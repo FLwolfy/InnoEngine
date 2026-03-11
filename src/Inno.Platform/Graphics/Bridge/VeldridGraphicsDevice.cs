@@ -1,6 +1,8 @@
 using System;
 using System.Runtime.InteropServices;
+
 using Inno.Platform.Window.Bridge;
+
 using Veldrid;
 using Veldrid.StartupUtilities;
 using VeldridGraphicsBackend = Veldrid.GraphicsBackend;
@@ -32,21 +34,23 @@ internal class VeldridGraphicsDevice : IGraphicsDevice
 
         // Ensure swapchain/backbuffer matches drawable pixel size on HiDPI displays.
         {
-            var (fbW, fbH) = VeldridSdl2HiDpi.GetFramebufferSize(window.inner);
-            if (fbW != window.width || fbH != window.height)
-                swapchainFrameBuffer.Resize(fbW, fbH);
+            var size = VeldridSdl2HiDpi.GetFramebufferSize(window.inner);
+            if (size != window.size)
+            {
+                swapchainFrameBuffer.Resize(size.x, size.y);
+            }
         }
         
         window.inner.Resized += () =>
         {
-            var (fbW, fbH) = VeldridSdl2HiDpi.GetFramebufferSize(window.inner);
-            swapchainFrameBuffer.Resize(fbW, fbH);
+            var size = VeldridSdl2HiDpi.GetFramebufferSize(window.inner);
+            swapchainFrameBuffer.Resize(size.x, size.y);
         };
     }
 
-    private VeldridGraphicsBackend ToVeldridGraphicsBackend(GraphicsBackend backend)
+    private VeldridGraphicsBackend ToVeldridGraphicsBackend(GraphicsBackend graphicsBackend)
     {
-        return backend switch
+        return graphicsBackend switch
         {
             GraphicsBackend.Vulkan => VeldridGraphicsBackend.Vulkan,
             GraphicsBackend.Direct3D11 => VeldridGraphicsBackend.Direct3D11,
@@ -54,7 +58,7 @@ internal class VeldridGraphicsDevice : IGraphicsDevice
             GraphicsBackend.Metal => VeldridGraphicsBackend.Metal,
             GraphicsBackend.OpenGLES => VeldridGraphicsBackend.OpenGLES,
             
-            _ => throw new NotSupportedException($"Graphics backend {backend} not supported")
+            _ => throw new NotSupportedException($"Graphics backend {graphicsBackend} not supported")
         };
     }
 
@@ -125,11 +129,6 @@ internal class VeldridGraphicsDevice : IGraphicsDevice
             m_graphicsDevice.SubmitCommands(veldridCmd.inner);
             m_graphicsDevice.WaitForIdle();  
         }
-    }
-
-    public void SwapBuffers()
-    {
-        m_graphicsDevice.SwapBuffers();
     }
 
     public void Dispose()

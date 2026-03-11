@@ -1,18 +1,18 @@
 using System;
-using ImGuiNET;
+
 using Inno.Core.ECS;
-using Inno.Core.Events;
 using Inno.Core.Math;
 using Inno.Editor.Core;
-using Inno.Editor.Gizmo;
 using Inno.Editor.GUI;
-using Inno.Editor.Utility;
 using Inno.Graphics;
 using Inno.Graphics.Pass;
 using Inno.Graphics.Targets;
 using Inno.Platform.Graphics;
-using Inno.Platform.ImGui;
 using Inno.Runtime.RenderPasses;
+
+using ImGuiNET;
+using Inno.ImGui;
+using ImGuiNet = ImGuiNET.ImGui;
 
 namespace Inno.Editor.Panel;
 
@@ -79,14 +79,15 @@ public class GameViewPanel : EditorPanel
     {
         m_renderPasses = new RenderPassStack();
         m_renderPasses.PushPass(new ClearScreenPass());
-        m_renderPasses.PushPass(new RenderOpaqueSpritePass(true));
-        m_renderPasses.PushPass(new RenderAlphaSpritePass(true));
+        m_renderPasses.PushPass(new RenderOpaqueMeshPass()); 
+        m_renderPasses.PushPass(new RenderOpaqueSpritePass());
+        m_renderPasses.PushPass(new RenderAlphaSpritePass());
     }
 
     private void CheckRegionChange()
     {
         // Get Available region
-        Vector2 available = ImGui.GetContentRegionAvail();
+        Vector2 available = ImGuiNet.GetContentRegionAvail();
         int newWidth = (int)Math.Max(available.x, 1);
         int newHeight = (int)Math.Max(available.y, 1);
         
@@ -118,10 +119,10 @@ public class GameViewPanel : EditorPanel
         var targetTexture = RenderGraphics.targetPool.Get("game")?.GetColorAttachment(0);
         if (targetTexture != null)
         {
-            var newTextureHandle = IImGui.GetOrBindTexture(targetTexture);
+            var newTextureHandle = ImGuiHost.GetOrBindTexture(targetTexture);
             if (m_currentTexture != targetTexture)
             {
-                IImGui.UnbindTexture(m_currentTexture);
+                ImGuiHost.UnbindTexture(m_currentTexture);
                 m_currentTexture = targetTexture;
             }
 
@@ -133,7 +134,7 @@ public class GameViewPanel : EditorPanel
                 return;
             }
             
-            ImGui.Image(newTextureHandle, new Vector2(m_width, m_height));
+            ImGuiNet.Image(newTextureHandle, new Vector2(m_width, m_height));
         }
     }
 }

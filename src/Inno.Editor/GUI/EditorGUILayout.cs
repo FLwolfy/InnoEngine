@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
-
-using ImGuiNET;
+using System.Text;
 
 using Inno.Core.Math;
-using Inno.Platform.ImGui;
+using Inno.ImGui;
+
+using ImGuiNET;
+using ImGuiNet = ImGuiNET.ImGui;
 
 namespace Inno.Editor.GUI;
 
@@ -25,6 +27,7 @@ public static class EditorGUILayout
     private static readonly Dictionary<int, int> COLUMN_COUNT_MAP = new();
     private static readonly Dictionary<int, float> COLUMN_TOTAL_WEIGHT_MAP = new();
     private static readonly Dictionary<int, List<float>> COLUMN_WEIGHT_MAP = new();
+    private static readonly Stack<bool> COLUMN_PAD_STACK = new();
 
     private static int m_columnDepth = 0;
     private static float m_nextIndentWidth = 0;
@@ -57,7 +60,7 @@ public static class EditorGUILayout
     /// </summary>
     public static void BeginScope(int id)
     {
-        ImGui.PushID(id);
+        ImGuiNet.PushID(id);
         SCOPE_STACK.Push(id);
     }
 
@@ -66,7 +69,7 @@ public static class EditorGUILayout
     /// </summary>
     public static void EndScope()
     {
-        ImGui.PopID();
+        ImGuiNet.PopID();
         SCOPE_STACK.Pop();
     }
 
@@ -84,27 +87,37 @@ public static class EditorGUILayout
 
         m_columnDepth++;
 
-        int layoutKey = (int)ImGui.GetID($"__EditorGUILayout_Columns__{m_columnDepth}");
+        int layoutKey = (int)ImGuiNet.GetID($"__EditorGUILayout_Columns__{m_columnDepth}");
         COLUMN_KEY_STACK.Push(layoutKey);
 
         bool dirty = !COLUMN_COUNT_MAP.ContainsKey(layoutKey);
         COLUMN_DIRTY_STACK.Push(dirty);
 
+        // Track whether we push style var for this table instance
+        bool pushedPad = false;
+
         if (!dirty)
         {
+            // If this is a nested table (e.g. Vector2/3/4 fields inside a property row),
+            // remove vertical cell padding so the row height matches normal widgets.
+            if (m_columnDepth > 1)
+            {
+                var style = ImGuiNet.GetStyle();
+                ImGuiNet.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(style.CellPadding.X, 0f));
+                pushedPad = true;
+            }
+
             int columnCount = COLUMN_COUNT_MAP[layoutKey];
 
-            ImGui.BeginTable($"EditorLayout##{layoutKey}", columnCount, flags);
+            ImGuiNet.BeginTable($"EditorLayout##{layoutKey}", columnCount, flags);
 
             var weights = COLUMN_WEIGHT_MAP[layoutKey];
             for (int i = 0; i < columnCount; i++)
-            {
-                ImGui.TableSetupColumn($"Column {i}", ImGuiTableColumnFlags.None, weights[i]);
-            }
+                ImGuiNet.TableSetupColumn($"Column {i}", ImGuiTableColumnFlags.None, weights[i]);
 
-            float rowH = ImGui.GetFrameHeight();
-            ImGui.TableNextRow(ImGuiTableRowFlags.None, rowH);
-            ImGui.TableSetColumnIndex(0);
+            float rowH = ImGuiNet.GetFrameHeight();
+            ImGuiNet.TableNextRow(ImGuiTableRowFlags.None, rowH);
+            ImGuiNet.TableSetColumnIndex(0);
         }
         else
         {
@@ -112,6 +125,8 @@ public static class EditorGUILayout
             COLUMN_TOTAL_WEIGHT_MAP[layoutKey] = firstColumnWeight;
             COLUMN_WEIGHT_MAP[layoutKey] = new List<float> { firstColumnWeight };
         }
+
+        COLUMN_PAD_STACK.Push(pushedPad);
     }
 
     /// <summary>
@@ -125,9 +140,15 @@ public static class EditorGUILayout
         bool dirty = COLUMN_DIRTY_STACK.Pop();
         int layoutKey = COLUMN_KEY_STACK.Pop();
 
+        // Must pop style var even if dirty (we always pushed a marker)
+        bool pushedPad = COLUMN_PAD_STACK.Pop();
+
         if (!dirty)
         {
-            ImGui.EndTable();
+            ImGuiNet.EndTable();
+
+            if (pushedPad)
+                ImGuiNet.PopStyleVar();
         }
         else
         {
@@ -154,7 +175,7 @@ public static class EditorGUILayout
 
         if (!COLUMN_DIRTY_STACK.Peek())
         {
-            ImGui.TableNextColumn();
+            ImGuiNet.TableNextColumn();
         }
         else
         {
@@ -166,11 +187,10 @@ public static class EditorGUILayout
         }
     }
 
-
     /// <summary>
     /// Inserts vertical spacing.
     /// </summary>
-    public static void Space(float pixels = 8f) => ImGui.Dummy(new Vector2(1, pixels));
+    public static void Space(float pixels = 8f) => ImGuiNet.Dummy(new Vector2(1, pixels));
 
     /// <summary>
     /// Sets a one-shot indentation for the next property row.
@@ -190,10 +210,10 @@ public static class EditorGUILayout
         FontStyle result = FontStyle.None;
         foreach (var s in FONT_STYLE_STACK) result |= s;
 
-        if (result == FontStyle.Bold) IImGui.UseFont(ImGuiFontStyle.Bold);
-        else if (result == FontStyle.Italic) IImGui.UseFont(ImGuiFontStyle.Italic);
-        else if (result == (FontStyle.Bold | FontStyle.Italic)) IImGui.UseFont(ImGuiFontStyle.BoldItalic);
-        else IImGui.UseFont(ImGuiFontStyle.Regular);
+        if (result == FontStyle.Bold) ImGuiHost.UseFont(ImGuiFontStyle.Bold);
+        else if (result == FontStyle.Italic) ImGuiHost.UseFont(ImGuiFontStyle.Italic);
+        else if (result == (FontStyle.Bold | FontStyle.Italic)) ImGuiHost.UseFont(ImGuiFontStyle.BoldItalic);
+        else ImGuiHost.UseFont(ImGuiFontStyle.Regular);
     }
 
     /// <summary>
@@ -206,10 +226,10 @@ public static class EditorGUILayout
         FontStyle result = FontStyle.None;
         foreach (var s in FONT_STYLE_STACK) result |= s;
 
-        if (result == FontStyle.Bold) IImGui.UseFont(ImGuiFontStyle.Bold);
-        else if (result == FontStyle.Italic) IImGui.UseFont(ImGuiFontStyle.Italic);
-        else if (result == (FontStyle.Bold | FontStyle.Italic)) IImGui.UseFont(ImGuiFontStyle.BoldItalic);
-        else IImGui.UseFont(ImGuiFontStyle.Regular);
+        if (result == FontStyle.Bold) ImGuiHost.UseFont(ImGuiFontStyle.Bold);
+        else if (result == FontStyle.Italic) ImGuiHost.UseFont(ImGuiFontStyle.Italic);
+        else if (result == (FontStyle.Bold | FontStyle.Italic)) ImGuiHost.UseFont(ImGuiFontStyle.BoldItalic);
+        else ImGuiHost.UseFont(ImGuiFontStyle.Regular);
     }
 
     /// <summary>
@@ -218,7 +238,7 @@ public static class EditorGUILayout
     public static void BeginAlignment(LayoutAlign align)
     {
         ALIGN_STACK.Push(align);
-        ImGui.BeginGroup();
+        ImGuiNet.BeginGroup();
     }
 
     /// <summary>
@@ -230,152 +250,7 @@ public static class EditorGUILayout
             throw new InvalidOperationException("EditorLayout.End called without matching Begin");
 
         ALIGN_STACK.Pop();
-        ImGui.EndGroup();
-    }
-
-    private readonly struct DrawScope : IDisposable
-    {
-        private readonly bool m_enabled;
-
-        public DrawScope(bool enabled)
-        {
-            m_enabled = enabled;
-            if (!enabled) ImGui.BeginDisabled();
-        }
-
-        public void Dispose()
-        {
-            if (!m_enabled) ImGui.EndDisabled();
-        }
-    }
-
-    private static float GetAlignedOffsetX(float itemWidth, float availWidth)
-    {
-        if (ALIGN_STACK.Count == 0) return 0f;
-
-        var align = ALIGN_STACK.Peek();
-        return align switch
-        {
-            LayoutAlign.Center => (availWidth - itemWidth) * 0.5f,
-            LayoutAlign.Back => (availWidth - itemWidth),
-            _ => 0f
-        };
-    }
-
-    private static void SetAlignedCursorPosX(float itemWidth)
-    {
-        if (ALIGN_STACK.Count == 0) return;
-
-        var align = ALIGN_STACK.Peek();
-        var cursorPos = ImGui.GetCursorPos();
-        var avail = ImGui.GetContentRegionAvail();
-
-        float offsetX = align switch
-        {
-            LayoutAlign.Center => (avail.X - itemWidth) * 0.5f,
-            LayoutAlign.Back => (avail.X - itemWidth),
-            _ => 0f
-        };
-
-        ImGui.SetCursorPosX(cursorPos.X + offsetX);
-    }
-
-    private static float MeasureWidth(Action onMeasure)
-    {
-        EditorImGuiEx.BeginInvisible();
-        ImGui.PushID("__measure__");
-        onMeasure.Invoke();
-        ImGui.PopID();
-        EditorImGuiEx.EndInvisible();
-
-        return EditorImGuiEx.GetInvisibleItemRectSize().x;
-    }
-
-    private static void BeginPropertyRow(string label)
-    {
-        ImGui.PushID(label);
-
-        BeginColumns(2f);
-        if (m_nextIndentWidth != 0)
-        {
-            ImGui.Dummy(new Vector2(m_nextIndentWidth, 0));
-            ImGui.SameLine();
-            m_nextIndentWidth = 0;
-        }
-        Label(label);
-
-        SplitColumns(3f);
-
-        if (!COLUMN_DIRTY_STACK.Peek())
-            ImGui.TableSetColumnIndex(1);
-    }
-
-    private static void EndPropertyRow()
-    {
-        EndColumns();
-        ImGui.PopID();
-    }
-
-    private static bool DrawAxisDrag(string axis, ref float value, float fieldW, Color tagColor)
-    {
-        bool changed = false;
-        float gap = ImGui.GetStyle().ItemSpacing.X;
-        float h = ImGui.GetFrameHeight();
-        var tagSize = new Vector2(h, h);
-
-        var dl = ImGui.GetWindowDrawList();
-        Vector2 p0 = ImGui.GetCursorScreenPos();
-        Vector2 p1 = new Vector2(p0.x + tagSize.x, p0.y + tagSize.y);
-
-        ImGui.InvisibleButton($"##tag_{axis}", tagSize);
-        bool hovered = ImGui.IsItemHovered();
-        bool held = ImGui.IsItemActive();
-
-        Vector4 bg = new Vector4(tagColor.r, tagColor.g, tagColor.b, tagColor.a);
-        if (held)
-        {
-            bg = new Vector4(tagColor.r * 0.90f, tagColor.g * 0.90f, tagColor.b * 0.90f, tagColor.a);
-        }
-        else if (hovered)
-        {
-            bg = new Vector4(
-                MathF.Min(1f, tagColor.r + 0.10f),
-                MathF.Min(1f, tagColor.g + 0.10f),
-                MathF.Min(1f, tagColor.b + 0.10f),
-                tagColor.a);
-        }
-
-        float rounding = ImGui.GetStyle().FrameRounding;
-        dl.AddRectFilled(p0, p1, ImGui.ColorConvertFloat4ToU32(bg), rounding);
-
-        Vector2 textSize = ImGui.CalcTextSize(axis);
-        Vector2 textPos = new Vector2(
-            p0.x + (tagSize.x - textSize.x) * 0.5f,
-            p0.y + (tagSize.y - textSize.y) * 0.5f);
-        dl.AddText(textPos, ImGui.ColorConvertFloat4ToU32(new Vector4(1, 1, 1, 1)), axis);
-
-        if (held)
-        {
-            float speed = 0.02f;
-            var io = ImGui.GetIO();
-            if (io.KeyShift) speed *= 0.2f;
-            if (io.KeyCtrl) speed *= 5.0f;
-
-            float delta = io.MouseDelta.X * speed;
-            if (delta != 0f)
-            {
-                value += delta;
-                changed = true;
-            }
-
-            ImGui.SetMouseCursor(ImGuiMouseCursor.ResizeEW);
-        }
-
-        ImGui.SameLine(0f, gap);
-        ImGui.SetNextItemWidth(fieldW);
-        changed |= ImGui.InputFloat($"##{axis}", ref value);
-
-        return changed;
+        ImGuiNet.EndGroup();
     }
 
     #endregion
@@ -387,23 +262,30 @@ public static class EditorGUILayout
     /// </summary>
     public static void Label(string text, bool enabled = true)
     {
-        float rowH = ImGui.GetFrameHeight();
+        var labelText = ToInspectorLabel(text);
+        
+        // Keep using frame height so each property row aligns to standard widgets.
+        float rowH = ImGuiNet.GetFrameHeight();
 
-        Vector2 p0 = ImGui.GetCursorScreenPos();
-        float availW = ImGui.GetContentRegionAvail().X;
+        Vector2 p0 = ImGuiNet.GetCursorScreenPos();
+        float availW = ImGuiNet.GetContentRegionAvail().X;
 
-        ImGui.Dummy(new Vector2(1, rowH));
+        // Reserve the full row height in the layout
+        ImGuiNet.Dummy(new Vector2(1, rowH));
 
-        float textW = ImGui.CalcTextSize(text).X;
-        float offsetX = GetAlignedOffsetX(textW, availW);
+        // Horizontal alignment (your existing alignment stack)
+        Vector2 textSize = ImGuiNet.CalcTextSize(labelText);
+        float offsetX = GetAlignedOffsetX(textSize.x, availW);
 
-        Vector2 pad = ImGui.GetStyle().FramePadding;
-        uint col = ImGui.GetColorU32(enabled ? ImGuiCol.Text : ImGuiCol.TextDisabled);
+        // Vertical center inside the reserved row height
+        float textY = p0.y + (rowH - textSize.y) * 0.5f;
 
-        ImGui.GetWindowDrawList().AddText(
-            new Vector2(p0.x + offsetX, p0.y + pad.y),
+        uint col = ImGuiNet.GetColorU32(enabled ? ImGuiCol.Text : ImGuiCol.TextDisabled);
+
+        ImGuiNet.GetWindowDrawList().AddText(
+            new Vector2(p0.x + offsetX, textY),
             col,
-            text);
+            labelText);
     }
 
     /// <summary>
@@ -411,9 +293,9 @@ public static class EditorGUILayout
     /// </summary>
     public static bool Button(string label, bool enabled = true)
     {
-        float width = MeasureWidth(() => ImGui.Button(label));
+        float width = MeasureWidth(() => ImGuiNet.Button(label));
         SetAlignedCursorPosX(width);
-        using (new DrawScope(enabled)) { return ImGui.Button(label); }
+        using (new DrawScope(enabled)) { return ImGuiNet.Button(label); }
     }
 
     /// <summary>
@@ -424,8 +306,8 @@ public static class EditorGUILayout
         using (new DrawScope(enabled))
         {
             BeginPropertyRow(label);
-            ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
-            bool result = ImGui.InputInt("##value", ref value);
+            ImGuiNet.SetNextItemWidth(ImGuiNet.GetContentRegionAvail().X);
+            bool result = ImGuiNet.InputInt("##value", ref value);
             EndPropertyRow();
             return result;
         }
@@ -439,8 +321,8 @@ public static class EditorGUILayout
         using (new DrawScope(enabled))
         {
             BeginPropertyRow(label);
-            ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
-            bool result = ImGui.InputFloat("##value", ref value);
+            ImGuiNet.SetNextItemWidth(ImGuiNet.GetContentRegionAvail().X);
+            bool result = ImGuiNet.InputFloat("##value", ref value);
             EndPropertyRow();
             return result;
         }
@@ -462,9 +344,9 @@ public static class EditorGUILayout
 
             BeginColumns();
 
-            changed |= DrawAxisDrag("X", ref x, ImGui.GetColumnWidth(), new Color(0.75f, 0.20f, 0.20f));
+            changed |= DrawAxisDrag("X", ref x, ImGuiNet.GetColumnWidth(), new Color(0.75f, 0.20f, 0.20f));
             SplitColumns();
-            changed |= DrawAxisDrag("Y", ref y, ImGui.GetColumnWidth(), new Color(0.20f, 0.65f, 0.25f));
+            changed |= DrawAxisDrag("Y", ref y, ImGuiNet.GetColumnWidth(), new Color(0.20f, 0.65f, 0.25f));
             SplitColumns();
             
             EndColumns();
@@ -494,11 +376,11 @@ public static class EditorGUILayout
 
             BeginColumns();
 
-            changed |= DrawAxisDrag("X", ref x, ImGui.GetColumnWidth(), new Color(0.75f, 0.20f, 0.20f));
+            changed |= DrawAxisDrag("X", ref x, ImGuiNet.GetColumnWidth(), new Color(0.75f, 0.20f, 0.20f));
             SplitColumns();
-            changed |= DrawAxisDrag("Y", ref y, ImGui.GetColumnWidth(), new Color(0.20f, 0.65f, 0.25f));
+            changed |= DrawAxisDrag("Y", ref y, ImGuiNet.GetColumnWidth(), new Color(0.20f, 0.65f, 0.25f));
             SplitColumns();
-            changed |= DrawAxisDrag("Z", ref z, ImGui.GetColumnWidth(), new Color(0.25f, 0.35f, 0.80f));
+            changed |= DrawAxisDrag("Z", ref z, ImGuiNet.GetColumnWidth(), new Color(0.25f, 0.35f, 0.80f));
 
             EndColumns();
 
@@ -528,12 +410,13 @@ public static class EditorGUILayout
 
             BeginColumns();
             
-            changed |= DrawAxisDrag("X", ref x, ImGui.GetColumnWidth(), new Color(0.75f, 0.20f, 0.20f)); // Red
-            changed |= DrawAxisDrag("Z", ref z, ImGui.GetColumnWidth(), new Color(0.25f, 0.35f, 0.80f)); // Blue
+            changed |= DrawAxisDrag("X", ref x, ImGuiNet.GetColumnWidth(), new Color(0.75f, 0.20f, 0.20f)); // Red
             SplitColumns();
-            changed |= DrawAxisDrag("Y", ref y, ImGui.GetColumnWidth(), new Color(0.20f, 0.65f, 0.25f)); // Green
-            changed |= DrawAxisDrag("W", ref w, ImGui.GetColumnWidth(), new Color(0.65f, 0.65f, 0.65f)); // Gray
+            changed |= DrawAxisDrag("Z", ref z, ImGuiNet.GetColumnWidth(), new Color(0.25f, 0.35f, 0.80f)); // Blue
             SplitColumns();
+            changed |= DrawAxisDrag("Y", ref y, ImGuiNet.GetColumnWidth(), new Color(0.20f, 0.65f, 0.25f)); // Green
+            SplitColumns();
+            changed |= DrawAxisDrag("W", ref w, ImGuiNet.GetColumnWidth(), new Color(0.65f, 0.65f, 0.65f)); // Gray
             
             EndColumns();
 
@@ -546,8 +429,12 @@ public static class EditorGUILayout
     }
 
     /// <summary>
-    /// Draws a Quaternion field with per-component drags.
+    /// Draws a Quaternion field as Euler angles (degrees) with stable UI editing.
     /// </summary>
+    /// <remarks>
+    /// Quaternion remains the source of truth. The editor shows XYZ degrees (Vector3-like),
+    /// while caching euler values in ImGui state storage to keep continuity (unwrap) and avoid jumps.
+    /// </remarks>
     public static bool QuaternionField(string label, ref Quaternion value, bool enabled = true)
     {
         bool changed = false;
@@ -556,26 +443,132 @@ public static class EditorGUILayout
         {
             BeginPropertyRow(label);
 
-            float x = value.x;
-            float y = value.y;
-            float z = value.z;
-            float w = value.w;
+            // Per-widget cache keyed by ImGui ID
+            uint id = ImGuiNet.GetID("##quat_euler_cache");
+            var storage = ImGuiNet.GetStateStorage();
+
+            uint kHas = id ^ 0xA13F_001u;
+            uint kQx  = id ^ 0xA13F_010u;
+            uint kQy  = id ^ 0xA13F_011u;
+            uint kQz  = id ^ 0xA13F_012u;
+            uint kQw  = id ^ 0xA13F_013u;
+            uint kEx  = id ^ 0xA13F_020u;
+            uint kEy  = id ^ 0xA13F_021u;
+            uint kEz  = id ^ 0xA13F_022u;
+
+            // Pack/unpack float into ImGui storage int slots
+            int Pack(float f) => BitConverter.SingleToInt32Bits(f);
+            float Unpack(int i) => BitConverter.Int32BitsToSingle(i);
+
+            bool hasCache = storage.GetBool(kHas, false);
+
+            Quaternion lastQ = hasCache
+                ? new Quaternion(
+                    Unpack(storage.GetInt(kQx, 0)),
+                    Unpack(storage.GetInt(kQy, 0)),
+                    Unpack(storage.GetInt(kQz, 0)),
+                    Unpack(storage.GetInt(kQw, Pack(1f))))
+                : Quaternion.identity;
+
+            Vector3 cachedEuler = hasCache
+                ? new Vector3(
+                    Unpack(storage.GetInt(kEx, 0)),
+                    Unpack(storage.GetInt(kEy, 0)),
+                    Unpack(storage.GetInt(kEz, 0)))
+                : Vector3.ZERO;
+
+            // If the quaternion changed externally, refresh the cached euler from quaternion
+            bool externalChanged = !hasCache || !value.Equals(lastQ);
+
+            Vector3 euler;
+            if (externalChanged)
+            {
+                // quaternion -> euler
+                euler = value.normalized.ToEulerAnglesXYZDegrees();
+
+                // normalize to [-180, 180]
+                float nx = euler.x % 360f; if (nx > 180f) nx -= 360f; if (nx < -180f) nx += 360f;
+                float ny = euler.y % 360f; if (ny > 180f) ny -= 360f; if (ny < -180f) ny += 360f;
+                float nz = euler.z % 360f; if (nz > 180f) nz -= 360f; if (nz < -180f) nz += 360f;
+
+                if (hasCache)
+                {
+                    // unwrap each axis to be closest to cachedEuler
+                    float rx = cachedEuler.x % 360f; if (rx > 180f) rx -= 360f; if (rx < -180f) rx += 360f;
+                    float ry = cachedEuler.y % 360f; if (ry > 180f) ry -= 360f; if (ry < -180f) ry += 360f;
+                    float rz = cachedEuler.z % 360f; if (rz > 180f) rz -= 360f; if (rz < -180f) rz += 360f;
+
+                    float dx = nx - rx; if (dx > 180f) nx -= 360f; else if (dx < -180f) nx += 360f;
+                    float dy = ny - ry; if (dy > 180f) ny -= 360f; else if (dy < -180f) ny += 360f;
+                    float dz = nz - rz; if (dz > 180f) nz -= 360f; else if (dz < -180f) nz += 360f;
+                }
+
+                euler = new Vector3(nx, ny, nz);
+                cachedEuler = euler;
+
+                // store cache (no helper method)
+                storage.SetBool(kHas, true);
+                storage.SetInt(kQx, Pack(value.x));
+                storage.SetInt(kQy, Pack(value.y));
+                storage.SetInt(kQz, Pack(value.z));
+                storage.SetInt(kQw, Pack(value.w));
+                storage.SetInt(kEx, Pack(cachedEuler.x));
+                storage.SetInt(kEy, Pack(cachedEuler.y));
+                storage.SetInt(kEz, Pack(cachedEuler.z));
+
+                hasCache = true;
+            }
+            else
+            {
+                euler = cachedEuler;
+            }
+
+            float x = euler.x;
+            float y = euler.y;
+            float z = euler.z;
 
             BeginColumns();
 
-            changed |= DrawAxisDrag("X", ref x, ImGui.GetColumnWidth(), new Color(0.75f, 0.20f, 0.20f));
+            changed |= DrawAxisDrag("X", ref x, ImGuiNet.GetColumnWidth(), new Color(0.75f, 0.20f, 0.20f));
             SplitColumns();
-            changed |= DrawAxisDrag("Y", ref y, ImGui.GetColumnWidth(), new Color(0.20f, 0.65f, 0.25f));
+            changed |= DrawAxisDrag("Y", ref y, ImGuiNet.GetColumnWidth(), new Color(0.20f, 0.65f, 0.25f));
             SplitColumns();
-            changed |= DrawAxisDrag("Z", ref z, ImGui.GetColumnWidth(), new Color(0.25f, 0.35f, 0.80f));
-            SplitColumns();
-            changed |= DrawAxisDrag("W", ref w, ImGui.GetColumnWidth(), new Color(0.55f, 0.55f, 0.55f));
+            changed |= DrawAxisDrag("Z", ref z, ImGuiNet.GetColumnWidth(), new Color(0.25f, 0.35f, 0.80f));
 
             EndColumns();
 
             if (changed)
             {
-                value.x = x; value.y = y; value.z = z; value.w = w;
+                // normalize input to [-180, 180]
+                float nx = x % 360f; if (nx > 180f) nx -= 360f; if (nx < -180f) nx += 360f;
+                float ny = y % 360f; if (ny > 180f) ny -= 360f; if (ny < -180f) ny += 360f;
+                float nz = z % 360f; if (nz > 180f) nz -= 360f; if (nz < -180f) nz += 360f;
+
+                // unwrap relative to cachedEuler (keep continuity)
+                float rx = cachedEuler.x % 360f; if (rx > 180f) rx -= 360f; if (rx < -180f) rx += 360f;
+                float ry = cachedEuler.y % 360f; if (ry > 180f) ry -= 360f; if (ry < -180f) ry += 360f;
+                float rz = cachedEuler.z % 360f; if (rz > 180f) rz -= 360f; if (rz < -180f) rz += 360f;
+
+                float dx = nx - rx; if (dx > 180f) nx -= 360f; else if (dx < -180f) nx += 360f;
+                float dy = ny - ry; if (dy > 180f) ny -= 360f; else if (dy < -180f) ny += 360f;
+                float dz = nz - rz; if (dz > 180f) nz -= 360f; else if (dz < -180f) nz += 360f;
+
+                var newEuler = new Vector3(nx, ny, nz);
+
+                // euler -> quaternion
+                var newQ = Quaternion.FromEulerAnglesXYZDegrees(newEuler).normalized;
+                value = newQ;
+
+                // update cache
+                cachedEuler = newEuler;
+                storage.SetBool(kHas, true);
+                storage.SetInt(kQx, Pack(value.x));
+                storage.SetInt(kQy, Pack(value.y));
+                storage.SetInt(kQz, Pack(value.z));
+                storage.SetInt(kQw, Pack(value.w));
+                storage.SetInt(kEx, Pack(cachedEuler.x));
+                storage.SetInt(kEy, Pack(cachedEuler.y));
+                storage.SetInt(kEz, Pack(cachedEuler.z));
             }
 
             EndPropertyRow();
@@ -592,8 +585,8 @@ public static class EditorGUILayout
         using (new DrawScope(enabled))
         {
             BeginPropertyRow(label);
-            ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
-            bool result = ImGui.InputText("##value", ref value, maxLength);
+            ImGuiNet.SetNextItemWidth(ImGuiNet.GetContentRegionAvail().X);
+            bool result = ImGuiNet.InputText("##value", ref value, maxLength);
             EndPropertyRow();
             return result;
         }
@@ -607,7 +600,7 @@ public static class EditorGUILayout
         using (new DrawScope(enabled))
         {
             BeginPropertyRow(label);
-            bool result = ImGui.Checkbox("##value", ref value);
+            bool result = ImGuiNet.Checkbox("##value", ref value);
             EndPropertyRow();
             return result;
         }
@@ -625,8 +618,8 @@ public static class EditorGUILayout
             BeginPropertyRow(label);
 
             var v = new System.Numerics.Vector4(input.r, input.g, input.b, input.a);
-            ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
-            result = ImGui.ColorEdit4("##value", ref v);
+            ImGuiNet.SetNextItemWidth(ImGuiNet.GetContentRegionAvail().X);
+            result = ImGuiNet.ColorEdit4("##value", ref v);
 
             output = new Color(v.X, v.Y, v.Z, v.W);
 
@@ -644,8 +637,8 @@ public static class EditorGUILayout
         using (new DrawScope(enabled))
         {
             BeginPropertyRow(label);
-            ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
-            bool result = ImGui.Combo("##value", ref selectedIndex, list, list.Length);
+            ImGuiNet.SetNextItemWidth(ImGuiNet.GetContentRegionAvail().X);
+            bool result = ImGuiNet.Combo("##value", ref selectedIndex, list, list.Length);
             EndPropertyRow();
             return result;
         }
@@ -663,27 +656,27 @@ public static class EditorGUILayout
         {
             if (Button(label, enabled))
             {
-                ImGui.OpenPopup(label);
+                ImGuiNet.OpenPopup(label);
             }
 
-            if (ImGui.BeginPopup(label))
+            if (ImGuiNet.BeginPopup(label))
             {
                 if (itemNameList.Length == 0)
                 {
-                    ImGui.Text(emptyMsg);
+                    ImGuiNet.Text(emptyMsg);
                 }
 
                 for (int i = 0; i < itemNameList.Length; i++)
                 {
-                    if (ImGui.MenuItem(itemNameList[i]))
+                    if (ImGuiNet.MenuItem(itemNameList[i]))
                     {
                         selectedIndex = i;
                         changed = true;
-                        ImGui.CloseCurrentPopup();
+                        ImGuiNet.CloseCurrentPopup();
                     }
                 }
 
-                ImGui.EndPopup();
+                ImGuiNet.EndPopup();
             }
         }
 
@@ -695,7 +688,7 @@ public static class EditorGUILayout
     /// </summary>
     public static bool CollapsingHeader(string label, Action? onClose = null, bool defaultOpen = true, bool enabled = true)
     {
-        ImGui.SetNextItemOpen(defaultOpen, ImGuiCond.Once);
+        ImGuiNet.SetNextItemOpen(defaultOpen, ImGuiCond.Once);
 
         bool visibility = true;
         bool result;
@@ -703,7 +696,7 @@ public static class EditorGUILayout
         if (onClose == null)
         {
             BeginFont(FontStyle.Bold);
-            result = ImGui.CollapsingHeader(label);
+            result = ImGuiNet.CollapsingHeader(label);
             EndFont();
         }
         else
@@ -711,7 +704,7 @@ public static class EditorGUILayout
             using (new DrawScope(enabled))
             {
                 BeginFont(FontStyle.Bold);
-                result = ImGui.CollapsingHeader(label, ref visibility);
+                result = ImGuiNet.CollapsingHeader(label, ref visibility);
                 EndFont();
             }
 
@@ -728,53 +721,53 @@ public static class EditorGUILayout
     {
         using (new DrawScope(enabled))
         {
-            ImGui.PushID(label);
+            ImGuiNet.PushID(label);
 
-            var storage = ImGui.GetStateStorage();
-            uint openId = ImGui.GetID("##open");
+            var storage = ImGuiNet.GetStateStorage();
+            uint openId = ImGuiNet.GetID("##open");
             bool open = storage.GetBool(openId, defaultOpen);
-            float rowH = ImGui.GetFrameHeight();
+            float rowH = ImGuiNet.GetFrameHeight();
 
-            Vector2 p0 = ImGui.GetCursorScreenPos();
+            Vector2 p0 = ImGuiNet.GetCursorScreenPos();
 
-            var prevFont = IImGui.GetCurrentFont();
-            IImGui.UseFont(ImGuiFontStyle.Bold);
+            var prevFont = ImGuiHost.GetCurrentFont();
+            ImGuiHost.UseFont(ImGuiFontStyle.Bold);
 
-            float labelW = ImGui.CalcTextSize(label).X;
+            float labelW = ImGuiNet.CalcTextSize(label).X;
 
-            ImGui.InvisibleButton("##lbl_hit", new Vector2(labelW, rowH));
-            bool lblHovered = ImGui.IsItemHovered();
-            bool lblClicked = ImGui.IsItemClicked(ImGuiMouseButton.Left);
+            ImGuiNet.InvisibleButton("##lbl_hit", new Vector2(labelW, rowH));
+            bool lblHovered = ImGuiNet.IsItemHovered();
+            bool lblClicked = ImGuiNet.IsItemClicked(ImGuiMouseButton.Left);
 
-            ImGui.SetCursorScreenPos(p0);
+            ImGuiNet.SetCursorScreenPos(p0);
             Label(label);
 
-            IImGui.UseFont(prevFont);
+            ImGuiHost.UseFont(prevFont);
 
             Vector2 triP0 = new Vector2(p0.x + labelW, p0.y);
             Vector2 triSize = new Vector2(rowH, rowH);
 
-            ImGui.SetCursorScreenPos(triP0);
-            ImGui.InvisibleButton("##tri_hit", triSize);
-            bool triHovered = ImGui.IsItemHovered();
-            bool triClicked = ImGui.IsItemClicked(ImGuiMouseButton.Left);
+            ImGuiNet.SetCursorScreenPos(triP0);
+            ImGuiNet.InvisibleButton("##tri_hit", triSize);
+            bool triHovered = ImGuiNet.IsItemHovered();
+            bool triClicked = ImGuiNet.IsItemClicked(ImGuiMouseButton.Left);
 
             bool hovered = lblHovered || triHovered;
 
             if (hovered)
-                ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+                ImGuiNet.SetMouseCursor(ImGuiMouseCursor.Hand);
 
-            var dl = ImGui.GetWindowDrawList();
-            float rounding = ImGui.GetStyle().FrameRounding;
+            var dl = ImGuiNet.GetWindowDrawList();
+            float rounding = ImGuiNet.GetStyle().FrameRounding;
 
             if (hovered)
             {
-                uint bg = ImGui.GetColorU32(ImGuiCol.HeaderHovered);
+                uint bg = ImGuiNet.GetColorU32(ImGuiCol.HeaderHovered);
                 bg = (bg & 0x00FFFFFFu) | (50u << 24);
                 dl.AddRectFilled(triP0, triP0 + triSize, bg, rounding);
             }
 
-            uint col = ImGui.GetColorU32(ImGuiCol.Text);
+            uint col = ImGuiNet.GetColorU32(ImGuiCol.Text);
             if (hovered) col = (col & 0x00FFFFFFu) | (255u << 24);
 
             float triSizePx = rowH * 0.14f;
@@ -805,19 +798,20 @@ public static class EditorGUILayout
                 storage.SetBool(openId, open);
             }
 
-            ImGui.PopID();
+            ImGuiNet.PopID();
             return open;
         }
     }
 
     /// <summary>
-    /// Draws a GUID drop target field.
+    /// Draws a drop reference target field.
     /// </summary>
-    public static bool GuidDrop(
+    public static bool DropRef<T>(
         string label,
+        string displayText,
         string payloadType,
-        ref Guid value,
-        string? displayText = null,
+        ref T? value,
+        Predicate<T>? condition = null,
         bool enabled = true)
     {
         bool changed = false;
@@ -826,66 +820,59 @@ public static class EditorGUILayout
         {
             BeginPropertyRow(label);
 
-            float w = ImGui.GetContentRegionAvail().X;
-            float h = ImGui.GetFrameHeight();
+            float w = ImGuiNet.GetContentRegionAvail().X;
+            float h = ImGuiNet.GetFrameHeight();
 
-            Vector2 p0 = ImGui.GetCursorScreenPos();
+            Vector2 p0 = ImGuiNet.GetCursorScreenPos();
             Vector2 size = new Vector2(w, h);
 
-            ImGui.InvisibleButton("##guid_drop", size);
+            ImGuiNet.InvisibleButton("##guid_drop", size);
 
-            bool hovered = ImGui.IsItemHovered();
-            bool active = ImGui.IsItemActive();
+            bool hovered = ImGuiNet.IsItemHovered();
+            bool active = ImGuiNet.IsItemActive();
 
-            var dl = ImGui.GetWindowDrawList();
+            var dl = ImGuiNet.GetWindowDrawList();
 
-            uint bgCol = ImGui.GetColorU32(
+            uint bgCol = ImGuiNet.GetColorU32(
                 active ? ImGuiCol.FrameBgActive :
                 hovered ? ImGuiCol.FrameBgHovered :
                           ImGuiCol.FrameBg);
 
-            uint borderCol = ImGui.GetColorU32(ImGuiCol.Border);
+            uint borderCol = ImGuiNet.GetColorU32(ImGuiCol.Border);
 
-            float rounding = ImGui.GetStyle().FrameRounding;
+            float rounding = ImGuiNet.GetStyle().FrameRounding;
             dl.AddRectFilled(p0, p0 + size, bgCol, rounding);
             dl.AddRect(p0, p0 + size, borderCol, rounding);
 
-            if (enabled && ImGui.BeginDragDropTarget())
+            if (enabled && ImGuiNet.BeginDragDropTarget())
             {
-                Guid? incoming = EditorImGuiEx.AcceptDragPayload<Guid>(payloadType);
-
-                if (incoming.HasValue)
+                if (ImGuiHost.TryAcceptDragPayload(payloadType, out T incoming, condition))
                 {
-                    value = incoming.Value;
+                    value = incoming;
                     changed = true;
                 }
 
-                ImGui.EndDragDropTarget();
+                ImGuiNet.EndDragDropTarget();
             }
 
-            if (enabled && ImGui.BeginPopupContextItem("##guid_drop_ctx"))
+            if (enabled && ImGuiNet.BeginPopupContextItem("##guid_drop_ctx"))
             {
-                if (ImGui.MenuItem("Clear"))
+                if (ImGuiNet.MenuItem("Clear"))
                 {
-                    if (value != Guid.Empty)
-                    {
-                        value = Guid.Empty;
-                        changed = true;
-                    }
+                    value = default;
+                    changed = true;
                 }
-                ImGui.EndPopup();
+                ImGuiNet.EndPopup();
             }
 
-            string text = value == Guid.Empty ? "None (Drop Guid Here)" : (displayText ?? value.ToString());
-
-            Vector2 textSize = ImGui.CalcTextSize(text);
-            Vector2 pad = ImGui.GetStyle().FramePadding;
+            Vector2 textSize = ImGuiNet.CalcTextSize(displayText);
+            Vector2 pad = ImGuiNet.GetStyle().FramePadding;
 
             float textX = p0.x + pad.x;
             float textY = p0.y + (h - textSize.y) * 0.5f;
 
-            uint textCol = ImGui.GetColorU32(ImGuiCol.Text);
-            dl.AddText(new Vector2(textX, textY), textCol, text);
+            uint textCol = ImGuiNet.GetColorU32(ImGuiCol.Text);
+            dl.AddText(new Vector2(textX, textY), textCol, displayText);
 
             EndPropertyRow();
         }
@@ -893,5 +880,195 @@ public static class EditorGUILayout
         return changed;
     }
 
+    #endregion
+    
+    #region Helpers
+    
+        private readonly struct DrawScope : IDisposable
+    {
+        private readonly bool m_enabled;
+
+        public DrawScope(bool enabled)
+        {
+            m_enabled = enabled;
+            if (!enabled) ImGuiNet.BeginDisabled();
+        }
+
+        public void Dispose()
+        {
+            if (!m_enabled) ImGuiNet.EndDisabled();
+        }
+    }
+
+    private static float GetAlignedOffsetX(float itemWidth, float availWidth)
+    {
+        if (ALIGN_STACK.Count == 0) return 0f;
+
+        var align = ALIGN_STACK.Peek();
+        return align switch
+        {
+            LayoutAlign.Center => (availWidth - itemWidth) * 0.5f,
+            LayoutAlign.Back => (availWidth - itemWidth),
+            _ => 0f
+        };
+    }
+
+    private static void SetAlignedCursorPosX(float itemWidth)
+    {
+        if (ALIGN_STACK.Count == 0) return;
+
+        var align = ALIGN_STACK.Peek();
+        var cursorPos = ImGuiNet.GetCursorPos();
+        var avail = ImGuiNet.GetContentRegionAvail();
+
+        float offsetX = align switch
+        {
+            LayoutAlign.Center => (avail.X - itemWidth) * 0.5f,
+            LayoutAlign.Back => (avail.X - itemWidth),
+            _ => 0f
+        };
+
+        ImGuiNet.SetCursorPosX(cursorPos.X + offsetX);
+    }
+
+    private static float MeasureWidth(Action onMeasure)
+    {
+        ImGuiHost.BeginInvisible();
+        ImGuiNet.PushID("__measure__");
+        onMeasure.Invoke();
+        ImGuiNet.PopID();
+        ImGuiHost.EndInvisible();
+
+        return ImGuiHost.GetInvisibleItemSize().x;
+    }
+
+    private static void BeginPropertyRow(string label)
+    {
+        ImGuiNet.PushID(label);
+
+        BeginColumns(2f);
+        if (m_nextIndentWidth != 0)
+        {
+            ImGuiNet.Dummy(new Vector2(m_nextIndentWidth, 0));
+            ImGuiNet.SameLine();
+            m_nextIndentWidth = 0;
+        }
+        Label(label);
+
+        SplitColumns(3f);
+
+        if (!COLUMN_DIRTY_STACK.Peek())
+            ImGuiNet.TableSetColumnIndex(1);
+    }
+
+    private static void EndPropertyRow()
+    {
+        EndColumns();
+        ImGuiNet.PopID();
+    }
+
+    private static bool DrawAxisDrag(string axis, ref float value, float fieldW, Color tagColor)
+    {
+        bool changed = false;
+        float gap = ImGuiNet.GetStyle().ItemSpacing.X;
+        float h = ImGuiNet.GetFrameHeight();
+        var tagSize = new Vector2(h, h);
+
+        var dl = ImGuiNet.GetWindowDrawList();
+        Vector2 p0 = ImGuiNet.GetCursorScreenPos();
+        Vector2 p1 = new Vector2(p0.x + tagSize.x, p0.y + tagSize.y);
+
+        ImGuiNet.InvisibleButton($"##tag_{axis}", tagSize);
+        bool hovered = ImGuiNet.IsItemHovered();
+        bool held = ImGuiNet.IsItemActive();
+
+        Vector4 bg = new Vector4(tagColor.r, tagColor.g, tagColor.b, tagColor.a);
+        if (held)
+        {
+            bg = new Vector4(tagColor.r * 0.90f, tagColor.g * 0.90f, tagColor.b * 0.90f, tagColor.a);
+        }
+        else if (hovered)
+        {
+            bg = new Vector4(
+                MathF.Min(1f, tagColor.r + 0.10f),
+                MathF.Min(1f, tagColor.g + 0.10f),
+                MathF.Min(1f, tagColor.b + 0.10f),
+                tagColor.a);
+        }
+
+        float rounding = ImGuiNet.GetStyle().FrameRounding;
+        dl.AddRectFilled(p0, p1, ImGuiNet.ColorConvertFloat4ToU32(bg), rounding);
+
+        Vector2 textSize = ImGuiNet.CalcTextSize(axis);
+        Vector2 textPos = new Vector2(
+            p0.x + (tagSize.x - textSize.x) * 0.5f,
+            p0.y + (tagSize.y - textSize.y) * 0.5f);
+        dl.AddText(textPos, ImGuiNet.ColorConvertFloat4ToU32(new Vector4(1, 1, 1, 1)), axis);
+
+        if (held)
+        {
+            float speed = 0.02f;
+            var io = ImGuiNet.GetIO();
+            if (io.KeyShift) speed *= 0.2f;
+            if (io.KeyCtrl) speed *= 5.0f;
+
+            float delta = io.MouseDelta.X * speed;
+            if (delta != 0f)
+            {
+                value += delta;
+                changed = true;
+            }
+
+            ImGuiNet.SetMouseCursor(ImGuiMouseCursor.ResizeEW);
+        }
+
+        ImGuiNet.SameLine(0f, gap);
+        ImGuiNet.SetNextItemWidth(fieldW);
+        changed |= ImGuiNet.InputFloat($"##{axis}", ref value);
+
+        return changed;
+    }
+    
+    private static string ToInspectorLabel(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+            return string.Empty;
+
+        var sb = new StringBuilder(name.Length * 2);
+
+        sb.Append(char.ToUpper(name[0]));
+
+        for (int i = 1; i < name.Length; i++)
+        {
+            char curr = name[i];
+            char prev = name[i - 1];
+            char prevPrev = i > 1 ? name[i - 2] : '\0';
+
+            bool currUpper = char.IsUpper(curr);
+            bool prevUpper = char.IsUpper(prev);
+            bool currLower = char.IsLower(curr);
+            bool currDigit = char.IsDigit(curr);
+            bool prevDigit = char.IsDigit(prev);
+
+            bool needSpace =
+                // lower -> upper (positionX)
+                (!prevUpper && currUpper)
+
+                // acronym end: URLValue
+                || (prevUpper && currLower && i > 1 && char.IsUpper(prevPrev))
+
+                // letter <-> digit
+                || (!prevDigit && currDigit)
+                || (prevDigit && !currDigit);
+
+            if (needSpace)
+                sb.Append(' ');
+
+            sb.Append(curr);
+        }
+
+        return sb.ToString();
+    }
+    
     #endregion
 }

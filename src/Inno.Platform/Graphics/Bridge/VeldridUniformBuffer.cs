@@ -19,7 +19,7 @@ internal class VeldridUniformBuffer : IUniformBuffer
     
     public void Set<T>(ref T data) where T : unmanaged
     {
-        m_graphicsDevice.UpdateBuffer(inner, 0, data);
+        m_graphicsDevice.UpdateBuffer(inner, 0, ref data);
     }
 
     public void Dispose()

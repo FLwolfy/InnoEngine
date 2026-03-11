@@ -1,6 +1,8 @@
 using System;
-using ImGuiNET;
+using ImGuizmoNET;
+using Inno.Core.ECS;
 using Inno.Core.Events;
+using Inno.Core.Logging;
 using Inno.Core.Math;
 using Inno.Editor.Core;
 using Inno.Editor.Gizmo;
@@ -9,8 +11,10 @@ using Inno.Graphics;
 using Inno.Graphics.Pass;
 using Inno.Graphics.Targets;
 using Inno.Platform.Graphics;
-using Inno.Platform.ImGui;
 using Inno.Runtime.RenderPasses;
+
+using Inno.ImGui;
+using ImGuiNet = ImGuiNET.ImGui;
 
 namespace Inno.Editor.Panel;
 
@@ -33,6 +37,11 @@ public class SceneViewPanel : EditorPanel
     
     private int m_width;
     private int m_height;
+    private Rect m_viewRect;
+    
+    private readonly float[] m_gizmoView  = new float[16];
+    private readonly float[] m_gizmoProj  = new float[16];
+    private readonly float[] m_gizmoModel = new float[16];
     
     internal SceneViewPanel()
     {
@@ -62,6 +71,9 @@ public class SceneViewPanel : EditorPanel
         
         // Draw axis gizmo
         DrawAxisGizmo();
+        
+        // Draw transform gizmo
+        DrawTransformGizmo();
     }
     
     private void EnsureSceneRenderTarget()
@@ -97,6 +109,7 @@ public class SceneViewPanel : EditorPanel
     {
         m_renderPasses = new RenderPassStack();
         m_renderPasses.PushPass(new ClearScreenPass(Color.LIGHTGRAY));
+        m_renderPasses.PushPass(new RenderOpaqueMeshPass()); 
         m_renderPasses.PushPass(new RenderOpaqueSpritePass());
         m_renderPasses.PushPass(new RenderAlphaSpritePass());
     }
@@ -104,7 +117,7 @@ public class SceneViewPanel : EditorPanel
     private void CheckRegionChange()
     {
         // Get Available region
-        Vector2 available = ImGui.GetContentRegionAvail();
+        Vector2 available = ImGuiNet.GetContentRegionAvail();
         int newWidth = (int)Math.Max(available.x, 1);
         int newHeight = (int)Math.Max(available.y, 1);
         
@@ -134,39 +147,49 @@ public class SceneViewPanel : EditorPanel
     
     private void HandlePanZoom()
     {
-        Vector2 panDelta = Vector2.ZERO;
-        var io = ImGui.GetIO();
-        
+        var io = ImGuiNet.GetIO();
+
         float zoomDelta = io.MouseWheel;
-        Vector2 localMousePos = io.MousePos - ImGui.GetCursorScreenPos();
+        Vector2 localMousePos = io.MousePos - ImGuiNet.GetCursorScreenPos();
 
-        bool isMouseInContent = localMousePos.y > 0 && ImGui.IsWindowHovered();
-        bool isPanning = io.MouseDown[(int)MOUSE_BUTTON_PAN] || zoomDelta != 0.0f;
-        if (isMouseInContent && isPanning)
-        {
-            if (ImGui.IsWindowFocused()) { panDelta = io.MouseDelta; }
-            else { ImGui.SetWindowFocus(); }
-        }
+        bool isMouseInContent = localMousePos.y > 0 && ImGuiNet.IsWindowHovered();
+        bool wantZoom = zoomDelta != 0.0f;
+        bool wantPan = io.MouseDown[(int)MOUSE_BUTTON_PAN];
 
-        if (ImGui.IsWindowFocused())
+        Vector2 panDelta = Vector2.ZERO;
+
+        // Only react when hovered (content)
+        if (isMouseInContent && (wantPan || wantZoom))
         {
+            // If you want: steal focus when interacting
+            if (!ImGuiNet.IsWindowFocused())
+                ImGuiNet.SetWindowFocus();
+
+            if (wantPan)
+                panDelta = io.MouseDelta;
+
+            // Apply update only when hovered
             m_editorCamera2D.Update(panDelta, zoomDelta, localMousePos);
         }
     }
+
 
     private void DrawScene()
     {
         var targetTexture = RenderGraphics.targetPool.Get("scene")?.GetColorAttachment(0);
         if (targetTexture != null)
         {
-            var newTextureHandle = IImGui.GetOrBindTexture(targetTexture);
+            var newTextureHandle = ImGuiHost.GetOrBindTexture(targetTexture);
             if (m_currentTexture != targetTexture)
             {
-                IImGui.UnbindTexture(m_currentTexture);
+                ImGuiHost.UnbindTexture(m_currentTexture);
                 m_currentTexture = targetTexture;
             }
             
-            ImGui.Image(newTextureHandle, new Vector2(m_width, m_height));
+            ImGuiNet.Image(newTextureHandle, new Vector2(m_width, m_height));
+            Vector2 min = ImGuiNet.GetItemRectMin();
+            Vector2 max = ImGuiNet.GetItemRectMax();
+            ImGuizmo.SetRect(min.x, min.y, max.x - min.x, max.y - min.y);
         }
     }
     
@@ -193,7 +216,7 @@ public class SceneViewPanel : EditorPanel
         Vector2 offsetWorld = new Vector2(offsetXWorld, offsetYWorld);
         Vector2 offset = Vector2.Transform(offsetWorld, m_editorCamera2D.GetWorldToScreenMatrix());
         
-        m_gridGizmo.startPos = ImGui.GetWindowPos() + ImGui.GetCursorStartPos();
+        m_gridGizmo.startPos = ImGuiNet.GetWindowPos() + ImGuiNet.GetCursorStartPos();
         m_gridGizmo.size = new Vector2(m_width, m_height);
         m_gridGizmo.offset = offset;
         m_gridGizmo.spacing = spacing;
@@ -201,6 +224,57 @@ public class SceneViewPanel : EditorPanel
         m_gridGizmo.coordsIncrement = new Vector2(newAxisInterval, newAxisInterval);
         
         m_gridGizmo.Draw();
+    }
+
+    private void DrawTransformGizmo()
+    {
+        ImGuizmo.SetOrthographic(true);
+
+        if (EditorManager.selection.selectedObject is GameObject go)
+        {
+            // Check destroy or not
+            if (go.transform == null) return;
+            
+            Matrix world = BuildWorldMatrix(go.transform);
+            
+            ToFloat16(m_editorCamera2D.viewMatrix, m_gizmoView);
+            ToFloat16(m_editorCamera2D.projectionMatrix, m_gizmoProj);
+            ToFloat16(world, m_gizmoModel);
+
+            bool usingGizmo = ImGuizmo.Manipulate(
+                ref m_gizmoView[0],
+                ref m_gizmoProj[0],
+                OPERATION.TRANSLATE,
+                MODE.WORLD,
+                ref m_gizmoModel[0]
+            );
+        }
+    }
+
+    public static void ToFloat16(Matrix m, float[] dst)
+    {
+        dst[0]  = m.m11; dst[1]  = m.m12; dst[2]  = m.m13; dst[3]  = m.m14;
+        dst[4]  = m.m21; dst[5]  = m.m22; dst[6]  = m.m23; dst[7]  = m.m24;
+        dst[8]  = m.m31; dst[9]  = m.m32; dst[10] = m.m33; dst[11] = m.m34;
+        dst[12] = m.m41; dst[13] = m.m42; dst[14] = m.m43; dst[15] = m.m44;
+    }
+
+    public static Matrix FromFloat16(float[] m)
+    {
+        return new Matrix(
+            m[0],  m[1],  m[2],  m[3],
+            m[4],  m[5],  m[6],  m[7],
+            m[8],  m[9],  m[10], m[11],
+            m[12], m[13], m[14], m[15]
+        );
+    }
+    
+    private static Matrix BuildWorldMatrix(Transform t)
+    {
+        return
+            Matrix.CreateScale(t.worldScale) *
+            Matrix.CreateFromQuaternion(t.worldRotation) *
+            Matrix.CreateTranslation(t.worldPosition);
     }
 
 }

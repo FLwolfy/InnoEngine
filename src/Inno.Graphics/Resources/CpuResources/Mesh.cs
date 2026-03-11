@@ -19,8 +19,7 @@ public readonly struct MeshSegment(string name, int indexStart, int indexCount, 
 
 public class Mesh
 {
-    // TODO: Change this to asset-inserted when complete mesh assets
-    public Guid guid { get; } = Guid.NewGuid();
+    public Guid guid { get; }
 
     private readonly List<VertexAttributeEntry> m_attributes = new();
     private readonly Dictionary<string, int> m_attributeIndex = new();
@@ -37,6 +36,13 @@ public class Mesh
 
     public Mesh(string name)
     {
+        this.guid = Guid.NewGuid();
+        this.name = name;
+    }
+    
+    public Mesh(Guid guid, string name)
+    {
+        this.guid = guid;
         this.name = name;
     }
 

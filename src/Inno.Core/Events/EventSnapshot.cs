@@ -5,6 +5,7 @@ namespace Inno.Core.Events;
 public class EventSnapshot
 {
     private readonly Dictionary<EventType, object> m_eventMap = new();
+    private readonly List<char> m_inputChars = new();
     
     public void AddEvent(Event e)
     {
@@ -18,7 +19,7 @@ public class EventSnapshot
             m_eventMap[e.type] = new List<Event> { e };
         }
     }
-
+    
     public IEnumerable<Event> GetEvents(EventType type)
     {
         if (m_eventMap.TryGetValue(type, out var obj) && obj is List<Event> list)
@@ -26,5 +27,16 @@ public class EventSnapshot
         return [];
     }
 
-    public void Clear() => m_eventMap.Clear();
+    public void AddInputChar(char c)
+    {
+        m_inputChars.Add(c);
+    }
+    
+    public IReadOnlyList<char> GetInputChars() => m_inputChars;
+
+    public void Clear()
+    {
+        m_eventMap.Clear();
+        m_inputChars.Clear();
+    }
 }

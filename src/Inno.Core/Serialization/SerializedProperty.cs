@@ -2,54 +2,68 @@ using System;
 
 namespace Inno.Core.Serialization;
 
-public class SerializedProperty
+/// <summary>
+/// Represents a discoverable property in the editor and in the serialization pipeline.
+/// </summary>
+public sealed class SerializedProperty
 {
-    /// <summary>
-    /// The visibility Enum of the property in the editor.
-    /// </summary>
-    public enum PropertyVisibility { Show, Hide, ReadOnly, }
-    
+    #region Backing Delegates
+
     private readonly Func<object?> m_getter;
     private readonly Action<object?> m_setter;
-    
+
+    #endregion
+
+    #region Public State
+
     /// <summary>
-    /// The name of the property.
+    /// Gets the display and serialization key name.
     /// </summary>
     public string name { get; }
-    
+
     /// <summary>
-    /// The type of the property.
+    /// Gets the declared CLR type of this property.
     /// </summary>
     public Type propertyType { get; }
-    
+
     /// <summary>
-    /// The visibility of the property.
+    /// Gets the visibility of this property.
     /// </summary>
     public PropertyVisibility visibility { get; }
 
-    internal SerializedProperty(string name, Type propertyType, Func<object?> getter, Action<object?> setter,  PropertyVisibility visibility)
+    #endregion
+
+    #region Construction
+
+    internal SerializedProperty(
+        string name,
+        Type propertyType,
+        Func<object?> getter,
+        Action<object?> setter,
+        PropertyVisibility visibility)
     {
         this.name = name;
         this.propertyType = propertyType;
         this.visibility = visibility;
-        
         m_getter = getter;
         m_setter = setter;
     }
-    
-    /// <summary>
-    /// Gets the value of the property.
-    /// </summary>
-    public object? GetValue()
-    {
-        return m_getter.Invoke();
-    }
+
+    #endregion
+
+    #region Public API
 
     /// <summary>
-    /// Sets the value of the property.
+    /// Gets the current value.
     /// </summary>
-    public void SetValue(object? value)
-    {
-        m_setter.Invoke(value);
-    }
+    /// <returns>The value produced by the getter delegate.</returns>
+    public object? GetValue() => m_getter();
+
+    /// <summary>
+    /// Sets the current value.
+    /// </summary>
+    /// <param name="value">The value to assign.</param>
+    public void SetValue(object? value) => m_setter(value);
+
+    #endregion
 }

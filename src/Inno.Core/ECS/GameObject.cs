@@ -8,44 +8,43 @@ namespace Inno.Core.ECS;
 /// <summary>
 /// Represents an entity in the scene. It holds an ID and allows component operations.
 /// </summary>
-public class GameObject : Serializable
+public class GameObject : ISerializable
 {
-    public readonly Guid id = Guid.NewGuid();
-    public readonly Transform transform;
+    [SerializableProperty] public Guid id { get; private set; } = Guid.NewGuid();
+    [SerializableProperty] public string name { get; set; } = "GameObject";
+
+    public Transform transform => GetComponent<Transform>()!;
     public readonly GameScene scene;
-    
-    public string name = "GameObject";
 
     public GameObject()
     {
         GameScene? activeScene = SceneManager.GetActiveScene();
-        if (activeScene == null)
-        {
-            throw new InvalidOperationException("Can not attach GameObject to a null scene.");
-        }
 
-        scene = activeScene;
+        scene = activeScene ?? throw new InvalidOperationException("Can not attach GameObject to a null scene.");
         scene.RegisterGameObject(this);
-        
-        transform = AddComponent<Transform>();
+
+        AddComponent<Transform>();
     }
     
-    public GameObject(string name) : this()
+    public GameObject(string name)
     {
+        GameScene? activeScene = SceneManager.GetActiveScene();
+
         this.name = name;
+        scene = activeScene ?? throw new InvalidOperationException("Can not attach GameObject to a null scene.");
+        scene.RegisterGameObject(this);
+
+        AddComponent<Transform>();
     }
 
-    public GameObject(GameScene scene)
+    /// <summary>
+    /// This constructor will not automatically add Transform.
+    /// This is mainly used for scene deserialization.
+    /// </summary>
+    internal GameObject(GameScene scene)
     {
         this.scene = scene;
         scene.RegisterGameObject(this);
-        
-        transform = AddComponent<Transform>();
-    }
-
-    public GameObject(GameScene scene, string name) : this(scene)
-    {
-        this.name = name;
     }
 
     /// <summary>

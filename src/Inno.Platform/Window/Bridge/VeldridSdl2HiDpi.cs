@@ -1,5 +1,8 @@
 using System;
 using System.Runtime.InteropServices;
+
+using Inno.Core.Math;
+
 using Veldrid.Sdl2;
 
 namespace Inno.Platform.Window.Bridge;
@@ -22,7 +25,7 @@ internal static unsafe class VeldridSdl2HiDpi
     private static SdlGetWindowSizeInPixelsT? m_getWindowSizeInPixels;
     private static SdlGlGetDrawableSizeT? m_glGetDrawableSize;
 
-    public static (int fbWidth, int fbHeight) GetFramebufferSize(Sdl2Window window)
+    public static Vector2Int GetFramebufferSize(Sdl2Window window)
     {
         if (window == null) throw new ArgumentNullException(nameof(window));
 
@@ -38,7 +41,7 @@ internal static unsafe class VeldridSdl2HiDpi
         if (m_getWindowSizeInPixels != null)
         {
             m_getWindowSizeInPixels(window.SdlWindowHandle, &w, &h);
-            if (w > 0 && h > 0) return (w, h);
+            if (w > 0 && h > 0) return new(w, h);
         }
 
         // Fallback: SDL_GL_GetDrawableSize
@@ -51,20 +54,20 @@ internal static unsafe class VeldridSdl2HiDpi
         if (m_glGetDrawableSize != null)
         {
             m_glGetDrawableSize(window.SdlWindowHandle, &w, &h);
-            if (w > 0 && h > 0) return (w, h);
+            if (w > 0 && h > 0) return new(w, h);
         }
 
         // Last resort: logical size
-        return (window.Width, window.Height);
+        return new(window.Width, window.Height);
     }
 
-    public static (float scaleX, float scaleY) GetFramebufferScale(Sdl2Window window)
+    public static Vector2 GetFramebufferScale(Sdl2Window window)
     {
-        var (fbW, fbH) = GetFramebufferSize(window);
-        float sx = window.Width > 0 ? (float)fbW / window.Width : 1f;
-        float sy = window.Height > 0 ? (float)fbH / window.Height : 1f;
+        var size = GetFramebufferSize(window);
+        float sx = window.Width > 0 ? (float)size.x / window.Width : 1f;
+        float sy = window.Height > 0 ? (float)size.y / window.Height : 1f;
         if (sx <= 0f) sx = 1f;
         if (sy <= 0f) sy = 1f;
-        return (sx, sy);
+        return new(sx, sy);
     }
 }

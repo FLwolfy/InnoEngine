@@ -7,7 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ImGui.NET" Version="1.91.6.1" PrivateAssets="all" />
     <PackageReference Include="Veldrid" Version="4.9.0" PrivateAssets="compile" />
     <PackageReference Include="Veldrid.SDL2" Version="4.9.0" PrivateAssets="compile" />
     <PackageReference Include="Veldrid.SPIRV" Version="1.0.15" PrivateAssets="compile" />
@@ -16,12 +15,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Inno.Core\Inno.Core.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="**\Assets\**\*.*">
-      <LogicalName>%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
-    </EmbeddedResource>
   </ItemGroup>
 
 </Project>

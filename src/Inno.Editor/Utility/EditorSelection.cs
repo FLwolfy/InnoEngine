@@ -1,15 +1,14 @@
-using System.Runtime.Serialization;
-using Inno.Core.Serialization;
+using ISerializable = Inno.Core.Serialization.ISerializable;
 
 namespace Inno.Editor.Utility;
 
 public class EditorSelection
 {
-    public Serializable? selectedObject { get; private set; }
-    public delegate void SelectionChangedHandler(Serializable? oldObj, Serializable? newObj);
+    public ISerializable? selectedObject { get; private set; }
+    public delegate void SelectionChangedHandler(ISerializable? oldObj, ISerializable? newObj);
     public event SelectionChangedHandler? OnSelectionChanged;
 
-    public void Select(Serializable obj)
+    public void Select(ISerializable obj)
     {
         if (selectedObject != obj)
         {

@@ -8,19 +8,19 @@ namespace Inno.Core.ECS;
 /// <summary>
 /// Represents a scene that contains and manages GameObjects.
 /// </summary>
-public class GameScene : Serializable
+public class GameScene : ISerializable
 {
-    public readonly Guid id = Guid.NewGuid();
-    public string name = "GameScene";
-    
-    private bool m_isRunning;
-    private bool m_isUpdating;
+    [SerializableProperty] public Guid id { get; private set; } = Guid.NewGuid();
+    [SerializableProperty] public string name { get; set; } = "GameScene";
     
     private readonly List<GameObject> m_gameObjects = [];
     private readonly List<GameObject> m_pendingGameObjectRemoves = [];
-    private readonly ComponentManager m_componentManager = new();
+    private readonly ComponentPool m_componentPool = new();
+    
+    private bool m_isRunning;
+    private bool m_isUpdating;
 
-    internal GameCamera? mainCamera;
+    internal Camera? mainCamera;
 
     internal GameScene() {}
     
@@ -32,82 +32,110 @@ public class GameScene : Serializable
     /// <summary>
     /// Gets the component manager of the current game scene.
     /// </summary>
-    internal ComponentManager GetComponentManager() => m_componentManager;
+    internal ComponentPool GetComponentManager() => m_componentPool;
 
     internal void EndRuntime()
     {
         m_isRunning = false;
         m_isUpdating = false;
-        m_componentManager.EndRuntime();
+        m_componentPool.EndRuntime();
         m_pendingGameObjectRemoves.Clear();
     }
+    
+    // =============================
+    // Serialization
+    // =============================
+    
+    [SerializableProperty]
+    private SceneSnapshot sceneSnapshot
+    {
+        get => SceneSnapshot.Create(in m_gameObjects, in m_componentPool);
+        set
+        {
+            ClearForRestore();
+            RestoreFromSnapshot(value);
+        }
+    }
 
-    internal void ClearForRestore()
+    private void ClearForRestore()
     {
         mainCamera = null;
         m_pendingGameObjectRemoves.Clear();
-        m_componentManager.ClearAll();
+        m_componentPool.ClearAll();
         m_gameObjects.Clear();
         m_isRunning = false;
         m_isUpdating = false;
     }
 
-    internal void RestoreFromSnapshot(SceneSnapshot.SceneSnapshotData data)
+    private void RestoreFromSnapshot(SceneSnapshot snapshot)
     {
-        // Defensive: only restore into an edit-state scene.
-        ClearForRestore();
-
         // First pass: create all objects (so parenting can resolve).
-        var created = new Dictionary<string, GameObject>(StringComparer.Ordinal);
-        foreach (var o in data.objects)
+        foreach (var goe in snapshot.gameObjectEntries)
         {
-            var go = new GameObject(this, o.name);
-            created[o.name] = go;
+            var go = new GameObject(this);
+            ((ISerializable)go).RestoreState(goe.objectState);
         }
-
-        // Second pass: restore components and state.
-        foreach (var o in data.objects)
+        
+        // Second pass: restore transform
+        for (int i = 0; i < snapshot.gameObjectEntries.Count; i++)
         {
-            if (!created.TryGetValue(o.name, out var go)) continue;
+            // Object
+            var goe = snapshot.gameObjectEntries[i];
+            var go = m_gameObjects[i];
 
-            foreach (var c in o.components)
+            // Transform retore
+            var transState = goe.componentEntries
+                .Where(ce =>
+                {
+                    var t = Type.GetType(ce.typeName);
+                    return t != null && typeof(Transform).IsAssignableFrom(t);
+                })
+                .Select(ce => ce.componentState)
+                .First();
+            var trans = go.AddComponent<Transform>();
+            ((ISerializable)trans).RestoreState(transState);
+        }
+        
+        // Third pass: parent-child relation
+        foreach (var go in m_gameObjects)
+        {
+            var trans = go.transform;
+            var parentId = trans.parentId;
+            if (parentId != Guid.Empty)
             {
-                var compType = Type.GetType(c.type);
-                if (compType == null) continue;
-
-                GameComponent? comp;
-                if (compType == typeof(Transform))
-                {
-                    comp = go.transform;
-                }
-                else
-                {
-                    comp = go.AddComponent(compType);
-                }
-
-                if (comp == null) continue;
-
-                if (comp is Serializable s)
-                    s.RestoreState(c.state);
+                trans.SetParent(FindGameObject(parentId)!.transform, worldTransformStays: false);
             }
         }
-
-        // Third pass: restore parenting (keep local transform).
-        foreach (var o in data.objects)
+        
+        // Forth pass: restore components and state.
+        for (int i = 0; i < snapshot.gameObjectEntries.Count; i++)
         {
-            if (o.parentName == null) continue;
-            if (!created.TryGetValue(o.name, out var child)) continue;
-            if (!created.TryGetValue(o.parentName, out var parent)) continue;
-            child.transform.SetParent(parent.transform, worldTransformStays: false);
+            var goe = snapshot.gameObjectEntries[i];
+            var go = m_gameObjects[i];
+            foreach (var ce in goe.componentEntries)
+            {
+                var type = Type.GetType(ce.typeName);
+                if (type == null || typeof(Transform).IsAssignableFrom(type)) continue;
+                
+                var comp = go.AddComponent(type);
+                if (comp is ISerializable serializable)
+                {
+                    serializable.RestoreState(ce.componentState);
+                }
+            }
         }
     }
+    
+    // =============================
+    // APIs
+    // =============================
 
     /// <summary>
     /// Gets all components of a specific type in the current game scene.
     /// </summary>
     public IEnumerable<T> GetAllComponents<T>() where T : GameComponent
     {
-        return m_componentManager.GetAll<T>();
+        return m_componentPool.GetAll<T>();
     }
 
     /// <summary>
@@ -115,7 +143,7 @@ public class GameScene : Serializable
     /// </summary>
     public IEnumerable<T> GetAllComponentsAs<T>() where T : GameComponent
     {
-        return m_componentManager.GetAllAssignableTo<T>();
+        return m_componentPool.GetAllAssignableTo<T>();
     }
     
     /// <summary>
@@ -123,13 +151,13 @@ public class GameScene : Serializable
     /// </summary>
     public IEnumerable<T> GetAllComponent<T>() where T : GameComponent
     {
-        return m_componentManager.GetAll<T>();
+        return m_componentPool.GetAll<T>();
     }
         
     /// <summary>
     /// Gets the main camera of the current game scene.
     /// </summary>
-    public GameCamera? GetMainCamera() => mainCamera;
+    public Camera? GetMainCamera() => mainCamera;
 
     /// <summary>
     /// Registers a GameObject to this scene.
@@ -145,10 +173,10 @@ public class GameScene : Serializable
     /// </summary>
     public void UnregisterGameObject(GameObject obj)
     {
-        var components = m_componentManager.GetAll(obj.id);
+        var components = m_componentPool.GetAll(obj.id);
         foreach (var comp in components)
         {
-            m_componentManager.Remove(obj.id, comp);
+            m_componentPool.Remove(obj.id, comp);
         }
 
         if (m_isRunning || m_isUpdating)
@@ -198,8 +226,8 @@ public class GameScene : Serializable
     /// </summary>
     internal void BeginRuntime()
     {
-        m_componentManager.WakeAll();
-        m_componentManager.BeginRuntime();
+        m_componentPool.WakeAll();
+        m_componentPool.BeginRuntime();
         m_isRunning = true;
     }
 
@@ -210,7 +238,7 @@ public class GameScene : Serializable
     {
         // Updates
         m_isUpdating = true;
-        m_componentManager.UpdateAll();
+        m_componentPool.UpdateAll();
         m_isUpdating = false;
         
         // Remove objects

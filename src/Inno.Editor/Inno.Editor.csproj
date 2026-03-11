@@ -7,11 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Inno.ImGui\Inno.ImGui.csproj" />
     <ProjectReference Include="..\Inno.Runtime\Inno.Runtime.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="ImGui.NET" Version="1.91.6.1" PrivateAssets="compile" />
+    <PackageReference Include="Twizzle.ImGui-Bundle.NET" Version="1.91.5.2" PrivateAssets="compile"/>
   </ItemGroup>
   
 </Project>

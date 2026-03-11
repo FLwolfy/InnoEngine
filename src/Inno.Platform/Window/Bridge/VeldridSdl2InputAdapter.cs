@@ -1,6 +1,8 @@
 using System;
 using Inno.Core.Events;
+
 using Veldrid;
+
 using SYSVector2 = System.Numerics.Vector2;
 
 namespace Inno.Platform.Window.Bridge;

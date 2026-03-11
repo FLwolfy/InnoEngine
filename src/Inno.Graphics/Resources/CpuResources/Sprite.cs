@@ -1,16 +1,45 @@
 using Inno.Assets;
 using Inno.Assets.AssetType;
+using Inno.Assets.Core;
 using Inno.Core.Math;
 using Inno.Core.Serialization;
 using Inno.Graphics.Decoder;
 
 namespace Inno.Graphics.Resources.CpuResources;
 
-public sealed class Sprite : Serializable
+public sealed class Sprite : ISerializable
 {
     public Texture? texture { get; private set; }
-
-    [SerializableProperty] private AssetRef<TextureAsset>? m_textureAsset;
+    
+    [SerializableProperty]
+    private AssetRef<TextureAsset> source
+    {
+        get
+        {
+            if (texture == null)
+            {
+                return default;
+            }
+            
+            return AssetManager.Get<TextureAsset>(texture.guid);
+        }
+        set
+        { 
+            if (value.isValid)
+            {
+                var asset = value.Resolve();
+                if (asset != null)
+                {
+                    texture = ResourceDecoder.DecodeBinaries<Texture, TextureAsset>(asset);
+                }
+            }
+            else
+            {
+                texture = null;
+            }
+        }
+    }
+    
     [SerializableProperty] public Vector4 uv;
     [SerializableProperty] public Vector2 size;
 
@@ -19,7 +48,7 @@ public sealed class Sprite : Serializable
         this.texture = texture;
         if (texture != null)
         {
-            m_textureAsset = AssetManager.Get<TextureAsset>(texture.guid);
+            source = AssetManager.Get<TextureAsset>(texture.guid);
         }
         
         this.uv = uv;
@@ -44,18 +73,6 @@ public sealed class Sprite : Serializable
             new Vector4(0, 0, 1, 1),
             size
         );
-    }
-
-    protected override void OnAfterRestore()
-    {
-        if (m_textureAsset != null)
-        {
-            var asset = m_textureAsset.Value.Resolve();
-            if (asset != null)
-            {
-                texture = ResourceDecoder.DecodeBinaries<Texture, TextureAsset>(asset);
-            }
-        }
     }
         
 }

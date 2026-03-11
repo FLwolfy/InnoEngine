@@ -3,12 +3,12 @@ namespace Inno.Core.Math;
 /// <summary>
 /// Represents an RGBA color with float components in the range [0, 1].
 /// </summary>
-public readonly struct Color
+public struct Color
 {
-    public readonly float r;
-    public readonly float g;
-    public readonly float b;
-    public readonly float a;
+    public float r;
+    public float g;
+    public float b;
+    public float a;
 
     public Color(float r, float g, float b, float a = 1f)
     {

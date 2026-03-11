@@ -1,6 +1,9 @@
-using ImGuiNET;
-using Inno.Editor.Core;
 using System;
+
+using Inno.Editor.Core;
+
+using ImGuiNET;
+using ImGuiNet = ImGuiNET.ImGui;
 
 namespace Inno.Editor.GUI;
 
@@ -15,10 +18,10 @@ internal static class EditorPlayBar
 
     public static void Draw()
     {
-        var vp = ImGui.GetMainViewport();
+        var vp = ImGuiNet.GetMainViewport();
 
-        ImGui.SetNextWindowPos(new System.Numerics.Vector2(vp.Pos.X + vp.Size.X * 0.5f, vp.Pos.Y + 6f), ImGuiCond.Always, new System.Numerics.Vector2(0.5f, 0f));
-        ImGui.SetNextWindowSize(new System.Numerics.Vector2(0, C_HEIGHT), ImGuiCond.Always);
+        ImGuiNet.SetNextWindowPos(new System.Numerics.Vector2(vp.Pos.X + vp.Size.X * 0.5f, vp.Pos.Y + 6f), ImGuiCond.Always, new System.Numerics.Vector2(0.5f, 0f));
+        ImGuiNet.SetNextWindowSize(new System.Numerics.Vector2(0, C_HEIGHT), ImGuiCond.Always);
 
         var flags = ImGuiWindowFlags.NoDecoration
                     | ImGuiWindowFlags.NoDocking
@@ -27,17 +30,17 @@ internal static class EditorPlayBar
                     | ImGuiWindowFlags.NoFocusOnAppearing
                     | ImGuiWindowFlags.NoNav;
 
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new System.Numerics.Vector2(10f, 6f));
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 8f);
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 1f);
+        ImGuiNet.PushStyleVar(ImGuiStyleVar.WindowPadding, new System.Numerics.Vector2(10f, 6f));
+        ImGuiNet.PushStyleVar(ImGuiStyleVar.WindowRounding, 8f);
+        ImGuiNet.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 1f);
 
-        if (ImGui.Begin("##EditorPlayBar", flags))
+        if (ImGuiNet.Begin("##EditorPlayBar", flags))
         {
             DrawButtons();
         }
-        ImGui.End();
+        ImGuiNet.End();
 
-        ImGui.PopStyleVar(3);
+        ImGuiNet.PopStyleVar(3);
     }
 
     private static void DrawButtons()
@@ -49,18 +52,18 @@ internal static class EditorPlayBar
         bool inPause = mode == EditorMode.Pause;
 
         string runLabel = inEdit ? "Run" : "Stop";
-        if (ImGui.Button(runLabel))
+        if (ImGuiNet.Button(runLabel))
         {
             if (inEdit) EditorRuntimeController.Play();
             else EditorRuntimeController.Stop();
         }
 
-        ImGui.SameLine();
+        ImGuiNet.SameLine();
 
         using (new DisabledScope(!inEdit))
         {
             string pauseLabel = inPause ? "Resume" : "Pause";
-            if (ImGui.Button(pauseLabel))
+            if (ImGuiNet.Button(pauseLabel))
             {
                 if (inPlay) EditorRuntimeController.Pause();
                 else if (inPause) EditorRuntimeController.Resume();
@@ -75,12 +78,12 @@ internal static class EditorPlayBar
         public DisabledScope(bool enabled)
         {
             m_enabled = enabled;
-            if (!enabled) ImGui.BeginDisabled();
+            if (!enabled) ImGuiNet.BeginDisabled();
         }
 
         public void Dispose()
         {
-            if (!m_enabled) ImGui.EndDisabled();
+            if (!m_enabled) ImGuiNet.EndDisabled();
         }
     }
 }

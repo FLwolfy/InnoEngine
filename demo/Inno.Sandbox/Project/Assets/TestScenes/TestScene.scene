@@ -1,0 +1,1166 @@
+$kind: state
+$value:
+  id:
+    $kind: prim
+    $type: System.Guid, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+    $value: d78333e0-cf49-47cb-83eb-5b4e1e284f23
+  name:
+    $kind: prim
+    $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+    $value: TestScene
+  sceneSnapshot:
+    $kind: serializableWrapper
+    $type: Inno.Core.ECS.SceneSnapshot, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+    $value:
+      $kind: state
+      $value:
+        gameObjectEntries:
+          $kind: list
+          $items:
+          - $kind: serializableWrapper
+            $type: Inno.Core.ECS.SceneSnapshot+GameObjectEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+            $value:
+              $kind: state
+              $value:
+                objectState:
+                  $kind: state
+                  $value:
+                    id:
+                      $kind: prim
+                      $type: System.Guid, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                      $value: ecfdc4eb-9370-452d-a093-c5090e056a76
+                    name:
+                      $kind: prim
+                      $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                      $value: Main Camera
+                componentEntries:
+                  $kind: list
+                  $items:
+                  - $kind: serializableWrapper
+                    $type: Inno.Core.ECS.SceneSnapshot+ComponentEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                    $value:
+                      $kind: state
+                      $value:
+                        typeName:
+                          $kind: prim
+                          $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                          $value: Inno.Core.ECS.Transform, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                        componentState:
+                          $kind: state
+                          $value:
+                            localPosition:
+                              $kind: struct
+                              $type: Inno.Core.Math.Vector3, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 200
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                            localScale:
+                              $kind: struct
+                              $type: Inno.Core.Math.Vector3, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                            localRotation:
+                              $kind: struct
+                              $type: Inno.Core.Math.Quaternion, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:w:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                            parentId:
+                              $kind: prim
+                              $type: System.Guid, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 00000000-0000-0000-0000-000000000000
+                  - $kind: serializableWrapper
+                    $type: Inno.Core.ECS.SceneSnapshot+ComponentEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                    $value:
+                      $kind: state
+                      $value:
+                        typeName:
+                          $kind: prim
+                          $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                          $value: Inno.Runtime.Component.OrthographicCamera, Inno.Runtime, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                        componentState:
+                          $kind: state
+                          $value:
+                            near:
+                              $kind: prim
+                              $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: -1000
+                            far:
+                              $kind: prim
+                              $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 1000
+                            size:
+                              $kind: prim
+                              $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 1080
+                            isMainCamera:
+                              $kind: prim
+                              $type: System.Boolean, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: true
+                            aspectRatio:
+                              $kind: prim
+                              $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 1.7777
+          - $kind: serializableWrapper
+            $type: Inno.Core.ECS.SceneSnapshot+GameObjectEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+            $value:
+              $kind: state
+              $value:
+                objectState:
+                  $kind: state
+                  $value:
+                    id:
+                      $kind: prim
+                      $type: System.Guid, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                      $value: adca0347-da9a-4248-a374-f3691e1b69a1
+                    name:
+                      $kind: prim
+                      $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                      $value: Test Object 1
+                componentEntries:
+                  $kind: list
+                  $items:
+                  - $kind: serializableWrapper
+                    $type: Inno.Core.ECS.SceneSnapshot+ComponentEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                    $value:
+                      $kind: state
+                      $value:
+                        typeName:
+                          $kind: prim
+                          $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                          $value: Inno.Core.ECS.Transform, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                        componentState:
+                          $kind: state
+                          $value:
+                            localPosition:
+                              $kind: struct
+                              $type: Inno.Core.Math.Vector3, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                            localScale:
+                              $kind: struct
+                              $type: Inno.Core.Math.Vector3, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 100
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 100
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                            localRotation:
+                              $kind: struct
+                              $type: Inno.Core.Math.Quaternion, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0.38268346
+                                F:w:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0.9238795
+                            parentId:
+                              $kind: prim
+                              $type: System.Guid, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 00000000-0000-0000-0000-000000000000
+                  - $kind: serializableWrapper
+                    $type: Inno.Core.ECS.SceneSnapshot+ComponentEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                    $value:
+                      $kind: state
+                      $value:
+                        typeName:
+                          $kind: prim
+                          $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                          $value: Inno.Runtime.Component.SpriteRenderer, Inno.Runtime, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                        componentState:
+                          $kind: state
+                          $value:
+                            sprite:
+                              $kind: serializableWrapper
+                              $type: Inno.Graphics.Resources.CpuResources.Sprite, Inno.Graphics, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $value:
+                                $kind: state
+                                $value:
+                                  m_textureAsset:
+                                    $kind: null
+                                  uv:
+                                    $kind: struct
+                                    $type: Inno.Core.Math.Vector4, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                                    $fields:
+                                      F:x:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 0
+                                      F:y:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 0
+                                      F:z:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                                      F:w:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                                  size:
+                                    $kind: struct
+                                    $type: Inno.Core.Math.Vector2, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                                    $fields:
+                                      F:x:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                                      F:y:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                            color:
+                              $kind: struct
+                              $type: Inno.Core.Math.Color, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:r:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                                F:g:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                                F:b:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                                F:a:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                            opacity:
+                              $kind: prim
+                              $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 1
+                            layerDepth:
+                              $kind: prim
+                              $type: System.Int32, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 0
+          - $kind: serializableWrapper
+            $type: Inno.Core.ECS.SceneSnapshot+GameObjectEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+            $value:
+              $kind: state
+              $value:
+                objectState:
+                  $kind: state
+                  $value:
+                    id:
+                      $kind: prim
+                      $type: System.Guid, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                      $value: f0aad17c-5c1a-4902-8072-2cac53bda4d1
+                    name:
+                      $kind: prim
+                      $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                      $value: Test Object2
+                componentEntries:
+                  $kind: list
+                  $items:
+                  - $kind: serializableWrapper
+                    $type: Inno.Core.ECS.SceneSnapshot+ComponentEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                    $value:
+                      $kind: state
+                      $value:
+                        typeName:
+                          $kind: prim
+                          $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                          $value: Inno.Core.ECS.Transform, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                        componentState:
+                          $kind: state
+                          $value:
+                            localPosition:
+                              $kind: struct
+                              $type: Inno.Core.Math.Vector3, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                            localScale:
+                              $kind: struct
+                              $type: Inno.Core.Math.Vector3, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0.5
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0.5
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                            localRotation:
+                              $kind: struct
+                              $type: Inno.Core.Math.Quaternion, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: -0.38268346
+                                F:w:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0.9238795
+                            parentId:
+                              $kind: prim
+                              $type: System.Guid, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: adca0347-da9a-4248-a374-f3691e1b69a1
+                  - $kind: serializableWrapper
+                    $type: Inno.Core.ECS.SceneSnapshot+ComponentEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                    $value:
+                      $kind: state
+                      $value:
+                        typeName:
+                          $kind: prim
+                          $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                          $value: Inno.Runtime.Component.SpriteRenderer, Inno.Runtime, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                        componentState:
+                          $kind: state
+                          $value:
+                            sprite:
+                              $kind: serializableWrapper
+                              $type: Inno.Graphics.Resources.CpuResources.Sprite, Inno.Graphics, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $value:
+                                $kind: state
+                                $value:
+                                  m_textureAsset:
+                                    $kind: null
+                                  uv:
+                                    $kind: struct
+                                    $type: Inno.Core.Math.Vector4, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                                    $fields:
+                                      F:x:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 0
+                                      F:y:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 0
+                                      F:z:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                                      F:w:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                                  size:
+                                    $kind: struct
+                                    $type: Inno.Core.Math.Vector2, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                                    $fields:
+                                      F:x:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                                      F:y:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                            color:
+                              $kind: struct
+                              $type: Inno.Core.Math.Color, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:r:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:g:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:b:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:a:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                            opacity:
+                              $kind: prim
+                              $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 1
+                            layerDepth:
+                              $kind: prim
+                              $type: System.Int32, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 0
+          - $kind: serializableWrapper
+            $type: Inno.Core.ECS.SceneSnapshot+GameObjectEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+            $value:
+              $kind: state
+              $value:
+                objectState:
+                  $kind: state
+                  $value:
+                    id:
+                      $kind: prim
+                      $type: System.Guid, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                      $value: 7f35d810-eec2-4e23-add6-3c345672ae2c
+                    name:
+                      $kind: prim
+                      $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                      $value: Test Object3
+                componentEntries:
+                  $kind: list
+                  $items:
+                  - $kind: serializableWrapper
+                    $type: Inno.Core.ECS.SceneSnapshot+ComponentEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                    $value:
+                      $kind: state
+                      $value:
+                        typeName:
+                          $kind: prim
+                          $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                          $value: Inno.Core.ECS.Transform, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                        componentState:
+                          $kind: state
+                          $value:
+                            localPosition:
+                              $kind: struct
+                              $type: Inno.Core.Math.Vector3, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1.0606601
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: -1.0606601
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                            localScale:
+                              $kind: struct
+                              $type: Inno.Core.Math.Vector3, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0.5
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0.5
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                            localRotation:
+                              $kind: struct
+                              $type: Inno.Core.Math.Quaternion, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: -0.38268346
+                                F:w:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0.9238795
+                            parentId:
+                              $kind: prim
+                              $type: System.Guid, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: adca0347-da9a-4248-a374-f3691e1b69a1
+                  - $kind: serializableWrapper
+                    $type: Inno.Core.ECS.SceneSnapshot+ComponentEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                    $value:
+                      $kind: state
+                      $value:
+                        typeName:
+                          $kind: prim
+                          $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                          $value: Inno.Runtime.Component.SpriteRenderer, Inno.Runtime, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                        componentState:
+                          $kind: state
+                          $value:
+                            sprite:
+                              $kind: serializableWrapper
+                              $type: Inno.Graphics.Resources.CpuResources.Sprite, Inno.Graphics, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $value:
+                                $kind: state
+                                $value:
+                                  m_textureAsset:
+                                    $kind: null
+                                  uv:
+                                    $kind: struct
+                                    $type: Inno.Core.Math.Vector4, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                                    $fields:
+                                      F:x:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 0
+                                      F:y:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 0
+                                      F:z:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                                      F:w:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                                  size:
+                                    $kind: struct
+                                    $type: Inno.Core.Math.Vector2, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                                    $fields:
+                                      F:x:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                                      F:y:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                            color:
+                              $kind: struct
+                              $type: Inno.Core.Math.Color, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:r:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:g:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:b:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:a:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                            opacity:
+                              $kind: prim
+                              $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 1
+                            layerDepth:
+                              $kind: prim
+                              $type: System.Int32, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 0
+          - $kind: serializableWrapper
+            $type: Inno.Core.ECS.SceneSnapshot+GameObjectEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+            $value:
+              $kind: state
+              $value:
+                objectState:
+                  $kind: state
+                  $value:
+                    id:
+                      $kind: prim
+                      $type: System.Guid, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                      $value: 81f6ab4d-bac9-4630-84c1-149e68b9f593
+                    name:
+                      $kind: prim
+                      $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                      $value: Test Object4
+                componentEntries:
+                  $kind: list
+                  $items:
+                  - $kind: serializableWrapper
+                    $type: Inno.Core.ECS.SceneSnapshot+ComponentEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                    $value:
+                      $kind: state
+                      $value:
+                        typeName:
+                          $kind: prim
+                          $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                          $value: Inno.Core.ECS.Transform, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                        componentState:
+                          $kind: state
+                          $value:
+                            localPosition:
+                              $kind: struct
+                              $type: Inno.Core.Math.Vector3, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 2.1213202
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: -2.1213202
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                            localScale:
+                              $kind: struct
+                              $type: Inno.Core.Math.Vector3, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0.5
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0.5
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                            localRotation:
+                              $kind: struct
+                              $type: Inno.Core.Math.Quaternion, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: -0.38268346
+                                F:w:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0.9238795
+                            parentId:
+                              $kind: prim
+                              $type: System.Guid, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: adca0347-da9a-4248-a374-f3691e1b69a1
+                  - $kind: serializableWrapper
+                    $type: Inno.Core.ECS.SceneSnapshot+ComponentEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                    $value:
+                      $kind: state
+                      $value:
+                        typeName:
+                          $kind: prim
+                          $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                          $value: Inno.Runtime.Component.SpriteRenderer, Inno.Runtime, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                        componentState:
+                          $kind: state
+                          $value:
+                            sprite:
+                              $kind: serializableWrapper
+                              $type: Inno.Graphics.Resources.CpuResources.Sprite, Inno.Graphics, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $value:
+                                $kind: state
+                                $value:
+                                  m_textureAsset:
+                                    $kind: null
+                                  uv:
+                                    $kind: struct
+                                    $type: Inno.Core.Math.Vector4, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                                    $fields:
+                                      F:x:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 0
+                                      F:y:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 0
+                                      F:z:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                                      F:w:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                                  size:
+                                    $kind: struct
+                                    $type: Inno.Core.Math.Vector2, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                                    $fields:
+                                      F:x:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                                      F:y:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                            color:
+                              $kind: struct
+                              $type: Inno.Core.Math.Color, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:r:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:g:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:b:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:a:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                            opacity:
+                              $kind: prim
+                              $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 1
+                            layerDepth:
+                              $kind: prim
+                              $type: System.Int32, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 0
+          - $kind: serializableWrapper
+            $type: Inno.Core.ECS.SceneSnapshot+GameObjectEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+            $value:
+              $kind: state
+              $value:
+                objectState:
+                  $kind: state
+                  $value:
+                    id:
+                      $kind: prim
+                      $type: System.Guid, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                      $value: 4b6e1ddd-cc5f-48f9-af4c-621f81117fd7
+                    name:
+                      $kind: prim
+                      $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                      $value: Test Object5
+                componentEntries:
+                  $kind: list
+                  $items:
+                  - $kind: serializableWrapper
+                    $type: Inno.Core.ECS.SceneSnapshot+ComponentEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                    $value:
+                      $kind: state
+                      $value:
+                        typeName:
+                          $kind: prim
+                          $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                          $value: Inno.Core.ECS.Transform, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                        componentState:
+                          $kind: state
+                          $value:
+                            localPosition:
+                              $kind: struct
+                              $type: Inno.Core.Math.Vector3, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 3.1819804
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: -3.1819806
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                            localScale:
+                              $kind: struct
+                              $type: Inno.Core.Math.Vector3, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0.5
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0.5
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                            localRotation:
+                              $kind: struct
+                              $type: Inno.Core.Math.Quaternion, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: -0.38268346
+                                F:w:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0.9238795
+                            parentId:
+                              $kind: prim
+                              $type: System.Guid, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: adca0347-da9a-4248-a374-f3691e1b69a1
+                  - $kind: serializableWrapper
+                    $type: Inno.Core.ECS.SceneSnapshot+ComponentEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                    $value:
+                      $kind: state
+                      $value:
+                        typeName:
+                          $kind: prim
+                          $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                          $value: Inno.Runtime.Component.SpriteRenderer, Inno.Runtime, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                        componentState:
+                          $kind: state
+                          $value:
+                            sprite:
+                              $kind: serializableWrapper
+                              $type: Inno.Graphics.Resources.CpuResources.Sprite, Inno.Graphics, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $value:
+                                $kind: state
+                                $value:
+                                  m_textureAsset:
+                                    $kind: null
+                                  uv:
+                                    $kind: struct
+                                    $type: Inno.Core.Math.Vector4, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                                    $fields:
+                                      F:x:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 0
+                                      F:y:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 0
+                                      F:z:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                                      F:w:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                                  size:
+                                    $kind: struct
+                                    $type: Inno.Core.Math.Vector2, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                                    $fields:
+                                      F:x:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                                      F:y:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                            color:
+                              $kind: struct
+                              $type: Inno.Core.Math.Color, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:r:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:g:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:b:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:a:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                            opacity:
+                              $kind: prim
+                              $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 1
+                            layerDepth:
+                              $kind: prim
+                              $type: System.Int32, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 0
+          - $kind: serializableWrapper
+            $type: Inno.Core.ECS.SceneSnapshot+GameObjectEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+            $value:
+              $kind: state
+              $value:
+                objectState:
+                  $kind: state
+                  $value:
+                    id:
+                      $kind: prim
+                      $type: System.Guid, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                      $value: 586a80cf-d168-4931-a4f5-f280a0d8abea
+                    name:
+                      $kind: prim
+                      $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                      $value: Textured Object
+                componentEntries:
+                  $kind: list
+                  $items:
+                  - $kind: serializableWrapper
+                    $type: Inno.Core.ECS.SceneSnapshot+ComponentEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                    $value:
+                      $kind: state
+                      $value:
+                        typeName:
+                          $kind: prim
+                          $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                          $value: Inno.Core.ECS.Transform, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                        componentState:
+                          $kind: state
+                          $value:
+                            localPosition:
+                              $kind: struct
+                              $type: Inno.Core.Math.Vector3, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 200
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                            localScale:
+                              $kind: struct
+                              $type: Inno.Core.Math.Vector3, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                            localRotation:
+                              $kind: struct
+                              $type: Inno.Core.Math.Quaternion, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:x:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:y:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:z:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 0
+                                F:w:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                            parentId:
+                              $kind: prim
+                              $type: System.Guid, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 00000000-0000-0000-0000-000000000000
+                  - $kind: serializableWrapper
+                    $type: Inno.Core.ECS.SceneSnapshot+ComponentEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                    $value:
+                      $kind: state
+                      $value:
+                        typeName:
+                          $kind: prim
+                          $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                          $value: Inno.Runtime.Component.SpriteRenderer, Inno.Runtime, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                        componentState:
+                          $kind: state
+                          $value:
+                            sprite:
+                              $kind: serializableWrapper
+                              $type: Inno.Graphics.Resources.CpuResources.Sprite, Inno.Graphics, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $value:
+                                $kind: state
+                                $value:
+                                  m_textureAsset:
+                                    $kind: struct
+                                    $type: Inno.Assets.Core.AssetRef`1[[Inno.Assets.AssetType.TextureAsset, Inno.Assets, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]], Inno.Assets, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                                    $fields:
+                                      P:guid:
+                                        $kind: prim
+                                        $type: System.Guid, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: a6874b0e-f619-4fce-8101-b29ae6e1912a
+                                      P:isEmbedded:
+                                        $kind: prim
+                                        $type: System.Boolean, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: false
+                                  uv:
+                                    $kind: struct
+                                    $type: Inno.Core.Math.Vector4, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                                    $fields:
+                                      F:x:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 0
+                                      F:y:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 0
+                                      F:z:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                                      F:w:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 1
+                                  size:
+                                    $kind: struct
+                                    $type: Inno.Core.Math.Vector2, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                                    $fields:
+                                      F:x:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 30
+                                      F:y:
+                                        $kind: prim
+                                        $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                        $value: 30
+                            color:
+                              $kind: struct
+                              $type: Inno.Core.Math.Color, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                              $fields:
+                                F:r:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                                F:g:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                                F:b:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                                F:a:
+                                  $kind: prim
+                                  $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                                  $value: 1
+                            opacity:
+                              $kind: prim
+                              $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 1
+                            layerDepth:
+                              $kind: prim
+                              $type: System.Int32, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 0
+                  - $kind: serializableWrapper
+                    $type: Inno.Core.ECS.SceneSnapshot+ComponentEntry, Inno.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                    $value:
+                      $kind: state
+                      $value:
+                        typeName:
+                          $kind: prim
+                          $type: System.String, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                          $value: Inno.Sandbox.EditorTest+TestComponent, Inno.Sandbox, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null
+                        componentState:
+                          $kind: state
+                          $value:
+                            rotationSpeed:
+                              $kind: prim
+                              $type: System.Single, System.Private.CoreLib, Version=9.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e
+                              $value: 10

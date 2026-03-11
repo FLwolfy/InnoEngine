@@ -14,6 +14,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Platform", "src\Inno.P
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Assets", "src\Inno.Assets\Inno.Assets.csproj", "{1F6552CF-9409-4DC7-A9DB-3049F5977046}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.ImGui", "src\Inno.ImGui\Inno.ImGui.csproj", "{1000E386-5D03-4182-B38B-00011A329835}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -48,5 +50,9 @@ Global
 		{1F6552CF-9409-4DC7-A9DB-3049F5977046}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1F6552CF-9409-4DC7-A9DB-3049F5977046}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1F6552CF-9409-4DC7-A9DB-3049F5977046}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1000E386-5D03-4182-B38B-00011A329835}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1000E386-5D03-4182-B38B-00011A329835}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1000E386-5D03-4182-B38B-00011A329835}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1000E386-5D03-4182-B38B-00011A329835}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

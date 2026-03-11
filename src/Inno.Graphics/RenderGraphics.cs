@@ -14,15 +14,17 @@ public static class RenderGraphics
     {
         gpuCache = new GpuCache();
         targetPool = new RenderTargetPool(device);
-        
+
         Renderer2D.Initialize(device);
+        Renderer3D.Initialize(device);
     }
 
     public static void Clear()
     {
         gpuCache.Clear();
         targetPool.Clear();
-        
+
         Renderer2D.CleanResources();
+        Renderer3D.CleanResources();
     }
 }

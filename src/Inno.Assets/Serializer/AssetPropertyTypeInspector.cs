@@ -2,40 +2,46 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using Inno.Core.Serialization;
+
+using Inno.Assets.AssetType;
+
 using YamlDotNet.Core;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.TypeInspectors;
 
 namespace Inno.Assets.Serializer;
 
-public class AssetPropertyTypeInspector : TypeInspectorSkeleton
+public sealed class AssetPropertyTypeInspector : TypeInspectorSkeleton
 {
     public override string GetEnumName(Type enumType, string name) => name;
     public override string GetEnumValue(object enumValue) => enumValue.ToString()!;
 
     public override IEnumerable<IPropertyDescriptor> GetProperties(Type type, object? container)
     {
-        if (!type.IsAssignableTo(typeof(Serializable))) 
-            throw new ArgumentException($"{nameof(type)} must be assignable to {nameof(Serializable)}");
-        
-        foreach (var prop in GetAllProperties(type))
+        if (!type.IsAssignableTo(typeof(InnoAsset)))
+            throw new ArgumentException($"{nameof(type)} must be assignable to {nameof(InnoAsset)}");
+
+        foreach (var member in GetAllMembers(type))
         {
-            var attr = prop.GetCustomAttribute<SerializablePropertyAttribute>();
+            var attr = member.GetCustomAttribute<AssetPropertyAttribute>();
             if (attr == null) continue;
 
-            if (attr.propertyVisibility == SerializedProperty.PropertyVisibility.ReadOnly)
+            if (member is PropertyInfo p)
             {
-                yield return new ReadonlyPropertyDescriptor(prop);
+                yield return attr.readOnly
+                    ? new ReadonlyPropertyDescriptor(p)
+                    : new ForceSetPropertyDescriptor(p);
             }
-            else
+            else if (member is FieldInfo f)
             {
-                yield return new ForceSetPropertyDescriptor(prop);
+                yield return attr.readOnly
+                    ? new ReadonlyFieldDescriptor(f)
+                    : new ForceSetFieldDescriptor(f);
             }
         }
     }
 
-    private static IEnumerable<PropertyInfo> GetAllProperties(Type type)
+    private static IEnumerable<MemberInfo> GetAllMembers(Type type)
     {
         var stack = new Stack<Type>();
         var t = type;
@@ -48,17 +54,26 @@ public class AssetPropertyTypeInspector : TypeInspectorSkeleton
         while (stack.Count > 0)
         {
             var current = stack.Pop();
+
             foreach (var p in current.GetProperties(
-                             BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-                         .OrderBy(p => p.MetadataToken))
+                         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                     .OrderBy(p => p.MetadataToken))
             {
+                // skip indexers
+                if (p.GetIndexParameters().Length != 0) continue;
                 yield return p;
+            }
+
+            foreach (var f in current.GetFields(
+                         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                     .OrderBy(f => f.MetadataToken))
+            {
+                yield return f;
             }
         }
     }
 
-
-    private class ReadonlyPropertyDescriptor(PropertyInfo property) : IPropertyDescriptor
+    private sealed class ReadonlyPropertyDescriptor(PropertyInfo property) : IPropertyDescriptor
     {
         public string Name => property.Name;
         public bool AllowNulls => true;
@@ -84,7 +99,7 @@ public class AssetPropertyTypeInspector : TypeInspectorSkeleton
         }
     }
 
-    private class ForceSetPropertyDescriptor(PropertyInfo property) : IPropertyDescriptor
+    private sealed class ForceSetPropertyDescriptor(PropertyInfo property) : IPropertyDescriptor
     {
         public string Name => property.Name;
         public bool AllowNulls => true;
@@ -107,6 +122,58 @@ public class AssetPropertyTypeInspector : TypeInspectorSkeleton
         public void Write(object target, object? value)
         {
             property.SetValue(target, value);
+        }
+    }
+
+    private sealed class ReadonlyFieldDescriptor(FieldInfo field) : IPropertyDescriptor
+    {
+        public string Name => field.Name;
+        public bool AllowNulls => true;
+        public bool CanWrite => false;
+        public Type Type => field.FieldType;
+        public Type? TypeOverride { get; set; }
+        public int Order { get; set; }
+        public ScalarStyle ScalarStyle { get; set; }
+        public bool Required => false;
+        public Type? ConverterType => null;
+
+        public T? GetCustomAttribute<T>() where T : Attribute => field.GetCustomAttribute<T>();
+
+        public IObjectDescriptor Read(object target)
+        {
+            var value = field.GetValue(target);
+            return new ObjectDescriptor(value, field.FieldType, field.FieldType);
+        }
+
+        public void Write(object target, object? value)
+        {
+            // DO NOTHING
+        }
+    }
+
+    private sealed class ForceSetFieldDescriptor(FieldInfo field) : IPropertyDescriptor
+    {
+        public string Name => field.Name;
+        public bool AllowNulls => true;
+        public bool CanWrite => true;
+        public Type Type => field.FieldType;
+        public Type? TypeOverride { get; set; }
+        public int Order { get; set; }
+        public ScalarStyle ScalarStyle { get; set; }
+        public bool Required => false;
+        public Type? ConverterType => null;
+
+        public T? GetCustomAttribute<T>() where T : Attribute => field.GetCustomAttribute<T>();
+
+        public IObjectDescriptor Read(object target)
+        {
+            var value = field.GetValue(target);
+            return new ObjectDescriptor(value, field.FieldType, field.FieldType);
+        }
+
+        public void Write(object target, object? value)
+        {
+            field.SetValue(target, value);
         }
     }
 }

@@ -28,8 +28,10 @@ public class EditorCamera2D
     private float m_aspectRatio = 1.7777f;
     private Vector2 m_position = Vector2.ZERO;
 
-    private const float C_NEAR = -1f;
-    private const float C_FAR = 1f;
+    // TODO: THIS CAN BE MODIFIED LATER IN SETTINGS
+    private const float C_NEAR = -1000f;
+    private const float C_FAR = 1000f;
+    
     private const float C_MIN_SIZE = 0.1f;
     private const float C_MAX_SIZE = 10f;
     private const float C_ZOOM_SPEED = 0.05f;

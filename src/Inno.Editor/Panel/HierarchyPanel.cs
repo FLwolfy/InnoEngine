@@ -1,14 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using ImGuiNET;
 
 using Inno.Core.ECS;
-using Inno.Core.Events;
 using Inno.Core.Math;
 using Inno.Editor.Core;
 using Inno.Editor.GUI;
-using Inno.Runtime.Component;
+
+using ImGuiNET;
+using Inno.Core.Events;
+using Inno.ImGui;
+using ImGuiNet = ImGuiNET.ImGui;
+
+using BranchInfo = (float, uint);
 
 namespace Inno.Editor.Panel;
 
@@ -16,155 +20,193 @@ public class HierarchyPanel : EditorPanel
 {
     public override string title => "Hierarchy";
 
-    private const string C_GAMEOBJECT_GUID_TYPE = "GameObjectGUID";
     private readonly Queue<Action> m_pendingGuiUpdateAction = new();
-    
-    internal HierarchyPanel() {}
+    private readonly Stack<BranchInfo> m_branch = new();
+    private int m_row;
+
+    internal HierarchyPanel() { }
 
     internal override void OnGUI()
     {
-        // Scrollable area for the whole hierarchy
-        ImGui.BeginChild(
-            "##HierarchyScroll",
-            new Vector2(0,0),
-            ImGuiChildFlags.None,
-            ImGuiWindowFlags.HorizontalScrollbar
-        );
+        m_row = 0;
+        m_branch.Clear();
 
-        // Draw Scene root
-        DrawSceneObjectRoot();
+        ImGuiNet.BeginChild("##HierarchyScroll", new Vector2(0, 0), ImGuiChildFlags.None, ImGuiWindowFlags.HorizontalScrollbar);
 
-        // Draw root GameObjects
-        foreach (var obj in SceneManager.GetActiveScene()!.GetAllRootGameObjects())
+        // Split draw channels: 0 = background (stripes), 1 = normal content (tree/items/drag highlight)
+        var dl = ImGuiNet.GetWindowDrawList();
+        dl.ChannelsSplit(2);
+        dl.ChannelsSetCurrent(1);
+
+        var activeScene = SceneManager.GetActiveScene();
+
+        if (activeScene != null)
         {
-            DrawRootGameObject(obj);
+            DrawSceneRoot();
+            foreach (var obj in activeScene.GetAllRootGameObjects())
+                DrawGameObject(obj);
         }
 
-        // Handle Menu Events (must be inside the child, so hover checks refer to this child)
         HandleMenu();
+        while (m_pendingGuiUpdateAction.Count > 0) m_pendingGuiUpdateAction.Dequeue().Invoke();
 
-        // Apply delayed actions
-        while (m_pendingGuiUpdateAction.Count > 0)
-        {
-            m_pendingGuiUpdateAction.Dequeue().Invoke();
-        }
+        // Merge channels back
+        dl.ChannelsMerge();
 
-        ImGui.EndChild();
+        ImGuiNet.EndChild();
     }
 
     private void HandleMenu()
     {
-        if (!ImGui.IsAnyItemHovered() && ImGui.IsWindowHovered() && ImGui.GetIO().MouseClicked[(int)Input.MouseButton.Right])
-        {
-            ImGui.OpenPopup("HierarchyContextMenu");
-        }
+        var io = ImGuiNet.GetIO();
+        if (!ImGuiNet.IsAnyItemHovered() && ImGuiNet.IsWindowHovered() && io.MouseClicked[(int)Input.MouseButton.Right])
+            ImGuiNet.OpenPopup("HierarchyContextMenu");
 
-        if (ImGui.BeginPopup("HierarchyContextMenu"))
-        {
-            if (ImGui.BeginMenu("Create"))
-            {
-                if (ImGui.MenuItem("GameObject"))
-                {
-                    m_pendingGuiUpdateAction.Enqueue(() =>
-                    {
-                        var go = new GameObject("New GameObject");
-                        EditorManager.selection.Select(go);
-                    });
-                }
-                ImGui.EndMenu();
-            }
-            ImGui.EndPopup();
-        }
-    }
+        if (!ImGuiNet.BeginPopup("HierarchyContextMenu")) return;
 
-    private void DrawSceneObjectRoot()
-    {
-        // Draw "Scene Root" as non-selectable, non-draggable
-        ImGui.Text("[ Scene Root ]");
-        if (ImGui.BeginDragDropTarget())
+        if (ImGuiNet.BeginMenu("Create"))
         {
-            var payload = EditorImGuiEx.AcceptDragPayload<Guid>(C_GAMEOBJECT_GUID_TYPE);
-            if (payload != null)
-            {
-                var obj = SceneManager.GetActiveScene()!.FindGameObject(payload.Value);
-                m_pendingGuiUpdateAction.Enqueue(() => obj?.transform.SetParent(null));
-            }
-            ImGui.EndDragDropTarget();
-        }
-    }
-
-    private void DrawRootGameObject(GameObject obj)
-    {
-        var selection = EditorManager.selection;
-        bool isSelected = selection.IsSelected(obj);
-        bool hasChildren = obj.transform.children.Count > 0;
-
-        // TreeNodeFlags with Selected flag
-        var flags = hasChildren ? ImGuiTreeNodeFlags.DefaultOpen | ImGuiTreeNodeFlags.OpenOnArrow | ImGuiTreeNodeFlags.OpenOnDoubleClick : ImGuiTreeNodeFlags.Leaf;
-        flags |= ImGuiTreeNodeFlags.SpanFullWidth;
-        if (isSelected)
-        {
-            flags |= ImGuiTreeNodeFlags.Selected;
-        }
-
-        ////////////// Begin Tree Node //////////////
-        bool isOpenTree = ImGui.TreeNodeEx($"###{obj.id}", flags);
-        
-        // Handle Right Click menu
-        if (ImGui.BeginPopupContextItem($"Popup_{obj.id}"))
-        {
-            if (ImGui.MenuItem("Delete"))
-            {
+            if (ImGuiNet.MenuItem("GameObject"))
                 m_pendingGuiUpdateAction.Enqueue(() =>
                 {
-                    obj.scene.UnregisterGameObject(obj);
+                    var go = new GameObject("New GameObject");
+                    EditorManager.selection.Select(go);
                 });
-            }
-
-            ImGui.EndPopup();
-        }
-        
-        // Handle click selection
-        if (ImGui.IsItemClicked((int)Input.MouseButton.Left))
-        {
-            selection.Select(obj);
+            ImGuiNet.EndMenu();
         }
 
-        // Drag Source
-        if (ImGui.BeginDragDropSource())
+        ImGuiNet.EndPopup();
+    }
+
+    private void DrawSceneRoot()
+    {
+        DrawStripe();
+        ImGuiNet.Text("[ Scene Root ]");
+
+        if (!ImGuiNet.BeginDragDropTarget()) return;
+
+        if (ImGuiHost.TryAcceptDragPayload(EditorPayloadType.GAMEOBJECT_PAYLOAD, out GameObject obj))
         {
-            EditorImGuiEx.SetDragPayload(C_GAMEOBJECT_GUID_TYPE, obj.id);
-            ImGui.Text($"Dragging {obj.name}");
-            ImGui.EndDragDropSource();
+            m_pendingGuiUpdateAction.Enqueue(() => obj?.transform.SetParent(null));
         }
 
-        // Drag Target
-        if (ImGui.BeginDragDropTarget())
+        ImGuiNet.EndDragDropTarget();
+    }
+
+    private void DrawGameObject(GameObject obj, bool isLastChild = false)
+    {
+        var selection = EditorManager.selection;
+        bool selected = selection.IsSelected(obj);
+        bool hasChildren = obj.transform.children.Count > 0;
+
+        DrawStripe();
+
+        var flags = (hasChildren
+                ? ImGuiTreeNodeFlags.DefaultOpen | ImGuiTreeNodeFlags.OpenOnArrow | ImGuiTreeNodeFlags.OpenOnDoubleClick
+                : ImGuiTreeNodeFlags.Leaf)
+            | ImGuiTreeNodeFlags.SpanFullWidth;
+
+        if (selected) flags |= ImGuiTreeNodeFlags.Selected;
+
+        bool open = ImGuiNet.TreeNodeEx($"###{obj.id}", flags);
+
+        var rMin = ImGuiNet.GetItemRectMin();
+        var rMax = ImGuiNet.GetItemRectMax();
+        float yMid = (rMin.Y + rMax.Y) * 0.5f;
+
+        DrawBranchLinesForThisRow(rMin, rMax, yMid, isLastChild, hasChildren);
+
+        if (ImGuiNet.BeginPopupContextItem($"Popup_{obj.id}"))
         {
-            var payload = EditorImGuiEx.AcceptDragPayload<Guid>(C_GAMEOBJECT_GUID_TYPE);
-            if (payload != null && payload != obj.id)
+            if (ImGuiNet.MenuItem("Delete"))
+                m_pendingGuiUpdateAction.Enqueue(() => obj.scene.UnregisterGameObject(obj));
+            ImGuiNet.EndPopup();
+        }
+
+        if (ImGuiNet.IsItemClicked((int)Input.MouseButton.Left)) selection.Select(obj);
+
+        if (ImGuiNet.BeginDragDropSource())
+        {
+            ImGuiHost.SetDragPayload(EditorPayloadType.GAMEOBJECT_PAYLOAD, obj);
+            ImGuiNet.Text($"Dragging {obj.name}");
+            ImGuiNet.EndDragDropSource();
+        }
+
+        if (ImGuiNet.BeginDragDropTarget())
+        {
+            if (ImGuiHost.TryAcceptDragPayload(EditorPayloadType.GAMEOBJECT_PAYLOAD, out GameObject payloadObj))
             {
-                var payloadObj = SceneManager.GetActiveScene()!.FindGameObject(payload.Value);
                 m_pendingGuiUpdateAction.Enqueue(() => payloadObj?.transform.SetParent(obj.transform));
             }
-            ImGui.EndDragDropTarget();
+            ImGuiNet.EndDragDropTarget();
         }
-        
-        // Tree Node Text
-        var isCamera = obj.GetAllComponents().Any(c => c.GetType().IsAssignableTo(typeof(GameCamera)));
-        ImGui.SameLine();
+
+        bool isCamera = obj.GetAllComponents().Any(c => c.GetType().IsAssignableTo(typeof(Camera)));
+        ImGuiNet.SameLine();
         EditorImGuiEx.DrawIconAndText(isCamera ? ImGuiIcon.Camera : ImGuiIcon.Cube, obj.name);
 
-        // Draw Children
-        if (hasChildren && isOpenTree)
+        if (hasChildren && open)
         {
-            foreach (var child in obj.transform.children) DrawRootGameObject(child.gameObject);
+            var style = ImGuiNet.GetStyle();
+            var offsetX = ImGuiNet.GetFontSize() * 0.5f;
+            float arrowX = rMin.X + style.FramePadding.X + style.IndentSpacing * m_branch.Count + offsetX;
+            uint lineCol = ImGuiNet.GetColorU32(ImGuiCol.Separator);
+
+            m_branch.Push((arrowX, lineCol));
+
+            int childCount = obj.transform.children.Count;
+            for (int i = 0; i < childCount; i++)
+                DrawGameObject(obj.transform.children[i].gameObject, i == childCount - 1);
+
+            m_branch.Pop();
         }
-        
-        ////////////// End Tree Node //////////////
-        if (isOpenTree)
-        {
-            ImGui.TreePop();
-        }
+
+        if (open) ImGuiNet.TreePop();
+    }
+    
+    private void DrawBranchLinesForThisRow(Vector2 rMin, Vector2 rMax, float yMid, bool isLastChild, bool hasChildren)
+    {
+        if (m_branch.Count == 0) return;
+
+        var dl = ImGuiNet.GetWindowDrawList();
+        var style = ImGuiNet.GetStyle();
+
+        var top = m_branch.Peek();
+        float y2 = isLastChild ? yMid : rMax.y;
+        dl.AddLine(new Vector2(top.Item1, rMin.y), new Vector2(top.Item1, y2), top.Item2);
+
+        float offsetX = hasChildren ? 0 : ImGuiNet.GetFontSize() * 0.8f;
+        float thisIndentX = rMin.x + style.FramePadding.X + style.IndentSpacing * m_branch.Count + offsetX;
+        dl.AddLine(new Vector2(top.Item1, yMid), new Vector2(thisIndentX, yMid), top.Item2);
+    }
+
+    private void DrawStripe()
+    {
+        var style = ImGuiNet.GetStyle();
+        var bg = style.Colors[(int)ImGuiCol.WindowBg];
+        float delta = (m_row++ & 1) == 0 ? 0.018f : -0.010f;
+
+        var col = new Vector4(
+            MathHelper.Clamp(bg.X + delta, 0, 1f),
+            MathHelper.Clamp(bg.Y + delta, 0, 1f),
+            MathHelper.Clamp(bg.Z + delta, 0, 1f),
+            bg.W
+        );
+
+        var winPos = ImGuiNet.GetWindowPos();
+        var winSize = ImGuiNet.GetWindowSize();
+        var p = ImGuiNet.GetCursorScreenPos();
+        float hh = ImGuiNet.GetFrameHeight();
+
+        var dl = ImGuiNet.GetWindowDrawList();
+
+        // Draw stripe on background channel so it never covers drag/hover highlight
+        dl.ChannelsSetCurrent(0);
+        dl.AddRectFilled(
+            new Vector2(winPos.X, p.Y),
+            new Vector2(winPos.X + winSize.X, p.Y + hh),
+            ImGuiNet.GetColorU32(col)
+        );
+        dl.ChannelsSetCurrent(1);
     }
 }

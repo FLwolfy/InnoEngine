@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Inno.Core.Math;
 using Inno.Core.Serialization;
@@ -19,7 +20,6 @@ public class Transform : GameComponent
     // Local transform relative to parent
     private Vector3 m_localPosition = Vector3.ZERO;
     private Quaternion m_localRotation = Quaternion.identity;
-    private float m_localRotationZ = 0f;
     private Vector3 m_localScale = Vector3.ONE;
 
     // Children transforms
@@ -58,37 +58,17 @@ public class Transform : GameComponent
     /// <summary>
     /// Local rotation relative to parent transform.
     /// </summary>
-    [SerializableProperty(SerializedProperty.PropertyVisibility.Hide)]
+    [SerializableProperty]
     public Quaternion localRotation
     {
         get => m_localRotation;
-        set 
-        { 
-            m_localRotation = value;
-            m_localRotationZ = m_localRotation.ToEulerAnglesXYZDegrees().z;
-            MarkDirty(); 
+        set
+        {
+            m_localRotation = value.normalized;
+            MarkDirty();
         }
     }
     
-    /// <summary>
-    /// Cached local rotation Euler Z angle (degrees).
-    /// Changing this will update localRotation quaternion.
-    /// </summary>
-    [SerializableProperty]
-    public float localRotationZ
-    {
-        get => m_localRotationZ;
-        set
-        {
-            if (!MathHelper.AlmostEquals(m_localRotationZ, value))
-            {
-                m_localRotationZ = value;
-                m_localRotation = Quaternion.FromEulerAnglesXYZDegrees(new Vector3(0, 0, m_localRotationZ));
-                MarkDirty();
-            }
-        }
-    }
-
     #endregion
 
     #region World Properties
@@ -184,6 +164,7 @@ public class Transform : GameComponent
     /// Parent transform. Null if root.
     /// </summary>
     public Transform? parent { get; private set; }
+    [SerializableProperty(PropertyVisibility.Hide)] internal Guid parentId { get; private set; } = Guid.Empty;
 
     /// <summary>
     /// Read-only list of children transforms.
@@ -191,6 +172,8 @@ public class Transform : GameComponent
     public IReadOnlyList<Transform> children => m_children.AsReadOnly();
     
     #endregion
+    
+    #region APIs
 
     /// <summary>
     /// Sets the parent transform.
@@ -251,8 +234,34 @@ public class Transform : GameComponent
             parent?.m_children.Add(this);
         }
 
+        parentId = newParent == null ? Guid.Empty : newParent.gameObject.id;
         MarkDirty();
     }
+
+    /// <summary>
+    /// Updates this transform (called each frame by ECS).
+    /// </summary>
+    public override void Update()
+    {
+        UpdateIfDirty();
+    }
+
+    /// <summary>
+    /// Called when the component is detached, cleans up parent and children references.
+    /// </summary>
+    public override void OnDetach()
+    {
+        SetParent(null);
+        foreach (var child in m_children.ToArray())
+        {
+            child.SetParent(null);
+        }
+        m_children.Clear();
+    }
+    
+    #endregion
+    
+    #region Helpers
     
     private void MarkDirty()
     {
@@ -292,26 +301,7 @@ public class Transform : GameComponent
         OnTransformChanged?.Invoke();
         m_isDirty = false;
     }
-
-    /// <summary>
-    /// Updates this transform (called each frame by ECS).
-    /// </summary>
-    public override void Update()
-    {
-        UpdateIfDirty();
-    }
-
-    /// <summary>
-    /// Called when the component is detached, cleans up parent and children references.
-    /// </summary>
-    public override void OnDetach()
-    {
-        SetParent(null);
-        foreach (var child in m_children.ToArray())
-        {
-            child.SetParent(null);
-        }
-        m_children.Clear();
-    }
+    
+    #endregion
 }
 

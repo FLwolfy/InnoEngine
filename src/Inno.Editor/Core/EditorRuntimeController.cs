@@ -1,4 +1,5 @@
 using Inno.Core.ECS;
+using Inno.Core.Serialization;
 
 namespace Inno.Editor.Core;
 
@@ -12,7 +13,7 @@ namespace Inno.Editor.Core;
 /// </summary>
 public static class EditorRuntimeController
 {
-    private static SceneSnapshot.SceneSnapshotData? m_sceneSnapshot;
+    private static SerializingState? m_sceneRuntimeState;
 
     public static bool isPlaying => EditorManager.mode == EditorMode.Play;
     public static bool isPaused => EditorManager.mode == EditorMode.Pause;
@@ -25,7 +26,7 @@ public static class EditorRuntimeController
         if (scene == null) return;
 
         // Snapshot BEFORE runtime mutates anything.
-        m_sceneSnapshot = SceneSnapshot.Capture(scene);
+        m_sceneRuntimeState = ((ISerializable)scene).CaptureState();
 
         SceneManager.BeginRuntime();
         EditorManager.SetMode(EditorMode.Play);
@@ -52,7 +53,7 @@ public static class EditorRuntimeController
         {
             EditorManager.SetMode(EditorMode.Edit);
             SceneManager.EndRuntime();
-            m_sceneSnapshot = null;
+            m_sceneRuntimeState = null;
             return;
         }
 
@@ -60,15 +61,15 @@ public static class EditorRuntimeController
         EditorManager.SetMode(EditorMode.Edit);
         SceneManager.EndRuntime();
 
-        if (m_sceneSnapshot != null)
+        if (m_sceneRuntimeState != null)
         {
-            SceneSnapshot.Restore(scene, m_sceneSnapshot);
+            ((ISerializable)scene).RestoreState(m_sceneRuntimeState);
         }
         
         // Editor selection should not assume object identity survived.
         EditorManager.selection.Deselect();
 
-        m_sceneSnapshot = null;
+        m_sceneRuntimeState = null;
     }
 
     /// <summary>

@@ -8,8 +8,7 @@ public abstract class Layer(string name = "Layer")
 
     public virtual void OnUpdate() { }
     public virtual void OnRender() { }
-    public virtual void OnImGui() { }
-    public virtual void OnEvent(EventSnapshot snapshot) { }
+    public virtual void OnEvent(Event e) { }
     public virtual void OnAttach() { }
     public virtual void OnDetach() { }
 }

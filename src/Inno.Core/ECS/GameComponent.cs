@@ -19,7 +19,7 @@ public enum ComponentTag
 /// <summary>
 /// Abstract class for game components.
 /// </summary>
-public abstract class GameComponent : Serializable, IComparable<GameComponent>
+public abstract class GameComponent : ISerializable, IComparable<GameComponent>
 {
     public GameObject gameObject { get; private set; } = null!;
     public Transform transform => gameObject.transform;

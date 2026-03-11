@@ -1,97 +1,55 @@
-using System;
 using System.Collections.Generic;
+
 using Inno.Core.Serialization;
 
 namespace Inno.Core.ECS;
 
-/// <summary>
-/// In-memory snapshot for Editor Play/Stop.
-///
-/// Key design choice:
-/// - Snapshot is NOT persisted to disk and does not participate in the YAML asset pipeline.
-/// - We capture only members explicitly marked with [SerializableProperty] on types derived from Serializable.
-/// - Allowed member types are enforced by Serializable (primitives/engine value-types/nested Serializable).
-///
-/// This keeps Play/Stop deterministic and avoids JSON ctor/cycle issues (e.g. Sprite).
-/// </summary>
-public static class SceneSnapshot
+internal class SceneSnapshot : ISerializable
 {
-    public sealed class SceneSnapshotData
+    [SerializableProperty] public List<GameObjectEntry> gameObjectEntries { get; private set; }
+
+    private SceneSnapshot(List<GameObjectEntry> gameObjectEntries)
     {
-        public string sceneName { get; init; } = "";
-        public List<GameObjectSnapshotData> objects { get; init; } = [];
+        this.gameObjectEntries = gameObjectEntries;
+    }
+    
+    public readonly struct ComponentEntry : ISerializable
+    {
+        [SerializableProperty] public string typeName { get; init; }
+        [SerializableProperty] public SerializingState componentState { get; init; }
+    }
+    
+    public readonly struct GameObjectEntry : ISerializable
+    {
+        [SerializableProperty] public SerializingState objectState { get; init; }
+        [SerializableProperty] public List<ComponentEntry> componentEntries { get; init; }
     }
 
-    public sealed class GameObjectSnapshotData
+    public static SceneSnapshot Create(
+        in List<GameObject> gameObjects,
+        in ComponentPool componentPool)
     {
-        public string name { get; init; } = "";
-        public string? parentName { get; init; }
-        public List<ComponentSnapshotData> components { get; init; } = [];
-    }
-
-    public sealed class ComponentSnapshotData
-    {
-        public string type { get; init; } = "";
-
-        /// <summary>
-        /// Component state node produced by Serializable.CaptureState().
-        /// Values are primitives/value-types or nested dictionaries for Serializable.
-        /// </summary>
-        public Dictionary<string, object?> state { get; init; } = new(StringComparer.Ordinal);
-    }
-
-    public static SceneSnapshotData Capture(GameScene scene)
-    {
-        if (scene == null) throw new ArgumentNullException(nameof(scene));
-
-        return new SceneSnapshotData
+        List<GameObjectEntry> gameObjectEntries = new List<GameObjectEntry>();
+        foreach (var gameObject in gameObjects)
         {
-            sceneName = scene.name,
-            objects = CaptureObjects(scene)
-        };
-    }
-
-    public static void Restore(GameScene scene, SceneSnapshotData snapshot)
-    {
-        if (scene == null) throw new ArgumentNullException(nameof(scene));
-        if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
-        scene.RestoreFromSnapshot(snapshot);
-    }
-
-    private static List<GameObjectSnapshotData> CaptureObjects(GameScene scene)
-    {
-        var list = new List<GameObjectSnapshotData>();
-        foreach (var go in scene.GetAllGameObjects())
-        {
-            list.Add(new GameObjectSnapshotData
+            List<ComponentEntry> componentEntries = new List<ComponentEntry>();
+            foreach (var component in componentPool.GetAll(gameObject.id))
             {
-                name = go.name,
-                parentName = go.transform.parent?.gameObject.name,
-                components = CaptureComponents(go)
+                var type = component.GetType();
+                componentEntries.Add(new ComponentEntry
+                {
+                    typeName = type.AssemblyQualifiedName ?? type.FullName ?? type.Name,
+                    componentState = ((ISerializable)component).CaptureState()
+                });
+            }
+            
+            gameObjectEntries.Add(new GameObjectEntry
+            {
+                objectState = ((ISerializable)gameObject).CaptureState(),
+                componentEntries = componentEntries
             });
         }
-        return list;
-    }
-
-    private static List<ComponentSnapshotData> CaptureComponents(GameObject go)
-    {
-        var comps = go.GetAllComponents();
-        var result = new List<ComponentSnapshotData>(comps.Count);
-
-        foreach (var comp in comps)
-        {
-            var compType = comp.GetType();
-
-            if (comp is not Serializable s)
-                continue;
-
-            result.Add(new ComponentSnapshotData
-            {
-                type = compType.AssemblyQualifiedName ?? compType.FullName ?? compType.Name,
-                state = s.CaptureState()
-            });
-        }
-
-        return result;
+        
+        return new SceneSnapshot(gameObjectEntries);
     }
 }

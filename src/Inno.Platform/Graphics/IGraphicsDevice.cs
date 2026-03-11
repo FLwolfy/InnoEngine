@@ -32,5 +32,4 @@ public interface IGraphicsDevice : IDisposable
     ICommandList CreateCommandList();
     
     void Submit(ICommandList commandList);
-    void SwapBuffers();
 }

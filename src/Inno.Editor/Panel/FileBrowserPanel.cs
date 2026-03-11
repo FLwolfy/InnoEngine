@@ -1,98 +1,91 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
-
-using ImGuiNET;
+using System.Runtime.InteropServices;
 
 using Inno.Assets;
 using Inno.Core.Logging;
 using Inno.Core.Math;
 using Inno.Editor.Core;
 using Inno.Editor.GUI;
-using Inno.Platform.ImGui;
+using Inno.ImGui;
+
+using ImGuiNET;
+using Inno.Assets.AssetType;
+using Inno.Assets.Core;
+using Inno.Platform;
+using ImGuiNet = ImGuiNET.ImGui;
 
 namespace Inno.Editor.Panel;
 
 public sealed class FileBrowserPanel : EditorPanel
 {
+    /// <summary>
+    /// Gets the panel title.
+    /// </summary>
     public override string title => "File";
-    
-    // Drag typeID
-    public const string C_ASSET_GUID_TYPE = "FileAssetGUID";
 
-    // Splitter
-    private const float C_SPLITTER_DEFAULT_WIDTH = 280f;
     private const float C_SPLITTER_WIDTH = 3f;
     private const float C_LEFT_MIN_WIDTH = 10f;
     private const float C_RIGHT_MIN_WIDTH = 20f;
-    private float m_leftWidth;
-    private float m_leftRatio = -1f; // keep ratio when window resizes
+    private float m_leftWidth = -1f;
+    private float m_leftRatio = -1f;
 
-    // Grid
     private const float C_GRID_ICON_SIZE = 54f;
+    private const double C_SNAPSHOT_TTL_SECONDS = 0.5;
+    private const float C_GRID_SCALE_MIN = 0.2f;
+    private const float C_GRID_SCALE_MAX = 5.0f;
+    private float m_gridScale = 1.0f;
 
-    // Root Paths
     private readonly string m_rootPath;
     private string m_currentDir;
     private readonly string m_rootPathNative;
     private string m_currentDirNative;
-
-    // Selection
     private string? m_selectedPath;
+    
+    private bool m_navPending;
+    private string m_navTarget = "";
+    private bool m_navPushHistory;
 
-    // Reveal selection in tree (one-frame force-open)
     private readonly HashSet<string> m_revealOpenPaths = new(StringComparer.OrdinalIgnoreCase);
     private bool m_revealOpenPending;
 
-    // Cached directory snapshot
-    private const double C_SNAPSHOT_TTL_SECONDS = 0.5;
     private readonly DirectorySnapshot m_snapshot = new();
     private DateTime m_snapshotTime = DateTime.MinValue;
     private readonly List<string> m_history = new();
     private int m_historyIndex = -1;
-
-    // Asset directory change versioning (single source of truth is AssetManager watcher)
     private int m_assetAppliedVersion;
 
-    // Search
     private readonly DirectorySnapshot m_searchSnapshot = new();
     private DateTime m_searchSnapshotTime = DateTime.MinValue;
     private string m_search = "";
     private string m_searchLast = "";
 
-    // View
     private ViewMode m_viewMode = ViewMode.Grid;
     private SortField m_sortField = SortField.Name;
     private bool m_sortAscending = true;
 
-    // Grid scale
-    private const float C_GRID_SCALE_MIN = 0.2f;
-    private const float C_GRID_SCALE_MAX = 5.0f;
-    private float m_gridScale = 1.0f;
-
-    // Rename / Delete UI state
     private string? m_renameTargetPath;
     private string m_renameBuffer = "";
     private string? m_deleteTargetPath;
+    private bool m_requestOpenRenamePopup;
+    private bool m_requestOpenDeletePopup;
+
+    private readonly Dictionary<Guid, string> m_relByGuid = new();
 
     private enum ViewMode { Grid, List }
     private enum SortField { Name, Type, Source }
 
-    private readonly struct Entry(
-        string fullPath,
-        string name,
-        bool isDir,
-        string type,
-        string source)
+    private struct Entry(string fullPath, string name, bool isDir, string type, string source, Guid? guid)
     {
-        public readonly string fullPath = fullPath;  // normalized
-        public readonly string name = name;          // display name (file/folder name)
+        public readonly string fullPath = fullPath;
+        public readonly string name = name;
         public readonly bool isDir = isDir;
         public readonly string type = type;
-
-        // Finder-like "Source" column: relative to current dir, using "~" prefix
         public readonly string source = source;
+        public readonly Guid? guid = guid;
     }
 
     private sealed class DirectorySnapshot
@@ -101,134 +94,129 @@ public sealed class FileBrowserPanel : EditorPanel
         public void Clear() => entries.Clear();
     }
 
+    #region Lifecycle
+
     internal FileBrowserPanel()
     {
-        // Native paths
         m_rootPathNative = Path.GetFullPath(AssetManager.assetDirectory);
         m_currentDirNative = m_rootPathNative;
 
-        // Normalized paths
         m_rootPath = NormalizePath(m_rootPathNative);
         m_currentDir = m_rootPath;
 
-        // Selection
-        m_selectedPath = null;
-
-        // UI
-        m_leftWidth = IImGui.GetStorageData("Editor.File.SplitterLeftWidth", C_SPLITTER_DEFAULT_WIDTH);
-
         PushHistory(m_currentDir);
 
-        // Snapshot refresh is driven by AssetManager's single watcher (coalesced).
         m_assetAppliedVersion = AssetManager.assetDirectoryChangeVersion;
         RefreshSnapshot(force: true);
     }
 
     internal override void OnGUI()
     {
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(10, 10));
-        ImGui.BeginChild("##FileBrowserRoot", new Vector2(0, 0));
+        ImGuiNet.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(10, 10));
+        ImGuiNet.BeginChild("##FileBrowserRoot", new Vector2(0, 0));
 
-        float statusH = ImGui.GetFrameHeight(); // fits SmallButton nicely
-        var avail = ImGui.GetContentRegionAvail();
+        float statusH = ImGuiNet.GetFrameHeight();
+        var avail = ImGuiNet.GetContentRegionAvail();
         float bodyH = Math.Max(0f, avail.Y - statusH - 6f);
 
-        ImGui.BeginChild("##FileBrowserBody", new Vector2(0, bodyH));
+        ImGuiNet.BeginChild("##FileBrowserBody", new Vector2(0, bodyH));
+        
+        CommitPendingNavigate();
 
-        var region = ImGui.GetContentRegionAvail();
+        var region = ImGuiNet.GetContentRegionAvail();
         float totalW = Math.Max(0f, region.X);
-        if (m_leftRatio < 0f && totalW > 0f)
-            m_leftRatio = Math.Clamp(m_leftWidth / totalW, 0f, 1f);
-
-        // Left: tree
+        if (totalW > 0f)
         {
-            ImGui.BeginChild(
-                "##Tree",
-                new Vector2(m_leftWidth, 0),
-                ImGuiChildFlags.None,
-                ImGuiWindowFlags.HorizontalScrollbar
-            );
-
-            DrawDirectoryTree(m_rootPathNative, m_rootPath);
-            ImGui.EndChild();
+            if (m_leftWidth < 0f || m_leftRatio < 0f)
+            {
+                m_leftRatio = 0.5f;
+                m_leftWidth = Math.Clamp(totalW * m_leftRatio, C_LEFT_MIN_WIDTH,
+                    Math.Max(C_LEFT_MIN_WIDTH, totalW - C_RIGHT_MIN_WIDTH));
+            }
+            else
+            {
+                if (m_leftRatio < 0f)
+                    m_leftRatio = Math.Clamp(m_leftWidth / totalW, 0f, 1f);
+            }
         }
 
-        // Clear one-frame reveal request after tree has been rendered
+        {
+            ImGuiNet.BeginChild("##Tree", new Vector2(m_leftWidth, 0), ImGuiChildFlags.None,
+                ImGuiWindowFlags.HorizontalScrollbar);
+
+            DrawDirectoryTree(m_rootPathNative, m_rootPath);
+            ImGuiNet.EndChild();
+        }
+
         if (m_revealOpenPending)
         {
             m_revealOpenPending = false;
             m_revealOpenPaths.Clear();
         }
 
-        // Middle: Splitter
         {
-            ImGui.SameLine();
+            ImGuiNet.SameLine();
             float maxLeft = Math.Max(C_LEFT_MIN_WIDTH, totalW - C_RIGHT_MIN_WIDTH);
             bool draggingSplitter = DrawSplitter(ref m_leftWidth, minLeft: C_LEFT_MIN_WIDTH, maxLeft: maxLeft);
-            ImGui.SameLine();
+            ImGuiNet.SameLine();
 
             if (totalW > 0f)
             {
                 float maxLeft2 = Math.Max(C_LEFT_MIN_WIDTH, totalW - C_RIGHT_MIN_WIDTH);
 
                 if (draggingSplitter)
-                {
                     m_leftRatio = Math.Clamp(m_leftWidth / totalW, 0f, 1f);
-                }
                 else
-                {
-                    float target = m_leftRatio * totalW;
-                    m_leftWidth = Math.Clamp(target, C_LEFT_MIN_WIDTH, maxLeft2);
-                }
+                    m_leftWidth = Math.Clamp(m_leftRatio * totalW, C_LEFT_MIN_WIDTH, maxLeft2);
             }
         }
 
-        // Right: content
         {
-            ImGui.BeginChild("##Content", new Vector2(0, 0));
+            ImGuiNet.BeginChild("##Content", new Vector2(0, 0));
             DrawToolbar();
             DrawContent();
-            ImGui.EndChild();
+            ImGuiNet.EndChild();
         }
 
-        ImGui.EndChild(); // body
-
-        ImGui.Separator();
+        ImGuiNet.EndChild();
+        ImGuiNet.Separator();
         DrawStatusBarFinderPath(statusH);
 
-        ImGui.EndChild(); // root
-        ImGui.PopStyleVar();
+        ImGuiNet.EndChild();
+        ImGuiNet.PopStyleVar();
 
         DrawRenamePopup();
         DrawDeletePopup();
     }
 
-    // ============================
-    // Toolbar
-    // ============================
+    #endregion
+
+    #region Toolbar
+
     private void DrawToolbar()
     {
-        ImGui.AlignTextToFramePadding();
+        ImGuiNet.AlignTextToFramePadding();
 
         bool canBack = m_historyIndex > 0;
         bool canForward = m_historyIndex >= 0 && m_historyIndex < m_history.Count - 1;
 
-        ImGui.BeginDisabled(!canBack);
-        if (ImGui.Button("<##Back")) NavigateHistory(-1);
-        ImGui.EndDisabled();
-        ImGui.SameLine();
+        ImGuiNet.BeginDisabled(!canBack);
+        if (ImGuiNet.Button("<##Back")) NavigateHistory(-1);
+        ImGuiNet.EndDisabled();
+        ImGuiNet.SameLine();
 
-        ImGui.BeginDisabled(!canForward);
-        if (ImGui.Button(">##Forward")) NavigateHistory(+1);
-        ImGui.EndDisabled();
-        ImGui.SameLine();
+        ImGuiNet.BeginDisabled(!canForward);
+        if (ImGuiNet.Button(">##Forward")) NavigateHistory(+1);
+        ImGuiNet.EndDisabled();
+        ImGuiNet.SameLine();
 
-        ImGui.TextUnformatted(GetCurrentFolderDisplayName());
+        ImGuiNet.TextUnformatted(GetCurrentFolderDisplayName());
     }
 
-    // ============================
-    // Left Tree (folders + files)
-    // ============================
+    #endregion
+
+    #region Tree
+
     private void DrawDirectoryTree(string pathNative, string pathNormalized)
     {
         if (!Directory.Exists(pathNative))
@@ -236,84 +224,82 @@ public sealed class FileBrowserPanel : EditorPanel
 
         string displayName = IsSamePath(pathNormalized, m_rootPath) ? "Assets" : Path.GetFileName(pathNative);
 
-        // Highlight is driven by selection (single-click), not currentDir.
         bool selected = IsSelected(pathNormalized);
 
         var flags = ImGuiTreeNodeFlags.OpenOnArrow | ImGuiTreeNodeFlags.SpanFullWidth;
         if (selected) flags |= ImGuiTreeNodeFlags.Selected;
 
-        // Keep currentDir open behavior
         bool shouldOpen = IsAncestorOrSelf(pathNormalized, m_currentDir);
 
-        // One-frame forced reveal for selection path chain
         if (m_revealOpenPending && m_revealOpenPaths.Contains(pathNormalized))
-        {
-            ImGui.SetNextItemOpen(true, ImGuiCond.Always);
-        }
+            ImGuiNet.SetNextItemOpen(true, ImGuiCond.Always);
         else
-        {
-            ImGui.SetNextItemOpen(shouldOpen, ImGuiCond.Once);
-        }
+            ImGuiNet.SetNextItemOpen(shouldOpen, ImGuiCond.Once);
 
-        bool open = ImGui.TreeNodeEx($"##tree_{pathNormalized}", flags);
+        bool open = ImGuiNet.TreeNodeEx($"##tree_{pathNormalized}", flags);
 
-        // Single click: select only (do NOT enter)
-        if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
-        {
+        if (ImGuiNet.IsItemClicked(ImGuiMouseButton.Left))
             SelectFolder(pathNormalized);
+
+        if (ImGuiNet.IsItemHovered() && ImGuiNet.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+            RequestNavigate(pathNormalized, pushHistory: true);
+
+        if (!IsSamePath(pathNormalized, m_rootPath))
+        {
+            EmitFolderDragSource(pathNormalized, displayName);
         }
 
-        // Double click: enter (navigate)
-        if (ImGui.IsItemHovered() && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+        if (BeginMoveDropTarget(pathNormalized, out var srcRel))
         {
-            NavigateTo(pathNormalized, pushHistory: true);
+            string dstFolderRel = AssetManager.NormalizeRelativePath(AssetManager.ToRelativePathFromAssetDirectory(ToNativePath(pathNormalized)));
+            TryMoveToFolder(srcRel, dstFolderRel);
         }
 
         bool insideDirectory = IsSamePath(pathNormalized, m_currentDir);
         if (insideDirectory)
         {
-            IImGui.UseFont(ImGuiFontStyle.BoldItalic);
-            ImGui.SameLine();
+            ImGuiHost.UseFont(ImGuiFontStyle.BoldItalic);
+            ImGuiNet.SameLine();
             EditorImGuiEx.DrawIconAndText(ImGuiIcon.Folder, displayName);
             EditorImGuiEx.UnderlineLastItem();
-            IImGui.UseFont(ImGuiFontStyle.Regular);
+            ImGuiHost.UseFont(ImGuiFontStyle.Regular);
         }
         else
         {
-            ImGui.SameLine();
+            ImGuiNet.SameLine();
             EditorImGuiEx.DrawIconAndText(ImGuiIcon.Folder, displayName);
         }
 
-        if (ImGui.BeginPopupContextItem($"##tree_ctx_{pathNormalized}"))
+        if (ImGuiNet.BeginPopupContextItem($"##tree_ctx_{pathNormalized}"))
         {
             DrawCommonContextItems(pathNormalized);
-            ImGui.EndPopup();
+            ImGuiNet.EndPopup();
         }
 
-        if (open)
+        if (!open)
+            return;
+
+        try
         {
-            try
+            foreach (var dir in Directory.GetDirectories(pathNative))
             {
-                foreach (var dir in Directory.GetDirectories(pathNative))
-                {
-                    if (IsHidden(dir)) continue;
-                    DrawDirectoryTree(dir, NormalizePath(dir));
-                }
-
-                foreach (var file in Directory.GetFiles(pathNative))
-                {
-                    if (IsHidden(file)) continue;
-                    if (IsEditorFilteredFile(file)) continue;
-                    DrawTreeFileItem(file);
-                }
-            }
-            catch (Exception e)
-            {
-                Log.Error(e.Message);
+                if (IsHidden(dir)) continue;
+                DrawDirectoryTree(dir, NormalizePath(dir));
             }
 
-            ImGui.TreePop();
+            foreach (var file in Directory.GetFiles(pathNative))
+            {
+                if (IsHidden(file)) continue;
+                if (IsEditorFilteredFile(file)) continue;
+                DrawTreeFileItem(file);
+            }
         }
+        catch (Exception e)
+        {
+            Log.Error(e.Message);
+        }
+
+        ImGuiNet.TreePop();
     }
 
     private void DrawTreeFileItem(string filePathNative)
@@ -325,52 +311,60 @@ public sealed class FileBrowserPanel : EditorPanel
         string type = ToType(fi.Extension);
         bool selected = IsSelected(full);
 
-        var flags =
-            ImGuiTreeNodeFlags.Leaf |
-            ImGuiTreeNodeFlags.NoTreePushOnOpen |
-            ImGuiTreeNodeFlags.SpanFullWidth;
-
+        var flags = ImGuiTreeNodeFlags.Leaf | ImGuiTreeNodeFlags.NoTreePushOnOpen | ImGuiTreeNodeFlags.SpanFullWidth;
         if (selected) flags |= ImGuiTreeNodeFlags.Selected;
 
-        ImGui.TreeNodeEx($"##tree_file_{full}", flags);
+        ImGuiNet.TreeNodeEx($"##tree_file_{full}", flags);
 
-        if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
+        if (ImGuiNet.IsItemClicked(ImGuiMouseButton.Left))
             SelectFile(full);
 
-        ImGui.SameLine();
+        if (ImGuiNet.IsItemHovered() && ImGuiNet.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+            TryOpenFile(full);
+
+        Guid? guid = TryGetGuidForFileByNativePath(filePathNative);
+        var e = new Entry(
+            fullPath: full,
+            name: name,
+            isDir: false,
+            type: type,
+            source: "~",
+            guid: guid
+        );
+
+        CacheGuidMapping(e);
+
+        EmitFileDragSource(e);
+
+        ImGuiNet.SameLine();
         EditorImGuiEx.DrawIconAndText(FileIcon(type), name);
 
-        if (ImGui.BeginPopupContextItem($"##tree_file_ctx_{full}"))
+        if (ImGuiNet.BeginPopupContextItem($"##tree_file_ctx_{full}"))
         {
-            DrawItemContextItems(new Entry(
-                fullPath: full,
-                name: name,
-                isDir: false,
-                type: type,
-                source: "~"
-            ));
-            ImGui.EndPopup();
+            DrawItemContextItems(e);
+            ImGuiNet.EndPopup();
         }
     }
 
-    // ============================
-    // Right Content
-    // ============================
+    #endregion
+
+    #region Content
+
     private void DrawContent()
     {
-        // TopBar: View toggle + Search
         DrawViewTopBar();
-        ImGui.Separator();
+        ImGuiNet.Separator();
 
         bool searching = !string.IsNullOrWhiteSpace(m_search);
 
         if (searching) RefreshSearchSnapshot(force: false);
         else RefreshSnapshot(force: false);
 
-        if (ImGui.BeginPopupContextWindow("##content_ctx", ImGuiPopupFlags.MouseButtonRight | ImGuiPopupFlags.NoOpenOverItems))
+        if (ImGuiNet.BeginPopupContextWindow("##content_ctx",
+                ImGuiPopupFlags.MouseButtonRight | ImGuiPopupFlags.NoOpenOverItems))
         {
             DrawCommonContextItems(m_currentDir);
-            ImGui.EndPopup();
+            ImGuiNet.EndPopup();
         }
 
         var src = searching ? m_searchSnapshot.entries : m_snapshot.entries;
@@ -384,103 +378,77 @@ public sealed class FileBrowserPanel : EditorPanel
 
     private void DrawViewTopBar()
     {
-        ImGui.AlignTextToFramePadding();
+        ImGuiNet.AlignTextToFramePadding();
 
         string viewLabel = m_viewMode == ViewMode.Grid ? "Grid" : "List";
-        if (ImGui.Button(viewLabel))
+        if (ImGuiNet.Button(viewLabel))
             m_viewMode = m_viewMode == ViewMode.Grid ? ViewMode.List : ViewMode.Grid;
 
-        ImGui.SameLine();
+        ImGuiNet.SameLine();
 
-        float avail = ImGui.GetContentRegionAvail().X;
-        ImGui.SetNextItemWidth(Math.Max(120f, avail));
-        ImGui.InputTextWithHint("##Search", "Search", ref m_search, 256);
+        float avail = ImGuiNet.GetContentRegionAvail().X;
+        ImGuiNet.SetNextItemWidth(Math.Max(120f, avail));
+        ImGuiNet.InputTextWithHint("##Search", "Search", ref m_search, 256);
     }
 
-    // ============================
-    // Grid (fixed spacing; no periodic jitter on resize)
-    // ============================
     private void DrawGrid(List<Entry> entries, float iconSize)
     {
-        float availW = ImGui.GetContentRegionAvail().X;
+        float availW = ImGuiNet.GetContentRegionAvail().X;
         float cellW = iconSize;
 
         int cols = Math.Max(1, (int)Math.Floor(availW / cellW));
 
-        var flags =
-            ImGuiTableFlags.SizingFixedFit |
-            ImGuiTableFlags.PadOuterX |
-            ImGuiTableFlags.NoBordersInBody |
-            ImGuiTableFlags.NoSavedSettings;
+        var flags = ImGuiTableFlags.SizingFixedFit |
+                    ImGuiTableFlags.PadOuterX |
+                    ImGuiTableFlags.NoBordersInBody |
+                    ImGuiTableFlags.NoSavedSettings;
 
-        if (!ImGui.BeginTable("##grid_table", cols, flags)) return;
+        if (!ImGuiNet.BeginTable("##grid_table", cols, flags))
+            return;
 
         for (int c = 0; c < cols; c++)
-            ImGui.TableSetupColumn($"##gc{c}", ImGuiTableColumnFlags.WidthFixed, cellW);
+            ImGuiNet.TableSetupColumn($"##gc{c}", ImGuiTableColumnFlags.WidthFixed, cellW);
 
         int col = 0;
-        ImGui.TableNextRow();
+        ImGuiNet.TableNextRow();
 
         foreach (var e in entries)
         {
-            ImGui.TableSetColumnIndex(col);
-            DrawGridItem(e, iconSize, 2.75f);
+            ImGuiNet.TableSetColumnIndex(col);
+            DrawGridItem(e, iconSize, 15f);
 
             col++;
             if (col >= cols)
             {
                 col = 0;
-                ImGui.TableNextRow();
+                ImGuiNet.TableNextRow();
             }
         }
 
-        ImGui.EndTable();
+        ImGuiNet.EndTable();
     }
 
     private void DrawGridItem(Entry e, float itemSize, float iconScale)
     {
-        ImGui.BeginGroup();
-        ImGui.PushID(e.fullPath);
+        ImGuiNet.BeginGroup();
+        ImGuiNet.PushID(e.guid.HasValue ? e.guid.Value.ToString() : e.fullPath);
 
-        var drawList = ImGui.GetWindowDrawList();
-        bool selected = IsSelected(e.fullPath);
-        string icon = e.isDir ? ImGuiIcon.Folder : FileIcon(e.type);
-
-        Vector2 p0 = ImGui.GetCursorScreenPos();
+        Vector2 p0 = ImGuiNet.GetCursorScreenPos();
         Vector2 size = new Vector2(itemSize, itemSize);
 
-        ImGui.InvisibleButton("##grid_item_btn", size);
+        ImGuiNet.InvisibleButton("##grid_item_btn", size);
 
-        bool hovered = ImGui.IsItemHovered();
-        bool clicked = ImGui.IsItemClicked(ImGuiMouseButton.Left);
-
+        bool selected = IsSelected(e.fullPath);
+        bool hovered = ImGuiNet.IsItemHovered();
+        bool clicked = ImGuiNet.IsItemClicked(ImGuiMouseButton.Left);
         if (hovered || selected)
         {
-            var col = ImGui.GetColorU32(selected ? ImGuiCol.HeaderActive : ImGuiCol.HeaderHovered);
+            var col = ImGuiNet.GetColorU32(selected ? ImGuiCol.HeaderActive : ImGuiCol.HeaderHovered);
             uint a = (uint)(hovered && !selected ? 80 : 110);
             uint bg = (col & 0x00FFFFFFu) | (a << 24);
             float rounding = 10f;
-            drawList.AddRectFilled(p0, p0 + size, bg, rounding);
+            ImGuiNet.GetWindowDrawList().AddRectFilled(p0, p0 + size, bg, rounding);
         }
-
-        var currentFont = IImGui.GetCurrentFont();
-        var gridScale = itemSize / C_GRID_ICON_SIZE;
-        float fontSize = iconScale * gridScale * currentFont.size;
-
-        IImGui.UseFont(ImGuiFontStyle.Icon, fontSize);
-        ImFontPtr font = ImGui.GetFont();
-
-        uint iconCol = ImGui.GetColorU32(ImGuiCol.Text);
-        float scale = fontSize / ImGui.GetFontSize();
-        Vector2 textSize = ImGui.CalcTextSize(icon);
-        Vector2 scaledTextSize = textSize * scale;
-        Vector2 iconPos = new Vector2(
-            p0.x + (size.x - scaledTextSize.x) * 0.5f,
-            p0.y + (size.y - scaledTextSize.y) * 0.5f
-        );
-
-        drawList.AddText(font, fontSize, iconPos, iconCol, icon);
-        IImGui.UseFont(currentFont); // This is to be used for the drawList
 
         if (clicked)
         {
@@ -488,257 +456,322 @@ public sealed class FileBrowserPanel : EditorPanel
             else SelectFile(e.fullPath);
         }
 
-        if (hovered && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+        if (hovered && ImGuiNet.IsMouseDoubleClicked(ImGuiMouseButton.Left))
         {
-            if (e.isDir) NavigateTo(e.fullPath, pushHistory: true);
+            if (e.isDir) RequestNavigate(e.fullPath, pushHistory: true);
+            else TryOpenFile(e.fullPath);
         }
 
-        if (ImGui.BeginPopupContextItem("##item_ctx"))
+        if (ImGuiNet.BeginPopupContextItem("##item_ctx"))
         {
             DrawItemContextItems(e);
-            ImGui.EndPopup();
+            ImGuiNet.EndPopup();
         }
-        
-        // Drag
-        if (!e.isDir && ImGui.BeginDragDropSource())
+
+        if (e.isDir)
+            EmitFolderDragSource(e.fullPath, e.name);
+        else
+            EmitFileDragSource(e);
+
+        if (e.isDir && BeginMoveDropTarget(e.fullPath, out var srcRel))
         {
-            var relativePath = GetRelativeDisplay(AssetManager.assetDirectory, e.fullPath);
-            EditorImGuiEx.SetDragPayload(C_ASSET_GUID_TYPE, AssetManager.GetGuid(relativePath));
-            ImGui.Text($"Dragging {relativePath}");
-            ImGui.EndDragDropSource();
+            string dstFolderRel = AssetManager.NormalizeRelativePath(AssetManager.ToRelativePathFromAssetDirectory(ToNativePath(e.fullPath)));
+            TryMoveToFolder(srcRel, dstFolderRel);
         }
 
-        IImGui.UseFont(currentFont); // This is to be used for the regular context
-        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + itemSize);
-        var textWidth = ImGui.CalcTextSize(e.name).X;
-        var currentCursorX = ImGui.GetCursorPosX();
-        var offsetX = textWidth <= itemSize ? (itemSize - textWidth) / 2 : 0;
-        ImGui.SetCursorPosX(currentCursorX + offsetX);
-        ImGui.TextWrapped(e.name);
-        ImGui.PopTextWrapPos();
+        var icon = e.isDir ? ImGuiIcon.Folder : FileIcon(e.type);
+        var currentFont = ImGuiHost.GetCurrentFont();
+        ImGuiHost.UseFont(ImGuiFontStyle.Icon, itemSize * iconScale / ImGuiNet.GetFontSize());
 
-        ImGui.PopID();
-        ImGui.EndGroup();
+        Vector2 winPos = ImGuiNet.GetWindowPos();
+        Vector2 p0Local = p0 - winPos;
+        Vector2 iconTextSize = ImGuiNet.CalcTextSize(icon);
+        float iconX = MathF.Floor(p0Local.x + (itemSize - iconTextSize.x) * 0.5f);
+        float iconY = MathF.Floor(p0Local.y + (itemSize - iconTextSize.y) * 0.5f);
+
+        ImGuiNet.SetCursorPos(new Vector2(iconX, iconY));
+        ImGuiNet.TextUnformatted(icon);
+        ImGuiHost.UseFont(currentFont);
+        ImGuiNet.SetCursorPos(new Vector2(p0Local.x, p0Local.y + itemSize));
+
+        ImGuiNet.PushTextWrapPos(ImGuiNet.GetCursorPosX() + itemSize);
+        var textWidth = ImGuiNet.CalcTextSize(e.name).X;
+        var currentCursorX = ImGuiNet.GetCursorPosX();
+        var offsetX = textWidth <= itemSize ? (itemSize - textWidth) / 2 : 0;
+        ImGuiNet.SetCursorPosX(currentCursorX + offsetX);
+        ImGuiNet.TextWrapped(e.name);
+        ImGuiNet.PopTextWrapPos();
+
+        ImGuiNet.PopID();
+        ImGuiNet.EndGroup();
     }
 
     private void DrawGridWithScaleBar(List<Entry> entries)
     {
-        float barH = ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.Y * 2f;
+        float barH = ImGuiNet.GetFrameHeight() + ImGuiNet.GetStyle().ItemSpacing.Y * 2f;
 
-        var avail = ImGui.GetContentRegionAvail();
+        var avail = ImGuiNet.GetContentRegionAvail();
         float gridH = Math.Max(0f, avail.Y - barH);
 
-        ImGui.BeginChild("##GridArea", new Vector2(0, gridH));
+        ImGuiNet.BeginChild("##GridArea", new Vector2(0, gridH));
         float iconSize = C_GRID_ICON_SIZE * m_gridScale;
         DrawGrid(entries, iconSize);
-        ImGui.EndChild();
+        ImGuiNet.EndChild();
 
-        ImGui.Separator();
+        ImGuiNet.Separator();
 
-        ImGui.BeginChild("##GridScaleBar", new Vector2(0, 0), ImGuiChildFlags.None);
+        ImGuiNet.BeginChild("##GridScaleBar", new Vector2(0, 0), ImGuiChildFlags.None);
         DrawGridScaleSlider();
-        ImGui.EndChild();
+        ImGuiNet.EndChild();
     }
 
     private void DrawGridScaleSlider()
     {
-        ImGui.AlignTextToFramePadding();
-        ImGui.TextDisabled("Size");
-        ImGui.SameLine();
+        ImGuiNet.AlignTextToFramePadding();
+        ImGuiNet.TextDisabled("Size");
+        ImGuiNet.SameLine();
 
-        float avail = ImGui.GetContentRegionAvail().X;
+        float avail = ImGuiNet.GetContentRegionAvail().X;
         float sliderW = Math.Max(120f, avail);
 
-        ImGui.SetNextItemWidth(sliderW);
+        ImGuiNet.SetNextItemWidth(sliderW);
 
-        if (ImGui.SliderFloat(
-                "##grid_scale",
-                ref m_gridScale,
-                C_GRID_SCALE_MIN,
-                C_GRID_SCALE_MAX,
-                "%.2fx",
-                ImGuiSliderFlags.NoInput
-            ))
+        if (ImGuiNet.SliderFloat("##grid_scale", ref m_gridScale, C_GRID_SCALE_MIN, C_GRID_SCALE_MAX, "%.2fx",
+                ImGuiSliderFlags.NoInput))
         {
             m_gridScale = Math.Clamp(m_gridScale, C_GRID_SCALE_MIN, C_GRID_SCALE_MAX);
         }
     }
 
-    // List: ONLY Name + Type + Source
     private void DrawList(List<Entry> entries)
     {
-        var tableFlags =
-            ImGuiTableFlags.RowBg |
-            ImGuiTableFlags.BordersInnerV |
-            ImGuiTableFlags.Resizable |
-            ImGuiTableFlags.ScrollY |
-            ImGuiTableFlags.SizingFixedFit;
+        var tableFlags = ImGuiTableFlags.RowBg |
+                         ImGuiTableFlags.BordersInnerV |
+                         ImGuiTableFlags.Resizable |
+                         ImGuiTableFlags.ScrollY |
+                         ImGuiTableFlags.SizingFixedFit;
 
-        var avail = ImGui.GetContentRegionAvail();
+        var avail = ImGuiNet.GetContentRegionAvail();
 
-        if (!ImGui.BeginTable("##list_table", 3, tableFlags, new Vector2(0, avail.Y)))
+        if (!ImGuiNet.BeginTable("##list_table", 3, tableFlags, new Vector2(0, avail.Y)))
             return;
 
-        ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthFixed);
-        ImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed);
-        ImGui.TableSetupColumn("Source", ImGuiTableColumnFlags.WidthStretch);
+        ImGuiNet.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthFixed);
+        ImGuiNet.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed);
+        ImGuiNet.TableSetupColumn("Source", ImGuiTableColumnFlags.WidthStretch);
 
-        ImGui.TableHeadersRow();
+        ImGuiNet.TableHeadersRow();
 
         foreach (var e in entries)
         {
-            float rowH = ImGui.GetFrameHeight();
+            float rowH = ImGuiNet.GetFrameHeight();
 
-            ImGui.TableNextRow(ImGuiTableRowFlags.None, rowH);
-            ImGui.TableSetColumnIndex(0);
+            ImGuiNet.TableNextRow(ImGuiTableRowFlags.None, rowH);
+            ImGuiNet.TableSetColumnIndex(0);
 
             bool selected = IsSelected(e.fullPath);
-            string selId = $"##name_{e.fullPath}";
+            string uid = e.guid.HasValue ? e.guid.Value.ToString() : e.fullPath;
+            string selId = $"##name_{uid}";
 
-            if (ImGui.Selectable(selId, selected, ImGuiSelectableFlags.SpanAllColumns, new Vector2(0, rowH)))
+            if (ImGuiNet.Selectable(selId, selected, ImGuiSelectableFlags.SpanAllColumns, new Vector2(0, rowH)))
             {
                 if (e.isDir) SelectFolder(e.fullPath);
                 else SelectFile(e.fullPath);
             }
 
-            if (ImGui.IsItemHovered() && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+            if (ImGuiNet.IsItemHovered() && ImGuiNet.IsMouseDoubleClicked(ImGuiMouseButton.Left))
             {
-                if (e.isDir) NavigateTo(e.fullPath, pushHistory: true);
+                if (e.isDir) RequestNavigate(e.fullPath, pushHistory: true);
+                else TryOpenFile(e.fullPath);
             }
 
-            if (ImGui.BeginPopupContextItem($"##list_ctx_{e.fullPath}"))
+            if (ImGuiNet.BeginPopupContextItem($"##list_ctx_{uid}"))
             {
                 DrawItemContextItems(e);
-                ImGui.EndPopup();
+                ImGuiNet.EndPopup();
             }
 
-            // Col 0: Name
-            ImGui.SameLine();
-            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + ImGui.GetStyle().FramePadding.Y);
+            if (e.isDir)
+                EmitFolderDragSource(e.fullPath, e.name);
+            else
+                EmitFileDragSource(e);
+
+            if (e.isDir && BeginMoveDropTarget(e.fullPath, out var srcRel))
+            {
+                string dstFolderRel = AssetManager.NormalizeRelativePath(AssetManager.ToRelativePathFromAssetDirectory(ToNativePath(e.fullPath)));
+                TryMoveToFolder(srcRel, dstFolderRel);
+            }
+
+            ImGuiNet.SameLine();
+            ImGuiNet.SetCursorPosY(ImGuiNet.GetCursorPosY() + ImGuiNet.GetStyle().FramePadding.Y);
             EditorImGuiEx.DrawIconAndText(e.isDir ? ImGuiIcon.Folder : FileIcon(e.type), e.name);
 
-            // Col 1: Type
-            ImGui.TableSetColumnIndex(1);
-            ImGui.AlignTextToFramePadding();
-            ImGui.TextUnformatted(e.isDir ? "FOLDER" : e.type);
+            ImGuiNet.TableSetColumnIndex(1);
+            ImGuiNet.AlignTextToFramePadding();
+            ImGuiNet.TextUnformatted(e.isDir ? "FOLDER" : e.type);
 
-            // Col 2: Source
-            ImGui.TableSetColumnIndex(2);
-            ImGui.AlignTextToFramePadding();
-            ImGui.TextUnformatted(e.source);
+            ImGuiNet.TableSetColumnIndex(2);
+            ImGuiNet.AlignTextToFramePadding();
+            ImGuiNet.TextUnformatted(e.source);
         }
 
-        ImGui.EndTable();
+        ImGuiNet.EndTable();
     }
 
     private void DrawListWithSortBar(List<Entry> entries)
     {
-        float barH = ImGui.GetFrameHeight() + ImGui.GetStyle().ItemSpacing.Y * 2f;
-        var avail = ImGui.GetContentRegionAvail();
+        float barH = ImGuiNet.GetFrameHeight() + ImGuiNet.GetStyle().ItemSpacing.Y * 2f;
+        var avail = ImGuiNet.GetContentRegionAvail();
         float listH = Math.Max(0f, avail.Y - barH);
 
-        ImGui.BeginChild("##ListArea", new Vector2(0, listH));
+        ImGuiNet.BeginChild("##ListArea", new Vector2(0, listH));
         DrawList(entries);
-        ImGui.EndChild();
+        ImGuiNet.EndChild();
 
-        ImGui.Separator();
+        ImGuiNet.Separator();
 
-        ImGui.BeginChild("##ListSortBar", new Vector2(0, 0), ImGuiChildFlags.None);
+        ImGuiNet.BeginChild("##ListSortBar", new Vector2(0, 0), ImGuiChildFlags.None);
         DrawListSortBar();
-        ImGui.EndChild();
+        ImGuiNet.EndChild();
     }
 
     private void DrawListSortBar()
     {
-        ImGui.AlignTextToFramePadding();
+        ImGuiNet.AlignTextToFramePadding();
 
-        ImGui.TextDisabled("Sort");
-        ImGui.SameLine();
+        ImGuiNet.TextDisabled("Sort");
+        ImGuiNet.SameLine();
 
-        if (ImGui.Button(m_sortAscending ? "Asc##sort" : "Desc##sort"))
+        if (ImGuiNet.Button(m_sortAscending ? "Asc##sort" : "Desc##sort"))
             m_sortAscending = !m_sortAscending;
 
-        ImGui.SameLine();
+        ImGuiNet.SameLine();
 
-        float w = ImGui.GetContentRegionAvail().X;
-        ImGui.SetNextItemWidth(Math.Max(80f, w));
+        float w = ImGuiNet.GetContentRegionAvail().X;
+        ImGuiNet.SetNextItemWidth(Math.Max(80f, w));
 
         SortCombo("##sortField", ref m_sortField);
     }
 
     private static void SortCombo(string id, ref SortField field)
     {
-        if (ImGui.BeginCombo(id, field.ToString()))
+        if (!ImGuiNet.BeginCombo(id, field.ToString()))
+            return;
+
+        foreach (SortField v in Enum.GetValues(typeof(SortField)))
         {
-            foreach (SortField v in Enum.GetValues(typeof(SortField)))
-            {
-                bool selected = (v == field);
-                if (ImGui.Selectable(v.ToString(), selected))
-                    field = v;
-                if (selected) ImGui.SetItemDefaultFocus();
-            }
-            ImGui.EndCombo();
+            bool selected = (v == field);
+            if (ImGuiNet.Selectable(v.ToString(), selected))
+                field = v;
+
+            if (selected)
+                ImGuiNet.SetItemDefaultFocus();
         }
+
+        ImGuiNet.EndCombo();
     }
 
-    // ============================
-    // Context Menus
-    // ============================
+    #endregion
+
+    #region Context Menus
+
     private void DrawItemContextItems(Entry e)
     {
         if (e.isDir)
         {
-            if (ImGui.MenuItem("Open"))
-                NavigateTo(e.fullPath, pushHistory: true);
+            if (ImGuiNet.MenuItem("Open"))
+                RequestNavigate(e.fullPath, pushHistory: true);
         }
 
-        if (ImGui.MenuItem("Reveal in Finder/Explorer"))
-            RevealInSystem(e.fullPath);
+        if (ImGuiNet.MenuItem("Reveal in Explorer"))
+            PlatformAPI.RevealInSystem(ToNativePath(e.fullPath));
 
-        ImGui.Separator();
+        ImGuiNet.Separator();
 
-        if (ImGui.MenuItem("Rename"))
+        if (ImGuiNet.MenuItem("Rename"))
             BeginRename(e.fullPath);
 
-        if (ImGui.MenuItem("Delete"))
+        if (ImGuiNet.MenuItem("Delete"))
             BeginDelete(e.fullPath);
     }
 
     private void DrawCommonContextItems(string targetFolderNormalized)
     {
-        if (ImGui.MenuItem("New Folder"))
+        if (ImGuiNet.MenuItem("New Folder"))
             CreateNewFolder(targetFolderNormalized);
 
-        if (ImGui.MenuItem("Reveal in Finder/Explorer"))
-            RevealInSystem(targetFolderNormalized);
+        if (ImGuiNet.MenuItem("Reveal in Finder/Explorer"))
+            PlatformAPI.RevealInSystem(ToNativePath(targetFolderNormalized));
     }
 
-    // ============================
-    // Navigation / History
-    // ============================
-    private void NavigateTo(string dirNormalized, bool pushHistory)
+    #endregion
+
+    #region Navigation
+    
+    private void RequestNavigate(string dirNormalized, bool pushHistory)
     {
         dirNormalized = NormalizePath(dirNormalized);
-
-        // If same as current, do nothing (no history, no refresh)
-        if (IsSamePath(dirNormalized, m_currentDir))
+        if (string.IsNullOrWhiteSpace(dirNormalized))
             return;
 
-        string dirNative = ToNativePath(dirNormalized);
+        m_navPending = true;
+        m_navTarget = dirNormalized;
+        m_navPushHistory = pushHistory;
+    }
+    
+    private void CommitPendingNavigate()
+    {
+        if (!m_navPending)
+            return;
+
+        m_navPending = false;
+        
+        if (IsSamePath(m_navTarget, m_currentDir))
+            return;
+
+        string dirNative = ToNativePath(m_navTarget);
         if (!Directory.Exists(dirNative))
             return;
 
-        m_currentDir = dirNormalized;
+        m_currentDir = m_navTarget;
         m_currentDirNative = dirNative;
 
-        // Finder-like behavior: entering a folder clears selection
         ClearSelection();
+        RevealFolderInTree(m_navTarget);
 
-        if (pushHistory)
-            PushHistory(dirNormalized);
+        if (m_navPushHistory)
+            PushHistory(m_navTarget);
 
         RefreshSnapshot(force: true);
     }
+
+    private void RevealFolderInTree(string folderNormalized)
+    {
+        m_revealOpenPaths.Clear();
+        m_revealOpenPending = false;
+
+        if (string.IsNullOrWhiteSpace(folderNormalized))
+            return;
+
+        folderNormalized = NormalizePath(folderNormalized);
+
+        if (!IsAncestorOrSelf(m_rootPath, folderNormalized))
+            return;
+
+        string running = m_rootPath.TrimEnd('/');
+        var parts = SplitPathRelativeToRoot(folderNormalized, m_rootPath);
+
+        m_revealOpenPaths.Add(m_rootPath);
+
+        foreach (var part in parts)
+        {
+            running = NormalizePath(Path.Combine(running, part));
+            m_revealOpenPaths.Add(running);
+        }
+
+        m_revealOpenPending = true;
+    }
+
 
     private void PushHistory(string dir)
     {
@@ -756,12 +789,13 @@ public sealed class FileBrowserPanel : EditorPanel
             return;
 
         m_historyIndex = next;
-        NavigateTo(m_history[m_historyIndex], pushHistory: false);
+        RequestNavigate(m_history[m_historyIndex], pushHistory: false);
     }
 
-    // ============================
-    // Snapshot / IO
-    // ============================
+    #endregion
+
+    #region Snapshot
+
     private void RefreshSnapshot(bool force)
     {
         if (!force)
@@ -783,6 +817,7 @@ public sealed class FileBrowserPanel : EditorPanel
 
         m_snapshotTime = DateTime.UtcNow;
         m_snapshot.Clear();
+        m_relByGuid.Clear();
 
         try
         {
@@ -798,7 +833,8 @@ public sealed class FileBrowserPanel : EditorPanel
                     name: Path.GetFileName(d),
                     isDir: true,
                     type: "Folder",
-                    source: "~"
+                    source: "~",
+                    guid: null
                 ));
             }
 
@@ -809,13 +845,20 @@ public sealed class FileBrowserPanel : EditorPanel
 
                 var fi = new FileInfo(f);
 
-                m_snapshot.entries.Add(new Entry(
+                string rel = AssetManager.NormalizeRelativePath(AssetManager.ToRelativePathFromAssetDirectory(f));
+                Guid? g = TryGetGuidByRel(rel);
+
+                var e = new Entry(
                     fullPath: NormalizePath(f),
                     name: fi.Name,
                     isDir: false,
                     type: ToType(fi.Extension),
-                    source: "~"
-                ));
+                    source: "~",
+                    guid: g
+                );
+
+                CacheGuidMapping(e, rel);
+                m_snapshot.entries.Add(e);
             }
         }
         catch (Exception e)
@@ -834,11 +877,7 @@ public sealed class FileBrowserPanel : EditorPanel
 
             if (!queryChanged)
             {
-                if (changed)
-                {
-                    // AssetManager already coalesces bursts; refresh immediately.
-                }
-                else
+                if (!changed)
                 {
                     var now = DateTime.UtcNow;
                     if ((now - m_searchSnapshotTime).TotalSeconds < C_SNAPSHOT_TTL_SECONDS)
@@ -853,6 +892,7 @@ public sealed class FileBrowserPanel : EditorPanel
         m_assetAppliedVersion = AssetManager.assetDirectoryChangeVersion;
 
         m_searchSnapshot.Clear();
+        m_relByGuid.Clear();
 
         try
         {
@@ -875,7 +915,8 @@ public sealed class FileBrowserPanel : EditorPanel
                     name: string.IsNullOrWhiteSpace(name) ? rel : name,
                     isDir: true,
                     type: "Folder",
-                    source: src
+                    source: src,
+                    guid: null
                 ));
             }
 
@@ -886,16 +927,23 @@ public sealed class FileBrowserPanel : EditorPanel
 
                 var fi = new FileInfo(f);
 
-                string rel = GetRelativeDisplay(m_currentDirNative, f);
-                string src = BuildSourceFromRelative(rel);
+                string relDisplay = GetRelativeDisplay(m_currentDirNative, f);
+                string src = BuildSourceFromRelative(relDisplay);
 
-                m_searchSnapshot.entries.Add(new Entry(
+                string rel = AssetManager.NormalizeRelativePath(AssetManager.ToRelativePathFromAssetDirectory(f));
+                Guid? g = TryGetGuidByRel(rel);
+
+                var e = new Entry(
                     fullPath: NormalizePath(f),
                     name: fi.Name,
                     isDir: false,
                     type: ToType(fi.Extension),
-                    source: src
-                ));
+                    source: src,
+                    guid: g
+                );
+
+                CacheGuidMapping(e, rel);
+                m_searchSnapshot.entries.Add(e);
             }
         }
         catch (Exception e)
@@ -930,44 +978,106 @@ public sealed class FileBrowserPanel : EditorPanel
         return q.ToList();
     }
 
-    // ============================
-    // Rename / Delete / Create
-    // ============================
+    private static Guid? TryGetGuidByRel(string rel)
+    {
+        try
+        {
+            return AssetManager.GetGuid(rel);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private Guid? TryGetGuidForFileByNativePath(string nativePath)
+    {
+        try
+        {
+            string rel = AssetManager.NormalizeRelativePath(AssetManager.ToRelativePathFromAssetDirectory(nativePath));
+            if (string.IsNullOrWhiteSpace(rel))
+                return null;
+            return TryGetGuidByRel(rel);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private void CacheGuidMapping(in Entry e, string? relOverride = null)
+    {
+        if (!e.guid.HasValue)
+            return;
+
+        string rel;
+        if (!string.IsNullOrWhiteSpace(relOverride))
+        {
+            rel = relOverride;
+        }
+        else
+        {
+            try
+            {
+                rel = AssetManager.NormalizeRelativePath(AssetManager.ToRelativePathFromAssetDirectory(ToNativePath(e.fullPath)));
+            }
+            catch
+            {
+                return;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(rel))
+            return;
+
+        m_relByGuid[e.guid.Value] = AssetManager.NormalizeRelativePath(rel);
+    }
+
+    #endregion
+
+    #region File Operations
+
     private void BeginRename(string pathNormalized)
     {
         m_renameTargetPath = pathNormalized;
         m_renameBuffer = Path.GetFileName(pathNormalized);
-        ImGui.OpenPopup("Rename##popup");
+        m_requestOpenRenamePopup = true;
     }
 
     private void DrawRenamePopup()
     {
-        if (!ImGui.BeginPopupModal("Rename##popup", ImGuiWindowFlags.AlwaysAutoResize))
+        if (m_requestOpenRenamePopup)
+        {
+            ImGuiNet.OpenPopup("Rename##popup");
+            m_requestOpenRenamePopup = false;
+        }
+
+        if (!ImGuiNet.BeginPopupModal("Rename##popup", ImGuiWindowFlags.AlwaysAutoResize))
             return;
 
-        ImGui.TextUnformatted("New name:");
-        ImGui.SetNextItemWidth(360f);
-        ImGui.InputText("##rename", ref m_renameBuffer, 256);
+        ImGuiNet.TextUnformatted("New name:");
+        ImGuiNet.SetNextItemWidth(360f);
+        ImGuiNet.InputText("##rename", ref m_renameBuffer, 256);
 
-        ImGui.Spacing();
+        ImGuiNet.Spacing();
 
-        bool ok = ImGui.Button("OK", new Vector2(120, 0));
-        ImGui.SameLine();
-        bool cancel = ImGui.Button("Cancel", new Vector2(120, 0));
+        bool ok = ImGuiNet.Button("OK", new Vector2(120, 0));
+        ImGuiNet.SameLine();
+        bool cancel = ImGuiNet.Button("Cancel", new Vector2(120, 0));
 
         if (ok && m_renameTargetPath != null)
         {
             TryRename(m_renameTargetPath, m_renameBuffer);
             m_renameTargetPath = null;
-            ImGui.CloseCurrentPopup();
+            ImGuiNet.CloseCurrentPopup();
         }
         else if (cancel)
         {
             m_renameTargetPath = null;
-            ImGui.CloseCurrentPopup();
+            ImGuiNet.CloseCurrentPopup();
         }
 
-        ImGui.EndPopup();
+        ImGuiNet.EndPopup();
     }
 
     private void TryRename(string oldPathNormalized, string newName)
@@ -983,30 +1093,16 @@ public sealed class FileBrowserPanel : EditorPanel
             if (IsSamePath(oldPathNormalized, newPathNorm))
                 return;
 
-            string oldNative = ToNativePath(oldPathNormalized);
-            string newNative = ToNativePath(newPathNorm);
+            string oldRel = AssetManager.NormalizeRelativePath(AssetManager.ToRelativePathFromAssetDirectory(ToNativePath(oldPathNormalized)));
+            string newRel = AssetManager.NormalizeRelativePath(AssetManager.ToRelativePathFromAssetDirectory(ToNativePath(newPathNorm)));
 
-            bool renamed = false;
+            if (!AssetManager.RenamePath(oldRel, newRel))
+                return;
 
-            if (Directory.Exists(oldNative))
-            {
-                Directory.Move(oldNative, newNative);
-                renamed = true;
-            }
-            else if (File.Exists(oldNative))
-            {
-                File.Move(oldNative, newNative);
-                renamed = true;
-            }
+            if (IsSelected(oldPathNormalized))
+                SelectPath(newPathNorm);
 
-            if (renamed)
-            {
-                // keep selection on renamed item
-                if (IsSelected(oldPathNormalized))
-                    SelectPath(newPathNorm);
-
-                RefreshSnapshot(force: true);
-            }
+            RefreshSnapshot(force: true);
         }
         catch (Exception e)
         {
@@ -1017,65 +1113,58 @@ public sealed class FileBrowserPanel : EditorPanel
     private void BeginDelete(string pathNormalized)
     {
         m_deleteTargetPath = pathNormalized;
-        ImGui.OpenPopup("Delete##popup");
+        m_requestOpenDeletePopup = true;
     }
 
     private void DrawDeletePopup()
     {
-        if (!ImGui.BeginPopupModal("Delete##popup", ImGuiWindowFlags.AlwaysAutoResize))
+        if (m_requestOpenDeletePopup)
+        {
+            ImGuiNet.OpenPopup("Delete##popup");
+            m_requestOpenDeletePopup = false;
+        }
+
+        if (!ImGuiNet.BeginPopupModal("Delete##popup", ImGuiWindowFlags.AlwaysAutoResize))
             return;
 
         string name = m_deleteTargetPath != null ? Path.GetFileName(m_deleteTargetPath) : "";
-        ImGui.TextUnformatted($"Delete '{name}' ?");
-        ImGui.TextDisabled("This action cannot be undone.");
+        ImGuiNet.TextUnformatted($"Delete '{name}' ?");
+        ImGuiNet.TextDisabled("This action cannot be undone.");
 
-        ImGui.Spacing();
+        ImGuiNet.Spacing();
 
-        bool del = ImGui.Button("Delete", new Vector2(120, 0));
-        ImGui.SameLine();
-        bool cancel = ImGui.Button("Cancel", new Vector2(120, 0));
+        bool del = ImGuiNet.Button("Delete", new Vector2(120, 0));
+        ImGuiNet.SameLine();
+        bool cancel = ImGuiNet.Button("Cancel", new Vector2(120, 0));
 
         if (del && m_deleteTargetPath != null)
         {
             TryDelete(m_deleteTargetPath);
             m_deleteTargetPath = null;
-            ImGui.CloseCurrentPopup();
+            ImGuiNet.CloseCurrentPopup();
         }
         else if (cancel)
         {
             m_deleteTargetPath = null;
-            ImGui.CloseCurrentPopup();
+            ImGuiNet.CloseCurrentPopup();
         }
 
-        ImGui.EndPopup();
+        ImGuiNet.EndPopup();
     }
 
     private void TryDelete(string pathNormalized)
     {
         try
         {
-            string native = ToNativePath(pathNormalized);
+            string rel = AssetManager.NormalizeRelativePath(AssetManager.ToRelativePathFromAssetDirectory(ToNativePath(pathNormalized)));
 
-            bool deleted = false;
+            if (!AssetManager.DeletePath(rel))
+                return;
 
-            if (Directory.Exists(native))
-            {
-                Directory.Delete(native, recursive: true);
-                deleted = true;
-            }
-            else if (File.Exists(native))
-            {
-                File.Delete(native);
-                deleted = true;
-            }
+            if (IsSelected(pathNormalized))
+                ClearSelection();
 
-            if (deleted)
-            {
-                if (IsSelected(pathNormalized))
-                    ClearSelection();
-
-                RefreshSnapshot(force: true);
-            }
+            RefreshSnapshot(force: true);
         }
         catch (Exception e)
         {
@@ -1100,12 +1189,13 @@ public sealed class FileBrowserPanel : EditorPanel
                 i++;
             }
 
-            Directory.CreateDirectory(candidateNative);
+            string rel = AssetManager.NormalizeRelativePath(AssetManager.ToRelativePathFromAssetDirectory(candidateNative));
+            if (!AssetManager.CreateFolder(rel))
+                return;
 
             string candidateNorm = NormalizePath(candidateNative);
             RefreshSnapshot(force: true);
 
-            // select then rename
             SelectFolder(candidateNorm);
             BeginRename(candidateNorm);
         }
@@ -1115,67 +1205,168 @@ public sealed class FileBrowserPanel : EditorPanel
         }
     }
 
-    // ============================
-    // Splitter
-    // ============================
-    private static bool DrawSplitter(ref float leftWidth, float minLeft, float maxLeft)
+    private void TryMoveToFolder(string srcRel, string dstFolderRel)
     {
-        float height = ImGui.GetContentRegionAvail().Y;
-
-        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 0f);
-        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(0, 0));
-        ImGui.Button("##Splitter", new Vector2(C_SPLITTER_WIDTH, height));
-        ImGui.PopStyleVar(2);
-
-        bool active = ImGui.IsItemActive();
-        if (active)
+        try
         {
-            float delta = ImGui.GetIO().MouseDelta.X;
-            leftWidth = Math.Clamp(leftWidth + delta, minLeft, maxLeft);
-            IImGui.SetStorageData("Editor.File.SplitterLeftWidth", leftWidth);
+            srcRel = AssetManager.NormalizeRelativePath(srcRel);
+            dstFolderRel = AssetManager.NormalizeRelativePath(dstFolderRel);
+
+            if (!AssetManager.MovePath(srcRel, dstFolderRel))
+                return;
+
+            RefreshSnapshot(force: true);
+        }
+        catch (Exception e)
+        {
+            Log.Error(e.Message);
+        }
+    }
+
+    #endregion
+
+    #region DragDrop
+
+    private void EmitFileDragSource(in Entry e)
+    {
+        if (e.isDir)
+            return;
+
+        if (!e.guid.HasValue)
+            return;
+
+        if (!ImGuiNet.BeginDragDropSource())
+            return;
+
+        var guid = e.guid.Value;
+        ImGuiHost.SetDragPayload(EditorPayloadType.ASSET_REF_PAYLOAD, AssetManager.Get<InnoAsset>(guid));
+        ImGuiNet.TextUnformatted(e.name);
+
+        ImGuiNet.EndDragDropSource();
+    }
+
+    private void EmitFolderDragSource(string folderNormalized, string displayName)
+    {
+        if (!ImGuiNet.BeginDragDropSource())
+            return;
+
+        try
+        {
+            string rel = AssetManager.NormalizeRelativePath(AssetManager.ToRelativePathFromAssetDirectory(ToNativePath(folderNormalized)));
+            rel = AssetManager.NormalizeRelativePath(rel);
+
+            if (!string.IsNullOrWhiteSpace(rel))
+                ImGuiHost.SetDragPayload(EditorPayloadType.PATH_PAYLOAD, rel);
+        }
+        catch
+        {
+            // Do nothing
         }
 
-        if (ImGui.IsItemHovered())
-            ImGui.SetMouseCursor(ImGuiMouseCursor.ResizeEW);
+        ImGuiNet.TextUnformatted(displayName);
+        ImGuiNet.EndDragDropSource();
+    }
+
+    private bool BeginMoveDropTarget(string fullPathNormalizedFolder, out string srcRel)
+    {
+        srcRel = "";
+
+        if (!ImGuiNet.BeginDragDropTarget())
+            return false;
+        
+        try
+        {
+            if (!Directory.Exists(ToNativePath(fullPathNormalizedFolder)))
+                return false;
+
+            if (ImGuiHost.TryAcceptDragPayload(EditorPayloadType.ASSET_REF_PAYLOAD, out AssetRef<InnoAsset> assetRef))
+            {
+                if (!assetRef.isValid)
+                    return false;
+                
+                if (!m_relByGuid.TryGetValue(assetRef.guid, out var rel) || string.IsNullOrWhiteSpace(rel))
+                    return false;
+
+                srcRel = AssetManager.NormalizeRelativePath(rel);
+                return true;
+            }
+            
+            if (ImGuiHost.TryAcceptDragPayload(EditorPayloadType.PATH_PAYLOAD, out string pathPayload))
+            {
+                if (string.IsNullOrWhiteSpace(pathPayload))
+                    return false;
+
+                srcRel = AssetManager.NormalizeRelativePath(pathPayload);
+                return true;
+            }
+
+            return false;
+        }
+        finally
+        {
+            ImGuiNet.EndDragDropTarget();
+        }
+    }
+
+    #endregion
+
+    #region Splitter
+
+    private static bool DrawSplitter(ref float leftWidth, float minLeft, float maxLeft)
+    {
+        float height = ImGuiNet.GetContentRegionAvail().Y;
+
+        ImGuiNet.PushStyleVar(ImGuiStyleVar.FrameRounding, 0f);
+        ImGuiNet.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(0, 0));
+        ImGuiNet.Button("##Splitter", new Vector2(C_SPLITTER_WIDTH, height));
+        ImGuiNet.PopStyleVar(2);
+
+        bool active = ImGuiNet.IsItemActive();
+        if (active)
+        {
+            float delta = ImGuiNet.GetIO().MouseDelta.X;
+            leftWidth = Math.Clamp(leftWidth + delta, minLeft, maxLeft);
+        }
+
+        if (ImGuiNet.IsItemHovered())
+            ImGuiNet.SetMouseCursor(ImGuiMouseCursor.ResizeEW);
 
         return active;
     }
 
-    // ============================
-    // Statusbar (Finder-like path: clickable segments + horizontal scroll)
-    // ============================
+    #endregion
+
+    #region StatusBar
+
     private void DrawStatusBarFinderPath(float height)
     {
-        ImGui.BeginChild(
-            "##FileBrowserStatus",
-            new Vector2(0, height),
-            ImGuiChildFlags.None,
-            ImGuiWindowFlags.HorizontalScrollbar
-        );
+        ImGuiNet.BeginChild("##FileBrowserStatus", new Vector2(0, height), ImGuiChildFlags.None,
+            ImGuiWindowFlags.HorizontalScrollbar);
 
-        if (ImGui.SmallButton("Assets##sb_root"))
-            NavigateTo(m_rootPath, pushHistory: true);
+        if (ImGuiNet.SmallButton("Assets##sb_root"))
+            RequestNavigate(m_rootPath, pushHistory: true);
 
         string running = m_rootPath;
         var parts = SplitPathRelativeToRoot(m_currentDir, m_rootPath);
 
         for (int i = 0; i < parts.Count; i++)
         {
-            ImGui.SameLine();
-            ImGui.TextDisabled(">");
-            ImGui.SameLine();
+            ImGuiNet.SameLine();
+            ImGuiNet.TextDisabled(">");
+            ImGuiNet.SameLine();
 
             running = NormalizePath(Path.Combine(running, parts[i]));
-            if (ImGui.SmallButton($"{parts[i]}##sb_{i}"))
-                NavigateTo(running, pushHistory: true);
+            if (ImGuiNet.SmallButton($"{parts[i]}##sb_{i}"))
+                RequestNavigate(running, pushHistory: true);
         }
 
-        ImGui.EndChild();
+        ImGuiNet.EndChild();
     }
 
-    // ============================
-    // Selection API (extensible; no syncing)
-    // ============================
+    #endregion
+
+    #region Selection
+
     private void SelectPath(string? pathNormalized)
     {
         string? n = string.IsNullOrWhiteSpace(pathNormalized) ? null : NormalizePath(pathNormalized);
@@ -1183,8 +1374,6 @@ public sealed class FileBrowserPanel : EditorPanel
             return;
 
         m_selectedPath = n;
-
-        // Ensure tree opens to reveal selection
         BuildRevealOpenPathsForSelection(n);
     }
 
@@ -1196,14 +1385,11 @@ public sealed class FileBrowserPanel : EditorPanel
         if (string.IsNullOrWhiteSpace(selectedNormalized))
             return;
 
-        // If selection is a file, reveal its parent folder chain
         string targetFolderNorm = GetFolderNormalizedForPath(selectedNormalized);
 
-        // Must be inside root to reveal
         if (!IsAncestorOrSelf(m_rootPath, targetFolderNorm))
             return;
 
-        // Build root -> ... -> target chain
         string running = m_rootPath.TrimEnd('/');
         var parts = SplitPathRelativeToRoot(targetFolderNorm, m_rootPath);
 
@@ -1246,17 +1432,8 @@ public sealed class FileBrowserPanel : EditorPanel
         m_revealOpenPaths.Clear();
     }
 
-    private void SelectFile(string filePathNormalized)
-    {
-        // TODO: Future extension point: open inspector, preview, etc.
-        SelectPath(filePathNormalized);
-    }
-
-    private void SelectFolder(string folderPathNormalized)
-    {
-        // TODO: Future extension point: show folder meta, etc.
-        SelectPath(folderPathNormalized);
-    }
+    private void SelectFile(string filePathNormalized) => SelectPath(filePathNormalized);
+    private void SelectFolder(string folderPathNormalized) => SelectPath(folderPathNormalized);
 
     private bool IsSelected(string? pathNormalized)
     {
@@ -1266,9 +1443,10 @@ public sealed class FileBrowserPanel : EditorPanel
         return IsSamePath(pathNormalized, m_selectedPath);
     }
 
-    // ============================
-    // Utility
-    // ============================
+    #endregion
+
+    #region Utility
+
     private static string NormalizePath(string p)
     {
         if (string.IsNullOrWhiteSpace(p)) return "";
@@ -1325,9 +1503,7 @@ public sealed class FileBrowserPanel : EditorPanel
     }
 
     private static bool IsEditorFilteredFile(string file)
-    {
-        return file.EndsWith(AssetManager.C_ASSET_POSTFIX, StringComparison.OrdinalIgnoreCase);
-    }
+        => file.EndsWith(AssetManager.C_ASSET_POSTFIX, StringComparison.OrdinalIgnoreCase);
 
     private static List<string> SplitPathRelativeToRoot(string fullPath, string rootPath)
     {
@@ -1371,13 +1547,25 @@ public sealed class FileBrowserPanel : EditorPanel
         return type switch
         {
             "PNG" => ImGuiIcon.Image,
+            "SCENE" => ImGuiIcon.ObjectGroup,
+            "OBJ" => ImGuiIcon.Shapes,
             _ => ImGuiIcon.File
         };
     }
 
-    private static void RevealInSystem(string path)
+    private static void TryOpenFile(string fullPathNormalized)
     {
-        throw new NotImplementedException(path);
+        var ext = Path.GetExtension(fullPathNormalized).ToUpperInvariant();
+        switch (ext)
+        {
+            case ".SCENE":
+            {
+                string fullNative = fullPathNormalized.Replace('/', Path.DirectorySeparatorChar);
+                string rel = GetRelativeDisplay(AssetManager.assetDirectory, fullNative);
+                EditorSceneAssetIO.OpenScene(rel);
+                break;
+            }
+        }
     }
 
     private string GetCurrentFolderDisplayName()
@@ -1389,9 +1577,6 @@ public sealed class FileBrowserPanel : EditorPanel
         return string.IsNullOrWhiteSpace(name) ? "Assets" : name;
     }
 
-    // Build Finder-like source:
-    // - If item is in current dir => "~"
-    // - Else => "~/<dirRel>" (for a file, dirRel excludes filename; for a dir, dirRel excludes its own name)
     private static string BuildSourceFromRelative(string rel)
     {
         if (string.IsNullOrWhiteSpace(rel))
@@ -1411,4 +1596,6 @@ public sealed class FileBrowserPanel : EditorPanel
 
         return "~/" + parent;
     }
+
+    #endregion
 }

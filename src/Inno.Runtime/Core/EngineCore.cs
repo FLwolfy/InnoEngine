@@ -3,49 +3,42 @@ using Inno.Core.Application;
 using Inno.Core.Events;
 using Inno.Core.Layers;
 using Inno.Core.Logging;
-using Inno.Core.Utility;
 using Inno.Graphics;
 using Inno.Graphics.Renderer;
-using Inno.Graphics.Resources.GpuResources.Cache;
-using Inno.Graphics.Targets;
 using Inno.Platform;
 using Inno.Platform.Graphics;
-using Inno.Platform.ImGui;
 using Inno.Platform.Window;
 
 namespace Inno.Runtime.Core;
 
 public abstract class EngineCore
 {
-    private static readonly int DEFAULT_WINDOW_WIDTH = 1920;
-    private static readonly int DEFAULT_WINDOW_HEIGHT = 1080;
-    private static readonly bool DEFAULT_WINDOW_RESIZABLE = false;
-    
-    private readonly IWindow m_mainWindow;
-    private readonly IGraphicsDevice m_graphicsDevice;
-    
+    private readonly PlatformRuntime m_platform;
     private readonly Shell m_gameShell;
     private readonly LayerStack m_layerStack;
-    private readonly EventSnapshot m_eventSnapshot;
     private readonly FileLogSink m_fileSink;
     
-    protected EngineCore(bool imGui = true)
+    protected EngineCore()
     {
         // Initialize platforms
-        m_mainWindow = PlatformAPI.CreateWindow(new WindowInfo()
-        {
-            name = "Main Window",
-            width = DEFAULT_WINDOW_WIDTH,
-            height = DEFAULT_WINDOW_HEIGHT
-        }, WindowBackend.Veldrid_Sdl2);
-        m_mainWindow.resizable = DEFAULT_WINDOW_RESIZABLE;
-        m_graphicsDevice = PlatformAPI.CreateGraphicsDevice(m_mainWindow, GraphicsBackend.Metal);
-        if (imGui) PlatformAPI.SetupImGuiImpl(m_mainWindow, m_graphicsDevice, ImGuiColorSpaceHandling.Legacy);
-        
+        m_platform = PlatformAPI.CreatePlatform
+        (
+            new WindowInfo
+            {
+                name = "Main Window",
+                x = 0,
+                y = 0,
+                width = 2180,
+                height = 1080,
+                flags = WindowFlags.AllowHighDpi | WindowFlags.Resizable | WindowFlags.Decorated
+            }, 
+            PlatformBackend.Veldrid_Sdl2,
+            GraphicsBackend.Metal
+        );
+
         // Initialize lifecycle
         m_gameShell = new Shell();
         m_layerStack = new LayerStack();
-        m_eventSnapshot = new EventSnapshot();
         
         // Initialize Asset
         AssetManager.Initialize(
@@ -59,7 +52,7 @@ public abstract class EngineCore
         LogManager.RegisterSink(m_fileSink);
         
         // Initialize Render
-        RenderGraphics.Initialize(m_graphicsDevice);
+        RenderGraphics.Initialize(m_platform.graphicsDevice);
         
         // Initialization Callbacks
         m_gameShell.SetOnLoad(OnLoad);
@@ -77,6 +70,7 @@ public abstract class EngineCore
         
         // Graphics Resources
         Renderer2D.LoadResources();
+        Renderer3D.LoadResources();
     }
 
     private void OnSetup()
@@ -93,16 +87,14 @@ public abstract class EngineCore
 
     private void OnEvent(EventDispatcher dispatcher)
     {
-        m_mainWindow.PumpEvents(dispatcher);
+        m_platform.windowSystem.mainWindow.PumpEvents(dispatcher);
         
         var shouldCloseWindow = false;
-        m_eventSnapshot.Clear();
         dispatcher.Dispatch(e =>
         {
-            m_eventSnapshot.AddEvent(e);
+            m_layerStack.OnEvent(e);
             if (e.type == EventType.WindowClose) shouldCloseWindow = true;
         });
-        m_layerStack.OnEvent(m_eventSnapshot);
         if (shouldCloseWindow) End();
     }
 
@@ -111,13 +103,12 @@ public abstract class EngineCore
         // Layer Render
         m_layerStack.OnRender();
         
-        // Layer ImGui
-        IImGui.BeginLayout(Time.renderDeltaTime);
-        m_layerStack.OnImGui();
-        IImGui.EndLayout();
-        
         // Swap Buffers
-        m_graphicsDevice.SwapBuffers();
+        m_platform.windowSystem.SwapWindowBuffers(m_platform.windowSystem.mainWindow);
+        foreach (var extraWindow in m_platform.windowSystem.extraWindows)
+        {
+            m_platform.windowSystem.SwapWindowBuffers(extraWindow);
+        }
     }
 
     private void OnClose()
@@ -126,13 +117,16 @@ public abstract class EngineCore
         RenderGraphics.Clear();
         
         // Dispose Resources
-        IImGui.DisposeImpl();
         m_fileSink.Dispose();
-        m_graphicsDevice.Dispose();
         
         // Assets
         AssetManager.Shutdown();
     }
+    
+    /// <summary>
+    /// Get the platform implemented for this engine core.
+    /// </summary>
+    public PlatformRuntime GetImplementedPlatform() => m_platform;
     
     /// <summary>
     /// Starts the main loop of the engine.
@@ -148,23 +142,6 @@ public abstract class EngineCore
     public void End()
     {
         m_gameShell.Terminate();
-    }
-
-    /// <summary>
-    /// Resizes the main window of the engine.
-    /// </summary>
-    protected void SetWindowSize(int width, int height)
-    {
-        m_mainWindow.width = width;
-        m_mainWindow.height = height;
-    }
-    
-    /// <summary>
-    /// Sets whether the main window is resizable.
-    /// </summary>
-    protected void SetWindowResizable(bool resizable)
-    {
-        m_mainWindow.resizable = resizable;
     }
 
     /// <summary>
