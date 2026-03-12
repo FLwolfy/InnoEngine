@@ -224,7 +224,7 @@ Inno/
 │  └─ scripts/
 │
 ├─ src/
-│  ├─ Core/
+│  ├─ core/
 │  │  ├─ Inno.Core/
 │  │  │  ├─ Inno.Core.csproj
 │  │  │  ├─ GlobalUsings.cs
@@ -319,7 +319,7 @@ Inno/
 │  │     ├─ Synchronization/
 │  │     └─ Collections/
 │  │
-│  ├─ Platform/
+│  ├─ platform/
 │  │  ├─ Inno.Platform/
 │  │  │  ├─ Inno.Platform.csproj
 │  │  │  ├─ Abstractions/
@@ -351,7 +351,7 @@ Inno/
 │  │     ├─ Clipboard/
 │  │     └─ Internal/
 │  │
-│  ├─ Graphics/
+│  ├─ graphics/
 │  │  ├─ Inno.Graphics/
 │  │  │  ├─ Inno.Graphics.csproj
 │  │  │  ├─ Abstractions/
@@ -406,7 +406,7 @@ Inno/
 │  │     ├─ Commands/
 │  │     └─ Internal/
 │  │
-│  ├─ Assets/
+│  ├─ assets/
 │  │  ├─ Inno.Assets/
 │  │  │  ├─ Inno.Assets.csproj
 │  │  │  ├─ Database/
@@ -458,7 +458,7 @@ Inno/
 │  │     ├─ GpuUpload/
 │  │     └─ Caches/
 │  │
-│  ├─ Content/
+│  ├─ content/
 │  │  ├─ Inno.Content/
 │  │  │  ├─ Inno.Content.csproj
 │  │  │  ├─ Common/
@@ -504,7 +504,7 @@ Inno/
 │  │     ├─ Runtime/
 │  │     └─ Serialization/
 │  │
-│  ├─ ECS/
+│  ├─ ecs/
 │  │  ├─ Inno.ECS/
 │  │  │  ├─ Inno.ECS.csproj
 │  │  │  ├─ Entities/
@@ -527,7 +527,7 @@ Inno/
 │  │     ├─ Systems/
 │  │     └─ Utilities/
 │  │
-│  ├─ Scene/
+│  ├─ scene/
 │  │  ├─ Inno.Scene/
 │  │  │  ├─ Inno.Scene.csproj
 │  │  │  ├─ Nodes/
@@ -549,7 +549,7 @@ Inno/
 │  │     ├─ Authoring/
 │  │     └─ Validation/
 │  │
-│  ├─ Rendering/
+│  ├─ rendering/
 │  │  ├─ Inno.Rendering/
 │  │  │  ├─ Inno.Rendering.csproj
 │  │  │  ├─ Cameras/
@@ -583,7 +583,7 @@ Inno/
 │  │     ├─ Shapes/
 │  │     └─ Overlay/
 │  │
-│  ├─ Engine/
+│  ├─ engine/
 │  │  ├─ Inno.Engine/
 │  │  │  ├─ Inno.Engine.csproj
 │  │  │  ├─ Host/
@@ -623,7 +623,7 @@ Inno/
 │  │     ├─ Host/
 │  │     └─ Binding/
 │  │
-│  ├─ Editor/
+│  ├─ editor/
 │  │  ├─ Inno.Editor.Framework/
 │  │  │  ├─ Inno.Editor.Framework.csproj
 │  │  │  ├─ Docking/
@@ -665,7 +665,7 @@ Inno/
 │  │     ├─ Themes/
 │  │     └─ BuiltinAssets/
 │  │
-│  └─ Launcher/
+│  └─ launcher/
 │     ├─ Inno.Launcher/
 │     │  ├─ Inno.Launcher.csproj
 │     │  ├─ Program.cs
@@ -685,7 +685,7 @@ Inno/
 │        └─ Bootstrap/
 │
 ├─ tests/
-│  ├─ Core/
+│  ├─ core/
 │  │  ├─ Inno.Core.Tests/
 │  │  │  ├─ Inno.Core.Tests.csproj
 │  │  │  ├─ Diagnostics/
@@ -702,35 +702,35 @@ Inno/
 │  │     ├─ Yaml/
 │  │     └─ Json/
 │  │
-│  ├─ Assets/
+│  ├─ assets/
 │  │  ├─ Inno.Assets.Tests/
 │  │  ├─ Inno.Assets.Pipeline.Tests/
 │  │  └─ Inno.Assets.Runtime.Tests/
 │  │
-│  ├─ ECS/
+│  ├─ ecs/
 │  │  ├─ Inno.ECS.Tests/
 │  │  ├─ Inno.ECS.Systems.Tests/
 │  │  └─ Inno.ECS.Transforms.Tests/
 │  │
-│  ├─ Scene/
+│  ├─ scene/
 │  │  ├─ Inno.Scene.Tests/
 │  │  └─ Inno.Scene.Serialization.Tests/
 │  │
-│  ├─ Rendering/
+│  ├─ rendering/
 │  │  ├─ Inno.Rendering.Tests/
 │  │  ├─ Inno.Rendering.RenderGraph.Tests/
 │  │  └─ Inno.Rendering.Passes.Tests/
 │  │
-│  ├─ Editor/
+│  ├─ editor/
 │  │  ├─ Inno.Editor.Framework.Tests/
 │  │  └─ Inno.Editor.Tests/
 │  │
-│  ├─ Integration/
+│  ├─ integration/
 │  │  ├─ Inno.Integration.Tests/
 │  │  ├─ Inno.PlayMode.Tests/
 │  │  └─ Inno.AssetImport.Tests/
 │  │
-│  └─ Golden/
+│  └─ golden/
 │     ├─ Inno.Golden.Serialization.Tests/
 │     ├─ Inno.Golden.Scene.Tests/
 │     └─ Inno.Golden.Shader.Tests/
@@ -761,7 +761,7 @@ Inno/
 │     └─ Assets/
 │
 └─ games/
-   ├─ Sandbox/
+   ├─ sandbox/
    │  ├─ Sandbox/
    │  │  ├─ Sandbox.csproj
    │  │  ├─ Game/
@@ -780,7 +780,7 @@ Inno/
    │     ├─ Gizmos/
    │     └─ Menus/
    │
-   └─ DemoGame/
+   └─ demoGame/
       ├─ DemoGame/
       │  ├─ DemoGame.csproj
       │  ├─ Game/
