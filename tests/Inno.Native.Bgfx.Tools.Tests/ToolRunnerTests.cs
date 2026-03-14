@@ -13,25 +13,29 @@ public sealed class ToolRunnerTests
     [InlineData("geometryv")]
     [InlineData("texturec")]
     [InlineData("texturev")]
-    public void ResolveToolPath_UsesOverrideDirectory(string toolName)
+    public void ResolveToolPath_FindsToolsFromOutput(string toolName)
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), "inno-bgfx-tools-test", Guid.NewGuid().ToString("n"));
-        Directory.CreateDirectory(tempDir);
+        var resolved = ToolRunner.ResolveToolPath(toolName);
+        var platform = OperatingSystem.IsMacOS() ? "osx-arm64" : "windows-x64";
+        var toolsDir = Path.Combine(AppContext.BaseDirectory, "native", "bgfx", platform, "tools");
+        Assert.StartsWith(toolsDir, resolved, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(resolved), $"Tool missing: {toolName} (resolved: {resolved})");
+    }
 
-        var toolFile = OperatingSystem.IsWindows() ? $"{toolName}.exe" : toolName;
-        var toolPath = Path.Combine(tempDir, toolFile);
-        File.WriteAllText(toolPath, string.Empty);
+    [Theory]
+    [InlineData("shaderc")]
+    [InlineData("geometryc")]
+    [InlineData("geometryv")]
+    [InlineData("texturec")]
+    [InlineData("texturev")]
+    public void ResolveToolPath_Throws_WhenOutputMissing(string toolName)
+    {
+        var toolsRoot = Path.Combine(AppContext.BaseDirectory, "native");
+        if (Directory.Exists(toolsRoot))
+        {
+            Directory.Delete(toolsRoot, recursive: true);
+        }
 
-        Environment.SetEnvironmentVariable("INNO_BGFX_TOOLS_DIR", tempDir);
-        try
-        {
-            var resolved = ToolRunner.ResolveToolPath(toolName);
-            Assert.Equal(toolPath, resolved);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("INNO_BGFX_TOOLS_DIR", null);
-            Directory.Delete(tempDir, recursive: true);
-        }
+        Assert.Throws<FileNotFoundException>(() => ToolRunner.ResolveToolPath(toolName));
     }
 }

@@ -9,6 +9,8 @@
  *
  */
 
+using Inno.Native.Dll;
+
 namespace Inno.Native.Bgfx;
 
 public static partial class bgfx
@@ -18,4 +20,9 @@ public static partial class bgfx
 #else
     const string DllName = "bgfx-shared-lib-release";
 #endif
+
+    static bgfx()
+    {
+        NativeDllLoader.RegisterResolver(typeof(bgfx).Assembly);
+    }
 }

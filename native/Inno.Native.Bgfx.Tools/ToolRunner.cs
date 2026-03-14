@@ -1,7 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
+using Inno.Native.Dll;
 
 namespace Inno.Native.Bgfx.Tools;
 
@@ -50,33 +50,6 @@ public static class ToolRunner
     public static string ResolveToolPath(string toolName)
     {
         var fileName = OperatingSystem.IsWindows() ? $"{toolName}.exe" : toolName;
-        var overrideDir = Environment.GetEnvironmentVariable("INNO_BGFX_TOOLS_DIR");
-        if (!string.IsNullOrWhiteSpace(overrideDir))
-        {
-            var overridePath = FindFirstMatch(overrideDir, fileName);
-            if (overridePath != null)
-            {
-                return overridePath;
-            }
-        }
-
-        var toolsRoot = Path.Combine(AppContext.BaseDirectory, "tools");
-        var fallbackPath = FindFirstMatch(toolsRoot, fileName);
-        if (fallbackPath != null)
-        {
-            return fallbackPath;
-        }
-
-        throw new FileNotFoundException($"Tool not found under {toolsRoot}.");
-    }
-
-    private static string? FindFirstMatch(string rootDir, string fileName)
-    {
-        if (!Directory.Exists(rootDir))
-        {
-            return null;
-        }
-
-        return Directory.EnumerateFiles(rootDir, fileName, SearchOption.AllDirectories).FirstOrDefault();
+        return NativeDllLoader.FindNativeFile(fileName);
     }
 }
