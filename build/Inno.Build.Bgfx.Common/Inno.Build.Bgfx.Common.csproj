@@ -1,11 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Inno.Build.Bgfx.Common\Inno.Build.Bgfx.Common.csproj" />
-  </ItemGroup>
 </Project>
