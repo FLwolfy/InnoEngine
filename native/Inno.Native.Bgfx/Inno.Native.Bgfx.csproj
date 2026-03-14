@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ConfigurationLower>$([System.String]::Copy('$(Configuration)').ToLowerInvariant())</ConfigurationLower>
+    <NativePlatform Condition="'$(OS)' == 'Windows_NT'">windows-x64</NativePlatform>
+    <NativePlatform Condition="'$(OS)' != 'Windows_NT'">osx-arm64</NativePlatform>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\..\lib\bgfx\$(NativePlatform)\*-$(ConfigurationLower).dll" Condition="'$(OS)' == 'Windows_NT'" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\lib\bgfx\$(NativePlatform)\*-$(ConfigurationLower).dylib" Condition="'$(OS)' != 'Windows_NT'" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

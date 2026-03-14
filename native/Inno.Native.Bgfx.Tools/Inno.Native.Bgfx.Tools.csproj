@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>Inno.Native.Bgfx.Tools.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Native.Bgfx\Inno.Native.Bgfx.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\..\lib\bgfx\osx-arm64\tools\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>tools/osx-arm64/%(Filename)%(Extension)</Link>
+    </Content>
+    <Content Include="..\..\lib\bgfx\windows-x64\tools\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>tools/windows-x64/%(Filename)%(Extension)</Link>
+    </Content>
+  </ItemGroup>
+</Project>

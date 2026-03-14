@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using Inno.Build.Bgfx.Common;
 
 namespace Inno.Build.Bgfx.Clean;
