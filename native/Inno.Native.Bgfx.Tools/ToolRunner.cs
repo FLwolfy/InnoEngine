@@ -5,7 +5,7 @@ using System.Linq;
 
 namespace Inno.Native.Bgfx.Tools;
 
-internal static class ToolRunner
+public static class ToolRunner
 {
     public static int Run(string toolName, string arguments, string? workingDirectory = null)
     {
