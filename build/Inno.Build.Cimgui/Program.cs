@@ -2,13 +2,13 @@ using System;
 using System.IO;
 using System.Linq;
 using Inno.Build.Global;
-using Inno.Build.Sdl3.Platforms;
+using Inno.Build.Cimgui.Platforms;
 
-namespace Inno.Build.Sdl3;
+namespace Inno.Build.Cimgui;
 
 static class Program
 {
-    private static readonly string[] LIBRARY_TOKENS = ["SDL3"];
+    private static readonly string[] LIBRARY_TOKENS = ["cimgui"];
     private static readonly string[] SHARED_EXTENSIONS = { ".dll", ".dylib", ".so" };
 
     public static int Main(string[] args)
@@ -16,21 +16,21 @@ static class Program
         try
         {
             var options = Options.Parse(args);
-            var builder = Sdl3BuilderFactory.CreateForCurrentPlatform();
+            var builder = CimguiBuilderFactory.CreateForCurrentPlatform();
             var repoRoot = GlobalBuildUtils.FindRepoRoot();
             var externDir = Path.Combine(repoRoot, GlobalBuildConstants.EXTERN_DIR_NAME);
-            var sdlDir = Path.Combine(externDir, Sdl3BuildConstants.SDL_DIR_NAME);
-            var outputDir = Path.Combine(repoRoot, GlobalBuildConstants.OUTPUT_ROOT_DIR_NAME, Sdl3BuildConstants.OUTPUT_PRODUCT_DIR_NAME, builder.OutputPlatform);
+            var cimguiDir = Path.Combine(externDir, CimguiBuildConstants.CIMGUI_DIR_NAME);
+            var outputDir = Path.Combine(repoRoot, GlobalBuildConstants.OUTPUT_ROOT_DIR_NAME, CimguiBuildConstants.OUTPUT_PRODUCT_DIR_NAME, builder.outputPlatform);
 
             Directory.CreateDirectory(externDir);
             Directory.CreateDirectory(outputDir);
 
-            Sdl3BuildUtils.ValidateSource(sdlDir);
+            CimguiBuildUtils.ValidateSource(cimguiDir);
 
-            builder.Build(sdlDir, options.Config);
-            CopyArtifacts(sdlDir, outputDir, options.Config);
+            builder.Build(cimguiDir, options.Config);
+            CopyArtifacts(cimguiDir, outputDir, options.Config);
 
-            Console.WriteLine($"SDL3 build complete. Output: {outputDir}");
+            Console.WriteLine($"cimgui build complete. Output: {outputDir}");
             return 0;
         }
         catch (Exception ex)
@@ -40,42 +40,16 @@ static class Program
         }
     }
 
-    private static void CopyArtifacts(string sdlDir, string outputDir, string config)
+    private static void CopyArtifacts(string cimguiDir, string outputDir, string config)
     {
         var options = new BuildArtifactOptions(
-            Sdl3BuildConstants.BUILD_DIR_NAME,
+            CimguiBuildConstants.BUILD_DIR_NAME,
             LIBRARY_TOKENS,
             SHARED_EXTENSIONS,
             null,
-            NormalizeOutputName);
+            GlobalBuildUtils.NormalizeOutputName);
 
-        BuildArtifactCopier.CopyArtifacts(sdlDir, outputDir, config, options);
-    }
-
-    private static string NormalizeOutputName(string fileName, string config)
-    {
-        var ext = Path.GetExtension(fileName);
-        var baseName = Path.GetFileNameWithoutExtension(fileName);
-        var trimmed = GlobalBuildUtils.TrimConfigSuffix(TrimVersionSuffix(baseName));
-        return $"{trimmed}-{config}{ext}";
-    }
-
-    private static string TrimVersionSuffix(string baseName)
-    {
-        const string SDL_LIB_PREFIX = "libSDL3.";
-        const string SDL_PREFIX = "SDL3.";
-
-        if (baseName.StartsWith(SDL_LIB_PREFIX, StringComparison.OrdinalIgnoreCase))
-        {
-            return "libSDL3";
-        }
-
-        if (baseName.StartsWith(SDL_PREFIX, StringComparison.OrdinalIgnoreCase))
-        {
-            return "SDL3";
-        }
-
-        return baseName;
+        BuildArtifactCopier.CopyArtifacts(cimguiDir, outputDir, config, options);
     }
 }
 

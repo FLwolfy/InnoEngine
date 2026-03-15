@@ -74,4 +74,39 @@ public static class GlobalBuildUtils
             throw new InvalidOperationException($"{fileName} exited with code {process.ExitCode}.");
         }
     }
+
+    public static bool ContainsAny(string value, params string[] needles)
+    {
+        foreach (var needle in needles)
+        {
+            if (value.Contains(needle, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static string NormalizeOutputName(string fileName, string config)
+    {
+        var ext = Path.GetExtension(fileName);
+        var baseName = Path.GetFileNameWithoutExtension(fileName);
+        var trimmed = TrimConfigSuffix(baseName);
+        return $"{trimmed}-{config}{ext}";
+    }
+
+    public static string TrimConfigSuffix(string baseName)
+    {
+        if (baseName.EndsWith("Release", StringComparison.OrdinalIgnoreCase))
+        {
+            baseName = baseName[..^"Release".Length];
+        }
+        else if (baseName.EndsWith("Debug", StringComparison.OrdinalIgnoreCase))
+        {
+            baseName = baseName[..^"Debug".Length];
+        }
+
+        return baseName.TrimEnd('-', '_', '.');
+    }
 }

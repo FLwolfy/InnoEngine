@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Inno.Build.Bgfx.Platforms;
@@ -9,18 +8,14 @@ namespace Inno.Build.Bgfx;
 
 static class Program
 {
-    private static readonly string[] LIBRARY_TOKENS = [
+    private static readonly string[] LIBRARY_TOKENS =
+    {
         BgfxBuildConstants.BGFX_DIR_NAME,
         BgfxBuildConstants.BX_DIR_NAME,
         BgfxBuildConstants.BIMG_DIR_NAME,
-    ];
-    private static readonly string[] BUILD_PATH_TOKENS = { "/bin/", "/lib/" };
-    private static readonly HashSet<string> SHARED_EXTENSIONS = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".dll",
-        ".dylib",
-        ".so",
     };
+    private static readonly string[] BUILD_PATH_TOKENS = { "/bin/", "/lib/" };
+    private static readonly string[] SHARED_EXTENSIONS = { ".dll", ".dylib", ".so" };
 
     public static int Main(string[] args)
     {
@@ -56,89 +51,18 @@ static class Program
 
     private static void CopyArtifacts(string bgfxDir, string outputDir, bool includeStatic, string config)
     {
-        var buildDir = Path.Combine(bgfxDir, BgfxBuildConstants.BUILD_DIR_NAME);
-        if (!Directory.Exists(buildDir))
-        {
-            Console.WriteLine($"No {BgfxBuildConstants.BUILD_DIR_NAME} directory found. Nothing to copy.");
-            return;
-        }
-        var exts = new HashSet<string>(SHARED_EXTENSIONS, StringComparer.OrdinalIgnoreCase);
+        var extensions = includeStatic
+            ? SHARED_EXTENSIONS.Concat(new[] { ".a", ".lib" }).ToArray()
+            : SHARED_EXTENSIONS;
 
-        if (includeStatic)
-        {
-            exts.Add(".a");
-            exts.Add(".lib");
-        }
+        var options = new BuildArtifactOptions(
+            BgfxBuildConstants.BUILD_DIR_NAME,
+            LIBRARY_TOKENS,
+            extensions,
+            BUILD_PATH_TOKENS,
+            GlobalBuildUtils.NormalizeOutputName);
 
-        var candidates = Directory.EnumerateFiles(buildDir, "*", SearchOption.AllDirectories)
-            .Where(path =>
-            {
-                var ext = Path.GetExtension(path);
-                if (!exts.Contains(ext))
-                {
-                    return false;
-                }
-
-                var fileName = Path.GetFileName(path);
-                if (!ContainsAny(fileName, LIBRARY_TOKENS))
-                {
-                    return false;
-                }
-
-                var normalized = path.Replace('\\', '/');
-                return ContainsAny(normalized, BUILD_PATH_TOKENS);
-            })
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        if (candidates.Count == 0)
-        {
-            Console.WriteLine($"No matching artifacts found under {BgfxBuildConstants.BUILD_DIR_NAME}.");
-            return;
-        }
-
-        Directory.CreateDirectory(outputDir);
-        foreach (var src in candidates)
-        {
-            var destName = NormalizeOutputName(Path.GetFileName(src), config);
-            var dest = Path.Combine(outputDir, destName);
-            File.Copy(src, dest, overwrite: true);
-        }
-    }
-
-    private static bool ContainsAny(string value, params string[] needles)
-    {
-        foreach (var needle in needles)
-        {
-            if (value.Contains(needle, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static string NormalizeOutputName(string fileName, string config)
-    {
-        var ext = Path.GetExtension(fileName);
-        var baseName = Path.GetFileNameWithoutExtension(fileName);
-        var trimmed = TrimConfigSuffix(baseName);
-        return $"{trimmed}-{config}{ext}";
-    }
-
-    private static string TrimConfigSuffix(string baseName)
-    {
-        if (baseName.EndsWith("Release", StringComparison.OrdinalIgnoreCase))
-        {
-            baseName = baseName[..^"Release".Length];
-        }
-        else if (baseName.EndsWith("Debug", StringComparison.OrdinalIgnoreCase))
-        {
-            baseName = baseName[..^"Debug".Length];
-        }
-
-        return baseName.TrimEnd('-', '_', '.');
+        BuildArtifactCopier.CopyArtifacts(bgfxDir, outputDir, config, options);
     }
 
 }
