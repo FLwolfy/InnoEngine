@@ -1,6 +1,7 @@
 using System;
 using System.IO;
-using Inno.Build.Bgfx.Common;
+using Inno.Build.Bgfx;
+using Inno.Build.Global;
 
 namespace Inno.Build.Bgfx.Clean;
 
@@ -10,11 +11,11 @@ static class Program
     {
         try
         {
-            var repoRoot = BgfxBuildUtils.FindRepoRoot();
-            var libDir = Path.Combine(repoRoot, BgfxBuildConstants.OUTPUT_ROOT_DIR_NAME);
+            var repoRoot = GlobalBuildUtils.FindRepoRoot();
+            var libDir = Path.Combine(repoRoot, GlobalBuildConstants.OUTPUT_ROOT_DIR_NAME);
             var bgfxLibDir = Path.Combine(libDir, BgfxBuildConstants.OUTPUT_PRODUCT_DIR_NAME);
 
-            var externDir = Path.Combine(repoRoot, BgfxBuildConstants.EXTERN_DIR_NAME);
+            var externDir = Path.Combine(repoRoot, GlobalBuildConstants.EXTERN_DIR_NAME);
             var bgfxDir = Path.Combine(externDir, BgfxBuildConstants.BGFX_DIR_NAME);
             var bxDir = Path.Combine(externDir, BgfxBuildConstants.BX_DIR_NAME);
             var bimgDir = Path.Combine(externDir, BgfxBuildConstants.BIMG_DIR_NAME);

@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Inno.Build.Bgfx.Common;
+using Inno.Build.Bgfx;
+using Inno.Build.Bgfx.Platforms;
+using Inno.Build.Global;
 
 namespace Inno.Build.Bgfx.Tools;
 
@@ -13,13 +15,13 @@ static class Program
         try
         {
             var options = Options.Parse(args);
-            var repoRoot = BgfxBuildUtils.FindRepoRoot();
-            var externDir = Path.Combine(repoRoot, BgfxBuildConstants.EXTERN_DIR_NAME);
+            var repoRoot = GlobalBuildUtils.FindRepoRoot();
+            var externDir = Path.Combine(repoRoot, GlobalBuildConstants.EXTERN_DIR_NAME);
             var bgfxDir = Path.Combine(externDir, BgfxBuildConstants.BGFX_DIR_NAME);
             var bxDir = Path.Combine(externDir, BgfxBuildConstants.BX_DIR_NAME);
             var bimgDir = Path.Combine(externDir, BgfxBuildConstants.BIMG_DIR_NAME);
-            var defaults = DetectOutputPlatform(options);
-            var outputDir = Path.Combine(repoRoot, BgfxBuildConstants.OUTPUT_ROOT_DIR_NAME, BgfxBuildConstants.OUTPUT_PRODUCT_DIR_NAME, defaults.OutputPlatform);
+            var builder = BgfxBuilderFactory.CreateForCurrentPlatform();
+            var outputDir = Path.Combine(repoRoot, GlobalBuildConstants.OUTPUT_ROOT_DIR_NAME, BgfxBuildConstants.OUTPUT_PRODUCT_DIR_NAME, builder.outputPlatform);
 
             Directory.CreateDirectory(externDir);
             Directory.CreateDirectory(outputDir);
@@ -27,7 +29,7 @@ static class Program
             BgfxBuildUtils.ValidateSubmodules(bgfxDir, bxDir, bimgDir);
 
             EnsureBgfxBuilt(outputDir, options.Config);
-            BgfxBuildUtils.Run("make", $"tools config={options.Config}", bgfxDir);
+            builder.BuildTools(bgfxDir, options.Config);
             CopyTools(bgfxDir, outputDir, options.Config);
 
             Console.WriteLine($"bgfx tools build complete. Output: {outputDir}");
@@ -38,11 +40,6 @@ static class Program
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
-    }
-
-    private static (string OutputPlatform, string MakeTarget) DetectOutputPlatform(Options options)
-    {
-        return BgfxBuildUtils.DetectDefaults(options.Config);
     }
 
     private static void CopyTools(string bgfxDir, string outputDir, string config)
@@ -144,7 +141,7 @@ internal sealed record Options(string Config)
 {
     public static Options Parse(string[] args)
     {
-        var config = BgfxBuildUtils.DefaultConfig();
+        var config = GlobalBuildUtils.DefaultConfig();
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -159,7 +156,7 @@ internal sealed record Options(string Config)
             }
         }
 
-        if (config is not (BgfxBuildConstants.DEBUG_CONFIG or BgfxBuildConstants.RELEASE_CONFIG))
+        if (config is not (GlobalBuildConstants.DEBUG_CONFIG or GlobalBuildConstants.RELEASE_CONFIG))
         {
             throw new ArgumentException("--config must be 'debug' or 'release'.");
         }

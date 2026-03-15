@@ -2,7 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Inno.Build.Bgfx.Common;
+using Inno.Build.Bgfx.Platforms;
+using Inno.Build.Global;
 
 namespace Inno.Build.Bgfx;
 
@@ -26,19 +27,21 @@ static class Program
         try
         {
             var options = Options.Parse(args);
-            var repoRoot = BgfxBuildUtils.FindRepoRoot();
-            var externDir = Path.Combine(repoRoot, BgfxBuildConstants.EXTERN_DIR_NAME);
+            var builder = BgfxBuilderFactory.CreateForCurrentPlatform();
+            var repoRoot = GlobalBuildUtils.FindRepoRoot();
+            var externDir = Path.Combine(repoRoot, GlobalBuildConstants.EXTERN_DIR_NAME);
             var bgfxDir = Path.Combine(externDir, BgfxBuildConstants.BGFX_DIR_NAME);
             var bxDir = Path.Combine(externDir, BgfxBuildConstants.BX_DIR_NAME);
             var bimgDir = Path.Combine(externDir, BgfxBuildConstants.BIMG_DIR_NAME);
-            var outputDir = Path.Combine(repoRoot, BgfxBuildConstants.OUTPUT_ROOT_DIR_NAME, BgfxBuildConstants.OUTPUT_PRODUCT_DIR_NAME, options.outputPlatform);
+            var outputPlatform = builder.outputPlatform;
+            var outputDir = Path.Combine(repoRoot, GlobalBuildConstants.OUTPUT_ROOT_DIR_NAME, BgfxBuildConstants.OUTPUT_PRODUCT_DIR_NAME, outputPlatform);
 
             Directory.CreateDirectory(externDir);
             Directory.CreateDirectory(outputDir);
 
             BgfxBuildUtils.ValidateSubmodules(bgfxDir, bxDir, bimgDir);
 
-            BgfxBuildUtils.Run("make", options.makeTarget, bgfxDir);
+            builder.Build(bgfxDir, options.config, options.makeTargetOverride);
 
             CopyArtifacts(bgfxDir, outputDir, options.includeStatic, options.config);
             Console.WriteLine($"bgfx build complete. Output: {outputDir}");
@@ -141,14 +144,13 @@ static class Program
 }
 
 internal sealed record Options(
-    string outputPlatform,
-    string makeTarget,
+    string makeTargetOverride,
     bool includeStatic,
     string config)
 {
     public static Options Parse(string[] args)
     {
-        var config = BgfxBuildUtils.DefaultConfig();
+        var config = GlobalBuildUtils.DefaultConfig();
         var makeTargetOverride = "";
         var includeStatic = false;
 
@@ -171,17 +173,12 @@ internal sealed record Options(
             }
         }
 
-        if (config is not (BgfxBuildConstants.DEBUG_CONFIG or BgfxBuildConstants.RELEASE_CONFIG))
+        if (config is not (GlobalBuildConstants.DEBUG_CONFIG or GlobalBuildConstants.RELEASE_CONFIG))
         {
             throw new ArgumentException("--config must be 'debug' or 'release'.");
         }
 
-        var defaults = BgfxBuildUtils.DetectDefaults(config);
-        var makeTarget = string.IsNullOrWhiteSpace(makeTargetOverride)
-            ? defaults.MakeTarget
-            : makeTargetOverride;
-
-        return new Options(defaults.OutputPlatform, makeTarget, includeStatic, config);
+        return new Options(makeTargetOverride, includeStatic, config);
     }
 
     private static string GetNext(string[] args, ref int index)
