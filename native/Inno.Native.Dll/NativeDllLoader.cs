@@ -3,34 +3,47 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Inno.Native.Dll;
 
+/// <summary>
+/// Copies native binaries into output and loads them from the native folder.
+/// </summary>
 public static class NativeDllLoader
 {
-    private const string REPO_ROOT_MARKER_FILE = "InnoEngine.sln";
-    private const string NATIVE_DIR_NAME = "native";
-    private const string LIB_DIR_NAME = "lib";
+    private static int resolverRegistered;
 
-    [ModuleInitializer]
-    internal static void Initialize()
+    /// <summary>
+    /// Loads a native library from the output native folder, registering a resolver for the calling assembly.
+    /// </summary>
+    /// <param name="libraryName">Library name without platform extension.</param>
+    /// <returns>Handle to the loaded library.</returns>
+    public static IntPtr LoadNativeDll(string libraryName)
     {
-        EnsureNativeOutputFromRepoLib();
+        var targetAssembly = Assembly.GetCallingAssembly();
+        RegisterResolverOnce(targetAssembly);
+        var candidateNames = GetLibraryFileNames(libraryName);
+        foreach (var root in GetSearchRoots())
+        {
+            foreach (var name in candidateNames)
+            {
+                var match = Directory.EnumerateFiles(root, name, SearchOption.AllDirectories).FirstOrDefault();
+                if (match != null)
+                {
+                    return NativeLibrary.Load(match);
+                }
+            }
+        }
+
+        throw new DllNotFoundException($"Native library not found under native output: {libraryName}");
     }
 
-    public static void RegisterResolver(Assembly? assembly = null)
-    {
-        var target = assembly ?? Assembly.GetCallingAssembly();
-        NativeLibrary.SetDllImportResolver(target, ResolveNativeLibrary);
-    }
-
-    public static IntPtr Load(string libraryName)
-    {
-        return ResolveNativeLibrary(libraryName, Assembly.GetCallingAssembly(), null);
-    }
-
+    /// <summary>
+    /// Finds a file under the output native folder.
+    /// </summary>
+    /// <param name="fileName">Exact file name to locate.</param>
+    /// <returns>Full path to the file.</returns>
     public static string FindNativeFile(string fileName)
     {
         foreach (var root in GetSearchRoots())
@@ -45,39 +58,95 @@ public static class NativeDllLoader
         throw new FileNotFoundException($"Native file not found under search roots: {fileName}");
     }
 
-    public static void EnsureNativeOutputFromRepoLib(params string[] fileNames)
+    /// <summary>
+    /// Copies a native library from repo lib into the output native folder.
+    /// </summary>
+    /// <param name="libraryName">Library name without platform extension.</param>
+    /// <returns>Full path to the copied file.</returns>
+    public static string EnsureNativeDll(string libraryName)
+    {
+        var candidateNames = GetLibraryFileNames(libraryName);
+        foreach (var name in candidateNames)
+        {
+            var copied = EnsureNativeFile(name, throwIfMissing: false);
+            if (!string.IsNullOrEmpty(copied))
+            {
+                return copied;
+            }
+        }
+
+        throw new FileNotFoundException($"Native library not found in repo lib: {libraryName}");
+    }
+
+    /// <summary>
+    /// Copies a file from repo lib into the output native folder.
+    /// </summary>
+    /// <param name="fileName">Exact file name to copy.</param>
+    /// <returns>Full path to the copied file.</returns>
+    public static string EnsureNativeFile(string fileName)
+    {
+        var copied = EnsureNativeFile(fileName, throwIfMissing: true);
+        return copied;
+    }
+
+    private static string EnsureNativeFile(string fileName, bool throwIfMissing)
     {
         var repoRoot = FindRepoRoot(AppContext.BaseDirectory);
         if (repoRoot == null)
         {
-            return;
-        }
-
-        var libRoot = Path.Combine(repoRoot, LIB_DIR_NAME);
-        if (!Directory.Exists(libRoot))
-        {
-            return;
-        }
-
-        var nativeRoot = Path.Combine(AppContext.BaseDirectory, NATIVE_DIR_NAME);
-        Directory.CreateDirectory(nativeRoot);
-
-        var files = fileNames.Length == 0
-            ? Directory.EnumerateFiles(libRoot, "*", SearchOption.AllDirectories)
-            : ResolveFilesFromLibRoot(libRoot, fileNames);
-
-        foreach (var src in files)
-        {
-            var relative = Path.GetRelativePath(libRoot, src);
-            var dest = Path.Combine(nativeRoot, relative);
-            var destDir = Path.GetDirectoryName(dest);
-            if (!string.IsNullOrEmpty(destDir))
+            if (throwIfMissing)
             {
-                Directory.CreateDirectory(destDir);
+                throw new DirectoryNotFoundException("Repo root not found. Cannot resolve lib path.");
             }
 
-            File.Copy(src, dest, overwrite: true);
+            return string.Empty;
         }
+
+        var libRoot = Path.Combine(repoRoot, NativeDllConstants.LIB_DIR_NAME);
+        if (!Directory.Exists(libRoot))
+        {
+            if (throwIfMissing)
+            {
+                throw new DirectoryNotFoundException($"Lib directory not found: {libRoot}");
+            }
+
+            return string.Empty;
+        }
+
+        var nativeRoot = Path.Combine(AppContext.BaseDirectory, NativeDllConstants.NATIVE_DIR_NAME);
+        Directory.CreateDirectory(nativeRoot);
+
+        var srcFile = Directory.EnumerateFiles(libRoot, fileName, SearchOption.AllDirectories).FirstOrDefault();
+        if (srcFile == null)
+        {
+            if (throwIfMissing)
+            {
+                throw new FileNotFoundException($"Native file not found in repo lib: {fileName}");
+            }
+
+            return string.Empty;
+        }
+
+        var relative = Path.GetRelativePath(libRoot, srcFile);
+        var dest = Path.Combine(nativeRoot, relative);
+        var destDir = Path.GetDirectoryName(dest);
+        if (!string.IsNullOrEmpty(destDir))
+        {
+            Directory.CreateDirectory(destDir);
+        }
+
+        File.Copy(srcFile, dest, overwrite: true);
+        return dest;
+    }
+
+    private static void RegisterResolverOnce(Assembly targetAssembly)
+    {
+        if (System.Threading.Interlocked.Exchange(ref resolverRegistered, 1) == 1)
+        {
+            return;
+        }
+
+        NativeLibrary.SetDllImportResolver(targetAssembly, ResolveNativeLibrary);
     }
 
     private static IntPtr ResolveNativeLibrary(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
@@ -127,42 +196,11 @@ public static class NativeDllLoader
     private static IEnumerable<string> GetSearchRoots()
     {
         var baseDir = AppContext.BaseDirectory;
-        var nativeRoot = Path.Combine(baseDir, NATIVE_DIR_NAME);
+        var nativeRoot = Path.Combine(baseDir, NativeDllConstants.NATIVE_DIR_NAME);
         if (Directory.Exists(nativeRoot))
         {
             yield return nativeRoot;
         }
-    }
-
-    private static IEnumerable<string> ResolveFilesFromLibRoot(string libRoot, IEnumerable<string> fileNames)
-    {
-        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var name in fileNames)
-        {
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                continue;
-            }
-
-            set.Add(name);
-        }
-
-        if (set.Count == 0)
-        {
-            return Array.Empty<string>();
-        }
-
-        var matches = new List<string>();
-        foreach (var name in set)
-        {
-            var match = Directory.EnumerateFiles(libRoot, name, SearchOption.AllDirectories).FirstOrDefault();
-            if (match != null)
-            {
-                matches.Add(match);
-            }
-        }
-
-        return matches;
     }
 
     private static string? FindRepoRoot(string startDir)
@@ -170,7 +208,7 @@ public static class NativeDllLoader
         var dir = new DirectoryInfo(startDir);
         while (dir != null)
         {
-            if (File.Exists(Path.Combine(dir.FullName, REPO_ROOT_MARKER_FILE)))
+            if (File.Exists(Path.Combine(dir.FullName, NativeDllConstants.REPO_ROOT_MARKER_FILE)))
             {
                 return dir.FullName;
             }

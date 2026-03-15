@@ -13,16 +13,20 @@ using Inno.Native.Dll;
 
 namespace Inno.Native.Bgfx;
 
+/// <summary>
+/// bgfx native bindings loader.
+/// </summary>
 public static partial class bgfx
 {
 #if DEBUG
-    const string DllName = "bgfx-shared-lib-debug";
+    const string DLL_NAME = "bgfx-shared-lib-debug";
 #else
-    const string DllName = "bgfx-shared-lib-release";
+    const string DLL_NAME = "bgfx-shared-lib-release";
 #endif
     
     static bgfx()
     {
-        NativeDllLoader.RegisterResolver(typeof(bgfx).Assembly);
+        NativeDllLoader.EnsureNativeDll(DLL_NAME);
+        NativeDllLoader.LoadNativeDll(DLL_NAME);
     }
 }

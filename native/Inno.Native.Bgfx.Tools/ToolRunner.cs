@@ -5,11 +5,43 @@ using Inno.Native.Dll;
 
 namespace Inno.Native.Bgfx.Tools;
 
+/// <summary>
+/// Runs bgfx tool executables from the native output.
+/// </summary>
 public static class ToolRunner
 {
-    public static int Run(string toolName, string arguments, string? workingDirectory = null)
+    static ToolRunner()
     {
-        var toolPath = ResolveToolPath(toolName);
+        var suffix = GetConfigSuffix();
+        var tools = Enum.GetValues<BgfxTool>();
+        foreach (var tool in tools)
+        {
+            var toolName = tool.ToString().ToLowerInvariant();
+            var primaryName = $"{toolName}{suffix}";
+            var primaryFileName = OperatingSystem.IsWindows() ? $"{primaryName}.exe" : primaryName;
+            var fallbackFileName = OperatingSystem.IsWindows() ? $"{toolName}.exe" : toolName;
+
+            try
+            {
+                NativeDllLoader.EnsureNativeFile(primaryFileName);
+            }
+            catch (FileNotFoundException)
+            {
+                NativeDllLoader.EnsureNativeFile(fallbackFileName);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Runs the specified tool with arguments.
+    /// </summary>
+    /// <param name="tool">Tool to execute.</param>
+    /// <param name="arguments">Command line arguments.</param>
+    /// <param name="workingDirectory">Optional working directory; defaults to AppContext.BaseDirectory.</param>
+    /// <returns>Process exit code.</returns>
+    public static int Run(BgfxTool tool, string arguments, string? workingDirectory = null)
+    {
+        var toolPath = ResolveToolPath(tool);
         var psi = new ProcessStartInfo
         {
             FileName = toolPath,
@@ -47,9 +79,32 @@ public static class ToolRunner
         return process.ExitCode;
     }
 
-    public static string ResolveToolPath(string toolName)
+    private static string ResolveToolPath(BgfxTool tool)
     {
-        var fileName = OperatingSystem.IsWindows() ? $"{toolName}.exe" : toolName;
-        return NativeDllLoader.FindNativeFile(fileName);
+        var toolName = tool.ToString().ToLowerInvariant();
+        var suffix = GetConfigSuffix();
+        var primaryName = $"{toolName}{suffix}";
+        var fallbackName = toolName;
+
+        var primaryFileName = OperatingSystem.IsWindows() ? $"{primaryName}.exe" : primaryName;
+        var fallbackFileName = OperatingSystem.IsWindows() ? $"{fallbackName}.exe" : fallbackName;
+
+        try
+        {
+            return NativeDllLoader.FindNativeFile(primaryFileName);
+        }
+        catch (FileNotFoundException)
+        {
+            return NativeDllLoader.FindNativeFile(fallbackFileName);
+        }
+    }
+
+    private static string GetConfigSuffix()
+    {
+#if DEBUG
+        return "-debug";
+#else
+        return "-release";
+#endif
     }
 }

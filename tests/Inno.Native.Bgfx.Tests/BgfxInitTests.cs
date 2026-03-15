@@ -1,8 +1,4 @@
 using System;
-using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices;
-using BgfxNative = global::Inno.Native.Bgfx;
 using Xunit;
 
 namespace Inno.Native.Bgfx.Tests;
