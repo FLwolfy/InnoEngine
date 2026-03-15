@@ -7,3 +7,6 @@
 [submodule "extern/bgfx"]
 	path = extern/bgfx
 	url = https://github.com/bkaradzic/bgfx.git
+[submodule "extern/SDL"]
+	path = extern/SDL
+	url = https://github.com/libsdl-org/SDL.git
