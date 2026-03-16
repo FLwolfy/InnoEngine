@@ -11,12 +11,12 @@ namespace Inno.Native.ImGui
         public static bool AotStaticLink;
     }
 
-    public static unsafe partial class ImGui
+    public static partial class ImGui
     {
 #if DEBUG
-        private const string DLL_NAME = "cimgui-debug";
+        private const string DLL_NAME = "libcimgui-debug";
 #else
-        private const string DLL_NAME = "cimgui-release";
+        private const string DLL_NAME = "libcimgui-release";
 #endif
 
         static ImGui()

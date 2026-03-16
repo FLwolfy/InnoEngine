@@ -55,27 +55,7 @@ static class Program
     private static string NormalizeOutputName(string fileName, string config)
     {
         var ext = Path.GetExtension(fileName);
-        var baseName = Path.GetFileNameWithoutExtension(fileName);
-        var trimmed = GlobalBuildUtils.TrimConfigSuffix(TrimVersionSuffix(baseName));
-        return $"{trimmed}-{config}{ext}";
-    }
-
-    private static string TrimVersionSuffix(string baseName)
-    {
-        const string SDL_LIB_PREFIX = "libSDL3.";
-        const string SDL_PREFIX = "SDL3.";
-
-        if (baseName.StartsWith(SDL_LIB_PREFIX, StringComparison.OrdinalIgnoreCase))
-        {
-            return "libSDL3";
-        }
-
-        if (baseName.StartsWith(SDL_PREFIX, StringComparison.OrdinalIgnoreCase))
-        {
-            return "SDL3";
-        }
-
-        return baseName;
+        return $"{Sdl3BuildConstants.OUTPUT_DLL_NAME}-{config}{ext}";
     }
 }
 

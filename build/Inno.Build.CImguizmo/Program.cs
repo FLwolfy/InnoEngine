@@ -2,13 +2,13 @@ using System;
 using System.IO;
 using System.Linq;
 using Inno.Build.Global;
-using Inno.Build.Cimgui.Platforms;
+using Inno.Build.CImguizmo.Platforms;
 
-namespace Inno.Build.Cimgui;
+namespace Inno.Build.CImguizmo;
 
 static class Program
 {
-    private static readonly string[] LIBRARY_TOKENS = ["cimgui"];
+    private static readonly string[] LIBRARY_TOKENS = ["cimguizmo"];
     private static readonly string[] SHARED_EXTENSIONS = { ".dll", ".dylib", ".so" };
 
     public static int Main(string[] args)
@@ -16,21 +16,24 @@ static class Program
         try
         {
             var options = Options.Parse(args);
-            var builder = CimguiBuilderFactory.CreateForCurrentPlatform();
+            var builder = CImguizmoBuilderFactory.CreateForCurrentPlatform();
             var repoRoot = GlobalBuildUtils.FindRepoRoot();
             var externDir = Path.Combine(repoRoot, GlobalBuildConstants.EXTERN_DIR_NAME);
-            var cimguiDir = Path.Combine(externDir, CimguiBuildConstants.CIMGUI_DIR_NAME);
-            var outputDir = Path.Combine(repoRoot, GlobalBuildConstants.OUTPUT_ROOT_DIR_NAME, CimguiBuildConstants.OUTPUT_PRODUCT_DIR_NAME, builder.outputPlatform);
+            var cimguiDir = Path.Combine(externDir, CImguizmoBuildConstants.CIMGUI_DIR_NAME);
+            var cimguizmoDir = Path.Combine(externDir, CImguizmoBuildConstants.CIMGUIZMO_DIR_NAME);
+            var outputDir = Path.Combine(repoRoot, GlobalBuildConstants.OUTPUT_ROOT_DIR_NAME, CImguizmoBuildConstants.OUTPUT_PRODUCT_DIR_NAME, builder.outputPlatform);
+            var cimguiOutputDir = Path.Combine(repoRoot, GlobalBuildConstants.OUTPUT_ROOT_DIR_NAME, "cimgui", builder.outputPlatform);
+            var cimguiBuildDir = Path.Combine(cimguiDir, CImguizmoBuildConstants.CIMGUI_BUILD_DIR_NAME, builder.outputPlatform);
 
             Directory.CreateDirectory(externDir);
             Directory.CreateDirectory(outputDir);
 
-            CimguiBuildUtils.ValidateSource(cimguiDir);
+            CImguizmoBuildUtils.ValidateSource(cimguizmoDir, cimguiDir);
 
-            builder.Build(cimguiDir, options.Config);
-            CopyArtifacts(cimguiDir, outputDir, options.Config);
+            builder.Build(cimguizmoDir, cimguiDir, cimguiBuildDir, cimguiOutputDir, options.Config);
+            CopyArtifacts(cimguizmoDir, outputDir, options.Config);
 
-            Console.WriteLine($"cimgui build complete. Output: {outputDir}");
+            Console.WriteLine($"cimguizmo build complete. Output: {outputDir}");
             return 0;
         }
         catch (Exception ex)
@@ -40,22 +43,22 @@ static class Program
         }
     }
 
-    private static void CopyArtifacts(string cimguiDir, string outputDir, string config)
+    private static void CopyArtifacts(string cimguizmoDir, string outputDir, string config)
     {
         var options = new BuildArtifactOptions(
-            CimguiBuildConstants.BUILD_DIR_NAME,
+            CImguizmoBuildConstants.BUILD_DIR_NAME,
             LIBRARY_TOKENS,
             SHARED_EXTENSIONS,
             null,
             NormalizeOutputName);
 
-        BuildArtifactCopier.CopyArtifacts(cimguiDir, outputDir, config, options);
+        BuildArtifactCopier.CopyArtifacts(cimguizmoDir, outputDir, config, options);
     }
 
     private static string NormalizeOutputName(string fileName, string config)
     {
         var ext = Path.GetExtension(fileName);
-        return $"{CimguiBuildConstants.OUTPUT_DLL_NAME}-{config}{ext}";
+        return $"{CImguizmoBuildConstants.OUTPUT_DLL_NAME}-{config}{ext}";
     }
 }
 

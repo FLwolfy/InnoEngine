@@ -13,3 +13,6 @@
 [submodule "extern/cimgui"]
 	path = extern/cimgui
 	url = https://github.com/cimgui/cimgui.git
+[submodule "extern/cimguizmo"]
+	path = extern/cimguizmo
+	url = https://github.com/cimgui/cimguizmo.git

@@ -15,6 +15,8 @@ public sealed record BuildArtifactOptions(
 
 public static class BuildArtifactCopier
 {
+    private const string DSYM_TOKEN = ".dSYM";
+
     public static void CopyArtifacts(string buildRoot, string outputDir, string config, BuildArtifactOptions options)
     {
         var buildDir = Path.Combine(buildRoot, options.buildDirName);
@@ -27,6 +29,11 @@ public static class BuildArtifactCopier
         var candidates = Directory.EnumerateFiles(buildDir, "*", SearchOption.AllDirectories)
             .Where(path =>
             {
+                if (path.Contains(DSYM_TOKEN, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
                 var ext = Path.GetExtension(path);
                 if (!options.extensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
                 {

@@ -178,6 +178,10 @@ public static class NativeDllLoader
         if (OperatingSystem.IsWindows())
         {
             names.Add($"{libraryName}.dll");
+            if (!libraryName.StartsWith("lib", StringComparison.OrdinalIgnoreCase))
+            {
+                names.Add($"lib{libraryName}.dll");
+            }
             return names;
         }
 
