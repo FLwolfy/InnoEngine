@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace Inno.Native.Dll;
 
@@ -12,7 +13,8 @@ namespace Inno.Native.Dll;
 /// </summary>
 public static class NativeDllLoader
 {
-    private static int resolverRegistered;
+    private static readonly Lock RESOLVER_LOCK = new();
+    private static readonly HashSet<Assembly> REGISTERED_RESOLVERS = new();
 
     /// <summary>
     /// Loads a native library from the output native folder, registering a resolver for the calling assembly.
@@ -141,12 +143,15 @@ public static class NativeDllLoader
 
     private static void RegisterResolverOnce(Assembly targetAssembly)
     {
-        if (System.Threading.Interlocked.Exchange(ref resolverRegistered, 1) == 1)
+        lock (RESOLVER_LOCK)
         {
-            return;
-        }
+            if (!REGISTERED_RESOLVERS.Add(targetAssembly))
+            {
+                return;
+            }
 
-        NativeLibrary.SetDllImportResolver(targetAssembly, ResolveNativeLibrary);
+            NativeLibrary.SetDllImportResolver(targetAssembly, ResolveNativeLibrary);
+        }
     }
 
     private static IntPtr ResolveNativeLibrary(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
