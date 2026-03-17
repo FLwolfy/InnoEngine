@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 
 namespace Inno.Core.Storage;
 
@@ -29,6 +30,7 @@ public readonly struct PoolKey<TKey>
     /// </summary>
     public bool isValid
     {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
             if (poolRef == null || !poolRef.TryGetTarget(out var pool))

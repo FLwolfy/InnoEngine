@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace Inno.Core.Storage;
 
@@ -13,9 +14,11 @@ public sealed class QueryFromKey<T, TKey> : IQueryCondition<T> where T : class w
         m_value = value;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int GetCandidateCount(ObjectPool<T> pool)
         => pool.GetCountUnsafe(m_key, m_value);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryGetSingle(ObjectPool<T> pool, out T item)
     {
         if (pool.TryGetSingleUnsafe(m_key, m_value, out var found) && found != null)
@@ -28,9 +31,11 @@ public sealed class QueryFromKey<T, TKey> : IQueryCondition<T> where T : class w
         return false;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public HashSet<T>? GetSet(ObjectPool<T> pool)
         => pool.GetSetUnsafe(m_key, m_value);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Validate(ObjectPool<T> pool, T item)
         => pool.ContainsInSet(m_key, m_value, item);
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace Inno.Core.Storage;
 
@@ -12,18 +13,22 @@ public sealed class QueryPredicate<T> : IQueryCondition<T> where T : class
         m_predicate = predicate;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int GetCandidateCount(ObjectPool<T> pool)
         => int.MaxValue;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryGetSingle(ObjectPool<T> pool, out T item)
     {
         item = null!;
         return false;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public HashSet<T>? GetSet(ObjectPool<T> pool)
         => null;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Validate(ObjectPool<T> pool, T item)
         => m_predicate(item);
 

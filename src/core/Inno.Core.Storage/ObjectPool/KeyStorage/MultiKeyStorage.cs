@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace Inno.Core.Storage;
 
@@ -43,18 +44,23 @@ internal sealed class MultiKeyStorage<TKey, T> : IKeyStorage<TKey, T> where T : 
         return true;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int GetCount(TKey key)
         => m_map.TryGetValue(key, out var set) ? set.Count : 0;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Contains(TKey key, T item)
         => m_map.TryGetValue(key, out var set) && set.Contains(item);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsKeyEmpty(TKey key)
         => !m_map.TryGetValue(key, out var set) || set.Count == 0;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public HashSet<T>? GetSet(TKey key)
         => m_map.TryGetValue(key, out var set) ? set : EMPTY_SET;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Clear()
         => m_map.Clear();
 }

@@ -117,7 +117,7 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
         m_lock.EnterWriteLock();
         try
         {
-            if (m_indexByName.ContainsKey(name))
+            if (m_indexByName.TryGetValue(name, out _))
                 throw new InvalidOperationException($"Key '{name}' already exists.");
 
             if ((flags & PoolKeyFlags.Ordered) != 0 && orderComparer == null)
@@ -294,6 +294,7 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal bool IsValidItem(T item)
     {
         if (item == null) return false;
@@ -375,6 +376,7 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     public PoolQuery<T> Query()
         => new(this);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal bool IsOrderedKey<TKey>(PoolKey<TKey> key) where TKey : notnull
         => (GetIndex(key).flags & PoolKeyFlags.Ordered) != 0;
 
@@ -409,12 +411,16 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal int GetCountUnsafe<TKey>(PoolKey<TKey> key, TKey value) where TKey : notnull => GetIndex(key).GetCount(value);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal bool TryGetSingleUnsafe<TKey>(PoolKey<TKey> key, TKey value, out T? item) where TKey : notnull => GetIndex(key).TryGetSingle(value, out item);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal HashSet<T>? GetSetUnsafe<TKey>(PoolKey<TKey> key, TKey value) where TKey : notnull => GetIndex(key).FindUnsafe(value);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal bool ContainsInSet<TKey>(PoolKey<TKey> key, TKey value, T item) where TKey : notnull => GetIndex(key).Contains(value, item);
 
     internal IEnumerable<T> ExecuteQuery(List<IQueryCondition<T>> conditions)

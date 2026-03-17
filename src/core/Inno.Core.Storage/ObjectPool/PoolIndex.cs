@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace Inno.Core.Storage;
 
@@ -101,15 +102,19 @@ internal sealed class PoolIndex<T, TKey> : IPoolIndex<T> where T : class where T
         m_keyByItem.Clear();
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryGetSingle(TKey key, out T? item)
         => m_storage.TryGetSingle(key, out item);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal HashSet<T>? FindUnsafe(TKey key)
         => m_storage.GetSet(key);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal int GetCount(TKey key)
         => m_storage.GetCount(key);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal bool Contains(TKey key, T item)
         => m_storage.Contains(key, item);
 

@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Inno.Core.Storage;
 
 /// <summary>
@@ -27,6 +29,7 @@ public readonly struct PoolEntry<T> where T : class
     /// <param name="key">Key handle.</param>
     /// <param name="value">Key value.</param>
     /// <returns>The same entry for chaining.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public PoolEntry<T> Set<TKey>(PoolKey<TKey> key, TKey value) where TKey : notnull
     {
         m_pool.SetKey(m_item, key, value);
