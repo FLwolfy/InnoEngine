@@ -129,6 +129,13 @@ public static class MathHelper
     return value1 + (value2 - value1) * amount;
   }
 
+  /// <summary>Linearly interpolates between two values without clamping the amount.</summary>
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static float LerpUnclamped(float value1, float value2, float amount)
+  {
+    return value1 + (value2 - value1) * amount;
+  }
+
   /// <summary>
   /// Linearly interpolates between two values.
   /// This method is a less efficient, more precise version of <see cref="M:MathHelper.Lerp(System.Single,System.Single,System.Single)" />.
@@ -195,6 +202,18 @@ public static class MathHelper
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static float ToRadians(float degrees) => degrees * ((float) MathF.PI / 180f);
 
+  /// <summary>Clamps a value to the inclusive range [min, max].</summary>
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static float Clamp(float value, float min, float max) => Math.Clamp(value, min, max);
+
+  /// <summary>Clamps a value to the inclusive range [0, 1].</summary>
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static float Saturate(float value) => Math.Clamp(value, 0f, 1f);
+
+  /// <summary>Returns true if the value is finite (not NaN or infinity).</summary>
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+
   /// <summary>
   /// Reduces a given angle to a value between π and -π.
   /// </summary>
@@ -216,5 +235,6 @@ public static class MathHelper
   /// </summary>
   /// <param name="value">A value.</param>
   /// <returns><c>true</c> if <c>value</c> is powered by two; otherwise <c>false</c>.</returns>
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool IsPowerOfTwo(int value) => value > 0 && (value & value - 1) == 0;
 }

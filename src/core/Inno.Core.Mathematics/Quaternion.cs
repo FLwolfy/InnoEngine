@@ -23,10 +23,10 @@ public struct Quaternion : IEquatable<Quaternion>
     public static Quaternion identity => new Quaternion(0, 0, 0, 1);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public float Length() => MathF.Sqrt(x * x + y * y + z * z + w * w);
+    public float Length() => MathF.Sqrt(LengthSquared());
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public float LengthSquared() => x * x + y * y + z * z + w * w;
+    public float LengthSquared() => SimdMath.Dot4(x, y, z, w, x, y, z, w);
 
     public Quaternion normalized => Normalize(this);
 
@@ -102,6 +102,80 @@ public struct Quaternion : IEquatable<Quaternion>
             MathF.Cos(halfAngle)
         );
     }
+
+    /// <summary>
+    /// Creates a quaternion from a rotation matrix.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quaternion FromRotationMatrix(Matrix m)
+    {
+        float trace = m.m11 + m.m22 + m.m33;
+        if (trace > 0f)
+        {
+            float s = MathF.Sqrt(trace + 1f) * 2f;
+            float invS = 1f / s;
+            return Normalize(new Quaternion(
+                (m.m32 - m.m23) * invS,
+                (m.m13 - m.m31) * invS,
+                (m.m21 - m.m12) * invS,
+                0.25f * s));
+        }
+
+        if (m.m11 > m.m22 && m.m11 > m.m33)
+        {
+            float s = MathF.Sqrt(1f + m.m11 - m.m22 - m.m33) * 2f;
+            float invS = 1f / s;
+            return Normalize(new Quaternion(
+                0.25f * s,
+                (m.m12 + m.m21) * invS,
+                (m.m13 + m.m31) * invS,
+                (m.m32 - m.m23) * invS));
+        }
+
+        if (m.m22 > m.m33)
+        {
+            float s = MathF.Sqrt(1f + m.m22 - m.m11 - m.m33) * 2f;
+            float invS = 1f / s;
+            return Normalize(new Quaternion(
+                (m.m12 + m.m21) * invS,
+                0.25f * s,
+                (m.m23 + m.m32) * invS,
+                (m.m13 - m.m31) * invS));
+        }
+
+        float sFinal = MathF.Sqrt(1f + m.m33 - m.m11 - m.m22) * 2f;
+        float invFinal = 1f / sFinal;
+        return Normalize(new Quaternion(
+            (m.m13 + m.m31) * invFinal,
+            (m.m23 + m.m32) * invFinal,
+            0.25f * sFinal,
+            (m.m21 - m.m12) * invFinal));
+    }
+
+    /// <summary>
+    /// Creates a rotation quaternion that looks in <paramref name="forward"/> direction with the given <paramref name="up"/>.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Quaternion LookRotation(Vector3 forward, Vector3 up)
+    {
+        Vector3 z = Vector3.NormalizeSafe(forward);
+        Vector3 x = Vector3.NormalizeSafe(Vector3.Cross(up, z));
+        Vector3 y = Vector3.Cross(z, x);
+
+        var m = new Matrix(
+            x.x, y.x, z.x, 0f,
+            x.y, y.y, z.y, 0f,
+            x.z, y.z, z.z, 0f,
+            0f,  0f,  0f,  1f);
+
+        return FromRotationMatrix(m);
+    }
+
+    /// <summary>
+    /// Converts this quaternion to a rotation matrix.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Matrix ToMatrix() => Matrix.CreateFromQuaternion(this);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Quaternion CreateFromYawPitchRoll(float yaw, float pitch, float roll)

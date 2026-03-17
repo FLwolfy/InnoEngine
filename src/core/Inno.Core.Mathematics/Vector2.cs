@@ -22,10 +22,10 @@ public struct Vector2 : IEquatable<Vector2>
     public static readonly Vector2 UNIT_Y = new(0f, 1f);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public float Length() => MathF.Sqrt(x * x + y * y);
+    public float Length() => MathF.Sqrt(LengthSquared());
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public float LengthSquared() => x * x + y * y;
+    public float LengthSquared() => SimdMath.Dot2(x, y, x, y);
 
     public Vector2 normalized
     {
@@ -37,7 +37,48 @@ public struct Vector2 : IEquatable<Vector2>
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static float Dot(Vector2 a, Vector2 b) => a.x * b.x + a.y * b.y;
+    public static Vector2 NormalizeSafe(Vector2 value, float epsilon = MathHelper.C_TOLERANCE)
+    {
+        float len = value.Length();
+        return len > epsilon ? value / len : ZERO;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float Dot(Vector2 a, Vector2 b) => SimdMath.Dot2(a.x, a.y, b.x, b.y);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float Angle(Vector2 from, Vector2 to)
+    {
+        float denom = from.Length() * to.Length();
+        if (denom <= MathHelper.C_TOLERANCE)
+        {
+            return 0f;
+        }
+
+        float cos = Dot(from, to) / denom;
+        cos = Math.Clamp(cos, -1f, 1f);
+        return MathF.Acos(cos);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float SignedAngle(Vector2 from, Vector2 to)
+    {
+        float unsigned = Angle(from, to);
+        float sign = MathF.Sign(from.x * to.y - from.y * to.x);
+        return unsigned * sign;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vector2 Project(Vector2 vector, Vector2 onto)
+    {
+        float denom = Dot(onto, onto);
+        if (denom <= MathHelper.C_TOLERANCE)
+        {
+            return ZERO;
+        }
+
+        return onto * (Dot(vector, onto) / denom);
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector2 Lerp(Vector2 a, Vector2 b, float t)
@@ -81,14 +122,22 @@ public struct Vector2 : IEquatable<Vector2>
     }
 
     // Operators
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector2 operator +(Vector2 a, Vector2 b) => new Vector2(a.x + b.x, a.y + b.y);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector2 operator -(Vector2 a, Vector2 b) => new Vector2(a.x - b.x, a.y - b.y);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector2 operator -(Vector2 v) => new Vector2(-v.x, -v.y);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector2 operator *(Vector2 v, float scalar) => new Vector2(v.x * scalar, v.y * scalar);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector2 operator *(float scalar, Vector2 v) => v * scalar;
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector2 operator /(Vector2 v, float scalar) => new Vector2(v.x / scalar, v.y / scalar);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool operator ==(Vector2 a, Vector2 b) => MathHelper.AlmostEquals(a.x, b.x) && MathHelper.AlmostEquals(a.y, b.y);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool operator !=(Vector2 a, Vector2 b) => !(a == b);
     
     public static implicit operator System.Numerics.Vector2(Vector2 v) => new(v.x, v.y);

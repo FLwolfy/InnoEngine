@@ -1,6 +1,9 @@
 using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.Arm;
+using System.Runtime.Intrinsics.X86;
 
 namespace Inno.Core.Mathematics;
 
@@ -30,10 +33,10 @@ public struct Vector4 : IEquatable<Vector4>
 
     // Length
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public float Length() => MathF.Sqrt(x * x + y * y + z * z + w * w);
+    public float Length() => MathF.Sqrt(LengthSquared());
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public float LengthSquared() => x * x + y * y + z * z + w * w;
+    public float LengthSquared() => SimdMath.Dot4(x, y, z, w, x, y, z, w);
 
     public Vector4 normalized
     {
@@ -47,7 +50,7 @@ public struct Vector4 : IEquatable<Vector4>
     // Dot product
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static float Dot(Vector4 a, Vector4 b) =>
-        a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+        SimdMath.Dot4(a.x, a.y, a.z, a.w, b.x, b.y, b.z, b.w);
 
     // Lerp
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -63,11 +66,26 @@ public struct Vector4 : IEquatable<Vector4>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector4 Transform(Vector4 v, Matrix m)
     {
-        float tx = m.m11 * v.x + m.m12 * v.y + m.m13 * v.z + m.m14 * v.w;
-        float ty = m.m21 * v.x + m.m22 * v.y + m.m23 * v.z + m.m24 * v.w;
-        float tz = m.m31 * v.x + m.m32 * v.y + m.m33 * v.z + m.m34 * v.w;
-        float tw = m.m41 * v.x + m.m42 * v.y + m.m43 * v.z + m.m44 * v.w;
-        return new Vector4(tx, ty, tz, tw);
+        if (Sse.IsSupported || AdvSimd.IsSupported)
+        {
+            var vec = Vector128.Create(v.x, v.y, v.z, v.w);
+            var row1 = Vector128.Create(m.m11, m.m12, m.m13, m.m14);
+            var row2 = Vector128.Create(m.m21, m.m22, m.m23, m.m24);
+            var row3 = Vector128.Create(m.m31, m.m32, m.m33, m.m34);
+            var row4 = Vector128.Create(m.m41, m.m42, m.m43, m.m44);
+
+            float tx = SimdMath.Dot4(row1, vec);
+            float ty = SimdMath.Dot4(row2, vec);
+            float tz = SimdMath.Dot4(row3, vec);
+            float tw = SimdMath.Dot4(row4, vec);
+            return new Vector4(tx, ty, tz, tw);
+        }
+
+        float sx = m.m11 * v.x + m.m12 * v.y + m.m13 * v.z + m.m14 * v.w;
+        float sy = m.m21 * v.x + m.m22 * v.y + m.m23 * v.z + m.m24 * v.w;
+        float sz = m.m31 * v.x + m.m32 * v.y + m.m33 * v.z + m.m34 * v.w;
+        float sw = m.m41 * v.x + m.m42 * v.y + m.m43 * v.z + m.m44 * v.w;
+        return new Vector4(sx, sy, sz, sw);
     }
 
     // Project (useful in homogeneous coordinate systems)
@@ -79,20 +97,26 @@ public struct Vector4 : IEquatable<Vector4>
     }
 
     // Operators
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector4 operator +(Vector4 a, Vector4 b) =>
         new(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector4 operator -(Vector4 a, Vector4 b) =>
         new(a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector4 operator -(Vector4 v) =>
         new(-v.x, -v.y, -v.z, -v.w);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector4 operator *(Vector4 v, float s) =>
         new(v.x * s, v.y * s, v.z * s, v.w * s);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector4 operator *(float s, Vector4 v) => v * s;
     
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector4 operator *(Matrix m, Vector4 v)
     {
         return new Vector4(
@@ -103,15 +127,18 @@ public struct Vector4 : IEquatable<Vector4>
         );
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector4 operator /(Vector4 v, float s) =>
         new(v.x / s, v.y / s, v.z / s, v.w / s);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool operator ==(Vector4 a, Vector4 b) =>
         MathHelper.AlmostEquals(a.x, b.x) &&
         MathHelper.AlmostEquals(a.y, b.y) &&
         MathHelper.AlmostEquals(a.z, b.z) &&
         MathHelper.AlmostEquals(a.w, b.w);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool operator !=(Vector4 a, Vector4 b) => !(a == b);
     
     public static implicit operator System.Numerics.Vector4(Vector4 v) => new(v.x, v.y, v.z, v.w);

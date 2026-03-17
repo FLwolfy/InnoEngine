@@ -1,5 +1,8 @@
 using System;
 using System.Runtime.Serialization;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.Arm;
+using System.Runtime.Intrinsics.X86;
 
 namespace Inno.Core.Mathematics;
 
@@ -250,6 +253,21 @@ public struct Matrix : IEquatable<Matrix>
     }
 
     /// <summary>
+    /// Creates a right-handed, perspective projection matrix (depth range 0..1).
+    /// </summary>
+    public static Matrix CreatePerspectiveFieldOfViewRH(float fov, float aspect, float near, float far)
+    {
+        float f = 1f / MathF.Tan(fov * 0.5f);
+        float nf = 1f / (near - far);
+
+        return new Matrix(
+            f / aspect, 0, 0,                  0,
+            0,          f, 0,                  0,
+            0,          0, far * nf,           near * far * nf,
+            0,          0, -1,                 0);
+    }
+
+    /// <summary>
     /// Creates an orthographic projection matrix (depth range 0..1).
     /// </summary>
     /// <param name="width">View width.</param>
@@ -259,16 +277,39 @@ public struct Matrix : IEquatable<Matrix>
     /// <returns>An orthographic projection matrix.</returns>
     public static Matrix CreateOrthographic(float width, float height, float near, float far)
     {
-        float m00 = 2f / width;
-        float m11 = 2f / height;
+        return CreateOrthographicOffCenter(
+            -width * 0.5f,
+            width * 0.5f,
+            -height * 0.5f,
+            height * 0.5f,
+            near,
+            far);
+    }
+
+    /// <summary>
+    /// Creates an off-center orthographic projection matrix (depth range 0..1).
+    /// </summary>
+    /// <param name="left">Left plane.</param>
+    /// <param name="right">Right plane.</param>
+    /// <param name="bottom">Bottom plane.</param>
+    /// <param name="top">Top plane.</param>
+    /// <param name="near">Near plane.</param>
+    /// <param name="far">Far plane.</param>
+    /// <returns>An orthographic projection matrix.</returns>
+    public static Matrix CreateOrthographicOffCenter(float left, float right, float bottom, float top, float near, float far)
+    {
+        float m00 = 2f / (right - left);
+        float m11 = 2f / (top - bottom);
         float m22 = 1f / (far - near);
-        float m32 = -near / (far - near);
+        float m14 = -(right + left) / (right - left);
+        float m24 = -(top + bottom) / (top - bottom);
+        float m34 = -near / (far - near);
 
         return new Matrix(
-            m00, 0,   0,   0,
-            0,   m11, 0,   0,
-            0,   0,   m22, 0,
-            0,   0,   m32, 1
+            m00, 0,   0,   m14,
+            0,   m11, 0,   m24,
+            0,   0,   m22, m34,
+            0,   0,   0,   1
         );
     }
 
@@ -297,6 +338,23 @@ public struct Matrix : IEquatable<Matrix>
             0,   0,   0,   1);
     }
 
+    /// <summary>
+    /// Creates a right-handed view matrix that looks from <paramref name="eye"/> to <paramref name="target"/>.
+    /// </summary>
+    public static Matrix CreateLookAtRH(Vector3 eye, Vector3 target, Vector3 up)
+    {
+        // RH: forward points from eye to target but is -Z in view space
+        Vector3 z = (eye - target).normalized;          // forward (-Z)
+        Vector3 x = Vector3.Cross(up, z).normalized;    // right
+        Vector3 y = Vector3.Cross(z, x);                // up
+
+        return new Matrix(
+            x.x, y.x, z.x, -Vector3.Dot(x, eye),
+            x.y, y.y, z.y, -Vector3.Dot(y, eye),
+            x.z, y.z, z.z, -Vector3.Dot(z, eye),
+            0,   0,   0,   1);
+    }
+
 
     #endregion
 
@@ -310,6 +368,41 @@ public struct Matrix : IEquatable<Matrix>
     /// <returns>The product matrix <c>a * b</c>.</returns>
     public static Matrix Multiply(Matrix a, Matrix b)
     {
+        if (Sse.IsSupported || AdvSimd.IsSupported)
+        {
+            var col0 = Vector128.Create(b.m11, b.m21, b.m31, b.m41);
+            var col1 = Vector128.Create(b.m12, b.m22, b.m32, b.m42);
+            var col2 = Vector128.Create(b.m13, b.m23, b.m33, b.m43);
+            var col3 = Vector128.Create(b.m14, b.m24, b.m34, b.m44);
+
+            var row0 = Vector128.Create(a.m11, a.m12, a.m13, a.m14);
+            var row1 = Vector128.Create(a.m21, a.m22, a.m23, a.m24);
+            var row2 = Vector128.Create(a.m31, a.m32, a.m33, a.m34);
+            var row3 = Vector128.Create(a.m41, a.m42, a.m43, a.m44);
+
+            return new Matrix(
+                SimdMath.Dot4(row0, col0),
+                SimdMath.Dot4(row0, col1),
+                SimdMath.Dot4(row0, col2),
+                SimdMath.Dot4(row0, col3),
+
+                SimdMath.Dot4(row1, col0),
+                SimdMath.Dot4(row1, col1),
+                SimdMath.Dot4(row1, col2),
+                SimdMath.Dot4(row1, col3),
+
+                SimdMath.Dot4(row2, col0),
+                SimdMath.Dot4(row2, col1),
+                SimdMath.Dot4(row2, col2),
+                SimdMath.Dot4(row2, col3),
+
+                SimdMath.Dot4(row3, col0),
+                SimdMath.Dot4(row3, col1),
+                SimdMath.Dot4(row3, col2),
+                SimdMath.Dot4(row3, col3)
+            );
+        }
+
         return new Matrix(
             a.m11 * b.m11 + a.m12 * b.m21 + a.m13 * b.m31 + a.m14 * b.m41,
             a.m11 * b.m12 + a.m12 * b.m22 + a.m13 * b.m32 + a.m14 * b.m42,
@@ -331,6 +424,71 @@ public struct Matrix : IEquatable<Matrix>
             a.m41 * b.m13 + a.m42 * b.m23 + a.m43 * b.m33 + a.m44 * b.m43,
             a.m41 * b.m14 + a.m42 * b.m24 + a.m43 * b.m34 + a.m44 * b.m44
         );
+    }
+
+    /// <summary>
+    /// Returns the determinant of the matrix.
+    /// </summary>
+    public static float Determinant(Matrix m)
+    {
+        float a00 = m.m11, a01 = m.m12, a02 = m.m13, a03 = m.m14;
+        float a10 = m.m21, a11 = m.m22, a12 = m.m23, a13 = m.m24;
+        float a20 = m.m31, a21 = m.m32, a22 = m.m33, a23 = m.m34;
+        float a30 = m.m41, a31 = m.m42, a32 = m.m43, a33 = m.m44;
+
+        float b00 = a00 * a11 - a01 * a10;
+        float b01 = a00 * a12 - a02 * a10;
+        float b02 = a00 * a13 - a03 * a10;
+        float b03 = a01 * a12 - a02 * a11;
+        float b04 = a01 * a13 - a03 * a11;
+        float b05 = a02 * a13 - a03 * a12;
+        float b06 = a20 * a31 - a21 * a30;
+        float b07 = a20 * a32 - a22 * a30;
+        float b08 = a20 * a33 - a23 * a30;
+        float b09 = a21 * a32 - a22 * a31;
+        float b10 = a21 * a33 - a23 * a31;
+        float b11 = a22 * a33 - a23 * a32;
+
+        return b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+    }
+
+    /// <summary>
+    /// Decomposes a matrix into scale, rotation and translation.
+    /// </summary>
+    public static bool Decompose(Matrix m, out Vector3 scale, out Quaternion rotation, out Vector3 translation)
+    {
+        translation = new Vector3(m.m14, m.m24, m.m34);
+
+        Vector3 col0 = new Vector3(m.m11, m.m21, m.m31);
+        Vector3 col1 = new Vector3(m.m12, m.m22, m.m32);
+        Vector3 col2 = new Vector3(m.m13, m.m23, m.m33);
+
+        float sx = col0.Length();
+        float sy = col1.Length();
+        float sz = col2.Length();
+
+        scale = new Vector3(sx, sy, sz);
+
+        if (sx <= MathHelper.C_TOLERANCE || sy <= MathHelper.C_TOLERANCE || sz <= MathHelper.C_TOLERANCE)
+        {
+            rotation = Quaternion.identity;
+            return false;
+        }
+
+        if (Determinant(m) < 0f)
+        {
+            scale.x = -scale.x;
+            col0 = -col0;
+        }
+
+        var rot = new Matrix(
+            col0.x / scale.x, col1.x / scale.y, col2.x / scale.z, 0f,
+            col0.y / scale.x, col1.y / scale.y, col2.y / scale.z, 0f,
+            col0.z / scale.x, col1.z / scale.y, col2.z / scale.z, 0f,
+            0f,               0f,               0f,               1f);
+
+        rotation = Quaternion.FromRotationMatrix(rot);
+        return true;
     }
 
     /// <summary>
