@@ -16,7 +16,11 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
     private readonly Dictionary<TKey, HashSet<TKey>> m_edges = new();
     private readonly Dictionary<TKey, HashSet<TKey>> m_rev = new();
     private readonly Dictionary<TKey, DependencyEntry<TValue>> m_entries = new();
-    private readonly Lock m_sync = new();
+    private readonly ReaderWriterLockSlim m_sync = new(LockRecursionPolicy.NoRecursion);
+    private int m_structureVersion;
+    private int m_cachedTopoVersion = -1;
+    private List<TKey>? m_cachedTopo;
+    private List<TKey>? m_cachedCyclic;
 
     /// <summary>
     /// Whether cycles are allowed.
@@ -42,8 +46,15 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
     {
         get
         {
-            lock (m_sync)
+            m_sync.EnterReadLock();
+            try
+            {
                 return m_edges.Count;
+            }
+            finally
+            {
+                m_sync.ExitReadLock();
+            }
         }
     }
 
@@ -56,16 +67,14 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
     /// <param name="node">Node key.</param>
     public void AddNode(TKey node)
     {
-        lock (m_sync)
+        m_sync.EnterWriteLock();
+        try
         {
-            if (!m_edges.ContainsKey(node))
-                m_edges[node] = new HashSet<TKey>();
-
-            if (!m_rev.ContainsKey(node))
-                m_rev[node] = new HashSet<TKey>();
-
-            if (!m_entries.ContainsKey(node))
-                m_entries[node] = new DependencyEntry<TValue>();
+            AddNodeLocked(node);
+        }
+        finally
+        {
+            m_sync.ExitWriteLock();
         }
     }
 
@@ -79,15 +88,21 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
     /// <param name="dependsOn">Dependency node.</param>
     public void AddDependency(TKey node, TKey dependsOn)
     {
-        lock (m_sync)
+        m_sync.EnterWriteLock();
+        try
         {
-            AddNode(node);
-            AddNode(dependsOn);
+            AddNodeLocked(node);
+            AddNodeLocked(dependsOn);
 
             if (!m_edges[node].Add(dependsOn))
                 return;
 
             m_rev[dependsOn].Add(node);
+            m_structureVersion++;
+        }
+        finally
+        {
+            m_sync.ExitWriteLock();
         }
     }
 
@@ -102,7 +117,8 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
     /// <returns>True if removed; otherwise false.</returns>
     public bool RemoveDependency(TKey node, TKey dependsOn)
     {
-        lock (m_sync)
+        m_sync.EnterWriteLock();
+        try
         {
             if (!m_edges.TryGetValue(node, out var set))
                 return false;
@@ -113,7 +129,12 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
             if (m_rev.TryGetValue(dependsOn, out var rev))
                 rev.Remove(node);
 
+            m_structureVersion++;
             return true;
+        }
+        finally
+        {
+            m_sync.ExitWriteLock();
         }
     }
 
@@ -127,7 +148,8 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
     /// <returns>True if removed; otherwise false.</returns>
     public bool RemoveNode(TKey node)
     {
-        lock (m_sync)
+        m_sync.EnterWriteLock();
+        try
         {
             if (!m_edges.Remove(node))
                 return false;
@@ -142,7 +164,12 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
             }
 
             m_entries.Remove(node);
+            m_structureVersion++;
             return true;
+        }
+        finally
+        {
+            m_sync.ExitWriteLock();
         }
     }
 
@@ -151,11 +178,20 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
     /// </summary>
     public void Clear()
     {
-        lock (m_sync)
+        m_sync.EnterWriteLock();
+        try
         {
             m_edges.Clear();
             m_rev.Clear();
             m_entries.Clear();
+            m_structureVersion++;
+            m_cachedTopoVersion = -1;
+            m_cachedTopo = null;
+            m_cachedCyclic = null;
+        }
+        finally
+        {
+            m_sync.ExitWriteLock();
         }
     }
 
@@ -180,61 +216,13 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
     /// <returns>Topological order of acyclic nodes.</returns>
     public IReadOnlyList<TKey> TopologicalSort(out IReadOnlyList<TKey> cyclicNodes)
     {
-        var snapshot = Snapshot();
+        var topo = GetCachedTopologicalOrder();
+        cyclicNodes = topo.Cyclic;
 
-        var result = new List<TKey>(snapshot.Count);
-        var incoming = new Dictionary<TKey, int>(snapshot.Count);
-        foreach (var node in snapshot.Keys)
-            incoming[node] = 0;
-
-        foreach (var kv in snapshot)
-        {
-            foreach (var dep in kv.Value)
-                incoming[kv.Key] = incoming[kv.Key] + 1;
-        }
-
-        var queue = new Queue<TKey>();
-        foreach (var kv in incoming)
-        {
-            if (kv.Value == 0)
-                queue.Enqueue(kv.Key);
-        }
-
-        while (queue.Count > 0)
-        {
-            var n = queue.Dequeue();
-            result.Add(n);
-
-            foreach (var kv in snapshot)
-            {
-                if (!kv.Value.Remove(n))
-                    continue;
-
-                incoming[kv.Key] = incoming[kv.Key] - 1;
-                if (incoming[kv.Key] == 0)
-                    queue.Enqueue(kv.Key);
-            }
-        }
-
-        if (result.Count == snapshot.Count)
-        {
-            cyclicNodes = Array.Empty<TKey>();
-            return result;
-        }
-
-        var leftovers = new List<TKey>();
-        foreach (var kv in incoming)
-        {
-            if (kv.Value > 0)
-                leftovers.Add(kv.Key);
-        }
-
-        cyclicNodes = leftovers;
-
-        if (!allowCycles)
+        if (cyclicNodes.Count > 0 && !allowCycles)
             throw new InvalidOperationException("Dependency graph contains cycles.");
 
-        return result;
+        return topo.Order;
     }
 
     /// <summary>
@@ -276,7 +264,8 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
             return;
 
         List<TKey> toVisit;
-        lock (m_sync)
+        m_sync.EnterWriteLock();
+        try
         {
             if (!m_entries.TryGetValue(key, out var entry))
                 return;
@@ -287,6 +276,10 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
             toVisit = new List<TKey>();
             if (m_rev.TryGetValue(key, out var rev))
                 toVisit.AddRange(rev);
+        }
+        finally
+        {
+            m_sync.ExitWriteLock();
         }
 
         if (toVisit.Count == 0)
@@ -301,7 +294,8 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
             if (!visited.Add(n))
                 continue;
 
-            lock (m_sync)
+            m_sync.EnterWriteLock();
+            try
             {
                 if (m_entries.TryGetValue(n, out var entry))
                 {
@@ -314,6 +308,10 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
                     foreach (var r in rev)
                         queue.Enqueue(r);
                 }
+            }
+            finally
+            {
+                m_sync.ExitWriteLock();
             }
         }
     }
@@ -333,7 +331,8 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
         if (dependencyCacheMode == DependencyCacheMode.Disabled)
             return false;
 
-        lock (m_sync)
+        m_sync.EnterReadLock();
+        try
         {
             if (!m_entries.TryGetValue(key, out var entry) || !entry.hasValue || entry.dirty)
                 return false;
@@ -341,6 +340,10 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
             entry.lastAccessTicks = Environment.TickCount64;
             value = entry.value;
             return true;
+        }
+        finally
+        {
+            m_sync.ExitReadLock();
         }
     }
 
@@ -365,9 +368,10 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
 
         int generation;
 
-        lock (m_sync)
+        m_sync.EnterWriteLock();
+        try
         {
-            AddNode(key);
+            AddNodeLocked(key);
             var entry = m_entries[key];
 
             if (entry.hasValue && !entry.dirty)
@@ -378,10 +382,15 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
 
             generation = entry.generation;
         }
+        finally
+        {
+            m_sync.ExitWriteLock();
+        }
 
         var computed = factory(key);
 
-        lock (m_sync)
+        m_sync.EnterWriteLock();
+        try
         {
             var entry = m_entries[key];
             if (entry.generation != generation)
@@ -393,6 +402,10 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
             entry.lastAccessTicks = Environment.TickCount64;
             entry.lastUpdateTicks = entry.lastAccessTicks;
             return computed;
+        }
+        finally
+        {
+            m_sync.ExitWriteLock();
         }
     }
 
@@ -411,8 +424,23 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
         if (dependencyCacheMode == DependencyCacheMode.Disabled)
             return 0;
 
-        var snapshot = Snapshot();
-        var order = TopologicalOrder(snapshot, out var cyclic);
+        var dirtyNodes = GetDirtyNodesSnapshot();
+        if (dirtyNodes.Count == 0)
+            return 0;
+
+        List<TKey> order;
+        List<TKey> cyclic;
+        if (dirtyNodes.Count == count)
+        {
+            var topo = GetCachedTopologicalOrder();
+            order = topo.Order;
+            cyclic = topo.Cyclic;
+        }
+        else
+        {
+            var subgraph = SnapshotSubgraph(dirtyNodes);
+            order = TopologicalOrder(subgraph, out cyclic);
+        }
 
         if (cyclic.Count > 0 && !allowCycles)
             throw new InvalidOperationException("Dependency graph contains cycles.");
@@ -448,7 +476,8 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
 
     private bool IsDirty(TKey key, out int generation)
     {
-        lock (m_sync)
+        m_sync.EnterReadLock();
+        try
         {
             if (!m_entries.TryGetValue(key, out var entry))
             {
@@ -459,11 +488,16 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
             generation = entry.generation;
             return entry.dirty;
         }
+        finally
+        {
+            m_sync.ExitReadLock();
+        }
     }
 
     private bool TryCommit(TKey key, int generation, TValue value)
     {
-        lock (m_sync)
+        m_sync.EnterWriteLock();
+        try
         {
             if (!m_entries.TryGetValue(key, out var entry))
                 return false;
@@ -478,16 +512,130 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
             entry.lastUpdateTicks = entry.lastAccessTicks;
             return true;
         }
+        finally
+        {
+            m_sync.ExitWriteLock();
+        }
     }
 
     private Dictionary<TKey, HashSet<TKey>> Snapshot()
     {
-        lock (m_sync)
+        m_sync.EnterReadLock();
+        try
         {
-            var snapshot = new Dictionary<TKey, HashSet<TKey>>(m_edges.Count);
-            foreach (var kv in m_edges)
-                snapshot[kv.Key] = new HashSet<TKey>(kv.Value);
+            return SnapshotUnsafe();
+        }
+        finally
+        {
+            m_sync.ExitReadLock();
+        }
+    }
+
+    private Dictionary<TKey, HashSet<TKey>> SnapshotUnsafe()
+    {
+        var snapshot = new Dictionary<TKey, HashSet<TKey>>(m_edges.Count);
+        foreach (var kv in m_edges)
+            snapshot[kv.Key] = new HashSet<TKey>(kv.Value);
+        return snapshot;
+    }
+
+    private void AddNodeLocked(TKey node)
+    {
+        if (!m_edges.ContainsKey(node))
+        {
+            m_edges[node] = new HashSet<TKey>();
+            m_structureVersion++;
+        }
+
+        if (!m_rev.ContainsKey(node))
+            m_rev[node] = new HashSet<TKey>();
+
+        if (!m_entries.ContainsKey(node))
+            m_entries[node] = new DependencyEntry<TValue>();
+    }
+
+    private List<TKey> GetDirtyNodesSnapshot()
+    {
+        m_sync.EnterReadLock();
+        try
+        {
+            var list = new List<TKey>();
+            foreach (var kv in m_entries)
+            {
+                if (kv.Value.dirty)
+                    list.Add(kv.Key);
+            }
+
+            return list;
+        }
+        finally
+        {
+            m_sync.ExitReadLock();
+        }
+    }
+
+    private Dictionary<TKey, HashSet<TKey>> SnapshotSubgraph(List<TKey> nodes)
+    {
+        var set = new HashSet<TKey>(nodes);
+        m_sync.EnterReadLock();
+        try
+        {
+            var snapshot = new Dictionary<TKey, HashSet<TKey>>(nodes.Count);
+            foreach (var node in nodes)
+            {
+                if (!m_edges.TryGetValue(node, out var deps))
+                {
+                    snapshot[node] = new HashSet<TKey>();
+                    continue;
+                }
+
+                var filtered = new HashSet<TKey>();
+                foreach (var dep in deps)
+                {
+                    if (set.Contains(dep))
+                        filtered.Add(dep);
+                }
+
+                snapshot[node] = filtered;
+            }
+
             return snapshot;
+        }
+        finally
+        {
+            m_sync.ExitReadLock();
+        }
+    }
+
+    private (List<TKey> Order, List<TKey> Cyclic) GetCachedTopologicalOrder()
+    {
+        m_sync.EnterReadLock();
+        try
+        {
+            if (m_cachedTopo != null && m_cachedCyclic != null && m_cachedTopoVersion == m_structureVersion)
+                return (m_cachedTopo, m_cachedCyclic);
+        }
+        finally
+        {
+            m_sync.ExitReadLock();
+        }
+
+        m_sync.EnterWriteLock();
+        try
+        {
+            if (m_cachedTopo != null && m_cachedCyclic != null && m_cachedTopoVersion == m_structureVersion)
+                return (m_cachedTopo, m_cachedCyclic);
+
+            var snapshot = SnapshotUnsafe();
+            var order = TopologicalOrder(snapshot, out var cyclic);
+            m_cachedTopo = order;
+            m_cachedCyclic = cyclic;
+            m_cachedTopoVersion = m_structureVersion;
+            return (order, cyclic);
+        }
+        finally
+        {
+            m_sync.ExitWriteLock();
         }
     }
 
