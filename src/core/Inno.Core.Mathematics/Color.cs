@@ -1,11 +1,12 @@
 using System;
+using System.Runtime.CompilerServices;
 
 namespace Inno.Core.Mathematics;
 
 /// <summary>
 /// Represents an RGBA color with float components in the range [0, 1].
 /// </summary>
-public struct Color
+public struct Color : IEquatable<Color>
 {
     public float r;
     public float g;
@@ -75,4 +76,22 @@ public struct Color
             c.a * factor
         );
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator ==(Color a, Color b)
+    {
+        return MathHelper.AlmostEquals(a.r, b.r) &&
+               MathHelper.AlmostEquals(a.g, b.g) &&
+               MathHelper.AlmostEquals(a.b, b.b) &&
+               MathHelper.AlmostEquals(a.a, b.a);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool operator !=(Color a, Color b) => !(a == b);
+
+    public override bool Equals(object? obj) => obj is Color other && Equals(other);
+
+    public bool Equals(Color other) => this == other;
+
+    public override int GetHashCode() => HashCode.Combine(r, g, b, a);
 }
