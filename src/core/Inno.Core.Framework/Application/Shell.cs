@@ -1,5 +1,7 @@
 using System;
+using System.Collections;
 using System.Diagnostics;
+using Inno.Core.Coroutines;
 using Inno.Core.Events;
 using Inno.Core.Logging;
 using Inno.Core.Reflection;
@@ -17,6 +19,7 @@ public class Shell
 
     private readonly Stopwatch m_timer;
     private readonly EventDispatcher m_eventDispatcher;
+    private readonly CoroutineScheduler m_coroutines;
     
     private double m_lastTime;
     private bool m_isRunning;
@@ -28,10 +31,17 @@ public class Shell
     public void SetOnEvent(Action<EventDispatcher>? onEvent) => m_onEvent = onEvent;
     public void SetOnClose(Action onClose) => m_onClose = onClose;
 
+    public CoroutineHandle StartCoroutine(IEnumerator routine) => m_coroutines.StartCoroutine(routine);
+    public CoroutineHandle StartCoroutine(object owner, IEnumerator routine) => m_coroutines.StartCoroutine(owner, routine);
+    public bool StopCoroutine(CoroutineHandle handle) => m_coroutines.StopCoroutine(handle);
+    public void StopAllCoroutines() => m_coroutines.StopAllCoroutines();
+    public void StopAllCoroutines(object owner) => m_coroutines.StopAllCoroutines(owner);
+
     public Shell()
     {
         m_timer = new Stopwatch();
         m_eventDispatcher = new EventDispatcher();
+        m_coroutines = new CoroutineScheduler();
         
         LogManager.RegisterSink(new ConsoleLogSink());
         TypeCacheManager.Initialize();
@@ -60,6 +70,7 @@ public class Shell
             
             // Logic Step
             Time.Update((float)now, delta);
+            m_coroutines.Tick(delta);
             m_onStep?.Invoke();
             
             // Render
@@ -69,6 +80,7 @@ public class Shell
         }
 
         m_onClose?.Invoke();
+        m_coroutines.Dispose();
         LogManager.Shutdown();
     }
 
