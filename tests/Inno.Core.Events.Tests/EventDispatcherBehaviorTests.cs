@@ -48,6 +48,20 @@ public sealed class EventDispatcherBehaviorTests
     }
 
     [Fact]
+    public void ListenTokenDispose_ConcurrentDispose_IsSafeAndIdempotent()
+    {
+        var dispatcher = new EventDispatcher();
+        using EventHub hub = dispatcher.CreateHub();
+        var count = 0;
+
+        IDisposable token = hub.Listen<ProbeEvent>(_ => Interlocked.Increment(ref count));
+        Parallel.For(0, 64, _ => token.Dispose());
+        dispatcher.Emit(new ProbeEvent(42));
+
+        Assert.Equal(0, count);
+    }
+
+    [Fact]
     public void ListenOnce_InvokesOnlyOneTime()
     {
         var dispatcher = new EventDispatcher();
@@ -256,6 +270,71 @@ public sealed class EventDispatcherBehaviorTests
         Assert.Equal(iterations, hubAFirst);
         Assert.Equal(iterations / 2, hubASecond);
         Assert.Equal(iterations / 2, hubBCount);
+    }
+
+    [Fact]
+    public void Announce_DispatchesImmediately_OnlyInCurrentHub()
+    {
+        var dispatcher = new EventDispatcher();
+        using EventHub hubA = dispatcher.CreateHub(order: 10);
+        using EventHub hubB = dispatcher.CreateHub(order: 0);
+        var hubACalled = false;
+        var hubBCalled = false;
+
+        hubA.Listen<ProbeEvent>(_ => hubACalled = true);
+        hubB.Listen<ProbeEvent>(_ => hubBCalled = true);
+
+        hubA.Announce(new ProbeEvent(1));
+
+        Assert.True(hubACalled);
+        Assert.False(hubBCalled);
+    }
+
+    [Fact]
+    public void Announce_RespectsHandleInHub_InSameHub()
+    {
+        var dispatcher = new EventDispatcher();
+        using EventHub hub = dispatcher.CreateHub();
+        var secondCalled = false;
+
+        hub.Listen<ProbeEvent>(e => e.HandleInHub());
+        hub.Listen<ProbeEvent>(_ => secondCalled = true);
+
+        hub.Announce(new ProbeEvent(2));
+
+        Assert.False(secondCalled);
+    }
+
+    [Fact]
+    public void DisposeHub_DuringDispatch_StopsRemainingListenersInSameHub()
+    {
+        var dispatcher = new EventDispatcher();
+        EventHub hub = dispatcher.CreateHub();
+        var secondCalled = false;
+
+        hub.Listen<ProbeEvent>(_ => hub.Dispose());
+        hub.Listen<ProbeEvent>(_ => secondCalled = true);
+
+        dispatcher.Emit(new ProbeEvent(100));
+
+        Assert.False(secondCalled);
+        Assert.False(hub.isValid);
+    }
+
+    [Fact]
+    public void DisposeHub_DuringAnnounce_StopsRemainingListenersInSameHub()
+    {
+        var dispatcher = new EventDispatcher();
+        EventHub hub = dispatcher.CreateHub();
+        var secondCalled = false;
+
+        hub.Listen<ProbeEvent>(_ => hub.Dispose());
+        hub.Listen<ProbeEvent>(_ => secondCalled = true);
+
+        hub.Announce(new ProbeEvent(101));
+
+        Assert.False(secondCalled);
+        Assert.False(hub.isValid);
     }
 
     private sealed class ProbeEvent(int value) : Event

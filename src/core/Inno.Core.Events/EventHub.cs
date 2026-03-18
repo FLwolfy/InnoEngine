@@ -121,20 +121,25 @@ public sealed class EventHub : IDisposable
         ThrowIfInvalid();
         ArgumentNullException.ThrowIfNull(handler);
 
-        IDisposable? token = null;
-        int invoked = 0;
-        token = Listen<TEvent>(e =>
-        {
-            if (Interlocked.Exchange(ref invoked, 1) != 0)
-            {
-                return;
-            }
+        OneShotSubscription<TEvent> oneShot = new(handler);
+        IDisposable subscription = Listen<TEvent>(oneShot.Invoke, priority);
+        oneShot.Bind(subscription);
+        return oneShot;
+    }
 
-            token?.Dispose();
-            handler.Invoke(e);
-        }, priority);
-
-        return token;
+    /// <summary>
+    /// Immediately dispatches an event inside this hub only.
+    /// </summary>
+    /// <remarks>
+    /// This does not route through the dispatcher hub chain.
+    /// Only listeners registered on this hub are invoked.
+    /// </remarks>
+    /// <param name="e">The event instance to dispatch locally.</param>
+    public void Announce(Event e)
+    {
+        ThrowIfInvalid();
+        ArgumentNullException.ThrowIfNull(e);
+        Dispatch(e);
     }
 
     /// <summary>
@@ -170,21 +175,35 @@ public sealed class EventHub : IDisposable
         HubState snapshot = Volatile.Read(ref m_state);
         using Event.HubDispatchScope _ = e.BeginHubDispatchScope();
 
-        foreach (Type type in EnumerateDispatchTypes(e.GetType()))
+        Type? type = e.GetType();
+        while (type is not null && typeof(Event).IsAssignableFrom(type))
         {
+            if (Volatile.Read(ref m_disposed) != 0)
+            {
+                return;
+            }
+
             if (!snapshot.buckets.TryGetValue(type, out Listener[]? listeners))
             {
+                type = type.BaseType;
                 continue;
             }
 
             for (int i = 0; i < listeners.Length; i++)
             {
+                if (Volatile.Read(ref m_disposed) != 0)
+                {
+                    return;
+                }
+
                 listeners[i].Invoke(e);
                 if (e.isGlobalHandled || e.IsHandledInCurrentHub())
                 {
                     return;
                 }
             }
+
+            type = type.BaseType;
         }
     }
 
@@ -235,30 +254,19 @@ public sealed class EventHub : IDisposable
         }
     }
 
-    private static IEnumerable<Type> EnumerateDispatchTypes(Type eventType)
-    {
-        Type? type = eventType;
-        while (type is not null && typeof(Event).IsAssignableFrom(type))
-        {
-            yield return type;
-            type = type.BaseType;
-        }
-    }
-
     private sealed class Subscription(EventHub hub, Type eventType, long listenerOrder) : IDisposable
     {
         private EventHub? m_hub = hub;
 
         public void Dispose()
         {
-            EventHub? hub = m_hub;
+            EventHub? hub = Interlocked.Exchange(ref m_hub, null);
             if (hub is null)
             {
                 return;
             }
 
             hub.Unlisten(eventType, listenerOrder);
-            m_hub = null;
         }
     }
 
@@ -268,6 +276,61 @@ public sealed class EventHub : IDisposable
         public long order { get; } = order;
 
         public void Invoke(Event e) => callback.Invoke(e);
+    }
+
+    private sealed class OneShotSubscription<TEvent>(Action<TEvent> handler) : IDisposable
+        where TEvent : Event
+    {
+        private readonly Action<TEvent> m_handler = handler;
+        private IDisposable? m_subscription;
+        private int m_completed;
+
+        public void Bind(IDisposable subscription)
+        {
+            if (Interlocked.CompareExchange(ref m_completed, 0, 0) != 0)
+            {
+                subscription.Dispose();
+                return;
+            }
+
+            if (Interlocked.CompareExchange(ref m_subscription, subscription, null) is not null)
+            {
+                subscription.Dispose();
+                return;
+            }
+
+            if (Interlocked.CompareExchange(ref m_completed, 0, 0) != 0)
+            {
+                DisposeBoundSubscription();
+            }
+        }
+
+        public void Invoke(TEvent e)
+        {
+            if (Interlocked.Exchange(ref m_completed, 1) != 0)
+            {
+                return;
+            }
+
+            DisposeBoundSubscription();
+            m_handler.Invoke(e);
+        }
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref m_completed, 1) != 0)
+            {
+                return;
+            }
+
+            DisposeBoundSubscription();
+        }
+
+        private void DisposeBoundSubscription()
+        {
+            IDisposable? subscription = Interlocked.Exchange(ref m_subscription, null);
+            subscription?.Dispose();
+        }
     }
 
     private sealed class ListenerBucket

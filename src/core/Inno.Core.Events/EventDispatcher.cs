@@ -12,7 +12,7 @@ namespace Inno.Core.Events;
 public sealed class EventDispatcher
 {
     private readonly ConcurrentQueue<Event> m_queue = new();
-    private readonly object m_hubsGate = new();
+    private readonly Lock m_hubsGate = new();
     private EventHub[] m_hubsSnapshot = [];
     private long m_nextHubSequence;
 
