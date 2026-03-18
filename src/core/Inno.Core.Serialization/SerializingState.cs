@@ -256,22 +256,21 @@ public sealed record SerializingState
                 return;
             }
 
-            if (value is IDictionary dict)
+            if (SerializableGraph.TryGetDictionaryTypes(t, out _, out _))
             {
+                if (!SerializableGraph.TryEnumerateDictionaryEntries(value, t, out var entries))
+                    throw new InvalidDataException($"Map node must be enumerable key-value pairs. Got: {t.FullName}");
+
                 bw.Write((byte)BinKind.Dict);
-
-                var entries = new List<DictionaryEntry>(dict.Count);
-                foreach (DictionaryEntry e in dict) entries.Add(e);
-
-                var allStringKey = entries.All(e => e.Key is string);
-                if (allStringKey)
-                    entries.Sort((a, b) => StringComparer.Ordinal.Compare((string)a.Key, (string)b.Key));
+                if (entries.Count > 0 && entries.TrueForAll(static e => e.Key is string))
+                    entries.Sort(static (a, b) => StringComparer.Ordinal.Compare((string)a.Key!, (string)b.Key!));
 
                 bw.Write(entries.Count);
                 for (var i = 0; i < entries.Count; i++)
                 {
-                    WriteNode(bw, entries[i].Key);
-                    WriteNode(bw, entries[i].Value);
+                    var entry = entries[i];
+                    WriteNode(bw, entry.Key);
+                    WriteNode(bw, entry.Value);
                 }
 
                 return;
@@ -279,7 +278,9 @@ public sealed record SerializingState
 
             if (value is IEnumerable en && value is not string)
             {
-                var tmp = new List<object?>();
+                var tmp = value is ICollection col
+                    ? new List<object?>(col.Count)
+                    : new List<object?>();
                 foreach (var it in en) tmp.Add(it);
 
                 bw.Write((byte)BinKind.List);
@@ -374,9 +375,9 @@ public sealed record SerializingState
                 case BinKind.Dict:
                 {
                     var count = br.ReadInt32();
-                    var map = new Dictionary<object?, object?>(System.Math.Max(0, count));
+                    var map = new Dictionary<object, object?>(System.Math.Max(0, count));
                     for (var i = 0; i < count; i++)
-                        map[ReadNode(br)] = ReadNode(br);
+                        map[ReadNode(br)!] = ReadNode(br);
                     return map;
                 }
 
@@ -434,11 +435,8 @@ public sealed record SerializingState
 
             var memberCount = br.ReadInt32();
 
-            var fieldMap = SerializableGraph.GetStructSerializableFields(t)
-                .ToDictionary(f => "F:" + f.Name, f => f, StringComparer.Ordinal);
-
-            var propMap = SerializableGraph.GetStructSerializableProperties(t)
-                .ToDictionary(p => "P:" + p.Name, p => p, StringComparer.Ordinal);
+            var fieldMap = SerializableGraph.GetStructSerializableFieldMap(t);
+            var propMap = SerializableGraph.GetStructSerializablePropertyMap(t);
 
             for (var i = 0; i < memberCount; i++)
             {
@@ -447,17 +445,15 @@ public sealed record SerializingState
 
                 if (fieldMap.TryGetValue(key, out var fi))
                 {
-                    var vis = SerializableGraph.GetVisibilityOrShow(fi);
-                    if ((vis & PropertyVisibility.Deserialize) != 0 && !fi.IsInitOnly)
-                        fi.SetValue(boxed, val);
+                    if (fi.canDeserialize)
+                        fi.field.SetValue(boxed, val);
                     continue;
                 }
 
                 if (propMap.TryGetValue(key, out var pi))
                 {
-                    var vis = SerializableGraph.GetVisibilityOrShow(pi);
-                    if ((vis & PropertyVisibility.Deserialize) != 0 && pi.CanWrite)
-                        pi.SetValue(boxed, val);
+                    if (pi.canDeserialize)
+                        pi.property.SetValue(boxed, val);
                     continue;
                 }
             }

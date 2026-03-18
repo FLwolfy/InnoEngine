@@ -12,12 +12,12 @@ public sealed class ObjectPoolTests
 {
     private sealed class Item
     {
-        public string Name { get; }
+        public string name { get; }
         public int Category { get; }
 
         public Item(string name, int category)
         {
-            Name = name;
+            this.name = name;
             Category = category;
         }
     }

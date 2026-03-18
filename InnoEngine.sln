@@ -1,52 +1,52 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Bgfx", "build\\Inno.Build.Bgfx\\Inno.Build.Bgfx.csproj", "{2B3C2546-F897-4F41-8B2C-B8A40B6A36D0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Bgfx", "build\Inno.Build.Bgfx\Inno.Build.Bgfx.csproj", "{2B3C2546-F897-4F41-8B2C-B8A40B6A36D0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Bgfx.Tools", "build\\Inno.Build.Bgfx.Tools\\Inno.Build.Bgfx.Tools.csproj", "{8E5FD8CE-B8F7-4F89-9A4E-0E4B0A6B1C7B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Bgfx.Tools", "build\Inno.Build.Bgfx.Tools\Inno.Build.Bgfx.Tools.csproj", "{8E5FD8CE-B8F7-4F89-9A4E-0E4B0A6B1C7B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Global", "build\\Inno.Build.Global\\Inno.Build.Global.csproj", "{2C4A9FCD-72D2-4ED9-B5F3-EDC389FF2F30}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Global", "build\Inno.Build.Global\Inno.Build.Global.csproj", "{2C4A9FCD-72D2-4ED9-B5F3-EDC389FF2F30}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Bgfx.Clean", "build\\Inno.Build.Bgfx.Clean\\Inno.Build.Bgfx.Clean.csproj", "{1B6E3F0A-1F6B-4B0A-8C1E-8C2F5E8A2C9D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Bgfx.Clean", "build\Inno.Build.Bgfx.Clean\Inno.Build.Bgfx.Clean.csproj", "{1B6E3F0A-1F6B-4B0A-8C1E-8C2F5E8A2C9D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Sdl3", "build\\Inno.Build.Sdl3\\Inno.Build.Sdl3.csproj", "{EE26B2A1-CEED-43BD-99FB-E66B35DDF999}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Sdl3", "build\Inno.Build.Sdl3\Inno.Build.Sdl3.csproj", "{EE26B2A1-CEED-43BD-99FB-E66B35DDF999}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Sdl3.Clean", "build\\Inno.Build.Sdl3.Clean\\Inno.Build.Sdl3.Clean.csproj", "{1B992CE3-8F21-4852-B1F1-3710384C8A50}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Sdl3.Clean", "build\Inno.Build.Sdl3.Clean\Inno.Build.Sdl3.Clean.csproj", "{1B992CE3-8F21-4852-B1F1-3710384C8A50}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Cimgui", "build\\Inno.Build.Cimgui\\Inno.Build.Cimgui.csproj", "{7D142685-2FCD-46F9-AE5C-A6A1E62ADDEE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Cimgui", "build\Inno.Build.Cimgui\Inno.Build.Cimgui.csproj", "{7D142685-2FCD-46F9-AE5C-A6A1E62ADDEE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Cimgui.Clean", "build\\Inno.Build.Cimgui.Clean\\Inno.Build.Cimgui.Clean.csproj", "{DF05ABF7-1CB2-488C-8FF7-2A6F440DF904}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Cimgui.Clean", "build\Inno.Build.Cimgui.Clean\Inno.Build.Cimgui.Clean.csproj", "{DF05ABF7-1CB2-488C-8FF7-2A6F440DF904}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.CImguizmo", "build\\Inno.Build.CImguizmo\\Inno.Build.CImguizmo.csproj", "{F9321CFD-E789-40B4-9133-BFE8196857FA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.CImguizmo", "build\Inno.Build.CImguizmo\Inno.Build.CImguizmo.csproj", "{F9321CFD-E789-40B4-9133-BFE8196857FA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.CImguizmo.Clean", "build\\Inno.Build.CImguizmo.Clean\\Inno.Build.CImguizmo.Clean.csproj", "{C76200B1-3CD9-4906-888C-2703FB4E7456}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.CImguizmo.Clean", "build\Inno.Build.CImguizmo.Clean\Inno.Build.CImguizmo.Clean.csproj", "{C76200B1-3CD9-4906-888C-2703FB4E7456}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.SDL3", "native\\Inno.Native.SDL3\\Inno.Native.SDL3.csproj", "{2E1E98AC-8D37-4E17-9D8E-2E9B35D31807}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.SDL3", "native\Inno.Native.SDL3\Inno.Native.SDL3.csproj", "{2E1E98AC-8D37-4E17-9D8E-2E9B35D31807}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.SDL3.Tests", "tests\\Inno.Native.SDL3.Tests\\Inno.Native.SDL3.Tests.csproj", "{4E0B5F68-7D2B-4F5A-9A2E-19C87D2A9A72}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.SDL3.Tests", "tests\Inno.Native.SDL3.Tests\Inno.Native.SDL3.Tests.csproj", "{4E0B5F68-7D2B-4F5A-9A2E-19C87D2A9A72}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.ImGui", "native\\Inno.Native.ImGui\\Inno.Native.ImGui.csproj", "{F4DAED1E-21D0-4C17-BF11-94EA06EFBBA5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.ImGui", "native\Inno.Native.ImGui\Inno.Native.ImGui.csproj", "{F4DAED1E-21D0-4C17-BF11-94EA06EFBBA5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.ImGui.Tests", "tests\\Inno.Native.ImGui.Tests\\Inno.Native.ImGui.Tests.csproj", "{37FE572C-8E8D-4AA6-ACDF-6BE6BCDD02A5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.ImGui.Tests", "tests\Inno.Native.ImGui.Tests\Inno.Native.ImGui.Tests.csproj", "{37FE572C-8E8D-4AA6-ACDF-6BE6BCDD02A5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.ImGuizmo", "native\\Inno.Native.ImGuizmo\\Inno.Native.ImGuizmo.csproj", "{CF1ECCEA-F166-46C6-9964-4D2C19102FF7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.ImGuizmo", "native\Inno.Native.ImGuizmo\Inno.Native.ImGuizmo.csproj", "{CF1ECCEA-F166-46C6-9964-4D2C19102FF7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.ImGuizmo.Tests", "tests\\Inno.Native.ImGuizmo.Tests\\Inno.Native.ImGuizmo.Tests.csproj", "{B3630277-2EB7-4D87-B5CB-8802A9E6D06F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.ImGuizmo.Tests", "tests\Inno.Native.ImGuizmo.Tests\Inno.Native.ImGuizmo.Tests.csproj", "{B3630277-2EB7-4D87-B5CB-8802A9E6D06F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.Bgfx", "native\\Inno.Native.Bgfx\\Inno.Native.Bgfx.csproj", "{6E0A4E7C-7C89-4B7B-8E76-1A9B8C2F2B52}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.Bgfx", "native\Inno.Native.Bgfx\Inno.Native.Bgfx.csproj", "{6E0A4E7C-7C89-4B7B-8E76-1A9B8C2F2B52}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Demo.Window", "demo\\Inno.Demo.Window\\Inno.Demo.Window.csproj", "{C69007C0-0311-47FD-86F0-E92469C3D1F2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Demo.Window", "demo\Inno.Demo.Window\Inno.Demo.Window.csproj", "{C69007C0-0311-47FD-86F0-E92469C3D1F2}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "demo", "demo", "{345FEF62-5FF9-464A-98FC-E609631E1E17}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.Bgfx.Tools", "native\\Inno.Native.Bgfx.Tools\\Inno.Native.Bgfx.Tools.csproj", "{4E1D7C77-2F5C-4F6E-8B1F-5A6D8D7A1E32}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.Bgfx.Tools", "native\Inno.Native.Bgfx.Tools\Inno.Native.Bgfx.Tools.csproj", "{4E1D7C77-2F5C-4F6E-8B1F-5A6D8D7A1E32}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.Dll", "native\\Inno.Native.Dll\\Inno.Native.Dll.csproj", "{7B3F9C01-2C23-4A9D-8E2E-0B2A9E1D7C44}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.Dll", "native\Inno.Native.Dll\Inno.Native.Dll.csproj", "{7B3F9C01-2C23-4A9D-8E2E-0B2A9E1D7C44}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.Bgfx.Tests", "tests\\Inno.Native.Bgfx.Tests\\Inno.Native.Bgfx.Tests.csproj", "{9AAB2B3E-5C3A-4D2E-8F9A-3A4F9B7E6C01}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.Bgfx.Tests", "tests\Inno.Native.Bgfx.Tests\Inno.Native.Bgfx.Tests.csproj", "{9AAB2B3E-5C3A-4D2E-8F9A-3A4F9B7E6C01}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.Bgfx.Tools.Tests", "tests\\Inno.Native.Bgfx.Tools.Tests\\Inno.Native.Bgfx.Tools.Tests.csproj", "{D2E7B1A4-9D6B-4E6D-8D21-1D0A4F9E9B02}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.Bgfx.Tools.Tests", "tests\Inno.Native.Bgfx.Tools.Tests\Inno.Native.Bgfx.Tools.Tests.csproj", "{D2E7B1A4-9D6B-4E6D-8D21-1D0A4F9E9B02}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "native", "native", "{A4D2C1A6-70C3-4A4B-8E3C-7EAF5C0B1D6F}"
 EndProject
@@ -93,6 +93,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Storage.Tests", "tests\Inno.Core.Storage.Tests\Inno.Core.Storage.Tests.csproj", "{5A7A9C10-0D4D-4F54-8E59-1F4E3F7E9A12}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "core", "core", "{5CEA3D05-0D66-4758-97F1-1B5C727F75B5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Serialization.Tests", "tests\Inno.Core.Serialization.Tests\Inno.Core.Serialization.Tests.csproj", "{71128E4C-7A08-4D8F-BAE0-7B03C984A814}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Reflection.Tests", "tests\Inno.Core.Reflection.Tests\Inno.Core.Reflection.Tests.csproj", "{D5F78986-0703-4DDE-99F1-91BF59207BDB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -228,6 +232,14 @@ Global
 		{5A7A9C10-0D4D-4F54-8E59-1F4E3F7E9A12}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5A7A9C10-0D4D-4F54-8E59-1F4E3F7E9A12}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5A7A9C10-0D4D-4F54-8E59-1F4E3F7E9A12}.Release|Any CPU.Build.0 = Release|Any CPU
+		{71128E4C-7A08-4D8F-BAE0-7B03C984A814}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{71128E4C-7A08-4D8F-BAE0-7B03C984A814}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{71128E4C-7A08-4D8F-BAE0-7B03C984A814}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{71128E4C-7A08-4D8F-BAE0-7B03C984A814}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D5F78986-0703-4DDE-99F1-91BF59207BDB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D5F78986-0703-4DDE-99F1-91BF59207BDB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D5F78986-0703-4DDE-99F1-91BF59207BDB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D5F78986-0703-4DDE-99F1-91BF59207BDB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{2C4A9FCD-72D2-4ED9-B5F3-EDC389FF2F30} = {47891007-1E47-4233-87C7-9448692ECDED}
@@ -272,5 +284,7 @@ Global
 		{5CEA3D05-0D66-4758-97F1-1B5C727F75B5} = {B7F13E20-4F12-4C14-9C2D-9A8451C7B4E9}
 		{5A7A9C10-0D4D-4F54-8E59-1F4E3F7E9A12} = {5CEA3D05-0D66-4758-97F1-1B5C727F75B5}
 		{C0E37B88-4A3A-4CF0-B2EA-1B2C4B9B9C07} = {5CEA3D05-0D66-4758-97F1-1B5C727F75B5}
+		{71128E4C-7A08-4D8F-BAE0-7B03C984A814} = {B7F13E20-4F12-4C14-9C2D-9A8451C7B4E9}
+		{D5F78986-0703-4DDE-99F1-91BF59207BDB} = {B7F13E20-4F12-4C14-9C2D-9A8451C7B4E9}
 	EndGlobalSection
 EndGlobal

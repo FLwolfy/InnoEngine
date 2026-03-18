@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -12,8 +11,19 @@ public static class Log
 {
     private const string C_DEFAULT_CATEGORY = "Unknown";
 
-    private static readonly ConcurrentDictionary<Type, (AssemblyGroup Source, string Category)> TYPE_INFO_CACHE = new();
-    private static readonly ConcurrentDictionary<Assembly, AssemblyGroup> ASSEMBLY_SOURCE_CACHE = new();
+    private sealed class TypeInfo
+    {
+        public required AssemblyGroup source { get; init; }
+        public required string category { get; init; }
+    }
+
+    private sealed class AssemblySource
+    {
+        public required AssemblyGroup source { get; init; }
+    }
+
+    private static readonly ConditionalWeakTable<Type, TypeInfo> TYPE_INFO_CACHE = new();
+    private static readonly ConditionalWeakTable<Assembly, AssemblySource> ASSEMBLY_SOURCE_CACHE = new();
 
     [Conditional("DEBUG")]
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -73,14 +83,20 @@ public static class Log
 
         if (callerType != null)
         {
-            var info = TYPE_INFO_CACHE.GetOrAdd(callerType, static t =>
+            var info = TYPE_INFO_CACHE.GetValue(callerType, static t =>
             {
-                var src = ASSEMBLY_SOURCE_CACHE.GetOrAdd(t.Assembly, static assembly => assembly.GetInnoAssemblyGroup());
-                return (src, t.Name);
+                var src = ASSEMBLY_SOURCE_CACHE.GetValue(t.Assembly, static assembly =>
+                    new AssemblySource { source = assembly.GetInnoAssemblyGroup() });
+
+                return new TypeInfo
+                {
+                    source = src.source,
+                    category = t.Name
+                };
             });
 
-            source = info.Source;
-            category = info.Category;
+            source = info.source;
+            category = info.category;
         }
 
         var msg = (args == null || args.Length == 0) ? message : string.Format(message, args);
