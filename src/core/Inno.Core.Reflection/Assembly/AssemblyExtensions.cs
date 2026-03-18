@@ -4,6 +4,9 @@ using System.Runtime.CompilerServices;
 
 namespace Inno.Core.Reflection;
 
+/// <summary>
+/// Extension helpers for assembly metadata used by Inno runtime systems.
+/// </summary>
 public static class AssemblyExtensions
 {
     private const string C_ASSEMBLY_GROUP_KEY = "Inno.AssemblyGroup";
@@ -15,6 +18,11 @@ public static class AssemblyExtensions
 
     private static readonly ConditionalWeakTable<Assembly, AssemblyGroupBox> CACHE = new();
 
+    /// <summary>
+    /// Resolves the <see cref="AssemblyGroup"/> from assembly metadata.
+    /// </summary>
+    /// <param name="assembly">The source assembly.</param>
+    /// <returns>The resolved assembly group, or <see cref="AssemblyGroup.None"/> if not present.</returns>
     public static AssemblyGroup GetInnoAssemblyGroup(this Assembly assembly)
     {
         ArgumentNullException.ThrowIfNull(assembly);

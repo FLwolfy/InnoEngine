@@ -7,6 +7,9 @@ using System.Threading;
 
 namespace Inno.Core.Reflection;
 
+/// <summary>
+/// Provides cached type discovery for Inno namespaces, including subtype, interface, and attribute lookups.
+/// </summary>
 public static class TypeCacheManager
 {
     private const string C_INNO_NAMESPACE = "Inno";
@@ -21,6 +24,9 @@ public static class TypeCacheManager
 
     private static event Action? OnRefreshed;
 
+    /// <summary>
+    /// Initializes the cache manager, runs initialize hooks, and subscribes refresh hooks.
+    /// </summary>
     public static void Initialize()
     {
         Refresh();
@@ -88,7 +94,7 @@ public static class TypeCacheManager
     }
     
     /// <summary>
-    /// This needs to be called when a new type is registered to the cache.
+    /// Rebuilds all internal type indices from currently loaded assemblies.
     /// </summary>
     public static void Refresh()
     {
@@ -147,8 +153,10 @@ public static class TypeCacheManager
     }
 
     /// <summary>
-    /// Gets all subtypes of the given type T in the Assembly Company specified above.
+    /// Gets all discovered concrete subtypes of <typeparamref name="T"/>.
     /// </summary>
+    /// <typeparam name="T">The base type.</typeparam>
+    /// <returns>A list of matching concrete types.</returns>
     public static IReadOnlyList<Type> GetSubTypesOf<T>()
     {
         EnsureFresh();
@@ -157,8 +165,10 @@ public static class TypeCacheManager
     }
 
     /// <summary>
-    /// Gets all subtypes of the given interface in the Assembly Company specified above.
+    /// Gets all discovered concrete types implementing <typeparamref name="TInterface"/>.
     /// </summary>
+    /// <typeparam name="TInterface">The target interface type.</typeparam>
+    /// <returns>A list of matching concrete types.</returns>
     public static IReadOnlyList<Type> GetTypesImplementing<TInterface>()
     {
         EnsureFresh();
@@ -167,8 +177,10 @@ public static class TypeCacheManager
     }
 
     /// <summary>
-    /// Gets all types with the specified attribute in the Assembly Namespace specified above.
+    /// Gets all discovered concrete types annotated with <typeparamref name="TAttr"/>.
     /// </summary>
+    /// <typeparam name="TAttr">The attribute type.</typeparam>
+    /// <returns>A list of matching concrete types.</returns>
     public static IReadOnlyList<Type> GetTypesWithAttribute<TAttr>() where TAttr : Attribute
     {
         EnsureFresh();

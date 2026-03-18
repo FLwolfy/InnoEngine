@@ -7,8 +7,14 @@ using System.Threading;
 
 namespace Inno.Core.Logging;
 
+/// <summary>
+/// Persists log entries to rotating text files on disk.
+/// </summary>
 public class FileLogSink : ILogSink, IDisposable
 {
+    /// <summary>
+    /// Prefix used for generated log file names.
+    /// </summary>
     public const string C_LOG_FILE_PREFIX = "log_";
     
     private readonly string m_logDirectory;
@@ -16,11 +22,20 @@ public class FileLogSink : ILogSink, IDisposable
     private readonly int m_maxFiles;
     private string m_currentFile;
     private long m_currentSize;
+    private FileStream? m_stream;
+    private StreamWriter? m_writer;
 
     private readonly ConcurrentQueue<LogEntry> m_queue = new();
+    private readonly SemaphoreSlim m_signal = new(0);
     private readonly Thread m_workerThread;
-    private bool m_running = true;
+    private volatile bool m_running = true;
 
+    /// <summary>
+    /// Initializes a file sink.
+    /// </summary>
+    /// <param name="logDirectory">Directory where log files are stored.</param>
+    /// <param name="maxFileSizeBytes">Maximum file size before rotation.</param>
+    /// <param name="maxFiles">Maximum number of retained files.</param>
     public FileLogSink(string logDirectory, long maxFileSizeBytes = 10 * 1024 * 1024, int maxFiles = 10)
     {
         m_logDirectory = logDirectory;
@@ -32,41 +47,68 @@ public class FileLogSink : ILogSink, IDisposable
         
         m_currentFile = GetNewLogFilePath();
         m_currentSize = 0;
+        OpenWriter();
 
         m_workerThread = new Thread(ProcessQueue) { IsBackground = true };
         m_workerThread.Start();
     }
 
+    /// <summary>
+    /// Queues a log entry for asynchronous file writing.
+    /// </summary>
+    /// <param name="entry">The entry to persist.</param>
     public void Receive(LogEntry entry)
     {
         m_queue.Enqueue(entry);
+        m_signal.Release();
     }
 
     private void ProcessQueue()
     {
-        while (m_running)
+        while (true)
         {
-            while (m_queue.TryDequeue(out var entry))
+            m_signal.Wait();
+            DrainQueue();
+
+            if (!m_running && m_queue.IsEmpty)
+                break;
+        }
+    }
+
+    private void DrainQueue()
+    {
+        if (m_writer == null)
+            return;
+
+        var buffer = new StringBuilder(16 * 1024);
+        while (m_queue.TryDequeue(out var entry))
+        {
+            try
             {
-                try
-                {
-                    string line = FormatEntry(entry) + Environment.NewLine;
-                    byte[] bytes = Encoding.UTF8.GetBytes(line);
+                var line = FormatEntry(entry) + Environment.NewLine;
+                var bytes = Encoding.UTF8.GetByteCount(line);
 
-                    File.AppendAllText(m_currentFile, line, Encoding.UTF8);
-                    m_currentSize += bytes.Length;
+                buffer.Append(line);
+                m_currentSize += bytes;
 
-                    if (m_currentSize > m_maxFileSize)
-                    {
-                        RotateFile();
-                    }
-                }
-                catch
+                if (m_currentSize > m_maxFileSize)
                 {
-                    // Ignore I/O exceptions
+                    m_writer.Write(buffer.ToString());
+                    m_writer.Flush();
+                    buffer.Clear();
+                    RotateFile();
                 }
             }
-            Thread.Sleep(10); // reduce CPU usage
+            catch
+            {
+                // Ignore I/O exceptions
+            }
+        }
+
+        if (buffer.Length > 0)
+        {
+            m_writer.Write(buffer.ToString());
+            m_writer.Flush();
         }
     }
 
@@ -74,10 +116,13 @@ public class FileLogSink : ILogSink, IDisposable
     {
         // Cleanup old files
         CleanupOldFiles();
-        
+
+        CloseWriter();
+
         // Create a new log file
         m_currentFile = GetNewLogFilePath();
         m_currentSize = 0;
+        OpenWriter();
     }
 
     private void CleanupOldFiles()
@@ -110,7 +155,7 @@ public class FileLogSink : ILogSink, IDisposable
 
     private string FormatEntry(LogEntry entry)
     {
-        return $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{entry.source}] [{entry.level}]: {entry.message} ({entry.file}:{entry.line})";
+        return $"[{entry.time:yyyy-MM-dd HH:mm:ss.fff}] [{entry.source}] [{entry.level}]: {entry.message} ({entry.file}:{entry.line})";
     }
 
     private string GetNewLogFilePath()
@@ -119,23 +164,52 @@ public class FileLogSink : ILogSink, IDisposable
         return Path.Combine(m_logDirectory, $"{C_LOG_FILE_PREFIX}{timestamp}.txt");
     }
 
+    /// <summary>
+    /// Stops the sink worker and flushes remaining queued entries.
+    /// </summary>
     public void Dispose()
     {
         m_running = false;
+        m_signal.Release();
         m_workerThread.Join();
 
-        // Flush remaining entries
-        while (m_queue.TryDequeue(out var entry))
+        DrainQueue();
+        CloseWriter();
+        m_signal.Dispose();
+    }
+
+    private void OpenWriter()
+    {
+        m_stream = new FileStream(
+            m_currentFile,
+            FileMode.Append,
+            FileAccess.Write,
+            FileShare.Read,
+            bufferSize: 16 * 1024,
+            FileOptions.SequentialScan);
+
+        m_writer = new StreamWriter(m_stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false))
         {
-            try
-            {
-                string line = FormatEntry(entry) + Environment.NewLine;
-                File.AppendAllText(m_currentFile, line, Encoding.UTF8);
-            }
-            catch
-            {
-                // Ignore I/O exceptions
-            }
+            AutoFlush = false
+        };
+    }
+
+    private void CloseWriter()
+    {
+        try
+        {
+            m_writer?.Flush();
+        }
+        catch
+        {
+            // Ignore flush exceptions
+        }
+        finally
+        {
+            m_writer?.Dispose();
+            m_stream?.Dispose();
+            m_writer = null;
+            m_stream = null;
         }
     }
 }

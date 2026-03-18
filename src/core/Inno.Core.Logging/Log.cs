@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
@@ -7,6 +8,9 @@ using Inno.Core.Reflection;
 
 namespace Inno.Core.Logging;
 
+/// <summary>
+/// Convenience facade for writing logs with automatic source/category resolution.
+/// </summary>
 public static class Log
 {
     private const string C_DEFAULT_CATEGORY = "Unknown";
@@ -25,40 +29,85 @@ public static class Log
     private static readonly ConditionalWeakTable<Type, TypeInfo> TYPE_INFO_CACHE = new();
     private static readonly ConditionalWeakTable<Assembly, AssemblySource> ASSEMBLY_SOURCE_CACHE = new();
 
+    /// <summary>
+    /// Writes a debug-level message using the object's string representation.
+    /// </summary>
+    /// <param name="obj">The object to log.</param>
     [Conditional("DEBUG")]
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Debug(object? obj)
         => Write(LogLevel.Debug, $"{obj}", null);
     
+    /// <summary>
+    /// Writes a formatted debug-level message.
+    /// </summary>
+    /// <param name="message">The composite format string.</param>
+    /// <param name="args">The format arguments.</param>
     [Conditional("DEBUG")]
+    /// <summary>
+    /// Writes an info-level message using the object's string representation.
+    /// </summary>
+    /// <param name="obj">The object to log.</param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Debug(string message, params object[]? args)
         => Write(LogLevel.Debug, message, args);
 
+    /// <summary>
+    /// Writes a formatted info-level message.
+    /// </summary>
+    /// <param name="message">The composite format string.</param>
+    /// <param name="args">The format arguments.</param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Info(object? obj)
         => Write(LogLevel.Info, $"{obj}", null);
     
+    /// <summary>
+    /// Writes a warning-level message using the object's string representation.
+    /// </summary>
+    /// <param name="obj">The object to log.</param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Info(string message, params object[]? args)
         => Write(LogLevel.Info, message, args);
 
+    /// <summary>
+    /// Writes a formatted warning-level message.
+    /// </summary>
+    /// <param name="message">The composite format string.</param>
+    /// <param name="args">The format arguments.</param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Warn(object? obj)
         => Write(LogLevel.Warn, $"{obj}", null);
     
+    /// <summary>
+    /// Writes an error-level message using the object's string representation.
+    /// </summary>
+    /// <param name="obj">The object to log.</param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Warn(string message, params object[]? args)
         => Write(LogLevel.Warn, message, args);
 
+    /// <summary>
+    /// Writes a formatted error-level message.
+    /// </summary>
+    /// <param name="message">The composite format string.</param>
+    /// <param name="args">The format arguments.</param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Error(object? obj)
         => Write(LogLevel.Error, $"{obj}", null);
     
+    /// <summary>
+    /// Writes a fatal-level message using the object's string representation.
+    /// </summary>
+    /// <param name="obj">The object to log.</param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Error(string message, params object[]? args)
         => Write(LogLevel.Error, message, args);
 
+    /// <summary>
+    /// Writes a formatted fatal-level message.
+    /// </summary>
+    /// <param name="message">The composite format string.</param>
+    /// <param name="args">The format arguments.</param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Fatal(object? obj)
         => Write(LogLevel.Fatal, $"{obj}", null);
@@ -72,9 +121,7 @@ public static class Log
     {
         if (!LogManager.IsEnabled(level)) return;
 
-        var sf = new StackTrace(skipFrames: 2, fNeedFileInfo: true).GetFrame(0);
-        if (sf == null) return;
-        
+        var sf = new StackFrame(2, false);
         var method = sf.GetMethod();
         var callerType = method?.DeclaringType;
 
@@ -100,8 +147,17 @@ public static class Log
         }
 
         var msg = (args == null || args.Length == 0) ? message : string.Format(message, args);
-        var file = sf.GetFileName() ?? C_DEFAULT_CATEGORY;
-        var line = sf.GetFileLineNumber();
+
+        var file = C_DEFAULT_CATEGORY;
+        var line = 0;
+
+        if (Debugger.IsAttached)
+        {
+            var fileInfoFrame = new StackFrame(2, true);
+            var filePath = fileInfoFrame.GetFileName();
+            file = string.IsNullOrWhiteSpace(filePath) ? C_DEFAULT_CATEGORY : Path.GetFileName(filePath);
+            line = fileInfoFrame.GetFileLineNumber();
+        }
         
         LogManager.Dispatch(new LogEntry(level, source, category, msg, file, line));
     }

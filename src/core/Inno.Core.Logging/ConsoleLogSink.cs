@@ -2,8 +2,15 @@ using System;
 
 namespace Inno.Core.Logging;
 
+/// <summary>
+/// Writes log entries to the process console with level-based colors.
+/// </summary>
 public class ConsoleLogSink : ILogSink
 {
+    /// <summary>
+    /// Writes the specified entry to standard output.
+    /// </summary>
+    /// <param name="entry">The log entry to print.</param>
     public void Receive(LogEntry entry)
     {
         var originalColor = Console.ForegroundColor;
