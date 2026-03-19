@@ -12,5 +12,5 @@ public sealed class WaitUntil(Func<bool> predicate) : YieldInstruction
     /// </summary>
     public Func<bool> predicate { get; } = predicate ?? throw new ArgumentNullException(nameof(predicate));
 
-    internal override ICoroutineWaiter CreateWaiter(double now, ulong frame) => new WaitUntilWaiter(predicate);
+    internal override CoroutineWaitDelegate CreateWaiter(double now, ulong frame) => _ => !predicate.Invoke();
 }

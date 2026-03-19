@@ -13,5 +13,5 @@ public sealed class WaitForTask(Task task) : YieldInstruction
     /// </summary>
     public Task task { get; } = task ?? throw new ArgumentNullException(nameof(task));
 
-    internal override ICoroutineWaiter CreateWaiter(double now, ulong frame) => new WaitForTaskWaiter(task);
+    internal override CoroutineWaitDelegate CreateWaiter(double now, ulong frame) => _ => !task.IsCompleted;
 }

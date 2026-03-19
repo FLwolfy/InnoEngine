@@ -10,13 +10,15 @@ public sealed class WaitForSeconds(float seconds) : YieldInstruction
     /// </summary>
     public float seconds { get; } = seconds;
 
-    internal override ICoroutineWaiter CreateWaiter(double now, ulong frame)
+    internal override CoroutineWaitDelegate CreateWaiter(double now, ulong frame)
     {
+        ulong targetFrame = frame + 1;
         if (seconds <= 0f)
         {
-            return new NextFrameWaiter(frame + 1);
+            return scheduler => scheduler.frame < targetFrame;
         }
 
-        return new WaitForSecondsWaiter(now + seconds);
+        double targetTime = now + seconds;
+        return scheduler => scheduler.now < targetTime;
     }
 }

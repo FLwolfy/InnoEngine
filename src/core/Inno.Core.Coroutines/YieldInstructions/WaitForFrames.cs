@@ -10,13 +10,15 @@ public sealed class WaitForFrames(int frames) : YieldInstruction
     /// </summary>
     public int frames { get; } = frames;
 
-    internal override ICoroutineWaiter CreateWaiter(double now, ulong frame)
+    internal override CoroutineWaitDelegate CreateWaiter(double now, ulong frame)
     {
+        ulong targetFrame = frame + 1;
         if (frames <= 0)
         {
-            return new NextFrameWaiter(frame + 1);
+            return scheduler => scheduler.frame < targetFrame;
         }
 
-        return new WaitForFramesWaiter(frame + (ulong)frames);
+        ulong target = frame + (ulong)frames;
+        return scheduler => scheduler.frame < target;
     }
 }

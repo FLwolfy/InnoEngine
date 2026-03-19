@@ -240,7 +240,7 @@ public sealed class CoroutineScheduler : IDisposable
     {
         if (state.waiter is not null)
         {
-            if (state.waiter.KeepWaiting(this))
+            if (state.waiter.Invoke(this))
             {
                 return true;
             }
@@ -275,7 +275,8 @@ public sealed class CoroutineScheduler : IDisposable
             object? yielded = current.Current;
             if (yielded is null)
             {
-                state.waiter = new NextFrameWaiter(m_frame + 1);
+                ulong targetFrame = m_frame + 1;
+                state.waiter = scheduler => scheduler.frame < targetFrame;
                 return true;
             }
 
@@ -293,13 +294,13 @@ public sealed class CoroutineScheduler : IDisposable
 
             if (yielded is Task task)
             {
-                state.waiter = new WaitForTaskWaiter(task);
+                state.waiter = _ => !task.IsCompleted;
                 return true;
             }
 
             if (yielded is CoroutineHandle handle)
             {
-                state.waiter = new WaitForCoroutineWaiter(handle);
+                state.waiter = scheduler => scheduler.Contains(handle);
                 return true;
             }
 
@@ -370,6 +371,6 @@ public sealed class CoroutineScheduler : IDisposable
         public long id { get; } = id;
         public object? owner { get; } = owner;
         public Stack<IEnumerator> stack { get; } = new([routine]);
-        public ICoroutineWaiter? waiter { get; set; }
+        public CoroutineWaitDelegate? waiter { get; set; }
     }
 }
