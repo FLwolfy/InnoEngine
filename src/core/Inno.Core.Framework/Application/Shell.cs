@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Diagnostics;
 using Inno.Core.Coroutines;
 using Inno.Core.Events;
@@ -8,40 +7,39 @@ using Inno.Core.Reflection;
 
 namespace Inno.Core.Framework;
 
-public class Shell
+public sealed class Shell : IDisposable
 {
     private Action? m_onLoad;
     private Action? m_onSetup;
     private Action? m_onStep;
     private Action? m_onDraw;
-    private Action<EventDispatcher>? m_onEvent;
     private Action? m_onClose;
 
     private readonly Stopwatch m_timer;
-    private readonly EventDispatcher m_eventDispatcher;
+    private readonly EventDispatcher m_events;
     private readonly CoroutineScheduler m_coroutines;
-    
+    private readonly LayerStack m_layers;
+
     private double m_lastTime;
     private bool m_isRunning;
+    private bool m_disposed;
 
     public void SetOnLoad(Action onLoad) => m_onLoad = onLoad;
     public void SetOnSetup(Action onSetup) => m_onSetup = onSetup;
     public void SetOnStep(Action onStep) => m_onStep = onStep;
     public void SetOnDraw(Action onDraw) => m_onDraw = onDraw;
-    public void SetOnEvent(Action<EventDispatcher>? onEvent) => m_onEvent = onEvent;
     public void SetOnClose(Action onClose) => m_onClose = onClose;
 
-    public CoroutineHandle StartCoroutine(IEnumerator routine) => m_coroutines.StartCoroutine(routine);
-    public CoroutineHandle StartCoroutine(object owner, IEnumerator routine) => m_coroutines.StartCoroutine(owner, routine);
-    public bool StopCoroutine(CoroutineHandle handle) => m_coroutines.StopCoroutine(handle);
-    public void StopAllCoroutines() => m_coroutines.StopAllCoroutines();
-    public void StopAllCoroutines(object owner) => m_coroutines.StopAllCoroutines(owner);
+    public EventDispatcher eventDispatcher => m_events;
+    public CoroutineScheduler coroutineScheduler => m_coroutines;
+    public LayerStack layerStack => m_layers;
 
     public Shell()
     {
         m_timer = new Stopwatch();
-        m_eventDispatcher = new EventDispatcher();
+        m_events = new EventDispatcher();
         m_coroutines = new CoroutineScheduler();
+        m_layers = new LayerStack(() => m_events.CreateHub());
         
         LogManager.RegisterSink(new ConsoleLogSink());
         TypeCacheManager.Initialize();
@@ -50,6 +48,7 @@ public class Shell
 
     public void Run()
     {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
         if (m_isRunning) return;
         m_isRunning = true;
             
@@ -59,33 +58,50 @@ public class Shell
         m_timer.Start();
         m_lastTime = 0.0;
 
-        while (m_isRunning)
+        try
         {
-            double now = m_timer.Elapsed.TotalSeconds;
-            float delta = (float)(now - m_lastTime);
-            m_lastTime = now;
+            while (m_isRunning)
+            {
+                double now = m_timer.Elapsed.TotalSeconds;
+                float delta = (float)(now - m_lastTime);
+                m_lastTime = now;
 
-            // Inputs
-            m_onEvent?.Invoke(m_eventDispatcher);
-            
-            // Logic Step
-            Time.Update((float)now, delta);
-            m_coroutines.Tick(delta);
-            m_onStep?.Invoke();
-            
-            // Render
-            // TODO: This should probably be moved to different thread
-            Time.RenderUpdate(delta);
-            m_onDraw?.Invoke();
+                m_events.Flush();
+
+                Time.Update((float)now, delta);
+                m_coroutines.Tick(delta);
+                m_onStep?.Invoke();
+                m_layers.OnUpdate(delta);
+
+                Time.RenderUpdate(delta);
+                m_onDraw?.Invoke();
+                m_layers.OnRender(Time.renderDeltaTime);
+            }
         }
-
-        m_onClose?.Invoke();
-        m_coroutines.Dispose();
-        LogManager.Shutdown();
+        finally
+        {
+            m_onClose?.Invoke();
+            Dispose();
+        }
     }
 
     public void Terminate()
     {
         m_isRunning = false;
+    }
+
+    public void Dispose()
+    {
+        if (m_disposed)
+        {
+            return;
+        }
+
+        m_disposed = true;
+        m_isRunning = false;
+
+        m_layers.Dispose();
+        m_coroutines.Dispose();
+        LogManager.Shutdown();
     }
 }

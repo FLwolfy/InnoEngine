@@ -34,6 +34,6 @@ public static class Time
     /// <param name="delta">Delta time between render frames.</param>
     internal static void RenderUpdate(float delta)
     {
-        renderDeltaTime = deltaTime;
+        renderDeltaTime = delta;
     }
 }
