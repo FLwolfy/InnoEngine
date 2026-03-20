@@ -4,6 +4,9 @@ using Inno.Core.Events;
 
 namespace Inno.Core.Framework;
 
+/// <summary>
+/// Ordered container of layers and overlays with per-layer event hubs.
+/// </summary>
 public sealed class LayerStack : IDisposable
 {
     private readonly Func<EventHub> m_hubFactory;
@@ -11,14 +14,31 @@ public sealed class LayerStack : IDisposable
     private int m_layerInsertIndex = 0;
     private bool m_disposed;
 
+    /// <summary>
+    /// Gets the number of attached layers and overlays.
+    /// </summary>
     public int count => m_layers.Count;
+
+    /// <summary>
+    /// Gets the layer at the specified index.
+    /// </summary>
+    /// <param name="index">Layer index.</param>
+    /// <returns>Layer at the given index.</returns>
     public Layer this[int index] => m_layers[index].layer;
 
+    /// <summary>
+    /// Creates a layer stack.
+    /// </summary>
+    /// <param name="hubFactory">Factory used to create a new <see cref="EventHub"/> per layer.</param>
     public LayerStack(Func<EventHub> hubFactory)
     {
         m_hubFactory = hubFactory ?? throw new ArgumentNullException(nameof(hubFactory));
     }
 
+    /// <summary>
+    /// Adds a base layer below overlays.
+    /// </summary>
+    /// <param name="layer">Layer instance.</param>
     public void PushLayer(Layer layer)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -45,6 +65,10 @@ public sealed class LayerStack : IDisposable
         }
     }
 
+    /// <summary>
+    /// Adds an overlay layer on top of all base layers.
+    /// </summary>
+    /// <param name="overlay">Overlay instance.</param>
     public void PushOverlay(Layer overlay)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -69,6 +93,11 @@ public sealed class LayerStack : IDisposable
         }
     }
 
+    /// <summary>
+    /// Removes a base layer.
+    /// </summary>
+    /// <param name="layer">Layer to remove.</param>
+    /// <returns><see langword="true"/> when removed; otherwise <see langword="false"/>.</returns>
     public bool PopLayer(Layer layer)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -96,6 +125,11 @@ public sealed class LayerStack : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Removes an overlay layer.
+    /// </summary>
+    /// <param name="overlay">Overlay to remove.</param>
+    /// <returns><see langword="true"/> when removed; otherwise <see langword="false"/>.</returns>
     public bool PopOverlay(Layer overlay)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -122,6 +156,10 @@ public sealed class LayerStack : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Executes per-frame update on all layers in stack order.
+    /// </summary>
+    /// <param name="deltaTime">Frame delta time in seconds.</param>
     public void OnUpdate(float deltaTime)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -132,6 +170,24 @@ public sealed class LayerStack : IDisposable
         }
     }
 
+    /// <summary>
+    /// Executes fixed-step updates on all layers in stack order.
+    /// </summary>
+    /// <param name="fixedDeltaTime">Fixed timestep in seconds.</param>
+    public void OnFixedUpdate(float fixedDeltaTime)
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+
+        foreach (var entry in m_layers)
+        {
+            entry.layer.OnFixedUpdate(fixedDeltaTime);
+        }
+    }
+
+    /// <summary>
+    /// Executes render callbacks on all layers in stack order.
+    /// </summary>
+    /// <param name="renderDeltaTime">Render delta time in seconds.</param>
     public void OnRender(float renderDeltaTime)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -142,6 +198,9 @@ public sealed class LayerStack : IDisposable
         }
     }
 
+    /// <summary>
+    /// Detaches and removes all layers and overlays.
+    /// </summary>
     public void Clear()
     {
         if (m_disposed)
@@ -166,6 +225,9 @@ public sealed class LayerStack : IDisposable
         m_layerInsertIndex = 0;
     }
 
+    /// <summary>
+    /// Disposes the stack and detaches all layers.
+    /// </summary>
     public void Dispose()
     {
         if (m_disposed)

@@ -19,9 +19,9 @@ public static class LogManager
     private static readonly SemaphoreSlim SIGNAL = new(0);
     private static readonly Lock LIFECYCLE_LOCK = new();
 
-    private static Thread? m_workerThread;
-    private static volatile bool m_running;
-    private static volatile LogLevel m_minimumLevel = LogLevel.Debug;
+    private static Thread? s_workerThread;
+    private static volatile bool s_running;
+    private static volatile LogLevel s_minimumLevel = LogLevel.Debug;
 
     /// <summary>
     /// Starts the logging worker thread if it has not been started.
@@ -30,16 +30,16 @@ public static class LogManager
     {
         lock (LIFECYCLE_LOCK)
         {
-            if (m_workerThread != null)
+            if (s_workerThread != null)
                 return;
 
-            m_running = true;
-            m_workerThread = new Thread(ProcessQueue)
+            s_running = true;
+            s_workerThread = new Thread(ProcessQueue)
             {
                 IsBackground = true,
                 Name = C_WORKER_THREAD_NAME
             };
-            m_workerThread.Start();
+            s_workerThread.Start();
         }
     }
 
@@ -77,12 +77,12 @@ public static class LogManager
     /// <param name="level">The minimum enabled level.</param>
     public static void SetMinimumLevel(LogLevel level)
     {
-        m_minimumLevel = level;
+        s_minimumLevel = level;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static bool IsEnabled(LogLevel level)
-        => level >= m_minimumLevel;
+        => level >= s_minimumLevel;
 
     /// <summary>
     /// Enqueues a log entry for asynchronous dispatch.
@@ -104,7 +104,7 @@ public static class LogManager
             SIGNAL.Wait();
             DrainQueue();
 
-            if (!m_running && QUEUE.IsEmpty)
+            if (!s_running && QUEUE.IsEmpty)
                 break;
         }
     }
@@ -150,14 +150,14 @@ public static class LogManager
 
         lock (LIFECYCLE_LOCK)
         {
-            if (m_workerThread == null)
+            if (s_workerThread == null)
                 return;
 
-            m_running = false;
+            s_running = false;
             SIGNAL.Release();
 
-            worker = m_workerThread;
-            m_workerThread = null;
+            worker = s_workerThread;
+            s_workerThread = null;
         }
 
         worker.Join();

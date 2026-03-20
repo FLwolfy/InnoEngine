@@ -1,5 +1,8 @@
 namespace Inno.Core.Framework;
 
+/// <summary>
+/// Global time state for the active shell runtime.
+/// </summary>
 public static class Time
 {
     /// <summary>
@@ -16,6 +19,16 @@ public static class Time
     /// The time between render updates.
     /// </summary>
     public static float renderDeltaTime { get; private set; }
+
+    /// <summary>
+    /// Fixed-step simulation time elapsed since start in seconds.
+    /// </summary>
+    public static float fixedTime { get; private set; }
+
+    /// <summary>
+    /// Current fixed-step interval in seconds.
+    /// </summary>
+    public static float fixedDeltaTime { get; private set; }
 
     /// <summary>
     /// Update the time info. Called each frame from the game loop.
@@ -35,5 +48,15 @@ public static class Time
     internal static void RenderUpdate(float delta)
     {
         renderDeltaTime = delta;
+    }
+
+    /// <summary>
+    /// Advance fixed-step simulation time.
+    /// </summary>
+    /// <param name="fixedDelta">Fixed-step interval in seconds.</param>
+    internal static void FixedUpdate(float fixedDelta)
+    {
+        fixedDeltaTime = fixedDelta;
+        fixedTime += fixedDelta;
     }
 }

@@ -19,8 +19,8 @@ public static class TypeCacheManager
     private static ConditionalWeakTable<Type, WeakTypeSet> s_attributeCache = new();
 
     private static readonly Lock CACHE_SYNC = new();
-    private static volatile bool isDirty = false;
-    private static int lastAssemblyCount = -1;
+    private static volatile bool s_isDirty = false;
+    private static int s_lastAssemblyCount = -1;
 
     private static event Action? OnRefreshed;
 
@@ -36,7 +36,7 @@ public static class TypeCacheManager
             
         AppDomain.CurrentDomain.AssemblyLoad += (_, _) =>
         {
-            isDirty = true;
+            s_isDirty = true;
         };
 
         OnRefreshed?.Invoke();
@@ -145,8 +145,8 @@ public static class TypeCacheManager
             s_subclassCache = subclassCache;
             s_interfaceCache = interfaceCache;
             s_attributeCache = attributeCache;
-            lastAssemblyCount = AppDomain.CurrentDomain.GetAssemblies().Length;
-            isDirty = false;
+            s_lastAssemblyCount = AppDomain.CurrentDomain.GetAssemblies().Length;
+            s_isDirty = false;
         }
 
         OnRefreshed?.Invoke();
@@ -190,15 +190,15 @@ public static class TypeCacheManager
 
     private static void EnsureFresh()
     {
-        if (AppDomain.CurrentDomain.GetAssemblies().Length != Volatile.Read(ref lastAssemblyCount))
-            isDirty = true;
+        if (AppDomain.CurrentDomain.GetAssemblies().Length != Volatile.Read(ref s_lastAssemblyCount))
+            s_isDirty = true;
 
-        if (!isDirty)
+        if (!s_isDirty)
             return;
 
         lock (CACHE_SYNC)
         {
-            if (isDirty)
+            if (s_isDirty)
                 Refresh();
         }
     }
