@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Threading;
 using Inno.Core.Events;
 using Inno.Core.Framework;
@@ -13,6 +14,12 @@ public sealed class ShellBehaviorTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new Shell(0f));
         Assert.Throws<ArgumentOutOfRangeException>(() => new Shell(-0.01f));
+    }
+
+    [Fact]
+    public void Constructor_WithNegativeMaxFrameRate_Throws()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Shell(maxFrameRate: -1));
     }
 
     [Fact]
@@ -109,6 +116,29 @@ public sealed class ShellBehaviorTests
     }
 
     [Fact]
+    public void Run_UsesConfiguredFixedDeltaTime()
+    {
+        const float fixedDelta = 0.02f;
+        using var shell = new Shell(fixedDeltaTime: fixedDelta);
+
+        var fixedCount = 0;
+        shell.SetOnFixedStep(() =>
+        {
+            fixedCount++;
+            if (fixedCount >= 3)
+            {
+                shell.Terminate();
+            }
+        });
+        shell.SetOnStep(() => Thread.Sleep(10));
+
+        shell.Run();
+
+        Assert.True(fixedCount >= 1);
+        Assert.True(Math.Abs(Time.fixedDeltaTime - fixedDelta) < 0.0001f);
+    }
+
+    [Fact]
     public void SingleThreadMode_ExecutesDrawOnMainThread()
     {
         using var shell = new Shell(fixedDeltaTime: 0.001f, useBackgroundRenderThread: false);
@@ -166,6 +196,117 @@ public sealed class ShellBehaviorTests
 
         Assert.True(drawCount >= 1);
         Assert.NotEqual(0, drawThreadId);
+        Assert.NotEqual(mainThreadId, drawThreadId);
+    }
+
+    [Fact]
+    public void MaxFrameRate_LimitsLoopFrequency()
+    {
+        using var shell = new Shell(fixedDeltaTime: 0.001f, maxFrameRate: 30);
+        var stepCount = 0;
+        var timer = Stopwatch.StartNew();
+
+        shell.SetOnStep(() =>
+        {
+            stepCount++;
+            if (stepCount >= 12)
+            {
+                shell.Terminate();
+            }
+        });
+
+        shell.Run();
+        timer.Stop();
+
+        Assert.True(stepCount >= 12);
+        Assert.True(timer.ElapsedMilliseconds >= 220, $"Elapsed was {timer.ElapsedMilliseconds}ms.");
+    }
+
+    [Fact]
+    public void SingleThread_SlowDraw_BlocksStep()
+    {
+        using var shell = new Shell(fixedDeltaTime: 0.001f, useBackgroundRenderThread: false);
+        var stepCount = 0;
+        var timer = Stopwatch.StartNew();
+
+        shell.SetOnDraw(() => Thread.Sleep(20));
+        shell.SetOnStep(() =>
+        {
+            stepCount++;
+            if (stepCount >= 10)
+            {
+                shell.Terminate();
+            }
+        });
+
+        shell.Run();
+        timer.Stop();
+
+        Assert.True(timer.ElapsedMilliseconds >= 150, $"Elapsed was {timer.ElapsedMilliseconds}ms.");
+    }
+
+    [Fact]
+    public void BackgroundRenderThread_SlowDraw_DoesNotBlockStep_FullAsyncBehavior()
+    {
+        using var shell = new Shell(fixedDeltaTime: 0.001f, useBackgroundRenderThread: true);
+        var stepCount = 0;
+        var drawCount = 0;
+        var timer = Stopwatch.StartNew();
+
+        shell.SetOnDraw(() =>
+        {
+            Interlocked.Increment(ref drawCount);
+            Thread.Sleep(20);
+        });
+        shell.SetOnStep(() =>
+        {
+            stepCount++;
+            if (stepCount >= 40)
+            {
+                shell.Terminate();
+            }
+        });
+
+        shell.Run();
+        timer.Stop();
+
+        Assert.True(stepCount >= 40);
+        Assert.True(timer.ElapsedMilliseconds < 450, $"Elapsed was {timer.ElapsedMilliseconds}ms.");
+        Assert.True(drawCount >= 1);
+    }
+
+    [Fact]
+    public void SettingsCtor_AppliesFixedDelta_AndBackgroundRenderThread()
+    {
+        var settings = new ShellSettings
+        {
+            fixedDeltaTime = 0.005f,
+            useBackgroundRenderThread = true,
+            maxFrameRate = 0
+        };
+
+        using var shell = new Shell(in settings);
+        int drawThreadId = 0;
+        int mainThreadId = Environment.CurrentManagedThreadId;
+        var fixedCount = 0;
+
+        shell.SetOnDraw(() =>
+        {
+            Interlocked.CompareExchange(ref drawThreadId, Environment.CurrentManagedThreadId, 0);
+        });
+        shell.SetOnFixedStep(() =>
+        {
+            fixedCount++;
+            if (fixedCount >= 2)
+            {
+                shell.Terminate();
+            }
+        });
+        shell.SetOnStep(() => Thread.Sleep(3));
+
+        shell.Run();
+
+        Assert.True(Math.Abs(Time.fixedDeltaTime - 0.005f) < 0.0001f);
         Assert.NotEqual(mainThreadId, drawThreadId);
     }
 
