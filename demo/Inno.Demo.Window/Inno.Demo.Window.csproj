@@ -4,11 +4,13 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\native\Inno.Native.Dll\Inno.Native.Dll.csproj" />
-    <ProjectReference Include="..\..\native\Inno.Native.SDL3\Inno.Native.SDL3.csproj" />
-    <ProjectReference Include="..\..\native\Inno.Native.Bgfx\Inno.Native.Bgfx.csproj" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Framework\Inno.Core.Framework.csproj" />
+    <ProjectReference Include="..\..\src\platform\Inno.Platform\Inno.Platform.csproj" />
+    <ProjectReference Include="..\..\src\platform\Inno.Platform.SDL3\Inno.Platform.SDL3.csproj" />
+    <ProjectReference Include="..\..\src\graphics\Inno.Graphics\Inno.Graphics.csproj" />
+    <ProjectReference Include="..\..\src\graphics\Inno.Graphics.Rhi\Inno.Graphics.Rhi.csproj" />
+    <ProjectReference Include="..\..\src\graphics\Inno.Graphics.Rhi.Bgfx\Inno.Graphics.Rhi.Bgfx.csproj" />
   </ItemGroup>
 </Project>

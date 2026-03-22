@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Graphics.Rhi\Inno.Graphics.Rhi.csproj" />
+    <ProjectReference Include="..\..\platform\Inno.Platform\Inno.Platform.csproj" />
+    <ProjectReference Include="..\..\..\native\Inno.Native.Bgfx\Inno.Native.Bgfx.csproj" />
+  </ItemGroup>
+</Project>
