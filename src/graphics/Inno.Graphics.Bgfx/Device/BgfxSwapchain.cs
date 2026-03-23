@@ -4,13 +4,26 @@ namespace Inno.Graphics.Bgfx;
 
 public sealed class BgfxSwapchain : DisposableGraphicsResource, IGraphicsSwapchain
 {
-    public BgfxSwapchain(GraphicsSwapchainDescription description)
+    private readonly BgfxGraphicsDevice m_device;
+
+    public BgfxSwapchain(GraphicsSwapchainDescription description, BgfxGraphicsDevice device)
     {
+        m_device = device;
+        nativeHandle = description.nativeHandle;
+        nativeDisplayHandle = description.nativeDisplayHandle;
+        nativeWindowKind = description.nativeWindowKind;
         width = description.width;
         height = description.height;
         colorFormat = description.colorFormat;
         depthFormat = description.depthFormat;
+        vSync = description.vSync;
     }
+
+    public IntPtr nativeHandle { get; }
+
+    public IntPtr nativeDisplayHandle { get; }
+
+    public GraphicsNativeWindowKind nativeWindowKind { get; }
 
     public int width { get; private set; }
 
@@ -20,14 +33,16 @@ public sealed class BgfxSwapchain : DisposableGraphicsResource, IGraphicsSwapcha
 
     public PixelFormat depthFormat { get; }
 
+    public bool vSync { get; }
+
     public void Resize(int width, int height)
     {
         this.width = width;
         this.height = height;
+        m_device.ResetBackbuffer(width, height, vSync, colorFormat);
     }
 
     public void Present()
     {
-        throw new NotImplementedException("bgfx present is not implemented yet.");
     }
 }

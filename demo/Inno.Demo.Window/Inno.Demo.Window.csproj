@@ -10,5 +10,7 @@
     <ProjectReference Include="..\..\src\platform\Inno.Platform\Inno.Platform.csproj" />
     <ProjectReference Include="..\..\src\platform\Inno.Platform.SDL3\Inno.Platform.SDL3.csproj" />
     <ProjectReference Include="..\..\src\graphics\Inno.Graphics\Inno.Graphics.csproj" />
+    <ProjectReference Include="..\..\src\graphics\Inno.Graphics.Bgfx\Inno.Graphics.Bgfx.csproj" />
+    <ProjectReference Include="..\..\src\render\Inno.Rendering\Inno.Rendering.csproj" />
   </ItemGroup>
 </Project>

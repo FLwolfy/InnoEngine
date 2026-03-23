@@ -9,6 +9,10 @@ public sealed class GraphicsSwapchainDescription
 {
     public required IntPtr nativeHandle { get; init; }
 
+    public IntPtr nativeDisplayHandle { get; init; }
+
+    public GraphicsNativeWindowKind nativeWindowKind { get; init; } = GraphicsNativeWindowKind.Unknown;
+
     public int width { get; init; }
 
     public int height { get; init; }

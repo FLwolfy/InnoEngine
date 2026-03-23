@@ -4,8 +4,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>preview</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Inno.Graphics/Inno.Graphics.csproj" />
+    <ProjectReference Include="../../../native/Inno.Native.Bgfx/Inno.Native.Bgfx.csproj" />
   </ItemGroup>
 </Project>
