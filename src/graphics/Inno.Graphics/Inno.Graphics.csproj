@@ -6,6 +6,5 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\core\Inno.Core.Mathematics\Inno.Core.Mathematics.csproj" />
-    <ProjectReference Include="..\Inno.Graphics.Rhi\Inno.Graphics.Rhi.csproj" />
   </ItemGroup>
 </Project>
