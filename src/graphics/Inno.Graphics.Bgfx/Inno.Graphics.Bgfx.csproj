@@ -5,4 +5,7 @@
     <Nullable>enable</Nullable>
     <LangVersion>preview</LangVersion>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Inno.Graphics/Inno.Graphics.csproj" />
+  </ItemGroup>
 </Project>
