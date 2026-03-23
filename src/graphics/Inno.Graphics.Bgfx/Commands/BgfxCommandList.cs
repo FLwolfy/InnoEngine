@@ -23,6 +23,9 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
     private BgfxBuffer? m_vertexBuffer;
     private BgfxBuffer? m_indexBuffer;
     private int m_vertexSlot;
+    private readonly float[] m_viewMatrix = (float[])s_identityMatrix.Clone();
+    private readonly float[] m_projectionMatrix = (float[])s_identityMatrix.Clone();
+    private readonly float[] m_modelMatrix = (float[])s_identityMatrix.Clone();
 
     internal bool isRecording => m_isRecording;
 
@@ -36,6 +39,9 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
         m_vertexSlot = 0;
         m_viewport = default;
         m_scissorRect = default;
+        Array.Copy(s_identityMatrix, m_viewMatrix, 16);
+        Array.Copy(s_identityMatrix, m_projectionMatrix, 16);
+        Array.Copy(s_identityMatrix, m_modelMatrix, 16);
     }
 
     public void End()
@@ -54,6 +60,10 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
             ?? throw new ArgumentException("renderTarget must be BgfxRenderTarget.", nameof(renderTarget));
         m_clearValue = clearValue;
 
+        if (m_renderTarget.frameBufferHandle.Valid)
+        {
+            bgfx.set_view_frame_buffer(DefaultViewId, m_renderTarget.frameBufferHandle);
+        }
         bgfx.set_view_rect(DefaultViewId, 0, 0, (ushort)m_renderTarget.width, (ushort)m_renderTarget.height);
         bgfx.set_view_clear(
             DefaultViewId,
@@ -63,9 +73,10 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
             clearValue.stencil);
         unsafe
         {
-            fixed (float* matrix = s_identityMatrix)
+            fixed (float* view = m_viewMatrix)
+            fixed (float* proj = m_projectionMatrix)
             {
-                bgfx.set_view_transform(DefaultViewId, matrix, matrix);
+                bgfx.set_view_transform(DefaultViewId, view, proj);
             }
         }
         bgfx.touch(DefaultViewId);
@@ -116,6 +127,41 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
         _ = resourceSet;
     }
 
+    public void SetViewProjection(ReadOnlySpan<float> view, ReadOnlySpan<float> projection)
+    {
+        if (view.Length < 16)
+        {
+            throw new ArgumentException("View matrix must contain 16 float values.", nameof(view));
+        }
+
+        if (projection.Length < 16)
+        {
+            throw new ArgumentException("Projection matrix must contain 16 float values.", nameof(projection));
+        }
+
+        view[..16].CopyTo(m_viewMatrix);
+        projection[..16].CopyTo(m_projectionMatrix);
+
+        unsafe
+        {
+            fixed (float* viewPtr = m_viewMatrix)
+            fixed (float* projPtr = m_projectionMatrix)
+            {
+                bgfx.set_view_transform(DefaultViewId, viewPtr, projPtr);
+            }
+        }
+    }
+
+    public void SetModelTransform(ReadOnlySpan<float> model)
+    {
+        if (model.Length < 16)
+        {
+            throw new ArgumentException("Model matrix must contain 16 float values.", nameof(model));
+        }
+
+        model[..16].CopyTo(m_modelMatrix);
+    }
+
     public void Draw(int vertexCount, int instanceCount = 1, int firstVertex = 0, int firstInstance = 0)
     {
         _ = instanceCount;
@@ -128,7 +174,7 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
 
         unsafe
         {
-            fixed (float* matrix = s_identityMatrix)
+            fixed (float* matrix = m_modelMatrix)
             {
                 bgfx.set_transform(matrix, 1);
             }
@@ -154,6 +200,13 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
 
         bgfx.set_vertex_buffer((byte)m_vertexSlot, vb, 0, vertexCount);
         bgfx.set_index_buffer(ib, (uint)args.firstIndex, (uint)args.indexCount);
+        unsafe
+        {
+            fixed (float* matrix = m_modelMatrix)
+            {
+                bgfx.set_transform(matrix, 1);
+            }
+        }
         bgfx.set_state(m_pipeline.state, 0);
         bgfx.submit(DefaultViewId, m_pipeline.program.handle, 0, 0);
     }

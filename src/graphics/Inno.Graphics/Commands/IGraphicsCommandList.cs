@@ -27,6 +27,10 @@ public interface IGraphicsCommandList : IGraphicsResource
 
     void SetResourceSet(int slot, IGraphicsResourceSet resourceSet);
 
+    void SetViewProjection(ReadOnlySpan<float> view, ReadOnlySpan<float> projection);
+
+    void SetModelTransform(ReadOnlySpan<float> model);
+
     void Draw(int vertexCount, int instanceCount = 1, int firstVertex = 0, int firstInstance = 0);
 
     void DrawIndexed(DrawIndexedArguments args);

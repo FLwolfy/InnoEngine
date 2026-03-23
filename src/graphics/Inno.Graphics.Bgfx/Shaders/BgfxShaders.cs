@@ -5,7 +5,7 @@ namespace Inno.Graphics.Bgfx;
 
 public sealed class BgfxShader : DisposableGraphicsResource, IGraphicsShader
 {
-    private bgfx.ShaderHandle m_handle;
+    private bgfx.ShaderHandle m_handle = new() { idx = ushort.MaxValue };
 
     public BgfxShader(ShaderDescription description)
     {
@@ -46,7 +46,7 @@ public sealed class BgfxShader : DisposableGraphicsResource, IGraphicsShader
 
 public sealed class BgfxProgram : DisposableGraphicsResource, IGraphicsProgram
 {
-    private bgfx.ProgramHandle m_handle;
+    private bgfx.ProgramHandle m_handle = new() { idx = ushort.MaxValue };
 
     public BgfxProgram(GraphicsProgramDescription description)
     {

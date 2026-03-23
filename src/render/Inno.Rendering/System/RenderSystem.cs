@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Inno.Graphics;
 using Inno.Rendering;
 
 namespace Inno.Rendering;
@@ -6,15 +7,29 @@ namespace Inno.Rendering;
 /// <summary>
 /// Main high-level rendering entry point.
 /// </summary>
-public sealed class RenderSystem
+public sealed class RenderSystem : IDisposable
 {
     private ulong m_frameIndex;
     private RenderFrameStatistics m_lastStatistics = new();
+    private readonly RenderResourceCache m_resourceCache = new();
+    private readonly GraphicsRenderRuntime? m_graphicsRuntime;
 
     public RenderSystem(RenderPipeline? pipeline = null, RenderSettings? settings = null)
     {
         this.pipeline = pipeline ?? ForwardPipeline.Create();
         this.settings = settings ?? new RenderSettings();
+    }
+
+    public RenderSystem(
+        IGraphicsDevice device,
+        IGraphicsSwapchain swapchain,
+        RenderPipeline? pipeline = null,
+        RenderSettings? settings = null,
+        string? shaderProfile = null,
+        string? shaderAssetRoot = null)
+        : this(pipeline, settings)
+    {
+        m_graphicsRuntime = new GraphicsRenderRuntime(device, swapchain, shaderProfile, shaderAssetRoot);
     }
 
     public RenderPipeline pipeline { get; set; }
@@ -48,21 +63,34 @@ public sealed class RenderSystem
             timestamp = DateTimeOffset.UtcNow
         };
 
-        var cache = new RenderResourceCache();
         var context = new RenderPipelineContext
         {
             request = request,
             frame = frame,
-            resourceCache = cache
+            resourceCache = m_resourceCache,
+            graphics = m_graphicsRuntime
         };
 
-        pipeline.Render(context);
-        frame.statistics.renderablesSubmitted = request.scene.renderables.items.Count;
-        frame.statistics.visibleLights = request.scene.lights.items.Count;
-        stopwatch.Stop();
-        frame.statistics.cpuTime = stopwatch.Elapsed;
-        m_lastStatistics = frame.statistics;
+        try
+        {
+            m_graphicsRuntime?.BeginFrame(request);
+            pipeline.Render(context);
+        }
+        finally
+        {
+            m_graphicsRuntime?.EndFrame();
+            frame.statistics.renderablesSubmitted = request.scene.renderables.items.Count;
+            frame.statistics.visibleLights = request.scene.lights.items.Count;
+            stopwatch.Stop();
+            frame.statistics.cpuTime = stopwatch.Elapsed;
+            m_lastStatistics = frame.statistics;
+        }
     }
 
     public RenderFrameStatistics GetLastFrameStatistics() => m_lastStatistics;
+
+    public void Dispose()
+    {
+        m_graphicsRuntime?.Dispose();
+    }
 }

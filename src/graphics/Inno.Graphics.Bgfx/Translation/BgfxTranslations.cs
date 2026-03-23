@@ -56,11 +56,11 @@ public static class BgfxStateEncoder
         state |= description.rasterState.cullMode switch
         {
             GraphicsCullMode.Front => frontFaceCounterClockwise
-                ? (ulong)bgfx.StateFlags.CullCcw
-                : (ulong)bgfx.StateFlags.CullCw,
-            GraphicsCullMode.Back => frontFaceCounterClockwise
                 ? (ulong)bgfx.StateFlags.CullCw
                 : (ulong)bgfx.StateFlags.CullCcw,
+            GraphicsCullMode.Back => frontFaceCounterClockwise
+                ? (ulong)bgfx.StateFlags.CullCcw
+                : (ulong)bgfx.StateFlags.CullCw,
             _ => 0UL
         };
 

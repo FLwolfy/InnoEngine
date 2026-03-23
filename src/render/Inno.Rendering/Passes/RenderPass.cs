@@ -25,7 +25,11 @@ public sealed class OpaquePass : RenderPass
     {
     }
 
-    internal override void Execute(RenderPassContext context) => context.renderList.Build(RenderItemFilter.Opaque);
+    internal override void Execute(RenderPassContext context)
+    {
+        context.renderList.Build(RenderItemFilter.Opaque);
+        context.pipelineContext.graphics?.ExecutePass(context.pipelineContext, context.renderList, RenderItemFilter.Opaque);
+    }
 }
 
 public sealed class TransparentPass : RenderPass
@@ -34,7 +38,11 @@ public sealed class TransparentPass : RenderPass
     {
     }
 
-    internal override void Execute(RenderPassContext context) => context.renderList.Build(RenderItemFilter.Transparent);
+    internal override void Execute(RenderPassContext context)
+    {
+        context.renderList.Build(RenderItemFilter.Transparent);
+        context.pipelineContext.graphics?.ExecutePass(context.pipelineContext, context.renderList, RenderItemFilter.Transparent);
+    }
 }
 
 public sealed class ShadowPass : RenderPass
@@ -43,7 +51,11 @@ public sealed class ShadowPass : RenderPass
     {
     }
 
-    internal override void Execute(RenderPassContext context) => context.renderList.Build(RenderItemFilter.ShadowCasters);
+    internal override void Execute(RenderPassContext context)
+    {
+        context.renderList.Build(RenderItemFilter.ShadowCasters);
+        context.pipelineContext.graphics?.ExecutePass(context.pipelineContext, context.renderList, RenderItemFilter.ShadowCasters);
+    }
 }
 
 public sealed class SkyboxPass : RenderPass
@@ -85,7 +97,11 @@ public sealed class DepthPrepass : RenderPass
     {
     }
 
-    internal override void Execute(RenderPassContext context) => context.renderList.Build(RenderItemFilter.DepthOnly);
+    internal override void Execute(RenderPassContext context)
+    {
+        context.renderList.Build(RenderItemFilter.DepthOnly);
+        context.pipelineContext.graphics?.ExecutePass(context.pipelineContext, context.renderList, RenderItemFilter.DepthOnly);
+    }
 }
 
 public sealed class PostProcessPass : RenderPass

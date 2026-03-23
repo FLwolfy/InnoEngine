@@ -60,6 +60,7 @@ internal sealed class RenderList
     public void Build(RenderItemFilter filter)
     {
         m_queue.Clear();
+        var viewMask = m_view.layerMask.value;
         foreach (var renderable in m_scene.renderables.items)
         {
             if (renderable.visibility != Visibility.Visible)
@@ -67,7 +68,21 @@ internal sealed class RenderList
                 continue;
             }
 
-            var isTransparent = renderable is MeshRenderable meshRenderable && meshRenderable.material.surfaceType == MaterialSurfaceType.Transparent;
+            if ((renderable.layerMask & viewMask) == 0)
+            {
+                continue;
+            }
+
+            var material = renderable switch
+            {
+                MeshRenderable meshRenderable => meshRenderable.material,
+                SpriteRenderable spriteRenderable => spriteRenderable.material,
+                SkyboxRenderable skyboxRenderable => skyboxRenderable.material,
+                FullscreenQuadRenderable fullscreenQuadRenderable => fullscreenQuadRenderable.material,
+                _ => null
+            };
+
+            var isTransparent = material?.surfaceType == MaterialSurfaceType.Transparent;
             if (filter == RenderItemFilter.Opaque && isTransparent)
             {
                 continue;
@@ -76,6 +91,19 @@ internal sealed class RenderList
             if (filter == RenderItemFilter.Transparent && !isTransparent)
             {
                 continue;
+            }
+
+            if (filter == RenderItemFilter.ShadowCasters)
+            {
+                if (renderable.shadowMode is ShadowMode.Off or ShadowMode.ReceiveOnly)
+                {
+                    continue;
+                }
+
+                if (material is not null && !material.castShadows)
+                {
+                    continue;
+                }
             }
 
             m_queue.Add(new RenderItem
