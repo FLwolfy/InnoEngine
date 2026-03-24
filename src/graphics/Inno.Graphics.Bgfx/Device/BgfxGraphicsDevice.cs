@@ -27,7 +27,7 @@ public sealed class BgfxGraphicsDevice : IGraphicsDevice
 
     public IGraphicsTexture CreateTexture(TextureDescription description) => new BgfxTexture(description);
 
-    public IGraphicsSampler CreateSampler(SamplerDescription description) => new BgfxSampler();
+    public IGraphicsSampler CreateSampler(SamplerDescription description) => new BgfxSampler(description);
 
     public IGraphicsShader CreateShader(ShaderDescription description) => new BgfxShader(description);
 
@@ -39,7 +39,7 @@ public sealed class BgfxGraphicsDevice : IGraphicsDevice
 
     public IGraphicsRenderTarget CreateRenderTarget(GraphicsRenderTargetDescription description) => new BgfxRenderTarget(description);
 
-    public IGraphicsResourceSet CreateResourceSet(ResourceSetDescription description) => new BgfxResourceSet();
+    public IGraphicsResourceSet CreateResourceSet(ResourceSetDescription description) => new BgfxResourceSet(description);
 
     public IGraphicsCommandList CreateCommandList() => new BgfxCommandList();
 

@@ -1,4 +1,3 @@
-using Inno.Graphics;
 
 namespace Inno.Graphics;
 
@@ -14,4 +13,6 @@ public sealed class GraphicsRenderTargetDescription
     public int width { get; init; }
 
     public int height { get; init; }
+
+    public bool useBackbuffer { get; init; }
 }

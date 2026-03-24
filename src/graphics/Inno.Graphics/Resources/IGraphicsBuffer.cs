@@ -1,4 +1,3 @@
-using Inno.Graphics;
 
 namespace Inno.Graphics;
 

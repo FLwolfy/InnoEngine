@@ -1,4 +1,5 @@
 using Inno.Core.Mathematics;
+using System.Runtime.InteropServices;
 
 namespace Inno.Rendering;
 
@@ -50,15 +51,16 @@ public readonly record struct VertexElement(VertexSemantic semantic, int semanti
 /// <summary>
 /// Defines a commonly used PBR-compatible vertex shape.
 /// </summary>
-public readonly struct StandardVertex
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
+public struct StandardVertex
 {
-    public Vector3 position { get; init; }
+    public Vector3 position;
 
-    public Vector3 normal { get; init; }
+    public Vector3 normal;
 
-    public Vector4 tangent { get; init; }
+    public Vector4 tangent;
 
-    public Vector2 texCoord0 { get; init; }
+    public Vector2 texCoord0;
 
-    public Vector4 color { get; init; }
+    public Vector4 color;
 }

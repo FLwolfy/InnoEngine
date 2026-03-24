@@ -18,7 +18,8 @@ public struct Transform
         var scale = Matrix.CreateScale(this.scale);
         var rotation = Matrix.CreateFromQuaternion(this.rotation);
         var translation = Matrix.CreateTranslation(this.position);
-        return scale * rotation * translation;
+        // Column-vector convention: local point -> scale -> rotate -> translate.
+        return translation * rotation * scale;
     }
 
     public static Transform identity => new()

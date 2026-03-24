@@ -1,4 +1,3 @@
-using Inno.Rendering;
 
 namespace Inno.Rendering;
 
@@ -7,7 +6,12 @@ internal enum RenderItemFilter
     Opaque = 0,
     Transparent,
     ShadowCasters,
-    DepthOnly
+    DepthOnly,
+    Skybox,
+    Gizmo,
+    Ui,
+    PostProcess,
+    ObjectPicking
 }
 
 internal readonly record struct RenderSortKey(ulong value) : IComparable<RenderSortKey>
@@ -83,6 +87,32 @@ internal sealed class RenderList
             };
 
             var isTransparent = material?.surfaceType == MaterialSurfaceType.Transparent;
+
+            if (filter == RenderItemFilter.Skybox && renderable is not SkyboxRenderable)
+            {
+                continue;
+            }
+
+            if (filter == RenderItemFilter.Ui && renderable is not SpriteRenderable)
+            {
+                continue;
+            }
+
+            if (filter == RenderItemFilter.PostProcess && renderable is not FullscreenQuadRenderable)
+            {
+                continue;
+            }
+
+            if (filter == RenderItemFilter.Gizmo && renderable is not FullscreenQuadRenderable)
+            {
+                continue;
+            }
+
+            if (filter == RenderItemFilter.ObjectPicking && renderable is not MeshRenderable)
+            {
+                continue;
+            }
+
             if (filter == RenderItemFilter.Opaque && isTransparent)
             {
                 continue;
@@ -95,12 +125,30 @@ internal sealed class RenderList
 
             if (filter == RenderItemFilter.ShadowCasters)
             {
+                if (renderable is not MeshRenderable)
+                {
+                    continue;
+                }
+
                 if (renderable.shadowMode is ShadowMode.Off or ShadowMode.ReceiveOnly)
                 {
                     continue;
                 }
 
                 if (material is not null && !material.castShadows)
+                {
+                    continue;
+                }
+            }
+
+            if (filter == RenderItemFilter.DepthOnly)
+            {
+                if (renderable is not MeshRenderable)
+                {
+                    continue;
+                }
+
+                if (isTransparent == true)
                 {
                     continue;
                 }

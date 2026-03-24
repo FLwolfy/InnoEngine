@@ -1,4 +1,3 @@
-using Inno.Rendering;
 
 namespace Inno.Rendering;
 

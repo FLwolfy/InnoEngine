@@ -57,6 +57,12 @@ public sealed class Mesh
     {
         if (typeof(TVertex) == typeof(StandardVertex))
         {
+            var standardStride = System.Runtime.InteropServices.Marshal.SizeOf<StandardVertex>();
+            if (standardStride != 64)
+            {
+                throw new InvalidOperationException($"StandardVertex stride mismatch. Expected 64, actual {standardStride}.");
+            }
+
             return new VertexLayout([
                 new VertexElement(VertexSemantic.Position, 0, 0, 12),
                 new VertexElement(VertexSemantic.Normal, 0, 12, 12),

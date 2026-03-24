@@ -8,4 +8,8 @@ public interface IGraphicsRenderTarget : IGraphicsResource
     int width { get; }
 
     int height { get; }
+
+    IReadOnlyList<IGraphicsTexture> colorAttachments { get; }
+
+    IGraphicsTexture? depthAttachment { get; }
 }

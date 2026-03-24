@@ -1,4 +1,3 @@
-using Inno.Graphics;
 
 namespace Inno.Graphics;
 
@@ -30,6 +29,8 @@ public interface IGraphicsCommandList : IGraphicsResource
     void SetViewProjection(ReadOnlySpan<float> view, ReadOnlySpan<float> projection);
 
     void SetModelTransform(ReadOnlySpan<float> model);
+
+    void SetGlobalVector4(string name, ReadOnlySpan<float> value);
 
     void Draw(int vertexCount, int instanceCount = 1, int firstVertex = 0, int firstInstance = 0);
 

@@ -1,3 +1,4 @@
+using System;
 using Inno.Core.Mathematics;
 using Inno.Graphics;
 using Inno.Graphics.Bgfx;
@@ -52,9 +53,9 @@ internal static class Program
         var renderTarget = RenderTarget.Backbuffer(renderWindow);
         var pipeline = ForwardPipeline.Create(builder =>
         {
-            builder.enableDepthPrepass = true;
-            builder.enableShadows = true;
-            builder.enableTransparentPass = true;
+            builder.enableDepthPrepass = false;
+            builder.enableShadows = false;
+            builder.enableTransparentPass = false;
             builder.enableSkybox = false;
             builder.enablePostProcessing = false;
             builder.enableUiPass = false;
@@ -73,23 +74,15 @@ internal static class Program
         var scene = new RenderScene();
         scene.environment.ambientColor = new Color(0.08f, 0.09f, 0.11f, 1.0f);
         scene.environment.ambientIntensity = 0.2f;
-        scene.settings.enableShadows = true;
+        scene.settings.enableShadows = false;
 
-        scene.Add(new DirectionalLight
+        var material = new StandardMaterial
         {
-            color = Color.WHITE,
-            intensity = 1.5f,
-            direction = Vector3.NormalizeSafe(new Vector3(-0.5f, -1.0f, -0.3f)),
-            shadows = LightShadowSettings.@default with { enabled = true }
-        });
-
-        var material = new CustomMaterial
-        {
-            name = "CubeCustom",
-            shaderName = "cubes",
+            name = "CubeLit",
             surfaceType = MaterialSurfaceType.Opaque,
             cullMode = MaterialCullMode.Back,
-            depthMode = MaterialDepthMode.ReadWrite
+            depthMode = MaterialDepthMode.ReadWrite,
+            receiveShadows = false
         };
 
         var cube = new MeshRenderable
@@ -99,7 +92,31 @@ internal static class Program
             material = material,
             transform = Transform.identity
         };
+
+        var floorMaterial = new StandardMaterial
+        {
+            name = "Ground",
+            surfaceType = MaterialSurfaceType.Opaque,
+            cullMode = MaterialCullMode.None,
+            depthMode = MaterialDepthMode.ReadWrite,
+            castShadows = false,
+            receiveShadows = true
+        };
+        var floor = new MeshRenderable
+        {
+            name = "Ground",
+            mesh = CreateGroundMesh(),
+            material = floorMaterial,
+            transform = new Transform
+            {
+                position = new Vector3(0.0f, -1.6f, 0.0f),
+                rotation = Quaternion.identity,
+                scale = Vector3.ONE
+            }
+        };
+
         scene.Add(cube);
+        scene.Add(floor);
 
         var camera = new PerspectiveCamera
         {
@@ -108,8 +125,8 @@ internal static class Program
             farClip = 100.0f,
             transform = new CameraTransform
             {
-                position = new Vector3(0.0f, 1.0f, 4.5f),
-                rotation = Quaternion.identity
+                position = new Vector3(0.0f, 6.0f, 15.0f),
+                rotation = Quaternion.CreateFromYawPitchRoll(0.0f, -0.1f, 0.0f)
             }
         };
 
@@ -145,11 +162,10 @@ internal static class Program
             var t = (float)timer.Elapsed.TotalSeconds;
             cube.transform = new Transform
             {
-                position = new Vector3(0.0f, 0.0f, 0.0f),
-                rotation = Quaternion.CreateFromYawPitchRoll(t * 0.7f, t * 0.35f, t * 0.15f),
+                position = Vector3.ZERO,
+                rotation = Quaternion.CreateFromYawPitchRoll(t * 0.28f, t * 0.14f, t * 0.06f),
                 scale = Vector3.ONE
             };
-
             var request = new RenderRequest
             {
                 scene = scene,
@@ -167,24 +183,46 @@ internal static class Program
         var s = 0.75f;
         var vertices = new[]
         {
-            new StandardVertex { position = new Vector3(-s, -s, +s), normal = Vector3.BACK, tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(0, 1), color = new Vector4(1, 0, 0, 1) },
-            new StandardVertex { position = new Vector3(+s, -s, +s), normal = Vector3.BACK, tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(1, 1), color = new Vector4(0, 1, 0, 1) },
-            new StandardVertex { position = new Vector3(+s, +s, +s), normal = Vector3.BACK, tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(1, 0), color = new Vector4(0, 0, 1, 1) },
-            new StandardVertex { position = new Vector3(-s, +s, +s), normal = Vector3.BACK, tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(0, 0), color = new Vector4(1, 1, 0, 1) },
-            new StandardVertex { position = new Vector3(-s, -s, -s), normal = Vector3.FORWARD, tangent = new Vector4(-1, 0, 0, 1), texCoord0 = new Vector2(1, 1), color = new Vector4(1, 0, 1, 1) },
-            new StandardVertex { position = new Vector3(+s, -s, -s), normal = Vector3.FORWARD, tangent = new Vector4(-1, 0, 0, 1), texCoord0 = new Vector2(0, 1), color = new Vector4(0, 1, 1, 1) },
-            new StandardVertex { position = new Vector3(+s, +s, -s), normal = Vector3.FORWARD, tangent = new Vector4(-1, 0, 0, 1), texCoord0 = new Vector2(0, 0), color = new Vector4(1, 1, 1, 1) },
-            new StandardVertex { position = new Vector3(-s, +s, -s), normal = Vector3.FORWARD, tangent = new Vector4(-1, 0, 0, 1), texCoord0 = new Vector2(1, 0), color = new Vector4(0, 0, 0, 1) }
+            // +Z
+            new StandardVertex { position = new Vector3(-s, -s, +s), normal = new Vector3(0, 0, 1), tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(0, 1), color = new Vector4(0.97f, 0.70f, 0.72f, 1) },
+            new StandardVertex { position = new Vector3(+s, -s, +s), normal = new Vector3(0, 0, 1), tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(1, 1), color = new Vector4(0.97f, 0.70f, 0.72f, 1) },
+            new StandardVertex { position = new Vector3(+s, +s, +s), normal = new Vector3(0, 0, 1), tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(1, 0), color = new Vector4(0.97f, 0.70f, 0.72f, 1) },
+            new StandardVertex { position = new Vector3(-s, +s, +s), normal = new Vector3(0, 0, 1), tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(0, 0), color = new Vector4(0.97f, 0.70f, 0.72f, 1) },
+            // -Z
+            new StandardVertex { position = new Vector3(+s, -s, -s), normal = new Vector3(0, 0, -1), tangent = new Vector4(-1, 0, 0, 1), texCoord0 = new Vector2(0, 1), color = new Vector4(0.70f, 0.85f, 0.98f, 1) },
+            new StandardVertex { position = new Vector3(-s, -s, -s), normal = new Vector3(0, 0, -1), tangent = new Vector4(-1, 0, 0, 1), texCoord0 = new Vector2(1, 1), color = new Vector4(0.70f, 0.85f, 0.98f, 1) },
+            new StandardVertex { position = new Vector3(-s, +s, -s), normal = new Vector3(0, 0, -1), tangent = new Vector4(-1, 0, 0, 1), texCoord0 = new Vector2(1, 0), color = new Vector4(0.70f, 0.85f, 0.98f, 1) },
+            new StandardVertex { position = new Vector3(+s, +s, -s), normal = new Vector3(0, 0, -1), tangent = new Vector4(-1, 0, 0, 1), texCoord0 = new Vector2(0, 0), color = new Vector4(0.70f, 0.85f, 0.98f, 1) },
+            // +X
+            new StandardVertex { position = new Vector3(+s, -s, +s), normal = new Vector3(1, 0, 0), tangent = new Vector4(0, 0, -1, 1), texCoord0 = new Vector2(0, 1), color = new Vector4(0.76f, 0.95f, 0.76f, 1) },
+            new StandardVertex { position = new Vector3(+s, -s, -s), normal = new Vector3(1, 0, 0), tangent = new Vector4(0, 0, -1, 1), texCoord0 = new Vector2(1, 1), color = new Vector4(0.76f, 0.95f, 0.76f, 1) },
+            new StandardVertex { position = new Vector3(+s, +s, -s), normal = new Vector3(1, 0, 0), tangent = new Vector4(0, 0, -1, 1), texCoord0 = new Vector2(1, 0), color = new Vector4(0.76f, 0.95f, 0.76f, 1) },
+            new StandardVertex { position = new Vector3(+s, +s, +s), normal = new Vector3(1, 0, 0), tangent = new Vector4(0, 0, -1, 1), texCoord0 = new Vector2(0, 0), color = new Vector4(0.76f, 0.95f, 0.76f, 1) },
+            // -X
+            new StandardVertex { position = new Vector3(-s, -s, -s), normal = new Vector3(-1, 0, 0), tangent = new Vector4(0, 0, 1, 1), texCoord0 = new Vector2(0, 1), color = new Vector4(0.98f, 0.92f, 0.67f, 1) },
+            new StandardVertex { position = new Vector3(-s, -s, +s), normal = new Vector3(-1, 0, 0), tangent = new Vector4(0, 0, 1, 1), texCoord0 = new Vector2(1, 1), color = new Vector4(0.98f, 0.92f, 0.67f, 1) },
+            new StandardVertex { position = new Vector3(-s, +s, +s), normal = new Vector3(-1, 0, 0), tangent = new Vector4(0, 0, 1, 1), texCoord0 = new Vector2(1, 0), color = new Vector4(0.98f, 0.92f, 0.67f, 1) },
+            new StandardVertex { position = new Vector3(-s, +s, -s), normal = new Vector3(-1, 0, 0), tangent = new Vector4(0, 0, 1, 1), texCoord0 = new Vector2(0, 0), color = new Vector4(0.98f, 0.92f, 0.67f, 1) },
+            // +Y
+            new StandardVertex { position = new Vector3(-s, +s, +s), normal = new Vector3(0, 1, 0), tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(0, 1), color = new Vector4(0.82f, 0.74f, 0.96f, 1) },
+            new StandardVertex { position = new Vector3(+s, +s, +s), normal = new Vector3(0, 1, 0), tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(1, 1), color = new Vector4(0.82f, 0.74f, 0.96f, 1) },
+            new StandardVertex { position = new Vector3(+s, +s, -s), normal = new Vector3(0, 1, 0), tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(1, 0), color = new Vector4(0.82f, 0.74f, 0.96f, 1) },
+            new StandardVertex { position = new Vector3(-s, +s, -s), normal = new Vector3(0, 1, 0), tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(0, 0), color = new Vector4(0.82f, 0.74f, 0.96f, 1) },
+            // -Y
+            new StandardVertex { position = new Vector3(-s, -s, -s), normal = new Vector3(0, -1, 0), tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(0, 1), color = new Vector4(0.73f, 0.92f, 0.90f, 1) },
+            new StandardVertex { position = new Vector3(+s, -s, -s), normal = new Vector3(0, -1, 0), tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(1, 1), color = new Vector4(0.73f, 0.92f, 0.90f, 1) },
+            new StandardVertex { position = new Vector3(+s, -s, +s), normal = new Vector3(0, -1, 0), tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(1, 0), color = new Vector4(0.73f, 0.92f, 0.90f, 1) },
+            new StandardVertex { position = new Vector3(-s, -s, +s), normal = new Vector3(0, -1, 0), tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(0, 0), color = new Vector4(0.73f, 0.92f, 0.90f, 1) }
         };
 
         uint[] indices =
         [
             0, 1, 2, 2, 3, 0,
-            1, 5, 6, 6, 2, 1,
-            5, 4, 7, 7, 6, 5,
-            4, 0, 3, 3, 7, 4,
-            3, 2, 6, 6, 7, 3,
-            4, 5, 1, 1, 0, 4
+            4, 5, 6, 6, 7, 4,
+            8, 9, 10, 10, 11, 8,
+            12, 13, 14, 14, 15, 12,
+            16, 17, 18, 18, 19, 16,
+            20, 21, 22, 22, 23, 20
         ];
 
         return new MeshBuilder()
@@ -192,5 +230,25 @@ internal static class Program
             .SetIndices(indices)
             .AddSurface(new MeshSurface(0, indices.Length, 0, MeshTopology.Triangles))
             .Build("DemoCube");
+    }
+
+    private static Mesh CreateGroundMesh()
+    {
+        const float h = 5.0f;
+        var c = new Vector4(0.78f, 0.80f, 0.82f, 1.0f);
+        var vertices = new[]
+        {
+            new StandardVertex { position = new Vector3(-h, 0.0f, -h), normal = Vector3.UP, tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(0, 0), color = c },
+            new StandardVertex { position = new Vector3(+h, 0.0f, -h), normal = Vector3.UP, tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(1, 0), color = c },
+            new StandardVertex { position = new Vector3(+h, 0.0f, +h), normal = Vector3.UP, tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(1, 1), color = c },
+            new StandardVertex { position = new Vector3(-h, 0.0f, +h), normal = Vector3.UP, tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(0, 1), color = c }
+        };
+        uint[] indices = [0, 1, 2, 2, 3, 0];
+
+        return new MeshBuilder()
+            .SetVertices<StandardVertex>(vertices)
+            .SetIndices(indices)
+            .AddSurface(new MeshSurface(0, indices.Length, 0, MeshTopology.Triangles))
+            .Build("DemoGround");
     }
 }

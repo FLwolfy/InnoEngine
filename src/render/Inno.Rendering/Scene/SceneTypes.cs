@@ -17,7 +17,7 @@ public sealed class SceneEnvironment
 /// </summary>
 public sealed class SceneRenderSettings
 {
-    public bool enableShadows { get; set; } = true;
+    public bool enableShadows { get; set; }
 
     public bool enableFog { get; set; }
 }

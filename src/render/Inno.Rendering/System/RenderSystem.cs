@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using Inno.Graphics;
-using Inno.Rendering;
 
 namespace Inno.Rendering;
 
@@ -79,11 +78,17 @@ public sealed class RenderSystem : IDisposable
         finally
         {
             m_graphicsRuntime?.EndFrame();
-            frame.statistics.renderablesSubmitted = request.scene.renderables.items.Count;
-            frame.statistics.visibleLights = request.scene.lights.items.Count;
+            if (settings.collectStatistics)
+            {
+                frame.statistics.renderablesSubmitted = request.scene.renderables.items.Count;
+                frame.statistics.visibleLights = request.scene.lights.items.Count;
+            }
             stopwatch.Stop();
-            frame.statistics.cpuTime = stopwatch.Elapsed;
-            m_lastStatistics = frame.statistics;
+            if (settings.collectStatistics)
+            {
+                frame.statistics.cpuTime = stopwatch.Elapsed;
+                m_lastStatistics = frame.statistics;
+            }
         }
     }
 

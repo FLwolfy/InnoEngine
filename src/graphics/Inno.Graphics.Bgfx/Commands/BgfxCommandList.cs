@@ -5,7 +5,6 @@ namespace Inno.Graphics.Bgfx;
 
 public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsCommandList
 {
-    private const ushort DefaultViewId = 0;
     private static readonly float[] s_identityMatrix =
     [
         1, 0, 0, 0,
@@ -23,9 +22,13 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
     private BgfxBuffer? m_vertexBuffer;
     private BgfxBuffer? m_indexBuffer;
     private int m_vertexSlot;
+    private readonly Dictionary<int, BgfxResourceSet> m_resourceSets = new();
+    private readonly Dictionary<string, UniformBinding> m_globalUniforms = new(StringComparer.Ordinal);
     private readonly float[] m_viewMatrix = (float[])s_identityMatrix.Clone();
     private readonly float[] m_projectionMatrix = (float[])s_identityMatrix.Clone();
     private readonly float[] m_modelMatrix = (float[])s_identityMatrix.Clone();
+    private ushort m_currentViewId;
+    private ushort m_nextViewId;
 
     internal bool isRecording => m_isRecording;
 
@@ -39,9 +42,12 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
         m_vertexSlot = 0;
         m_viewport = default;
         m_scissorRect = default;
+        m_resourceSets.Clear();
         Array.Copy(s_identityMatrix, m_viewMatrix, 16);
         Array.Copy(s_identityMatrix, m_projectionMatrix, 16);
         Array.Copy(s_identityMatrix, m_modelMatrix, 16);
+        m_currentViewId = 0;
+        m_nextViewId = 0;
     }
 
     public void End()
@@ -59,14 +65,15 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
         m_renderTarget = renderTarget as BgfxRenderTarget
             ?? throw new ArgumentException("renderTarget must be BgfxRenderTarget.", nameof(renderTarget));
         m_clearValue = clearValue;
+        m_currentViewId = m_nextViewId++;
 
         if (m_renderTarget.frameBufferHandle.Valid)
         {
-            bgfx.set_view_frame_buffer(DefaultViewId, m_renderTarget.frameBufferHandle);
+            bgfx.set_view_frame_buffer(m_currentViewId, m_renderTarget.frameBufferHandle);
         }
-        bgfx.set_view_rect(DefaultViewId, 0, 0, (ushort)m_renderTarget.width, (ushort)m_renderTarget.height);
+        bgfx.set_view_rect(m_currentViewId, 0, 0, (ushort)m_renderTarget.width, (ushort)m_renderTarget.height);
         bgfx.set_view_clear(
-            DefaultViewId,
+            m_currentViewId,
             (ushort)(bgfx.ClearFlags.Color | bgfx.ClearFlags.Depth),
             PackColor(clearValue),
             clearValue.depth,
@@ -76,10 +83,10 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
             fixed (float* view = m_viewMatrix)
             fixed (float* proj = m_projectionMatrix)
             {
-                bgfx.set_view_transform(DefaultViewId, view, proj);
+                bgfx.set_view_transform(m_currentViewId, view, proj);
             }
         }
-        bgfx.touch(DefaultViewId);
+        bgfx.touch(m_currentViewId);
     }
 
     public void EndRenderPass()
@@ -93,7 +100,7 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
 
         var width = (ushort)Math.Max(1, (int)viewport.width);
         var height = (ushort)Math.Max(1, (int)viewport.height);
-        bgfx.set_view_rect(DefaultViewId, (ushort)viewport.x, (ushort)viewport.y, width, height);
+        bgfx.set_view_rect(m_currentViewId, (ushort)viewport.x, (ushort)viewport.y, width, height);
     }
 
     public void SetScissorRect(GraphicsScissorRect rect)
@@ -123,8 +130,8 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
 
     public void SetResourceSet(int slot, IGraphicsResourceSet resourceSet)
     {
-        _ = slot;
-        _ = resourceSet;
+        m_resourceSets[slot] = resourceSet as BgfxResourceSet
+            ?? throw new ArgumentException("resourceSet must be BgfxResourceSet.", nameof(resourceSet));
     }
 
     public void SetViewProjection(ReadOnlySpan<float> view, ReadOnlySpan<float> projection)
@@ -147,7 +154,7 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
             fixed (float* viewPtr = m_viewMatrix)
             fixed (float* projPtr = m_projectionMatrix)
             {
-                bgfx.set_view_transform(DefaultViewId, viewPtr, projPtr);
+                bgfx.set_view_transform(m_currentViewId, viewPtr, projPtr);
             }
         }
     }
@@ -160,6 +167,28 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
         }
 
         model[..16].CopyTo(m_modelMatrix);
+    }
+
+    public void SetGlobalVector4(string name, ReadOnlySpan<float> value)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new ArgumentException("Uniform name cannot be null or whitespace.", nameof(name));
+        }
+
+        if (value.Length < 4)
+        {
+            throw new ArgumentException("Global vector4 uniform value must contain at least 4 floats.", nameof(value));
+        }
+
+        if (!m_globalUniforms.TryGetValue(name, out var binding))
+        {
+            var handle = bgfx.create_uniform(name, bgfx.UniformType.Vec4, 1);
+            binding = new UniformBinding(handle, new float[4]);
+            m_globalUniforms.Add(name, binding);
+        }
+
+        value[..4].CopyTo(binding.values);
     }
 
     public void Draw(int vertexCount, int instanceCount = 1, int firstVertex = 0, int firstInstance = 0)
@@ -180,8 +209,10 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
             }
         }
 
+        ApplyGlobalUniforms();
+        BindResourceSets();
         bgfx.set_state(m_pipeline.state, 0);
-        bgfx.submit(DefaultViewId, m_pipeline.program.handle, 0, 0);
+        bgfx.submit(m_currentViewId, m_pipeline.program.handle, 0, (byte)bgfx.DiscardFlags.All);
     }
 
     public void DrawIndexed(DrawIndexedArguments args)
@@ -207,8 +238,45 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
                 bgfx.set_transform(matrix, 1);
             }
         }
+        ApplyGlobalUniforms();
+        BindResourceSets();
         bgfx.set_state(m_pipeline.state, 0);
-        bgfx.submit(DefaultViewId, m_pipeline.program.handle, 0, 0);
+        bgfx.submit(m_currentViewId, m_pipeline.program.handle, 0, (byte)bgfx.DiscardFlags.All);
+    }
+
+    private unsafe void ApplyGlobalUniforms()
+    {
+        foreach (var entry in m_globalUniforms.Values)
+        {
+            fixed (float* values = entry.values)
+            {
+                bgfx.set_uniform(entry.handle, values, 1);
+            }
+        }
+    }
+
+    private void BindResourceSets()
+    {
+        var textureBound = false;
+        foreach (var resourceSetEntry in m_resourceSets)
+        {
+            _ = resourceSetEntry.Key;
+            var resourceSet = resourceSetEntry.Value;
+            foreach (var textureBinding in resourceSet.textureBindings)
+            {
+                if (textureBound)
+                {
+                    continue;
+                }
+
+                bgfx.set_texture(
+                    (byte)textureBinding.slot,
+                    textureBinding.uniform,
+                    textureBinding.texture.handle,
+                    uint.MaxValue);
+                textureBound = true;
+            }
+        }
     }
 
     private static uint PackColor(ClearValue clearValue)
@@ -237,5 +305,31 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
         {
             throw new InvalidOperationException("Vertex buffer is not bound.");
         }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        foreach (var uniform in m_globalUniforms.Values)
+        {
+            if (uniform.handle.Valid)
+            {
+                bgfx.destroy_uniform(uniform.handle);
+            }
+        }
+
+        m_globalUniforms.Clear();
+    }
+
+    private sealed class UniformBinding
+    {
+        public UniformBinding(bgfx.UniformHandle handle, float[] values)
+        {
+            this.handle = handle;
+            this.values = values;
+        }
+
+        public bgfx.UniformHandle handle { get; }
+
+        public float[] values { get; }
     }
 }

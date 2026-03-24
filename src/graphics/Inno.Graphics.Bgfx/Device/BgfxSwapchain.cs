@@ -1,5 +1,7 @@
 using Inno.Graphics;
 
+using Inno.Native.Bgfx;
+
 namespace Inno.Graphics.Bgfx;
 
 public sealed class BgfxSwapchain : DisposableGraphicsResource, IGraphicsSwapchain
@@ -44,5 +46,6 @@ public sealed class BgfxSwapchain : DisposableGraphicsResource, IGraphicsSwapcha
 
     public void Present()
     {
+        bgfx.frame(0);
     }
 }

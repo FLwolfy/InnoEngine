@@ -1,4 +1,3 @@
-using Inno.Rendering;
 
 namespace Inno.Rendering;
 
@@ -54,22 +53,21 @@ public sealed class ForwardPipeline : RenderPipeline
         }
     }
 
-    internal static ForwardPipeline FromFeatureSet(PipelineFeatureSet features)
+    internal static ForwardPipeline FromFeatureSet(PipelineFeatureSet features, IReadOnlyList<RenderFeature>? customFeatures = null)
     {
-        var passes = new List<RenderPass>
+        var passes = new List<RenderPass>();
+
+        if (features.enableShadows)
         {
-            new OpaquePass()
-        };
+            passes.Add(new ShadowPass());
+        }
 
         if (features.enableDepthPrepass)
         {
             passes.Add(new DepthPrepass());
         }
 
-        if (features.enableShadows)
-        {
-            passes.Add(new ShadowPass());
-        }
+        passes.Add(new OpaquePass());
 
         if (features.enableSkybox)
         {
@@ -86,6 +84,11 @@ public sealed class ForwardPipeline : RenderPipeline
             passes.Add(new PostProcessPass());
         }
 
+        if (features.enableObjectPicking)
+        {
+            passes.Add(new ObjectPickingPass());
+        }
+
         if (features.enableGizmos)
         {
             passes.Add(new GizmoPass());
@@ -96,6 +99,28 @@ public sealed class ForwardPipeline : RenderPipeline
             passes.Add(new UiPass());
         }
 
+        if (customFeatures is not null && customFeatures.Count > 0)
+        {
+            var context = new RenderFeatureContext
+            {
+                features = features
+            };
+
+            foreach (var feature in customFeatures)
+            {
+                if (feature.enabled)
+                {
+                    feature.AddRenderPasses(context, passes);
+                }
+            }
+        }
+
+        passes.Sort(static (a, b) =>
+        {
+            var cmp = ((int)a.passEvent).CompareTo((int)b.passEvent);
+            return cmp != 0 ? cmp : string.CompareOrdinal(a.name, b.name);
+        });
+
         return new ForwardPipeline("ForwardPipeline", passes);
     }
 }
@@ -105,9 +130,11 @@ public sealed class ForwardPipeline : RenderPipeline
 /// </summary>
 public sealed class ForwardPipelineBuilder
 {
+    private readonly List<RenderFeature> m_features = [];
+
     public bool enableDepthPrepass { get; set; }
 
-    public bool enableShadows { get; set; } = true;
+    public bool enableShadows { get; set; }
 
     public bool enableSkybox { get; set; } = true;
 
@@ -120,6 +147,13 @@ public sealed class ForwardPipelineBuilder
     public bool enableObjectPicking { get; set; }
 
     public bool enableUiPass { get; set; } = true;
+
+    public ForwardPipelineBuilder AddFeature(RenderFeature feature)
+    {
+        ArgumentNullException.ThrowIfNull(feature);
+        m_features.Add(feature);
+        return this;
+    }
 
     public ForwardPipeline Build()
     {
@@ -135,7 +169,7 @@ public sealed class ForwardPipelineBuilder
             enableUiPass = enableUiPass
         };
 
-        return ForwardPipeline.FromFeatureSet(features);
+        return ForwardPipeline.FromFeatureSet(features, m_features);
     }
 }
 
@@ -148,7 +182,9 @@ public sealed class RenderPipelineAsset
 
     public PipelineFeatureSet features { get; set; } = new();
 
-    public RenderPipeline CreatePipeline() => ForwardPipeline.FromFeatureSet(features);
+    public List<RenderFeature> customFeatures { get; } = [];
+
+    public RenderPipeline CreatePipeline() => ForwardPipeline.FromFeatureSet(features, customFeatures);
 }
 
 /// <summary>
@@ -158,7 +194,7 @@ public sealed class PipelineFeatureSet
 {
     public bool enableDepthPrepass { get; set; }
 
-    public bool enableShadows { get; set; } = true;
+    public bool enableShadows { get; set; }
 
     public bool enableSkybox { get; set; } = true;
 

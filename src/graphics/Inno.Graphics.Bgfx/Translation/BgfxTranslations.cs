@@ -89,7 +89,13 @@ public static class BgfxVertexLayoutConverter
     public static unsafe bgfx.VertexLayout Build(GraphicsInputLayoutDescription description)
     {
         bgfx.VertexLayout layout = default;
-        bgfx.vertex_layout_begin(&layout, bgfx.RendererType.Count);
+        var rendererType = bgfx.get_renderer_type();
+        if (rendererType == bgfx.RendererType.Count)
+        {
+            rendererType = bgfx.RendererType.Noop;
+        }
+
+        bgfx.vertex_layout_begin(&layout, rendererType);
 
         foreach (var element in description.elements)
         {
@@ -187,6 +193,27 @@ public static class BgfxVertexLayoutConverter
 
 public sealed class BgfxShaderBindingMap
 {
+    private readonly Dictionary<string, int> m_slotByName = new(StringComparer.Ordinal);
+
+    public void Set(string name, int slot)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new ArgumentException("Binding name cannot be empty.", nameof(name));
+        }
+
+        m_slotByName[name] = slot;
+    }
+
+    public bool TryGetSlot(string name, out int slot)
+    {
+        return m_slotByName.TryGetValue(name, out slot);
+    }
+
+    public void Clear()
+    {
+        m_slotByName.Clear();
+    }
 }
 
 public sealed class BgfxViewAllocator

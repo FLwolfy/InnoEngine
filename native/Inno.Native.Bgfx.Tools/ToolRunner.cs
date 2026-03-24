@@ -10,28 +10,6 @@ namespace Inno.Native.Bgfx.Tools;
 /// </summary>
 public static class ToolRunner
 {
-    static ToolRunner()
-    {
-        var suffix = GetConfigSuffix();
-        var tools = Enum.GetValues<BgfxTool>();
-        foreach (var tool in tools)
-        {
-            var toolName = tool.ToString().ToLowerInvariant();
-            var primaryName = $"{toolName}{suffix}";
-            var primaryFileName = OperatingSystem.IsWindows() ? $"{primaryName}.exe" : primaryName;
-            var fallbackFileName = OperatingSystem.IsWindows() ? $"{toolName}.exe" : toolName;
-
-            try
-            {
-                NativeDllLoader.EnsureNativeFile(primaryFileName);
-            }
-            catch (FileNotFoundException)
-            {
-                NativeDllLoader.EnsureNativeFile(fallbackFileName);
-            }
-        }
-    }
-
     /// <summary>
     /// Runs the specified tool with arguments.
     /// </summary>
@@ -84,19 +62,30 @@ public static class ToolRunner
         var toolName = tool.ToString().ToLowerInvariant();
         var suffix = GetConfigSuffix();
         var primaryName = $"{toolName}{suffix}";
-        var fallbackName = toolName;
-
         var primaryFileName = OperatingSystem.IsWindows() ? $"{primaryName}.exe" : primaryName;
-        var fallbackFileName = OperatingSystem.IsWindows() ? $"{fallbackName}.exe" : fallbackName;
+        var fallbackFileName = OperatingSystem.IsWindows() ? $"{toolName}.exe" : toolName;
 
-        try
+        TryEnsureNativeFile(primaryFileName);
+        TryEnsureNativeFile(fallbackFileName);
+
+        if (TryFindNativeFile(primaryFileName, out var primaryPath))
         {
-            return NativeDllLoader.FindNativeFile(primaryFileName);
+            return primaryPath;
         }
-        catch (FileNotFoundException)
+
+        if (TryFindNativeFile(fallbackFileName, out var fallbackPath))
         {
-            return NativeDllLoader.FindNativeFile(fallbackFileName);
+            return fallbackPath;
         }
+
+        var fromRepo = TryResolveFromRepo(toolName);
+        if (fromRepo is not null)
+        {
+            return fromRepo;
+        }
+
+        throw new FileNotFoundException(
+            $"Unable to resolve bgfx tool '{toolName}'. Tried native output and extern/bgfx/tools/bin.");
     }
 
     private static string GetConfigSuffix()
@@ -106,5 +95,70 @@ public static class ToolRunner
 #else
         return "-release";
 #endif
+    }
+
+    private static void TryEnsureNativeFile(string fileName)
+    {
+        try
+        {
+            NativeDllLoader.EnsureNativeFile(fileName);
+        }
+        catch (Exception)
+        {
+            // Ignore here and continue with other resolution paths.
+        }
+    }
+
+    private static bool TryFindNativeFile(string fileName, out string fullPath)
+    {
+        try
+        {
+            fullPath = NativeDllLoader.FindNativeFile(fileName);
+            return true;
+        }
+        catch (FileNotFoundException)
+        {
+            fullPath = string.Empty;
+            return false;
+        }
+    }
+
+    private static string? TryResolveFromRepo(string toolName)
+    {
+        var repoRoot = FindRepoRoot();
+        if (repoRoot is null)
+        {
+            return null;
+        }
+
+        var platform = OperatingSystem.IsMacOS() ? "darwin" : OperatingSystem.IsWindows() ? "windows" : "linux";
+        var fileName = OperatingSystem.IsWindows() ? $"{toolName}.exe" : toolName;
+        var candidate = Path.Combine(repoRoot, "extern", "bgfx", "tools", "bin", platform, fileName);
+        return File.Exists(candidate) ? candidate : null;
+    }
+
+    private static string? FindRepoRoot()
+    {
+        var starts = new[]
+        {
+            AppContext.BaseDirectory,
+            Directory.GetCurrentDirectory()
+        };
+
+        foreach (var start in starts)
+        {
+            var dir = new DirectoryInfo(start);
+            while (dir != null)
+            {
+                if (File.Exists(Path.Combine(dir.FullName, "InnoEngine.sln")))
+                {
+                    return dir.FullName;
+                }
+
+                dir = dir.Parent;
+            }
+        }
+
+        return null;
     }
 }

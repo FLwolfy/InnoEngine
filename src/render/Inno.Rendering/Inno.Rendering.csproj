@@ -8,6 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="../../graphics/Inno.Graphics/Inno.Graphics.csproj" />
     <ProjectReference Include="../../core/Inno.Core.Mathematics/Inno.Core.Mathematics.csproj" />
+    <ProjectReference Include="../../../native/Inno.Native.Bgfx.Tools/Inno.Native.Bgfx.Tools.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Assets/**">
