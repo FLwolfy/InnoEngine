@@ -13,17 +13,19 @@ uniform vec4 u_shadowReceiver;
 
 float SampleShadow(vec4 shadowPos)
 {
-    vec3 proj = shadowPos.xyz / max(shadowPos.w, 1e-5);
-    vec2 uv = proj.xy * 0.5 + 0.5;
-    float shadowDepth = proj.z;
+    vec3 ndc = shadowPos.xyz / max(shadowPos.w, 1e-5);
+    vec2 uv = ndc.xy * 0.5 + 0.5;
+    float shadowDepth = ndc.z * 0.5 + 0.5;
 
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
     {
         return 1.0;
     }
 
+    uv.y = 1.0 - uv.y;
+
     float texel = max(1e-6, u_shadowParams.z);
-    float radius = clamp(u_shadowParams.w, 0.0, 3.0);
+    float radius = u_shadowParams.w;
     float bias = u_shadowParams.x;
     float lit = 0.0;
     float samples = 0.0;

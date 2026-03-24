@@ -21,8 +21,10 @@ public abstract class Camera
 
     public virtual Matrix GetViewMatrix()
     {
-        var target = transform.position + transform.forward;
-        return Matrix.CreateLookAtRH(transform.position, target, transform.up);
+        var rotation = Matrix.CreateFromQuaternion(transform.rotation);
+        var translation = Matrix.CreateTranslation(transform.position);
+        var world = translation * rotation;
+        return Matrix.Invert(world);
     }
 
     public abstract Matrix GetProjectionMatrix(float aspectRatio);

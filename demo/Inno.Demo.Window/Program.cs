@@ -84,11 +84,11 @@ internal static class Program
             shadows = LightShadowSettings.@default with
             {
                 enabled = true,
-                resolution = 2048,
+                resolution = 4096,
                 cascadeCount = 1,
-                depthBias = 0.0010f,
-                strength = 0.8f,
-                pcfRadius = 1
+                depthBias = 0.00002f,
+                strength = 0.7f,
+                pcfRadius = 2
             }
         });
 
@@ -113,7 +113,7 @@ internal static class Program
         {
             name = "Ground",
             surfaceType = MaterialSurfaceType.Opaque,
-            cullMode = MaterialCullMode.None,
+            cullMode = MaterialCullMode.Back,
             depthMode = MaterialDepthMode.ReadWrite,
             castShadows = false,
             receiveShadows = true
@@ -125,7 +125,7 @@ internal static class Program
             material = floorMaterial,
             transform = new Transform
             {
-                position = new Vector3(0.0f, -1.6f, 0.0f),
+                position = new Vector3(0.0f, -3.6f, 0.0f),
                 rotation = Quaternion.identity,
                 scale = Vector3.ONE
             }
@@ -141,8 +141,8 @@ internal static class Program
             farClip = 100.0f,
             transform = new CameraTransform
             {
-                position = new Vector3(0.0f, 6.0f, 15.0f),
-                rotation = Quaternion.CreateFromYawPitchRoll(0.0f, -0.1f, 0.0f)
+                position = new Vector3(10.0f, 8.0f, 10.0f),
+                rotation = Quaternion.CreateFromYawPitchRoll(0.8f, -0.8f, 0.0f)
             }
         };
 
@@ -178,7 +178,7 @@ internal static class Program
             var t = (float)timer.Elapsed.TotalSeconds;
             cube.transform = new Transform
             {
-                position = Vector3.ZERO,
+                position = new Vector3(1.5f, 3.0f, 1.5f),
                 rotation = Quaternion.CreateFromYawPitchRoll(t * 0.28f, t * 0.14f, t * 0.06f),
                 scale = Vector3.ONE
             };
@@ -259,7 +259,7 @@ internal static class Program
             new StandardVertex { position = new Vector3(+h, 0.0f, +h), normal = Vector3.UP, tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(1, 1), color = c },
             new StandardVertex { position = new Vector3(-h, 0.0f, +h), normal = Vector3.UP, tangent = new Vector4(1, 0, 0, 1), texCoord0 = new Vector2(0, 1), color = c }
         };
-        uint[] indices = [0, 1, 2, 2, 3, 0];
+        uint[] indices = [0, 2, 1, 2, 0, 3];
 
         return new MeshBuilder()
             .SetVertices<StandardVertex>(vertices)

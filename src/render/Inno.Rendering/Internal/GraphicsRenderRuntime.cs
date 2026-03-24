@@ -126,6 +126,7 @@ internal sealed class GraphicsRenderRuntime : IDisposable
         WriteColumnMajor(projectionMatrix, projRaw);
         m_commandList.SetViewProjection(viewRaw, projRaw);
         ApplyGlobalLightUniform(context.request.scene);
+        ApplyCameraUniform(view.camera);
         ApplyShadowUniforms(context.request.scene);
         Span<float> ambientRaw = stackalloc float[4];
         var ambient = context.request.scene.environment.ambientColor;
@@ -461,7 +462,7 @@ internal sealed class GraphicsRenderRuntime : IDisposable
                 cullMode = isSkyboxPass
                     ? GraphicsCullMode.None
                     : isShadowPass
-                        ? GraphicsCullMode.Back
+                        ? GraphicsCullMode.None
                     : material.cullMode switch
                 {
                     MaterialCullMode.Front => GraphicsCullMode.Front,
@@ -796,7 +797,7 @@ internal sealed class GraphicsRenderRuntime : IDisposable
 
     private void EnsureShadowResources(int requestedSize)
     {
-        var size = Math.Clamp(requestedSize, 512, 4096);
+        var size = Math.Max(1, requestedSize);
         if (m_shadowRenderTarget is not null && m_shadowResourceSet is not null && m_shadowMapSize == size)
         {
             return;
@@ -990,21 +991,33 @@ internal sealed class GraphicsRenderRuntime : IDisposable
         }
 
         var foundCasters = false;
-        var min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
-        var max = new Vector3(float.MinValue, float.MinValue, float.MinValue);
         foreach (var item in casterItems)
         {
-            if (!TryResolveDrawable(item.renderable, out var mesh, out _, out var transform))
+            if (item.renderable is MeshRenderable)
+            {
+                foundCasters = true;
+                break;
+            }
+        }
+
+        if (!foundCasters)
+        {
+            return false;
+        }
+
+        var min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+        var max = new Vector3(float.MinValue, float.MinValue, float.MinValue);
+        var foundAnyMesh = false;
+
+        // Include all visible mesh bounds (casters + receivers) so the projected shadow can land on receiver surfaces.
+        foreach (var renderable in scene.renderables.items)
+        {
+            if (renderable is not MeshRenderable meshRenderable || renderable.visibility != Visibility.Visible)
             {
                 continue;
             }
 
-            if (item.renderable is not MeshRenderable)
-            {
-                continue;
-            }
-
-            var worldBounds = ComputeWorldBounds(mesh.bounds, transform.ToMatrix());
+            var worldBounds = ComputeWorldBounds(meshRenderable.mesh.bounds, meshRenderable.transform.ToMatrix());
             var worldMin = worldBounds.center - worldBounds.extents;
             var worldMax = worldBounds.center + worldBounds.extents;
 
@@ -1014,10 +1027,10 @@ internal sealed class GraphicsRenderRuntime : IDisposable
             max.x = MathF.Max(max.x, worldMax.x);
             max.y = MathF.Max(max.y, worldMax.y);
             max.z = MathF.Max(max.z, worldMax.z);
-            foundCasters = true;
+            foundAnyMesh = true;
         }
 
-        if (!foundCasters)
+        if (!foundAnyMesh)
         {
             return false;
         }
@@ -1182,7 +1195,7 @@ internal sealed class GraphicsRenderRuntime : IDisposable
         v[0] = MathF.Max(0.0f, shadowSettings.depthBias);
         v[1] = Math.Clamp(shadowSettings.strength, 0.0f, 1.0f);
         v[2] = 1.0f / Math.Max(1, m_shadowMapSize);
-        v[3] = Math.Clamp(shadowSettings.pcfRadius, 0.0f, 2.0f);
+        v[3] = Math.Max(0.0f, shadowSettings.pcfRadius);
         m_commandList.SetGlobalVector4("u_shadowParams", v);
     }
 
@@ -1256,6 +1269,24 @@ internal sealed class GraphicsRenderRuntime : IDisposable
         lightDirRaw[2] = lightDirection.z;
         lightDirRaw[3] = 0.0f;
         m_commandList.SetGlobalVector4("u_mainLightDir", lightDirRaw);
+    }
+
+    private void ApplyCameraUniform(Camera camera)
+    {
+        var p = camera.transform.position;
+        var f = Vector3.NormalizeSafe(camera.transform.forward);
+        Span<float> cameraRaw = stackalloc float[4];
+        cameraRaw[0] = p.x;
+        cameraRaw[1] = p.y;
+        cameraRaw[2] = p.z;
+        cameraRaw[3] = 1.0f;
+        m_commandList.SetGlobalVector4("u_cameraWorldPos", cameraRaw);
+
+        cameraRaw[0] = f.x;
+        cameraRaw[1] = f.y;
+        cameraRaw[2] = f.z;
+        cameraRaw[3] = 0.0f;
+        m_commandList.SetGlobalVector4("u_cameraForward", cameraRaw);
     }
 
     private bool TryResolveDrawable(Renderable renderable, out Mesh mesh, out Material material, out Transform transform)
