@@ -10,6 +10,11 @@ public sealed class SkyboxPass : RenderPass
     {
     }
 
+    internal override void Setup(RenderGraphPassBuilder builder)
+    {
+        builder.ReadWrite(RenderGraphResourceNames.Backbuffer);
+    }
+
     internal override void Execute(RenderPassContext context)
     {
         context.renderList.Build(RenderItemFilter.Skybox);

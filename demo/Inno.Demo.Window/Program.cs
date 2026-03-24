@@ -58,7 +58,7 @@ internal static class Program
             builder.enableTransparentPass = false;
             builder.enableSkybox = false;
             builder.enablePostProcessing = false;
-            builder.enableUiPass = false;
+            builder.enableUiPass = true;
         });
 
         using var renderSystem = new RenderSystem(
@@ -131,8 +131,34 @@ internal static class Program
             }
         };
 
+        var uiMaterial = new SpriteMaterial
+        {
+            name = "DemoUiPanel",
+            surfaceType = MaterialSurfaceType.Transparent,
+            blendMode = MaterialBlendMode.Alpha,
+            cullMode = MaterialCullMode.None,
+            depthMode = MaterialDepthMode.Disabled,
+            castShadows = false,
+            receiveShadows = false,
+            tint = new Color(0.20f, 0.80f, 0.95f, 0.75f)
+        };
+        var uiPanel = new SpriteRenderable
+        {
+            name = "DemoUiPanel",
+            material = uiMaterial,
+            shadowMode = ShadowMode.Off,
+            sortingOrder = 10_000,
+            transform = new Transform
+            {
+                position = new Vector3(0.70f, -0.70f, 0.0f),
+                rotation = Quaternion.identity,
+                scale = new Vector3(0.22f, 0.14f, 1.0f)
+            }
+        };
+
         scene.Add(cube);
         scene.Add(floor);
+        scene.Add(uiPanel);
 
         var camera = new PerspectiveCamera
         {

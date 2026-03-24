@@ -10,6 +10,11 @@ public sealed class ShadowPass : RenderPass
     {
     }
 
+    internal override void Setup(RenderGraphPassBuilder builder)
+    {
+        builder.Write(RenderGraphResourceNames.ShadowMap);
+    }
+
     internal override void Execute(RenderPassContext context)
     {
         context.renderList.Build(RenderItemFilter.ShadowCasters);

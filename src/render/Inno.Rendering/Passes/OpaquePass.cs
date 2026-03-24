@@ -10,6 +10,12 @@ public sealed class OpaquePass : RenderPass
     {
     }
 
+    internal override void Setup(RenderGraphPassBuilder builder)
+    {
+        builder.Read(RenderGraphResourceNames.ShadowMap);
+        builder.Write(RenderGraphResourceNames.Backbuffer);
+    }
+
     internal override void Execute(RenderPassContext context)
     {
         context.renderList.Build(RenderItemFilter.Opaque);

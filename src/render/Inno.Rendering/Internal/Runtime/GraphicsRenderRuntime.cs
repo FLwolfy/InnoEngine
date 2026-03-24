@@ -20,6 +20,7 @@ internal sealed class GraphicsRenderRuntime : IDisposable
     private readonly Mesh m_builtinQuadMesh = BuiltinMeshFactory.CreateFullscreenQuad();
     private readonly Mesh m_builtinCubeMesh = BuiltinMeshFactory.CreateUnitCube();
     private readonly Dictionary<RenderTarget, IGraphicsRenderTarget> m_renderTargetCache = new();
+    private readonly Dictionary<string, RenderTarget> m_graphTransientTargets = new(StringComparer.Ordinal);
     private readonly IGraphicsTexture m_fallbackWhiteTexture;
     private readonly IGraphicsResourceSet m_fallbackShadowResourceSet;
     private readonly RuntimePassFeatureRegistry m_passFeatures = new();
@@ -42,6 +43,8 @@ internal sealed class GraphicsRenderRuntime : IDisposable
     private IGraphicsRenderTarget? m_mainRenderTarget;
     private bool m_frameActive;
     private bool m_passActive;
+    private IGraphicsRenderTarget? m_activeRenderTarget;
+    private readonly HashSet<IGraphicsRenderTarget> m_clearedTargets = [];
 
     public GraphicsRenderRuntime(IGraphicsDevice device, IGraphicsSwapchain swapchain, string? shaderProfile = null, string? shaderAssetRoot = null)
     {
@@ -90,11 +93,42 @@ internal sealed class GraphicsRenderRuntime : IDisposable
         m_mainClearValue = new ClearValue(clear.color.r, clear.color.g, clear.color.b, clear.color.a, clear.depth, clear.stencil);
         m_shadowMapReady = false;
         m_shadowCascadeCount = 1;
+        m_activeRenderTarget = null;
+        m_clearedTargets.Clear();
 
         m_device.BeginFrame();
         m_commandList.Begin();
         m_frameActive = true;
         m_passActive = false;
+    }
+
+    internal void BeginGraphPass(
+        RenderPass pass,
+        RenderGraphPassDeclaration declaration,
+        RenderGraphFrameResources frameResources,
+        RenderRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(pass);
+        ArgumentNullException.ThrowIfNull(declaration);
+        ArgumentNullException.ThrowIfNull(frameResources);
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (!m_frameActive)
+        {
+            return;
+        }
+
+        if (pass is ShadowPass)
+        {
+            EndActivePassIfAny();
+            return;
+        }
+
+        var target = ResolvePassRenderTarget(declaration, frameResources) ?? request.target;
+        var gpuTarget = GetOrCreateRenderTarget(target);
+        var viewport = ResolveViewportForTarget(target, request.view.viewport);
+        var clearValue = ResolveClearValueForTarget(target, request.view.clear);
+        EnsureRenderPass(gpuTarget, viewport, clearValue, clearOnFirstUse: true);
     }
 
     public void ExecutePass(RenderPipelineContext context, RenderList renderList, RenderItemFilter filter)
@@ -119,7 +153,10 @@ internal sealed class GraphicsRenderRuntime : IDisposable
 
     internal void ExecuteScenePassFeature(RenderPipelineContext context, RenderList renderList, RenderItemFilter filter)
     {
-        EnsureMainRenderPassStarted();
+        if (!m_passActive)
+        {
+            EnsureMainRenderPassStarted();
+        }
 
         var view = context.request.view;
         var target = context.request.target;
@@ -330,19 +367,121 @@ internal sealed class GraphicsRenderRuntime : IDisposable
 
     private void EnsureMainRenderPassStarted()
     {
-        if (m_passActive)
-        {
-            return;
-        }
-
         if (m_mainRenderTarget is null)
         {
             return;
         }
 
-        m_commandList.BeginRenderPass(m_mainRenderTarget, m_mainClearValue);
-        m_commandList.SetViewport(new GraphicsViewport(m_mainViewport.x, m_mainViewport.y, m_mainViewport.width, m_mainViewport.height));
-        m_passActive = true;
+        EnsureRenderPass(m_mainRenderTarget, m_mainViewport, m_mainClearValue, clearOnFirstUse: true);
+    }
+
+    private void EnsureRenderPass(
+        IGraphicsRenderTarget renderTarget,
+        Viewport viewport,
+        ClearValue clearValue,
+        bool clearOnFirstUse)
+    {
+        var sameTarget = m_passActive && ReferenceEquals(m_activeRenderTarget, renderTarget);
+        if (!sameTarget)
+        {
+            EndActivePassIfAny();
+            var shouldClear = !clearOnFirstUse || !m_clearedTargets.Contains(renderTarget);
+            var useClear = shouldClear ? clearValue : new ClearValue(0, 0, 0, 0, 1.0f, 0);
+            m_commandList.BeginRenderPass(renderTarget, useClear);
+            if (clearOnFirstUse)
+            {
+                m_clearedTargets.Add(renderTarget);
+            }
+
+            m_activeRenderTarget = renderTarget;
+            m_passActive = true;
+        }
+
+        m_commandList.SetViewport(new GraphicsViewport(viewport.x, viewport.y, viewport.width, viewport.height));
+    }
+
+    private void EndActivePassIfAny()
+    {
+        if (!m_passActive)
+        {
+            return;
+        }
+
+        m_commandList.EndRenderPass();
+        m_passActive = false;
+        m_activeRenderTarget = null;
+    }
+
+    private RenderTarget? ResolvePassRenderTarget(RenderGraphPassDeclaration declaration, RenderGraphFrameResources frameResources)
+    {
+        for (var i = declaration.resources.Count - 1; i >= 0; i--)
+        {
+            var usage = declaration.resources[i];
+            if (usage.access is not RenderGraphResourceAccess.Write and not RenderGraphResourceAccess.ReadWrite)
+            {
+                continue;
+            }
+
+            if (frameResources.TryResolveRenderTarget(usage.name, out var target))
+            {
+                return target;
+            }
+
+            if (frameResources.TryGetInternalDescriptor(usage.name, out var descriptor) && descriptor is not null)
+            {
+                return GetOrCreateGraphTransientTarget(usage.name, descriptor);
+            }
+        }
+
+        return null;
+    }
+
+    private RenderTarget GetOrCreateGraphTransientTarget(string resourceName, RenderTargetDescriptor descriptor)
+    {
+        if (m_graphTransientTargets.TryGetValue(resourceName, out var existing))
+        {
+            if (existing is TextureRenderTarget textureTarget && IsSameDescriptor(textureTarget.descriptor, descriptor))
+            {
+                return existing;
+            }
+
+            m_graphTransientTargets.Remove(resourceName);
+        }
+
+        var created = new TextureRenderTarget(descriptor);
+        m_graphTransientTargets.Add(resourceName, created);
+        return created;
+    }
+
+    private static bool IsSameDescriptor(RenderTargetDescriptor lhs, RenderTargetDescriptor rhs)
+    {
+        return lhs.size.width == rhs.size.width
+               && lhs.size.height == rhs.size.height
+               && lhs.colorFormat == rhs.colorFormat
+               && lhs.hasDepth == rhs.hasDepth
+               && lhs.hasMipmaps == rhs.hasMipmaps;
+    }
+
+    private static Viewport ResolveViewportForTarget(RenderTarget target, Viewport requested)
+    {
+        if (requested.width > 1 && requested.height > 1
+            && requested.width <= target.width && requested.height <= target.height)
+        {
+            return requested;
+        }
+
+        return new Viewport(0, 0, target.width, target.height);
+    }
+
+    private static ClearValue ResolveClearValueForTarget(RenderTarget target, ClearSettings clearSettings)
+    {
+        var clear = clearSettings;
+        if (target is TextureRenderTarget)
+        {
+            return new ClearValue(0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0);
+        }
+
+        return new ClearValue(clear.color.r, clear.color.g, clear.color.b, clear.color.a, clear.depth, clear.stencil);
     }
 
     public void EndFrame()
@@ -352,11 +491,7 @@ internal sealed class GraphicsRenderRuntime : IDisposable
             return;
         }
 
-        if (m_passActive)
-        {
-            m_commandList.EndRenderPass();
-            m_passActive = false;
-        }
+        EndActivePassIfAny();
 
         m_commandList.End();
         m_device.Submit(m_commandList);
@@ -402,6 +537,7 @@ internal sealed class GraphicsRenderRuntime : IDisposable
         }
 
         m_renderTargetCache.Clear();
+        m_graphTransientTargets.Clear();
         m_resourceSetCache.Clear();
         m_textureCache.Clear();
         m_shadowResourceSet?.Dispose();
@@ -444,15 +580,34 @@ internal sealed class GraphicsRenderRuntime : IDisposable
             return cached;
         }
 
+        var colorFormat = m_swapchain.colorFormat;
+        PixelFormat? depthFormat = m_swapchain.depthFormat;
+        if (target is TextureRenderTarget textureTarget)
+        {
+            colorFormat = Map(textureTarget.descriptor.colorFormat);
+            depthFormat = textureTarget.descriptor.hasDepth ? PixelFormat.D24UnormS8Uint : null;
+        }
+
         var created = m_device.CreateRenderTarget(new GraphicsRenderTargetDescription
         {
             width = Math.Max(1, target.width),
             height = Math.Max(1, target.height),
-            colorFormats = [m_swapchain.colorFormat],
-            depthFormat = m_swapchain.depthFormat
+            colorFormats = [colorFormat],
+            depthFormat = depthFormat
         });
         m_renderTargetCache.Add(target, created);
         return created;
+    }
+
+    private static PixelFormat Map(RenderTargetFormat format)
+    {
+        return format switch
+        {
+            RenderTargetFormat.Rgba16Float => PixelFormat.R16G16B16A16Float,
+            RenderTargetFormat.Depth24Stencil8 => PixelFormat.D24UnormS8Uint,
+            RenderTargetFormat.Depth32 => PixelFormat.D32Float,
+            _ => PixelFormat.R8G8B8A8Unorm
+        };
     }
 
     private RuntimeGpuMesh GetOrCreateMesh(Mesh mesh)

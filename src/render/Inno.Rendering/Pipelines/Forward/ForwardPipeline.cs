@@ -7,6 +7,7 @@ namespace Inno.Rendering;
 public sealed class ForwardPipeline : RenderPipeline
 {
     private readonly List<RenderPass> m_passes;
+    private readonly RenderPassGraphCompiler m_graphCompiler = new();
 
     private ForwardPipeline(string name, List<RenderPass> passes) : base(name)
     {
@@ -23,16 +24,26 @@ public sealed class ForwardPipeline : RenderPipeline
     internal override void Render(RenderPipelineContext context)
     {
         var renderList = new RenderList(context.request.scene, context.request.view);
+        var graph = m_graphCompiler.Compile(m_passes);
+        var frameResources = new RenderGraphFrameResources(context.request.target, graph.resourcePlan);
+        context.frame.statistics.renderGraphPassCount = graph.orderedPasses.Count;
+        context.frame.statistics.renderGraphResourceCount = graph.resourcePlan.resources.Count;
         var passContext = new RenderPassContext
         {
             pipelineContext = context,
-            renderList = renderList
+            renderList = renderList,
+            frameResources = frameResources
         };
 
-        foreach (var pass in m_passes)
+        foreach (var pass in graph.orderedPasses)
         {
             if (pass.enabled)
             {
+                if (graph.TryGetDeclaration(pass, out var declaration))
+                {
+                    context.graphics?.BeginGraphPass(pass, declaration, frameResources, context.request);
+                }
+
                 pass.Execute(passContext);
             }
         }

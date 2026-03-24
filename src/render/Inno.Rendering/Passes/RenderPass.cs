@@ -17,5 +17,10 @@ public abstract class RenderPass
 
     public bool enabled { get; set; } = true;
 
+    internal virtual void Setup(RenderGraphPassBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+    }
+
     internal abstract void Execute(RenderPassContext context);
 }

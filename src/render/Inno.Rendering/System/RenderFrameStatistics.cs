@@ -12,5 +12,9 @@ public sealed class RenderFrameStatistics
 
     public int visibleLights { get; internal set; }
 
+    public int renderGraphPassCount { get; internal set; }
+
+    public int renderGraphResourceCount { get; internal set; }
+
     public TimeSpan cpuTime { get; internal set; }
 }
