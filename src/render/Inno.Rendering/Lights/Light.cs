@@ -15,37 +15,3 @@ public abstract class Light
 
     public LightShadowSettings shadows { get; set; } = LightShadowSettings.@default;
 }
-
-/// <summary>
-/// Represents directional sunlight-like light.
-/// </summary>
-public sealed class DirectionalLight : Light
-{
-    public Vector3 direction { get; set; } = Vector3.NormalizeSafe(new Vector3(0.2f, -1.0f, 0.3f));
-}
-
-/// <summary>
-/// Represents omni-directional point light.
-/// </summary>
-public sealed class PointLight : Light
-{
-    public Vector3 position { get; set; }
-
-    public float range { get; set; } = 10.0f;
-}
-
-/// <summary>
-/// Represents cone-shaped spot light.
-/// </summary>
-public sealed class SpotLight : Light
-{
-    public Vector3 position { get; set; }
-
-    public Vector3 direction { get; set; } = Vector3.DOWN;
-
-    public float range { get; set; } = 15.0f;
-
-    public float innerAngle { get; set; } = 25.0f;
-
-    public float outerAngle { get; set; } = 35.0f;
-}

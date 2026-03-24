@@ -54,7 +54,7 @@ internal static class Program
         var pipeline = ForwardPipeline.Create(builder =>
         {
             builder.enableDepthPrepass = false;
-            builder.enableShadows = false;
+            builder.enableShadows = true;
             builder.enableTransparentPass = false;
             builder.enableSkybox = false;
             builder.enablePostProcessing = false;
@@ -73,8 +73,24 @@ internal static class Program
 
         var scene = new RenderScene();
         scene.environment.ambientColor = new Color(0.08f, 0.09f, 0.11f, 1.0f);
-        scene.environment.ambientIntensity = 0.2f;
-        scene.settings.enableShadows = false;
+        scene.environment.ambientIntensity = 0.22f;
+        scene.settings.enableShadows = true;
+
+        scene.Add(new DirectionalLight
+        {
+            color = Color.WHITE,
+            intensity = 1.25f,
+            direction = Vector3.NormalizeSafe(new Vector3(0.0f, -1.0f, 0.0f)),
+            shadows = LightShadowSettings.@default with
+            {
+                enabled = true,
+                resolution = 2048,
+                cascadeCount = 1,
+                depthBias = 0.0010f,
+                strength = 0.8f,
+                pcfRadius = 1
+            }
+        });
 
         var material = new StandardMaterial
         {

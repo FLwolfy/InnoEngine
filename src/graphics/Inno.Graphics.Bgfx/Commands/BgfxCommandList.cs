@@ -213,6 +213,7 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
         BindResourceSets();
         bgfx.set_state(m_pipeline.state, 0);
         bgfx.submit(m_currentViewId, m_pipeline.program.handle, 0, (byte)bgfx.DiscardFlags.All);
+        m_resourceSets.Clear();
     }
 
     public void DrawIndexed(DrawIndexedArguments args)
@@ -242,6 +243,7 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
         BindResourceSets();
         bgfx.set_state(m_pipeline.state, 0);
         bgfx.submit(m_currentViewId, m_pipeline.program.handle, 0, (byte)bgfx.DiscardFlags.All);
+        m_resourceSets.Clear();
     }
 
     private unsafe void ApplyGlobalUniforms()
@@ -257,14 +259,14 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
 
     private void BindResourceSets()
     {
-        var textureBound = false;
+        HashSet<int> boundSlots = [];
         foreach (var resourceSetEntry in m_resourceSets)
         {
             _ = resourceSetEntry.Key;
             var resourceSet = resourceSetEntry.Value;
             foreach (var textureBinding in resourceSet.textureBindings)
             {
-                if (textureBound)
+                if (!boundSlots.Add(textureBinding.slot))
                 {
                     continue;
                 }
@@ -274,7 +276,6 @@ public sealed class BgfxCommandList : DisposableGraphicsResource, IGraphicsComma
                     textureBinding.uniform,
                     textureBinding.texture.handle,
                     uint.MaxValue);
-                textureBound = true;
             }
         }
     }

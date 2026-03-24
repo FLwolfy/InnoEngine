@@ -21,6 +21,7 @@ internal sealed class GraphicsRenderRuntime : IDisposable
     private readonly Mesh m_builtinCubeMesh = CreateUnitCubeMesh();
     private readonly Dictionary<RenderTarget, IGraphicsRenderTarget> m_renderTargetCache = new();
     private readonly IGraphicsTexture m_fallbackWhiteTexture;
+    private readonly IGraphicsResourceSet m_fallbackShadowResourceSet;
     private IGraphicsRenderTarget? m_backbufferTarget;
     private IGraphicsRenderTarget? m_shadowRenderTarget;
     private IGraphicsResourceSet? m_shadowResourceSet;
@@ -55,6 +56,18 @@ internal sealed class GraphicsRenderRuntime : IDisposable
             ? Path.Combine(AppContext.BaseDirectory, "Assets")
             : shaderAssetRoot;
         m_fallbackWhiteTexture = CreateFallbackWhiteTexture();
+        m_fallbackShadowResourceSet = m_device.CreateResourceSet(new ResourceSetDescription
+        {
+            bindings =
+            [
+                new GraphicsResourceBinding
+                {
+                    slot = 1,
+                    bindingType = GraphicsBindingType.Texture,
+                    resource = m_fallbackWhiteTexture
+                }
+            ]
+        });
     }
 
     public void BeginFrame(RenderRequest request)
@@ -92,6 +105,7 @@ internal sealed class GraphicsRenderRuntime : IDisposable
 
         if (filter == RenderItemFilter.ShadowCasters)
         {
+            ExecuteShadowMapPass(context, renderList);
             return;
         }
 
@@ -111,6 +125,15 @@ internal sealed class GraphicsRenderRuntime : IDisposable
         WriteColumnMajor(viewMatrix, viewRaw);
         WriteColumnMajor(projectionMatrix, projRaw);
         m_commandList.SetViewProjection(viewRaw, projRaw);
+        ApplyGlobalLightUniform(context.request.scene);
+        ApplyShadowUniforms(context.request.scene);
+        Span<float> ambientRaw = stackalloc float[4];
+        var ambient = context.request.scene.environment.ambientColor;
+        ambientRaw[0] = ambient.r;
+        ambientRaw[1] = ambient.g;
+        ambientRaw[2] = ambient.b;
+        ambientRaw[3] = context.request.scene.environment.ambientIntensity;
+        m_commandList.SetGlobalVector4("u_ambient", ambientRaw);
 
         foreach (var item in renderList.items)
         {
@@ -124,6 +147,17 @@ internal sealed class GraphicsRenderRuntime : IDisposable
 
             m_commandList.SetPipeline(pipeline);
             m_commandList.SetVertexBuffer(gpuMesh.vertexBuffer);
+            var baseResourceSet = GetOrCreateResourceSet(item.renderable, material);
+            m_commandList.SetResourceSet(0, baseResourceSet);
+            if (m_shadowMapReady && material.receiveShadows && m_shadowResourceSet is not null)
+            {
+                m_commandList.SetResourceSet(1, m_shadowResourceSet);
+            }
+            else
+            {
+                m_commandList.SetResourceSet(1, m_fallbackShadowResourceSet);
+            }
+            ApplyShadowReceiverUniform(item.renderable, material);
 
             if (filter == RenderItemFilter.Skybox)
             {
@@ -156,6 +190,11 @@ internal sealed class GraphicsRenderRuntime : IDisposable
 
     private void ExecuteShadowMapPass(RenderPipelineContext context, RenderList renderList)
     {
+        if (!context.request.scene.settings.enableShadows)
+        {
+            return;
+        }
+
         var shadowSettings = ResolveDirectionalShadowSettings(context.request.scene);
         if (!shadowSettings.enabled)
         {
@@ -306,6 +345,7 @@ internal sealed class GraphicsRenderRuntime : IDisposable
         m_textureCache.Clear();
         m_shadowResourceSet?.Dispose();
         m_shadowResourceSet = null;
+        m_fallbackShadowResourceSet.Dispose();
         m_shadowRenderTarget?.Dispose();
         m_shadowRenderTarget = null;
         m_backbufferTarget?.Dispose();
@@ -787,7 +827,7 @@ internal sealed class GraphicsRenderRuntime : IDisposable
             [
                 new GraphicsResourceBinding
                 {
-                    slot = 0,
+                    slot = 1,
                     bindingType = GraphicsBindingType.Texture,
                     resource = m_shadowRenderTarget.colorAttachments[0]
                 }
@@ -1104,14 +1144,16 @@ internal sealed class GraphicsRenderRuntime : IDisposable
 
     private void ApplyShadowUniforms(RenderScene scene)
     {
-        if (!m_shadowMapReady)
-        {
-            return;
-        }
-
+        var shadowsEnabled = scene.settings.enableShadows;
         var shadowSettings = ResolveDirectionalShadowSettings(scene);
-        if (!shadowSettings.enabled)
+        if (!shadowsEnabled || !m_shadowMapReady || !shadowSettings.enabled)
         {
+            Span<float> disabled = stackalloc float[4];
+            disabled[0] = 0.0f;
+            disabled[1] = 0.0f;
+            disabled[2] = 1.0f;
+            disabled[3] = 0.0f;
+            m_commandList.SetGlobalVector4("u_shadowParams", disabled);
             return;
         }
 
@@ -1146,8 +1188,8 @@ internal sealed class GraphicsRenderRuntime : IDisposable
 
     private void ApplyShadowReceiverUniform(Renderable renderable, Material material)
     {
-        _ = renderable;
-        var receiveShadows = material.receiveShadows;
+        var receiveShadows = material.receiveShadows
+            && renderable.shadowMode is ShadowMode.CastAndReceive or ShadowMode.ReceiveOnly;
         Span<float> v = stackalloc float[4];
         v[0] = receiveShadows ? 1.0f : 0.0f;
         v[1] = 0.0f;
@@ -1187,7 +1229,7 @@ internal sealed class GraphicsRenderRuntime : IDisposable
     private void ApplyGlobalLightUniform(RenderScene scene)
     {
         var lightColor = Color.WHITE;
-        var lightIntensity = 1.0f;
+        var lightIntensity = 0.0f;
         foreach (var light in scene.lights.items)
         {
             if (light is not DirectionalLight directional || !directional.enabled)
