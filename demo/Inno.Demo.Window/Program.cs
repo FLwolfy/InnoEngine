@@ -58,7 +58,7 @@ internal static class Program
             builder.enableTransparentPass = false;
             builder.enableSkybox = false;
             builder.enablePostProcessing = false;
-            builder.enableUiPass = true;
+            builder.enableUiPass = false;
         });
 
         using var renderSystem = new RenderSystem(

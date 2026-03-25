@@ -3,31 +3,25 @@ using Inno.Graphics;
 
 namespace Inno.Rendering;
 
-internal sealed class GraphicsRenderRuntime : IDisposable
+internal sealed class GraphicsRenderRuntime : IDisposable, IScenePassRuntimeBackend, IShadowPassRuntimeBackend
 {
     private const int MaxShadowCascades = 2;
     private readonly IGraphicsDevice m_device;
     private readonly IGraphicsSwapchain m_swapchain;
     private readonly IGraphicsCommandList m_commandList;
-    private readonly string m_shaderProfile;
-    private readonly string m_shaderAssetRoot;
-    private readonly Dictionary<Mesh, RuntimeGpuMesh> m_meshCache = new();
-    private readonly Dictionary<string, IGraphicsProgram> m_programCache = new(StringComparer.Ordinal);
-    private readonly Dictionary<RuntimePipelineKey, IGraphicsRenderPipeline> m_pipelineCache = new();
-    private readonly List<IGraphicsShader> m_shaderCache = [];
-    private readonly Dictionary<Texture, IGraphicsTexture> m_textureCache = new();
-    private readonly Dictionary<IGraphicsTexture, IGraphicsResourceSet> m_resourceSetCache = new();
+    private readonly GpuResourceRegistry m_gpuResources;
+    private readonly PipelineStateLibrary m_pipelineLibrary;
     private readonly Mesh m_builtinQuadMesh = BuiltinMeshFactory.CreateFullscreenQuad();
     private readonly Mesh m_builtinCubeMesh = BuiltinMeshFactory.CreateUnitCube();
-    private readonly Dictionary<RenderTarget, IGraphicsRenderTarget> m_renderTargetCache = new();
     private readonly Dictionary<string, RenderTarget> m_graphTransientTargets = new(StringComparer.Ordinal);
-    private readonly IGraphicsTexture m_fallbackWhiteTexture;
     private readonly IGraphicsResourceSet m_fallbackShadowResourceSet;
     private readonly RuntimePassFeatureRegistry m_passFeatures = new();
-    private readonly MaterialShaderResolverRegistry m_shaderResolvers = new();
     private readonly RenderableResolverRegistry m_renderableResolvers = new();
-    private IRenderPipelineDescriptorFactory m_pipelineDescriptorFactory;
-    private IGraphicsRenderTarget? m_backbufferTarget;
+    private readonly MaterialTextureResolverRegistry m_textureResolvers = new();
+    private IMaterialParameterBinder m_materialParameterBinder;
+    private readonly GlobalParameterBinder m_globalParameterBinder = new();
+    private readonly ScenePassExecutor m_scenePassExecutor = new();
+    private readonly ShadowPassExecutor m_shadowPassExecutor = new();
     private IGraphicsRenderTarget? m_shadowRenderTarget;
     private IGraphicsResourceSet? m_shadowResourceSet;
     private int m_shadowMapSize;
@@ -51,12 +45,14 @@ internal sealed class GraphicsRenderRuntime : IDisposable
         m_device = device ?? throw new ArgumentNullException(nameof(device));
         m_swapchain = swapchain ?? throw new ArgumentNullException(nameof(swapchain));
         m_commandList = m_device.CreateCommandList();
-        m_shaderProfile = string.IsNullOrWhiteSpace(shaderProfile) ? GetDefaultShaderProfile() : shaderProfile;
-        m_shaderAssetRoot = string.IsNullOrWhiteSpace(shaderAssetRoot)
+        var resolvedShaderProfile = string.IsNullOrWhiteSpace(shaderProfile) ? GetDefaultShaderProfile() : shaderProfile;
+        var resolvedShaderAssetRoot = string.IsNullOrWhiteSpace(shaderAssetRoot)
             ? Path.Combine(AppContext.BaseDirectory, "Assets")
             : shaderAssetRoot;
-        m_pipelineDescriptorFactory = new DefaultRenderPipelineDescriptorFactory();
-        m_fallbackWhiteTexture = CreateFallbackWhiteTexture();
+        m_gpuResources = new GpuResourceRegistry(m_device, m_swapchain);
+        m_pipelineLibrary = new PipelineStateLibrary(m_device, resolvedShaderProfile, resolvedShaderAssetRoot);
+        m_materialParameterBinder = new DefaultMaterialParameterBinder();
+        m_pipelineLibrary.SetPipelineDescriptorFactory(new DefaultRenderPipelineDescriptorFactory());
         m_fallbackShadowResourceSet = m_device.CreateResourceSet(new ResourceSetDescription
         {
             bindings =
@@ -65,12 +61,13 @@ internal sealed class GraphicsRenderRuntime : IDisposable
                 {
                     slot = 1,
                     bindingType = GraphicsBindingType.Texture,
-                    resource = m_fallbackWhiteTexture
+                    resource = m_gpuResources.fallbackWhiteTexture
                 }
             ]
         });
         RegisterDefaultShaderResolvers();
         RegisterDefaultRenderableResolvers();
+        RegisterDefaultTextureResolvers();
         RegisterDefaultPassFeatures();
     }
 
@@ -153,87 +150,7 @@ internal sealed class GraphicsRenderRuntime : IDisposable
 
     internal void ExecuteScenePassFeature(RenderPipelineContext context, RenderList renderList, RenderItemFilter filter)
     {
-        if (!m_passActive)
-        {
-            EnsureMainRenderPassStarted();
-        }
-
-        var view = context.request.view;
-        var target = context.request.target;
-        var overlayPass = filter is RenderItemFilter.Ui or RenderItemFilter.Gizmo or RenderItemFilter.PostProcess;
-        var viewMatrix = overlayPass ? Matrix.identity : view.camera.GetViewMatrix();
-        var projectionMatrix = overlayPass
-            ? Matrix.identity
-            : view.camera.GetProjectionMatrix(GetAspectRatio(view, target));
-
-        Span<float> viewRaw = stackalloc float[16];
-        Span<float> projRaw = stackalloc float[16];
-        Span<float> modelRaw = stackalloc float[16];
-        WriteColumnMajor(viewMatrix, viewRaw);
-        WriteColumnMajor(projectionMatrix, projRaw);
-        m_commandList.SetViewProjection(viewRaw, projRaw);
-        ApplyGlobalLightUniform(context.request.scene);
-        ApplyCameraUniform(view.camera);
-        ApplyShadowUniforms(context.request.scene);
-        Span<float> ambientRaw = stackalloc float[4];
-        var ambient = context.request.scene.environment.ambientColor;
-        ambientRaw[0] = ambient.r;
-        ambientRaw[1] = ambient.g;
-        ambientRaw[2] = ambient.b;
-        ambientRaw[3] = context.request.scene.environment.ambientIntensity;
-        m_commandList.SetGlobalVector4("u_ambient", ambientRaw);
-
-        foreach (var item in renderList.items)
-        {
-            if (!TryResolveDrawable(item.renderable, out var mesh, out var material, out var transform))
-            {
-                continue;
-            }
-
-            var gpuMesh = GetOrCreateMesh(mesh);
-            var pipeline = GetOrCreatePipeline(material, gpuMesh.inputLayout, filter);
-
-            m_commandList.SetPipeline(pipeline);
-            m_commandList.SetVertexBuffer(gpuMesh.vertexBuffer);
-            var baseResourceSet = GetOrCreateResourceSet(item.renderable, material);
-            m_commandList.SetResourceSet(0, baseResourceSet);
-            if (m_shadowMapReady && material.receiveShadows && m_shadowResourceSet is not null)
-            {
-                m_commandList.SetResourceSet(1, m_shadowResourceSet);
-            }
-            else
-            {
-                m_commandList.SetResourceSet(1, m_fallbackShadowResourceSet);
-            }
-            ApplyShadowReceiverUniform(item.renderable, material);
-
-            if (filter == RenderItemFilter.Skybox)
-            {
-                transform = new Transform
-                {
-                    position = view.camera.transform.position,
-                    rotation = Quaternion.identity,
-                    scale = new Vector3(50.0f, 50.0f, 50.0f)
-                };
-            }
-
-            var modelMatrix = transform.ToMatrix();
-
-            WriteColumnMajor(modelMatrix, modelRaw);
-            m_commandList.SetModelTransform(modelRaw);
-
-            if (gpuMesh.indexCount > 0)
-            {
-                m_commandList.SetIndexBuffer(gpuMesh.indexBuffer!);
-                m_commandList.DrawIndexed(new DrawIndexedArguments(gpuMesh.indexCount));
-                context.frame.statistics.drawCalls++;
-            }
-            else if (gpuMesh.vertexCount > 0)
-            {
-                m_commandList.Draw(gpuMesh.vertexCount);
-                context.frame.statistics.drawCalls++;
-            }
-        }
+        m_scenePassExecutor.Execute(this, context, renderList, filter);
     }
 
     internal void RegisterPassFeature(IRuntimePassFeature feature)
@@ -243,7 +160,7 @@ internal sealed class GraphicsRenderRuntime : IDisposable
 
     internal void RegisterShaderResolver(IMaterialShaderResolver resolver)
     {
-        m_shaderResolvers.Register(resolver);
+        m_pipelineLibrary.RegisterShaderResolver(resolver);
     }
 
     internal void RegisterRenderableResolver(IRenderableResolver resolver)
@@ -251,10 +168,105 @@ internal sealed class GraphicsRenderRuntime : IDisposable
         m_renderableResolvers.Register(resolver);
     }
 
+    internal void RegisterTextureResolver(IMaterialTextureResolver resolver)
+    {
+        m_textureResolvers.Register(resolver);
+    }
+
     internal void SetPipelineDescriptorFactory(IRenderPipelineDescriptorFactory factory)
     {
-        m_pipelineDescriptorFactory = factory ?? throw new ArgumentNullException(nameof(factory));
+        m_pipelineLibrary.SetPipelineDescriptorFactory(factory ?? throw new ArgumentNullException(nameof(factory)));
     }
+
+    internal void SetMaterialParameterBinder(IMaterialParameterBinder binder)
+    {
+        m_materialParameterBinder = binder ?? throw new ArgumentNullException(nameof(binder));
+    }
+
+    IGraphicsCommandList IScenePassRuntimeBackend.commandList => m_commandList;
+
+    bool IScenePassRuntimeBackend.shadowMapReady => m_shadowMapReady;
+
+    IGraphicsResourceSet? IScenePassRuntimeBackend.shadowResourceSet => m_shadowResourceSet;
+
+    IGraphicsResourceSet IScenePassRuntimeBackend.fallbackShadowResourceSet => m_fallbackShadowResourceSet;
+
+    void IScenePassRuntimeBackend.EnsureMainRenderPassStarted() => EnsureMainRenderPassStarted();
+
+    void IScenePassRuntimeBackend.ApplyGlobalLightUniform(RenderScene scene) => ApplyGlobalLightUniform(scene);
+
+    void IScenePassRuntimeBackend.ApplyCameraUniform(Camera camera) => ApplyCameraUniform(camera);
+
+    void IScenePassRuntimeBackend.ApplyShadowUniforms(RenderScene scene) => ApplyShadowUniforms(scene);
+
+    void IScenePassRuntimeBackend.ApplyShadowReceiverUniform(Renderable renderable, Material material) => ApplyShadowReceiverUniform(renderable, material);
+
+    bool IScenePassRuntimeBackend.TryResolveDrawable(Renderable renderable, out Mesh mesh, out Material material, out Transform transform)
+    {
+        return TryResolveDrawable(renderable, out mesh, out material, out transform);
+    }
+
+    RuntimeGpuMesh IScenePassRuntimeBackend.GetOrCreateMesh(Mesh mesh) => GetOrCreateMesh(mesh);
+
+    IGraphicsRenderPipeline IScenePassRuntimeBackend.GetOrCreatePipeline(Material material, IGraphicsInputLayout inputLayout, RenderItemFilter filter)
+    {
+        return GetOrCreatePipeline(material, inputLayout, filter);
+    }
+
+    IGraphicsResourceSet IScenePassRuntimeBackend.GetOrCreateResourceSet(Renderable renderable, Material material)
+    {
+        return GetOrCreateResourceSet(renderable, material);
+    }
+
+    void IScenePassRuntimeBackend.BindMaterialParameters(Renderable renderable, Material material)
+    {
+        m_materialParameterBinder.Bind(m_commandList, renderable, material);
+    }
+
+    float IScenePassRuntimeBackend.GetAspectRatio(RenderView view, RenderTarget target) => GetAspectRatio(view, target);
+
+    void IScenePassRuntimeBackend.WriteColumnMajor(Matrix matrix, Span<float> output) => WriteColumnMajor(matrix, output);
+
+    IGraphicsCommandList IShadowPassRuntimeBackend.commandList => m_commandList;
+
+    IGraphicsRenderTarget? IShadowPassRuntimeBackend.shadowRenderTarget => m_shadowRenderTarget;
+
+    bool IShadowPassRuntimeBackend.hasShadowSamplingResource => m_shadowResourceSet is not null;
+
+    int IShadowPassRuntimeBackend.shadowCascadeCount => m_shadowCascadeCount;
+
+    ShadowCascadeData IShadowPassRuntimeBackend.GetShadowCascade(int cascadeIndex) => m_shadowCascades[cascadeIndex];
+
+    void IShadowPassRuntimeBackend.MarkShadowMapReady() => m_shadowMapReady = true;
+
+    LightShadowSettings IShadowPassRuntimeBackend.ResolveDirectionalShadowSettings(RenderScene scene) => ResolveDirectionalShadowSettings(scene);
+
+    void IShadowPassRuntimeBackend.EnsureShadowResources(int requestedSize) => EnsureShadowResources(requestedSize);
+
+    bool IShadowPassRuntimeBackend.TryBuildDirectionalShadowCascades(
+        RenderRequest request,
+        RenderScene scene,
+        IReadOnlyList<RenderItem> casterItems,
+        LightShadowSettings shadowSettings)
+    {
+        return TryBuildDirectionalShadowCascades(request, scene, casterItems, shadowSettings);
+    }
+
+    bool IShadowPassRuntimeBackend.TryResolveDrawable(Renderable renderable, out Mesh mesh, out Material material, out Transform transform)
+    {
+        return TryResolveDrawable(renderable, out mesh, out material, out transform);
+    }
+
+    RuntimeGpuMesh IShadowPassRuntimeBackend.GetOrCreateMesh(Mesh mesh) => GetOrCreateMesh(mesh);
+
+    IGraphicsRenderPipeline IShadowPassRuntimeBackend.GetOrCreatePipeline(Material material, IGraphicsInputLayout inputLayout, RenderItemFilter filter)
+    {
+        return GetOrCreatePipeline(material, inputLayout, filter);
+    }
+
+    void IShadowPassRuntimeBackend.WriteColumnMajor(Matrix matrix, Span<float> output) => WriteColumnMajor(matrix, output);
+
+    void IShadowPassRuntimeBackend.SetMatrixRows(string uniformPrefix, Matrix matrix) => SetMatrixRows(uniformPrefix, matrix);
 
     private void RegisterDefaultPassFeatures()
     {
@@ -274,8 +286,8 @@ internal sealed class GraphicsRenderRuntime : IDisposable
 
     private void RegisterDefaultShaderResolvers()
     {
-        m_shaderResolvers.Register(new StandardMaterialShaderResolver());
-        m_shaderResolvers.Register(new CustomMaterialShaderResolver());
+        m_pipelineLibrary.RegisterShaderResolver(new StandardMaterialShaderResolver());
+        m_pipelineLibrary.RegisterShaderResolver(new CustomMaterialShaderResolver());
     }
 
     private void RegisterDefaultRenderableResolvers()
@@ -286,83 +298,14 @@ internal sealed class GraphicsRenderRuntime : IDisposable
         m_renderableResolvers.Register(new SkyboxRenderableResolver());
     }
 
+    private void RegisterDefaultTextureResolvers()
+    {
+        m_textureResolvers.Register(new DefaultMaterialTextureResolver());
+    }
+
     private void ExecuteShadowMapPass(RenderPipelineContext context, RenderList renderList)
     {
-        if (!context.request.scene.settings.enableShadows)
-        {
-            return;
-        }
-
-        var shadowSettings = ResolveDirectionalShadowSettings(context.request.scene);
-        if (!shadowSettings.enabled)
-        {
-            return;
-        }
-
-        EnsureShadowResources(shadowSettings.resolution);
-        if (m_shadowRenderTarget is null || m_shadowResourceSet is null)
-        {
-            return;
-        }
-
-        if (!TryBuildDirectionalShadowCascades(context.request, context.request.scene, renderList.items, shadowSettings))
-        {
-            return;
-        }
-
-        var clearShadow = new ClearValue(1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0);
-        m_commandList.BeginRenderPass(m_shadowRenderTarget, clearShadow);
-        Span<float> modelRaw = stackalloc float[16];
-        Span<float> viewRaw = stackalloc float[16];
-        Span<float> projRaw = stackalloc float[16];
-        var tileWidth = Math.Max(1, m_shadowRenderTarget.width / m_shadowCascadeCount);
-        for (var cascadeIndex = 0; cascadeIndex < m_shadowCascadeCount; cascadeIndex++)
-        {
-            var cascade = m_shadowCascades[cascadeIndex];
-            m_commandList.SetViewport(new GraphicsViewport(tileWidth * cascadeIndex, 0, tileWidth, m_shadowRenderTarget.height));
-            SetMatrixRows("u_shadowViewProj", cascade.viewProjection);
-
-            WriteColumnMajor(cascade.view, viewRaw);
-            WriteColumnMajor(cascade.projection, projRaw);
-            m_commandList.SetViewProjection(viewRaw, projRaw);
-
-            foreach (var item in renderList.items)
-            {
-                if (!TryResolveDrawable(item.renderable, out var mesh, out var material, out var transform))
-                {
-                    continue;
-                }
-
-                if (item.renderable is not MeshRenderable)
-                {
-                    continue;
-                }
-
-                var gpuMesh = GetOrCreateMesh(mesh);
-                var pipeline = GetOrCreatePipeline(material, gpuMesh.inputLayout, RenderItemFilter.ShadowCasters);
-                m_commandList.SetPipeline(pipeline);
-                m_commandList.SetVertexBuffer(gpuMesh.vertexBuffer);
-
-                var modelMatrix = transform.ToMatrix();
-                WriteColumnMajor(modelMatrix, modelRaw);
-                m_commandList.SetModelTransform(modelRaw);
-
-                if (gpuMesh.indexCount > 0)
-                {
-                    m_commandList.SetIndexBuffer(gpuMesh.indexBuffer!);
-                    m_commandList.DrawIndexed(new DrawIndexedArguments(gpuMesh.indexCount));
-                    context.frame.statistics.drawCalls++;
-                }
-                else if (gpuMesh.vertexCount > 0)
-                {
-                    m_commandList.Draw(gpuMesh.vertexCount);
-                    context.frame.statistics.drawCalls++;
-                }
-            }
-        }
-
-        m_commandList.EndRenderPass();
-        m_shadowMapReady = true;
+        m_shadowPassExecutor.Execute(this, context, renderList);
     }
 
     private void EnsureMainRenderPassStarted()
@@ -501,400 +444,37 @@ internal sealed class GraphicsRenderRuntime : IDisposable
 
     public void Dispose()
     {
-        foreach (var pipeline in m_pipelineCache.Values)
-        {
-            pipeline.Dispose();
-        }
-
-        foreach (var program in m_programCache.Values)
-        {
-            program.Dispose();
-        }
-
-        foreach (var shader in m_shaderCache)
-        {
-            shader.Dispose();
-        }
-
-        foreach (var mesh in m_meshCache.Values)
-        {
-            mesh.Dispose();
-        }
-
-        foreach (var renderTarget in m_renderTargetCache.Values)
-        {
-            renderTarget.Dispose();
-        }
-
-        foreach (var resourceSet in m_resourceSetCache.Values)
-        {
-            resourceSet.Dispose();
-        }
-
-        foreach (var texture in m_textureCache.Values)
-        {
-            texture.Dispose();
-        }
-
-        m_renderTargetCache.Clear();
+        m_pipelineLibrary.Dispose();
+        m_gpuResources.Dispose();
         m_graphTransientTargets.Clear();
-        m_resourceSetCache.Clear();
-        m_textureCache.Clear();
         m_shadowResourceSet?.Dispose();
         m_shadowResourceSet = null;
         m_fallbackShadowResourceSet.Dispose();
         m_shadowRenderTarget?.Dispose();
         m_shadowRenderTarget = null;
-        m_backbufferTarget?.Dispose();
-        m_fallbackWhiteTexture.Dispose();
         m_commandList.Dispose();
     }
 
     private IGraphicsRenderTarget GetOrCreateRenderTarget(RenderTarget target)
     {
-        if (target is BackbufferTarget backbuffer)
-        {
-            if (backbuffer.window.width != m_swapchain.width || backbuffer.window.height != m_swapchain.height)
-            {
-                m_swapchain.Resize(backbuffer.window.width, backbuffer.window.height);
-            }
-
-            if (m_backbufferTarget is null || m_backbufferTarget.width != backbuffer.window.width || m_backbufferTarget.height != backbuffer.window.height)
-            {
-                m_backbufferTarget?.Dispose();
-                m_backbufferTarget = m_device.CreateRenderTarget(new GraphicsRenderTargetDescription
-                {
-                    width = backbuffer.window.width,
-                    height = backbuffer.window.height,
-                    colorFormats = [m_swapchain.colorFormat],
-                    depthFormat = m_swapchain.depthFormat,
-                    useBackbuffer = true
-                });
-            }
-
-            return m_backbufferTarget;
-        }
-
-        if (m_renderTargetCache.TryGetValue(target, out var cached))
-        {
-            return cached;
-        }
-
-        var colorFormat = m_swapchain.colorFormat;
-        PixelFormat? depthFormat = m_swapchain.depthFormat;
-        if (target is TextureRenderTarget textureTarget)
-        {
-            colorFormat = Map(textureTarget.descriptor.colorFormat);
-            depthFormat = textureTarget.descriptor.hasDepth ? PixelFormat.D24UnormS8Uint : null;
-        }
-
-        var created = m_device.CreateRenderTarget(new GraphicsRenderTargetDescription
-        {
-            width = Math.Max(1, target.width),
-            height = Math.Max(1, target.height),
-            colorFormats = [colorFormat],
-            depthFormat = depthFormat
-        });
-        m_renderTargetCache.Add(target, created);
-        return created;
-    }
-
-    private static PixelFormat Map(RenderTargetFormat format)
-    {
-        return format switch
-        {
-            RenderTargetFormat.Rgba16Float => PixelFormat.R16G16B16A16Float,
-            RenderTargetFormat.Depth24Stencil8 => PixelFormat.D24UnormS8Uint,
-            RenderTargetFormat.Depth32 => PixelFormat.D32Float,
-            _ => PixelFormat.R8G8B8A8Unorm
-        };
+        return m_gpuResources.GetOrCreateRenderTarget(target);
     }
 
     private RuntimeGpuMesh GetOrCreateMesh(Mesh mesh)
     {
-        if (m_meshCache.TryGetValue(mesh, out var cached))
-        {
-            return cached;
-        }
-
-        var vertexBytes = mesh.vertexData;
-        var vertexBufferSize = Math.Max(1, vertexBytes.Length);
-        var vertexBuffer = m_device.CreateBuffer(new BufferDescription
-        {
-            sizeInBytes = vertexBufferSize,
-            usage = GraphicsBufferUsage.Vertex,
-            cpuAccess = BufferCpuAccess.Write
-        });
-        if (vertexBytes.Length > 0)
-        {
-            vertexBuffer.SetData(vertexBytes.Span);
-        }
-
-        IGraphicsBuffer? indexBuffer = null;
-        var indexCount = mesh.indices.Length;
-        if (indexCount > 0)
-        {
-            indexBuffer = m_device.CreateBuffer(new BufferDescription
-            {
-                sizeInBytes = indexCount * sizeof(uint),
-                usage = GraphicsBufferUsage.Index,
-                cpuAccess = BufferCpuAccess.Write
-            });
-            indexBuffer.SetData(mesh.indices.Span);
-        }
-
-        var inputLayout = CreateInputLayout(mesh.vertexLayout);
-        var created = new RuntimeGpuMesh(mesh, vertexBuffer, indexBuffer, mesh.vertexCount, indexCount, inputLayout);
-        m_meshCache.Add(mesh, created);
-        return created;
+        return m_gpuResources.GetOrCreateMesh(mesh);
     }
 
     private IGraphicsRenderPipeline GetOrCreatePipeline(Material material, IGraphicsInputLayout inputLayout, RenderItemFilter filter)
     {
-        var shaderName = GetShaderName(material);
-        if (filter == RenderItemFilter.ShadowCasters)
-        {
-            shaderName = "shadowmap";
-        }
-
-        var key = new RuntimePipelineKey(shaderName, material.surfaceType, material.blendMode, material.cullMode, material.depthMode, inputLayout, filter);
-        if (m_pipelineCache.TryGetValue(key, out var cached))
-        {
-            return cached;
-        }
-
-        var program = GetOrCreateProgram(shaderName);
-        var descriptor = m_pipelineDescriptorFactory.Create(material, filter, program, inputLayout);
-        var pipeline = m_device.CreateRenderPipeline(descriptor);
-
-        m_pipelineCache.Add(key, pipeline);
-        return pipeline;
+        return m_pipelineLibrary.GetOrCreatePipeline(material, inputLayout, filter);
     }
-
-    private IGraphicsProgram GetOrCreateProgram(string shaderName)
-    {
-        if (m_programCache.TryGetValue(shaderName, out var cached))
-        {
-            return cached;
-        }
-
-        var language = m_shaderProfile switch
-        {
-            "metal" => ShaderLanguage.Metal,
-            "dxbc" or "dxil" => ShaderLanguage.Hlsl,
-            "spirv" => ShaderLanguage.SpirV,
-            _ => ShaderLanguage.Glsl
-        };
-
-        var vsBytes = LoadShader("vs", shaderName);
-        var fsBytes = LoadShader("fs", shaderName);
-        var vs = m_device.CreateShader(new ShaderDescription
-        {
-            stage = ShaderStage.Vertex,
-            language = language,
-            bytecode = vsBytes
-        });
-        var fs = m_device.CreateShader(new ShaderDescription
-        {
-            stage = ShaderStage.Fragment,
-            language = language,
-            bytecode = fsBytes
-        });
-
-        var program = m_device.CreateProgram(new GraphicsProgramDescription
-        {
-            shaders = [vs, fs]
-        });
-
-        m_shaderCache.Add(vs);
-        m_shaderCache.Add(fs);
-        m_programCache.Add(shaderName, program);
-        return program;
-    }
-
-    private ReadOnlyMemory<byte> LoadShader(string stagePrefix, string shaderName)
-    {
-        TryCompileRuntime(shaderName);
-        var filePath = Path.Combine(m_shaderAssetRoot, m_shaderProfile, $"{stagePrefix}_{shaderName}.bin");
-
-        if (!File.Exists(filePath))
-        {
-            TryCompileRuntime("cubes");
-            filePath = Path.Combine(m_shaderAssetRoot, m_shaderProfile, $"{stagePrefix}_cubes.bin");
-        }
-
-        if (!File.Exists(filePath))
-        {
-            throw new FileNotFoundException($"Cannot find shader bytecode for '{shaderName}' in profile '{m_shaderProfile}'.", filePath);
-        }
-
-        return File.ReadAllBytes(filePath);
-    }
-
-    private void TryCompileRuntime(string shaderName)
-    {
-        try
-        {
-            RuntimeShaderCompiler.EnsureCompiled(m_shaderAssetRoot, m_shaderProfile, shaderName);
-        }
-        catch (FileNotFoundException)
-        {
-            // Allow fallback shader resolution when custom shader source is not provided.
-        }
-    }
-
-    private IGraphicsInputLayout CreateInputLayout(VertexLayout vertexLayout)
-    {
-        var elements = vertexLayout.elements
-            .Select(x => new GraphicsVertexElement
-            {
-                semantic = ToGraphicsSemantic(x.semantic),
-                semanticIndex = x.semanticIndex,
-                format = ToVertexFormat(x.sizeInBytes),
-                offset = x.offset
-            })
-            .ToArray();
-
-        return m_device.CreateInputLayout(new GraphicsInputLayoutDescription
-        {
-            elements = elements,
-            stride = vertexLayout.stride
-        });
-    }
-
-    private string GetShaderName(Material material) => m_shaderResolvers.Resolve(material);
 
     private IGraphicsResourceSet GetOrCreateResourceSet(Renderable renderable, Material material)
     {
-        var texture = ResolveTextureForRenderable(renderable, material);
-        var gpuTexture = texture is null ? m_fallbackWhiteTexture : GetOrCreateTexture(texture);
-        if (m_resourceSetCache.TryGetValue(gpuTexture, out var cached))
-        {
-            return cached;
-        }
-
-        var resourceSet = m_device.CreateResourceSet(new ResourceSetDescription
-        {
-            bindings =
-            [
-                new GraphicsResourceBinding
-                {
-                    slot = 0,
-                    bindingType = GraphicsBindingType.Texture,
-                    resource = gpuTexture
-                }
-            ]
-        });
-        m_resourceSetCache.Add(gpuTexture, resourceSet);
-        return resourceSet;
-    }
-
-    private IGraphicsTexture GetOrCreateTexture(Texture texture)
-    {
-        if (m_textureCache.TryGetValue(texture, out var cached))
-        {
-            return cached;
-        }
-
-        var width = Math.Max(1, texture.width);
-        var height = Math.Max(1, texture.height);
-        var description = new TextureDescription
-        {
-            width = width,
-            height = height,
-            depthOrLayers = texture is TextureCube ? 1 : 1,
-            mipLevels = 1,
-            dimension = texture is TextureCube ? TextureDimension.TextureCube : TextureDimension.Texture2D,
-            usage = TextureUsage.Sampled,
-            format = ToPixelFormat(texture.format)
-        };
-
-        var created = m_device.CreateTexture(description);
-        if (description.dimension == TextureDimension.Texture2D && description.format == PixelFormat.R8G8B8A8Unorm)
-        {
-            created.SetData<uint>(new uint[] { 0xFFFFFFFFu });
-        }
-
-        m_textureCache.Add(texture, created);
-        return created;
-    }
-
-    private IGraphicsTexture CreateFallbackWhiteTexture()
-    {
-        var texture = m_device.CreateTexture(new TextureDescription
-        {
-            width = 1,
-            height = 1,
-            depthOrLayers = 1,
-            mipLevels = 1,
-            dimension = TextureDimension.Texture2D,
-            usage = TextureUsage.Sampled,
-            format = PixelFormat.R8G8B8A8Unorm
-        });
-        texture.SetData<uint>(new uint[] { 0xFFFFFFFFu });
-        return texture;
-    }
-
-    private static Texture? ResolveTextureForRenderable(Renderable renderable, Material material)
-    {
-        if (renderable is MeshRenderable meshRenderable
-            && TryGetTextureFromPropertyBlock(meshRenderable.materialOverrides, out var overrideTexture))
-        {
-            return overrideTexture;
-        }
-
-        if (TryGetTextureFromPropertyBlock(material.overrides, out var materialOverrideTexture))
-        {
-            return materialOverrideTexture;
-        }
-
-        if (material is CustomMaterial customMaterial
-            && TryGetTextureFromPropertyBlock(customMaterial.properties, out var customTexture))
-        {
-            return customTexture;
-        }
-
-        return material switch
-        {
-            StandardMaterial standard => standard.baseMap,
-            UnlitMaterial unlit => unlit.colorMap,
-            SpriteMaterial sprite => sprite.spriteTexture,
-            SkyboxMaterial skybox => skybox.skyTexture,
-            _ => null
-        };
-    }
-
-    private static bool TryGetTextureFromPropertyBlock(MaterialPropertyBlock? propertyBlock, out Texture? texture)
-    {
-        if (propertyBlock is null)
-        {
-            texture = null;
-            return false;
-        }
-
-        // Keep aliases compatible with common engine/importer naming conventions.
-        if (propertyBlock.TryGetTexture("_MainTex", out texture)
-            || propertyBlock.TryGetTexture("_BaseMap", out texture)
-            || propertyBlock.TryGetTexture("baseMap", out texture)
-            || propertyBlock.TryGetTexture("albedoMap", out texture)
-            || propertyBlock.TryGetTexture("texture0", out texture))
-        {
-            return true;
-        }
-
-        texture = null;
-        return false;
-    }
-
-    private static PixelFormat ToPixelFormat(TextureFormat textureFormat)
-    {
-        return textureFormat switch
-        {
-            TextureFormat.Rgba16Float => PixelFormat.R16G16B16A16Float,
-            TextureFormat.Depth24Stencil8 => PixelFormat.D24UnormS8Uint,
-            TextureFormat.Depth32 => PixelFormat.D32Float,
-            _ => PixelFormat.R8G8B8A8Unorm
-        };
+        var texture = m_textureResolvers.Resolve(renderable, material);
+        var gpuTexture = texture is null ? m_gpuResources.fallbackWhiteTexture : m_gpuResources.GetOrCreateTexture(texture);
+        return m_gpuResources.GetOrCreateTextureResourceSet(gpuTexture, 0);
     }
 
     private static Vector3 ResolveDirectionalLightDirection(RenderScene scene)
@@ -1285,169 +865,38 @@ internal sealed class GraphicsRenderRuntime : IDisposable
 
     private void ApplyShadowUniforms(RenderScene scene)
     {
-        var shadowsEnabled = scene.settings.enableShadows;
-        var shadowSettings = ResolveDirectionalShadowSettings(scene);
-        if (!shadowsEnabled || !m_shadowMapReady || !shadowSettings.enabled)
-        {
-            Span<float> disabled = stackalloc float[4];
-            disabled[0] = 0.0f;
-            disabled[1] = 0.0f;
-            disabled[2] = 1.0f;
-            disabled[3] = 0.0f;
-            m_commandList.SetGlobalVector4("u_shadowParams", disabled);
-            return;
-        }
-
-        SetMatrixRows("u_lightViewProj0_", m_shadowCascades[0].viewProjection);
-        SetMatrixRows("u_lightViewProj1_", m_shadowCascades[1].viewProjection);
-
-        Span<float> v = stackalloc float[4];
-        v[0] = m_shadowCascadeCount;
-        v[1] = m_shadowCascades[0].splitDistance;
-        v[2] = m_shadowCascades[1].splitDistance;
-        v[3] = 0.0f;
-        m_commandList.SetGlobalVector4("u_shadowCascadeInfo", v);
-
-        v[0] = m_shadowCascades[0].atlasScaleBias.x;
-        v[1] = m_shadowCascades[0].atlasScaleBias.y;
-        v[2] = m_shadowCascades[0].atlasScaleBias.z;
-        v[3] = m_shadowCascades[0].atlasScaleBias.w;
-        m_commandList.SetGlobalVector4("u_shadowCascadeData0", v);
-
-        v[0] = m_shadowCascades[1].atlasScaleBias.x;
-        v[1] = m_shadowCascades[1].atlasScaleBias.y;
-        v[2] = m_shadowCascades[1].atlasScaleBias.z;
-        v[3] = m_shadowCascades[1].atlasScaleBias.w;
-        m_commandList.SetGlobalVector4("u_shadowCascadeData1", v);
-
-        v[0] = MathF.Max(0.0f, shadowSettings.depthBias);
-        v[1] = Math.Clamp(shadowSettings.strength, 0.0f, 1.0f);
-        v[2] = 1.0f / Math.Max(1, m_shadowMapSize);
-        v[3] = Math.Max(0.0f, shadowSettings.pcfRadius);
-        m_commandList.SetGlobalVector4("u_shadowParams", v);
+        m_globalParameterBinder.ApplyShadowUniforms(
+            m_commandList,
+            scene,
+            m_shadowMapReady,
+            m_shadowCascadeCount,
+            m_shadowCascades,
+            m_shadowMapSize);
     }
 
     private void ApplyShadowReceiverUniform(Renderable renderable, Material material)
     {
-        var receiveShadows = material.receiveShadows
-            && renderable.shadowMode is ShadowMode.CastAndReceive or ShadowMode.ReceiveOnly;
-        Span<float> v = stackalloc float[4];
-        v[0] = receiveShadows ? 1.0f : 0.0f;
-        v[1] = 0.0f;
-        v[2] = 0.0f;
-        v[3] = 0.0f;
-        m_commandList.SetGlobalVector4("u_shadowReceiver", v);
+        m_globalParameterBinder.ApplyShadowReceiverUniform(m_commandList, renderable, material);
     }
 
     private void SetMatrixRows(string uniformPrefix, Matrix matrix)
     {
-        Span<float> row = stackalloc float[4];
-        row[0] = matrix.m11;
-        row[1] = matrix.m21;
-        row[2] = matrix.m31;
-        row[3] = matrix.m41;
-        m_commandList.SetGlobalVector4($"{uniformPrefix}0", row);
-
-        row[0] = matrix.m12;
-        row[1] = matrix.m22;
-        row[2] = matrix.m32;
-        row[3] = matrix.m42;
-        m_commandList.SetGlobalVector4($"{uniformPrefix}1", row);
-
-        row[0] = matrix.m13;
-        row[1] = matrix.m23;
-        row[2] = matrix.m33;
-        row[3] = matrix.m43;
-        m_commandList.SetGlobalVector4($"{uniformPrefix}2", row);
-
-        row[0] = matrix.m14;
-        row[1] = matrix.m24;
-        row[2] = matrix.m34;
-        row[3] = matrix.m44;
-        m_commandList.SetGlobalVector4($"{uniformPrefix}3", row);
+        m_globalParameterBinder.SetMatrixRows(m_commandList, uniformPrefix, matrix);
     }
 
     private void ApplyGlobalLightUniform(RenderScene scene)
     {
-        var lightColor = Color.WHITE;
-        var lightIntensity = 0.0f;
-        foreach (var light in scene.lights.items)
-        {
-            if (light is not DirectionalLight directional || !directional.enabled)
-            {
-                continue;
-            }
-
-            lightColor = directional.color;
-            lightIntensity = directional.intensity;
-            break;
-        }
-
-        Span<float> lightRaw = stackalloc float[4];
-        lightRaw[0] = lightColor.r;
-        lightRaw[1] = lightColor.g;
-        lightRaw[2] = lightColor.b;
-        lightRaw[3] = lightIntensity;
-        m_commandList.SetGlobalVector4("u_globalLight", lightRaw);
-
-        var lightDirection = ResolveDirectionalLightDirection(scene);
-        Span<float> lightDirRaw = stackalloc float[4];
-        lightDirRaw[0] = lightDirection.x;
-        lightDirRaw[1] = lightDirection.y;
-        lightDirRaw[2] = lightDirection.z;
-        lightDirRaw[3] = 0.0f;
-        m_commandList.SetGlobalVector4("u_mainLightDir", lightDirRaw);
+        m_globalParameterBinder.ApplyGlobalLightUniform(m_commandList, scene);
     }
 
     private void ApplyCameraUniform(Camera camera)
     {
-        var p = camera.transform.position;
-        var f = Vector3.NormalizeSafe(camera.transform.forward);
-        Span<float> cameraRaw = stackalloc float[4];
-        cameraRaw[0] = p.x;
-        cameraRaw[1] = p.y;
-        cameraRaw[2] = p.z;
-        cameraRaw[3] = 1.0f;
-        m_commandList.SetGlobalVector4("u_cameraWorldPos", cameraRaw);
-
-        cameraRaw[0] = f.x;
-        cameraRaw[1] = f.y;
-        cameraRaw[2] = f.z;
-        cameraRaw[3] = 0.0f;
-        m_commandList.SetGlobalVector4("u_cameraForward", cameraRaw);
+        m_globalParameterBinder.ApplyCameraUniform(m_commandList, camera);
     }
 
     private bool TryResolveDrawable(Renderable renderable, out Mesh mesh, out Material material, out Transform transform)
     {
         return m_renderableResolvers.TryResolve(renderable, m_builtinQuadMesh, m_builtinCubeMesh, out mesh, out material, out transform);
-    }
-
-    private static string ToGraphicsSemantic(VertexSemantic semantic)
-    {
-        return semantic switch
-        {
-            VertexSemantic.Position => "POSITION",
-            VertexSemantic.Normal => "NORMAL",
-            VertexSemantic.Tangent => "TANGENT",
-            VertexSemantic.Bitangent => "BITANGENT",
-            VertexSemantic.Color0 => "COLOR",
-            VertexSemantic.TexCoord0 or VertexSemantic.TexCoord1 or VertexSemantic.TexCoord2 or VertexSemantic.TexCoord3 => "TEXCOORD",
-            VertexSemantic.BlendIndices => "INDICES",
-            VertexSemantic.BlendWeights => "WEIGHT",
-            _ => "POSITION"
-        };
-    }
-
-    private static VertexFormat ToVertexFormat(int sizeInBytes)
-    {
-        return sizeInBytes switch
-        {
-            4 => VertexFormat.Float,
-            8 => VertexFormat.Float2,
-            12 => VertexFormat.Float3,
-            16 => VertexFormat.Float4,
-            _ => VertexFormat.Float4
-        };
     }
 
     private static float GetAspectRatio(RenderView view, RenderTarget target)

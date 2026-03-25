@@ -49,50 +49,42 @@ public sealed class ForwardPipeline : RenderPipeline
         }
     }
 
+    internal static IReadOnlyList<IForwardPassProvider> CreateDefaultPassProviders()
+    {
+        return
+        [
+            new BuiltinForwardPassProvider(static features => features.enableShadows, static () => new ShadowPass()),
+            new BuiltinForwardPassProvider(static features => features.enableDepthPrepass, static () => new DepthPrepass()),
+            new BuiltinForwardPassProvider(static _ => true, static () => new OpaquePass()),
+            new BuiltinForwardPassProvider(static features => features.enableSkybox, static () => new SkyboxPass()),
+            new BuiltinForwardPassProvider(static features => features.enableTransparentPass, static () => new TransparentPass()),
+            new BuiltinForwardPassProvider(static features => features.enablePostProcessing, static () => new PostProcessPass()),
+            new BuiltinForwardPassProvider(static features => features.enableObjectPicking, static () => new ObjectPickingPass()),
+            new BuiltinForwardPassProvider(static features => features.enableGizmos, static () => new GizmoPass()),
+            new BuiltinForwardPassProvider(static features => features.enableUiPass, static () => new UiPass())
+        ];
+    }
+
     internal static ForwardPipeline FromFeatureSet(PipelineFeatureSet features, IReadOnlyList<RenderFeature>? customFeatures = null)
     {
+        return FromProviders(features, CreateDefaultPassProviders(), customFeatures);
+    }
+
+    internal static ForwardPipeline FromProviders(
+        PipelineFeatureSet features,
+        IReadOnlyList<IForwardPassProvider> passProviders,
+        IReadOnlyList<RenderFeature>? customFeatures = null)
+    {
+        ArgumentNullException.ThrowIfNull(features);
+        ArgumentNullException.ThrowIfNull(passProviders);
         var passes = new List<RenderPass>();
-
-        if (features.enableShadows)
+        var providerContext = new ForwardPassProviderContext
         {
-            passes.Add(new ShadowPass());
-        }
-
-        if (features.enableDepthPrepass)
+            features = features
+        };
+        foreach (var provider in passProviders)
         {
-            passes.Add(new DepthPrepass());
-        }
-
-        passes.Add(new OpaquePass());
-
-        if (features.enableSkybox)
-        {
-            passes.Add(new SkyboxPass());
-        }
-
-        if (features.enableTransparentPass)
-        {
-            passes.Add(new TransparentPass());
-        }
-
-        if (features.enablePostProcessing)
-        {
-            passes.Add(new PostProcessPass());
-        }
-
-        if (features.enableObjectPicking)
-        {
-            passes.Add(new ObjectPickingPass());
-        }
-
-        if (features.enableGizmos)
-        {
-            passes.Add(new GizmoPass());
-        }
-
-        if (features.enableUiPass)
-        {
-            passes.Add(new UiPass());
+            provider.AddRenderPasses(providerContext, passes);
         }
 
         if (customFeatures is not null && customFeatures.Count > 0)

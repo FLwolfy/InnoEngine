@@ -7,6 +7,15 @@ namespace Inno.Rendering;
 public sealed class ForwardPipelineBuilder
 {
     private readonly List<RenderFeature> m_features = [];
+    private readonly List<IForwardPassProvider> m_passProviders = [];
+
+    public ForwardPipelineBuilder()
+    {
+        foreach (var provider in ForwardPipeline.CreateDefaultPassProviders())
+        {
+            m_passProviders.Add(provider);
+        }
+    }
 
     public bool enableDepthPrepass { get; set; }
 
@@ -31,6 +40,13 @@ public sealed class ForwardPipelineBuilder
         return this;
     }
 
+    public ForwardPipelineBuilder AddPassProvider(IForwardPassProvider passProvider)
+    {
+        ArgumentNullException.ThrowIfNull(passProvider);
+        m_passProviders.Add(passProvider);
+        return this;
+    }
+
     public ForwardPipeline Build()
     {
         var features = new PipelineFeatureSet
@@ -45,6 +61,6 @@ public sealed class ForwardPipelineBuilder
             enableUiPass = enableUiPass
         };
 
-        return ForwardPipeline.FromFeatureSet(features, m_features);
+        return ForwardPipeline.FromProviders(features, m_passProviders, m_features);
     }
 }

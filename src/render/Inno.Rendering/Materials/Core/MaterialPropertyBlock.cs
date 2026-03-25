@@ -60,6 +60,11 @@ public sealed class MaterialPropertyBlock
         return false;
     }
 
+    public IEnumerable<KeyValuePair<string, object>> EnumerateProperties()
+    {
+        return m_values;
+    }
+
     private static class NullTexture
     {
         public static readonly object VALUE = new();

@@ -31,7 +31,7 @@ internal sealed class RenderPassGraphCompiler
             .ToArray();
         var declarations = BuildDeclarations(sorted);
 
-        RebuildGraph(sorted);
+        RebuildGraph(sorted, declarations);
         var topological = m_graph.TopologicalSort(out var cyclicNodes);
         if (cyclicNodes.Count > 0)
         {
@@ -60,28 +60,61 @@ internal sealed class RenderPassGraphCompiler
         return m_cached;
     }
 
-    private void RebuildGraph(IReadOnlyList<RenderPass> sortedPasses)
+    private void RebuildGraph(IReadOnlyList<RenderPass> sortedPasses, IReadOnlyList<RenderGraphPassDeclaration> declarations)
     {
         m_graph.Clear();
         m_passByNode.Clear();
 
-        string? previousNode = null;
+        var nodes = new string[sortedPasses.Count];
         for (var index = 0; index < sortedPasses.Count; index++)
         {
             var pass = sortedPasses[index];
             var node = BuildNodeName(index, pass);
+            nodes[index] = node;
 
             m_graph.AddNode(node);
             m_passByNode[node] = pass;
-
-            if (previousNode is not null)
-            {
-                // Linear chain dependency for deterministic pass ordering.
-                m_graph.AddDependency(node, previousNode);
-            }
-
-            previousNode = node;
         }
+
+        for (var index = 0; index < sortedPasses.Count; index++)
+        {
+            var currentNode = nodes[index];
+            var currentDeclaration = declarations[index];
+            for (var previousIndex = 0; previousIndex < index; previousIndex++)
+            {
+                var previousDeclaration = declarations[previousIndex];
+                if (HasResourceDependency(previousDeclaration, currentDeclaration))
+                {
+                    m_graph.AddDependency(currentNode, nodes[previousIndex]);
+                }
+            }
+        }
+    }
+
+    private static bool HasResourceDependency(RenderGraphPassDeclaration previous, RenderGraphPassDeclaration current)
+    {
+        foreach (var previousUsage in previous.resources)
+        {
+            foreach (var currentUsage in current.resources)
+            {
+                if (!string.Equals(previousUsage.name, currentUsage.name, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (IsWrite(previousUsage.access) || IsWrite(currentUsage.access))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsWrite(RenderGraphResourceAccess access)
+    {
+        return access is RenderGraphResourceAccess.Write or RenderGraphResourceAccess.ReadWrite;
     }
 
     private static string BuildNodeName(int index, RenderPass pass)
