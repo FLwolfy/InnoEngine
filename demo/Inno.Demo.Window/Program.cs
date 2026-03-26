@@ -3,7 +3,6 @@ using Inno.Core.Mathematics;
 using Inno.Graphics;
 using Inno.Graphics.Bgfx;
 using Inno.Platform;
-using Inno.Platform.SDL3;
 using Inno.Rendering;
 using System.Diagnostics;
 
@@ -13,7 +12,7 @@ internal static class Program
 {
     private static int Main()
     {
-        using var app = new Sdl3PlatformApplication();
+        using var app = new PlatformApplication();
         using var window = app.CreateWindow(new PlatformWindowOptions
         {
             title = "Inno Demo",

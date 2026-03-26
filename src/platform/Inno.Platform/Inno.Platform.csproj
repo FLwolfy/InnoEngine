@@ -3,5 +3,10 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\native\Inno.Native.SDL3\Inno.Native.SDL3.csproj" PrivateAssets="compile" />
+  </ItemGroup>
 </Project>

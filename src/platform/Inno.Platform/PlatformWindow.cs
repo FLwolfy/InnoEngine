@@ -1,15 +1,14 @@
 using System;
 using Inno.Native.SDL3;
-using Inno.Platform;
 
-namespace Inno.Platform.SDL3;
+namespace Inno.Platform;
 
-public sealed class Sdl3PlatformWindow : IPlatformWindow
+internal sealed class PlatformWindow : IPlatformWindow
 {
     private SDLWindowPtr m_window;
     private bool m_disposed;
 
-    internal unsafe Sdl3PlatformWindow(SDLWindowPtr window, string title)
+    internal unsafe PlatformWindow(SDLWindowPtr window, string title)
     {
         m_window = window;
         this.title = title;

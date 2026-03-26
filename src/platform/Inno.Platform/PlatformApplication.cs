@@ -1,16 +1,16 @@
 using System;
 using System.Collections.Generic;
+
 using Inno.Native.SDL3;
-using Inno.Platform;
 
-namespace Inno.Platform.SDL3;
+namespace Inno.Platform;
 
-public sealed class Sdl3PlatformApplication : IPlatformApplication
+public sealed class PlatformApplication : IPlatformApplication
 {
-    private readonly Dictionary<uint, Sdl3PlatformWindow> m_windows = [];
+    private readonly Dictionary<uint, PlatformWindow> m_windows = [];
     private bool m_disposed;
 
-    public Sdl3PlatformApplication()
+    public PlatformApplication()
     {
         if (!SDL.Init((uint)(SDLInitFlags.Video | SDLInitFlags.Events)))
         {
@@ -36,7 +36,7 @@ public sealed class Sdl3PlatformApplication : IPlatformApplication
             throw SDL.GetErrorAsException() ?? new InvalidOperationException("SDL_CreateWindow failed.");
         }
 
-        var window = new Sdl3PlatformWindow(windowHandle, options.title);
+        var window = new PlatformWindow(windowHandle, options.title);
         m_windows[window.windowId] = window;
         return window;
     }
