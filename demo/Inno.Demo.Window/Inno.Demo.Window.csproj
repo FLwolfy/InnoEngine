@@ -6,11 +6,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" />
     <ProjectReference Include="..\..\src\core\Inno.Core.Framework\Inno.Core.Framework.csproj" />
     <ProjectReference Include="..\..\src\core\Inno.Core.Mathematics\Inno.Core.Mathematics.csproj" />
     <ProjectReference Include="..\..\src\platform\Inno.Platform\Inno.Platform.csproj" />
-    <ProjectReference Include="..\..\src\graphics\Inno.Graphics\Inno.Graphics.csproj" />
-    <ProjectReference Include="..\..\src\graphics\Inno.Graphics.Bgfx\Inno.Graphics.Bgfx.csproj" />
-    <ProjectReference Include="..\..\src\render\Inno.Rendering\Inno.Rendering.csproj" />
+    <ProjectReference Include="..\..\src\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" />
   </ItemGroup>
 </Project>

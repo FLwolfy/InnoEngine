@@ -9,4 +9,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\native\Inno.Native.SDL3\Inno.Native.SDL3.csproj" PrivateAssets="compile" />
   </ItemGroup>
+  
+  <ItemGroup>
+    <ProjectReference Include="..\..\core\Inno.Core.Events\Inno.Core.Events.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Input\Inno.Core.Input.csproj" />
+  </ItemGroup>
 </Project>
