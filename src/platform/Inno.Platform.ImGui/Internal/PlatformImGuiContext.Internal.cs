@@ -12,12 +12,13 @@ namespace Inno.Platform.ImGui;
 
 public sealed unsafe partial class PlatformImGuiContext
 {
-    private const float DefaultKeyRepeatDelaySeconds = 0.275f;
-    private const float DefaultKeyRepeatRateSeconds = 0.050f;
-    private const float DefaultFontSizePixels = 16.0f;
-    private const string DefaultFontsDirectoryRelativePath = "Assets/Fonts";
-    private const string DefaultIconsDirectoryRelativePath = "Assets/Icons";
-    private const string DefaultFontFileName = "JetBrainsMono-Regular.ttf";
+    private const float DEFAULT_KEY_REPEAT_DELAY_SECONDS = 0.275f;
+    private const float DEFAULT_KEY_REPEAT_RATE_SECONDS = 0.050f;
+    private const float DEFAULT_FONT_SIZE_PIXELS = 16.0f;
+    private const float DEFAULT_MOUSE_SCROLLING_UNITS = 0.3f;
+    private const string DEFAULT_FONTS_DIRECTORY_RELATIVE_PATH = "Assets/Fonts";
+    private const string DEFAULT_ICONS_DIRECTORY_RELATIVE_PATH = "Assets/Icons";
+    private const string DEFAULT_FONT_FILE_NAME = "JetBrainsMono-Regular.ttf";
 
     private readonly PlatformWindow m_window;
     private readonly ImGuiContextPtr m_context;
@@ -69,8 +70,8 @@ public sealed unsafe partial class PlatformImGuiContext
 
     private static void ConfigureKeyRepeat(ImGuiIOPtr io)
     {
-        io.KeyRepeatDelay = DefaultKeyRepeatDelaySeconds;
-        io.KeyRepeatRate = DefaultKeyRepeatRateSeconds;
+        io.KeyRepeatDelay = DEFAULT_KEY_REPEAT_DELAY_SECONDS;
+        io.KeyRepeatRate = DEFAULT_KEY_REPEAT_RATE_SECONDS;
     }
 
     private static void ConfigureFonts(ImGuiIOPtr io)
@@ -83,7 +84,7 @@ public sealed unsafe partial class PlatformImGuiContext
         var preferredIndex = FindPreferredFontIndex(fontPaths);
         for (var i = 0; i < fontPaths.Count; i++)
         {
-            var loadedFont = fonts.AddFontFromFileTTF(fontPaths[i], DefaultFontSizePixels);
+            var loadedFont = fonts.AddFontFromFileTTF(fontPaths[i], DEFAULT_FONT_SIZE_PIXELS);
             if (loadedFont == null)
             {
                 continue;
@@ -114,7 +115,7 @@ public sealed unsafe partial class PlatformImGuiContext
 
     private static int FindPreferredFontIndex(List<string> fontPaths)
     {
-        if (fontPaths.Count == 0 || string.IsNullOrWhiteSpace(DefaultFontFileName))
+        if (fontPaths.Count == 0 || string.IsNullOrWhiteSpace(DEFAULT_FONT_FILE_NAME))
         {
             return -1;
         }
@@ -122,7 +123,7 @@ public sealed unsafe partial class PlatformImGuiContext
         for (var i = 0; i < fontPaths.Count; i++)
         {
             var fileName = Path.GetFileName(fontPaths[i]);
-            if (fileName.Equals(DefaultFontFileName, StringComparison.OrdinalIgnoreCase))
+            if (fileName.Equals(DEFAULT_FONT_FILE_NAME, StringComparison.OrdinalIgnoreCase))
             {
                 return i;
             }
@@ -137,12 +138,12 @@ public sealed unsafe partial class PlatformImGuiContext
         iconFonts = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var fontDirectory in ResolveAssetDirectories(DefaultFontsDirectoryRelativePath))
+        foreach (var fontDirectory in ResolveAssetDirectories(DEFAULT_FONTS_DIRECTORY_RELATIVE_PATH))
         {
             CollectFontFiles(fontDirectory, baseFonts, seen, includeSubdirectories: false);
         }
 
-        foreach (var iconDirectory in ResolveAssetDirectories(DefaultIconsDirectoryRelativePath))
+        foreach (var iconDirectory in ResolveAssetDirectories(DEFAULT_ICONS_DIRECTORY_RELATIVE_PATH))
         {
             CollectFontFiles(iconDirectory, iconFonts, seen, includeSubdirectories: false);
         }
@@ -216,7 +217,7 @@ public sealed unsafe partial class PlatformImGuiContext
                 mergeConfig.PixelSnapH = true;
                 try
                 {
-                    _ = fonts.AddFontFromFileTTF(iconFontPaths[i], DefaultFontSizePixels, mergeConfig, pGlyphRanges);
+                    _ = fonts.AddFontFromFileTTF(iconFontPaths[i], DEFAULT_FONT_SIZE_PIXELS, mergeConfig, pGlyphRanges);
                 }
                 finally
                 {
@@ -264,6 +265,12 @@ public sealed unsafe partial class PlatformImGuiContext
             case SDLEventType.KeyUp:
             {
                 var down = eventType == SDLEventType.KeyDown;
+                if (down && sdlEvent.Key.Repeat != 0)
+                {
+                    // Keep key-repeat timing driven by ImGui (io.KeyRepeatDelay/KeyRepeatRate).
+                    break;
+                }
+
                 UpdateKeyModifiers(io, sdlEvent.Key.Mod);
 
                 var key = TranslateKey(sdlEvent.Key.Scancode);
@@ -325,7 +332,15 @@ public sealed unsafe partial class PlatformImGuiContext
                 var wheelX = sdlEvent.Wheel.X;
                 var wheelY = sdlEvent.Wheel.Y;
 
-                io.AddMouseWheelEvent(wheelX, wheelY);
+                // Flip the horizontal wheel for macOS due to natural scrolling
+                if (OperatingSystem.IsMacOS())
+                {
+                    wheelX = -wheelX;
+                }
+
+                io.AddMouseWheelEvent(
+                    wheelX * DEFAULT_MOUSE_SCROLLING_UNITS,
+                    wheelY * DEFAULT_MOUSE_SCROLLING_UNITS);
                 break;
             }
 
