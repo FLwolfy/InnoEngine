@@ -311,19 +311,43 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     }
 
     /// <summary>
-    /// Finds items by key and returns a lazy enumerable.
+    /// Finds items by key and returns a lazy fail-fast enumerable.
     /// </summary>
     /// <remarks>
-    /// Enumeration is fail-fast and throws if the pool is modified during iteration.
+    /// Enumeration throws if the pool is modified during iteration.
     /// </remarks>
     /// <typeparam name="TKey">Key type.</typeparam>
     /// <param name="key">The key handle to query.</param>
     /// <param name="value">The key value to look up.</param>
-    /// <returns>Lazy enumerable of matching items.</returns>
-    public IEnumerable<T> Find<TKey>(PoolKey<TKey> key, TKey value) where TKey : notnull
+    /// <returns>Lazy fail-fast enumerable of matching items.</returns>
+    public IEnumerable<T> FindFast<TKey>(PoolKey<TKey> key, TKey value) where TKey : notnull
     {
         var index = GetIndex(key);
         return EnumerateFind(index, value);
+    }
+
+    /// <summary>
+    /// Finds items by key and returns a stable snapshot.
+    /// </summary>
+    /// <remarks>
+    /// The returned list is detached from subsequent pool mutations.
+    /// </remarks>
+    /// <typeparam name="TKey">Key type.</typeparam>
+    /// <param name="key">The key handle to query.</param>
+    /// <param name="value">The key value to look up.</param>
+    /// <returns>A stable snapshot list of matching items.</returns>
+    public IReadOnlyList<T> Find<TKey>(PoolKey<TKey> key, TKey value) where TKey : notnull
+    {
+        m_lock.EnterReadLock();
+        try
+        {
+            var index = GetIndex(key);
+            return BuildFindSnapshot(index, value);
+        }
+        finally
+        {
+            m_lock.ExitReadLock();
+        }
     }
 
     private IEnumerable<T> EnumerateFind<TKey>(PoolIndex<T, TKey> index, TKey value) where TKey : notnull
@@ -345,6 +369,29 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
             EnsureVersion(version);
             yield return item;
         }
+    }
+
+    private List<T> BuildFindSnapshot<TKey>(PoolIndex<T, TKey> index, TKey value) where TKey : notnull
+    {
+        var result = new List<T>();
+        if ((index.flags & PoolKeyFlags.Unique) != 0 && index.TryGetSingle(value, out var single) && single != null)
+        {
+            result.Add(single);
+            return result;
+        }
+
+        var set = index.FindUnsafe(value);
+        if (set == null || set.Count == 0)
+        {
+            return result;
+        }
+
+        foreach (var item in set)
+        {
+            result.Add(item);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -423,8 +470,107 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal bool ContainsInSet<TKey>(PoolKey<TKey> key, TKey value, T item) where TKey : notnull => GetIndex(key).Contains(value, item);
 
-    internal IEnumerable<T> ExecuteQuery(List<IQueryCondition<T>> conditions)
+    internal IEnumerable<T> ExecuteQueryFast(List<IQueryCondition<T>> conditions)
         => EnumerateQuery(conditions);
+
+    internal IReadOnlyList<T> ExecuteQuerySnapshot(List<IQueryCondition<T>> conditions)
+    {
+        m_lock.EnterReadLock();
+        try
+        {
+            var result = new List<T>();
+            if (conditions.Count == 0)
+            {
+                result.AddRange(m_activeList);
+                return result;
+            }
+
+            int seedIndex = 0;
+            int seedCount = conditions[0].GetCandidateCount(this);
+            for (int i = 1; i < conditions.Count; i++)
+            {
+                int candidateCount = conditions[i].GetCandidateCount(this);
+                if (candidateCount < seedCount)
+                {
+                    seedCount = candidateCount;
+                    seedIndex = i;
+                }
+            }
+
+            if (seedCount == 0)
+            {
+                return result;
+            }
+
+            if (seedCount == 1 && conditions[seedIndex].TryGetSingle(this, out var single))
+            {
+                bool ok = true;
+                for (int i = 0; i < conditions.Count; i++)
+                {
+                    if (!conditions[i].Validate(this, single))
+                    {
+                        ok = false;
+                        break;
+                    }
+                }
+
+                if (ok)
+                {
+                    result.Add(single);
+                }
+
+                return result;
+            }
+
+            var seed = conditions[seedIndex].GetSet(this);
+            if (seed == null)
+            {
+                foreach (var item in m_activeList)
+                {
+                    bool ok = true;
+                    for (int i = 0; i < conditions.Count; i++)
+                    {
+                        if (!conditions[i].Validate(this, item))
+                        {
+                            ok = false;
+                            break;
+                        }
+                    }
+
+                    if (ok)
+                    {
+                        result.Add(item);
+                    }
+                }
+
+                return result;
+            }
+
+            foreach (var item in seed)
+            {
+                bool ok = true;
+                for (int i = 0; i < conditions.Count; i++)
+                {
+                    if (!conditions[i].Validate(this, item))
+                    {
+                        ok = false;
+                        break;
+                    }
+                }
+
+                if (ok)
+                {
+                    result.Add(item);
+                }
+            }
+
+            return result;
+        }
+        finally
+        {
+            m_lock.ExitReadLock();
+        }
+    }
 
     private IEnumerable<T> EnumerateQuery(List<IQueryCondition<T>> conditions)
     {
@@ -605,10 +751,79 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
         }
     }
 
-    internal IEnumerable<T> ExecuteOrderedQuery<TKey>(
+    internal IEnumerable<T> ExecuteOrderedQueryFast<TKey>(
         PoolKey<TKey> orderKey,
         List<IQueryCondition<T>> conditions) where TKey : notnull
         => EnumerateOrderedQuery(orderKey, conditions);
+
+    internal IReadOnlyList<T> ExecuteOrderedQuerySnapshot<TKey>(
+        PoolKey<TKey> orderKey,
+        List<IQueryCondition<T>> conditions) where TKey : notnull
+    {
+        m_lock.EnterReadLock();
+        try
+        {
+            var index = GetIndex(orderKey);
+            if ((index.flags & PoolKeyFlags.Ordered) == 0)
+            {
+                throw new InvalidOperationException($"Key '{orderKey.name}' is not ordered.");
+            }
+
+            var result = new List<T>();
+            foreach (var key in index.EnumerateOrderedKeys())
+            {
+                if (index.TryGetSingle(key, out var single) && single != null)
+                {
+                    bool ok = true;
+                    for (int i = 0; i < conditions.Count; i++)
+                    {
+                        if (!conditions[i].Validate(this, single))
+                        {
+                            ok = false;
+                            break;
+                        }
+                    }
+
+                    if (ok)
+                    {
+                        result.Add(single);
+                    }
+
+                    continue;
+                }
+
+                var set = index.FindUnsafe(key);
+                if (set == null || set.Count == 0)
+                {
+                    continue;
+                }
+
+                foreach (var item in set)
+                {
+                    bool ok = true;
+                    for (int i = 0; i < conditions.Count; i++)
+                    {
+                        if (!conditions[i].Validate(this, item))
+                        {
+                            ok = false;
+                            break;
+                        }
+                    }
+
+                    if (ok)
+                    {
+                        result.Add(item);
+                    }
+                }
+            }
+
+            return result;
+        }
+        finally
+        {
+            m_lock.ExitReadLock();
+        }
+    }
 
     private IEnumerable<T> EnumerateOrderedQuery<TKey>(
         PoolKey<TKey> orderKey,

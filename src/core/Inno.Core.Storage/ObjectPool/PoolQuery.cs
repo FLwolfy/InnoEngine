@@ -10,7 +10,8 @@ public sealed class PoolQuery<T> where T : class
 {
     private readonly ObjectPool<T> m_pool;
     private readonly List<IQueryCondition<T>> m_conditions = new();
-    private Func<IEnumerable<T>>? m_orderedExec;
+    private Func<IEnumerable<T>>? m_orderedFastExec;
+    private Func<IReadOnlyList<T>>? m_orderedSnapshotExec;
     private Func<T?>? m_orderedFirstExec;
 
     internal PoolQuery(ObjectPool<T> pool)
@@ -59,20 +60,28 @@ public sealed class PoolQuery<T> where T : class
         if (!m_pool.IsOrderedKey(key))
             throw new InvalidOperationException($"Key '{key.name}' is not ordered.");
 
-        m_orderedExec = () => m_pool.ExecuteOrderedQuery(key, m_conditions);
+        m_orderedFastExec = () => m_pool.ExecuteOrderedQueryFast(key, m_conditions);
+        m_orderedSnapshotExec = () => m_pool.ExecuteOrderedQuerySnapshot(key, m_conditions);
         m_orderedFirstExec = () => m_pool.ExecuteOrderedFirst(key, m_conditions);
         return this;
     }
 
     /// <summary>
-    /// Executes the query and returns a lazy enumerable of results.
+    /// Executes the query and returns a lazy fail-fast enumerable of results.
     /// </summary>
     /// <remarks>
     /// Enumeration is fail-fast and throws if the pool is modified during iteration.
     /// </remarks>
-    /// <returns>Lazy enumerable of matching items.</returns>
-    public IEnumerable<T> Get()
-        => m_orderedExec != null ? m_orderedExec() : m_pool.ExecuteQuery(m_conditions);
+    /// <returns>Lazy fail-fast enumerable of matching items.</returns>
+    public IEnumerable<T> GetFast()
+        => m_orderedFastExec != null ? m_orderedFastExec() : m_pool.ExecuteQueryFast(m_conditions);
+
+    /// <summary>
+    /// Executes the query and returns a stable snapshot.
+    /// </summary>
+    /// <returns>A snapshot list detached from subsequent pool mutations.</returns>
+    public IReadOnlyList<T> Get()
+        => m_orderedSnapshotExec != null ? m_orderedSnapshotExec() : m_pool.ExecuteQuerySnapshot(m_conditions);
 
     /// <summary>
     /// Executes the query and returns the first matching item or null.

@@ -7,7 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\core\Inno.Core.ECS\Inno.Core.ECS.csproj" />
     <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
   </ItemGroup>
 

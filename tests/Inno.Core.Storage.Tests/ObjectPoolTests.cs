@@ -151,6 +151,38 @@ public sealed class ObjectPoolTests
     }
 
     [Fact]
+    public void GetFast_IsFailFast_WhenPoolMutates()
+    {
+        var pool = new ObjectPool<Item>();
+        pool.Add(new Item("A", 1));
+        pool.Add(new Item("B", 2));
+
+        using var enumerator = pool.Query().GetFast().GetEnumerator();
+        Assert.True(enumerator.MoveNext());
+
+        pool.Add(new Item("C", 3));
+
+        Assert.Throws<InvalidOperationException>(() => enumerator.MoveNext());
+    }
+
+    [Fact]
+    public void Get_ReturnsStableSnapshot_WhenPoolMutates()
+    {
+        var pool = new ObjectPool<Item>();
+        var a = new Item("A", 1);
+        var b = new Item("B", 2);
+        pool.Add(a);
+        pool.Add(b);
+
+        IReadOnlyList<Item> snapshot = pool.Query().Get();
+        pool.Add(new Item("C", 3));
+
+        Assert.Equal(2, snapshot.Count);
+        Assert.Contains(a, snapshot);
+        Assert.Contains(b, snapshot);
+    }
+
+    [Fact]
     public void RemoveAll_KeepsKeys()
     {
         var pool = new ObjectPool<Item>();
