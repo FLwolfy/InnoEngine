@@ -5,8 +5,10 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 using Inno.Core.Logging;
+using Inno.Core.Reflection;
 
 namespace Inno.Core.Serialization;
 
@@ -180,20 +182,43 @@ public interface ISerializable
         PropertyVisibility visibility,
         long sortKey);
 
-    private static readonly ConditionalWeakTable<Type, MemberSlot[]> SLOT_CACHE = new();
-    private static readonly ConditionalWeakTable<Type, Func<object>> ACTIVATOR_CACHE = new();
+    private static readonly Lock SLOT_CACHE_SYNC = new();
+    private static readonly Dictionary<int, MemberSlot[]> SLOT_CACHE = [];
+    private static readonly Lock ACTIVATOR_CACHE_SYNC = new();
+    private static readonly Dictionary<int, Func<object>> ACTIVATOR_CACHE = [];
 
-    private static MemberSlot[] GetSlots(Type type) => SLOT_CACHE.GetValue(type, static t => BuildSlots(t));
+    private static MemberSlot[] GetSlots(Type type)
+    {
+        int typeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(type);
+        lock (SLOT_CACHE_SYNC)
+        {
+            if (SLOT_CACHE.TryGetValue(typeId, out MemberSlot[]? slots))
+            {
+                return slots;
+            }
+
+            slots = BuildSlots(type);
+            SLOT_CACHE[typeId] = slots;
+            return slots;
+        }
+    }
 
     // Cache generated order map per declaring type (so BuildSlots is cheap).
-    private static readonly ConditionalWeakTable<Type, IReadOnlyDictionary<string, int>> DECL_ORDER_CACHE = new();
+    private static readonly Lock DECL_ORDER_CACHE_SYNC = new();
+    private static readonly Dictionary<int, IReadOnlyDictionary<string, int>> DECL_ORDER_CACHE = [];
 
     private static IReadOnlyDictionary<string, int> GetDeclOrderMap(Type declaringType)
     {
-        return DECL_ORDER_CACHE.GetValue(declaringType, static t =>
+        int typeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(declaringType);
+        lock (DECL_ORDER_CACHE_SYNC)
         {
+            if (DECL_ORDER_CACHE.TryGetValue(typeId, out IReadOnlyDictionary<string, int>? existing))
+            {
+                return existing;
+            }
+
             // Try generator registry first
-            if (GeneratedOrderRegistry.TryGetOrder(t, out var orderList))
+            if (GeneratedOrderRegistry.TryGetOrder(declaringType, out var orderList))
             {
                 var map = new Dictionary<string, int>(orderList.Length, StringComparer.Ordinal);
                 for (var i = 0; i < orderList.Length; i++)
@@ -202,11 +227,15 @@ public interface ISerializable
                     if (!map.ContainsKey(orderList[i]))
                         map[orderList[i]] = i;
                 }
+
+                DECL_ORDER_CACHE[typeId] = map;
                 return map;
             }
 
-            return new Dictionary<string, int>(0, StringComparer.Ordinal);
-        });
+            var empty = new Dictionary<string, int>(0, StringComparer.Ordinal);
+            DECL_ORDER_CACHE[typeId] = empty;
+            return empty;
+        }
     }
 
     private static int GetDeclOrderIndex(Type declaringType, string memberName)
@@ -360,8 +389,10 @@ public interface ISerializable
         public required Func<KeyValuePair<object?, object?>[], object> construct { get; init; }
     }
 
-    private static readonly ConditionalWeakTable<Type, SequenceFactory> SEQUENCE_FACTORY_CACHE = new();
-    private static readonly ConditionalWeakTable<Type, MapFactory> MAP_FACTORY_CACHE = new();
+    private static readonly Lock SEQUENCE_FACTORY_CACHE_SYNC = new();
+    private static readonly Dictionary<int, SequenceFactory> SEQUENCE_FACTORY_CACHE = [];
+    private static readonly Lock MAP_FACTORY_CACHE_SYNC = new();
+    private static readonly Dictionary<int, MapFactory> MAP_FACTORY_CACHE = [];
 
     private static object? CaptureValue(object? value, Type declaredType)
     {
@@ -418,9 +449,14 @@ public interface ISerializable
 
         if (value is ISerializable s)
         {
+            Type runtimeType = s.GetType();
+            int runtimeTypeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(runtimeType);
             return new Dictionary<string, object?>(2, StringComparer.Ordinal)
             {
-                ["__type"] = s.GetType().AssemblyQualifiedName ?? s.GetType().FullName ?? s.GetType().Name,
+                ["__runtimeTypeId"] = runtimeTypeId,
+                ["__stableTypeId"] = TypeIdentityRegistry.TryGetStableTypeId(runtimeType, out Guid stableTypeId)
+                    ? stableTypeId.ToString("D")
+                    : null,
                 ["data"] = s.CaptureState()
             };
         }
@@ -488,7 +524,7 @@ public interface ISerializable
             if (!TryReadMapEntries(raw, out var entries))
                 throw new InvalidOperationException($"Map node must be IDictionary or key-value sequence. Got: {raw.GetType().FullName}");
 
-            var factory = MAP_FACTORY_CACHE.GetValue(t, static target => BuildMapFactory(target));
+            MapFactory factory = GetMapFactory(t);
             var restoredEntries = new KeyValuePair<object?, object?>[entries.Count];
             for (var i = 0; i < entries.Count; i++)
             {
@@ -506,7 +542,7 @@ public interface ISerializable
             if (!TryReadSequenceItems(raw, out var items))
                 throw new InvalidOperationException($"Sequence node must be a list-like value. Got: {raw.GetType().FullName}");
 
-            var factory = SEQUENCE_FACTORY_CACHE.GetValue(t, static target => BuildSequenceFactory(target));
+            SequenceFactory factory = GetSequenceFactory(t);
             var restoredItems = new object?[items.Count];
             for (var i = 0; i < items.Count; i++)
                 restoredItems[i] = RestoreValue(items[i], factory.elementType);
@@ -522,11 +558,22 @@ public interface ISerializable
                 throw new InvalidOperationException("Serializable wrapper missing 'data' (SerializingState).");
 
             var runtimeType = t;
-            if (wrapper.TryGetValue("__type", out var typeStrObj) && typeStrObj is string typeStr)
+            if (wrapper.TryGetValue("__stableTypeId", out var stableTypeObj) &&
+                stableTypeObj is string stableTypeText &&
+                Guid.TryParse(stableTypeText, out Guid stableTypeId) &&
+                TypeIdentityRegistry.TryResolveType(stableTypeId, out Type? stableResolved) &&
+                stableResolved is not null &&
+                t.IsAssignableFrom(stableResolved))
             {
-                var resolved = Type.GetType(typeStr);
-                if (resolved != null && t.IsAssignableFrom(resolved))
-                    runtimeType = resolved;
+                runtimeType = stableResolved;
+            }
+            else if (wrapper.TryGetValue("__runtimeTypeId", out var runtimeTypeObj) &&
+                     TryReadRuntimeTypeId(runtimeTypeObj, out int runtimeTypeId) &&
+                     TypeIdentityRegistry.TryResolveRuntimeType(runtimeTypeId, out Type? runtimeResolved) &&
+                     runtimeResolved is not null &&
+                     t.IsAssignableFrom(runtimeResolved))
+            {
+                runtimeType = runtimeResolved;
             }
 
             var inst = CreateSerializableInstance(runtimeType);
@@ -559,6 +606,57 @@ public interface ISerializable
         }
 
         throw new InvalidOperationException($"Serializable wrapper must be a dictionary. Got: {raw.GetType().FullName}");
+    }
+
+    private static bool TryReadRuntimeTypeId(object? raw, out int runtimeTypeId)
+    {
+        switch (raw)
+        {
+            case int i:
+                runtimeTypeId = i;
+                return true;
+            case long l when l is >= int.MinValue and <= int.MaxValue:
+                runtimeTypeId = (int)l;
+                return true;
+            case string s when int.TryParse(s, out int parsed):
+                runtimeTypeId = parsed;
+                return true;
+            default:
+                runtimeTypeId = default;
+                return false;
+        }
+    }
+
+    private static SequenceFactory GetSequenceFactory(Type targetType)
+    {
+        int typeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(targetType);
+        lock (SEQUENCE_FACTORY_CACHE_SYNC)
+        {
+            if (SEQUENCE_FACTORY_CACHE.TryGetValue(typeId, out SequenceFactory? existing))
+            {
+                return existing;
+            }
+
+            SequenceFactory created = BuildSequenceFactory(targetType);
+            SEQUENCE_FACTORY_CACHE[typeId] = created;
+            return created;
+        }
+    }
+
+    private static MapFactory GetMapFactory(Type targetType)
+    {
+        int typeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(targetType);
+        lock (MAP_FACTORY_CACHE_SYNC)
+        {
+            if (MAP_FACTORY_CACHE.TryGetValue(typeId, out MapFactory? existing))
+            {
+                return existing;
+            }
+
+            MapFactory created = BuildMapFactory(targetType);
+            MAP_FACTORY_CACHE[typeId] = created;
+            return created;
+        }
     }
 
     private static SequenceFactory BuildSequenceFactory(Type targetType)
@@ -845,7 +943,17 @@ public interface ISerializable
 
     private static object CreateCachedInstance(Type concreteType)
     {
-        var factory = ACTIVATOR_CACHE.GetValue(concreteType, static t => BuildActivator(t));
+        int typeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(concreteType);
+        Func<object> factory;
+        lock (ACTIVATOR_CACHE_SYNC)
+        {
+            if (!ACTIVATOR_CACHE.TryGetValue(typeId, out factory!))
+            {
+                factory = BuildActivator(concreteType);
+                ACTIVATOR_CACHE[typeId] = factory;
+            }
+        }
+
         return factory();
     }
 

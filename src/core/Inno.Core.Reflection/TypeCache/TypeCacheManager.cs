@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Threading;
 
 namespace Inno.Core.Reflection;
@@ -14,9 +13,9 @@ public static class TypeCacheManager
 {
     private const string C_INNO_NAMESPACE = "Inno";
 
-    private static ConditionalWeakTable<Type, WeakTypeSet> s_subclassCache = new();
-    private static ConditionalWeakTable<Type, WeakTypeSet> s_interfaceCache = new();
-    private static ConditionalWeakTable<Type, WeakTypeSet> s_attributeCache = new();
+    private static Dictionary<int, Type[]> s_subclassCache = [];
+    private static Dictionary<int, Type[]> s_interfaceCache = [];
+    private static Dictionary<int, Type[]> s_attributeCache = [];
 
     private static readonly Lock CACHE_SYNC = new();
     private static volatile bool s_isDirty = false;
@@ -110,9 +109,9 @@ public static class TypeCacheManager
             .Where(t => !t.IsAbstract && !t.IsInterface && (t.Namespace?.StartsWith(C_INNO_NAMESPACE) ?? false))
             .ToArray();
 
-        var subclassCache = new ConditionalWeakTable<Type, WeakTypeSet>();
-        var interfaceCache = new ConditionalWeakTable<Type, WeakTypeSet>();
-        var attributeCache = new ConditionalWeakTable<Type, WeakTypeSet>();
+        var subclassSets = new Dictionary<int, HashSet<Type>>();
+        var interfaceSets = new Dictionary<int, HashSet<Type>>();
+        var attributeSets = new Dictionary<int, HashSet<Type>>();
 
         foreach (var type in allTypes)
         {
@@ -122,23 +121,27 @@ public static class TypeCacheManager
             var baseType = type.BaseType;
             while (baseType != null && baseType != typeof(object))
             {
-                GetOrCreateWeakSet(subclassCache, baseType).Add(type);
+                AddToIndex(subclassSets, baseType, type);
                 baseType = baseType.BaseType;
             }
 
             // Index by interfaces
             foreach (var iface in type.GetInterfaces())
             {
-                GetOrCreateWeakSet(interfaceCache, iface).Add(type);
+                AddToIndex(interfaceSets, iface, type);
             }
 
             // Index by attributes
             foreach (var attr in type.GetCustomAttributes(inherit: true))
             {
                 var attrType = attr.GetType();
-                GetOrCreateWeakSet(attributeCache, attrType).Add(type);
+                AddToIndex(attributeSets, attrType, type);
             }
         }
+
+        Dictionary<int, Type[]> subclassCache = FreezeIndex(subclassSets);
+        Dictionary<int, Type[]> interfaceCache = FreezeIndex(interfaceSets);
+        Dictionary<int, Type[]> attributeCache = FreezeIndex(attributeSets);
 
         lock (CACHE_SYNC)
         {
@@ -160,7 +163,8 @@ public static class TypeCacheManager
     public static IReadOnlyList<Type> GetSubTypesOf<T>()
     {
         EnsureFresh();
-        if (s_subclassCache.TryGetValue(typeof(T), out var set)) return set.GetAliveTypes();
+        int keyId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(typeof(T));
+        if (s_subclassCache.TryGetValue(keyId, out Type[]? set)) return set;
         return [];
     }
 
@@ -172,7 +176,8 @@ public static class TypeCacheManager
     public static IReadOnlyList<Type> GetTypesImplementing<TInterface>()
     {
         EnsureFresh();
-        if (s_interfaceCache.TryGetValue(typeof(TInterface), out var set)) return set.GetAliveTypes();
+        int keyId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(typeof(TInterface));
+        if (s_interfaceCache.TryGetValue(keyId, out Type[]? set)) return set;
         return [];
     }
 
@@ -184,7 +189,8 @@ public static class TypeCacheManager
     public static IReadOnlyList<Type> GetTypesWithAttribute<TAttr>() where TAttr : Attribute
     {
         EnsureFresh();
-        if (s_attributeCache.TryGetValue(typeof(TAttr), out var set)) return set.GetAliveTypes();
+        int keyId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(typeof(TAttr));
+        if (s_attributeCache.TryGetValue(keyId, out Type[]? set)) return set;
         return [];
     }
 
@@ -203,58 +209,26 @@ public static class TypeCacheManager
         }
     }
 
-    private static WeakTypeSet GetOrCreateWeakSet(ConditionalWeakTable<Type, WeakTypeSet> table, Type key)
+    private static void AddToIndex(Dictionary<int, HashSet<Type>> index, Type keyType, Type valueType)
     {
-        if (table.TryGetValue(key, out var set))
-            return set;
+        int keyId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(keyType);
+        if (!index.TryGetValue(keyId, out HashSet<Type>? set))
+        {
+            set = new HashSet<Type>();
+            index[keyId] = set;
+        }
 
-        set = new WeakTypeSet();
-        try
-        {
-            table.Add(key, set);
-            return set;
-        }
-        catch (ArgumentException)
-        {
-            return table.GetValue(key, static _ => new WeakTypeSet());
-        }
+        set.Add(valueType);
     }
 
-    private sealed class WeakTypeSet
+    private static Dictionary<int, Type[]> FreezeIndex(Dictionary<int, HashSet<Type>> index)
     {
-        private readonly object m_syncRoot = new();
-        private readonly List<WeakReference<Type>> m_items = new();
-
-        public void Add(Type type)
+        var frozen = new Dictionary<int, Type[]>(index.Count);
+        foreach (var pair in index)
         {
-            lock (m_syncRoot)
-            {
-                m_items.Add(new WeakReference<Type>(type));
-            }
+            frozen[pair.Key] = pair.Value.ToArray();
         }
 
-        public IReadOnlyList<Type> GetAliveTypes()
-        {
-            lock (m_syncRoot)
-            {
-                var result = new List<Type>(m_items.Count);
-                var write = 0;
-
-                for (var i = 0; i < m_items.Count; i++)
-                {
-                    var wr = m_items[i];
-                    if (!wr.TryGetTarget(out var target))
-                        continue;
-
-                    result.Add(target);
-                    m_items[write++] = wr;
-                }
-
-                if (write < m_items.Count)
-                    m_items.RemoveRange(write, m_items.Count - write);
-
-                return result;
-            }
-        }
+        return frozen;
     }
 }

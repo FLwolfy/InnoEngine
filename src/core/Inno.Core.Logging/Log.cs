@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 using Inno.Core.Reflection;
 
@@ -26,7 +28,8 @@ public static class Log
         public required AssemblyGroup source { get; init; }
     }
 
-    private static readonly ConditionalWeakTable<Type, TypeInfo> TYPE_INFO_CACHE = new();
+    private static readonly Lock TYPE_INFO_CACHE_SYNC = new();
+    private static readonly Dictionary<int, TypeInfo> TYPE_INFO_CACHE = [];
     private static readonly ConditionalWeakTable<Assembly, AssemblySource> ASSEMBLY_SOURCE_CACHE = new();
 
     /// <summary>
@@ -130,17 +133,23 @@ public static class Log
 
         if (callerType != null)
         {
-            var info = TYPE_INFO_CACHE.GetValue(callerType, static t =>
+            int runtimeTypeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(callerType);
+            TypeInfo info;
+            lock (TYPE_INFO_CACHE_SYNC)
             {
-                var src = ASSEMBLY_SOURCE_CACHE.GetValue(t.Assembly, static assembly =>
-                    new AssemblySource { source = assembly.GetInnoAssemblyGroup() });
-
-                return new TypeInfo
+                if (!TYPE_INFO_CACHE.TryGetValue(runtimeTypeId, out info!))
                 {
-                    source = src.source,
-                    category = t.Name
-                };
-            });
+                    var src = ASSEMBLY_SOURCE_CACHE.GetValue(callerType.Assembly, static assembly =>
+                        new AssemblySource { source = assembly.GetInnoAssemblyGroup() });
+
+                    info = new TypeInfo
+                    {
+                        source = src.source,
+                        category = callerType.Name
+                    };
+                    TYPE_INFO_CACHE[runtimeTypeId] = info;
+                }
+            }
 
             source = info.source;
             category = info.category;

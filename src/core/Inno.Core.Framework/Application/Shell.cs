@@ -174,6 +174,7 @@ public sealed class Shell : IDisposable
 
             LogManager.RegisterSink(new ConsoleLogSink());
             TypeCacheManager.Initialize();
+            TypeIdentityRegistry.RebuildFromLoadedAssemblies();
             LogManager.Initialize();
         }
         catch

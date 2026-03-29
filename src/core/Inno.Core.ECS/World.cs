@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Inno.Core.Reflection;
 using Inno.Core.Storage;
 
 namespace Inno.Core.ECS;
@@ -11,22 +12,23 @@ public sealed class World
 
     private readonly ObjectPool<Component> m_components = new();
     private readonly PoolKey<Guid> m_componentEntityKey;
-    private readonly PoolKey<Type> m_componentTypeKey;
-
-    private readonly List<ISystem> m_systems = [];
-
+    private readonly PoolKey<int> m_componentTypeIdKey;
+    
+    private readonly record struct ComponentAddOp(Guid entityId, Component component, int componentTypeId);
     private readonly List<ComponentAddOp> m_pendingAddComponents = [];
+    
+    private readonly record struct ComponentRemoveOp(Guid entityId, int componentTypeId);
     private readonly List<ComponentRemoveOp> m_pendingRemoveComponents = [];
+
     private readonly HashSet<Guid> m_pendingKilledEntities = [];
-
-    internal PoolKey<Guid> componentEntityKey => m_componentEntityKey;
-    internal PoolKey<Type> componentTypeKey => m_componentTypeKey;
-
+    private readonly List<ISystem> m_systems = [];
+    
+    
     public World()
     {
         m_entityIdKey = m_entities.DefineKey<Guid>("entity.id", PoolKeyFlags.Unique);
         m_componentEntityKey = m_components.DefineKey<Guid>("component.entity");
-        m_componentTypeKey = m_components.DefineKey<Type>("component.type");
+        m_componentTypeIdKey = m_components.DefineKey<int>("component.typeId");
     }
 
     public Entity CreateEntity(Guid? parentGuid = null)
@@ -101,8 +103,9 @@ public sealed class World
 
         EnsureEntityExists(entity.id);
 
-        RemovePendingForEntityType(entity.id, typeof(TComponent));
-        m_pendingAddComponents.Add(new ComponentAddOp(entity.id, component, typeof(TComponent)));
+        int componentTypeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(typeof(TComponent));
+        RemovePendingForEntityType(entity.id, componentTypeId);
+        m_pendingAddComponents.Add(new ComponentAddOp(entity.id, component, componentTypeId));
     }
 
     public bool RemoveComponent<TComponent>(Entity entity)
@@ -111,13 +114,12 @@ public sealed class World
         ArgumentNullException.ThrowIfNull(entity);
         EnsureEntityExists(entity.id);
 
-        bool removedPendingAdd = RemovePendingAdd(entity.id, typeof(TComponent));
-        m_pendingRemoveComponents.Add(new ComponentRemoveOp(entity.id, typeof(TComponent)));
-        return removedPendingAdd || FindComponent(entity.id, typeof(TComponent)) is not null;
+        int componentTypeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(typeof(TComponent));
+        bool removedPendingAdd = RemovePendingAdd(entity.id, componentTypeId);
+        m_pendingRemoveComponents.Add(new ComponentRemoveOp(entity.id, componentTypeId));
+        return removedPendingAdd || FindComponent(entity.id, componentTypeId) is not null;
     }
 
-    public QueryBuilder Query()
-        => new(this, m_components.Query());
 
     public void FlushPending()
     {
@@ -129,7 +131,8 @@ public sealed class World
     internal IEnumerable<(Entity entity, TComponent component)> QueryTyped<TComponent>()
         where TComponent : Component
     {
-        IReadOnlyList<Component> typed = m_components.Find(m_componentTypeKey, typeof(TComponent));
+        int componentTypeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(typeof(TComponent));
+        IReadOnlyList<Component> typed = m_components.Find(m_componentTypeIdKey, componentTypeId);
         for (int i = 0; i < typed.Count; i++)
         {
             Component component = typed[i];
@@ -161,7 +164,7 @@ public sealed class World
                 continue;
             }
 
-            Component? existing = FindComponent(op.entityId, op.componentType);
+            Component? existing = FindComponent(op.entityId, op.componentTypeId);
             if (existing is not null)
             {
                 RemoveComponentInstance(existing);
@@ -170,7 +173,7 @@ public sealed class World
             op.component.entityId = op.entityId;
             m_components.Add(op.component)
                 .Set(m_componentEntityKey, op.entityId)
-                .Set(m_componentTypeKey, op.componentType);
+                .Set(m_componentTypeIdKey, op.componentTypeId);
         }
 
         m_pendingAddComponents.Clear();
@@ -181,7 +184,7 @@ public sealed class World
         for (int i = 0; i < m_pendingRemoveComponents.Count; i++)
         {
             ComponentRemoveOp op = m_pendingRemoveComponents[i];
-            Component? component = FindComponent(op.entityId, op.componentType);
+            Component? component = FindComponent(op.entityId, op.componentTypeId);
             if (component is null)
             {
                 continue;
@@ -228,11 +231,11 @@ public sealed class World
         return m_components.Remove(component);
     }
 
-    private Component? FindComponent(Guid entityId, Type componentType)
+    private Component? FindComponent(Guid entityId, int componentTypeId)
     {
         return m_components.Query()
             .Find(m_componentEntityKey, entityId)
-            .Find(m_componentTypeKey, componentType)
+            .Find(m_componentTypeIdKey, componentTypeId)
             .First();
     }
 
@@ -250,13 +253,13 @@ public sealed class World
         return entity is not null;
     }
 
-    private bool RemovePendingAdd(Guid entityId, Type componentType)
+    private bool RemovePendingAdd(Guid entityId, int componentTypeId)
     {
         bool removed = false;
         for (int i = m_pendingAddComponents.Count - 1; i >= 0; i--)
         {
             ComponentAddOp op = m_pendingAddComponents[i];
-            if (op.entityId != entityId || op.componentType != componentType)
+            if (op.entityId != entityId || op.componentTypeId != componentTypeId)
             {
                 continue;
             }
@@ -270,12 +273,12 @@ public sealed class World
         return removed;
     }
 
-    private void RemovePendingForEntityType(Guid entityId, Type componentType)
+    private void RemovePendingForEntityType(Guid entityId, int componentTypeId)
     {
         for (int i = m_pendingRemoveComponents.Count - 1; i >= 0; i--)
         {
             ComponentRemoveOp op = m_pendingRemoveComponents[i];
-            if (op.entityId == entityId && op.componentType == componentType)
+            if (op.entityId == entityId && op.componentTypeId == componentTypeId)
             {
                 m_pendingRemoveComponents.RemoveAt(i);
             }
@@ -304,42 +307,4 @@ public sealed class World
         }
     }
 
-    private readonly record struct ComponentAddOp(Guid entityId, Component component, Type componentType);
-
-    private readonly record struct ComponentRemoveOp(Guid entityId, Type componentType);
-}
-
-public sealed class QueryBuilder(World world, PoolQuery<Component> query)
-{
-    private readonly World m_world = world;
-    private readonly PoolQuery<Component> m_query = query;
-
-    public QueryBuilder ForEntity(Entity entity)
-    {
-        ArgumentNullException.ThrowIfNull(entity);
-        m_query.Find(m_world.componentEntityKey, entity.id);
-        return this;
-    }
-
-    public QueryBuilder ForComponent<TComponent>()
-        where TComponent : Component
-    {
-        m_query.Find(m_world.componentTypeKey, typeof(TComponent));
-        return this;
-    }
-
-    public QueryBuilder Where(Func<Component, bool> predicate)
-    {
-        m_query.Where(predicate);
-        return this;
-    }
-
-    public IEnumerable<Component> GetFast()
-        => m_query.GetFast();
-
-    public IReadOnlyList<Component> Get()
-        => m_query.Get();
-
-    public Component? First()
-        => m_query.First();
 }

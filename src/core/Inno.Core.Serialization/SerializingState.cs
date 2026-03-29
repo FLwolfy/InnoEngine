@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using Inno.Core.Reflection;
 
 namespace Inno.Core.Serialization;
 
@@ -16,6 +17,8 @@ public sealed record SerializingState
 
     private const string INNO_MAGIC_HEADER = "INNO";
     private const int SERIALIZATION_VERSION = 1;
+    private const string STABLE_TYPE_PREFIX = "stable:";
+    private const string RUNTIME_TYPE_PREFIX = "runtime:";
 
     #endregion
 
@@ -234,7 +237,7 @@ public sealed record SerializingState
             if (t.IsEnum)
             {
                 bw.Write((byte)BinKind.Enum);
-                bw.Write(t.AssemblyQualifiedName ?? t.FullName ?? t.Name);
+                WriteTypeIdentity(bw, t);
                 bw.Write(Convert.ToInt64(value));
                 return;
             }
@@ -295,7 +298,7 @@ public sealed record SerializingState
             {
                 bw.Write((byte)BinKind.Serializable);
                 var rt = ser.GetType();
-                bw.Write(rt.AssemblyQualifiedName ?? rt.FullName ?? rt.Name);
+                WriteTypeIdentity(bw, rt);
 
                 SerializableGraph.ValidateAllowedTypeGraph(rt, $"BinaryWrite({rt.FullName})");
 
@@ -308,7 +311,7 @@ public sealed record SerializingState
                 SerializableGraph.ValidateAllowedTypeGraph(t, $"BinaryWrite({t.FullName})");
 
                 bw.Write((byte)BinKind.Struct);
-                bw.Write(t.AssemblyQualifiedName ?? t.FullName ?? t.Name);
+                WriteTypeIdentity(bw, t);
 
                 var fields = SerializableGraph.GetStructSerializableFields(t);
                 var props = SerializableGraph.GetStructSerializableProperties(t);
@@ -348,9 +351,7 @@ public sealed record SerializingState
 
                 case BinKind.Enum:
                 {
-                    var enumTypeName = br.ReadString();
-                    var enumType = Type.GetType(enumTypeName)
-                                   ?? throw new InvalidDataException($"Could not resolve enum type '{enumTypeName}'.");
+                    var enumType = ReadTypeIdentity(br, "enum");
                     return Enum.ToObject(enumType, br.ReadInt64());
                 }
 
@@ -386,9 +387,7 @@ public sealed record SerializingState
 
                 case BinKind.Serializable:
                 {
-                    var typeName = br.ReadString();
-                    var rt = Type.GetType(typeName)
-                             ?? throw new InvalidDataException($"Could not resolve ISerializable type '{typeName}'.");
+                    var rt = ReadTypeIdentity(br, "ISerializable");
 
                     if (!typeof(ISerializable).IsAssignableFrom(rt))
                         throw new InvalidDataException($"Type '{rt.FullName}' is not ISerializable.");
@@ -422,9 +421,7 @@ public sealed record SerializingState
 
         private static object ReadStruct(BinaryReader br)
         {
-            var typeName = br.ReadString();
-            var t = Type.GetType(typeName)
-                    ?? throw new InvalidDataException($"Could not resolve struct type '{typeName}'.");
+            var t = ReadTypeIdentity(br, "struct");
 
             if (!t.IsValueType || t.IsEnum)
                 throw new InvalidDataException($"Type '{t.FullName}' is not a struct value-type.");
@@ -459,6 +456,49 @@ public sealed record SerializingState
             }
 
             return boxed;
+        }
+
+        private static void WriteTypeIdentity(BinaryWriter bw, Type type)
+        {
+            if (TypeIdentityRegistry.TryGetStableTypeId(type, out Guid stableTypeId))
+            {
+                bw.Write(STABLE_TYPE_PREFIX + stableTypeId.ToString("D"));
+                return;
+            }
+
+            int runtimeTypeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(type);
+            bw.Write(RUNTIME_TYPE_PREFIX + runtimeTypeId);
+        }
+
+        private static Type ReadTypeIdentity(BinaryReader br, string kind)
+        {
+            string token = br.ReadString();
+            if (token.StartsWith(STABLE_TYPE_PREFIX, StringComparison.Ordinal))
+            {
+                string text = token[STABLE_TYPE_PREFIX.Length..];
+                if (!Guid.TryParse(text, out Guid stableTypeId))
+                    throw new InvalidDataException($"Invalid stable type id '{token}' for {kind}.");
+
+                if (TypeIdentityRegistry.TryResolveType(stableTypeId, out Type? stableType) && stableType is not null)
+                    return stableType;
+
+                throw new InvalidDataException($"Could not resolve stable type id '{stableTypeId}' for {kind}.");
+            }
+
+            if (token.StartsWith(RUNTIME_TYPE_PREFIX, StringComparison.Ordinal))
+            {
+                string text = token[RUNTIME_TYPE_PREFIX.Length..];
+                if (!int.TryParse(text, out int runtimeTypeId))
+                    throw new InvalidDataException($"Invalid runtime type id '{token}' for {kind}.");
+
+                if (TypeIdentityRegistry.TryResolveRuntimeType(runtimeTypeId, out Type? runtimeType) && runtimeType is not null)
+                    return runtimeType;
+
+                throw new InvalidDataException($"Could not resolve runtime type id '{runtimeTypeId}' for {kind}.");
+            }
+
+            throw new InvalidDataException(
+                $"Unsupported type identity token '{token}' for {kind}. Expected '{STABLE_TYPE_PREFIX}...' or '{RUNTIME_TYPE_PREFIX}...'.");
         }
 
         private static void WritePrimitive(BinaryWriter bw, object value, Type t)

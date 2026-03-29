@@ -73,6 +73,25 @@ public sealed class SerializationBehaviorTests
     }
 
     [Fact]
+    public void SerializingState_Deserialize_LegacyTypeToken_Throws()
+    {
+        using var ms = new MemoryStream();
+        using (var bw = new BinaryWriter(ms))
+        {
+            bw.Write("INNO");
+            bw.Write(1);
+            bw.Write((byte)20); // BinKind.State
+            bw.Write(1); // key count
+            bw.Write("value");
+            bw.Write((byte)2); // BinKind.Enum
+            bw.Write(typeof(SampleMode).AssemblyQualifiedName!); // legacy token without stable:/runtime:
+            bw.Write((long)SampleMode.Hard);
+        }
+
+        Assert.Throws<InvalidDataException>(() => SerializingState.Deserialize(ms.ToArray()));
+    }
+
+    [Fact]
     public void SerializingState_SerializeDeserialize_SupportsRuntimeMapAndSequenceTypes()
     {
         var map = new CustomMap();

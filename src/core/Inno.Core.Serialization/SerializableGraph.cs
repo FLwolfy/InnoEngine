@@ -2,8 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Threading;
+
+using Inno.Core.Reflection;
 
 namespace Inno.Core.Serialization;
 
@@ -53,9 +54,12 @@ internal static class SerializableGraph
     internal readonly record struct StructFieldEntry(FieldInfo field, bool canDeserialize);
     internal readonly record struct StructPropertyEntry(PropertyInfo property, bool canDeserialize);
 
-    private static readonly ConditionalWeakTable<Type, TypeShape> TYPE_SHAPE_CACHE = new();
-    private static readonly ConditionalWeakTable<Type, StructMembers> STRUCT_MEMBER_CACHE = new();
-    private static readonly ConditionalWeakTable<Type, GraphValidationState> VALIDATION_CACHE = new();
+    private static readonly Lock TYPE_SHAPE_CACHE_SYNC = new();
+    private static readonly Dictionary<int, TypeShape> TYPE_SHAPE_CACHE = [];
+    private static readonly Lock STRUCT_MEMBER_CACHE_SYNC = new();
+    private static readonly Dictionary<int, StructMembers> STRUCT_MEMBER_CACHE = [];
+    private static readonly Lock VALIDATION_CACHE_SYNC = new();
+    private static readonly Dictionary<int, GraphValidationState> VALIDATION_CACHE = [];
 
     private const int VALIDATION_FLAG_ALLOW_ISERIALIZABLE = 1 << 0;
 
@@ -71,14 +75,14 @@ internal static class SerializableGraph
 
     internal static bool TryGetListElementType(Type t, out Type elem)
     {
-        var shape = TYPE_SHAPE_CACHE.GetValue(t, BuildTypeShape);
+        var shape = GetTypeShape(t);
         elem = shape.listElementType!;
         return shape.hasListElement;
     }
 
     internal static bool TryGetDictionaryTypes(Type t, out Type keyType, out Type valueType)
     {
-        var shape = TYPE_SHAPE_CACHE.GetValue(t, BuildTypeShape);
+        var shape = GetTypeShape(t);
         keyType = shape.dictionaryKeyType!;
         valueType = shape.dictionaryValueType!;
         return shape.hasDictionaryTypes;
@@ -130,16 +134,16 @@ internal static class SerializableGraph
         m.GetCustomAttribute<SerializablePropertyAttribute>(inherit: true)?.propertyVisibility ?? PropertyVisibility.Show;
 
     internal static FieldInfo[] GetStructSerializableFields(Type t) =>
-        STRUCT_MEMBER_CACHE.GetValue(t, BuildStructMembers).fields;
+        GetStructMembers(t).fields;
 
     internal static PropertyInfo[] GetStructSerializableProperties(Type t) =>
-        STRUCT_MEMBER_CACHE.GetValue(t, BuildStructMembers).properties;
+        GetStructMembers(t).properties;
 
     internal static IReadOnlyDictionary<string, StructFieldEntry> GetStructSerializableFieldMap(Type t) =>
-        STRUCT_MEMBER_CACHE.GetValue(t, BuildStructMembers).fieldMap;
+        GetStructMembers(t).fieldMap;
 
     internal static IReadOnlyDictionary<string, StructPropertyEntry> GetStructSerializablePropertyMap(Type t) =>
-        STRUCT_MEMBER_CACHE.GetValue(t, BuildStructMembers).propertyMap;
+        GetStructMembers(t).propertyMap;
 
     #endregion
 
@@ -148,7 +152,7 @@ internal static class SerializableGraph
     internal static void ValidateAllowedTypeGraph(Type type, string where)
     {
         var normalizedType = Nullable.GetUnderlyingType(type) ?? type;
-        var state = VALIDATION_CACHE.GetValue(normalizedType, static _ => new GraphValidationState());
+        var state = GetValidationState(normalizedType);
         var flag = VALIDATION_FLAG_ALLOW_ISERIALIZABLE;
 
         if ((Volatile.Read(ref state.flags) & flag) != 0)
@@ -222,6 +226,54 @@ internal static class SerializableGraph
     #endregion
 
     #region Cache Builders
+
+    private static TypeShape GetTypeShape(Type type)
+    {
+        int typeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(type);
+        lock (TYPE_SHAPE_CACHE_SYNC)
+        {
+            if (TYPE_SHAPE_CACHE.TryGetValue(typeId, out TypeShape? existing))
+            {
+                return existing;
+            }
+
+            TypeShape created = BuildTypeShape(type);
+            TYPE_SHAPE_CACHE[typeId] = created;
+            return created;
+        }
+    }
+
+    private static StructMembers GetStructMembers(Type type)
+    {
+        int typeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(type);
+        lock (STRUCT_MEMBER_CACHE_SYNC)
+        {
+            if (STRUCT_MEMBER_CACHE.TryGetValue(typeId, out StructMembers? existing))
+            {
+                return existing;
+            }
+
+            StructMembers created = BuildStructMembers(type);
+            STRUCT_MEMBER_CACHE[typeId] = created;
+            return created;
+        }
+    }
+
+    private static GraphValidationState GetValidationState(Type type)
+    {
+        int typeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(type);
+        lock (VALIDATION_CACHE_SYNC)
+        {
+            if (VALIDATION_CACHE.TryGetValue(typeId, out GraphValidationState? existing))
+            {
+                return existing;
+            }
+
+            GraphValidationState created = new();
+            VALIDATION_CACHE[typeId] = created;
+            return created;
+        }
+    }
 
     private static TypeShape BuildTypeShape(Type t)
     {
