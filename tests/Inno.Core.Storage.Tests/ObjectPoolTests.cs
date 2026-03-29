@@ -62,6 +62,38 @@ public sealed class ObjectPoolTests
     }
 
     [Fact]
+    public void DefineKey_Unique_ThrowsOnDuplicateValueFromDifferentItems()
+    {
+        var pool = new ObjectPool<Item>();
+        var key = pool.DefineKey<int>("id", PoolKeyFlags.Unique);
+
+        var a = new Item("A", 1);
+        var b = new Item("B", 2);
+
+        pool.Add(a).Set(key, 10);
+
+        InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() =>
+            pool.Add(b).Set(key, 10));
+
+        Assert.Contains("Duplicate key", ex.Message);
+    }
+
+    [Fact]
+    public void DefineKey_Unique_AllowsResettingSameValueOnSameItem()
+    {
+        var pool = new ObjectPool<Item>();
+        var key = pool.DefineKey<int>("id", PoolKeyFlags.Unique);
+
+        var a = new Item("A", 1);
+        
+        pool.Add(a).Set(key, 10);
+        pool.Add(a).Set(key, 20);
+
+        Item? found = pool.First(key, 20);
+        Assert.Same(a, found);
+    }
+
+    [Fact]
     public void DefineKey_MultiAndQuery()
     {
         var pool = new ObjectPool<Item>();
