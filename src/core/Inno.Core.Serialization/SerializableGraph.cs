@@ -60,6 +60,9 @@ internal static class SerializableGraph
     private static readonly Dictionary<int, StructMembers> STRUCT_MEMBER_CACHE = [];
     private static readonly Lock VALIDATION_CACHE_SYNC = new();
     private static readonly Dictionary<int, GraphValidationState> VALIDATION_CACHE = [];
+    private static readonly Lock LOCAL_TYPE_KEY_SYNC = new();
+    private static readonly Dictionary<Type, int> LOCAL_TYPE_KEYS = [];
+    private static int s_nextLocalTypeKey = int.MinValue;
 
     private const int VALIDATION_FLAG_ALLOW_ISERIALIZABLE = 1 << 0;
 
@@ -229,7 +232,7 @@ internal static class SerializableGraph
 
     private static TypeShape GetTypeShape(Type type)
     {
-        int typeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(type);
+        int typeId = GetTypeCacheKey(type);
         lock (TYPE_SHAPE_CACHE_SYNC)
         {
             if (TYPE_SHAPE_CACHE.TryGetValue(typeId, out TypeShape? existing))
@@ -245,7 +248,7 @@ internal static class SerializableGraph
 
     private static StructMembers GetStructMembers(Type type)
     {
-        int typeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(type);
+        int typeId = GetTypeCacheKey(type);
         lock (STRUCT_MEMBER_CACHE_SYNC)
         {
             if (STRUCT_MEMBER_CACHE.TryGetValue(typeId, out StructMembers? existing))
@@ -261,7 +264,7 @@ internal static class SerializableGraph
 
     private static GraphValidationState GetValidationState(Type type)
     {
-        int typeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(type);
+        int typeId = GetTypeCacheKey(type);
         lock (VALIDATION_CACHE_SYNC)
         {
             if (VALIDATION_CACHE.TryGetValue(typeId, out GraphValidationState? existing))
@@ -403,6 +406,26 @@ internal static class SerializableGraph
             fieldMap = fieldMap,
             propertyMap = propertyMap
         };
+    }
+
+    private static int GetTypeCacheKey(Type type)
+    {
+        if (TypeCache.TryGetRuntimeTypeId(type, out int runtimeTypeId))
+        {
+            return runtimeTypeId;
+        }
+
+        lock (LOCAL_TYPE_KEY_SYNC)
+        {
+            if (LOCAL_TYPE_KEYS.TryGetValue(type, out int existing))
+            {
+                return existing;
+            }
+
+            int created = s_nextLocalTypeKey++;
+            LOCAL_TYPE_KEYS[type] = created;
+            return created;
+        }
     }
 
     #endregion

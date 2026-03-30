@@ -30,6 +30,9 @@ public static class Log
 
     private static readonly Lock TYPE_INFO_CACHE_SYNC = new();
     private static readonly Dictionary<int, TypeInfo> TYPE_INFO_CACHE = [];
+    private static readonly Lock LOCAL_TYPE_KEY_SYNC = new();
+    private static readonly Dictionary<Type, int> LOCAL_TYPE_KEYS = [];
+    private static int s_nextLocalTypeKey = int.MinValue;
     private static readonly ConditionalWeakTable<Assembly, AssemblySource> ASSEMBLY_SOURCE_CACHE = new();
 
     /// <summary>
@@ -47,10 +50,6 @@ public static class Log
     /// <param name="message">The composite format string.</param>
     /// <param name="args">The format arguments.</param>
     [Conditional("DEBUG")]
-    /// <summary>
-    /// Writes an info-level message using the object's string representation.
-    /// </summary>
-    /// <param name="obj">The object to log.</param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Debug(string message, params object[]? args)
         => Write(LogLevel.Debug, message, args);
@@ -133,7 +132,7 @@ public static class Log
 
         if (callerType != null)
         {
-            int runtimeTypeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(callerType);
+            int runtimeTypeId = GetTypeCacheKey(callerType);
             TypeInfo info;
             lock (TYPE_INFO_CACHE_SYNC)
             {
@@ -169,5 +168,25 @@ public static class Log
         }
         
         LogManager.Dispatch(new LogEntry(level, source, category, msg, file, line));
+    }
+
+    private static int GetTypeCacheKey(Type type)
+    {
+        if (TypeCache.TryGetRuntimeTypeId(type, out int runtimeTypeId))
+        {
+            return runtimeTypeId;
+        }
+
+        lock (LOCAL_TYPE_KEY_SYNC)
+        {
+            if (LOCAL_TYPE_KEYS.TryGetValue(type, out int existing))
+            {
+                return existing;
+            }
+
+            int created = s_nextLocalTypeKey++;
+            LOCAL_TYPE_KEYS[type] = created;
+            return created;
+        }
     }
 }

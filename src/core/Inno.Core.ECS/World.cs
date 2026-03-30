@@ -103,7 +103,7 @@ public sealed class World
 
         EnsureEntityExists(entity.id);
 
-        int componentTypeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(typeof(TComponent));
+        int componentTypeId = GetComponentRuntimeTypeId(typeof(TComponent));
         RemovePendingForEntityType(entity.id, componentTypeId);
         m_pendingAddComponents.Add(new ComponentAddOp(entity.id, component, componentTypeId));
     }
@@ -114,7 +114,7 @@ public sealed class World
         ArgumentNullException.ThrowIfNull(entity);
         EnsureEntityExists(entity.id);
 
-        int componentTypeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(typeof(TComponent));
+        int componentTypeId = GetComponentRuntimeTypeId(typeof(TComponent));
         bool removedPendingAdd = RemovePendingAdd(entity.id, componentTypeId);
         m_pendingRemoveComponents.Add(new ComponentRemoveOp(entity.id, componentTypeId));
         return removedPendingAdd || FindComponent(entity.id, componentTypeId) is not null;
@@ -131,7 +131,7 @@ public sealed class World
     internal IEnumerable<(Entity entity, TComponent component)> QueryTyped<TComponent>()
         where TComponent : Component
     {
-        int componentTypeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(typeof(TComponent));
+        int componentTypeId = GetComponentRuntimeTypeId(typeof(TComponent));
         IReadOnlyList<Component> typed = m_components.Find(m_componentTypeIdKey, componentTypeId);
         for (int i = 0; i < typed.Count; i++)
         {
@@ -305,6 +305,17 @@ public sealed class World
                 m_pendingRemoveComponents.RemoveAt(i);
             }
         }
+    }
+
+    private static int GetComponentRuntimeTypeId(Type componentType)
+    {
+        if (TypeCache.TryGetRuntimeTypeId(componentType, out int runtimeTypeId))
+        {
+            return runtimeTypeId;
+        }
+
+        throw new InvalidOperationException(
+            $"Component type '{componentType.FullName}' is not loaded in TypeCache. Call TypeCacheManager.Initialize/Rebuild first.");
     }
 
 }

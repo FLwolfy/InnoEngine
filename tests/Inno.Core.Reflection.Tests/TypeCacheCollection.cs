@@ -3,7 +3,7 @@ using Xunit;
 namespace Inno.Core.Reflection.Tests;
 
 [CollectionDefinition(NAME, DisableParallelization = true)]
-public sealed class TypeIdentityRegistryCollection
+public sealed class TypeCacheCollection
 {
-    public const string NAME = "TypeIdentityRegistryCollection";
+    public const string NAME = "TypeCacheCollection";
 }

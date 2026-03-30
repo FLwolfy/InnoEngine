@@ -460,13 +460,17 @@ public sealed record SerializingState
 
         private static void WriteTypeIdentity(BinaryWriter bw, Type type)
         {
-            if (TypeIdentityRegistry.TryGetStableTypeId(type, out Guid stableTypeId))
+            if (TypeCache.TryGetStableTypeId(type, out Guid stableTypeId))
             {
                 bw.Write(STABLE_TYPE_PREFIX + stableTypeId.ToString("D"));
                 return;
             }
 
-            int runtimeTypeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(type);
+            if (!TypeCache.TryGetRuntimeTypeId(type, out int runtimeTypeId))
+            {
+                throw new InvalidDataException(
+                    $"Type '{type.FullName}' is not loaded in TypeCache. Cannot persist runtime type id token.");
+            }
             bw.Write(RUNTIME_TYPE_PREFIX + runtimeTypeId);
         }
 
@@ -479,7 +483,7 @@ public sealed record SerializingState
                 if (!Guid.TryParse(text, out Guid stableTypeId))
                     throw new InvalidDataException($"Invalid stable type id '{token}' for {kind}.");
 
-                if (TypeIdentityRegistry.TryResolveType(stableTypeId, out Type? stableType) && stableType is not null)
+                if (TypeCache.TryResolveType(stableTypeId, out Type? stableType) && stableType is not null)
                     return stableType;
 
                 throw new InvalidDataException($"Could not resolve stable type id '{stableTypeId}' for {kind}.");
@@ -491,7 +495,7 @@ public sealed record SerializingState
                 if (!int.TryParse(text, out int runtimeTypeId))
                     throw new InvalidDataException($"Invalid runtime type id '{token}' for {kind}.");
 
-                if (TypeIdentityRegistry.TryResolveRuntimeType(runtimeTypeId, out Type? runtimeType) && runtimeType is not null)
+                if (TypeCache.TryResolveType(runtimeTypeId, out Type? runtimeType) && runtimeType is not null)
                     return runtimeType;
 
                 throw new InvalidDataException($"Could not resolve runtime type id '{runtimeTypeId}' for {kind}.");

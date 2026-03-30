@@ -10,12 +10,6 @@
     <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="..\..\src\core\Inno.Core.Reflection\TypeCache\StableTypeId.lock.json">
-      <Link>StableTypeId.lock.json</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-  <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.6.6" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.6">

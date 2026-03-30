@@ -186,10 +186,13 @@ public interface ISerializable
     private static readonly Dictionary<int, MemberSlot[]> SLOT_CACHE = [];
     private static readonly Lock ACTIVATOR_CACHE_SYNC = new();
     private static readonly Dictionary<int, Func<object>> ACTIVATOR_CACHE = [];
+    private static readonly Lock LOCAL_TYPE_KEY_SYNC = new();
+    private static readonly Dictionary<Type, int> LOCAL_TYPE_KEYS = [];
+    private static int s_nextLocalTypeKey = int.MinValue;
 
     private static MemberSlot[] GetSlots(Type type)
     {
-        int typeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(type);
+        int typeId = GetTypeCacheKey(type);
         lock (SLOT_CACHE_SYNC)
         {
             if (SLOT_CACHE.TryGetValue(typeId, out MemberSlot[]? slots))
@@ -209,7 +212,7 @@ public interface ISerializable
 
     private static IReadOnlyDictionary<string, int> GetDeclOrderMap(Type declaringType)
     {
-        int typeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(declaringType);
+        int typeId = GetTypeCacheKey(declaringType);
         lock (DECL_ORDER_CACHE_SYNC)
         {
             if (DECL_ORDER_CACHE.TryGetValue(typeId, out IReadOnlyDictionary<string, int>? existing))
@@ -450,11 +453,15 @@ public interface ISerializable
         if (value is ISerializable s)
         {
             Type runtimeType = s.GetType();
-            int runtimeTypeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(runtimeType);
+            if (!TypeCache.TryGetRuntimeTypeId(runtimeType, out int runtimeTypeId))
+            {
+                throw new InvalidOperationException(
+                    $"Runtime type '{runtimeType.FullName}' is not loaded in TypeCache.");
+            }
             return new Dictionary<string, object?>(2, StringComparer.Ordinal)
             {
                 ["__runtimeTypeId"] = runtimeTypeId,
-                ["__stableTypeId"] = TypeIdentityRegistry.TryGetStableTypeId(runtimeType, out Guid stableTypeId)
+                ["__stableTypeId"] = TypeCache.TryGetStableTypeId(runtimeType, out Guid stableTypeId)
                     ? stableTypeId.ToString("D")
                     : null,
                 ["data"] = s.CaptureState()
@@ -561,7 +568,7 @@ public interface ISerializable
             if (wrapper.TryGetValue("__stableTypeId", out var stableTypeObj) &&
                 stableTypeObj is string stableTypeText &&
                 Guid.TryParse(stableTypeText, out Guid stableTypeId) &&
-                TypeIdentityRegistry.TryResolveType(stableTypeId, out Type? stableResolved) &&
+                TypeCache.TryResolveType(stableTypeId, out Type? stableResolved) &&
                 stableResolved is not null &&
                 t.IsAssignableFrom(stableResolved))
             {
@@ -569,7 +576,7 @@ public interface ISerializable
             }
             else if (wrapper.TryGetValue("__runtimeTypeId", out var runtimeTypeObj) &&
                      TryReadRuntimeTypeId(runtimeTypeObj, out int runtimeTypeId) &&
-                     TypeIdentityRegistry.TryResolveRuntimeType(runtimeTypeId, out Type? runtimeResolved) &&
+                     TypeCache.TryResolveType(runtimeTypeId, out Type? runtimeResolved) &&
                      runtimeResolved is not null &&
                      t.IsAssignableFrom(runtimeResolved))
             {
@@ -629,7 +636,7 @@ public interface ISerializable
 
     private static SequenceFactory GetSequenceFactory(Type targetType)
     {
-        int typeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(targetType);
+        int typeId = GetTypeCacheKey(targetType);
         lock (SEQUENCE_FACTORY_CACHE_SYNC)
         {
             if (SEQUENCE_FACTORY_CACHE.TryGetValue(typeId, out SequenceFactory? existing))
@@ -645,7 +652,7 @@ public interface ISerializable
 
     private static MapFactory GetMapFactory(Type targetType)
     {
-        int typeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(targetType);
+        int typeId = GetTypeCacheKey(targetType);
         lock (MAP_FACTORY_CACHE_SYNC)
         {
             if (MAP_FACTORY_CACHE.TryGetValue(typeId, out MapFactory? existing))
@@ -943,7 +950,7 @@ public interface ISerializable
 
     private static object CreateCachedInstance(Type concreteType)
     {
-        int typeId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(concreteType);
+        int typeId = GetTypeCacheKey(concreteType);
         Func<object> factory;
         lock (ACTIVATOR_CACHE_SYNC)
         {
@@ -993,6 +1000,26 @@ public interface ISerializable
             return (int)(roCollection.GetProperty("Count")!.GetValue(value) ?? 0);
 
         return 0;
+    }
+
+    private static int GetTypeCacheKey(Type type)
+    {
+        if (TypeCache.TryGetRuntimeTypeId(type, out int runtimeTypeId))
+        {
+            return runtimeTypeId;
+        }
+
+        lock (LOCAL_TYPE_KEY_SYNC)
+        {
+            if (LOCAL_TYPE_KEYS.TryGetValue(type, out int existing))
+            {
+                return existing;
+            }
+
+            int created = s_nextLocalTypeKey++;
+            LOCAL_TYPE_KEYS[type] = created;
+            return created;
+        }
     }
 
     #endregion

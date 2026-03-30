@@ -12,8 +12,4 @@
     <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Behavior\" />
-  </ItemGroup>
-
 </Project>

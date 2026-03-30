@@ -7,43 +7,111 @@ using System.Threading;
 namespace Inno.Core.Reflection;
 
 /// <summary>
-/// Provides cached type discovery for Inno namespaces, including subtype, interface, and attribute lookups.
+/// Manages TypeCache lifecycle, refresh, and hook execution.
 /// </summary>
 public static class TypeCacheManager
 {
     private const string C_INNO_NAMESPACE = "Inno";
 
-    private static Dictionary<int, Type[]> s_subclassCache = [];
-    private static Dictionary<int, Type[]> s_interfaceCache = [];
-    private static Dictionary<int, Type[]> s_attributeCache = [];
-
     private static readonly Lock CACHE_SYNC = new();
-    private static volatile bool s_isDirty = false;
+
+    private static HashSet<int> s_loadedRuntimeTypeIds = [];
+    private static HashSet<Guid> s_loadedStableTypeIds = [];
+    private static volatile bool s_isDirty;
     private static int s_lastAssemblyCount = -1;
 
     private static event Action? OnRefreshed;
+    
+    internal static TypeIdentityRegistry identityRegistry { get; } = new();
+    internal static TypeQueryRegistry queryRegistry { get; } = new();
 
     /// <summary>
-    /// Initializes the cache manager, runs initialize hooks, and subscribes refresh hooks.
+    /// Initializes TypeCache, runs initialize hooks, and subscribes refresh hooks.
     /// </summary>
     public static void Initialize()
     {
-        Refresh();
-        
+        Rebuild();
         InvokeInitializeHooks();
         SubscribeRefreshHooks();
-            
-        AppDomain.CurrentDomain.AssemblyLoad += (_, _) =>
+
+        AppDomain.CurrentDomain.AssemblyLoad += (_, _) => s_isDirty = true;
+    }
+
+    /// <summary>
+    /// Rebuilds TypeCache and identity registry from loaded Inno assemblies.
+    /// </summary>
+    public static void Rebuild()
+    {
+        Type[] discoveredTypes = AppDomain.CurrentDomain.GetAssemblies()
+            .Where(static a => !a.IsDynamic)
+            .SelectMany(static a =>
+            {
+                try { return a.GetTypes(); }
+                catch { return Type.EmptyTypes; }
+            })
+            .Where(static t => t.Namespace?.StartsWith(C_INNO_NAMESPACE, StringComparison.Ordinal) ?? false)
+            .ToArray();
+
+        identityRegistry.Rebuild(discoveredTypes);
+        queryRegistry.Rebuild(discoveredTypes, identityRegistry);
+
+        HashSet<int> loadedRuntimeTypeIds = BuildLoadedRuntimeTypeSet(discoveredTypes);
+        HashSet<Guid> loadedStableTypeIds = BuildLoadedStableTypeSet(discoveredTypes);
+
+        lock (CACHE_SYNC)
         {
-            s_isDirty = true;
-        };
+            s_loadedRuntimeTypeIds = loadedRuntimeTypeIds;
+            s_loadedStableTypeIds = loadedStableTypeIds;
+            s_lastAssemblyCount = AppDomain.CurrentDomain.GetAssemblies().Length;
+            s_isDirty = false;
+        }
 
         OnRefreshed?.Invoke();
     }
-    
+
+    internal static bool IsLoadedRuntimeTypeId(int runtimeTypeId)
+    {
+        lock (CACHE_SYNC)
+        {
+            return s_loadedRuntimeTypeIds.Contains(runtimeTypeId);
+        }
+    }
+
+    internal static bool IsLoadedStableTypeId(Guid stableTypeId)
+    {
+        lock (CACHE_SYNC)
+        {
+            return s_loadedStableTypeIds.Contains(stableTypeId);
+        }
+    }
+
+    internal static void EnsureFresh()
+    {
+        if (AppDomain.CurrentDomain.GetAssemblies().Length != Volatile.Read(ref s_lastAssemblyCount))
+        {
+            s_isDirty = true;
+        }
+
+        if (!s_isDirty)
+        {
+            return;
+        }
+
+        bool shouldRefresh;
+        lock (CACHE_SYNC)
+        {
+            shouldRefresh = s_isDirty;
+        }
+
+        if (shouldRefresh)
+        {
+            Rebuild();
+        }
+    }
+
     private static void InvokeInitializeHooks()
     {
-        foreach (var method in EnumerateHookMethods(typeof(TypeCacheInitializeAttribute)))
+        foreach (MethodInfo method in EnumerateHookMethods(typeof(TypeCacheInitializeAttribute)))
         {
             ValidateHookSignature(method);
             method.Invoke(null, null);
@@ -52,7 +120,7 @@ public static class TypeCacheManager
 
     private static void SubscribeRefreshHooks()
     {
-        foreach (var method in EnumerateHookMethods(typeof(TypeCacheRefreshAttribute)))
+        foreach (MethodInfo method in EnumerateHookMethods(typeof(TypeCacheRefreshAttribute)))
         {
             ValidateHookSignature(method);
             OnRefreshed += () => method.Invoke(null, null);
@@ -61,26 +129,16 @@ public static class TypeCacheManager
 
     private static IEnumerable<MethodInfo> EnumerateHookMethods(Type attributeType)
     {
-        var assemblies = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(a => !a.IsDynamic);
-
-        var allTypes = assemblies
-            .SelectMany(a =>
+        return AppDomain.CurrentDomain.GetAssemblies()
+            .Where(static a => !a.IsDynamic)
+            .SelectMany(static a =>
             {
                 try { return a.GetTypes(); }
                 catch { return Type.EmptyTypes; }
             })
-            .Where(t => t.Namespace?.StartsWith(C_INNO_NAMESPACE) ?? false);
-
-        foreach (var type in allTypes)
-        {
-            var methods = type.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            foreach (var method in methods)
-            {
-                if (method.IsDefined(attributeType, inherit: false))
-                    yield return method;
-            }
-        }
+            .Where(static t => t.Namespace?.StartsWith(C_INNO_NAMESPACE, StringComparison.Ordinal) ?? false)
+            .SelectMany(static t => t.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
+            .Where(method => method.IsDefined(attributeType, inherit: false));
     }
 
     private static void ValidateHookSignature(MethodInfo method)
@@ -88,147 +146,35 @@ public static class TypeCacheManager
         if (method.ReturnType != typeof(void) || method.GetParameters().Length != 0)
         {
             throw new InvalidOperationException(
-                $"[{method.GetCustomAttributes(false).First(a => a.GetType().Name.Contains("TypeCache"))}] " + $"method must be 'static void Method()': {method.DeclaringType?.FullName}.{method.Name}");
+                $"TypeCache hook method must be 'static void Method()': {method.DeclaringType?.FullName}.{method.Name}");
         }
     }
-    
-    /// <summary>
-    /// Rebuilds all internal type indices from currently loaded assemblies.
-    /// </summary>
-    public static void Refresh()
+
+    private static HashSet<int> BuildLoadedRuntimeTypeSet(IEnumerable<Type> types)
     {
-        var assemblies = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(a => !a.IsDynamic);
-
-        var allTypes = assemblies
-            .SelectMany(a =>
-            {
-                try { return a.GetTypes(); }
-                catch { return Type.EmptyTypes; }
-            })
-            .Where(t => !t.IsAbstract && !t.IsInterface && (t.Namespace?.StartsWith(C_INNO_NAMESPACE) ?? false))
-            .ToArray();
-
-        var subclassSets = new Dictionary<int, HashSet<Type>>();
-        var interfaceSets = new Dictionary<int, HashSet<Type>>();
-        var attributeSets = new Dictionary<int, HashSet<Type>>();
-
-        foreach (var type in allTypes)
+        var set = new HashSet<int>();
+        foreach (Type type in types)
         {
-            if (type.IsAbstract) continue;
-
-            // Index by base type
-            var baseType = type.BaseType;
-            while (baseType != null && baseType != typeof(object))
+            if (identityRegistry.TryGetRuntimeTypeId(type, out int runtimeTypeId))
             {
-                AddToIndex(subclassSets, baseType, type);
-                baseType = baseType.BaseType;
-            }
-
-            // Index by interfaces
-            foreach (var iface in type.GetInterfaces())
-            {
-                AddToIndex(interfaceSets, iface, type);
-            }
-
-            // Index by attributes
-            foreach (var attr in type.GetCustomAttributes(inherit: true))
-            {
-                var attrType = attr.GetType();
-                AddToIndex(attributeSets, attrType, type);
+                set.Add(runtimeTypeId);
             }
         }
 
-        Dictionary<int, Type[]> subclassCache = FreezeIndex(subclassSets);
-        Dictionary<int, Type[]> interfaceCache = FreezeIndex(interfaceSets);
-        Dictionary<int, Type[]> attributeCache = FreezeIndex(attributeSets);
+        return set;
+    }
 
-        lock (CACHE_SYNC)
+    private static HashSet<Guid> BuildLoadedStableTypeSet(IEnumerable<Type> types)
+    {
+        var set = new HashSet<Guid>();
+        foreach (Type type in types)
         {
-            s_subclassCache = subclassCache;
-            s_interfaceCache = interfaceCache;
-            s_attributeCache = attributeCache;
-            s_lastAssemblyCount = AppDomain.CurrentDomain.GetAssemblies().Length;
-            s_isDirty = false;
+            if (identityRegistry.TryGetStableTypeId(type, out Guid stableTypeId))
+            {
+                set.Add(stableTypeId);
+            }
         }
 
-        OnRefreshed?.Invoke();
-    }
-
-    /// <summary>
-    /// Gets all discovered concrete subtypes of <typeparamref name="T"/>.
-    /// </summary>
-    /// <typeparam name="T">The base type.</typeparam>
-    /// <returns>A list of matching concrete types.</returns>
-    public static IReadOnlyList<Type> GetSubTypesOf<T>()
-    {
-        EnsureFresh();
-        int keyId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(typeof(T));
-        if (s_subclassCache.TryGetValue(keyId, out Type[]? set)) return set;
-        return [];
-    }
-
-    /// <summary>
-    /// Gets all discovered concrete types implementing <typeparamref name="TInterface"/>.
-    /// </summary>
-    /// <typeparam name="TInterface">The target interface type.</typeparam>
-    /// <returns>A list of matching concrete types.</returns>
-    public static IReadOnlyList<Type> GetTypesImplementing<TInterface>()
-    {
-        EnsureFresh();
-        int keyId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(typeof(TInterface));
-        if (s_interfaceCache.TryGetValue(keyId, out Type[]? set)) return set;
-        return [];
-    }
-
-    /// <summary>
-    /// Gets all discovered concrete types annotated with <typeparamref name="TAttr"/>.
-    /// </summary>
-    /// <typeparam name="TAttr">The attribute type.</typeparam>
-    /// <returns>A list of matching concrete types.</returns>
-    public static IReadOnlyList<Type> GetTypesWithAttribute<TAttr>() where TAttr : Attribute
-    {
-        EnsureFresh();
-        int keyId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(typeof(TAttr));
-        if (s_attributeCache.TryGetValue(keyId, out Type[]? set)) return set;
-        return [];
-    }
-
-    private static void EnsureFresh()
-    {
-        if (AppDomain.CurrentDomain.GetAssemblies().Length != Volatile.Read(ref s_lastAssemblyCount))
-            s_isDirty = true;
-
-        if (!s_isDirty)
-            return;
-
-        lock (CACHE_SYNC)
-        {
-            if (s_isDirty)
-                Refresh();
-        }
-    }
-
-    private static void AddToIndex(Dictionary<int, HashSet<Type>> index, Type keyType, Type valueType)
-    {
-        int keyId = TypeIdentityRegistry.GetOrAddRuntimeTypeId(keyType);
-        if (!index.TryGetValue(keyId, out HashSet<Type>? set))
-        {
-            set = new HashSet<Type>();
-            index[keyId] = set;
-        }
-
-        set.Add(valueType);
-    }
-
-    private static Dictionary<int, Type[]> FreezeIndex(Dictionary<int, HashSet<Type>> index)
-    {
-        var frozen = new Dictionary<int, Type[]>(index.Count);
-        foreach (var pair in index)
-        {
-            frozen[pair.Key] = pair.Value.ToArray();
-        }
-
-        return frozen;
+        return set;
     }
 }
