@@ -5,6 +5,9 @@ using Inno.Core.Storage;
 
 namespace Inno.Core.ECS;
 
+/// <summary>
+/// ECS runtime container that manages entities, components, and system updates.
+/// </summary>
 public sealed class World
 {
     private readonly ObjectPool<Entity> m_entities = new();
@@ -13,6 +16,7 @@ public sealed class World
     private readonly ObjectPool<Component> m_components = new();
     private readonly PoolKey<Guid> m_componentEntityKey;
     private readonly PoolKey<int> m_componentTypeIdKey;
+    private readonly PoolKey<(Guid entityId, int componentTypeId)> m_componentEntityTypeKey;
     
     private readonly record struct ComponentAddOp(Guid entityId, Component component, int componentTypeId);
     private readonly List<ComponentAddOp> m_pendingAddComponents = [];
@@ -24,13 +28,24 @@ public sealed class World
     private readonly List<ISystem> m_systems = [];
     
     
+    /// <summary>
+    /// Initializes an empty world and all lookup keys.
+    /// </summary>
     public World()
     {
         m_entityIdKey = m_entities.DefineKey<Guid>("entity.id", PoolKeyFlags.Unique);
         m_componentEntityKey = m_components.DefineKey<Guid>("component.entity");
         m_componentTypeIdKey = m_components.DefineKey<int>("component.typeId");
+        m_componentEntityTypeKey = m_components.DefineKey<(Guid entityId, int componentTypeId)>(
+            "component.entityType",
+            PoolKeyFlags.Unique);
     }
 
+    /// <summary>
+    /// Creates and registers a new entity.
+    /// </summary>
+    /// <param name="parentGuid">Optional parent entity id.</param>
+    /// <returns>The created entity.</returns>
     public Entity CreateEntity(Guid? parentGuid = null)
     {
         Entity entity = new(Guid.NewGuid(), parentGuid);
@@ -38,6 +53,11 @@ public sealed class World
         return entity;
     }
 
+    /// <summary>
+    /// Marks an entity for deferred destruction.
+    /// </summary>
+    /// <param name="entity">Entity to destroy.</param>
+    /// <returns><see langword="true"/> if newly scheduled; otherwise <see langword="false"/>.</returns>
     public bool KillEntity(Entity entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
@@ -50,6 +70,10 @@ public sealed class World
         return m_pendingKilledEntities.Add(entity.id);
     }
 
+    /// <summary>
+    /// Registers a system and keeps execution order deterministic by <see cref="ISystem.order"/>.
+    /// </summary>
+    /// <param name="system">System instance to register.</param>
     public void RegisterSystem(ISystem system)
     {
         ArgumentNullException.ThrowIfNull(system);
@@ -68,6 +92,11 @@ public sealed class World
         });
     }
 
+    /// <summary>
+    /// Unregisters the first system assignable to <typeparamref name="TSystem"/>.
+    /// </summary>
+    /// <typeparam name="TSystem">System type to remove.</typeparam>
+    /// <returns><see langword="true"/> if removed; otherwise <see langword="false"/>.</returns>
     public bool UnregisterSystem<TSystem>()
         where TSystem : class, ISystem
     {
@@ -83,6 +112,10 @@ public sealed class World
         return false;
     }
 
+    /// <summary>
+    /// Updates all systems for a frame.
+    /// </summary>
+    /// <param name="deltaTime">Frame delta time in seconds.</param>
     public void Update(float deltaTime)
     {
         FlushPending();
@@ -95,19 +128,30 @@ public sealed class World
         FlushPending();
     }
 
-    public void AddComponent<TComponent>(Entity entity, TComponent component)
-        where TComponent : Component
+    /// <summary>
+    /// Schedules creation of a new component instance on an entity.
+    /// </summary>
+    /// <typeparam name="TComponent">Component type to add.</typeparam>
+    /// <param name="entity">Target entity.</param>
+    public void AddComponent<TComponent>(Entity entity)
+        where TComponent : Component, new()
     {
         ArgumentNullException.ThrowIfNull(entity);
-        ArgumentNullException.ThrowIfNull(component);
 
         EnsureEntityExists(entity.id);
 
+        TComponent component = new();
         int componentTypeId = GetComponentRuntimeTypeId(typeof(TComponent));
         RemovePendingForEntityType(entity.id, componentTypeId);
         m_pendingAddComponents.Add(new ComponentAddOp(entity.id, component, componentTypeId));
     }
 
+    /// <summary>
+    /// Schedules removal of a component type from an entity.
+    /// </summary>
+    /// <typeparam name="TComponent">Component type to remove.</typeparam>
+    /// <param name="entity">Target entity.</param>
+    /// <returns><see langword="true"/> if an existing or pending component was found.</returns>
     public bool RemoveComponent<TComponent>(Entity entity)
         where TComponent : Component
     {
@@ -121,6 +165,9 @@ public sealed class World
     }
 
 
+    /// <summary>
+    /// Applies all deferred add/remove/destroy operations immediately.
+    /// </summary>
     public void FlushPending()
     {
         ApplyPendingComponentRemoves();
@@ -128,20 +175,165 @@ public sealed class World
         ApplyPendingEntityKills();
     }
 
-    internal IEnumerable<(Entity entity, TComponent component)> QueryTyped<TComponent>()
+    /// <summary>
+    /// Returns a stable snapshot of components matching the requested type and optional entity filter.
+    /// </summary>
+    /// <typeparam name="TComponent">Component type.</typeparam>
+    /// <param name="entityId">Optional entity id filter.</param>
+    /// <returns>Snapshot list detached from subsequent world mutations.</returns>
+    public IReadOnlyList<TComponent> ViewComponents<TComponent>(Guid? entityId = null)
         where TComponent : Component
     {
         int componentTypeId = GetComponentRuntimeTypeId(typeof(TComponent));
-        IReadOnlyList<Component> typed = m_components.Find(m_componentTypeIdKey, componentTypeId);
-        for (int i = 0; i < typed.Count; i++)
+        if (entityId is Guid targetEntityId)
         {
-            Component component = typed[i];
-            if (!TryFindEntity(component.entityId, out Entity? entity) || entity is null)
+            Component? component = FindComponent(targetEntityId, componentTypeId);
+            if (component is TComponent typed)
+            {
+                return [typed];
+            }
+
+            return [];
+        }
+
+        IReadOnlyList<Component> typedComponents = m_components.Find(m_componentTypeIdKey, componentTypeId);
+        var result = new List<TComponent>(typedComponents.Count);
+        for (int i = 0; i < typedComponents.Count; i++)
+        {
+            if (typedComponents[i] is TComponent typed)
+            {
+                result.Add(typed);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Returns a lazy fail-fast sequence of components matching the requested type and optional entity filter.
+    /// </summary>
+    /// <typeparam name="TComponent">Component type.</typeparam>
+    /// <param name="entityId">Optional entity id filter.</param>
+    /// <returns>Lazy sequence suitable for hot-path iteration.</returns>
+    public IEnumerable<TComponent> ViewComponentsFast<TComponent>(Guid? entityId = null)
+        where TComponent : Component
+    {
+        int componentTypeId = GetComponentRuntimeTypeId(typeof(TComponent));
+        if (entityId is Guid targetEntityId)
+        {
+            Component? component = FindComponent(targetEntityId, componentTypeId);
+            if (component is TComponent typed)
+            {
+                yield return typed;
+            }
+
+            yield break;
+        }
+
+        foreach (Component component in m_components.FindFast(m_componentTypeIdKey, componentTypeId))
+        {
+            if (component is TComponent typed)
+            {
+                yield return typed;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns a stable snapshot of entities that contain all provided component types.
+    /// </summary>
+    /// <param name="componentTypes">Component type intersection criteria.</param>
+    /// <returns>Snapshot list detached from subsequent world mutations.</returns>
+    public IReadOnlyList<Entity> ViewEntities(Type[] componentTypes)
+    {
+        int[] componentTypeIds = ResolveComponentTypeIds(componentTypes);
+        IReadOnlyList<Component>[] buckets = new IReadOnlyList<Component>[componentTypeIds.Length];
+        int seedIndex = 0;
+        for (int i = 0; i < componentTypeIds.Length; i++)
+        {
+            buckets[i] = m_components.Find(m_componentTypeIdKey, componentTypeIds[i]);
+            if (buckets[i].Count < buckets[seedIndex].Count)
+            {
+                seedIndex = i;
+            }
+        }
+
+        var result = new List<Entity>(buckets[seedIndex].Count);
+        IReadOnlyList<Component> seed = buckets[seedIndex];
+        for (int i = 0; i < seed.Count; i++)
+        {
+            Guid entityId = seed[i].entityId;
+            if (!TryFindEntity(entityId, out Entity? entity) || entity is null)
             {
                 continue;
             }
 
-            yield return (entity, (TComponent)component);
+            bool matched = true;
+            for (int j = 0; j < componentTypeIds.Length; j++)
+            {
+                if (j == seedIndex)
+                {
+                    continue;
+                }
+
+                if (FindComponent(entityId, componentTypeIds[j]) is null)
+                {
+                    matched = false;
+                    break;
+                }
+            }
+
+            if (matched)
+            {
+                result.Add(entity);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Returns a lazy fail-fast sequence of entities that contain all provided component types.
+    /// </summary>
+    /// <param name="componentTypes">Component type intersection criteria.</param>
+    /// <returns>Lazy sequence suitable for hot-path iteration.</returns>
+    public IEnumerable<Entity> ViewEntitiesFast(Type[] componentTypes)
+    {
+        return ViewEntitiesFastCore(componentTypes);
+    }
+
+    private IEnumerable<Entity> ViewEntitiesFastCore(Type[] componentTypes)
+    {
+        int[] componentTypeIds = ResolveComponentTypeIds(componentTypes);
+        int seedIndex = FindMinBucketIndex(componentTypeIds);
+        int seedTypeId = componentTypeIds[seedIndex];
+        foreach (Component seedComponent in m_components.FindFast(m_componentTypeIdKey, seedTypeId))
+        {
+            Guid entityId = seedComponent.entityId;
+            if (!TryFindEntity(entityId, out Entity? entity) || entity is null)
+            {
+                continue;
+            }
+
+            bool matched = true;
+            for (int i = 0; i < componentTypeIds.Length; i++)
+            {
+                if (i == seedIndex)
+                {
+                    continue;
+                }
+
+                if (FindComponent(entityId, componentTypeIds[i]) is null)
+                {
+                    matched = false;
+                    break;
+                }
+            }
+
+            if (matched)
+            {
+                yield return entity;
+            }
         }
     }
 
@@ -173,7 +365,8 @@ public sealed class World
             op.component.entityId = op.entityId;
             m_components.Add(op.component)
                 .Set(m_componentEntityKey, op.entityId)
-                .Set(m_componentTypeIdKey, op.componentTypeId);
+                .Set(m_componentTypeIdKey, op.componentTypeId)
+                .Set(m_componentEntityTypeKey, (op.entityId, op.componentTypeId));
         }
 
         m_pendingAddComponents.Clear();
@@ -233,10 +426,7 @@ public sealed class World
 
     private Component? FindComponent(Guid entityId, int componentTypeId)
     {
-        return m_components.Query()
-            .Find(m_componentEntityKey, entityId)
-            .Find(m_componentTypeIdKey, componentTypeId)
-            .First();
+        return m_components.First(m_componentEntityTypeKey, (entityId, componentTypeId));
     }
 
     private void EnsureEntityExists(Guid entityId)
@@ -316,6 +506,53 @@ public sealed class World
 
         throw new InvalidOperationException(
             $"Component type '{componentType.FullName}' is not loaded in TypeCache. Call TypeCacheManager.Initialize/Rebuild first.");
+    }
+
+    private int FindMinBucketIndex(int[] componentTypeIds)
+    {
+        int seedIndex = 0;
+        int seedCount = m_components.Find(m_componentTypeIdKey, componentTypeIds[0]).Count;
+        for (int i = 1; i < componentTypeIds.Length; i++)
+        {
+            int count = m_components.Find(m_componentTypeIdKey, componentTypeIds[i]).Count;
+            if (count < seedCount)
+            {
+                seedCount = count;
+                seedIndex = i;
+            }
+        }
+
+        return seedIndex;
+    }
+
+    private static int[] ResolveComponentTypeIds(Type[] componentTypes)
+    {
+        ArgumentNullException.ThrowIfNull(componentTypes);
+        if (componentTypes.Length == 0)
+        {
+            throw new ArgumentException("At least one component type is required.", nameof(componentTypes));
+        }
+
+        var seen = new HashSet<int>();
+        var typeIds = new List<int>(componentTypes.Length);
+        for (int i = 0; i < componentTypes.Length; i++)
+        {
+            Type componentType = componentTypes[i] ?? throw new ArgumentNullException(nameof(componentTypes));
+            if (!typeof(Component).IsAssignableFrom(componentType))
+            {
+                throw new ArgumentException(
+                    $"Type '{componentType.FullName}' is not a component type.",
+                    nameof(componentTypes));
+            }
+
+            int typeId = GetComponentRuntimeTypeId(componentType);
+            if (seen.Add(typeId))
+            {
+                typeIds.Add(typeId);
+            }
+        }
+
+        return [..typeIds];
     }
 
 }
