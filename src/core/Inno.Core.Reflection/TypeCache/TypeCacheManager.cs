@@ -42,8 +42,23 @@ public static class TypeCacheManager
     /// </summary>
     public static void Rebuild()
     {
-        Type[] discoveredTypes = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(static a => !a.IsDynamic)
+        Rebuild(assembly: null);
+    }
+
+    /// <summary>
+    /// Rebuilds TypeCache and identity registry from a target assembly.
+    /// This operation replaces the current cache content rather than merging into it.
+    /// When <paramref name="assembly"/> is <see langword="null"/>, all loaded non-dynamic assemblies are scanned.
+    /// When <paramref name="assembly"/> is dynamic, it is ignored and the resulting cache is empty.
+    /// </summary>
+    /// <param name="assembly">The assembly to rebuild from, or <see langword="null"/> to scan all loaded assemblies.</param>
+    public static void Rebuild(Assembly? assembly)
+    {
+        Assembly[] assemblies = assembly is null
+            ? AppDomain.CurrentDomain.GetAssemblies().Where(static a => !a.IsDynamic).ToArray()
+            : assembly.IsDynamic ? [] : [assembly];
+
+        Type[] discoveredTypes = assemblies
             .SelectMany(static a =>
             {
                 try { return a.GetTypes(); }
@@ -120,7 +135,7 @@ public static class TypeCacheManager
 
     private static void SubscribeRefreshHooks()
     {
-        foreach (MethodInfo method in EnumerateHookMethods(typeof(TypeCacheRefreshAttribute)))
+        foreach (MethodInfo method in EnumerateHookMethods(typeof(TypeCacheRebuildAttribute)))
         {
             ValidateHookSignature(method);
             OnRefreshed += () => method.Invoke(null, null);

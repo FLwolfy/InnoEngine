@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using System.Reflection;
+using System.Reflection.Emit;
 
 using Inno.Core.Reflection;
 using ExternalNamespace;
@@ -150,6 +152,128 @@ public sealed class TypeCacheTests
         Type[] second = TypeCache.GetSubTypesOf<TestBase>().OrderBy(static t => t.FullName, StringComparer.Ordinal).ToArray();
 
         Assert.Equal(first, second);
+    }
+
+    [Fact]
+    public void Rebuild_WithSpecificAssembly_LoadsTypesFromThatAssembly()
+    {
+        TypeCacheManager.Rebuild(typeof(TypeCacheTests).Assembly);
+
+        Assert.True(TypeCache.TryGetRuntimeTypeId(typeof(TestDerived), out _));
+        Assert.False(TypeCache.TryGetRuntimeTypeId(typeof(TypeCacheManager), out _));
+    }
+
+    [Fact]
+    public void Rebuild_WithNonInnoAssembly_DoesNotLoadTestTypes()
+    {
+        TypeCacheManager.Rebuild(typeof(string).Assembly);
+
+        Assert.False(TypeCache.TryGetRuntimeTypeId(typeof(TestDerived), out _));
+        Assert.False(TypeCache.TryGetRuntimeTypeId(typeof(TypeCacheManager), out _));
+    }
+
+    [Fact]
+    public void Rebuild_WithCoreReflectionAssembly_LoadsCoreTypesButNotTestTypes()
+    {
+        TypeCacheManager.Rebuild(typeof(TypeCacheManager).Assembly);
+
+        Assert.True(TypeCache.TryGetRuntimeTypeId(typeof(TypeCacheManager), out _));
+        Assert.False(TypeCache.TryGetRuntimeTypeId(typeof(TestDerived), out _));
+    }
+
+    [Fact]
+    public void Rebuild_WithDynamicAssembly_IgnoresAssemblyAndClearsLoadedTypes()
+    {
+        AssemblyBuilder dynamicAssembly = AssemblyBuilder.DefineDynamicAssembly(
+            new AssemblyName("Inno.Dynamic.TypeCacheTests"),
+            AssemblyBuilderAccess.Run);
+        ModuleBuilder moduleBuilder = dynamicAssembly.DefineDynamicModule("Main");
+        Type generatedType = moduleBuilder
+            .DefineType("Inno.Dynamic.GeneratedType", TypeAttributes.Public)
+            .CreateType()!;
+
+        TypeCacheManager.Rebuild(dynamicAssembly);
+
+        Assert.False(TypeCache.TryGetRuntimeTypeId(generatedType, out _));
+        Assert.False(TypeCache.TryGetRuntimeTypeId(typeof(TestDerived), out _));
+        Assert.False(TypeCache.TryGetRuntimeTypeId(typeof(TypeCacheManager), out _));
+    }
+
+    [Fact]
+    public void Rebuild_GlobalAfterScopedRebuild_RestoresAllLoadedTypes()
+    {
+        TypeCacheManager.Rebuild(typeof(string).Assembly);
+        Assert.False(TypeCache.TryGetRuntimeTypeId(typeof(TestDerived), out _));
+        Assert.False(TypeCache.TryGetRuntimeTypeId(typeof(TypeCacheManager), out _));
+
+        TypeCacheManager.Rebuild();
+
+        Assert.True(TypeCache.TryGetRuntimeTypeId(typeof(TestDerived), out _));
+        Assert.True(TypeCache.TryGetRuntimeTypeId(typeof(TypeCacheManager), out _));
+    }
+
+    [Fact]
+    public void Rebuild_NullAssembly_BehavesAsGlobalRebuild()
+    {
+        TypeCacheManager.Rebuild(typeof(string).Assembly);
+        Assert.False(TypeCache.TryGetRuntimeTypeId(typeof(TestDerived), out _));
+
+        TypeCacheManager.Rebuild((Assembly?)null);
+
+        Assert.True(TypeCache.TryGetRuntimeTypeId(typeof(TestDerived), out _));
+        Assert.True(TypeCache.TryGetRuntimeTypeId(typeof(TypeCacheManager), out _));
+    }
+
+    [Fact]
+    public void RuntimeTypeId_IsInvalidAfterScopedRemoval_AndChangesWhenTypeReturns()
+    {
+        TypeCacheManager.Rebuild();
+        Assert.True(TypeCache.TryGetRuntimeTypeId(typeof(TestDerived), out int originalRuntimeId));
+        Assert.True(TypeCache.TryResolveType(originalRuntimeId, out Type? resolvedBeforeRemoval));
+        Assert.Equal(typeof(TestDerived), resolvedBeforeRemoval);
+
+        TypeCacheManager.Rebuild(typeof(string).Assembly);
+        Assert.False(TypeCache.TryResolveType(originalRuntimeId, out _));
+
+        TypeCacheManager.Rebuild();
+        Assert.True(TypeCache.TryGetRuntimeTypeId(typeof(TestDerived), out int runtimeIdAfterReturn));
+        Assert.NotEqual(originalRuntimeId, runtimeIdAfterReturn);
+    }
+
+    [Fact]
+    public void StableTypeId_IsInvalidAfterScopedRemoval_AndResolvesAgainAfterGlobalRebuild()
+    {
+        Guid stableId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
+        TypeCacheManager.Rebuild();
+        Assert.True(TypeCache.TryResolveType(stableId, out Type? resolvedBeforeRemoval));
+        Assert.Equal(typeof(StableAnnotatedTypeA), resolvedBeforeRemoval);
+
+        TypeCacheManager.Rebuild(typeof(string).Assembly);
+        Assert.False(TypeCache.TryResolveType(stableId, out _));
+
+        TypeCacheManager.Rebuild();
+        Assert.True(TypeCache.TryResolveType(stableId, out Type? resolvedAfterRestore));
+        Assert.Equal(typeof(StableAnnotatedTypeA), resolvedAfterRestore);
+    }
+
+    [Fact]
+    public void QueryApis_ReturnEmpty_WhenCacheBuiltFromAssemblyWithoutInnoTypes()
+    {
+        TypeCacheManager.Rebuild(typeof(string).Assembly);
+
+        Assert.Empty(TypeCache.GetSubTypesOf<TestBase>());
+        Assert.Empty(TypeCache.GetTypesImplementing<ITestContract>());
+        Assert.Empty(TypeCache.GetTypesWithAttribute<TestMarkerAttribute>());
+    }
+
+    [Fact]
+    public void TryGetTypeId_ThrowsArgumentNullException_ForNullType()
+    {
+        TypeCacheManager.Rebuild();
+
+        Assert.Throws<ArgumentNullException>(() => TypeCache.TryGetRuntimeTypeId(null!, out _));
+        Assert.Throws<ArgumentNullException>(() => TypeCache.TryGetStableTypeId(null!, out _));
     }
 }
 
