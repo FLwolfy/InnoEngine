@@ -64,7 +64,7 @@ public sealed class World
     public bool KillEntity(Entity entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        if (!TryFindEntity(entity.id, out _))
+        if (m_entities.First(m_entityIdKey, entity.id) is null)
         {
             return false;
         }
@@ -164,7 +164,7 @@ public sealed class World
         int componentTypeId = GetComponentRuntimeTypeId(typeof(TComponent));
         bool removedPendingAdd = RemovePendingAdd(entity.id, componentTypeId);
         m_pendingRemoveComponents.Add(new ComponentRemoveOp(entity.id, componentTypeId));
-        return removedPendingAdd || FindComponent(entity.id, componentTypeId) is not null;
+        return removedPendingAdd || m_components.First(m_componentEntityTypeKey, (entity.id, componentTypeId)) is not null;
     }
 
 
@@ -191,7 +191,7 @@ public sealed class World
         int componentTypeId = GetComponentRuntimeTypeId(typeof(TComponent));
         if (entityId is Guid targetEntityId)
         {
-            Component? component = FindComponent(targetEntityId, componentTypeId);
+            Component? component = m_components.First(m_componentEntityTypeKey, (targetEntityId, componentTypeId));
             if (component is TComponent typed)
             {
                 return [typed];
@@ -226,7 +226,7 @@ public sealed class World
         int componentTypeId = GetComponentRuntimeTypeId(typeof(TComponent));
         if (entityId is Guid targetEntityId)
         {
-            Component? component = FindComponent(targetEntityId, componentTypeId);
+            Component? component = m_components.First(m_componentEntityTypeKey, (targetEntityId, componentTypeId));
             if (component is TComponent typed)
             {
                 yield return typed;
@@ -285,7 +285,8 @@ public sealed class World
         for (int i = 0; i < seed.Count; i++)
         {
             Guid entityId = seed[i].entityId;
-            if (!TryFindEntity(entityId, out Entity? entity) || entity is null)
+            Entity? entity = m_entities.First(m_entityIdKey, entityId);
+            if (entity is null)
             {
                 continue;
             }
@@ -298,7 +299,7 @@ public sealed class World
                     continue;
                 }
 
-                if (FindComponent(entityId, componentTypeIds[j]) is null)
+                if (m_components.First(m_componentEntityTypeKey, (entityId, componentTypeIds[j])) is null)
                 {
                     matched = false;
                     break;
@@ -338,7 +339,8 @@ public sealed class World
         foreach (Component seedComponent in m_components.FindFast(m_componentTypeIdKey, seedTypeId))
         {
             Guid entityId = seedComponent.entityId;
-            if (!TryFindEntity(entityId, out Entity? entity) || entity is null)
+            Entity? entity = m_entities.First(m_entityIdKey, entityId);
+            if (entity is null)
             {
                 continue;
             }
@@ -351,7 +353,7 @@ public sealed class World
                     continue;
                 }
 
-                if (FindComponent(entityId, componentTypeIds[i]) is null)
+                if (m_components.First(m_componentEntityTypeKey, (entityId, componentTypeIds[i])) is null)
                 {
                     matched = false;
                     break;
@@ -377,14 +379,14 @@ public sealed class World
                 continue;
             }
 
-            if (!TryFindEntity(op.entityId, out _))
+            if (m_entities.First(m_entityIdKey, op.entityId) is null)
             {
                 op.component.Reset();
                 op.component.entityId = Guid.Empty;
                 continue;
             }
 
-            Component? existing = FindComponent(op.entityId, op.componentTypeId);
+            Component? existing = m_components.First(m_componentEntityTypeKey, (op.entityId, op.componentTypeId));
             if (existing is not null)
             {
                 RemoveComponentInstance(existing);
@@ -405,7 +407,7 @@ public sealed class World
         for (int i = 0; i < m_pendingRemoveComponents.Count; i++)
         {
             ComponentRemoveOp op = m_pendingRemoveComponents[i];
-            Component? component = FindComponent(op.entityId, op.componentTypeId);
+            Component? component = m_components.First(m_componentEntityTypeKey, (op.entityId, op.componentTypeId));
             if (component is null)
             {
                 continue;
@@ -430,7 +432,8 @@ public sealed class World
         for (int i = 0; i < killed.Length; i++)
         {
             Guid entityId = killed[i];
-            if (!TryFindEntity(entityId, out Entity? entity) || entity is null)
+            Entity? entity = m_entities.First(m_entityIdKey, entityId);
+            if (entity is null)
             {
                 continue;
             }
@@ -452,23 +455,12 @@ public sealed class World
         return m_components.Remove(component);
     }
 
-    private Component? FindComponent(Guid entityId, int componentTypeId)
-    {
-        return m_components.First(m_componentEntityTypeKey, (entityId, componentTypeId));
-    }
-
     private void EnsureEntityExists(Guid entityId)
     {
-        if (!TryFindEntity(entityId, out _))
+        if (m_entities.First(m_entityIdKey, entityId) is null)
         {
             throw new InvalidOperationException($"Entity '{entityId}' is not part of this world.");
         }
-    }
-
-    private bool TryFindEntity(Guid entityId, out Entity? entity)
-    {
-        entity = m_entities.First(m_entityIdKey, entityId);
-        return entity is not null;
     }
 
     private bool RemovePendingAdd(Guid entityId, int componentTypeId)
