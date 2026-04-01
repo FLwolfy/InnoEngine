@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\core\Inno.Core.ECS\Inno.Core.ECS.csproj" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 using Inno.Core.ECS;
+using Inno.Core.Reflection;
 
 using Xunit;
 
@@ -133,7 +134,8 @@ public sealed class WorldTests
         world.AddComponent<TestVelocityComponent>(both);
         world.FlushPending();
 
-        IReadOnlyList<Entity> entities = world.ViewEntities([typeof(TestPositionComponent), typeof(TestVelocityComponent)]);
+        EntityViewHandle handle = world.CreateEntityViewHandle([typeof(TestPositionComponent), typeof(TestVelocityComponent)]);
+        IReadOnlyList<Entity> entities = world.ViewEntities(handle);
 
         Assert.Single(entities);
         Assert.Equal(both.id, entities[0].id);
@@ -154,10 +156,39 @@ public sealed class WorldTests
         world.AddComponent<TestVelocityComponent>(bothB);
         world.FlushPending();
 
-        IReadOnlyList<Guid> fast = [.. world.ViewEntitiesFast([typeof(TestPositionComponent), typeof(TestVelocityComponent)]).Select(static e => e.id).OrderBy(static id => id)];
+        EntityViewHandle handle = world.CreateEntityViewHandle([typeof(TestPositionComponent), typeof(TestVelocityComponent)]);
+        IReadOnlyList<Guid> fast = [.. world.ViewEntitiesFast(handle).Select(static e => e.id).OrderBy(static id => id)];
         IReadOnlyList<Guid> expected = new[] { bothA.id, bothB.id }.OrderBy(static id => id).ToArray();
 
         Assert.Equal(expected, fast);
+    }
+
+    [Fact]
+    public void ViewEntities_WithNullHandle_ReturnsAllEntities()
+    {
+        var world = new World();
+        Entity a = world.CreateEntity();
+        Entity b = world.CreateEntity();
+        Entity c = world.CreateEntity();
+
+        IReadOnlyList<Guid> all = [.. world.ViewEntities().Select(static e => e.id).OrderBy(static id => id)];
+        IReadOnlyList<Guid> expected = new[] { a.id, b.id, c.id }.OrderBy(static id => id).ToArray();
+
+        Assert.Equal(expected, all);
+    }
+
+    [Fact]
+    public void ViewEntitiesFast_WithNullHandle_ReturnsAllEntities()
+    {
+        var world = new World();
+        Entity a = world.CreateEntity();
+        Entity b = world.CreateEntity();
+        Entity c = world.CreateEntity();
+
+        IReadOnlyList<Guid> all = [.. world.ViewEntitiesFast().Select(static e => e.id).OrderBy(static id => id)];
+        IReadOnlyList<Guid> expected = new[] { a.id, b.id, c.id }.OrderBy(static id => id).ToArray();
+
+        Assert.Equal(expected, all);
     }
 
     [Fact]
@@ -170,7 +201,8 @@ public sealed class WorldTests
         world.AddComponent<TestVelocityComponent>(both);
         world.FlushPending();
 
-        IReadOnlyList<Entity> snapshot = world.ViewEntities([typeof(TestPositionComponent), typeof(TestVelocityComponent)]);
+        EntityViewHandle handle = world.CreateEntityViewHandle([typeof(TestPositionComponent), typeof(TestVelocityComponent)]);
+        IReadOnlyList<Entity> snapshot = world.ViewEntities(handle);
 
         world.AddComponent<TestPositionComponent>(bothLater);
         world.AddComponent<TestVelocityComponent>(bothLater);
@@ -190,8 +222,9 @@ public sealed class WorldTests
         world.AddComponent<TestVelocityComponent>(both);
         world.FlushPending();
 
-        IReadOnlyList<Entity> entities = world.ViewEntities(
+        EntityViewHandle handle = world.CreateEntityViewHandle(
             [typeof(TestPositionComponent), typeof(TestPositionComponent), typeof(TestVelocityComponent)]);
+        IReadOnlyList<Entity> entities = world.ViewEntities(handle);
 
         Assert.Single(entities);
         Assert.Equal(both.id, entities[0].id);
@@ -202,8 +235,7 @@ public sealed class WorldTests
     {
         var world = new World();
 
-        Assert.Throws<ArgumentException>(() => world.ViewEntities(Array.Empty<Type>()));
-        Assert.Throws<ArgumentException>(() => world.ViewEntitiesFast(Array.Empty<Type>()).ToArray());
+        Assert.Throws<ArgumentException>(() => world.CreateEntityViewHandle(Array.Empty<Type>()));
     }
 
     [Fact]
@@ -212,8 +244,7 @@ public sealed class WorldTests
         var world = new World();
         Type[] types = [typeof(TestPositionComponent), typeof(string)];
 
-        Assert.Throws<ArgumentException>(() => world.ViewEntities(types));
-        Assert.Throws<ArgumentException>(() => world.ViewEntitiesFast(types).ToArray());
+        Assert.Throws<ArgumentException>(() => world.CreateEntityViewHandle(types));
     }
 
     [Fact]
@@ -222,8 +253,7 @@ public sealed class WorldTests
         var world = new World();
         Type[] types = [typeof(TestPositionComponent), null!];
 
-        Assert.Throws<ArgumentNullException>(() => world.ViewEntities(types));
-        Assert.Throws<ArgumentNullException>(() => world.ViewEntitiesFast(types).ToArray());
+        Assert.Throws<ArgumentNullException>(() => world.CreateEntityViewHandle(types));
     }
 
     [Fact]
@@ -238,13 +268,80 @@ public sealed class WorldTests
         world.AddComponent<TestPositionComponent>(b);
         world.FlushPending();
 
-        using IEnumerator<Entity> iterator = world.ViewEntitiesFast([typeof(TestPositionComponent)]).GetEnumerator();
+        EntityViewHandle handle = world.CreateEntityViewHandle([typeof(TestPositionComponent)]);
+        using IEnumerator<Entity> iterator = world.ViewEntitiesFast(handle).GetEnumerator();
         Assert.True(iterator.MoveNext());
 
         world.AddComponent<TestPositionComponent>(c);
         world.FlushPending();
 
         Assert.Throws<InvalidOperationException>(() => iterator.MoveNext());
+    }
+
+    [Fact]
+    public void EntityViewHandle_CanBeReused_ByViewEntitiesApis()
+    {
+        var world = new World();
+        Entity bothA = world.CreateEntity();
+        Entity bothB = world.CreateEntity();
+        Entity onlyPos = world.CreateEntity();
+
+        world.AddComponent<TestPositionComponent>(bothA);
+        world.AddComponent<TestVelocityComponent>(bothA);
+        world.AddComponent<TestPositionComponent>(bothB);
+        world.AddComponent<TestVelocityComponent>(bothB);
+        world.AddComponent<TestPositionComponent>(onlyPos);
+        world.FlushPending();
+
+        EntityViewHandle handle = world.CreateEntityViewHandle([typeof(TestPositionComponent), typeof(TestVelocityComponent)]);
+        Assert.True(handle.isValid);
+
+        IReadOnlyList<Guid> snapshot = [.. world.ViewEntities(handle).Select(static e => e.id).OrderBy(static id => id)];
+        IReadOnlyList<Guid> fast = [.. world.ViewEntitiesFast(handle).Select(static e => e.id).OrderBy(static id => id)];
+        IReadOnlyList<Guid> expected = new[] { bothA.id, bothB.id }.OrderBy(static id => id).ToArray();
+
+        Assert.Equal(expected, snapshot);
+        Assert.Equal(expected, fast);
+    }
+
+    [Fact]
+    public void EntityViewHandle_Default_IsInvalid()
+    {
+        EntityViewHandle handle = default;
+        Assert.False(handle.isValid);
+    }
+
+    [Fact]
+    public void ViewEntities_WithHandleFromDifferentWorld_Throws()
+    {
+        var worldA = new World();
+        var worldB = new World();
+        EntityViewHandle handle = worldA.CreateEntityViewHandle([typeof(TestPositionComponent)]);
+
+        Assert.Throws<InvalidOperationException>(() => worldB.ViewEntities(handle));
+        Assert.Throws<InvalidOperationException>(() => worldB.ViewEntitiesFast(handle).ToArray());
+    }
+
+    [Fact]
+    public void EntityViewHandle_IsInvalid_AfterTypeCacheRebuildWithoutEcsTypes()
+    {
+        try
+        {
+            TypeCacheManager.Initialize();
+            var world = new World();
+            EntityViewHandle handle = world.CreateEntityViewHandle([typeof(TestPositionComponent)]);
+            Assert.True(handle.isValid);
+
+            TypeCacheManager.Rebuild(typeof(string).Assembly);
+
+            Assert.False(handle.isValid);
+            Assert.Throws<InvalidOperationException>(() => world.ViewEntities(handle));
+            Assert.Throws<InvalidOperationException>(() => world.ViewEntitiesFast(handle).ToArray());
+        }
+        finally
+        {
+            TypeCacheManager.Rebuild();
+        }
     }
 
     [Fact]

@@ -10,6 +10,8 @@ namespace Inno.Core.ECS;
 /// </summary>
 public sealed class World
 {
+    private readonly WeakReference<World> m_worldRef;
+
     private readonly ObjectPool<Entity> m_entities = new();
     private readonly PoolKey<Guid> m_entityIdKey;
 
@@ -33,6 +35,7 @@ public sealed class World
     /// </summary>
     public World()
     {
+        m_worldRef = new WeakReference<World>(this);
         m_entityIdKey = m_entities.DefineKey<Guid>("entity.id", PoolKeyFlags.Unique);
         m_componentEntityKey = m_components.DefineKey<Guid>("component.entity");
         m_componentTypeIdKey = m_components.DefineKey<int>("component.typeId");
@@ -177,6 +180,7 @@ public sealed class World
 
     /// <summary>
     /// Returns a stable snapshot of components matching the requested type and optional entity filter.
+    /// When <paramref name="entityId"/> is <see langword="null"/>, returns all components of <typeparamref name="TComponent"/>.
     /// </summary>
     /// <typeparam name="TComponent">Component type.</typeparam>
     /// <param name="entityId">Optional entity id filter.</param>
@@ -211,6 +215,7 @@ public sealed class World
 
     /// <summary>
     /// Returns a lazy fail-fast sequence of components matching the requested type and optional entity filter.
+    /// When <paramref name="entityId"/> is <see langword="null"/>, returns all components of <typeparamref name="TComponent"/>.
     /// </summary>
     /// <typeparam name="TComponent">Component type.</typeparam>
     /// <param name="entityId">Optional entity id filter.</param>
@@ -240,13 +245,30 @@ public sealed class World
     }
 
     /// <summary>
-    /// Returns a stable snapshot of entities that contain all provided component types.
+    /// Creates a reusable handle for querying entities that contain all provided component types.
     /// </summary>
     /// <param name="componentTypes">Component type intersection criteria.</param>
-    /// <returns>Snapshot list detached from subsequent world mutations.</returns>
-    public IReadOnlyList<Entity> ViewEntities(Type[] componentTypes)
+    /// <returns>Reusable handle for <see cref="ViewEntities(EntityViewHandle)"/> and <see cref="ViewEntitiesFast(EntityViewHandle)"/>.</returns>
+    public EntityViewHandle CreateEntityViewHandle(Type[] componentTypes)
     {
         int[] componentTypeIds = ResolveComponentTypeIds(componentTypes);
+        return new EntityViewHandle(m_worldRef, componentTypeIds);
+    }
+
+    /// <summary>
+    /// Returns a stable snapshot of entities that match a prebuilt entity view handle.
+    /// When <paramref name="handle"/> is <see langword="null"/>, returns all entities.
+    /// </summary>
+    /// <param name="handle">Prebuilt view handle.</param>
+    /// <returns>Snapshot list detached from subsequent world mutations.</returns>
+    public IReadOnlyList<Entity> ViewEntities(EntityViewHandle? handle = null)
+    {
+        if (handle is null)
+        {
+            return m_entities.Query().Get();
+        }
+
+        int[] componentTypeIds = handle.Value.GetComponentTypeIdsOrThrow(this);
         IReadOnlyList<Component>[] buckets = new IReadOnlyList<Component>[componentTypeIds.Length];
         int seedIndex = 0;
         for (int i = 0; i < componentTypeIds.Length; i++)
@@ -293,18 +315,24 @@ public sealed class World
     }
 
     /// <summary>
-    /// Returns a lazy fail-fast sequence of entities that contain all provided component types.
+    /// Returns a lazy fail-fast sequence of entities that match a prebuilt entity view handle.
+    /// When <paramref name="handle"/> is <see langword="null"/>, returns all entities.
     /// </summary>
-    /// <param name="componentTypes">Component type intersection criteria.</param>
+    /// <param name="handle">Prebuilt view handle.</param>
     /// <returns>Lazy sequence suitable for hot-path iteration.</returns>
-    public IEnumerable<Entity> ViewEntitiesFast(Type[] componentTypes)
+    public IEnumerable<Entity> ViewEntitiesFast(EntityViewHandle? handle = null)
     {
-        return ViewEntitiesFastCore(componentTypes);
-    }
+        if (handle is null)
+        {
+            foreach (Entity entity in m_entities.Query().GetFast())
+            {
+                yield return entity;
+            }
 
-    private IEnumerable<Entity> ViewEntitiesFastCore(Type[] componentTypes)
-    {
-        int[] componentTypeIds = ResolveComponentTypeIds(componentTypes);
+            yield break;
+        }
+
+        int[] componentTypeIds = handle.Value.GetComponentTypeIdsOrThrow(this);
         int seedIndex = FindMinBucketIndex(componentTypeIds);
         int seedTypeId = componentTypeIds[seedIndex];
         foreach (Component seedComponent in m_components.FindFast(m_componentTypeIdKey, seedTypeId))
