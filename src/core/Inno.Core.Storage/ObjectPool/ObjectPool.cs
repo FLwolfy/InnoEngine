@@ -417,6 +417,45 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     }
 
     /// <summary>
+    /// Returns all stored items as a stable snapshot.
+    /// </summary>
+    /// <remarks>
+    /// The returned list is detached from subsequent pool mutations.
+    /// </remarks>
+    /// <returns>A snapshot list of all stored items.</returns>
+    public IReadOnlyList<T> All()
+    {
+        m_lock.EnterReadLock();
+        try
+        {
+            var result = new List<T>(m_activeList.Count);
+            result.AddRange(m_activeList);
+            return result;
+        }
+        finally
+        {
+            m_lock.ExitReadLock();
+        }
+    }
+
+    /// <summary>
+    /// Returns all stored items as a lazy fail-fast enumerable.
+    /// </summary>
+    /// <remarks>
+    /// Enumeration throws if the pool is modified during iteration.
+    /// </remarks>
+    /// <returns>Lazy fail-fast enumerable of all stored items.</returns>
+    public IEnumerable<T> AllFast()
+    {
+        var version = Volatile.Read(ref m_version);
+        foreach (var item in m_activeList)
+        {
+            EnsureVersion(version);
+            yield return item;
+        }
+    }
+
+    /// <summary>
     /// Starts a query over stored items.
     /// </summary>
     /// <returns>A query builder.</returns>

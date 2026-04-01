@@ -14,6 +14,7 @@ public sealed class World
 
     private readonly ObjectPool<Entity> m_entities = new();
     private readonly PoolKey<Guid> m_entityIdKey;
+    private readonly PoolKey<int> m_entityArchetypeIdKey;
 
     private readonly ObjectPool<Component> m_components = new();
     private readonly PoolKey<Guid> m_componentEntityKey;
@@ -28,7 +29,7 @@ public sealed class World
 
     private readonly HashSet<Guid> m_pendingKilledEntities = [];
     private readonly List<ISystem> m_systems = [];
-    
+    private readonly EntityArchetypeIndex m_archetypeIndex = new();
     
     /// <summary>
     /// Initializes an empty world and all lookup keys.
@@ -37,6 +38,7 @@ public sealed class World
     {
         m_worldRef = new WeakReference<World>(this);
         m_entityIdKey = m_entities.DefineKey<Guid>("entity.id", PoolKeyFlags.Unique);
+        m_entityArchetypeIdKey = m_entities.DefineKey<int>("entity.archetypeId");
         m_componentEntityKey = m_components.DefineKey<Guid>("component.entity");
         m_componentTypeIdKey = m_components.DefineKey<int>("component.typeId");
         m_componentEntityTypeKey = m_components.DefineKey<(Guid entityId, int componentTypeId)>(
@@ -52,7 +54,10 @@ public sealed class World
     public Entity CreateEntity(Guid? parentGuid = null)
     {
         Entity entity = new(Guid.NewGuid(), parentGuid);
-        m_entities.Add(entity).Set(m_entityIdKey, entity.id);
+        m_entities.Add(entity)
+            .Set(m_entityIdKey, entity.id)
+            .Set(m_entityArchetypeIdKey, m_archetypeIndex.emptyArchetypeId);
+        m_archetypeIndex.RegisterEntity(entity.id);
         return entity;
     }
 
@@ -265,50 +270,23 @@ public sealed class World
     {
         if (handle is null)
         {
-            return m_entities.Query().Get();
+            return m_entities.All();
         }
 
         int[] componentTypeIds = handle.Value.GetComponentTypeIdsOrThrow(this);
-        IReadOnlyList<Component>[] buckets = new IReadOnlyList<Component>[componentTypeIds.Length];
-        int seedIndex = 0;
-        for (int i = 0; i < componentTypeIds.Length; i++)
+        IReadOnlyList<int> archetypeIds = m_archetypeIndex.GetMatchingArchetypeIds(componentTypeIds);
+        if (archetypeIds.Count == 0)
         {
-            buckets[i] = m_components.Find(m_componentTypeIdKey, componentTypeIds[i]);
-            if (buckets[i].Count < buckets[seedIndex].Count)
-            {
-                seedIndex = i;
-            }
+            return [];
         }
 
-        var result = new List<Entity>(buckets[seedIndex].Count);
-        IReadOnlyList<Component> seed = buckets[seedIndex];
-        for (int i = 0; i < seed.Count; i++)
+        var result = new List<Entity>();
+        for (int i = 0; i < archetypeIds.Count; i++)
         {
-            Guid entityId = seed[i].entityId;
-            Entity? entity = m_entities.First(m_entityIdKey, entityId);
-            if (entity is null)
+            IReadOnlyList<Entity> entities = m_entities.Find(m_entityArchetypeIdKey, archetypeIds[i]);
+            for (int j = 0; j < entities.Count; j++)
             {
-                continue;
-            }
-
-            bool matched = true;
-            for (int j = 0; j < componentTypeIds.Length; j++)
-            {
-                if (j == seedIndex)
-                {
-                    continue;
-                }
-
-                if (m_components.First(m_componentEntityTypeKey, (entityId, componentTypeIds[j])) is null)
-                {
-                    matched = false;
-                    break;
-                }
-            }
-
-            if (matched)
-            {
-                result.Add(entity);
+                result.Add(entities[j]);
             }
         }
 
@@ -325,7 +303,7 @@ public sealed class World
     {
         if (handle is null)
         {
-            foreach (Entity entity in m_entities.Query().GetFast())
+            foreach (Entity entity in m_entities.AllFast())
             {
                 yield return entity;
             }
@@ -334,33 +312,10 @@ public sealed class World
         }
 
         int[] componentTypeIds = handle.Value.GetComponentTypeIdsOrThrow(this);
-        int seedIndex = FindMinBucketIndex(componentTypeIds);
-        int seedTypeId = componentTypeIds[seedIndex];
-        foreach (Component seedComponent in m_components.FindFast(m_componentTypeIdKey, seedTypeId))
+        IReadOnlyList<int> archetypeIds = m_archetypeIndex.GetMatchingArchetypeIds(componentTypeIds);
+        for (int i = 0; i < archetypeIds.Count; i++)
         {
-            Guid entityId = seedComponent.entityId;
-            Entity? entity = m_entities.First(m_entityIdKey, entityId);
-            if (entity is null)
-            {
-                continue;
-            }
-
-            bool matched = true;
-            for (int i = 0; i < componentTypeIds.Length; i++)
-            {
-                if (i == seedIndex)
-                {
-                    continue;
-                }
-
-                if (m_components.First(m_componentEntityTypeKey, (entityId, componentTypeIds[i])) is null)
-                {
-                    matched = false;
-                    break;
-                }
-            }
-
-            if (matched)
+            foreach (Entity entity in m_entities.FindFast(m_entityArchetypeIdKey, archetypeIds[i]))
             {
                 yield return entity;
             }
@@ -397,6 +352,15 @@ public sealed class World
                 .Set(m_componentEntityKey, op.entityId)
                 .Set(m_componentTypeIdKey, op.componentTypeId)
                 .Set(m_componentEntityTypeKey, (op.entityId, op.componentTypeId));
+
+            if (m_archetypeIndex.TryOnComponentAdded(op.entityId, op.componentTypeId, out int archetypeId))
+            {
+                Entity? entity = m_entities.First(m_entityIdKey, op.entityId);
+                if (entity is not null)
+                {
+                    m_entities.Add(entity).Set(m_entityArchetypeIdKey, archetypeId);
+                }
+            }
         }
 
         m_pendingAddComponents.Clear();
@@ -414,6 +378,14 @@ public sealed class World
             }
 
             RemoveComponentInstance(component);
+            if (m_archetypeIndex.TryOnComponentRemoved(op.entityId, op.componentTypeId, out int archetypeId))
+            {
+                Entity? entity = m_entities.First(m_entityIdKey, op.entityId);
+                if (entity is not null)
+                {
+                    m_entities.Add(entity).Set(m_entityArchetypeIdKey, archetypeId);
+                }
+            }
         }
 
         m_pendingRemoveComponents.Clear();
@@ -444,6 +416,7 @@ public sealed class World
                 RemoveComponentInstance(all[j]);
             }
 
+            m_archetypeIndex.UnregisterEntity(entityId);
             m_entities.Remove(entity);
         }
     }
@@ -526,23 +499,6 @@ public sealed class World
 
         throw new InvalidOperationException(
             $"Component type '{componentType.FullName}' is not loaded in TypeCache. Call TypeCacheManager.Initialize/Rebuild first.");
-    }
-
-    private int FindMinBucketIndex(int[] componentTypeIds)
-    {
-        int seedIndex = 0;
-        int seedCount = m_components.Find(m_componentTypeIdKey, componentTypeIds[0]).Count;
-        for (int i = 1; i < componentTypeIds.Length; i++)
-        {
-            int count = m_components.Find(m_componentTypeIdKey, componentTypeIds[i]).Count;
-            if (count < seedCount)
-            {
-                seedCount = count;
-                seedIndex = i;
-            }
-        }
-
-        return seedIndex;
     }
 
     private static int[] ResolveComponentTypeIds(Type[] componentTypes)

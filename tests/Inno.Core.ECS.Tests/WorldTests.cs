@@ -305,6 +305,56 @@ public sealed class WorldTests
     }
 
     [Fact]
+    public void ViewEntities_RemainsStable_WhenUnrelatedComponentTypeChanges()
+    {
+        var world = new World();
+        Entity both = world.CreateEntity();
+        Entity onlyPos = world.CreateEntity();
+        Entity unrelated = world.CreateEntity();
+
+        world.AddComponent<TestPositionComponent>(both);
+        world.AddComponent<TestVelocityComponent>(both);
+        world.AddComponent<TestPositionComponent>(onlyPos);
+        world.FlushPending();
+
+        EntityViewHandle handle = world.CreateEntityViewHandle([typeof(TestPositionComponent), typeof(TestVelocityComponent)]);
+        IReadOnlyList<Entity> first = world.ViewEntities(handle);
+
+        world.AddComponent<TestTagComponent>(unrelated);
+        world.FlushPending();
+
+        IReadOnlyList<Entity> second = world.ViewEntities(handle);
+
+        Assert.Single(first);
+        Assert.Single(second);
+        Assert.Equal(both.id, second[0].id);
+    }
+
+    [Fact]
+    public void ViewEntities_ReflectsChanges_WhenRelatedComponentTypeChanges()
+    {
+        var world = new World();
+        Entity both = world.CreateEntity();
+        Entity later = world.CreateEntity();
+
+        world.AddComponent<TestPositionComponent>(both);
+        world.AddComponent<TestVelocityComponent>(both);
+        world.FlushPending();
+
+        EntityViewHandle handle = world.CreateEntityViewHandle([typeof(TestPositionComponent), typeof(TestVelocityComponent)]);
+        IReadOnlyList<Entity> first = world.ViewEntities(handle);
+
+        world.AddComponent<TestPositionComponent>(later);
+        world.AddComponent<TestVelocityComponent>(later);
+        world.FlushPending();
+
+        IReadOnlyList<Entity> second = world.ViewEntities(handle);
+
+        Assert.Single(first);
+        Assert.Equal(2, second.Count);
+    }
+
+    [Fact]
     public void EntityViewHandle_Default_IsInvalid()
     {
         EntityViewHandle handle = default;
@@ -543,6 +593,8 @@ public sealed class WorldTests
     }
 
     private sealed class TestVelocityComponent : Component;
+
+    private sealed class TestTagComponent : Component;
 
     private sealed class LowOrderSystem(List<string> sink) : ISystem
     {
