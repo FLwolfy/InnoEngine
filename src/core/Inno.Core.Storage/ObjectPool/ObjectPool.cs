@@ -21,6 +21,11 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     private readonly WeakReference<IObjectPool> m_poolRef;
     private readonly List<T> m_activeList = new();
     private readonly Dictionary<T, int> m_activeIndex = new(ReferenceEqualityComparer<T>.INSTANCE);
+    private readonly Dictionary<T, PoolRuntimeHandle> m_handleByItem = new(ReferenceEqualityComparer<T>.INSTANCE);
+    private readonly List<int> m_sparseToDense = new();
+    private readonly List<uint> m_generations = new();
+    private readonly List<int> m_denseToSlot = new();
+    private Stack<int> m_freeSlots = new();
     private readonly Dictionary<int, IPoolIndex<T>> m_indexes = new();
     private readonly Dictionary<string, int> m_indexByName = new(StringComparer.Ordinal);
     private readonly ReaderWriterLockSlim m_lock = new(LockRecursionPolicy.NoRecursion);
@@ -64,6 +69,11 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
         {
             m_activeList.Clear();
             m_activeIndex.Clear();
+            m_handleByItem.Clear();
+            m_sparseToDense.Clear();
+            m_generations.Clear();
+            m_denseToSlot.Clear();
+            m_freeSlots = new Stack<int>();
             m_indexes.Clear();
             m_indexByName.Clear();
             m_nextIndexId = 1;
@@ -86,8 +96,18 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
         m_lock.EnterWriteLock();
         try
         {
+            for (int i = 0; i < m_denseToSlot.Count; i++)
+            {
+                int slot = m_denseToSlot[i];
+                m_sparseToDense[slot] = -1;
+                m_generations[slot]++;
+                m_freeSlots.Push(slot);
+            }
+
             m_activeList.Clear();
             m_activeIndex.Clear();
+            m_handleByItem.Clear();
+            m_denseToSlot.Clear();
             foreach (var index in m_indexes.Values)
                 index.Clear();
             BumpVersion();
@@ -243,8 +263,13 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
         {
             if (!m_activeIndex.ContainsKey(item))
             {
-                m_activeIndex[item] = m_activeList.Count;
+                PoolRuntimeHandle handle = AllocateHandle();
+                int denseIndex = m_activeList.Count;
+                m_activeIndex[item] = denseIndex;
+                m_handleByItem[item] = handle;
                 m_activeList.Add(item);
+                m_denseToSlot.Add(handle.slot);
+                m_sparseToDense[handle.slot] = denseIndex;
                 BumpVersion();
             }
         }
@@ -276,15 +301,22 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
 
             var lastIndex = m_activeList.Count - 1;
             var lastItem = m_activeList[lastIndex];
+            var removedSlot = m_denseToSlot[index];
+            var lastSlot = m_denseToSlot[lastIndex];
             m_activeList.RemoveAt(lastIndex);
+            m_denseToSlot.RemoveAt(lastIndex);
             m_activeIndex.Remove(item);
+            m_handleByItem.Remove(item);
 
             if (index != lastIndex)
             {
                 m_activeList[index] = lastItem;
                 m_activeIndex[lastItem] = index;
+                m_denseToSlot[index] = lastSlot;
+                m_sparseToDense[lastSlot] = index;
             }
 
+            ReleaseSlot(removedSlot);
             BumpVersion();
             return true;
         }
@@ -303,6 +335,71 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
         try
         {
             return m_activeIndex.ContainsKey(item);
+        }
+        finally
+        {
+            m_lock.ExitReadLock();
+        }
+    }
+
+    /// <summary>
+    /// Tries to get the runtime handle for an item currently stored in the pool.
+    /// </summary>
+    /// <param name="item">Item to resolve.</param>
+    /// <param name="handle">Resolved runtime handle when successful.</param>
+    /// <returns>True when the item is currently stored in this pool.</returns>
+    internal bool TryGetHandle(T item, out PoolRuntimeHandle handle)
+    {
+        if (item == null)
+        {
+            handle = default;
+            return false;
+        }
+
+        m_lock.EnterReadLock();
+        try
+        {
+            return m_handleByItem.TryGetValue(item, out handle);
+        }
+        finally
+        {
+            m_lock.ExitReadLock();
+        }
+    }
+
+    /// <summary>
+    /// Returns true when the provided runtime handle still points to a live item in this pool.
+    /// </summary>
+    internal bool IsHandleValid(PoolRuntimeHandle handle)
+    {
+        m_lock.EnterReadLock();
+        try
+        {
+            return IsHandleValidNoLock(handle);
+        }
+        finally
+        {
+            m_lock.ExitReadLock();
+        }
+    }
+
+    /// <summary>
+    /// Tries to resolve an item by runtime handle.
+    /// </summary>
+    internal bool TryGetByHandle(PoolRuntimeHandle handle, out T? item)
+    {
+        m_lock.EnterReadLock();
+        try
+        {
+            if (!IsHandleValidNoLock(handle))
+            {
+                item = null;
+                return false;
+            }
+
+            int denseIndex = m_sparseToDense[handle.slot];
+            item = m_activeList[denseIndex];
+            return true;
         }
         finally
         {
@@ -508,6 +605,46 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal bool ContainsInSet<TKey>(PoolKey<TKey> key, TKey value, T item) where TKey : notnull => GetIndex(key).Contains(value, item);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private PoolRuntimeHandle AllocateHandle()
+    {
+        int slot;
+        if (m_freeSlots.Count > 0)
+        {
+            slot = m_freeSlots.Pop();
+        }
+        else
+        {
+            slot = m_generations.Count;
+            m_generations.Add(1);
+            m_sparseToDense.Add(-1);
+        }
+
+        return new PoolRuntimeHandle(slot, m_generations[slot]);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ReleaseSlot(int slot)
+    {
+        m_sparseToDense[slot] = -1;
+        m_generations[slot]++;
+        m_freeSlots.Push(slot);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool IsHandleValidNoLock(PoolRuntimeHandle handle)
+    {
+        int slot = handle.slot;
+        if ((uint)slot >= (uint)m_generations.Count)
+            return false;
+
+        if (m_generations[slot] != handle.generation)
+            return false;
+
+        int denseIndex = m_sparseToDense[slot];
+        return denseIndex >= 0 && denseIndex < m_activeList.Count;
+    }
 
     internal IEnumerable<T> ExecuteQueryFast(List<IQueryCondition<T>> conditions)
         => EnumerateQuery(conditions);

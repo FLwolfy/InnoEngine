@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 
 using Inno.Core.Storage;
 
@@ -277,5 +278,98 @@ public sealed class ObjectPoolTests
         pool.Add(new Item("C", 3));
 
         Assert.Throws<InvalidOperationException>(() => enumerator.MoveNext());
+    }
+
+    [Fact]
+    public void RuntimeHandle_ResolvesItem_WhenAlive()
+    {
+        var pool = new ObjectPool<Item>();
+        var a = new Item("A", 1);
+        pool.Add(a);
+
+        object handle = GetHandle(pool, a);
+        Assert.True(IsHandleValid(pool, handle));
+        Assert.True(TryGetByHandle(pool, handle, out Item? resolved));
+        Assert.Same(a, resolved);
+    }
+
+    [Fact]
+    public void RuntimeHandle_BecomesInvalid_AfterRemove()
+    {
+        var pool = new ObjectPool<Item>();
+        var a = new Item("A", 1);
+        pool.Add(a);
+        object handle = GetHandle(pool, a);
+
+        Assert.True(pool.Remove(a));
+        Assert.False(IsHandleValid(pool, handle));
+        Assert.False(TryGetByHandle(pool, handle, out _));
+    }
+
+    [Fact]
+    public void RuntimeHandle_InvalidatesOldGeneration_WhenSlotReused()
+    {
+        var pool = new ObjectPool<Item>();
+        var first = new Item("First", 1);
+        pool.Add(first);
+        object firstHandle = GetHandle(pool, first);
+
+        Assert.True(pool.Remove(first));
+
+        var second = new Item("Second", 2);
+        pool.Add(second);
+        object secondHandle = GetHandle(pool, second);
+
+        Assert.Equal(ReadHandleField<int>(firstHandle, "slot"), ReadHandleField<int>(secondHandle, "slot"));
+        Assert.NotEqual(ReadHandleField<uint>(firstHandle, "generation"), ReadHandleField<uint>(secondHandle, "generation"));
+        Assert.False(IsHandleValid(pool, firstHandle));
+        Assert.True(IsHandleValid(pool, secondHandle));
+    }
+
+    [Fact]
+    public void RuntimeHandle_InvalidatesAfterRemoveAll()
+    {
+        var pool = new ObjectPool<Item>();
+        var key = pool.DefineKey<int>("category");
+        var a = new Item("A", 1);
+
+        pool.Add(a).Set(key, a.Category);
+        object handle = GetHandle(pool, a);
+
+        pool.RemoveAll();
+
+        Assert.True(key.isValid);
+        Assert.False(IsHandleValid(pool, handle));
+        Assert.False(TryGetByHandle(pool, handle, out _));
+    }
+
+    private static object GetHandle(ObjectPool<Item> pool, Item item)
+    {
+        MethodInfo tryGetHandle = pool.GetType().GetMethod("TryGetHandle", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        object?[] args = [item, null];
+        bool ok = (bool)tryGetHandle.Invoke(pool, args)!;
+        Assert.True(ok);
+        return args[1]!;
+    }
+
+    private static bool IsHandleValid(ObjectPool<Item> pool, object handle)
+    {
+        MethodInfo isHandleValid = pool.GetType().GetMethod("IsHandleValid", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        return (bool)isHandleValid.Invoke(pool, [handle])!;
+    }
+
+    private static bool TryGetByHandle(ObjectPool<Item> pool, object handle, out Item? resolved)
+    {
+        MethodInfo tryGetByHandle = pool.GetType().GetMethod("TryGetByHandle", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        object?[] args = [handle, null];
+        bool ok = (bool)tryGetByHandle.Invoke(pool, args)!;
+        resolved = (Item?)args[1];
+        return ok;
+    }
+
+    private static TField ReadHandleField<TField>(object handle, string fieldName)
+    {
+        PropertyInfo property = handle.GetType().GetProperty(fieldName, BindingFlags.Instance | BindingFlags.Public)!;
+        return (TField)property.GetValue(handle)!;
     }
 }
