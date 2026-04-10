@@ -62,11 +62,16 @@ public sealed class TypeCacheTests
     }
 
     [Fact]
-    public void TryGetStableTypeId_ForTypeWithoutStableAttribute_ReturnsFalse()
+    public void TryGetStableTypeId_ForTypeWithoutStableAttribute_ReturnsDeterministicId()
     {
         TypeCacheManager.Rebuild();
 
-        Assert.False(TypeCache.TryGetStableTypeId(typeof(TypeCacheManager), out _));
+        Assert.True(TypeCache.TryGetStableTypeId(typeof(TypeCacheManager), out Guid first));
+        Assert.NotEqual(Guid.Empty, first);
+
+        TypeCacheManager.Rebuild();
+        Assert.True(TypeCache.TryGetStableTypeId(typeof(TypeCacheManager), out Guid second));
+        Assert.Equal(first, second);
     }
 
     [Fact]
@@ -141,6 +146,27 @@ public sealed class TypeCacheTests
         Assert.True(TypeCache.TryGetRuntimeTypeId(typeof(TestDerived), out int a));
         Assert.True(TypeCache.TryGetRuntimeTypeId(typeof(TestContractImpl), out int b));
         Assert.NotEqual(a, b);
+    }
+
+    [Fact]
+    public void TryGetStableTypeId_ForTypeWithoutAttribute_ReturnsTrue()
+    {
+        TypeCacheManager.Rebuild();
+
+        Assert.True(TypeCache.TryGetStableTypeId(typeof(DeterministicStableType), out Guid stableId));
+        Assert.NotEqual(Guid.Empty, stableId);
+    }
+
+    [Fact]
+    public void TypeWithoutAttribute_StableId_IsDeterministicAcrossRebuild()
+    {
+        TypeCacheManager.Rebuild();
+        Assert.True(TypeCache.TryGetStableTypeId(typeof(DeterministicStableType), out Guid first));
+
+        TypeCacheManager.Rebuild();
+        Assert.True(TypeCache.TryGetStableTypeId(typeof(DeterministicStableType), out Guid second));
+
+        Assert.Equal(first, second);
     }
 
     [Fact]
@@ -386,3 +412,5 @@ public sealed class StableAnnotatedTypeA;
 
 [StableTypeId("22222222-2222-2222-2222-222222222222")]
 public struct StableAnnotatedTypeB;
+
+public sealed class DeterministicStableType;

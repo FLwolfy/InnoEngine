@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 
 namespace Inno.Core.Reflection;
@@ -11,6 +13,9 @@ namespace Inno.Core.Reflection;
 /// </summary>
 internal sealed class TypeIdentityRegistry
 {
+    // RFC 4122 DNS namespace UUID, used to build deterministic UUIDv5 for auto stable ids.
+    private static readonly Guid C_STABLE_NAMESPACE_GUID = Guid.Parse("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
+
     private readonly Lock m_sync = new();
     private Dictionary<Type, Guid> m_stableByType = [];
     private Dictionary<Guid, Type> m_typeByStable = [];
@@ -56,15 +61,18 @@ internal sealed class TypeIdentityRegistry
         foreach (Type type in sourceTypes)
         {
             StableTypeIdAttribute? attr = type.GetCustomAttribute<StableTypeIdAttribute>(inherit: false);
-            if (attr is null)
+            Guid stableId;
+            if (attr is not null)
             {
-                continue;
+                if (!Guid.TryParse(attr.id, out stableId))
+                {
+                    throw new InvalidOperationException(
+                        $"Type '{type.FullName}' has invalid StableTypeId '{attr.id}'.");
+                }
             }
-
-            if (!Guid.TryParse(attr.id, out Guid stableId))
+            else
             {
-                throw new InvalidOperationException(
-                    $"Type '{type.FullName}' has invalid StableTypeId '{attr.id}'.");
+                stableId = CreateDeterministicStableId(type);
             }
 
             if (!typeByStable.TryAdd(stableId, type))
@@ -204,5 +212,41 @@ internal sealed class TypeIdentityRegistry
         string assemblyName = type.Assembly.GetName().Name ?? "UnknownAssembly";
         string typeName = type.FullName ?? type.Name;
         return $"{assemblyName}:{typeName}";
+    }
+
+    private static Guid CreateDeterministicStableId(Type type)
+    {
+        string key = GetTypeLockKey(type);
+        return CreateGuidV5(C_STABLE_NAMESPACE_GUID, key);
+    }
+
+    private static Guid CreateGuidV5(Guid namespaceId, string name)
+    {
+        byte[] ns = namespaceId.ToByteArray();
+        SwapGuidByteOrder(ns);
+
+        byte[] nameBytes = Encoding.UTF8.GetBytes(name);
+        byte[] data = new byte[ns.Length + nameBytes.Length];
+        Buffer.BlockCopy(ns, 0, data, 0, ns.Length);
+        Buffer.BlockCopy(nameBytes, 0, data, ns.Length, nameBytes.Length);
+
+        byte[] hash = SHA1.HashData(data);
+        Span<byte> bytes = stackalloc byte[16];
+        hash.AsSpan(0, 16).CopyTo(bytes);
+
+        bytes[6] = (byte)((bytes[6] & 0x0F) | 0x50);
+        bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
+
+        byte[] guidBytes = bytes.ToArray();
+        SwapGuidByteOrder(guidBytes);
+        return new Guid(guidBytes);
+    }
+
+    private static void SwapGuidByteOrder(byte[] guidBytes)
+    {
+        (guidBytes[0], guidBytes[3]) = (guidBytes[3], guidBytes[0]);
+        (guidBytes[1], guidBytes[2]) = (guidBytes[2], guidBytes[1]);
+        (guidBytes[4], guidBytes[5]) = (guidBytes[5], guidBytes[4]);
+        (guidBytes[6], guidBytes[7]) = (guidBytes[7], guidBytes[6]);
     }
 }
