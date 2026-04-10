@@ -128,6 +128,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Reflection.TestAs
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Reflection.TestAssemblyB", "tests\Inno.Core.Reflection.TestAssemblyB\Inno.Core.Reflection.TestAssemblyB.csproj", "{09DF33A1-F9F1-4AA7-BB9F-5E7523C2A1D7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Identity", "src\core\Inno.Core.Identity\Inno.Core.Identity.csproj", "{A7F5BEB6-FBD2-4CC1-AC4B-74C33F11E999}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -318,6 +320,10 @@ Global
 		{09DF33A1-F9F1-4AA7-BB9F-5E7523C2A1D7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{09DF33A1-F9F1-4AA7-BB9F-5E7523C2A1D7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{09DF33A1-F9F1-4AA7-BB9F-5E7523C2A1D7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A7F5BEB6-FBD2-4CC1-AC4B-74C33F11E999}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A7F5BEB6-FBD2-4CC1-AC4B-74C33F11E999}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A7F5BEB6-FBD2-4CC1-AC4B-74C33F11E999}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A7F5BEB6-FBD2-4CC1-AC4B-74C33F11E999}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{2C4A9FCD-72D2-4ED9-B5F3-EDC389FF2F30} = {47891007-1E47-4233-87C7-9448692ECDED}
@@ -377,5 +383,6 @@ Global
 		{25343E4D-FFED-45AA-9F65-0767B610496D} = {5CEA3D05-0D66-4758-97F1-1B5C727F75B5}
 		{7043C6E8-69E1-40AA-A6A2-BBCCB6952F7A} = {5CEA3D05-0D66-4758-97F1-1B5C727F75B5}
 		{09DF33A1-F9F1-4AA7-BB9F-5E7523C2A1D7} = {5CEA3D05-0D66-4758-97F1-1B5C727F75B5}
+		{A7F5BEB6-FBD2-4CC1-AC4B-74C33F11E999} = {390EB70E-21BA-4C7D-8000-D8CE42F9A3E2}
 	EndGlobalSection
 EndGlobal
