@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -274,6 +275,92 @@ public sealed class TypeCacheTests
 
         Assert.Throws<ArgumentNullException>(() => TypeCache.TryGetRuntimeTypeId(null!, out _));
         Assert.Throws<ArgumentNullException>(() => TypeCache.TryGetStableTypeId(null!, out _));
+    }
+
+    [Fact]
+    public void GetTypesWithAttribute_WorksAcrossDifferentAssemblies()
+    {
+        Type assemblyAMarkerAttribute = LoadType("Inno.Core.Reflection.TestAssemblyA", "Inno.Core.Reflection.TestAssets.A.AssemblyAMarkerAttribute");
+        Type assemblyBMarkerAttribute = LoadType("Inno.Core.Reflection.TestAssemblyB", "Inno.Core.Reflection.TestAssets.B.AssemblyBMarkerAttribute");
+        Type assemblyAMarkedType = LoadType("Inno.Core.Reflection.TestAssemblyA", "Inno.Core.Reflection.TestAssets.A.AssemblyAMarkedType");
+        Type assemblyBMarkedType = LoadType("Inno.Core.Reflection.TestAssemblyB", "Inno.Core.Reflection.TestAssets.B.AssemblyBMarkedType");
+
+        TypeCacheManager.Rebuild();
+
+        IReadOnlyList<Type> aTypes = GetTypesWithAttribute(assemblyAMarkerAttribute);
+        IReadOnlyList<Type> bTypes = GetTypesWithAttribute(assemblyBMarkerAttribute);
+
+        Assert.Contains(assemblyAMarkedType, aTypes);
+        Assert.Contains(assemblyBMarkedType, bTypes);
+    }
+
+    [Fact]
+    public void Rebuild_WithSpecificAssembly_FiltersAttributeResultsToThatAssembly()
+    {
+        Type assemblyAMarkerAttribute = LoadType("Inno.Core.Reflection.TestAssemblyA", "Inno.Core.Reflection.TestAssets.A.AssemblyAMarkerAttribute");
+        Type assemblyBMarkerAttribute = LoadType("Inno.Core.Reflection.TestAssemblyB", "Inno.Core.Reflection.TestAssets.B.AssemblyBMarkerAttribute");
+        Type assemblyAMarkedType = LoadType("Inno.Core.Reflection.TestAssemblyA", "Inno.Core.Reflection.TestAssets.A.AssemblyAMarkedType");
+        Type assemblyBMarkedType = LoadType("Inno.Core.Reflection.TestAssemblyB", "Inno.Core.Reflection.TestAssets.B.AssemblyBMarkedType");
+
+        TypeCacheManager.Rebuild("Inno.Core.Reflection.TestAssemblyA");
+        Assert.Contains(assemblyAMarkedType, GetTypesWithAttribute(assemblyAMarkerAttribute));
+        Assert.Empty(GetTypesWithAttribute(assemblyBMarkerAttribute));
+
+        TypeCacheManager.Rebuild("Inno.Core.Reflection.TestAssemblyB");
+        Assert.Contains(assemblyBMarkedType, GetTypesWithAttribute(assemblyBMarkerAttribute));
+        Assert.Empty(GetTypesWithAttribute(assemblyAMarkerAttribute));
+    }
+
+    [Fact]
+    public void Initialize_And_RebuildHooks_RespectAssemblyNameOnAttributes()
+    {
+        Type assemblyAHooks = LoadType("Inno.Core.Reflection.TestAssemblyA", "Inno.Core.Reflection.TestAssets.A.AssemblyAHooks");
+        Type assemblyBHooks = LoadType("Inno.Core.Reflection.TestAssemblyB", "Inno.Core.Reflection.TestAssets.B.AssemblyBHooks");
+
+        InvokeResetHooks(assemblyAHooks);
+        InvokeResetHooks(assemblyBHooks);
+
+        TypeCacheManager.Initialize();
+
+        Assert.Equal(1, ReadHookCounter(assemblyAHooks, "initializeCount"));
+        Assert.Equal(1, ReadHookCounter(assemblyBHooks, "initializeCount"));
+        Assert.Equal(0, ReadHookCounter(assemblyAHooks, "mismatchedInitializeCount"));
+        Assert.Equal(0, ReadHookCounter(assemblyBHooks, "mismatchedInitializeCount"));
+
+        TypeCacheManager.Rebuild();
+
+        Assert.Equal(1, ReadHookCounter(assemblyAHooks, "rebuildCount"));
+        Assert.Equal(1, ReadHookCounter(assemblyBHooks, "rebuildCount"));
+        Assert.Equal(0, ReadHookCounter(assemblyAHooks, "mismatchedRebuildCount"));
+        Assert.Equal(0, ReadHookCounter(assemblyBHooks, "mismatchedRebuildCount"));
+    }
+
+    private static Type LoadType(string assemblyName, string fullTypeName)
+    {
+        Assembly assembly = Assembly.Load(assemblyName);
+        return assembly.GetType(fullTypeName, throwOnError: true)!;
+    }
+
+    private static IReadOnlyList<Type> GetTypesWithAttribute(Type attributeType)
+    {
+        MethodInfo method = typeof(TypeCache)
+            .GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Single(static m => m.Name == nameof(TypeCache.GetTypesWithAttribute) && m.IsGenericMethodDefinition);
+
+        MethodInfo closed = method.MakeGenericMethod(attributeType);
+        return (IReadOnlyList<Type>)closed.Invoke(null, null)!;
+    }
+
+    private static void InvokeResetHooks(Type hooksType)
+    {
+        MethodInfo reset = hooksType.GetMethod("Reset", BindingFlags.Public | BindingFlags.Static)!;
+        reset.Invoke(null, null);
+    }
+
+    private static int ReadHookCounter(Type hooksType, string propertyName)
+    {
+        PropertyInfo property = hooksType.GetProperty(propertyName, BindingFlags.Public | BindingFlags.Static)!;
+        return (int)property.GetValue(null)!;
     }
 }
 
