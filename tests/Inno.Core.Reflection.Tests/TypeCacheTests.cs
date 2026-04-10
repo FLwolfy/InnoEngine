@@ -157,7 +157,7 @@ public sealed class TypeCacheTests
     [Fact]
     public void Rebuild_WithSpecificAssembly_LoadsTypesFromThatAssembly()
     {
-        TypeCacheManager.Rebuild(typeof(TypeCacheTests).Assembly);
+        TypeCacheManager.Rebuild(typeof(TypeCacheTests).Assembly.GetName().Name);
 
         Assert.True(TypeCache.TryGetRuntimeTypeId(typeof(TestDerived), out _));
         Assert.False(TypeCache.TryGetRuntimeTypeId(typeof(TypeCacheManager), out _));
@@ -166,7 +166,7 @@ public sealed class TypeCacheTests
     [Fact]
     public void Rebuild_WithNonInnoAssembly_DoesNotLoadTestTypes()
     {
-        TypeCacheManager.Rebuild(typeof(string).Assembly);
+        TypeCacheManager.Rebuild(typeof(string).Assembly.GetName().Name);
 
         Assert.False(TypeCache.TryGetRuntimeTypeId(typeof(TestDerived), out _));
         Assert.False(TypeCache.TryGetRuntimeTypeId(typeof(TypeCacheManager), out _));
@@ -175,7 +175,7 @@ public sealed class TypeCacheTests
     [Fact]
     public void Rebuild_WithCoreReflectionAssembly_LoadsCoreTypesButNotTestTypes()
     {
-        TypeCacheManager.Rebuild(typeof(TypeCacheManager).Assembly);
+        TypeCacheManager.Rebuild(typeof(TypeCacheManager).Assembly.GetName().Name);
 
         Assert.True(TypeCache.TryGetRuntimeTypeId(typeof(TypeCacheManager), out _));
         Assert.False(TypeCache.TryGetRuntimeTypeId(typeof(TestDerived), out _));
@@ -192,7 +192,7 @@ public sealed class TypeCacheTests
             .DefineType("Inno.Dynamic.GeneratedType", TypeAttributes.Public)
             .CreateType()!;
 
-        TypeCacheManager.Rebuild(dynamicAssembly);
+        TypeCacheManager.Rebuild(dynamicAssembly.GetName().Name);
 
         Assert.False(TypeCache.TryGetRuntimeTypeId(generatedType, out _));
         Assert.False(TypeCache.TryGetRuntimeTypeId(typeof(TestDerived), out _));
@@ -202,7 +202,7 @@ public sealed class TypeCacheTests
     [Fact]
     public void Rebuild_GlobalAfterScopedRebuild_RestoresAllLoadedTypes()
     {
-        TypeCacheManager.Rebuild(typeof(string).Assembly);
+        TypeCacheManager.Rebuild(typeof(string).Assembly.GetName().Name);
         Assert.False(TypeCache.TryGetRuntimeTypeId(typeof(TestDerived), out _));
         Assert.False(TypeCache.TryGetRuntimeTypeId(typeof(TypeCacheManager), out _));
 
@@ -215,10 +215,10 @@ public sealed class TypeCacheTests
     [Fact]
     public void Rebuild_NullAssembly_BehavesAsGlobalRebuild()
     {
-        TypeCacheManager.Rebuild(typeof(string).Assembly);
+        TypeCacheManager.Rebuild(typeof(string).Assembly.GetName().Name);
         Assert.False(TypeCache.TryGetRuntimeTypeId(typeof(TestDerived), out _));
 
-        TypeCacheManager.Rebuild((Assembly?)null);
+        TypeCacheManager.Rebuild((string?)null);
 
         Assert.True(TypeCache.TryGetRuntimeTypeId(typeof(TestDerived), out _));
         Assert.True(TypeCache.TryGetRuntimeTypeId(typeof(TypeCacheManager), out _));
@@ -232,7 +232,7 @@ public sealed class TypeCacheTests
         Assert.True(TypeCache.TryResolveType(originalRuntimeId, out Type? resolvedBeforeRemoval));
         Assert.Equal(typeof(TestDerived), resolvedBeforeRemoval);
 
-        TypeCacheManager.Rebuild(typeof(string).Assembly);
+        TypeCacheManager.Rebuild(typeof(string).Assembly.GetName().Name);
         Assert.False(TypeCache.TryResolveType(originalRuntimeId, out _));
 
         TypeCacheManager.Rebuild();
@@ -249,7 +249,7 @@ public sealed class TypeCacheTests
         Assert.True(TypeCache.TryResolveType(stableId, out Type? resolvedBeforeRemoval));
         Assert.Equal(typeof(StableAnnotatedTypeA), resolvedBeforeRemoval);
 
-        TypeCacheManager.Rebuild(typeof(string).Assembly);
+        TypeCacheManager.Rebuild(typeof(string).Assembly.GetName().Name);
         Assert.False(TypeCache.TryResolveType(stableId, out _));
 
         TypeCacheManager.Rebuild();
@@ -260,7 +260,7 @@ public sealed class TypeCacheTests
     [Fact]
     public void QueryApis_ReturnEmpty_WhenCacheBuiltFromAssemblyWithoutInnoTypes()
     {
-        TypeCacheManager.Rebuild(typeof(string).Assembly);
+        TypeCacheManager.Rebuild(typeof(string).Assembly.GetName().Name);
 
         Assert.Empty(TypeCache.GetSubTypesOf<TestBase>());
         Assert.Empty(TypeCache.GetTypesImplementing<ITestContract>());

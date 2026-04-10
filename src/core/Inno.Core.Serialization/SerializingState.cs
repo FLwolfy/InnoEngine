@@ -242,7 +242,7 @@ public sealed record SerializingState
                 return;
             }
 
-            if (SerializableGraph.IsAllowedPrimitive(t))
+            if (IsPrimitiveType(t))
             {
                 bw.Write((byte)BinKind.Primitive);
                 WritePrimitive(bw, value, t);
@@ -259,11 +259,8 @@ public sealed record SerializingState
                 return;
             }
 
-            if (SerializableGraph.TryGetDictionaryTypes(t, out _, out _))
+            if (TryEnumerateDictionaryEntries(value, out var entries))
             {
-                if (!SerializableGraph.TryEnumerateDictionaryEntries(value, t, out var entries))
-                    throw new InvalidDataException($"Map node must be enumerable key-value pairs. Got: {t.FullName}");
-
                 bw.Write((byte)BinKind.Dict);
                 if (entries.Count > 0 && entries.TrueForAll(static e => e.Key is string))
                     entries.Sort(static (a, b) => StringComparer.Ordinal.Compare((string)a.Key!, (string)b.Key!));
@@ -300,21 +297,17 @@ public sealed record SerializingState
                 var rt = ser.GetType();
                 WriteTypeIdentity(bw, rt);
 
-                SerializableGraph.ValidateAllowedTypeGraph(rt, $"BinaryWrite({rt.FullName})");
-
                 WriteState(bw, ser.CaptureState());
                 return;
             }
 
-            if (t.IsValueType)
+            if (StructSerializer.IsStructPayloadType(t))
             {
-                SerializableGraph.ValidateAllowedTypeGraph(t, $"BinaryWrite({t.FullName})");
-
                 bw.Write((byte)BinKind.Struct);
                 WriteTypeIdentity(bw, t);
 
-                var fields = SerializableGraph.GetStructSerializableFields(t);
-                var props = SerializableGraph.GetStructSerializableProperties(t);
+                var fields = StructSerializer.GetStructSerializableFields(t);
+                var props = StructSerializer.GetStructSerializableProperties(t);
 
                 bw.Write(fields.Length + props.Length);
 
@@ -392,8 +385,6 @@ public sealed record SerializingState
                     if (!typeof(ISerializable).IsAssignableFrom(rt))
                         throw new InvalidDataException($"Type '{rt.FullName}' is not ISerializable.");
 
-                    SerializableGraph.ValidateAllowedTypeGraph(rt, $"BinaryRead({rt.FullName})");
-
                     var state = ReadState(br);
                     var inst = ISerializable.CreateSerializableInstance(rt);
                     inst.RestoreState(state);
@@ -423,17 +414,15 @@ public sealed record SerializingState
         {
             var t = ReadTypeIdentity(br, "struct");
 
-            if (!t.IsValueType || t.IsEnum)
+            if (!StructSerializer.IsStructPayloadType(t))
                 throw new InvalidDataException($"Type '{t.FullName}' is not a struct value-type.");
-
-            SerializableGraph.ValidateAllowedTypeGraph(t, $"BinaryRead({t.FullName})");
 
             object boxed = Activator.CreateInstance(t)!;
 
             var memberCount = br.ReadInt32();
 
-            var fieldMap = SerializableGraph.GetStructSerializableFieldMap(t);
-            var propMap = SerializableGraph.GetStructSerializablePropertyMap(t);
+            var fieldMap = StructSerializer.GetStructSerializableFieldMap(t);
+            var propMap = StructSerializer.GetStructSerializablePropertyMap(t);
 
             for (var i = 0; i < memberCount; i++)
             {
@@ -528,6 +517,56 @@ public sealed record SerializingState
             }
 
             throw new InvalidDataException($"Unsupported primitive type: {t.FullName}");
+        }
+
+        private static bool IsPrimitiveType(Type type)
+            => type == typeof(bool) ||
+               type == typeof(byte) ||
+               type == typeof(sbyte) ||
+               type == typeof(short) ||
+               type == typeof(ushort) ||
+               type == typeof(int) ||
+               type == typeof(uint) ||
+               type == typeof(long) ||
+               type == typeof(ulong) ||
+               type == typeof(float) ||
+               type == typeof(double) ||
+               type == typeof(decimal) ||
+               type == typeof(string) ||
+               type == typeof(Guid);
+
+        private static bool TryEnumerateDictionaryEntries(object value, out List<KeyValuePair<object?, object?>> entries)
+        {
+            if (value is IDictionary dict)
+            {
+                entries = new List<KeyValuePair<object?, object?>>(dict.Count);
+                foreach (DictionaryEntry entry in dict)
+                    entries.Add(new KeyValuePair<object?, object?>(entry.Key, entry.Value));
+                return true;
+            }
+
+            if (value is not IEnumerable enumerable || value is string)
+            {
+                entries = new List<KeyValuePair<object?, object?>>();
+                return false;
+            }
+
+            entries = new List<KeyValuePair<object?, object?>>();
+            foreach (object? item in enumerable)
+            {
+                if (item == null)
+                    return false;
+
+                Type itemType = item.GetType();
+                if (!itemType.IsGenericType || itemType.GetGenericTypeDefinition() != typeof(KeyValuePair<,>))
+                    return false;
+
+                object? key = itemType.GetProperty("Key")!.GetValue(item);
+                object? val = itemType.GetProperty("Value")!.GetValue(item);
+                entries.Add(new KeyValuePair<object?, object?>(key, val));
+            }
+
+            return true;
         }
 
         private static object ReadPrimitive(BinaryReader br)

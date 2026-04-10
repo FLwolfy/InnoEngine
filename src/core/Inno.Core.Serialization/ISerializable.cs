@@ -1,8 +1,6 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -31,6 +29,8 @@ public sealed class OnSerializableRestored : Attribute;
 /// </remarks>
 public interface ISerializable
 {
+    private static readonly AsyncLocal<HashSet<object>?> s_capturePathContext = new();
+
     #region Public API
 
     /// <summary>
@@ -77,20 +77,33 @@ public interface ISerializable
     /// <exception cref="InvalidOperationException">Thrown when a member value is not supported by the serialization graph.</exception>
     public SerializingState CaptureState()
     {
+        HashSet<object>? existingPath = s_capturePathContext.Value;
+        bool isRootCapture = existingPath is null;
+        HashSet<object> capturePath = existingPath ?? new HashSet<object>(ReferenceObjectComparer.Instance);
+        if (isRootCapture)
+            s_capturePathContext.Value = capturePath;
+
         var slots = GetSlots(GetType());
         var node = new Dictionary<string, object?>(slots.Length, StringComparer.Ordinal);
-
-        foreach (var s in slots)
+        try
         {
-            if ((s.visibility & PropertyVisibility.Serialize) == 0)
+            foreach (var s in slots)
             {
-                continue;
+                if ((s.visibility & PropertyVisibility.Serialize) == 0)
+                {
+                    continue;
+                }
+
+                node[s.name] = CaptureValue(s.getter(this), s.type, capturePath);
             }
 
-            node[s.name] = CaptureValue(s.getter(this), s.type);
+            return new SerializingState(node);
         }
-
-        return new SerializingState(node);
+        finally
+        {
+            if (isRootCapture)
+                s_capturePathContext.Value = null;
+        }
     }
 
     /// <summary>
@@ -184,8 +197,6 @@ public interface ISerializable
 
     private static readonly Lock SLOT_CACHE_SYNC = new();
     private static readonly Dictionary<int, MemberSlot[]> SLOT_CACHE = [];
-    private static readonly Lock ACTIVATOR_CACHE_SYNC = new();
-    private static readonly Dictionary<int, Func<object>> ACTIVATOR_CACHE = [];
     private static readonly Lock LOCAL_TYPE_KEY_SYNC = new();
     private static readonly Dictionary<Type, int> LOCAL_TYPE_KEYS = [];
     private static int s_nextLocalTypeKey = int.MinValue;
@@ -297,8 +308,6 @@ public interface ISerializable
                 if (!noSetterAllowed && setMethod == null)
                     throw new InvalidOperationException($"{type.FullName}.{p.Name} must have setter for its [SerializableProperty].");
 
-                SerializableGraph.ValidateAllowedTypeGraph(p.PropertyType, $"{type.FullName}.{p.Name}");
-
                 var declOrder = declMap.TryGetValue(p.Name, out var idx) ? idx : int.MaxValue;
 
                 // sortKey priority:
@@ -342,8 +351,6 @@ public interface ISerializable
                 if (!noSetterAllowed && f.IsInitOnly)
                     throw new InvalidOperationException($"{type.FullName}.{f.Name} is readonly; it must be writable for its [SerializableProperty].");
 
-                SerializableGraph.ValidateAllowedTypeGraph(f.FieldType, $"{type.FullName}.{f.Name}");
-
                 var declOrder = declMap.TryGetValue(f.Name, out var idx) ? idx : int.MaxValue;
 
                 long sortKey =
@@ -379,627 +386,62 @@ public interface ISerializable
 
     #region Value Conversions
 
-    private sealed class SequenceFactory
+    private static object? CaptureValue(object? value, Type declaredType, HashSet<object> capturePath)
     {
-        public required Type elementType { get; init; }
-        public required Func<object?[], object> construct { get; init; }
-    }
+        if (value == null)
+            return null;
 
-    private sealed class MapFactory
-    {
-        public required Type keyType { get; init; }
-        public required Type valueType { get; init; }
-        public required Func<KeyValuePair<object?, object?>[], object> construct { get; init; }
-    }
-
-    private static readonly Lock SEQUENCE_FACTORY_CACHE_SYNC = new();
-    private static readonly Dictionary<int, SequenceFactory> SEQUENCE_FACTORY_CACHE = [];
-    private static readonly Lock MAP_FACTORY_CACHE_SYNC = new();
-    private static readonly Dictionary<int, MapFactory> MAP_FACTORY_CACHE = [];
-
-    private static object? CaptureValue(object? value, Type declaredType)
-    {
-        if (value == null) return null;
-
-        var t = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
-
-        if (t.IsEnum) return Convert.ToInt64(value);
-        if (SerializableGraph.IsAllowedPrimitive(t)) return value;
-        if (SerializableGraph.IsSerializingState(t)) return value;
-
-        if (t.IsArray)
+        bool tracked = false;
+        if (value is not string && !value.GetType().IsValueType)
         {
-            var elemType = t.GetElementType()!;
-            var arr = (Array)value;
-            var list = new List<object?>(arr.Length);
-            for (var i = 0; i < arr.Length; i++)
-                list.Add(CaptureValue(arr.GetValue(i), elemType));
-            return list;
-        }
-
-        if (SerializableGraph.TryGetDictionaryTypes(t, out var keyType, out var valueType))
-        {
-            if (!SerializableGraph.TryEnumerateDictionaryEntries(value, value.GetType(), out var entries))
+            if (!capturePath.Add(value))
             {
                 throw new InvalidOperationException(
-                    $"CaptureValue: Declared type is map-like ('{t.FullName}') but runtime value '{value.GetType().FullName}' cannot be enumerated as key-value entries.");
+                    $"Cycle reference detected while serializing type '{value.GetType().FullName}'.");
             }
 
-            var node = new Dictionary<object, object?>(entries.Count);
-            for (var i = 0; i < entries.Count; i++)
-            {
-                var entry = entries[i];
-                node[CaptureValue(entry.Key, keyType)!] = CaptureValue(entry.Value, valueType);
-            }
-
-            return node;
+            tracked = true;
         }
 
-        if (SerializableGraph.TryGetListElementType(t, out var listElem))
+        Type normalizedType = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
+        try
         {
-            if (value is not IEnumerable enumerable)
-            {
-                throw new InvalidOperationException(
-                    $"CaptureValue: Declared type is sequence-like ('{t.FullName}') but runtime value '{value.GetType().FullName}' is not IEnumerable.");
-            }
-
-            var count = TryGetEnumerableCount(value);
-            var result = count > 0 ? new List<object?>(count) : new List<object?>();
-            foreach (var it in enumerable)
-                result.Add(CaptureValue(it, listElem));
-            return result;
+            if (SerializableManager.TrySerialize(
+                    value,
+                    normalizedType,
+                    (nestedValue, nestedType) => CaptureValue(nestedValue, nestedType, capturePath),
+                    out object? node))
+                return node;
         }
-
-        if (value is ISerializable s)
+        finally
         {
-            Type runtimeType = s.GetType();
-            if (!TypeCache.TryGetRuntimeTypeId(runtimeType, out int runtimeTypeId))
-            {
-                throw new InvalidOperationException(
-                    $"Runtime type '{runtimeType.FullName}' is not loaded in TypeCache.");
-            }
-            return new Dictionary<string, object?>(2, StringComparer.Ordinal)
-            {
-                ["__runtimeTypeId"] = runtimeTypeId,
-                ["__stableTypeId"] = TypeCache.TryGetStableTypeId(runtimeType, out Guid stableTypeId)
-                    ? stableTypeId.ToString("D")
-                    : null,
-                ["data"] = s.CaptureState()
-            };
+            if (tracked)
+                capturePath.Remove(value);
         }
 
-        if (t.IsValueType) return value;
-
-        throw new InvalidOperationException($"Unsupported CaptureValue type: {t.FullName}");
+        throw new InvalidOperationException($"No serialization codec found for '{normalizedType.FullName}'.");
     }
 
     private static object? RestoreValue(object? raw, Type declaredType)
     {
-        var isNullable = Nullable.GetUnderlyingType(declaredType) != null;
-        var t = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
-
+        bool isNullable = Nullable.GetUnderlyingType(declaredType) is not null;
+        Type normalizedType = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
         if (raw == null)
         {
-            if (!t.IsValueType || isNullable) return null;
-            throw new InvalidOperationException($"RestoreValue failed: value-type '{t.FullName}' cannot be null.");
+            if (!normalizedType.IsValueType || isNullable)
+                return null;
+
+            throw new InvalidOperationException($"RestoreValue failed: value-type '{normalizedType.FullName}' cannot be null.");
         }
 
-        if (t.IsEnum) return Enum.ToObject(t, Convert.ToInt64(raw));
-
-        if (SerializableGraph.IsAllowedPrimitive(t))
-        {
-            if (t == typeof(string)) return raw as string;
-            if (t == typeof(Guid)) return raw is Guid g ? g : Guid.Parse(raw.ToString() ?? Guid.Empty.ToString());
-
-            if (t == typeof(bool)) return Convert.ToBoolean(raw);
-            if (t == typeof(byte)) return Convert.ToByte(raw);
-            if (t == typeof(sbyte)) return Convert.ToSByte(raw);
-            if (t == typeof(short)) return Convert.ToInt16(raw);
-            if (t == typeof(ushort)) return Convert.ToUInt16(raw);
-            if (t == typeof(int)) return Convert.ToInt32(raw);
-            if (t == typeof(uint)) return Convert.ToUInt32(raw);
-            if (t == typeof(long)) return Convert.ToInt64(raw);
-            if (t == typeof(ulong)) return Convert.ToUInt64(raw);
-            if (t == typeof(float)) return Convert.ToSingle(raw);
-            if (t == typeof(double)) return Convert.ToDouble(raw);
-            if (t == typeof(decimal)) return Convert.ToDecimal(raw);
-
-            throw new InvalidOperationException($"Unexpected primitive type: {t.FullName}");
-        }
-
-        if (SerializableGraph.IsSerializingState(t))
-        {
-            if (raw is SerializingState ss) return ss;
-            throw new InvalidOperationException($"RestoreValue failed: expected SerializingState node for '{t.FullName}', got '{raw.GetType().FullName}'.");
-        }
-
-        if (t.IsArray)
-        {
-            if (raw is not IReadOnlyList<object?> list)
-                throw new InvalidOperationException($"Array node must be a list. Got: {raw.GetType().FullName}");
-
-            var elemType = t.GetElementType()!;
-            var arr = Array.CreateInstance(elemType, list.Count);
-            for (var i = 0; i < list.Count; i++)
-                arr.SetValue(RestoreValue(list[i], elemType), i);
-
-            return arr;
-        }
-
-        if (SerializableGraph.TryGetDictionaryTypes(t, out _, out _))
-        {
-            if (!TryReadMapEntries(raw, out var entries))
-                throw new InvalidOperationException($"Map node must be IDictionary or key-value sequence. Got: {raw.GetType().FullName}");
-
-            MapFactory factory = GetMapFactory(t);
-            var restoredEntries = new KeyValuePair<object?, object?>[entries.Count];
-            for (var i = 0; i < entries.Count; i++)
-            {
-                var entry = entries[i];
-                restoredEntries[i] = new KeyValuePair<object?, object?>(
-                    RestoreValue(entry.Key, factory.keyType),
-                    RestoreValue(entry.Value, factory.valueType));
-            }
-
-            return factory.construct(restoredEntries);
-        }
-
-        if (SerializableGraph.TryGetListElementType(t, out _))
-        {
-            if (!TryReadSequenceItems(raw, out var items))
-                throw new InvalidOperationException($"Sequence node must be a list-like value. Got: {raw.GetType().FullName}");
-
-            SequenceFactory factory = GetSequenceFactory(t);
-            var restoredItems = new object?[items.Count];
-            for (var i = 0; i < items.Count; i++)
-                restoredItems[i] = RestoreValue(items[i], factory.elementType);
-
-            return factory.construct(restoredItems);
-        }
-
-        if (typeof(ISerializable).IsAssignableFrom(t))
-        {
-            var wrapper = CoerceToStringKeyDictionary(raw);
-
-            if (!wrapper.TryGetValue("data", out var dataObj) || dataObj is not SerializingState data)
-                throw new InvalidOperationException("Serializable wrapper missing 'data' (SerializingState).");
-
-            var runtimeType = t;
-            if (wrapper.TryGetValue("__stableTypeId", out var stableTypeObj) &&
-                stableTypeObj is string stableTypeText &&
-                Guid.TryParse(stableTypeText, out Guid stableTypeId) &&
-                TypeCache.TryResolveType(stableTypeId, out Type? stableResolved) &&
-                stableResolved is not null &&
-                t.IsAssignableFrom(stableResolved))
-            {
-                runtimeType = stableResolved;
-            }
-            else if (wrapper.TryGetValue("__runtimeTypeId", out var runtimeTypeObj) &&
-                     TryReadRuntimeTypeId(runtimeTypeObj, out int runtimeTypeId) &&
-                     TypeCache.TryResolveType(runtimeTypeId, out Type? runtimeResolved) &&
-                     runtimeResolved is not null &&
-                     t.IsAssignableFrom(runtimeResolved))
-            {
-                runtimeType = runtimeResolved;
-            }
-
-            var inst = CreateSerializableInstance(runtimeType);
-            inst.RestoreState(data);
-            return inst;
-        }
-
-        if (t.IsValueType) return raw;
-
-        throw new InvalidOperationException($"Unsupported RestoreValue type: {t.FullName}");
-    }
-
-    private static Dictionary<string, object?> CoerceToStringKeyDictionary(object raw)
-    {
-        if (raw is Dictionary<string, object?> sdict) return sdict;
-
-        if (raw is IDictionary dict)
-        {
-            var result = new Dictionary<string, object?>(dict.Count, StringComparer.Ordinal);
-
-            foreach (DictionaryEntry e in dict)
-            {
-                if (e.Key is not string k)
-                    throw new InvalidOperationException($"Serializable wrapper dict keys must be strings. Got key type: {e.Key?.GetType().FullName ?? "null"}");
-
-                result[k] = e.Value;
-            }
-
-            return result;
-        }
-
-        throw new InvalidOperationException($"Serializable wrapper must be a dictionary. Got: {raw.GetType().FullName}");
-    }
-
-    private static bool TryReadRuntimeTypeId(object? raw, out int runtimeTypeId)
-    {
-        switch (raw)
-        {
-            case int i:
-                runtimeTypeId = i;
-                return true;
-            case long l when l is >= int.MinValue and <= int.MaxValue:
-                runtimeTypeId = (int)l;
-                return true;
-            case string s when int.TryParse(s, out int parsed):
-                runtimeTypeId = parsed;
-                return true;
-            default:
-                runtimeTypeId = default;
-                return false;
-        }
-    }
-
-    private static SequenceFactory GetSequenceFactory(Type targetType)
-    {
-        int typeId = GetTypeCacheKey(targetType);
-        lock (SEQUENCE_FACTORY_CACHE_SYNC)
-        {
-            if (SEQUENCE_FACTORY_CACHE.TryGetValue(typeId, out SequenceFactory? existing))
-            {
-                return existing;
-            }
-
-            SequenceFactory created = BuildSequenceFactory(targetType);
-            SEQUENCE_FACTORY_CACHE[typeId] = created;
-            return created;
-        }
-    }
-
-    private static MapFactory GetMapFactory(Type targetType)
-    {
-        int typeId = GetTypeCacheKey(targetType);
-        lock (MAP_FACTORY_CACHE_SYNC)
-        {
-            if (MAP_FACTORY_CACHE.TryGetValue(typeId, out MapFactory? existing))
-            {
-                return existing;
-            }
-
-            MapFactory created = BuildMapFactory(targetType);
-            MAP_FACTORY_CACHE[typeId] = created;
-            return created;
-        }
-    }
-
-    private static SequenceFactory BuildSequenceFactory(Type targetType)
-    {
-        if (!SerializableGraph.TryGetListElementType(targetType, out var elementType))
-            throw new InvalidOperationException($"Type '{targetType.FullName}' is not a sequence-like type.");
-
-        var listType = typeof(List<>).MakeGenericType(elementType);
-        var enumerableType = typeof(IEnumerable<>).MakeGenericType(elementType);
-
-        if (targetType.IsAssignableFrom(listType))
-        {
-            return new SequenceFactory
-            {
-                elementType = elementType,
-                construct = items => BuildTypedList(elementType, items)
-            };
-        }
-
-        var constructor = FindSingleArgConstructor(targetType, listType, enumerableType);
-        if (constructor != null)
-        {
-            return new SequenceFactory
-            {
-                elementType = elementType,
-                construct = items => constructor.Invoke(new[] { BuildTypedList(elementType, items) })
-            };
-        }
-
-        var staticFactory = targetType
-            .GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
-            .FirstOrDefault(m =>
-                (m.Name == "CreateRange" || m.Name == "Create") &&
-                targetType.IsAssignableFrom(m.ReturnType) &&
-                m.GetParameters().Length == 1 &&
-                m.GetParameters()[0].ParameterType.IsAssignableFrom(listType));
-
-        if (staticFactory != null)
-        {
-            return new SequenceFactory
-            {
-                elementType = elementType,
-                construct = items => staticFactory.Invoke(null, new[] { BuildTypedList(elementType, items) })!
-            };
-        }
-
-        if (!targetType.IsAbstract && ResolveSequenceAddMethod(targetType, elementType) is MethodInfo addMethod)
-        {
-            return new SequenceFactory
-            {
-                elementType = elementType,
-                construct = items =>
-                {
-                    var instance = CreateCachedInstance(targetType);
-                    for (var i = 0; i < items.Length; i++)
-                        addMethod.Invoke(instance, new[] { items[i] });
-                    return instance;
-                }
-            };
-        }
-
-        throw new InvalidOperationException(
-            $"Cannot construct sequence type '{targetType.FullName}'. Provide ctor(IEnumerable<T>), static CreateRange/Create, or Add(T).");
-    }
-
-    private static MapFactory BuildMapFactory(Type targetType)
-    {
-        if (!SerializableGraph.TryGetDictionaryTypes(targetType, out var keyType, out var valueType))
-            throw new InvalidOperationException($"Type '{targetType.FullName}' is not a map-like type.");
-
-        var dictionaryType = typeof(Dictionary<,>).MakeGenericType(keyType, valueType);
-        var kvType = typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType);
-        var kvListType = typeof(List<>).MakeGenericType(kvType);
-        var enumerableType = typeof(IEnumerable<>).MakeGenericType(kvType);
-
-        if (targetType.IsAssignableFrom(dictionaryType))
-        {
-            return new MapFactory
-            {
-                keyType = keyType,
-                valueType = valueType,
-                construct = entries => BuildTypedDictionary(keyType, valueType, entries)
-            };
-        }
-
-        var constructor = FindSingleArgConstructor(targetType, kvListType, enumerableType);
-        if (constructor != null)
-        {
-            return new MapFactory
-            {
-                keyType = keyType,
-                valueType = valueType,
-                construct = entries => constructor.Invoke(new[] { BuildTypedKeyValueList(kvType, entries) })
-            };
-        }
-
-        var staticFactory = targetType
-            .GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
-            .FirstOrDefault(m =>
-                (m.Name == "CreateRange" || m.Name == "Create") &&
-                targetType.IsAssignableFrom(m.ReturnType) &&
-                m.GetParameters().Length == 1 &&
-                m.GetParameters()[0].ParameterType.IsAssignableFrom(kvListType));
-
-        if (staticFactory != null)
-        {
-            return new MapFactory
-            {
-                keyType = keyType,
-                valueType = valueType,
-                construct = entries => staticFactory.Invoke(null, new[] { BuildTypedKeyValueList(kvType, entries) })!
-            };
-        }
-
-        if (!targetType.IsAbstract && ResolveMapAddMethod(targetType, keyType, valueType) is MethodInfo addMethod)
-        {
-            return new MapFactory
-            {
-                keyType = keyType,
-                valueType = valueType,
-                construct = entries =>
-                {
-                    var instance = CreateCachedInstance(targetType);
-                    for (var i = 0; i < entries.Length; i++)
-                    {
-                        var entry = entries[i];
-                        addMethod.Invoke(instance, new[] { entry.Key, entry.Value });
-                    }
-                    return instance;
-                }
-            };
-        }
-
-        throw new InvalidOperationException(
-            $"Cannot construct map type '{targetType.FullName}'. Provide ctor(IEnumerable<KeyValuePair<K,V>>), static CreateRange/Create, or Add(K,V).");
-    }
-
-    private static MethodInfo? ResolveSequenceAddMethod(Type targetType, Type elementType)
-    {
-        var direct = targetType.GetMethod(
-            "Add",
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-            binder: null,
-            types: new[] { elementType },
-            modifiers: null);
-        if (direct != null)
-            return direct;
-
-        var collectionIface = typeof(ICollection<>).MakeGenericType(elementType);
-        return collectionIface.IsAssignableFrom(targetType)
-            ? collectionIface.GetMethod("Add", new[] { elementType })
-            : null;
-    }
-
-    private static MethodInfo? ResolveMapAddMethod(Type targetType, Type keyType, Type valueType)
-    {
-        var direct = targetType.GetMethod(
-            "Add",
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-            binder: null,
-            types: new[] { keyType, valueType },
-            modifiers: null);
-        if (direct != null)
-            return direct;
-
-        var dictionaryIface = typeof(IDictionary<,>).MakeGenericType(keyType, valueType);
-        return dictionaryIface.IsAssignableFrom(targetType)
-            ? dictionaryIface.GetMethod("Add", new[] { keyType, valueType })
-            : null;
-    }
-
-    private static object BuildTypedList(Type elementType, object?[] items)
-    {
-        var listType = typeof(List<>).MakeGenericType(elementType);
-        var list = (IList)CreateCachedInstance(listType);
-        for (var i = 0; i < items.Length; i++)
-            list.Add(items[i]);
-        return list;
-    }
-
-    private static object BuildTypedDictionary(Type keyType, Type valueType, KeyValuePair<object?, object?>[] entries)
-    {
-        var dictType = typeof(Dictionary<,>).MakeGenericType(keyType, valueType);
-        var dict = (IDictionary)CreateCachedInstance(dictType);
-        for (var i = 0; i < entries.Length; i++)
-        {
-            var entry = entries[i];
-            dict.Add(entry.Key!, entry.Value);
-        }
-        return dict;
-    }
-
-    private static object BuildTypedKeyValueList(Type kvType, KeyValuePair<object?, object?>[] entries)
-    {
-        var listType = typeof(List<>).MakeGenericType(kvType);
-        var list = (IList)CreateCachedInstance(listType);
-
-        for (var i = 0; i < entries.Length; i++)
-        {
-            var entry = entries[i];
-            var kv = Activator.CreateInstance(kvType, entry.Key, entry.Value)!;
-            list.Add(kv);
-        }
-
-        return list;
-    }
-
-    private static ConstructorInfo? FindSingleArgConstructor(Type targetType, params Type[] candidateArgTypes)
-    {
-        var constructors = targetType.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        for (var i = 0; i < constructors.Length; i++)
-        {
-            var ctor = constructors[i];
-            var parameters = ctor.GetParameters();
-            if (parameters.Length != 1)
-                continue;
-
-            var parameterType = parameters[0].ParameterType;
-            for (var c = 0; c < candidateArgTypes.Length; c++)
-            {
-                if (parameterType.IsAssignableFrom(candidateArgTypes[c]))
-                    return ctor;
-            }
-        }
-
-        return null;
-    }
-
-    private static bool TryReadSequenceItems(object raw, out List<object?> items)
-    {
-        if (raw is IReadOnlyList<object?> roList)
-        {
-            items = new List<object?>(roList.Count);
-            for (var i = 0; i < roList.Count; i++)
-                items.Add(roList[i]);
-            return true;
-        }
-
-        if (raw is IEnumerable enumerable && raw is not string)
-        {
-            items = new List<object?>();
-            foreach (var item in enumerable)
-                items.Add(item);
-            return true;
-        }
-
-        items = new List<object?>();
-        return false;
-    }
-
-    private static bool TryReadMapEntries(object raw, out List<KeyValuePair<object?, object?>> entries)
-    {
-        if (raw is IDictionary dict)
-        {
-            entries = new List<KeyValuePair<object?, object?>>(dict.Count);
-            foreach (DictionaryEntry entry in dict)
-                entries.Add(new KeyValuePair<object?, object?>(entry.Key, entry.Value));
-            return true;
-        }
-
-        if (raw is not IEnumerable enumerable)
-        {
-            entries = new List<KeyValuePair<object?, object?>>();
-            return false;
-        }
-
-        entries = new List<KeyValuePair<object?, object?>>();
-        foreach (var item in enumerable)
-        {
-            if (item == null)
-                return false;
-
-            var itemType = item.GetType();
-            if (!itemType.IsGenericType || itemType.GetGenericTypeDefinition() != typeof(KeyValuePair<,>))
-                return false;
-
-            var key = itemType.GetProperty("Key")!.GetValue(item);
-            var value = itemType.GetProperty("Value")!.GetValue(item);
-            entries.Add(new KeyValuePair<object?, object?>(key, value));
-        }
-
-        return true;
-    }
-
-    private static object CreateCachedInstance(Type concreteType)
-    {
-        int typeId = GetTypeCacheKey(concreteType);
-        Func<object> factory;
-        lock (ACTIVATOR_CACHE_SYNC)
-        {
-            if (!ACTIVATOR_CACHE.TryGetValue(typeId, out factory!))
-            {
-                factory = BuildActivator(concreteType);
-                ACTIVATOR_CACHE[typeId] = factory;
-            }
-        }
-
-        return factory();
-    }
-
-    private static Func<object> BuildActivator(Type concreteType)
-    {
-        var ctor = concreteType.GetConstructor(
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-            binder: null,
-            types: Type.EmptyTypes,
-            modifiers: null);
-        if (ctor == null)
-            return () => Activator.CreateInstance(concreteType, nonPublic: true)!;
-
-        try
-        {
-            var body = Expression.Convert(Expression.New(ctor), typeof(object));
-            return Expression.Lambda<Func<object>>(body).Compile();
-        }
-        catch
-        {
-            return () => ctor.Invoke(null)!;
-        }
-    }
-
-    private static int TryGetEnumerableCount(object value)
-    {
-        if (value is Array array)
-            return array.Length;
-
-        if (value is ICollection collection)
-            return collection.Count;
-
-        var roCollection = value.GetType()
-            .GetInterfaces()
-            .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IReadOnlyCollection<>));
-        if (roCollection != null)
-            return (int)(roCollection.GetProperty("Count")!.GetValue(value) ?? 0);
-
-        return 0;
+        if (SerializableManager.TryDeserialize(
+                raw,
+                normalizedType,
+                static (nestedNode, nestedType) => RestoreValue(nestedNode, nestedType),
+                out object? restored))
+            return restored;
+
+        throw new InvalidOperationException($"No deserialization codec found for '{normalizedType.FullName}'.");
     }
 
     private static int GetTypeCacheKey(Type type)
@@ -1023,6 +465,17 @@ public interface ISerializable
     }
 
     #endregion
+
+    private sealed class ReferenceObjectComparer : IEqualityComparer<object>
+    {
+        internal static ReferenceObjectComparer Instance { get; } = new();
+
+        public new bool Equals(object? x, object? y)
+            => ReferenceEquals(x, y);
+
+        public int GetHashCode(object obj)
+            => RuntimeHelpers.GetHashCode(obj);
+    }
 
     #region Restore Hooks
 

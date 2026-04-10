@@ -17,7 +17,7 @@ public struct EntityViewHandle
 
     private static int s_typeCacheVersion;
     
-    [TypeCacheRebuild]
+    [TypeCacheRebuild("Inno.Core.ECS")]
     private static void OnTypeCacheRefresh()
     {
         Interlocked.Increment(ref s_typeCacheVersion);

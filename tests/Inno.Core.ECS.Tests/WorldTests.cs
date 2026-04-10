@@ -382,7 +382,7 @@ public sealed class WorldTests
             EntityViewHandle handle = world.CreateEntityViewHandle([typeof(TestPositionComponent)]);
             Assert.True(handle.isValid);
 
-            TypeCacheManager.Rebuild(typeof(string).Assembly);
+            TypeCacheManager.Rebuild(typeof(string).Assembly.GetName().Name);
 
             Assert.False(handle.isValid);
             Assert.Throws<InvalidOperationException>(() => world.ViewEntities(handle));
