@@ -172,7 +172,7 @@ public sealed class IdentityRegistry
     internal bool TryGetRuntimeId(in Identity identity, out int runtimeId)
     {
         runtimeId = 0;
-        if (identity.persistentId == Guid.Empty || identity.runtimeId == 0)
+        if (identity.persistentId == Guid.Empty || identity.rawRuntimeId == 0)
             return false;
 
         m_lock.EnterReadLock();
@@ -181,7 +181,7 @@ public sealed class IdentityRegistry
             if (!m_runtimeByPersistent.TryGetValue(identity.persistentId, out int currentRuntimeId))
                 return false;
 
-            if (currentRuntimeId != identity.runtimeId)
+            if (currentRuntimeId != identity.rawRuntimeId)
                 return false;
 
             if (!TryResolveDenseIndexNoLock(currentRuntimeId, out _))

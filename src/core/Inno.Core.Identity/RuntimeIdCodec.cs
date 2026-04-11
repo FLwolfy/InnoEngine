@@ -5,7 +5,7 @@ namespace Inno.Core.Identity;
 /// <summary>
 /// Packs and unpacks runtime ids into a single <see cref="int"/> using slot + generation.
 /// </summary>
-public static class RuntimeIdCodec
+internal static class RuntimeIdCodec
 {
     public const int SLOT_BITS = 20;
     public const int GENERATION_BITS = 12;
