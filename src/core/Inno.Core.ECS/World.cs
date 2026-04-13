@@ -50,16 +50,15 @@ public sealed class World
     /// <summary>
     /// Creates and registers a new entity.
     /// </summary>
-    /// <param name="parentId">Optional parent entity id.</param>
     /// <returns>The created entity.</returns>
-    public Entity CreateEntity(int? parentId = null)
+    public Entity CreateEntity()
     {
         if (m_nextEntityId <= 0)
         {
             throw new InvalidOperationException("Entity id pool exhausted.");
         }
 
-        Entity entity = new(m_nextEntityId++, parentId);
+        Entity entity = new(m_nextEntityId++);
         m_entities.Add(entity)
             .Set(m_entityIdKey, entity.id)
             .Set(m_entityArchetypeIdKey, m_archetypeIndex.emptyArchetypeId);

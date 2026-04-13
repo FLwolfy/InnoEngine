@@ -12,17 +12,6 @@ namespace Inno.Core.ECS.Tests;
 public sealed class WorldTests
 {
     [Fact]
-    public void CreateEntity_WithParentId_PreservesParent()
-    {
-        var world = new World();
-        const int parent = 42;
-
-        Entity entity = world.CreateEntity(parent);
-
-        Assert.Equal(parent, entity.parentId);
-    }
-
-    [Fact]
     public void AddAndRemoveComponent_FlushPending_UpdatesViews()
     {
         var world = new World();
