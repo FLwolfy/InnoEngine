@@ -13,23 +13,24 @@ public sealed class World
     private readonly WeakReference<World> m_worldRef;
 
     private readonly ObjectPool<Entity> m_entities = new();
-    private readonly PoolKey<Guid> m_entityIdKey;
+    private readonly PoolKey<int> m_entityIdKey;
     private readonly PoolKey<int> m_entityArchetypeIdKey;
 
     private readonly ObjectPool<Component> m_components = new();
-    private readonly PoolKey<Guid> m_componentEntityKey;
+    private readonly PoolKey<int> m_componentEntityKey;
     private readonly PoolKey<int> m_componentTypeIdKey;
-    private readonly PoolKey<(Guid entityId, int componentTypeId)> m_componentEntityTypeKey;
+    private readonly PoolKey<(int entityId, int componentTypeId)> m_componentEntityTypeKey;
     
-    private readonly record struct ComponentAddOp(Guid entityId, Component component, int componentTypeId);
+    private readonly record struct ComponentAddOp(int entityId, Component component, int componentTypeId);
     private readonly List<ComponentAddOp> m_pendingAddComponents = [];
     
-    private readonly record struct ComponentRemoveOp(Guid entityId, int componentTypeId);
+    private readonly record struct ComponentRemoveOp(int entityId, int componentTypeId);
     private readonly List<ComponentRemoveOp> m_pendingRemoveComponents = [];
 
-    private readonly HashSet<Guid> m_pendingKilledEntities = [];
+    private readonly HashSet<int> m_pendingKilledEntities = [];
     private readonly List<ISystem> m_systems = [];
     private readonly EntityArchetypeIndex m_archetypeIndex = new();
+    private int m_nextEntityId = 1;
     
     /// <summary>
     /// Initializes an empty world and all lookup keys.
@@ -37,11 +38,11 @@ public sealed class World
     public World()
     {
         m_worldRef = new WeakReference<World>(this);
-        m_entityIdKey = m_entities.DefineKey<Guid>("entity.id", PoolKeyFlags.Unique);
+        m_entityIdKey = m_entities.DefineKey<int>("entity.id", PoolKeyFlags.Unique);
         m_entityArchetypeIdKey = m_entities.DefineKey<int>("entity.archetypeId");
-        m_componentEntityKey = m_components.DefineKey<Guid>("component.entity");
+        m_componentEntityKey = m_components.DefineKey<int>("component.entity");
         m_componentTypeIdKey = m_components.DefineKey<int>("component.typeId");
-        m_componentEntityTypeKey = m_components.DefineKey<(Guid entityId, int componentTypeId)>(
+        m_componentEntityTypeKey = m_components.DefineKey<(int entityId, int componentTypeId)>(
             "component.entityType",
             PoolKeyFlags.Unique);
     }
@@ -49,11 +50,16 @@ public sealed class World
     /// <summary>
     /// Creates and registers a new entity.
     /// </summary>
-    /// <param name="parentGuid">Optional parent entity id.</param>
+    /// <param name="parentId">Optional parent entity id.</param>
     /// <returns>The created entity.</returns>
-    public Entity CreateEntity(Guid? parentGuid = null)
+    public Entity CreateEntity(int? parentId = null)
     {
-        Entity entity = new(Guid.NewGuid(), parentGuid);
+        if (m_nextEntityId <= 0)
+        {
+            throw new InvalidOperationException("Entity id pool exhausted.");
+        }
+
+        Entity entity = new(m_nextEntityId++, parentId);
         m_entities.Add(entity)
             .Set(m_entityIdKey, entity.id)
             .Set(m_entityArchetypeIdKey, m_archetypeIndex.emptyArchetypeId);
@@ -190,11 +196,11 @@ public sealed class World
     /// <typeparam name="TComponent">Component type.</typeparam>
     /// <param name="entityId">Optional entity id filter.</param>
     /// <returns>Snapshot list detached from subsequent world mutations.</returns>
-    public IReadOnlyList<TComponent> ViewComponents<TComponent>(Guid? entityId = null)
+    public IReadOnlyList<TComponent> ViewComponents<TComponent>(int? entityId = null)
         where TComponent : Component
     {
         int componentTypeId = GetComponentRuntimeTypeId(typeof(TComponent));
-        if (entityId is Guid targetEntityId)
+        if (entityId is int targetEntityId)
         {
             Component? component = m_components.First(m_componentEntityTypeKey, (targetEntityId, componentTypeId));
             if (component is TComponent typed)
@@ -225,11 +231,11 @@ public sealed class World
     /// <typeparam name="TComponent">Component type.</typeparam>
     /// <param name="entityId">Optional entity id filter.</param>
     /// <returns>Lazy sequence suitable for hot-path iteration.</returns>
-    public IEnumerable<TComponent> ViewComponentsFast<TComponent>(Guid? entityId = null)
+    public IEnumerable<TComponent> ViewComponentsFast<TComponent>(int? entityId = null)
         where TComponent : Component
     {
         int componentTypeId = GetComponentRuntimeTypeId(typeof(TComponent));
-        if (entityId is Guid targetEntityId)
+        if (entityId is int targetEntityId)
         {
             Component? component = m_components.First(m_componentEntityTypeKey, (targetEntityId, componentTypeId));
             if (component is TComponent typed)
@@ -330,14 +336,14 @@ public sealed class World
             if (m_pendingKilledEntities.Contains(op.entityId))
             {
                 op.component.Reset();
-                op.component.entityId = Guid.Empty;
+                op.component.entityId = 0;
                 continue;
             }
 
             if (m_entities.First(m_entityIdKey, op.entityId) is null)
             {
                 op.component.Reset();
-                op.component.entityId = Guid.Empty;
+                op.component.entityId = 0;
                 continue;
             }
 
@@ -398,12 +404,12 @@ public sealed class World
             return;
         }
 
-        Guid[] killed = [..m_pendingKilledEntities];
+        int[] killed = [..m_pendingKilledEntities];
         m_pendingKilledEntities.Clear();
 
         for (int i = 0; i < killed.Length; i++)
         {
-            Guid entityId = killed[i];
+            int entityId = killed[i];
             Entity? entity = m_entities.First(m_entityIdKey, entityId);
             if (entity is null)
             {
@@ -424,11 +430,11 @@ public sealed class World
     private bool RemoveComponentInstance(Component component)
     {
         component.Reset();
-        component.entityId = Guid.Empty;
+        component.entityId = 0;
         return m_components.Remove(component);
     }
 
-    private void EnsureEntityExists(Guid entityId)
+    private void EnsureEntityExists(int entityId)
     {
         if (m_entities.First(m_entityIdKey, entityId) is null)
         {
@@ -436,7 +442,7 @@ public sealed class World
         }
     }
 
-    private bool RemovePendingAdd(Guid entityId, int componentTypeId)
+    private bool RemovePendingAdd(int entityId, int componentTypeId)
     {
         bool removed = false;
         for (int i = m_pendingAddComponents.Count - 1; i >= 0; i--)
@@ -448,7 +454,7 @@ public sealed class World
             }
 
             op.component.Reset();
-            op.component.entityId = Guid.Empty;
+            op.component.entityId = 0;
             m_pendingAddComponents.RemoveAt(i);
             removed = true;
         }
@@ -456,7 +462,7 @@ public sealed class World
         return removed;
     }
 
-    private void RemovePendingForEntityType(Guid entityId, int componentTypeId)
+    private void RemovePendingForEntityType(int entityId, int componentTypeId)
     {
         for (int i = m_pendingRemoveComponents.Count - 1; i >= 0; i--)
         {
@@ -468,7 +474,7 @@ public sealed class World
         }
     }
 
-    private void RemovePendingOpsForEntity(Guid entityId)
+    private void RemovePendingOpsForEntity(int entityId)
     {
         for (int i = m_pendingAddComponents.Count - 1; i >= 0; i--)
         {
@@ -476,7 +482,7 @@ public sealed class World
             {
                 Component component = m_pendingAddComponents[i].component;
                 component.Reset();
-                component.entityId = Guid.Empty;
+                component.entityId = 0;
                 m_pendingAddComponents.RemoveAt(i);
             }
         }

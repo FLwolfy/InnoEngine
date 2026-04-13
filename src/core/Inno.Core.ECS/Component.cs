@@ -1,5 +1,3 @@
-using System;
-
 namespace Inno.Core.ECS;
 
 /// <summary>
@@ -10,7 +8,7 @@ public abstract class Component
     /// <summary>
     /// Gets the owning entity id assigned by the world runtime.
     /// </summary>
-    public Guid entityId { get; internal set; }
+    public int entityId { get; internal set; }
 
     /// <summary>
     /// Gets or sets whether this component is enabled for system processing.

@@ -12,14 +12,14 @@ namespace Inno.Core.ECS.Tests;
 public sealed class WorldTests
 {
     [Fact]
-    public void CreateEntity_WithParentGuid_PreservesParent()
+    public void CreateEntity_WithParentId_PreservesParent()
     {
         var world = new World();
-        Guid parent = Guid.NewGuid();
+        const int parent = 42;
 
         Entity entity = world.CreateEntity(parent);
 
-        Assert.Equal(parent, entity.parentGuid);
+        Assert.Equal(parent, entity.parentId);
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public sealed class WorldTests
     public void AddComponent_ForUnknownEntity_Throws()
     {
         var world = new World();
-        var outside = new Entity(Guid.NewGuid());
+        var outside = new Entity(-1);
 
         Assert.Throws<InvalidOperationException>(() => world.AddComponent<TestPositionComponent>(outside));
     }
@@ -87,8 +87,8 @@ public sealed class WorldTests
         world.AddComponent<TestPositionComponent>(b);
         world.FlushPending();
 
-        IReadOnlyList<Guid> snapshot = [.. world.ViewComponents<TestPositionComponent>().Select(static c => c.entityId).OrderBy(static id => id)];
-        IReadOnlyList<Guid> fast = [.. world.ViewComponentsFast<TestPositionComponent>().Select(static c => c.entityId).OrderBy(static id => id)];
+        IReadOnlyList<int> snapshot = [.. world.ViewComponents<TestPositionComponent>().Select(static c => c.entityId).OrderBy(static id => id)];
+        IReadOnlyList<int> fast = [.. world.ViewComponentsFast<TestPositionComponent>().Select(static c => c.entityId).OrderBy(static id => id)];
 
         Assert.Equal(snapshot, fast);
     }
@@ -99,7 +99,7 @@ public sealed class WorldTests
         var world = new World();
         world.CreateEntity();
 
-        Assert.Empty(world.ViewComponents<TestPositionComponent>(Guid.NewGuid()));
+        Assert.Empty(world.ViewComponents<TestPositionComponent>(-1));
     }
 
     [Fact]
@@ -157,8 +157,8 @@ public sealed class WorldTests
         world.FlushPending();
 
         EntityViewHandle handle = world.CreateEntityViewHandle([typeof(TestPositionComponent), typeof(TestVelocityComponent)]);
-        IReadOnlyList<Guid> fast = [.. world.ViewEntitiesFast(handle).Select(static e => e.id).OrderBy(static id => id)];
-        IReadOnlyList<Guid> expected = new[] { bothA.id, bothB.id }.OrderBy(static id => id).ToArray();
+        IReadOnlyList<int> fast = [.. world.ViewEntitiesFast(handle).Select(static e => e.id).OrderBy(static id => id)];
+        IReadOnlyList<int> expected = new[] { bothA.id, bothB.id }.OrderBy(static id => id).ToArray();
 
         Assert.Equal(expected, fast);
     }
@@ -171,8 +171,8 @@ public sealed class WorldTests
         Entity b = world.CreateEntity();
         Entity c = world.CreateEntity();
 
-        IReadOnlyList<Guid> all = [.. world.ViewEntities().Select(static e => e.id).OrderBy(static id => id)];
-        IReadOnlyList<Guid> expected = new[] { a.id, b.id, c.id }.OrderBy(static id => id).ToArray();
+        IReadOnlyList<int> all = [.. world.ViewEntities().Select(static e => e.id).OrderBy(static id => id)];
+        IReadOnlyList<int> expected = new[] { a.id, b.id, c.id }.OrderBy(static id => id).ToArray();
 
         Assert.Equal(expected, all);
     }
@@ -185,8 +185,8 @@ public sealed class WorldTests
         Entity b = world.CreateEntity();
         Entity c = world.CreateEntity();
 
-        IReadOnlyList<Guid> all = [.. world.ViewEntitiesFast().Select(static e => e.id).OrderBy(static id => id)];
-        IReadOnlyList<Guid> expected = new[] { a.id, b.id, c.id }.OrderBy(static id => id).ToArray();
+        IReadOnlyList<int> all = [.. world.ViewEntitiesFast().Select(static e => e.id).OrderBy(static id => id)];
+        IReadOnlyList<int> expected = new[] { a.id, b.id, c.id }.OrderBy(static id => id).ToArray();
 
         Assert.Equal(expected, all);
     }
@@ -296,9 +296,9 @@ public sealed class WorldTests
         EntityViewHandle handle = world.CreateEntityViewHandle([typeof(TestPositionComponent), typeof(TestVelocityComponent)]);
         Assert.True(handle.isValid);
 
-        IReadOnlyList<Guid> snapshot = [.. world.ViewEntities(handle).Select(static e => e.id).OrderBy(static id => id)];
-        IReadOnlyList<Guid> fast = [.. world.ViewEntitiesFast(handle).Select(static e => e.id).OrderBy(static id => id)];
-        IReadOnlyList<Guid> expected = new[] { bothA.id, bothB.id }.OrderBy(static id => id).ToArray();
+        IReadOnlyList<int> snapshot = [.. world.ViewEntities(handle).Select(static e => e.id).OrderBy(static id => id)];
+        IReadOnlyList<int> fast = [.. world.ViewEntitiesFast(handle).Select(static e => e.id).OrderBy(static id => id)];
+        IReadOnlyList<int> expected = new[] { bothA.id, bothB.id }.OrderBy(static id => id).ToArray();
 
         Assert.Equal(expected, snapshot);
         Assert.Equal(expected, fast);
@@ -415,7 +415,7 @@ public sealed class WorldTests
     public void KillEntity_WithUnknownEntity_ReturnsFalse()
     {
         var world = new World();
-        var outside = new Entity(Guid.NewGuid());
+        var outside = new Entity(-1);
 
         Assert.False(world.KillEntity(outside));
     }

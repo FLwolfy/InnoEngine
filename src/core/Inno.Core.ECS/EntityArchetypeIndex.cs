@@ -7,8 +7,8 @@ internal sealed class EntityArchetypeIndex
 {
     private const int C_EMPTY_ARCHETYPE_ID = 0;
 
-    private readonly Dictionary<Guid, HashSet<int>> m_entityComponentTypeIds = [];
-    private readonly Dictionary<Guid, int> m_entityArchetypeIds = [];
+    private readonly Dictionary<int, HashSet<int>> m_entityComponentTypeIds = [];
+    private readonly Dictionary<int, int> m_entityArchetypeIds = [];
     private readonly Dictionary<int, HashSet<int>> m_archetypeComponentTypeIdSets = [];
     private readonly Dictionary<string, int> m_archetypeIdBySignature = new(StringComparer.Ordinal);
     private int m_nextArchetypeId = 1;
@@ -21,19 +21,19 @@ internal sealed class EntityArchetypeIndex
         m_archetypeComponentTypeIdSets[C_EMPTY_ARCHETYPE_ID] = [];
     }
 
-    public void RegisterEntity(Guid entityId)
+    public void RegisterEntity(int entityId)
     {
         m_entityComponentTypeIds[entityId] = [];
         m_entityArchetypeIds[entityId] = C_EMPTY_ARCHETYPE_ID;
     }
 
-    public void UnregisterEntity(Guid entityId)
+    public void UnregisterEntity(int entityId)
     {
         m_entityComponentTypeIds.Remove(entityId);
         m_entityArchetypeIds.Remove(entityId);
     }
 
-    public bool TryOnComponentAdded(Guid entityId, int componentTypeId, out int archetypeId)
+    public bool TryOnComponentAdded(int entityId, int componentTypeId, out int archetypeId)
     {
         HashSet<int> componentTypeIds = GetOrCreateEntityComponentTypeSet(entityId);
         if (!componentTypeIds.Add(componentTypeId))
@@ -47,7 +47,7 @@ internal sealed class EntityArchetypeIndex
         return true;
     }
 
-    public bool TryOnComponentRemoved(Guid entityId, int componentTypeId, out int archetypeId)
+    public bool TryOnComponentRemoved(int entityId, int componentTypeId, out int archetypeId)
     {
         if (!m_entityComponentTypeIds.TryGetValue(entityId, out HashSet<int>? componentTypeIds) ||
             !componentTypeIds.Remove(componentTypeId))
@@ -90,7 +90,7 @@ internal sealed class EntityArchetypeIndex
         return matches;
     }
 
-    private HashSet<int> GetOrCreateEntityComponentTypeSet(Guid entityId)
+    private HashSet<int> GetOrCreateEntityComponentTypeSet(int entityId)
     {
         if (m_entityComponentTypeIds.TryGetValue(entityId, out HashSet<int>? componentTypeIds))
         {
