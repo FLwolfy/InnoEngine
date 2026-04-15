@@ -12,14 +12,14 @@ public sealed class IdentityRegistry
 {
     private readonly ReaderWriterLockSlim m_lock = new(LockRecursionPolicy.NoRecursion);
 
-    private readonly List<IIdentityObject> m_active = new();
-    private readonly Dictionary<IIdentityObject, int> m_denseIndexByObject = new(ReferenceComparer<IIdentityObject>.INSTANCE);
+    private readonly List<IdentityObject> m_active = new();
+    private readonly Dictionary<IdentityObject, int> m_denseIndexByObject = new(ReferenceComparer<IdentityObject>.INSTANCE);
     private readonly List<int> m_denseToSlot = new();
     private readonly List<int> m_sparseToDense = new();
     private readonly List<int> m_generations = new();
     private readonly Stack<int> m_freeSlots = new();
 
-    private readonly Dictionary<Guid, IIdentityObject> m_objectByPersistent = new();
+    private readonly Dictionary<Guid, IdentityObject> m_objectByPersistent = new();
     private readonly Dictionary<Guid, int> m_runtimeByPersistent = new();
 
     public int count
@@ -38,7 +38,7 @@ public sealed class IdentityRegistry
         }
     }
 
-    public bool Register(IIdentityObject obj)
+    public bool Register(IdentityObject obj)
     {
         ArgumentNullException.ThrowIfNull(obj);
 
@@ -50,7 +50,7 @@ public sealed class IdentityRegistry
 
             Identity identity = obj.identity;
             Guid persistentId = identity.persistentId == Guid.Empty ? Guid.NewGuid() : identity.persistentId;
-            if (m_objectByPersistent.TryGetValue(persistentId, out IIdentityObject? existing) && !ReferenceEquals(existing, obj))
+            if (m_objectByPersistent.TryGetValue(persistentId, out IdentityObject? existing) && !ReferenceEquals(existing, obj))
                 throw new InvalidOperationException($"Persistent id '{persistentId}' is already registered.");
 
             int slot = AllocateSlot();
@@ -68,7 +68,7 @@ public sealed class IdentityRegistry
 
             identity = new Identity(persistentId);
             identity.Bind(this, runtimeId);
-            obj.identity = identity;
+            obj.SetIdentity(identity);
             return true;
         }
         finally
@@ -77,7 +77,7 @@ public sealed class IdentityRegistry
         }
     }
 
-    public bool Unregister(IIdentityObject obj)
+    public bool Unregister(IdentityObject obj)
     {
         ArgumentNullException.ThrowIfNull(obj);
 
@@ -91,7 +91,7 @@ public sealed class IdentityRegistry
             Guid persistentId = identity.persistentId;
 
             int lastIndex = m_active.Count - 1;
-            IIdentityObject lastObj = m_active[lastIndex];
+            IdentityObject lastObj = m_active[lastIndex];
             int removedSlot = m_denseToSlot[denseIndex];
             int lastSlot = m_denseToSlot[lastIndex];
 
@@ -121,7 +121,7 @@ public sealed class IdentityRegistry
             }
 
             identity.Unbind(this);
-            obj.identity = identity;
+            obj.SetIdentity(identity);
             return true;
         }
         finally
@@ -130,7 +130,7 @@ public sealed class IdentityRegistry
         }
     }
 
-    public bool TryGet(int runtimeId, out IIdentityObject? obj)
+    public bool TryGet(int runtimeId, out IdentityObject? obj)
     {
         m_lock.EnterReadLock();
         try
@@ -150,7 +150,7 @@ public sealed class IdentityRegistry
         }
     }
 
-    public bool TryGet(Guid persistentId, out IIdentityObject? obj)
+    public bool TryGet(Guid persistentId, out IdentityObject? obj)
     {
         if (persistentId == Guid.Empty)
         {

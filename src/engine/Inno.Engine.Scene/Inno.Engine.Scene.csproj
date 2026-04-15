@@ -6,4 +6,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\core\Inno.Core.ECS\Inno.Core.ECS.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Identity\Inno.Core.Identity.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Mathematics\Inno.Core.Mathematics.csproj" />
+  </ItemGroup>
+
 </Project>

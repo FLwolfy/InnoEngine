@@ -8,9 +8,16 @@ namespace Inno.Core.Identity.Tests;
 
 public sealed class IdentityRegistryTests
 {
-    private sealed class Entity : IIdentityObject
+    private sealed class Entity : IdentityObject
     {
-        public Identity identity { get; set; }
+        public Entity()
+        {
+        }
+
+        public Entity(Guid persistentId)
+        {
+            identity = new Identity(persistentId);
+        }
     }
 
     [Fact]
@@ -52,8 +59,8 @@ public sealed class IdentityRegistryTests
         Assert.True(entity.identity.runtimeId.HasValue);
         int runtimeId = entity.identity.runtimeId.Value;
 
-        Assert.True(registry.TryGet(runtimeId, out IIdentityObject? fromRuntime));
-        Assert.True(registry.TryGet(entity.identity.persistentId, out IIdentityObject? fromPersistent));
+        Assert.True(registry.TryGet(runtimeId, out IdentityObject? fromRuntime));
+        Assert.True(registry.TryGet(entity.identity.persistentId, out IdentityObject? fromPersistent));
 
         Assert.Same(entity, fromRuntime);
         Assert.Same(entity, fromPersistent);
@@ -79,7 +86,7 @@ public sealed class IdentityRegistryTests
         Assert.Equal(UnpackSlot(oldRuntimeId), UnpackSlot(newRuntimeId));
         Assert.NotEqual(UnpackGeneration(oldRuntimeId), UnpackGeneration(newRuntimeId));
         Assert.False(registry.TryGet(oldRuntimeId, out _));
-        Assert.True(registry.TryGet(newRuntimeId, out IIdentityObject? resolved));
+        Assert.True(registry.TryGet(newRuntimeId, out IdentityObject? resolved));
         Assert.Same(second, resolved);
     }
 
@@ -110,14 +117,11 @@ public sealed class IdentityRegistryTests
     {
         var registry = new IdentityRegistry();
         Guid assigned = Guid.NewGuid();
-        var entity = new Entity
-        {
-            identity = new Identity(assigned)
-        };
+        var entity = new Entity(assigned);
 
         Assert.True(registry.Register(entity));
         Assert.Equal(assigned, entity.identity.persistentId);
-        Assert.True(registry.TryGet(assigned, out IIdentityObject? resolved));
+        Assert.True(registry.TryGet(assigned, out IdentityObject? resolved));
         Assert.Same(entity, resolved);
     }
 
@@ -126,8 +130,8 @@ public sealed class IdentityRegistryTests
     {
         var registry = new IdentityRegistry();
         Guid shared = Guid.NewGuid();
-        var a = new Entity { identity = new Identity(shared) };
-        var b = new Entity { identity = new Identity(shared) };
+        var a = new Entity(shared);
+        var b = new Entity(shared);
 
         Assert.True(registry.Register(a));
         Assert.Throws<InvalidOperationException>(() => registry.Register(b));
