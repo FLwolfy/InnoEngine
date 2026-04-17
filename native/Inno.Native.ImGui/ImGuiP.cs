@@ -2,7 +2,7 @@
 
 namespace Inno.Native.ImGui
 {
-    using HexaGen.Runtime;
+    using BGCS.Runtime;
 
     public static unsafe partial class ImGuiP
     {

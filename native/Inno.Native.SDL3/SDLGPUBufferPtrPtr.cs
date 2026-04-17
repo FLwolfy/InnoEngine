@@ -1,6 +1,6 @@
 ﻿namespace Inno.Native.SDL3
 {
-    using HexaGen.Runtime;
+    using BGCS.Runtime;
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;

@@ -12,7 +12,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Numerics;
 
-using HexaGen.Runtime;
+using BGCS.Runtime;
 
 namespace Inno.Native.ImGuizmo
 {

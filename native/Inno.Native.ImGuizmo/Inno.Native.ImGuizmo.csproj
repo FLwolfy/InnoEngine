@@ -7,7 +7,7 @@
   </PropertyGroup>
   
   <ItemGroup>
-    <PackageReference Include="HexaGen.Runtime" Version="1.1.24" PrivateAssets="compile" />
+    <PackageReference Include="BGCS.Runtime" Version="1.0.1" PrivateAssets="compile" />
   </ItemGroup>
   
   <ItemGroup>

@@ -7,7 +7,7 @@
 // </auto-generated>
 // ------------------------------------------------------------------------------
 
-using HexaGen.Runtime;
+using BGCS.Runtime;
 using System;
 using System.Diagnostics;
 using System.Drawing;

@@ -1,5 +1,5 @@
 using System;
-using HexaGen.Runtime;
+using BGCS.Runtime;
 using Inno.Native.Dll;
 
 namespace Inno.Native.SDL3;

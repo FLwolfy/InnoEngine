@@ -1,6 +1,6 @@
 namespace Inno.Native.ImGuizmo
 {
-    using HexaGen.Runtime;
+    using BGCS.Runtime;
     using Inno.Native.Dll;
     using System.Diagnostics;
 

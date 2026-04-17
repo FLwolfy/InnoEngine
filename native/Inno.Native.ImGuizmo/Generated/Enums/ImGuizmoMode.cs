@@ -8,7 +8,7 @@
 // ------------------------------------------------------------------------------
 
 using System;
-using HexaGen.Runtime;
+using BGCS.Runtime;
 using System.Numerics;
 using Inno.Native.ImGui;
 

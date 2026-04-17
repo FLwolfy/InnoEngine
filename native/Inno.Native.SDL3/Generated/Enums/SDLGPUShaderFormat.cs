@@ -8,7 +8,7 @@
 // ------------------------------------------------------------------------------
 
 using System;
-using HexaGen.Runtime;
+using BGCS.Runtime;
 
 namespace Inno.Native.SDL3
 {

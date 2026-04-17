@@ -11,7 +11,7 @@ using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using HexaGen.Runtime;
+using BGCS.Runtime;
 
 namespace Inno.Native.SDL3
 {

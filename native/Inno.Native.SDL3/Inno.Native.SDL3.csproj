@@ -7,6 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Inno.Native.Dll\Inno.Native.Dll.csproj" PrivateAssets="compile" />
-    <PackageReference Include="HexaGen.Runtime" Version="1.1.24" PrivateAssets="compile" />
+    <PackageReference Include="BGCS.Runtime" Version="1.0.1" PrivateAssets="compile" />
   </ItemGroup>
 </Project>
