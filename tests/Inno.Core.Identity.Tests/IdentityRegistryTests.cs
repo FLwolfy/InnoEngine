@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 
 using Inno.Core.Identity;
 
@@ -8,7 +9,24 @@ namespace Inno.Core.Identity.Tests;
 
 public sealed class IdentityRegistryTests
 {
-    private sealed class Entity : IdentityObject
+    private static readonly MethodInfo S_SET_IDENTITY_METHOD =
+        typeof(IIdentityObject).GetMethod(
+            "SetIdentity",
+            BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public,
+            null,
+            new[] { typeof(Identity) },
+            null)
+        ?? throw new InvalidOperationException("IIdentityObject.SetIdentity(Identity) was not found.");
+
+    private static void SetIdentity(IIdentityObject target, Identity identity)
+    {
+        S_SET_IDENTITY_METHOD.Invoke(target, new object[] { identity });
+    }
+
+    private static Identity GetIdentity(Entity entity)
+        => ((IIdentityObject)entity).GetIdentity();
+
+    private sealed class Entity : IIdentityObject
     {
         public Entity()
         {
@@ -16,7 +34,7 @@ public sealed class IdentityRegistryTests
 
         public Entity(Guid persistentId)
         {
-            identity = new Identity(persistentId);
+            SetIdentity(this, new Identity(persistentId));
         }
     }
 
@@ -27,16 +45,16 @@ public sealed class IdentityRegistryTests
         var entity = new Entity();
 
         Assert.True(registry.Register(entity));
-        Assert.NotEqual(Guid.Empty, entity.identity.persistentId);
-        Assert.True(entity.identity.runtimeId.HasValue);
-        Assert.NotEqual(0, entity.identity.runtimeId.Value);
+        Assert.NotEqual(Guid.Empty, GetIdentity(entity).persistentId);
+        Assert.True(GetIdentity(entity).runtimeId.HasValue);
+        Assert.NotEqual(0, GetIdentity(entity).runtimeId.Value);
     }
 
     [Fact]
     public void RuntimeId_IsNull_WhenNeverRegistered()
     {
         var entity = new Entity();
-        Assert.Null(entity.identity.runtimeId);
+        Assert.Null(GetIdentity(entity).runtimeId);
     }
 
     [Fact]
@@ -47,7 +65,7 @@ public sealed class IdentityRegistryTests
         Assert.True(registry.Register(entity));
 
         Assert.True(registry.Unregister(entity));
-        Assert.Null(entity.identity.runtimeId);
+        Assert.Null(GetIdentity(entity).runtimeId);
     }
 
     [Fact]
@@ -56,11 +74,11 @@ public sealed class IdentityRegistryTests
         var registry = new IdentityRegistry();
         var entity = new Entity();
         Assert.True(registry.Register(entity));
-        Assert.True(entity.identity.runtimeId.HasValue);
-        int runtimeId = entity.identity.runtimeId.Value;
+        Assert.True(GetIdentity(entity).runtimeId.HasValue);
+        int runtimeId = GetIdentity(entity).runtimeId.Value;
 
-        Assert.True(registry.TryGet(runtimeId, out IdentityObject? fromRuntime));
-        Assert.True(registry.TryGet(entity.identity.persistentId, out IdentityObject? fromPersistent));
+        Assert.True(registry.TryGet(runtimeId, out IIdentityObject? fromRuntime));
+        Assert.True(registry.TryGet(GetIdentity(entity).persistentId, out IIdentityObject? fromPersistent));
 
         Assert.Same(entity, fromRuntime);
         Assert.Same(entity, fromPersistent);
@@ -73,20 +91,20 @@ public sealed class IdentityRegistryTests
 
         var first = new Entity();
         Assert.True(registry.Register(first));
-        Assert.True(first.identity.runtimeId.HasValue);
-        int oldRuntimeId = first.identity.runtimeId.Value;
+        Assert.True(GetIdentity(first).runtimeId.HasValue);
+        int oldRuntimeId = GetIdentity(first).runtimeId.Value;
 
         Assert.True(registry.Unregister(first));
 
         var second = new Entity();
         Assert.True(registry.Register(second));
-        Assert.True(second.identity.runtimeId.HasValue);
-        int newRuntimeId = second.identity.runtimeId.Value;
+        Assert.True(GetIdentity(second).runtimeId.HasValue);
+        int newRuntimeId = GetIdentity(second).runtimeId.Value;
 
         Assert.Equal(UnpackSlot(oldRuntimeId), UnpackSlot(newRuntimeId));
         Assert.NotEqual(UnpackGeneration(oldRuntimeId), UnpackGeneration(newRuntimeId));
         Assert.False(registry.TryGet(oldRuntimeId, out _));
-        Assert.True(registry.TryGet(newRuntimeId, out IdentityObject? resolved));
+        Assert.True(registry.TryGet(newRuntimeId, out IIdentityObject? resolved));
         Assert.Same(second, resolved);
     }
 
@@ -105,10 +123,10 @@ public sealed class IdentityRegistryTests
         var entity = new Entity();
 
         Assert.True(registry.Register(entity));
-        int firstRuntimeId = entity.identity.runtimeId!.Value;
+        int firstRuntimeId = GetIdentity(entity).runtimeId!.Value;
 
         Assert.False(registry.Register(entity));
-        Assert.Equal(firstRuntimeId, entity.identity.runtimeId!.Value);
+        Assert.Equal(firstRuntimeId, GetIdentity(entity).runtimeId!.Value);
         Assert.Equal(1, registry.count);
     }
 
@@ -120,8 +138,8 @@ public sealed class IdentityRegistryTests
         var entity = new Entity(assigned);
 
         Assert.True(registry.Register(entity));
-        Assert.Equal(assigned, entity.identity.persistentId);
-        Assert.True(registry.TryGet(assigned, out IdentityObject? resolved));
+        Assert.Equal(assigned, GetIdentity(entity).persistentId);
+        Assert.True(registry.TryGet(assigned, out IIdentityObject? resolved));
         Assert.Same(entity, resolved);
     }
 
@@ -161,12 +179,12 @@ public sealed class IdentityRegistryTests
         var entity = new Entity();
         Assert.True(registry.Register(entity));
 
-        int firstRuntimeId = entity.identity.runtimeId!.Value;
+        int firstRuntimeId = GetIdentity(entity).runtimeId!.Value;
         Assert.True(registry.Unregister(entity));
-        Assert.Null(entity.identity.runtimeId);
+        Assert.Null(GetIdentity(entity).runtimeId);
 
         Assert.True(registry.Register(entity));
-        int secondRuntimeId = entity.identity.runtimeId!.Value;
+        int secondRuntimeId = GetIdentity(entity).runtimeId!.Value;
         Assert.NotEqual(firstRuntimeId, secondRuntimeId);
     }
 

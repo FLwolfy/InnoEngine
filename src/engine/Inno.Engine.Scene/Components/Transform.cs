@@ -35,9 +35,11 @@ public class Transform : Component
     private bool m_hasPendingParentTransaction;
     private Transform? m_pendingParent;
     private TransformParentOptions m_pendingParentOptions = TransformParentOptions.KeepWorld;
-    private Vector3 m_pendingWorldPosition;
-    private Quaternion m_pendingWorldRotation;
-    private Vector3 m_pendingWorldScale;
+
+    private bool m_hasPendingWorldTransaction;
+    private Vector3 m_pendingWorldPosition = Vector3.ZERO;
+    private Quaternion m_pendingWorldRotation = Quaternion.identity;
+    private Vector3 m_pendingWorldScale = Vector3.ONE;
 
     public Vector3 localPosition
     {
@@ -71,46 +73,31 @@ public class Transform : Component
 
     public Vector3 worldPosition
     {
-        get
-        {
-            UpdateIfDirty();
-            return m_worldPosition;
-        }
+        get => m_worldPosition;
         set
         {
-            m_worldPosition = value;
-            OnTransformChanged?.Invoke();
-            MarkChildrenDirty();
+            BeginWorldTransaction();
+            m_pendingWorldPosition = value;
         }
     }
 
     public Quaternion worldRotation
     {
-        get
-        {
-            UpdateIfDirty();
-            return m_worldRotation;
-        }
+        get => m_worldRotation;
         set
         {
-            m_worldRotation = value.normalized;
-            OnTransformChanged?.Invoke();
-            MarkChildrenDirty();
+            BeginWorldTransaction();
+            m_pendingWorldRotation = value.normalized;
         }
     }
 
     public Vector3 worldScale
     {
-        get
-        {
-            UpdateIfDirty();
-            return m_worldScale;
-        }
+        get => m_worldScale;
         set
         {
-            m_worldScale = value;
-            OnTransformChanged?.Invoke();
-            MarkChildrenDirty();
+            BeginWorldTransaction();
+            m_pendingWorldScale = value;
         }
     }
 
@@ -131,19 +118,9 @@ public class Transform : Component
             return;
         }
 
-        UpdateIfDirty();
-        m_pendingWorldPosition = m_worldPosition;
-        m_pendingWorldRotation = m_worldRotation;
-        m_pendingWorldScale = m_worldScale;
         m_pendingParent = newParent;
         m_pendingParentOptions = options;
         m_hasPendingParentTransaction = true;
-        MarkDirty();
-    }
-
-    public void Update()
-    {
-        UpdateIfDirty();
     }
 
     public void OnDetach()
@@ -169,6 +146,7 @@ public class Transform : Component
         m_hasPendingParentTransaction = false;
         m_pendingParent = null;
         m_pendingParentOptions = TransformParentOptions.KeepWorld;
+        m_hasPendingWorldTransaction = false;
         m_pendingWorldPosition = Vector3.ZERO;
         m_pendingWorldRotation = Quaternion.identity;
         m_pendingWorldScale = Vector3.ONE;
@@ -179,33 +157,38 @@ public class Transform : Component
 
     internal bool TryConsumeParentTransaction(
         out Transform? newParent,
-        out TransformParentOptions options,
-        out Vector3 worldPosition,
-        out Quaternion worldRotation,
-        out Vector3 worldScale)
+        out TransformParentOptions options)
     {
         if (!m_hasPendingParentTransaction)
         {
             newParent = null;
             options = TransformParentOptions.KeepWorld;
+            return false;
+        }
+
+        newParent = m_pendingParent;
+        options = m_pendingParentOptions;
+
+        m_hasPendingParentTransaction = false;
+        m_pendingParent = null;
+        m_pendingParentOptions = TransformParentOptions.KeepWorld;
+        return true;
+    }
+
+    internal bool TryConsumeWorldTransaction(out Vector3 worldPosition, out Quaternion worldRotation, out Vector3 worldScale)
+    {
+        if (!m_hasPendingWorldTransaction)
+        {
             worldPosition = Vector3.ZERO;
             worldRotation = Quaternion.identity;
             worldScale = Vector3.ONE;
             return false;
         }
 
-        newParent = m_pendingParent;
-        options = m_pendingParentOptions;
         worldPosition = m_pendingWorldPosition;
         worldRotation = m_pendingWorldRotation;
         worldScale = m_pendingWorldScale;
-
-        m_hasPendingParentTransaction = false;
-        m_pendingParent = null;
-        m_pendingParentOptions = TransformParentOptions.KeepWorld;
-        m_pendingWorldPosition = Vector3.ZERO;
-        m_pendingWorldRotation = Quaternion.identity;
-        m_pendingWorldScale = Vector3.ONE;
+        m_hasPendingWorldTransaction = false;
         return true;
     }
 
@@ -302,6 +285,19 @@ public class Transform : Component
         }
     }
 
+    private void BeginWorldTransaction()
+    {
+        if (!m_hasPendingWorldTransaction)
+        {
+            m_pendingWorldPosition = m_worldPosition;
+            m_pendingWorldRotation = m_worldRotation;
+            m_pendingWorldScale = m_worldScale;
+        }
+
+        m_hasPendingWorldTransaction = true;
+        MarkDirty();
+    }
+
     private void MarkDirty()
     {
         if (m_isDirty)
@@ -314,55 +310,6 @@ public class Transform : Component
         {
             m_children[i].MarkDirty();
         }
-    }
-
-    private void MarkChildrenDirty()
-    {
-        for (int i = 0; i < m_children.Count; i++)
-        {
-            m_children[i].MarkDirty();
-        }
-    }
-
-    private void UpdateIfDirty()
-    {
-        if (!m_isDirty)
-        {
-            return;
-        }
-
-        if (m_parent is not null)
-        {
-            m_parent.UpdateIfDirty();
-        }
-
-        if (m_parent is null)
-        {
-            m_worldPosition = m_localPosition;
-            m_worldRotation = m_localRotation;
-            m_worldScale = m_localScale;
-        }
-        else
-        {
-            Vector3 parentScale = m_parent.worldScale;
-            Quaternion parentRotation = m_parent.worldRotation;
-            Vector3 parentPosition = m_parent.worldPosition;
-
-            m_worldScale = new(
-                m_localScale.x * parentScale.x,
-                m_localScale.y * parentScale.y,
-                m_localScale.z * parentScale.z);
-
-            m_worldRotation = (parentRotation * m_localRotation).normalized;
-            Vector3 scaled = new(
-                m_localPosition.x * parentScale.x,
-                m_localPosition.y * parentScale.y,
-                m_localPosition.z * parentScale.z);
-            Vector3 rotated = Vector3.Transform(scaled, parentRotation);
-            m_worldPosition = parentPosition + rotated;
-        }
-
-        m_isDirty = false;
     }
 
     private static float SafeDiv(float value, float divisor)

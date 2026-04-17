@@ -12,14 +12,14 @@ public sealed class IdentityRegistry
 {
     private readonly ReaderWriterLockSlim m_lock = new(LockRecursionPolicy.NoRecursion);
 
-    private readonly List<IdentityObject> m_active = new();
-    private readonly Dictionary<IdentityObject, int> m_denseIndexByObject = new(ReferenceComparer<IdentityObject>.INSTANCE);
+    private readonly List<IIdentityObject> m_active = new();
+    private readonly Dictionary<IIdentityObject, int> m_denseIndexByObject = new(ReferenceComparer<IIdentityObject>.INSTANCE);
     private readonly List<int> m_denseToSlot = new();
     private readonly List<int> m_sparseToDense = new();
     private readonly List<int> m_generations = new();
     private readonly Stack<int> m_freeSlots = new();
 
-    private readonly Dictionary<Guid, IdentityObject> m_objectByPersistent = new();
+    private readonly Dictionary<Guid, IIdentityObject> m_objectByPersistent = new();
     private readonly Dictionary<Guid, int> m_runtimeByPersistent = new();
 
     public int count
@@ -38,7 +38,7 @@ public sealed class IdentityRegistry
         }
     }
 
-    public bool Register(IdentityObject obj)
+    public bool Register(IIdentityObject obj)
     {
         ArgumentNullException.ThrowIfNull(obj);
 
@@ -48,9 +48,9 @@ public sealed class IdentityRegistry
             if (m_denseIndexByObject.ContainsKey(obj))
                 return false;
 
-            Identity identity = obj.identity;
-            Guid persistentId = identity.persistentId == Guid.Empty ? Guid.NewGuid() : identity.persistentId;
-            if (m_objectByPersistent.TryGetValue(persistentId, out IdentityObject? existing) && !ReferenceEquals(existing, obj))
+            Identity identity = obj.GetIdentity();
+            Guid persistentId = identity.persistentId;
+            if (m_objectByPersistent.TryGetValue(persistentId, out IIdentityObject? existing) && !ReferenceEquals(existing, obj))
                 throw new InvalidOperationException($"Persistent id '{persistentId}' is already registered.");
 
             int slot = AllocateSlot();
@@ -77,7 +77,7 @@ public sealed class IdentityRegistry
         }
     }
 
-    public bool Unregister(IdentityObject obj)
+    public bool Unregister(IIdentityObject obj)
     {
         ArgumentNullException.ThrowIfNull(obj);
 
@@ -87,11 +87,11 @@ public sealed class IdentityRegistry
             if (!m_denseIndexByObject.TryGetValue(obj, out int denseIndex))
                 return false;
 
-            Identity identity = obj.identity;
+            Identity identity = obj.GetIdentity();
             Guid persistentId = identity.persistentId;
 
             int lastIndex = m_active.Count - 1;
-            IdentityObject lastObj = m_active[lastIndex];
+            IIdentityObject lastObj = m_active[lastIndex];
             int removedSlot = m_denseToSlot[denseIndex];
             int lastSlot = m_denseToSlot[lastIndex];
 
@@ -130,7 +130,7 @@ public sealed class IdentityRegistry
         }
     }
 
-    public bool TryGet(int runtimeId, out IdentityObject? obj)
+    public bool TryGet(int runtimeId, out IIdentityObject? obj)
     {
         m_lock.EnterReadLock();
         try
@@ -150,7 +150,7 @@ public sealed class IdentityRegistry
         }
     }
 
-    public bool TryGet(Guid persistentId, out IdentityObject? obj)
+    public bool TryGet(Guid persistentId, out IIdentityObject? obj)
     {
         if (persistentId == Guid.Empty)
         {
@@ -238,4 +238,5 @@ public sealed class IdentityRegistry
         public int GetHashCode(T obj)
             => RuntimeHelpers.GetHashCode(obj);
     }
+
 }

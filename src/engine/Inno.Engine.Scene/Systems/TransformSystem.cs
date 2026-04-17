@@ -24,6 +24,10 @@ public sealed class TransformSystem : System<Transform>
         }
 
         BuildSets(transforms);
+        RefreshRoots();
+        UpdateHierarchies();
+        ResolveWorldTransactions();
+        UpdateHierarchies();
         ResolveParentTransactions();
         RefreshRoots();
         UpdateHierarchies();
@@ -46,16 +50,26 @@ public sealed class TransformSystem : System<Transform>
         }
     }
 
+    private void ResolveWorldTransactions()
+    {
+        foreach (Transform transform in m_all)
+        {
+            if (!transform.TryConsumeWorldTransaction(out Vector3 worldPosition, out Quaternion worldRotation, out Vector3 worldScale))
+            {
+                continue;
+            }
+
+            transform.ApplyLocalFromWorldFromSystem(worldPosition, worldRotation, worldScale);
+        }
+    }
+
     private void ResolveParentTransactions()
     {
         foreach (Transform transform in m_all)
         {
             if (!transform.TryConsumeParentTransaction(
                     out Transform? requestedParent,
-                    out TransformParentOptions options,
-                    out Vector3 worldPosition,
-                    out Quaternion worldRotation,
-                    out Vector3 worldScale))
+                    out TransformParentOptions options))
             {
                 continue;
             }
@@ -78,6 +92,9 @@ public sealed class TransformSystem : System<Transform>
                 }
             }
 
+            Vector3 worldPosition = transform.worldPosition;
+            Quaternion worldRotation = transform.worldRotation;
+            Vector3 worldScale = transform.worldScale;
             transform.ApplyParentFromSystem(targetParent);
 
             if (options == TransformParentOptions.KeepWorld)
