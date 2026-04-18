@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -25,8 +26,15 @@ public sealed unsafe partial class PlatformImGuiContext
     private readonly PlatformImGuiViewportBackend? m_viewports;
     private readonly PlatformImGuiSdlRenderer m_renderer;
     private readonly Dictionary<ImGuiMouseCursor, SDLCursorPtr> m_cursors = [];
+    private readonly Stopwatch m_frameTimer = Stopwatch.StartNew();
+
     private ImGuiMouseCursor m_currentCursor = ImGuiMouseCursor.None;
     private SDLWindowPtr m_textInputWindow = SDLWindowPtr.Null;
+    private TimeSpan m_lastFrameTime;
+    private Action? m_lastDrawFrame;
+    private uint m_liveResizeLockedWindowId;
+    private bool m_pendingLiveResizeSnapCheck;
+    private bool m_isFrameActive;
     private bool m_textInputActive;
     private bool m_disposed;
 
@@ -236,6 +244,7 @@ public sealed unsafe partial class PlatformImGuiContext
 
         ImGuiNative.SetCurrentContext(m_context);
         var io = ImGuiNative.GetIO();
+        var eventType = (SDLEventType)sdlEvent.Type;
 
         if (!TryGetWindowId(ref sdlEvent, out var eventWindowId))
         {
@@ -247,18 +256,12 @@ public sealed unsafe partial class PlatformImGuiContext
             return;
         }
 
-        if (m_viewports != null && m_viewports.TryGetViewportId(eventWindowId, out var hoveredViewportId))
-        {
-            io.AddMouseViewportEvent(hoveredViewportId);
-        }
-        else if (eventWindowId == m_window.windowId)
-        {
-            io.AddMouseViewportEvent(ImGuiNative.GetMainViewport().ID);
-        }
+        RefreshLiveResizeHoverLock(eventType, eventWindowId, ref sdlEvent);
+        var viewportWindowId = ResolveViewportEventWindowId(eventWindowId);
+        QueueHoveredViewportEvent(io, viewportWindowId);
 
         m_viewports?.ProcessEvent(ref sdlEvent, eventWindowId);
 
-        var eventType = (SDLEventType)sdlEvent.Type;
         switch (eventType)
         {
             case SDLEventType.KeyDown:
@@ -361,10 +364,85 @@ public sealed unsafe partial class PlatformImGuiContext
             case SDLEventType.WindowPixelSizeChanged:
                 UpdateDisplayMetrics(io);
                 break;
+
+            case SDLEventType.WindowExposed:
+                UpdateDisplayMetrics(io);
+                break;
         }
     }
 
-    public partial void BeginFrame(float deltaTimeSeconds)
+    internal void RenderLiveResizeWindow(uint windowId)
+    {
+        if (m_disposed)
+        {
+            return;
+        }
+
+        var ownsMainWindow = windowId == m_window.windowId;
+        var ownsViewportWindow = m_viewports?.OwnsWindow(windowId) == true;
+        if (!ownsMainWindow && !ownsViewportWindow)
+        {
+            return;
+        }
+
+        if (m_isFrameActive)
+        {
+            return;
+        }
+
+        ImGuiNative.SetCurrentContext(m_context);
+        var liveResizeDraw = m_lastDrawFrame;
+        if (liveResizeDraw is null)
+        {
+            return;
+        }
+
+        if (ownsViewportWindow)
+        {
+            m_viewports?.SyncLiveResizeWindow(windowId);
+        }
+
+        var now = m_frameTimer.Elapsed;
+        m_liveResizeLockedWindowId = windowId;
+        var deltaSeconds = (float)(now - m_lastFrameTime).TotalSeconds;
+        m_lastFrameTime = now;
+
+        BeginFrame(deltaSeconds);
+        try
+        {
+            liveResizeDraw();
+            _ = EndFrame();
+        }
+        catch
+        {
+            m_isFrameActive = false;
+            throw;
+        }
+    }
+
+    public partial IntPtr RenderFrame(Action drawFrame)
+    {
+        ArgumentNullException.ThrowIfNull(drawFrame);
+        m_lastDrawFrame = drawFrame;
+
+        var now = m_frameTimer.Elapsed;
+        var deltaSeconds = (float)(now - m_lastFrameTime).TotalSeconds;
+        m_lastFrameTime = now;
+
+        BeginFrame(deltaSeconds);
+        try
+        {
+            drawFrame();
+            return EndFrame();
+        }
+        catch
+        {
+            m_isFrameActive = false;
+            throw;
+        }
+    }
+
+    internal void BeginFrame(float deltaTimeSeconds)
     {
         if (m_disposed)
         {
@@ -378,12 +456,14 @@ public sealed unsafe partial class PlatformImGuiContext
         UpdateDisplayMetrics(io);
         io.DeltaTime = deltaTimeSeconds > 0f ? deltaTimeSeconds : (1f / 60f);
         UpdateMouseData(io, m_window.sdlWindow);
+        ApplyLiveResizeViewportPolicy(io);
         UpdateTextInputState(io);
         
+        m_isFrameActive = true;
         ImGuiNative.NewFrame();
     }
 
-    public partial IntPtr EndFrame()
+    internal IntPtr EndFrame()
     {
         if (m_disposed)
         {
@@ -392,21 +472,113 @@ public sealed unsafe partial class PlatformImGuiContext
         
         var io = ImGuiNative.GetIO();
         
-        ImGuiNative.SetCurrentContext(m_context);
-        UpdateMouseCursor(io);
-        ImGuiNative.SetMouseCursor(ImGuiMouseCursor.None);
-        ImGuiNative.Render();
-
-        io.MouseDrawCursor = false;
-        var drawData = ImGuiNative.GetDrawData();
-        m_renderer.Render(drawData);
-        if ((io.ConfigFlags & ImGuiConfigFlags.ViewportsEnable) != 0)
+        try
         {
-            ImGuiNative.UpdatePlatformWindows();
-            ImGuiNative.RenderPlatformWindowsDefault();
             ImGuiNative.SetCurrentContext(m_context);
+            UpdateMouseCursor(io);
+            ImGuiNative.SetMouseCursor(ImGuiMouseCursor.None);
+            ImGuiNative.Render();
+
+            io.MouseDrawCursor = false;
+            var drawData = ImGuiNative.GetDrawData();
+            m_renderer.Render(drawData);
+            if ((io.ConfigFlags & ImGuiConfigFlags.ViewportsEnable) != 0)
+            {
+                ImGuiNative.UpdatePlatformWindows();
+                ImGuiNative.RenderPlatformWindowsDefault();
+                ImGuiNative.SetCurrentContext(m_context);
+            }
+
+            return new IntPtr(drawData);
         }
-        return new IntPtr(drawData);
+        finally
+        {
+            m_isFrameActive = false;
+        }
+    }
+
+    private void RefreshLiveResizeHoverLock(SDLEventType eventType, uint eventWindowId, ref SDLEvent sdlEvent)
+    {
+        if (eventType != SDLEventType.WindowExposed)
+        {
+            return;
+        }
+
+        if (sdlEvent.Window.Data1 != 0)
+        {
+            m_liveResizeLockedWindowId = eventWindowId;
+            m_pendingLiveResizeSnapCheck = false;
+            return;
+        }
+
+        if (m_liveResizeLockedWindowId != 0
+            && eventWindowId == m_liveResizeLockedWindowId
+            && sdlEvent.Window.Data1 == 0)
+        {
+            m_liveResizeLockedWindowId = 0;
+            m_pendingLiveResizeSnapCheck = true;
+        }
+    }
+
+    private uint ResolveViewportEventWindowId(uint eventWindowId)
+    {
+        if (m_liveResizeLockedWindowId == 0 || eventWindowId == m_liveResizeLockedWindowId)
+        {
+            return eventWindowId;
+        }
+
+        if (m_liveResizeLockedWindowId == m_window.windowId)
+        {
+            return m_liveResizeLockedWindowId;
+        }
+
+        if (m_viewports != null && m_viewports.OwnsWindow(m_liveResizeLockedWindowId))
+        {
+            return m_liveResizeLockedWindowId;
+        }
+
+        return eventWindowId;
+    }
+
+    private void ApplyLiveResizeViewportPolicy(ImGuiIOPtr io)
+    {
+        if (m_liveResizeLockedWindowId != 0)
+        {
+            QueueHoveredViewportEvent(io, m_liveResizeLockedWindowId);
+            return;
+        }
+
+        if (!m_pendingLiveResizeSnapCheck)
+        {
+            return;
+        }
+
+        var focusedWindow = SDL.GetMouseFocus();
+        if (!focusedWindow.IsNull)
+        {
+            QueueHoveredViewportEvent(io, SDL.GetWindowID(focusedWindow));
+        }
+
+        m_pendingLiveResizeSnapCheck = false;
+    }
+
+    private void QueueHoveredViewportEvent(ImGuiIOPtr io, uint windowId)
+    {
+        if (windowId == 0)
+        {
+            return;
+        }
+
+        if (windowId == m_window.windowId)
+        {
+            io.AddMouseViewportEvent(ImGuiNative.GetMainViewport().ID);
+            return;
+        }
+
+        if (m_viewports != null && m_viewports.TryGetViewportId(windowId, out var viewportId))
+        {
+            io.AddMouseViewportEvent(viewportId);
+        }
     }
 
     public partial void Dispose()
@@ -748,6 +920,7 @@ public sealed unsafe partial class PlatformImGuiContext
             case SDLEventType.WindowFocusLost:
             case SDLEventType.WindowMouseLeave:
             case SDLEventType.WindowDisplayScaleChanged:
+            case SDLEventType.WindowExposed:
             case SDLEventType.WindowMoved:
             case SDLEventType.WindowResized:
             case SDLEventType.WindowPixelSizeChanged:
@@ -760,4 +933,5 @@ public sealed unsafe partial class PlatformImGuiContext
                 return false;
         }
     }
+
 }

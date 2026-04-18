@@ -92,6 +92,7 @@ public static class PlatformApplicationImGuiExtensions
             }
 
             PlatformApplicationHooks.s_onSdlEvent += OnSdlEvent;
+            PlatformApplicationHooks.s_onLiveResizeRedraw += OnLiveResizeRedraw;
             PlatformApplicationHooks.s_onDisposing += OnApplicationDisposing;
             s_hooksInstalled = true;
         }
@@ -107,6 +108,19 @@ public static class PlatformApplicationImGuiExtensions
         foreach (var context in state.contexts.Values)
         {
             context.ProcessEvent(ref sdlEvent);
+        }
+    }
+
+    private static void OnLiveResizeRedraw(PlatformApplication application, uint windowId)
+    {
+        if (!s_states.TryGetValue(application, out var state))
+        {
+            return;
+        }
+
+        foreach (var context in state.contexts.Values)
+        {
+            context.RenderLiveResizeWindow(windowId);
         }
     }
 

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Threading;
 using Inno.Core.Events;
 using Inno.Core.Input;
 using Inno.Native.SDL3;
@@ -9,9 +11,14 @@ namespace Inno.Platform;
 /// <summary>
 /// Platform runtime entry point responsible for window creation and platform event polling.
 /// </summary>
-public sealed partial class PlatformApplication
+public sealed unsafe partial class PlatformApplication
 {
     private readonly Dictionary<uint, PlatformWindow> m_windows = [];
+    private SDLEventFilter? m_liveResizeEventWatch;
+    private SDLMainThreadCallback? m_liveResizeMainThreadCallback;
+    private GCHandle m_liveResizeEventWatchHandle;
+    private int m_liveResizeRedrawQueued;
+    private uint m_liveResizeWindowId;
     private bool m_disposed;
 
     private void Initialize()
@@ -25,6 +32,17 @@ public sealed partial class PlatformApplication
         if (!SDL.Init((uint)(SDLInitFlags.Video | SDLInitFlags.Events)))
         {
             throw SDL.GetErrorAsException() ?? new InvalidOperationException("SDL_Init failed.");
+        }
+
+        m_liveResizeEventWatch = LiveResizeEventWatch;
+        m_liveResizeMainThreadCallback = LiveResizeMainThreadCallback;
+        m_liveResizeEventWatchHandle = GCHandle.Alloc(this, GCHandleType.Normal);
+        var userData = (nint)GCHandle.ToIntPtr(m_liveResizeEventWatchHandle);
+        if (!SDL.AddEventWatch(m_liveResizeEventWatch, userData))
+        {
+            m_liveResizeEventWatchHandle.Free();
+            m_liveResizeEventWatch = null;
+            m_liveResizeMainThreadCallback = null;
         }
     }
 
@@ -74,7 +92,16 @@ public sealed partial class PlatformApplication
         {
             return;
         }
-        
+
+        if (m_liveResizeEventWatch is not null && m_liveResizeEventWatchHandle.IsAllocated)
+        {
+            var userData = (nint)GCHandle.ToIntPtr(m_liveResizeEventWatchHandle);
+            SDL.RemoveEventWatch(m_liveResizeEventWatch, userData);
+            m_liveResizeEventWatchHandle.Free();
+            m_liveResizeEventWatch = null;
+            m_liveResizeMainThreadCallback = null;
+        }
+
         PlatformApplicationHooks.OnDisposing(this);
 
         foreach (var window in m_windows.Values)
@@ -85,6 +112,59 @@ public sealed partial class PlatformApplication
         m_windows.Clear();
         SDL.Quit();
         m_disposed = true;
+    }
+
+    private static unsafe byte LiveResizeEventWatch(void* userData, SDLEvent* evnt)
+    {
+        if (userData == null || evnt == null)
+        {
+            return 1;
+        }
+
+        var eventType = (SDLEventType)evnt->Type;
+        if (eventType != SDLEventType.WindowExposed || evnt->Window.Data1 == 0)
+        {
+            return 1;
+        }
+
+        var handle = GCHandle.FromIntPtr((IntPtr)userData);
+        if (handle.Target is not PlatformApplication application || application.m_disposed)
+        {
+            return 1;
+        }
+
+        Volatile.Write(ref application.m_liveResizeWindowId, evnt->Window.WindowID);
+        if (Interlocked.Exchange(ref application.m_liveResizeRedrawQueued, 1) == 0)
+        {
+            var userDataPtr = (nint)GCHandle.ToIntPtr(application.m_liveResizeEventWatchHandle);
+            if (!SDL.RunOnMainThread(application.m_liveResizeMainThreadCallback!, userDataPtr, false))
+            {
+                Interlocked.Exchange(ref application.m_liveResizeRedrawQueued, 0);
+            }
+        }
+
+        return 1;
+    }
+
+    private static unsafe void LiveResizeMainThreadCallback(void* userData)
+    {
+        if (userData == null)
+        {
+            return;
+        }
+
+        var handle = GCHandle.FromIntPtr((IntPtr)userData);
+        if (handle.Target is not PlatformApplication application || application.m_disposed)
+        {
+            return;
+        }
+
+        var windowId = Volatile.Read(ref application.m_liveResizeWindowId);
+        Interlocked.Exchange(ref application.m_liveResizeRedrawQueued, 0);
+        if (windowId != 0)
+        {
+            PlatformApplicationHooks.DispatchLiveResizeRedraw(application, windowId);
+        }
     }
 
     private bool TryTranslateEvent(ref SDLEvent sdlEvent, out Event? evnt)

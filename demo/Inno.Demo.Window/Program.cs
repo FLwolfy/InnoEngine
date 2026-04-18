@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 using Inno.Core.Events;
 using Inno.Platform;
 using Inno.Platform.ImGui;
@@ -21,9 +19,11 @@ internal static class Program
             highPixelDensity = true
         });
         using var imgui = app.CreateImGuiContext(window, enableViewports: true, enableDocking: true);
-
-        var timer = Stopwatch.StartNew();
-        var lastTime = timer.Elapsed;
+        static void DrawUi()
+        {
+            _ = ImGui.DockSpaceOverViewport();
+            ImGui.ShowDemoWindow();
+        }
         var isRunning = true;
         while (isRunning && !window.isClosed)
         {
@@ -41,14 +41,7 @@ internal static class Program
                 break;
             }
 
-            var now = timer.Elapsed;
-            var deltaSeconds = (float)(now - lastTime).TotalSeconds;
-            lastTime = now;
-
-            imgui.BeginFrame(deltaSeconds);
-            _ = ImGui.DockSpaceOverViewport();
-            ImGui.ShowDemoWindow();
-            var drawData = imgui.EndFrame();
+            var drawData = imgui.RenderFrame(DrawUi);
             _ = drawData;
         }
 

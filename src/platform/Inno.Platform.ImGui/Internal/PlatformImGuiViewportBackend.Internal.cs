@@ -130,6 +130,61 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
         }
     }
 
+    internal void RenderLiveResizeWindow(uint windowId)
+    {
+        if (!s_windowToViewport.TryGetValue(windowId, out var viewportId))
+        {
+            return;
+        }
+
+        var viewport = FindViewportById(viewportId);
+        if (viewport.IsNull || viewport.Handle == null || viewport.Handle->DrawData == null)
+        {
+            return;
+        }
+
+        if (!TryGetViewportData(viewport.Handle, out var data))
+        {
+            return;
+        }
+
+        EnsureViewportFontTexture(data);
+        RenderDrawData(data.renderer, data.fontTexture, viewport.Handle->DrawData);
+        _ = SDL.RenderPresent(data.renderer);
+    }
+
+    internal void SyncLiveResizeWindow(uint windowId)
+    {
+        if (!s_windowToViewport.TryGetValue(windowId, out var viewportId))
+        {
+            return;
+        }
+
+        var viewport = FindViewportById(viewportId);
+        if (viewport.IsNull || viewport.Handle == null)
+        {
+            return;
+        }
+
+        if (!TryGetViewportData(viewport.Handle, out var data))
+        {
+            return;
+        }
+
+        var width = 0;
+        var height = 0;
+        SDL.GetWindowSize(data.window, ref width, ref height);
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        viewport.Handle->Size = new Vector2(width, height);
+        viewport.Handle->WorkSize = new Vector2(width, height);
+        viewport.Handle->DpiScale = GetWindowDpiScale(data.window);
+        viewport.Handle->PlatformRequestResize = 1;
+    }
+
     public void Dispose()
     {
         if (m_disposed)
