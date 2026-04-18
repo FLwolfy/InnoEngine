@@ -479,6 +479,15 @@ public sealed unsafe partial class PlatformImGuiContext
         
         m_isFrameActive = true;
         ImGuiNative.NewFrame();
+        
+        // During live resize, prevent the main viewport from hosting other windows.
+        var mainViewport = ImGuiNative.GetMainViewport();
+        if (m_liveResizeLockedWindowId != 0
+            && (io.ConfigFlags & ImGuiConfigFlags.ViewportsEnable) != 0
+            && !mainViewport.IsNull)
+        {
+            mainViewport.Flags &= ~ImGuiViewportFlags.CanHostOtherWindows;
+        }
     }
 
     internal IntPtr EndFrame()
