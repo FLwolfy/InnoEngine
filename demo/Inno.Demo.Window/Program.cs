@@ -1,3 +1,4 @@
+using System;
 using Inno.Core.Events;
 using Inno.Platform;
 using Inno.Platform.ImGui;
@@ -31,6 +32,19 @@ internal static class Program
         {
             while (app.PollEvent(out var evnt))
             {
+                switch (evnt)
+                {
+                    case WindowEvent windowEvent:
+                        Console.WriteLine($"[WindowEvent] {windowEvent.GetType().Name} windowId={windowEvent.windowId}");
+                        break;
+                    case KeyEvent keyEvent:
+                        Console.WriteLine($"[KeyEvent] {keyEvent.GetType().Name} windowId={keyEvent.windowId}");
+                        break;
+                    case MouseEvent mouseEvent:
+                        Console.WriteLine($"[MouseEvent] {mouseEvent.GetType().Name} windowId={mouseEvent.windowId}");
+                        break;
+                }
+
                 if (evnt is ApplicationQuitEvent or WindowCloseEvent)
                 {
                     isRunning = false;

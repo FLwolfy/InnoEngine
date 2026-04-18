@@ -5,15 +5,19 @@ namespace Inno.Core.Events;
 /// <summary>
 /// Base class for mouse events.
 /// </summary>
-public abstract class MouseEvent : Event
+public abstract class MouseEvent(uint windowId) : Event
 {
+    /// <summary>
+    /// Gets the source window id for this event.
+    /// </summary>
+    public uint windowId { get; } = windowId;
 }
 
 
 /// <summary>
 /// Raised when the cursor moves.
 /// </summary>
-public class MouseMovedEvent(float x, float y) : MouseEvent
+public class MouseMovedEvent(uint windowId, float x, float y) : MouseEvent(windowId)
 {
     /// <summary>
     /// Gets cursor X coordinate.
@@ -29,7 +33,7 @@ public class MouseMovedEvent(float x, float y) : MouseEvent
 /// <summary>
 /// Raised when mouse wheel scrolls.
 /// </summary>
-public class MouseScrolledEvent(float offsetX, float offsetY) : MouseEvent
+public class MouseScrolledEvent(uint windowId, float offsetX, float offsetY) : MouseEvent(windowId)
 {
     /// <summary>
     /// Gets horizontal scroll offset.
@@ -45,7 +49,7 @@ public class MouseScrolledEvent(float offsetX, float offsetY) : MouseEvent
 /// <summary>
 /// Base class for mouse button events.
 /// </summary>
-public abstract class MouseButtonEvent(MouseButton button) : MouseEvent
+public abstract class MouseButtonEvent(uint windowId, MouseButton button) : MouseEvent(windowId)
 {
     /// <summary>
     /// Gets the mouse button for this event.
@@ -56,13 +60,13 @@ public abstract class MouseButtonEvent(MouseButton button) : MouseEvent
 /// <summary>
 /// Raised when a mouse button is pressed.
 /// </summary>
-public class MouseButtonPressedEvent(MouseButton button) : MouseButtonEvent(button)
+public class MouseButtonPressedEvent(uint windowId, MouseButton button) : MouseButtonEvent(windowId, button)
 {
 }
 
 /// <summary>
 /// Raised when a mouse button is released.
 /// </summary>
-public class MouseButtonReleasedEvent(MouseButton button) : MouseButtonEvent(button)
+public class MouseButtonReleasedEvent(uint windowId, MouseButton button) : MouseButtonEvent(windowId, button)
 {
 }

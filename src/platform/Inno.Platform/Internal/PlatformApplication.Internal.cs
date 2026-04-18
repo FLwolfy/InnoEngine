@@ -13,12 +13,14 @@ namespace Inno.Platform;
 /// </summary>
 public sealed unsafe partial class PlatformApplication
 {
+    private readonly List<Event> m_pendingEvents = [];
     private readonly Dictionary<uint, PlatformWindow> m_windows = [];
     private SDLEventFilter? m_liveResizeEventWatch;
     private SDLMainThreadCallback? m_liveResizeMainThreadCallback;
     private GCHandle m_liveResizeEventWatchHandle;
     private int m_liveResizeRedrawQueued;
     private uint m_liveResizeWindowId;
+    private int m_pendingEventReadIndex;
     private bool m_disposed;
 
     private void Initialize()
@@ -71,19 +73,69 @@ public sealed unsafe partial class PlatformApplication
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
 
+        if (TryDequeuePendingEvent(out evnt))
+        {
+            return true;
+        }
+
+        PollAndCoalescePendingEvents();
+        if (TryDequeuePendingEvent(out evnt))
+        {
+            return true;
+        }
+
+        evnt = null;
+        return false;
+    }
+
+    private bool TryDequeuePendingEvent(out Event? evnt)
+    {
+        if (m_pendingEventReadIndex >= m_pendingEvents.Count)
+        {
+            evnt = null;
+            return false;
+        }
+
+        evnt = m_pendingEvents[m_pendingEventReadIndex++];
+        if (m_pendingEventReadIndex >= m_pendingEvents.Count)
+        {
+            m_pendingEvents.Clear();
+            m_pendingEventReadIndex = 0;
+        }
+
+        return true;
+    }
+
+    private void PollAndCoalescePendingEvents()
+    {
+        m_pendingEvents.Clear();
+        m_pendingEventReadIndex = 0;
+
+        Dictionary<PendingEventCoalesceKey, int> latestEventIndicesByKey = new();
         SDLEvent sdlEvent = default;
         while (SDL.PollEvent(ref sdlEvent))
         {
             PlatformApplicationHooks.DispatchSdlEvent(this, ref sdlEvent);
 
-            if (TryTranslateEvent(ref sdlEvent, out evnt))
+            if (!TryTranslateEvent(ref sdlEvent, out var translatedEvent))
             {
-                return true;
+                continue;
+            }
+
+            if (TryCreatePendingEventCoalesceKey(translatedEvent, out var key)
+                && latestEventIndicesByKey.TryGetValue(key, out var index))
+            {
+                m_pendingEvents[index] = translatedEvent;
+                continue;
+            }
+
+            var nextIndex = m_pendingEvents.Count;
+            m_pendingEvents.Add(translatedEvent);
+            if (TryCreatePendingEventCoalesceKey(translatedEvent, out key))
+            {
+                latestEventIndicesByKey[key] = nextIndex;
             }
         }
-
-        evnt = null;
-        return false;
     }
 
     public partial void Dispose()
@@ -183,7 +235,7 @@ public sealed unsafe partial class PlatformApplication
                     resizedWindow.UpdateSize(sdlEvent.Window.Data1, sdlEvent.Window.Data2);
                 }
 
-                evnt = new WindowResizeEvent(sdlEvent.Window.Data1, sdlEvent.Window.Data2);
+                evnt = new WindowResizeEvent(sdlEvent.Window.WindowID, sdlEvent.Window.Data1, sdlEvent.Window.Data2);
                 return true;
 
             case SDLEventType.WindowCloseRequested:
@@ -192,14 +244,14 @@ public sealed unsafe partial class PlatformApplication
                     closingWindow.MarkClosed();
                 }
 
-                evnt = new WindowCloseEvent();
+                evnt = new WindowCloseEvent(sdlEvent.Window.WindowID);
                 return true;
 
             case SDLEventType.KeyDown:
             {
                 var key = TranslateKey(sdlEvent.Key.Key);
                 var modifiers = TranslateModifiers(sdlEvent.Key.Mod);
-                evnt = new KeyPressedEvent(key, modifiers, sdlEvent.Key.Repeat != 0);
+                evnt = new KeyPressedEvent(sdlEvent.Key.WindowID, key, modifiers, sdlEvent.Key.Repeat != 0);
                 return true;
             }
 
@@ -207,12 +259,12 @@ public sealed unsafe partial class PlatformApplication
             {
                 var key = TranslateKey(sdlEvent.Key.Key);
                 var modifiers = TranslateModifiers(sdlEvent.Key.Mod);
-                evnt = new KeyReleasedEvent(key, modifiers);
+                evnt = new KeyReleasedEvent(sdlEvent.Key.WindowID, key, modifiers);
                 return true;
             }
 
             case SDLEventType.MouseMotion:
-                evnt = new MouseMovedEvent(sdlEvent.Motion.X, sdlEvent.Motion.Y);
+                evnt = new MouseMovedEvent(sdlEvent.Motion.WindowID, sdlEvent.Motion.X, sdlEvent.Motion.Y);
                 return true;
 
             case SDLEventType.MouseWheel:
@@ -225,14 +277,14 @@ public sealed unsafe partial class PlatformApplication
                     wheelY = -wheelY;
                 }
 
-                evnt = new MouseScrolledEvent(wheelX, wheelY);
+                evnt = new MouseScrolledEvent(sdlEvent.Wheel.WindowID, wheelX, wheelY);
                 return true;
             }
 
             case SDLEventType.MouseButtonDown:
                 if (TryTranslateMouseButton(sdlEvent.Button.Button, out var pressedButton))
                 {
-                    evnt = new MouseButtonPressedEvent(pressedButton);
+                    evnt = new MouseButtonPressedEvent(sdlEvent.Button.WindowID, pressedButton);
                     return true;
                 }
 
@@ -241,7 +293,7 @@ public sealed unsafe partial class PlatformApplication
             case SDLEventType.MouseButtonUp:
                 if (TryTranslateMouseButton(sdlEvent.Button.Button, out var releasedButton))
                 {
-                    evnt = new MouseButtonReleasedEvent(releasedButton);
+                    evnt = new MouseButtonReleasedEvent(sdlEvent.Button.WindowID, releasedButton);
                     return true;
                 }
 
@@ -416,4 +468,24 @@ public sealed unsafe partial class PlatformApplication
             _ => KeyCode.Unknown
         };
     }
+
+    private static bool TryCreatePendingEventCoalesceKey(Event evnt, out PendingEventCoalesceKey key)
+    {
+        if (evnt is WindowEvent windowEvent)
+        {
+            key = new PendingEventCoalesceKey(windowEvent.windowId, evnt.GetType());
+            return true;
+        }
+
+        if (evnt is ApplicationEvent)
+        {
+            key = new PendingEventCoalesceKey(0, evnt.GetType());
+            return true;
+        }
+
+        key = default;
+        return false;
+    }
+
+    private readonly record struct PendingEventCoalesceKey(uint windowId, Type eventType);
 }

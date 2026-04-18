@@ -3,15 +3,19 @@ namespace Inno.Core.Events;
 /// <summary>
 /// Base class for window lifecycle events.
 /// </summary>
-public abstract class WindowEvent : Event
+public abstract class WindowEvent(uint windowId) : Event
 {
+    /// <summary>
+    /// Gets the source window id for this event.
+    /// </summary>
+    public uint windowId { get; } = windowId;
 }
 
 
 /// <summary>
 /// Raised when the window size changes.
 /// </summary>
-public class WindowResizeEvent(int width, int height) : WindowEvent
+public class WindowResizeEvent(uint windowId, int width, int height) : WindowEvent(windowId)
 {
     /// <summary>
     /// Gets the new window width.
@@ -27,6 +31,6 @@ public class WindowResizeEvent(int width, int height) : WindowEvent
 /// <summary>
 /// Raised when the window requests close.
 /// </summary>
-public class WindowCloseEvent : WindowEvent
+public class WindowCloseEvent(uint windowId) : WindowEvent(windowId)
 {
 }
