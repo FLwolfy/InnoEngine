@@ -25,14 +25,12 @@ public static class PlatformApplicationImGuiExtensions
     /// </summary>
     /// <param name="application">Target platform application instance.</param>
     /// <param name="window">Target platform window.</param>
-    /// <param name="enableViewports">Whether to enable ImGui multi-viewport support.</param>
-    /// <param name="enableDocking">Whether to enable ImGui docking support.</param>
+    /// <param name="contextFlags">ImGui context feature flags.</param>
     /// <returns>The created or existing <see cref="PlatformImGuiContext"/>.</returns>
     public static PlatformImGuiContext CreateImGuiContext(
         this PlatformApplication application,
         PlatformWindow window,
-        bool enableViewports = true,
-        bool enableDocking = true)
+        ImGuiContextFlags contextFlags)
     {
         ArgumentNullException.ThrowIfNull(application);
         ArgumentNullException.ThrowIfNull(window);
@@ -49,7 +47,7 @@ public static class PlatformApplicationImGuiExtensions
             return existing;
         }
 
-        var context = new PlatformImGuiContext(window, enableViewports, enableDocking);
+        var context = new PlatformImGuiContext(window, contextFlags);
         state.contexts[window.windowId] = context;
         return context;
     }

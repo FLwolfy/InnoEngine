@@ -18,7 +18,9 @@ internal static class Program
             resizable = true,
             highPixelDensity = true
         });
-        using var imgui = app.CreateImGuiContext(window, enableViewports: true, enableDocking: true);
+        using var imgui = app.CreateImGuiContext(
+            window,
+            ImGuiContextFlags.EnableViewports | ImGuiContextFlags.EnableDocking | ImGuiContextFlags.EnableSmoothResize);
         static void DrawUi()
         {
             _ = ImGui.DockSpaceOverViewport();

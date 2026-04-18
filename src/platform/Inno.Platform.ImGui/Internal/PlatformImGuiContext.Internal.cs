@@ -20,6 +20,7 @@ public sealed unsafe partial class PlatformImGuiContext
     private const string DEFAULT_FONTS_DIRECTORY_RELATIVE_PATH = "Assets/Fonts";
     private const string DEFAULT_ICONS_DIRECTORY_RELATIVE_PATH = "Assets/Icons";
     private const string DEFAULT_FONT_FILE_NAME = "JetBrainsMono-Regular.ttf";
+    private const double LIVE_RESIZE_HOVER_LOCK_TIMEOUT_SECONDS = 0.25;
 
     private readonly PlatformWindow m_window;
     private readonly ImGuiContextPtr m_context;
@@ -31,15 +32,20 @@ public sealed unsafe partial class PlatformImGuiContext
     private ImGuiMouseCursor m_currentCursor = ImGuiMouseCursor.None;
     private SDLWindowPtr m_textInputWindow = SDLWindowPtr.Null;
     private TimeSpan m_lastFrameTime;
+    private TimeSpan m_lastLiveResizeLockTime;
     private Action? m_lastDrawFrame;
     private uint m_liveResizeLockedWindowId;
-    private bool m_pendingLiveResizeSnapCheck;
+    private readonly bool m_enableSmoothResize;
     private bool m_isFrameActive;
     private bool m_textInputActive;
     private bool m_disposed;
 
-    internal PlatformImGuiContext(PlatformWindow window, bool enableViewports, bool enableDocking)
+    internal PlatformImGuiContext(PlatformWindow window, ImGuiContextFlags contextFlags)
     {
+        var enableViewports = (contextFlags & ImGuiContextFlags.EnableViewports) != 0;
+        var enableDocking = (contextFlags & ImGuiContextFlags.EnableDocking) != 0;
+        m_enableSmoothResize = (contextFlags & ImGuiContextFlags.EnableSmoothResize) != 0;
+
         m_window = window;
         m_context = ImGuiNative.CreateContext();
         ImGuiNative.SetCurrentContext(m_context);
@@ -256,9 +262,21 @@ public sealed unsafe partial class PlatformImGuiContext
             return;
         }
 
-        RefreshLiveResizeHoverLock(eventType, eventWindowId, ref sdlEvent);
-        var viewportWindowId = ResolveViewportEventWindowId(eventWindowId);
-        QueueHoveredViewportEvent(io, viewportWindowId);
+        var viewportWindowId = eventWindowId;
+        if (m_enableSmoothResize)
+        {
+            RefreshLiveResizeHoverLock(eventType, eventWindowId, ref sdlEvent);
+            viewportWindowId = ResolveViewportEventWindowId(eventWindowId);
+        }
+
+        if (m_viewports != null && m_viewports.TryGetViewportId(viewportWindowId, out var hoveredViewportId))
+        {
+            io.AddMouseViewportEvent(hoveredViewportId);
+        }
+        else if (viewportWindowId == m_window.windowId)
+        {
+            io.AddMouseViewportEvent(ImGuiNative.GetMainViewport().ID);
+        }
 
         m_viewports?.ProcessEvent(ref sdlEvent, eventWindowId);
 
@@ -373,7 +391,7 @@ public sealed unsafe partial class PlatformImGuiContext
 
     internal void RenderLiveResizeWindow(uint windowId)
     {
-        if (m_disposed)
+        if (m_disposed || !m_enableSmoothResize)
         {
             return;
         }
@@ -404,6 +422,7 @@ public sealed unsafe partial class PlatformImGuiContext
 
         var now = m_frameTimer.Elapsed;
         m_liveResizeLockedWindowId = windowId;
+        m_lastLiveResizeLockTime = now;
         var deltaSeconds = (float)(now - m_lastFrameTime).TotalSeconds;
         m_lastFrameTime = now;
 
@@ -456,7 +475,6 @@ public sealed unsafe partial class PlatformImGuiContext
         UpdateDisplayMetrics(io);
         io.DeltaTime = deltaTimeSeconds > 0f ? deltaTimeSeconds : (1f / 60f);
         UpdateMouseData(io, m_window.sdlWindow);
-        ApplyLiveResizeViewportPolicy(io);
         UpdateTextInputState(io);
         
         m_isFrameActive = true;
@@ -499,24 +517,34 @@ public sealed unsafe partial class PlatformImGuiContext
 
     private void RefreshLiveResizeHoverLock(SDLEventType eventType, uint eventWindowId, ref SDLEvent sdlEvent)
     {
-        if (eventType != SDLEventType.WindowExposed)
+        if (m_liveResizeLockedWindowId == 0)
         {
             return;
         }
 
-        if (sdlEvent.Window.Data1 != 0)
+        var now = m_frameTimer.Elapsed;
+        if (eventWindowId == m_liveResizeLockedWindowId)
         {
-            m_liveResizeLockedWindowId = eventWindowId;
-            m_pendingLiveResizeSnapCheck = false;
+            m_lastLiveResizeLockTime = now;
+        }
+
+        if ((now - m_lastLiveResizeLockTime).TotalSeconds > LIVE_RESIZE_HOVER_LOCK_TIMEOUT_SECONDS)
+        {
+            m_liveResizeLockedWindowId = 0;
             return;
         }
 
-        if (m_liveResizeLockedWindowId != 0
+        if (eventType == SDLEventType.WindowExposed
             && eventWindowId == m_liveResizeLockedWindowId
             && sdlEvent.Window.Data1 == 0)
         {
             m_liveResizeLockedWindowId = 0;
-            m_pendingLiveResizeSnapCheck = true;
+            return;
+        }
+
+        if (eventType == SDLEventType.MouseButtonUp && sdlEvent.Button.Button == SDL.SDL_BUTTON_LEFT)
+        {
+            m_liveResizeLockedWindowId = 0;
         }
     }
 
@@ -538,47 +566,6 @@ public sealed unsafe partial class PlatformImGuiContext
         }
 
         return eventWindowId;
-    }
-
-    private void ApplyLiveResizeViewportPolicy(ImGuiIOPtr io)
-    {
-        if (m_liveResizeLockedWindowId != 0)
-        {
-            QueueHoveredViewportEvent(io, m_liveResizeLockedWindowId);
-            return;
-        }
-
-        if (!m_pendingLiveResizeSnapCheck)
-        {
-            return;
-        }
-
-        var focusedWindow = SDL.GetMouseFocus();
-        if (!focusedWindow.IsNull)
-        {
-            QueueHoveredViewportEvent(io, SDL.GetWindowID(focusedWindow));
-        }
-
-        m_pendingLiveResizeSnapCheck = false;
-    }
-
-    private void QueueHoveredViewportEvent(ImGuiIOPtr io, uint windowId)
-    {
-        if (windowId == 0)
-        {
-            return;
-        }
-
-        if (windowId == m_window.windowId)
-        {
-            io.AddMouseViewportEvent(ImGuiNative.GetMainViewport().ID);
-            return;
-        }
-
-        if (m_viewports != null && m_viewports.TryGetViewportId(windowId, out var viewportId))
-        {
-            io.AddMouseViewportEvent(viewportId);
-        }
     }
 
     public partial void Dispose()
