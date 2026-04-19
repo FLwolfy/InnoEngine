@@ -11,6 +11,7 @@ public sealed partial class PlatformWindow
     private SDLWindowPtr m_window;
     private readonly uint m_windowId;
     private readonly string m_title;
+    private readonly bool m_ownsNativeWindow;
     private int m_width;
     private int m_height;
     private bool m_isClosed;
@@ -19,9 +20,15 @@ public sealed partial class PlatformWindow
     internal SDLWindowPtr sdlWindow => m_window;
 
     internal unsafe PlatformWindow(SDLWindowPtr window, string title)
+        : this(window, title, ownsNativeWindow: true)
+    {
+    }
+
+    internal unsafe PlatformWindow(SDLWindowPtr window, string title, bool ownsNativeWindow)
     {
         m_window = window;
         m_title = title;
+        m_ownsNativeWindow = ownsNativeWindow;
         m_windowId = SDL.GetWindowID(m_window);
 
         var currentWidth = 0;
@@ -55,12 +62,12 @@ public sealed partial class PlatformWindow
             return;
         }
 
-        if (!m_window.IsNull)
+        if (!m_window.IsNull && m_ownsNativeWindow)
         {
             SDL.DestroyWindow(m_window);
-            m_window = SDLWindowPtr.Null;
         }
 
+        m_window = SDLWindowPtr.Null;
         m_isClosed = true;
         m_disposed = true;
     }

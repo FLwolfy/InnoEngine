@@ -43,7 +43,7 @@ public sealed partial class PlatformWindow : IDisposable
     public partial void RequestClose();
 
     /// <summary>
-    /// Destroys the underlying native window and releases related resources.
+    /// Releases this instance and its resources, destroying the underlying native window when owned by this instance.
     /// </summary>
     public partial void Dispose();
 }

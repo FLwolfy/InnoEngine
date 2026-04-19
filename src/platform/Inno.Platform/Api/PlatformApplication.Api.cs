@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Inno.Core.Events;
 
 namespace Inno.Platform;
@@ -29,6 +30,15 @@ public sealed partial class PlatformApplication : IDisposable
     /// <param name="evnt">The translated event, or <see langword="null"/> when no event is available.</param>
     /// <returns><see langword="true"/> when an event was returned; otherwise <see langword="false"/>.</returns>
     public partial bool PollEvent(out Event? evnt);
+
+    /// <summary>
+    /// Gets a snapshot of all currently valid platform windows.
+    /// </summary>
+    /// <returns>
+    /// A read-only list containing every currently valid window, including windows created by integrations
+    /// such as ImGui viewports.
+    /// </returns>
+    public partial IReadOnlyList<PlatformWindow> GetWindows();
 
     /// <summary>
     /// Releases all platform resources owned by this application instance.

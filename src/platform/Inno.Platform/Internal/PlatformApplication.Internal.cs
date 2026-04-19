@@ -88,6 +88,49 @@ public sealed unsafe partial class PlatformApplication
         return false;
     }
 
+    public partial IReadOnlyList<PlatformWindow> GetWindows()
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+
+        var count = 0;
+        var nativeWindows = SDL.GetWindows(ref count);
+        if (nativeWindows.IsNull || count <= 0)
+        {
+            return Array.Empty<PlatformWindow>();
+        }
+
+        try
+        {
+            var windows = new List<PlatformWindow>(count);
+            for (var i = 0; i < count; i++)
+            {
+                var nativeWindow = nativeWindows[i];
+                if (nativeWindow == null)
+                {
+                    continue;
+                }
+
+                var nativeWindowPtr = new SDLWindowPtr(nativeWindow);
+                var windowId = SDL.GetWindowID(nativeWindowPtr);
+                if (m_windows.TryGetValue(windowId, out var existingWindow))
+                {
+                    windows.Add(existingWindow);
+                    continue;
+                }
+
+                // This includes foreign windows managed by integrations, e.g. ImGui viewports.
+                var title = SDL.GetWindowTitleS(nativeWindowPtr);
+                windows.Add(new PlatformWindow(nativeWindowPtr, title, ownsNativeWindow: false));
+            }
+
+            return windows;
+        }
+        finally
+        {
+            SDL.Free((void*)nativeWindows.Handle);
+        }
+    }
+
     private bool TryDequeuePendingEvent(out Event? evnt)
     {
         if (m_pendingEventReadIndex >= m_pendingEvents.Count)
