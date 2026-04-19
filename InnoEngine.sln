@@ -130,7 +130,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "engine", "engine", "{553600
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Engine.Scene", "src\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj", "{64407888-81A9-4EA5-B44B-AAE5107D2D83}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.JobSystem", "src\core\Inno.Core.JobSystem\Inno.Core.JobSystem.csproj", "{654F7267-E77C-4D4D-9C73-87CEB5E11204}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Job", "src\core\Inno.Core.Job\Inno.Core.Job.csproj", "{654F7267-E77C-4D4D-9C73-87CEB5E11204}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.JobSystem.Tests", "tests\Inno.Core.JobSystem.Tests\Inno.Core.JobSystem.Tests.csproj", "{E8BC703F-C7A0-4E1C-93D4-B6972A4D2499}"
 EndProject

@@ -531,8 +531,18 @@ public sealed unsafe partial class PlatformImGuiContext
             return;
         }
 
+        float mouseX = 0f;
+        float mouseY = 0f;
+        var mouseButtons = SDL.GetMouseState(ref mouseX, ref mouseY);
+        var leftMouseMask = 1u << (SDL.SDL_BUTTON_LEFT - 1);
+        if ((mouseButtons & leftMouseMask) == 0)
+        {
+            m_liveResizeLockedWindowId = 0;
+            return;
+        }
+
         var now = m_frameTimer.Elapsed;
-        if (eventWindowId == m_liveResizeLockedWindowId)
+        if (eventType == SDLEventType.WindowExposed && eventWindowId == m_liveResizeLockedWindowId)
         {
             m_lastLiveResizeLockTime = now;
         }
@@ -585,12 +595,18 @@ public sealed unsafe partial class PlatformImGuiContext
         }
 
         ImGuiNative.SetCurrentContext(m_context);
+        var io = ImGuiNative.GetIO();
         if (m_textInputActive)
         {
             var textInputWindow = m_textInputWindow.IsNull ? m_window.sdlWindow : m_textInputWindow;
             _ = SDL.StopTextInput(textInputWindow);
             m_textInputWindow = SDLWindowPtr.Null;
             m_textInputActive = false;
+        }
+
+        if ((io.ConfigFlags & ImGuiConfigFlags.ViewportsEnable) != 0)
+        {
+            ImGuiNative.DestroyPlatformWindows();
         }
 
         foreach (var cursor in m_cursors.Values)

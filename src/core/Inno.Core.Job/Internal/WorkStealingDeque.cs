@@ -1,6 +1,6 @@
 using System;
 
-namespace Inno.Core.JobSystem.Internal;
+namespace Inno.Core.Job.Internal;
 
 internal sealed class WorkStealingDeque<T>
 {

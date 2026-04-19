@@ -1,8 +1,8 @@
 using System;
-using System.Diagnostics;
-using System.Threading;
+
 using Inno.Core.Events;
-using Inno.Core.Framework;
+using Inno.Core.Job;
+
 using Xunit;
 
 namespace Inno.Core.Framework.Tests;
@@ -17,9 +17,13 @@ public sealed class ShellBehaviorTests
     }
 
     [Fact]
-    public void Constructor_WithNegativeMaxFrameRate_Throws()
+    public void Constructor_WithNonPositiveMaxFrameDelta_Throws()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new Shell(maxFrameRate: -1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Shell(new ShellSettings
+        {
+            fixedDeltaTime = 1f / 60f,
+            maxFrameDeltaTime = 0f
+        }));
     }
 
     [Fact]
@@ -40,316 +44,85 @@ public sealed class ShellBehaviorTests
     }
 
     [Fact]
-    public void Run_InvokesLifecycleCallbacks_AndTerminates()
-    {
-        using var shell = new Shell(fixedDeltaTime: 0.001f);
-
-        var loadCount = 0;
-        var setupCount = 0;
-        var stepCount = 0;
-        var drawCount = 0;
-        var closeCount = 0;
-
-        shell.SetOnLoad(() => loadCount++);
-        shell.SetOnSetup(() => setupCount++);
-        shell.SetOnStep(() =>
-        {
-            stepCount++;
-            Thread.Sleep(1);
-            if (stepCount >= 3)
-            {
-                shell.Terminate();
-            }
-        });
-        shell.SetOnDraw(() => drawCount++);
-        shell.SetOnClose(() => closeCount++);
-
-        shell.Run();
-
-        Assert.Equal(1, loadCount);
-        Assert.Equal(1, setupCount);
-        Assert.True(stepCount >= 3);
-        Assert.True(drawCount >= 1);
-        Assert.Equal(1, closeCount);
-    }
-
-    [Fact]
-    public void Run_OnDisposedShell_Throws()
+    public void Tick_OnDisposedShell_Throws()
     {
         var shell = new Shell();
         shell.Dispose();
-
-        Assert.Throws<ObjectDisposedException>(() => shell.Run());
+        Assert.Throws<ObjectDisposedException>(() => shell.Tick(0f, 0.016f));
     }
 
     [Fact]
-    public void Dispose_IsIdempotent()
+    public void Tick_AdvancesLayers_AndFixedStep()
     {
-        var shell = new Shell();
-        shell.Dispose();
-        shell.Dispose();
-    }
-
-    [Fact]
-    public void Run_AdvancesFixedStepCallback()
-    {
-        using var shell = new Shell(fixedDeltaTime: 0.001f);
-
-        var fixedCount = 0;
-        var stepCount = 0;
-
-        shell.SetOnFixedStep(() => fixedCount++);
-        shell.SetOnStep(() =>
+        using var shell = new Shell(new ShellSettings
         {
-            stepCount++;
-            Thread.Sleep(2);
-            if (fixedCount >= 2 || stepCount >= 20)
-            {
-                shell.Terminate();
-            }
+            fixedDeltaTime = 0.01f,
+            maxFrameDeltaTime = 0.25f
         });
-
-        shell.Run();
-
-        Assert.True(fixedCount >= 1);
-        Assert.True(Time.fixedDeltaTime > 0f);
-    }
-
-    [Fact]
-    public void Run_UsesConfiguredFixedDeltaTime()
-    {
-        const float fixedDelta = 0.02f;
-        using var shell = new Shell(fixedDeltaTime: fixedDelta);
-
-        var fixedCount = 0;
-        shell.SetOnFixedStep(() =>
-        {
-            fixedCount++;
-            if (fixedCount >= 3)
-            {
-                shell.Terminate();
-            }
-        });
-        shell.SetOnStep(() => Thread.Sleep(10));
-
-        shell.Run();
-
-        Assert.True(fixedCount >= 1);
-        Assert.True(Math.Abs(Time.fixedDeltaTime - fixedDelta) < 0.0001f);
-    }
-
-    [Fact]
-    public void SingleThreadMode_ExecutesDrawOnMainThread()
-    {
-        using var shell = new Shell(fixedDeltaTime: 0.001f, useBackgroundRenderThread: false);
-
-        int drawThreadId = 0;
-        var stepCount = 0;
-        int mainThreadId = Environment.CurrentManagedThreadId;
-
-        shell.SetOnDraw(() =>
-        {
-            Interlocked.CompareExchange(ref drawThreadId, Environment.CurrentManagedThreadId, 0);
-        });
-        shell.SetOnStep(() =>
-        {
-            stepCount++;
-            Thread.Sleep(1);
-            if (stepCount >= 3)
-            {
-                shell.Terminate();
-            }
-        });
-
-        shell.Run();
-
-        Assert.NotEqual(0, drawThreadId);
-        Assert.Equal(mainThreadId, drawThreadId);
-    }
-
-    [Fact]
-    public void BackgroundRenderThread_ExecutesDrawOutsideMainThread()
-    {
-        using var shell = new Shell(fixedDeltaTime: 0.001f, useBackgroundRenderThread: true);
-
-        int drawThreadId = 0;
-        var drawCount = 0;
-        var stepCount = 0;
-        var mainThreadId = Environment.CurrentManagedThreadId;
-
-        shell.SetOnDraw(() =>
-        {
-            Interlocked.CompareExchange(ref drawThreadId, Environment.CurrentManagedThreadId, 0);
-            Interlocked.Increment(ref drawCount);
-        });
-        shell.SetOnStep(() =>
-        {
-            stepCount++;
-            Thread.Sleep(1);
-            if (Volatile.Read(ref drawCount) >= 2 || stepCount >= 50)
-            {
-                shell.Terminate();
-            }
-        });
-
-        shell.Run();
-
-        Assert.True(drawCount >= 1);
-        Assert.NotEqual(0, drawThreadId);
-        Assert.NotEqual(mainThreadId, drawThreadId);
-    }
-
-    [Fact]
-    public void MaxFrameRate_LimitsLoopFrequency()
-    {
-        using var shell = new Shell(fixedDeltaTime: 0.001f, maxFrameRate: 30);
-        var stepCount = 0;
-        var timer = Stopwatch.StartNew();
-
-        shell.SetOnStep(() =>
-        {
-            stepCount++;
-            if (stepCount >= 12)
-            {
-                shell.Terminate();
-            }
-        });
-
-        shell.Run();
-        timer.Stop();
-
-        Assert.True(stepCount >= 12);
-        Assert.True(timer.ElapsedMilliseconds >= 220, $"Elapsed was {timer.ElapsedMilliseconds}ms.");
-    }
-
-    [Fact]
-    public void SingleThread_SlowDraw_BlocksStep()
-    {
-        using var shell = new Shell(fixedDeltaTime: 0.001f, useBackgroundRenderThread: false);
-        var stepCount = 0;
-        var timer = Stopwatch.StartNew();
-
-        shell.SetOnDraw(() => Thread.Sleep(20));
-        shell.SetOnStep(() =>
-        {
-            stepCount++;
-            if (stepCount >= 10)
-            {
-                shell.Terminate();
-            }
-        });
-
-        shell.Run();
-        timer.Stop();
-
-        Assert.True(timer.ElapsedMilliseconds >= 150, $"Elapsed was {timer.ElapsedMilliseconds}ms.");
-    }
-
-    [Fact]
-    public void BackgroundRenderThread_SlowDraw_DoesNotBlockStep_FullAsyncBehavior()
-    {
-        using var shell = new Shell(fixedDeltaTime: 0.001f, useBackgroundRenderThread: true);
-        var stepCount = 0;
-        var drawCount = 0;
-        var timer = Stopwatch.StartNew();
-
-        shell.SetOnDraw(() =>
-        {
-            Interlocked.Increment(ref drawCount);
-            Thread.Sleep(20);
-        });
-        shell.SetOnStep(() =>
-        {
-            stepCount++;
-            if (stepCount >= 40)
-            {
-                shell.Terminate();
-            }
-        });
-
-        shell.Run();
-        timer.Stop();
-
-        Assert.True(stepCount >= 40);
-        Assert.True(timer.ElapsedMilliseconds < 450, $"Elapsed was {timer.ElapsedMilliseconds}ms.");
-        Assert.True(drawCount >= 1);
-    }
-
-    [Fact]
-    public void SettingsCtor_AppliesFixedDelta_AndBackgroundRenderThread()
-    {
-        var settings = new ShellSettings
-        {
-            fixedDeltaTime = 0.005f,
-            useBackgroundRenderThread = true,
-            maxFrameRate = 0
-        };
-
-        using var shell = new Shell(in settings);
-        int drawThreadId = 0;
-        int mainThreadId = Environment.CurrentManagedThreadId;
-        var fixedCount = 0;
-
-        shell.SetOnDraw(() =>
-        {
-            Interlocked.CompareExchange(ref drawThreadId, Environment.CurrentManagedThreadId, 0);
-        });
-        shell.SetOnFixedStep(() =>
-        {
-            fixedCount++;
-            if (fixedCount >= 2)
-            {
-                shell.Terminate();
-            }
-        });
-        shell.SetOnStep(() => Thread.Sleep(3));
-
-        shell.Run();
-
-        Assert.True(Math.Abs(Time.fixedDeltaTime - 0.005f) < 0.0001f);
-        Assert.NotEqual(mainThreadId, drawThreadId);
-    }
-
-    [Fact]
-    public void OnClose_IsCalled_WhenStepThrows()
-    {
-        var shell = new Shell(fixedDeltaTime: 0.001f);
-        var closeCount = 0;
-        shell.SetOnClose(() => closeCount++);
-        shell.SetOnStep(() => throw new InvalidOperationException("boom"));
-
-        Assert.Throws<InvalidOperationException>(() => shell.Run());
-        Assert.Equal(1, closeCount);
-
-        using var next = new Shell();
-        Assert.NotNull(next);
-    }
-
-    [Fact]
-    public void EventDispatcher_QueuedEventDispatchedOnNextFlush()
-    {
-        using var shell = new Shell(fixedDeltaTime: 0.001f);
         var layer = new ProbeLayer("probe");
         shell.layerStack.PushLayer(layer);
-        var stepCount = 0;
 
-        shell.SetOnStep(() =>
+        shell.Tick(0.01f, 0.01f);
+        shell.Tick(0.02f, 0.01f);
+
+        Assert.Equal(2, layer.updateCount);
+        Assert.Equal(2, layer.renderCount);
+        Assert.True(layer.fixedCount >= 2);
+    }
+
+    [Fact]
+    public void Tick_ClampsDeltaByMaxFrameDelta()
+    {
+        using var shell = new Shell(new ShellSettings
         {
-            stepCount++;
-            if (stepCount == 1)
-            {
-                shell.eventDispatcher.Enqueue(new ProbeEvent(1));
-            }
-
-            if (stepCount >= 2)
-            {
-                shell.Terminate();
-            }
+            fixedDeltaTime = 1f / 60f,
+            maxFrameDeltaTime = 0.05f
         });
+        var layer = new ProbeLayer("probe");
+        shell.layerStack.PushLayer(layer);
 
-        shell.Run();
+        shell.Tick(1f, 1f);
+
+        Assert.True(layer.lastUpdateDelta <= 0.05f + 0.0001f);
+        Assert.True(Math.Abs(Time.deltaTime - layer.lastUpdateDelta) < 0.0001f);
+        Assert.True(Math.Abs(Time.renderDeltaTime - layer.lastRenderDelta) < 0.0001f);
+    }
+
+    [Fact]
+    public void EventDispatcher_QueuedEventDispatchedOnTick()
+    {
+        using var shell = new Shell();
+        var layer = new EventProbeLayer("event-probe");
+        shell.layerStack.PushLayer(layer);
+
+        shell.eventDispatcher.Enqueue(new ProbeEvent(5));
+        shell.Tick(0.01f, 0.01f);
 
         Assert.Equal(1, layer.receivedCount);
+    }
+
+    [Fact]
+    public void JobSystem_IsAvailableByDefault_AndDrainsMainThreadCallbacks()
+    {
+        using var shell = new Shell();
+        var callbacks = 0;
+
+        _ = JobSystem.Schedule(() => JobSystem.EnqueueMainThread(() => callbacks++));
+        shell.Tick(0.01f, 0.01f);
+
+        Assert.Equal(1, callbacks);
+    }
+
+    [Fact]
+    public void SettingsCtor_AlwaysProvidesJobSystem()
+    {
+        using var shell = new Shell(new ShellSettings
+        {
+            fixedDeltaTime = 1f / 60f,
+            maxFrameDeltaTime = 0.25f
+        });
+
+        Assert.True(JobSystem.workerCount >= 0);
     }
 
     private sealed class ProbeEvent(int value) : Event
@@ -359,11 +132,37 @@ public sealed class ShellBehaviorTests
 
     private sealed class ProbeLayer(string name) : Layer(name)
     {
+        public int fixedCount { get; private set; }
+        public int updateCount { get; private set; }
+        public int renderCount { get; private set; }
+        public float lastUpdateDelta { get; private set; }
+        public float lastRenderDelta { get; private set; }
+
+        public override void OnFixedUpdate(float fixedDeltaTime)
+        {
+            fixedCount++;
+        }
+
+        public override void OnUpdate(float deltaTime)
+        {
+            updateCount++;
+            lastUpdateDelta = deltaTime;
+        }
+
+        public override void OnRender(float renderDeltaTime)
+        {
+            renderCount++;
+            lastRenderDelta = renderDeltaTime;
+        }
+    }
+
+    private sealed class EventProbeLayer(string name) : Layer(name)
+    {
         public int receivedCount { get; private set; }
 
         public override void OnAttach()
         {
-            Listen<ProbeEvent>(_ => receivedCount++);
+            _ = Listen<ProbeEvent>(_ => receivedCount++);
         }
     }
 }

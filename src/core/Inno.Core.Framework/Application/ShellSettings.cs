@@ -11,8 +11,9 @@ public readonly struct ShellSettings
     public ShellSettings()
     {
         fixedDeltaTime = 1f / 60f;
-        useBackgroundRenderThread = false;
-        maxFrameRate = 0;
+        maxFrameDeltaTime = 0.25f;
+        useSingleThreadJobSystem = false;
+        jobWorkerCount = 0;
     }
 
     /// <summary>
@@ -21,12 +22,17 @@ public readonly struct ShellSettings
     public float fixedDeltaTime { get; init; }
 
     /// <summary>
-    /// Whether to run rendering on a dedicated background thread using fully async submission.
+    /// Maximum accepted frame delta in seconds used to clamp unstable frame times.
     /// </summary>
-    public bool useBackgroundRenderThread { get; init; }
+    public float maxFrameDeltaTime { get; init; }
 
     /// <summary>
-    /// Maximum main-loop frame rate. Set to 0 to disable frame limiting.
+    /// Whether to use deterministic single-thread jobs instead of work-stealing workers.
     /// </summary>
-    public int maxFrameRate { get; init; }
+    public bool useSingleThreadJobSystem { get; init; }
+
+    /// <summary>
+    /// Worker thread count for work-stealing jobs. Set to 0 for auto.
+    /// </summary>
+    public int jobWorkerCount { get; init; }
 }

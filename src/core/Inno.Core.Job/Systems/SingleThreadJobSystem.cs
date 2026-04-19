@@ -1,16 +1,14 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Threading;
+using Inno.Core.Job.Internal;
 
-using Inno.Core.JobSystem.Internal;
-
-namespace Inno.Core.JobSystem;
+namespace Inno.Core.Job;
 
 /// <summary>
-/// Multi-threaded job scheduler backed by a fixed worker pool and work-stealing queues.
+/// Single-threaded deterministic job scheduler.
 /// </summary>
-public sealed class WorkStealingJobSystem : IJobSystem
+public sealed class SingleThreadJobSystem : IJobSystem
 {
     private static readonly Action<object?> s_noop = static _ => { };
     private static readonly Action<object?> s_actionInvoker = static state => ((Action?)state)?.Invoke();
@@ -22,57 +20,32 @@ public sealed class WorkStealingJobSystem : IJobSystem
     };
 
     private readonly object m_jobsGate = new();
-    private readonly ConcurrentQueue<int> m_globalInjectQueue = new();
     private readonly ConcurrentQueue<Action> m_mainThreadQueue = new();
-    private readonly ManualResetEventSlim m_completionSignal = new(false);
-    private readonly SemaphoreSlim m_wakeSignal = new(0);
-    private readonly ThreadLocal<int> m_currentWorkerId = new(() => -1, trackAllValues: false);
-    private readonly WorkerRuntime[] m_workers;
-
+    private readonly Queue<int> m_readyQueue = new();
     private readonly List<JobRecord> m_jobs = [];
     private readonly Stack<int> m_freeIndices = [];
     private readonly List<int> m_frameJobs = [];
 
     private readonly int m_mainThreadId;
-    private readonly int m_workerCount;
-    private bool m_disposed;
     private bool m_frameActive;
-    private int m_running;
+    private bool m_disposed;
 
     /// <summary>
-    /// Creates a job system with default options.
+    /// Creates a deterministic single-thread scheduler.
     /// </summary>
-    public WorkStealingJobSystem()
-        : this(new JobSystemOptions())
-    {
-    }
-
-    /// <summary>
-    /// Creates a job system with explicit options.
-    /// </summary>
-    public WorkStealingJobSystem(JobSystemOptions options)
+    public SingleThreadJobSystem()
     {
         m_mainThreadId = Environment.CurrentManagedThreadId;
-        m_workerCount = options.ResolveWorkerCount();
-        m_workers = new WorkerRuntime[m_workerCount];
-        m_running = 1;
-
-        for (var i = 0; i < m_workers.Length; i++)
-        {
-            var workerId = i;
-            var worker = new WorkerRuntime(workerId, () => WorkerLoop(workerId));
-            m_workers[i] = worker;
-            worker.thread.Start();
-        }
     }
 
     /// <inheritdoc />
-    public int workerCount => m_workerCount;
+    public int workerCount => 0;
 
     /// <inheritdoc />
     public void BeginFrame()
     {
         ThrowIfDisposed();
+        EnsureMainThread();
         lock (m_jobsGate)
         {
             if (m_frameActive)
@@ -82,6 +55,7 @@ public sealed class WorkStealingJobSystem : IJobSystem
 
             m_frameActive = true;
             m_frameJobs.Clear();
+            m_readyQueue.Clear();
         }
     }
 
@@ -89,6 +63,7 @@ public sealed class WorkStealingJobSystem : IJobSystem
     public void EndFrame()
     {
         ThrowIfDisposed();
+        EnsureMainThread();
 
         List<JobHandle> handles = [];
         lock (m_jobsGate)
@@ -111,7 +86,7 @@ public sealed class WorkStealingJobSystem : IJobSystem
             }
         }
 
-        List<Exception>? exceptions = null;
+        List<Exception>? faults = null;
         for (var i = 0; i < handles.Count; i++)
         {
             try
@@ -120,8 +95,8 @@ public sealed class WorkStealingJobSystem : IJobSystem
             }
             catch (Exception ex)
             {
-                exceptions ??= [];
-                exceptions.Add(ex);
+                faults ??= [];
+                faults.Add(ex);
             }
         }
 
@@ -148,9 +123,9 @@ public sealed class WorkStealingJobSystem : IJobSystem
             m_frameActive = false;
         }
 
-        if (exceptions is { Count: > 0 })
+        if (faults is { Count: > 0 })
         {
-            throw new AggregateException("One or more jobs failed during EndFrame.", exceptions);
+            throw new AggregateException("One or more jobs failed during EndFrame.", faults);
         }
     }
 
@@ -166,6 +141,7 @@ public sealed class WorkStealingJobSystem : IJobSystem
     {
         ArgumentNullException.ThrowIfNull(job);
         ThrowIfDisposed();
+        EnsureMainThread();
 
         List<int>? readyIndices = null;
         JobHandle handle;
@@ -240,16 +216,16 @@ public sealed class WorkStealingJobSystem : IJobSystem
         }
 
         var chunkCount = (length + batchSize - 1) / batchSize;
-        var chunkHandles = new JobHandle[chunkCount];
+        var handles = new JobHandle[chunkCount];
         var chunkIndex = 0;
         for (var start = 0; start < length; start += batchSize)
         {
             var end = Math.Min(start + batchSize, length);
-            var rangeState = new ParallelForRangeState(body, start, end);
-            chunkHandles[chunkIndex++] = Schedule(s_parallelRangeInvoker, rangeState, ReadOnlySpan<JobHandle>.Empty);
+            var state = new ParallelForRangeState(body, start, end);
+            handles[chunkIndex++] = Schedule(s_parallelRangeInvoker, state, ReadOnlySpan<JobHandle>.Empty);
         }
 
-        return CombineDependencies(chunkHandles);
+        return CombineDependencies(handles);
     }
 
     /// <inheritdoc />
@@ -261,8 +237,8 @@ public sealed class WorkStealingJobSystem : IJobSystem
         }
 
         ThrowIfDisposed();
+        EnsureMainThread();
 
-        var spinner = new SpinWait();
         while (true)
         {
             if (TryGetCompletion(handle, out var exception))
@@ -275,20 +251,9 @@ public sealed class WorkStealingJobSystem : IJobSystem
                 return;
             }
 
-            if (TryExecuteOneAvailableJob())
+            if (!TryExecuteSingleQueuedJob())
             {
-                spinner.Reset();
-                continue;
-            }
-
-            if (spinner.Count < 12)
-            {
-                spinner.SpinOnce();
-            }
-            else
-            {
-                m_completionSignal.Wait(1);
-                m_completionSignal.Reset();
+                throw new InvalidOperationException("No executable jobs are available while waiting for completion.");
             }
         }
     }
@@ -339,68 +304,33 @@ public sealed class WorkStealingJobSystem : IJobSystem
     /// <inheritdoc />
     public void Dispose()
     {
-        if (m_disposed)
-        {
-            return;
-        }
-
         m_disposed = true;
-        Interlocked.Exchange(ref m_running, 0);
-
-        for (var i = 0; i < m_workers.Length; i++)
-        {
-            m_wakeSignal.Release();
-        }
-
-        for (var i = 0; i < m_workers.Length; i++)
-        {
-            m_workers[i].thread.Join();
-        }
-
-        m_currentWorkerId.Dispose();
-        m_wakeSignal.Dispose();
-        m_completionSignal.Dispose();
     }
 
-    private void WorkerLoop(int workerId)
+    private bool TryExecuteSingleQueuedJob()
     {
-        m_currentWorkerId.Value = workerId;
-        while (Volatile.Read(ref m_running) != 0)
-        {
-            m_wakeSignal.Wait(50);
-            if (Volatile.Read(ref m_running) == 0)
-            {
-                break;
-            }
-
-            while (TryExecuteOneAvailableJob())
-            {
-            }
-        }
-    }
-
-    private bool TryExecuteOneAvailableJob()
-    {
-        if (!TryDequeueWorkItem(out var jobIndex))
-        {
-            return false;
-        }
-
-        Action<object?>? callback = null;
-        object? state = null;
+        int index;
         lock (m_jobsGate)
         {
-            if (!TryGetActiveRecordNoLock(jobIndex, out var record))
+            if (m_readyQueue.Count == 0)
             {
                 return false;
             }
 
-            if (record.executionState != JobExecutionState.Queued)
+            index = m_readyQueue.Dequeue();
+            if (!TryGetActiveRecordNoLock(index, out var record) || record.executionState != JobExecutionState.Queued)
             {
                 return false;
             }
 
             record.executionState = JobExecutionState.Running;
+        }
+
+        Action<object?>? callback;
+        object? state;
+        lock (m_jobsGate)
+        {
+            var record = m_jobs[index];
             callback = record.callback;
             state = record.state;
         }
@@ -418,7 +348,7 @@ public sealed class WorkStealingJobSystem : IJobSystem
         List<int>? readyIndices = null;
         lock (m_jobsGate)
         {
-            if (!TryGetActiveRecordNoLock(jobIndex, out var record))
+            if (!TryGetActiveRecordNoLock(index, out var record))
             {
                 return true;
             }
@@ -456,69 +386,17 @@ public sealed class WorkStealingJobSystem : IJobSystem
             QueueReadyJobs(readyIndices);
         }
 
-        m_completionSignal.Set();
         return true;
-    }
-
-    private bool TryDequeueWorkItem(out int jobIndex)
-    {
-        var workerId = m_currentWorkerId.Value;
-        if (workerId >= 0)
-        {
-            if (m_workers[workerId].localQueue.TryPopBottom(out jobIndex))
-            {
-                return true;
-            }
-        }
-
-        if (m_globalInjectQueue.TryDequeue(out jobIndex))
-        {
-            return true;
-        }
-
-        if (workerId >= 0)
-        {
-            var startVictim = (workerId + 1) % m_workers.Length;
-            for (var i = 0; i < m_workers.Length - 1; i++)
-            {
-                var victim = (startVictim + i) % m_workers.Length;
-                if (m_workers[victim].localQueue.TryStealTop(out jobIndex))
-                {
-                    return true;
-                }
-            }
-        }
-        else
-        {
-            for (var i = 0; i < m_workers.Length; i++)
-            {
-                if (m_workers[i].localQueue.TryStealTop(out jobIndex))
-                {
-                    return true;
-                }
-            }
-        }
-
-        jobIndex = default;
-        return false;
     }
 
     private void QueueReadyJobs(List<int> readyIndices)
     {
-        var workerId = m_currentWorkerId.Value;
-        for (var i = 0; i < readyIndices.Count; i++)
+        lock (m_jobsGate)
         {
-            var index = readyIndices[i];
-            if (workerId >= 0)
+            for (var i = 0; i < readyIndices.Count; i++)
             {
-                m_workers[workerId].localQueue.PushBottom(index);
+                m_readyQueue.Enqueue(readyIndices[i]);
             }
-            else
-            {
-                m_globalInjectQueue.Enqueue(index);
-            }
-
-            m_wakeSignal.Release();
         }
     }
 
@@ -605,7 +483,7 @@ public sealed class WorkStealingJobSystem : IJobSystem
     {
         if (m_disposed)
         {
-            throw new ObjectDisposedException(nameof(WorkStealingJobSystem));
+            throw new ObjectDisposedException(nameof(SingleThreadJobSystem));
         }
     }
 

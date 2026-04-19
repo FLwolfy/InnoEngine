@@ -3,10 +3,10 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-
-using Inno.Core.JobSystem;
-
 using Xunit;
+
+using Inno.Core.Job;
+
 
 namespace Inno.Core.JobSystem.Tests;
 

@@ -1,6 +1,6 @@
 using System;
 
-namespace Inno.Core.JobSystem;
+namespace Inno.Core.Job;
 
 /// <summary>
 /// Job scheduler and worker pool interface.

@@ -1,6 +1,6 @@
 using System;
 
-namespace Inno.Core.JobSystem;
+namespace Inno.Core.Job;
 
 /// <summary>
 /// Options used to configure multi-threaded schedulers such as <see cref="WorkStealingJobSystem"/>.

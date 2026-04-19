@@ -9,9 +9,11 @@
   <ItemGroup>
     <ProjectReference Include="..\Inno.Core.Coroutines\Inno.Core.Coroutines.csproj" />
     <ProjectReference Include="..\Inno.Core.Events\Inno.Core.Events.csproj" />
+    <ProjectReference Include="..\Inno.Core.JobSystem\Inno.Core.JobSystem.csproj" />
   </ItemGroup>
   
   <ItemGroup>
+    <ProjectReference Include="..\Inno.Core.Job\Inno.Core.Job.csproj" />
     <ProjectReference Include="..\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
   </ItemGroup>

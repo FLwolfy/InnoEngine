@@ -1,4 +1,4 @@
-namespace Inno.Core.JobSystem;
+namespace Inno.Core.Job;
 
 /// <summary>
 /// Opaque handle representing a scheduled job.

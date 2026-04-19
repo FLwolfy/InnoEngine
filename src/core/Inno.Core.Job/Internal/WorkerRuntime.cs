@@ -1,6 +1,6 @@
 using System.Threading;
 
-namespace Inno.Core.JobSystem.Internal;
+namespace Inno.Core.Job.Internal;
 
 internal sealed class WorkerRuntime
 {

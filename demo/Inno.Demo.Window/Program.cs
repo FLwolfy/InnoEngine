@@ -1,8 +1,13 @@
 using System;
+using System.Diagnostics;
+using System.Threading;
+
 using Inno.Core.Events;
+using Inno.Core.Framework;
+using Inno.Core.Job;
+using Inno.Native.ImGui;
 using Inno.Platform;
 using Inno.Platform.ImGui;
-using Inno.Native.ImGui;
 
 namespace Inno.Demo.Window;
 
@@ -10,59 +15,138 @@ internal static class Program
 {
     private static int Main()
     {
-        using var app = new PlatformApplication();
-        using var window = app.CreateWindow(new PlatformWindowOptions
+        using var platformApp = new PlatformApplication();
+        using var window = platformApp.CreateWindow(new PlatformWindowOptions
         {
-            title = "Inno Demo",
+            title = "Inno Demo (App + Shell + Layer + JobSystem)",
             width = 1280,
             height = 720,
             resizable = true,
             highPixelDensity = true
         });
-        using var imgui = app.CreateImGuiContext(
+        using var shell = new Shell(new ShellSettings
+        {
+            fixedDeltaTime = 1f / 60f,
+            maxFrameDeltaTime = 0.25f,
+            useSingleThreadJobSystem = false,
+            jobWorkerCount = 0
+        });
+        var imgui = platformApp.CreateImGuiContext(
             window,
             ImGuiContextFlags.EnableViewports | ImGuiContextFlags.EnableDocking | ImGuiContextFlags.EnableSmoothResize);
-        static void DrawUi()
+
+        var jobLayer = new JobDemoLayer();
+        var imguiLayer = new ImGuiDemoLayer(imgui);
+        shell.layerStack.PushLayer(jobLayer);
+        shell.layerStack.PushOverlay(imguiLayer);
+
+        try
         {
-            _ = ImGui.DockSpaceOverViewport();
-            ImGui.ShowDemoWindow();
-        }
-        var isRunning = true;
-        while (isRunning && !window.isClosed)
-        {
-            while (app.PollEvent(out var evnt))
+            var isRunning = true;
+            var timer = Stopwatch.StartNew();
+            var lastTime = 0.0;
+            while (isRunning)
             {
-                switch (evnt)
+                var now = timer.Elapsed.TotalSeconds;
+                var delta = (float)(now - lastTime);
+                lastTime = now;
+                if (delta < 0f)
                 {
-                    case WindowEvent windowEvent:
-                        Console.WriteLine($"[WindowEvent] {windowEvent.GetType().Name} windowId={windowEvent.windowId}");
-                        break;
-                    case KeyEvent keyEvent:
-                        Console.WriteLine($"[KeyEvent] {keyEvent.GetType().Name} windowId={keyEvent.windowId}");
-                        break;
-                    case MouseEvent mouseEvent:
-                        Console.WriteLine($"[MouseEvent] {mouseEvent.GetType().Name} windowId={mouseEvent.windowId}");
-                        break;
+                    delta = 0f;
                 }
 
-                if (evnt is ApplicationQuitEvent or WindowCloseEvent)
+                while (platformApp.PollEvent(out var evnt))
+                {
+                    if (evnt is null)
+                    {
+                        continue;
+                    }
+
+                    switch (evnt)
+                    {
+                        case WindowEvent windowEvent:
+                            Console.WriteLine($"[WindowEvent] {windowEvent.GetType().Name} windowId={windowEvent.windowId}");
+                            break;
+                        case KeyEvent keyEvent:
+                            Console.WriteLine($"[KeyEvent] {keyEvent.GetType().Name} windowId={keyEvent.windowId}");
+                            break;
+                    }
+
+                    shell.eventDispatcher.Enqueue(evnt);
+                    if (evnt is ApplicationQuitEvent)
+                    {
+                        isRunning = false;
+                        break;
+                    }
+
+                    if (evnt is WindowCloseEvent closeEvent && closeEvent.windowId == window.windowId)
+                    {
+                        isRunning = false;
+                        break;
+                    }
+                }
+
+                if (!isRunning || window.isClosed)
                 {
                     isRunning = false;
                     break;
                 }
-            }
 
-            if (!isRunning)
-            {
-                break;
+                shell.Tick((float)now, delta);
             }
-
-            var drawData = imgui.RenderFrame(DrawUi);
-            _ = drawData;
+        }
+        finally
+        {
+            platformApp.DestroyImGuiContext(window);
+            shell.layerStack.PopOverlay(imguiLayer);
+            shell.layerStack.PopLayer(jobLayer);
         }
 
-        app.DestroyImGuiContext(window);
         return 0;
     }
 
+    private sealed class JobDemoLayer : Layer
+    {
+        private bool m_scheduledJobDemo;
+
+        internal JobDemoLayer()
+            : base("JobDemoLayer")
+        {
+        }
+
+        public override void OnUpdate(float deltaTime)
+        {
+            if (m_scheduledJobDemo)
+            {
+                return;
+            }
+
+            m_scheduledJobDemo = true;
+            _ = JobSystem.Schedule(() =>
+            {
+                Thread.Sleep(10);
+                JobSystem.EnqueueMainThread(() => Console.WriteLine("[JobSystem] Background job finished on main thread callback."));
+            });
+        }
+    }
+
+    private sealed class ImGuiDemoLayer : Layer
+    {
+        private readonly PlatformImGuiContext m_imgui;
+
+        internal ImGuiDemoLayer(PlatformImGuiContext imgui)
+            : base("ImGuiDemoLayer")
+        {
+            m_imgui = imgui;
+        }
+
+        public override void OnRender(float renderDeltaTime)
+        {
+            _ = m_imgui.RenderFrame(static () =>
+            {
+                _ = ImGui.DockSpaceOverViewport();
+                ImGui.ShowDemoWindow();
+            });
+        }
+    }
 }

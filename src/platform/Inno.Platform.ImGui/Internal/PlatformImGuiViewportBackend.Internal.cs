@@ -203,6 +203,14 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
         var platformIo = ImGuiNative.GetPlatformIO();
         platformIo.ClearPlatformHandlers();
         platformIo.ClearRendererHandlers();
+
+        var mainViewport = ImGuiNative.GetMainViewport();
+        if (!mainViewport.IsNull)
+        {
+            mainViewport.PlatformHandle = null;
+            mainViewport.PlatformHandleRaw = null;
+        }
+
         m_disposed = true;
     }
 

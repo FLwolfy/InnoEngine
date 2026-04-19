@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Inno.Core.JobSystem.Internal;
+namespace Inno.Core.Job.Internal;
 
 internal sealed class JobRecord
 {
