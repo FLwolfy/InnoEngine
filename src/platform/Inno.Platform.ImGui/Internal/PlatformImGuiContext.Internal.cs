@@ -461,7 +461,7 @@ public sealed unsafe partial class PlatformImGuiContext
         }
     }
 
-    internal void BeginFrame(float deltaTimeSeconds)
+    private void BeginFrame(float deltaTimeSeconds)
     {
         if (m_disposed)
         {
@@ -490,7 +490,7 @@ public sealed unsafe partial class PlatformImGuiContext
         }
     }
 
-    internal IntPtr EndFrame()
+    private IntPtr EndFrame()
     {
         if (m_disposed)
         {

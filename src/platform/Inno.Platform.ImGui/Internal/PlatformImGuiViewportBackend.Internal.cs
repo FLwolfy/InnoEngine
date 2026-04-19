@@ -179,9 +179,16 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
             return;
         }
 
+        var x = 0;
+        var y = 0;
+        _ = SDL.GetWindowPosition(data.window, ref x, ref y);
+
+        viewport.Handle->Pos = new Vector2(x, y);
+        viewport.Handle->WorkPos = new Vector2(x, y);
         viewport.Handle->Size = new Vector2(width, height);
         viewport.Handle->WorkSize = new Vector2(width, height);
         viewport.Handle->DpiScale = GetWindowDpiScale(data.window);
+        viewport.Handle->PlatformRequestMove = 1;
         viewport.Handle->PlatformRequestResize = 1;
     }
 

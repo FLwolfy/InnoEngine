@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.Threading;
 
 using Inno.Core.Events;
 using Inno.Core.Framework;
@@ -33,7 +32,8 @@ internal static class Program
         });
         var imgui = platformApp.CreateImGuiContext(
             window,
-            ImGuiContextFlags.EnableViewports | ImGuiContextFlags.EnableDocking | ImGuiContextFlags.EnableSmoothResize);
+            ImGuiContextFlags.EnableViewports | ImGuiContextFlags.EnableDocking | ImGuiContextFlags.EnableSmoothResize
+        );
 
         var jobLayer = new JobDemoLayer();
         var imguiLayer = new ImGuiDemoLayer(imgui);
@@ -108,6 +108,7 @@ internal static class Program
     private sealed class JobDemoLayer : Layer
     {
         private bool m_scheduledJobDemo;
+        private float m_elapsedSeconds;
 
         internal JobDemoLayer()
             : base("JobDemoLayer")
@@ -121,10 +122,15 @@ internal static class Program
                 return;
             }
 
+            m_elapsedSeconds += deltaTime;
+            if (m_elapsedSeconds < 5f)
+            {
+                return;
+            }
+
             m_scheduledJobDemo = true;
             _ = JobSystem.Schedule(() =>
             {
-                Thread.Sleep(10);
                 JobSystem.EnqueueMainThread(() => Console.WriteLine("[JobSystem] Background job finished on main thread callback."));
             });
         }
