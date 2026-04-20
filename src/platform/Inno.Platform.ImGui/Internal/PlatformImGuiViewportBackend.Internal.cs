@@ -18,8 +18,12 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
         internal SDLTexturePtr fontTexture;
         internal int fontTextureWidth;
         internal int fontTextureHeight;
+        internal nint fontPixelsPtr;
+        internal int fontTexturePitch;
         internal uint windowId;
         internal GCHandle gcHandle;
+        internal SDLVertex[] vertexScratch = [];
+        internal int[] indexScratch = [];
     }
 
     private static readonly PlatformCreateWindow s_platformCreateWindow = PlatformCreateWindowCallback;
@@ -149,7 +153,7 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
         }
 
         EnsureViewportFontTexture(data);
-        RenderDrawData(data.renderer, data.fontTexture, viewport.Handle->DrawData);
+        RenderDrawData(data, data.fontTexture, viewport.Handle->DrawData);
         _ = SDL.RenderPresent(data.renderer);
     }
 
@@ -443,7 +447,7 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
         }
 
         EnsureViewportFontTexture(data);
-        RenderDrawData(data.renderer, data.fontTexture, viewport->DrawData);
+        RenderDrawData(data, data.fontTexture, viewport->DrawData);
     }
 
     private static void RendererSwapBuffersCallback(ImGuiViewport* viewport, void* renderArg)
@@ -626,6 +630,8 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
                 data.fontTexture = SDLTexturePtr.Null;
                 data.fontTextureWidth = 0;
                 data.fontTextureHeight = 0;
+                data.fontPixelsPtr = 0;
+                data.fontTexturePitch = 0;
             }
 
             return;
@@ -659,11 +665,26 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
             data.fontTextureHeight = texData.Height;
         }
 
-        _ = SDL.UpdateTexture(data.fontTexture, SDLRectPtr.Null, texData.Pixels, texData.GetPitch());
+        var pitch = texData.GetPitch();
+        var pixelsPtr = (nint)texData.Pixels;
+        var needsUpload = needsRecreate
+            || data.fontPixelsPtr != pixelsPtr
+            || data.fontTexturePitch != pitch
+            || texData.Status == ImTextureStatus.WantCreate
+            || texData.Status == ImTextureStatus.WantUpdates;
+        if (!needsUpload)
+        {
+            return;
+        }
+
+        _ = SDL.UpdateTexture(data.fontTexture, SDLRectPtr.Null, texData.Pixels, pitch);
+        data.fontPixelsPtr = pixelsPtr;
+        data.fontTexturePitch = pitch;
     }
 
-    private static void RenderDrawData(SDLRendererPtr renderer, SDLTexturePtr fontTexture, ImDrawData* drawDataNative)
+    private static void RenderDrawData(ViewportWindowData data, SDLTexturePtr fontTexture, ImDrawData* drawDataNative)
     {
+        var renderer = data.renderer;
         if (renderer.IsNull || drawDataNative == null || drawDataNative->Valid == 0)
         {
             return;
@@ -686,11 +707,11 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
             }
 
             var vertexCount = drawList.VtxBuffer.Size;
-            var vertices = new SDLVertex[vertexCount];
+            EnsureVertexCapacity(data, vertexCount);
             var srcVertices = drawList.VtxBuffer.Data;
             for (var i = 0; i < vertexCount; i++)
             {
-                vertices[i] = ToSdlVertex(srcVertices[i], clipOff, clipScale);
+                data.vertexScratch[i] = ToSdlVertex(srcVertices[i], clipOff, clipScale);
             }
 
             var cmdCount = drawList.CmdBuffer.Size;
@@ -715,13 +736,13 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
                 _ = SDL.SetRenderClipRect(renderer, clipRect);
 
                 var elemCount = (int)drawCmd.ElemCount;
-                var indices = new int[elemCount];
+                EnsureIndexCapacity(data, elemCount);
                 var srcIndices = drawList.IdxBuffer.Data;
                 var idxOffset = (int)drawCmd.IdxOffset;
                 var vtxOffset = (int)drawCmd.VtxOffset;
                 for (var i = 0; i < elemCount; i++)
                 {
-                    indices[i] = srcIndices[idxOffset + i] + vtxOffset;
+                    data.indexScratch[i] = srcIndices[idxOffset + i] + vtxOffset;
                 }
 
                 var texture = drawCmd.GetTexID() == fontTexId ? fontTexture : TextureFromImGui(drawCmd.GetTexID());
@@ -730,8 +751,8 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
                     texture = fontTexture;
                 }
 
-                fixed (SDLVertex* pVertices = vertices)
-                fixed (int* pIndices = indices)
+                fixed (SDLVertex* pVertices = data.vertexScratch)
+                fixed (int* pIndices = data.indexScratch)
                 {
                     _ = SDL.RenderGeometry(renderer, texture, pVertices, vertexCount, pIndices, elemCount);
                 }
@@ -739,6 +760,26 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
         }
 
         _ = SDL.SetRenderClipRect(renderer, SDLRectPtr.Null);
+    }
+
+    private static void EnsureVertexCapacity(ViewportWindowData data, int required)
+    {
+        if (data.vertexScratch.Length >= required)
+        {
+            return;
+        }
+
+        Array.Resize(ref data.vertexScratch, required);
+    }
+
+    private static void EnsureIndexCapacity(ViewportWindowData data, int required)
+    {
+        if (data.indexScratch.Length >= required)
+        {
+            return;
+        }
+
+        Array.Resize(ref data.indexScratch, required);
     }
 
     private static SDLTexturePtr CreateTexture(SDLRendererPtr renderer, int width, int height)

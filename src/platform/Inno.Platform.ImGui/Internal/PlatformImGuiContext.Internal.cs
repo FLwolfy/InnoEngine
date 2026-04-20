@@ -21,6 +21,7 @@ public sealed unsafe partial class PlatformImGuiContext
     private const string DEFAULT_ICONS_DIRECTORY_RELATIVE_PATH = "Assets/Icons";
     private const string DEFAULT_FONT_FILE_NAME = "JetBrainsMono-Regular.ttf";
     private const double LIVE_RESIZE_HOVER_LOCK_TIMEOUT_SECONDS = 0.25;
+    private const double LIVE_RESIZE_MIN_REDRAW_INTERVAL_SECONDS = 1.0 / 120.0;
 
     private readonly PlatformWindow m_window;
     private readonly ImGuiContextPtr m_context;
@@ -33,6 +34,7 @@ public sealed unsafe partial class PlatformImGuiContext
     private SDLWindowPtr m_textInputWindow = SDLWindowPtr.Null;
     private TimeSpan m_lastFrameTime;
     private TimeSpan m_lastLiveResizeLockTime;
+    private TimeSpan m_lastLiveResizeRenderTime;
     private Action? m_lastDrawFrame;
     private uint m_liveResizeLockedWindowId;
     private readonly bool m_enableSmoothResize;
@@ -421,6 +423,12 @@ public sealed unsafe partial class PlatformImGuiContext
         }
 
         var now = m_frameTimer.Elapsed;
+        if ((now - m_lastLiveResizeRenderTime).TotalSeconds < LIVE_RESIZE_MIN_REDRAW_INTERVAL_SECONDS)
+        {
+            return;
+        }
+
+        m_lastLiveResizeRenderTime = now;
         m_liveResizeLockedWindowId = windowId;
         m_lastLiveResizeLockTime = now;
         var deltaSeconds = (float)(now - m_lastFrameTime).TotalSeconds;
