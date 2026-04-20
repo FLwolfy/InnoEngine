@@ -62,9 +62,9 @@ public static class JobSystem
     }
 
     /// <summary>
-    /// Enqueues a callback that must execute on the main thread.
+    /// Schedules a callback that must execute on the main thread.
     /// </summary>
-    public static void EnqueueMainThread(Action action)
+    public static void RunOnMainThread(Action action)
     {
         JobSystemManager.current.EnqueueMainThread(action);
     }

@@ -66,7 +66,7 @@ public sealed class ShellBehaviorTests
         shell.Tick(0.02f, 0.01f);
 
         Assert.Equal(2, layer.updateCount);
-        Assert.Equal(2, layer.renderCount);
+        Assert.Equal(2, layer.lateUpdateCount);
         Assert.True(layer.fixedCount >= 2);
     }
 
@@ -85,7 +85,7 @@ public sealed class ShellBehaviorTests
 
         Assert.True(layer.lastUpdateDelta <= 0.05f + 0.0001f);
         Assert.True(Math.Abs(Time.deltaTime - layer.lastUpdateDelta) < 0.0001f);
-        Assert.True(Math.Abs(Time.renderDeltaTime - layer.lastRenderDelta) < 0.0001f);
+        Assert.True(Math.Abs(layer.lastLateUpdateDelta - layer.lastUpdateDelta) < 0.0001f);
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public sealed class ShellBehaviorTests
         using var shell = new Shell();
         var callbacks = 0;
 
-        _ = JobSystem.Schedule(() => JobSystem.EnqueueMainThread(() => callbacks++));
+        _ = JobSystem.Schedule(() => JobSystem.RunOnMainThread(() => callbacks++));
         shell.Tick(0.01f, 0.01f);
 
         Assert.Equal(1, callbacks);
@@ -134,9 +134,9 @@ public sealed class ShellBehaviorTests
     {
         public int fixedCount { get; private set; }
         public int updateCount { get; private set; }
-        public int renderCount { get; private set; }
+        public int lateUpdateCount { get; private set; }
         public float lastUpdateDelta { get; private set; }
-        public float lastRenderDelta { get; private set; }
+        public float lastLateUpdateDelta { get; private set; }
 
         public override void OnFixedUpdate(float fixedDeltaTime)
         {
@@ -149,10 +149,10 @@ public sealed class ShellBehaviorTests
             lastUpdateDelta = deltaTime;
         }
 
-        public override void OnRender(float renderDeltaTime)
+        public override void OnLateUpdate(float deltaTime)
         {
-            renderCount++;
-            lastRenderDelta = renderDeltaTime;
+            lateUpdateCount++;
+            lastLateUpdateDelta = deltaTime;
         }
     }
 

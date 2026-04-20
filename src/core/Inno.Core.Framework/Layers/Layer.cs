@@ -40,10 +40,10 @@ public abstract class Layer(string name = "Layer")
     public virtual void OnUpdate(float deltaTime) { }
 
     /// <summary>
-    /// Called when this layer should render.
+    /// Called after <see cref="OnUpdate"/> once per frame.
     /// </summary>
-    /// <param name="renderDeltaTime">Render delta time in seconds.</param>
-    public virtual void OnRender(float renderDeltaTime) { }
+    /// <param name="deltaTime">Frame delta time in seconds.</param>
+    public virtual void OnLateUpdate(float deltaTime) { }
 
     /// <summary>
     /// Subscribes to events in this layer's event hub.

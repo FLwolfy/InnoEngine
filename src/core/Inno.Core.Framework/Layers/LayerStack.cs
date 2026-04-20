@@ -185,16 +185,16 @@ public sealed class LayerStack : IDisposable
     }
 
     /// <summary>
-    /// Executes render callbacks on all layers in stack order.
+    /// Executes late-update callbacks on all layers in stack order.
     /// </summary>
-    /// <param name="renderDeltaTime">Render delta time in seconds.</param>
-    public void OnRender(float renderDeltaTime)
+    /// <param name="deltaTime">Frame delta time in seconds.</param>
+    public void OnLateUpdate(float deltaTime)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
 
         foreach (var entry in m_layers)
         {
-            entry.layer.OnRender(renderDeltaTime);
+            entry.layer.OnLateUpdate(deltaTime);
         }
     }
 

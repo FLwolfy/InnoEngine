@@ -222,7 +222,7 @@ public sealed class LayerStackBehaviorTests
         Assert.Throws<ObjectDisposedException>(() => layerStack.PopOverlay(layer));
         Assert.Throws<ObjectDisposedException>(() => layerStack.OnUpdate(0.1f));
         Assert.Throws<ObjectDisposedException>(() => layerStack.OnFixedUpdate(0.1f));
-        Assert.Throws<ObjectDisposedException>(() => layerStack.OnRender(0.1f));
+        Assert.Throws<ObjectDisposedException>(() => layerStack.OnLateUpdate(0.1f));
     }
 
     private sealed class ProbeEvent(int value) : Event

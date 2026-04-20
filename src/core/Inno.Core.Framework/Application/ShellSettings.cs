@@ -12,6 +12,7 @@ public readonly struct ShellSettings
     {
         fixedDeltaTime = 1f / 60f;
         maxFrameDeltaTime = 0.25f;
+        maxUpdateStepsPerTick = 8;
         useSingleThreadJobSystem = false;
         jobWorkerCount = 0;
     }
@@ -25,6 +26,11 @@ public readonly struct ShellSettings
     /// Maximum accepted frame delta in seconds used to clamp unstable frame times.
     /// </summary>
     public float maxFrameDeltaTime { get; init; }
+
+    /// <summary>
+    /// Maximum number of fixed-step logic updates executed in a single <see cref="Shell.Tick"/> call.
+    /// </summary>
+    public int maxUpdateStepsPerTick { get; init; }
 
     /// <summary>
     /// Whether to use deterministic single-thread jobs instead of work-stealing workers.

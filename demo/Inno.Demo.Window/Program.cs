@@ -27,6 +27,7 @@ internal static class Program
         {
             fixedDeltaTime = 1f / 60f,
             maxFrameDeltaTime = 0.25f,
+            maxUpdateStepsPerTick = 8,
             useSingleThreadJobSystem = false,
             jobWorkerCount = 0
         });
@@ -131,7 +132,7 @@ internal static class Program
             m_scheduledJobDemo = true;
             _ = JobSystem.Schedule(() =>
             {
-                JobSystem.EnqueueMainThread(() => Console.WriteLine("[JobSystem] Background job finished on main thread callback."));
+                JobSystem.RunOnMainThread(() => Console.WriteLine("[JobSystem] Background job finished on main thread callback."));
             });
         }
     }
@@ -146,7 +147,7 @@ internal static class Program
             m_imgui = imgui;
         }
 
-        public override void OnRender(float renderDeltaTime)
+        public override void OnLateUpdate(float deltaTime)
         {
             _ = m_imgui.RenderFrame(static () =>
             {

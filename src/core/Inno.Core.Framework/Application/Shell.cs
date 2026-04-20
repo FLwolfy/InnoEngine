@@ -17,12 +17,14 @@ public sealed class Shell : IDisposable
     private static int s_isShellAlive;
     private const float DEFAULT_FIXED_DELTA_TIME = 1f / 60f;
     private const float DEFAULT_MAX_FRAME_DELTA_TIME = 0.25f;
+    private const int DEFAULT_MAX_UPDATE_STEPS_PER_TICK = 8;
 
     private readonly EventDispatcher m_events;
     private readonly CoroutineScheduler m_coroutines;
     private readonly LayerStack m_layers;
     private readonly float m_fixedDeltaTime;
     private readonly float m_maxFrameDeltaTime;
+    private readonly int m_maxUpdateStepsPerTick;
 
     private float m_fixedAccumulator;
     private bool m_disposed;
@@ -50,6 +52,7 @@ public sealed class Shell : IDisposable
         {
             fixedDeltaTime = fixedDeltaTime,
             maxFrameDeltaTime = DEFAULT_MAX_FRAME_DELTA_TIME,
+            maxUpdateStepsPerTick = DEFAULT_MAX_UPDATE_STEPS_PER_TICK,
             useSingleThreadJobSystem = false,
             jobWorkerCount = 0
         })
@@ -73,6 +76,14 @@ public sealed class Shell : IDisposable
             throw new ArgumentOutOfRangeException(nameof(settings.maxFrameDeltaTime), "maxFrameDeltaTime must be greater than zero.");
         }
 
+        var maxUpdateStepsPerTick = settings.maxUpdateStepsPerTick > 0
+            ? settings.maxUpdateStepsPerTick
+            : DEFAULT_MAX_UPDATE_STEPS_PER_TICK;
+        if (maxUpdateStepsPerTick <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(settings.maxUpdateStepsPerTick), "maxUpdateStepsPerTick must be greater than zero.");
+        }
+
         if (Interlocked.CompareExchange(ref s_isShellAlive, 1, 0) != 0)
         {
             throw new InvalidOperationException("Only one Shell instance can exist at a time.");
@@ -82,6 +93,7 @@ public sealed class Shell : IDisposable
         {
             m_fixedDeltaTime = fixedDeltaTime;
             m_maxFrameDeltaTime = maxFrameDeltaTime;
+            m_maxUpdateStepsPerTick = maxUpdateStepsPerTick;
             m_events = new EventDispatcher();
             m_coroutines = new CoroutineScheduler();
             m_layers = new LayerStack(() => m_events.CreateHub());
@@ -132,16 +144,23 @@ public sealed class Shell : IDisposable
             m_coroutines.Tick(delta);
 
             m_fixedAccumulator += delta;
-            while (m_fixedAccumulator >= m_fixedDeltaTime)
+            var updateSteps = 0;
+            while (m_fixedAccumulator >= m_fixedDeltaTime && updateSteps < m_maxUpdateStepsPerTick)
             {
                 Time.FixedUpdate(m_fixedDeltaTime);
                 m_layers.OnFixedUpdate(m_fixedDeltaTime);
                 m_fixedAccumulator -= m_fixedDeltaTime;
+                updateSteps++;
+            }
+
+            if (updateSteps == m_maxUpdateStepsPerTick && m_fixedAccumulator >= m_fixedDeltaTime)
+            {
+                // Avoid spiral-of-death behavior on long stalls by dropping stale simulation debt.
+                m_fixedAccumulator = 0f;
             }
 
             m_layers.OnUpdate(delta);
-            Time.RenderUpdate(delta);
-            m_layers.OnRender(Time.renderDeltaTime);
+            m_layers.OnLateUpdate(delta);
         }
         finally
         {

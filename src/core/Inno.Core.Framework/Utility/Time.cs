@@ -16,11 +16,6 @@ public static class Time
     public static float deltaTime { get; private set; }
     
     /// <summary>
-    /// The time between render updates.
-    /// </summary>
-    public static float renderDeltaTime { get; private set; }
-
-    /// <summary>
     /// Fixed-step simulation time elapsed since start in seconds.
     /// </summary>
     public static float fixedTime { get; private set; }
@@ -39,15 +34,6 @@ public static class Time
     {
         time = totalTime;
         deltaTime = delta;
-    }
-
-    /// <summary>
-    /// Update the render delta time. This is called by the render pipeline after each frame is rendered.
-    /// </summary>
-    /// <param name="delta">Delta time between render frames.</param>
-    internal static void RenderUpdate(float delta)
-    {
-        renderDeltaTime = delta;
     }
 
     /// <summary>
