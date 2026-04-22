@@ -10,5 +10,5 @@ public static class NativeDllConstants
     /// <summary>Output folder name for native binaries.</summary>
     public const string NATIVE_DIR_NAME = "native";
     /// <summary>Repo folder name containing built native binaries.</summary>
-    public const string LIB_DIR_NAME = "lib";
+    public const string LIB_DIR_NAME = ".lib";
 }
