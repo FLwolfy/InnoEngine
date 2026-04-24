@@ -76,7 +76,7 @@ public static class AssetManager
             artifactRoot = Path.GetFullPath(options.artifactRoot);
             Directory.CreateDirectory(assetRoot);
             Directory.CreateDirectory(artifactRoot);
-            s_fileSystem = new AssetFileSystem(assetRoot, options.enableFileSystemWatcher, options.fileWatcherFlushDelayMs);
+            s_fileSystem = new AssetFileSystem(assetRoot, autoStart: false, options.fileWatcherFlushDelayMs);
             s_fileSystem.ChangedBatch += OnFileSystemChangedBatch;
 
             isInitialized = true;
@@ -89,6 +89,13 @@ public static class AssetManager
 
         if (options.autoRegisterImportersFromTypeCache)
             RegisterImportersFromTypeCache();
+
+        lock (SYNC)
+        {
+            ReconcileStorageState();
+            if (options.enableFileSystemWatcher)
+                s_fileSystem.Start();
+        }
     }
 
     /// <summary>
@@ -302,7 +309,7 @@ public static class AssetManager
 
         string absSourcePath = GetAbsoluteSourcePath(normalized);
         Directory.CreateDirectory(Path.GetDirectoryName(absSourcePath)!);
-        File.WriteAllBytes(absSourcePath, sourceBytes);
+        WriteAllBytesAtomic(absSourcePath, sourceBytes);
 
         Unload(normalized);
         _ = LoadInternal(normalized, asset.GetType(), forceReimport: true);
@@ -616,7 +623,7 @@ public static class AssetManager
         byte[] bytes = SerializingState.Serialize(((ISerializable)meta).CaptureState());
         string metaPath = GetMetaPath(relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(metaPath)!);
-        File.WriteAllBytes(metaPath, bytes);
+        WriteAllBytesAtomic(metaPath, bytes);
     }
 
     private static AssetMeta DeserializeMeta(string metaPath)
@@ -633,7 +640,7 @@ public static class AssetManager
     {
         string artifactPath = GetArtifactPath(relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(artifactPath)!);
-        File.WriteAllBytes(artifactPath, artifactBytes ?? []);
+        WriteAllBytesAtomic(artifactPath, artifactBytes ?? []);
     }
 
     private static string GetMetaPath(string relativePath)
@@ -644,25 +651,30 @@ public static class AssetManager
 
     private static IAssetImporter ResolveImporterByPathOrAssetType(string relativePath, Type assetType)
     {
-        string ext = NormalizeExtension(Path.GetExtension(relativePath));
         lock (SYNC)
         {
-            IReadOnlyList<IAssetImporter> importers = IMPORTERS.All();
-            for (int i = 0; i < importers.Count; i++)
-            {
-                IAssetImporter importer = importers[i];
-                for (int j = 0; j < importer.supportedExtensions.Count; j++)
-                {
-                    if (string.Equals(NormalizeExtension(importer.supportedExtensions[j]), ext, StringComparison.Ordinal))
-                        return importer;
-                }
-            }
-
-            int runtimeTypeId = ResolveRuntimeTypeId(assetType);
-            IAssetImporter? byType = IMPORTERS.First(IMPORTER_TYPE_KEY, runtimeTypeId);
-            if (byType is not null)
-                return byType;
+            return ResolveImporterByPathOrAssetTypeNoLock(relativePath, assetType);
         }
+    }
+
+    private static IAssetImporter ResolveImporterByPathOrAssetTypeNoLock(string relativePath, Type assetType)
+    {
+        string ext = NormalizeExtension(Path.GetExtension(relativePath));
+        IReadOnlyList<IAssetImporter> importers = IMPORTERS.All();
+        for (int i = 0; i < importers.Count; i++)
+        {
+            IAssetImporter importer = importers[i];
+            for (int j = 0; j < importer.supportedExtensions.Count; j++)
+            {
+                if (string.Equals(NormalizeExtension(importer.supportedExtensions[j]), ext, StringComparison.Ordinal))
+                    return importer;
+            }
+        }
+
+        int runtimeTypeId = ResolveRuntimeTypeId(assetType);
+        IAssetImporter? byType = IMPORTERS.First(IMPORTER_TYPE_KEY, runtimeTypeId);
+        if (byType is not null)
+            return byType;
 
         throw new InvalidOperationException($"No importer registered for extension '{ext}' or asset type '{assetType.Name}'.");
     }
@@ -751,50 +763,90 @@ public static class AssetManager
 
     private static void OnFileSystemChangedBatch(IReadOnlyList<AssetChangedEvent> changes)
     {
+        AssetChangedEvent[] sourceChanges;
         lock (SYNC)
         {
-            for (int i = 0; i < changes.Count; i++)
-            {
-                string path = NormalizeRelativePath(changes[i].relativePath);
-                if (string.IsNullOrWhiteSpace(path))
-                    continue;
+            sourceChanges = changes
+                .Where(static x => !IsInternalGeneratedPath(x.relativePath))
+                .ToArray();
 
-                if (changes[i].changeType.HasFlag(WatcherChangeTypes.Renamed))
-                {
-                    HandleRenamedSourcePath(changes[i].oldRelativePath, path);
-                    continue;
-                }
+            if (sourceChanges.Length == 0)
+                return;
 
-                bool wasDeleted = changes[i].changeType.HasFlag(WatcherChangeTypes.Deleted);
-                AssetObject? cached = LOADED_CACHE.First(CACHE_PATH_KEY, path);
-                if (cached is not null)
-                {
-                    Type cachedType = cached.GetType();
-                    RemoveFromCache(cached);
+            AssetChangedEvent[] renamed = sourceChanges
+                .Where(static x => x.changeType.HasFlag(WatcherChangeTypes.Renamed))
+                .ToArray();
+            AssetChangedEvent[] deleted = sourceChanges
+                .Where(static x => !x.changeType.HasFlag(WatcherChangeTypes.Renamed) && x.changeType.HasFlag(WatcherChangeTypes.Deleted))
+                .ToArray();
+            AssetChangedEvent[] createdOrChanged = sourceChanges
+                .Where(static x => !x.changeType.HasFlag(WatcherChangeTypes.Renamed) && !x.changeType.HasFlag(WatcherChangeTypes.Deleted))
+                .ToArray();
 
-                    if (!wasDeleted)
-                    {
-                        try
-                        {
-                            string absSourcePath = GetAbsoluteSourcePath(path);
-                            if (File.Exists(absSourcePath))
-                                _ = LoadInternal(path, cachedType, forceReimport: true);
-                        }
-                        catch
-                        {
-                            // Keep runtime alive; caller can inspect filesystem event and decide recovery path.
-                        }
-                    }
-                }
+            for (int i = 0; i < renamed.Length; i++)
+                HandleRenamedSourcePath(renamed[i].oldRelativePath, renamed[i].relativePath);
 
-                if (wasDeleted)
-                {
-                    CleanupGeneratedFiles(path);
-                }
-            }
+            for (int i = 0; i < deleted.Length; i++)
+                HandleDeletedSourcePath(deleted[i].relativePath);
+
+            for (int i = 0; i < createdOrChanged.Length; i++)
+                HandleCreatedOrChangedSourcePath(createdOrChanged[i].relativePath);
         }
 
-        SourceFileSystemChanged?.Invoke(changes);
+        SourceFileSystemChanged?.Invoke(sourceChanges);
+    }
+
+    private static void HandleDeletedSourcePath(string relativePath)
+    {
+        string path = NormalizeRelativePath(relativePath);
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        if (TryGetLoadedAssetByPath(path, out AssetObject? loaded))
+            RemoveFromCache(loaded);
+
+        CleanupGeneratedFiles(path);
+    }
+
+    private static void HandleCreatedOrChangedSourcePath(string relativePath)
+    {
+        string path = NormalizeRelativePath(relativePath);
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        string absSourcePath = GetAbsoluteSourcePath(path);
+        if (!File.Exists(absSourcePath))
+            return;
+
+        if (TryGetLoadedAssetByPath(path, out AssetObject? loaded))
+        {
+            Type loadedType = loaded.GetType();
+            RemoveFromCache(loaded);
+            try
+            {
+                _ = LoadInternal(path, loadedType, forceReimport: true);
+            }
+            catch
+            {
+                // Keep runtime alive; caller can inspect filesystem event and decide recovery path.
+            }
+            return;
+        }
+
+        _ = TryImportSourceToDisk(path);
+    }
+
+    private static bool TryGetLoadedAssetByPath(string normalizedPath, out AssetObject loaded)
+    {
+        AssetObject? cached = LOADED_CACHE.First(CACHE_PATH_KEY, normalizedPath);
+        if (cached is null)
+        {
+            loaded = null!;
+            return false;
+        }
+
+        loaded = cached;
+        return true;
     }
 
     private static void HandleRenamedSourcePath(string oldRelativePath, string newRelativePath)
@@ -804,48 +856,133 @@ public static class AssetManager
         if (string.IsNullOrWhiteSpace(newPath) || string.IsNullOrWhiteSpace(oldPath))
             return;
 
-        Type? cachedType = null;
+        bool isDirectoryRename = Directory.Exists(GetAbsoluteSourcePath(newPath));
+        if (isDirectoryRename)
+        {
+            HandleRenamedDirectory(oldPath, newPath);
+            return;
+        }
+
+        Type? reloadType = null;
+
         AssetObject? oldCached = LOADED_CACHE.First(CACHE_PATH_KEY, oldPath);
         if (oldCached is not null)
         {
-            cachedType = oldCached.GetType();
-            Guid persistentId = GetIdentity(oldCached).persistentId;
+            reloadType = oldCached.GetType();
             RemoveFromCache(oldCached);
+        }
 
-            // Preserve already-loaded instance availability across rename immediately.
-            AssetObject? conflictByNewPath = LOADED_CACHE.First(CACHE_PATH_KEY, newPath);
-            if (conflictByNewPath is not null)
-                RemoveFromCache(conflictByNewPath);
-
-            if (persistentId != Guid.Empty)
-            {
-                AssetObject? conflictByGuid = LOADED_CACHE.First(CACHE_PERSISTENT_ID_KEY, persistentId);
-                if (conflictByGuid is not null)
-                    RemoveFromCache(conflictByGuid);
-            }
-
-            IDENTITY_REGISTRY.Register(oldCached, persistentId);
-            oldCached.SetSourceInfo(newPath, oldCached.sourceHash);
-            LOADED_CACHE.Add(oldCached)
-                .Set(CACHE_PATH_KEY, newPath)
-                .Set(CACHE_PERSISTENT_ID_KEY, GetIdentity(oldCached).persistentId);
+        AssetObject? newCached = LOADED_CACHE.First(CACHE_PATH_KEY, newPath);
+        if (newCached is not null)
+        {
+            reloadType ??= newCached.GetType();
+            RemoveFromCache(newCached);
         }
 
         MoveGeneratedFiles(oldPath, newPath);
 
-        if (cachedType is null)
+        string absNewSourcePath = GetAbsoluteSourcePath(newPath);
+        if (!File.Exists(absNewSourcePath))
+        {
+            CleanupGeneratedFiles(newPath);
             return;
+        }
 
         try
         {
-            string absNewSourcePath = GetAbsoluteSourcePath(newPath);
-            if (File.Exists(absNewSourcePath))
-                _ = LoadInternal(newPath, cachedType, forceReimport: false);
+            if (reloadType is not null)
+            {
+                _ = LoadInternal(newPath, reloadType, forceReimport: true);
+            }
+            else
+            {
+                _ = TryImportSourceToDisk(newPath);
+            }
         }
         catch
         {
-            // Keep runtime alive; caller can inspect filesystem event and decide recovery path.
+            // Watcher callbacks should not crash the runtime.
         }
+    }
+
+    private static void HandleRenamedDirectory(string oldRelativePath, string newRelativePath)
+    {
+        AssetObject[] affected = LOADED_CACHE.All()
+            .Where(x => IsSameOrUnderPath(x.sourcePath, oldRelativePath))
+            .ToArray();
+
+        for (int i = 0; i < affected.Length; i++)
+        {
+            AssetObject loaded = affected[i];
+            Guid persistentId = GetIdentity(loaded).persistentId;
+            string remapped = RemapPathPrefix(loaded.sourcePath, oldRelativePath, newRelativePath);
+            RemoveFromCache(loaded);
+            IDENTITY_REGISTRY.Register(loaded, persistentId);
+            loaded.SetSourceInfo(remapped, loaded.sourceHash);
+            LOADED_CACHE.Add(loaded)
+                .Set(CACHE_PATH_KEY, remapped)
+                .Set(CACHE_PERSISTENT_ID_KEY, GetIdentity(loaded).persistentId);
+        }
+
+        MoveGeneratedTree(oldRelativePath, newRelativePath);
+    }
+
+    private static bool IsSameOrUnderPath(string path, string parentPath)
+        => string.Equals(path, parentPath, StringComparison.OrdinalIgnoreCase)
+           || path.StartsWith(parentPath + "/", StringComparison.OrdinalIgnoreCase);
+
+    private static string RemapPathPrefix(string path, string oldPrefix, string newPrefix)
+    {
+        if (string.Equals(path, oldPrefix, StringComparison.OrdinalIgnoreCase))
+            return newPrefix;
+
+        return newPrefix + path[oldPrefix.Length..];
+    }
+
+    private static bool IsInternalGeneratedPath(string relativePath)
+    {
+        string path = NormalizeRelativePath(relativePath);
+        if (path.EndsWith(C_META_POSTFIX, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return path.Contains(C_META_POSTFIX + ".", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryImportSourceToDisk(string relativePath)
+    {
+        string normalized = NormalizeRelativePath(relativePath);
+        if (string.IsNullOrWhiteSpace(normalized) || IsInternalGeneratedPath(normalized))
+            return false;
+
+        string absSourcePath = GetAbsoluteSourcePath(normalized);
+        if (!File.Exists(absSourcePath))
+            return false;
+
+        IAssetImporter importer;
+        try
+        {
+            importer = ResolveImporterByPathOrAssetTypeNoLock(normalized, typeof(AssetObject));
+        }
+        catch
+        {
+            return false;
+        }
+
+        byte[] sourceBytes = File.ReadAllBytes(absSourcePath);
+        string sourceHash = ComputeSha256Hex(sourceBytes);
+        var context = new AssetImportContext(normalized, absSourcePath, sourceBytes, sourceHash);
+        AssetImportResult<AssetObject> importResult = importer.Import(context);
+
+        AssetObject imported = importResult.asset;
+        Guid persistentId = ReadPersistentIdFromMeta(normalized) ?? GetIdentity(imported).persistentId;
+        if (persistentId == Guid.Empty)
+            persistentId = Guid.NewGuid();
+
+        imported.SetSourceInfo(normalized, sourceHash);
+        imported.SetRuntimePayload(importResult.artifactBytes);
+        PersistMeta(normalized, importer, imported, persistentId, importResult.dependencies);
+        PersistArtifact(normalized, importResult.artifactBytes);
+        return true;
     }
 
     private static void CleanupGeneratedFiles(string relativePath)
@@ -858,6 +995,33 @@ public static class AssetManager
     {
         MoveGeneratedFile(GetMetaPath(oldRelativePath), GetMetaPath(newRelativePath));
         MoveGeneratedFile(GetArtifactPath(oldRelativePath), GetArtifactPath(newRelativePath));
+    }
+
+    private static void MoveGeneratedTree(string oldRelativePath, string newRelativePath)
+    {
+        string oldMetaDir = Path.Combine(assetRoot, oldRelativePath);
+        string newMetaDir = Path.Combine(assetRoot, newRelativePath);
+        string oldArtifactDir = Path.Combine(artifactRoot, oldRelativePath);
+        string newArtifactDir = Path.Combine(artifactRoot, newRelativePath);
+
+        if (Directory.Exists(oldMetaDir))
+            MoveGeneratedTreeFiles(oldMetaDir, newMetaDir, C_META_POSTFIX);
+        if (Directory.Exists(oldArtifactDir))
+            MoveGeneratedTreeFiles(oldArtifactDir, newArtifactDir, C_ARTIFACT_POSTFIX);
+    }
+
+    private static void MoveGeneratedTreeFiles(string oldRootDir, string newRootDir, string postfix)
+    {
+        string[] files = Directory.GetFiles(oldRootDir, "*" + postfix, SearchOption.AllDirectories);
+        for (int i = 0; i < files.Length; i++)
+        {
+            string oldFile = files[i];
+            string relative = Path.GetRelativePath(oldRootDir, oldFile);
+            string newFile = Path.Combine(newRootDir, relative);
+            MoveGeneratedFile(oldFile, newFile);
+        }
+
+        TryDeleteEmptyDirectory(oldRootDir);
     }
 
     private static void MoveGeneratedFile(string oldPath, string newPath)
@@ -881,6 +1045,139 @@ public static class AssetManager
             return;
 
         File.Delete(path);
+        TryDeleteEmptyDirectory(Path.GetDirectoryName(path)!);
+    }
+
+    private static void TryDeleteEmptyDirectory(string absolutePath)
+    {
+        if (string.IsNullOrWhiteSpace(absolutePath) || !Directory.Exists(absolutePath))
+            return;
+
+        string normalized = Path.GetFullPath(absolutePath);
+        if (string.Equals(normalized, assetRoot, StringComparison.Ordinal) ||
+            string.Equals(normalized, artifactRoot, StringComparison.Ordinal))
+            return;
+
+        if (Directory.EnumerateFileSystemEntries(absolutePath).Any())
+            return;
+
+        Directory.Delete(absolutePath);
+    }
+
+    private static void ReconcileStorageState()
+    {
+        string[] sourceFiles = Directory.GetFiles(assetRoot, "*", SearchOption.AllDirectories)
+            .Where(static x => !x.EndsWith(C_META_POSTFIX, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        for (int i = 0; i < sourceFiles.Length; i++)
+        {
+            string relativePath = NormalizeRelativePath(Path.GetRelativePath(assetRoot, sourceFiles[i]));
+            ReconcileSourceFile(relativePath);
+        }
+
+        CleanupOrphanMetadataAndArtifacts();
+        s_fileSystem.Refresh();
+    }
+
+    private static void ReconcileSourceFile(string relativePath)
+    {
+        string absSourcePath = GetAbsoluteSourcePath(relativePath);
+        if (!File.Exists(absSourcePath))
+            return;
+
+        IAssetImporter importer;
+        try
+        {
+            importer = ResolveImporterByPathOrAssetTypeNoLock(relativePath, typeof(AssetObject));
+        }
+        catch
+        {
+            return;
+        }
+
+        string metaPath = GetMetaPath(relativePath);
+        string artifactPath = GetArtifactPath(relativePath);
+        byte[] sourceBytes = File.ReadAllBytes(absSourcePath);
+        string sourceHash = ComputeSha256Hex(sourceBytes);
+        bool requiresReimport = !File.Exists(metaPath) || !File.Exists(artifactPath);
+
+        if (!requiresReimport)
+        {
+            try
+            {
+                AssetMeta meta = DeserializeMeta(metaPath);
+                requiresReimport =
+                    !string.Equals(meta.sourceHash, sourceHash, StringComparison.Ordinal) ||
+                    !string.Equals(meta.importerId, importer.importerId, StringComparison.Ordinal) ||
+                    meta.importerVersion != importer.version;
+
+                if (!requiresReimport)
+                {
+                    _ = File.ReadAllBytes(artifactPath);
+                    if (meta.assetStateBytes.Length > 0)
+                        _ = SerializingState.Deserialize(meta.assetStateBytes);
+                }
+            }
+            catch
+            {
+                requiresReimport = true;
+            }
+        }
+
+        if (requiresReimport)
+            _ = TryImportSourceToDisk(relativePath);
+    }
+
+    private static void CleanupOrphanMetadataAndArtifacts()
+    {
+        string[] allMetaFiles = Directory.GetFiles(assetRoot, "*" + C_META_POSTFIX, SearchOption.AllDirectories);
+        for (int i = 0; i < allMetaFiles.Length; i++)
+        {
+            string relativeMeta = NormalizeRelativePath(Path.GetRelativePath(assetRoot, allMetaFiles[i]));
+            string relativeSource = relativeMeta[..^C_META_POSTFIX.Length];
+            string sourcePath = GetAbsoluteSourcePath(relativeSource);
+            if (File.Exists(sourcePath))
+                continue;
+
+            CleanupGeneratedFiles(relativeSource);
+        }
+
+        string[] allArtifactFiles = Directory.GetFiles(artifactRoot, "*" + C_ARTIFACT_POSTFIX, SearchOption.AllDirectories);
+        for (int i = 0; i < allArtifactFiles.Length; i++)
+        {
+            string relativeArtifact = NormalizeRelativePath(Path.GetRelativePath(artifactRoot, allArtifactFiles[i]));
+            string relativeSource = relativeArtifact[..^C_ARTIFACT_POSTFIX.Length];
+            string sourcePath = GetAbsoluteSourcePath(relativeSource);
+            string metaPath = GetMetaPath(relativeSource);
+            if (File.Exists(sourcePath) && File.Exists(metaPath))
+                continue;
+
+            TryDeleteFile(allArtifactFiles[i]);
+        }
+    }
+
+    private static void WriteAllBytesAtomic(string path, byte[] bytes)
+    {
+        string directory = Path.GetDirectoryName(path)!;
+        Directory.CreateDirectory(directory);
+
+        string tempPath = Path.Combine(directory, $"{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                stream.Write(bytes ?? []);
+                stream.Flush(flushToDisk: true);
+            }
+
+            File.Move(tempPath, path, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+        }
     }
 
     private static void EnsureInitialized()

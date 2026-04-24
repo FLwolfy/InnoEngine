@@ -13,7 +13,7 @@ internal sealed class AssetWatcher : IDisposable
     private readonly string m_root;
     private readonly FileSystemWatcher m_watcher;
     private readonly Lock m_sync = new();
-    private readonly Dictionary<string, AssetChangedEvent> m_pending = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<AssetChangedEvent> m_pending = new(64);
     private Timer? m_flushTimer;
     private readonly int m_flushDelayMs;
 
@@ -90,18 +90,7 @@ internal sealed class AssetWatcher : IDisposable
 
         lock (m_sync)
         {
-            if (m_pending.TryGetValue(relative, out AssetChangedEvent existing))
-            {
-                WatcherChangeTypes mergedType = existing.changeType | changeType;
-                string mergedOldRelativePath = !string.IsNullOrWhiteSpace(oldRelativePath)
-                    ? oldRelativePath
-                    : existing.oldRelativePath;
-                m_pending[relative] = new AssetChangedEvent(relative, mergedType, mergedOldRelativePath);
-            }
-            else
-            {
-                m_pending[relative] = new AssetChangedEvent(relative, changeType, oldRelativePath);
-            }
+            m_pending.Add(new AssetChangedEvent(relative, changeType, oldRelativePath));
 
             m_flushTimer ??= new Timer(_ => Flush(), null, Timeout.Infinite, Timeout.Infinite);
             m_flushTimer.Change(m_flushDelayMs, Timeout.Infinite);
@@ -110,16 +99,19 @@ internal sealed class AssetWatcher : IDisposable
 
     private void Flush()
     {
-        AssetChangedEvent[] batch;
+        AssetChangedEvent[] rawBatch;
         lock (m_sync)
         {
             if (m_pending.Count == 0)
                 return;
 
-            batch = new AssetChangedEvent[m_pending.Count];
-            m_pending.Values.CopyTo(batch, 0);
+            rawBatch = m_pending.ToArray();
             m_pending.Clear();
         }
+
+        AssetChangedEvent[] batch = AssetChangeBatchNormalizer.Normalize(m_root, rawBatch);
+        if (batch.Length == 0)
+            return;
 
         ChangedBatch?.Invoke(batch);
     }
