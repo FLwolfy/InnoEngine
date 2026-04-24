@@ -24,6 +24,8 @@ public sealed class AssetFileSystem : IDisposable
     private bool m_disposed;
 
     public string assetRoot { get; }
+    
+    public bool isWatching => m_watcher.isWatching;
 
     /// <summary>
     /// Raised after batched source file-system changes are detected and index refresh completes.
@@ -171,6 +173,16 @@ public sealed class AssetFileSystem : IDisposable
         }
 
         return builder.ToString();
+    }
+    
+    public void WaitForIdle()
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+
+        if (!m_watcher.isWatching)
+            return;
+
+        m_watcher.WaitForIdle();
     }
 
     public void Dispose()

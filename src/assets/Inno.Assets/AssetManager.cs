@@ -437,6 +437,19 @@ public static class AssetManager
             return s_fileSystem.TryGetEntry(relativePath, out entry);
         }
     }
+    
+    /// <summary>
+    /// Waits until the filesystem async tasks to synchronize.
+    /// </summary>
+    public static void WaitForIdle()
+    {
+        EnsureInitialized();
+
+        if (!s_fileSystem.isWatching)
+            return;
+
+        s_fileSystem.WaitForIdle();
+    }
 
     private static AssetObject LoadInternal(string relativePath, Type requestedAssetType, bool forceReimport)
     {

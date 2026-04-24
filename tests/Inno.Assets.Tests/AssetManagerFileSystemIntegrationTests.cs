@@ -334,25 +334,13 @@ public sealed class AssetManagerFileSystemIntegrationTests
             WriteSourceFile(assets, p1, "v3");
 
             Assert.True(SpinWait.SpinUntil(
-                () =>
-                {
-                    try
-                    {
-                        if (!File.Exists(Path.Combine(assets, p1 + ".innoasset")) ||
-                            !File.Exists(Path.Combine(artifacts, p1 + ".abin")) ||
-                            File.Exists(Path.Combine(assets, p2 + ".innoasset")) ||
-                            File.Exists(Path.Combine(artifacts, p2 + ".abin")))
-                            return false;
-
-                        TextAsset current = AssetManager.Load<TextAsset>(p1);
-                        return current.content == "v3";
-                    }
-                    catch
-                    {
-                        return false;
-                    }
-                },
+                () => File.Exists(Path.Combine(assets, p1 + ".innoasset")) &&
+                      File.Exists(Path.Combine(artifacts, p1 + ".abin")) &&
+                      !File.Exists(Path.Combine(assets, p2 + ".innoasset")) &&
+                      !File.Exists(Path.Combine(artifacts, p2 + ".abin")),
                 TimeSpan.FromSeconds(5)));
+            
+            AssetManager.WaitForIdle();
 
             TextAsset final = AssetManager.Load<TextAsset>(p1);
             Assert.Equal("v3", final.content);
