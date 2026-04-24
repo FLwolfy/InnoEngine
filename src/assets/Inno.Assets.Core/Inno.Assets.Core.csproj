@@ -6,4 +6,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\core\Inno.Core.Identity\Inno.Core.Identity.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
+  </ItemGroup>
+
 </Project>

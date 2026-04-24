@@ -6,4 +6,14 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\core\Inno.Core.Identity\Inno.Core.Identity.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
+    <ProjectReference Include="..\Inno.Assets.Core\Inno.Assets.Core.csproj" />
+    <ProjectReference Include="..\Inno.Assets.IO\Inno.Assets.IO.csproj" />
+    <ProjectReference Include="..\Inno.Assets.Loader\Inno.Assets.Loader.csproj" />
+    <ProjectReference Include="..\Inno.Assets.Types\Inno.Assets.Types.csproj" />
+  </ItemGroup>
+
 </Project>

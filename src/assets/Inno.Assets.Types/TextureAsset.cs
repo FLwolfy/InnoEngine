@@ -1,20 +1,31 @@
 using Inno.Assets.Core;
-using Inno.Platform.Graphics;
+using Inno.Core.Serialization;
 
 namespace Inno.Assets.Types;
 
-public sealed class TextureAsset : InnoAsset
+public sealed class TextureAsset : AssetObject
 {
-    [AssetProperty] public int width { get; private set; }
-    [AssetProperty] public int height { get; private set; }
-    
-    [AssetProperty] public PixelFormat format { get; private set; } = PixelFormat.R8_G8_B8_A8_UNorm;
-    [AssetProperty] public TextureUsage usage { get; private set; } = TextureUsage.Sampled;
-    [AssetProperty] public TextureDimension dimension { get; private set; } = TextureDimension.Texture2D;
+    [SerializableProperty]
+    public int width { get; private set; }
 
-    public TextureAsset(int width, int height)
+    [SerializableProperty]
+    public int height { get; private set; }
+
+    [SerializableProperty]
+    public int channelCount { get; private set; } = 4;
+
+    [SerializableProperty]
+    public string encoding { get; private set; } = "png";
+
+    public TextureAsset()
+    {
+    }
+
+    public TextureAsset(int width, int height, int channelCount = 4, string encoding = "png")
     {
         this.width = width;
         this.height = height;
+        this.channelCount = channelCount;
+        this.encoding = encoding ?? "png";
     }
 }

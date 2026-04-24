@@ -1,17 +1,23 @@
 using Inno.Assets.Core;
-using Inno.Platform.Graphics;
+using Inno.Core.Serialization;
 
 namespace Inno.Assets.Types;
 
-public class ShaderAsset : InnoAsset
+public sealed class ShaderAsset : AssetObject
 {
-    [AssetProperty] public ShaderStage shaderStage { get; private set; }
-    
-    public readonly string glslCode;
-    
-    public ShaderAsset(ShaderStage stage, string glsl)
+    [SerializableProperty]
+    public string stage { get; private set; } = "unknown";
+
+    [SerializableProperty]
+    public string sourceCode { get; private set; } = string.Empty;
+
+    public ShaderAsset()
     {
-        shaderStage = stage;
-        glslCode = glsl;
+    }
+
+    public ShaderAsset(string stage, string sourceCode)
+    {
+        this.stage = stage ?? "unknown";
+        this.sourceCode = sourceCode ?? string.Empty;
     }
 }

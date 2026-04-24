@@ -12,6 +12,7 @@
 
   <ItemGroup> 
     <ProjectReference Include="..\Inno.Assets.Core\Inno.Assets.Core.csproj" />
+    <ProjectReference Include="..\Inno.Assets.Types\Inno.Assets.Types.csproj" />
   </ItemGroup>
 
 </Project>
