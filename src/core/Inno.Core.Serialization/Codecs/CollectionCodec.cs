@@ -28,10 +28,23 @@ internal sealed class CollectionCodec<TCollection> : SerializationCodec<TCollect
 
     public override TCollection OnDeserialize(in DeserializeContext context, object? node)
     {
-        if (node is not IReadOnlyList<object?> list)
-            throw new InvalidOperationException($"Sequence node must be IReadOnlyList<object?>. Got {node?.GetType().FullName ?? "null"}");
+        IReadOnlyList<object?> list = node switch
+        {
+            IReadOnlyList<object?> direct => direct,
+            IEnumerable enumerable => ToObjectList(enumerable),
+            _ => throw new InvalidOperationException($"Sequence node must be enumerable. Got {node?.GetType().FullName ?? "null"}")
+        };
 
         return (TCollection)BuildSequenceFromNodes(typeof(TCollection), list, context);
+    }
+
+    private static IReadOnlyList<object?> ToObjectList(IEnumerable source)
+    {
+        var list = new List<object?>();
+        foreach (object? item in source)
+            list.Add(item);
+
+        return list;
     }
 
     private static bool TryGetListElementType(Type type, out Type elementType)

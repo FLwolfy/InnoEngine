@@ -54,5 +54,11 @@ public readonly struct AssetImportContext
     /// Reads <see cref="sourceBytes"/> as UTF-8 text.
     /// </summary>
     public string ReadUtf8Text()
-        => Encoding.UTF8.GetString(sourceBytes.Span);
+    {
+        string text = Encoding.UTF8.GetString(sourceBytes.Span);
+        if (text.Length > 0 && text[0] == '\uFEFF')
+            return text[1..];
+
+        return text;
+    }
 }

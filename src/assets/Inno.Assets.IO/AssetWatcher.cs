@@ -6,26 +6,9 @@ using System.Threading;
 namespace Inno.Assets.IO;
 
 /// <summary>
-/// Batched file-system change event for asset source files.
-/// </summary>
-/// <param name="relativePath">Changed path relative to watched root.</param>
-/// <param name="changeType">File-system change type.</param>
-public readonly struct AssetChangedEvent(string relativePath, WatcherChangeTypes changeType)
-{
-    /// <summary>
-    /// Changed path relative to watched root.
-    /// </summary>
-    public string relativePath { get; } = relativePath;
-    /// <summary>
-    /// Underlying file-system change type.
-    /// </summary>
-    public WatcherChangeTypes changeType { get; } = changeType;
-}
-
-/// <summary>
 /// File watcher that coalesces rapid file-system changes into batched callbacks.
 /// </summary>
-public sealed class AssetWatcher : IDisposable
+internal sealed class AssetWatcher : IDisposable
 {
     private readonly string m_root;
     private readonly FileSystemWatcher m_watcher;
@@ -96,15 +79,30 @@ public sealed class AssetWatcher : IDisposable
         => Enqueue(args.FullPath, args.ChangeType);
 
     private void OnRenamed(object sender, RenamedEventArgs args)
-        => Enqueue(args.FullPath, WatcherChangeTypes.Renamed);
-
-    private void Enqueue(string fullPath, WatcherChangeTypes changeType)
     {
-        string relative = AssetPath.Normalize(Path.GetRelativePath(m_root, fullPath));
+        string oldRelative = NormalizeRelativePath(Path.GetRelativePath(m_root, args.OldFullPath));
+        Enqueue(args.FullPath, WatcherChangeTypes.Renamed, oldRelative);
+    }
+
+    private void Enqueue(string fullPath, WatcherChangeTypes changeType, string oldRelativePath = "")
+    {
+        string relative = NormalizeRelativePath(Path.GetRelativePath(m_root, fullPath));
 
         lock (m_sync)
         {
-            m_pending[relative] = new AssetChangedEvent(relative, changeType);
+            if (m_pending.TryGetValue(relative, out AssetChangedEvent existing))
+            {
+                WatcherChangeTypes mergedType = existing.changeType | changeType;
+                string mergedOldRelativePath = !string.IsNullOrWhiteSpace(oldRelativePath)
+                    ? oldRelativePath
+                    : existing.oldRelativePath;
+                m_pending[relative] = new AssetChangedEvent(relative, mergedType, mergedOldRelativePath);
+            }
+            else
+            {
+                m_pending[relative] = new AssetChangedEvent(relative, changeType, oldRelativePath);
+            }
+
             m_flushTimer ??= new Timer(_ => Flush(), null, Timeout.Infinite, Timeout.Infinite);
             m_flushTimer.Change(m_flushDelayMs, Timeout.Infinite);
         }
@@ -124,5 +122,21 @@ public sealed class AssetWatcher : IDisposable
         }
 
         ChangedBatch?.Invoke(batch);
+    }
+
+    private static string NormalizeRelativePath(string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+            return string.Empty;
+
+        string path = relativePath.Replace('\\', '/').Trim();
+        while (path.StartsWith("./", StringComparison.Ordinal))
+            path = path[2..];
+        while (path.StartsWith("/", StringComparison.Ordinal))
+            path = path[1..];
+        while (path.EndsWith("/", StringComparison.Ordinal))
+            path = path[..^1];
+
+        return path == "." ? string.Empty : path;
     }
 }

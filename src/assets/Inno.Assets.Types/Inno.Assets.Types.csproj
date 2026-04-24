@@ -7,7 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Inno.Assets.Core\Inno.Assets.Core.csproj" />
   </ItemGroup>
 

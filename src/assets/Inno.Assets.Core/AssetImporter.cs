@@ -48,8 +48,11 @@ public abstract class AssetImporter<TAsset> : IAssetImporter where TAsset : Asse
         return false;
     }
 
-    AssetImportResult IAssetImporter.Import(in AssetImportContext context)
-        => ImportTyped(context).ToUntyped();
+    AssetImportResult<AssetObject> IAssetImporter.Import(in AssetImportContext context)
+    {
+        AssetImportResult<TAsset> typed = ImportTyped(context);
+        return new AssetImportResult<AssetObject>(typed.asset, typed.artifactBytes, typed.dependencies);
+    }
 
     bool IAssetImporter.TryExport(AssetObject asset, out byte[] sourceBytes)
     {

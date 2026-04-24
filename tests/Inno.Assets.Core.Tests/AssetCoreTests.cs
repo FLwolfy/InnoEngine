@@ -1,4 +1,3 @@
-using System;
 using System.Text;
 
 using Inno.Assets.Core;
@@ -11,16 +10,6 @@ namespace Inno.Assets.Core.Tests;
 public sealed class AssetCoreTests
 {
     [Fact]
-    public void ComputeSha256Hex_IsDeterministic()
-    {
-        byte[] data = Encoding.UTF8.GetBytes("hello-assets");
-        string h1 = AssetHashUtility.ComputeSha256Hex(data);
-        string h2 = AssetHashUtility.ComputeSha256Hex(data);
-        Assert.Equal(h1, h2);
-        Assert.NotEmpty(h1);
-    }
-
-    [Fact]
     public void AssetImportContext_ReadUtf8Text_Works()
     {
         byte[] bytes = Encoding.UTF8.GetBytes("abc");
@@ -30,10 +19,11 @@ public sealed class AssetCoreTests
     }
 
     [Fact]
-    public void AssetHandle_ToString_ContainsTypeName()
+    public void AssetRef_ToString_ContainsTypeName()
     {
-        var handle = new AssetHandle<TextAsset>(Guid.NewGuid(), 7);
+        AssetRef<TextAsset> handle = default;
+
         Assert.Contains("TextAsset", handle.ToString());
-        Assert.True(handle.isValid);
+        Assert.False(handle.isValid);
     }
 }

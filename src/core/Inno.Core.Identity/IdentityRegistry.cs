@@ -40,6 +40,19 @@ public sealed class IdentityRegistry
 
     public bool Register(IIdentityObject obj)
     {
+        return Register(obj, persistentId: null);
+    }
+
+    /// <summary>
+    /// Registers an object and binds a runtime id, with optional persistent id override.
+    /// </summary>
+    /// <param name="obj">Identity object to register.</param>
+    /// <param name="persistentId">
+    /// Preferred persistent id. When null, uses object's current identity persistent id.
+    /// </param>
+    /// <returns><see langword="true"/> when registered; <see langword="false"/> when already registered.</returns>
+    public bool Register(IIdentityObject obj, Guid? persistentId)
+    {
         ArgumentNullException.ThrowIfNull(obj);
 
         m_lock.EnterWriteLock();
@@ -49,9 +62,12 @@ public sealed class IdentityRegistry
                 return false;
 
             Identity identity = obj.GetIdentity();
-            Guid persistentId = identity.persistentId;
-            if (m_objectByPersistent.TryGetValue(persistentId, out IIdentityObject? existing) && !ReferenceEquals(existing, obj))
-                throw new InvalidOperationException($"Persistent id '{persistentId}' is already registered.");
+            Guid resolvedPersistentId = persistentId.GetValueOrDefault(identity.persistentId);
+            if (resolvedPersistentId == Guid.Empty)
+                resolvedPersistentId = Guid.NewGuid();
+
+            if (m_objectByPersistent.TryGetValue(resolvedPersistentId, out IIdentityObject? existing) && !ReferenceEquals(existing, obj))
+                throw new InvalidOperationException($"Persistent id '{resolvedPersistentId}' is already registered.");
 
             int slot = AllocateSlot();
             int generation = m_generations[slot];
@@ -63,10 +79,10 @@ public sealed class IdentityRegistry
             m_denseToSlot.Add(slot);
             m_sparseToDense[slot] = denseIndex;
 
-            m_objectByPersistent[persistentId] = obj;
-            m_runtimeByPersistent[persistentId] = runtimeId;
+            m_objectByPersistent[resolvedPersistentId] = obj;
+            m_runtimeByPersistent[resolvedPersistentId] = runtimeId;
 
-            identity = new Identity(persistentId);
+            identity = new Identity(resolvedPersistentId);
             identity.Bind(this, runtimeId);
             obj.SetIdentity(identity);
             return true;

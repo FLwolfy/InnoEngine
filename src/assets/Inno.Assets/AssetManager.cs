@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 
 using Inno.Assets.Core;
@@ -10,6 +11,7 @@ using Inno.Assets.Loader;
 using Inno.Core.Identity;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
+using Inno.Core.Storage;
 
 namespace Inno.Assets;
 
@@ -18,51 +20,47 @@ namespace Inno.Assets;
 /// </summary>
 public static class AssetManager
 {
-    private const string C_META_POSTFIX = ".innoasset";
-    private const string C_ARTIFACT_POSTFIX = ".abin";
+    internal const string C_META_POSTFIX = ".innoasset";
+    internal const string C_ARTIFACT_POSTFIX = ".abin";
 
     private static readonly Lock SYNC = new();
     private static readonly IdentityRegistry IDENTITY_REGISTRY = new();
 
-    private static readonly Dictionary<string, IAssetImporter> IMPORTER_BY_EXTENSION = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly Dictionary<Type, IAssetImporter> IMPORTER_BY_ASSET_TYPE = new();
-    private static readonly Dictionary<string, AssetCacheEntry> CACHE_BY_PATH = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly Dictionary<Guid, AssetCacheEntry> CACHE_BY_GUID = new();
+    private static readonly ObjectPool<IAssetImporter> IMPORTERS = new();
+    private static readonly PoolKey<int> IMPORTER_TYPE_KEY =
+        IMPORTERS.DefineKey<int>("asset.importer.typeId", PoolKeyFlags.Unique);
+
+    private static readonly ObjectPool<AssetObject> LOADED_CACHE = new();
+    private static readonly PoolKey<string> CACHE_PATH_KEY =
+        LOADED_CACHE.DefineKey<string>("asset.cache.path", PoolKeyFlags.Unique);
+    private static readonly PoolKey<Guid> CACHE_PERSISTENT_ID_KEY =
+        LOADED_CACHE.DefineKey<Guid>("asset.cache.persistentId", PoolKeyFlags.Unique);
 
     /// <summary>
     /// Absolute source asset root directory.
     /// </summary>
     public static string assetRoot { get; private set; } = string.Empty;
+
     /// <summary>
     /// Absolute imported artifact root directory.
     /// </summary>
     public static string artifactRoot { get; private set; } = string.Empty;
+
+    private static AssetFileSystem s_fileSystem = null!;
+
     /// <summary>
     /// True when manager has been initialized.
     /// </summary>
     public static bool isInitialized { get; private set; }
 
     /// <summary>
-    /// Initializes asset manager with minimal options.
+    /// Raised when source files changed in asset root.
     /// </summary>
-    /// <param name="assetRoot">Source asset root directory.</param>
-    /// <param name="artifactRoot">Imported artifact root directory.</param>
-    /// <param name="registerBuiltInImporters">Whether to register built-in importers.</param>
-    public static void Initialize(string assetRoot, string artifactRoot, bool registerBuiltInImporters = true)
-    {
-        Initialize(new AssetManagerOptions
-        {
-            assetRoot = assetRoot,
-            artifactRoot = artifactRoot,
-            autoRegisterBuiltInImporters = registerBuiltInImporters,
-            autoRegisterImportersFromTypeCache = false
-        });
-    }
+    public static event Action<IReadOnlyList<AssetChangedEvent>>? SourceFileSystemChanged;
 
     /// <summary>
     /// Initializes asset manager.
     /// </summary>
-    /// <param name="options">Initialization options.</param>
     public static void Initialize(AssetManagerOptions options)
     {
         if (string.IsNullOrWhiteSpace(options.assetRoot))
@@ -78,6 +76,8 @@ public static class AssetManager
             artifactRoot = Path.GetFullPath(options.artifactRoot);
             Directory.CreateDirectory(assetRoot);
             Directory.CreateDirectory(artifactRoot);
+            s_fileSystem = new AssetFileSystem(assetRoot, options.enableFileSystemWatcher, options.fileWatcherFlushDelayMs);
+            s_fileSystem.ChangedBatch += OnFileSystemChangedBatch;
 
             isInitialized = true;
         }
@@ -131,36 +131,30 @@ public static class AssetManager
     /// <summary>
     /// Registers an importer by type using parameterless constructor.
     /// </summary>
-    /// <typeparam name="TImporter">Importer type.</typeparam>
     public static void RegisterImporter<TImporter>() where TImporter : IAssetImporter, new()
         => RegisterImporter(new TImporter());
 
     /// <summary>
     /// Registers an importer instance.
     /// </summary>
-    /// <param name="importer">Importer to register.</param>
     public static void RegisterImporter(IAssetImporter importer)
     {
         ArgumentNullException.ThrowIfNull(importer);
 
+        int targetRuntimeTypeId = ResolveRuntimeTypeId(importer.targetAssetType);
         lock (SYNC)
         {
-            IMPORTER_BY_ASSET_TYPE[importer.targetAssetType] = importer;
+            IAssetImporter? existing = IMPORTERS.First(IMPORTER_TYPE_KEY, targetRuntimeTypeId);
+            if (existing is not null)
+                IMPORTERS.Remove(existing);
 
-            for (int i = 0; i < importer.supportedExtensions.Count; i++)
-            {
-                string ext = NormalizeExtension(importer.supportedExtensions[i]);
-                IMPORTER_BY_EXTENSION[ext] = importer;
-            }
+            IMPORTERS.Add(importer).Set(IMPORTER_TYPE_KEY, targetRuntimeTypeId);
         }
     }
 
     /// <summary>
     /// Loads an asset from source/import cache.
     /// </summary>
-    /// <typeparam name="TAsset">Asset type.</typeparam>
-    /// <param name="relativePath">Path relative to <see cref="assetRoot"/>.</param>
-    /// <returns>Loaded asset instance.</returns>
     public static TAsset Load<TAsset>(string relativePath) where TAsset : AssetObject
     {
         AssetObject loaded = LoadInternal(relativePath, typeof(TAsset), forceReimport: false);
@@ -173,9 +167,6 @@ public static class AssetManager
     /// <summary>
     /// Forces reimport and reload for a source asset.
     /// </summary>
-    /// <typeparam name="TAsset">Asset type.</typeparam>
-    /// <param name="relativePath">Path relative to <see cref="assetRoot"/>.</param>
-    /// <returns>Reimported asset instance.</returns>
     public static TAsset Reimport<TAsset>(string relativePath) where TAsset : AssetObject
     {
         AssetObject loaded = LoadInternal(relativePath, typeof(TAsset), forceReimport: true);
@@ -188,10 +179,6 @@ public static class AssetManager
     /// <summary>
     /// Tries to load an asset.
     /// </summary>
-    /// <typeparam name="TAsset">Asset type.</typeparam>
-    /// <param name="relativePath">Path relative to <see cref="assetRoot"/>.</param>
-    /// <param name="asset">Loaded asset when successful.</param>
-    /// <returns>True on success.</returns>
     public static bool TryLoad<TAsset>(string relativePath, out TAsset asset) where TAsset : AssetObject
     {
         try
@@ -209,47 +196,25 @@ public static class AssetManager
     /// <summary>
     /// Gets a handle for an asset path, loading it when needed.
     /// </summary>
-    /// <typeparam name="TAsset">Asset type.</typeparam>
-    /// <param name="relativePath">Path relative to <see cref="assetRoot"/>.</param>
-    /// <returns>Asset handle.</returns>
-    public static AssetHandle<TAsset> GetHandle<TAsset>(string relativePath) where TAsset : AssetObject
+    public static AssetRef<TAsset> GetRef<TAsset>(string relativePath) where TAsset : AssetObject
     {
         TAsset asset = Load<TAsset>(relativePath);
-        return new AssetHandle<TAsset>(asset.persistentId, asset.runtimeId ?? 0);
+        return new AssetRef<TAsset>(GetIdentity(asset));
     }
 
     /// <summary>
     /// Tries to resolve a handle to currently loaded asset instance.
     /// </summary>
-    /// <typeparam name="TAsset">Asset type.</typeparam>
-    /// <param name="handle">Asset handle.</param>
-    /// <param name="asset">Resolved asset when successful.</param>
-    /// <returns>True when handle resolves to loaded instance.</returns>
-    public static bool TryResolve<TAsset>(AssetHandle<TAsset> handle, out TAsset asset) where TAsset : AssetObject
+    public static bool TryResolve<TAsset>(AssetRef<TAsset> assetRef, out TAsset asset) where TAsset : AssetObject
     {
-        if (!handle.isValid)
+        if (!assetRef.isValid)
         {
             asset = null!;
             return false;
         }
 
-        lock (SYNC)
-        {
-            if (CACHE_BY_GUID.TryGetValue(handle.persistentId, out AssetCacheEntry? byGuid) &&
-                byGuid.asset is TAsset typedByGuid)
-            {
-                asset = typedByGuid;
-                return true;
-            }
-        }
-
-        if (handle.runtimeId != 0 &&
-            IDENTITY_REGISTRY.TryGet(handle.runtimeId, out IIdentityObject? runtimeObj) &&
-            runtimeObj is TAsset typedByRuntime)
-        {
-            asset = typedByRuntime;
+        if (TryGetLoaded(assetRef.identity, out asset))
             return true;
-        }
 
         asset = null!;
         return false;
@@ -258,17 +223,13 @@ public static class AssetManager
     /// <summary>
     /// Tries to get already-loaded asset by path without loading from disk.
     /// </summary>
-    /// <typeparam name="TAsset">Asset type.</typeparam>
-    /// <param name="relativePath">Path relative to <see cref="assetRoot"/>.</param>
-    /// <param name="asset">Loaded asset when found.</param>
-    /// <returns>True when asset is already loaded.</returns>
     public static bool TryGetLoaded<TAsset>(string relativePath, out TAsset asset) where TAsset : AssetObject
     {
-        string normalized = AssetPath.Normalize(relativePath);
+        string normalized = NormalizeRelativePath(relativePath);
         lock (SYNC)
         {
-            if (CACHE_BY_PATH.TryGetValue(normalized, out AssetCacheEntry? entry) &&
-                entry.asset is TAsset typed)
+            AssetObject? loaded = LOADED_CACHE.First(CACHE_PATH_KEY, normalized);
+            if (loaded is TAsset typed)
             {
                 asset = typed;
                 return true;
@@ -280,10 +241,43 @@ public static class AssetManager
     }
 
     /// <summary>
+    /// Tries to get already-loaded asset by identity.
+    /// </summary>
+    public static bool TryGetLoaded<TAsset>(in Identity identity, out TAsset asset) where TAsset : AssetObject
+    {
+        Guid persistentId = identity.persistentId;
+        if (persistentId == Guid.Empty)
+        {
+            asset = null!;
+            return false;
+        }
+
+        lock (SYNC)
+        {
+            AssetObject? loaded = LOADED_CACHE.First(CACHE_PERSISTENT_ID_KEY, persistentId);
+            if (loaded is TAsset typed)
+            {
+                asset = typed;
+                return true;
+            }
+        }
+
+        int runtimeId = identity.runtimeId ?? 0;
+        if (runtimeId > 0 &&
+            IDENTITY_REGISTRY.TryGet(runtimeId, out IIdentityObject? runtimeObject) &&
+            runtimeObject is TAsset runtimeTyped)
+        {
+            asset = runtimeTyped;
+            return true;
+        }
+
+        asset = null!;
+        return false;
+    }
+
+    /// <summary>
     /// Saves asset back to its current source path.
     /// </summary>
-    /// <param name="asset">Asset to save.</param>
-    /// <returns>True when save succeeded.</returns>
     public static bool Save(AssetObject asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
@@ -296,20 +290,17 @@ public static class AssetManager
     /// <summary>
     /// Saves asset back to source path.
     /// </summary>
-    /// <param name="relativePath">Path relative to <see cref="assetRoot"/>.</param>
-    /// <param name="asset">Asset to save.</param>
-    /// <returns>True when save succeeded.</returns>
     public static bool Save(string relativePath, AssetObject asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
         EnsureInitialized();
 
-        string normalized = AssetPath.Normalize(relativePath);
+        string normalized = NormalizeRelativePath(relativePath);
         IAssetImporter importer = ResolveImporterByPathOrAssetType(normalized, asset.GetType());
         if (!importer.TryExport(asset, out byte[] sourceBytes))
             return false;
 
-        string absSourcePath = Path.Combine(assetRoot, normalized);
+        string absSourcePath = GetAbsoluteSourcePath(normalized);
         Directory.CreateDirectory(Path.GetDirectoryName(absSourcePath)!);
         File.WriteAllBytes(absSourcePath, sourceBytes);
 
@@ -321,17 +312,16 @@ public static class AssetManager
     /// <summary>
     /// Unloads one asset by path.
     /// </summary>
-    /// <param name="relativePath">Path relative to <see cref="assetRoot"/>.</param>
-    /// <returns>True when an asset was unloaded.</returns>
     public static bool Unload(string relativePath)
     {
-        string normalized = AssetPath.Normalize(relativePath);
+        string normalized = NormalizeRelativePath(relativePath);
         lock (SYNC)
         {
-            if (!CACHE_BY_PATH.TryGetValue(normalized, out AssetCacheEntry? entry))
+            AssetObject? loaded = LOADED_CACHE.First(CACHE_PATH_KEY, normalized);
+            if (loaded is null)
                 return false;
 
-            RemoveFromCache(entry);
+            RemoveFromCache(loaded);
             return true;
         }
     }
@@ -339,20 +329,18 @@ public static class AssetManager
     /// <summary>
     /// Unloads one asset by handle.
     /// </summary>
-    /// <typeparam name="TAsset">Asset type.</typeparam>
-    /// <param name="handle">Asset handle.</param>
-    /// <returns>True when an asset was unloaded.</returns>
-    public static bool Unload<TAsset>(AssetHandle<TAsset> handle) where TAsset : AssetObject
+    public static bool Unload<TAsset>(AssetRef<TAsset> assetRef) where TAsset : AssetObject
     {
-        if (!handle.isValid)
+        if (!assetRef.isValid)
             return false;
 
         lock (SYNC)
         {
-            if (!CACHE_BY_GUID.TryGetValue(handle.persistentId, out AssetCacheEntry? entry))
+            AssetObject? loaded = LOADED_CACHE.First(CACHE_PERSISTENT_ID_KEY, assetRef.identity.persistentId);
+            if (loaded is null)
                 return false;
 
-            RemoveFromCache(entry);
+            RemoveFromCache(loaded);
             return true;
         }
     }
@@ -364,20 +352,18 @@ public static class AssetManager
     {
         lock (SYNC)
         {
-            foreach (AssetCacheEntry entry in CACHE_BY_PATH.Values.ToArray())
-                RemoveFromCache(entry);
+            AssetObject[] all = LOADED_CACHE.All().ToArray();
+            for (int i = 0; i < all.Length; i++)
+                RemoveFromCache(all[i]);
         }
     }
 
     /// <summary>
     /// Gets runtime artifact bytes for a loaded handle.
     /// </summary>
-    /// <typeparam name="TAsset">Asset type.</typeparam>
-    /// <param name="handle">Asset handle.</param>
-    /// <returns>Artifact bytes, or empty array when unresolved.</returns>
-    public static byte[] GetArtifactBytes<TAsset>(AssetHandle<TAsset> handle) where TAsset : AssetObject
+    public static byte[] GetArtifactBytes<TAsset>(AssetRef<TAsset> assetRef) where TAsset : AssetObject
     {
-        if (!TryResolve(handle, out TAsset asset))
+        if (!TryResolve(assetRef, out TAsset asset))
             return [];
 
         return asset.runtimePayload.ToArray();
@@ -386,12 +372,62 @@ public static class AssetManager
     /// <summary>
     /// Returns currently loaded relative paths.
     /// </summary>
-    /// <returns>Snapshot of loaded paths.</returns>
     public static IReadOnlyList<string> GetLoadedPaths()
     {
         lock (SYNC)
         {
-            return CACHE_BY_PATH.Keys.OrderBy(static x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+            return LOADED_CACHE.All()
+                .Select(static x => x.sourcePath)
+                .OrderBy(static x => x, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+    }
+
+    /// <summary>
+    /// Returns current filesystem tree graph for source assets.
+    /// </summary>
+    public static string GetFileSystemTreeGraph()
+    {
+        EnsureInitialized();
+        lock (SYNC)
+        {
+            return s_fileSystem.BuildTreeGraph();
+        }
+    }
+
+    /// <summary>
+    /// Returns a snapshot of indexed source files/directories.
+    /// </summary>
+    public static IReadOnlyList<AssetFileEntry> GetFileSystemEntries(bool includeDirectories = true)
+    {
+        EnsureInitialized();
+        lock (SYNC)
+        {
+            return s_fileSystem.GetEntries(includeDirectories);
+        }
+    }
+
+    /// <summary>
+    /// Returns a snapshot of immediate children under one directory path.
+    /// </summary>
+    public static IReadOnlyList<AssetFileEntry> GetFileSystemChildren(string parentRelativePath)
+    {
+        EnsureInitialized();
+        lock (SYNC)
+        {
+            return s_fileSystem.GetChildren(parentRelativePath);
+        }
+    }
+
+    /// <summary>
+    /// Tries to get one indexed source file-system entry by relative path.
+    /// </summary>
+    public static bool TryGetFileSystemEntry(string relativePath, out AssetFileEntry entry)
+    {
+        EnsureInitialized();
+        lock (SYNC)
+        {
+            return s_fileSystem.TryGetEntry(relativePath, out entry);
         }
     }
 
@@ -399,28 +435,27 @@ public static class AssetManager
     {
         EnsureInitialized();
 
-        string normalized = AssetPath.Normalize(relativePath);
+        string normalized = NormalizeRelativePath(relativePath);
         if (string.IsNullOrWhiteSpace(normalized))
             throw new InvalidOperationException("Asset path is empty.");
 
         lock (SYNC)
         {
-            if (!forceReimport &&
-                CACHE_BY_PATH.TryGetValue(normalized, out AssetCacheEntry? cached) &&
-                requestedAssetType.IsAssignableFrom(cached.asset.GetType()))
+            if (!forceReimport)
             {
-                return cached.asset;
+                AssetObject? loaded = LOADED_CACHE.First(CACHE_PATH_KEY, normalized);
+                if (loaded is not null && requestedAssetType.IsAssignableFrom(loaded.GetType()))
+                    return loaded;
             }
         }
 
-        string absSourcePath = Path.Combine(assetRoot, normalized);
+        string absSourcePath = GetAbsoluteSourcePath(normalized);
         if (!File.Exists(absSourcePath))
             throw new FileNotFoundException($"Asset source file not found: {absSourcePath}");
 
         IAssetImporter importer = ResolveImporterByPathOrAssetType(normalized, requestedAssetType);
-        string sourceHash;
         byte[] sourceBytes = File.ReadAllBytes(absSourcePath);
-        sourceHash = AssetHashUtility.ComputeSha256Hex(sourceBytes);
+        string sourceHash = ComputeSha256Hex(sourceBytes);
 
         if (!forceReimport &&
             TryLoadFromDiskCache(normalized, absSourcePath, sourceHash, importer, requestedAssetType, out AssetObject? cachedAsset))
@@ -429,21 +464,20 @@ public static class AssetManager
         }
 
         var context = new AssetImportContext(normalized, absSourcePath, sourceBytes, sourceHash);
-        AssetImportResult importResult = importer.Import(context);
+        AssetImportResult<AssetObject> importResult = importer.Import(context);
 
         AssetObject imported = importResult.asset;
-        Guid persistentId = ReadPersistentIdFromMeta(normalized) ?? imported.persistentId;
+        Identity importedIdentity = GetIdentity(imported);
+        Guid persistentId = ReadPersistentIdFromMeta(normalized) ?? importedIdentity.persistentId;
         if (persistentId == Guid.Empty)
             persistentId = Guid.NewGuid();
 
-        imported.SetPersistentId(persistentId);
         imported.SetSourceInfo(normalized, sourceHash);
         imported.SetRuntimePayload(importResult.artifactBytes);
 
-        PersistMeta(normalized, importer, imported, importResult.dependencies);
+        PersistMeta(normalized, importer, imported, persistentId, importResult.dependencies);
         PersistArtifact(normalized, importResult.artifactBytes);
-
-        CacheLoaded(normalized, importer.importerId, imported);
+        CacheLoaded(normalized, imported, persistentId);
         return imported;
     }
 
@@ -464,7 +498,16 @@ public static class AssetManager
             return false;
         }
 
-        AssetMeta meta = DeserializeMeta(metaPath);
+        AssetMeta meta;
+        try
+        {
+            meta = DeserializeMeta(metaPath);
+        }
+        catch
+        {
+            asset = null!;
+            return false;
+        }
         if (!string.Equals(meta.sourceHash, sourceHash, StringComparison.Ordinal) ||
             !string.Equals(meta.importerId, importer.importerId, StringComparison.Ordinal) ||
             meta.importerVersion != importer.version)
@@ -503,11 +546,10 @@ public static class AssetManager
             ((ISerializable)restored).RestoreState(state);
         }
 
-        restored.SetPersistentId(meta.persistentId);
         restored.SetSourceInfo(relativePath, sourceHash);
         restored.SetRuntimePayload(artifactBytes);
 
-        CacheLoaded(relativePath, importer.importerId, restored);
+        CacheLoaded(relativePath, restored, meta.persistentId);
         asset = restored;
         return true;
     }
@@ -548,11 +590,16 @@ public static class AssetManager
         }
     }
 
-    private static void PersistMeta(string relativePath, IAssetImporter importer, AssetObject asset, IReadOnlyList<string> dependencies)
+    private static void PersistMeta(
+        string relativePath,
+        IAssetImporter importer,
+        AssetObject asset,
+        Guid persistentId,
+        IReadOnlyList<string> dependencies)
     {
         var meta = new AssetMeta
         {
-            persistentId = asset.persistentId,
+            persistentId = persistentId,
             relativePath = relativePath,
             sourceHash = asset.sourceHash,
             importerId = importer.importerId,
@@ -600,10 +647,20 @@ public static class AssetManager
         string ext = NormalizeExtension(Path.GetExtension(relativePath));
         lock (SYNC)
         {
-            if (IMPORTER_BY_EXTENSION.TryGetValue(ext, out IAssetImporter? byExt))
-                return byExt;
+            IReadOnlyList<IAssetImporter> importers = IMPORTERS.All();
+            for (int i = 0; i < importers.Count; i++)
+            {
+                IAssetImporter importer = importers[i];
+                for (int j = 0; j < importer.supportedExtensions.Count; j++)
+                {
+                    if (string.Equals(NormalizeExtension(importer.supportedExtensions[j]), ext, StringComparison.Ordinal))
+                        return importer;
+                }
+            }
 
-            if (IMPORTER_BY_ASSET_TYPE.TryGetValue(assetType, out IAssetImporter? byType))
+            int runtimeTypeId = ResolveRuntimeTypeId(assetType);
+            IAssetImporter? byType = IMPORTERS.First(IMPORTER_TYPE_KEY, runtimeTypeId);
+            if (byType is not null)
                 return byType;
         }
 
@@ -621,29 +678,209 @@ public static class AssetManager
         return normalized.ToLowerInvariant();
     }
 
-    private static void CacheLoaded(string relativePath, string importerId, AssetObject asset)
+    private static void CacheLoaded(string relativePath, AssetObject asset, Guid persistentId)
     {
         lock (SYNC)
         {
-            if (CACHE_BY_PATH.TryGetValue(relativePath, out AssetCacheEntry? oldByPath))
+            AssetObject? oldByPath = LOADED_CACHE.First(CACHE_PATH_KEY, relativePath);
+            if (oldByPath is not null)
                 RemoveFromCache(oldByPath);
 
-            if (CACHE_BY_GUID.TryGetValue(asset.persistentId, out AssetCacheEntry? oldByGuid))
-                RemoveFromCache(oldByGuid);
+            if (persistentId != Guid.Empty)
+            {
+                AssetObject? oldByGuid = LOADED_CACHE.First(CACHE_PERSISTENT_ID_KEY, persistentId);
+                if (oldByGuid is not null)
+                    RemoveFromCache(oldByGuid);
+            }
 
-            IDENTITY_REGISTRY.Register(asset);
-
-            var entry = new AssetCacheEntry(relativePath, importerId, asset);
-            CACHE_BY_PATH[relativePath] = entry;
-            CACHE_BY_GUID[asset.persistentId] = entry;
+            IDENTITY_REGISTRY.Register(asset, persistentId);
+            asset.SetSourceInfo(relativePath, asset.sourceHash);
+            Identity identity = GetIdentity(asset);
+            LOADED_CACHE.Add(asset)
+                .Set(CACHE_PATH_KEY, relativePath)
+                .Set(CACHE_PERSISTENT_ID_KEY, identity.persistentId);
         }
     }
 
-    private static void RemoveFromCache(AssetCacheEntry entry)
+    private static void RemoveFromCache(AssetObject asset)
     {
-        CACHE_BY_PATH.Remove(entry.relativePath);
-        CACHE_BY_GUID.Remove(entry.asset.persistentId);
-        IDENTITY_REGISTRY.Unregister(entry.asset);
+        LOADED_CACHE.Remove(asset);
+        IDENTITY_REGISTRY.Unregister(asset);
+    }
+
+    private static int ResolveRuntimeTypeId(Type type)
+    {
+        if (TypeCache.TryGetRuntimeTypeId(type, out int runtimeTypeId))
+            return runtimeTypeId;
+
+        throw new InvalidOperationException($"Type '{type.FullName}' has no runtime type id in TypeCache.");
+    }
+
+    private static string GetAbsoluteSourcePath(string normalizedRelativePath)
+    {
+        string fullPath = Path.GetFullPath(Path.Combine(assetRoot, normalizedRelativePath));
+        string rootWithSeparator = assetRoot.EndsWith(Path.DirectorySeparatorChar)
+            ? assetRoot
+            : assetRoot + Path.DirectorySeparatorChar;
+
+        if (!fullPath.StartsWith(rootWithSeparator, StringComparison.Ordinal) &&
+            !string.Equals(fullPath, assetRoot, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Asset path escapes root: {normalizedRelativePath}");
+
+        return fullPath;
+    }
+
+    private static string NormalizeRelativePath(string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+            return string.Empty;
+
+        string path = relativePath.Replace('\\', '/').Trim();
+        while (path.StartsWith("./", StringComparison.Ordinal))
+            path = path[2..];
+        while (path.StartsWith("/", StringComparison.Ordinal))
+            path = path[1..];
+        while (path.EndsWith("/", StringComparison.Ordinal))
+            path = path[..^1];
+
+        return path == "." ? string.Empty : path;
+    }
+
+    private static Identity GetIdentity(AssetObject asset)
+        => ((IIdentityObject)asset).GetIdentity();
+
+    private static void OnFileSystemChangedBatch(IReadOnlyList<AssetChangedEvent> changes)
+    {
+        lock (SYNC)
+        {
+            for (int i = 0; i < changes.Count; i++)
+            {
+                string path = NormalizeRelativePath(changes[i].relativePath);
+                if (string.IsNullOrWhiteSpace(path))
+                    continue;
+
+                if (changes[i].changeType.HasFlag(WatcherChangeTypes.Renamed))
+                {
+                    HandleRenamedSourcePath(changes[i].oldRelativePath, path);
+                    continue;
+                }
+
+                bool wasDeleted = changes[i].changeType.HasFlag(WatcherChangeTypes.Deleted);
+                AssetObject? cached = LOADED_CACHE.First(CACHE_PATH_KEY, path);
+                if (cached is not null)
+                {
+                    Type cachedType = cached.GetType();
+                    RemoveFromCache(cached);
+
+                    if (!wasDeleted)
+                    {
+                        try
+                        {
+                            string absSourcePath = GetAbsoluteSourcePath(path);
+                            if (File.Exists(absSourcePath))
+                                _ = LoadInternal(path, cachedType, forceReimport: true);
+                        }
+                        catch
+                        {
+                            // Keep runtime alive; caller can inspect filesystem event and decide recovery path.
+                        }
+                    }
+                }
+
+                if (wasDeleted)
+                {
+                    CleanupGeneratedFiles(path);
+                }
+            }
+        }
+
+        SourceFileSystemChanged?.Invoke(changes);
+    }
+
+    private static void HandleRenamedSourcePath(string oldRelativePath, string newRelativePath)
+    {
+        string oldPath = NormalizeRelativePath(oldRelativePath);
+        string newPath = NormalizeRelativePath(newRelativePath);
+        if (string.IsNullOrWhiteSpace(newPath) || string.IsNullOrWhiteSpace(oldPath))
+            return;
+
+        Type? cachedType = null;
+        AssetObject? oldCached = LOADED_CACHE.First(CACHE_PATH_KEY, oldPath);
+        if (oldCached is not null)
+        {
+            cachedType = oldCached.GetType();
+            Guid persistentId = GetIdentity(oldCached).persistentId;
+            RemoveFromCache(oldCached);
+
+            // Preserve already-loaded instance availability across rename immediately.
+            AssetObject? conflictByNewPath = LOADED_CACHE.First(CACHE_PATH_KEY, newPath);
+            if (conflictByNewPath is not null)
+                RemoveFromCache(conflictByNewPath);
+
+            if (persistentId != Guid.Empty)
+            {
+                AssetObject? conflictByGuid = LOADED_CACHE.First(CACHE_PERSISTENT_ID_KEY, persistentId);
+                if (conflictByGuid is not null)
+                    RemoveFromCache(conflictByGuid);
+            }
+
+            IDENTITY_REGISTRY.Register(oldCached, persistentId);
+            oldCached.SetSourceInfo(newPath, oldCached.sourceHash);
+            LOADED_CACHE.Add(oldCached)
+                .Set(CACHE_PATH_KEY, newPath)
+                .Set(CACHE_PERSISTENT_ID_KEY, GetIdentity(oldCached).persistentId);
+        }
+
+        MoveGeneratedFiles(oldPath, newPath);
+
+        if (cachedType is null)
+            return;
+
+        try
+        {
+            string absNewSourcePath = GetAbsoluteSourcePath(newPath);
+            if (File.Exists(absNewSourcePath))
+                _ = LoadInternal(newPath, cachedType, forceReimport: false);
+        }
+        catch
+        {
+            // Keep runtime alive; caller can inspect filesystem event and decide recovery path.
+        }
+    }
+
+    private static void CleanupGeneratedFiles(string relativePath)
+    {
+        TryDeleteFile(GetMetaPath(relativePath));
+        TryDeleteFile(GetArtifactPath(relativePath));
+    }
+
+    private static void MoveGeneratedFiles(string oldRelativePath, string newRelativePath)
+    {
+        MoveGeneratedFile(GetMetaPath(oldRelativePath), GetMetaPath(newRelativePath));
+        MoveGeneratedFile(GetArtifactPath(oldRelativePath), GetArtifactPath(newRelativePath));
+    }
+
+    private static void MoveGeneratedFile(string oldPath, string newPath)
+    {
+        if (string.Equals(oldPath, newPath, StringComparison.Ordinal))
+            return;
+
+        if (!File.Exists(oldPath))
+            return;
+
+        Directory.CreateDirectory(Path.GetDirectoryName(newPath)!);
+        if (File.Exists(newPath))
+            File.Delete(newPath);
+
+        File.Move(oldPath, newPath);
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        if (!File.Exists(path))
+            return;
+
+        File.Delete(path);
     }
 
     private static void EnsureInitialized()
@@ -654,36 +891,28 @@ public static class AssetManager
 
     private static void ShutdownInternal()
     {
-        foreach (AssetCacheEntry entry in CACHE_BY_PATH.Values.ToArray())
-            IDENTITY_REGISTRY.Unregister(entry.asset);
+        AssetObject[] loaded = LOADED_CACHE.All().ToArray();
+        for (int i = 0; i < loaded.Length; i++)
+            IDENTITY_REGISTRY.Unregister(loaded[i]);
 
-        IMPORTER_BY_EXTENSION.Clear();
-        IMPORTER_BY_ASSET_TYPE.Clear();
-        CACHE_BY_PATH.Clear();
-        CACHE_BY_GUID.Clear();
+        LOADED_CACHE.RemoveAll();
+        IMPORTERS.RemoveAll();
+
+        if (isInitialized)
+        {
+            s_fileSystem.ChangedBatch -= OnFileSystemChangedBatch;
+            s_fileSystem.Dispose();
+        }
 
         assetRoot = string.Empty;
         artifactRoot = string.Empty;
         isInitialized = false;
     }
 
-    private sealed class AssetCacheEntry(string relativePath, string importerId, AssetObject asset)
+    private static string ComputeSha256Hex(ReadOnlySpan<byte> sourceBytes)
     {
-        public string relativePath { get; } = relativePath;
-        public string importerId { get; } = importerId;
-        public AssetObject asset { get; } = asset;
-    }
-
-    private sealed class AssetMeta : ISerializable
-    {
-        [SerializableProperty] public Guid persistentId { get; set; }
-        [SerializableProperty] public string relativePath { get; set; } = string.Empty;
-        [SerializableProperty] public string sourceHash { get; set; } = string.Empty;
-        [SerializableProperty] public string importerId { get; set; } = string.Empty;
-        [SerializableProperty] public int importerVersion { get; set; }
-        [SerializableProperty] public Guid assetTypeStableId { get; set; }
-        [SerializableProperty] public int assetRuntimeTypeId { get; set; }
-        [SerializableProperty] public byte[] assetStateBytes { get; set; } = [];
-        [SerializableProperty] public string[] dependencies { get; set; } = [];
+        Span<byte> hash = stackalloc byte[32];
+        SHA256.HashData(sourceBytes, hash);
+        return Convert.ToHexString(hash);
     }
 }

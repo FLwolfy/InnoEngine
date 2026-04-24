@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Reflection;
 
 using Inno.Core.Identity;
 using Inno.Core.Serialization;
@@ -29,15 +28,7 @@ public abstract class AssetObject : ISerializable, IIdentityObject
     /// </summary>
     public string name => string.IsNullOrWhiteSpace(sourcePath) ? GetType().Name : Path.GetFileName(sourcePath);
 
-    /// <summary>
-    /// Persistent identity id used for stable cross-session references.
-    /// </summary>
-    public Guid persistentId => ((IIdentityObject)this).GetIdentity().persistentId;
-
-    /// <summary>
-    /// Runtime identity id assigned while loaded in the current process.
-    /// </summary>
-    public int? runtimeId => ((IIdentityObject)this).GetIdentity().runtimeId;
+    public Identity identity => ((IIdentityObject)this).GetIdentity();
 
     /// <summary>
     /// Runtime-ready artifact payload produced by importer.
@@ -55,20 +46,5 @@ public abstract class AssetObject : ISerializable, IIdentityObject
     internal void SetRuntimePayload(byte[] payload)
     {
         m_runtimePayload = payload ?? [];
-    }
-
-    internal void SetPersistentId(Guid persistentId)
-    {
-        if (persistentId == Guid.Empty)
-            persistentId = Guid.NewGuid();
-
-        var method = typeof(IIdentityObject).GetMethod(
-            "SetIdentity",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-
-        if (method == null)
-            throw new InvalidOperationException("Failed to resolve IIdentityObject.SetIdentity.");
-
-        method.Invoke(this, [new Identity(persistentId)]);
     }
 }

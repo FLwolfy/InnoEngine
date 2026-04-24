@@ -23,6 +23,16 @@ public readonly struct AssetManagerOptions
     public bool autoRegisterImportersFromTypeCache { get; init; }
 
     /// <summary>
+    /// Whether to enable file-system watch and hot-refresh.
+    /// </summary>
+    public bool enableFileSystemWatcher { get; init; }
+
+    /// <summary>
+    /// File watcher change coalescing delay in milliseconds.
+    /// </summary>
+    public int fileWatcherFlushDelayMs { get; init; }
+
+    /// <summary>
     /// Creates options with sensible defaults for most projects.
     /// </summary>
     /// <param name="assetRoot">Source assets root folder.</param>
@@ -35,7 +45,9 @@ public readonly struct AssetManagerOptions
             assetRoot = assetRoot,
             artifactRoot = artifactRoot,
             autoRegisterBuiltInImporters = true,
-            autoRegisterImportersFromTypeCache = false
+            autoRegisterImportersFromTypeCache = false,
+            enableFileSystemWatcher = true,
+            fileWatcherFlushDelayMs = 80
         };
     }
 }

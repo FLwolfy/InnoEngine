@@ -4,6 +4,7 @@ using System.Diagnostics;
 using Inno.Core.Events;
 using Inno.Core.Framework;
 using Inno.Core.Job;
+using Inno.Core.Logging;
 using Inno.Native.ImGui;
 using Inno.Platform;
 using Inno.Platform.ImGui;
@@ -66,10 +67,10 @@ internal static class Program
                     switch (evnt)
                     {
                         case WindowEvent windowEvent:
-                            Console.WriteLine($"[WindowEvent] {windowEvent.GetType().Name} windowId={windowEvent.windowId}");
+                            Log.Info("[WindowEvent] {0} windowId={1}", windowEvent.GetType().Name, windowEvent.windowId);
                             break;
                         case KeyEvent keyEvent:
-                            Console.WriteLine($"[KeyEvent] {keyEvent.GetType().Name} windowId={keyEvent.windowId}");
+                            Log.Info("[KeyEvent] {0} windowId={1}", keyEvent.GetType().Name, keyEvent.windowId);
                             break;
                     }
 
@@ -132,7 +133,7 @@ internal static class Program
             m_scheduledJobDemo = true;
             _ = JobSystem.Schedule(() =>
             {
-                JobSystem.RunOnMainThread(() => Console.WriteLine("[JobSystem] Background job finished on main thread callback."));
+                JobSystem.RunOnMainThread(() => Log.Info("[JobSystem] Background job finished on main thread callback."));
             });
         }
     }

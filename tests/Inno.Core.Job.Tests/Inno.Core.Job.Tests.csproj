@@ -5,9 +5,9 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <RootNamespace>Inno.Core.JobSystem.Tests</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\core\Inno.Core.JobSystem\Inno.Core.JobSystem.csproj" />
     <ProjectReference Include="..\..\src\core\Inno.Core.Job\Inno.Core.Job.csproj" />
   </ItemGroup>
   <ItemGroup>

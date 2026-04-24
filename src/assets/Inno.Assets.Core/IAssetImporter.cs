@@ -30,7 +30,7 @@ public interface IAssetImporter
     /// </summary>
     /// <param name="context">Import input context.</param>
     /// <returns>Import output.</returns>
-    AssetImportResult Import(in AssetImportContext context);
+    AssetImportResult<AssetObject> Import(in AssetImportContext context);
 
     /// <summary>
     /// Tries to export asset object back to source bytes.
