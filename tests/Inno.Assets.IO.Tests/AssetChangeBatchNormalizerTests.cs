@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 
 using Inno.Assets.IO;
 
@@ -16,7 +17,7 @@ public sealed class AssetChangeBatchNormalizerTests
         string root = CreateRoot();
         try
         {
-            AssetChangedEvent[] normalized = AssetChangeBatchNormalizer.Normalize(root, [
+            AssetChangedEvent[] normalized = NormalizeViaReflection(root, [
                 new AssetChangedEvent("A/a.txt", WatcherChangeTypes.Created),
                 new AssetChangedEvent("A/a.txt", WatcherChangeTypes.Changed),
                 new AssetChangedEvent("A/a.txt", WatcherChangeTypes.Deleted)
@@ -41,7 +42,7 @@ public sealed class AssetChangeBatchNormalizerTests
             Directory.CreateDirectory(Path.Combine(root, "B"));
             File.WriteAllText(Path.Combine(root, "B", "new.txt"), "x");
 
-            AssetChangedEvent[] normalized = AssetChangeBatchNormalizer.Normalize(root, [
+            AssetChangedEvent[] normalized = NormalizeViaReflection(root, [
                 new AssetChangedEvent("B/new.txt", WatcherChangeTypes.Renamed, "A/old.txt"),
                 new AssetChangedEvent("B/new.txt", WatcherChangeTypes.Changed)
             ]);
@@ -67,13 +68,13 @@ public sealed class AssetChangeBatchNormalizerTests
             Directory.CreateDirectory(Path.Combine(root, "Flow"));
             File.WriteAllText(Path.Combine(root, "Flow", "one.txt"), "x");
 
-            AssetChangedEvent[] a = AssetChangeBatchNormalizer.Normalize(root, [
+            AssetChangedEvent[] a = NormalizeViaReflection(root, [
                 new AssetChangedEvent("Flow/two.txt", WatcherChangeTypes.Renamed, "Flow/one.txt"),
                 new AssetChangedEvent("Flow/two.txt", WatcherChangeTypes.Changed),
                 new AssetChangedEvent("Flow/one.txt", WatcherChangeTypes.Deleted)
             ]);
 
-            AssetChangedEvent[] b = AssetChangeBatchNormalizer.Normalize(root, [
+            AssetChangedEvent[] b = NormalizeViaReflection(root, [
                 new AssetChangedEvent("Flow/one.txt", WatcherChangeTypes.Deleted),
                 new AssetChangedEvent("Flow/two.txt", WatcherChangeTypes.Changed),
                 new AssetChangedEvent("Flow/two.txt", WatcherChangeTypes.Renamed, "Flow/one.txt")
@@ -91,6 +92,18 @@ public sealed class AssetChangeBatchNormalizerTests
 
     private static string ToSignal(AssetChangedEvent e)
         => $"{e.relativePath}|{e.oldRelativePath}|{(int)e.changeType}";
+
+    private static AssetChangedEvent[] NormalizeViaReflection(string root, AssetChangedEvent[] rawBatch)
+    {
+        Assembly assembly = typeof(AssetFileSystem).Assembly;
+        Type normalizerType = assembly.GetType("Inno.Assets.IO.AssetChangeBatchNormalizer", throwOnError: true)!;
+        MethodInfo normalize = normalizerType.GetMethod(
+            "Normalize",
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        object? result = normalize.Invoke(null, [root, rawBatch]);
+        return Assert.IsType<AssetChangedEvent[]>(result);
+    }
 
     private static string CreateRoot()
     {

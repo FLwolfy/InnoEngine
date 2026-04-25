@@ -583,13 +583,6 @@ public static class AssetManager
             return stableResolved;
         }
 
-        if (meta.assetRuntimeTypeId != 0 &&
-            TypeCache.TryResolveType(meta.assetRuntimeTypeId, out Type? runtimeResolved) &&
-            runtimeResolved != null)
-        {
-            return runtimeResolved;
-        }
-
         return fallback;
     }
 
@@ -630,8 +623,6 @@ public static class AssetManager
 
         if (TypeCache.TryGetStableTypeId(asset.GetType(), out Guid stableTypeId))
             meta.assetTypeStableId = stableTypeId;
-        if (TypeCache.TryGetRuntimeTypeId(asset.GetType(), out int runtimeTypeId))
-            meta.assetRuntimeTypeId = runtimeTypeId;
 
         byte[] bytes = SerializingState.Serialize(((ISerializable)meta).CaptureState());
         string metaPath = GetMetaPath(relativePath);
