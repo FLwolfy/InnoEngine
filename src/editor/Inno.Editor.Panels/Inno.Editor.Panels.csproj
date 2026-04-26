@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Editor.Core\Inno.Editor.Core.csproj" />
+    <ProjectReference Include="..\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" />
+    <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" />
+  </ItemGroup>
+</Project>
