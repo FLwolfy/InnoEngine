@@ -5,6 +5,7 @@ using Inno.Editor.ImGui;
 using Inno.Editor.Panels;
 using Inno.Platform.ImGui;
 using Inno.Core.Framework;
+using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Application;
 
@@ -44,7 +45,7 @@ internal sealed class EditorLayer : Layer
 
         _ = m_imgui.RenderFrame(() =>
         {
-            ImGuiWidget.DockSpaceFullscreen();
+            _ = NativeImGui.DockSpaceOverViewport();
             DrawMainMenu();
             DrawPanels();
         });

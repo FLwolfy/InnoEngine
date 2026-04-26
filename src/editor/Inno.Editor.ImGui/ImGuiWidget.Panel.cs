@@ -11,14 +11,6 @@ namespace Inno.Editor.ImGui;
 public static partial class ImGuiWidget
 {
     /// <summary>
-    /// Draws a dockspace covering the main viewport.
-    /// </summary>
-    public static void DockSpaceFullscreen()
-    {
-        _ = NativeImGui.DockSpaceOverViewport();
-    }
-
-    /// <summary>
     /// Opens a standard panel window and executes panel body.
     /// </summary>
     /// <param name="title">Window title.</param>
@@ -49,6 +41,8 @@ public static partial class ImGuiWidget
     /// <param name="text">Hint text.</param>
     public static void Hint(string text)
     {
+        NativeImGui.BeginDisabled(true);
         NativeImGui.TextUnformatted(text);
+        NativeImGui.EndDisabled();
     }
 }

@@ -4,7 +4,7 @@ using System.IO;
 using Inno.Assets;
 using Inno.Assets.IO;
 using Inno.Editor.Core;
-using Inno.Native.ImGui;
+using Inno.Editor.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panels;
@@ -32,12 +32,14 @@ public sealed class AssetTreePanel : EditorPanel
     {
         IReadOnlyList<AssetFileEntry> children = AssetManager.GetFileSystemChildren(relativePath);
         bool selected = string.Equals(context.selection.selectedPath, relativePath, System.StringComparison.Ordinal);
-        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags.OpenOnArrow | ImGuiTreeNodeFlags.SpanFullWidth;
-        if (selected)
-            flags |= ImGuiTreeNodeFlags.Selected;
-        if (relativePath.Length == 0)
-            NativeImGui.SetNextItemOpen(true, ImGuiCond.Once);
-        bool opened = NativeImGui.TreeNodeEx($"{label}##{(relativePath.Length == 0 ? "root" : relativePath)}", flags);
+        bool opened = ImGuiWidget.TreeNodeIcon(
+            id: relativePath.Length == 0 ? "root" : relativePath,
+            icon: "[D]",
+            label: label,
+            selected: selected,
+            isLeaf: false,
+            defaultOpen: relativePath.Length == 0,
+            drawLines: true);
 
         if (NativeImGui.IsItemClicked())
         {

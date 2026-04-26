@@ -63,9 +63,8 @@ public sealed class AssetBrowserPanel : EditorPanel
             AssetFileEntry entry = entries[i];
             string icon = entry.isDirectory ? "[D]" : "[F]";
             string name = Path.GetFileName(entry.relativePath);
-            string rowLabel = $"{icon} {name}";
             bool selected = string.Equals(context.selection.selectedPath, entry.relativePath, System.StringComparison.Ordinal);
-            if (ImGuiWidget.SelectableRow(entry.relativePath, rowLabel, selected))
+            if (ImGuiWidget.SelectableIconRow(entry.relativePath, icon, name, selected))
             {
                 context.selection.SetSelectedPath(entry.relativePath);
             }

@@ -10,7 +10,12 @@ public static partial class ImGuiWidget
     public static void SetupStyle()
 	{
 	    var style = NativeImGui.GetStyle();
+	    ApplyLayoutStyle(style);
+	    ApplyColorStyle(style);
+	}
 
+	private static void ApplyLayoutStyle(ImGuiStylePtr style)
+	{
 	    style.Alpha = 1.0f;
 	    style.DisabledAlpha = 0.1f;
 	    style.FontScaleMain = 1.25f;
@@ -55,8 +60,10 @@ public static partial class ImGuiWidget
 	    style.ColorButtonPosition = ImGuiDir.Right;
 	    style.ButtonTextAlign = new Vector2(0.5f, 0.5f);
 	    style.SelectableTextAlign = new Vector2(0.0f, 0.0f);
-	    
-	    // --- Colors ---
+	}
+
+	private static void ApplyColorStyle(ImGuiStylePtr style)
+	{
 	    style.Colors[(int)ImGuiCol.Text] = new Vector4(1.0f, 1.0f, 1.0f, 1.0f);
 	    style.Colors[(int)ImGuiCol.TextDisabled] = new Vector4(1.0f, 1.0f, 1.0f, 0.360515f);
 	    style.Colors[(int)ImGuiCol.WindowBg] = new Vector4(0.18f, 0.18f, 0.18f, 1.0f);
