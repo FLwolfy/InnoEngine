@@ -20,11 +20,6 @@ namespace Inno.Native.ImGui
 	public enum ImGuiItemFlagsPrivate : int
 	{
 		/// <summary>
-		/// false      Disable interactions (DOES NOT affect visuals. DO NOT mix direct use of this with BeginDisabled(). See BeginDisabled()EndDisabled() for full disable feature, and github #211).<br/>
-		/// </summary>
-		Disabled = unchecked(1024),
-
-		/// <summary>
 		/// false      [ALPHA] Allow hovering interactions but underlying value is not changed.<br/>
 		/// </summary>
 		ReadOnly = unchecked(2048),

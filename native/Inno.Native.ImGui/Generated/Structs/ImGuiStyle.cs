@@ -180,6 +180,11 @@ namespace Inno.Native.ImGui
 		/// <summary>
 		/// To be documented.
 		/// </summary>
+		public float ImageRounding;
+
+		/// <summary>
+		/// To be documented.
+		/// </summary>
 		public float ImageBorderSize;
 
 		/// <summary>
@@ -246,6 +251,26 @@ namespace Inno.Native.ImGui
 		/// To be documented.
 		/// </summary>
 		public float TreeLinesRounding;
+
+		/// <summary>
+		/// To be documented.
+		/// </summary>
+		public float DragDropTargetRounding;
+
+		/// <summary>
+		/// To be documented.
+		/// </summary>
+		public float DragDropTargetBorderSize;
+
+		/// <summary>
+		/// To be documented.
+		/// </summary>
+		public float DragDropTargetPadding;
+
+		/// <summary>
+		/// To be documented.
+		/// </summary>
+		public float ColorMarkerSize;
 
 		/// <summary>
 		/// To be documented.
@@ -391,6 +416,7 @@ namespace Inno.Native.ImGui
 		public Vector4 Colors_58;
 		public Vector4 Colors_59;
 		public Vector4 Colors_60;
+		public Vector4 Colors_61;
 
 		/// <summary>
 		/// To be documented.
@@ -431,7 +457,7 @@ namespace Inno.Native.ImGui
 		/// <summary>
 		/// To be documented.
 		/// </summary>
-		public unsafe ImGuiStyle(float fontSizeBase = default, float fontScaleMain = default, float fontScaleDpi = default, float alpha = default, float disabledAlpha = default, Vector2 windowPadding = default, float windowRounding = default, float windowBorderSize = default, float windowBorderHoverPadding = default, Vector2 windowMinSize = default, Vector2 windowTitleAlign = default, ImGuiDir windowMenuButtonPosition = default, float childRounding = default, float childBorderSize = default, float popupRounding = default, float popupBorderSize = default, Vector2 framePadding = default, float frameRounding = default, float frameBorderSize = default, Vector2 itemSpacing = default, Vector2 itemInnerSpacing = default, Vector2 cellPadding = default, Vector2 touchExtraPadding = default, float indentSpacing = default, float columnsMinSpacing = default, float scrollbarSize = default, float scrollbarRounding = default, float scrollbarPadding = default, float grabMinSize = default, float grabRounding = default, float logSliderDeadzone = default, float imageBorderSize = default, float tabRounding = default, float tabBorderSize = default, float tabMinWidthBase = default, float tabMinWidthShrink = default, float tabCloseButtonMinWidthSelected = default, float tabCloseButtonMinWidthUnselected = default, float tabBarBorderSize = default, float tabBarOverlineSize = default, float tableAngledHeadersAngle = default, Vector2 tableAngledHeadersTextAlign = default, ImGuiTreeNodeFlags treeLinesFlags = default, float treeLinesSize = default, float treeLinesRounding = default, ImGuiDir colorButtonPosition = default, Vector2 buttonTextAlign = default, Vector2 selectableTextAlign = default, float separatorTextBorderSize = default, Vector2 separatorTextAlign = default, Vector2 separatorTextPadding = default, Vector2 displayWindowPadding = default, Vector2 displaySafeAreaPadding = default, bool dockingNodeHasCloseButton = default, float dockingSeparatorSize = default, float mouseCursorScale = default, bool antiAliasedLines = default, bool antiAliasedLinesUseTex = default, bool antiAliasedFill = default, float curveTessellationTol = default, float circleTessellationMaxError = default, Vector4* colors = default, float hoverStationaryDelay = default, float hoverDelayShort = default, float hoverDelayNormal = default, ImGuiHoveredFlags hoverFlagsForTooltipMouse = default, ImGuiHoveredFlags hoverFlagsForTooltipNav = default, float mainScale = default, float nextFrameFontSizeBase = default)
+		public unsafe ImGuiStyle(float fontSizeBase = default, float fontScaleMain = default, float fontScaleDpi = default, float alpha = default, float disabledAlpha = default, Vector2 windowPadding = default, float windowRounding = default, float windowBorderSize = default, float windowBorderHoverPadding = default, Vector2 windowMinSize = default, Vector2 windowTitleAlign = default, ImGuiDir windowMenuButtonPosition = default, float childRounding = default, float childBorderSize = default, float popupRounding = default, float popupBorderSize = default, Vector2 framePadding = default, float frameRounding = default, float frameBorderSize = default, Vector2 itemSpacing = default, Vector2 itemInnerSpacing = default, Vector2 cellPadding = default, Vector2 touchExtraPadding = default, float indentSpacing = default, float columnsMinSpacing = default, float scrollbarSize = default, float scrollbarRounding = default, float scrollbarPadding = default, float grabMinSize = default, float grabRounding = default, float logSliderDeadzone = default, float imageRounding = default, float imageBorderSize = default, float tabRounding = default, float tabBorderSize = default, float tabMinWidthBase = default, float tabMinWidthShrink = default, float tabCloseButtonMinWidthSelected = default, float tabCloseButtonMinWidthUnselected = default, float tabBarBorderSize = default, float tabBarOverlineSize = default, float tableAngledHeadersAngle = default, Vector2 tableAngledHeadersTextAlign = default, ImGuiTreeNodeFlags treeLinesFlags = default, float treeLinesSize = default, float treeLinesRounding = default, float dragDropTargetRounding = default, float dragDropTargetBorderSize = default, float dragDropTargetPadding = default, float colorMarkerSize = default, ImGuiDir colorButtonPosition = default, Vector2 buttonTextAlign = default, Vector2 selectableTextAlign = default, float separatorTextBorderSize = default, Vector2 separatorTextAlign = default, Vector2 separatorTextPadding = default, Vector2 displayWindowPadding = default, Vector2 displaySafeAreaPadding = default, bool dockingNodeHasCloseButton = default, float dockingSeparatorSize = default, float mouseCursorScale = default, bool antiAliasedLines = default, bool antiAliasedLinesUseTex = default, bool antiAliasedFill = default, float curveTessellationTol = default, float circleTessellationMaxError = default, Vector4* colors = default, float hoverStationaryDelay = default, float hoverDelayShort = default, float hoverDelayNormal = default, ImGuiHoveredFlags hoverFlagsForTooltipMouse = default, ImGuiHoveredFlags hoverFlagsForTooltipNav = default, float mainScale = default, float nextFrameFontSizeBase = default)
 		{
 			FontSizeBase = fontSizeBase;
 			FontScaleMain = fontScaleMain;
@@ -464,6 +490,7 @@ namespace Inno.Native.ImGui
 			GrabMinSize = grabMinSize;
 			GrabRounding = grabRounding;
 			LogSliderDeadzone = logSliderDeadzone;
+			ImageRounding = imageRounding;
 			ImageBorderSize = imageBorderSize;
 			TabRounding = tabRounding;
 			TabBorderSize = tabBorderSize;
@@ -478,6 +505,10 @@ namespace Inno.Native.ImGui
 			TreeLinesFlags = treeLinesFlags;
 			TreeLinesSize = treeLinesSize;
 			TreeLinesRounding = treeLinesRounding;
+			DragDropTargetRounding = dragDropTargetRounding;
+			DragDropTargetBorderSize = dragDropTargetBorderSize;
+			DragDropTargetPadding = dragDropTargetPadding;
+			ColorMarkerSize = colorMarkerSize;
 			ColorButtonPosition = colorButtonPosition;
 			ButtonTextAlign = buttonTextAlign;
 			SelectableTextAlign = selectableTextAlign;
@@ -557,6 +588,7 @@ namespace Inno.Native.ImGui
 				Colors_58 = colors[58];
 				Colors_59 = colors[59];
 				Colors_60 = colors[60];
+				Colors_61 = colors[61];
 			}
 			HoverStationaryDelay = hoverStationaryDelay;
 			HoverDelayShort = hoverDelayShort;
@@ -570,7 +602,7 @@ namespace Inno.Native.ImGui
 		/// <summary>
 		/// To be documented.
 		/// </summary>
-		public unsafe ImGuiStyle(float fontSizeBase = default, float fontScaleMain = default, float fontScaleDpi = default, float alpha = default, float disabledAlpha = default, Vector2 windowPadding = default, float windowRounding = default, float windowBorderSize = default, float windowBorderHoverPadding = default, Vector2 windowMinSize = default, Vector2 windowTitleAlign = default, ImGuiDir windowMenuButtonPosition = default, float childRounding = default, float childBorderSize = default, float popupRounding = default, float popupBorderSize = default, Vector2 framePadding = default, float frameRounding = default, float frameBorderSize = default, Vector2 itemSpacing = default, Vector2 itemInnerSpacing = default, Vector2 cellPadding = default, Vector2 touchExtraPadding = default, float indentSpacing = default, float columnsMinSpacing = default, float scrollbarSize = default, float scrollbarRounding = default, float scrollbarPadding = default, float grabMinSize = default, float grabRounding = default, float logSliderDeadzone = default, float imageBorderSize = default, float tabRounding = default, float tabBorderSize = default, float tabMinWidthBase = default, float tabMinWidthShrink = default, float tabCloseButtonMinWidthSelected = default, float tabCloseButtonMinWidthUnselected = default, float tabBarBorderSize = default, float tabBarOverlineSize = default, float tableAngledHeadersAngle = default, Vector2 tableAngledHeadersTextAlign = default, ImGuiTreeNodeFlags treeLinesFlags = default, float treeLinesSize = default, float treeLinesRounding = default, ImGuiDir colorButtonPosition = default, Vector2 buttonTextAlign = default, Vector2 selectableTextAlign = default, float separatorTextBorderSize = default, Vector2 separatorTextAlign = default, Vector2 separatorTextPadding = default, Vector2 displayWindowPadding = default, Vector2 displaySafeAreaPadding = default, bool dockingNodeHasCloseButton = default, float dockingSeparatorSize = default, float mouseCursorScale = default, bool antiAliasedLines = default, bool antiAliasedLinesUseTex = default, bool antiAliasedFill = default, float curveTessellationTol = default, float circleTessellationMaxError = default, Span<Vector4> colors = default, float hoverStationaryDelay = default, float hoverDelayShort = default, float hoverDelayNormal = default, ImGuiHoveredFlags hoverFlagsForTooltipMouse = default, ImGuiHoveredFlags hoverFlagsForTooltipNav = default, float mainScale = default, float nextFrameFontSizeBase = default)
+		public unsafe ImGuiStyle(float fontSizeBase = default, float fontScaleMain = default, float fontScaleDpi = default, float alpha = default, float disabledAlpha = default, Vector2 windowPadding = default, float windowRounding = default, float windowBorderSize = default, float windowBorderHoverPadding = default, Vector2 windowMinSize = default, Vector2 windowTitleAlign = default, ImGuiDir windowMenuButtonPosition = default, float childRounding = default, float childBorderSize = default, float popupRounding = default, float popupBorderSize = default, Vector2 framePadding = default, float frameRounding = default, float frameBorderSize = default, Vector2 itemSpacing = default, Vector2 itemInnerSpacing = default, Vector2 cellPadding = default, Vector2 touchExtraPadding = default, float indentSpacing = default, float columnsMinSpacing = default, float scrollbarSize = default, float scrollbarRounding = default, float scrollbarPadding = default, float grabMinSize = default, float grabRounding = default, float logSliderDeadzone = default, float imageRounding = default, float imageBorderSize = default, float tabRounding = default, float tabBorderSize = default, float tabMinWidthBase = default, float tabMinWidthShrink = default, float tabCloseButtonMinWidthSelected = default, float tabCloseButtonMinWidthUnselected = default, float tabBarBorderSize = default, float tabBarOverlineSize = default, float tableAngledHeadersAngle = default, Vector2 tableAngledHeadersTextAlign = default, ImGuiTreeNodeFlags treeLinesFlags = default, float treeLinesSize = default, float treeLinesRounding = default, float dragDropTargetRounding = default, float dragDropTargetBorderSize = default, float dragDropTargetPadding = default, float colorMarkerSize = default, ImGuiDir colorButtonPosition = default, Vector2 buttonTextAlign = default, Vector2 selectableTextAlign = default, float separatorTextBorderSize = default, Vector2 separatorTextAlign = default, Vector2 separatorTextPadding = default, Vector2 displayWindowPadding = default, Vector2 displaySafeAreaPadding = default, bool dockingNodeHasCloseButton = default, float dockingSeparatorSize = default, float mouseCursorScale = default, bool antiAliasedLines = default, bool antiAliasedLinesUseTex = default, bool antiAliasedFill = default, float curveTessellationTol = default, float circleTessellationMaxError = default, Span<Vector4> colors = default, float hoverStationaryDelay = default, float hoverDelayShort = default, float hoverDelayNormal = default, ImGuiHoveredFlags hoverFlagsForTooltipMouse = default, ImGuiHoveredFlags hoverFlagsForTooltipNav = default, float mainScale = default, float nextFrameFontSizeBase = default)
 		{
 			FontSizeBase = fontSizeBase;
 			FontScaleMain = fontScaleMain;
@@ -603,6 +635,7 @@ namespace Inno.Native.ImGui
 			GrabMinSize = grabMinSize;
 			GrabRounding = grabRounding;
 			LogSliderDeadzone = logSliderDeadzone;
+			ImageRounding = imageRounding;
 			ImageBorderSize = imageBorderSize;
 			TabRounding = tabRounding;
 			TabBorderSize = tabBorderSize;
@@ -617,6 +650,10 @@ namespace Inno.Native.ImGui
 			TreeLinesFlags = treeLinesFlags;
 			TreeLinesSize = treeLinesSize;
 			TreeLinesRounding = treeLinesRounding;
+			DragDropTargetRounding = dragDropTargetRounding;
+			DragDropTargetBorderSize = dragDropTargetBorderSize;
+			DragDropTargetPadding = dragDropTargetPadding;
+			ColorMarkerSize = colorMarkerSize;
 			ColorButtonPosition = colorButtonPosition;
 			ButtonTextAlign = buttonTextAlign;
 			SelectableTextAlign = selectableTextAlign;
@@ -696,6 +733,7 @@ namespace Inno.Native.ImGui
 				Colors_58 = colors[58];
 				Colors_59 = colors[59];
 				Colors_60 = colors[60];
+				Colors_61 = colors[61];
 			}
 			HoverStationaryDelay = hoverStationaryDelay;
 			HoverDelayShort = hoverDelayShort;
@@ -717,7 +755,7 @@ namespace Inno.Native.ImGui
 			{
 				fixed (Vector4* p = &this.Colors_0)
 				{
-					return new Span<Vector4>(p, 61);
+					return new Span<Vector4>(p, 62);
 				}
 			}
 		}
@@ -913,6 +951,10 @@ namespace Inno.Native.ImGui
 		/// <summary>
 		/// To be documented.
 		/// </summary>
+		public ref float ImageRounding => ref Unsafe.AsRef<float>(&Handle->ImageRounding);
+		/// <summary>
+		/// To be documented.
+		/// </summary>
 		public ref float ImageBorderSize => ref Unsafe.AsRef<float>(&Handle->ImageBorderSize);
 		/// <summary>
 		/// To be documented.
@@ -966,6 +1008,22 @@ namespace Inno.Native.ImGui
 		/// To be documented.
 		/// </summary>
 		public ref float TreeLinesRounding => ref Unsafe.AsRef<float>(&Handle->TreeLinesRounding);
+		/// <summary>
+		/// To be documented.
+		/// </summary>
+		public ref float DragDropTargetRounding => ref Unsafe.AsRef<float>(&Handle->DragDropTargetRounding);
+		/// <summary>
+		/// To be documented.
+		/// </summary>
+		public ref float DragDropTargetBorderSize => ref Unsafe.AsRef<float>(&Handle->DragDropTargetBorderSize);
+		/// <summary>
+		/// To be documented.
+		/// </summary>
+		public ref float DragDropTargetPadding => ref Unsafe.AsRef<float>(&Handle->DragDropTargetPadding);
+		/// <summary>
+		/// To be documented.
+		/// </summary>
+		public ref float ColorMarkerSize => ref Unsafe.AsRef<float>(&Handle->ColorMarkerSize);
 		/// <summary>
 		/// To be documented.
 		/// </summary>
@@ -1038,7 +1096,7 @@ namespace Inno.Native.ImGui
 		{
 			get
 			{
-				return new Span<Vector4>(&Handle->Colors_0, 61);
+				return new Span<Vector4>(&Handle->Colors_0, 62);
 			}
 		}
 		/// <summary>

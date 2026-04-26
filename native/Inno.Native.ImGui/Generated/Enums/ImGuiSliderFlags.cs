@@ -60,6 +60,11 @@ namespace Inno.Native.ImGui
 		NoSpeedTweaks = unchecked(2048),
 
 		/// <summary>
+		/// Display small triangle markers for minimum and maximum values, using style.Colors[ImGuiCol_SliderGrabActive].<br/>
+		/// </summary>
+		ColorMarkers = unchecked(4096),
+
+		/// <summary>
 		/// To be documented.
 		/// </summary>
 		AlwaysClamp = unchecked(1536),

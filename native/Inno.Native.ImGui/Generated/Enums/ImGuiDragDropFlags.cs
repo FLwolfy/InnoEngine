@@ -80,6 +80,11 @@ namespace Inno.Native.ImGui
 		AcceptNoPreviewTooltip = unchecked(4096),
 
 		/// <summary>
+		/// Request styling this preview as if item was already held, e.g. for selection visuals.<br/>
+		/// </summary>
+		AcceptDrawAsHovered = unchecked(8192),
+
+		/// <summary>
 		/// For peeking ahead and inspecting the payload before delivery.<br/>
 		/// </summary>
 		AcceptPeekOnly = unchecked(3072),

@@ -62,6 +62,11 @@ namespace Inno.Native.ImGui
 		/// <summary>
 		/// To be documented.
 		/// </summary>
-		Count = unchecked(8),
+		UnsavedMarker = unchecked(8),
+
+		/// <summary>
+		/// To be documented.
+		/// </summary>
+		Count = unchecked(9),
 	}
 }

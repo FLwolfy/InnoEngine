@@ -53,5 +53,10 @@ namespace Inno.Native.ImGui
 		/// false     Allow submitting an item with the same identifier as an item already submitted this frame without triggering a warning tooltip if io.ConfigDebugHighlightIdConflicts is set.<br/>
 		/// </summary>
 		AllowDuplicateId = unchecked(32),
+
+		/// <summary>
+		/// false     Disable interactions (DOES NOT affect visuals. DO NOT mix direct use of this with BeginDisabled(). See BeginDisabled() for full disable feature, and github #211 for use of old-style PushItemFlag().)<br/>
+		/// </summary>
+		Disabled = unchecked(64),
 	}
 }

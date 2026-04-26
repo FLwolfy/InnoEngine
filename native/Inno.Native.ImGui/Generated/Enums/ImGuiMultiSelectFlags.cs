@@ -57,12 +57,12 @@ namespace Inno.Native.ImGui
 		/// <summary>
 		/// Enable box-selection with same width and same x pos items (e.g. full row Selectable()). Box-selection works better with little bit of spacing between items hit-box in order to be able to aim at empty space.<br/>
 		/// </summary>
-		BoxSelect1D = unchecked(64),
+		BoxSelect1d = unchecked(64),
 
 		/// <summary>
 		/// Enable box-selection with varying width or varying x pos items support (e.g. different width labels, or 2D layoutgrid). This is slower: alters clipping logic so that e.g. horizontal movements will update selection of normally clipped items.<br/>
 		/// </summary>
-		BoxSelect2D = unchecked(128),
+		BoxSelect2d = unchecked(128),
 
 		/// <summary>
 		/// Disable scrolling when box-selecting near edges of scope.<br/>
@@ -92,16 +92,21 @@ namespace Inno.Native.ImGui
 		/// <summary>
 		/// Apply selection on mouse down when clicking on unselected item. (Default)<br/>
 		/// </summary>
-		OnClick = unchecked(8192),
+		SelectOnClick = unchecked(8192),
 
 		/// <summary>
 		/// Apply selection on mouse release when clicking an unselected item. Allow dragging an unselected item without altering selection.<br/>
 		/// </summary>
-		OnClickRelease = unchecked(16384),
+		SelectOnClickRelease = unchecked(16384),
 
 		/// <summary>
 		/// [Temporary] Enable navigation wrapping on X axis. Provided as a convenience because we don't have a design for the general Nav API for this yet. When the more general feature be public we may obsolete this flag in favor of new one.<br/>
 		/// </summary>
 		NavWrapX = unchecked(65536),
+
+		/// <summary>
+		/// Disable selecting items on right mouse button click (e.g. for opening context menu in maps).<br/>
+		/// </summary>
+		NoSelectOnRightClick = unchecked(131072),
 	}
 }

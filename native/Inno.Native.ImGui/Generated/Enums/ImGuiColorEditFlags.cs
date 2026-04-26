@@ -75,24 +75,29 @@ namespace Inno.Native.ImGui
 		NoBorder = unchecked(1024),
 
 		/// <summary>
+		/// ColorEdit: disable rendering R/G/B/A color marker. May also be disabled globally by setting style.ColorMarkerSize = 0.<br/>
+		/// </summary>
+		NoColorMarkers = unchecked(2048),
+
+		/// <summary>
 		/// ColorEdit, ColorPicker, ColorButton: disable alpha in the preview,. Contrary to _NoAlpha it may still be edited when calling ColorEdit4()ColorPicker4(). For ColorButton() this does the same as _NoAlpha.<br/>
 		/// </summary>
-		AlphaOpaque = unchecked(2048),
+		AlphaOpaque = unchecked(4096),
 
 		/// <summary>
 		/// ColorEdit, ColorPicker, ColorButton: disable rendering a checkerboard background behind transparent color.<br/>
 		/// </summary>
-		AlphaNoBg = unchecked(4096),
+		AlphaNoBg = unchecked(8192),
 
 		/// <summary>
 		/// ColorEdit, ColorPicker, ColorButton: display half opaque  half transparent preview.<br/>
 		/// </summary>
-		AlphaPreviewHalf = unchecked(8192),
+		AlphaPreviewHalf = unchecked(16384),
 
 		/// <summary>
 		/// ColorEdit, ColorPicker: show vertical alpha bargradient in picker.<br/>
 		/// </summary>
-		AlphaBar = unchecked(65536),
+		AlphaBar = unchecked(262144),
 
 		/// <summary>
 		/// (WIP) ColorEdit: Currently only disable 0.0f..1.0f limits in RGBA edition (note: you probably want to use ImGuiColorEditFlags_Float flag as well).<br/>
@@ -152,7 +157,7 @@ namespace Inno.Native.ImGui
 		/// <summary>
 		/// To be documented.
 		/// </summary>
-		AlphaMask = unchecked(14338),
+		AlphaMask = unchecked(28674),
 
 		/// <summary>
 		/// To be documented.

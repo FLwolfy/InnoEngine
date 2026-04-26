@@ -95,8 +95,13 @@ namespace Inno.Native.ImGui
 		OutputToTty = unchecked(1048576),
 
 		/// <summary>
+		/// Also send output to debugger<br/>
+		/// </summary>
+		OutputToDebugger = unchecked(2097152),
+
+		/// <summary>
 		/// Also send output to Test Engine<br/>
 		/// </summary>
-		OutputToTestEngine = unchecked(2097152),
+		OutputToTestEngine = unchecked(4194304),
 	}
 }
