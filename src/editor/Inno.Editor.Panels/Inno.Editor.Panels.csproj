@@ -8,6 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Inno.Editor.Core\Inno.Editor.Core.csproj" />
     <ProjectReference Include="..\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" />
+    <ProjectReference Include="..\..\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" />
     <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" />
     <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" />
   </ItemGroup>

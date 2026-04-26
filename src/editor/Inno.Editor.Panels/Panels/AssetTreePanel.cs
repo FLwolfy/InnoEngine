@@ -3,6 +3,7 @@ using System.IO;
 
 using Inno.Assets;
 using Inno.Assets.IO;
+using Inno.Core.Logging;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
@@ -45,6 +46,9 @@ public sealed class AssetTreePanel : EditorPanel
         {
             context.selection.SetSelectedPath(relativePath);
             context.selection.SetCurrentDirectory(relativePath);
+            
+            // TODO: REMOVE DEBUG TESTS
+            Log.Fatal("Clicked: Clicked: Clicked: Clicked: Clicked: Clicked: Clicked: Clicked: Clicked: Clicked: Clicked: Clicked: Clicked: Clicked: Clicked: Clicked: Clicked: Clicked: Clicked: Clicked: " + relativePath);
         }
 
         if (!opened)
