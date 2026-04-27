@@ -48,7 +48,7 @@ public sealed class AssetTreePanel : EditorPanel
             context.selection.SetCurrentDirectory(relativePath);
             
             // TODO: REMOVE DEBUG TESTS
-            Log.Info("This is a very very long debug message for multiple line and ellipse showing tests.This is a very very long debug message for multiple line and ellipse showing tests.This is a very very long debug message for multiple line and ellipse showing tests.");
+            Log.Fatal("This is a very very long debug message for multiple line and ellipse showing tests.This is a very very long debug message for multiple line and ellipse showing tests.This is a very very long debug message for multiple line and ellipse showing tests.");
         }
 
         if (!opened)

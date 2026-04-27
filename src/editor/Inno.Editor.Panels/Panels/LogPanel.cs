@@ -16,25 +16,27 @@ namespace Inno.Editor.Panels;
 /// </summary>
 public sealed class LogPanel : EditorPanel
 {
+    #region Constants
     private const string C_ICON_BUG = ImGuiIcon.Bug;
     private const string C_ICON_INFO = ImGuiIcon.CircleInfo;
     private const string C_ICON_WARN = ImGuiIcon.TriangleExclamation;
     private const string C_ICON_ERROR = ImGuiIcon.CircleXmark;
     private const string C_ICON_FATAL = ImGuiIcon.SkullCrossbones;
     private const string C_ICON_DEFAULT = ImGuiIcon.FileLines;
+    #endregion
 
+    #region State
     private readonly HashSet<LogLevel> m_filterLevels = Enum.GetValues<LogLevel>().ToHashSet();
     private readonly LogLevel[] m_levels = Enum.GetValues<LogLevel>();
-    private readonly float[] m_levelTokenW = new float[Enum.GetValues<LogLevel>().Length];
     private readonly HashSet<long> m_openEntries = [];
 
     private bool m_collapse = true;
-    private bool m_levelTokenWValid;
-    private float m_levelTokenWFontSize = -1f;
     private int m_lastSnapshotCount = -1;
     private bool m_requestScrollToBottom = true;
     private bool m_lastRenderedCollapse = true;
+    #endregion
 
+    #region Lifecycle
     /// <summary>
     /// Creates the panel.
     /// </summary>
@@ -52,7 +54,9 @@ public sealed class LogPanel : EditorPanel
         DrawLogRegion(context);
         NativeImGui.EndChild();
     }
+    #endregion
 
+    #region Toolbar
     private void DrawToolbar(EditorContext context)
     {
         bool collapseChanged = NativeImGui.Checkbox("Collapse", ref m_collapse);
@@ -109,7 +113,9 @@ public sealed class LogPanel : EditorPanel
         NativeImGui.EndCombo();
         return changed;
     }
+    #endregion
 
+    #region Log Region
     private void DrawLogRegion(EditorContext context)
     {
         NativeImGui.BeginChild("LogRegion", Vector2.Zero);
@@ -135,32 +141,22 @@ public sealed class LogPanel : EditorPanel
 
         NativeImGui.EndChild();
     }
+    #endregion
 
+    #region Entries
     private void DrawEntries(LogEntry[] entries)
     {
         if (entries.Length == 0)
         {
-            NativeImGui.BeginDisabled(true);
-            NativeImGui.TextUnformatted("No logs yet.");
-            NativeImGui.EndDisabled();
+            DrawDisabledHint("No logs yet.");
             return;
         }
 
-        List<LogEntry> visibleEntries = [];
-        for (int i = 0; i < entries.Length; i++)
-        {
-            LogEntry entry = entries[i];
-            if (m_filterLevels.Contains(entry.level))
-            {
-                visibleEntries.Add(entry);
-            }
-        }
+        List<LogEntry> visibleEntries = CollectVisibleEntries(entries);
 
         if (visibleEntries.Count == 0)
         {
-            NativeImGui.BeginDisabled(true);
-            NativeImGui.TextUnformatted("All logs are filtered out.");
-            NativeImGui.EndDisabled();
+            DrawDisabledHint("All logs are filtered out.");
             return;
         }
 
@@ -179,45 +175,20 @@ public sealed class LogPanel : EditorPanel
 
             if (m_collapse)
             {
-                List<long> runEntryIds = [];
-                for (int i = start; i <= end; i++)
-                {
-                    runEntryIds.Add(visibleEntries[i].time.Ticks);
-                }
-
+                List<long> runEntryIds = CollectRunEntryIds(visibleEntries, start, end);
                 long latestEntryId = runEntryIds[^1];
                 bool latestEntryOpen = m_openEntries.Contains(latestEntryId);
-                bool anyOpenInRun = false;
-                for (int i = 0; i < runEntryIds.Count; i++)
-                {
-                    if (m_openEntries.Contains(runEntryIds[i]))
-                    {
-                        anyOpenInRun = true;
-                        break;
-                    }
-                }
+                bool anyOpenInRun = ContainsAnyOpen(runEntryIds);
 
                 if (latestEntryOpen)
                 {
-                    for (int i = 0; i < runEntryIds.Count; i++)
-                    {
-                        long runEntryId = runEntryIds[i];
-                        if (runEntryId != latestEntryId)
-                        {
-                            m_openEntries.Remove(runEntryId);
-                        }
-                    }
+                    KeepOnlyLatestOpen(runEntryIds, latestEntryId);
                 }
                 else if (anyOpenInRun)
                 {
-                    // Rule 6: while already in collapse mode, expanded state must follow the latest entry.
                     bool shouldPromoteLatest = wasCollapseLastFrame && !switchedToCollapse;
-                    for (int i = 0; i < runEntryIds.Count; i++)
-                    {
-                        m_openEntries.Remove(runEntryIds[i]);
-                    }
+                    CloseAll(runEntryIds);
 
-                    // Rule 5: when switching from non-collapse to collapse, only latest-open keeps collapse expanded.
                     if (shouldPromoteLatest)
                     {
                         m_openEntries.Add(latestEntryId);
@@ -238,7 +209,9 @@ public sealed class LogPanel : EditorPanel
             start = end + 1;
         }
     }
+    #endregion
 
+    #region Entry Card
     private void DrawLogEntry(LogEntry entry, int repeatCount, IReadOnlyList<long> runEntryIds, bool collapseView)
     {
         (Vector4 levelColor, string levelIcon) = GetLevelVisual(entry.level);
@@ -328,7 +301,9 @@ public sealed class LogPanel : EditorPanel
         NativeImGui.Dummy(new Vector2(0f, 2f));
         NativeImGui.PopID();
     }
+    #endregion
 
+    #region Entry Header / Detail
     private static void DrawHeader(
         LogEntry entry,
         int repeatCount,
@@ -344,9 +319,9 @@ public sealed class LogPanel : EditorPanel
         string prefix = $"{levelIcon} [{entry.level}] ";
         string toggleText = isOpen ? "▾" : "▸";
         ImGuiStylePtr style = NativeImGui.GetStyle();
-        const float togglePadX = 2f;
-        const float togglePadY = 1f;
-        float toggleW = NativeImGui.CalcTextSize(toggleText).X + togglePadX * 2f;
+        const float c_togglePadX = 2f;
+        const float c_togglePadY = 1f;
+        float toggleW = NativeImGui.CalcTextSize(toggleText).X + c_togglePadX * 2f;
         float prefixW = NativeImGui.CalcTextSize(prefix).X + toggleW + style.ItemInnerSpacing.X;
         float suffixW = NativeImGui.CalcTextSize(repeatText).X;
         float suffixColW = MathF.Max(1f, suffixW);
@@ -381,7 +356,7 @@ public sealed class LogPanel : EditorPanel
             Vector4 toggleBg = NativeImGui.ColorConvertU32ToFloat4(NativeImGui.GetColorU32(ImGuiCol.Button, 0.82f));
             Vector4 toggleHovered = NativeImGui.ColorConvertU32ToFloat4(NativeImGui.GetColorU32(ImGuiCol.ButtonHovered, 0.82f));
             Vector4 toggleActive = NativeImGui.ColorConvertU32ToFloat4(NativeImGui.GetColorU32(ImGuiCol.ButtonActive, 0.82f));
-            NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(togglePadX, togglePadY));
+            NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(c_togglePadX, c_togglePadY));
             NativeImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 0f);
             NativeImGui.PushStyleColor(ImGuiCol.Button, toggleBg);
             NativeImGui.PushStyleColor(ImGuiCol.ButtonHovered, toggleHovered);
@@ -456,7 +431,77 @@ public sealed class LogPanel : EditorPanel
         NativeImGui.TextUnformatted(value);
         NativeImGui.PopTextWrapPos();
     }
-    
+    #endregion
+
+    #region State Helpers
+    private static void DrawDisabledHint(string text)
+    {
+        NativeImGui.BeginDisabled(true);
+        NativeImGui.TextUnformatted(text);
+        NativeImGui.EndDisabled();
+    }
+
+    private List<LogEntry> CollectVisibleEntries(LogEntry[] entries)
+    {
+        List<LogEntry> visibleEntries = [];
+        for (int i = 0; i < entries.Length; i++)
+        {
+            LogEntry entry = entries[i];
+            if (m_filterLevels.Contains(entry.level))
+            {
+                visibleEntries.Add(entry);
+            }
+        }
+
+        return visibleEntries;
+    }
+
+    private static List<long> CollectRunEntryIds(List<LogEntry> visibleEntries, int start, int end)
+    {
+        List<long> runEntryIds = [];
+        for (int i = start; i <= end; i++)
+        {
+            runEntryIds.Add(visibleEntries[i].time.Ticks);
+        }
+
+        return runEntryIds;
+    }
+
+    private bool ContainsAnyOpen(IReadOnlyList<long> runEntryIds)
+    {
+        for (int i = 0; i < runEntryIds.Count; i++)
+        {
+            if (m_openEntries.Contains(runEntryIds[i]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void KeepOnlyLatestOpen(IReadOnlyList<long> runEntryIds, long latestEntryId)
+    {
+        for (int i = 0; i < runEntryIds.Count; i++)
+        {
+            long runEntryId = runEntryIds[i];
+            if (runEntryId != latestEntryId)
+            {
+                m_openEntries.Remove(runEntryId);
+            }
+        }
+    }
+
+    private void CloseAll(IReadOnlyList<long> runEntryIds)
+    {
+        for (int i = 0; i < runEntryIds.Count; i++)
+        {
+            m_openEntries.Remove(runEntryIds[i]);
+        }
+    }
+    #endregion
+
+    #region Visual / Text Helpers
     private static (Vector4 color, string icon) GetLevelVisual(LogLevel level)
     {
         return level switch
@@ -528,7 +573,7 @@ public sealed class LogPanel : EditorPanel
 
     private static string FitTextWithEllipsis(string text, float maxWidth)
     {
-        const string ellipsis = "...";
+        const string c_ellipsis = "...";
         if (string.IsNullOrEmpty(text))
         {
             return string.Empty;
@@ -536,7 +581,7 @@ public sealed class LogPanel : EditorPanel
 
         if (maxWidth <= 1f)
         {
-            return ellipsis;
+            return c_ellipsis;
         }
 
         if (NativeImGui.CalcTextSize(text).X <= maxWidth)
@@ -544,10 +589,10 @@ public sealed class LogPanel : EditorPanel
             return text;
         }
 
-        float ellipsisW = NativeImGui.CalcTextSize(ellipsis).X;
+        float ellipsisW = NativeImGui.CalcTextSize(c_ellipsis).X;
         if (ellipsisW >= maxWidth)
         {
-            return ellipsis;
+            return c_ellipsis;
         }
 
         float maxTextW = maxWidth - ellipsisW;
@@ -568,9 +613,10 @@ public sealed class LogPanel : EditorPanel
 
         if (lo <= 0)
         {
-            return ellipsis;
+            return c_ellipsis;
         }
 
-        return text[..lo] + ellipsis;
+        return text[..lo] + c_ellipsis;
     }
+    #endregion
 }
