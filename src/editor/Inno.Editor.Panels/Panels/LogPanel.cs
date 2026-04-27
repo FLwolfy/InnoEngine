@@ -33,6 +33,7 @@ public sealed class LogPanel : EditorPanel
     private float m_levelTokenWFontSize = -1f;
     private int m_lastSnapshotCount = -1;
     private bool m_requestScrollToBottom = true;
+    private bool m_lastRenderedCollapse = true;
 
     /// <summary>
     /// Creates the panel.
@@ -114,15 +115,17 @@ public sealed class LogPanel : EditorPanel
         NativeImGui.BeginChild("LogRegion", Vector2.Zero);
 
         LogEntry[] entries = context.logs.Snapshot();
-        if (entries.Length != m_lastSnapshotCount)
+        int previousSnapshotCount = m_lastSnapshotCount;
+        bool hasNewEntries = previousSnapshotCount >= 0 && entries.Length > previousSnapshotCount;
+        if (entries.Length != previousSnapshotCount)
         {
             m_lastSnapshotCount = entries.Length;
-            m_requestScrollToBottom = true;
         }
 
         bool scrollAtBottom = NativeImGui.GetScrollY() >= NativeImGui.GetScrollMaxY() - 1f;
-        bool shouldScrollToBottom = m_requestScrollToBottom || scrollAtBottom;
+        bool shouldScrollToBottom = m_requestScrollToBottom || (hasNewEntries && scrollAtBottom);
         DrawEntries(entries);
+        m_lastRenderedCollapse = m_collapse;
 
         if (shouldScrollToBottom)
         {
@@ -162,6 +165,9 @@ public sealed class LogPanel : EditorPanel
         }
 
         int start = 0;
+        bool collapseModeChanged = m_collapse != m_lastRenderedCollapse;
+        bool switchedToCollapse = collapseModeChanged && m_collapse;
+        bool wasCollapseLastFrame = m_lastRenderedCollapse;
 
         while (start < visibleEntries.Count)
         {
@@ -180,26 +186,42 @@ public sealed class LogPanel : EditorPanel
                 }
 
                 long latestEntryId = runEntryIds[^1];
+                bool latestEntryOpen = m_openEntries.Contains(latestEntryId);
                 bool anyOpenInRun = false;
                 for (int i = 0; i < runEntryIds.Count; i++)
                 {
-                    if (!m_openEntries.Contains(runEntryIds[i]))
+                    if (m_openEntries.Contains(runEntryIds[i]))
                     {
-                        continue;
+                        anyOpenInRun = true;
+                        break;
                     }
-
-                    anyOpenInRun = true;
-                    break;
                 }
 
-                if (anyOpenInRun && !m_openEntries.Contains(latestEntryId))
+                if (latestEntryOpen)
                 {
+                    for (int i = 0; i < runEntryIds.Count; i++)
+                    {
+                        long runEntryId = runEntryIds[i];
+                        if (runEntryId != latestEntryId)
+                        {
+                            m_openEntries.Remove(runEntryId);
+                        }
+                    }
+                }
+                else if (anyOpenInRun)
+                {
+                    // Rule 6: while already in collapse mode, expanded state must follow the latest entry.
+                    bool shouldPromoteLatest = wasCollapseLastFrame && !switchedToCollapse;
                     for (int i = 0; i < runEntryIds.Count; i++)
                     {
                         m_openEntries.Remove(runEntryIds[i]);
                     }
 
-                    m_openEntries.Add(latestEntryId);
+                    // Rule 5: when switching from non-collapse to collapse, only latest-open keeps collapse expanded.
+                    if (shouldPromoteLatest)
+                    {
+                        m_openEntries.Add(latestEntryId);
+                    }
                 }
 
                 DrawLogEntry(visibleEntries[end], end - start + 1, runEntryIds, collapseView: true);
