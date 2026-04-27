@@ -16,8 +16,6 @@ namespace Inno.Editor.Panels;
 /// </summary>
 public sealed class LogPanel : EditorPanel
 {
-    private const bool C_SAFE_RENDER = true;
-    private const string C_ELLIPSIS = "...";
     private const string C_ICON_BUG = ImGuiIcon.Bug;
     private const string C_ICON_INFO = ImGuiIcon.CircleInfo;
     private const string C_ICON_WARN = ImGuiIcon.TriangleExclamation;
@@ -28,10 +26,13 @@ public sealed class LogPanel : EditorPanel
     private readonly HashSet<LogLevel> m_filterLevels = Enum.GetValues<LogLevel>().ToHashSet();
     private readonly LogLevel[] m_levels = Enum.GetValues<LogLevel>();
     private readonly float[] m_levelTokenW = new float[Enum.GetValues<LogLevel>().Length];
+    private readonly HashSet<long> m_openEntries = [];
 
     private bool m_collapse = true;
     private bool m_levelTokenWValid;
     private float m_levelTokenWFontSize = -1f;
+    private int m_lastSnapshotCount = -1;
+    private bool m_requestScrollToBottom = true;
 
     /// <summary>
     /// Creates the panel.
@@ -44,34 +45,45 @@ public sealed class LogPanel : EditorPanel
     /// <inheritdoc />
     public override void OnRender(EditorContext context)
     {
-        bool oldCollapse = m_collapse;
-
         NativeImGui.BeginChild("LogChild", Vector2.Zero);
         DrawToolbar(context);
         NativeImGui.Separator();
-        DrawLogRegion(context, oldCollapse);
+        DrawLogRegion(context);
         NativeImGui.EndChild();
     }
 
     private void DrawToolbar(EditorContext context)
     {
-        _ = NativeImGui.Checkbox("Collapse", ref m_collapse);
+        bool collapseChanged = NativeImGui.Checkbox("Collapse", ref m_collapse);
+        if (collapseChanged)
+        {
+            m_requestScrollToBottom = true;
+        }
+
         NativeImGui.SameLine();
-        DrawFilterCombo();
+        bool filterChanged = DrawFilterCombo();
+        if (filterChanged)
+        {
+            m_requestScrollToBottom = true;
+        }
+
         NativeImGui.SameLine();
         if (NativeImGui.Button("Clear"))
         {
             context.logs.Clear();
+            m_lastSnapshotCount = 0;
+            m_requestScrollToBottom = true;
         }
     }
 
-    private void DrawFilterCombo()
+    private bool DrawFilterCombo()
     {
         if (!NativeImGui.BeginCombo("##LogFilter", "Filter", ImGuiComboFlags.WidthFitPreview))
         {
-            return;
+            return false;
         }
 
+        bool changed = false;
         for (int i = 0; i < m_levels.Length; i++)
         {
             LogLevel level = m_levels[i];
@@ -89,28 +101,39 @@ public sealed class LogPanel : EditorPanel
             {
                 m_filterLevels.Remove(level);
             }
+
+            changed = true;
         }
 
         NativeImGui.EndCombo();
+        return changed;
     }
 
-    private void DrawLogRegion(EditorContext context, bool oldCollapse)
+    private void DrawLogRegion(EditorContext context)
     {
         NativeImGui.BeginChild("LogRegion", Vector2.Zero);
 
-        bool scrollAtBottom = NativeImGui.GetScrollY() >= NativeImGui.GetScrollMaxY() - 1f;
         LogEntry[] entries = context.logs.Snapshot();
-        DrawEntries(entries, oldCollapse);
+        if (entries.Length != m_lastSnapshotCount)
+        {
+            m_lastSnapshotCount = entries.Length;
+            m_requestScrollToBottom = true;
+        }
 
-        if (scrollAtBottom)
+        bool scrollAtBottom = NativeImGui.GetScrollY() >= NativeImGui.GetScrollMaxY() - 1f;
+        bool shouldScrollToBottom = m_requestScrollToBottom || scrollAtBottom;
+        DrawEntries(entries);
+
+        if (shouldScrollToBottom)
         {
             NativeImGui.SetScrollHereY(1f);
+            m_requestScrollToBottom = false;
         }
 
         NativeImGui.EndChild();
     }
 
-    private void DrawEntries(LogEntry[] entries, bool oldCollapse)
+    private void DrawEntries(LogEntry[] entries)
     {
         if (entries.Length == 0)
         {
@@ -120,350 +143,309 @@ public sealed class LogPanel : EditorPanel
             return;
         }
 
-        LogEntry? last = null;
-        int count = 0;
-        int visibleCount = 0;
-
+        List<LogEntry> visibleEntries = [];
         for (int i = 0; i < entries.Length; i++)
         {
             LogEntry entry = entries[i];
-            if (!m_filterLevels.Contains(entry.level))
+            if (m_filterLevels.Contains(entry.level))
             {
-                continue;
+                visibleEntries.Add(entry);
             }
-
-            if (m_collapse && last is { } prevCollapsed && entry.level == prevCollapsed.level && entry.message == prevCollapsed.message)
-            {
-                last = entry;
-                count++;
-                continue;
-            }
-
-            if (last is { } prev)
-            {
-                DrawLogEntry(prev, count, oldCollapse);
-                visibleCount++;
-            }
-
-            last = entry;
-            count = 1;
         }
 
-        if (last is { } tail)
-        {
-            DrawLogEntry(tail, count, oldCollapse);
-            visibleCount++;
-        }
-
-        if (visibleCount == 0)
+        if (visibleEntries.Count == 0)
         {
             NativeImGui.BeginDisabled(true);
             NativeImGui.TextUnformatted("All logs are filtered out.");
             NativeImGui.EndDisabled();
-        }
-    }
-
-    private void DrawLogEntry(LogEntry entry, int repeatCount, bool oldCollapse)
-    {
-        if (C_SAFE_RENDER)
-        {
-            DrawLogEntrySafe(entry, repeatCount);
             return;
         }
 
-        NativeImGui.PushID(entry.time.Ticks.GetHashCode());
+        int start = 0;
 
-        ImGuiStylePtr style = NativeImGui.GetStyle();
-        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
-        ImGuiStoragePtr storage = NativeImGui.GetStateStorage();
-
-        (Vector4 levelColor, string levelIcon) = GetLevelVisual(entry.level);
-
-        uint openId = NativeImGui.GetID("##LogOpen");
-        bool open = storage.GetBool(openId, false);
-        if (oldCollapse && !m_collapse)
+        while (start < visibleEntries.Count)
         {
-            open = false;
-            storage.SetBool(openId, false);
+            int end = start;
+            while (end + 1 < visibleEntries.Count && IsSameEntryIgnoreTime(visibleEntries[end + 1], visibleEntries[end]))
+            {
+                end++;
+            }
+
+            if (m_collapse)
+            {
+                List<long> runEntryIds = [];
+                for (int i = start; i <= end; i++)
+                {
+                    runEntryIds.Add(visibleEntries[i].time.Ticks);
+                }
+
+                long latestEntryId = runEntryIds[^1];
+                bool anyOpenInRun = false;
+                for (int i = 0; i < runEntryIds.Count; i++)
+                {
+                    if (!m_openEntries.Contains(runEntryIds[i]))
+                    {
+                        continue;
+                    }
+
+                    anyOpenInRun = true;
+                    break;
+                }
+
+                if (anyOpenInRun && !m_openEntries.Contains(latestEntryId))
+                {
+                    for (int i = 0; i < runEntryIds.Count; i++)
+                    {
+                        m_openEntries.Remove(runEntryIds[i]);
+                    }
+
+                    m_openEntries.Add(latestEntryId);
+                }
+
+                DrawLogEntry(visibleEntries[end], end - start + 1, runEntryIds, collapseView: true);
+            }
+            else
+            {
+                for (int i = start; i <= end; i++)
+                {
+                    long entryId = visibleEntries[i].time.Ticks;
+                    DrawLogEntry(visibleEntries[i], 1, [entryId], collapseView: false);
+                }
+            }
+
+            start = end + 1;
         }
-
-        float padX = style.FramePadding.X;
-        const float C_PAD_Y = 2f;
-
-        float arrowSize = NativeImGui.GetFontSize() * 0.50f;
-        float gap = style.ItemSpacing.X;
-
-        Vector2 headerMin = NativeImGui.GetCursorScreenPos();
-        float fullW = NativeImGui.GetContentRegionAvail().X;
-        float lineH = NativeImGui.GetFontSize();
-        float wrapStartX = headerMin.X + padX + arrowSize + gap;
-
-        string repeatText = repeatCount > 1 ? $"(x{repeatCount})" : string.Empty;
-        float repeatW = repeatCount > 1 ? NativeImGui.CalcTextSize(repeatText).X : 0f;
-
-        float right = (headerMin.X + fullW) - style.FramePadding.X - (repeatW > 0 ? (repeatW + style.ItemSpacing.X) : 0f);
-        float msgStartX = wrapStartX + GetLevelTokenWidth(entry.level) + style.ItemSpacing.X;
-        float msgAvail = MathF.Max(1f, right - msgStartX);
-        if (!float.IsFinite(msgStartX))
-        {
-            msgStartX = wrapStartX + 80f;
-        }
-        if (!float.IsFinite(msgAvail) || msgAvail < 1f)
-        {
-            msgAvail = MathF.Max(1f, fullW * 0.5f);
-        }
-
-        string msg = entry.message;
-        bool hasNewline = msg.IndexOfAny(['\n', '\r']) >= 0;
-        bool willWrap = open && !hasNewline && NativeImGui.CalcTextSize(msg).X > msgAvail;
-        float headerContentH = !open
-            ? lineH
-            : hasNewline
-                ? MathF.Max(lineH, NativeImGui.CalcTextSize(msg, false, msgAvail).Y)
-                : willWrap
-                    ? MathF.Max(lineH, NativeImGui.CalcTextSize(msg, false, msgAvail).Y)
-                    : lineH;
-
-        float headerH = headerContentH + C_PAD_Y * 2f;
-        Vector2 headerMax = new(headerMin.X + fullW, headerMin.Y + headerH);
-
-        _ = NativeImGui.InvisibleButton("##LogHeaderBtn", new Vector2(fullW, headerH));
-        if (NativeImGui.IsItemClicked(ImGuiMouseButton.Left))
-        {
-            open = !open;
-            storage.SetBool(openId, open);
-        }
-
-        drawList.AddRectFilled(
-            headerMin,
-            headerMax,
-            LerpU32(NativeImGui.GetColorU32(ImGuiCol.Header), NativeImGui.GetColorU32(ImGuiCol.WindowBg), 0.15f),
-            style.FrameRounding);
-
-        DrawArrow(
-            drawList,
-            new Vector2(headerMin.X + padX + arrowSize * 0.5f, headerMin.Y + C_PAD_Y + lineH * 0.5f),
-            arrowSize,
-            open,
-            NativeImGui.GetColorU32(ImGuiCol.Text));
-
-        DrawHeaderText(
-            entry,
-            levelColor,
-            levelIcon,
-            headerMin,
-            headerMax,
-            wrapStartX,
-            C_PAD_Y,
-            repeatText,
-            repeatW,
-            msgStartX,
-            msgAvail,
-            open,
-            willWrap,
-            hasNewline);
-
-        if (open)
-        {
-            DrawDetailsBlock(entry, headerMin, headerMax, style, drawList);
-        }
-        else
-        {
-            NativeImGui.Dummy(Vector2.Zero);
-        }
-
-        NativeImGui.PopID();
     }
 
-    private static void DrawLogEntrySafe(LogEntry entry, int repeatCount)
+    private void DrawLogEntry(LogEntry entry, int repeatCount, IReadOnlyList<long> runEntryIds, bool collapseView)
     {
         (Vector4 levelColor, string levelIcon) = GetLevelVisual(entry.level);
-        string messagePreview = entry.message;
-        bool hasNewline = messagePreview.IndexOfAny(['\n', '\r']) >= 0;
-        if (hasNewline)
+
+        long entryId = entry.time.Ticks;
+        int rowId = entryId.GetHashCode();
+        NativeImGui.PushID(rowId);
+        bool isOpen = m_openEntries.Contains(entryId);
+        if (!isOpen)
         {
-            messagePreview = GetFirstLine(messagePreview) + C_ELLIPSIS;
-        }
+            Vector4 collapsedCardBg = GetCollapsedBgColor();
+            Vector4 collapsedCardBorder = GetCollapsedBorderColor();
+            NativeImGui.PushStyleColor(ImGuiCol.FrameBg, collapsedCardBg);
+            NativeImGui.PushStyleColor(ImGuiCol.Border, collapsedCardBorder);
+            NativeImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 8f);
+            NativeImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1f);
+            NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(6f, 2f));
 
-        string repeatText = repeatCount > 1 ? $" (x{repeatCount})" : string.Empty;
-        string header = $"{levelIcon} [{entry.level}] {messagePreview}{repeatText}";
+            ImGuiChildFlags collapsedChildFlags = ImGuiChildFlags.FrameStyle | ImGuiChildFlags.AutoResizeY;
+            ImGuiWindowFlags collapsedChildWindowFlags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoSavedSettings;
+            if (NativeImGui.BeginChild("##LogEntryCard", new Vector2(0f, 0f), collapsedChildFlags, collapsedChildWindowFlags))
+            {
+                DrawHeader(entry, repeatCount, levelColor, levelIcon, false, collapsedCardBg, out bool toggled);
+                if (toggled)
+                {
+                    if (collapseView)
+                    {
+                        for (int i = 0; i < runEntryIds.Count; i++)
+                        {
+                            m_openEntries.Remove(runEntryIds[i]);
+                        }
 
-        NativeImGui.PushID(entry.time.Ticks.GetHashCode());
-        NativeImGui.PushStyleColor(ImGuiCol.Text, levelColor);
-        bool open = NativeImGui.TreeNodeEx(
-            header,
-            ImGuiTreeNodeFlags.SpanAvailWidth | ImGuiTreeNodeFlags.FramePadding);
-        NativeImGui.PopStyleColor();
+                        m_openEntries.Add(entryId);
+                    }
+                    else
+                    {
+                        m_openEntries.Add(entryId);
+                    }
+                }
+            }
 
-        if (!open)
-        {
+            NativeImGui.EndChild();
+            NativeImGui.PopStyleVar(3);
+            NativeImGui.PopStyleColor(2);
+            NativeImGui.Dummy(new Vector2(0f, 1f));
             NativeImGui.PopID();
             return;
         }
 
-        NativeImGui.BeginDisabled(true);
-        NativeImGui.TextUnformatted($"Time: {entry.time:HH:mm:ss}");
-        NativeImGui.TextUnformatted($"Source: {entry.source}");
-        NativeImGui.TextUnformatted($"File: {entry.file}");
-        NativeImGui.TextUnformatted($"Line: {entry.line}");
-        NativeImGui.EndDisabled();
-        NativeImGui.TreePop();
+        Vector4 cardBg = GetExpandedBgColor(levelColor);
+        Vector4 cardBorder = LerpColor(new Vector4(0.24f, 0.24f, 0.24f, 1f), levelColor, 0.20f);
+        NativeImGui.PushStyleColor(ImGuiCol.FrameBg, cardBg);
+        NativeImGui.PushStyleColor(ImGuiCol.Border, cardBorder);
+        NativeImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 8f);
+        NativeImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1f);
+        NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(6f, 2f));
+
+        ImGuiChildFlags childFlags = ImGuiChildFlags.FrameStyle | ImGuiChildFlags.AutoResizeY;
+        ImGuiWindowFlags childWindowFlags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoSavedSettings;
+        if (NativeImGui.BeginChild("##LogEntryCard", new Vector2(0f, 0f), childFlags, childWindowFlags))
+        {
+            DrawHeader(entry, repeatCount, levelColor, levelIcon, true, cardBg, out bool toggled);
+            if (toggled)
+            {
+                if (collapseView)
+                {
+                    for (int i = 0; i < runEntryIds.Count; i++)
+                    {
+                        m_openEntries.Remove(runEntryIds[i]);
+                    }
+                }
+                else
+                {
+                    m_openEntries.Remove(entryId);
+                }
+            }
+
+            NativeImGui.PushStyleColor(ImGuiCol.Separator, LerpColor(cardBg, Vector4.One, 0.12f));
+            NativeImGui.Separator();
+            NativeImGui.PopStyleColor();
+            DrawDetail(entry);
+        }
+
+        NativeImGui.EndChild();
+        NativeImGui.PopStyleVar(3);
+        NativeImGui.PopStyleColor(2);
+        NativeImGui.Dummy(new Vector2(0f, 2f));
         NativeImGui.PopID();
     }
 
-    private void DrawHeaderText(
+    private static void DrawHeader(
         LogEntry entry,
+        int repeatCount,
         Vector4 levelColor,
         string levelIcon,
-        Vector2 headerMin,
-        Vector2 headerMax,
-        float wrapStartX,
-        float padY,
-        string repeatText,
-        float repeatW,
-        float msgStartX,
-        float msgAvail,
-        bool open,
-        bool willWrap,
-        bool hasNewline)
+        bool isOpen,
+        Vector4 headerBgColor,
+        out bool toggled)
     {
+        toggled = false;
+        string content = isOpen ? entry.message : GetFirstLine(entry.message);
+        string repeatText = repeatCount > 1 ? $" (x{repeatCount})" : string.Empty;
+        string prefix = $"{levelIcon} [{entry.level}] ";
+        string toggleText = isOpen ? "▾" : "▸";
         ImGuiStylePtr style = NativeImGui.GetStyle();
-        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
-
-        NativeImGui.SetCursorScreenPos(new Vector2(wrapStartX, headerMin.Y + padY));
-
-        NativeImGui.PushStyleColor(ImGuiCol.Text, levelColor);
-        NativeImGui.TextUnformatted(levelIcon);
-        NativeImGui.SameLine();
-        NativeImGui.TextUnformatted($"[{entry.level}]");
-        NativeImGui.PopStyleColor();
-
-        NativeImGui.SetCursorScreenPos(new Vector2(msgStartX, headerMin.Y + padY));
-
-        string msg = entry.message;
-        if (!open)
+        const float togglePadX = 2f;
+        const float togglePadY = 1f;
+        float toggleW = NativeImGui.CalcTextSize(toggleText).X + togglePadX * 2f;
+        float prefixW = NativeImGui.CalcTextSize(prefix).X + toggleW + style.ItemInnerSpacing.X;
+        float suffixW = NativeImGui.CalcTextSize(repeatText).X;
+        float suffixColW = MathF.Max(1f, suffixW);
+        float tableOuterW = MathF.Max(1f, NativeImGui.GetContentRegionAvail().X);
+        float contentW = MathF.Max(1f, tableOuterW - prefixW - suffixColW);
+        if (!isOpen)
         {
-            if (!hasNewline)
-            {
-                DrawSingleLineEllipsis(msg, msgAvail);
-            }
-            else
-            {
-                string firstLine = GetFirstLine(msg);
-                DrawSingleLineEllipsisForcedSuffix(firstLine, msgAvail);
-            }
+            content = FitTextWithEllipsis(GetFirstLine(entry.message), contentW);
         }
-        else
+        Vector2 tableOuterSize = new(tableOuterW, 0f);
+        ImGuiTableFlags flags =
+            ImGuiTableFlags.SizingFixedFit |
+            ImGuiTableFlags.NoHostExtendX |
+            ImGuiTableFlags.NoPadOuterX |
+            ImGuiTableFlags.NoPadInnerX |
+            ImGuiTableFlags.NoSavedSettings;
+
+        if (NativeImGui.BeginTable("##HeaderTable", 3, flags, tableOuterSize))
         {
-            if (!hasNewline && !willWrap)
+            NativeImGui.TableSetupColumn("##prefix", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize, prefixW);
+            NativeImGui.TableSetupColumn("##content", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize, contentW);
+            NativeImGui.TableSetupColumn("##suffix", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize, suffixColW);
+
+            NativeImGui.TableNextRow();
+            if (isOpen)
             {
-                NativeImGui.TextUnformatted(msg);
+                uint headerBgU32 = NativeImGui.ColorConvertFloat4ToU32(headerBgColor);
+                NativeImGui.TableSetBgColor(ImGuiTableBgTarget.RowBg0, headerBgU32);
             }
-            else
+
+            _ = NativeImGui.TableSetColumnIndex(0);
+            Vector4 toggleBg = NativeImGui.ColorConvertU32ToFloat4(NativeImGui.GetColorU32(ImGuiCol.Button, 0.82f));
+            Vector4 toggleHovered = NativeImGui.ColorConvertU32ToFloat4(NativeImGui.GetColorU32(ImGuiCol.ButtonHovered, 0.82f));
+            Vector4 toggleActive = NativeImGui.ColorConvertU32ToFloat4(NativeImGui.GetColorU32(ImGuiCol.ButtonActive, 0.82f));
+            NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(togglePadX, togglePadY));
+            NativeImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 0f);
+            NativeImGui.PushStyleColor(ImGuiCol.Button, toggleBg);
+            NativeImGui.PushStyleColor(ImGuiCol.ButtonHovered, toggleHovered);
+            NativeImGui.PushStyleColor(ImGuiCol.ButtonActive, toggleActive);
+            if (NativeImGui.SmallButton($"{toggleText}##HeaderToggle"))
             {
-                NativeImGui.PushTextWrapPos(NativeImGui.GetCursorPosX() + msgAvail);
-                NativeImGui.TextUnformatted(msg);
+                toggled = true;
+            }
+            NativeImGui.PopStyleColor(3);
+            NativeImGui.PopStyleVar(2);
+            NativeImGui.SameLine();
+            NativeImGui.PushStyleColor(ImGuiCol.Text, levelColor);
+            NativeImGui.TextUnformatted(prefix);
+            NativeImGui.PopStyleColor();
+
+            _ = NativeImGui.TableSetColumnIndex(1);
+            if (isOpen)
+            {
+                NativeImGui.PushTextWrapPos(0f);
+                NativeImGui.TextUnformatted(content);
                 NativeImGui.PopTextWrapPos();
             }
-        }
-
-        if (repeatW > 0f)
-        {
-            drawList.AddText(
-                new Vector2(headerMax.X - style.FramePadding.X - repeatW, headerMin.Y + padY),
-                NativeImGui.GetColorU32(ImGuiCol.TextDisabled),
-                repeatText);
-        }
-    }
-
-    private static void DrawDetailsBlock(LogEntry entry, Vector2 headerMin, Vector2 headerMax, ImGuiStylePtr style, ImDrawListPtr drawList)
-    {
-        NativeImGui.SetCursorScreenPos(new Vector2(headerMin.X, headerMax.Y + style.ItemSpacing.Y));
-
-        Vector2 blockMin = NativeImGui.GetCursorScreenPos();
-        float blockW = NativeImGui.GetContentRegionAvail().X;
-
-        string details =
-            $"Time: {entry.time:HH:mm:ss}\n" +
-            $"Source: {entry.source}\n" +
-            $"File: {entry.file}\n" +
-            $"Line: {entry.line}";
-
-        float padX = style.FramePadding.X;
-        float padY = style.FramePadding.Y;
-
-        Vector2 size = NativeImGui.CalcTextSize(details, false, blockW - padX * 2f);
-        float blockH = size.Y + padY * 2f;
-
-        drawList.AddRectFilled(
-            blockMin,
-            new Vector2(blockMin.X + blockW, blockMin.Y + blockH),
-            LerpU32(NativeImGui.GetColorU32(ImGuiCol.Header), NativeImGui.GetColorU32(ImGuiCol.WindowBg), 0.75f),
-            style.FrameRounding);
-
-        NativeImGui.SetCursorScreenPos(new Vector2(blockMin.X + padX, blockMin.Y + padY));
-        NativeImGui.PushTextWrapPos(NativeImGui.GetCursorPosX() + MathF.Max(1f, blockW - padX * 2f));
-        NativeImGui.TextUnformatted(details);
-        NativeImGui.PopTextWrapPos();
-
-        NativeImGui.SetCursorScreenPos(new Vector2(blockMin.X, blockMin.Y + blockH));
-        NativeImGui.Dummy(Vector2.Zero);
-    }
-
-    private float GetLevelTokenWidth(LogLevel level)
-    {
-        float fontSize = NativeImGui.GetFontSize();
-        if (!m_levelTokenWValid || MathF.Abs(m_levelTokenWFontSize - fontSize) > 0.01f)
-        {
-            m_levelTokenWFontSize = fontSize;
-            for (int i = 0; i < m_levels.Length; i++)
+            else
             {
-                LogLevel lv = m_levels[i];
-                float w = 0f;
-                // Do not use icon glyph for width calculation here.
-                // Some font/encoding combinations can return unstable metrics for private-use glyphs.
-                float levelWidth = NativeImGui.CalcTextSize($"[{lv}]").X;
-                float iconWidthApprox = MathF.Max(8f, fontSize * 0.75f);
-                w += iconWidthApprox;
-                w += NativeImGui.GetStyle().ItemSpacing.X;
-                w += levelWidth;
-
-                if (!float.IsFinite(w) || w <= 0f || w > 4096f)
-                {
-                    w = MathF.Max(24f, fontSize * 3f);
-                }
-
-                m_levelTokenW[(int)lv] = w;
+                NativeImGui.TextUnformatted(content);
             }
 
-            m_levelTokenWValid = true;
-        }
+            _ = NativeImGui.TableSetColumnIndex(2);
+            if (!string.IsNullOrEmpty(repeatText))
+            {
+                float remainW = NativeImGui.GetContentRegionAvail().X;
+                float suffixOffsetX = MathF.Max(0f, remainW - suffixW);
+                NativeImGui.SetCursorPosX(NativeImGui.GetCursorPosX() + suffixOffsetX);
+                NativeImGui.TextUnformatted(repeatText);
+            }
 
-        float width = m_levelTokenW[(int)level];
-        if (!float.IsFinite(width) || width <= 0f || width > 4096f)
-        {
-            return MathF.Max(24f, NativeImGui.GetFontSize() * 3f);
+            NativeImGui.EndTable();
         }
-
-        return width;
     }
 
-    private static (Vector4 color, string icon) GetLevelVisual(LogLevel level) => level switch
+    private static void DrawDetail(LogEntry entry)
     {
-        LogLevel.Debug => (new Vector4(0.80f, 0.90f, 0.85f, 1f), C_ICON_BUG),
-        LogLevel.Info => (new Vector4(0.20f, 1f, 0.20f, 1f), C_ICON_INFO),
-        LogLevel.Warn => (new Vector4(1f, 1f, 0.20f, 1f), C_ICON_WARN),
-        LogLevel.Error => (new Vector4(1f, 0.20f, 0.20f, 1f), C_ICON_ERROR),
-        LogLevel.Fatal => (new Vector4(1f, 0.20f, 1f, 1f), C_ICON_FATAL),
-        _ => (Vector4.One, C_ICON_DEFAULT)
-    };
+        string timeText = entry.time.ToString("HH:mm:ss");
+        string sourceText = entry.source.ToString();
+        if (string.IsNullOrWhiteSpace(sourceText))
+        {
+            sourceText = "-";
+        }
 
-    private static uint LerpU32(uint a, uint b, float t)
+        string fileText = string.IsNullOrWhiteSpace(entry.file) ? "-" : entry.file;
+        string lineText = entry.line.ToString();
+        string fileWithLineText = entry.line > 0 ? $"{fileText}:{lineText}" : fileText;
+
+        if (NativeImGui.BeginTable("##LogEntryDetails", 2, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.NoHostExtendX))
+        {
+            NativeImGui.TableSetupColumn("##label", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize);
+            NativeImGui.TableSetupColumn("##value", ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoResize, 1f);
+            DrawDetailFieldRow("File:", fileWithLineText);
+            DrawDetailFieldRow("Source:", sourceText);
+            DrawDetailFieldRow("Time:", timeText);
+            NativeImGui.EndTable();
+        }
+    }
+
+    private static void DrawDetailFieldRow(string label, string value)
     {
-        Vector4 va = NativeImGui.ColorConvertU32ToFloat4(a);
-        Vector4 vb = NativeImGui.ColorConvertU32ToFloat4(b);
-        Vector4 v = LerpColor(va, vb, t);
-        return NativeImGui.ColorConvertFloat4ToU32(v);
+        NativeImGui.TableNextRow();
+        _ = NativeImGui.TableSetColumnIndex(0);
+        NativeImGui.TextUnformatted(label);
+        _ = NativeImGui.TableSetColumnIndex(1);
+        NativeImGui.PushTextWrapPos(0f);
+        NativeImGui.TextUnformatted(value);
+        NativeImGui.PopTextWrapPos();
+    }
+    
+    private static (Vector4 color, string icon) GetLevelVisual(LogLevel level)
+    {
+        return level switch
+        {
+            LogLevel.Debug => (new Vector4(0.80f, 0.90f, 0.85f, 1f), C_ICON_BUG),
+            LogLevel.Info => (new Vector4(0.20f, 1f, 0.20f, 1f), C_ICON_INFO),
+            LogLevel.Warn => (new Vector4(1f, 1f, 0.20f, 1f), C_ICON_WARN),
+            LogLevel.Error => (new Vector4(1f, 0.20f, 0.20f, 1f), C_ICON_ERROR),
+            LogLevel.Fatal => (new Vector4(1f, 0.20f, 1f, 1f), C_ICON_FATAL),
+            _ => (Vector4.One, C_ICON_DEFAULT)
+        };
     }
 
     private static Vector4 LerpColor(Vector4 a, Vector4 b, float t)
@@ -473,34 +455,36 @@ public sealed class LogPanel : EditorPanel
             a.X + (b.X - a.X) * t,
             a.Y + (b.Y - a.Y) * t,
             a.Z + (b.Z - a.Z) * t,
-            a.W + (b.W - a.W) * t);
+            1f);
     }
 
-    private static void DrawArrow(ImDrawListPtr drawList, Vector2 center, float size, bool open, uint color)
+    private static bool IsSameEntryIgnoreTime(in LogEntry a, in LogEntry b)
     {
-        if (!open)
-        {
-            size *= 0.75f;
-        }
-
-        float h = size;
-        float w = size * 0.9f;
-
-        if (!open)
-        {
-            Vector2 p1 = new(center.X - w * 0.35f, center.Y - h * 0.5f);
-            Vector2 p2 = new(center.X - w * 0.35f, center.Y + h * 0.5f);
-            Vector2 p3 = new(center.X + w * 0.55f, center.Y);
-            drawList.AddTriangleFilled(p1, p2, p3, color);
-            return;
-        }
-
-        Vector2 q1 = new(center.X - w * 0.5f, center.Y - h * 0.25f);
-        Vector2 q2 = new(center.X + w * 0.5f, center.Y - h * 0.25f);
-        Vector2 q3 = new(center.X, center.Y + h * 0.55f);
-        drawList.AddTriangleFilled(q1, q2, q3, color);
+        return a.level == b.level
+            && a.source.Equals(b.source)
+            && string.Equals(a.category, b.category, StringComparison.Ordinal)
+            && string.Equals(a.message, b.message, StringComparison.Ordinal)
+            && string.Equals(a.file, b.file, StringComparison.Ordinal)
+            && a.line == b.line;
     }
 
+    private static Vector4 GetCollapsedBgColor()
+    {
+        uint bgU32 = NativeImGui.GetColorU32(ImGuiCol.Button, 0.55f);
+        return NativeImGui.ColorConvertU32ToFloat4(bgU32);
+    }
+
+    private static Vector4 GetCollapsedBorderColor()
+    {
+        uint borderU32 = NativeImGui.GetColorU32(ImGuiCol.Border, 0.65f);
+        return NativeImGui.ColorConvertU32ToFloat4(borderU32);
+    }
+
+    private static Vector4 GetExpandedBgColor(Vector4 levelColor)
+    {
+        return LerpColor(new Vector4(0.10f, 0.10f, 0.10f, 1f), levelColor, 0.12f);
+    }
+    
     private static string GetFirstLine(string text)
     {
         if (string.IsNullOrEmpty(text))
@@ -520,34 +504,37 @@ public sealed class LogPanel : EditorPanel
         return text;
     }
 
-    private static void DrawSingleLineEllipsis(string text, float maxWidth)
+    private static string FitTextWithEllipsis(string text, float maxWidth)
     {
-        if (string.IsNullOrEmpty(text) || maxWidth <= 1f)
+        const string ellipsis = "...";
+        if (string.IsNullOrEmpty(text))
         {
-            NativeImGui.TextUnformatted(string.Empty);
-            return;
+            return string.Empty;
+        }
+
+        if (maxWidth <= 1f)
+        {
+            return ellipsis;
         }
 
         if (NativeImGui.CalcTextSize(text).X <= maxWidth)
         {
-            NativeImGui.TextUnformatted(text);
-            return;
+            return text;
         }
 
-        float ellipsisW = NativeImGui.CalcTextSize(C_ELLIPSIS).X;
+        float ellipsisW = NativeImGui.CalcTextSize(ellipsis).X;
         if (ellipsisW >= maxWidth)
         {
-            NativeImGui.TextUnformatted(C_ELLIPSIS);
-            return;
+            return ellipsis;
         }
 
+        float maxTextW = maxWidth - ellipsisW;
         int lo = 0;
         int hi = text.Length;
         while (lo < hi)
         {
-            int mid = (lo + hi + 1) >> 1;
-            float w = NativeImGui.CalcTextSize(text[..mid]).X;
-            if (w + ellipsisW <= maxWidth)
+            int mid = (lo + hi + 1) / 2;
+            if (NativeImGui.CalcTextSize(text[..mid]).X <= maxTextW)
             {
                 lo = mid;
             }
@@ -557,53 +544,11 @@ public sealed class LogPanel : EditorPanel
             }
         }
 
-        int cut = lo;
-        while (cut > 0 && char.IsWhiteSpace(text[cut - 1]))
+        if (lo <= 0)
         {
-            cut--;
+            return ellipsis;
         }
 
-        NativeImGui.TextUnformatted(cut <= 0 ? C_ELLIPSIS : text[..cut] + C_ELLIPSIS);
-    }
-
-    private static void DrawSingleLineEllipsisForcedSuffix(string text, float maxWidth)
-    {
-        if (maxWidth <= 1f)
-        {
-            NativeImGui.TextUnformatted(string.Empty);
-            return;
-        }
-
-        float suffixW = NativeImGui.CalcTextSize(C_ELLIPSIS).X;
-        if (suffixW >= maxWidth)
-        {
-            NativeImGui.TextUnformatted(C_ELLIPSIS);
-            return;
-        }
-
-        int lo = 0;
-        int hi = text.Length;
-        while (lo < hi)
-        {
-            int mid = (lo + hi + 1) >> 1;
-            float w = NativeImGui.CalcTextSize(text[..mid]).X;
-            if (w + suffixW <= maxWidth)
-            {
-                lo = mid;
-            }
-            else
-            {
-                hi = mid - 1;
-            }
-        }
-
-        int cut = lo;
-        while (cut > 0 && char.IsWhiteSpace(text[cut - 1]))
-        {
-            cut--;
-        }
-
-        string body = cut <= 0 ? string.Empty : text[..cut];
-        NativeImGui.TextUnformatted(body + C_ELLIPSIS);
+        return text[..lo] + ellipsis;
     }
 }

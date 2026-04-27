@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -123,7 +122,7 @@ public static class Log
     {
         if (!LogManager.IsEnabled(level)) return;
 
-        var sf = new StackFrame(2, false);
+        var sf = new StackFrame(2, true);
         var method = sf.GetMethod();
         var callerType = method?.DeclaringType;
 
@@ -158,14 +157,9 @@ public static class Log
 
         var file = C_DEFAULT_CATEGORY;
         var line = 0;
-
-        if (Debugger.IsAttached)
-        {
-            var fileInfoFrame = new StackFrame(2, true);
-            var filePath = fileInfoFrame.GetFileName();
-            file = string.IsNullOrWhiteSpace(filePath) ? C_DEFAULT_CATEGORY : Path.GetFileName(filePath);
-            line = fileInfoFrame.GetFileLineNumber();
-        }
+        var filePath = sf.GetFileName();
+        file = string.IsNullOrWhiteSpace(filePath) ? C_DEFAULT_CATEGORY : filePath;
+        line = sf.GetFileLineNumber();
         
         LogManager.Dispatch(new LogEntry(level, source, category, msg, file, line));
     }
