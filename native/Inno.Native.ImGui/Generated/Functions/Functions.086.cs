@@ -661,10 +661,15 @@ namespace Inno.Native.ImGui
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static void GetItemRectMinNative(Vector2* pOut)
 		{
+			if (pOut == null)
+			{
+				return;
+			}
+
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, void>)funcTable[351])(pOut);
+			*pOut = ((delegate* unmanaged[Cdecl]<Vector2>)funcTable[351])();
 			#else
-			((delegate* unmanaged[Cdecl]<nint, void>)funcTable[351])((nint)pOut);
+			*pOut = (Vector2)((delegate* unmanaged[Cdecl]<Vector2>)funcTable[351])();
 			#endif
 		}
 
@@ -703,10 +708,15 @@ namespace Inno.Native.ImGui
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static void GetItemRectMaxNative(Vector2* pOut)
 		{
+			if (pOut == null)
+			{
+				return;
+			}
+
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, void>)funcTable[352])(pOut);
+			*pOut = ((delegate* unmanaged[Cdecl]<Vector2>)funcTable[352])();
 			#else
-			((delegate* unmanaged[Cdecl]<nint, void>)funcTable[352])((nint)pOut);
+			*pOut = (Vector2)((delegate* unmanaged[Cdecl]<Vector2>)funcTable[352])();
 			#endif
 		}
 
@@ -745,10 +755,15 @@ namespace Inno.Native.ImGui
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static void GetItemRectSizeNative(Vector2* pOut)
 		{
+			if (pOut == null)
+			{
+				return;
+			}
+
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, void>)funcTable[353])(pOut);
+			*pOut = ((delegate* unmanaged[Cdecl]<Vector2>)funcTable[353])();
 			#else
-			((delegate* unmanaged[Cdecl]<nint, void>)funcTable[353])((nint)pOut);
+			*pOut = (Vector2)((delegate* unmanaged[Cdecl]<Vector2>)funcTable[353])();
 			#endif
 		}
 
@@ -1090,10 +1105,15 @@ namespace Inno.Native.ImGui
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static void CalcTextSizeNative(Vector2* pOut, byte* text, byte* textEnd, byte hideTextAfterDoubleHash, float wrapWidth)
 		{
+			if (pOut == null)
+			{
+				return;
+			}
+
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, byte*, byte*, byte, float, void>)funcTable[365])(pOut, text, textEnd, hideTextAfterDoubleHash, wrapWidth);
+			*pOut = ((delegate* unmanaged[Cdecl]<byte*, byte*, byte, float, Vector2>)funcTable[365])(text, textEnd, hideTextAfterDoubleHash, wrapWidth);
 			#else
-			((delegate* unmanaged[Cdecl]<nint, nint, nint, byte, float, void>)funcTable[365])((nint)pOut, (nint)text, (nint)textEnd, hideTextAfterDoubleHash, wrapWidth);
+			*pOut = (Vector2)((delegate* unmanaged[Cdecl]<nint, nint, byte, float, Vector2>)funcTable[365])((nint)text, (nint)textEnd, hideTextAfterDoubleHash, wrapWidth);
 			#endif
 		}
 

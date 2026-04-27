@@ -1248,10 +1248,15 @@ namespace Inno.Native.ImGui
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static void GetCenterNative(Vector2* pOut, ImGuiViewport* self)
 		{
+			if (pOut == null)
+			{
+				return;
+			}
+
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, ImGuiViewport*, void>)funcTable[686])(pOut, self);
+			*pOut = ((delegate* unmanaged[Cdecl]<ImGuiViewport*, Vector2>)funcTable[686])(self);
 			#else
-			((delegate* unmanaged[Cdecl]<nint, nint, void>)funcTable[686])((nint)pOut, (nint)self);
+			*pOut = (Vector2)((delegate* unmanaged[Cdecl]<nint, Vector2>)funcTable[686])((nint)self);
 			#endif
 		}
 
@@ -1328,10 +1333,15 @@ namespace Inno.Native.ImGui
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static void GetWorkCenterNative(Vector2* pOut, ImGuiViewport* self)
 		{
+			if (pOut == null)
+			{
+				return;
+			}
+
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, ImGuiViewport*, void>)funcTable[687])(pOut, self);
+			*pOut = ((delegate* unmanaged[Cdecl]<ImGuiViewport*, Vector2>)funcTable[687])(self);
 			#else
-			((delegate* unmanaged[Cdecl]<nint, nint, void>)funcTable[687])((nint)pOut, (nint)self);
+			*pOut = (Vector2)((delegate* unmanaged[Cdecl]<nint, Vector2>)funcTable[687])((nint)self);
 			#endif
 		}
 

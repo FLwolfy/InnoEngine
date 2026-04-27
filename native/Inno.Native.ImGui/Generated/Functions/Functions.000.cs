@@ -2340,12 +2340,12 @@ namespace Inno.Native.ImGui
 		/// get current window position in screen space (IT IS UNLIKELY YOU EVER NEED TO USE THIS. Consider always using GetCursorScreenPos() and GetContentRegionAvail() instead)<br/>
 		/// </summary>
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		internal static void GetWindowPosNative(Vector2* pOut)
+		internal static Vector2 GetWindowPosNative()
 		{
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, void>)funcTable[45])(pOut);
+			return ((delegate* unmanaged[Cdecl]<Vector2>)funcTable[45])();
 			#else
-			((delegate* unmanaged[Cdecl]<nint, void>)funcTable[45])((nint)pOut);
+			return (Vector2)((delegate* unmanaged[Cdecl]<Vector2>)funcTable[45])();
 			#endif
 		}
 
@@ -2354,8 +2354,7 @@ namespace Inno.Native.ImGui
 		/// </summary>
 		public static Vector2 GetWindowPos()
 		{
-			Vector2 ret;
-			GetWindowPosNative(&ret);
+			Vector2 ret = GetWindowPosNative();
 			return ret;
 		}
 
@@ -2364,7 +2363,12 @@ namespace Inno.Native.ImGui
 		/// </summary>
 		public static void GetWindowPos(Vector2* pOut)
 		{
-			GetWindowPosNative(pOut);
+			if (pOut == null)
+			{
+				return;
+			}
+
+			*pOut = GetWindowPosNative();
 		}
 
 		/// <summary>
@@ -2372,22 +2376,19 @@ namespace Inno.Native.ImGui
 		/// </summary>
 		public static void GetWindowPos(ref Vector2 pOut)
 		{
-			fixed (Vector2* ppOut = &pOut)
-			{
-				GetWindowPosNative((Vector2*)ppOut);
-			}
+			pOut = GetWindowPosNative();
 		}
 
 		/// <summary>
 		/// get current window size (IT IS UNLIKELY YOU EVER NEED TO USE THIS. Consider always using GetCursorScreenPos() and GetContentRegionAvail() instead)<br/>
 		/// </summary>
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		internal static void GetWindowSizeNative(Vector2* pOut)
+		internal static Vector2 GetWindowSizeNative()
 		{
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, void>)funcTable[46])(pOut);
+			return ((delegate* unmanaged[Cdecl]<Vector2>)funcTable[46])();
 			#else
-			((delegate* unmanaged[Cdecl]<nint, void>)funcTable[46])((nint)pOut);
+			return (Vector2)((delegate* unmanaged[Cdecl]<Vector2>)funcTable[46])();
 			#endif
 		}
 
@@ -2396,8 +2397,7 @@ namespace Inno.Native.ImGui
 		/// </summary>
 		public static Vector2 GetWindowSize()
 		{
-			Vector2 ret;
-			GetWindowSizeNative(&ret);
+			Vector2 ret = GetWindowSizeNative();
 			return ret;
 		}
 
@@ -2406,7 +2406,12 @@ namespace Inno.Native.ImGui
 		/// </summary>
 		public static void GetWindowSize(Vector2* pOut)
 		{
-			GetWindowSizeNative(pOut);
+			if (pOut == null)
+			{
+				return;
+			}
+
+			*pOut = GetWindowSizeNative();
 		}
 
 		/// <summary>
@@ -2414,10 +2419,7 @@ namespace Inno.Native.ImGui
 		/// </summary>
 		public static void GetWindowSize(ref Vector2 pOut)
 		{
-			fixed (Vector2* ppOut = &pOut)
-			{
-				GetWindowSizeNative((Vector2*)ppOut);
-			}
+			pOut = GetWindowSizeNative();
 		}
 
 		/// <summary>
@@ -4044,10 +4046,15 @@ namespace Inno.Native.ImGui
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static void GetFontTexUvWhitePixelNative(Vector2* pOut)
 		{
+			if (pOut == null)
+			{
+				return;
+			}
+
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, void>)funcTable[98])(pOut);
+			*pOut = ((delegate* unmanaged[Cdecl]<Vector2>)funcTable[98])();
 			#else
-			((delegate* unmanaged[Cdecl]<nint, void>)funcTable[98])((nint)pOut);
+			*pOut = (Vector2)((delegate* unmanaged[Cdecl]<Vector2>)funcTable[98])();
 			#endif
 		}
 
@@ -4190,12 +4197,12 @@ namespace Inno.Native.ImGui
 		/// cursor position, absolute coordinates. THIS IS YOUR BEST FRIEND (prefer using this rather than GetCursorPos(), also more useful to work with ImDrawList API).<br/>
 		/// </summary>
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		internal static void GetCursorScreenPosNative(Vector2* pOut)
+		internal static Vector2 GetCursorScreenPosNative()
 		{
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, void>)funcTable[103])(pOut);
+			return ((delegate* unmanaged[Cdecl]<Vector2>)funcTable[103])();
 			#else
-			((delegate* unmanaged[Cdecl]<nint, void>)funcTable[103])((nint)pOut);
+			return (Vector2)((delegate* unmanaged[Cdecl]<Vector2>)funcTable[103])();
 			#endif
 		}
 
@@ -4204,8 +4211,7 @@ namespace Inno.Native.ImGui
 		/// </summary>
 		public static Vector2 GetCursorScreenPos()
 		{
-			Vector2 ret;
-			GetCursorScreenPosNative(&ret);
+			Vector2 ret = GetCursorScreenPosNative();
 			return ret;
 		}
 
@@ -4214,7 +4220,12 @@ namespace Inno.Native.ImGui
 		/// </summary>
 		public static void GetCursorScreenPos(Vector2* pOut)
 		{
-			GetCursorScreenPosNative(pOut);
+			if (pOut == null)
+			{
+				return;
+			}
+
+			*pOut = GetCursorScreenPosNative();
 		}
 
 		/// <summary>
@@ -4222,10 +4233,7 @@ namespace Inno.Native.ImGui
 		/// </summary>
 		public static void GetCursorScreenPos(ref Vector2 pOut)
 		{
-			fixed (Vector2* ppOut = &pOut)
-			{
-				GetCursorScreenPosNative((Vector2*)ppOut);
-			}
+			pOut = GetCursorScreenPosNative();
 		}
 
 		/// <summary>
@@ -4253,12 +4261,12 @@ namespace Inno.Native.ImGui
 		/// available space from current position. THIS IS YOUR BEST FRIEND.<br/>
 		/// </summary>
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		internal static void GetContentRegionAvailNative(Vector2* pOut)
+		internal static Vector2 GetContentRegionAvailNative()
 		{
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, void>)funcTable[105])(pOut);
+			return ((delegate* unmanaged[Cdecl]<Vector2>)funcTable[105])();
 			#else
-			((delegate* unmanaged[Cdecl]<nint, void>)funcTable[105])((nint)pOut);
+			return (Vector2)((delegate* unmanaged[Cdecl]<Vector2>)funcTable[105])();
 			#endif
 		}
 
@@ -4267,8 +4275,7 @@ namespace Inno.Native.ImGui
 		/// </summary>
 		public static Vector2 GetContentRegionAvail()
 		{
-			Vector2 ret;
-			GetContentRegionAvailNative(&ret);
+			Vector2 ret = GetContentRegionAvailNative();
 			return ret;
 		}
 
@@ -4277,7 +4284,12 @@ namespace Inno.Native.ImGui
 		/// </summary>
 		public static void GetContentRegionAvail(Vector2* pOut)
 		{
-			GetContentRegionAvailNative(pOut);
+			if (pOut == null)
+			{
+				return;
+			}
+
+			*pOut = GetContentRegionAvailNative();
 		}
 
 		/// <summary>
@@ -4285,22 +4297,19 @@ namespace Inno.Native.ImGui
 		/// </summary>
 		public static void GetContentRegionAvail(ref Vector2 pOut)
 		{
-			fixed (Vector2* ppOut = &pOut)
-			{
-				GetContentRegionAvailNative((Vector2*)ppOut);
-			}
+			pOut = GetContentRegionAvailNative();
 		}
 
 		/// <summary>
 		/// [window-local] cursor position in window-local coordinates. This is not your best friend.<br/>
 		/// </summary>
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		internal static void GetCursorPosNative(Vector2* pOut)
+		internal static Vector2 GetCursorPosNative()
 		{
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, void>)funcTable[106])(pOut);
+			return ((delegate* unmanaged[Cdecl]<Vector2>)funcTable[106])();
 			#else
-			((delegate* unmanaged[Cdecl]<nint, void>)funcTable[106])((nint)pOut);
+			return (Vector2)((delegate* unmanaged[Cdecl]<Vector2>)funcTable[106])();
 			#endif
 		}
 
@@ -4309,8 +4318,7 @@ namespace Inno.Native.ImGui
 		/// </summary>
 		public static Vector2 GetCursorPos()
 		{
-			Vector2 ret;
-			GetCursorPosNative(&ret);
+			Vector2 ret = GetCursorPosNative();
 			return ret;
 		}
 
@@ -4319,7 +4327,12 @@ namespace Inno.Native.ImGui
 		/// </summary>
 		public static void GetCursorPos(Vector2* pOut)
 		{
-			GetCursorPosNative(pOut);
+			if (pOut == null)
+			{
+				return;
+			}
+
+			*pOut = GetCursorPosNative();
 		}
 
 		/// <summary>
@@ -4327,10 +4340,7 @@ namespace Inno.Native.ImGui
 		/// </summary>
 		public static void GetCursorPos(ref Vector2 pOut)
 		{
-			fixed (Vector2* ppOut = &pOut)
-			{
-				GetCursorPosNative((Vector2*)ppOut);
-			}
+			pOut = GetCursorPosNative();
 		}
 
 		/// <summary>
@@ -4446,10 +4456,15 @@ namespace Inno.Native.ImGui
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static void GetCursorStartPosNative(Vector2* pOut)
 		{
+			if (pOut == null)
+			{
+				return;
+			}
+
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, void>)funcTable[112])(pOut);
+			*pOut = ((delegate* unmanaged[Cdecl]<Vector2>)funcTable[112])();
 			#else
-			((delegate* unmanaged[Cdecl]<nint, void>)funcTable[112])((nint)pOut);
+			*pOut = (Vector2)((delegate* unmanaged[Cdecl]<Vector2>)funcTable[112])();
 			#endif
 		}
 

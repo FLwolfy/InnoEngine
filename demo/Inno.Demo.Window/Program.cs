@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Numerics;
 
 using Inno.Core.Events;
 using Inno.Core.Framework;
@@ -154,7 +155,68 @@ internal static class Program
             {
                 _ = ImGui.DockSpaceOverViewport();
                 ImGui.ShowDemoWindow();
+                DrawNativeApiProbeWindow();
             });
+        }
+
+        private static void DrawNativeApiProbeWindow()
+        {
+            _ = ImGui.Begin("ImGui Native API Probe");
+
+            ImGui.TextUnformatted("This panel prints native ImGui API values in different contexts.");
+            DrawProbeBlock("Window Root (begin)");
+
+            ImGui.TextUnformatted("After one Text item");
+            DrawProbeBlock("Window Root (after item)");
+
+            if (ImGui.BeginChild("##ProbeChild", new Vector2(0f, 220f), ImGuiChildFlags.Borders))
+            {
+                ImGui.TextUnformatted("Inside BeginChild");
+                DrawProbeBlock("Child Root");
+
+                if (ImGui.BeginTable("##ProbeTable", 2, ImGuiTableFlags.SizingStretchProp, new Vector2(0f, 0f)))
+                {
+                    ImGui.TableSetupColumn("Left", ImGuiTableColumnFlags.WidthStretch, 1f);
+                    ImGui.TableSetupColumn("Right", ImGuiTableColumnFlags.WidthStretch, 1f);
+
+                    ImGui.TableNextRow();
+                    _ = ImGui.TableSetColumnIndex(0);
+                    ImGui.TextUnformatted("Left Cell");
+                    DrawProbeBlock("Table Cell Left");
+
+                    _ = ImGui.TableSetColumnIndex(1);
+                    ImGui.TextUnformatted("Right Cell");
+                    DrawProbeBlock("Table Cell Right");
+
+                    ImGui.EndTable();
+                }
+            }
+
+            ImGui.EndChild();
+            ImGui.End();
+        }
+
+        private static void DrawProbeBlock(string label)
+        {
+            ImGui.SeparatorText(label);
+
+            Vector2 cursorPos = ImGui.GetCursorPos();
+            Vector2 cursorScreenPos = ImGui.GetCursorScreenPos();
+            Vector2 contentAvail = ImGui.GetContentRegionAvail();
+
+            ImGui.TextUnformatted($"GetWindowWidth(): {ImGui.GetWindowWidth():F2}");
+            ImGui.TextUnformatted($"GetWindowHeight(): {ImGui.GetWindowHeight():F2}");
+            ImGui.TextUnformatted($"GetCursorPos(): {FormatVec2(cursorPos)}");
+            ImGui.TextUnformatted($"GetCursorPosX/Y(): {ImGui.GetCursorPosX():F2}, {ImGui.GetCursorPosY():F2}");
+            ImGui.TextUnformatted($"GetCursorScreenPos(): {FormatVec2(cursorScreenPos)}");
+            ImGui.TextUnformatted($"GetContentRegionAvail(): {FormatVec2(contentAvail)}");
+            ImGui.TextUnformatted($"GetScrollX/Y(): {ImGui.GetScrollX():F2}, {ImGui.GetScrollY():F2}");
+            ImGui.TextUnformatted($"GetScrollMaxX/Y(): {ImGui.GetScrollMaxX():F2}, {ImGui.GetScrollMaxY():F2}");
+        }
+
+        private static string FormatVec2(Vector2 value)
+        {
+            return $"({value.X:F2}, {value.Y:F2})";
         }
     }
 }

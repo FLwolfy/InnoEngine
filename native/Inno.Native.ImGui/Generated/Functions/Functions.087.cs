@@ -1328,10 +1328,15 @@ namespace Inno.Native.ImGui
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static void ColorConvertU32ToFloat4Native(Vector4* pOut, uint input)
 		{
+			if (pOut == null)
+			{
+				return;
+			}
+
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector4*, uint, void>)funcTable[366])(pOut, input);
+			*pOut = ((delegate* unmanaged[Cdecl]<uint, Vector4>)funcTable[366])(input);
 			#else
-			((delegate* unmanaged[Cdecl]<nint, uint, void>)funcTable[366])((nint)pOut, input);
+			*pOut = (Vector4)((delegate* unmanaged[Cdecl]<uint, Vector4>)funcTable[366])(input);
 			#endif
 		}
 
@@ -2107,10 +2112,15 @@ namespace Inno.Native.ImGui
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static void GetMousePosNative(Vector2* pOut)
 		{
+			if (pOut == null)
+			{
+				return;
+			}
+
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, void>)funcTable[389])(pOut);
+			*pOut = ((delegate* unmanaged[Cdecl]<Vector2>)funcTable[389])();
 			#else
-			((delegate* unmanaged[Cdecl]<nint, void>)funcTable[389])((nint)pOut);
+			*pOut = (Vector2)((delegate* unmanaged[Cdecl]<Vector2>)funcTable[389])();
 			#endif
 		}
 
@@ -2149,10 +2159,15 @@ namespace Inno.Native.ImGui
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static void GetMousePosOnOpeningCurrentPopupNative(Vector2* pOut)
 		{
+			if (pOut == null)
+			{
+				return;
+			}
+
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, void>)funcTable[390])(pOut);
+			*pOut = ((delegate* unmanaged[Cdecl]<Vector2>)funcTable[390])();
 			#else
-			((delegate* unmanaged[Cdecl]<nint, void>)funcTable[390])((nint)pOut);
+			*pOut = (Vector2)((delegate* unmanaged[Cdecl]<Vector2>)funcTable[390])();
 			#endif
 		}
 
@@ -2222,10 +2237,15 @@ namespace Inno.Native.ImGui
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static void GetMouseDragDeltaNative(Vector2* pOut, ImGuiMouseButton button, float lockThreshold)
 		{
+			if (pOut == null)
+			{
+				return;
+			}
+
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, ImGuiMouseButton, float, void>)funcTable[392])(pOut, button, lockThreshold);
+			*pOut = ((delegate* unmanaged[Cdecl]<ImGuiMouseButton, float, Vector2>)funcTable[392])(button, lockThreshold);
 			#else
-			((delegate* unmanaged[Cdecl]<nint, ImGuiMouseButton, float, void>)funcTable[392])((nint)pOut, button, lockThreshold);
+			*pOut = (Vector2)((delegate* unmanaged[Cdecl]<ImGuiMouseButton, float, Vector2>)funcTable[392])(button, lockThreshold);
 			#endif
 		}
 

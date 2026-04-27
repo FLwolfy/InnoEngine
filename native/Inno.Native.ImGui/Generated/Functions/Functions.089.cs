@@ -1522,10 +1522,15 @@ namespace Inno.Native.ImGui
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static void GetClipRectMinNative(Vector2* pOut, ImDrawList* self)
 		{
+			if (pOut == null)
+			{
+				return;
+			}
+
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, ImDrawList*, void>)funcTable[548])(pOut, self);
+			*pOut = ((delegate* unmanaged[Cdecl]<ImDrawList*, Vector2>)funcTable[548])(self);
 			#else
-			((delegate* unmanaged[Cdecl]<nint, nint, void>)funcTable[548])((nint)pOut, (nint)self);
+			*pOut = (Vector2)((delegate* unmanaged[Cdecl]<nint, Vector2>)funcTable[548])((nint)self);
 			#endif
 		}
 
@@ -1602,10 +1607,15 @@ namespace Inno.Native.ImGui
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static void GetClipRectMaxNative(Vector2* pOut, ImDrawList* self)
 		{
+			if (pOut == null)
+			{
+				return;
+			}
+
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, ImDrawList*, void>)funcTable[549])(pOut, self);
+			*pOut = ((delegate* unmanaged[Cdecl]<ImDrawList*, Vector2>)funcTable[549])(self);
 			#else
-			((delegate* unmanaged[Cdecl]<nint, nint, void>)funcTable[549])((nint)pOut, (nint)self);
+			*pOut = (Vector2)((delegate* unmanaged[Cdecl]<nint, Vector2>)funcTable[549])((nint)self);
 			#endif
 		}
 

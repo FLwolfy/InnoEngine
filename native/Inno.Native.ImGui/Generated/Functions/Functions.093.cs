@@ -4366,10 +4366,15 @@ namespace Inno.Native.ImGui
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		internal static void CalcTextSizeANative(Vector2* pOut, ImFont* self, float size, float maxWidth, float wrapWidth, byte* textBegin, byte* textEnd, byte** outRemaining)
 		{
+			if (pOut == null)
+			{
+				return;
+			}
+
 			#if NET5_0_OR_GREATER
-			((delegate* unmanaged[Cdecl]<Vector2*, ImFont*, float, float, float, byte*, byte*, byte**, void>)funcTable[677])(pOut, self, size, maxWidth, wrapWidth, textBegin, textEnd, outRemaining);
+			*pOut = ((delegate* unmanaged[Cdecl]<ImFont*, float, float, float, byte*, byte*, byte**, Vector2>)funcTable[677])(self, size, maxWidth, wrapWidth, textBegin, textEnd, outRemaining);
 			#else
-			((delegate* unmanaged[Cdecl]<nint, nint, float, float, float, nint, nint, nint, void>)funcTable[677])((nint)pOut, (nint)self, size, maxWidth, wrapWidth, (nint)textBegin, (nint)textEnd, (nint)outRemaining);
+			*pOut = (Vector2)((delegate* unmanaged[Cdecl]<nint, float, float, float, nint, nint, nint, Vector2>)funcTable[677])((nint)self, size, maxWidth, wrapWidth, (nint)textBegin, (nint)textEnd, (nint)outRemaining);
 			#endif
 		}
 
