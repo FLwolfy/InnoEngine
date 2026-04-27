@@ -20,6 +20,9 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
         internal int fontTextureHeight;
         internal nint fontPixelsPtr;
         internal int fontTexturePitch;
+        internal int fontTextureUniqueId = -1;
+        internal ImTextureRect fontUsedRect;
+        internal ImTextureRect fontUpdateRect;
         internal uint windowId;
         internal GCHandle gcHandle;
         internal SDLVertex[] vertexScratch = [];
@@ -632,6 +635,9 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
                 data.fontTextureHeight = 0;
                 data.fontPixelsPtr = 0;
                 data.fontTexturePitch = 0;
+                data.fontTextureUniqueId = -1;
+                data.fontUsedRect = default;
+                data.fontUpdateRect = default;
             }
 
             return;
@@ -667,9 +673,15 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
 
         var pitch = texData.GetPitch();
         var pixelsPtr = (nint)texData.Pixels;
+        var uniqueId = texData.UniqueID;
+        var usedRect = texData.UsedRect;
+        var updateRect = texData.UpdateRect;
         var needsUpload = needsRecreate
             || data.fontPixelsPtr != pixelsPtr
             || data.fontTexturePitch != pitch
+            || data.fontTextureUniqueId != uniqueId
+            || !TextureRectEquals(data.fontUsedRect, usedRect)
+            || !TextureRectEquals(data.fontUpdateRect, updateRect)
             || texData.Status == ImTextureStatus.WantCreate
             || texData.Status == ImTextureStatus.WantUpdates;
         if (!needsUpload)
@@ -680,6 +692,9 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
         _ = SDL.UpdateTexture(data.fontTexture, SDLRectPtr.Null, texData.Pixels, pitch);
         data.fontPixelsPtr = pixelsPtr;
         data.fontTexturePitch = pitch;
+        data.fontTextureUniqueId = uniqueId;
+        data.fontUsedRect = usedRect;
+        data.fontUpdateRect = updateRect;
     }
 
     private static void RenderDrawData(ViewportWindowData data, SDLTexturePtr fontTexture, ImDrawData* drawDataNative)
@@ -878,6 +893,14 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
     private static SDLTexturePtr TextureFromImGui(ImTextureID textureId)
     {
         return (SDLTexturePtr)(SDLTexture*)(void*)textureId;
+    }
+
+    private static bool TextureRectEquals(ImTextureRect a, ImTextureRect b)
+    {
+        return a.X == b.X
+            && a.Y == b.Y
+            && a.W == b.W
+            && a.H == b.H;
     }
 
     private static void* FunctionPtr(Delegate del)
