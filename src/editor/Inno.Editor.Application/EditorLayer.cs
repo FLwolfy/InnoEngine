@@ -25,7 +25,7 @@ internal sealed class EditorLayer : Layer
     public override void OnAttach()
     {
         m_context.Attach();
-        IEditorPanel[] panels = EditorDefaultPanels.Create();
+        EditorPanel[] panels = EditorDefaultPanels.Create();
         for (int i = 0; i < panels.Length; i++)
         {
             m_registry.Register(panels[i], m_context);
@@ -56,7 +56,7 @@ internal sealed class EditorLayer : Layer
         List<(string title, bool isOpen)> viewItems = new(m_registry.count);
         for (int i = 0; i < m_registry.count; i++)
         {
-            IEditorPanel panel = m_registry.panels[i];
+            EditorPanel panel = m_registry.panels[i];
             viewItems.Add((panel.title, panel.isOpen));
         }
 
@@ -73,7 +73,7 @@ internal sealed class EditorLayer : Layer
     {
         for (int i = 0; i < m_registry.count; i++)
         {
-            IEditorPanel panel = m_registry.panels[i];
+            EditorPanel panel = m_registry.panels[i];
             bool isOpen = panel.isOpen;
             ImGuiWidget.PanelWindow(panel.title, ref isOpen, () => panel.OnRender(m_context));
             panel.isOpen = isOpen;

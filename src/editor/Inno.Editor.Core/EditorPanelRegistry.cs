@@ -8,7 +8,7 @@ namespace Inno.Editor.Core;
 /// </summary>
 public sealed class EditorPanelRegistry
 {
-    private readonly List<IEditorPanel> m_panels = [];
+    private readonly List<EditorPanel> m_panels = [];
     private readonly HashSet<string> m_ids = new(StringComparer.Ordinal);
 
     /// <summary>
@@ -19,14 +19,14 @@ public sealed class EditorPanelRegistry
     /// <summary>
     /// Gets all registered panels in draw order.
     /// </summary>
-    public IReadOnlyList<IEditorPanel> panels => m_panels;
+    public IReadOnlyList<EditorPanel> panels => m_panels;
 
     /// <summary>
     /// Registers one panel and attaches it to context.
     /// </summary>
     /// <param name="panel">Panel instance.</param>
     /// <param name="context">Shared editor context.</param>
-    public void Register(IEditorPanel panel, EditorContext context)
+    public void Register(EditorPanel panel, EditorContext context)
     {
         ArgumentNullException.ThrowIfNull(panel);
         ArgumentNullException.ThrowIfNull(context);

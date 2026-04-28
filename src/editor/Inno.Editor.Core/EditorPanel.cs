@@ -3,7 +3,7 @@ namespace Inno.Editor.Core;
 /// <summary>
 /// Base class for editor panel implementations.
 /// </summary>
-public abstract class EditorPanel(string id, string title) : IEditorPanel
+public abstract class EditorPanel(string id, string title)
 {
     /// <summary>
     /// Gets panel stable identifier.

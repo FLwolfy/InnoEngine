@@ -10,7 +10,7 @@ public static class EditorDefaultPanels
     /// <summary>
     /// Creates default panel instances.
     /// </summary>
-    public static IEditorPanel[] Create()
+    public static EditorPanel[] Create()
     {
         return
         [
