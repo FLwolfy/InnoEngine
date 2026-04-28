@@ -14,8 +14,7 @@ public static class EditorDefaultPanels
     {
         return
         [
-            new AssetTreePanel(),
-            new AssetBrowserPanel(),
+            new FileBrowserPanel(),
             new InspectorPanel(),
             new LogPanel(),
             new StatsPanel()
