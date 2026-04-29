@@ -219,8 +219,8 @@ public sealed class LogPanel : EditorPanel
         long entryId = entry.time.Ticks;
         int rowId = entryId.GetHashCode();
         NativeImGui.PushID(rowId);
-        bool isOpen = m_openEntries.Contains(entryId);
-        if (!isOpen)
+        bool open = m_openEntries.Contains(entryId);
+        if (!open)
         {
             Vector4 collapsedCardBg = GetCollapsedBgColor();
             Vector4 collapsedCardBorder = GetCollapsedBorderColor();

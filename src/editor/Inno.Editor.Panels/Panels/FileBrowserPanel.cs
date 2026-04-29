@@ -18,17 +18,24 @@ namespace Inno.Editor.Panels;
 /// </summary>
 public sealed class FileBrowserPanel : EditorPanel
 {
+    #region Constants
     private const float C_TREE_DEFAULT_WIDTH = 280f;
     private const float C_GRID_CELL_WIDTH = 128f;
+    #endregion
 
+    #region State
     private ViewMode m_viewMode = ViewMode.Grid;
+    #endregion
 
+    #region Types
     private enum ViewMode
     {
         Grid,
         List
     }
+    #endregion
 
+    #region Lifecycle
     /// <summary>
     /// Creates the panel.
     /// </summary>
@@ -46,7 +53,9 @@ public sealed class FileBrowserPanel : EditorPanel
         NativeImGui.Separator();
         DrawStatusBar(context);
     }
+    #endregion
 
+    #region Toolbar
     private void DrawToolbar(EditorContext context)
     {
         string current = context.selection.currentDirectory;
@@ -75,7 +84,9 @@ public sealed class FileBrowserPanel : EditorPanel
         NativeImGui.SameLine();
         NativeImGui.TextUnformatted(GetPathText(current));
     }
+    #endregion
 
+    #region Body / Split Pane
     private void DrawBody(EditorContext context)
     {
         Vector2 bodySize = new(0f, -NativeImGui.GetFrameHeightWithSpacing());
@@ -102,7 +113,9 @@ public sealed class FileBrowserPanel : EditorPanel
 
         NativeImGui.EndChild();
     }
+    #endregion
 
+    #region Tree Pane
     private static void DrawTreePane(EditorContext context)
     {
         if (!NativeImGui.BeginChild("##TreePane", Vector2.Zero, ImGuiChildFlags.None, ImGuiWindowFlags.HorizontalScrollbar))
@@ -162,7 +175,9 @@ public sealed class FileBrowserPanel : EditorPanel
 
         NativeImGui.TreePop();
     }
+    #endregion
 
+    #region Content Pane
     private void DrawContentPane(EditorContext context)
     {
         if (!NativeImGui.BeginChild("##ContentPane", Vector2.Zero))
@@ -187,7 +202,9 @@ public sealed class FileBrowserPanel : EditorPanel
 
         NativeImGui.EndChild();
     }
+    #endregion
 
+    #region Entries
     private static List<AssetFileEntry> SortEntries(IReadOnlyList<AssetFileEntry> entries)
     {
         List<AssetFileEntry> sorted = new(entries.Count);
@@ -203,7 +220,9 @@ public sealed class FileBrowserPanel : EditorPanel
 
         return sorted;
     }
+    #endregion
 
+    #region Grid / List View
     private void DrawGrid(EditorContext context, IReadOnlyList<AssetFileEntry> entries)
     {
         float available = MathF.Max(1f, NativeImGui.GetContentRegionAvail().X);
@@ -260,7 +279,9 @@ public sealed class FileBrowserPanel : EditorPanel
             }
         }
     }
+    #endregion
 
+    #region Status / Helpers
     private static void DrawStatusBar(EditorContext context)
     {
         NativeImGui.TextUnformatted($"Path: {GetPathText(context.selection.currentDirectory)}");
@@ -289,4 +310,5 @@ public sealed class FileBrowserPanel : EditorPanel
 
         return path[candidateAncestor.Length] == '/';
     }
+    #endregion
 }
