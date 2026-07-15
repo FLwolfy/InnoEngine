@@ -15,6 +15,8 @@ public readonly struct ShellSettings
         maxUpdateStepsPerTick = 8;
         useSingleThreadJobSystem = false;
         jobWorkerCount = 0;
+        assetDirectory = "Assets";
+        artifactDirectory = "Artifacts";
     }
 
     /// <summary>
@@ -41,4 +43,14 @@ public readonly struct ShellSettings
     /// Worker thread count for work-stealing jobs. Set to 0 for auto.
     /// </summary>
     public int jobWorkerCount { get; init; }
+
+    /// <summary>
+    /// Root folder containing source assets.
+    /// </summary>
+    public string? assetDirectory { get; init; }
+
+    /// <summary>
+    /// Root folder containing imported runtime artifacts.
+    /// </summary>
+    public string? artifactDirectory { get; init; }
 }

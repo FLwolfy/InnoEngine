@@ -1,5 +1,6 @@
 using System;
 
+using Inno.Assets;
 using Inno.Core.Events;
 using Inno.Core.Job;
 
@@ -7,58 +8,68 @@ using Xunit;
 
 namespace Inno.Core.Framework.Tests;
 
-public sealed class ShellBehaviorTests
+public sealed class ShellBehaviorTests : IDisposable
 {
-    [Fact]
-    public void Constructor_WithNonPositiveFixedDelta_Throws()
+    public void Dispose()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new Shell(0f));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new Shell(-0.01f));
+        Shell.Shutdown();
     }
 
     [Fact]
-    public void Constructor_WithNonPositiveMaxFrameDelta_Throws()
+    public void Initialize_WithNonPositiveFixedDelta_Throws()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new Shell(new ShellSettings
+        Assert.Throws<ArgumentOutOfRangeException>(() => Shell.Initialize(new ShellSettings
+        {
+            fixedDeltaTime = -0.01f
+        }));
+    }
+
+    [Fact]
+    public void Initialize_WithNonPositiveMaxFrameDelta_Throws()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => Shell.Initialize(new ShellSettings
         {
             fixedDeltaTime = 1f / 60f,
-            maxFrameDeltaTime = 0f
+            maxFrameDeltaTime = -0.01f
         }));
     }
 
     [Fact]
     public void Shell_AllowsOnlySingleLiveInstance()
     {
-        using var first = new Shell();
-        Assert.Throws<InvalidOperationException>(() => new Shell());
+        Shell.Initialize(new ShellSettings());
+        Assert.Throws<InvalidOperationException>(() => Shell.Initialize(new ShellSettings()));
     }
 
     [Fact]
-    public void Dispose_ReleasesSingleInstanceGuard()
+    public void Shutdown_ReleasesSingleInstanceGuard()
     {
-        var first = new Shell();
-        first.Dispose();
+        Shell.Initialize(new ShellSettings());
+        Shell.Shutdown();
 
-        using var second = new Shell();
+        Shell.Initialize(new ShellSettings());
+        var second = Shell.instance;
         Assert.NotNull(second);
     }
 
     [Fact]
-    public void Tick_OnDisposedShell_Throws()
+    public void Tick_AfterShutdown_Throws()
     {
-        var shell = new Shell();
-        shell.Dispose();
+        Shell.Initialize(new ShellSettings());
+        var shell = Shell.instance;
+        Shell.Shutdown();
         Assert.Throws<ObjectDisposedException>(() => shell.Tick(0f, 0.016f));
     }
 
     [Fact]
     public void Tick_AdvancesLayers_AndFixedStep()
     {
-        using var shell = new Shell(new ShellSettings
+        Shell.Initialize(new ShellSettings
         {
             fixedDeltaTime = 0.01f,
             maxFrameDeltaTime = 0.25f
         });
+        var shell = Shell.instance;
         var layer = new ProbeLayer("probe");
         shell.layerStack.PushLayer(layer);
 
@@ -73,11 +84,12 @@ public sealed class ShellBehaviorTests
     [Fact]
     public void Tick_ClampsDeltaByMaxFrameDelta()
     {
-        using var shell = new Shell(new ShellSettings
+        Shell.Initialize(new ShellSettings
         {
             fixedDeltaTime = 1f / 60f,
             maxFrameDeltaTime = 0.05f
         });
+        var shell = Shell.instance;
         var layer = new ProbeLayer("probe");
         shell.layerStack.PushLayer(layer);
 
@@ -91,7 +103,8 @@ public sealed class ShellBehaviorTests
     [Fact]
     public void EventDispatcher_QueuedEventDispatchedOnTick()
     {
-        using var shell = new Shell();
+        Shell.Initialize(new ShellSettings());
+        var shell = Shell.instance;
         var layer = new EventProbeLayer("event-probe");
         shell.layerStack.PushLayer(layer);
 
@@ -104,25 +117,39 @@ public sealed class ShellBehaviorTests
     [Fact]
     public void JobSystem_IsAvailableByDefault_AndDrainsMainThreadCallbacks()
     {
-        using var shell = new Shell();
-        var callbacks = 0;
+        Shell.Initialize(new ShellSettings());
+        var shell = Shell.instance;
+        var layer = new JobProbeLayer("job-probe");
+        shell.layerStack.PushLayer(layer);
 
-        _ = JobSystem.Schedule(() => JobSystem.RunOnMainThread(() => callbacks++));
         shell.Tick(0.01f, 0.01f);
 
-        Assert.Equal(1, callbacks);
+        Assert.Equal(1, layer.callbackCount);
     }
 
     [Fact]
     public void SettingsCtor_AlwaysProvidesJobSystem()
     {
-        using var shell = new Shell(new ShellSettings
+        Shell.Initialize(new ShellSettings
         {
             fixedDeltaTime = 1f / 60f,
             maxFrameDeltaTime = 0.25f
         });
+        var shell = Shell.instance;
 
         Assert.True(JobSystem.workerCount >= 0);
+    }
+
+    [Fact]
+    public void Initialize_InitializesAssetManager_AndShutdownShutsItDown()
+    {
+        Shell.Initialize(new ShellSettings());
+        Assert.True(AssetManager.isInitialized);
+        Assert.False(string.IsNullOrWhiteSpace(AssetManager.assetRoot));
+
+        Shell.Shutdown();
+
+        Assert.False(AssetManager.isInitialized);
     }
 
     private sealed class ProbeEvent(int value) : Event
@@ -163,6 +190,22 @@ public sealed class ShellBehaviorTests
         public override void OnAttach()
         {
             _ = Listen<ProbeEvent>(_ => receivedCount++);
+        }
+    }
+
+    private sealed class JobProbeLayer(string name) : Layer(name)
+    {
+        private bool m_scheduled;
+
+        public int callbackCount { get; private set; }
+
+        public override void OnUpdate(float deltaTime)
+        {
+            if (m_scheduled)
+                return;
+
+            m_scheduled = true;
+            _ = JobSystem.Schedule(() => JobSystem.RunOnMainThread(() => callbackCount++));
         }
     }
 }

@@ -25,7 +25,7 @@ internal static class Program
             resizable = true,
             highPixelDensity = true
         });
-        using var shell = new Shell(new ShellSettings
+        using var shell = Shell.Initialize(new ShellSettings
         {
             fixedDeltaTime = 1f / 60f,
             maxFrameDeltaTime = 0.25f,

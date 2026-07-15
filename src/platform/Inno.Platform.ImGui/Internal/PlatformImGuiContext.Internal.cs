@@ -17,8 +17,8 @@ public sealed unsafe partial class PlatformImGuiContext
     private const float DEFAULT_KEY_REPEAT_RATE_SECONDS = 0.050f;
     private const float DEFAULT_FONT_SIZE_PIXELS = 16.0f;
     private const float DEFAULT_MOUSE_SCROLLING_UNITS = 0.3f;
-    private const string DEFAULT_FONTS_DIRECTORY_RELATIVE_PATH = "Assets/Fonts";
-    private const string DEFAULT_ICONS_DIRECTORY_RELATIVE_PATH = "Assets/Icons";
+    private const string DEFAULT_FONTS_DIRECTORY_RELATIVE_PATH = "BuiltIn/Fonts";
+    private const string DEFAULT_ICONS_DIRECTORY_RELATIVE_PATH = "BuiltIn/Icons";
     private const string DEFAULT_FONT_FILE_NAME = "JetBrainsMono-Regular.ttf";
     private const double LIVE_RESIZE_HOVER_LOCK_TIMEOUT_SECONDS = 0.25;
     private const double LIVE_RESIZE_MIN_REDRAW_INTERVAL_SECONDS = 1.0 / 120.0;

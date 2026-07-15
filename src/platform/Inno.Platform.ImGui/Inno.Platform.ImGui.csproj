@@ -13,11 +13,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Assets\**\*.*" CopyToOutputDirectory="PreserveNewest" />
-    <None Update="Assets\Icons\FA-Regular-400.ttf">
+    <None Include="BuiltIn\**\*.*" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="BuiltIn\Icons\FA-Regular-400.ttf">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Assets\Icons\FA-Solid-900.ttf">
+    <None Update="BuiltIn\Icons\FA-Solid-900.ttf">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

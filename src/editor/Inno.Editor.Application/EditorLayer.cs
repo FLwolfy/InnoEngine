@@ -13,7 +13,7 @@ internal sealed class EditorLayer : Layer
 {
     private readonly PlatformImGuiContext m_imgui;
     private readonly EditorContext m_context = new();
-    private readonly EditorPanelRegistry m_registry = new();
+    private readonly EditorPanelRegistry m_panelRegistry = new();
 
     internal EditorLayer(PlatformImGuiContext imgui)
         : base("EditorLayer")
@@ -28,13 +28,13 @@ internal sealed class EditorLayer : Layer
         EditorPanel[] panels = EditorDefaultPanels.Create();
         for (int i = 0; i < panels.Length; i++)
         {
-            m_registry.Register(panels[i], m_context);
+            m_panelRegistry.Register(panels[i], m_context);
         }
     }
 
     public override void OnDetach()
     {
-        m_registry.Clear(m_context);
+        m_panelRegistry.Clear(m_context);
         m_context.Detach();
     }
 
@@ -53,27 +53,27 @@ internal sealed class EditorLayer : Layer
 
     private void DrawMainMenu()
     {
-        List<(string title, bool isOpen)> viewItems = new(m_registry.count);
-        for (int i = 0; i < m_registry.count; i++)
+        List<(string title, bool isOpen)> viewItems = new(m_panelRegistry.count);
+        for (int i = 0; i < m_panelRegistry.count; i++)
         {
-            EditorPanel panel = m_registry.panels[i];
+            EditorPanel panel = m_panelRegistry.panels[i];
             viewItems.Add((panel.title, panel.isOpen));
         }
 
         ImGuiWidget.ViewMenu(viewItems, (index, isOpen) =>
         {
-            if (index < 0 || index >= m_registry.count)
+            if (index < 0 || index >= m_panelRegistry.count)
                 return;
 
-            m_registry.panels[index].isOpen = isOpen;
+            m_panelRegistry.panels[index].isOpen = isOpen;
         });
     }
 
     private void DrawPanels()
     {
-        for (int i = 0; i < m_registry.count; i++)
+        for (int i = 0; i < m_panelRegistry.count; i++)
         {
-            EditorPanel panel = m_registry.panels[i];
+            EditorPanel panel = m_panelRegistry.panels[i];
             bool isOpen = panel.isOpen;
             ImGuiWidget.PanelWindow(panel.title, ref isOpen, () => panel.OnRender(m_context));
             panel.isOpen = isOpen;

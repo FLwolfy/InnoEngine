@@ -45,13 +45,16 @@ public sealed class EditorHost : IDisposable
         });
         BootLog($"Window created. id={m_window.windowId}, size={m_window.width}x{m_window.height}.");
 
-        m_shell = new Shell(new ShellSettings
+        string projectRoot = Directory.GetCurrentDirectory();
+        m_shell = Shell.Initialize(new ShellSettings
         {
             fixedDeltaTime = 1f / 60f,
             maxFrameDeltaTime = 0.25f,
             maxUpdateStepsPerTick = 8,
             useSingleThreadJobSystem = false,
-            jobWorkerCount = 0
+            jobWorkerCount = 0,
+            assetDirectory = Path.Combine(projectRoot, "Assets"),
+            artifactDirectory = Path.Combine(projectRoot, "Artifacts")
         });
         BootLog("Shell created.");
 
@@ -62,7 +65,6 @@ public sealed class EditorHost : IDisposable
             | ImGuiContextFlags.EnableSmoothResize);
         BootLog("ImGui context created.");
 
-        EnsureAssetManagerInitialized();
         BootLog($"AssetManager initialized={AssetManager.isInitialized} root='{AssetManager.assetRoot}'.");
 
         m_editorLayer = new EditorLayer(m_imgui);
@@ -136,8 +138,7 @@ public sealed class EditorHost : IDisposable
 
         m_shell.layerStack.PopOverlay(m_editorLayer);
         m_platformApplication.DestroyImGuiContext(m_window);
-        AssetManager.Shutdown();
-        m_shell.Dispose();
+        Shell.Shutdown();
         m_window.Dispose();
         m_platformApplication.Dispose();
         BootLog("Dispose end.");
@@ -159,20 +160,10 @@ public sealed class EditorHost : IDisposable
         return evnt is WindowCloseEvent closeEvent && closeEvent.windowId == m_window.windowId;
     }
 
-    private static void EnsureAssetManagerInitialized()
-    {
-        if (AssetManager.isInitialized)
-            return;
-
-        string projectRoot = Directory.GetCurrentDirectory();
-        string assetRoot = Path.Combine(projectRoot, "Assets");
-        string artifactRoot = Path.Combine(projectRoot, "Artifacts");
-        AssetManager.Initialize(AssetManagerOptions.Create(assetRoot, artifactRoot));
-    }
-
     private void BootLog(string message)
     {
         string line = $"[{DateTime.Now:O}] {message}{Environment.NewLine}";
+        Console.Write(line);
         File.AppendAllText(m_bootLogPath, line);
     }
 }

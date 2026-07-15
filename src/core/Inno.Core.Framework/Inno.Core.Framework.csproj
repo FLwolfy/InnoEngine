@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Core.Coroutines\Inno.Core.Coroutines.csproj" />
     <ProjectReference Include="..\Inno.Core.Events\Inno.Core.Events.csproj" />
     <ProjectReference Include="..\Inno.Core.Job\Inno.Core.Job.csproj" />

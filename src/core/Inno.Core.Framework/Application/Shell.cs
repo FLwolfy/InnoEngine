@@ -1,6 +1,8 @@
 using System;
+using System.IO;
 using System.Threading;
 
+using Inno.Assets;
 using Inno.Core.Coroutines;
 using Inno.Core.Events;
 using Inno.Core.Job;
@@ -12,12 +14,13 @@ namespace Inno.Core.Framework;
 /// <summary>
 /// Engine runtime shell that advances one frame at a time via <see cref="Tick"/>.
 /// </summary>
-public sealed class Shell : IDisposable
+public sealed class Shell
 {
-    private static int s_isShellAlive;
-    private const float DEFAULT_FIXED_DELTA_TIME = 1f / 60f;
-    private const float DEFAULT_MAX_FRAME_DELTA_TIME = 0.25f;
-    private const int DEFAULT_MAX_UPDATE_STEPS_PER_TICK = 8;
+    private const string DEFAULT_ASSET_DIRECTORY = "Assets";
+    private const string DEFAULT_ARTIFACT_DIRECTORY = "Artifacts";
+
+    private static readonly Lock S_LIFECYCLE_LOCK = new();
+    private static Shell? s_instance;
 
     private readonly EventDispatcher m_events;
     private readonly CoroutineScheduler m_coroutines;
@@ -28,6 +31,37 @@ public sealed class Shell : IDisposable
 
     private float m_fixedAccumulator;
     private bool m_disposed;
+
+    /// <summary>
+    /// Gets whether the singleton shell is initialized.
+    /// </summary>
+    public static bool isInitialized
+    {
+        get
+        {
+            lock (S_LIFECYCLE_LOCK)
+            {
+                return s_instance is not null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the initialized singleton shell.
+    /// </summary>
+    public static Shell instance
+    {
+        get
+        {
+            lock (S_LIFECYCLE_LOCK)
+            {
+                if (s_instance is null)
+                    throw new InvalidOperationException("Shell is not initialized.");
+
+                return s_instance;
+            }
+        }
+    }
 
     /// <summary>
     /// Gets the event dispatcher owned by this shell.
@@ -44,49 +78,24 @@ public sealed class Shell : IDisposable
     /// </summary>
     public LayerStack layerStack => m_layers;
 
-    /// <summary>
-    /// Creates a shell with explicit fixed-step interval.
-    /// </summary>
-    public Shell(float fixedDeltaTime = DEFAULT_FIXED_DELTA_TIME)
-        : this(new ShellSettings
-        {
-            fixedDeltaTime = fixedDeltaTime,
-            maxFrameDeltaTime = DEFAULT_MAX_FRAME_DELTA_TIME,
-            maxUpdateStepsPerTick = DEFAULT_MAX_UPDATE_STEPS_PER_TICK,
-            useSingleThreadJobSystem = false,
-            jobWorkerCount = 0
-        })
+    private Shell(in ShellSettings settings)
     {
-    }
-
-    /// <summary>
-    /// Creates a shell with settings.
-    /// </summary>
-    public Shell(in ShellSettings settings)
-    {
-        var fixedDeltaTime = settings.fixedDeltaTime > 0f ? settings.fixedDeltaTime : DEFAULT_FIXED_DELTA_TIME;
+        var fixedDeltaTime = settings.fixedDeltaTime;
         if (fixedDeltaTime <= 0f)
         {
             throw new ArgumentOutOfRangeException(nameof(settings.fixedDeltaTime), "fixedDeltaTime must be greater than zero.");
         }
 
-        var maxFrameDeltaTime = settings.maxFrameDeltaTime > 0f ? settings.maxFrameDeltaTime : DEFAULT_MAX_FRAME_DELTA_TIME;
+        var maxFrameDeltaTime = settings.maxFrameDeltaTime;
         if (maxFrameDeltaTime <= 0f)
         {
             throw new ArgumentOutOfRangeException(nameof(settings.maxFrameDeltaTime), "maxFrameDeltaTime must be greater than zero.");
         }
 
-        var maxUpdateStepsPerTick = settings.maxUpdateStepsPerTick > 0
-            ? settings.maxUpdateStepsPerTick
-            : DEFAULT_MAX_UPDATE_STEPS_PER_TICK;
+        var maxUpdateStepsPerTick = settings.maxUpdateStepsPerTick;
         if (maxUpdateStepsPerTick <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(settings.maxUpdateStepsPerTick), "maxUpdateStepsPerTick must be greater than zero.");
-        }
-
-        if (Interlocked.CompareExchange(ref s_isShellAlive, 1, 0) != 0)
-        {
-            throw new InvalidOperationException("Only one Shell instance can exist at a time.");
         }
 
         try
@@ -111,13 +120,52 @@ public sealed class Shell : IDisposable
             LogManager.RegisterSink(new ConsoleLogSink());
             
             TypeCacheManager.Initialize();
+
+            AssetManager.Initialize(AssetManagerOptions.Create(
+                Path.GetFullPath(string.IsNullOrWhiteSpace(settings.assetDirectory)
+                    ? DEFAULT_ASSET_DIRECTORY
+                    : settings.assetDirectory),
+                Path.GetFullPath(string.IsNullOrWhiteSpace(settings.artifactDirectory)
+                    ? DEFAULT_ARTIFACT_DIRECTORY
+                    : settings.artifactDirectory)
+            ));
         }
         catch
         {
+            AssetManager.Shutdown();
             JobSystemManager.Shutdown();
-            Interlocked.Exchange(ref s_isShellAlive, 0);
+            LogManager.Shutdown();
             throw;
         }
+    }
+
+    /// <summary>
+    /// Initializes the singleton shell with settings.
+    /// </summary>
+    public static Shell Initialize(in ShellSettings settings)
+    {
+        lock (S_LIFECYCLE_LOCK)
+        {
+            if (s_instance is not null)
+                throw new InvalidOperationException("Shell is already initialized.");
+
+            s_instance = new Shell(settings);
+            return s_instance;
+        }
+    }
+
+    /// <summary>
+    /// Shuts down the singleton shell if it is initialized.
+    /// </summary>
+    public static void Shutdown()
+    {
+        Shell? shell;
+        lock (S_LIFECYCLE_LOCK)
+        {
+            shell = s_instance;
+        }
+
+        shell?.DisposeResources();
     }
 
     /// <summary>
@@ -174,11 +222,8 @@ public sealed class Shell : IDisposable
             }
         }
     }
-
-    /// <summary>
-    /// Releases shell resources.
-    /// </summary>
-    public void Dispose()
+    
+    private void DisposeResources()
     {
         if (m_disposed)
         {
@@ -190,12 +235,17 @@ public sealed class Shell : IDisposable
         {
             m_layers.Dispose();
             m_coroutines.Dispose();
+            AssetManager.Shutdown();
             JobSystemManager.Shutdown();
             LogManager.Shutdown();
         }
         finally
         {
-            Interlocked.Exchange(ref s_isShellAlive, 0);
+            lock (S_LIFECYCLE_LOCK)
+            {
+                if (ReferenceEquals(s_instance, this))
+                    s_instance = null;
+            }
         }
     }
 }
