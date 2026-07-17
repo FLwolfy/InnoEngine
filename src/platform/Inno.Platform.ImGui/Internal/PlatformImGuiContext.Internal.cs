@@ -16,6 +16,7 @@ public sealed unsafe partial class PlatformImGuiContext
     private const float DEFAULT_KEY_REPEAT_DELAY_SECONDS = 0.275f;
     private const float DEFAULT_KEY_REPEAT_RATE_SECONDS = 0.050f;
     private const float DEFAULT_FONT_SIZE_PIXELS = 16.0f;
+    private const float DEFAULT_ICON_SIZE_PIXELS = 14.0f;
     private const float DEFAULT_MOUSE_SCROLLING_UNITS = 0.3f;
     private const string DEFAULT_FONTS_DIRECTORY_RELATIVE_PATH = "BuiltIn/Fonts";
     private const string DEFAULT_ICONS_DIRECTORY_RELATIVE_PATH = "BuiltIn/Icons";
@@ -233,7 +234,7 @@ public sealed unsafe partial class PlatformImGuiContext
                 mergeConfig.PixelSnapH = true;
                 try
                 {
-                    _ = fonts.AddFontFromFileTTF(iconFontPaths[i], DEFAULT_FONT_SIZE_PIXELS, mergeConfig, pGlyphRanges);
+                    _ = fonts.AddFontFromFileTTF(iconFontPaths[i], DEFAULT_ICON_SIZE_PIXELS, mergeConfig, pGlyphRanges);
                 }
                 finally
                 {

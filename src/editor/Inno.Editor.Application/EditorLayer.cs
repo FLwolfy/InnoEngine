@@ -5,6 +5,7 @@ using Inno.Editor.ImGui;
 using Inno.Editor.Panels;
 using Inno.Platform.ImGui;
 using Inno.Core.Framework;
+using Inno.Core.Logging;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Application;

@@ -11,6 +11,11 @@ public enum AssemblyGroup
     None,
 
     /// <summary>
+    /// Native-level assembly group.
+    /// </summary>
+    Native,
+    
+    /// <summary>
     /// Game-level assembly group.
     /// </summary>
     Game,

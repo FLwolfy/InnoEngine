@@ -25,7 +25,7 @@ internal static class Program
             resizable = true,
             highPixelDensity = true
         });
-        using var shell = Shell.Initialize(new ShellSettings
+        var shell = Shell.Initialize(new ShellSettings
         {
             fixedDeltaTime = 1f / 60f,
             maxFrameDeltaTime = 0.25f,
@@ -103,6 +103,8 @@ internal static class Program
             platformApp.DestroyImGuiContext(window);
             shell.layerStack.PopOverlay(imguiLayer);
             shell.layerStack.PopLayer(jobLayer);
+            
+            Shell.Shutdown();
         }
 
         return 0;

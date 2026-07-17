@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup Condition="'$(InnoAssemblyGroup)' == ''">
+    <InnoAssemblyGroup>Native</InnoAssemblyGroup>
+  </PropertyGroup>
+</Project>

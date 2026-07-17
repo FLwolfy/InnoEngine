@@ -1,0 +1,5 @@
+<Project>
+  <ItemGroup Condition="'$(InnoAssemblyGroup)' != ''">
+    <AssemblyMetadata Include="Inno.AssemblyGroup" Value="$(InnoAssemblyGroup)" />
+  </ItemGroup>
+</Project>

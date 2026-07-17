@@ -226,7 +226,7 @@ public sealed class LogPanel : EditorPanel
             Vector4 collapsedCardBorder = GetCollapsedBorderColor();
             NativeImGui.PushStyleColor(ImGuiCol.FrameBg, collapsedCardBg);
             NativeImGui.PushStyleColor(ImGuiCol.Border, collapsedCardBorder);
-            NativeImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 8f);
+            NativeImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, NativeImGui.GetStyle().FrameRounding);
             NativeImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1f);
             NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(6f, 2f));
 
@@ -265,7 +265,7 @@ public sealed class LogPanel : EditorPanel
         Vector4 cardBorder = LerpColor(new Vector4(0.24f, 0.24f, 0.24f, 1f), levelColor, 0.20f);
         NativeImGui.PushStyleColor(ImGuiCol.FrameBg, cardBg);
         NativeImGui.PushStyleColor(ImGuiCol.Border, cardBorder);
-        NativeImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 8f);
+        NativeImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, NativeImGui.GetStyle().FrameRounding);
         NativeImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1f);
         NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(6f, 2f));
 

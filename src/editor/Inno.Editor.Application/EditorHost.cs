@@ -15,6 +15,9 @@ namespace Inno.Editor.Application;
 /// </summary>
 public sealed class EditorHost : IDisposable
 {
+    // NOTE: This project root should be changed to project selection
+    private static readonly string PROJECT_ROOT = "/Users/aaronliao/Dev/GameEngineDev/InnoProject";
+    
     private readonly PlatformApplication m_platformApplication;
     private readonly PlatformWindow m_window;
     private readonly Shell m_shell;
@@ -45,7 +48,6 @@ public sealed class EditorHost : IDisposable
         });
         BootLog($"Window created. id={m_window.windowId}, size={m_window.width}x{m_window.height}.");
 
-        string projectRoot = Directory.GetCurrentDirectory();
         m_shell = Shell.Initialize(new ShellSettings
         {
             fixedDeltaTime = 1f / 60f,
@@ -53,8 +55,8 @@ public sealed class EditorHost : IDisposable
             maxUpdateStepsPerTick = 8,
             useSingleThreadJobSystem = false,
             jobWorkerCount = 0,
-            assetDirectory = Path.Combine(projectRoot, "Assets"),
-            artifactDirectory = Path.Combine(projectRoot, "Artifacts")
+            assetDirectory = Path.Combine(PROJECT_ROOT, "Assets"),
+            artifactDirectory = Path.Combine(PROJECT_ROOT, "Artifacts")
         });
         BootLog("Shell created.");
 
