@@ -248,7 +248,7 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
 
         if ((viewport->Flags & ImGuiViewportFlags.TopMost) != 0)
         {
-            flags |= SDLWindowFlags.AlwaysOnTop;
+            flags |= SDLWindowFlags.AlwaysOnTop | SDLWindowFlags.NotFocusable;;
         }
 
         var width = Math.Max(1, (int)viewport->Size.X);
