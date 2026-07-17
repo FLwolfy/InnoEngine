@@ -18,6 +18,7 @@ public sealed class Shell
 {
     private const string DEFAULT_ASSET_DIRECTORY = "Assets";
     private const string DEFAULT_ARTIFACT_DIRECTORY = "Artifacts";
+    private const string DEFAULT_LOG_DIRECTORY = "Logs";
 
     private static readonly Lock S_LIFECYCLE_LOCK = new();
     private static Shell? s_instance;
@@ -118,16 +119,13 @@ public sealed class Shell
 
             LogManager.Initialize();
             LogManager.RegisterSink(new ConsoleLogSink());
+            LogManager.RegisterSink(new FileLogSink(Path.Combine(settings.projectRootDirectory, DEFAULT_LOG_DIRECTORY)));
             
             TypeCacheManager.Initialize();
 
             AssetManager.Initialize(AssetManagerOptions.Create(
-                Path.GetFullPath(string.IsNullOrWhiteSpace(settings.assetDirectory)
-                    ? DEFAULT_ASSET_DIRECTORY
-                    : settings.assetDirectory),
-                Path.GetFullPath(string.IsNullOrWhiteSpace(settings.artifactDirectory)
-                    ? DEFAULT_ARTIFACT_DIRECTORY
-                    : settings.artifactDirectory)
+                Path.Combine(settings.projectRootDirectory, DEFAULT_ASSET_DIRECTORY),
+                Path.Combine(settings.projectRootDirectory, DEFAULT_ARTIFACT_DIRECTORY)
             ));
         }
         catch

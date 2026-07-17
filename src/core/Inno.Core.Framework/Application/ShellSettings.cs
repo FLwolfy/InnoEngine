@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace Inno.Core.Framework;
 
 /// <summary>
@@ -15,8 +17,7 @@ public readonly struct ShellSettings
         maxUpdateStepsPerTick = 8;
         useSingleThreadJobSystem = false;
         jobWorkerCount = 0;
-        assetDirectory = "Assets";
-        artifactDirectory = "Artifacts";
+        projectRootDirectory = Directory.GetCurrentDirectory();
     }
 
     /// <summary>
@@ -45,12 +46,7 @@ public readonly struct ShellSettings
     public int jobWorkerCount { get; init; }
 
     /// <summary>
-    /// Root folder containing source assets.
+    /// Root folder of the project.
     /// </summary>
-    public string? assetDirectory { get; init; }
-
-    /// <summary>
-    /// Root folder containing imported runtime artifacts.
-    /// </summary>
-    public string? artifactDirectory { get; init; }
+    public string projectRootDirectory { get; init; }
 }

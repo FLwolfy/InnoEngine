@@ -55,8 +55,7 @@ public sealed class EditorHost : IDisposable
             maxUpdateStepsPerTick = 8,
             useSingleThreadJobSystem = false,
             jobWorkerCount = 0,
-            assetDirectory = Path.Combine(PROJECT_ROOT, "Assets"),
-            artifactDirectory = Path.Combine(PROJECT_ROOT, "Artifacts")
+            projectRootDirectory = Path.GetFullPath(PROJECT_ROOT)
         });
         BootLog("Shell created.");
 

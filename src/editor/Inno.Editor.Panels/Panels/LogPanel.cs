@@ -314,23 +314,28 @@ public sealed class LogPanel : EditorPanel
         out bool toggled)
     {
         toggled = false;
+        ImGuiStylePtr style = NativeImGui.GetStyle();
+        
+        const float c_togglePadX = 6f;
+        const float c_togglePadY = 1f;
+        
         string content = isOpen ? entry.message : GetFirstLine(entry.message);
         string repeatText = repeatCount > 1 ? $" (x{repeatCount})" : string.Empty;
         string prefix = $"{levelIcon} [{entry.level}] ";
-        string toggleText = isOpen ? "▾" : "▸";
-        ImGuiStylePtr style = NativeImGui.GetStyle();
-        const float c_togglePadX = 2f;
-        const float c_togglePadY = 1f;
+        string toggleText = isOpen ? "▼" : "▶";
+        
         float toggleW = NativeImGui.CalcTextSize(toggleText).X + c_togglePadX * 2f;
         float prefixW = NativeImGui.CalcTextSize(prefix).X + toggleW + style.ItemInnerSpacing.X;
         float suffixW = NativeImGui.CalcTextSize(repeatText).X;
         float suffixColW = MathF.Max(1f, suffixW);
         float tableOuterW = MathF.Max(1f, NativeImGui.GetContentRegionAvail().X);
         float contentW = MathF.Max(1f, tableOuterW - prefixW - suffixColW);
+        
         if (!isOpen)
         {
             content = FitTextWithEllipsis(GetFirstLine(entry.message), contentW);
         }
+        
         Vector2 tableOuterSize = new(tableOuterW, 0f);
         ImGuiTableFlags flags =
             ImGuiTableFlags.SizingFixedFit |
@@ -353,7 +358,7 @@ public sealed class LogPanel : EditorPanel
             }
 
             _ = NativeImGui.TableSetColumnIndex(0);
-            Vector4 toggleBg = NativeImGui.ColorConvertU32ToFloat4(NativeImGui.GetColorU32(ImGuiCol.Button, 0.82f));
+            Vector4 toggleBg = NativeImGui.ColorConvertU32ToFloat4(NativeImGui.GetColorU32(ImGuiCol.Button, 0.0f));
             Vector4 toggleHovered = NativeImGui.ColorConvertU32ToFloat4(NativeImGui.GetColorU32(ImGuiCol.ButtonHovered, 0.82f));
             Vector4 toggleActive = NativeImGui.ColorConvertU32ToFloat4(NativeImGui.GetColorU32(ImGuiCol.ButtonActive, 0.82f));
             NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(c_togglePadX, c_togglePadY));
