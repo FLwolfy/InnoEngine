@@ -30,7 +30,6 @@ public sealed class FileBrowserPanel : EditorPanel
     private const float C_GRID_SCALE_MIN = 1f;
     private const float C_GRID_SCALE_MAX = 10f;
     private const int C_SEARCH_BUFFER_SIZE = 256;
-    private const int C_TREE_MAX_DEPTH = 64;
 
     private static readonly Vector4 S_BG = new(0.165f, 0.165f, 0.165f, 1f);
     private static readonly Vector4 S_BG_ROW = new(0.185f, 0.185f, 0.185f, 1f);
@@ -53,7 +52,6 @@ public sealed class FileBrowserPanel : EditorPanel
     private string m_historyCurrent = string.Empty;
     private readonly Stack<string> m_backHistory = [];
     private readonly Stack<string> m_forwardHistory = [];
-    private readonly bool[] m_treeAncestorHasNext = new bool[C_TREE_MAX_DEPTH];
     #endregion
 
     #region Types
@@ -175,8 +173,7 @@ public sealed class FileBrowserPanel : EditorPanel
         Vector2 treePaneSize = new(-style.WindowPadding.X, 0f);
         if (NativeImGui.BeginChild("##TreePane", treePaneSize, ImGuiChildFlags.None))
         {
-            Array.Clear(m_treeAncestorHasNext);
-            DrawTreeEntry(context, string.Empty, "Assets", true, false, 0);
+            DrawTreeEntry(context, string.Empty, "Assets", true);
         }
 
         NativeImGui.EndChild();
@@ -198,7 +195,7 @@ public sealed class FileBrowserPanel : EditorPanel
     #endregion
 
     #region Tree
-    private void DrawTreeEntry(EditorContext context, string relativePath, string label, bool isRoot, bool hasNextSibling, int depth)
+    private void DrawTreeEntry(EditorContext context, string relativePath, string label, bool isRoot)
     {
         IReadOnlyList<AssetFileEntry> children = AssetManager.GetFileSystemChildren(relativePath);
         List<AssetFileEntry> sorted = SortTreeEntries(children);
@@ -206,96 +203,41 @@ public sealed class FileBrowserPanel : EditorPanel
         bool isDirectory = isRoot || IsDirectoryPath(relativePath);
         bool selected = string.Equals(context.selection.selectedPath, relativePath, StringComparison.Ordinal);
         bool isLeaf = !isDirectory || sorted.Count == 0;
-        bool isAncestor = isDirectory && IsAncestorOrSelf(relativePath, context.selection.currentDirectory);
         bool isCurrentDirectory = isDirectory && string.Equals(context.selection.currentDirectory, relativePath, StringComparison.Ordinal);
 
-        if ((uint)depth < (uint)m_treeAncestorHasNext.Length)
-            m_treeAncestorHasNext[depth] = hasNextSibling;
-
-        if (!isRoot && isAncestor)
-            NativeImGui.SetNextItemOpen(true, ImGuiCond.Once);
-
         string icon = isDirectory ? ImGuiIcon.Folder : GetFileIcon(relativePath);
-        Vector2 nodeCursor = NativeImGui.GetCursorScreenPos();
-        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags.SpanFullWidth;
-        if (selected)
-            flags |= ImGuiTreeNodeFlags.Selected;
-        if (isLeaf)
-        {
-            flags |= ImGuiTreeNodeFlags.Leaf | ImGuiTreeNodeFlags.NoTreePushOnOpen;
-        }
-        else
-        {
-            flags |= ImGuiTreeNodeFlags.OpenOnArrow;
-            if (isRoot || isAncestor || sorted.Count == 1)
-                flags |= ImGuiTreeNodeFlags.DefaultOpen;
-        }
+        string nodeId = $"tree_{(isRoot ? "root" : relativePath)}";
 
-        DrawTreeHierarchyLines(nodeCursor, depth, isRoot, hasNextSibling, isDirectory && !isLeaf);
-        bool open = NativeImGui.TreeNodeEx($"##tree_{(isRoot ? "root" : relativePath)}", flags);
+        bool open = ImGuiWidget.TreeNode(
+            nodeId,
+            () => ImGuiWidget.IconText(icon, label, isCurrentDirectory),
+            selected,
+            isLeaf
+        );
+
         bool itemClicked = NativeImGui.IsItemClicked();
         bool itemDoubleClicked = NativeImGui.IsItemHovered() && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
-        DrawIconTextAt(new Vector2(nodeCursor.X + NativeImGui.GetTreeNodeToLabelSpacing(), nodeCursor.Y), icon, label, isCurrentDirectory);
 
-        if (itemClicked)
+        if (itemClicked || itemDoubleClicked)
         {
             context.selection.SetSelectedPath(relativePath);
-            if (isDirectory && itemDoubleClicked)
-                NavigateTo(context, relativePath);
         }
 
-        if (!open || isLeaf)
-            return;
-
-        for (int i = 0; i < sorted.Count; i++)
+        if (isDirectory && itemDoubleClicked)
         {
-            AssetFileEntry child = sorted[i];
-            DrawTreeEntry(context, child.relativePath, Path.GetFileName(child.relativePath), false, i < sorted.Count - 1, depth + 1);
+            NavigateTo(context, relativePath);
         }
 
-        NativeImGui.TreePop();
-    }
-
-    private static void DrawIconTextAt(Vector2 screenPos, string icon, string text, bool highlight)
-    {
-        float offsetFromWindowStart = screenPos.X - NativeImGui.GetWindowPos().X;
-        NativeImGui.SameLine(offsetFromWindowStart, 0f);
-        ImGuiWidget.IconText(icon, text, highlight);
-    }
-
-    private void DrawTreeHierarchyLines(Vector2 nodeCursor, int depth, bool isRoot, bool hasNextSibling, bool hasDisclosureArrow)
-    {
-        if (isRoot || depth <= 0)
-            return;
-
-        ImGuiStylePtr style = NativeImGui.GetStyle();
-        float rowMinY = nodeCursor.Y - style.ItemSpacing.Y * 0.5f;
-        float rowMaxY = nodeCursor.Y + NativeImGui.GetTextLineHeight() + style.ItemSpacing.Y * 0.5f;
-        float rowCenterY = nodeCursor.Y + NativeImGui.GetTextLineHeight() * 0.5f;
-        float nodeToLabel = NativeImGui.GetTreeNodeToLabelSpacing();
-        float arrowTipOffset = nodeToLabel * 0.5f;
-        float branchX = nodeCursor.X - style.IndentSpacing + arrowTipOffset;
-        float labelStartX = nodeCursor.X + nodeToLabel;
-        float fileConnectorPadding = MathF.Max(1f, style.ItemInnerSpacing.X);
-        float folderConnectorPadding = fileConnectorPadding * 2f + 2f;
-        float targetX = hasDisclosureArrow
-            ? nodeCursor.X + arrowTipOffset - folderConnectorPadding
-            : labelStartX - fileConnectorPadding;
-        uint color = NativeImGui.ColorConvertFloat4ToU32(S_BORDER_SOFT);
-        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
-
-        for (int level = 1; level < depth; level++)
+        if (open)
         {
-            if ((uint)level >= (uint)m_treeAncestorHasNext.Length || !m_treeAncestorHasNext[level])
-                continue;
+            for (int i = 0; i < sorted.Count; i++)
+            {
+                AssetFileEntry child = sorted[i];
+                DrawTreeEntry(context, child.relativePath, Path.GetFileName(child.relativePath), false);
+            }
 
-            float x = nodeCursor.X - style.IndentSpacing * (depth - level + 1) + arrowTipOffset;
-            drawList.AddLine(new Vector2(x, rowMinY), new Vector2(x, rowMaxY), color, 1f);
+            NativeImGui.TreePop();
         }
-
-        drawList.AddLine(new Vector2(branchX, rowMinY), new Vector2(branchX, hasNextSibling ? rowMaxY : rowCenterY), color, 1f);
-        if (targetX > branchX)
-            drawList.AddLine(new Vector2(branchX, rowCenterY), new Vector2(targetX, rowCenterY), color, 1f);
     }
     #endregion
 
