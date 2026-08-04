@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
+using System.Text;
 
 using Inno.Assets;
 using Inno.Assets.IO;
@@ -14,24 +15,63 @@ using NativeImGui = Inno.Native.ImGui.ImGui;
 namespace Inno.Editor.Panels;
 
 /// <summary>
-/// Unified file browser panel with tree + content view.
+/// Asset browser panel with a tree pane and filtered table view.
 /// </summary>
 public sealed class FileBrowserPanel : EditorPanel
 {
     #region Constants
-    private const float C_TREE_DEFAULT_WIDTH = 280f;
-    private const float C_GRID_CELL_WIDTH = 128f;
+    private const float C_TREE_WIDTH = 263f;
+    private const float C_TREE_MIN_WIDTH = 140f;
+    private const float C_TREE_MAX_WIDTH = 520f;
+    private const float C_BREADCRUMB_BAR_HEIGHT = 25f;
+    private const float C_GRID_MIN_CELL_SIZE = 32f;
+    private const float C_GRID_CELL_PADDING = 2f;
+    private const float C_GRID_SCALE_DEFAULT = 3f;
+    private const float C_GRID_SCALE_MIN = 1f;
+    private const float C_GRID_SCALE_MAX = 10f;
+    private const int C_SEARCH_BUFFER_SIZE = 256;
+
+    private static readonly Vector4 S_BG = new(0.165f, 0.165f, 0.165f, 1f);
+    private static readonly Vector4 S_BG_ROW = new(0.185f, 0.185f, 0.185f, 1f);
+    private static readonly Vector4 S_BG_ROW_ALT = new(0.215f, 0.215f, 0.215f, 1f);
+    private static readonly Vector4 S_BG_FIELD = new(0.235f, 0.22f, 0.27f, 1f);
+    private static readonly Vector4 S_BORDER = new(0.31f, 0.30f, 0.35f, 1f);
+    private static readonly Vector4 S_BORDER_SOFT = new(0.24f, 0.24f, 0.27f, 1f);
+    private static readonly Vector4 S_TEXT = new(0.86f, 0.86f, 0.86f, 1f);
+    private static readonly Vector4 S_TEXT_MUTED = new(0.54f, 0.54f, 0.56f, 1f);
+    private static readonly Vector4 S_ACCENT = new(0.50f, 0.45f, 0.62f, 1f);
     #endregion
 
     #region State
-    private ViewMode m_viewMode = ViewMode.Grid;
+    private float m_treeWidth = C_TREE_WIDTH;
+    private string m_filter = string.Empty;
+    private ViewMode m_viewMode = ViewMode.List;
+    private EntryTypeFilter m_entryTypeFilter = EntryTypeFilter.All;
+    private EntryScopeFilter m_entryScopeFilter = EntryScopeFilter.CurrentOnly;
+    private float m_gridScale = C_GRID_SCALE_DEFAULT;
+    private string m_historyCurrent = string.Empty;
+    private readonly Stack<string> m_backHistory = [];
+    private readonly Stack<string> m_forwardHistory = [];
     #endregion
 
     #region Types
     private enum ViewMode
     {
-        Grid,
-        List
+        List,
+        Grid
+    }
+
+    private enum EntryTypeFilter
+    {
+        All,
+        FoldersOnly,
+        FilesOnly
+    }
+
+    private enum EntryScopeFilter
+    {
+        CurrentOnly,
+        Recursive
     }
     #endregion
 
@@ -47,188 +87,407 @@ public sealed class FileBrowserPanel : EditorPanel
     /// <inheritdoc />
     public override void OnRender(EditorContext context)
     {
-        DrawToolbar(context);
-        NativeImGui.Separator();
-        DrawBody(context);
-        NativeImGui.Separator();
-        DrawStatusBar(context);
+        PushBrowserStyle();
+        DrawBrowser(context);
+        PopBrowserStyle();
     }
     #endregion
 
-    #region Toolbar
-    private void DrawToolbar(EditorContext context)
+    #region Layout
+    private void DrawBrowser(EditorContext context)
     {
-        string current = context.selection.currentDirectory;
-        bool isRoot = string.IsNullOrEmpty(current);
+        SyncExternalDirectoryChange(context.selection.currentDirectory);
 
-        NativeImGui.BeginDisabled(isRoot);
-        if (NativeImGui.Button($"{ImGuiIcon.ArrowUp} Up"))
+        ImGuiStylePtr style = NativeImGui.GetStyle();
+        Vector2 bodySize = new(0f, -(C_BREADCRUMB_BAR_HEIGHT + style.ItemSpacing.Y));
+        if (NativeImGui.BeginChild("##FileBrowserMain", bodySize, ImGuiChildFlags.None, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
         {
-            string parent = Path.GetDirectoryName(current)?.Replace('\\', '/') ?? string.Empty;
-            context.selection.SetCurrentDirectory(parent);
-            context.selection.SetSelectedPath(parent);
-        }
+            ImGuiTableFlags splitFlags =
+                ImGuiTableFlags.NoPadOuterX |
+                ImGuiTableFlags.SizingFixedFit |
+                ImGuiTableFlags.NoSavedSettings;
 
-        NativeImGui.EndDisabled();
-        NativeImGui.SameLine();
+            float splitterWidth = GetTreeSplitterWidth(style);
+            NativeImGui.PushStyleVar(ImGuiStyleVar.CellPadding, Vector2.Zero);
+            if (NativeImGui.BeginTable("##FileBrowserSplit", 3, splitFlags))
+            {
+                NativeImGui.TableSetupColumn("##Tree", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize, m_treeWidth);
+                NativeImGui.TableSetupColumn("##Splitter", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize, splitterWidth);
+                NativeImGui.TableSetupColumn("##Content", ImGuiTableColumnFlags.WidthStretch);
 
-        bool grid = m_viewMode == ViewMode.Grid;
-        if (NativeImGui.RadioButton("Grid", grid))
-            m_viewMode = ViewMode.Grid;
+                NativeImGui.TableNextRow();
+                _ = NativeImGui.TableSetColumnIndex(0);
+                DrawTreePane(context);
 
-        NativeImGui.SameLine();
-        bool list = m_viewMode == ViewMode.List;
-        if (NativeImGui.RadioButton("List", list))
-            m_viewMode = ViewMode.List;
+                _ = NativeImGui.TableSetColumnIndex(1);
+                DrawTreeSplitter(splitterWidth);
 
-        NativeImGui.SameLine();
-        NativeImGui.TextUnformatted(GetPathText(current));
-    }
-    #endregion
+                _ = NativeImGui.TableSetColumnIndex(2);
+                DrawContentPane(context);
 
-    #region Body / Split Pane
-    private void DrawBody(EditorContext context)
-    {
-        Vector2 bodySize = new(0f, -NativeImGui.GetFrameHeightWithSpacing());
-        if (!NativeImGui.BeginChild("##FileBrowserBody", bodySize))
-        {
-            NativeImGui.EndChild();
-            return;
-        }
+                NativeImGui.EndTable();
+            }
 
-        ImGuiTableFlags flags = ImGuiTableFlags.Resizable | ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.SizingStretchProp;
-        if (NativeImGui.BeginTable("##FileBrowserSplit", 2, flags))
-        {
-            NativeImGui.TableSetupColumn("Tree", ImGuiTableColumnFlags.WidthFixed, C_TREE_DEFAULT_WIDTH);
-            NativeImGui.TableSetupColumn("Content", ImGuiTableColumnFlags.WidthStretch);
-
-            NativeImGui.TableNextColumn();
-            DrawTreePane(context);
-
-            NativeImGui.TableNextColumn();
-            DrawContentPane(context);
-
-            NativeImGui.EndTable();
+            NativeImGui.PopStyleVar();
         }
 
         NativeImGui.EndChild();
+        DrawBreadcrumbBar(context);
+    }
+
+    private static float GetTreeSplitterWidth(ImGuiStylePtr style)
+    {
+        return MathF.Max(2f, style.DockingSeparatorSize);
+    }
+
+    private void DrawTreeSplitter(float width)
+    {
+        Vector2 size = new(width, MathF.Max(1f, NativeImGui.GetContentRegionAvail().Y));
+        _ = NativeImGui.InvisibleButton("##TreeSplitterGrip", size);
+
+        bool hovered = NativeImGui.IsItemHovered();
+        bool active = NativeImGui.IsItemActive();
+        if (hovered || active)
+            NativeImGui.SetMouseCursor(ImGuiMouseCursor.ResizeEw);
+
+        if (active)
+        {
+            Vector2 delta = NativeImGui.GetMouseDragDelta(ImGuiMouseButton.Left);
+            if (MathF.Abs(delta.X) > 0f)
+            {
+                m_treeWidth = Math.Clamp(m_treeWidth + delta.X, C_TREE_MIN_WIDTH, C_TREE_MAX_WIDTH);
+                NativeImGui.ResetMouseDragDelta(ImGuiMouseButton.Left);
+            }
+        }
+
+        Vector2 min = NativeImGui.GetItemRectMin();
+        Vector2 max = NativeImGui.GetItemRectMax();
+        Vector4 color = active ? S_ACCENT : hovered ? S_BORDER : S_BORDER_SOFT;
+        NativeImGui.AddRectFilled(NativeImGui.GetWindowDrawList(), min, max, NativeImGui.ColorConvertFloat4ToU32(color));
+    }
+
+    private void DrawTreePane(EditorContext context)
+    {
+        NativeImGui.PushStyleColor(ImGuiCol.ChildBg, S_BG);
+        ImGuiStylePtr style = NativeImGui.GetStyle();
+        Vector2 treePaneSize = new(-style.WindowPadding.X, 0f);
+        if (NativeImGui.BeginChild("##TreePane", treePaneSize, ImGuiChildFlags.None))
+        {
+            DrawTreeEntry(context, string.Empty, "Assets", true, NavigateTo);
+        }
+
+        NativeImGui.EndChild();
+        NativeImGui.PopStyleColor();
+    }
+
+    private void DrawContentPane(EditorContext context)
+    {
+        NativeImGui.PushStyleColor(ImGuiCol.ChildBg, S_BG);
+        if (NativeImGui.BeginChild("##ContentPane", Vector2.Zero, ImGuiChildFlags.None, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+        {
+            DrawToolbar(context);
+            DrawEntriesRegion(context, CollectVisibleEntries(context));
+        }
+
+        NativeImGui.EndChild();
+        NativeImGui.PopStyleColor();
     }
     #endregion
 
-    #region Tree Pane
-    private static void DrawTreePane(EditorContext context)
-    {
-        if (!NativeImGui.BeginChild("##TreePane", Vector2.Zero, ImGuiChildFlags.None, ImGuiWindowFlags.HorizontalScrollbar))
-        {
-            NativeImGui.EndChild();
-            return;
-        }
-
-        DrawDirectoryNode(context, string.Empty, "Assets");
-        NativeImGui.EndChild();
-    }
-
-    private static void DrawDirectoryNode(EditorContext context, string relativePath, string label)
+    #region Tree
+    private static void DrawTreeEntry(EditorContext context, string relativePath, string label, bool isRoot, Action<EditorContext, string> navigateTo)
     {
         IReadOnlyList<AssetFileEntry> children = AssetManager.GetFileSystemChildren(relativePath);
-        List<AssetFileEntry> directories = [];
-        for (int i = 0; i < children.Count; i++)
-        {
-            if (children[i].isDirectory)
-                directories.Add(children[i]);
-        }
+        List<AssetFileEntry> sorted = SortTreeEntries(children);
 
-        directories.Sort(static (a, b) => string.CompareOrdinal(a.relativePath, b.relativePath));
-
-        bool selected = string.Equals(context.selection.currentDirectory, relativePath, StringComparison.Ordinal);
-        bool isLeaf = directories.Count == 0;
-        bool isRoot = relativePath.Length == 0;
-        bool isAncestor = IsAncestorOrSelf(relativePath, context.selection.currentDirectory);
+        bool isDirectory = isRoot || IsDirectoryPath(relativePath);
+        bool selected = string.Equals(context.selection.selectedPath, relativePath, StringComparison.Ordinal);
+        bool isLeaf = !isDirectory || sorted.Count == 0;
+        bool isAncestor = isDirectory && IsAncestorOrSelf(relativePath, context.selection.currentDirectory);
+        bool isCurrentDirectory = isDirectory && string.Equals(context.selection.currentDirectory, relativePath, StringComparison.Ordinal);
 
         if (!isRoot && isAncestor)
             NativeImGui.SetNextItemOpen(true, ImGuiCond.Once);
 
-        bool open = ImGuiWidget.TreeNodeIcon(
-            id: isRoot ? "root" : relativePath,
-            icon: ImGuiIcon.Folder,
-            label: label,
-            selected: selected,
-            isLeaf: isLeaf,
-            defaultOpen: isRoot,
-            drawLines: true);
+        string icon = isDirectory ? ImGuiIcon.Folder : GetFileIcon(relativePath);
+        Vector2 nodeCursor = NativeImGui.GetCursorScreenPos();
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags.SpanFullWidth;
+        if (selected)
+            flags |= ImGuiTreeNodeFlags.Selected;
+        if (isLeaf)
+        {
+            flags |= ImGuiTreeNodeFlags.Leaf | ImGuiTreeNodeFlags.NoTreePushOnOpen;
+        }
+        else
+        {
+            flags |= ImGuiTreeNodeFlags.OpenOnArrow;
+            if (isRoot || isAncestor || sorted.Count == 1)
+                flags |= ImGuiTreeNodeFlags.DefaultOpen;
+        }
+
+        string displayText = $"{icon} {label}";
+        bool open = NativeImGui.TreeNodeEx($"{displayText}##tree_{(isRoot ? "root" : relativePath)}", flags);
+        if (isCurrentDirectory)
+            DrawCurrentDirectoryUnderline(nodeCursor.X + NativeImGui.GetTreeNodeToLabelSpacing(), displayText);
 
         if (NativeImGui.IsItemClicked())
         {
-            context.selection.SetCurrentDirectory(relativePath);
             context.selection.SetSelectedPath(relativePath);
+            if (isDirectory && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+                navigateTo(context, relativePath);
         }
 
         if (!open || isLeaf)
             return;
 
-        for (int i = 0; i < directories.Count; i++)
+        for (int i = 0; i < sorted.Count; i++)
         {
-            AssetFileEntry child = directories[i];
-            string childName = Path.GetFileName(child.relativePath);
-            DrawDirectoryNode(context, child.relativePath, childName);
+            AssetFileEntry child = sorted[i];
+            DrawTreeEntry(context, child.relativePath, Path.GetFileName(child.relativePath), false, navigateTo);
         }
 
         NativeImGui.TreePop();
     }
     #endregion
 
-    #region Content Pane
-    private void DrawContentPane(EditorContext context)
+    #region Content
+    private void DrawToolbar(EditorContext context)
     {
-        if (!NativeImGui.BeginChild("##ContentPane", Vector2.Zero))
+        DrawNavigationBar(context);
+        DrawViewAndSearchBar();
+    }
+
+    private void DrawNavigationBar(EditorContext context)
+    {
+        string current = context.selection.currentDirectory;
+
+        NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(6f, 1f));
+        PushButtonColors(CanGoBack ? S_ACCENT : S_BORDER_SOFT);
+
+        NativeImGui.BeginDisabled(!CanGoBack);
+        if (NativeImGui.SmallButton($"{ImGuiIcon.AngleLeft}##Back"))
+            GoBack(context);
+
+        NativeImGui.EndDisabled();
+        NativeImGui.PopStyleColor(3);
+
+        NativeImGui.SameLine(0f, 2f);
+        PushButtonColors(CanGoForward ? S_ACCENT : S_BORDER_SOFT);
+        NativeImGui.BeginDisabled(!CanGoForward);
+        if (NativeImGui.SmallButton($"{ImGuiIcon.AngleRight}##Forward"))
+            GoForward(context);
+
+        NativeImGui.EndDisabled();
+        NativeImGui.PopStyleColor(3);
+
+        NativeImGui.SameLine(0f, 5f);
+
+        NativeImGui.PushStyleColor(ImGuiCol.Text, S_TEXT);
+        NativeImGui.TextUnformatted(GetDirectoryLabel(current));
+        NativeImGui.PopStyleColor();
+
+        NativeImGui.PopStyleVar();
+    }
+
+    private void DrawViewAndSearchBar()
+    {
+        NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(5f, 1f));
+
+        PushButtonColors(S_ACCENT);
+        if (NativeImGui.SmallButton($"{m_viewMode}##ViewMode"))
+            m_viewMode = m_viewMode == ViewMode.List ? ViewMode.Grid : ViewMode.List;
+
+        NativeImGui.PopStyleColor(3);
+        NativeImGui.SameLine(0f, 4f);
+
+        DrawEntryFilterCombo();
+        NativeImGui.SameLine(0f, 4f);
+
+        NativeImGui.SetNextItemWidth(-1f);
+        DrawSearchInput();
+        NativeImGui.PopStyleVar();
+    }
+
+    private void DrawEntryFilterCombo()
+    {
+        if (!NativeImGui.BeginCombo("##AssetEntryFilter", "Filter", ImGuiComboFlags.WidthFitPreview))
+            return;
+
+        DrawEntryTypeFilterOption("All", EntryTypeFilter.All);
+        DrawEntryTypeFilterOption("Folders", EntryTypeFilter.FoldersOnly);
+        DrawEntryTypeFilterOption("Files", EntryTypeFilter.FilesOnly);
+        NativeImGui.Separator();
+        DrawEntryScopeFilterOption("Current", EntryScopeFilter.CurrentOnly);
+        DrawEntryScopeFilterOption("Recursive", EntryScopeFilter.Recursive);
+
+        NativeImGui.EndCombo();
+    }
+
+    private void DrawEntryTypeFilterOption(string label, EntryTypeFilter filter)
+    {
+        bool selected = m_entryTypeFilter == filter;
+        if (NativeImGui.Checkbox(label, ref selected))
         {
-            NativeImGui.EndChild();
+            if (selected)
+                m_entryTypeFilter = filter;
+            else if (m_entryTypeFilter == filter)
+                m_entryTypeFilter = EntryTypeFilter.All;
+        }
+    }
+
+    private void DrawEntryScopeFilterOption(string label, EntryScopeFilter filter)
+    {
+        bool selected = m_entryScopeFilter == filter;
+        if (NativeImGui.Checkbox(label, ref selected))
+        {
+            if (selected)
+                m_entryScopeFilter = filter;
+            else if (m_entryScopeFilter == filter)
+                m_entryScopeFilter = EntryScopeFilter.CurrentOnly;
+        }
+    }
+
+    private void DrawEntriesRegion(EditorContext context, IReadOnlyList<AssetFileEntry> entries)
+    {
+        if (m_viewMode == ViewMode.List)
+        {
+            DrawListRegion(context, entries);
             return;
         }
 
-        IReadOnlyList<AssetFileEntry> entries = AssetManager.GetFileSystemChildren(context.selection.currentDirectory);
-        if (entries.Count == 0)
-        {
-            ImGuiWidget.Hint("Folder is empty.");
-            NativeImGui.EndChild();
-            return;
-        }
+        DrawGridRegion(context, entries);
+    }
 
-        List<AssetFileEntry> sorted = SortEntries(entries);
-        if (m_viewMode == ViewMode.Grid)
-            DrawGrid(context, sorted);
-        else
-            DrawList(context, sorted);
+    private void DrawListRegion(EditorContext context, IReadOnlyList<AssetFileEntry> entries)
+    {
+        if (NativeImGui.BeginChild("##EntriesScroll", Vector2.Zero, ImGuiChildFlags.None))
+            DrawEntriesTable(context, entries, context.selection.currentDirectory);
 
         NativeImGui.EndChild();
     }
-    #endregion
 
-    #region Entries
-    private static List<AssetFileEntry> SortEntries(IReadOnlyList<AssetFileEntry> entries)
+    private void DrawGridRegion(EditorContext context, IReadOnlyList<AssetFileEntry> entries)
     {
-        List<AssetFileEntry> sorted = new(entries.Count);
-        for (int i = 0; i < entries.Count; i++)
-            sorted.Add(entries[i]);
+        ImGuiStylePtr style = NativeImGui.GetStyle();
+        float sliderHeight = NativeImGui.GetFrameHeight() + style.WindowPadding.Y * 2f + style.ItemSpacing.Y;
+        if (NativeImGui.BeginChild("##EntriesScroll", new Vector2(0f, -sliderHeight), ImGuiChildFlags.None))
+            DrawGrid(context, entries);
 
-        sorted.Sort(static (a, b) =>
-        {
-            if (a.isDirectory != b.isDirectory)
-                return a.isDirectory ? -1 : 1;
-            return string.CompareOrdinal(a.relativePath, b.relativePath);
-        });
-
-        return sorted;
+        NativeImGui.EndChild();
+        DrawGridScaleSlider();
     }
-    #endregion
 
-    #region Grid / List View
+    private void DrawGridScaleSlider()
+    {
+        m_gridScale = Math.Clamp(m_gridScale, C_GRID_SCALE_MIN, C_GRID_SCALE_MAX);
+        DrawGridScaleTopSplitter();
+        Vector2 cursor = NativeImGui.GetCursorPos();
+        float labelOffsetY = MathF.Max(0f, (NativeImGui.GetFrameHeight() - NativeImGui.GetTextLineHeight()) * 0.5f);
+        NativeImGui.SetCursorPosY(cursor.Y + labelOffsetY);
+        NativeImGui.TextUnformatted("Scale");
+        NativeImGui.SameLine();
+        NativeImGui.SetCursorPosY(cursor.Y);
+        NativeImGui.SetNextItemWidth(-1f);
+        _ = NativeImGui.SliderFloat("##GridScale", ref m_gridScale, C_GRID_SCALE_MIN, C_GRID_SCALE_MAX, "%.1f");
+        m_gridScale = Math.Clamp(m_gridScale, C_GRID_SCALE_MIN, C_GRID_SCALE_MAX);
+    }
+
+    private static void DrawGridScaleTopSplitter()
+    {
+        ImGuiStylePtr style = NativeImGui.GetStyle();
+        Vector2 cursor = NativeImGui.GetCursorScreenPos();
+        float width = NativeImGui.GetContentRegionAvail().X;
+        float lineY = cursor.Y + style.WindowPadding.Y;
+        uint color = NativeImGui.ColorConvertFloat4ToU32(S_BORDER);
+        NativeImGui.GetWindowDrawList().AddLine(new Vector2(cursor.X, lineY), new Vector2(cursor.X + width, lineY), color, 1f);
+        NativeImGui.SetCursorPosY(NativeImGui.GetCursorPosY() + style.WindowPadding.Y * 2f);
+    }
+
+    private void DrawEntriesTable(EditorContext context, IReadOnlyList<AssetFileEntry> entries, string currentDirectory)
+    {
+        ImGuiTableFlags flags =
+            ImGuiTableFlags.RowBg |
+            ImGuiTableFlags.Resizable |
+            ImGuiTableFlags.BordersInnerV |
+            ImGuiTableFlags.PadOuterX |
+            ImGuiTableFlags.SizingFixedFit |
+            ImGuiTableFlags.NoSavedSettings;
+
+        ImGuiStylePtr style = NativeImGui.GetStyle();
+        NativeImGui.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(style.WindowPadding.X, style.CellPadding.Y));
+        if (!NativeImGui.BeginTable("##FileBrowserEntries", 3, flags, new Vector2(0f, 0f)))
+        {
+            NativeImGui.PopStyleVar();
+            return;
+        }
+
+        NativeImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthFixed, 244f);
+        NativeImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed, 164f);
+        NativeImGui.TableSetupColumn("Source", ImGuiTableColumnFlags.WidthStretch, 1f);
+        DrawHeaderRow();
+
+        uint rowBg = NativeImGui.ColorConvertFloat4ToU32(S_BG_ROW);
+        uint rowAltBg = NativeImGui.ColorConvertFloat4ToU32(S_BG_ROW_ALT);
+        for (int i = 0; i < entries.Count; i++)
+        {
+            AssetFileEntry entry = entries[i];
+            NativeImGui.TableNextRow();
+            NativeImGui.TableSetBgColor(i % 2 == 0 ? ImGuiTableBgTarget.RowBg0 : ImGuiTableBgTarget.RowBg1, i % 2 == 0 ? rowBg : rowAltBg);
+
+            DrawNameCell(context, entry);
+            DrawTextCell(GetTypeText(entry), S_TEXT);
+            DrawTextCell(GetSourceText(entry, currentDirectory), S_TEXT);
+        }
+
+        NativeImGui.EndTable();
+        NativeImGui.PopStyleVar();
+    }
+
+    private static void DrawHeaderRow()
+    {
+        NativeImGui.TableNextRow();
+        _ = NativeImGui.TableSetColumnIndex(0);
+        NativeImGui.TextUnformatted("Name");
+        _ = NativeImGui.TableSetColumnIndex(1);
+        NativeImGui.TextUnformatted("Type");
+        _ = NativeImGui.TableSetColumnIndex(2);
+        NativeImGui.TextUnformatted("Source");
+    }
+
+    private void DrawNameCell(EditorContext context, AssetFileEntry entry)
+    {
+        _ = NativeImGui.TableSetColumnIndex(0);
+        string icon = entry.isDirectory ? ImGuiIcon.Folder : GetFileIcon(entry.relativePath);
+        string name = Path.GetFileName(entry.relativePath);
+        bool selected = string.Equals(context.selection.selectedPath, entry.relativePath, StringComparison.Ordinal);
+
+        NativeImGui.PushStyleColor(ImGuiCol.Header, S_ACCENT);
+        NativeImGui.PushStyleColor(ImGuiCol.HeaderHovered, S_ACCENT);
+        NativeImGui.PushStyleColor(ImGuiCol.HeaderActive, S_ACCENT);
+        if (NativeImGui.Selectable($"{icon} {name}##entry_{entry.relativePath}", selected, ImGuiSelectableFlags.SpanAllColumns))
+            context.selection.SetSelectedPath(entry.relativePath);
+
+        if (entry.isDirectory && NativeImGui.IsItemHovered() && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+            OpenEntryFromList(context, entry);
+
+        NativeImGui.PopStyleColor(3);
+    }
+
+    private static void DrawTextCell(string text, Vector4 color)
+    {
+        NativeImGui.TableNextColumn();
+        NativeImGui.PushStyleColor(ImGuiCol.Text, color);
+        NativeImGui.TextUnformatted(text);
+        NativeImGui.PopStyleColor();
+    }
+
     private void DrawGrid(EditorContext context, IReadOnlyList<AssetFileEntry> entries)
     {
-        float available = MathF.Max(1f, NativeImGui.GetContentRegionAvail().X);
-        int columns = Math.Max(1, (int)(available / C_GRID_CELL_WIDTH));
+        float cellSize = GetGridCellSize();
+        float available = MathF.Max(cellSize, NativeImGui.GetContentRegionAvail().X);
+        int columns = Math.Max(1, (int)(available / cellSize));
 
-        if (!NativeImGui.BeginTable("##FileBrowserGrid", columns, ImGuiTableFlags.SizingStretchSame))
+        if (!NativeImGui.BeginTable("##FileBrowserGrid", columns, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.NoPadOuterX | ImGuiTableFlags.NoSavedSettings))
             return;
 
         for (int i = 0; i < entries.Count; i++)
@@ -242,56 +501,411 @@ public sealed class FileBrowserPanel : EditorPanel
 
     private void DrawGridItem(EditorContext context, AssetFileEntry entry)
     {
-        string icon = entry.isDirectory ? ImGuiIcon.Folder : ImGuiIcon.File;
-        string name = Path.GetFileName(entry.relativePath);
+        float cellSize = GetGridCellSize();
+        string icon = entry.isDirectory ? ImGuiIcon.Folder : GetFileIcon(entry.relativePath);
+        string name = FitTextWithEllipsis(Path.GetFileName(entry.relativePath), cellSize - 10f);
         bool selected = string.Equals(context.selection.selectedPath, entry.relativePath, StringComparison.Ordinal);
+        Vector2 itemSize = new(cellSize - C_GRID_CELL_PADDING, cellSize - C_GRID_CELL_PADDING);
 
-        if (NativeImGui.Selectable($"{icon} {name}##grid_{entry.relativePath}", selected))
+        NativeImGui.PushID(entry.relativePath);
+        if (NativeImGui.InvisibleButton("##GridItem", itemSize))
             context.selection.SetSelectedPath(entry.relativePath);
 
-        if (entry.isDirectory
-            && NativeImGui.IsItemHovered()
-            && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
-        {
-            context.selection.SetCurrentDirectory(entry.relativePath);
-            context.selection.SetSelectedPath(entry.relativePath);
-        }
+        if (entry.isDirectory && NativeImGui.IsItemHovered() && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+            OpenEntryFromList(context, entry);
+
+        DrawGridItemVisual(icon, name, selected, m_gridScale);
+        NativeImGui.PopID();
     }
 
-    private static void DrawList(EditorContext context, IReadOnlyList<AssetFileEntry> entries)
+    private static unsafe void DrawGridItemVisual(string icon, string name, bool selected, float scale)
     {
-        for (int i = 0; i < entries.Count; i++)
+        bool hovered = NativeImGui.IsItemHovered();
+        bool active = NativeImGui.IsItemActive();
+        Vector2 min = NativeImGui.GetItemRectMin();
+        Vector2 max = NativeImGui.GetItemRectMax();
+        Vector2 size = max - min;
+
+        Vector4 bg = selected ? S_ACCENT : S_BG;
+        if (active)
+            bg = LerpColor(bg, Vector4.One, 0.24f);
+        else if (hovered)
+            bg = LerpColor(bg, Vector4.One, 0.16f);
+
+        uint bgColor = NativeImGui.ColorConvertFloat4ToU32(bg);
+        uint textColor = NativeImGui.ColorConvertFloat4ToU32(S_TEXT);
+        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
+        drawList.AddRectFilled(min, max, bgColor, 1f);
+
+        ImFontPtr font = NativeImGui.GetFont();
+        float fontSize = NativeImGui.GetFontSize();
+        float iconFontSize = fontSize * scale;
+        Vector2 iconSize = NativeImGui.CalcTextSize(icon) * scale;
+        Vector2 nameSize = NativeImGui.CalcTextSize(name);
+        float labelY = max.Y - nameSize.Y - 4f;
+        float iconAreaCenterY = min.Y + (labelY - min.Y) * 0.5f;
+        Vector2 iconPos = new(min.X + (size.X - iconSize.X) * 0.5f, iconAreaCenterY - iconSize.Y * 0.5f);
+        Vector2 namePos = new(min.X + (size.X - nameSize.X) * 0.5f, labelY);
+
+        drawList.AddText(font.Handle, iconFontSize, iconPos, textColor, icon);
+        drawList.AddText(font.Handle, fontSize, namePos, textColor, name);
+    }
+
+    private float GetGridCellSize()
+    {
+        float fontSize = NativeImGui.GetFontSize();
+        return MathF.Max(C_GRID_MIN_CELL_SIZE, fontSize * (m_gridScale + 2f) + 8f);
+    }
+
+    private void DrawSearchInput()
+    {
+        byte[] hintBytes = Encoding.UTF8.GetBytes($"{ImGuiIcon.MagnifyingGlass}\0");
+        unsafe
         {
-            AssetFileEntry entry = entries[i];
-            string icon = entry.isDirectory ? ImGuiIcon.Folder : ImGuiIcon.File;
-            string name = Path.GetFileName(entry.relativePath);
-            bool selected = string.Equals(context.selection.selectedPath, entry.relativePath, StringComparison.Ordinal);
-
-            if (ImGuiWidget.SelectableIconRow(entry.relativePath, icon, name, selected))
-                context.selection.SetSelectedPath(entry.relativePath);
-
-            if (entry.isDirectory
-                && NativeImGui.IsItemHovered()
-                && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+            fixed (byte* hint = hintBytes)
             {
-                context.selection.SetCurrentDirectory(entry.relativePath);
-                context.selection.SetSelectedPath(entry.relativePath);
+                _ = NativeImGui.InputTextWithHint("##AssetSearch", hint, ref m_filter, (nuint)C_SEARCH_BUFFER_SIZE);
             }
         }
     }
     #endregion
 
-    #region Status / Helpers
-    private static void DrawStatusBar(EditorContext context)
+    #region Bottom Bar
+    private static void DrawCurrentDirectoryUnderline(float textStartX, string displayText)
     {
-        NativeImGui.TextUnformatted($"Path: {GetPathText(context.selection.currentDirectory)}");
+        Vector2 max = NativeImGui.GetItemRectMax();
+        float textWidth = NativeImGui.CalcTextSize(displayText).X;
+        uint color = NativeImGui.ColorConvertFloat4ToU32(S_TEXT);
+        NativeImGui.GetWindowDrawList().AddLine(new Vector2(textStartX, max.Y - 2f), new Vector2(textStartX + textWidth, max.Y - 2f), color, 1f);
     }
 
-    private static string GetPathText(string relativePath)
+    private void DrawBreadcrumbBar(EditorContext context)
+    {
+        NativeImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
+        if (NativeImGui.BeginChild("##BreadcrumbBar", new Vector2(0f, C_BREADCRUMB_BAR_HEIGHT), ImGuiChildFlags.None, ImGuiWindowFlags.HorizontalScrollbar))
+        {
+            DrawBreadcrumbTopSeparator();
+            IReadOnlyList<(string Label, string Path)> parts = BuildBreadcrumbParts(context.selection.currentDirectory);
+            NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(6f, 1f));
+            PushButtonColors(S_ACCENT);
+            NativeImGui.SetCursorPosY(MathF.Max(0f, (C_BREADCRUMB_BAR_HEIGHT - NativeImGui.GetFrameHeight()) * 0.5f));
+
+            for (int i = 0; i < parts.Count; i++)
+            {
+                (string label, string path) = parts[i];
+                if (i > 0)
+                {
+                    NativeImGui.SameLine(0f, 4f);
+                    NativeImGui.TextUnformatted(">");
+                    NativeImGui.SameLine(0f, 4f);
+                }
+
+                if (NativeImGui.SmallButton($"{label}##crumb_{path}"))
+                    NavigateTo(context, path);
+            }
+
+            NativeImGui.PopStyleColor(3);
+            NativeImGui.PopStyleVar();
+        }
+
+        NativeImGui.EndChild();
+        NativeImGui.PopStyleVar();
+    }
+
+    private static void DrawBreadcrumbTopSeparator()
+    {
+        Vector2 min = NativeImGui.GetWindowPos();
+        Vector2 size = NativeImGui.GetWindowSize();
+        uint color = NativeImGui.ColorConvertFloat4ToU32(S_BORDER);
+        NativeImGui.GetWindowDrawList().AddLine(min, new Vector2(min.X + size.X, min.Y), color, 1f);
+    }
+    #endregion
+
+    #region Data
+    private IReadOnlyList<AssetFileEntry> CollectVisibleEntries(EditorContext context)
+    {
+        List<AssetFileEntry> entries = [];
+
+        if (m_entryScopeFilter == EntryScopeFilter.CurrentOnly)
+        {
+            IReadOnlyList<AssetFileEntry> children = AssetManager.GetFileSystemChildren(context.selection.currentDirectory);
+            for (int i = 0; i < children.Count; i++)
+                entries.Add(children[i]);
+        }
+        else
+        {
+            CollectEntriesRecursive(context.selection.currentDirectory, entries);
+        }
+
+        ApplyTypeFilter(entries);
+        ApplySearchFilter(entries);
+
+        entries.Sort(static (a, b) =>
+        {
+            string aName = Path.GetFileName(a.relativePath);
+            string bName = Path.GetFileName(b.relativePath);
+            int byName = string.Compare(aName, bName, StringComparison.OrdinalIgnoreCase);
+            if (byName != 0)
+                return byName;
+            return string.CompareOrdinal(a.relativePath, b.relativePath);
+        });
+
+        return entries;
+    }
+
+    private void ApplyTypeFilter(List<AssetFileEntry> entries)
+    {
+        switch (m_entryTypeFilter)
+        {
+            case EntryTypeFilter.FoldersOnly:
+                entries.RemoveAll(static entry => !entry.isDirectory);
+                break;
+            case EntryTypeFilter.FilesOnly:
+                entries.RemoveAll(static entry => entry.isDirectory);
+                break;
+        }
+    }
+
+    private void ApplySearchFilter(List<AssetFileEntry> entries)
+    {
+        string filter = m_filter.Trim();
+        if (string.IsNullOrEmpty(filter))
+            return;
+
+        entries.RemoveAll(entry =>
+            !Path.GetFileName(entry.relativePath).Contains(filter, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void CollectEntriesRecursive(string directory, List<AssetFileEntry> entries)
+    {
+        IReadOnlyList<AssetFileEntry> children = AssetManager.GetFileSystemChildren(directory);
+        for (int i = 0; i < children.Count; i++)
+        {
+            AssetFileEntry child = children[i];
+            entries.Add(child);
+            if (child.isDirectory)
+                CollectEntriesRecursive(child.relativePath, entries);
+        }
+    }
+
+    private static List<AssetFileEntry> SortTreeEntries(IReadOnlyList<AssetFileEntry> entries)
+    {
+        List<AssetFileEntry> sorted = new(entries.Count);
+        for (int i = 0; i < entries.Count; i++)
+            sorted.Add(entries[i]);
+
+        sorted.Sort(static (a, b) =>
+        {
+            if (a.isDirectory != b.isDirectory)
+                return a.isDirectory ? -1 : 1;
+            return string.Compare(Path.GetFileName(a.relativePath), Path.GetFileName(b.relativePath), StringComparison.OrdinalIgnoreCase);
+        });
+
+        return sorted;
+    }
+    #endregion
+
+    #region Style
+    private static void PushBrowserStyle()
+    {
+        NativeImGui.PushStyleColor(ImGuiCol.Text, S_TEXT);
+        NativeImGui.PushStyleColor(ImGuiCol.WindowBg, S_BG);
+        NativeImGui.PushStyleColor(ImGuiCol.ChildBg, S_BG);
+        NativeImGui.PushStyleColor(ImGuiCol.Border, S_BORDER);
+        NativeImGui.PushStyleColor(ImGuiCol.TableHeaderBg, S_BG);
+        NativeImGui.PushStyleColor(ImGuiCol.TableBorderStrong, S_BORDER);
+        NativeImGui.PushStyleColor(ImGuiCol.TableBorderLight, S_BORDER_SOFT);
+        NativeImGui.PushStyleColor(ImGuiCol.TableRowBg, S_BG_ROW);
+        NativeImGui.PushStyleColor(ImGuiCol.TableRowBgAlt, S_BG_ROW_ALT);
+        NativeImGui.PushStyleColor(ImGuiCol.Header, S_ACCENT);
+        NativeImGui.PushStyleColor(ImGuiCol.HeaderHovered, S_ACCENT);
+        NativeImGui.PushStyleColor(ImGuiCol.HeaderActive, S_ACCENT);
+        NativeImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(2f, 1f));
+        NativeImGui.PushStyleVar(ImGuiStyleVar.ChildBorderSize, 1f);
+        NativeImGui.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(5f, 2f));
+        NativeImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(2f, 2f));
+        NativeImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 1f);
+    }
+
+    private static void PopBrowserStyle()
+    {
+        NativeImGui.PopStyleVar(5);
+        NativeImGui.PopStyleColor(12);
+    }
+
+    private static void PushButtonColors(Vector4 color)
+    {
+        NativeImGui.PushStyleColor(ImGuiCol.Button, color);
+        NativeImGui.PushStyleColor(ImGuiCol.ButtonHovered, LerpColor(color, Vector4.One, 0.16f));
+        NativeImGui.PushStyleColor(ImGuiCol.ButtonActive, LerpColor(color, Vector4.One, 0.24f));
+    }
+
+    private static Vector4 LerpColor(Vector4 a, Vector4 b, float t)
+    {
+        t = Math.Clamp(t, 0f, 1f);
+        return new Vector4(
+            a.X + (b.X - a.X) * t,
+            a.Y + (b.Y - a.Y) * t,
+            a.Z + (b.Z - a.Z) * t,
+            1f);
+    }
+    #endregion
+
+    #region Navigation
+    private bool CanGoBack => m_backHistory.Count > 0;
+
+    private bool CanGoForward => m_forwardHistory.Count > 0;
+
+    private void NavigateTo(EditorContext context, string directory)
+    {
+        directory = NormalizePath(directory);
+        if (string.Equals(context.selection.currentDirectory, directory, StringComparison.Ordinal))
+            return;
+
+        m_backHistory.Push(NormalizePath(context.selection.currentDirectory));
+        m_forwardHistory.Clear();
+        ApplyDirectory(context, directory);
+    }
+
+    private void GoBack(EditorContext context)
+    {
+        if (m_backHistory.Count == 0)
+            return;
+
+        m_forwardHistory.Push(NormalizePath(context.selection.currentDirectory));
+        ApplyDirectory(context, m_backHistory.Pop());
+    }
+
+    private void GoForward(EditorContext context)
+    {
+        if (m_forwardHistory.Count == 0)
+            return;
+
+        m_backHistory.Push(NormalizePath(context.selection.currentDirectory));
+        ApplyDirectory(context, m_forwardHistory.Pop());
+    }
+
+    private void ApplyDirectory(EditorContext context, string directory)
+    {
+        m_historyCurrent = NormalizePath(directory);
+        context.selection.SetCurrentDirectory(m_historyCurrent);
+        context.selection.SetSelectedPath(string.Empty);
+    }
+
+    private void OpenEntryFromList(EditorContext context, AssetFileEntry entry)
+    {
+        if (entry.isDirectory)
+            NavigateTo(context, entry.relativePath);
+    }
+
+    private void SyncExternalDirectoryChange(string directory)
+    {
+        directory = NormalizePath(directory);
+        if (string.Equals(m_historyCurrent, directory, StringComparison.Ordinal))
+            return;
+
+        m_historyCurrent = directory;
+        m_backHistory.Clear();
+        m_forwardHistory.Clear();
+    }
+
+    #endregion
+
+    #region Helpers
+    private static bool IsDirectoryPath(string relativePath)
+    {
+        return AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry entry) && entry.isDirectory;
+    }
+
+    private static string GetDirectoryLabel(string relativePath)
     {
         if (string.IsNullOrEmpty(relativePath))
-            return "Assets/";
-        return $"Assets/{relativePath}";
+            return "Assets";
+
+        string name = Path.GetFileName(relativePath);
+        return string.IsNullOrEmpty(name) ? "Assets" : name;
+    }
+
+    private static string GetSourceText(AssetFileEntry entry, string currentDirectory)
+    {
+        string? directory = Path.GetDirectoryName(entry.relativePath)?.Replace('\\', '/');
+        currentDirectory = NormalizePath(currentDirectory);
+        directory = string.IsNullOrEmpty(directory) ? string.Empty : NormalizePath(directory);
+
+        if (string.Equals(directory, currentDirectory, StringComparison.Ordinal))
+            return "~";
+
+        if (string.IsNullOrEmpty(currentDirectory))
+            return string.IsNullOrEmpty(directory) ? "~" : $"~/{directory}";
+
+        string prefix = currentDirectory + "/";
+        if (directory.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            string relativeSource = directory[prefix.Length..];
+            return string.IsNullOrEmpty(relativeSource) ? "~" : $"~/{relativeSource}";
+        }
+
+        return string.IsNullOrEmpty(directory) ? "~" : $"~/{directory}";
+    }
+
+    private static string GetTypeText(AssetFileEntry entry)
+    {
+        if (entry.isDirectory)
+            return "FOLDER";
+
+        string extension = entry.extension;
+        if (string.IsNullOrEmpty(extension))
+            extension = Path.GetExtension(entry.relativePath);
+
+        return string.IsNullOrEmpty(extension) ? "FILE" : extension.TrimStart('.').ToUpperInvariant();
+    }
+
+    private static string GetFileIcon(string relativePath)
+    {
+        string extension = Path.GetExtension(relativePath);
+        return string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase)
+            ? ImGuiIcon.FileImage
+            : ImGuiIcon.File;
+    }
+
+    private static IReadOnlyList<(string Label, string Path)> BuildBreadcrumbParts(string relativePath)
+    {
+        List<(string Label, string Path)> parts = [("Assets", string.Empty)];
+        if (string.IsNullOrEmpty(relativePath))
+            return parts;
+
+        string[] segments = relativePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        string path = string.Empty;
+        for (int i = 0; i < segments.Length; i++)
+        {
+            path = string.IsNullOrEmpty(path) ? segments[i] : $"{path}/{segments[i]}";
+            parts.Add((segments[i], path));
+        }
+
+        return parts;
+    }
+
+    private static string NormalizePath(string path)
+    {
+        return path.Replace('\\', '/').Trim('/');
+    }
+
+    private static string GetParentDirectory(string relativePath)
+    {
+        string? directory = Path.GetDirectoryName(relativePath)?.Replace('\\', '/');
+        return string.IsNullOrEmpty(directory) ? string.Empty : NormalizePath(directory);
+    }
+
+    private static string FitTextWithEllipsis(string text, float maxWidth)
+    {
+        const string c_ellipsis = "...";
+        if (NativeImGui.CalcTextSize(text).X <= maxWidth)
+            return text;
+
+        while (text.Length > 0 && NativeImGui.CalcTextSize(text + c_ellipsis).X > maxWidth)
+            text = text[..^1];
+
+        return text.Length == 0 ? c_ellipsis : text + c_ellipsis;
     }
 
     private static bool IsAncestorOrSelf(string candidateAncestor, string path)
