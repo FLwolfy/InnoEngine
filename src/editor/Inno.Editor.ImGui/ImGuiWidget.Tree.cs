@@ -18,6 +18,8 @@ public static partial class ImGuiWidget
     private static readonly Dictionary<string, bool> s_hasNextSiblingById = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, bool> s_openStatesById = new(StringComparer.Ordinal);
     private static int s_lastFrame = -1;
+    private static bool s_hasNextTreeNodeOpen;
+    private static bool s_nextTreeNodeOpen;
 
     private struct TreeNodeState
     {
@@ -46,6 +48,13 @@ public static partial class ImGuiWidget
     {
         BeginTreeFrameIfNeeded();
         bool open = !openable && s_openStatesById.TryGetValue(id, out bool storedOpen) && storedOpen;
+        if (!openable && s_hasNextTreeNodeOpen)
+        {
+            open = s_nextTreeNodeOpen;
+            s_openStatesById[id] = open;
+        }
+
+        s_hasNextTreeNodeOpen = false;
         NativeImGui.SetNextItemOpen(open, ImGuiCond.Always);
 
         Vector2 nodeCursor = NativeImGui.GetCursorScreenPos();
@@ -80,6 +89,12 @@ public static partial class ImGuiWidget
         }
 
         return isOpen && !openable;
+    }
+
+    public static void SetNextTreeNodeOpen(bool open)
+    {
+        s_hasNextTreeNodeOpen = true;
+        s_nextTreeNodeOpen = open;
     }
 
     private static TreeHighlightRect DrawTreeNodeContentContainer(string id, Vector2 nodeCursor, Action onDraw)

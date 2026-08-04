@@ -52,6 +52,13 @@ public sealed class FileBrowserPanel : EditorPanel
     private string m_historyCurrent = string.Empty;
     private readonly Stack<string> m_backHistory = [];
     private readonly Stack<string> m_forwardHistory = [];
+    private bool m_treeRootOpenRequest = true;
+    private bool m_treeCurrentDirectoryOpenRequest;
+    private bool m_treeSelectedPathOpenRequest;
+    private string m_treeCurrentDirectoryOpenTarget = string.Empty;
+    private string m_treeSelectedPathOpenTarget = string.Empty;
+    private string? m_lastTreeCurrentDirectoryOpenTarget;
+    private string? m_lastTreeSelectedPathOpenTarget;
     #endregion
 
     #region Types
@@ -99,7 +106,8 @@ public sealed class FileBrowserPanel : EditorPanel
         SyncExternalDirectoryChange(context.selection.currentDirectory);
 
         ImGuiStylePtr style = NativeImGui.GetStyle();
-        Vector2 bodySize = new(0f, -(C_BREADCRUMB_BAR_HEIGHT + style.ItemSpacing.Y));
+        float breadcrumbBarHeight = GetBreadcrumbBarHeight(context.selection.currentDirectory);
+        Vector2 bodySize = new(0f, -(breadcrumbBarHeight + style.ItemSpacing.Y));
         if (NativeImGui.BeginChild("##FileBrowserMain", bodySize, ImGuiChildFlags.None, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
         {
             ImGuiTableFlags splitFlags =
@@ -132,7 +140,7 @@ public sealed class FileBrowserPanel : EditorPanel
         }
 
         NativeImGui.EndChild();
-        DrawBreadcrumbBar(context);
+        DrawBreadcrumbBar(context, breadcrumbBarHeight);
     }
 
     private static float GetTreeSplitterWidth(ImGuiStylePtr style)
@@ -173,7 +181,9 @@ public sealed class FileBrowserPanel : EditorPanel
         Vector2 treePaneSize = new(-style.WindowPadding.X, 0f);
         if (NativeImGui.BeginChild("##TreePane", treePaneSize, ImGuiChildFlags.None))
         {
+            PrepareTreeOpenRequests(context);
             DrawTreeEntry(context, string.Empty, "Assets", true);
+            ClearTreeOpenRequests();
         }
 
         NativeImGui.EndChild();
@@ -207,6 +217,8 @@ public sealed class FileBrowserPanel : EditorPanel
 
         string icon = isDirectory ? ImGuiIcon.Folder : GetFileIcon(relativePath);
         string nodeId = $"tree_{(isRoot ? "root" : relativePath)}";
+        if (ShouldOpenTreeEntry(relativePath, isRoot, isDirectory))
+            ImGuiWidget.SetNextTreeNodeOpen(true);
 
         bool open = ImGuiWidget.TreeNode(
             nodeId,
@@ -238,6 +250,56 @@ public sealed class FileBrowserPanel : EditorPanel
 
             NativeImGui.TreePop();
         }
+    }
+
+    private void PrepareTreeOpenRequests(EditorContext context)
+    {
+        string currentDirectory = NormalizePath(context.selection.currentDirectory);
+        if (!m_treeCurrentDirectoryOpenRequest &&
+            !string.Equals(m_lastTreeCurrentDirectoryOpenTarget, currentDirectory, StringComparison.Ordinal))
+        {
+            m_treeCurrentDirectoryOpenTarget = currentDirectory;
+            m_treeCurrentDirectoryOpenRequest = true;
+            m_lastTreeCurrentDirectoryOpenTarget = currentDirectory;
+        }
+
+        string selectedPath = NormalizePath(context.selection.selectedPath);
+        string selectedTreePath = IsDirectoryPath(selectedPath) ? selectedPath : GetParentDirectory(selectedPath);
+        if (!m_treeSelectedPathOpenRequest &&
+            !string.Equals(m_lastTreeSelectedPathOpenTarget, selectedTreePath, StringComparison.Ordinal))
+        {
+            m_treeSelectedPathOpenTarget = selectedTreePath;
+            m_treeSelectedPathOpenRequest = true;
+            m_lastTreeSelectedPathOpenTarget = selectedTreePath;
+        }
+    }
+
+    private void ClearTreeOpenRequests()
+    {
+        m_treeRootOpenRequest = false;
+        m_treeCurrentDirectoryOpenRequest = false;
+        m_treeSelectedPathOpenRequest = false;
+    }
+
+    private void RequestOpenTreeToPath(string path)
+    {
+        string normalizedPath = NormalizePath(path);
+        string treePath = IsDirectoryPath(normalizedPath) ? normalizedPath : GetParentDirectory(normalizedPath);
+        m_treeSelectedPathOpenTarget = treePath;
+        m_treeSelectedPathOpenRequest = true;
+        m_lastTreeSelectedPathOpenTarget = treePath;
+    }
+
+    private bool ShouldOpenTreeEntry(string relativePath, bool isRoot, bool isDirectory)
+    {
+        if (!isDirectory)
+            return false;
+
+        if (isRoot)
+            return m_treeRootOpenRequest || m_treeCurrentDirectoryOpenRequest || m_treeSelectedPathOpenRequest;
+
+        return (m_treeCurrentDirectoryOpenRequest && IsAncestorOrSelf(relativePath, m_treeCurrentDirectoryOpenTarget)) ||
+               (m_treeSelectedPathOpenRequest && IsAncestorOrSelf(relativePath, m_treeSelectedPathOpenTarget));
     }
     #endregion
 
@@ -457,7 +519,11 @@ public sealed class FileBrowserPanel : EditorPanel
         NativeImGui.PushStyleColor(ImGuiCol.HeaderActive, S_ACCENT);
         Vector2 iconTextPos = NativeImGui.GetCursorScreenPos();
         if (NativeImGui.Selectable($"##entry_{entry.relativePath}", selected, ImGuiSelectableFlags.SpanAllColumns))
+        {
             context.selection.SetSelectedPath(entry.relativePath);
+            RequestOpenTreeToPath(entry.relativePath);
+        }
+
         bool itemHovered = NativeImGui.IsItemHovered();
         NativeImGui.SameLine(iconTextPos.X - NativeImGui.GetWindowPos().X, 0f);
         ImGuiWidget.IconText(icon, name, false);
@@ -504,7 +570,10 @@ public sealed class FileBrowserPanel : EditorPanel
 
         NativeImGui.PushID(entry.relativePath);
         if (NativeImGui.InvisibleButton("##GridItem", itemSize))
+        {
             context.selection.SetSelectedPath(entry.relativePath);
+            RequestOpenTreeToPath(entry.relativePath);
+        }
 
         if (entry.isDirectory && NativeImGui.IsItemHovered() && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
             OpenEntryFromList(context, entry);
@@ -566,16 +635,20 @@ public sealed class FileBrowserPanel : EditorPanel
     #endregion
 
     #region Bottom Bar
-    private void DrawBreadcrumbBar(EditorContext context)
+    private void DrawBreadcrumbBar(EditorContext context, float height)
     {
+        IReadOnlyList<(string Label, string Path)> parts = BuildBreadcrumbParts(context.selection.currentDirectory);
+        Vector2 framePadding = new(6f, 1f);
+        float contentWidth = CalculateBreadcrumbContentWidth(parts, framePadding);
+        NativeImGui.SetNextWindowContentSize(new Vector2(MathF.Max(contentWidth, NativeImGui.GetContentRegionAvail().X), 0f));
         NativeImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
-        if (NativeImGui.BeginChild("##BreadcrumbBar", new Vector2(0f, C_BREADCRUMB_BAR_HEIGHT), ImGuiChildFlags.None, ImGuiWindowFlags.HorizontalScrollbar))
+        if (NativeImGui.BeginChild("##BreadcrumbBar", new Vector2(0f, height), ImGuiChildFlags.None, ImGuiWindowFlags.HorizontalScrollbar))
         {
             DrawBreadcrumbTopSeparator();
-            IReadOnlyList<(string Label, string Path)> parts = BuildBreadcrumbParts(context.selection.currentDirectory);
-            NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(6f, 1f));
+            NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, framePadding);
             PushButtonColors(S_ACCENT);
-            NativeImGui.SetCursorPosY(MathF.Max(0f, (C_BREADCRUMB_BAR_HEIGHT - NativeImGui.GetFrameHeight()) * 0.5f));
+            float contentHeight = contentWidth > NativeImGui.GetWindowSize().X ? C_BREADCRUMB_BAR_HEIGHT : height;
+            NativeImGui.SetCursorPosY(MathF.Max(0f, (contentHeight - NativeImGui.GetFrameHeight()) * 0.5f));
 
             for (int i = 0; i < parts.Count; i++)
             {
@@ -597,6 +670,33 @@ public sealed class FileBrowserPanel : EditorPanel
 
         NativeImGui.EndChild();
         NativeImGui.PopStyleVar();
+    }
+
+    private static float GetBreadcrumbBarHeight(string currentDirectory)
+    {
+        IReadOnlyList<(string Label, string Path)> parts = BuildBreadcrumbParts(currentDirectory);
+        float contentWidth = CalculateBreadcrumbContentWidth(parts, new Vector2(6f, 1f));
+        return contentWidth > NativeImGui.GetContentRegionAvail().X
+            ? C_BREADCRUMB_BAR_HEIGHT + NativeImGui.GetStyle().ScrollbarSize
+            : C_BREADCRUMB_BAR_HEIGHT;
+    }
+
+    private static float CalculateBreadcrumbContentWidth(IReadOnlyList<(string Label, string Path)> parts, Vector2 framePadding)
+    {
+        if (parts.Count == 0)
+            return 0f;
+
+        float width = 0f;
+        float separatorWidth = NativeImGui.CalcTextSize(">").X;
+        for (int i = 0; i < parts.Count; i++)
+        {
+            if (i > 0)
+                width += separatorWidth + 8f;
+
+            width += NativeImGui.CalcTextSize(parts[i].Label).X + framePadding.X * 2f;
+        }
+
+        return MathF.Ceiling(width);
     }
 
     private static void DrawBreadcrumbTopSeparator()
@@ -782,7 +882,10 @@ public sealed class FileBrowserPanel : EditorPanel
     private void OpenEntryFromList(EditorContext context, AssetFileEntry entry)
     {
         if (entry.isDirectory)
+        {
+            RequestOpenTreeToPath(entry.relativePath);
             NavigateTo(context, entry.relativePath);
+        }
     }
 
     private void SyncExternalDirectoryChange(string directory)
@@ -872,8 +975,11 @@ public sealed class FileBrowserPanel : EditorPanel
         return parts;
     }
 
-    private static string NormalizePath(string path)
+    private static string NormalizePath(string? path)
     {
+        if (string.IsNullOrEmpty(path))
+            return string.Empty;
+
         return path.Replace('\\', '/').Trim('/');
     }
 
