@@ -7,7 +7,7 @@ using System.Threading;
 
 using Inno.Core.Storage;
 
-namespace Inno.Assets.IO;
+namespace Inno.Assets.File;
 
 /// <summary>
 /// Indexed asset source filesystem model backed by <see cref="AssetWatcher"/>.

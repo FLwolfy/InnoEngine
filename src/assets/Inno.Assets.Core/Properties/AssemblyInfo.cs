@@ -1,3 +1,3 @@
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("Inno.Assets")]
+[assembly: InternalsVisibleTo("Inno.Assets.Loader")]

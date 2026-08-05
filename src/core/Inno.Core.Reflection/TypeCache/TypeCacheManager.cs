@@ -26,6 +26,11 @@ public static class TypeCacheManager
 
     internal static TypeIdentityRegistry identityRegistry { get; } = new();
     internal static TypeQueryRegistry queryRegistry { get; } = new();
+    
+    /// <summary>
+    /// Determines whether the TypeCacheManager has been initialized.
+    /// </summary>
+    public static bool isInitialized { get; private set; }
 
     /// <summary>
     /// Initializes TypeCache, runs initialize hooks, and subscribes refresh hooks.
@@ -46,6 +51,8 @@ public static class TypeCacheManager
         SubscribeRefreshHooks(normalizedAssemblyName);
 
         AppDomain.CurrentDomain.AssemblyLoad += (_, _) => s_isDirty = true;
+        
+        isInitialized = true;
     }
 
     /// <summary>

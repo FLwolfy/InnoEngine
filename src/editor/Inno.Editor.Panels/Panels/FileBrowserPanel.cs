@@ -5,7 +5,7 @@ using System.Numerics;
 using System.Text;
 
 using Inno.Assets;
-using Inno.Assets.IO;
+using Inno.Assets.File;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
 using Inno.Native.ImGui;

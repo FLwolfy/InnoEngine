@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 
-namespace Inno.Assets.Core;
+using Inno.Assets.Core;
+
+namespace Inno.Assets.Loader;
 
 /// <summary>
 /// Strongly typed importer output.

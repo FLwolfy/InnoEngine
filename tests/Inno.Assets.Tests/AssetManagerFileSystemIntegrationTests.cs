@@ -6,7 +6,8 @@ using System.Text;
 using System.Threading;
 
 using Inno.Assets.Core;
-using Inno.Assets.IO;
+using Inno.Assets.File;
+using Inno.Assets.Loader;
 using Inno.Assets.Types;
 using Inno.Core.Serialization;
 
@@ -25,7 +26,7 @@ public sealed class AssetManagerFileSystemIntegrationTests
         string relativePath = "Config/game.txt";
         string sourcePath = Path.Combine(assets, "Config", "game.txt");
         Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
-        File.WriteAllText(sourcePath, "one", NoBomUtf8());
+        System.IO.File.WriteAllText(sourcePath, "one", NoBomUtf8());
 
         try
         {
@@ -39,17 +40,17 @@ public sealed class AssetManagerFileSystemIntegrationTests
                 fileWatcherFlushDelayMs = 20
             });
 
-            TextAsset loaded = AssetManager.Load<TextAsset>(relativePath);
-            string metadataPath = Path.Combine(assets, relativePath + ".innoasset");
+            TextAsset loaded = AssetManager.Load<TextAsset>(relativePath)!;
+            string metadataPath = Path.Combine(assets, relativePath + ".imeta");
             string artifactPath = Path.Combine(artifacts, relativePath + ".abin");
 
-            Assert.True(File.Exists(metadataPath));
-            Assert.True(File.Exists(artifactPath));
+            Assert.True(System.IO.File.Exists(metadataPath));
+            Assert.True(System.IO.File.Exists(artifactPath));
             Assert.True(SpinWait.SpinUntil(
-                () => AssetManager.TryGetFileSystemEntry("Config/game.txt.innoasset", out _),
+                () => AssetManager.TryGetFileSystemEntry("Config/game.txt.imeta", out _),
                 TimeSpan.FromSeconds(2)));
-            Assert.True(AssetManager.TryGetFileSystemEntry("Config/game.txt.innoasset", out AssetFileEntry entry));
-            Assert.Equal(".innoasset", entry.extension);
+            Assert.True(AssetManager.TryGetFileSystemEntry("Config/game.txt.imeta", out AssetFileEntry entry));
+            Assert.Equal(".imeta", entry.extension);
 
             AssetMetaProbe meta = ReadMeta(metadataPath);
             Assert.Equal(relativePath, meta.relativePath);
@@ -74,26 +75,30 @@ public sealed class AssetManagerFileSystemIntegrationTests
         string relativePath = "Config/save.txt";
         string sourcePath = Path.Combine(assets, "Config", "save.txt");
         Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
-        File.WriteAllText(sourcePath, "before", NoBomUtf8());
+        System.IO.File.WriteAllText(sourcePath, "before", NoBomUtf8());
 
         try
         {
             AssetManager.Initialize(AssetManagerOptions.Create(assets, artifacts));
 
-            TextAsset asset = AssetManager.Load<TextAsset>(relativePath);
-            string metadataPath = Path.Combine(assets, relativePath + ".innoasset");
+            TextAsset asset = AssetManager.Load<TextAsset>(relativePath)!;
+            string metadataPath = Path.Combine(assets, relativePath + ".imeta");
             string artifactPath = Path.Combine(artifacts, relativePath + ".abin");
             AssetMetaProbe beforeMeta = ReadMeta(metadataPath);
-            byte[] beforeArtifact = File.ReadAllBytes(artifactPath);
+            byte[] beforeArtifact = System.IO.File.ReadAllBytes(artifactPath);
 
             SetTextAssetContent(asset, "after-save");
             Assert.True(AssetManager.Save(asset));
 
-            string savedSource = File.ReadAllText(sourcePath);
+            string savedSource = System.IO.File.ReadAllText(sourcePath);
             Assert.Equal("after-save", savedSource);
 
-            byte[] afterArtifact = File.ReadAllBytes(artifactPath);
+            byte[] afterArtifact = System.IO.File.ReadAllBytes(artifactPath);
             AssetMetaProbe afterMeta = ReadMeta(metadataPath);
+            TextAsset? memoryAfterSave = AssetManager.Load<TextAsset>(relativePath, AssetLoadMode.MemoryCache);
+
+            Assert.NotNull(memoryAfterSave);
+            Assert.Equal("after-save", memoryAfterSave!.content);
             Assert.NotEqual(beforeMeta.sourceHash, afterMeta.sourceHash);
             Assert.NotEqual(beforeArtifact, afterArtifact);
             Assert.Equal("after-save", Encoding.UTF8.GetString(afterArtifact));
@@ -114,7 +119,7 @@ public sealed class AssetManagerFileSystemIntegrationTests
         string relativePath = "Config/hot.txt";
         string sourcePath = Path.Combine(assets, "Config", "hot.txt");
         Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
-        File.WriteAllText(sourcePath, "v1", NoBomUtf8());
+        System.IO.File.WriteAllText(sourcePath, "v1", NoBomUtf8());
 
         using var changed = new AutoResetEvent(false);
         void OnChanged(IReadOnlyList<AssetChangedEvent> _)
@@ -133,26 +138,27 @@ public sealed class AssetManagerFileSystemIntegrationTests
             });
             AssetManager.SourceFileSystemChanged += OnChanged;
 
-            AssetRef<TextAsset> assetRef = AssetManager.GetRef<TextAsset>(relativePath);
-            Assert.True(AssetManager.TryResolve(assetRef, out TextAsset initial));
+            AssetRef<TextAsset> assetRef = AssetManager.LoadRef<TextAsset>(relativePath);
+            TextAsset? initial = AssetManager.Resolve(assetRef);
+            Assert.NotNull(initial);
             Assert.Equal("v1", initial.content);
 
-            File.WriteAllText(sourcePath, "v2", NoBomUtf8());
+            System.IO.File.WriteAllText(sourcePath, "v2", NoBomUtf8());
             Assert.True(changed.WaitOne(TimeSpan.FromSeconds(3)));
             Assert.True(SpinWait.SpinUntil(
-                () => AssetManager.TryResolve(assetRef, out TextAsset hot) && hot.content == "v2",
+                () => AssetManager.Resolve(assetRef)?.content == "v2",
                 TimeSpan.FromSeconds(2)));
 
-            File.Delete(sourcePath);
+            System.IO.File.Delete(sourcePath);
             Assert.True(changed.WaitOne(TimeSpan.FromSeconds(3)));
             Assert.True(SpinWait.SpinUntil(
-                () => !AssetManager.TryResolve(assetRef, out _),
+                () => AssetManager.Resolve(assetRef) is null,
                 TimeSpan.FromSeconds(2)));
 
-            string metaPath = Path.Combine(assets, relativePath + ".innoasset");
+            string metaPath = Path.Combine(assets, relativePath + ".imeta");
             string artifactPath = Path.Combine(artifacts, relativePath + ".abin");
-            Assert.True(SpinWait.SpinUntil(() => !File.Exists(metaPath), TimeSpan.FromSeconds(2)));
-            Assert.True(SpinWait.SpinUntil(() => !File.Exists(artifactPath), TimeSpan.FromSeconds(2)));
+            Assert.True(SpinWait.SpinUntil(() => !System.IO.File.Exists(metaPath), TimeSpan.FromSeconds(2)));
+            Assert.True(SpinWait.SpinUntil(() => !System.IO.File.Exists(artifactPath), TimeSpan.FromSeconds(2)));
         }
         finally
         {
@@ -174,7 +180,7 @@ public sealed class AssetManagerFileSystemIntegrationTests
         string newSourcePath = Path.Combine(assets, "Moved", "rename_new.txt");
         Directory.CreateDirectory(Path.GetDirectoryName(oldSourcePath)!);
         Directory.CreateDirectory(Path.GetDirectoryName(newSourcePath)!);
-        File.WriteAllText(oldSourcePath, "rename-me", NoBomUtf8());
+        System.IO.File.WriteAllText(oldSourcePath, "rename-me", NoBomUtf8());
 
         using var changed = new AutoResetEvent(false);
         void OnChanged(IReadOnlyList<AssetChangedEvent> _)
@@ -193,33 +199,35 @@ public sealed class AssetManagerFileSystemIntegrationTests
             });
             AssetManager.SourceFileSystemChanged += OnChanged;
 
-            AssetRef<TextAsset> assetRef = AssetManager.GetRef<TextAsset>(oldRelativePath);
-            Assert.True(AssetManager.TryResolve(assetRef, out TextAsset initial));
+            AssetRef<TextAsset> assetRef = AssetManager.LoadRef<TextAsset>(oldRelativePath);
+            TextAsset? initial = AssetManager.Resolve(assetRef);
+            Assert.NotNull(initial);
             Assert.Equal("rename-me", initial.content);
 
-            string oldMetaPath = Path.Combine(assets, oldRelativePath + ".innoasset");
-            string newMetaPath = Path.Combine(assets, newRelativePath + ".innoasset");
+            string oldMetaPath = Path.Combine(assets, oldRelativePath + ".imeta");
+            string newMetaPath = Path.Combine(assets, newRelativePath + ".imeta");
             string oldArtifactPath = Path.Combine(artifacts, oldRelativePath + ".abin");
             string newArtifactPath = Path.Combine(artifacts, newRelativePath + ".abin");
-            Assert.True(File.Exists(oldMetaPath));
-            Assert.True(File.Exists(oldArtifactPath));
+            Assert.True(System.IO.File.Exists(oldMetaPath));
+            Assert.True(System.IO.File.Exists(oldArtifactPath));
 
-            File.Move(oldSourcePath, newSourcePath);
+            System.IO.File.Move(oldSourcePath, newSourcePath);
             Assert.True(changed.WaitOne(TimeSpan.FromSeconds(3)));
 
-            Assert.True(SpinWait.SpinUntil(() => File.Exists(newMetaPath), TimeSpan.FromSeconds(2)));
-            Assert.True(SpinWait.SpinUntil(() => File.Exists(newArtifactPath), TimeSpan.FromSeconds(2)));
-            Assert.True(SpinWait.SpinUntil(() => !File.Exists(oldMetaPath), TimeSpan.FromSeconds(2)));
-            Assert.True(SpinWait.SpinUntil(() => !File.Exists(oldArtifactPath), TimeSpan.FromSeconds(2)));
+            Assert.True(SpinWait.SpinUntil(() => System.IO.File.Exists(newMetaPath), TimeSpan.FromSeconds(2)));
+            Assert.True(SpinWait.SpinUntil(() => System.IO.File.Exists(newArtifactPath), TimeSpan.FromSeconds(2)));
+            Assert.True(SpinWait.SpinUntil(() => !System.IO.File.Exists(oldMetaPath), TimeSpan.FromSeconds(2)));
+            Assert.True(SpinWait.SpinUntil(() => !System.IO.File.Exists(oldArtifactPath), TimeSpan.FromSeconds(2)));
 
-            TextAsset loadedByNewPath = AssetManager.Load<TextAsset>(newRelativePath);
+            TextAsset loadedByNewPath = AssetManager.Load<TextAsset>(newRelativePath)!;
             Assert.Equal("rename-me", loadedByNewPath.content);
             Assert.True(SpinWait.SpinUntil(
-                () => !AssetManager.TryGetLoaded<TextAsset>(oldRelativePath, out _),
+                () => AssetManager.Load<TextAsset>(oldRelativePath, AssetLoadMode.MemoryCache) is null,
                 TimeSpan.FromSeconds(2)));
 
             AssetRef<TextAsset> refreshedRef = AssetManager.GetRef<TextAsset>(newRelativePath);
-            Assert.True(AssetManager.TryResolve(refreshedRef, out TextAsset resolvedByNewRef));
+            TextAsset? resolvedByNewRef = AssetManager.Resolve(refreshedRef);
+            Assert.NotNull(resolvedByNewRef);
             Assert.Equal("rename-me", resolvedByNewRef.content);
         }
         finally
@@ -326,7 +334,7 @@ public sealed class AssetManagerFileSystemIntegrationTests
                 fileWatcherFlushDelayMs = 15
             });
 
-            _ = AssetManager.Load<TextAsset>(p1);
+            _ = AssetManager.Load<TextAsset>(p1)!;
 
             MoveSourceFile(assets, p1, p2);
             WriteSourceFile(assets, p2, "v2");
@@ -334,15 +342,15 @@ public sealed class AssetManagerFileSystemIntegrationTests
             WriteSourceFile(assets, p1, "v3");
 
             Assert.True(SpinWait.SpinUntil(
-                () => File.Exists(Path.Combine(assets, p1 + ".innoasset")) &&
-                      File.Exists(Path.Combine(artifacts, p1 + ".abin")) &&
-                      !File.Exists(Path.Combine(assets, p2 + ".innoasset")) &&
-                      !File.Exists(Path.Combine(artifacts, p2 + ".abin")),
+                () => System.IO.File.Exists(Path.Combine(assets, p1 + ".imeta")) &&
+                      System.IO.File.Exists(Path.Combine(artifacts, p1 + ".abin")) &&
+                      !System.IO.File.Exists(Path.Combine(assets, p2 + ".imeta")) &&
+                      !System.IO.File.Exists(Path.Combine(artifacts, p2 + ".abin")),
                 TimeSpan.FromSeconds(5)));
             
             AssetManager.WaitForIdle();
 
-            TextAsset final = AssetManager.Load<TextAsset>(p1);
+            TextAsset final = AssetManager.Load<TextAsset>(p1)!;
             Assert.Equal("v3", final.content);
         }
         finally
@@ -363,42 +371,42 @@ public sealed class AssetManagerFileSystemIntegrationTests
         WriteSourceFile(assets, relative, "seed");
 
         string orphanRelative = "Recover/orphan.txt";
-        string orphanMetaPath = Path.Combine(assets, orphanRelative + ".innoasset");
+        string orphanMetaPath = Path.Combine(assets, orphanRelative + ".imeta");
         string orphanArtifactPath = Path.Combine(artifacts, orphanRelative + ".abin");
 
         try
         {
             AssetManager.Initialize(AssetManagerOptions.Create(assets, artifacts));
-            _ = AssetManager.Load<TextAsset>(relative);
+            _ = AssetManager.Load<TextAsset>(relative)!;
             AssetManager.Shutdown();
 
-            string metaPath = Path.Combine(assets, relative + ".innoasset");
+            string metaPath = Path.Combine(assets, relative + ".imeta");
             string artifactPath = Path.Combine(artifacts, relative + ".abin");
-            Assert.True(File.Exists(metaPath));
-            Assert.True(File.Exists(artifactPath));
+            Assert.True(System.IO.File.Exists(metaPath));
+            Assert.True(System.IO.File.Exists(artifactPath));
 
-            File.WriteAllBytes(metaPath, [0x01, 0x02, 0x03, 0x04]);
-            File.Delete(artifactPath);
+            System.IO.File.WriteAllBytes(metaPath, [0x01, 0x02, 0x03, 0x04]);
+            System.IO.File.Delete(artifactPath);
 
             WriteSourceFile(assets, orphanRelative, "temp");
             AssetManager.Initialize(AssetManagerOptions.Create(assets, artifacts));
-            _ = AssetManager.Load<TextAsset>(orphanRelative);
+            _ = AssetManager.Load<TextAsset>(orphanRelative)!;
             AssetManager.Shutdown();
             DeleteSourceFile(assets, orphanRelative);
-            Assert.True(File.Exists(orphanMetaPath));
-            Assert.True(File.Exists(orphanArtifactPath));
+            Assert.True(System.IO.File.Exists(orphanMetaPath));
+            Assert.True(System.IO.File.Exists(orphanArtifactPath));
 
             AssetManager.Initialize(AssetManagerOptions.Create(assets, artifacts));
 
-            Assert.True(File.Exists(metaPath));
-            Assert.True(File.Exists(artifactPath));
+            Assert.True(System.IO.File.Exists(metaPath));
+            Assert.True(System.IO.File.Exists(artifactPath));
             Assert.True(SpinWait.SpinUntil(
-                () => !File.Exists(orphanMetaPath) && !File.Exists(orphanArtifactPath),
+                () => !System.IO.File.Exists(orphanMetaPath) && !System.IO.File.Exists(orphanArtifactPath),
                 TimeSpan.FromSeconds(3)));
 
             AssetMetaProbe repairedMeta = ReadMeta(metaPath);
             Assert.Equal(relative, repairedMeta.relativePath);
-            TextAsset recovered = AssetManager.Load<TextAsset>(relative);
+            TextAsset recovered = AssetManager.Load<TextAsset>(relative)!;
             Assert.Equal("seed", recovered.content);
             Assert.Equal(repairedMeta.persistentId, recovered.identity.persistentId);
         }
@@ -409,9 +417,107 @@ public sealed class AssetManagerFileSystemIntegrationTests
         }
     }
 
+    [Fact]
+    public void Initialize_Reconcile_ImportsEntireTreeBeforeFirstLoad()
+    {
+        string root = CreateRoot();
+        string assets = Path.Combine(root, "Assets");
+        string artifacts = Path.Combine(root, "Artifacts");
+        string first = "Config/game.txt";
+        string second = "Nested/Deep/readme.txt";
+        WriteSourceFile(assets, first, "game");
+        WriteSourceFile(assets, second, "readme");
+
+        try
+        {
+            AssetManager.Initialize(new AssetManagerOptions
+            {
+                assetRoot = assets,
+                artifactRoot = artifacts,
+                autoRegisterBuiltInImporters = true,
+                autoRegisterImportersFromTypeCache = false,
+                enableFileSystemWatcher = false,
+                fileWatcherFlushDelayMs = 20
+            });
+
+            Assert.True(System.IO.File.Exists(Path.Combine(assets, first + ".imeta")));
+            Assert.True(System.IO.File.Exists(Path.Combine(artifacts, first + ".abin")));
+            Assert.True(System.IO.File.Exists(Path.Combine(assets, second + ".imeta")));
+            Assert.True(System.IO.File.Exists(Path.Combine(artifacts, second + ".abin")));
+
+            TextAsset firstLoaded = AssetManager.Load<TextAsset>(first)!;
+            TextAsset secondLoaded = AssetManager.Load<TextAsset>(second)!;
+            Assert.Equal("game", firstLoaded.content);
+            Assert.Equal("readme", secondLoaded.content);
+        }
+        finally
+        {
+            AssetManager.Shutdown();
+            DeleteRoot(root);
+        }
+    }
+
+    [Fact]
+    public void Rescan_FullTree_AddsUpdatesDeletesAndSynchronizesLoadedCache()
+    {
+        string root = CreateRoot();
+        string assets = Path.Combine(root, "Assets");
+        string artifacts = Path.Combine(root, "Artifacts");
+        string changed = "Config/changed.txt";
+        string deleted = "Config/deleted.txt";
+        string created = "New/created.txt";
+        WriteSourceFile(assets, changed, "v1");
+        WriteSourceFile(assets, deleted, "gone");
+
+        try
+        {
+            AssetManager.Initialize(new AssetManagerOptions
+            {
+                assetRoot = assets,
+                artifactRoot = artifacts,
+                autoRegisterBuiltInImporters = true,
+                autoRegisterImportersFromTypeCache = false,
+                enableFileSystemWatcher = false,
+                fileWatcherFlushDelayMs = 20
+            });
+
+            AssetRef<TextAsset> changedRef = AssetManager.LoadRef<TextAsset>(changed)!;
+            AssetRef<TextAsset> deletedRef = AssetManager.LoadRef<TextAsset>(deleted)!;
+            Assert.Equal("v1", AssetManager.Resolve(changedRef)!.content);
+            Assert.Equal("gone", AssetManager.Resolve(deletedRef)!.content);
+
+            WriteSourceFile(assets, changed, "v2");
+            WriteSourceFile(assets, created, "new");
+            DeleteSourceFile(assets, deleted);
+
+            AssetManager.Rescan();
+
+            TextAsset? changedAfterRescan = AssetManager.Resolve(changedRef);
+            Assert.NotNull(changedAfterRescan);
+            Assert.Equal("v2", changedAfterRescan!.content);
+            Assert.Equal(changedRef.identity.persistentId, changedAfterRescan.identity.persistentId);
+
+            TextAsset createdAfterRescan = AssetManager.Load<TextAsset>(created)!;
+            Assert.Equal("new", createdAfterRescan.content);
+            Assert.True(System.IO.File.Exists(Path.Combine(assets, created + ".imeta")));
+            Assert.True(System.IO.File.Exists(Path.Combine(artifacts, created + ".abin")));
+
+            Assert.Null(AssetManager.Resolve(deletedRef));
+            Assert.False(System.IO.File.Exists(Path.Combine(assets, deleted + ".imeta")));
+            Assert.False(System.IO.File.Exists(Path.Combine(artifacts, deleted + ".abin")));
+            Assert.True(AssetManager.TryGetFileSystemEntry(created, out _));
+            Assert.False(AssetManager.TryGetFileSystemEntry(deleted, out _));
+        }
+        finally
+        {
+            AssetManager.Shutdown();
+            DeleteRoot(root);
+        }
+    }
+
     private static AssetMetaProbe ReadMeta(string metadataPath)
     {
-        byte[] bytes = File.ReadAllBytes(metadataPath);
+        byte[] bytes = System.IO.File.ReadAllBytes(metadataPath);
         SerializingState state = SerializingState.Deserialize(bytes);
         var meta = new AssetMetaProbe();
         ((ISerializable)meta).RestoreState(state);
@@ -433,7 +539,7 @@ public sealed class AssetManagerFileSystemIntegrationTests
     {
         string path = Path.Combine(assetsRoot, relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, content, NoBomUtf8());
+        System.IO.File.WriteAllText(path, content, NoBomUtf8());
     }
 
     private static void MoveSourceFile(string assetsRoot, string fromRelativePath, string toRelativePath)
@@ -441,16 +547,16 @@ public sealed class AssetManagerFileSystemIntegrationTests
         string fromPath = Path.Combine(assetsRoot, fromRelativePath);
         string toPath = Path.Combine(assetsRoot, toRelativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(toPath)!);
-        if (File.Exists(toPath))
-            File.Delete(toPath);
-        File.Move(fromPath, toPath);
+        if (System.IO.File.Exists(toPath))
+            System.IO.File.Delete(toPath);
+        System.IO.File.Move(fromPath, toPath);
     }
 
     private static void DeleteSourceFile(string assetsRoot, string relativePath)
     {
         string path = Path.Combine(assetsRoot, relativePath);
-        if (File.Exists(path))
-            File.Delete(path);
+        if (System.IO.File.Exists(path))
+            System.IO.File.Delete(path);
     }
 
     private static string Pick(HashSet<string> set, Random rng)
@@ -470,11 +576,11 @@ public sealed class AssetManagerFileSystemIntegrationTests
     {
         foreach (string rel in existing)
         {
-            if (!File.Exists(Path.Combine(assetsRoot, rel)))
+            if (!System.IO.File.Exists(Path.Combine(assetsRoot, rel)))
                 return false;
-            if (!File.Exists(Path.Combine(assetsRoot, rel + ".innoasset")))
+            if (!System.IO.File.Exists(Path.Combine(assetsRoot, rel + ".imeta")))
                 return false;
-            if (!File.Exists(Path.Combine(artifactsRoot, rel + ".abin")))
+            if (!System.IO.File.Exists(Path.Combine(artifactsRoot, rel + ".abin")))
                 return false;
         }
 
@@ -483,9 +589,9 @@ public sealed class AssetManagerFileSystemIntegrationTests
             if (existing.Contains(rel))
                 continue;
 
-            if (File.Exists(Path.Combine(assetsRoot, rel + ".innoasset")))
+            if (System.IO.File.Exists(Path.Combine(assetsRoot, rel + ".imeta")))
                 return false;
-            if (File.Exists(Path.Combine(artifactsRoot, rel + ".abin")))
+            if (System.IO.File.Exists(Path.Combine(artifactsRoot, rel + ".abin")))
                 return false;
         }
 

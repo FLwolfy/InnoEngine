@@ -3,11 +3,11 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 
-using Inno.Assets.IO;
+using Inno.Assets.File;
 
 using Xunit;
 
-namespace Inno.Assets.IO.Tests;
+namespace Inno.Assets.File.Tests;
 
 public sealed class AssetChangeBatchNormalizerTests
 {
@@ -40,7 +40,7 @@ public sealed class AssetChangeBatchNormalizerTests
         try
         {
             Directory.CreateDirectory(Path.Combine(root, "B"));
-            File.WriteAllText(Path.Combine(root, "B", "new.txt"), "x");
+            System.IO.File.WriteAllText(Path.Combine(root, "B", "new.txt"), "x");
 
             AssetChangedEvent[] normalized = NormalizeViaReflection(root, [
                 new AssetChangedEvent("B/new.txt", WatcherChangeTypes.Renamed, "A/old.txt"),
@@ -66,7 +66,7 @@ public sealed class AssetChangeBatchNormalizerTests
         try
         {
             Directory.CreateDirectory(Path.Combine(root, "Flow"));
-            File.WriteAllText(Path.Combine(root, "Flow", "one.txt"), "x");
+            System.IO.File.WriteAllText(Path.Combine(root, "Flow", "one.txt"), "x");
 
             AssetChangedEvent[] a = NormalizeViaReflection(root, [
                 new AssetChangedEvent("Flow/two.txt", WatcherChangeTypes.Renamed, "Flow/one.txt"),
@@ -96,7 +96,7 @@ public sealed class AssetChangeBatchNormalizerTests
     private static AssetChangedEvent[] NormalizeViaReflection(string root, AssetChangedEvent[] rawBatch)
     {
         Assembly assembly = typeof(AssetFileSystem).Assembly;
-        Type normalizerType = assembly.GetType("Inno.Assets.IO.AssetChangeBatchNormalizer", throwOnError: true)!;
+        Type normalizerType = assembly.GetType("Inno.Assets.File.AssetChangeBatchNormalizer", throwOnError: true)!;
         MethodInfo normalize = normalizerType.GetMethod(
             "Normalize",
             BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)!;

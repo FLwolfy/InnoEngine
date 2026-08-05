@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 
-namespace Inno.Assets.IO;
+namespace Inno.Assets.File;
 
 /// <summary>
 /// File watcher that coalesces rapid file-system changes into batched callbacks.

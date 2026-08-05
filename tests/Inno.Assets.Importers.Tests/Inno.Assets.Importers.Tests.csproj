@@ -7,7 +7,9 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\assets\Inno.Assets.IO\Inno.Assets.IO.csproj" />
+    <ProjectReference Include="..\..\src\assets\Inno.Assets.Importers\Inno.Assets.Importers.csproj" />
+    <ProjectReference Include="..\..\src\assets\Inno.Assets.Loader\Inno.Assets.Loader.csproj" />
+    <ProjectReference Include="..\..\src\assets\Inno.Assets.Types\Inno.Assets.Types.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

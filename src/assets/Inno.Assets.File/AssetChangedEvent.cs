@@ -1,6 +1,6 @@
 using System.IO;
 
-namespace Inno.Assets.IO;
+namespace Inno.Assets.File;
 
 /// <summary>
 /// Batched file-system change event for asset source files.

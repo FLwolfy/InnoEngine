@@ -7,12 +7,7 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\assets\Inno.Assets\Inno.Assets.csproj" />
-    <ProjectReference Include="..\..\src\assets\Inno.Assets.Core\Inno.Assets.Core.csproj" />
     <ProjectReference Include="..\..\src\assets\Inno.Assets.File\Inno.Assets.File.csproj" />
-    <ProjectReference Include="..\..\src\assets\Inno.Assets.Loader\Inno.Assets.Loader.csproj" />
-    <ProjectReference Include="..\..\src\assets\Inno.Assets.Types\Inno.Assets.Types.csproj" />
-    <ProjectReference Include="..\..\src\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

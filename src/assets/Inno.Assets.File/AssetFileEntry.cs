@@ -1,4 +1,4 @@
-namespace Inno.Assets.IO;
+namespace Inno.Assets.File;
 
 /// <summary>
 /// One node in the asset source filesystem index.

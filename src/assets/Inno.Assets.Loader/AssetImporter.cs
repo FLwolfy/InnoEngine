@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 
-namespace Inno.Assets.Core;
+using Inno.Assets.Core;
+
+namespace Inno.Assets.Loader;
 
 /// <summary>
 /// Generic helper base for implementing <see cref="IAssetImporter"/>.

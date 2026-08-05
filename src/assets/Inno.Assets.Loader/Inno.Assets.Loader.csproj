@@ -8,11 +8,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Storage\Inno.Core.Storage.csproj" PrivateAssets="compile" />
   </ItemGroup>
 
-  <ItemGroup> 
+  <ItemGroup>
+    <ProjectReference Include="..\..\core\Inno.Core.Identity\Inno.Core.Identity.csproj" />
     <ProjectReference Include="..\Inno.Assets.Core\Inno.Assets.Core.csproj" />
-    <ProjectReference Include="..\Inno.Assets.Types\Inno.Assets.Types.csproj" />
   </ItemGroup>
 
 </Project>

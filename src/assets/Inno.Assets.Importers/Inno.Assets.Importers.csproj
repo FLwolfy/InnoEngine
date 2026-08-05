@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Assets.Core\Inno.Assets.Core.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Assets.Loader\Inno.Assets.Loader.csproj" />
+    <ProjectReference Include="..\Inno.Assets.Types\Inno.Assets.Types.csproj" />
+  </ItemGroup>
+
+</Project>

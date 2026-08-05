@@ -2,9 +2,9 @@ using System;
 
 using Inno.Core.Serialization;
 
-namespace Inno.Assets;
+namespace Inno.Assets.Core;
 
-internal sealed class AssetMeta : ISerializable
+public sealed class AssetMeta : ISerializable
 {
     // Identity
     [SerializableProperty] public Guid persistentId { get; set; }

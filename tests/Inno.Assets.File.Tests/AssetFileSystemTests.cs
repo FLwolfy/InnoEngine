@@ -3,11 +3,11 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 
-using Inno.Assets.IO;
+using Inno.Assets.File;
 
 using Xunit;
 
-namespace Inno.Assets.IO.Tests;
+namespace Inno.Assets.File.Tests;
 
 public sealed class AssetFileSystemTests
 {
@@ -18,8 +18,8 @@ public sealed class AssetFileSystemTests
         try
         {
             Directory.CreateDirectory(Path.Combine(root, "Config"));
-            File.WriteAllText(Path.Combine(root, "Config", "a.json"), "{}");
-            File.WriteAllText(Path.Combine(root, "readme.txt"), "hi");
+            System.IO.File.WriteAllText(Path.Combine(root, "Config", "a.json"), "{}");
+            System.IO.File.WriteAllText(Path.Combine(root, "readme.txt"), "hi");
 
             using var fs = new AssetFileSystem(root, autoStart: false);
             var entries = fs.GetEntries(includeDirectories: true);
@@ -48,7 +48,7 @@ public sealed class AssetFileSystemTests
         {
             Directory.CreateDirectory(Path.Combine(root, "Config"));
             string file = Path.Combine(root, "Config", "watch.txt");
-            File.WriteAllText(file, "a");
+            System.IO.File.WriteAllText(file, "a");
 
             using var fs = new AssetFileSystem(root, autoStart: true, flushDelayMs: 20);
             using var changed = new AutoResetEvent(false);
@@ -60,7 +60,7 @@ public sealed class AssetFileSystemTests
                 changed.Set();
             };
 
-            File.WriteAllText(file, "b");
+            System.IO.File.WriteAllText(file, "b");
             bool signaled = changed.WaitOne(TimeSpan.FromSeconds(2));
 
             Assert.True(signaled);

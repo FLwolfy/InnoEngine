@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-namespace Inno.Assets.IO;
+namespace Inno.Assets.File;
 
 internal static class AssetChangeBatchNormalizer
 {
@@ -108,7 +108,7 @@ internal static class AssetChangeBatchNormalizer
     private static bool ExistsAt(string rootPath, string relativePath)
     {
         string full = Path.Combine(rootPath, relativePath);
-        return File.Exists(full) || Directory.Exists(full);
+        return System.IO.File.Exists(full) || Directory.Exists(full);
     }
 
     private static string NormalizeRelativePath(string relativePath)

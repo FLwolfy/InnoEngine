@@ -2,9 +2,10 @@ using System;
 using System.Collections.Generic;
 
 using Inno.Assets.Core;
+using Inno.Assets.Loader;
 using Inno.Assets.Types;
 
-namespace Inno.Assets.Loader;
+namespace Inno.Assets.Importers;
 
 public sealed class BinaryAssetImporter : AssetImporter<BinaryAsset>
 {

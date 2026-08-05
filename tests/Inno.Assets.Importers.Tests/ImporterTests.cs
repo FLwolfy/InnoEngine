@@ -1,12 +1,13 @@
 using System.Text;
 
 using Inno.Assets.Core;
+using Inno.Assets.Importers;
 using Inno.Assets.Loader;
 using Inno.Assets.Types;
 
 using Xunit;
 
-namespace Inno.Assets.Loader.Tests;
+namespace Inno.Assets.Importers.Tests;
 
 public sealed class ImporterTests
 {

@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 
-namespace Inno.Assets.Core;
+namespace Inno.Assets.Loader;
 
 /// <summary>
 /// Immutable import input context passed to asset importers.

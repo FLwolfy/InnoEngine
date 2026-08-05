@@ -6,7 +6,7 @@ using System.Threading;
 
 using Inno.Assets;
 using Inno.Assets.Core;
-using Inno.Assets.IO;
+using Inno.Assets.File;
 using Inno.Assets.Types;
 using Inno.Core.Logging;
 
@@ -24,7 +24,7 @@ internal static class Program
         string assetsRoot = Path.Combine(executionRoot, "Assets");
         string artifactsRoot = Path.Combine(executionRoot, "Artifacts");
         string relativePath = "Notes/readme.txt";
-        string metaPath = Path.Combine(assetsRoot, relativePath + ".innoasset");
+        string metaPath = Path.Combine(assetsRoot, relativePath + ".imeta");
         string artifactPath = Path.Combine(artifactsRoot, relativePath + ".abin");
 
         using var changed = new AutoResetEvent(false);
@@ -58,29 +58,29 @@ internal static class Program
             Log.Info("[AssetsDemo] Meta path exists: {0} ({1})", File.Exists(metaPath), metaPath);
             Log.Info("[AssetsDemo] Artifact path exists: {0} ({1})", File.Exists(artifactPath), artifactPath);
 
-            TextAsset loaded = AssetManager.Load<TextAsset>(relativePath);
-            AssetRef<TextAsset> assetRef = AssetManager.GetRef<TextAsset>(relativePath);
+            TextAsset loaded = AssetManager.Load<TextAsset>(relativePath)!;
+            AssetRef<TextAsset> assetRef = AssetManager.LoadRef<TextAsset>(relativePath);
             Log.Info("[AssetsDemo] Loaded content: {0}", loaded.content);
             Log.Info("[AssetsDemo] Identity: {0}", assetRef.identity.persistentId);
 
             bool metaIndexed = SpinWait.SpinUntil(
-                () => AssetManager.TryGetFileSystemEntry("Notes/readme.txt.innoasset", out _),
+                () => AssetManager.TryGetFileSystemEntry("Notes/readme.txt.imeta", out _),
                 TimeSpan.FromSeconds(2));
-            Log.Info("[AssetsDemo] .innoasset indexed: {0}", metaIndexed);
+            Log.Info("[AssetsDemo] .imeta indexed: {0}", metaIndexed);
 
             Log.Info("[AssetsDemo] FileSystem tree:");
             Log.Info(AssetManager.GetFileSystemTreeGraph());
 
             SetTextAssetContent(loaded, "updated-by-save");
             bool saved = AssetManager.Save(loaded);
-            TextAsset updated = AssetManager.Load<TextAsset>(relativePath);
+            TextAsset updated = AssetManager.Load<TextAsset>(relativePath)!;
             Log.Info("[AssetsDemo] Save(existing)={0}, updated content={1}", saved, updated.content);
 
-            bool resolved = AssetManager.TryResolve(assetRef, out TextAsset resolvedAsset);
-            Log.Info("[AssetsDemo] Resolve(ref)={0}, content={1}", resolved, resolved ? resolvedAsset.content : "<none>");
+            TextAsset? resolvedAsset = AssetManager.Resolve(assetRef);
+            Log.Info("[AssetsDemo] Resolve(ref)={0}, content={1}", resolvedAsset is not null, resolvedAsset?.content ?? "<none>");
             AssetRef<TextAsset> refreshedRef = AssetManager.GetRef<TextAsset>(relativePath);
-            bool refreshedResolved = AssetManager.TryResolve(refreshedRef, out TextAsset refreshedAsset);
-            Log.Info("[AssetsDemo] Resolve(refreshedRef)={0}, content={1}", refreshedResolved, refreshedResolved ? refreshedAsset.content : "<none>");
+            TextAsset? refreshedAsset = AssetManager.Resolve(refreshedRef);
+            Log.Info("[AssetsDemo] Resolve(refreshedRef)={0}, content={1}", refreshedAsset is not null, refreshedAsset?.content ?? "<none>");
         }
         catch (Exception ex)
         {
