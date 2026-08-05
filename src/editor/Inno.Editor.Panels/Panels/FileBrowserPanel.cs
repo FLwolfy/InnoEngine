@@ -237,7 +237,7 @@ public sealed class FileBrowserPanel : EditorPanel
 
         if (isDirectory && itemDoubleClicked)
         {
-            NavigateTo(context, relativePath);
+            NavigateTo(context, relativePath, relativePath);
         }
 
         if (open)
@@ -264,7 +264,7 @@ public sealed class FileBrowserPanel : EditorPanel
         }
 
         string selectedPath = NormalizePath(context.selection.selectedPath);
-        string selectedTreePath = IsDirectoryPath(selectedPath) ? selectedPath : GetParentDirectory(selectedPath);
+        string selectedTreePath = GetTreeRevealTarget(selectedPath);
         if (!m_treeSelectedPathOpenRequest &&
             !string.Equals(m_lastTreeSelectedPathOpenTarget, selectedTreePath, StringComparison.Ordinal))
         {
@@ -281,6 +281,11 @@ public sealed class FileBrowserPanel : EditorPanel
         m_treeSelectedPathOpenRequest = false;
     }
 
+    private void RequestRevealTreePath(string path)
+    {
+        RequestOpenTreeToPath(GetTreeRevealTarget(path));
+    }
+
     private void RequestOpenTreeToPath(string path)
     {
         string normalizedPath = NormalizePath(path);
@@ -288,6 +293,12 @@ public sealed class FileBrowserPanel : EditorPanel
         m_treeSelectedPathOpenTarget = treePath;
         m_treeSelectedPathOpenRequest = true;
         m_lastTreeSelectedPathOpenTarget = treePath;
+    }
+
+    private static string GetTreeRevealTarget(string path)
+    {
+        string normalizedPath = NormalizePath(path);
+        return GetParentDirectory(normalizedPath);
     }
 
     private bool ShouldOpenTreeEntry(string relativePath, bool isRoot, bool isDirectory)
@@ -521,7 +532,7 @@ public sealed class FileBrowserPanel : EditorPanel
         if (NativeImGui.Selectable($"##entry_{entry.relativePath}", selected, ImGuiSelectableFlags.SpanAllColumns))
         {
             context.selection.SetSelectedPath(entry.relativePath);
-            RequestOpenTreeToPath(entry.relativePath);
+            RequestRevealTreePath(entry.relativePath);
         }
 
         bool itemHovered = NativeImGui.IsItemHovered();
@@ -572,7 +583,7 @@ public sealed class FileBrowserPanel : EditorPanel
         if (NativeImGui.InvisibleButton("##GridItem", itemSize))
         {
             context.selection.SetSelectedPath(entry.relativePath);
-            RequestOpenTreeToPath(entry.relativePath);
+            RequestRevealTreePath(entry.relativePath);
         }
 
         if (entry.isDirectory && NativeImGui.IsItemHovered() && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
@@ -843,7 +854,7 @@ public sealed class FileBrowserPanel : EditorPanel
 
     private bool CanGoForward => m_forwardHistory.Count > 0;
 
-    private void NavigateTo(EditorContext context, string directory)
+    private void NavigateTo(EditorContext context, string directory, string? selectedPathAfterNavigation = null)
     {
         directory = NormalizePath(directory);
         if (string.Equals(context.selection.currentDirectory, directory, StringComparison.Ordinal))
@@ -852,6 +863,8 @@ public sealed class FileBrowserPanel : EditorPanel
         m_backHistory.Push(NormalizePath(context.selection.currentDirectory));
         m_forwardHistory.Clear();
         ApplyDirectory(context, directory);
+        if (selectedPathAfterNavigation is not null)
+            context.selection.SetSelectedPath(selectedPathAfterNavigation);
     }
 
     private void GoBack(EditorContext context)
@@ -884,7 +897,7 @@ public sealed class FileBrowserPanel : EditorPanel
         if (entry.isDirectory)
         {
             RequestOpenTreeToPath(entry.relativePath);
-            NavigateTo(context, entry.relativePath);
+            NavigateTo(context, entry.relativePath, entry.relativePath);
         }
     }
 
