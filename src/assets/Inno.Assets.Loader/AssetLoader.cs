@@ -89,69 +89,65 @@ public sealed class AssetLoader
 
     #endregion
 
+    #region Importing
+
+    /// <summary>
+    /// Imports one source asset to metadata and artifact files without loading it into memory.
+    /// </summary>
+    public bool Import(string relativePath)
+    {
+        return TryImportSourceToDisk(relativePath);
+    }
+
+    #endregion
+
     #region Loading
 
     /// <summary>
-    /// Loads an asset from the allowed load sources.
+    /// Loads an asset from existing metadata and artifact files into memory.
     /// </summary>
-    public TAsset? Load<TAsset>(
-        string relativePath,
-        AssetLoadMode mode = AssetLoadMode.MemoryCache | AssetLoadMode.DiskCache | AssetLoadMode.DiskRaw)
-        where TAsset : AssetObject
+    public bool Load(string relativePath, Type requestedAssetType)
     {
-        AssetObject? loaded = LoadInternal(relativePath, typeof(TAsset), mode);
-        return loaded as TAsset;
+        ArgumentNullException.ThrowIfNull(requestedAssetType);
+
+        string normalized = NormalizeRelativePath(relativePath);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return false;
+
+        return TryLoadFromDiskCache(normalized, requestedAssetType, out _);
     }
 
     /// <summary>
-    /// Loads an asset reference from the allowed load sources.
+    /// Resolves an identity to a currently loaded asset instance.
     /// </summary>
-    public AssetRef<TAsset> LoadRef<TAsset>(
-        string relativePath,
-        AssetLoadMode mode = AssetLoadMode.MemoryCache | AssetLoadMode.DiskCache | AssetLoadMode.DiskRaw)
-        where TAsset : AssetObject
+    public AssetObject? Resolve(Identity identity, Type requestedAssetType)
     {
-        TAsset? asset = Load<TAsset>(relativePath, mode);
-        return asset is null ? new AssetRef<TAsset>(default) : new AssetRef<TAsset>(GetIdentity(asset));
-    }
+        ArgumentNullException.ThrowIfNull(requestedAssetType);
 
-    /// <summary>
-    /// Resolves a handle to currently loaded asset instance.
-    /// </summary>
-    public TAsset? Resolve<TAsset>(AssetRef<TAsset> assetRef) where TAsset : AssetObject
-    {
-        if (!assetRef.isValid)
+        if (identity.persistentId == Guid.Empty)
             return null;
 
-        if (TryLoadFromMemoryCache(assetRef.identity, typeof(TAsset), out AssetObject? loaded))
-            return loaded as TAsset;
+        if (TryLoadFromMemoryCache(identity, requestedAssetType, out AssetObject? loaded))
+            return loaded;
 
         return null;
     }
 
     /// <summary>
-    /// Gets an asset reference for a path without loading the asset.
+    /// Gets an identity for a path without loading the asset.
     /// </summary>
-    public AssetRef<TAsset> GetRef<TAsset>(string relativePath) where TAsset : AssetObject
+    public Identity GetIdentity(string relativePath)
     {
         string normalized = NormalizeRelativePath(relativePath);
         lock (m_sync)
         {
             AssetObject? loaded = m_loadedCache.First(m_cachePathKey, normalized);
-            if (loaded is TAsset)
-                return new AssetRef<TAsset>(GetIdentity(loaded));
+            if (loaded is not null)
+                return GetIdentity(loaded);
         }
 
         Guid? persistentId = ReadPersistentIdFromMeta(normalized);
-        return persistentId is Guid id ? new AssetRef<TAsset>(new Identity(id)) : new AssetRef<TAsset>(default);
-    }
-
-    /// <summary>
-    /// Gets an asset reference for an identity.
-    /// </summary>
-    public AssetRef<TAsset> GetRef<TAsset>(Identity identity) where TAsset : AssetObject
-    {
-        return identity.persistentId == Guid.Empty ? new AssetRef<TAsset>(default) : new AssetRef<TAsset>(identity);
+        return persistentId is Guid id ? new Identity(id) : default;
     }
 
     /// <summary>
@@ -201,8 +197,10 @@ public sealed class AssetLoader
         WriteAllBytesAtomic(absSourcePath, sourceBytes);
 
         Unload(normalized);
-        _ = LoadInternal(normalized, asset.GetType(), AssetLoadMode.DiskRaw);
-        return true;
+        if (!TryImportSourceToDisk(normalized))
+            return false;
+
+        return LoadByType(normalized, asset.GetType());
     }
 
     #endregion
@@ -227,16 +225,16 @@ public sealed class AssetLoader
     }
 
     /// <summary>
-    /// Unloads one asset by handle.
+    /// Unloads one asset by identity.
     /// </summary>
-    public bool Unload<TAsset>(AssetRef<TAsset> assetRef) where TAsset : AssetObject
+    public bool Unload(Identity identity)
     {
-        if (!assetRef.isValid)
+        if (identity.persistentId == Guid.Empty)
             return false;
 
         lock (m_sync)
         {
-            AssetObject? loaded = m_loadedCache.First(m_cachePersistentIdKey, assetRef.identity.persistentId);
+            AssetObject? loaded = m_loadedCache.First(m_cachePersistentIdKey, identity.persistentId);
             if (loaded is null)
                 return false;
 
@@ -356,7 +354,7 @@ public sealed class AssetLoader
         {
             try
             {
-                _ = LoadInternal(path, loaded.GetType(), AssetLoadMode.DiskRaw);
+                _ = TryImportSourceToDisk(path) && LoadByType(path, loaded.GetType());
             }
             catch
             {
@@ -416,7 +414,7 @@ public sealed class AssetLoader
         {
             if (reloadType is not null)
             {
-                _ = LoadInternal(newPath, reloadType, AssetLoadMode.DiskRaw);
+                _ = TryImportSourceToDisk(newPath) && LoadByType(newPath, reloadType);
             }
             else
             {
@@ -433,41 +431,13 @@ public sealed class AssetLoader
 
     #region Load Internals
 
-    private AssetObject? LoadInternal(string relativePath, Type requestedAssetType, AssetLoadMode mode)
+    private bool LoadByType(string relativePath, Type requestedAssetType)
     {
         string normalized = NormalizeRelativePath(relativePath);
         if (string.IsNullOrWhiteSpace(normalized))
-            return null;
+            return false;
 
-        if (mode.HasFlag(AssetLoadMode.MemoryCache) &&
-            TryLoadFromMemoryCache(normalized, requestedAssetType, out AssetObject? memoryAsset))
-            return memoryAsset;
-
-        if (mode.HasFlag(AssetLoadMode.DiskCache) &&
-            TryLoadFromDiskCache(normalized, requestedAssetType, out AssetObject? cachedAsset))
-            return cachedAsset;
-
-        if (mode.HasFlag(AssetLoadMode.DiskRaw) &&
-            TryImportFromDiskRaw(normalized, requestedAssetType, cacheLoaded: true, out AssetObject? importedAsset))
-            return importedAsset;
-
-        return null;
-    }
-
-    private bool TryLoadFromMemoryCache(string relativePath, Type requestedAssetType, out AssetObject? asset)
-    {
-        lock (m_sync)
-        {
-            AssetObject? loaded = m_loadedCache.First(m_cachePathKey, relativePath);
-            if (loaded is not null && requestedAssetType.IsAssignableFrom(loaded.GetType()))
-            {
-                asset = loaded;
-                return true;
-            }
-        }
-
-        asset = null;
-        return false;
+        return TryLoadFromDiskCache(normalized, requestedAssetType, out _);
     }
 
     private bool TryLoadFromMemoryCache(in Identity identity, Type requestedAssetType, out AssetObject? asset)
@@ -578,30 +548,18 @@ public sealed class AssetLoader
         if (string.IsNullOrWhiteSpace(normalized) || IsInternalGeneratedPath(normalized))
             return false;
 
-        return TryImportFromDiskRaw(normalized, typeof(AssetObject), cacheLoaded: false, out _);
+        return TryImportFromDiskRaw(normalized);
     }
 
-    private bool TryImportFromDiskRaw(
-        string relativePath,
-        Type requestedAssetType,
-        bool cacheLoaded,
-        out AssetObject? asset)
+    private bool TryImportFromDiskRaw(string relativePath)
     {
         try
         {
             string absSourcePath = GetAbsoluteSourcePath(relativePath);
             if (!File.Exists(absSourcePath))
-            {
-                asset = null;
                 return false;
-            }
 
-            IAssetImporter importer = ResolveImporterByPathOrAssetType(relativePath, requestedAssetType);
-            if (!requestedAssetType.IsAssignableFrom(importer.targetAssetType))
-            {
-                asset = null;
-                return false;
-            }
+            IAssetImporter importer = ResolveImporterByPathOrAssetType(relativePath, typeof(AssetObject));
 
             byte[] sourceBytes = File.ReadAllBytes(absSourcePath);
             string sourceHash = ComputeSha256Hex(sourceBytes);
@@ -619,15 +577,10 @@ public sealed class AssetLoader
             PersistMeta(relativePath, importer, imported, persistentId, importResult.dependencies);
             PersistArtifact(relativePath, importResult.artifactBytes);
 
-            if (cacheLoaded)
-                CacheLoaded(relativePath, imported, persistentId);
-
-            asset = imported;
             return true;
         }
         catch
         {
-            asset = null;
             return false;
         }
     }
@@ -850,7 +803,7 @@ public sealed class AssetLoader
 
             try
             {
-                _ = LoadInternal(entry.path, entry.type, AssetLoadMode.DiskCache | AssetLoadMode.DiskRaw);
+                _ = TryImportSourceToDisk(entry.path) && LoadByType(entry.path, entry.type);
             }
             catch
             {

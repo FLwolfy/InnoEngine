@@ -58,8 +58,10 @@ internal static class Program
             Log.Info("[AssetsDemo] Meta path exists: {0} ({1})", File.Exists(metaPath), metaPath);
             Log.Info("[AssetsDemo] Artifact path exists: {0} ({1})", File.Exists(artifactPath), artifactPath);
 
-            TextAsset loaded = AssetManager.Load<TextAsset>(relativePath)!;
-            AssetRef<TextAsset> assetRef = AssetManager.LoadRef<TextAsset>(relativePath);
+            bool loadedOk = AssetManager.Load<TextAsset>(relativePath);
+            AssetRef<TextAsset> assetRef = AssetManager.GetRef<TextAsset>(relativePath);
+            TextAsset loaded = AssetManager.Resolve(assetRef)!;
+            Log.Info("[AssetsDemo] Load result={0}", loadedOk);
             Log.Info("[AssetsDemo] Loaded content: {0}", loaded.content);
             Log.Info("[AssetsDemo] Identity: {0}", assetRef.identity.persistentId);
 
@@ -73,7 +75,7 @@ internal static class Program
 
             SetTextAssetContent(loaded, "updated-by-save");
             bool saved = AssetManager.Save(loaded);
-            TextAsset updated = AssetManager.Load<TextAsset>(relativePath)!;
+            TextAsset updated = AssetManager.Resolve(assetRef)!;
             Log.Info("[AssetsDemo] Save(existing)={0}, updated content={1}", saved, updated.content);
 
             TextAsset? resolvedAsset = AssetManager.Resolve(assetRef);

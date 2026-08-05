@@ -170,23 +170,10 @@ public static class AssetManager
     /// <summary>
     /// Imports the assets from disk for generating metadata and artifacts.
     /// </summary>
-    /// <remarks>
-    /// This process will automatically load the imported assets into the memory.
-    /// </remarks>
     public static bool Import(string relativePath)
     {
         EnsureInitialized();
-        return s_loader.Load<AssetObject>(relativePath, AssetLoadMode.DiskRaw) != null;
-    }
-
-    /// <summary>
-    /// Imports one source asset from disk as the requested asset type.
-    /// </summary>
-    public static bool Import<TAsset>(string relativePath)
-        where TAsset : AssetObject
-    {
-        EnsureInitialized();
-        return s_loader.Load<TAsset>(relativePath, AssetLoadMode.DiskRaw) != null;
+        return s_loader.Import(relativePath);
     }
 
     /// <summary>
@@ -207,25 +194,13 @@ public static class AssetManager
     #region Loading
 
     /// <summary>
-    /// Loads an asset from the allowed load sources.
+    /// Loads an asset from existing metadata and artifact files into memory.
     /// </summary>
-    public static TAsset? Load<TAsset>(string relativePath)
+    public static bool Load<TAsset>(string relativePath)
         where TAsset : AssetObject
     {
         EnsureInitialized();
-        var assetLoadMode = AssetLoadMode.MemoryCache | AssetLoadMode.DiskCache;
-        return s_loader.Load<TAsset>(relativePath, assetLoadMode);
-    }
-
-    /// <summary>
-    /// Loads an asset reference from the allowed load sources.
-    /// </summary>
-    public static AssetRef<TAsset> LoadRef<TAsset>(string relativePath)
-        where TAsset : AssetObject
-    {
-        EnsureInitialized();
-        var assetLoadMode = AssetLoadMode.MemoryCache | AssetLoadMode.DiskCache;
-        return s_loader.LoadRef<TAsset>(relativePath, assetLoadMode);
+        return s_loader.Load(relativePath, typeof(TAsset));
     }
 
     /// <summary>
@@ -235,7 +210,7 @@ public static class AssetManager
         where TAsset : AssetObject
     {
         EnsureInitialized();
-        return s_loader.Resolve(assetRef);
+        return s_loader.Resolve(assetRef.identity, typeof(TAsset)) as TAsset;
     }
 
     /// <summary>
@@ -244,7 +219,7 @@ public static class AssetManager
     public static AssetRef<TAsset> GetRef<TAsset>(string relativePath) where TAsset : AssetObject
     {
         EnsureInitialized();
-        return s_loader.GetRef<TAsset>(relativePath);
+        return new AssetRef<TAsset>(s_loader.GetIdentity(relativePath));
     }
 
     /// <summary>
@@ -253,7 +228,7 @@ public static class AssetManager
     public static AssetRef<TAsset> GetRef<TAsset>(Identity identity) where TAsset : AssetObject
     {
         EnsureInitialized();
-        return s_loader.GetRef<TAsset>(identity);
+        return identity.persistentId == Guid.Empty ? new AssetRef<TAsset>(default) : new AssetRef<TAsset>(identity);
     }
 
     /// <summary>
@@ -310,7 +285,7 @@ public static class AssetManager
         if (!isInitialized)
             return false;
 
-        return s_loader.Unload(assetRef);
+        return s_loader.Unload(assetRef.identity);
     }
 
     /// <summary>
