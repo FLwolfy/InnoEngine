@@ -10,5 +10,9 @@
     <ProjectReference Include="..\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Core.Storage\Inno.Core.Storage.csproj" PrivateAssets="compile" />
   </ItemGroup>
+  
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Core.Identity\Inno.Core.Identity.csproj" />
+  </ItemGroup>
 
 </Project>

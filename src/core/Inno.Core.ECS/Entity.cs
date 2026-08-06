@@ -1,13 +1,14 @@
 namespace Inno.Core.ECS;
 
+using Inno.Core.Identity;
+
 /// <summary>
-/// Represents an ECS entity handle in a world.
+/// Base ECS entity stored in a world.
 /// </summary>
-/// <param name="id">Unique entity id.</param>
-public sealed class Entity(int id)
+public abstract class Entity : IIdentityObject
 {
     /// <summary>
-    /// Gets the unique identifier of this entity.
+    /// Gets this entity's identity.
     /// </summary>
-    public int id { get; } = id;
+    public Identity identity => ((IIdentityObject)this).GetIdentity();
 }

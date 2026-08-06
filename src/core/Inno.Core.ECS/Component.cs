@@ -1,22 +1,24 @@
 namespace Inno.Core.ECS;
 
+using Inno.Core.Identity;
+
 /// <summary>
 /// Base class for ECS components stored in a <see cref="World"/>.
 /// </summary>
-public abstract class Component
+public abstract class Component : IIdentityObject
 {
     /// <summary>
     /// Gets the owning entity id assigned by the world runtime.
     /// </summary>
-    public int entityId { get; internal set; }
+    internal int entityId { get; set; }
 
     /// <summary>
-    /// Gets or sets whether this component is enabled for system processing.
+    /// Gets this component's identity.
     /// </summary>
-    public bool enabled { get; set; } = true;
+    public Identity identity => ((IIdentityObject)this).GetIdentity();
 
     /// <summary>
     /// Resets component state before the instance is removed from the world.
     /// </summary>
-    public virtual void Reset() { }
+    public abstract void Reset();
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Inno.Core.Identity;
 using Inno.Core.Reflection;
 using Inno.Core.Storage;
 
@@ -28,9 +29,9 @@ public sealed class World
     private readonly List<ComponentRemoveOp> m_pendingRemoveComponents = [];
 
     private readonly HashSet<int> m_pendingKilledEntities = [];
-    private readonly List<ISystem> m_systems = [];
+    private readonly List<System> m_systems = [];
     private readonly EntityArchetypeIndex m_archetypeIndex = new();
-    private int m_nextEntityId = 1;
+    private readonly IdentityRegistry m_identityRegistry = new();
     
     /// <summary>
     /// Initializes an empty world and all lookup keys.
@@ -48,21 +49,20 @@ public sealed class World
     }
 
     /// <summary>
-    /// Creates and registers a new entity.
+    /// Creates and registers a new entity instance of the requested entity type.
     /// </summary>
+    /// <typeparam name="TEntity">Entity type to create.</typeparam>
     /// <returns>The created entity.</returns>
-    public Entity CreateEntity()
+    public TEntity CreateEntity<TEntity>()
+        where TEntity : Entity, new()
     {
-        if (m_nextEntityId <= 0)
-        {
-            throw new InvalidOperationException("Entity id pool exhausted.");
-        }
-
-        Entity entity = new(m_nextEntityId++);
+        TEntity entity = new();
+        m_identityRegistry.Register(entity);
+        int entityId = GetRegisteredRuntimeId(entity);
         m_entities.Add(entity)
-            .Set(m_entityIdKey, entity.id)
+            .Set(m_entityIdKey, entityId)
             .Set(m_entityArchetypeIdKey, m_archetypeIndex.emptyArchetypeId);
-        m_archetypeIndex.RegisterEntity(entity.id);
+        m_archetypeIndex.RegisterEntity(entityId);
         return entity;
     }
 
@@ -74,20 +74,21 @@ public sealed class World
     public bool KillEntity(Entity entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        if (m_entities.First(m_entityIdKey, entity.id) is null)
+        if (!TryGetRegisteredRuntimeId(entity, out int entityId)
+            || m_entities.First(m_entityIdKey, entityId) is null)
         {
             return false;
         }
 
-        RemovePendingOpsForEntity(entity.id);
-        return m_pendingKilledEntities.Add(entity.id);
+        RemovePendingOpsForEntity(entityId);
+        return m_pendingKilledEntities.Add(entityId);
     }
 
     /// <summary>
-    /// Registers a system and keeps execution order deterministic by <see cref="ISystem.order"/>.
+    /// Registers a system and keeps execution order deterministic by system order.
     /// </summary>
     /// <param name="system">System instance to register.</param>
-    public void RegisterSystem(ISystem system)
+    public void RegisterSystem(System system)
     {
         ArgumentNullException.ThrowIfNull(system);
         m_systems.Add(system);
@@ -111,7 +112,7 @@ public sealed class World
     /// <typeparam name="TSystem">System type to remove.</typeparam>
     /// <returns><see langword="true"/> if removed; otherwise <see langword="false"/>.</returns>
     public bool UnregisterSystem<TSystem>()
-        where TSystem : class, ISystem
+        where TSystem : System
     {
         for (int i = 0; i < m_systems.Count; i++)
         {
@@ -126,16 +127,48 @@ public sealed class World
     }
 
     /// <summary>
-    /// Updates all systems for a frame.
+    /// Processes all systems for a fixed timestep.
     /// </summary>
-    /// <param name="deltaTime">Frame delta time in seconds.</param>
-    public void Update(float deltaTime)
+    /// <param name="fixedDeltaTime">Fixed timestep delta in seconds.</param>
+    public void FixedProcess(float fixedDeltaTime)
     {
         FlushPending();
 
         for (int i = 0; i < m_systems.Count; i++)
         {
-            m_systems[i].Update(this, deltaTime);
+            m_systems[i].FixedProcess(this, fixedDeltaTime);
+        }
+
+        FlushPending();
+    }
+
+    /// <summary>
+    /// Processes all systems for a frame.
+    /// </summary>
+    /// <param name="deltaTime">Frame delta time in seconds.</param>
+    public void Process(float deltaTime)
+    {
+        FlushPending();
+
+        for (int i = 0; i < m_systems.Count; i++)
+        {
+            m_systems[i].Process(this, deltaTime);
+        }
+
+        FlushPending();
+    }
+
+    /// <summary>
+    /// Processes all systems for the late frame stage.
+    /// </summary>
+    /// <param name="deltaTime">Frame delta time in seconds.</param>
+    public void LateProcess(float deltaTime)
+    {
+        FlushPending();
+
+        for (int i = 0; i < m_systems.Count; i++)
+        {
+            m_systems[i].LateProcess(this, deltaTime);
         }
 
         FlushPending();
@@ -151,12 +184,13 @@ public sealed class World
     {
         ArgumentNullException.ThrowIfNull(entity);
 
-        EnsureEntityExists(entity.id);
+        int entityId = GetRegisteredRuntimeId(entity);
+        EnsureEntityExists(entityId);
 
         TComponent component = new();
         int componentTypeId = GetComponentRuntimeTypeId(typeof(TComponent));
-        RemovePendingForEntityType(entity.id, componentTypeId);
-        m_pendingAddComponents.Add(new ComponentAddOp(entity.id, component, componentTypeId));
+        RemovePendingForEntityType(entityId, componentTypeId);
+        m_pendingAddComponents.Add(new ComponentAddOp(entityId, component, componentTypeId));
     }
 
     /// <summary>
@@ -169,14 +203,14 @@ public sealed class World
         where TComponent : Component
     {
         ArgumentNullException.ThrowIfNull(entity);
-        EnsureEntityExists(entity.id);
+        int entityId = GetRegisteredRuntimeId(entity);
+        EnsureEntityExists(entityId);
 
         int componentTypeId = GetComponentRuntimeTypeId(typeof(TComponent));
-        bool removedPendingAdd = RemovePendingAdd(entity.id, componentTypeId);
-        m_pendingRemoveComponents.Add(new ComponentRemoveOp(entity.id, componentTypeId));
-        return removedPendingAdd || m_components.First(m_componentEntityTypeKey, (entity.id, componentTypeId)) is not null;
+        bool removedPendingAdd = RemovePendingAdd(entityId, componentTypeId);
+        m_pendingRemoveComponents.Add(new ComponentRemoveOp(entityId, componentTypeId));
+        return removedPendingAdd || m_components.First(m_componentEntityTypeKey, (entityId, componentTypeId)) is not null;
     }
-
 
     /// <summary>
     /// Applies all deferred add/remove/destroy operations immediately.
@@ -198,6 +232,24 @@ public sealed class World
     public IReadOnlyList<TComponent> ViewComponents<TComponent>(int? entityId = null)
         where TComponent : Component
     {
+        if (ShouldUsePolymorphicComponentQuery(typeof(TComponent)))
+        {
+            IReadOnlyList<Component> components = entityId is int polymorphicTargetEntityId
+                ? m_components.Find(m_componentEntityKey, polymorphicTargetEntityId)
+                : m_components.All();
+
+            var polymorphicResult = new List<TComponent>(components.Count);
+            for (int i = 0; i < components.Count; i++)
+            {
+                if (components[i] is TComponent typed)
+                {
+                    polymorphicResult.Add(typed);
+                }
+            }
+
+            return polymorphicResult;
+        }
+
         int componentTypeId = GetComponentRuntimeTypeId(typeof(TComponent));
         if (entityId is int targetEntityId)
         {
@@ -233,6 +285,23 @@ public sealed class World
     public IEnumerable<TComponent> ViewComponentsFast<TComponent>(int? entityId = null)
         where TComponent : Component
     {
+        if (ShouldUsePolymorphicComponentQuery(typeof(TComponent)))
+        {
+            IEnumerable<Component> components = entityId is int polymorphicTargetEntityId
+                ? m_components.FindFast(m_componentEntityKey, polymorphicTargetEntityId)
+                : m_components.AllFast();
+
+            foreach (Component component in components)
+            {
+                if (component is TComponent typed)
+                {
+                    yield return typed;
+                }
+            }
+
+            yield break;
+        }
+
         int componentTypeId = GetComponentRuntimeTypeId(typeof(TComponent));
         if (entityId is int targetEntityId)
         {
@@ -352,6 +421,7 @@ public sealed class World
                 RemoveComponentInstance(existing);
             }
 
+            m_identityRegistry.Register(op.component);
             op.component.entityId = op.entityId;
             m_components.Add(op.component)
                 .Set(m_componentEntityKey, op.entityId)
@@ -423,6 +493,7 @@ public sealed class World
 
             m_archetypeIndex.UnregisterEntity(entityId);
             m_entities.Remove(entity);
+            m_identityRegistry.Unregister(entity);
         }
     }
 
@@ -430,6 +501,7 @@ public sealed class World
     {
         component.Reset();
         component.entityId = 0;
+        m_identityRegistry.Unregister(component);
         return m_components.Remove(component);
     }
 
@@ -504,6 +576,38 @@ public sealed class World
 
         throw new InvalidOperationException(
             $"Component type '{componentType.FullName}' is not loaded in TypeCache. Call TypeCacheManager.Initialize/Rebuild first.");
+    }
+
+    private static bool ShouldUsePolymorphicComponentQuery(Type componentType)
+        => componentType.IsAbstract || componentType.IsInterface;
+
+    private int GetRegisteredRuntimeId(IIdentityObject identityObject)
+    {
+        if (!TryGetRegisteredRuntimeId(identityObject, out int runtimeId))
+        {
+            throw new InvalidOperationException("Object is not registered in this world.");
+        }
+
+        return runtimeId;
+    }
+
+    private bool TryGetRegisteredRuntimeId(IIdentityObject identityObject, out int runtimeId)
+    {
+        runtimeId = 0;
+        int? candidate = identityObject.GetIdentity().runtimeId;
+        if (candidate is null)
+        {
+            return false;
+        }
+
+        if (!m_identityRegistry.TryGet(candidate.Value, out IIdentityObject? registered)
+            || !ReferenceEquals(registered, identityObject))
+        {
+            return false;
+        }
+
+        runtimeId = candidate.Value;
+        return true;
     }
 
     private static int[] ResolveComponentTypeIds(Type[] componentTypes)

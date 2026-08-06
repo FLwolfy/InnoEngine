@@ -6,6 +6,7 @@ using Inno.Core.ECS;
 using Inno.Core.Reflection;
 
 using Xunit;
+using EcsSystem = Inno.Core.ECS.System;
 
 namespace Inno.Core.ECS.Tests;
 
@@ -15,7 +16,7 @@ public sealed class WorldTests
     public void AddAndRemoveComponent_FlushPending_UpdatesViews()
     {
         var world = new World();
-        Entity entity = world.CreateEntity();
+        Entity entity = world.CreateEntity<TestEntity>();
 
         world.AddComponent<TestPositionComponent>(entity);
         Assert.Empty(world.ViewComponents<TestPositionComponent>());
@@ -32,7 +33,7 @@ public sealed class WorldTests
     public void AddComponent_ForUnknownEntity_Throws()
     {
         var world = new World();
-        var outside = new Entity(-1);
+        Entity outside = new World().CreateEntity<TestEntity>();
 
         Assert.Throws<InvalidOperationException>(() => world.AddComponent<TestPositionComponent>(outside));
     }
@@ -45,39 +46,50 @@ public sealed class WorldTests
     }
 
     [Fact]
+    public void CreateEntity_Generic_CreatesRequestedEntityType()
+    {
+        var world = new World();
+
+        TestEntity entity = world.CreateEntity<TestEntity>();
+
+        Assert.IsType<TestEntity>(entity);
+        Assert.True(Id(world, entity) > 0);
+        Assert.Contains(entity, world.ViewEntities());
+    }
+
+    [Fact]
     public void ViewComponents_WithEntityFilter_ReturnsOnlyRequestedEntity()
     {
         var world = new World();
-        Entity a = world.CreateEntity();
-        Entity b = world.CreateEntity();
+        Entity a = world.CreateEntity<TestEntity>();
+        Entity b = world.CreateEntity<TestEntity>();
 
         world.AddComponent<TestPositionComponent>(a);
         world.AddComponent<TestPositionComponent>(b);
         world.FlushPending();
 
-        IReadOnlyList<TestPositionComponent> aComponents = world.ViewComponents<TestPositionComponent>(a.id);
-        IReadOnlyList<TestPositionComponent> bComponents = world.ViewComponents<TestPositionComponent>(b.id);
+        IReadOnlyList<TestPositionComponent> aComponents = world.ViewComponents<TestPositionComponent>(Id(world, a));
+        IReadOnlyList<TestPositionComponent> bComponents = world.ViewComponents<TestPositionComponent>(Id(world, b));
 
         Assert.Single(aComponents);
         Assert.Single(bComponents);
-        Assert.NotEqual(aComponents[0].entityId, bComponents[0].entityId);
-        Assert.Equal(a.id, aComponents[0].entityId);
-        Assert.Equal(b.id, bComponents[0].entityId);
+        Assert.NotSame(aComponents[0], bComponents[0]);
+        Assert.NotEqual(aComponents[0].identity.runtimeId, bComponents[0].identity.runtimeId);
     }
 
     [Fact]
     public void ViewComponentsFast_MatchesSnapshotResults()
     {
         var world = new World();
-        Entity a = world.CreateEntity();
-        Entity b = world.CreateEntity();
+        Entity a = world.CreateEntity<TestEntity>();
+        Entity b = world.CreateEntity<TestEntity>();
 
         world.AddComponent<TestPositionComponent>(a);
         world.AddComponent<TestPositionComponent>(b);
         world.FlushPending();
 
-        IReadOnlyList<int> snapshot = [.. world.ViewComponents<TestPositionComponent>().Select(static c => c.entityId).OrderBy(static id => id)];
-        IReadOnlyList<int> fast = [.. world.ViewComponentsFast<TestPositionComponent>().Select(static c => c.entityId).OrderBy(static id => id)];
+        IReadOnlyList<int?> snapshot = [.. world.ViewComponents<TestPositionComponent>().Select(static c => c.identity.runtimeId).OrderBy(static id => id)];
+        IReadOnlyList<int?> fast = [.. world.ViewComponentsFast<TestPositionComponent>().Select(static c => c.identity.runtimeId).OrderBy(static id => id)];
 
         Assert.Equal(snapshot, fast);
     }
@@ -86,7 +98,7 @@ public sealed class WorldTests
     public void ViewComponents_WithUnknownEntityFilter_ReturnsEmpty()
     {
         var world = new World();
-        world.CreateEntity();
+        world.CreateEntity<TestEntity>();
 
         Assert.Empty(world.ViewComponents<TestPositionComponent>(-1));
     }
@@ -95,8 +107,8 @@ public sealed class WorldTests
     public void ViewComponents_Snapshot_IsStableAfterWorldMutation()
     {
         var world = new World();
-        Entity a = world.CreateEntity();
-        Entity b = world.CreateEntity();
+        Entity a = world.CreateEntity<TestEntity>();
+        Entity b = world.CreateEntity<TestEntity>();
 
         world.AddComponent<TestPositionComponent>(a);
         world.FlushPending();
@@ -106,16 +118,16 @@ public sealed class WorldTests
         world.FlushPending();
 
         Assert.Single(snapshot);
-        Assert.Equal(a.id, snapshot[0].entityId);
+        Assert.Same(snapshot[0], world.ViewComponents<TestPositionComponent>(Id(world, a))[0]);
     }
 
     [Fact]
     public void ViewEntities_ReturnsIntersectionOfAllTypes()
     {
         var world = new World();
-        Entity onlyPos = world.CreateEntity();
-        Entity onlyVel = world.CreateEntity();
-        Entity both = world.CreateEntity();
+        Entity onlyPos = world.CreateEntity<TestEntity>();
+        Entity onlyVel = world.CreateEntity<TestEntity>();
+        Entity both = world.CreateEntity<TestEntity>();
 
         world.AddComponent<TestPositionComponent>(onlyPos);
         world.AddComponent<TestVelocityComponent>(onlyVel);
@@ -127,16 +139,16 @@ public sealed class WorldTests
         IReadOnlyList<Entity> entities = world.ViewEntities(handle);
 
         Assert.Single(entities);
-        Assert.Equal(both.id, entities[0].id);
+        Assert.Equal(Id(world, both), Id(world, entities[0]));
     }
 
     [Fact]
     public void ViewEntitiesFast_ReturnsIntersectionOfAllTypes()
     {
         var world = new World();
-        Entity onlyPos = world.CreateEntity();
-        Entity bothA = world.CreateEntity();
-        Entity bothB = world.CreateEntity();
+        Entity onlyPos = world.CreateEntity<TestEntity>();
+        Entity bothA = world.CreateEntity<TestEntity>();
+        Entity bothB = world.CreateEntity<TestEntity>();
 
         world.AddComponent<TestPositionComponent>(onlyPos);
         world.AddComponent<TestPositionComponent>(bothA);
@@ -146,8 +158,8 @@ public sealed class WorldTests
         world.FlushPending();
 
         EntityViewHandle handle = world.CreateEntityViewHandle([typeof(TestPositionComponent), typeof(TestVelocityComponent)]);
-        IReadOnlyList<int> fast = [.. world.ViewEntitiesFast(handle).Select(static e => e.id).OrderBy(static id => id)];
-        IReadOnlyList<int> expected = new[] { bothA.id, bothB.id }.OrderBy(static id => id).ToArray();
+        IReadOnlyList<int> fast = [.. world.ViewEntitiesFast(handle).Select(e => Id(world, e)).OrderBy(static id => id)];
+        IReadOnlyList<int> expected = new[] { Id(world, bothA), Id(world, bothB) }.OrderBy(static id => id).ToArray();
 
         Assert.Equal(expected, fast);
     }
@@ -156,12 +168,12 @@ public sealed class WorldTests
     public void ViewEntities_WithNullHandle_ReturnsAllEntities()
     {
         var world = new World();
-        Entity a = world.CreateEntity();
-        Entity b = world.CreateEntity();
-        Entity c = world.CreateEntity();
+        Entity a = world.CreateEntity<TestEntity>();
+        Entity b = world.CreateEntity<TestEntity>();
+        Entity c = world.CreateEntity<TestEntity>();
 
-        IReadOnlyList<int> all = [.. world.ViewEntities().Select(static e => e.id).OrderBy(static id => id)];
-        IReadOnlyList<int> expected = new[] { a.id, b.id, c.id }.OrderBy(static id => id).ToArray();
+        IReadOnlyList<int> all = [.. world.ViewEntities().Select(e => Id(world, e)).OrderBy(static id => id)];
+        IReadOnlyList<int> expected = new[] { Id(world, a), Id(world, b), Id(world, c) }.OrderBy(static id => id).ToArray();
 
         Assert.Equal(expected, all);
     }
@@ -170,12 +182,12 @@ public sealed class WorldTests
     public void ViewEntitiesFast_WithNullHandle_ReturnsAllEntities()
     {
         var world = new World();
-        Entity a = world.CreateEntity();
-        Entity b = world.CreateEntity();
-        Entity c = world.CreateEntity();
+        Entity a = world.CreateEntity<TestEntity>();
+        Entity b = world.CreateEntity<TestEntity>();
+        Entity c = world.CreateEntity<TestEntity>();
 
-        IReadOnlyList<int> all = [.. world.ViewEntitiesFast().Select(static e => e.id).OrderBy(static id => id)];
-        IReadOnlyList<int> expected = new[] { a.id, b.id, c.id }.OrderBy(static id => id).ToArray();
+        IReadOnlyList<int> all = [.. world.ViewEntitiesFast().Select(e => Id(world, e)).OrderBy(static id => id)];
+        IReadOnlyList<int> expected = new[] { Id(world, a), Id(world, b), Id(world, c) }.OrderBy(static id => id).ToArray();
 
         Assert.Equal(expected, all);
     }
@@ -184,8 +196,8 @@ public sealed class WorldTests
     public void ViewEntities_Snapshot_IsStableAfterWorldMutation()
     {
         var world = new World();
-        Entity both = world.CreateEntity();
-        Entity bothLater = world.CreateEntity();
+        Entity both = world.CreateEntity<TestEntity>();
+        Entity bothLater = world.CreateEntity<TestEntity>();
         world.AddComponent<TestPositionComponent>(both);
         world.AddComponent<TestVelocityComponent>(both);
         world.FlushPending();
@@ -198,14 +210,14 @@ public sealed class WorldTests
         world.FlushPending();
 
         Assert.Single(snapshot);
-        Assert.Equal(both.id, snapshot[0].id);
+        Assert.Equal(Id(world, both), Id(world, snapshot[0]));
     }
 
     [Fact]
     public void ViewEntities_WithDuplicateTypes_DeduplicatesInput()
     {
         var world = new World();
-        Entity both = world.CreateEntity();
+        Entity both = world.CreateEntity<TestEntity>();
 
         world.AddComponent<TestPositionComponent>(both);
         world.AddComponent<TestVelocityComponent>(both);
@@ -216,7 +228,7 @@ public sealed class WorldTests
         IReadOnlyList<Entity> entities = world.ViewEntities(handle);
 
         Assert.Single(entities);
-        Assert.Equal(both.id, entities[0].id);
+        Assert.Equal(Id(world, both), Id(world, entities[0]));
     }
 
     [Fact]
@@ -249,9 +261,9 @@ public sealed class WorldTests
     public void ViewEntitiesFast_AreFailFast_WhenWorldMutatesDuringEnumeration()
     {
         var world = new World();
-        Entity a = world.CreateEntity();
-        Entity b = world.CreateEntity();
-        Entity c = world.CreateEntity();
+        Entity a = world.CreateEntity<TestEntity>();
+        Entity b = world.CreateEntity<TestEntity>();
+        Entity c = world.CreateEntity<TestEntity>();
 
         world.AddComponent<TestPositionComponent>(a);
         world.AddComponent<TestPositionComponent>(b);
@@ -271,9 +283,9 @@ public sealed class WorldTests
     public void EntityViewHandle_CanBeReused_ByViewEntitiesApis()
     {
         var world = new World();
-        Entity bothA = world.CreateEntity();
-        Entity bothB = world.CreateEntity();
-        Entity onlyPos = world.CreateEntity();
+        Entity bothA = world.CreateEntity<TestEntity>();
+        Entity bothB = world.CreateEntity<TestEntity>();
+        Entity onlyPos = world.CreateEntity<TestEntity>();
 
         world.AddComponent<TestPositionComponent>(bothA);
         world.AddComponent<TestVelocityComponent>(bothA);
@@ -285,9 +297,9 @@ public sealed class WorldTests
         EntityViewHandle handle = world.CreateEntityViewHandle([typeof(TestPositionComponent), typeof(TestVelocityComponent)]);
         Assert.True(handle.isValid);
 
-        IReadOnlyList<int> snapshot = [.. world.ViewEntities(handle).Select(static e => e.id).OrderBy(static id => id)];
-        IReadOnlyList<int> fast = [.. world.ViewEntitiesFast(handle).Select(static e => e.id).OrderBy(static id => id)];
-        IReadOnlyList<int> expected = new[] { bothA.id, bothB.id }.OrderBy(static id => id).ToArray();
+        IReadOnlyList<int> snapshot = [.. world.ViewEntities(handle).Select(e => Id(world, e)).OrderBy(static id => id)];
+        IReadOnlyList<int> fast = [.. world.ViewEntitiesFast(handle).Select(e => Id(world, e)).OrderBy(static id => id)];
+        IReadOnlyList<int> expected = new[] { Id(world, bothA), Id(world, bothB) }.OrderBy(static id => id).ToArray();
 
         Assert.Equal(expected, snapshot);
         Assert.Equal(expected, fast);
@@ -297,9 +309,9 @@ public sealed class WorldTests
     public void ViewEntities_RemainsStable_WhenUnrelatedComponentTypeChanges()
     {
         var world = new World();
-        Entity both = world.CreateEntity();
-        Entity onlyPos = world.CreateEntity();
-        Entity unrelated = world.CreateEntity();
+        Entity both = world.CreateEntity<TestEntity>();
+        Entity onlyPos = world.CreateEntity<TestEntity>();
+        Entity unrelated = world.CreateEntity<TestEntity>();
 
         world.AddComponent<TestPositionComponent>(both);
         world.AddComponent<TestVelocityComponent>(both);
@@ -316,15 +328,15 @@ public sealed class WorldTests
 
         Assert.Single(first);
         Assert.Single(second);
-        Assert.Equal(both.id, second[0].id);
+        Assert.Equal(Id(world, both), Id(world, second[0]));
     }
 
     [Fact]
     public void ViewEntities_ReflectsChanges_WhenRelatedComponentTypeChanges()
     {
         var world = new World();
-        Entity both = world.CreateEntity();
-        Entity later = world.CreateEntity();
+        Entity both = world.CreateEntity<TestEntity>();
+        Entity later = world.CreateEntity<TestEntity>();
 
         world.AddComponent<TestPositionComponent>(both);
         world.AddComponent<TestVelocityComponent>(both);
@@ -387,7 +399,7 @@ public sealed class WorldTests
     public void KillEntity_IsDeferred_AndRemovesComponentsOnFlush()
     {
         var world = new World();
-        Entity entity = world.CreateEntity();
+        Entity entity = world.CreateEntity<TestEntity>();
         world.AddComponent<TestPositionComponent>(entity);
         world.FlushPending();
 
@@ -404,7 +416,7 @@ public sealed class WorldTests
     public void KillEntity_WithUnknownEntity_ReturnsFalse()
     {
         var world = new World();
-        var outside = new Entity(-1);
+        Entity outside = new World().CreateEntity<TestEntity>();
 
         Assert.False(world.KillEntity(outside));
     }
@@ -420,7 +432,7 @@ public sealed class WorldTests
     public void RemoveComponent_WhenMissing_ReturnsFalse()
     {
         var world = new World();
-        Entity entity = world.CreateEntity();
+        Entity entity = world.CreateEntity<TestEntity>();
 
         Assert.False(world.RemoveComponent<TestPositionComponent>(entity));
     }
@@ -437,7 +449,7 @@ public sealed class WorldTests
     {
         TestPositionComponent.resetCount = 0;
         var world = new World();
-        Entity entity = world.CreateEntity();
+        Entity entity = world.CreateEntity<TestEntity>();
 
         world.AddComponent<TestPositionComponent>(entity);
         Assert.True(world.RemoveComponent<TestPositionComponent>(entity));
@@ -452,13 +464,13 @@ public sealed class WorldTests
     {
         TestPositionComponent.resetCount = 0;
         var world = new World();
-        Entity entity = world.CreateEntity();
+        Entity entity = world.CreateEntity<TestEntity>();
 
         world.AddComponent<TestPositionComponent>(entity);
         world.AddComponent<TestPositionComponent>(entity);
         world.FlushPending();
 
-        Assert.Single(world.ViewComponents<TestPositionComponent>(entity.id));
+        Assert.Single(world.ViewComponents<TestPositionComponent>(Id(world, entity)));
         Assert.Equal(1, TestPositionComponent.resetCount);
     }
 
@@ -467,7 +479,7 @@ public sealed class WorldTests
     {
         TestPositionComponent.resetCount = 0;
         var world = new World();
-        Entity entity = world.CreateEntity();
+        Entity entity = world.CreateEntity<TestEntity>();
 
         world.AddComponent<TestPositionComponent>(entity);
         Assert.True(world.KillEntity(entity));
@@ -487,7 +499,7 @@ public sealed class WorldTests
 
         world.RegisterSystem(late);
         world.RegisterSystem(early);
-        world.Update(0.5f);
+        world.Process(0.5f);
 
         Assert.Equal(["early", "late"], trace);
     }
@@ -500,9 +512,25 @@ public sealed class WorldTests
 
         world.RegisterSystem(new ZSameOrderSystem(trace));
         world.RegisterSystem(new ASameOrderSystem(trace));
-        world.Update(0.1f);
+        world.Process(0.1f);
 
         Assert.Equal(["A", "Z"], trace);
+    }
+
+    [Fact]
+    public void System_ProcessStages_AreDispatchedSeparately()
+    {
+        var world = new World();
+        var system = new StageTraceSystem();
+
+        world.RegisterSystem(system);
+        world.FixedProcess(0.02f);
+        world.Process(0.016f);
+        world.LateProcess(0.016f);
+
+        Assert.Equal(1, system.fixedProcessCount);
+        Assert.Equal(1, system.processCount);
+        Assert.Equal(1, system.lateProcessCount);
     }
 
     [Fact]
@@ -526,9 +554,9 @@ public sealed class WorldTests
     public void FastViews_AreFailFast_WhenWorldMutatesDuringEnumeration()
     {
         var world = new World();
-        Entity a = world.CreateEntity();
-        Entity b = world.CreateEntity();
-        Entity c = world.CreateEntity();
+        Entity a = world.CreateEntity<TestEntity>();
+        Entity b = world.CreateEntity<TestEntity>();
+        Entity c = world.CreateEntity<TestEntity>();
 
         world.AddComponent<TestPositionComponent>(a);
         world.AddComponent<TestPositionComponent>(b);
@@ -544,31 +572,31 @@ public sealed class WorldTests
     }
 
     [Fact]
-    public void GenericSystemBase_ForwardsUpdateToProcess()
+    public void System_Process_IsCalledByWorldProcess()
     {
         var world = new World();
         var system = new GenericForwardingSystem();
 
         world.RegisterSystem(system);
-        world.Update(0.25f);
+        world.Process(0.25f);
 
-        Assert.Equal(1, system.updateCount);
+        Assert.Equal(1, system.processCount);
         Assert.Equal(0.25f, system.lastDeltaTime);
     }
 
     [Fact]
-    public void Update_FlushesPendingBeforeAndAfterSystems()
+    public void Process_FlushesPendingBeforeAndAfterSystems()
     {
         var world = new World();
-        Entity entity = world.CreateEntity();
+        Entity entity = world.CreateEntity<TestEntity>();
         world.AddComponent<TestPositionComponent>(entity);
 
         var system = new FlushProbeSystem(entity);
         world.RegisterSystem(system);
-        world.Update(0.016f);
+        world.Process(0.016f);
 
         Assert.True(system.seenAtSystemStart);
-        Assert.Single(world.ViewComponents<TestVelocityComponent>(entity.id));
+        Assert.Single(world.ViewComponents<TestVelocityComponent>(Id(world, entity)));
     }
 
     private sealed class TestPositionComponent : Component
@@ -581,63 +609,89 @@ public sealed class WorldTests
         public static int resetCount;
     }
 
-    private sealed class TestVelocityComponent : Component;
-
-    private sealed class TestTagComponent : Component;
-
-    private sealed class LowOrderSystem(List<string> sink) : ISystem
+    private sealed class TestVelocityComponent : Component
     {
-        public int order => 1;
+        public override void Reset()
+        {
+        }
+    }
 
-        public void Update(World world, float deltaTime)
+    private sealed class TestTagComponent : Component
+    {
+        public override void Reset()
+        {
+        }
+    }
+
+    private static int Id(World world, Entity entity)
+        => entity.identity.runtimeId ?? throw new InvalidOperationException("Entity is not registered.");
+
+    private sealed class TestEntity : Entity;
+
+    private sealed class LowOrderSystem(List<string> sink) : EcsSystem
+    {
+        public override int order => 1;
+
+        public override void Process(World world, float deltaTime)
         {
             sink.Add("early");
         }
     }
 
-    private sealed class HighOrderSystem(List<string> sink) : ISystem
+    private sealed class HighOrderSystem(List<string> sink) : EcsSystem
     {
-        public int order => 10;
+        public override int order => 10;
 
-        public void Update(World world, float deltaTime)
+        public override void Process(World world, float deltaTime)
         {
             sink.Add("late");
         }
     }
 
-    private sealed class GenericForwardingSystem : System<TestPositionComponent>
+    private sealed class GenericForwardingSystem : EcsSystem
     {
-        public int updateCount;
+        public int processCount;
         public float lastDeltaTime;
 
-        protected override void Process(World world, float deltaTime)
+        public override void Process(World world, float deltaTime)
         {
-            updateCount++;
+            processCount++;
             lastDeltaTime = deltaTime;
         }
     }
 
-    private sealed class FlushProbeSystem(Entity entity) : ISystem
+    private sealed class FlushProbeSystem(Entity entity) : EcsSystem
     {
         public bool seenAtSystemStart;
-        public int order => 0;
+        public override int order => 0;
 
-        public void Update(World world, float deltaTime)
+        public override void Process(World world, float deltaTime)
         {
-            seenAtSystemStart = world.ViewComponents<TestPositionComponent>(entity.id).Count == 1;
+            seenAtSystemStart = world.ViewComponents<TestPositionComponent>(Id(world, entity)).Count == 1;
             world.AddComponent<TestVelocityComponent>(entity);
         }
     }
 
-    private sealed class ASameOrderSystem(List<string> sink) : ISystem
+    private sealed class StageTraceSystem : EcsSystem
     {
-        public int order => 5;
-        public void Update(World world, float deltaTime) => sink.Add("A");
+        public int fixedProcessCount;
+        public int processCount;
+        public int lateProcessCount;
+
+        public override void FixedProcess(World world, float fixedDeltaTime) => fixedProcessCount++;
+        public override void Process(World world, float deltaTime) => processCount++;
+        public override void LateProcess(World world, float deltaTime) => lateProcessCount++;
     }
 
-    private sealed class ZSameOrderSystem(List<string> sink) : ISystem
+    private sealed class ASameOrderSystem(List<string> sink) : EcsSystem
     {
-        public int order => 5;
-        public void Update(World world, float deltaTime) => sink.Add("Z");
+        public override int order => 5;
+        public override void Process(World world, float deltaTime) => sink.Add("A");
+    }
+
+    private sealed class ZSameOrderSystem(List<string> sink) : EcsSystem
+    {
+        public override int order => 5;
+        public override void Process(World world, float deltaTime) => sink.Add("Z");
     }
 }
