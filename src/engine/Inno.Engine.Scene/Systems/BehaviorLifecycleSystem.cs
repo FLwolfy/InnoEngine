@@ -7,21 +7,20 @@ using EcsSystem = Inno.Core.ECS.System;
 namespace Inno.Engine.Scene.Systems;
 
 /// <summary>
-/// Dispatches user-facing GameComponent lifecycle callbacks.
+/// Dispatches user-facing GameBehavior lifecycle callbacks.
 /// </summary>
-public sealed class GameComponentLifecycleSystem : EcsSystem
+public sealed class BehaviorLifecycleSystem : EcsSystem
 {
-    private readonly HashSet<GameComponent> m_tracked = [];
-    private readonly HashSet<GameComponent> m_seenThisStage = [];
-    private readonly Dictionary<GameComponent, bool> m_activeByComponent = new();
+    private readonly HashSet<GameBehavior> m_tracked = [];
+    private readonly HashSet<GameBehavior> m_seenThisStage = [];
 
     public override int order => 0;
 
     public override void FixedProcess(World world, float fixedDeltaTime)
     {
-        foreach (GameComponent component in Enumerate(world))
+        foreach (GameBehavior component in Enumerate(world))
         {
-            if (!PrepareForUpdate(world, component))
+            if (!PrepareForUpdate(component))
             {
                 continue;
             }
@@ -34,9 +33,9 @@ public sealed class GameComponentLifecycleSystem : EcsSystem
 
     public override void Process(World world, float deltaTime)
     {
-        foreach (GameComponent component in Enumerate(world))
+        foreach (GameBehavior component in Enumerate(world))
         {
-            if (!PrepareForUpdate(world, component))
+            if (!PrepareForUpdate(component))
             {
                 continue;
             }
@@ -49,9 +48,9 @@ public sealed class GameComponentLifecycleSystem : EcsSystem
 
     public override void LateProcess(World world, float deltaTime)
     {
-        foreach (GameComponent component in Enumerate(world))
+        foreach (GameBehavior component in Enumerate(world))
         {
-            if (!PrepareForUpdate(world, component))
+            if (!PrepareForUpdate(component))
             {
                 continue;
             }
@@ -62,28 +61,20 @@ public sealed class GameComponentLifecycleSystem : EcsSystem
         SweepDestroyed();
     }
 
-    private IEnumerable<GameComponent> Enumerate(World world)
+    private IEnumerable<GameBehavior> Enumerate(World world)
     {
         m_seenThisStage.Clear();
-        m_activeByComponent.Clear();
 
         foreach (Entity entity in world.ViewEntitiesFast())
         {
-            if (entity.identity.runtimeId is not int entityId)
+            int? activeEntityId = entity.identity.runtimeId;
+            if (activeEntityId is null)
             {
                 continue;
             }
 
-            bool activeInHierarchy = true;
-            IReadOnlyList<ActiveState> activeStates = world.ViewComponents<ActiveState>(entityId);
-            if (activeStates.Count != 0)
+            foreach (GameBehavior component in world.ViewComponents<GameBehavior>(activeEntityId.Value))
             {
-                activeInHierarchy = activeStates[0].activeInHierarchy;
-            }
-
-            foreach (GameComponent component in world.ViewComponents<GameComponent>(entityId))
-            {
-                m_activeByComponent[component] = activeInHierarchy;
                 m_seenThisStage.Add(component);
                 m_tracked.Add(component);
                 yield return component;
@@ -91,7 +82,7 @@ public sealed class GameComponentLifecycleSystem : EcsSystem
         }
     }
 
-    private bool PrepareForUpdate(World world, GameComponent component)
+    private bool PrepareForUpdate(GameBehavior component)
     {
         if (!component.lifecycleAwakeCalled)
         {
@@ -99,7 +90,7 @@ public sealed class GameComponentLifecycleSystem : EcsSystem
             component.lifecycleAwakeCalled = true;
         }
 
-        if (!IsRuntimeEnabled(world, component))
+        if (!IsRuntimeEnabled(component))
         {
             if (component.lifecycleWasEnabled)
             {
@@ -125,20 +116,20 @@ public sealed class GameComponentLifecycleSystem : EcsSystem
         return true;
     }
 
-    private bool IsRuntimeEnabled(World world, GameComponent component)
+    private static bool IsRuntimeEnabled(GameBehavior component)
     {
         if (!component.enabled)
         {
             return false;
         }
 
-        return !m_activeByComponent.TryGetValue(component, out bool activeInHierarchy) || activeInHierarchy;
+        return component.gameObject?.activeInHierarchy ?? false;
     }
 
     private void SweepDestroyed()
     {
-        List<GameComponent> destroyed = [];
-        foreach (GameComponent component in m_tracked)
+        List<GameBehavior> destroyed = [];
+        foreach (GameBehavior component in m_tracked)
         {
             if (!m_seenThisStage.Contains(component))
             {
@@ -148,7 +139,7 @@ public sealed class GameComponentLifecycleSystem : EcsSystem
 
         for (int i = 0; i < destroyed.Count; i++)
         {
-            GameComponent component = destroyed[i];
+            GameBehavior component = destroyed[i];
             if (component.lifecycleWasEnabled)
             {
                 component.OnDisable();

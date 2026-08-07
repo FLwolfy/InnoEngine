@@ -22,7 +22,6 @@ public sealed class AssetLoader
     internal const string C_ARTIFACT_POSTFIX = ".abin";
 
     private readonly Lock m_sync = new();
-    private readonly IdentityRegistry m_identityRegistry = new();
 
     private readonly ObjectPool<IAssetImporter> m_importers = new();
     private readonly PoolKey<int> m_importerTypeKey;
@@ -265,7 +264,7 @@ public sealed class AssetLoader
         {
             AssetObject[] loaded = m_loadedCache.All().ToArray();
             for (int i = 0; i < loaded.Length; i++)
-                m_identityRegistry.Unregister(loaded[i]);
+                IdentityManager.Unregister(loaded[i]);
 
             m_loadedCache.RemoveAll();
             m_importers.RemoveAll();
@@ -460,14 +459,13 @@ public sealed class AssetLoader
         }
 
         int runtimeId = identity.runtimeId ?? 0;
-        if (runtimeId > 0 &&
-            m_identityRegistry.TryGet(runtimeId, out IIdentityObject? runtimeObject) &&
-            runtimeObject is AssetObject runtimeAsset &&
+            if (runtimeId > 0 &&
+                IdentityManager.Get<AssetObject>(runtimeId) is AssetObject runtimeAsset &&
             requestedAssetType.IsAssignableFrom(runtimeAsset.GetType()))
-        {
-            asset = runtimeAsset;
-            return true;
-        }
+            {
+                asset = runtimeAsset;
+                return true;
+            }
 
         asset = null;
         return false;
@@ -681,7 +679,7 @@ public sealed class AssetLoader
                     RemoveFromCache(oldByGuid);
             }
 
-            m_identityRegistry.Register(asset, persistentId);
+            IdentityManager.Register(asset, persistentId);
             asset.SetSourceInfo(relativePath, asset.sourceHash);
             Identity identity = GetIdentity(asset);
             m_loadedCache.Add(asset)
@@ -693,7 +691,7 @@ public sealed class AssetLoader
     private void RemoveFromCache(AssetObject asset)
     {
         m_loadedCache.Remove(asset);
-        m_identityRegistry.Unregister(asset);
+        IdentityManager.Unregister(asset);
     }
 
     private bool TryGetLoadedAssetByPathNoLock(string normalizedPath, out AssetObject? loaded)
@@ -859,7 +857,7 @@ public sealed class AssetLoader
                 Guid persistentId = GetIdentity(loaded).persistentId;
                 string remapped = RemapPathPrefix(loaded.sourcePath, oldRelativePath, newRelativePath);
                 RemoveFromCache(loaded);
-                m_identityRegistry.Register(loaded, persistentId);
+                IdentityManager.Register(loaded, persistentId);
                 loaded.SetSourceInfo(remapped, loaded.sourceHash);
                 m_loadedCache.Add(loaded)
                     .Set(m_cachePathKey, remapped)

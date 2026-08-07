@@ -54,6 +54,7 @@ public sealed class GameScene : IIdentityObject
         m_world.AddComponent<ActiveState>(gameObject);
         m_world.AddComponent<Transform>(gameObject);
         m_world.FlushPending();
+        gameObject.BindDefaultComponents();
         gameObject.name = name;
         return gameObject;
     }
@@ -160,7 +161,6 @@ public sealed class GameScene : IIdentityObject
 
     private void RegisterDefaultSystems()
     {
-        m_world.RegisterSystem(new TransformSystem());
-        m_world.RegisterSystem(new GameComponentLifecycleSystem());
+        m_world.RegisterSystem(new BehaviorLifecycleSystem());
     }
 }

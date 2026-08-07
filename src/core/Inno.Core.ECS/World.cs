@@ -31,8 +31,6 @@ public sealed class World
     private readonly HashSet<int> m_pendingKilledEntities = [];
     private readonly List<System> m_systems = [];
     private readonly EntityArchetypeIndex m_archetypeIndex = new();
-    private readonly IdentityRegistry m_identityRegistry = new();
-    
     /// <summary>
     /// Initializes an empty world and all lookup keys.
     /// </summary>
@@ -57,7 +55,7 @@ public sealed class World
         where TEntity : Entity, new()
     {
         TEntity entity = new();
-        m_identityRegistry.Register(entity);
+        IdentityManager.Register(entity);
         int entityId = GetRegisteredRuntimeId(entity);
         m_entities.Add(entity)
             .Set(m_entityIdKey, entityId)
@@ -421,7 +419,7 @@ public sealed class World
                 RemoveComponentInstance(existing);
             }
 
-            m_identityRegistry.Register(op.component);
+            IdentityManager.Register(op.component);
             op.component.entityId = op.entityId;
             m_components.Add(op.component)
                 .Set(m_componentEntityKey, op.entityId)
@@ -493,7 +491,7 @@ public sealed class World
 
             m_archetypeIndex.UnregisterEntity(entityId);
             m_entities.Remove(entity);
-            m_identityRegistry.Unregister(entity);
+            IdentityManager.Unregister(entity);
         }
     }
 
@@ -501,7 +499,7 @@ public sealed class World
     {
         component.Reset();
         component.entityId = 0;
-        m_identityRegistry.Unregister(component);
+        IdentityManager.Unregister(component);
         return m_components.Remove(component);
     }
 
@@ -593,20 +591,19 @@ public sealed class World
 
     private bool TryGetRegisteredRuntimeId(IIdentityObject identityObject, out int runtimeId)
     {
-        runtimeId = 0;
-        int? candidate = identityObject.GetIdentity().runtimeId;
-        if (candidate is null)
+        Identity.Identity identity = identityObject.GetIdentity();
+        if (identity.runtimeId is null)
+        {
+            runtimeId = 0;
+            return false;
+        }
+
+        runtimeId = identity.runtimeId.Value;
+        if (!ReferenceEquals(IdentityManager.Get<IIdentityObject>(runtimeId), identityObject))
         {
             return false;
         }
 
-        if (!m_identityRegistry.TryGet(candidate.Value, out IIdentityObject? registered)
-            || !ReferenceEquals(registered, identityObject))
-        {
-            return false;
-        }
-
-        runtimeId = candidate.Value;
         return true;
     }
 

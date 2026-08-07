@@ -1,16 +1,21 @@
 using System;
 using System.Linq;
 
-using Inno.Engine.Runtime;
 using Inno.Engine.Scene;
+using Inno.Engine.Runtime;
 using Inno.Engine.Scene.Components;
 
 using Xunit;
 
 namespace Inno.Engine.Scene.Tests;
 
+[Collection(SceneTestsCollection.NAME)]
 public sealed class SceneFacadeTests : IDisposable
 {
+    public SceneFacadeTests(SceneTestsFixture _)
+    {
+    }
+
     public void Dispose()
     {
         SceneManager.UnloadActiveScene();
@@ -63,7 +68,7 @@ public sealed class SceneFacadeTests : IDisposable
         var scene = new GameScene("Test");
         GameObject parent = scene.CreateObject("Parent");
         GameObject child = scene.CreateObject("Child");
-        child.transform.SetParent(parent.transform);
+        child.GetComponent<Transform>().SetParent(parent.GetComponent<Transform>());
         scene.world.Process(0.016f);
 
         Assert.True(scene.DestroyObject(parent));
@@ -74,7 +79,7 @@ public sealed class SceneFacadeTests : IDisposable
     }
 
     [Fact]
-    public void GameComponentLifecycleSystem_DispatchesLifecycleCallbacks()
+    public void BehaviorLifecycleSystem_DispatchesLifecycleCallbacks()
     {
         var scene = new GameScene("Test");
         GameObject gameObject = scene.CreateObject("Actor");
@@ -126,7 +131,7 @@ public sealed class SceneFacadeTests : IDisposable
         Assert.False(SceneManager.hasActiveScene);
     }
 
-    private sealed class TestBehaviour : GameComponent
+    private sealed class TestBehaviour : GameBehavior
     {
         public int awakeCount;
         public int startCount;

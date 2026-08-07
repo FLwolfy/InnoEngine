@@ -47,12 +47,23 @@ public sealed class GameObject : Entity, IEquatable<GameObject>, IIdentityObject
     /// <summary>
     /// Gets whether this object is active after hierarchy rules are applied.
     /// </summary>
-    public bool activeInHierarchy => GetComponent<ActiveState>().activeInHierarchy;
+    public bool activeInHierarchy
+    {
+        get
+        {
+            if (!isRuntimeValid)
+            {
+                return false;
+            }
 
-    /// <summary>
-    /// Gets the required Transform component.
-    /// </summary>
-    public Transform transform => GetComponent<Transform>();
+            if (!TryGetComponent<ActiveState>(out ActiveState? state))
+            {
+                return false;
+            }
+
+            return IsActiveInHierarchy(state);
+        }
+    }
 
     /// <summary>
     /// Adds a component to this object and returns it.
@@ -65,7 +76,10 @@ public sealed class GameObject : Entity, IEquatable<GameObject>, IIdentityObject
         GameScene owner = EnsureAlive();
         owner.world.AddComponent<TComponent>(this);
         owner.world.FlushPending();
-        return GetComponent<TComponent>();
+
+        TComponent component = GetComponent<TComponent>();
+        BindComponent(component);
+        return component;
     }
 
     /// <summary>
@@ -95,7 +109,9 @@ public sealed class GameObject : Entity, IEquatable<GameObject>, IIdentityObject
         IReadOnlyList<TComponent> components = owner.world.ViewComponents<TComponent>(ownerId);
         if (components.Count != 0)
         {
-            return components[0];
+            TComponent component = components[0];
+            BindComponent(component);
+            return component;
         }
 
         throw new InvalidOperationException(
@@ -116,6 +132,7 @@ public sealed class GameObject : Entity, IEquatable<GameObject>, IIdentityObject
         if (components.Count != 0)
         {
             component = components[0];
+            BindComponent(component);
             return true;
         }
 
@@ -158,7 +175,7 @@ public sealed class GameObject : Entity, IEquatable<GameObject>, IIdentityObject
     {
         m_scene = scene ?? throw new ArgumentNullException(nameof(scene));
     }
-    
+
     private GameScene EnsureAlive()
     {
         GameScene owner = scene;
@@ -175,5 +192,68 @@ public sealed class GameObject : Entity, IEquatable<GameObject>, IIdentityObject
     {
         return identity.runtimeId
             ?? throw new InvalidOperationException("GameObject is not registered in a world.");
+    }
+
+    private void BindComponent(Component component)
+    {
+        if (component is GameBehavior behavior)
+        {
+            behavior.BindGameObject(this);
+        }
+
+        if (component is Transform transform)
+        {
+            transform.BindGameObject(this);
+        }
+    }
+
+    private bool IsActiveInHierarchy(ActiveState state)
+    {
+        if (!state.selfActive)
+        {
+            return false;
+        }
+
+        if (!TryGetComponent<Transform>(out Transform? transform))
+        {
+            return true;
+        }
+
+        return IsActiveInHierarchy(transform);
+    }
+
+    private bool IsActiveInHierarchy(Transform transform)
+    {
+        Transform? current = transform;
+        while (current is not null)
+        {
+            if (!current.TryGetSelfActiveState(out ActiveState? selfState))
+            {
+                return true;
+            }
+
+            if (!selfState.selfActive)
+            {
+                return false;
+            }
+
+            current = current.parent;
+            if (current is null || current.gameObject is null)
+            {
+                return true;
+            }
+        }
+
+        return true;
+    }
+
+    internal void BindDefaultComponents()
+    {
+        GameScene owner = scene;
+        int ownerId = GetRuntimeId();
+        foreach (Component component in owner.world.ViewComponents<Component>(ownerId))
+        {
+            BindComponent(component);
+        }
     }
 }

@@ -7,11 +7,18 @@ namespace Inno.Engine.Scene;
 /// <summary>
 /// Base class for user-facing scene behaviour components.
 /// </summary>
-public abstract class GameComponent : Component, IIdentityObject, ISerializable
+public abstract class GameBehavior : Component, IIdentityObject, ISerializable
 {
+    private GameObject? m_gameObject;
+
     internal bool lifecycleAwakeCalled;
     internal bool lifecycleStartCalled;
     internal bool lifecycleWasEnabled;
+
+    /// <summary>
+    /// Gets the owning game object.
+    /// </summary>
+    public GameObject? gameObject => m_gameObject;
 
     /// <summary>
     /// Gets or sets whether this component receives lifecycle updates.
@@ -85,5 +92,12 @@ public abstract class GameComponent : Component, IIdentityObject, ISerializable
         lifecycleStartCalled = false;
         lifecycleWasEnabled = false;
         enabled = true;
+
+        m_gameObject = null;
+    }
+
+    internal void BindGameObject(GameObject gameObject)
+    {
+        m_gameObject = gameObject;
     }
 }
