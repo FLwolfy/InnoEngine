@@ -96,8 +96,8 @@ public abstract class GameBehavior : Component, IIdentityObject, ISerializable
         m_gameObject = null;
     }
 
-    internal void BindGameObject(GameObject gameObject)
+    internal virtual void BindGameObject(GameObject go)
     {
-        m_gameObject = gameObject;
+        m_gameObject = go;
     }
 }

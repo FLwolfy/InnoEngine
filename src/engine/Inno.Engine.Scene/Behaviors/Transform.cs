@@ -83,11 +83,6 @@ public sealed class Transform : GameBehavior
     }
 
     /// <summary>
-    /// Gets the owning game object.
-    /// </summary>
-    public GameObject? gameObject => m_gameObject;
-
-    /// <summary>
     /// Gets the parent transform.
     /// </summary>
     public Transform? parent => m_parent;
@@ -146,18 +141,6 @@ public sealed class Transform : GameBehavior
     }
 
     /// <summary>
-    /// Binds this transform to a game object.
-    /// </summary>
-    internal void BindGameObject(GameObject gameObject)
-    {
-        m_gameObject = gameObject;
-        if (m_parent is not null && m_parentStableId == Guid.Empty)
-        {
-            m_parentStableId = m_parent.gameObject?.identity.persistentId ?? Guid.Empty;
-        }
-    }
-
-    /// <summary>
     /// Resets transform cache and hierarchy links.
     /// </summary>
     public override void Reset()
@@ -197,6 +180,26 @@ public sealed class Transform : GameBehavior
         }
 
         return false;
+    }
+    
+    internal override void BindGameObject(GameObject go)
+    {
+        base.BindGameObject(go);
+        if (m_parent is not null && m_parentStableId == Guid.Empty)
+        {
+            m_parentStableId = m_parent.gameObject?.identity.persistentId ?? Guid.Empty;
+        }
+    }
+    
+    internal bool TryGetSelfActiveState(out ActiveState? state)
+    {
+        if (m_gameObject is null)
+        {
+            state = null;
+            return false;
+        }
+
+        return m_gameObject.TryGetComponent(out state);
     }
 
     private void SetLocalPosition(Vector3 value)
@@ -376,17 +379,6 @@ public sealed class Transform : GameBehavior
     private void RemoveChild(Transform child)
     {
         m_children.Remove(child);
-    }
-
-    internal bool TryGetSelfActiveState(out ActiveState? state)
-    {
-        if (m_gameObject is null)
-        {
-            state = null;
-            return false;
-        }
-
-        return m_gameObject.TryGetComponent(out state);
     }
 
     private static float SafeDiv(float numerator, float denominator)

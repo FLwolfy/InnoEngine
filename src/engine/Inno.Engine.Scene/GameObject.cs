@@ -17,7 +17,7 @@ public sealed class GameObject : Entity, IEquatable<GameObject>, IIdentityObject
     /// <summary>
     /// Gets whether this object is still alive in its scene world.
     /// </summary>
-    public bool isRuntimeValid => identity.runtimeId is int runtimeId
+    public bool isRuntimeValid => identity.runtimeId is { } runtimeId
         && m_scene is not null
         && m_scene.ContainsEntityId(runtimeId);
 
@@ -61,7 +61,7 @@ public sealed class GameObject : Entity, IEquatable<GameObject>, IIdentityObject
                 return false;
             }
 
-            return IsActiveInHierarchy(state);
+            return IsActiveInHierarchy(state!);
         }
     }
 
@@ -159,7 +159,7 @@ public sealed class GameObject : Entity, IEquatable<GameObject>, IIdentityObject
 
     /// <inheritdoc />
     public override int GetHashCode()
-        => HashCode.Combine(m_scene, identity.persistentId);
+        => HashCode.Combine(identity.persistentId);
 
     /// <summary>
     /// Compares two game objects by reference identity.
@@ -219,7 +219,7 @@ public sealed class GameObject : Entity, IEquatable<GameObject>, IIdentityObject
             return true;
         }
 
-        return IsActiveInHierarchy(transform);
+        return IsActiveInHierarchy(transform!);
     }
 
     private bool IsActiveInHierarchy(Transform transform)
