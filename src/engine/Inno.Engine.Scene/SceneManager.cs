@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Inno.Engine.Scene;
 
@@ -7,6 +8,7 @@ namespace Inno.Engine.Scene;
 /// </summary>
 public static class SceneManager
 {
+    private static readonly List<GameScene> s_loadedScenes = [];
     private static GameScene? s_activeScene;
 
     /// <summary>
@@ -20,6 +22,11 @@ public static class SceneManager
     public static bool hasActiveScene => s_activeScene is not null;
 
     /// <summary>
+    /// Gets loaded scenes in hierarchy display order.
+    /// </summary>
+    public static IReadOnlyList<GameScene> loadedScenes => s_loadedScenes.ToArray();
+
+    /// <summary>
     /// Loads a scene as the active scene, unloading the previous scene first.
     /// </summary>
     /// <param name="scene">Scene to load.</param>
@@ -27,14 +34,35 @@ public static class SceneManager
     {
         ArgumentNullException.ThrowIfNull(scene);
 
-        if (ReferenceEquals(s_activeScene, scene))
+        if (ReferenceEquals(s_activeScene, scene) && s_loadedScenes.Count == 1)
         {
             return;
         }
 
-        UnloadActiveScene();
+        UnloadAllScenes();
+        s_loadedScenes.Add(scene);
         s_activeScene = scene;
         scene.Load();
+    }
+
+    /// <summary>
+    /// Loads a scene alongside the currently loaded scenes.
+    /// </summary>
+    /// <param name="scene">Scene to load additively.</param>
+    /// <param name="makeActive">Whether the loaded scene becomes active.</param>
+    public static void LoadSceneAdditive(GameScene scene, bool makeActive = true)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        if (!s_loadedScenes.Contains(scene))
+        {
+            s_loadedScenes.Add(scene);
+            scene.Load();
+        }
+
+        if (makeActive || s_activeScene is null)
+        {
+            s_activeScene = scene;
+        }
     }
 
     /// <summary>
@@ -50,44 +78,117 @@ public static class SceneManager
     }
 
     /// <summary>
+    /// Creates and loads a scene alongside the currently loaded scenes.
+    /// </summary>
+    /// <param name="name">Scene display name.</param>
+    /// <param name="makeActive">Whether the new scene becomes active.</param>
+    /// <returns>The newly loaded scene.</returns>
+    public static GameScene LoadNewSceneAdditive(string name = "Untitled Scene", bool makeActive = true)
+    {
+        var scene = new GameScene(name);
+        LoadSceneAdditive(scene, makeActive);
+        return scene;
+    }
+
+    /// <summary>
+    /// Makes a loaded scene active without changing the loaded scene set.
+    /// </summary>
+    /// <param name="scene">Loaded scene to activate.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the scene is not loaded.</exception>
+    public static void SetActiveScene(GameScene scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        if (!s_loadedScenes.Contains(scene))
+        {
+            throw new InvalidOperationException("Only a loaded scene can become active.");
+        }
+
+        s_activeScene = scene;
+    }
+
+    /// <summary>
     /// Unloads the active scene if one is loaded.
     /// </summary>
     public static void UnloadActiveScene()
     {
-        GameScene? scene = s_activeScene;
-        if (scene is null)
+        if (s_activeScene is GameScene scene)
         {
-            return;
+            UnloadScene(scene);
         }
-
-        s_activeScene = null;
-        scene.Unload();
     }
 
     /// <summary>
-    /// Advances the active scene fixed update.
+    /// Unloads a specific scene and selects another loaded scene when necessary.
+    /// </summary>
+    /// <param name="scene">Scene to unload.</param>
+    /// <returns><see langword="true"/> when the scene was loaded.</returns>
+    public static bool UnloadScene(GameScene scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        if (!s_loadedScenes.Remove(scene))
+        {
+            return false;
+        }
+
+        scene.Unload();
+        if (ReferenceEquals(s_activeScene, scene))
+        {
+            s_activeScene = s_loadedScenes.Count > 0 ? s_loadedScenes[^1] : null;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Unloads every loaded scene.
+    /// </summary>
+    public static void UnloadAllScenes()
+    {
+        for (int i = s_loadedScenes.Count - 1; i >= 0; i--)
+        {
+            s_loadedScenes[i].Unload();
+        }
+
+        s_loadedScenes.Clear();
+        s_activeScene = null;
+    }
+
+    /// <summary>
+    /// Advances every loaded scene fixed update.
     /// </summary>
     /// <param name="fixedDeltaTime">Fixed timestep in seconds.</param>
     public static void FixedUpdate(float fixedDeltaTime)
     {
-        s_activeScene?.FixedUpdate(fixedDeltaTime);
+        GameScene[] scenes = [.. s_loadedScenes];
+        for (int i = 0; i < scenes.Length; i++)
+        {
+            scenes[i].FixedUpdate(fixedDeltaTime);
+        }
     }
 
     /// <summary>
-    /// Advances the active scene update.
+    /// Advances every loaded scene update.
     /// </summary>
     /// <param name="deltaTime">Frame delta time in seconds.</param>
     public static void Update(float deltaTime)
     {
-        s_activeScene?.Update(deltaTime);
+        GameScene[] scenes = [.. s_loadedScenes];
+        for (int i = 0; i < scenes.Length; i++)
+        {
+            scenes[i].Update(deltaTime);
+        }
     }
 
     /// <summary>
-    /// Advances the active scene late update.
+    /// Advances every loaded scene late update.
     /// </summary>
     /// <param name="deltaTime">Frame delta time in seconds.</param>
     public static void LateUpdate(float deltaTime)
     {
-        s_activeScene?.LateUpdate(deltaTime);
+        GameScene[] scenes = [.. s_loadedScenes];
+        for (int i = 0; i < scenes.Length; i++)
+        {
+            scenes[i].LateUpdate(deltaTime);
+        }
     }
 }

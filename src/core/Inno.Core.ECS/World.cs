@@ -180,15 +180,53 @@ public sealed class World
     public void AddComponent<TComponent>(Entity entity)
         where TComponent : Component, new()
     {
+        _ = AddComponent(entity, typeof(TComponent));
+    }
+
+    /// <summary>
+    /// Schedules creation of a component using its runtime type.
+    /// </summary>
+    /// <param name="entity">Target entity.</param>
+    /// <param name="componentType">Concrete component type to create.</param>
+    /// <returns>The component instance scheduled for attachment.</returns>
+    public Component AddComponent(Entity entity, Type componentType)
+    {
         ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(componentType);
+
+        if (!typeof(Component).IsAssignableFrom(componentType) || componentType.IsAbstract)
+        {
+            throw new ArgumentException(
+                $"Component type '{componentType.FullName}' must be a concrete {nameof(Component)} type.",
+                nameof(componentType));
+        }
 
         int entityId = GetRegisteredRuntimeId(entity);
         EnsureEntityExists(entityId);
 
-        TComponent component = new();
-        int componentTypeId = GetComponentRuntimeTypeId(typeof(TComponent));
+        Component component;
+        try
+        {
+            component = (Component)(Activator.CreateInstance(componentType, nonPublic: true)
+                ?? throw new InvalidOperationException($"Could not create component type '{componentType.FullName}'."));
+        }
+        catch (Exception exception) when (exception is not ArgumentException)
+        {
+            throw new InvalidOperationException(
+                $"Component type '{componentType.FullName}' must provide a parameterless constructor.",
+                exception);
+        }
+
+        int componentTypeId = GetComponentRuntimeTypeId(componentType);
+        if (m_components.First(m_componentEntityTypeKey, (entityId, componentTypeId)) is not null)
+        {
+            throw new InvalidOperationException(
+                $"Entity '{entityId}' already has component '{componentType.FullName}'.");
+        }
+
         RemovePendingForEntityType(entityId, componentTypeId);
         m_pendingAddComponents.Add(new ComponentAddOp(entityId, component, componentTypeId));
+        return component;
     }
 
     /// <summary>
@@ -200,11 +238,31 @@ public sealed class World
     public bool RemoveComponent<TComponent>(Entity entity)
         where TComponent : Component
     {
+        return RemoveComponent(entity, typeof(TComponent));
+    }
+
+    /// <summary>
+    /// Schedules removal of a component using its runtime type.
+    /// </summary>
+    /// <param name="entity">Target entity.</param>
+    /// <param name="componentType">Component type to remove.</param>
+    /// <returns><see langword="true"/> if an existing or pending component was found.</returns>
+    public bool RemoveComponent(Entity entity, Type componentType)
+    {
         ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(componentType);
+
+        if (!typeof(Component).IsAssignableFrom(componentType))
+        {
+            throw new ArgumentException(
+                $"Component type '{componentType.FullName}' must derive from {nameof(Component)}.",
+                nameof(componentType));
+        }
+
         int entityId = GetRegisteredRuntimeId(entity);
         EnsureEntityExists(entityId);
 
-        int componentTypeId = GetComponentRuntimeTypeId(typeof(TComponent));
+        int componentTypeId = GetComponentRuntimeTypeId(componentType);
         bool removedPendingAdd = RemovePendingAdd(entityId, componentTypeId);
         m_pendingRemoveComponents.Add(new ComponentRemoveOp(entityId, componentTypeId));
         return removedPendingAdd || m_components.First(m_componentEntityTypeKey, (entityId, componentTypeId)) is not null;

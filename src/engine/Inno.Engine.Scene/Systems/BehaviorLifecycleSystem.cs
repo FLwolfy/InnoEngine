@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 
 using Inno.Core.ECS;
-using Inno.Engine.Scene.Components;
 using EcsSystem = Inno.Core.ECS.System;
 
 namespace Inno.Engine.Scene.Systems;

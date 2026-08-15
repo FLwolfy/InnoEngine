@@ -22,12 +22,12 @@ public sealed class Transform : GameBehavior
     private Quaternion m_localToWorldRotation = Quaternion.identity;
     private Vector3 m_worldScale = Vector3.ONE;
 
-    private GameObject? m_gameObject;
     private Guid m_parentStableId = Guid.Empty;
 
     /// <summary>
     /// Gets or sets local position.
     /// </summary>
+    [SerializableProperty]
     public Vector3 localPosition
     {
         get => m_localPosition;
@@ -37,6 +37,7 @@ public sealed class Transform : GameBehavior
     /// <summary>
     /// Gets or sets local rotation.
     /// </summary>
+    [SerializableProperty]
     public Quaternion localRotation
     {
         get => m_localRotation;
@@ -46,6 +47,7 @@ public sealed class Transform : GameBehavior
     /// <summary>
     /// Gets or sets local scale.
     /// </summary>
+    [SerializableProperty]
     public Vector3 localScale
     {
         get => m_localScale;
@@ -55,7 +57,6 @@ public sealed class Transform : GameBehavior
     /// <summary>
     /// Gets the resolved world position.
     /// </summary>
-    [SerializableProperty]
     public Vector3 worldPosition
     {
         get => m_worldPosition;
@@ -65,7 +66,6 @@ public sealed class Transform : GameBehavior
     /// <summary>
     /// Gets the resolved world rotation.
     /// </summary>
-    [SerializableProperty]
     public Quaternion worldRotation
     {
         get => m_localToWorldRotation;
@@ -75,7 +75,6 @@ public sealed class Transform : GameBehavior
     /// <summary>
     /// Gets the resolved world scale.
     /// </summary>
-    [SerializableProperty]
     public Vector3 worldScale
     {
         get => m_worldScale;
@@ -86,6 +85,28 @@ public sealed class Transform : GameBehavior
     /// Gets the parent transform.
     /// </summary>
     public Transform? parent => m_parent;
+
+    /// <summary>
+    /// Gets child transforms in explicit sibling order.
+    /// </summary>
+    public IReadOnlyList<Transform> children => m_children;
+
+    /// <summary>
+    /// Gets this transform's index among siblings or scene roots.
+    /// </summary>
+    public int siblingIndex
+    {
+        get
+        {
+            if (m_parent is not null)
+            {
+                return m_parent.m_children.IndexOf(this);
+            }
+
+            GameObject? owner = gameObject;
+            return owner is null ? -1 : owner.scene.GetRootSiblingIndex(owner);
+        }
+    }
 
     /// <summary>
     /// Gets the parent stable id for persistence.
@@ -122,13 +143,20 @@ public sealed class Transform : GameBehavior
             throw new InvalidOperationException("Parent transform is not bound to a game object.");
         }
 
+        GameObject? owner = gameObject;
+        if (parent is not null && owner is not null &&
+            !ReferenceEquals(parent.gameObject!.scene, owner.scene))
+        {
+            throw new InvalidOperationException("Transforms from different scenes cannot share a hierarchy.");
+        }
+
         if (ReferenceEquals(m_parent, parent))
         {
             return;
         }
 
-        DetachFromParent(preserveWorld: true);
-
+        Transform? previousParent = m_parent;
+        m_parent?.RemoveChild(this);
         m_parent = parent;
         m_parentStableId = parent?.gameObject?.identity.persistentId ?? Guid.Empty;
 
@@ -137,7 +165,43 @@ public sealed class Transform : GameBehavior
             m_parent.AddChild(this);
         }
 
+        NotifySceneParentChanged(previousParent, m_parent);
+
         ApplyWorld(currentWorldPosition, currentWorldRotation, currentWorldScale);
+    }
+
+    /// <summary>
+    /// Moves this transform within its current sibling collection.
+    /// </summary>
+    /// <param name="siblingIndex">Requested zero-based sibling index.</param>
+    public void SetSiblingIndex(int siblingIndex)
+    {
+        if (m_parent is null)
+        {
+            GameObject? owner = gameObject;
+            if (owner is null)
+            {
+                throw new InvalidOperationException("Transform is not bound to a game object.");
+            }
+
+            owner.scene.SetRootSiblingIndex(owner, siblingIndex);
+            return;
+        }
+
+        int currentIndex = m_parent.m_children.IndexOf(this);
+        if (currentIndex < 0)
+        {
+            throw new InvalidOperationException("Transform is missing from its parent child collection.");
+        }
+
+        int clampedIndex = Math.Clamp(siblingIndex, 0, m_parent.m_children.Count - 1);
+        if (currentIndex == clampedIndex)
+        {
+            return;
+        }
+
+        m_parent.m_children.RemoveAt(currentIndex);
+        m_parent.m_children.Insert(clampedIndex, this);
     }
 
     /// <summary>
@@ -160,10 +224,10 @@ public sealed class Transform : GameBehavior
         m_localToWorldRotation = Quaternion.identity;
         m_worldScale = Vector3.ONE;
 
-        m_gameObject = null;
         m_parentStableId = Guid.Empty;
         m_parent = null;
         m_children.Clear();
+        base.Reset();
     }
 
     private bool IsDescendantOf(Transform ancestor)
@@ -193,13 +257,14 @@ public sealed class Transform : GameBehavior
     
     internal bool TryGetSelfActiveState(out ActiveState? state)
     {
-        if (m_gameObject is null)
+        GameObject? owner = gameObject;
+        if (owner is null)
         {
             state = null;
             return false;
         }
 
-        return m_gameObject.TryGetComponent(out state);
+        return owner.TryGetComponent(out state);
     }
 
     private void SetLocalPosition(Vector3 value)
@@ -343,9 +408,11 @@ public sealed class Transform : GameBehavior
         Vector3 detachedWorldPosition = m_worldPosition;
         Quaternion detachedWorldRotation = m_localToWorldRotation;
         Vector3 detachedWorldScale = m_worldScale;
+        Transform previousParent = m_parent;
         m_parent.RemoveChild(this);
         m_parent = null;
         m_parentStableId = Guid.Empty;
+        NotifySceneParentChanged(previousParent, null);
 
         if (preserveWorld)
         {
@@ -364,9 +431,11 @@ public sealed class Transform : GameBehavior
         Quaternion unparentWorldRotation = m_localToWorldRotation;
         Vector3 unparentWorldScale = m_worldScale;
 
+        Transform previousParent = m_parent;
         m_parent.RemoveChild(this);
         m_parent = null;
         m_parentStableId = Guid.Empty;
+        NotifySceneParentChanged(previousParent, null);
 
         m_localPosition = unparentWorldPosition;
         m_localRotation = unparentWorldRotation.normalized;
@@ -379,6 +448,17 @@ public sealed class Transform : GameBehavior
     private void RemoveChild(Transform child)
     {
         m_children.Remove(child);
+    }
+
+    private void NotifySceneParentChanged(Transform? previousParent, Transform? currentParent)
+    {
+        GameObject? owner = gameObject;
+        if (owner is null)
+        {
+            return;
+        }
+
+        owner.scene.OnTransformParentChanged(this, previousParent, currentParent);
     }
 
     private static float SafeDiv(float numerator, float denominator)

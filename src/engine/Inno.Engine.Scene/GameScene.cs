@@ -14,6 +14,7 @@ namespace Inno.Engine.Scene;
 public sealed class GameScene : IIdentityObject
 {
     private readonly World m_world = new();
+    private readonly List<GameObject> m_rootObjects = [];
     private bool m_isLoaded;
 
     /// <summary>
@@ -56,6 +57,7 @@ public sealed class GameScene : IIdentityObject
         m_world.FlushPending();
         gameObject.BindDefaultComponents();
         gameObject.name = name;
+        m_rootObjects.Add(gameObject);
         return gameObject;
     }
 
@@ -75,6 +77,7 @@ public sealed class GameScene : IIdentityObject
 
         bool killed = m_world.KillEntity(gameObject);
         m_world.FlushPending();
+        m_rootObjects.Remove(gameObject);
         return killed;
     }
 
@@ -91,6 +94,16 @@ public sealed class GameScene : IIdentityObject
                 yield return gameObject;
             }
         }
+    }
+
+    /// <summary>
+    /// Gets root objects in their explicit hierarchy order.
+    /// </summary>
+    /// <returns>A snapshot detached from subsequent hierarchy mutations.</returns>
+    public IReadOnlyList<GameObject> GetRootObjects()
+    {
+        PruneInvalidRoots();
+        return m_rootObjects.ToArray();
     }
 
     /// <summary>
@@ -159,8 +172,65 @@ public sealed class GameScene : IIdentityObject
         return false;
     }
 
+    internal int GetRootSiblingIndex(GameObject gameObject)
+    {
+        return m_rootObjects.IndexOf(gameObject);
+    }
+
+    internal void SetRootSiblingIndex(GameObject gameObject, int siblingIndex)
+    {
+        int currentIndex = m_rootObjects.IndexOf(gameObject);
+        if (currentIndex < 0)
+        {
+            throw new InvalidOperationException("Only root objects have a root sibling index.");
+        }
+
+        int clampedIndex = Math.Clamp(siblingIndex, 0, m_rootObjects.Count - 1);
+        if (currentIndex == clampedIndex)
+        {
+            return;
+        }
+
+        m_rootObjects.RemoveAt(currentIndex);
+        m_rootObjects.Insert(clampedIndex, gameObject);
+    }
+
+    internal void OnTransformParentChanged(
+        Transform transform,
+        Transform? previousParent,
+        Transform? currentParent)
+    {
+        GameObject? gameObject = transform.gameObject;
+        if (gameObject is null)
+        {
+            return;
+        }
+
+        if (previousParent is null)
+        {
+            m_rootObjects.Remove(gameObject);
+        }
+
+        if (currentParent is null && !m_rootObjects.Contains(gameObject))
+        {
+            m_rootObjects.Add(gameObject);
+        }
+    }
+
     private void RegisterDefaultSystems()
     {
         m_world.RegisterSystem(new BehaviorLifecycleSystem());
+    }
+
+    private void PruneInvalidRoots()
+    {
+        for (int i = m_rootObjects.Count - 1; i >= 0; i--)
+        {
+            GameObject gameObject = m_rootObjects[i];
+            if (!gameObject.isRuntimeValid || gameObject.GetComponent<Transform>().parent is not null)
+            {
+                m_rootObjects.RemoveAt(i);
+            }
+        }
     }
 }

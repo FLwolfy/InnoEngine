@@ -7,5 +7,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" />
+    <ProjectReference Include="..\..\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" />
   </ItemGroup>
 </Project>

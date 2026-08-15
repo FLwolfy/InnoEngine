@@ -150,6 +150,46 @@ public sealed class AssetLoader
     }
 
     /// <summary>
+    /// Tries to resolve the concrete asset type recorded for a source path without loading the asset.
+    /// </summary>
+    /// <param name="relativePath">Source path relative to the asset root.</param>
+    /// <param name="assetType">Resolved asset type when metadata is available.</param>
+    /// <returns><see langword="true"/> when a concrete asset type was resolved.</returns>
+    public bool TryGetAssetType(string relativePath, out Type? assetType)
+    {
+        string normalized = NormalizeRelativePath(relativePath);
+        lock (m_sync)
+        {
+            AssetObject? loaded = m_loadedCache.First(m_cachePathKey, normalized);
+            if (loaded is not null)
+            {
+                assetType = loaded.GetType();
+                return true;
+            }
+        }
+
+        try
+        {
+            string metaPath = GetMetaPath(normalized);
+            if (!File.Exists(metaPath))
+            {
+                assetType = null;
+                return false;
+            }
+
+            AssetMeta meta = DeserializeMeta(metaPath);
+            IAssetImporter importer = ResolveImporterByPathOrAssetType(normalized, typeof(AssetObject));
+            assetType = ResolveAssetRuntimeType(meta, importer.targetAssetType);
+            return assetType is not null && typeof(AssetObject).IsAssignableFrom(assetType);
+        }
+        catch
+        {
+            assetType = null;
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Returns currently loaded relative paths.
     /// </summary>
     public IReadOnlyList<string> GetLoadedPaths()

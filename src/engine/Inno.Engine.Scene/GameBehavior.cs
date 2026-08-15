@@ -23,7 +23,7 @@ public abstract class GameBehavior : Component, IIdentityObject, ISerializable
     /// <summary>
     /// Gets or sets whether this component receives lifecycle updates.
     /// </summary>
-    [SerializableProperty]
+    [SerializableProperty(PropertyVisibility.Hide)]
     public bool enabled { get; set; } = true;
 
     /// <summary>

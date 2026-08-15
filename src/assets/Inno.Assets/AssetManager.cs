@@ -232,6 +232,21 @@ public static class AssetManager
     }
 
     /// <summary>
+    /// Tries to resolve an asset's concrete metadata type without loading the asset.
+    /// </summary>
+    /// <param name="relativePath">Source path relative to the asset root.</param>
+    /// <param name="assetType">Resolved concrete asset type when available.</param>
+    /// <returns><see langword="true"/> when the asset type was resolved.</returns>
+    public static bool TryGetAssetType(string relativePath, out Type? assetType)
+    {
+        EnsureInitialized();
+        lock (SYNC)
+        {
+            return s_loader.TryGetAssetType(relativePath, out assetType);
+        }
+    }
+
+    /// <summary>
     /// Returns currently loaded relative paths.
     /// </summary>
     public static IReadOnlyList<string> GetLoadedPaths()

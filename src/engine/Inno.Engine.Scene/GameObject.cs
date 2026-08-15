@@ -73,11 +73,21 @@ public sealed class GameObject : Entity, IEquatable<GameObject>, IIdentityObject
     public TComponent AddComponent<TComponent>()
         where TComponent : Component, new()
     {
-        GameScene owner = EnsureAlive();
-        owner.world.AddComponent<TComponent>(this);
-        owner.world.FlushPending();
+        return (TComponent)AddComponent(typeof(TComponent));
+    }
 
-        TComponent component = GetComponent<TComponent>();
+    /// <summary>
+    /// Adds a component using its runtime type.
+    /// </summary>
+    /// <param name="componentType">Concrete component type to add.</param>
+    /// <returns>The attached component.</returns>
+    public Component AddComponent(Type componentType)
+    {
+        ArgumentNullException.ThrowIfNull(componentType);
+
+        GameScene owner = EnsureAlive();
+        Component component = owner.world.AddComponent(this, componentType);
+        owner.world.FlushPending();
         BindComponent(component);
         return component;
     }
@@ -90,10 +100,44 @@ public sealed class GameObject : Entity, IEquatable<GameObject>, IIdentityObject
     public bool RemoveComponent<TComponent>()
         where TComponent : Component
     {
+        return RemoveComponent(typeof(TComponent));
+    }
+
+    /// <summary>
+    /// Removes a component using its runtime type.
+    /// </summary>
+    /// <param name="componentType">Component type to remove.</param>
+    /// <returns><see langword="true"/> when the component was found and removed.</returns>
+    public bool RemoveComponent(Type componentType)
+    {
+        ArgumentNullException.ThrowIfNull(componentType);
+
+        if (IsRequiredComponentType(componentType))
+        {
+            throw new InvalidOperationException(
+                $"Component '{componentType.FullName}' is required by {nameof(GameObject)} and cannot be removed.");
+        }
+
         GameScene owner = EnsureAlive();
-        bool removed = owner.world.RemoveComponent<TComponent>(this);
+        bool removed = owner.world.RemoveComponent(this, componentType);
         owner.world.FlushPending();
         return removed;
+    }
+
+    /// <summary>
+    /// Gets a stable snapshot of every component attached to this object.
+    /// </summary>
+    /// <returns>Components in attachment order.</returns>
+    public IReadOnlyList<Component> GetComponents()
+    {
+        GameScene owner = EnsureAlive();
+        IReadOnlyList<Component> components = owner.world.ViewComponents<Component>(GetRuntimeId());
+        for (int i = 0; i < components.Count; i++)
+        {
+            BindComponent(components[i]);
+        }
+
+        return components;
     }
 
     /// <summary>
@@ -200,11 +244,13 @@ public sealed class GameObject : Entity, IEquatable<GameObject>, IIdentityObject
         {
             behavior.BindGameObject(this);
         }
+    }
 
-        if (component is Transform transform)
-        {
-            transform.BindGameObject(this);
-        }
+    private static bool IsRequiredComponentType(Type componentType)
+    {
+        return componentType == typeof(Name)
+            || componentType == typeof(ActiveState)
+            || componentType == typeof(Transform);
     }
 
     private bool IsActiveInHierarchy(ActiveState state)
@@ -232,7 +278,7 @@ public sealed class GameObject : Entity, IEquatable<GameObject>, IIdentityObject
                 return true;
             }
 
-            if (!selfState.selfActive)
+            if (selfState is null || !selfState.selfActive)
             {
                 return false;
             }

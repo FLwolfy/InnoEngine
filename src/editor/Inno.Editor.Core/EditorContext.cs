@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
+
 using Inno.Core.Logging;
+using Inno.Engine.Scene;
 
 namespace Inno.Editor.Core;
 
@@ -7,6 +11,8 @@ namespace Inno.Editor.Core;
 /// </summary>
 public sealed class EditorContext
 {
+    private GameScene? m_ownedScene;
+
     /// <summary>
     /// Gets the shared selection state.
     /// </summary>
@@ -16,6 +22,17 @@ public sealed class EditorContext
     /// Gets the in-memory log buffer backing the log panel.
     /// </summary>
     public EditorLogBuffer logs { get; } = new();
+
+    /// <summary>
+    /// Gets the active scene being edited.
+    /// </summary>
+    public GameScene scene => SceneManager.activeScene
+        ?? throw new InvalidOperationException("The editor does not have an active scene.");
+
+    /// <summary>
+    /// Gets all scenes currently available to editor panels.
+    /// </summary>
+    public IReadOnlyList<GameScene> scenes => SceneManager.loadedScenes;
 
     /// <summary>
     /// Gets or sets the latest frame delta in seconds.
@@ -33,6 +50,10 @@ public sealed class EditorContext
     public void Attach()
     {
         LogManager.RegisterSink(logs);
+        if (!SceneManager.hasActiveScene)
+        {
+            m_ownedScene = SceneManager.LoadNewScene();
+        }
     }
 
     /// <summary>
@@ -40,6 +61,13 @@ public sealed class EditorContext
     /// </summary>
     public void Detach()
     {
+        selection.Clear();
+        if (m_ownedScene is not null)
+        {
+            _ = SceneManager.UnloadScene(m_ownedScene);
+        }
+
+        m_ownedScene = null;
         LogManager.UnregisterSink(logs);
     }
 }

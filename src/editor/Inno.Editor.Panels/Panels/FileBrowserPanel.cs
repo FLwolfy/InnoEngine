@@ -30,10 +30,11 @@ public sealed class FileBrowserPanel : EditorPanel
     private const float C_GRID_SCALE_MIN = 1f;
     private const float C_GRID_SCALE_MAX = 10f;
     private const int C_SEARCH_BUFFER_SIZE = 256;
+    private const string C_ASSET_PAYLOAD = "INNO_ASSET";
 
-    private static readonly Vector4 S_BG = new(0.165f, 0.165f, 0.165f, 1f);
-    private static readonly Vector4 S_BG_ROW = new(0.185f, 0.185f, 0.185f, 1f);
-    private static readonly Vector4 S_BG_ROW_ALT = new(0.215f, 0.215f, 0.215f, 1f);
+    private static readonly Vector4 S_BG = EditorPalette.collectionHeader;
+    private static readonly Vector4 S_BG_ROW = EditorPalette.collectionRow;
+    private static readonly Vector4 S_BG_ROW_ALT = EditorPalette.collectionRowAlternate;
     private static readonly Vector4 S_BG_FIELD = new(0.235f, 0.22f, 0.27f, 1f);
     private static readonly Vector4 S_BORDER = new(0.31f, 0.30f, 0.35f, 1f);
     private static readonly Vector4 S_BORDER_SOFT = new(0.24f, 0.24f, 0.27f, 1f);
@@ -220,27 +221,31 @@ public sealed class FileBrowserPanel : EditorPanel
         if (ShouldOpenTreeEntry(relativePath, isRoot, isDirectory))
             ImGuiWidget.SetNextTreeNodeOpen(true);
 
-        bool open = ImGuiWidget.TreeNode(
+        TreeNodeResult result = ImGuiWidget.TreeNode(
             nodeId,
             () => ImGuiWidget.IconText(icon, label, isCurrentDirectory),
-            selected,
-            isLeaf
-        );
+            new TreeNodeOptions
+            {
+                selected = selected,
+                isLeaf = isLeaf
+            });
 
-        bool itemClicked = NativeImGui.IsItemClicked();
-        bool itemDoubleClicked = NativeImGui.IsItemHovered() && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
+        if (!isRoot && AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry treeEntry))
+        {
+            DrawAssetDragSource(treeEntry);
+        }
 
-        if (itemClicked || itemDoubleClicked)
+        if (result.isClicked || result.isDoubleClicked)
         {
             context.selection.SetSelectedPath(relativePath);
         }
 
-        if (isDirectory && itemDoubleClicked)
+        if (isDirectory && result.isDoubleClicked)
         {
             NavigateTo(context, relativePath, relativePath);
         }
 
-        if (open)
+        if (result.isOpen)
         {
             for (int i = 0; i < sorted.Count; i++)
             {
@@ -510,6 +515,12 @@ public sealed class FileBrowserPanel : EditorPanel
     private static void DrawHeaderRow()
     {
         NativeImGui.TableNextRow();
+        NativeImGui.TableSetBgColor(
+            ImGuiTableBgTarget.RowBg0,
+            NativeImGui.ColorConvertFloat4ToU32(EditorPalette.collectionHeader));
+        NativeImGui.TableSetBgColor(
+            ImGuiTableBgTarget.RowBg1,
+            NativeImGui.ColorConvertFloat4ToU32(EditorPalette.collectionHeader));
         _ = NativeImGui.TableSetColumnIndex(0);
         NativeImGui.TextUnformatted("Name");
         _ = NativeImGui.TableSetColumnIndex(1);
@@ -534,6 +545,8 @@ public sealed class FileBrowserPanel : EditorPanel
             context.selection.SetSelectedPath(entry.relativePath);
             RequestRevealTreePath(entry.relativePath);
         }
+
+        DrawAssetDragSource(entry);
 
         bool itemHovered = NativeImGui.IsItemHovered();
         NativeImGui.SameLine(iconTextPos.X - NativeImGui.GetWindowPos().X, 0f);
@@ -586,11 +599,26 @@ public sealed class FileBrowserPanel : EditorPanel
             RequestRevealTreePath(entry.relativePath);
         }
 
+        DrawAssetDragSource(entry);
+
         if (entry.isDirectory && NativeImGui.IsItemHovered() && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
             OpenEntryFromList(context, entry);
 
         DrawGridItemVisual(icon, name, selected, m_gridScale);
         NativeImGui.PopID();
+    }
+
+    private static void DrawAssetDragSource(AssetFileEntry entry)
+    {
+        if (entry.isDirectory)
+        {
+            return;
+        }
+
+        _ = ImGuiWidget.DragDropSource<Guid>(
+            C_ASSET_PAYLOAD,
+            () => AssetManager.GetRef<Inno.Assets.Core.AssetObject>(entry.relativePath).identity.persistentId,
+            () => NativeImGui.TextUnformatted(Path.GetFileName(entry.relativePath)));
     }
 
     private static unsafe void DrawGridItemVisual(string icon, string name, bool selected, float scale)

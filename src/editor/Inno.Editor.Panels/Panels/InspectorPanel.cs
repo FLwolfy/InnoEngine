@@ -1,13 +1,16 @@
-using Inno.Assets;
-using Inno.Assets.File;
+using System;
+using System.Numerics;
+
+using Inno.Core.Logging;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
+using Inno.Editor.Inspection;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panels;
 
 /// <summary>
-/// Shows metadata for the current selected asset entry.
+/// Draws the registered inspector for the current editor selection.
 /// </summary>
 public sealed class InspectorPanel : EditorPanel
 {
@@ -15,41 +18,33 @@ public sealed class InspectorPanel : EditorPanel
     /// Creates the panel.
     /// </summary>
     public InspectorPanel()
-        : base("asset.inspector", "Inspector")
+        : base("editor.inspector", "Inspector")
     {
     }
 
     /// <inheritdoc />
     public override void OnRender(EditorContext context)
     {
-        string? selectedPath = context.selection.selectedPath;
-        if (string.IsNullOrWhiteSpace(selectedPath))
+        object? target = context.selection.selectedTarget;
+        if (target is null)
         {
-            ImGuiWidget.Hint("Select an item from Asset Tree or Assets panel.");
+            ImGuiWidget.Hint("Select an asset or scene object.");
             return;
         }
 
-        if (!AssetManager.TryGetFileSystemEntry(selectedPath, out AssetFileEntry entry))
+        try
         {
-            NativeImGui.TextColored(new System.Numerics.Vector4(1f, 0.35f, 0.35f, 1f), "Selected entry no longer exists.");
-            return;
+            if (!InspectorDrawerRegistry.Draw(context, target))
+            {
+                ImGuiWidget.Hint($"No inspector drawer is registered for {target.GetType().Name}.");
+            }
         }
-
-        NativeImGui.TextUnformatted("Path");
-        NativeImGui.Separator();
-        NativeImGui.TextUnformatted(entry.relativePath);
-
-        NativeImGui.Spacing();
-        NativeImGui.TextUnformatted("Type");
-        NativeImGui.Separator();
-        NativeImGui.TextUnformatted(entry.isDirectory ? "Directory" : "File");
-
-        if (!entry.isDirectory)
+        catch (Exception exception)
         {
-            NativeImGui.Spacing();
-            NativeImGui.TextUnformatted("Extension");
-            NativeImGui.Separator();
-            NativeImGui.TextUnformatted(string.IsNullOrEmpty(entry.extension) ? "<none>" : entry.extension);
+            NativeImGui.TextColored(
+                new Vector4(1f, 0.35f, 0.35f, 1f),
+                $"Inspector failed: {exception.Message}");
+            Log.Error("Inspector failed for target '{0}': {1}", target.GetType().FullName ?? target.GetType().Name, exception);
         }
     }
 }

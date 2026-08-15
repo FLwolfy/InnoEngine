@@ -3,19 +3,17 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Inno.Editor.Core\Inno.Editor.Core.csproj" />
     <ProjectReference Include="..\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" />
-    <ProjectReference Include="..\Inno.Editor.Inspection\Inno.Editor.Inspection.csproj" />
-    <ProjectReference Include="..\..\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" />
-    <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" />
-    <ProjectReference Include="..\..\assets\Inno.Assets.File\Inno.Assets.File.csproj" />
-    <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Mathematics\Inno.Core.Mathematics.csproj" />
     <ProjectReference Include="..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />
     <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
     <ProjectReference Include="..\..\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" />
+    <ProjectReference Include="..\..\assets\Inno.Assets.Core\Inno.Assets.Core.csproj" />
+    <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" />
+    <ProjectReference Include="..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" />
   </ItemGroup>
 </Project>

@@ -14,8 +14,9 @@ public static class EditorDefaultPanels
     {
         return
         [
-            new FileBrowserPanel(),
+            new HierarchyPanel(),
             new InspectorPanel(),
+            new FileBrowserPanel(),
             new LogPanel(),
             new StatsPanel()
         ];
