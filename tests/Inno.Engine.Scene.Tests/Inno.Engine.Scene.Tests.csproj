@@ -8,7 +8,14 @@
     <InnoAssemblyGroup>Game</InnoAssemblyGroup>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\assets\Inno.Assets\Inno.Assets.csproj" />
+    <ProjectReference Include="..\..\src\assets\Inno.Assets.Core\Inno.Assets.Core.csproj" />
+    <ProjectReference Include="..\..\src\assets\Inno.Assets.Loader\Inno.Assets.Loader.csproj" />
+    <ProjectReference Include="..\..\src\assets\Inno.Assets.Types\Inno.Assets.Types.csproj" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
     <ProjectReference Include="..\..\src\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" />
+    <ProjectReference Include="..\..\src\engine\Inno.Engine.Scene.Assets\Inno.Engine.Scene.Assets.csproj" />
     <ProjectReference Include="..\..\src\engine\Inno.Engine.Runtime\Inno.Engine.Runtime.csproj" />
   </ItemGroup>
   <ItemGroup>

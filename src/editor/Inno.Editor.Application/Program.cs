@@ -1,5 +1,7 @@
 using System;
 
+using Inno.Core.Reflection;
+
 namespace Inno.Editor.Application;
 
 internal static class Program

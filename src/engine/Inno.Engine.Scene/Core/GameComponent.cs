@@ -27,6 +27,13 @@ public abstract class GameComponent : EngineObject, ISerializable
     /// <exception cref="InvalidOperationException">Thrown when the component is detached or destroyed.</exception>
     public Transform transform => gameObject.transform;
 
+    /// <summary>
+    /// Restores this component to its default state when it is added or explicitly reset.
+    /// </summary>
+    protected virtual void Reset()
+    {
+    }
+
     internal GameObject? ownerOrNull => m_gameObject;
 
     internal void Attach(GameObject owner)
@@ -42,4 +49,6 @@ public abstract class GameComponent : EngineObject, ISerializable
         m_gameObject = null;
         MarkDestroyed();
     }
+
+    internal void DispatchReset() => Reset();
 }

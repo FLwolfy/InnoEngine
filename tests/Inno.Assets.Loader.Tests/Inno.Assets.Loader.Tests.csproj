@@ -8,7 +8,6 @@
     <InnoAssemblyGroup>Game</InnoAssemblyGroup>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\assets\Inno.Assets.Importers\Inno.Assets.Importers.csproj" />
     <ProjectReference Include="..\..\src\assets\Inno.Assets.Loader\Inno.Assets.Loader.csproj" />
     <ProjectReference Include="..\..\src\assets\Inno.Assets.Types\Inno.Assets.Types.csproj" />
     <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />

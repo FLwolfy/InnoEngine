@@ -28,9 +28,6 @@ public sealed class SceneSerializationTests : IDisposable
     [Fact]
     public void SceneRoundtrip_PreservesHierarchyOrderStateAndDirectReferences()
     {
-        Assert.Contains(
-            TypeCache.GetTypesWithAttribute<SerializationExtensionAttribute>(),
-            static type => type.Name == "GameSceneConverter");
         var source = new GameScene("Roundtrip");
         GameObject root = source.CreateObject("Root");
         GameObject child = source.CreateObject("Child");
@@ -50,6 +47,9 @@ public sealed class SceneSerializationTests : IDisposable
         Guid rootId = root.identity.persistentId;
         Guid childId = child.identity.persistentId;
         byte[] bytes = SerializationManager.Serialize(source);
+        Assert.Contains(
+            TypeCache.GetTypesWithAttribute<SerializationExtensionAttribute>(),
+            static type => type.Name == "GameSceneConverter");
         SceneManager.LoadScene(source);
         Assert.True(SceneManager.UnloadScene(source));
 
@@ -187,7 +187,7 @@ internal sealed class ReferenceComponent : GameComponent
     [SerializableProperty] public ReferenceComponent? targetComponent { get; set; }
     public int resetCount { get; private set; }
 
-    private void Reset()
+    protected override void Reset()
     {
         resetCount++;
     }

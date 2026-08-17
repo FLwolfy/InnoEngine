@@ -19,6 +19,7 @@ public sealed class SceneTestsFixture : IDisposable
     public SceneTestsFixture()
     {
         IdentityManager.Initialize();
+        TypeCacheManager.LoadAssembly("Inno.Engine.Scene.Assets");
         TypeCacheManager.Initialize();
         SerializationManager.Initialize();
     }

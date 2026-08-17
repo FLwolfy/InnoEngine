@@ -7,7 +7,6 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using Inno.Assets.Core;
-using Inno.Assets.Importers;
 using Inno.Assets.Loader;
 using Inno.Assets.Types;
 using Inno.Core.Identity;
@@ -22,7 +21,6 @@ public sealed class AssetLoaderTests : IDisposable
 {
     public AssetLoaderTests()
     {
-        _ = typeof(BuiltInAssetImporterPackage).Assembly;
         _ = typeof(PrivateConstructorAssetImporter);
         IdentityManager.Initialize();
         TypeCacheManager.Initialize();

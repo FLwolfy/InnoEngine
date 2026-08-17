@@ -122,6 +122,29 @@ public static class TypeCacheManager
     }
 
     /// <summary>
+    /// Loads an assembly by name and refreshes the type catalog when it is already initialized.
+    /// </summary>
+    /// <param name="assemblyName">The simple or display name of the assembly to load.</param>
+    /// <returns>The loaded assembly.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="assemblyName"/> is empty.</exception>
+    public static Assembly LoadAssembly(string assemblyName)
+    {
+        if (string.IsNullOrWhiteSpace(assemblyName))
+            throw new ArgumentException("Assembly name is required.", nameof(assemblyName));
+
+        Assembly? assembly = AppDomain.CurrentDomain.GetAssemblies()
+            .Where(static candidate => !candidate.IsDynamic)
+            .FirstOrDefault(candidate =>
+                string.Equals(candidate.GetName().Name, assemblyName, StringComparison.Ordinal));
+        assembly ??= Assembly.Load(new AssemblyName(assemblyName));
+
+        if (isInitialized)
+            Rebuild(s_currentAssemblyNameFilter);
+
+        return assembly;
+    }
+
+    /// <summary>
     /// Probes assembly names from a directory without loading them into the app domain.
     /// </summary>
     public static IReadOnlyList<string> DiscoverAssemblyNames(string directoryPath, string searchPattern = "*.dll")

@@ -7,8 +7,8 @@ using System.Threading.Tasks;
 
 using Inno.Assets.Core;
 using Inno.Assets.File;
-using Inno.Assets.Importers;
 using Inno.Assets.Loader;
+using Inno.Assets.Serialization;
 using Inno.Core.Identity;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
@@ -64,7 +64,6 @@ public static class AssetManager
         lock (S_LIFECYCLE_LOCK)
         {
             ShutdownLocked();
-            _ = typeof(BuiltInAssetImporterPackage).Assembly;
             assetRoot = Path.GetFullPath(options.assetRoot);
             artifactRoot = Path.GetFullPath(options.artifactRoot);
             AssetLoader loader = new(assetRoot, artifactRoot);
@@ -77,6 +76,7 @@ public static class AssetManager
             s_loader = loader;
             s_fileSystem = fileSystem;
             isInitialized = true;
+            AssetSerializationServices.SetReferenceResolver(ResolveSerializedReference);
             try
             {
                 loader.Rescan();
@@ -360,6 +360,7 @@ public static class AssetManager
 
     private static void ShutdownLocked()
     {
+        AssetSerializationServices.SetReferenceResolver(null);
         if (s_fileSystem is not null)
         {
             s_fileSystem.ChangedBatch -= OnSourceChanges;

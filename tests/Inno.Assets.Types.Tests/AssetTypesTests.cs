@@ -15,11 +15,9 @@ public sealed class AssetTypesTests
     }
 
     [Fact]
-    public void TextureAsset_Ctor_AssignsValues()
+    public void BinaryAsset_Ctor_AssignsValues()
     {
-        var asset = new TextureAsset(10, 20, 4, "png");
-        Assert.Equal(10, asset.width);
-        Assert.Equal(20, asset.height);
-        Assert.Equal("png", asset.encoding);
+        var asset = new BinaryAsset(10);
+        Assert.Equal(10, asset.byteLength);
     }
 }

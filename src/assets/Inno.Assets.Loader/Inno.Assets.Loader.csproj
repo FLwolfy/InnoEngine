@@ -19,6 +19,7 @@
     <ProjectReference Include="..\..\core\Inno.Core.Identity\Inno.Core.Identity.csproj" />
     <ProjectReference Include="..\Inno.Assets.Core\Inno.Assets.Core.csproj" />
     <ProjectReference Include="..\Inno.Assets.File\Inno.Assets.File.csproj" />
+    <ProjectReference Include="..\Inno.Assets.Types\Inno.Assets.Types.csproj" />
   </ItemGroup>
 
 </Project>

@@ -102,6 +102,23 @@ public sealed class SceneFacadeTests : IDisposable
     }
 
     [Fact]
+    public void ResetComponent_UsesVirtualDispatchAndExplicitBaseCall()
+    {
+        var scene = new GameScene("Test");
+        GameObject gameObject = scene.CreateObject("Actor");
+
+        DerivedResetComponent component = gameObject.AddComponent<DerivedResetComponent>();
+
+        Assert.Equal(1, component.baseResetCount);
+        Assert.Equal(1, component.derivedResetCount);
+
+        gameObject.ResetComponent(component);
+
+        Assert.Equal(2, component.baseResetCount);
+        Assert.Equal(2, component.derivedResetCount);
+    }
+
+    [Fact]
     public void SceneManager_LoadScene_ReplacesActiveScene()
     {
         var first = new GameScene("First");
@@ -148,7 +165,7 @@ public sealed class SceneFacadeTests : IDisposable
         protected override void OnEnable() => enableCount++;
         protected override void OnDisable() => disableCount++;
 
-        private void Reset()
+        protected override void Reset()
         {
             awakeCount = 0;
             startCount = 0;
@@ -157,6 +174,27 @@ public sealed class SceneFacadeTests : IDisposable
             lateUpdateCount = 0;
             enableCount = 0;
             disableCount = 0;
+        }
+    }
+
+    private class BaseResetComponent : GameComponent
+    {
+        public int baseResetCount;
+
+        protected override void Reset()
+        {
+            baseResetCount++;
+        }
+    }
+
+    private sealed class DerivedResetComponent : BaseResetComponent
+    {
+        public int derivedResetCount;
+
+        protected override void Reset()
+        {
+            base.Reset();
+            derivedResetCount++;
         }
     }
 }

@@ -205,7 +205,7 @@ public sealed class GameScene : EngineObject, ISerializable
             }
 
             if (invokeReset)
-                ComponentMessageCache.InvokeReset(component);
+                component.DispatchReset();
             return component;
         }
         catch
@@ -250,7 +250,7 @@ public sealed class GameScene : EngineObject, ISerializable
         ArgumentNullException.ThrowIfNull(component);
         if (!ReferenceEquals(component.ownerOrNull, owner))
             throw new InvalidOperationException($"GameComponent '{component.GetType().FullName}' is not attached to GameObject '{owner.name}'.");
-        ComponentMessageCache.InvokeReset(component);
+        component.DispatchReset();
     }
 
     internal IReadOnlyList<GameComponent> GetComponents(GameObject owner)

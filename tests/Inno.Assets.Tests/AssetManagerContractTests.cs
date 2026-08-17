@@ -103,7 +103,7 @@ public sealed class AssetManagerContractTests : IDisposable
         Assert.Single(AssetManager.GetLoadedPaths());
         Assert.False(AssetManager.TryLoad("Missing/nope.txt", out TextAsset? missing));
         Assert.Null(missing);
-        Assert.False(AssetManager.TryLoad("Text/shared.txt", out TextureAsset? wrongType));
+        Assert.False(AssetManager.TryLoad("Text/shared.txt", out BinaryAsset? wrongType));
         Assert.Null(wrongType);
     }
 

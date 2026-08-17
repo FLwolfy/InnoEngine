@@ -427,14 +427,12 @@ Inno/
 │  │  │  ├─ Dependencies/
 │  │  │  └─ Runtime/
 │  │  │
-│  │  ├─ Inno.Assets.Importers/
-│  │  │  ├─ Inno.Assets.Importers.csproj
-│  │  │  ├─ Textures/
-│  │  │  ├─ Meshes/
-│  │  │  ├─ Materials/
-│  │  │  ├─ Scenes/
-│  │  │  ├─ Shaders/
-│  │  │  └─ Audio/
+│  │  ├─ Inno.Assets.Loader/
+│  │  │  ├─ Inno.Assets.Loader.csproj
+│  │  │  ├─ Importers/
+│  │  │  │  ├─ TextAssetImporter.cs
+│  │  │  │  └─ BinaryAssetImporter.cs
+│  │  │  └─ Internal/
 │  │  │
 │  │  ├─ Inno.Assets.Pipeline/
 │  │  │  ├─ Inno.Assets.Pipeline.csproj
@@ -446,10 +444,7 @@ Inno/
 │  │  │
 │  │  ├─ Inno.Assets.Serialization/
 │  │  │  ├─ Inno.Assets.Serialization.csproj
-│  │  │  ├─ Metadata/
-│  │  │  ├─ Binary/
-│  │  │  ├─ Yaml/
-│  │  │  └─ State/
+│  │  │  └─ Asset converters and dependency collection
 │  │  │
 │  │  └─ Inno.Assets.Runtime/
 │  │     ├─ Inno.Assets.Runtime.csproj
@@ -584,6 +579,18 @@ Inno/
 │  │     └─ Overlay/
 │  │
 │  ├─ engine/
+│  │  ├─ Inno.Engine.Scene/
+│  │  │  ├─ Inno.Engine.Scene.csproj
+│  │  │  ├─ Core/
+│  │  │  ├─ Internal/
+│  │  │  └─ Prefabs/
+│  │  │
+│  │  ├─ Inno.Engine.Scene.Assets/
+│  │  │  ├─ Inno.Engine.Scene.Assets.csproj
+│  │  │  ├─ AssetTypes/
+│  │  │  ├─ Importers/
+│  │  │  └─ Serialization/
+│  │  │
 │  │  ├─ Inno.Engine/
 │  │  │  ├─ Inno.Engine.csproj
 │  │  │  ├─ Host/
