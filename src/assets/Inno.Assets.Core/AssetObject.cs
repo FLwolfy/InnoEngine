@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 
 using Inno.Core.Identity;
 using Inno.Core.Serialization;
@@ -9,99 +7,89 @@ using Inno.Core.Serialization;
 namespace Inno.Assets.Core;
 
 /// <summary>
-/// Base runtime asset object that participates in identity and serialization.
+/// Provides the common runtime identity and payload contract for imported assets.
 /// </summary>
 public abstract class AssetObject : ISerializable, IIdentityObject
 {
-    private AssetDependency[] m_dependencies = [];
     private byte[] m_runtimePayload = [];
     private bool m_isMissing;
+    private bool m_runtimeResourcesReleased;
+    private long m_contentVersion;
+    private string m_sourceHash = string.Empty;
 
-    /// <summary>
-    /// Relative path to the source file under <c>AssetManager.assetRoot</c>.
-    /// </summary>
+    /// <summary>Releases runtime resources when an unreachable asset is finalized.</summary>
+    ~AssetObject()
+    {
+        ReleaseRuntimeResources();
+    }
+
+    /// <summary>Gets the source-relative path associated with this asset.</summary>
     [SerializableProperty(PropertyVisibility.Hide)]
     public string sourcePath { get; private set; } = string.Empty;
 
-    /// <summary>
-    /// SHA-256 hash for source bytes used by import cache validation.
-    /// </summary>
-    [SerializableProperty(PropertyVisibility.Hide)]
-    public string sourceHash { get; private set; } = string.Empty;
+    /// <summary>Gets a display name derived from <see cref="sourcePath"/>.</summary>
+    public string name => string.IsNullOrWhiteSpace(sourcePath)
+        ? GetType().Name
+        : Path.GetFileName(sourcePath);
 
-    /// <summary>
-    /// Asset display name derived from <see cref="sourcePath"/>.
-    /// </summary>
-    public string name => string.IsNullOrWhiteSpace(sourcePath) ? GetType().Name : Path.GetFileName(sourcePath);
-
-    /// <summary>
-    /// Gets the persistent and runtime identity associated with this asset.
-    /// </summary>
+    /// <summary>Gets the persistent and runtime identity associated with this asset.</summary>
     public Identity identity => ((IIdentityObject)this).GetIdentity();
 
-    /// <summary>
-    /// Gets whether this instance preserves a reference to an asset that is currently unavailable.
-    /// </summary>
+    /// <summary>Gets whether this instance represents an unavailable persistent asset.</summary>
     public bool isMissing => m_isMissing;
 
-    /// <summary>
-    /// Gets the persistent direct dependencies declared by this asset.
-    /// </summary>
-    public IReadOnlyList<AssetDependency> dependencies => m_dependencies;
+    /// <summary>Gets the version of the currently committed runtime content.</summary>
+    public long contentVersion => m_contentVersion;
 
-    /// <summary>
-    /// Runtime-ready artifact payload produced by importer.
-    /// </summary>
+    /// <summary>Gets the runtime artifact payload produced by the importer.</summary>
     public ReadOnlyMemory<byte> runtimePayload => m_runtimePayload;
 
-    /// <summary>
-    /// Replaces the dependency descriptors associated with this asset.
-    /// </summary>
-    /// <param name="dependencies">Dependency descriptors to retain.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="dependencies"/> is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when a descriptor has an empty persistent identity.</exception>
-    protected void SetDependencies(IEnumerable<AssetDependency> dependencies)
+    /// <summary>Called after a new runtime payload has been committed to this instance.</summary>
+    /// <param name="previousPayload">The previously committed payload.</param>
+    /// <param name="currentPayload">The newly committed payload.</param>
+    protected virtual void OnRuntimePayloadChanged(
+        ReadOnlyMemory<byte> previousPayload,
+        ReadOnlyMemory<byte> currentPayload)
     {
-        ArgumentNullException.ThrowIfNull(dependencies);
-        AssetDependency[] normalized = dependencies
-            .GroupBy(static dependency => dependency.persistentId)
-            .Select(static group => group.First())
-            .OrderBy(static dependency => dependency.persistentId)
-            .ToArray();
-        for (int i = 0; i < normalized.Length; i++)
-        {
-            if (normalized[i].persistentId == Guid.Empty)
-                throw new ArgumentException("Asset dependencies must have non-empty persistent identities.", nameof(dependencies));
-            normalized[i].lastKnownPath ??= string.Empty;
-        }
-
-        m_dependencies = normalized;
     }
 
-    internal void SetSourceInfo(string relativePath, string hash)
+    /// <summary>Called once before runtime resources owned by this asset are released.</summary>
+    protected virtual void OnUnloading()
+    {
+    }
+
+    internal string sourceHash => m_sourceHash;
+
+    internal void InitializeRuntimeState(
+        string relativePath,
+        string sourceHash,
+        ReadOnlyMemory<byte> payload,
+        bool isMissing,
+        long version)
+    {
+        ReadOnlyMemory<byte> previous = m_runtimePayload;
+        sourcePath = relativePath ?? string.Empty;
+        m_sourceHash = sourceHash ?? string.Empty;
+        m_runtimePayload = payload.ToArray();
+        m_isMissing = isMissing;
+        m_contentVersion = version;
+        if (m_runtimeResourcesReleased)
+            GC.ReRegisterForFinalize(this);
+        m_runtimeResourcesReleased = false;
+        OnRuntimePayloadChanged(previous, m_runtimePayload);
+    }
+
+    internal void UpdateSourcePath(string relativePath)
     {
         sourcePath = relativePath ?? string.Empty;
-        sourceHash = hash ?? string.Empty;
     }
 
-    internal void SetRuntimePayload(byte[] payload)
+    internal void ReleaseRuntimeResources()
     {
-        m_runtimePayload = payload ?? [];
-    }
-
-    internal void SetDependenciesInternal(IEnumerable<AssetDependency> dependencies)
-        => SetDependencies(dependencies);
-
-    internal void InitializeMissing(Guid persistentId, string lastKnownPath)
-    {
-        if (persistentId == Guid.Empty)
-            throw new ArgumentException("A missing asset placeholder requires a persistent identity.", nameof(persistentId));
-
-        IdentityManager.InitializePersistentIdentity(this, persistentId);
-        sourcePath = lastKnownPath ?? string.Empty;
-        sourceHash = string.Empty;
+        if (m_runtimeResourcesReleased)
+            return;
+        m_runtimeResourcesReleased = true;
+        OnUnloading();
         m_runtimePayload = [];
-        m_dependencies = [];
-        m_isMissing = true;
     }
 }

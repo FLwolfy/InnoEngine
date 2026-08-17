@@ -2,6 +2,10 @@ using System.Collections.Generic;
 
 namespace Inno.Core.Storage;
 
+/// <summary>
+/// Defines one condition evaluated by an object-pool query.
+/// </summary>
+/// <typeparam name="T">The stored reference type.</typeparam>
 public interface IQueryCondition<T> where T : class
 {
     /// <summary>

@@ -7,11 +7,12 @@ using Inno.Assets.Types;
 
 namespace Inno.Assets.Importers;
 
-public sealed class PngTextureAssetImporter : AssetImporter<TextureAsset>
+[AssetImporterExtension]
+internal sealed class PngTextureAssetImporter : AssetImporter<TextureAsset>
 {
     public override IReadOnlyList<string> supportedExtensions { get; } = [".png"];
 
-    public override AssetImportResult<TextureAsset> ImportTyped(in AssetImportContext context)
+    protected override AssetImportResult<TextureAsset> Import(AssetImportContext context)
     {
         if (!TryReadPngSize(context.sourceBytes.Span, out int width, out int height))
             throw new InvalidOperationException($"Invalid PNG file: {context.relativePath}");
@@ -20,7 +21,7 @@ public sealed class PngTextureAssetImporter : AssetImporter<TextureAsset>
         return new AssetImportResult<TextureAsset>(asset, context.sourceBytes.ToArray());
     }
 
-    public override bool TryExportTyped(TextureAsset asset, out byte[] sourceBytes)
+    protected override bool TryExport(TextureAsset asset, out byte[] sourceBytes)
     {
         sourceBytes = asset.runtimePayload.ToArray();
         return sourceBytes.Length > 0;

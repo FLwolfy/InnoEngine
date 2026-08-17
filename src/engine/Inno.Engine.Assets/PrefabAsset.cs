@@ -17,6 +17,7 @@ namespace Inno.Engine.Assets;
 public sealed class PrefabAsset : AssetObject
 {
     private byte[] m_pendingPayload = [];
+    private AssetDependency[] m_pendingDependencies = [];
 
     /// <summary>
     /// Captures a game object subtree into a new unsaved prefab asset.
@@ -29,9 +30,11 @@ public sealed class PrefabAsset : AssetObject
         var dependencyCollection = new AssetDependencyCollection();
         SerializationContext context = SerializationContext.empty.With(dependencyCollection);
         byte[] payload = SerializationManager.Serialize(root, context);
-        var asset = new PrefabAsset { m_pendingPayload = payload };
-        asset.SetDependencies(dependencyCollection.dependencies);
-        return asset;
+        return new PrefabAsset
+        {
+            m_pendingPayload = payload,
+            m_pendingDependencies = dependencyCollection.dependencies.ToArray()
+        };
     }
 
     /// <summary>
@@ -48,10 +51,7 @@ public sealed class PrefabAsset : AssetObject
             .With<AssetObject>(this);
         if (parent is not null)
             context = context.With(parent);
-        GameObject root = SerializationManager.Deserialize<GameObject>(GetPayload(), context);
-        if (Inno.Assets.AssetManager.isInitialized && identity.persistentId != Guid.Empty)
-            Inno.Assets.AssetManager.TrackDependencies(scene, this);
-        return root;
+        return SerializationManager.Deserialize<GameObject>(GetPayload(), context);
     }
 
     internal byte[] ExportSource()
@@ -59,22 +59,19 @@ public sealed class PrefabAsset : AssetObject
         {
             resourceKind = EngineResourceEnvelope.C_PREFAB_KIND,
             payload = GetPayload(),
-            dependencies = dependencies.ToArray()
+            dependencies = GetDependencies()
         });
 
-    internal static PrefabAsset Import(byte[] sourceBytes, out byte[] artifactBytes, out string[] dependencies)
+    internal static PrefabAsset Import(
+        byte[] sourceBytes,
+        out byte[] artifactBytes,
+        out AssetDependency[] dependencies)
     {
         EngineResourceEnvelope envelope = SerializationManager.Deserialize<EngineResourceEnvelope>(sourceBytes);
         envelope.Validate(EngineResourceEnvelope.C_PREFAB_KIND);
-        dependencies = envelope.dependencies
-            .Select(static dependency => dependency.lastKnownPath)
-            .Where(static path => !string.IsNullOrWhiteSpace(path))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        dependencies = envelope.dependencies.ToArray();
         artifactBytes = (byte[])envelope.payload.Clone();
-        var asset = new PrefabAsset();
-        asset.SetDependencies(envelope.dependencies);
-        return asset;
+        return new PrefabAsset { m_pendingDependencies = envelope.dependencies.ToArray() };
     }
 
     private byte[] GetPayload()
@@ -84,5 +81,14 @@ public sealed class PrefabAsset : AssetObject
         if (m_pendingPayload.Length != 0)
             return (byte[])m_pendingPayload.Clone();
         throw new InvalidOperationException($"Prefab asset '{sourcePath}' does not contain an imported or pending prefab payload.");
+    }
+
+    private AssetDependency[] GetDependencies()
+    {
+        if (m_pendingDependencies.Length != 0)
+            return (AssetDependency[])m_pendingDependencies.Clone();
+        return AssetManager.isInitialized && identity.persistentId != Guid.Empty
+            ? AssetManager.GetDependencies(this).ToArray()
+            : [];
     }
 }

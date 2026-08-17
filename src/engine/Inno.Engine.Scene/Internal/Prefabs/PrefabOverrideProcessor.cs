@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using Inno.Assets;
 using Inno.Assets.Core;
 using Inno.Core.Serialization;
 using Inno.Engine.Scene.Components;
@@ -450,8 +449,6 @@ internal static class PrefabOverrideProcessor
                     context,
                     targetReferences);
             }
-            if (AssetManager.isInitialized)
-                AssetManager.TrackSerializedReferences(scene, targetComponent);
         }
     }
 

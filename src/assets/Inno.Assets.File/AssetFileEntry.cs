@@ -5,8 +5,12 @@ namespace Inno.Assets.File;
 /// </summary>
 public sealed class AssetFileEntry
 {
+    /// <summary>Gets the source-relative entry path.</summary>
     public string relativePath { get; internal set; } = string.Empty;
+    /// <summary>Gets the source-relative parent path.</summary>
     public string parentRelativePath { get; internal set; } = string.Empty;
+    /// <summary>Gets whether the entry represents a directory.</summary>
     public bool isDirectory { get; internal set; }
+    /// <summary>Gets the normalized lower-case file extension.</summary>
     public string extension { get; internal set; } = string.Empty;
 }

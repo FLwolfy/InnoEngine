@@ -16,6 +16,7 @@ namespace Inno.Engine.Assets;
 public sealed class SceneAsset : AssetObject
 {
     private byte[] m_pendingPayload = [];
+    private AssetDependency[] m_pendingDependencies = [];
 
     /// <summary>
     /// Captures a runtime scene into a new unsaved scene asset.
@@ -28,9 +29,11 @@ public sealed class SceneAsset : AssetObject
         var dependencyCollection = new AssetDependencyCollection();
         SerializationContext context = SerializationContext.empty.With(dependencyCollection);
         byte[] payload = SerializationManager.Serialize(scene, context);
-        var asset = new SceneAsset { m_pendingPayload = payload };
-        asset.SetDependencies(dependencyCollection.dependencies);
-        return asset;
+        return new SceneAsset
+        {
+            m_pendingPayload = payload,
+            m_pendingDependencies = dependencyCollection.dependencies.ToArray()
+        };
     }
 
     /// <summary>
@@ -40,10 +43,7 @@ public sealed class SceneAsset : AssetObject
     public GameScene Instantiate()
     {
         SerializationContext context = SerializationContext.empty.With<AssetObject>(this);
-        GameScene scene = SerializationManager.Deserialize<GameScene>(GetPayload(), context);
-        if (Inno.Assets.AssetManager.isInitialized && identity.persistentId != Guid.Empty)
-            Inno.Assets.AssetManager.TrackDependencies(scene, this);
-        return scene;
+        return SerializationManager.Deserialize<GameScene>(GetPayload(), context);
     }
 
     internal byte[] ExportSource()
@@ -51,22 +51,19 @@ public sealed class SceneAsset : AssetObject
         {
             resourceKind = EngineResourceEnvelope.C_SCENE_KIND,
             payload = GetPayload(),
-            dependencies = dependencies.ToArray()
+            dependencies = GetDependencies()
         });
 
-    internal static SceneAsset Import(byte[] sourceBytes, out byte[] artifactBytes, out string[] dependencies)
+    internal static SceneAsset Import(
+        byte[] sourceBytes,
+        out byte[] artifactBytes,
+        out AssetDependency[] dependencies)
     {
         EngineResourceEnvelope envelope = SerializationManager.Deserialize<EngineResourceEnvelope>(sourceBytes);
         envelope.Validate(EngineResourceEnvelope.C_SCENE_KIND);
-        dependencies = envelope.dependencies
-            .Select(static dependency => dependency.lastKnownPath)
-            .Where(static path => !string.IsNullOrWhiteSpace(path))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        dependencies = envelope.dependencies.ToArray();
         artifactBytes = (byte[])envelope.payload.Clone();
-        var asset = new SceneAsset();
-        asset.SetDependencies(envelope.dependencies);
-        return asset;
+        return new SceneAsset { m_pendingDependencies = envelope.dependencies.ToArray() };
     }
 
     private byte[] GetPayload()
@@ -76,5 +73,14 @@ public sealed class SceneAsset : AssetObject
         if (m_pendingPayload.Length != 0)
             return (byte[])m_pendingPayload.Clone();
         throw new InvalidOperationException($"Scene asset '{sourcePath}' does not contain an imported or pending scene payload.");
+    }
+
+    private AssetDependency[] GetDependencies()
+    {
+        if (m_pendingDependencies.Length != 0)
+            return (AssetDependency[])m_pendingDependencies.Clone();
+        return AssetManager.isInitialized && identity.persistentId != Guid.Empty
+            ? AssetManager.GetDependencies(this).ToArray()
+            : [];
     }
 }

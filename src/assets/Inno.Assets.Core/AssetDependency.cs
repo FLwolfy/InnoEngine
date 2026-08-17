@@ -3,48 +3,47 @@ using System;
 namespace Inno.Assets.Core;
 
 /// <summary>
-/// Identifies one persistent asset dependency independently of its current source path.
+/// Describes a persistent direct dependency on another asset.
 /// </summary>
-public struct AssetDependency : IEquatable<AssetDependency>
+public readonly struct AssetDependency : IEquatable<AssetDependency>
 {
-    /// <summary>
-    /// Gets or sets the persistent identity of the referenced asset.
-    /// </summary>
-    public Guid persistentId { get; set; }
-
-    /// <summary>
-    /// Gets or sets the stable type identity of the referenced asset.
-    /// </summary>
-    public Guid stableTypeId { get; set; }
-
-    /// <summary>
-    /// Gets or sets the last known source path relative to the asset root.
-    /// </summary>
-    public string lastKnownPath { get; set; }
-
     /// <summary>
     /// Creates an asset dependency descriptor.
     /// </summary>
-    /// <param name="persistentId">Persistent asset identity.</param>
-    /// <param name="stableTypeId">Stable asset type identity.</param>
-    /// <param name="lastKnownPath">Last known source path relative to the asset root.</param>
+    /// <param name="persistentId">The persistent identity of the referenced asset.</param>
+    /// <param name="stableTypeId">The stable identity of the expected asset type.</param>
+    /// <param name="lastKnownPath">The last known source-relative path.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="persistentId"/> is empty.</exception>
     public AssetDependency(Guid persistentId, Guid stableTypeId, string lastKnownPath)
     {
+        if (persistentId == Guid.Empty)
+            throw new ArgumentException("An asset dependency requires a persistent identity.", nameof(persistentId));
         this.persistentId = persistentId;
         this.stableTypeId = stableTypeId;
         this.lastKnownPath = lastKnownPath ?? string.Empty;
     }
 
-    /// <summary>
-    /// Compares two descriptors by persistent identity.
-    /// </summary>
-    /// <param name="other">The descriptor to compare.</param>
-    /// <returns><see langword="true"/> when both descriptors identify the same asset.</returns>
-    public readonly bool Equals(AssetDependency other) => persistentId == other.persistentId;
+    /// <summary>Gets the persistent identity of the referenced asset.</summary>
+    public Guid persistentId { get; }
 
-    /// <inheritdoc />
-    public override readonly bool Equals(object? obj) => obj is AssetDependency other && Equals(other);
+    /// <summary>Gets the stable identity of the expected asset type.</summary>
+    public Guid stableTypeId { get; }
 
-    /// <inheritdoc />
-    public override readonly int GetHashCode() => persistentId.GetHashCode();
+    /// <summary>Gets the last known source-relative path.</summary>
+    public string lastKnownPath { get; }
+
+    /// <inheritdoc/>
+    public bool Equals(AssetDependency other) => persistentId == other.persistentId;
+
+    /// <inheritdoc/>
+    public override bool Equals(object? obj) => obj is AssetDependency other && Equals(other);
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => persistentId.GetHashCode();
+
+    /// <summary>Determines whether two descriptors refer to the same persistent asset.</summary>
+    public static bool operator ==(AssetDependency left, AssetDependency right) => left.Equals(right);
+
+    /// <summary>Determines whether two descriptors refer to different persistent assets.</summary>
+    public static bool operator !=(AssetDependency left, AssetDependency right) => !left.Equals(right);
 }

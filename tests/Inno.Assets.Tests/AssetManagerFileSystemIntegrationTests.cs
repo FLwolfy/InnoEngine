@@ -70,12 +70,11 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
             Assert.True(AssetManager.Import("Config/game.txt"));
             TextAsset before = AssetManager.Load<TextAsset>("Config/game.txt");
             Guid persistentId = before.identity.persistentId;
-            Assert.True(AssetManager.Unload(before));
-
             Write(assets, "Config/game.txt", "two");
             AssetManager.Rescan();
             TextAsset after = AssetManager.Load<TextAsset>(persistentId);
 
+            Assert.Same(before, after);
             Assert.Equal("two", after.content);
             Assert.Equal(persistentId, after.identity.persistentId);
         }

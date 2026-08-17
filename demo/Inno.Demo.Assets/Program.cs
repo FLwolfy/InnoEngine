@@ -68,17 +68,15 @@ internal static class Program
             Log.Info("[AssetsDemo] Loaded content: {0}", loaded.content);
             Log.Info("[AssetsDemo] Identity: {0}", assetId);
 
-            bool metaIndexed = SpinWait.SpinUntil(
-                () => AssetManager.TryGetFileSystemEntry("Notes/readme.txt.imeta", out _),
+            bool sourceIndexed = SpinWait.SpinUntil(
+                () => AssetManager.TryGetFileSystemEntry(relativePath, out _),
                 TimeSpan.FromSeconds(2));
-            Log.Info("[AssetsDemo] .imeta indexed: {0}", metaIndexed);
+            Log.Info("[AssetsDemo] Source indexed: {0}", sourceIndexed);
 
-            Log.Info("[AssetsDemo] FileSystem tree:");
-            Log.Info(AssetManager.GetFileSystemTreeGraph());
+            Log.Info("[AssetsDemo] Indexed entries: {0}", AssetManager.GetFileSystemEntries().Count);
 
             SetTextAssetContent(loaded, "updated-by-save");
             bool saved = AssetManager.Save(loaded);
-            _ = AssetManager.Unload(loaded);
             TextAsset updated = AssetManager.Load<TextAsset>(assetId);
             Log.Info("[AssetsDemo] Save(existing)={0}, updated content={1}", saved, updated.content);
 

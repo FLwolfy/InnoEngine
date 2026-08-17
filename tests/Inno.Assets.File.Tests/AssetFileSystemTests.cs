@@ -12,6 +12,24 @@ namespace Inno.Assets.File.Tests;
 public sealed class AssetFileSystemTests
 {
     [Fact]
+    public void Queries_RejectRootedAndTraversalPaths()
+    {
+        string root = CreateRoot();
+        try
+        {
+            using var fileSystem = new AssetFileSystem(root, autoStart: false);
+
+            Assert.Throws<ArgumentException>(() => fileSystem.Exists("../outside.txt"));
+            Assert.Throws<ArgumentException>(() => fileSystem.GetChildren("A/../../outside"));
+            Assert.Throws<ArgumentException>(() => fileSystem.TryGetEntry(Path.GetFullPath(root), out _));
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Fact]
     public void Refresh_IndexesDirectoriesAndFiles()
     {
         string root = CreateRoot();

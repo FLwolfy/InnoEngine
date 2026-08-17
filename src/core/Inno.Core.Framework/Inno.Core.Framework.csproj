@@ -4,10 +4,10 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <InnoAssemblyGroup>Core</InnoAssemblyGroup>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Core.Coroutines\Inno.Core.Coroutines.csproj" />
     <ProjectReference Include="..\Inno.Core.Events\Inno.Core.Events.csproj" />
     <ProjectReference Include="..\Inno.Core.Job\Inno.Core.Job.csproj" />
@@ -15,6 +15,7 @@
   </ItemGroup>
   
   <ItemGroup>
+    <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />

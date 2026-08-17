@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 
+using Inno.Assets.Core;
 using Inno.Assets.Loader;
 using Inno.Engine.Assets;
 
@@ -8,7 +9,8 @@ namespace Inno.Engine.Assets.Importers;
 /// <summary>
 /// Imports and exports <c>.innoscene</c> source state.
 /// </summary>
-public sealed class SceneAssetImporter : AssetImporter<SceneAsset>
+[AssetImporterExtension]
+internal sealed class SceneAssetImporter : AssetImporter<SceneAsset>
 {
     private static readonly IReadOnlyList<string> s_extensions = new[] { ".innoscene" };
 
@@ -19,14 +21,19 @@ public sealed class SceneAssetImporter : AssetImporter<SceneAsset>
     public override IReadOnlyList<string> supportedExtensions => s_extensions;
 
     /// <inheritdoc />
-    public override AssetImportResult<SceneAsset> ImportTyped(in AssetImportContext context)
+    protected override AssetImportResult<SceneAsset> Import(AssetImportContext context)
     {
-        SceneAsset asset = SceneAsset.Import(context.sourceBytes.ToArray(), out byte[] artifact, out string[] dependencies);
-        return new AssetImportResult<SceneAsset>(asset, artifact, dependencies);
+        SceneAsset asset = SceneAsset.Import(
+            context.sourceBytes.ToArray(),
+            out byte[] artifact,
+            out AssetDependency[] dependencies);
+        for (int i = 0; i < dependencies.Length; i++)
+            context.DependsOnAsset(dependencies[i]);
+        return new AssetImportResult<SceneAsset>(asset, artifact);
     }
 
     /// <inheritdoc />
-    public override bool TryExportTyped(SceneAsset asset, out byte[] sourceBytes)
+    protected override bool TryExport(SceneAsset asset, out byte[] sourceBytes)
     {
         sourceBytes = asset.ExportSource();
         return true;

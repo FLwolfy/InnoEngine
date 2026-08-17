@@ -5,6 +5,7 @@ using System.IO;
 using Inno.Assets;
 using Inno.Core.Events;
 using Inno.Core.Framework;
+using Inno.Engine.Assets;
 using Inno.Platform;
 using Inno.Platform.ImGui;
 
@@ -48,6 +49,7 @@ public sealed class EditorHost : IDisposable
         });
         BootLog($"Window created. id={m_window.windowId}, size={m_window.width}x{m_window.height}.");
 
+        _ = typeof(SceneAsset).Assembly;
         m_shell = Shell.Initialize(new ShellSettings
         {
             fixedDeltaTime = 1f / 60f,

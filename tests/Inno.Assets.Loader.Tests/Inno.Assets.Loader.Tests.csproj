@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <InnoAssemblyGroup>Game</InnoAssemblyGroup>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\assets\Inno.Assets.Importers\Inno.Assets.Importers.csproj" />

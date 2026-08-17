@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading;
 
 using Inno.Core.Storage;
@@ -23,8 +22,10 @@ public sealed class AssetFileSystem : IDisposable
     private readonly AssetWatcher m_watcher;
     private bool m_disposed;
 
+    /// <summary>Gets the absolute source asset root.</summary>
     public string assetRoot { get; }
     
+    /// <summary>Gets whether source file watching is active.</summary>
     public bool isWatching => m_watcher.isWatching;
 
     /// <summary>
@@ -32,6 +33,10 @@ public sealed class AssetFileSystem : IDisposable
     /// </summary>
     public event Action<IReadOnlyList<AssetChangedEvent>>? ChangedBatch;
 
+    /// <summary>Creates an indexed source file system.</summary>
+    /// <param name="assetRoot">The absolute source root.</param>
+    /// <param name="autoStart">Whether file watching should start immediately.</param>
+    /// <param name="flushDelayMs">The watcher batch delay in milliseconds.</param>
     public AssetFileSystem(string assetRoot, bool autoStart = true, int flushDelayMs = 80)
     {
         if (string.IsNullOrWhiteSpace(assetRoot))
@@ -53,12 +58,14 @@ public sealed class AssetFileSystem : IDisposable
             m_watcher.Start();
     }
 
+    /// <summary>Starts source file watching.</summary>
     public void Start()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
         m_watcher.Start();
     }
 
+    /// <summary>Stops source file watching.</summary>
     public void Stop()
     {
         if (m_disposed)
@@ -67,6 +74,7 @@ public sealed class AssetFileSystem : IDisposable
         m_watcher.Stop();
     }
 
+    /// <summary>Rebuilds the indexed source file snapshot.</summary>
     public void Refresh()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -78,6 +86,9 @@ public sealed class AssetFileSystem : IDisposable
         }
     }
 
+    /// <summary>Determines whether an indexed source entry exists.</summary>
+    /// <param name="relativePath">The source-relative path.</param>
+    /// <returns><see langword="true"/> when the entry exists.</returns>
     public bool Exists(string relativePath)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -88,6 +99,10 @@ public sealed class AssetFileSystem : IDisposable
         }
     }
 
+    /// <summary>Tries to resolve an indexed source entry.</summary>
+    /// <param name="relativePath">The source-relative path.</param>
+    /// <param name="entry">The resolved entry when available.</param>
+    /// <returns><see langword="true"/> when the entry exists.</returns>
     public bool TryGetEntry(string relativePath, out AssetFileEntry entry)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -106,6 +121,9 @@ public sealed class AssetFileSystem : IDisposable
         }
     }
 
+    /// <summary>Gets a stable snapshot of indexed entries.</summary>
+    /// <param name="includeDirectories">Whether directory entries should be included.</param>
+    /// <returns>The indexed entries.</returns>
     public IReadOnlyList<AssetFileEntry> GetEntries(bool includeDirectories = true)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -121,6 +139,9 @@ public sealed class AssetFileSystem : IDisposable
         }
     }
 
+    /// <summary>Gets immediate children of an indexed directory.</summary>
+    /// <param name="parentRelativePath">The source-relative parent path.</param>
+    /// <returns>The immediate child entries.</returns>
     public IReadOnlyList<AssetFileEntry> GetChildren(string parentRelativePath)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -138,43 +159,7 @@ public sealed class AssetFileSystem : IDisposable
         }
     }
 
-    public string BuildTreeGraph()
-    {
-        ObjectDisposedException.ThrowIf(m_disposed, this);
-
-        AssetFileEntry[] snapshot;
-        lock (m_sync)
-        {
-            snapshot = m_entries.All()
-                .OrderBy(static x => x.relativePath.Count(static c => c == '/'))
-                .ThenBy(static x => x.relativePath, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-        }
-
-        var builder = new StringBuilder(4 * 1024);
-        builder.AppendLine("Assets/");
-        for (int i = 0; i < snapshot.Length; i++)
-        {
-            AssetFileEntry entry = snapshot[i];
-            if (entry.relativePath.Length == 0)
-                continue;
-
-            int depth = entry.relativePath.Count(static c => c == '/') + 1;
-            builder.Append(' ', depth * 2);
-            builder.Append(entry.isDirectory ? "[D] " : "[F] ");
-            builder.Append(Path.GetFileName(entry.relativePath));
-            if (!entry.isDirectory && !string.IsNullOrEmpty(entry.extension))
-            {
-                builder.Append("  ");
-                builder.Append(entry.extension);
-            }
-
-            builder.AppendLine();
-        }
-
-        return builder.ToString();
-    }
-    
+    /// <summary>Waits until all queued watcher changes have been processed.</summary>
     public void WaitForIdle()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -185,6 +170,7 @@ public sealed class AssetFileSystem : IDisposable
         m_watcher.WaitForIdle();
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         if (m_disposed)
@@ -268,6 +254,9 @@ public sealed class AssetFileSystem : IDisposable
         if (string.IsNullOrWhiteSpace(relativePath))
             return string.Empty;
 
+        if (Path.IsPathRooted(relativePath))
+            throw new ArgumentException("Asset file-system paths must be relative.", nameof(relativePath));
+
         string path = relativePath.Replace('\\', '/').Trim();
         while (path.StartsWith("./", StringComparison.Ordinal))
             path = path[2..];
@@ -276,6 +265,14 @@ public sealed class AssetFileSystem : IDisposable
         while (path.EndsWith("/", StringComparison.Ordinal))
             path = path[..^1];
 
-        return path == "." ? string.Empty : path;
+        if (path == ".")
+            return string.Empty;
+        if (path.Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Any(static segment => segment == ".."))
+        {
+            throw new ArgumentException("Asset file-system paths cannot escape the configured root.", nameof(relativePath));
+        }
+
+        return path;
     }
 }

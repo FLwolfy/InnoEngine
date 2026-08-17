@@ -73,7 +73,6 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
 
         if (NativeImGui.Selectable("None", persistentId == Guid.Empty))
         {
-            ReleaseCurrentAsset(context);
             context.SetValue(null);
         }
 
@@ -141,14 +140,7 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
         if (ReadPersistentId(context.GetValue()) == candidate.persistentId)
             return;
         object asset = LoadAsset(assetType, candidate.relativePath);
-        ReleaseCurrentAsset(context);
         context.SetValue(asset);
-    }
-
-    private static void ReleaseCurrentAsset(PropertyDrawContext context)
-    {
-        if (context.GetValue() is AssetObject current && !current.isMissing)
-            AssetManager.Unload(current);
     }
 
     private static object LoadAsset(Type assetType, string relativePath)

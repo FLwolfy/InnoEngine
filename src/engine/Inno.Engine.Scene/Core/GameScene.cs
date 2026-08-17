@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+using Inno.Assets.Core;
 using Inno.Core.Serialization;
 using Inno.Engine.Scene.Components;
 
@@ -20,6 +21,7 @@ public sealed class GameScene : EngineObject, ISerializable
     private string m_name;
     private bool m_isLoaded;
     private bool m_isUnloading;
+    private AssetObject? m_sourceAsset;
 
     /// <summary>
     /// Creates an empty scene.
@@ -285,6 +287,12 @@ public sealed class GameScene : EngineObject, ISerializable
 
     internal bool canDispatch => m_isLoaded && !m_isUnloading && !isDestroyed;
 
+    internal void SetSourceAsset(AssetObject sourceAsset)
+    {
+        ArgumentNullException.ThrowIfNull(sourceAsset);
+        m_sourceAsset = sourceAsset;
+    }
+
     internal void ValidateRestoreTarget(Guid persistentId)
     {
         EnsureNotDestroyed();
@@ -387,6 +395,7 @@ public sealed class GameScene : EngineObject, ISerializable
         m_systems.Clear();
         m_hierarchy.Clear();
         m_store.Clear();
+        m_sourceAsset = null;
         MarkDestroyed();
         if (firstException is not null)
             throw new InvalidOperationException($"Scene '{m_name}' encountered an error while unloading.", firstException);

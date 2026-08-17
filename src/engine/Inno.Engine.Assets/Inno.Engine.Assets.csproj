@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
+    <InnoAssemblyGroup>Core</InnoAssemblyGroup>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" />

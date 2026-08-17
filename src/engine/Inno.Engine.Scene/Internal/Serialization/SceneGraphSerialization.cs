@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-using Inno.Assets;
 using Inno.Assets.Core;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
@@ -200,21 +199,7 @@ internal static class SceneGraphSerialization
         using (references.Enter())
         {
             for (int i = 0; i < componentRestores.Count; i++)
-            {
-                try
-                {
-                    componentRestores[i].state.RestoreProperties(componentRestores[i].component);
-                }
-                finally
-                {
-                    if (AssetManager.isInitialized)
-                    {
-                        AssetManager.TrackSerializedReferences(
-                            scene,
-                            componentRestores[i].component);
-                    }
-                }
-            }
+                componentRestores[i].state.RestoreProperties(componentRestores[i].component);
         }
 
         for (int objectIndex = 0; objectIndex < objectReaders.Count; objectIndex++)
@@ -314,8 +299,6 @@ internal static class SceneGraphSerialization
                 connection.overrides.count,
                 connection.overrides.orphanedCount,
                 connection.sourceAsset));
-            if (AssetManager.isInitialized)
-                AssetManager.TrackDependencies(scene, connection.sourceAsset);
         }
 
         foreach (GameObject root in gameObjectBySourceId.Values.Where(

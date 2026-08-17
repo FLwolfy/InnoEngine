@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using System.Reflection;
 
 using Inno.Assets.Core;
 using Inno.Assets.Types;
@@ -21,12 +23,38 @@ public sealed class AssetCoreTests
     }
 
     [Fact]
-    public void AssetObject_DefaultRuntimeState_IsNotMissingAndHasNoDependencies()
+    public void AssetObject_DefaultRuntimeState_IsDetachedAndEmpty()
     {
         var asset = new TextAsset();
 
+        Assert.Equal(nameof(TextAsset), asset.name);
+        Assert.Equal(string.Empty, asset.sourcePath);
         Assert.False(asset.isMissing);
-        Assert.Empty(asset.dependencies);
+        Assert.Equal(0, asset.contentVersion);
         Assert.True(asset.runtimePayload.IsEmpty);
+    }
+
+    [Fact]
+    public void AssetDependency_IsAnImmutableValueContract()
+    {
+        PropertyInfo[] properties = typeof(AssetDependency).GetProperties(BindingFlags.Instance | BindingFlags.Public);
+
+        Assert.All(properties, static property => Assert.Null(property.SetMethod));
+        Assert.True(typeof(AssetDependency).IsValueType);
+    }
+
+    [Fact]
+    public void AssetObject_PublicSurface_DoesNotExposeSourceHashDependenciesOrSetters()
+    {
+        string[] propertyNames = typeof(AssetObject)
+            .GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Select(static property => property.Name)
+            .ToArray();
+
+        Assert.DoesNotContain("sourceHash", propertyNames);
+        Assert.DoesNotContain("dependencies", propertyNames);
+        Assert.False(typeof(AssetObject).GetProperty(nameof(AssetObject.sourcePath))!.SetMethod?.IsPublic ?? false);
+        Assert.Null(typeof(AssetObject).GetProperty(nameof(AssetObject.contentVersion))!.SetMethod);
+        Assert.Null(typeof(AssetObject).GetProperty(nameof(AssetObject.runtimePayload))!.SetMethod);
     }
 }

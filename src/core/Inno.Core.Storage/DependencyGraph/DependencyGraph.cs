@@ -1,46 +1,77 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 
 namespace Inno.Core.Storage;
 
 /// <summary>
-/// Dependency graph with optional caching.
+/// Stores a directed dependency graph and provides deterministic dependency queries.
 /// </summary>
+/// <typeparam name="TKey">The node key type.</typeparam>
 /// <remarks>
-/// It tracks edges and can store TValue per node. Dirty propagation is supported for
-/// incremental recomputation.
+/// An edge from <c>node</c> to <c>dependency</c> means that <c>node</c> depends on
+/// <c>dependency</c>. The graph accepts cycles; operations that require an acyclic graph,
+/// such as <see cref="TopologicalSort"/>, report them explicitly.
 /// </remarks>
-public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
+public sealed class DependencyGraph<TKey> where TKey : notnull
 {
-    private readonly Dictionary<TKey, HashSet<TKey>> m_edges = new();
-    private readonly Dictionary<TKey, HashSet<TKey>> m_rev = new();
-    private readonly Dictionary<TKey, DependencyEntry<TValue>> m_entries = new();
+    private sealed class Node
+    {
+        internal required long order;
+        internal HashSet<TKey> dependencies = null!;
+        internal HashSet<TKey> dependents = null!;
+    }
+
+    private sealed class NodePriorityComparer(
+        IComparer<TKey>? orderingComparer) : IComparer<NodePriority>
+    {
+        public int Compare(NodePriority x, NodePriority y)
+        {
+            if (orderingComparer is not null)
+            {
+                int keyComparison = orderingComparer.Compare(x.key, y.key);
+                if (keyComparison != 0)
+                    return keyComparison;
+            }
+
+            return x.order.CompareTo(y.order);
+        }
+    }
+
+    private readonly struct NodePriority(TKey key, long order)
+    {
+        internal TKey key { get; } = key;
+        internal long order { get; } = order;
+    }
+
+    private readonly Dictionary<TKey, Node> m_nodes;
+    private readonly IEqualityComparer<TKey> m_equalityComparer;
+    private readonly IComparer<TKey>? m_orderingComparer;
     private readonly ReaderWriterLockSlim m_sync = new(LockRecursionPolicy.NoRecursion);
-    private int m_structureVersion;
-    private int m_cachedTopoVersion = -1;
-    private List<TKey>? m_cachedTopo;
-    private List<TKey>? m_cachedCyclic;
+
+    private long m_nextNodeOrder;
+    private long m_version;
 
     /// <summary>
-    /// Whether cycles are allowed.
+    /// Creates an empty dependency graph.
     /// </summary>
-    /// <remarks>
-    /// When false, TopologicalSort/UpdateDirty throw if a cycle exists. When true, TopologicalSort
-    /// returns a partial order and exposes cyclic nodes.
-    /// </remarks>
-    public bool allowCycles { get; set; }
+    /// <param name="equalityComparer">Optional node equality comparer.</param>
+    /// <param name="orderingComparer">
+    /// Optional ordering comparer used to make query results deterministic. When omitted,
+    /// node insertion order is used.
+    /// </param>
+    public DependencyGraph(
+        IEqualityComparer<TKey>? equalityComparer = null,
+        IComparer<TKey>? orderingComparer = null)
+    {
+        m_equalityComparer = equalityComparer ?? EqualityComparer<TKey>.Default;
+        m_orderingComparer = orderingComparer;
+        m_nodes = new Dictionary<TKey, Node>(m_equalityComparer);
+    }
 
     /// <summary>
-    /// Cache update strategy.
-    /// </summary>
-    /// <remarks>
-    /// Use Disabled for a pure dependency graph with no cached TValue.
-    /// </remarks>
-    public DependencyCacheMode dependencyCacheMode { get; set; } = DependencyCacheMode.Hybrid;
-
-    /// <summary>
-    /// Number of nodes in the graph (edges are not counted).
+    /// Gets the number of nodes in the graph.
     /// </summary>
     public int count
     {
@@ -49,7 +80,7 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
             m_sync.EnterReadLock();
             try
             {
-                return m_edges.Count;
+                return m_nodes.Count;
             }
             finally
             {
@@ -59,18 +90,58 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
     }
 
     /// <summary>
-    /// Adds a node if it does not already exist.
+    /// Gets the structural version of the graph.
     /// </summary>
-    /// <remarks>
-    /// No edges are created.
-    /// </remarks>
-    /// <param name="node">Node key.</param>
-    public void AddNode(TKey node)
+    /// <remarks>The version changes after every successful structural mutation.</remarks>
+    public long version
+    {
+        get
+        {
+            m_sync.EnterReadLock();
+            try
+            {
+                return m_version;
+            }
+            finally
+            {
+                m_sync.ExitReadLock();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Determines whether a node exists.
+    /// </summary>
+    /// <param name="node">The node key.</param>
+    /// <returns><see langword="true"/> when the node exists.</returns>
+    public bool ContainsNode(TKey node)
+    {
+        m_sync.EnterReadLock();
+        try
+        {
+            return m_nodes.ContainsKey(node);
+        }
+        finally
+        {
+            m_sync.ExitReadLock();
+        }
+    }
+
+    /// <summary>
+    /// Adds a node when it does not already exist.
+    /// </summary>
+    /// <param name="node">The node key.</param>
+    /// <returns><see langword="true"/> when a node was added.</returns>
+    public bool AddNode(TKey node)
     {
         m_sync.EnterWriteLock();
         try
         {
-            AddNodeLocked(node);
+            if (!AddNodeLocked(node))
+                return false;
+
+            m_version++;
+            return true;
         }
         finally
         {
@@ -79,26 +150,58 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
     }
 
     /// <summary>
-    /// Adds a dependency edge (node depends on dependsOn).
+    /// Removes a node and every incoming and outgoing edge connected to it.
     /// </summary>
-    /// <remarks>
-    /// Both nodes are created if missing.
-    /// </remarks>
-    /// <param name="node">Dependent node.</param>
-    /// <param name="dependsOn">Dependency node.</param>
-    public void AddDependency(TKey node, TKey dependsOn)
+    /// <param name="node">The node key.</param>
+    /// <returns><see langword="true"/> when the node was removed.</returns>
+    public bool RemoveNode(TKey node)
+    {
+        m_sync.EnterWriteLock();
+        try
+        {
+            if (!m_nodes.Remove(node, out Node? removed))
+                return false;
+
+            foreach (TKey dependency in removed.dependencies)
+            {
+                if (m_nodes.TryGetValue(dependency, out Node? dependencyNode))
+                    dependencyNode.dependents.Remove(node);
+            }
+
+            foreach (TKey dependent in removed.dependents)
+            {
+                if (m_nodes.TryGetValue(dependent, out Node? dependentNode))
+                    dependentNode.dependencies.Remove(node);
+            }
+
+            m_version++;
+            return true;
+        }
+        finally
+        {
+            m_sync.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Adds an edge indicating that one node depends on another.
+    /// </summary>
+    /// <param name="node">The dependent node.</param>
+    /// <param name="dependency">The required dependency.</param>
+    /// <returns><see langword="true"/> when the edge was added.</returns>
+    public bool AddDependency(TKey node, TKey dependency)
     {
         m_sync.EnterWriteLock();
         try
         {
             AddNodeLocked(node);
-            AddNodeLocked(dependsOn);
+            AddNodeLocked(dependency);
+            if (!m_nodes[node].dependencies.Add(dependency))
+                return false;
 
-            if (!m_edges[node].Add(dependsOn))
-                return;
-
-            m_rev[dependsOn].Add(node);
-            m_structureVersion++;
+            m_nodes[dependency].dependents.Add(node);
+            m_version++;
+            return true;
         }
         finally
         {
@@ -109,27 +212,24 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
     /// <summary>
     /// Removes a dependency edge.
     /// </summary>
-    /// <remarks>
-    /// Returns false if the edge did not exist.
-    /// </remarks>
-    /// <param name="node">Dependent node.</param>
-    /// <param name="dependsOn">Dependency node.</param>
-    /// <returns>True if removed; otherwise false.</returns>
-    public bool RemoveDependency(TKey node, TKey dependsOn)
+    /// <param name="node">The dependent node.</param>
+    /// <param name="dependency">The required dependency.</param>
+    /// <returns><see langword="true"/> when the edge was removed.</returns>
+    public bool RemoveDependency(TKey node, TKey dependency)
     {
         m_sync.EnterWriteLock();
         try
         {
-            if (!m_edges.TryGetValue(node, out var set))
+            if (!m_nodes.TryGetValue(node, out Node? dependentNode) ||
+                !dependentNode.dependencies.Remove(dependency))
+            {
                 return false;
+            }
 
-            if (!set.Remove(dependsOn))
-                return false;
+            if (m_nodes.TryGetValue(dependency, out Node? dependencyNode))
+                dependencyNode.dependents.Remove(node);
 
-            if (m_rev.TryGetValue(dependsOn, out var rev))
-                rev.Remove(node);
-
-            m_structureVersion++;
+            m_version++;
             return true;
         }
         finally
@@ -139,610 +239,367 @@ public sealed class DependencyGraph<TKey, TValue> where TKey : notnull
     }
 
     /// <summary>
-    /// Removes a node and all incident edges.
+    /// Atomically replaces every direct dependency of a node.
     /// </summary>
-    /// <remarks>
-    /// Cached value (if any) is also removed.
-    /// </remarks>
-    /// <param name="node">Node key.</param>
-    /// <returns>True if removed; otherwise false.</returns>
-    public bool RemoveNode(TKey node)
+    /// <param name="node">The dependent node.</param>
+    /// <param name="dependencies">The complete replacement dependency set.</param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="dependencies"/> is <see langword="null"/>.
+    /// </exception>
+    public void ReplaceDependencies(TKey node, IEnumerable<TKey> dependencies)
     {
+        ArgumentNullException.ThrowIfNull(dependencies);
+        var replacement = new HashSet<TKey>(dependencies, m_equalityComparer);
+
         m_sync.EnterWriteLock();
         try
         {
-            if (!m_edges.Remove(node))
-                return false;
+            bool changed = AddNodeLocked(node);
+            foreach (TKey dependency in replacement)
+                changed |= AddNodeLocked(dependency);
 
-            if (m_rev.Remove(node, out var revSet))
+            Node target = m_nodes[node];
+            if (!changed && target.dependencies.SetEquals(replacement))
+                return;
+
+            foreach (TKey previous in target.dependencies)
+                m_nodes[previous].dependents.Remove(node);
+
+            target.dependencies.Clear();
+            foreach (TKey dependency in replacement)
             {
-                foreach (var r in revSet)
+                target.dependencies.Add(dependency);
+                m_nodes[dependency].dependents.Add(node);
+            }
+
+            m_version++;
+        }
+        finally
+        {
+            m_sync.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Gets direct or transitive dependencies of a node.
+    /// </summary>
+    /// <param name="node">The node to query.</param>
+    /// <param name="recursive">Whether transitive dependencies should be included.</param>
+    /// <returns>A stable dependency snapshot, or an empty list when the node is absent.</returns>
+    public IReadOnlyList<TKey> GetDependencies(TKey node, bool recursive = false)
+        => GetConnectedNodes(node, recursive, static value => value.dependencies);
+
+    /// <summary>
+    /// Gets direct or transitive dependents of a node.
+    /// </summary>
+    /// <param name="node">The node to query.</param>
+    /// <param name="recursive">Whether transitive dependents should be included.</param>
+    /// <returns>A stable dependent snapshot, or an empty list when the node is absent.</returns>
+    public IReadOnlyList<TKey> GetDependents(TKey node, bool recursive = false)
+        => GetConnectedNodes(node, recursive, static value => value.dependents);
+
+    /// <summary>
+    /// Determines whether one node directly or transitively depends on another.
+    /// </summary>
+    /// <param name="node">The dependent node.</param>
+    /// <param name="dependency">The dependency to find.</param>
+    /// <param name="recursive">Whether transitive edges should be searched.</param>
+    /// <returns><see langword="true"/> when the dependency exists.</returns>
+    public bool DependsOn(TKey node, TKey dependency, bool recursive = false)
+    {
+        m_sync.EnterReadLock();
+        try
+        {
+            if (!m_nodes.TryGetValue(node, out Node? start))
+                return false;
+            if (!recursive)
+                return start.dependencies.Contains(dependency);
+
+            var visited = new HashSet<TKey>(m_equalityComparer);
+            var pending = new Stack<TKey>(start.dependencies);
+            while (pending.Count > 0)
+            {
+                TKey current = pending.Pop();
+                if (m_equalityComparer.Equals(current, dependency))
+                    return true;
+                if (!visited.Add(current) || !m_nodes.TryGetValue(current, out Node? currentNode))
+                    continue;
+                foreach (TKey next in currentNode.dependencies)
+                    pending.Push(next);
+            }
+
+            return false;
+        }
+        finally
+        {
+            m_sync.ExitReadLock();
+        }
+    }
+
+    /// <summary>
+    /// Returns an order in which every dependency precedes its dependents.
+    /// </summary>
+    /// <returns>A deterministic topological ordering.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the graph contains a cycle. The exception message contains a complete cycle.
+    /// </exception>
+    public IReadOnlyList<TKey> TopologicalSort()
+    {
+        m_sync.EnterReadLock();
+        try
+        {
+            var remaining = new Dictionary<TKey, int>(m_nodes.Count, m_equalityComparer);
+            var ready = new PriorityQueue<TKey, NodePriority>(new NodePriorityComparer(m_orderingComparer));
+            foreach ((TKey key, Node value) in m_nodes)
+            {
+                remaining.Add(key, value.dependencies.Count);
+                if (value.dependencies.Count == 0)
+                    ready.Enqueue(key, new NodePriority(key, value.order));
+            }
+
+            var result = new List<TKey>(m_nodes.Count);
+            while (ready.TryDequeue(out TKey? current, out _))
+            {
+                result.Add(current);
+                foreach (TKey dependent in OrderNodes(m_nodes[current].dependents))
                 {
-                    if (m_edges.TryGetValue(r, out var set))
-                        set.Remove(node);
+                    if (--remaining[dependent] != 0)
+                        continue;
+                    Node dependentNode = m_nodes[dependent];
+                    ready.Enqueue(dependent, new NodePriority(dependent, dependentNode.order));
                 }
             }
 
-            m_entries.Remove(node);
-            m_structureVersion++;
-            return true;
+            if (result.Count == m_nodes.Count)
+                return result.ToArray();
+
+            IReadOnlyList<TKey> cycle = FindCycleLocked();
+            throw new InvalidOperationException(
+                $"Dependency graph contains a cycle: {string.Join(" -> ", cycle)}.");
         }
         finally
         {
-            m_sync.ExitWriteLock();
+            m_sync.ExitReadLock();
         }
     }
 
     /// <summary>
-    /// Clears all nodes, edges, and cached values.
+    /// Tries to find one complete cycle in the graph.
+    /// </summary>
+    /// <param name="cycle">
+    /// A closed cycle whose first and last nodes are equal, or an empty list when acyclic.
+    /// </param>
+    /// <returns><see langword="true"/> when a cycle was found.</returns>
+    public bool TryFindCycle(out IReadOnlyList<TKey> cycle)
+    {
+        m_sync.EnterReadLock();
+        try
+        {
+            cycle = FindCycleLocked();
+            return cycle.Count != 0;
+        }
+        finally
+        {
+            m_sync.ExitReadLock();
+        }
+    }
+
+    /// <summary>
+    /// Gets every strongly connected component in deterministic order.
+    /// </summary>
+    /// <returns>
+    /// A stable snapshot containing cyclic components and single-node acyclic components.
+    /// </returns>
+    public IReadOnlyList<IReadOnlyList<TKey>> GetStronglyConnectedComponents()
+    {
+        m_sync.EnterReadLock();
+        try
+        {
+            int nextIndex = 0;
+            var indexes = new Dictionary<TKey, int>(m_nodes.Count, m_equalityComparer);
+            var lowLinks = new Dictionary<TKey, int>(m_nodes.Count, m_equalityComparer);
+            var active = new HashSet<TKey>(m_equalityComparer);
+            var stack = new Stack<TKey>();
+            var components = new List<IReadOnlyList<TKey>>();
+
+            foreach (TKey node in OrderNodes(m_nodes.Keys))
+            {
+                if (!indexes.ContainsKey(node))
+                    Visit(node);
+            }
+
+            components.Sort((left, right) => CompareNodes(left[0], right[0]));
+            return components.ToArray();
+
+            void Visit(TKey node)
+            {
+                indexes[node] = nextIndex;
+                lowLinks[node] = nextIndex;
+                nextIndex++;
+                stack.Push(node);
+                active.Add(node);
+
+                foreach (TKey dependency in OrderNodes(m_nodes[node].dependencies))
+                {
+                    if (!indexes.ContainsKey(dependency))
+                    {
+                        Visit(dependency);
+                        lowLinks[node] = Math.Min(lowLinks[node], lowLinks[dependency]);
+                    }
+                    else if (active.Contains(dependency))
+                    {
+                        lowLinks[node] = Math.Min(lowLinks[node], indexes[dependency]);
+                    }
+                }
+
+                if (lowLinks[node] != indexes[node])
+                    return;
+
+                var component = new List<TKey>();
+                TKey current;
+                do
+                {
+                    current = stack.Pop();
+                    active.Remove(current);
+                    component.Add(current);
+                }
+                while (!m_equalityComparer.Equals(current, node));
+
+                component.Sort(CompareNodes);
+                components.Add(component.ToArray());
+            }
+        }
+        finally
+        {
+            m_sync.ExitReadLock();
+        }
+    }
+
+    /// <summary>
+    /// Removes every node and edge.
     /// </summary>
     public void Clear()
     {
         m_sync.EnterWriteLock();
         try
         {
-            m_edges.Clear();
-            m_rev.Clear();
-            m_entries.Clear();
-            m_structureVersion++;
-            m_cachedTopoVersion = -1;
-            m_cachedTopo = null;
-            m_cachedCyclic = null;
-        }
-        finally
-        {
-            m_sync.ExitWriteLock();
-        }
-    }
-
-    /// <summary>
-    /// Returns a topological ordering.
-    /// </summary>
-    /// <remarks>
-    /// If cycles exist and allowCycles is false, throws. If allowCycles is true, returns a partial
-    /// order (acyclic subset).
-    /// </remarks>
-    /// <returns>Topological order of nodes.</returns>
-    public IReadOnlyList<TKey> TopologicalSort()
-        => TopologicalSort(out _);
-
-    /// <summary>
-    /// Returns a topological ordering and outputs cyclic nodes when cycles exist.
-    /// </summary>
-    /// <remarks>
-    /// When allowCycles is false and cycles exist, throws.
-    /// </remarks>
-    /// <param name="cyclicNodes">Nodes that are part of cycles.</param>
-    /// <returns>Topological order of acyclic nodes.</returns>
-    public IReadOnlyList<TKey> TopologicalSort(out IReadOnlyList<TKey> cyclicNodes)
-    {
-        var topo = GetCachedTopologicalOrder();
-        cyclicNodes = topo.Cyclic;
-
-        if (cyclicNodes.Count > 0 && !allowCycles)
-            throw new InvalidOperationException("Dependency graph contains cycles.");
-
-        return topo.Order;
-    }
-
-    /// <summary>
-    /// Returns true if the graph contains a cycle.
-    /// </summary>
-    /// <returns>True if a cycle exists.</returns>
-    public bool HasCycle()
-    {
-        var snapshot = Snapshot();
-        var state = new Dictionary<TKey, int>(snapshot.Count);
-        var stack = new Stack<TKey>();
-        var indexByNode = new Dictionary<TKey, int>(snapshot.Count);
-
-        foreach (var node in snapshot.Keys)
-            state[node] = 0;
-
-        foreach (var node in snapshot.Keys)
-        {
-            if (state[node] != 0)
-                continue;
-
-            if (Dfs(node, snapshot, state, stack, indexByNode, out _))
-                return true;
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Marks a node as dirty and propagates to dependents (reverse edges).
-    /// </summary>
-    /// <remarks>
-    /// No-op when dependencyCacheMode is Disabled.
-    /// </remarks>
-    /// <param name="key">Node key.</param>
-    public void Invalidate(TKey key)
-    {
-        if (dependencyCacheMode == DependencyCacheMode.Disabled)
-            return;
-
-        List<TKey> toVisit;
-        m_sync.EnterWriteLock();
-        try
-        {
-            if (!m_entries.TryGetValue(key, out var entry))
+            if (m_nodes.Count == 0)
                 return;
-
-            entry.dirty = true;
-            entry.generation++;
-
-            toVisit = new List<TKey>();
-            if (m_rev.TryGetValue(key, out var rev))
-                toVisit.AddRange(rev);
+            m_nodes.Clear();
+            m_version++;
         }
         finally
         {
             m_sync.ExitWriteLock();
         }
-
-        if (toVisit.Count == 0)
-            return;
-
-        var queue = new Queue<TKey>(toVisit);
-        var visited = new HashSet<TKey>();
-
-        while (queue.Count > 0)
-        {
-            var n = queue.Dequeue();
-            if (!visited.Add(n))
-                continue;
-
-            m_sync.EnterWriteLock();
-            try
-            {
-                if (m_entries.TryGetValue(n, out var entry))
-                {
-                    entry.dirty = true;
-                    entry.generation++;
-                }
-
-                if (m_rev.TryGetValue(n, out var rev))
-                {
-                    foreach (var r in rev)
-                        queue.Enqueue(r);
-                }
-            }
-            finally
-            {
-                m_sync.ExitWriteLock();
-            }
-        }
     }
 
-    /// <summary>
-    /// Tries to get a cached value only if it exists and is not dirty.
-    /// </summary>
-    /// <remarks>
-    /// Returns false if dependencyCacheMode is Disabled or the value is missing/stale.
-    /// </remarks>
-    /// <param name="key">Node key.</param>
-    /// <param name="value">Cached value, if available.</param>
-    /// <returns>True if a valid cached value exists.</returns>
-    public bool TryGet(TKey key, out TValue? value)
+    private bool AddNodeLocked(TKey node)
     {
-        value = default;
-        if (dependencyCacheMode == DependencyCacheMode.Disabled)
+        if (m_nodes.ContainsKey(node))
             return false;
-
-        m_sync.EnterReadLock();
-        try
+        m_nodes.Add(node, new Node
         {
-            if (!m_entries.TryGetValue(key, out var entry) || !entry.hasValue || entry.dirty)
-                return false;
-
-            entry.lastAccessTicks = Environment.TickCount64;
-            value = entry.value;
-            return true;
-        }
-        finally
-        {
-            m_sync.ExitReadLock();
-        }
+            order = m_nextNodeOrder++,
+            dependencies = new HashSet<TKey>(m_equalityComparer),
+            dependents = new HashSet<TKey>(m_equalityComparer)
+        });
+        return true;
     }
 
-    /// <summary>
-    /// Gets a cached value or computes it using factory(key) and stores the result.
-    /// </summary>
-    /// <remarks>
-    /// In Eager mode, this first updates all dirty nodes. In Disabled mode, it just returns factory(key).
-    /// </remarks>
-    /// <param name="key">Node key.</param>
-    /// <param name="factory">Factory used to compute the value.</param>
-    /// <returns>The cached or computed value.</returns>
-    public TValue GetOrUpdate(TKey key, Func<TKey, TValue> factory)
-    {
-        if (factory == null) throw new ArgumentNullException(nameof(factory));
-
-        if (dependencyCacheMode == DependencyCacheMode.Disabled)
-            return factory(key);
-
-        if (dependencyCacheMode == DependencyCacheMode.Eager)
-            UpdateDirty(factory);
-
-        int generation;
-
-        m_sync.EnterWriteLock();
-        try
-        {
-            AddNodeLocked(key);
-            var entry = m_entries[key];
-
-            if (entry.hasValue && !entry.dirty)
-            {
-                entry.lastAccessTicks = Environment.TickCount64;
-                return entry.value!;
-            }
-
-            generation = entry.generation;
-        }
-        finally
-        {
-            m_sync.ExitWriteLock();
-        }
-
-        var computed = factory(key);
-
-        m_sync.EnterWriteLock();
-        try
-        {
-            var entry = m_entries[key];
-            if (entry.generation != generation)
-                return entry.hasValue ? entry.value! : computed;
-
-            entry.value = computed;
-            entry.hasValue = true;
-            entry.dirty = false;
-            entry.lastAccessTicks = Environment.TickCount64;
-            entry.lastUpdateTicks = entry.lastAccessTicks;
-            return computed;
-        }
-        finally
-        {
-            m_sync.ExitWriteLock();
-        }
-    }
-
-    /// <summary>
-    /// Updates dirty nodes in dependency order using factory(key). Returns how many nodes were updated.
-    /// </summary>
-    /// <remarks>
-    /// If allowCycles is true, cyclic nodes are updated after the acyclic subset.
-    /// </remarks>
-    /// <param name="factory">Factory used to compute values.</param>
-    /// <param name="maxCount">Maximum number of nodes to update.</param>
-    /// <returns>Number of nodes updated.</returns>
-    public int UpdateDirty(Func<TKey, TValue> factory, int maxCount = int.MaxValue)
-    {
-        if (factory == null) throw new ArgumentNullException(nameof(factory));
-        if (dependencyCacheMode == DependencyCacheMode.Disabled)
-            return 0;
-
-        var dirtyNodes = GetDirtyNodesSnapshot();
-        if (dirtyNodes.Count == 0)
-            return 0;
-
-        List<TKey> order;
-        List<TKey> cyclic;
-        if (dirtyNodes.Count == count)
-        {
-            var topo = GetCachedTopologicalOrder();
-            order = topo.Order;
-            cyclic = topo.Cyclic;
-        }
-        else
-        {
-            var subgraph = SnapshotSubgraph(dirtyNodes);
-            order = TopologicalOrder(subgraph, out cyclic);
-        }
-
-        if (cyclic.Count > 0 && !allowCycles)
-            throw new InvalidOperationException("Dependency graph contains cycles.");
-
-        int updated = 0;
-        for (int i = 0; i < order.Count && updated < maxCount; i++)
-        {
-            var key = order[i];
-            if (!IsDirty(key, out var gen))
-                continue;
-
-            var value = factory(key);
-            if (TryCommit(key, gen, value))
-                updated++;
-        }
-
-        if (allowCycles && cyclic.Count > 0 && updated < maxCount)
-        {
-            for (int i = 0; i < cyclic.Count && updated < maxCount; i++)
-            {
-                var key = cyclic[i];
-                if (!IsDirty(key, out var gen))
-                    continue;
-
-                var value = factory(key);
-                if (TryCommit(key, gen, value))
-                    updated++;
-            }
-        }
-
-        return updated;
-    }
-
-    private bool IsDirty(TKey key, out int generation)
-    {
-        m_sync.EnterReadLock();
-        try
-        {
-            if (!m_entries.TryGetValue(key, out var entry))
-            {
-                generation = 0;
-                return false;
-            }
-
-            generation = entry.generation;
-            return entry.dirty;
-        }
-        finally
-        {
-            m_sync.ExitReadLock();
-        }
-    }
-
-    private bool TryCommit(TKey key, int generation, TValue value)
-    {
-        m_sync.EnterWriteLock();
-        try
-        {
-            if (!m_entries.TryGetValue(key, out var entry))
-                return false;
-
-            if (entry.generation != generation)
-                return false;
-
-            entry.value = value;
-            entry.hasValue = true;
-            entry.dirty = false;
-            entry.lastAccessTicks = Environment.TickCount64;
-            entry.lastUpdateTicks = entry.lastAccessTicks;
-            return true;
-        }
-        finally
-        {
-            m_sync.ExitWriteLock();
-        }
-    }
-
-    private Dictionary<TKey, HashSet<TKey>> Snapshot()
-    {
-        m_sync.EnterReadLock();
-        try
-        {
-            return SnapshotUnsafe();
-        }
-        finally
-        {
-            m_sync.ExitReadLock();
-        }
-    }
-
-    private Dictionary<TKey, HashSet<TKey>> SnapshotUnsafe()
-    {
-        var snapshot = new Dictionary<TKey, HashSet<TKey>>(m_edges.Count);
-        foreach (var kv in m_edges)
-            snapshot[kv.Key] = new HashSet<TKey>(kv.Value);
-        return snapshot;
-    }
-
-    private void AddNodeLocked(TKey node)
-    {
-        if (!m_edges.ContainsKey(node))
-        {
-            m_edges[node] = new HashSet<TKey>();
-            m_structureVersion++;
-        }
-
-        if (!m_rev.ContainsKey(node))
-            m_rev[node] = new HashSet<TKey>();
-
-        if (!m_entries.ContainsKey(node))
-            m_entries[node] = new DependencyEntry<TValue>();
-    }
-
-    private List<TKey> GetDirtyNodesSnapshot()
-    {
-        m_sync.EnterReadLock();
-        try
-        {
-            var list = new List<TKey>();
-            foreach (var kv in m_entries)
-            {
-                if (kv.Value.dirty)
-                    list.Add(kv.Key);
-            }
-
-            return list;
-        }
-        finally
-        {
-            m_sync.ExitReadLock();
-        }
-    }
-
-    private Dictionary<TKey, HashSet<TKey>> SnapshotSubgraph(List<TKey> nodes)
-    {
-        var set = new HashSet<TKey>(nodes);
-        m_sync.EnterReadLock();
-        try
-        {
-            var snapshot = new Dictionary<TKey, HashSet<TKey>>(nodes.Count);
-            foreach (var node in nodes)
-            {
-                if (!m_edges.TryGetValue(node, out var deps))
-                {
-                    snapshot[node] = new HashSet<TKey>();
-                    continue;
-                }
-
-                var filtered = new HashSet<TKey>();
-                foreach (var dep in deps)
-                {
-                    if (set.Contains(dep))
-                        filtered.Add(dep);
-                }
-
-                snapshot[node] = filtered;
-            }
-
-            return snapshot;
-        }
-        finally
-        {
-            m_sync.ExitReadLock();
-        }
-    }
-
-    private (List<TKey> Order, List<TKey> Cyclic) GetCachedTopologicalOrder()
-    {
-        m_sync.EnterReadLock();
-        try
-        {
-            if (m_cachedTopo != null && m_cachedCyclic != null && m_cachedTopoVersion == m_structureVersion)
-                return (m_cachedTopo, m_cachedCyclic);
-        }
-        finally
-        {
-            m_sync.ExitReadLock();
-        }
-
-        m_sync.EnterWriteLock();
-        try
-        {
-            if (m_cachedTopo != null && m_cachedCyclic != null && m_cachedTopoVersion == m_structureVersion)
-                return (m_cachedTopo, m_cachedCyclic);
-
-            var snapshot = SnapshotUnsafe();
-            var order = TopologicalOrder(snapshot, out var cyclic);
-            m_cachedTopo = order;
-            m_cachedCyclic = cyclic;
-            m_cachedTopoVersion = m_structureVersion;
-            return (order, cyclic);
-        }
-        finally
-        {
-            m_sync.ExitWriteLock();
-        }
-    }
-
-    private static List<TKey> TopologicalOrder(Dictionary<TKey, HashSet<TKey>> deps, out List<TKey> cyclic)
-    {
-        var incoming = new Dictionary<TKey, int>(deps.Count);
-        foreach (var node in deps.Keys)
-            incoming[node] = 0;
-
-        foreach (var kv in deps)
-        {
-            foreach (var dep in kv.Value)
-                incoming[kv.Key] = incoming[kv.Key] + 1;
-        }
-
-        var queue = new Queue<TKey>();
-        foreach (var kv in incoming)
-        {
-            if (kv.Value == 0)
-                queue.Enqueue(kv.Key);
-        }
-
-        var result = new List<TKey>(deps.Count);
-        var remaining = new Dictionary<TKey, HashSet<TKey>>(deps.Count);
-        foreach (var kv in deps)
-            remaining[kv.Key] = new HashSet<TKey>(kv.Value);
-
-        while (queue.Count > 0)
-        {
-            var n = queue.Dequeue();
-            result.Add(n);
-
-            foreach (var kv in remaining)
-            {
-                if (!kv.Value.Remove(n))
-                    continue;
-
-                incoming[kv.Key] = incoming[kv.Key] - 1;
-                if (incoming[kv.Key] == 0)
-                    queue.Enqueue(kv.Key);
-            }
-        }
-
-        cyclic = new List<TKey>();
-        if (result.Count != deps.Count)
-        {
-            foreach (var kv in incoming)
-            {
-                if (kv.Value > 0)
-                    cyclic.Add(kv.Key);
-            }
-        }
-
-        return result;
-    }
-
-    private static bool Dfs(
+    private IReadOnlyList<TKey> GetConnectedNodes(
         TKey node,
-        Dictionary<TKey, HashSet<TKey>> edges,
-        Dictionary<TKey, int> state,
-        Stack<TKey> stack,
-        Dictionary<TKey, int> indexByNode,
-        out IReadOnlyList<TKey> cycle)
+        bool recursive,
+        Func<Node, HashSet<TKey>> selector)
     {
-        state[node] = 1;
-        indexByNode[node] = stack.Count;
-        stack.Push(node);
-
-        if (edges.TryGetValue(node, out var deps))
+        m_sync.EnterReadLock();
+        try
         {
-            foreach (var dep in deps)
-            {
-                if (!state.TryGetValue(dep, out var s))
-                {
-                    state[dep] = 0;
-                    s = 0;
-                }
+            if (!m_nodes.TryGetValue(node, out Node? start))
+                return Array.Empty<TKey>();
+            if (!recursive)
+                return OrderNodes(selector(start));
 
-                if (s == 0)
+            var result = new HashSet<TKey>(m_equalityComparer);
+            var pending = new Stack<TKey>(selector(start));
+            while (pending.Count > 0)
+            {
+                TKey current = pending.Pop();
+                if (!result.Add(current) || !m_nodes.TryGetValue(current, out Node? currentNode))
+                    continue;
+                foreach (TKey connected in selector(currentNode))
+                    pending.Push(connected);
+            }
+
+            result.Remove(node);
+            return OrderNodes(result);
+        }
+        finally
+        {
+            m_sync.ExitReadLock();
+        }
+    }
+
+    private IReadOnlyList<TKey> FindCycleLocked()
+    {
+        var states = new Dictionary<TKey, byte>(m_nodes.Count, m_equalityComparer);
+        var path = new List<TKey>();
+        var pathIndexes = new Dictionary<TKey, int>(m_nodes.Count, m_equalityComparer);
+
+        foreach (TKey node in OrderNodes(m_nodes.Keys))
+        {
+            if (!states.ContainsKey(node) && Visit(node, out IReadOnlyList<TKey>? cycle))
+                return cycle;
+        }
+        return Array.Empty<TKey>();
+
+        bool Visit(TKey node, out IReadOnlyList<TKey> cycle)
+        {
+            states[node] = 1;
+            pathIndexes[node] = path.Count;
+            path.Add(node);
+            foreach (TKey dependency in OrderNodes(m_nodes[node].dependencies))
+            {
+                if (!states.TryGetValue(dependency, out byte state))
                 {
-                    if (Dfs(dep, edges, state, stack, indexByNode, out cycle))
+                    if (Visit(dependency, out cycle))
                         return true;
                 }
-                else if (s == 1)
+                else if (state == 1)
                 {
-                    if (!indexByNode.TryGetValue(dep, out var start))
-                        start = 0;
-
-                    var arr = stack.ToArray();
-                    Array.Reverse(arr);
-
-                    var list = new List<TKey>();
-                    for (int i = start; i < arr.Length; i++)
-                        list.Add(arr[i]);
-
-                    list.Add(dep);
-                    cycle = list;
+                    int start = pathIndexes[dependency];
+                    var found = new List<TKey>(path.Count - start + 1);
+                    for (int i = start; i < path.Count; i++)
+                        found.Add(path[i]);
+                    found.Add(dependency);
+                    cycle = found.ToArray();
                     return true;
                 }
             }
+
+            states[node] = 2;
+            pathIndexes.Remove(node);
+            path.RemoveAt(path.Count - 1);
+            cycle = Array.Empty<TKey>();
+            return false;
         }
+    }
 
-        stack.Pop();
-        indexByNode.Remove(node);
-        state[node] = 2;
+    private TKey[] OrderNodes(IEnumerable<TKey> nodes)
+    {
+        TKey[] result = nodes.ToArray();
+        Array.Sort(result, CompareNodes);
+        return result;
+    }
 
-        cycle = Array.Empty<TKey>();
-        return false;
+    private int CompareNodes(TKey left, TKey right)
+    {
+        if (m_orderingComparer is not null)
+        {
+            int comparison = m_orderingComparer.Compare(left, right);
+            if (comparison != 0)
+                return comparison;
+        }
+        return m_nodes[left].order.CompareTo(m_nodes[right].order);
     }
 }

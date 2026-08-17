@@ -4,6 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <InnoAssemblyGroup>Core</InnoAssemblyGroup>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,6 +14,7 @@
     <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" />
     <ProjectReference Include="..\..\core\Inno.Core.Framework\Inno.Core.Framework.csproj" />
     <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" />
+    <ProjectReference Include="..\..\engine\Inno.Engine.Assets\Inno.Engine.Assets.csproj" />
     <ProjectReference Include="..\..\platform\Inno.Platform\Inno.Platform.csproj" />
     <ProjectReference Include="..\..\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" />
   </ItemGroup>

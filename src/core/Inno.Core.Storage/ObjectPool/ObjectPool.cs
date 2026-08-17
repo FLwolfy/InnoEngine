@@ -32,6 +32,9 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     private int m_nextIndexId = 1;
     private int m_version;
 
+    /// <summary>
+    /// Creates an empty object pool.
+    /// </summary>
     public ObjectPool()
     {
         m_poolRef = new WeakReference<IObjectPool>(this);

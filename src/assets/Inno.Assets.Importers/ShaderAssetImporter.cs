@@ -7,11 +7,12 @@ using Inno.Assets.Types;
 
 namespace Inno.Assets.Importers;
 
-public sealed class ShaderAssetImporter : AssetImporter<ShaderAsset>
+[AssetImporterExtension]
+internal sealed class ShaderAssetImporter : AssetImporter<ShaderAsset>
 {
     public override IReadOnlyList<string> supportedExtensions { get; } = [".vert", ".frag", ".comp", ".glsl"];
 
-    public override AssetImportResult<ShaderAsset> ImportTyped(in AssetImportContext context)
+    protected override AssetImportResult<ShaderAsset> Import(AssetImportContext context)
     {
         string source = context.ReadUtf8Text();
         string stage = context.extension switch
@@ -26,7 +27,7 @@ public sealed class ShaderAssetImporter : AssetImporter<ShaderAsset>
         return new AssetImportResult<ShaderAsset>(asset, Encoding.UTF8.GetBytes(source));
     }
 
-    public override bool TryExportTyped(ShaderAsset asset, out byte[] sourceBytes)
+    protected override bool TryExport(ShaderAsset asset, out byte[] sourceBytes)
     {
         sourceBytes = Encoding.UTF8.GetBytes(asset.sourceCode);
         return true;

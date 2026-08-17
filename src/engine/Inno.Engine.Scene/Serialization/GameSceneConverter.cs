@@ -49,6 +49,8 @@ internal sealed class GameSceneConverter : SerializationConverter<GameScene>
         var scene = new GameScene(
             reader.Read<string>(SceneGraphSerialization.C_NAME_KEY),
             instantiateFromAsset ? null : sceneId);
+        if (sourceAsset is not null)
+            scene.SetSourceAsset(sourceAsset);
         try
         {
             var references = new SceneGraphReferenceMap(scene);

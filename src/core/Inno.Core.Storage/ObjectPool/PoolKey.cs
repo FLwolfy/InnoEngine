@@ -3,11 +3,17 @@ using System.Runtime.CompilerServices;
 
 namespace Inno.Core.Storage;
 
+/// <summary>
+/// Defines indexing and cardinality behavior for an object-pool key.
+/// </summary>
 [Flags]
 public enum PoolKeyFlags
 {
+    /// <summary>Uses hash-based lookup without key ordering.</summary>
     Unordered = 1 << 0,
+    /// <summary>Maintains key ordering using the supplied comparer.</summary>
     Ordered = 1 << 1,
+    /// <summary>Allows at most one item for each key value.</summary>
     Unique =  1 << 2,
 }
 

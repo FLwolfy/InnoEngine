@@ -156,6 +156,8 @@ internal sealed class AssetWatcher : IDisposable
             return;
 
         string relative = NormalizeRelativePath(Path.GetRelativePath(m_root, fullPath));
+        if (IsGeneratedPath(relative))
+            return;
 
         lock (m_sync)
         {
@@ -255,4 +257,8 @@ internal sealed class AssetWatcher : IDisposable
 
         return path == "." ? string.Empty : path;
     }
+
+    private static bool IsGeneratedPath(string relativePath)
+        => relativePath.EndsWith(".imeta", StringComparison.OrdinalIgnoreCase) ||
+           relativePath.EndsWith(".abin", StringComparison.OrdinalIgnoreCase);
 }
