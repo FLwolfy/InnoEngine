@@ -81,4 +81,14 @@ public abstract class EngineObject : IIdentityObject
             m_isDestroyed = true;
         }
     }
+
+    internal Guid ReleaseIdentityForReplacement()
+    {
+        if (m_isDestroyed)
+            throw new InvalidOperationException($"Destroyed object '{GetType().FullName}' cannot be replaced.");
+        Guid persistentId = identity.persistentId;
+        if (!IdentityManager.Unregister(this))
+            throw new InvalidOperationException($"Identity release failed for '{GetType().FullName}'.");
+        return persistentId;
+    }
 }

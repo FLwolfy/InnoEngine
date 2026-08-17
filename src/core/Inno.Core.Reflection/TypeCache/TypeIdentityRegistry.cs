@@ -46,7 +46,7 @@ internal sealed class TypeIdentityRegistry
         }
     }
 
-    public void Rebuild(IEnumerable<Type> types)
+    public void Rebuild(IEnumerable<Type> types, TypeIdentityRegistry? previous)
     {
         ArgumentNullException.ThrowIfNull(types);
 
@@ -90,12 +90,15 @@ internal sealed class TypeIdentityRegistry
             .ThenBy(t => t.FullName, StringComparer.Ordinal)
             .ToArray();
 
-        Dictionary<Type, int> previousRuntimeByType;
-        int nextRuntimeTypeId;
-        lock (m_sync)
+        Dictionary<Type, int> previousRuntimeByType = [];
+        int nextRuntimeTypeId = 1;
+        if (previous is not null)
         {
-            previousRuntimeByType = m_runtimeByType;
-            nextRuntimeTypeId = m_nextRuntimeTypeId;
+            lock (previous.m_sync)
+            {
+                previousRuntimeByType = new Dictionary<Type, int>(previous.m_runtimeByType);
+                nextRuntimeTypeId = previous.m_nextRuntimeTypeId;
+            }
         }
 
         var runtimeByType = new Dictionary<Type, int>(orderedTypes.Length);
@@ -120,7 +123,7 @@ internal sealed class TypeIdentityRegistry
             m_runtimeByType = runtimeByType;
             m_typeByRuntime = typeByRuntime;
             m_nextRuntimeTypeId = nextRuntimeTypeId;
-            m_version++;
+            m_version = previous?.version + 1 ?? 1;
         }
     }
 

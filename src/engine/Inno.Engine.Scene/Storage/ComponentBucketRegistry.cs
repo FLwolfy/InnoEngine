@@ -35,6 +35,19 @@ internal sealed class ComponentBucketRegistry
         return result;
     }
 
+    internal void RemoveIfEmpty(IComponentBucket bucket)
+    {
+        if (bucket.count != 0 ||
+            !m_buckets.TryGetValue(bucket.componentType, out IComponentBucket? registered) ||
+            !ReferenceEquals(registered, bucket))
+        {
+            return;
+        }
+
+        m_buckets.Remove(bucket.componentType);
+        m_assignableBuckets.Clear();
+    }
+
     internal void Clear()
     {
         foreach (IComponentBucket bucket in m_buckets.Values)

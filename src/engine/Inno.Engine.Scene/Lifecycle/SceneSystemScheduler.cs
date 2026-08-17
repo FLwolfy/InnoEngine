@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 
 namespace Inno.Engine.Scene;
 
@@ -17,28 +19,107 @@ internal sealed class SceneSystemScheduler
     }
 
     internal TSystem Add<TSystem>() where TSystem : GameSystem, new()
+        => (TSystem)Add(typeof(TSystem), persistentId: null, invokeReset: true);
+
+    internal GameSystem Add(Type systemType, Guid? persistentId, bool invokeReset)
     {
-        var system = new TSystem();
-        Add(system);
+        ArgumentNullException.ThrowIfNull(systemType);
+        if (!typeof(GameSystem).IsAssignableFrom(systemType) || systemType.IsAbstract || !systemType.IsClass)
+            throw new ArgumentException($"Type '{systemType.FullName}' is not a concrete GameSystem.", nameof(systemType));
+        ConstructorInfo? constructor = systemType.GetConstructor(
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            Type.EmptyTypes,
+            modifiers: null);
+        if (constructor is null)
+            throw new InvalidOperationException($"GameSystem '{systemType.FullName}' requires a parameterless constructor.");
+        var system = (GameSystem)(constructor.Invoke(null)
+            ?? throw new InvalidOperationException($"Could not create GameSystem '{systemType.FullName}'."));
+        Add(system, persistentId, invokeReset);
         return system;
     }
 
-    internal void Add(GameSystem system)
+    internal void Add(GameSystem system, Guid? persistentId = null, bool invokeReset = true)
     {
         ArgumentNullException.ThrowIfNull(system);
         if (m_systems.Contains(system))
-            throw new InvalidOperationException($"System '{system.GetType().FullName}' is already registered with scene '{m_scene.name}'.");
+            throw new InvalidOperationException(
+                $"System '{system.GetType().FullName}' is already registered with scene '{m_scene.name}'.");
+        Type systemType = system.GetType();
+        bool allowsMultiple = systemType.IsDefined(typeof(AllowMultipleSystemAttribute), inherit: false);
+        if (!allowsMultiple && m_systems.Any(existing => existing.GetType() == systemType))
+            throw new InvalidOperationException($"Scene '{m_scene.name}' already contains GameSystem '{systemType.FullName}'.");
+
         system.Attach(m_scene);
-        m_systems.Add(system);
-        m_systems.Sort(static (left, right) => left.order.CompareTo(right.order));
+        try
+        {
+            system.RegisterIdentity(persistentId);
+            m_systems.Add(system);
+            Sort();
+            if (invokeReset)
+                system.DispatchReset();
+        }
+        catch
+        {
+            m_systems.Remove(system);
+            if (!system.isDestroyed)
+                system.Detach();
+            throw;
+        }
     }
 
     internal bool Remove(GameSystem system)
     {
         if (!m_systems.Remove(system))
             return false;
-        system.Detach();
+        try
+        {
+            SceneLifecycle.Destroy(system);
+        }
+        finally
+        {
+            if (!system.isDestroyed)
+                system.Detach();
+        }
         return true;
+    }
+
+    internal void Reset(GameSystem system)
+    {
+        if (!m_systems.Contains(system))
+            throw new InvalidOperationException($"GameSystem '{system.GetType().FullName}' is not registered.");
+        system.DispatchReset();
+        Sort();
+    }
+
+    internal IReadOnlyList<GameSystem> GetSystems() => m_systems.ToArray();
+
+    internal void ReplaceForReload(GameSystem previous, GameSystem replacement)
+    {
+        int index = m_systems.IndexOf(previous);
+        if (index < 0)
+            throw new InvalidOperationException("The GameSystem being replaced is not registered.");
+        bool attachedHere = replacement.ownerScene is null;
+        if (attachedHere)
+            replacement.Attach(m_scene);
+        else if (!ReferenceEquals(replacement.ownerScene, m_scene))
+            throw new InvalidOperationException("The replacement GameSystem belongs to another scene.");
+        Guid persistentId = previous.ReleaseIdentityForReplacement();
+        try
+        {
+            replacement.RegisterIdentity(persistentId);
+            m_systems[index] = replacement;
+            Sort();
+        }
+        catch
+        {
+            if (replacement.identity.runtimeId is not null)
+                _ = replacement.ReleaseIdentityForReplacement();
+            previous.RegisterIdentity(persistentId);
+            if (attachedHere && !replacement.isDestroyed)
+                replacement.Detach();
+            throw;
+        }
     }
 
     internal void DestroyBehavior(GameBehavior behavior) => m_behaviors.Destroy(behavior);
@@ -47,12 +128,12 @@ internal sealed class SceneSystemScheduler
     {
         using IDisposable iteration = m_scene.BeginExecutionPhase();
         m_behaviors.FixedUpdate(fixedDeltaTime);
-        GameSystem[] systems = [.. m_systems];
-        for (int i = 0; i < systems.Length; i++)
+        foreach (GameSystem system in m_systems.ToArray())
         {
             if (!m_scene.canDispatch)
                 break;
-            systems[i].DispatchFixedUpdate(fixedDeltaTime);
+            if (SceneLifecycle.Prepare(system, m_scene) && system.isActiveAndEnabled)
+                system.DispatchFixedUpdate(fixedDeltaTime);
         }
     }
 
@@ -60,12 +141,20 @@ internal sealed class SceneSystemScheduler
     {
         using IDisposable iteration = m_scene.BeginExecutionPhase();
         m_behaviors.Update(deltaTime);
-        GameSystem[] systems = [.. m_systems];
-        for (int i = 0; i < systems.Length; i++)
+        foreach (GameSystem system in m_systems.ToArray())
         {
             if (!m_scene.canDispatch)
                 break;
-            systems[i].DispatchUpdate(deltaTime);
+            if (!SceneLifecycle.Prepare(system, m_scene) || !system.isActiveAndEnabled)
+                continue;
+            if (!system.lifecycleStartCalled)
+            {
+                system.lifecycleStartCalled = true;
+                ((ISceneLifecycleObject)system).DispatchStart();
+                if (!m_scene.canDispatch || system.isDestroyed)
+                    break;
+            }
+            system.DispatchUpdate(deltaTime);
         }
     }
 
@@ -73,12 +162,14 @@ internal sealed class SceneSystemScheduler
     {
         using IDisposable iteration = m_scene.BeginExecutionPhase();
         m_behaviors.LateUpdate(deltaTime);
-        GameSystem[] systems = [.. m_systems];
-        for (int i = 0; i < systems.Length; i++)
+        foreach (GameSystem system in m_systems.ToArray())
         {
             if (!m_scene.canDispatch)
                 break;
-            systems[i].DispatchLateUpdate(deltaTime);
+            if (SceneLifecycle.Prepare(system, m_scene) &&
+                system.isActiveAndEnabled &&
+                system.lifecycleStartCalled)
+                system.DispatchLateUpdate(deltaTime);
         }
     }
 
@@ -86,7 +177,26 @@ internal sealed class SceneSystemScheduler
     {
         GameSystem[] systems = [.. m_systems];
         m_systems.Clear();
-        for (int i = 0; i < systems.Length; i++)
-            systems[i].Detach();
+        foreach (GameSystem system in systems)
+        {
+            try
+            {
+                SceneLifecycle.Destroy(system);
+            }
+            finally
+            {
+                if (!system.isDestroyed)
+                    system.Detach();
+            }
+        }
+    }
+
+    private void Sort()
+    {
+        GameSystem[] ordered = m_systems
+            .OrderBy(static system => system.order)
+            .ToArray();
+        m_systems.Clear();
+        m_systems.AddRange(ordered);
     }
 }

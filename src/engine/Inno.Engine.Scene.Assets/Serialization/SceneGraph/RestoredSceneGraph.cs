@@ -7,4 +7,5 @@ namespace Inno.Engine.Scene.Assets;
 
 internal sealed record RestoredSceneGraph(
     IReadOnlyDictionary<Guid, GameObject> objects,
-    IReadOnlyDictionary<Guid, GameComponent> components);
+    IReadOnlyDictionary<Guid, GameComponent> components,
+    IReadOnlyList<(GameComponent component, Inno.Core.Serialization.SerializationReader state)> componentStates);

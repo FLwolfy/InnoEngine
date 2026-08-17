@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 using Inno.Core.Serialization;
 using Inno.Engine.Scene;
@@ -11,23 +12,16 @@ namespace Inno.Engine.Scene.Assets;
 internal static class SerializedPropertyValueCodec
 {
     private const BindingFlags C_DECLARED_MEMBERS = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
-    private static readonly Dictionary<Type, PropertyMember[]> S_MEMBERS = [];
+    private static readonly ConditionalWeakTable<Type, MembersBox> S_MEMBERS = new();
     private static readonly MethodInfo S_WRITE_VALUE = typeof(SerializedPropertyValueCodec).GetMethod(nameof(WriteValue), BindingFlags.NonPublic | BindingFlags.Static)!;
     private static readonly MethodInfo S_READ_VALUE = typeof(SerializedPropertyValueCodec).GetMethod(nameof(ReadValue), BindingFlags.NonPublic | BindingFlags.Static)!;
-    private static readonly object S_SYNC = new();
 
     internal static IReadOnlyList<PropertyMember> GetMembers(Type componentType)
     {
         ArgumentNullException.ThrowIfNull(componentType);
-        lock (S_SYNC)
-        {
-            if (!S_MEMBERS.TryGetValue(componentType, out PropertyMember[]? members))
-            {
-                members = BuildMembers(componentType);
-                S_MEMBERS.Add(componentType, members);
-            }
-            return members;
-        }
+        return S_MEMBERS.GetValue(
+            componentType,
+            static type => new MembersBox(BuildMembers(type))).members;
     }
 
     internal static byte[] Encode(
@@ -129,6 +123,8 @@ internal static class SerializedPropertyValueCodec
 
     private static object? ReadValue<TValue>(SerializationReader reader)
         => reader.Read<TValue>("value");
+
+    private sealed record MembersBox(PropertyMember[] members);
 
     internal sealed class PropertyMember(
         string name,

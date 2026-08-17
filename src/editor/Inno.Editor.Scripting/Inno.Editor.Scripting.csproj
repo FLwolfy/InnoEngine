@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <InnoAssemblyGroup>Editor</InnoAssemblyGroup>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\core\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Framework\Inno.Core.Framework.csproj" />
+    <ProjectReference Include="..\..\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" />
+    <ProjectReference Include="..\..\engine\Inno.Engine.Scene.Assets\Inno.Engine.Scene.Assets.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 using Inno.Assets;
 using Inno.Assets.Core;
@@ -18,7 +19,7 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
     private const nuint C_SEARCH_BUFFER_SIZE = 256;
 
     private static readonly object C_SYNC = new();
-    private static readonly Dictionary<Type, AssetCandidate[]> s_candidatesByType = [];
+    private static ConditionalWeakTable<Type, CandidatesBox> s_candidatesByType = new();
     private static readonly Dictionary<string, string> s_searchByPath = new(StringComparer.Ordinal);
 
     static AssetReferencePropertyDrawer()
@@ -27,7 +28,7 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
         {
             lock (C_SYNC)
             {
-                s_candidatesByType.Clear();
+                s_candidatesByType = new ConditionalWeakTable<Type, CandidatesBox>();
             }
         };
     }
@@ -98,10 +99,8 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
     {
         lock (C_SYNC)
         {
-            if (s_candidatesByType.TryGetValue(targetAssetType, out AssetCandidate[]? cached))
-            {
-                return cached;
-            }
+            if (s_candidatesByType.TryGetValue(targetAssetType, out CandidatesBox? cached))
+                return cached.candidates;
 
             IReadOnlyList<AssetFileEntry> entries = AssetManager.GetFileSystemEntries(includeDirectories: false);
             var candidates = new List<AssetCandidate>(entries.Count);
@@ -123,9 +122,9 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
 
             candidates.Sort(static (left, right) =>
                 string.Compare(left.relativePath, right.relativePath, StringComparison.OrdinalIgnoreCase));
-            cached = candidates.ToArray();
-            s_candidatesByType[targetAssetType] = cached;
-            return cached;
+            AssetCandidate[] result = candidates.ToArray();
+            s_candidatesByType.Add(targetAssetType, new CandidatesBox(result));
+            return result;
         }
     }
 
@@ -157,4 +156,5 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
     }
 
     private sealed record AssetCandidate(string relativePath, Guid persistentId);
+    private sealed record CandidatesBox(AssetCandidate[] candidates);
 }

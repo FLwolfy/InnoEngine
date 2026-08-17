@@ -60,47 +60,10 @@ internal sealed class BehaviorLifecycleRunner
     }
 
     internal void Destroy(GameBehavior behavior)
-    {
-        if (behavior.lifecycleDestroyCalled)
-            return;
-        behavior.lifecycleDestroyCalled = true;
-        if (behavior.lifecycleWasEnabled)
-        {
-            behavior.lifecycleWasEnabled = false;
-            behavior.DispatchDisable();
-        }
-        behavior.DispatchDestroy();
-    }
+        => SceneLifecycle.Destroy(behavior);
 
     private bool Prepare(GameBehavior behavior)
     {
-        if (behavior.isDestroyed || behavior.lifecycleDestroyCalled)
-            return false;
-
-        bool active = behavior.isActiveAndEnabled;
-        if (active && !behavior.lifecycleAwakeCalled)
-        {
-            behavior.lifecycleAwakeCalled = true;
-            behavior.DispatchAwake();
-            if (!m_scene.canDispatch || behavior.isDestroyed || behavior.lifecycleDestroyCalled)
-                return false;
-        }
-
-        if (active && !behavior.lifecycleWasEnabled)
-        {
-            behavior.lifecycleWasEnabled = true;
-            behavior.DispatchEnable();
-            if (!m_scene.canDispatch || behavior.isDestroyed || behavior.lifecycleDestroyCalled)
-                return false;
-        }
-        else if (!active && behavior.lifecycleWasEnabled)
-        {
-            behavior.lifecycleWasEnabled = false;
-            behavior.DispatchDisable();
-            if (!m_scene.canDispatch || behavior.isDestroyed || behavior.lifecycleDestroyCalled)
-                return false;
-        }
-
-        return true;
+        return SceneLifecycle.Prepare(behavior, m_scene);
     }
 }

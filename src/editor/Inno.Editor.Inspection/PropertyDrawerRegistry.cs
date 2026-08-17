@@ -1,90 +1,68 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 
+using Inno.Core.Assemblies;
 using Inno.Core.Reflection;
 
 namespace Inno.Editor.Inspection;
 
 /// <summary>
-/// Discovers and resolves serialized property drawers through TypeCache.
+/// Discovers and resolves serialized property drawers through the active type catalog.
 /// </summary>
 public static class PropertyDrawerRegistry
 {
-    private sealed record Registration(
-        Type targetType,
-        bool useForChildren,
-        int priority,
-        Type drawerType,
-        IPropertyDrawer drawer);
-
-    private static readonly object C_SYNC = new();
-    private static Registration[] s_registrations = [];
-    private static bool s_initialized;
+    private static readonly PropertyTypeRegistry S_REGISTRY = new();
 
     /// <summary>
     /// Resolves the most specific drawer for a declared property type.
     /// </summary>
-    /// <param name="propertyType">Declared property type.</param>
-    /// <returns>The resolved property drawer.</returns>
     public static IPropertyDrawer Resolve(Type propertyType)
     {
         ArgumentNullException.ThrowIfNull(propertyType);
-        EnsureInitialized();
-
-        Registration? best = null;
-        int bestDistance = int.MaxValue;
-        for (int i = 0; i < s_registrations.Length; i++)
-        {
-            Registration registration = s_registrations[i];
-            if (!DrawerTypeUtility.TryGetDistance(
-                    propertyType,
-                    registration.targetType,
-                    registration.useForChildren,
-                    out int distance))
-            {
-                continue;
-            }
-
-            if (best is null || distance < bestDistance ||
-                (distance == bestDistance && registration.priority > best.priority))
-            {
-                best = registration;
-                bestDistance = distance;
-            }
-        }
-
-        return best?.drawer ?? UnsupportedPropertyDrawer.instance;
+        return S_REGISTRY.Resolve(propertyType);
     }
 
-    [TypeCacheInitialize("Inno.Editor.Inspection")]
-    [TypeCacheRebuild("Inno.Editor.Inspection")]
-    private static void Rebuild()
+    private sealed class PropertyTypeRegistry : TypeRegistry<Registration[]>
     {
-        lock (C_SYNC)
+        internal IPropertyDrawer Resolve(Type propertyType)
+        {
+            Registration? best = null;
+            int bestDistance = int.MaxValue;
+            foreach (Registration registration in current)
+            {
+                if (!DrawerTypeUtility.TryGetDistance(
+                        propertyType,
+                        registration.targetType,
+                        registration.useForChildren,
+                        out int distance))
+                    continue;
+                if (best is null || distance < bestDistance ||
+                    distance == bestDistance && registration.priority > best.priority)
+                {
+                    best = registration;
+                    bestDistance = distance;
+                }
+            }
+            return best?.drawer ?? UnsupportedPropertyDrawer.instance;
+        }
+
+        protected override Registration[] Build(TypeCacheSnapshot types)
         {
             var drawers = new Dictionary<Type, IPropertyDrawer>();
             var registrations = new List<Registration>();
-            IReadOnlyList<Type> drawerTypes = TypeCache.GetTypesWithAttribute<PropertyDrawerAttribute>();
-            for (int i = 0; i < drawerTypes.Count; i++)
+            foreach (Type drawerType in types.GetTypesWithAttribute<PropertyDrawerAttribute>()
+                         .OrderBy(static type => type.FullName, StringComparer.Ordinal))
             {
-                Type drawerType = drawerTypes[i];
-                if (!typeof(IPropertyDrawer).IsAssignableFrom(drawerType))
-                {
-                    throw new InvalidOperationException(
-                        $"Property drawer '{drawerType.FullName}' must implement {nameof(IPropertyDrawer)}.");
-                }
-
                 IPropertyDrawer drawer = drawers.TryGetValue(drawerType, out IPropertyDrawer? existing)
                     ? existing
-                    : (IPropertyDrawer)(Activator.CreateInstance(drawerType, nonPublic: true)
-                        ?? throw new InvalidOperationException($"Could not create property drawer '{drawerType.FullName}'."));
+                    : CreateExtension<IPropertyDrawer>(drawerType);
                 drawers[drawerType] = drawer;
 
-                PropertyDrawerAttribute[] attributes = [.. drawerType.GetCustomAttributes<PropertyDrawerAttribute>(false)];
-                for (int a = 0; a < attributes.Length; a++)
+                foreach (PropertyDrawerAttribute attribute in
+                         drawerType.GetCustomAttributes<PropertyDrawerAttribute>(false))
                 {
-                    PropertyDrawerAttribute attribute = attributes[a];
                     EnsureNoConflict(registrations, attribute, drawerType);
                     registrations.Add(new Registration(
                         attribute.targetType,
@@ -94,34 +72,40 @@ public static class PropertyDrawerRegistry
                         drawer));
                 }
             }
-
-            s_registrations = registrations.ToArray();
-            s_initialized = true;
+            return registrations.ToArray();
         }
-    }
 
-    private static void EnsureInitialized()
-    {
-        if (!s_initialized)
+        protected override void DisposeSnapshot(Registration[] snapshot)
         {
-            Rebuild();
+            var disposed = new HashSet<object>(ReferenceEqualityComparer.Instance);
+            foreach (IPropertyDrawer drawer in snapshot.Select(static registration => registration.drawer))
+            {
+                if (disposed.Add(drawer) && drawer is IDisposable disposable)
+                    disposable.Dispose();
+            }
         }
     }
 
     private static void EnsureNoConflict(
-        List<Registration> registrations,
+        IReadOnlyList<Registration> registrations,
         PropertyDrawerAttribute attribute,
         Type drawerType)
     {
-        for (int i = 0; i < registrations.Count; i++)
+        foreach (Registration existing in registrations)
         {
-            Registration existing = registrations[i];
-            if (existing.targetType == attribute.targetType &&
-                existing.priority == attribute.priority)
+            if (existing.targetType == attribute.targetType && existing.priority == attribute.priority)
             {
                 throw new InvalidOperationException(
-                    $"Property drawers '{existing.drawerType.FullName}' and '{drawerType.FullName}' conflict for '{attribute.targetType.FullName}'.");
+                    $"Property drawers '{existing.drawerType.FullName}' and '{drawerType.FullName}' " +
+                    $"conflict for '{attribute.targetType.FullName}'.");
             }
         }
     }
+
+    private sealed record Registration(
+        Type targetType,
+        bool useForChildren,
+        int priority,
+        Type drawerType,
+        IPropertyDrawer drawer);
 }

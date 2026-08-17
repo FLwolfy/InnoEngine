@@ -1,5 +1,9 @@
 <Project>
   <ItemGroup Condition="'$(InnoAssemblyGroup)' != ''">
     <AssemblyMetadata Include="Inno.AssemblyGroup" Value="$(InnoAssemblyGroup)" />
+    <AssemblyMetadata Include="Inno.ScriptApi" Value="$(InnoScriptApi)" />
+    <AssemblyMetadata Include="Inno.ScriptGlobalUsings"
+                      Value="$(InnoScriptGlobalUsings)"
+                      Condition="'$(InnoScriptGlobalUsings)' != ''" />
   </ItemGroup>
 </Project>

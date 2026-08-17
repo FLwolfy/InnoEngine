@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" />
     <ProjectReference Include="../Inno.Core.Reflection.TestAssemblyA/Inno.Core.Reflection.TestAssemblyA.csproj" />
     <ProjectReference Include="../Inno.Core.Reflection.TestAssemblyB/Inno.Core.Reflection.TestAssemblyB.csproj" />
   </ItemGroup>

@@ -52,8 +52,8 @@ public static class AssetManager
     {
         if (!IdentityManager.isInitialized)
             throw new InvalidOperationException("AssetManager requires IdentityManager to be initialized first.");
-        if (!TypeCacheManager.isInitialized)
-            throw new InvalidOperationException("AssetManager requires TypeCacheManager to be initialized first.");
+        if (!TypeCache.isInitialized)
+            throw new InvalidOperationException("AssetManager requires AssemblyManager to be initialized first.");
         if (!SerializationManager.isInitialized)
             throw new InvalidOperationException("AssetManager requires SerializationManager to be initialized first.");
         if (string.IsNullOrWhiteSpace(options.assetRoot))

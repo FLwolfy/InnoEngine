@@ -4,6 +4,8 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <InnoAssemblyGroup>Core</InnoAssemblyGroup>
+    <InnoScriptApi>Editor</InnoScriptApi>
+    <InnoScriptGlobalUsings>Inno.Editor.Core</InnoScriptGlobalUsings>
   </PropertyGroup>
 
   <ItemGroup>

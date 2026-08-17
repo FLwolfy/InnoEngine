@@ -101,6 +101,7 @@ internal sealed class SceneStore
         if (!entry.isCommitted)
         {
             m_components.Remove(component);
+            m_buckets.RemoveIfEmpty(entry.bucket);
             return SceneStoreRemovalKind.CanceledPendingAddition;
         }
 
@@ -109,6 +110,40 @@ internal sealed class SceneStore
         else
             CommitComponentRemoval(entry);
         return SceneStoreRemovalKind.RemovedCommitted;
+    }
+
+    internal void ReplaceComponent(GameComponent previous, GameComponent replacement)
+    {
+        ArgumentNullException.ThrowIfNull(previous);
+        ArgumentNullException.ThrowIfNull(replacement);
+        if (isExecuting || hasPendingChanges)
+            throw new InvalidOperationException("Components cannot be replaced during a scene execution phase.");
+        if (!m_components.TryGetValue(previous, out ComponentEntry? previousEntry) || !previousEntry.isAlive)
+            throw new InvalidOperationException("The component being replaced is not attached to this scene.");
+        if (m_components.ContainsKey(replacement))
+            throw new InvalidOperationException("The replacement component is already attached to this scene.");
+
+        SceneObjectRecord owner = previousEntry.owner;
+        int index = owner.components.IndexOf(previous);
+        if (index < 0)
+            throw new InvalidOperationException("The component attachment order is inconsistent.");
+        IComponentBucket replacementBucket = m_buckets.GetOrCreate(replacement.GetType());
+        var replacementEntry = new ComponentEntry(owner, replacement, replacementBucket)
+        {
+            isCommitted = previousEntry.isCommitted
+        };
+        if (previousEntry.isCommitted)
+        {
+            previousEntry.bucket.Remove(previous);
+            m_buckets.RemoveIfEmpty(previousEntry.bucket);
+            replacementBucket.Add(replacement);
+        }
+        previousEntry.isAlive = false;
+        previousEntry.isCommitted = false;
+        owner.components[index] = replacement;
+        m_components.Remove(previous);
+        m_components.Add(replacement, replacementEntry);
+        InvalidateQueryCaches();
     }
 
     internal IReadOnlyList<SceneStoreRemovedComponent> RemoveObject(GameObject gameObject)
@@ -314,6 +349,7 @@ internal sealed class SceneStore
         if (!entry.isCommitted)
         {
             m_components.Remove(component);
+            m_buckets.RemoveIfEmpty(entry.bucket);
             return;
         }
 
@@ -384,6 +420,7 @@ internal sealed class SceneStore
     private void CommitComponentRemoval(ComponentEntry entry)
     {
         entry.bucket.Remove(entry.component);
+        m_buckets.RemoveIfEmpty(entry.bucket);
         entry.isCommitted = false;
         m_components.Remove(entry.component);
         InvalidateQueryCaches();

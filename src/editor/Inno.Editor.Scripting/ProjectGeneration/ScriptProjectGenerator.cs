@@ -1,0 +1,148 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Xml.Linq;
+
+namespace Inno.Editor.Scripting;
+
+internal static class ScriptProjectGenerator
+{
+    private static readonly Guid C_GAME_PROJECT_ID = Guid.Parse("F61A6A9D-C87D-4964-BE8A-A28361A1D3A1");
+    private static readonly Guid C_EDITOR_PROJECT_ID = Guid.Parse("CA7049EB-739C-4EB8-A994-F937E71BCFC4");
+
+    internal static void Generate(ScriptManagerOptions options)
+    {
+        Directory.CreateDirectory(options.projectRootDirectory);
+        ScriptSourceSet sources = ScriptSourceSet.Discover(options.assetDirectory);
+        ScriptApiProfile runtimeApi = ScriptPluginMetadata.AddGlobalUsings(
+            ScriptApiCatalog.Build(includeEditor: false),
+            sources.runtimePlugins);
+        ScriptApiProfile editorApi = ScriptPluginMetadata.AddGlobalUsings(
+            ScriptApiCatalog.Build(includeEditor: true),
+            sources.runtimePlugins.Concat(sources.editorPlugins));
+        string gameProjectPath = Path.Combine(options.projectRootDirectory, "Inno.GameScripts.csproj");
+        string editorProjectPath = Path.Combine(options.projectRootDirectory, "Inno.EditorScripts.csproj");
+
+        CreateProject(
+            "Inno.GameScripts",
+            "Assets/**/*.cs",
+            "Assets/**/*.editor.cs",
+            runtimeApi,
+            sources.runtimePlugins,
+            projectReference: null)
+            .Save(gameProjectPath);
+        CreateProject(
+            "Inno.EditorScripts",
+            "Assets/**/*.editor.cs",
+            exclude: null,
+            editorApi,
+            sources.runtimePlugins.Concat(sources.editorPlugins).ToArray(),
+            "Inno.GameScripts.csproj")
+            .Save(editorProjectPath);
+        File.WriteAllText(
+            Path.Combine(options.projectRootDirectory, "InnoProject.sln"),
+            CreateSolution());
+    }
+
+    private static XDocument CreateProject(
+        string assemblyName,
+        string include,
+        string? exclude,
+        ScriptApiProfile api,
+        IReadOnlyList<string> plugins,
+        string? projectReference)
+    {
+        var earlyPropertyGroup = new XElement("PropertyGroup",
+            new XElement("BaseOutputPath", "Library/IDE/bin/" + assemblyName + "/"),
+            new XElement("BaseIntermediateOutputPath", "Library/IDE/obj/" + assemblyName + "/"),
+            new XElement("MSBuildProjectExtensionsPath", "Library/IDE/obj/" + assemblyName + "/"),
+            new XElement("RestoreOutputPath", "Library/IDE/obj/" + assemblyName + "/"));
+        var propertyGroup = new XElement("PropertyGroup",
+            new XElement("TargetFramework", "net9.0"),
+            new XElement("AssemblyName", assemblyName),
+            new XElement("EnableDefaultItems", "false"),
+            new XElement("EnableDefaultCompileItems", "false"),
+            new XElement("ImplicitUsings", "disable"),
+            new XElement("Nullable", "enable"),
+            new XElement("LangVersion", "latest"));
+        var compile = new XElement("Compile", new XAttribute("Include", include));
+        if (exclude is not null)
+            compile.Add(new XAttribute("Exclude", exclude));
+        var compileGroup = new XElement("ItemGroup", compile);
+
+        var referenceGroup = new XElement("ItemGroup");
+        string runtimeDirectory = Path.TrimEndingDirectorySeparator(
+            Path.GetFullPath(RuntimeEnvironment.GetRuntimeDirectory()));
+        foreach (string path in api.assemblies
+                     .Select(static assembly => assembly.Location)
+                     .Concat(plugins)
+                     .Where(path => !IsFrameworkAssembly(path, runtimeDirectory))
+                     .Distinct(StringComparer.OrdinalIgnoreCase)
+                     .OrderBy(static path => path, StringComparer.Ordinal))
+        {
+            referenceGroup.Add(new XElement("Reference",
+                new XAttribute("Include", Path.GetFileNameWithoutExtension(path)),
+                new XElement("HintPath", path),
+                new XElement("Private", "false")));
+        }
+
+        var usingGroup = new XElement("ItemGroup",
+            api.globalUsings.Select(static value => new XElement("Using", new XAttribute("Include", value))));
+        var folderGroup = new XElement("ItemGroup",
+            new XElement("Folder", new XAttribute("Include", "Assets/")));
+        var project = new XElement("Project",
+            earlyPropertyGroup,
+            new XElement("Import",
+                new XAttribute("Project", "Sdk.props"),
+                new XAttribute("Sdk", "Microsoft.NET.Sdk")),
+            propertyGroup,
+            compileGroup,
+            referenceGroup,
+            usingGroup,
+            folderGroup);
+        if (projectReference is not null)
+        {
+            project.Add(new XElement("ItemGroup",
+                new XElement("ProjectReference", new XAttribute("Include", projectReference))));
+        }
+        project.Add(new XElement("Import",
+            new XAttribute("Project", "Sdk.targets"),
+            new XAttribute("Sdk", "Microsoft.NET.Sdk")));
+        return new XDocument(project);
+    }
+
+    private static bool IsFrameworkAssembly(string path, string runtimeDirectory)
+    {
+        string assemblyPath = Path.GetFullPath(path);
+        return assemblyPath.StartsWith(runtimeDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string CreateSolution()
+    {
+        string gameProjectId = "{" + C_GAME_PROJECT_ID.ToString().ToUpperInvariant() + "}";
+        string editorProjectId = "{" + C_EDITOR_PROJECT_ID.ToString().ToUpperInvariant() + "}";
+        return $$"""
+            Microsoft Visual Studio Solution File, Format Version 12.00
+            # Visual Studio Version 17
+            VisualStudioVersion = 17.0.31903.59
+            MinimumVisualStudioVersion = 10.0.40219.1
+            Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.GameScripts", "Inno.GameScripts.csproj", "{{gameProjectId}}"
+            EndProject
+            Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.EditorScripts", "Inno.EditorScripts.csproj", "{{editorProjectId}}"
+            EndProject
+            Global
+            	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+            		Debug|Any CPU = Debug|Any CPU
+            	EndGlobalSection
+            	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+            		{{gameProjectId}}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+            		{{gameProjectId}}.Debug|Any CPU.Build.0 = Debug|Any CPU
+            		{{editorProjectId}}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+            		{{editorProjectId}}.Debug|Any CPU.Build.0 = Debug|Any CPU
+            	EndGlobalSection
+            EndGlobal
+            """;
+    }
+}

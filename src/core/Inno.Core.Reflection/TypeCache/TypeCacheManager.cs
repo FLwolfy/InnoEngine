@@ -1,369 +1,66 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Reflection;
-using System.Threading;
 
 namespace Inno.Core.Reflection;
 
 /// <summary>
-/// Manages TypeCache lifecycle, refresh, and hook execution.
+/// Stores the active immutable type snapshot without owning assembly lifecycle policy.
 /// </summary>
-public static class TypeCacheManager
+internal static class TypeCacheManager
 {
-    private static readonly Lock CACHE_SYNC = new();
+    private static readonly object S_SYNC = new();
 
-    private static HashSet<int> s_loadedRuntimeTypeIds = [];
-    private static HashSet<Guid> s_loadedStableTypeIds = [];
-    private static volatile bool s_isDirty;
-    private static int s_lastAssemblyCount = -1;
-    private static string? s_currentAssemblyNameFilter;
-    private static bool s_isAssemblyLoadSubscribed;
+    private static TypeCacheSnapshot s_current = TypeCacheSnapshot.empty;
+    private static Action? s_refreshProvider;
 
-    private static event Action? OnRefreshed;
+    internal static bool isInitialized { get; private set; }
 
-    internal static TypeIdentityRegistry identityRegistry { get; } = new();
-    internal static TypeQueryRegistry queryRegistry { get; } = new();
-    
-    /// <summary>
-    /// Determines whether the TypeCacheManager has been initialized.
-    /// </summary>
-    public static bool isInitialized { get; private set; }
-
-    /// <summary>
-    /// Initializes TypeCache, runs initialize hooks, and subscribes refresh hooks.
-    /// </summary>
-    public static void Initialize()
-        => Initialize(assemblyName: null);
-
-    /// <summary>
-    /// Initializes TypeCache for a specific assembly name, or globally when null/empty.
-    /// </summary>
-    public static void Initialize(string? assemblyName)
+    internal static TypeCacheSnapshot current
     {
-        if (isInitialized)
-            Shutdown();
-
-        string? normalizedAssemblyName = NormalizeAssemblyName(assemblyName);
-        s_currentAssemblyNameFilter = normalizedAssemblyName;
-
-        Rebuild(normalizedAssemblyName);
-        InvokeInitializeHooks(normalizedAssemblyName);
-        SubscribeRefreshHooks(normalizedAssemblyName);
-
-        if (!s_isAssemblyLoadSubscribed)
+        get
         {
-            AppDomain.CurrentDomain.AssemblyLoad += OnAssemblyLoaded;
-            s_isAssemblyLoadSubscribed = true;
+            EnsureFresh();
+            lock (S_SYNC)
+                return s_current;
         }
-        
-        isInitialized = true;
     }
 
-    /// <summary>
-    /// Clears discovered type state and detaches assembly-load tracking.
-    /// </summary>
-    public static void Shutdown()
+    internal static TypeCacheSnapshot PeekCurrent()
     {
-        if (s_isAssemblyLoadSubscribed)
-        {
-            AppDomain.CurrentDomain.AssemblyLoad -= OnAssemblyLoaded;
-            s_isAssemblyLoadSubscribed = false;
-        }
+        lock (S_SYNC)
+            return s_current;
+    }
 
-        identityRegistry.Rebuild(Array.Empty<Type>());
-        queryRegistry.Rebuild(Array.Empty<Type>(), identityRegistry);
-        lock (CACHE_SYNC)
+    internal static void ConfigureRefreshProvider(Action? refreshProvider)
+    {
+        lock (S_SYNC)
+            s_refreshProvider = refreshProvider;
+    }
+
+    internal static void Commit(TypeCacheSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        lock (S_SYNC)
         {
-            s_loadedRuntimeTypeIds.Clear();
-            s_loadedStableTypeIds.Clear();
-            s_lastAssemblyCount = -1;
-            s_currentAssemblyNameFilter = null;
-            s_isDirty = false;
-            OnRefreshed = null;
+            s_current = snapshot;
+            isInitialized = true;
+        }
+    }
+
+    internal static void Shutdown()
+    {
+        lock (S_SYNC)
+        {
+            s_refreshProvider = null;
+            s_current = TypeCacheSnapshot.empty;
             isInitialized = false;
         }
     }
 
-    /// <summary>
-    /// Rebuilds TypeCache and identity registry from loaded managed Inno assembly groups.
-    /// </summary>
-    public static void Rebuild()
-        => Rebuild(assemblyName: null);
-
-    /// <summary>
-    /// Rebuilds TypeCache and identity registry from a specific assembly name, or globally when null/empty.
-    /// </summary>
-    public static void Rebuild(string? assemblyName)
+    private static void EnsureFresh()
     {
-        string? normalizedAssemblyName = NormalizeAssemblyName(assemblyName);
-        while (true)
-        {
-            int assemblyCount = AppDomain.CurrentDomain.GetAssemblies().Length;
-            Assembly[] assemblies = ResolveAssemblies(normalizedAssemblyName);
-            RebuildFromAssemblies(assemblies, assemblyCount);
-            if (AppDomain.CurrentDomain.GetAssemblies().Length == assemblyCount)
-                return;
-        }
-    }
-
-    /// <summary>
-    /// Returns true when the assembly is currently loaded.
-    /// </summary>
-    public static bool IsAssemblyLoaded(string assemblyName)
-    {
-        if (string.IsNullOrWhiteSpace(assemblyName))
-            return false;
-
-        return AppDomain.CurrentDomain.GetAssemblies()
-            .Where(static a => !a.IsDynamic)
-            .Any(a => string.Equals(a.GetName().Name, assemblyName, StringComparison.Ordinal));
-    }
-
-    /// <summary>
-    /// Loads an assembly by name and refreshes the type catalog when it is already initialized.
-    /// </summary>
-    /// <param name="assemblyName">The simple or display name of the assembly to load.</param>
-    /// <returns>The loaded assembly.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="assemblyName"/> is empty.</exception>
-    public static Assembly LoadAssembly(string assemblyName)
-    {
-        if (string.IsNullOrWhiteSpace(assemblyName))
-            throw new ArgumentException("Assembly name is required.", nameof(assemblyName));
-
-        Assembly? assembly = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(static candidate => !candidate.IsDynamic)
-            .FirstOrDefault(candidate =>
-                string.Equals(candidate.GetName().Name, assemblyName, StringComparison.Ordinal));
-        assembly ??= Assembly.Load(new AssemblyName(assemblyName));
-
-        if (isInitialized)
-            Rebuild(s_currentAssemblyNameFilter);
-
-        return assembly;
-    }
-
-    /// <summary>
-    /// Probes assembly names from a directory without loading them into the app domain.
-    /// </summary>
-    public static IReadOnlyList<string> DiscoverAssemblyNames(string directoryPath, string searchPattern = "*.dll")
-    {
-        if (string.IsNullOrWhiteSpace(directoryPath))
-            throw new ArgumentException("Directory path is required.", nameof(directoryPath));
-
-        if (!Directory.Exists(directoryPath))
-            return [];
-
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (string path in Directory.EnumerateFiles(directoryPath, searchPattern, SearchOption.TopDirectoryOnly))
-        {
-            try
-            {
-                AssemblyName name = AssemblyName.GetAssemblyName(path);
-                if (!string.IsNullOrWhiteSpace(name.Name))
-                    names.Add(name.Name);
-            }
-            catch
-            {
-                // Ignore non-.NET files or unreadable assemblies.
-            }
-        }
-
-        return [.. names.OrderBy(static n => n, StringComparer.Ordinal)];
-    }
-
-    internal static bool IsLoadedRuntimeTypeId(int runtimeTypeId)
-    {
-        lock (CACHE_SYNC)
-        {
-            return s_loadedRuntimeTypeIds.Contains(runtimeTypeId);
-        }
-    }
-
-    internal static bool IsLoadedStableTypeId(Guid stableTypeId)
-    {
-        lock (CACHE_SYNC)
-        {
-            return s_loadedStableTypeIds.Contains(stableTypeId);
-        }
-    }
-
-    internal static void EnsureFresh()
-    {
-        if (AppDomain.CurrentDomain.GetAssemblies().Length != Volatile.Read(ref s_lastAssemblyCount))
-        {
-            s_isDirty = true;
-        }
-
-        if (!s_isDirty)
-        {
-            return;
-        }
-
-        bool shouldRefresh;
-        lock (CACHE_SYNC)
-        {
-            shouldRefresh = s_isDirty;
-        }
-
-        if (shouldRefresh)
-        {
-            Rebuild(s_currentAssemblyNameFilter);
-        }
-    }
-
-    private static void RebuildFromAssemblies(Assembly[] assemblies, int assemblyCount)
-    {
-        Type[] discoveredTypes = assemblies
-            .Where(IsDiscoverableAssembly)
-            .SelectMany(static a =>
-            {
-                try { return a.GetTypes(); }
-                catch { return Type.EmptyTypes; }
-            })
-            .ToArray();
-
-        identityRegistry.Rebuild(discoveredTypes);
-        queryRegistry.Rebuild(discoveredTypes, identityRegistry);
-
-        HashSet<int> loadedRuntimeTypeIds = BuildLoadedRuntimeTypeSet(discoveredTypes);
-        HashSet<Guid> loadedStableTypeIds = BuildLoadedStableTypeSet(discoveredTypes);
-
-        lock (CACHE_SYNC)
-        {
-            s_loadedRuntimeTypeIds = loadedRuntimeTypeIds;
-            s_loadedStableTypeIds = loadedStableTypeIds;
-            s_lastAssemblyCount = assemblyCount;
-            s_isDirty = false;
-        }
-
-        OnRefreshed?.Invoke();
-    }
-
-    private static Assembly[] ResolveAssemblies(string? assemblyName)
-    {
-        Assembly[] loaded = AppDomain.CurrentDomain.GetAssemblies().Where(static a => !a.IsDynamic).ToArray();
-        if (string.IsNullOrWhiteSpace(assemblyName))
-            return loaded;
-
-        return loaded
-            .Where(a => string.Equals(a.GetName().Name, assemblyName, StringComparison.Ordinal))
-            .ToArray();
-    }
-
-    private static bool IsDiscoverableAssembly(Assembly assembly)
-    {
-        AssemblyGroup group = assembly.GetInnoAssemblyGroup();
-        return group is AssemblyGroup.Core or AssemblyGroup.Game or AssemblyGroup.Plugin;
-    }
-
-    private static void OnAssemblyLoaded(object? sender, AssemblyLoadEventArgs args)
-        => s_isDirty = true;
-
-    private static void InvokeInitializeHooks(string? assemblyNameFilter)
-    {
-        foreach (MethodInfo method in EnumerateHookMethods(typeof(TypeCacheInitializeAttribute), assemblyNameFilter))
-        {
-            ValidateHookSignature(method);
-            method.Invoke(null, null);
-        }
-    }
-
-    private static void SubscribeRefreshHooks(string? assemblyNameFilter)
-    {
-        foreach (MethodInfo method in EnumerateHookMethods(typeof(TypeCacheRebuildAttribute), assemblyNameFilter))
-        {
-            ValidateHookSignature(method);
-            OnRefreshed += () => method.Invoke(null, null);
-        }
-    }
-
-    private static IEnumerable<MethodInfo> EnumerateHookMethods(Type attributeType, string? assemblyNameFilter)
-    {
-        Assembly[] assemblies = ResolveAssemblies(assemblyNameFilter)
-            .Where(IsDiscoverableAssembly)
-            .ToArray();
-        IEnumerable<MethodInfo> methods = assemblies
-            .SelectMany(static a =>
-            {
-                try { return a.GetTypes(); }
-                catch { return Type.EmptyTypes; }
-            })
-            .SelectMany(static t => t.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
-            .Where(method => method.IsDefined(attributeType, inherit: false));
-
-        foreach (MethodInfo method in methods)
-        {
-            if (!IsHookAllowedByAttribute(method, assemblyNameFilter, attributeType))
-                continue;
-
-            yield return method;
-        }
-    }
-
-    private static bool IsHookAllowedByAttribute(MethodInfo method, string? assemblyNameFilter, Type attributeType)
-    {
-        string declaringAssembly = method.DeclaringType?.Assembly.GetName().Name ?? string.Empty;
-        if (!string.IsNullOrWhiteSpace(assemblyNameFilter) &&
-            !string.Equals(declaringAssembly, assemblyNameFilter, StringComparison.Ordinal))
-            return false;
-
-        string? attributeAssembly = null;
-        if (attributeType == typeof(TypeCacheInitializeAttribute))
-        {
-            var attr = method.GetCustomAttribute<TypeCacheInitializeAttribute>(inherit: false);
-            attributeAssembly = NormalizeAssemblyName(attr?.assemblyName);
-        }
-        else if (attributeType == typeof(TypeCacheRebuildAttribute))
-        {
-            var attr = method.GetCustomAttribute<TypeCacheRebuildAttribute>(inherit: false);
-            attributeAssembly = NormalizeAssemblyName(attr?.assemblyName);
-        }
-
-        if (string.IsNullOrWhiteSpace(attributeAssembly))
-            return true;
-
-        return string.Equals(declaringAssembly, attributeAssembly, StringComparison.Ordinal);
-    }
-
-    private static void ValidateHookSignature(MethodInfo method)
-    {
-        if (method.ReturnType != typeof(void) || method.GetParameters().Length != 0)
-        {
-            throw new InvalidOperationException(
-                $"TypeCache hook method must be 'static void Method()': {method.DeclaringType?.FullName}.{method.Name}");
-        }
-    }
-
-    private static string? NormalizeAssemblyName(string? assemblyName)
-        => string.IsNullOrWhiteSpace(assemblyName) ? null : assemblyName;
-
-    private static HashSet<int> BuildLoadedRuntimeTypeSet(IEnumerable<Type> types)
-    {
-        var set = new HashSet<int>();
-        foreach (Type type in types)
-        {
-            if (identityRegistry.TryGetRuntimeTypeId(type, out int runtimeTypeId))
-            {
-                set.Add(runtimeTypeId);
-            }
-        }
-
-        return set;
-    }
-
-    private static HashSet<Guid> BuildLoadedStableTypeSet(IEnumerable<Type> types)
-    {
-        var set = new HashSet<Guid>();
-        foreach (Type type in types)
-        {
-            if (identityRegistry.TryGetStableTypeId(type, out Guid stableTypeId))
-            {
-                set.Add(stableTypeId);
-            }
-        }
-
-        return set;
+        Action? refreshProvider;
+        lock (S_SYNC)
+            refreshProvider = s_refreshProvider;
+        refreshProvider?.Invoke();
     }
 }

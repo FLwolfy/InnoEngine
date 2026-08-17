@@ -14,10 +14,13 @@ namespace Inno.Engine.Scene.Assets;
 internal static class SceneGraphSerialization
 {
     internal const int C_SCHEMA_VERSION = 2;
+    internal const int C_SCENE_SCHEMA_VERSION = 3;
     internal const string C_SCHEMA_VERSION_KEY = "schemaVersion";
     internal const string C_SCENE_ID_KEY = "sceneId";
     internal const string C_NAME_KEY = "name";
     internal const string C_OBJECTS_KEY = "objects";
+    internal const string C_SYSTEMS_KEY = "systems";
+    internal const string C_SYSTEM_ID_KEY = "systemId";
     internal const string C_OBJECT_ID_KEY = "objectId";
     internal const string C_ACTIVE_SELF_KEY = "activeSelf";
     internal const string C_PARENT_ID_KEY = "parentId";
@@ -139,7 +142,8 @@ internal static class SceneGraphSerialization
         GameScene scene,
         IReadOnlyList<SerializationReader> objectReaders,
         bool preservePersistentIds,
-        SceneGraphReferenceMap references)
+        SceneGraphReferenceMap references,
+        bool restoreProperties = true)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(objectReaders);
@@ -197,10 +201,13 @@ internal static class SceneGraphSerialization
         foreach ((Guid sourceId, GameComponent component) in componentBySourceId)
             references.Register(sourceId, component);
 
-        using (references.Enter())
+        if (restoreProperties)
         {
-            for (int i = 0; i < componentRestores.Count; i++)
-                componentRestores[i].state.RestoreProperties(componentRestores[i].component);
+            using (references.Enter())
+            {
+                for (int i = 0; i < componentRestores.Count; i++)
+                    componentRestores[i].state.RestoreProperties(componentRestores[i].component);
+            }
         }
 
         for (int objectIndex = 0; objectIndex < objectReaders.Count; objectIndex++)
@@ -307,21 +314,72 @@ internal static class SceneGraphSerialization
         {
             scene.RecomputeActiveSubtree(root);
         }
-        return new RestoredSceneGraph(gameObjectBySourceId, componentBySourceId);
+        return new RestoredSceneGraph(gameObjectBySourceId, componentBySourceId, componentRestores);
     }
 
     internal static void ValidateScene(SerializationReader reader)
     {
         int version = reader.Read<int>(C_SCHEMA_VERSION_KEY);
-        if (version != C_SCHEMA_VERSION)
+        if (version is not C_SCHEMA_VERSION and not C_SCENE_SCHEMA_VERSION)
         {
             throw new InvalidDataException(
                 $"Scene schema version '{version}' at '{reader.path}' is unsupported. " +
-                $"Expected '{C_SCHEMA_VERSION}'.");
+                $"Expected '{C_SCHEMA_VERSION}' or '{C_SCENE_SCHEMA_VERSION}'.");
         }
         EnsurePersistentId(reader.Read<Guid>(C_SCENE_ID_KEY), $"{reader.path}.{C_SCENE_ID_KEY}");
         _ = reader.Read<string>(C_NAME_KEY);
         ValidateObjects(reader.ReadObjectArray(C_OBJECTS_KEY));
+        if (version >= C_SCENE_SCHEMA_VERSION)
+            ValidateSystems(reader.ReadObjectArray(C_SYSTEMS_KEY));
+    }
+
+    internal static void WriteSystems(
+        SerializationWriter writer,
+        IReadOnlyCollection<GameSystem> systems,
+        IReadOnlyDictionary<EngineObject, Guid> sourceIds)
+    {
+        writer.WriteObjectArray(C_SYSTEMS_KEY, systems, (systemWriter, system) =>
+        {
+            systemWriter.Write(C_SYSTEM_ID_KEY, GetSourceId(sourceIds, system));
+            systemWriter.Write(C_STABLE_TYPE_ID_KEY, GetStableSystemTypeId(system.GetType()));
+            systemWriter.WriteObject(C_STATE_KEY, stateWriter => stateWriter.WriteProperties(system));
+        });
+    }
+
+    internal static IReadOnlyList<(GameSystem system, SerializationReader state)> CreateSystems(
+        GameScene scene,
+        IReadOnlyList<SerializationReader> systemReaders,
+        bool preservePersistentIds,
+        SceneGraphReferenceMap references)
+    {
+        ValidateSystems(systemReaders);
+        var result = new List<(GameSystem, SerializationReader)>(systemReaders.Count);
+        foreach (SerializationReader systemReader in systemReaders)
+        {
+            Guid sourceId = systemReader.Read<Guid>(C_SYSTEM_ID_KEY);
+            Type systemType = ResolveSystemType(systemReader.Read<Guid>(C_STABLE_TYPE_ID_KEY));
+            GameSystem system = scene.AddSystem(
+                systemType,
+                preservePersistentIds ? sourceId : null,
+                invokeReset: false);
+            references.Register(sourceId, system);
+            result.Add((system, systemReader.ReadObject(C_STATE_KEY)));
+        }
+        return result;
+    }
+
+    private static void ValidateSystems(IReadOnlyList<SerializationReader> systemReaders)
+    {
+        var identities = new HashSet<Guid>();
+        foreach (SerializationReader systemReader in systemReaders)
+        {
+            Guid systemId = systemReader.Read<Guid>(C_SYSTEM_ID_KEY);
+            EnsurePersistentId(systemId, $"{systemReader.path}.{C_SYSTEM_ID_KEY}");
+            if (!identities.Add(systemId))
+                throw new InvalidDataException($"Duplicate GameSystem identity '{systemId}' at '{systemReader.path}'.");
+            _ = ResolveSystemType(systemReader.Read<Guid>(C_STABLE_TYPE_ID_KEY));
+            _ = systemReader.ReadObject(C_STATE_KEY);
+        }
     }
 
     internal static void ReconcilePrefabConnections(
@@ -531,6 +589,22 @@ internal static class SceneGraphSerialization
                 $"Stable type id '{stableTypeId}' resolves to invalid component type '{componentType.FullName}'.");
         }
         return componentType;
+    }
+
+    private static Guid GetStableSystemTypeId(Type systemType)
+    {
+        if (!TypeCache.TryGetStableTypeId(systemType, out Guid stableTypeId))
+            throw new InvalidOperationException($"GameSystem type '{systemType.FullName}' requires a loaded StableTypeId.");
+        return stableTypeId;
+    }
+
+    private static Type ResolveSystemType(Guid stableTypeId)
+    {
+        if (!TypeCache.TryResolveType(stableTypeId, out Type? systemType) || systemType is null)
+            throw new InvalidDataException($"GameSystem stable type id '{stableTypeId}' is not loaded.");
+        if (!typeof(GameSystem).IsAssignableFrom(systemType) || systemType.IsAbstract)
+            throw new InvalidDataException($"Stable type id '{stableTypeId}' resolves to invalid system '{systemType.FullName}'.");
+        return systemType;
     }
 
     private static void EnsurePersistentId(Guid persistentId, string path)

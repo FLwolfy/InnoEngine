@@ -7,9 +7,12 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
     <InnoAssemblyGroup>Core</InnoAssemblyGroup>
+    <InnoScriptApi>Runtime</InnoScriptApi>
+    <InnoScriptGlobalUsings>Inno.Core.Serialization;Inno.Core.Serialization.Converters</InnoScriptGlobalUsings>
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
   </ItemGroup>
 

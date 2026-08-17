@@ -6,8 +6,8 @@ using System.Text;
 
 using Inno.Assets.Loader;
 using Inno.Assets.Types;
+using Inno.Core.Assemblies;
 using Inno.Core.Identity;
-using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 
 using Xunit;
@@ -19,14 +19,17 @@ public sealed class ImporterIntegrationTests : IDisposable
     public ImporterIntegrationTests()
     {
         IdentityManager.Initialize();
-        TypeCacheManager.Initialize();
+        AssemblyManager.Initialize(new AssemblyManagerOptions
+        {
+            cacheDirectory = Path.Combine(Path.GetTempPath(), "InnoImporterTests", "Assemblies")
+        });
         SerializationManager.Initialize();
     }
 
     public void Dispose()
     {
         SerializationManager.Shutdown();
-        TypeCacheManager.Shutdown();
+        AssemblyManager.Shutdown();
         IdentityManager.Shutdown();
     }
 

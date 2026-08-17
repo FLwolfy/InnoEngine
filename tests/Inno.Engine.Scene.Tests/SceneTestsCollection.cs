@@ -1,7 +1,8 @@
 using System;
+using System.IO;
 
+using Inno.Core.Assemblies;
 using Inno.Core.Identity;
-using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 
 using Xunit;
@@ -19,15 +20,18 @@ public sealed class SceneTestsFixture : IDisposable
     public SceneTestsFixture()
     {
         IdentityManager.Initialize();
-        TypeCacheManager.LoadAssembly("Inno.Engine.Scene.Assets");
-        TypeCacheManager.Initialize();
+        _ = typeof(Inno.Engine.Scene.Assets.SceneAsset);
+        AssemblyManager.Initialize(new AssemblyManagerOptions
+        {
+            cacheDirectory = Path.Combine(Path.GetTempPath(), "InnoSceneTests", "Assemblies")
+        });
         SerializationManager.Initialize();
     }
 
     public void Dispose()
     {
         SerializationManager.Shutdown();
-        TypeCacheManager.Shutdown();
+        AssemblyManager.Shutdown();
         IdentityManager.Shutdown();
     }
 }

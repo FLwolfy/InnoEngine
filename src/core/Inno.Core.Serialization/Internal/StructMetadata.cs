@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace Inno.Core.Serialization;
 
@@ -10,21 +11,11 @@ internal static class StructMetadata
     private const BindingFlags C_MEMBERS =
         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
-    private static readonly object s_sync = new();
-    private static readonly Dictionary<Type, StructMember[]> s_cache = [];
+    private static readonly ConditionalWeakTable<Type, MembersBox> S_CACHE = new();
 
     internal static StructMember[] GetMembers(Type structType)
     {
-        lock (s_sync)
-        {
-            if (!s_cache.TryGetValue(structType, out StructMember[]? members))
-            {
-                members = BuildMembers(structType);
-                s_cache.Add(structType, members);
-            }
-
-            return members;
-        }
+        return S_CACHE.GetValue(structType, static type => new MembersBox(BuildMembers(type))).members;
     }
 
     private static StructMember[] BuildMembers(Type structType)
@@ -123,6 +114,8 @@ internal static class StructMetadata
             getter is null ? null : property.GetValue,
             setter is null ? null : property.SetValue);
     }
+
+    private sealed record MembersBox(StructMember[] members);
 }
 
 internal sealed class StructMember

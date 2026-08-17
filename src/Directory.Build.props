@@ -2,4 +2,7 @@
   <PropertyGroup Condition="'$(InnoAssemblyGroup)' == ''">
     <InnoAssemblyGroup>Core</InnoAssemblyGroup>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(InnoScriptApi)' == ''">
+    <InnoScriptApi>None</InnoScriptApi>
+  </PropertyGroup>
 </Project>

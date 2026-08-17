@@ -27,11 +27,7 @@ public static class Log
         public required AssemblyGroup source { get; init; }
     }
 
-    private static readonly Lock TYPE_INFO_CACHE_SYNC = new();
-    private static readonly Dictionary<int, TypeInfo> TYPE_INFO_CACHE = [];
-    private static readonly Lock LOCAL_TYPE_KEY_SYNC = new();
-    private static readonly Dictionary<Type, int> LOCAL_TYPE_KEYS = [];
-    private static int s_nextLocalTypeKey = int.MinValue;
+    private static readonly ConditionalWeakTable<Type, TypeInfo> TYPE_INFO_CACHE = new();
     private static readonly ConditionalWeakTable<Assembly, AssemblySource> ASSEMBLY_SOURCE_CACHE = new();
 
     /// <summary>
@@ -131,23 +127,16 @@ public static class Log
 
         if (callerType != null)
         {
-            int runtimeTypeId = GetTypeCacheKey(callerType);
-            TypeInfo info;
-            lock (TYPE_INFO_CACHE_SYNC)
+            TypeInfo info = TYPE_INFO_CACHE.GetValue(callerType, static type =>
             {
-                if (!TYPE_INFO_CACHE.TryGetValue(runtimeTypeId, out info!))
+                var src = ASSEMBLY_SOURCE_CACHE.GetValue(type.Assembly, static assembly =>
+                    new AssemblySource { source = assembly.GetInnoAssemblyGroup() });
+                return new TypeInfo
                 {
-                    var src = ASSEMBLY_SOURCE_CACHE.GetValue(callerType.Assembly, static assembly =>
-                        new AssemblySource { source = assembly.GetInnoAssemblyGroup() });
-
-                    info = new TypeInfo
-                    {
-                        source = src.source,
-                        category = callerType.Name
-                    };
-                    TYPE_INFO_CACHE[runtimeTypeId] = info;
-                }
-            }
+                    source = src.source,
+                    category = type.Name
+                };
+            });
 
             source = info.source;
             category = info.category;
@@ -164,23 +153,4 @@ public static class Log
         LogManager.Dispatch(new LogEntry(level, source, category, msg, file, line));
     }
 
-    private static int GetTypeCacheKey(Type type)
-    {
-        if (TypeCache.TryGetRuntimeTypeId(type, out int runtimeTypeId))
-        {
-            return runtimeTypeId;
-        }
-
-        lock (LOCAL_TYPE_KEY_SYNC)
-        {
-            if (LOCAL_TYPE_KEYS.TryGetValue(type, out int existing))
-            {
-                return existing;
-            }
-
-            int created = s_nextLocalTypeKey++;
-            LOCAL_TYPE_KEYS[type] = created;
-            return created;
-        }
-    }
 }

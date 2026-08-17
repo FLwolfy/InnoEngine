@@ -152,6 +152,15 @@ public sealed class GameScene : EngineObject, ISerializable
     }
 
     /// <summary>
+    /// Creates and registers a concrete game system by runtime type.
+    /// </summary>
+    public GameSystem AddSystem(Type systemType)
+    {
+        EnsureNotDestroyed();
+        return m_systems.Add(systemType, persistentId: null, invokeReset: true);
+    }
+
+    /// <summary>
     /// Registers a game system instance.
     /// </summary>
     /// <param name="system">System to register.</param>
@@ -172,6 +181,28 @@ public sealed class GameScene : EngineObject, ISerializable
         ArgumentNullException.ThrowIfNull(system);
         return m_systems.Remove(system);
     }
+
+    /// <summary>
+    /// Explicitly restores a registered system to its default state.
+    /// </summary>
+    public void ResetSystem(GameSystem system)
+    {
+        EnsureNotDestroyed();
+        ArgumentNullException.ThrowIfNull(system);
+        m_systems.Reset(system);
+    }
+
+    /// <summary>
+    /// Gets registered systems in execution order.
+    /// </summary>
+    public IReadOnlyList<GameSystem> GetSystems()
+    {
+        EnsureNotDestroyed();
+        return m_systems.GetSystems();
+    }
+
+    internal GameSystem AddSystem(Type systemType, Guid? persistentId, bool invokeReset)
+        => m_systems.Add(systemType, persistentId, invokeReset);
 
     internal bool Contains(GameObject gameObject) => !isDestroyed && m_store.Contains(gameObject);
 
@@ -285,6 +316,37 @@ public sealed class GameScene : EngineObject, ISerializable
             .SelectMany(m_store.GetComponents)
             .FirstOrDefault(component => component.identity.persistentId == persistentId);
 
+    internal void ReplaceComponentForReload(GameComponent previous, GameComponent replacement)
+    {
+        GameObject owner = previous.ownerOrNull
+            ?? throw new InvalidOperationException("The component being replaced is detached.");
+        if (!Contains(owner) || previous is Transform || replacement is Transform)
+            throw new InvalidOperationException("Only attached non-Transform components can be hot reloaded.");
+        bool attachedHere = replacement.ownerOrNull is null;
+        if (attachedHere)
+            replacement.Attach(owner);
+        else if (!ReferenceEquals(replacement.ownerOrNull, owner))
+            throw new InvalidOperationException("The replacement component belongs to another GameObject.");
+        Guid persistentId = previous.ReleaseIdentityForReplacement();
+        try
+        {
+            replacement.RegisterIdentity(persistentId);
+            m_store.ReplaceComponent(previous, replacement);
+        }
+        catch
+        {
+            if (replacement.identity.runtimeId is not null)
+                _ = replacement.ReleaseIdentityForReplacement();
+            previous.RegisterIdentity(persistentId);
+            if (attachedHere && !replacement.isDestroyed)
+                replacement.Detach();
+            throw;
+        }
+    }
+
+    internal void ReplaceSystemForReload(GameSystem previous, GameSystem replacement)
+        => m_systems.ReplaceForReload(previous, replacement);
+
     internal bool canDispatch => m_isLoaded && !m_isUnloading && !isDestroyed;
 
     internal void SetSourceAsset(AssetObject sourceAsset)
@@ -298,7 +360,7 @@ public sealed class GameScene : EngineObject, ISerializable
         EnsureNotDestroyed();
         if (m_isLoaded)
             throw new InvalidOperationException($"Loaded scene '{m_name}' cannot be restored in place.");
-        if (m_store.GetOwnedObjects().Count != 0)
+        if (m_store.GetOwnedObjects().Count != 0 || m_systems.GetSystems().Count != 0)
             throw new InvalidOperationException($"Scene '{m_name}' must be empty before state can be restored.");
         if (identity.persistentId != persistentId)
         {

@@ -3,12 +3,12 @@ using System.IO;
 using System.Threading;
 
 using Inno.Assets;
+using Inno.Core.Assemblies;
 using Inno.Core.Coroutines;
 using Inno.Core.Events;
 using Inno.Core.Job;
 using Inno.Core.Identity;
 using Inno.Core.Logging;
-using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 
 namespace Inno.Core.Framework;
@@ -21,6 +21,7 @@ public sealed class Shell
     private const string DEFAULT_ASSET_DIRECTORY = "Assets";
     private const string DEFAULT_ARTIFACT_DIRECTORY = "Artifacts";
     private const string DEFAULT_LOG_DIRECTORY = "Logs";
+    private const string DEFAULT_ASSEMBLY_CACHE_DIRECTORY = "Library/Assemblies";
 
     private static readonly Lock S_LIFECYCLE_LOCK = new();
     private static Shell? s_instance;
@@ -124,7 +125,12 @@ public sealed class Shell
             LogManager.RegisterSink(new ConsoleLogSink());
             LogManager.RegisterSink(new FileLogSink(Path.Combine(settings.projectRootDirectory, DEFAULT_LOG_DIRECTORY)));
             
-            TypeCacheManager.Initialize();
+            AssemblyManager.Initialize(new AssemblyManagerOptions
+            {
+                cacheDirectory = Path.Combine(
+                    settings.projectRootDirectory,
+                    DEFAULT_ASSEMBLY_CACHE_DIRECTORY)
+            });
             SerializationManager.Initialize();
 
             AssetManager.Initialize(AssetManagerOptions.Create(
@@ -136,7 +142,7 @@ public sealed class Shell
         {
             AssetManager.Shutdown();
             SerializationManager.Shutdown();
-            TypeCacheManager.Shutdown();
+            AssemblyManager.Shutdown();
             LogManager.Shutdown();
             JobSystemManager.Shutdown();
             IdentityManager.Shutdown();
@@ -242,7 +248,7 @@ public sealed class Shell
             m_coroutines.Dispose();
             AssetManager.Shutdown();
             SerializationManager.Shutdown();
-            TypeCacheManager.Shutdown();
+            AssemblyManager.Shutdown();
             LogManager.Shutdown();
             JobSystemManager.Shutdown();
             IdentityManager.Shutdown();

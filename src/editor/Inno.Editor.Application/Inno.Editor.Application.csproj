@@ -11,6 +11,7 @@
     <ProjectReference Include="..\Inno.Editor.Core\Inno.Editor.Core.csproj" />
     <ProjectReference Include="..\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" />
     <ProjectReference Include="..\Inno.Editor.Panels\Inno.Editor.Panels.csproj" />
+    <ProjectReference Include="..\Inno.Editor.Scripting\Inno.Editor.Scripting.csproj" />
     <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" />
     <ProjectReference Include="..\..\core\Inno.Core.Framework\Inno.Core.Framework.csproj" />
     <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" />

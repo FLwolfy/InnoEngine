@@ -5,6 +5,8 @@ using System.IO;
 using Inno.Assets;
 using Inno.Core.Events;
 using Inno.Core.Framework;
+using Inno.Core.Logging;
+using Inno.Editor.Scripting;
 using Inno.Platform;
 using Inno.Platform.ImGui;
 
@@ -21,6 +23,7 @@ public sealed class EditorHost : IDisposable
     private readonly PlatformApplication m_platformApplication;
     private readonly PlatformWindow m_window;
     private readonly Shell m_shell;
+    private readonly ScriptManager m_scriptManager;
     private readonly PlatformImGuiContext m_imgui;
     private readonly EditorLayer m_editorLayer;
     private readonly string m_bootLogPath;
@@ -58,6 +61,14 @@ public sealed class EditorHost : IDisposable
             projectRootDirectory = Path.GetFullPath(PROJECT_ROOT)
         });
         BootLog("Shell created.");
+
+        m_scriptManager = new ScriptManager(new ScriptManagerOptions
+        {
+            projectRootDirectory = Path.GetFullPath(PROJECT_ROOT)
+        });
+        m_scriptManager.CompilationCompleted += OnScriptCompilationCompleted;
+        m_scriptManager.Start();
+        BootLog("Script manager started.");
 
         m_imgui = m_platformApplication.CreateImGuiContext(
             m_window,
@@ -115,6 +126,15 @@ public sealed class EditorHost : IDisposable
             if (m_frameCount == 0)
                 BootLog("About to execute first shell.Tick.");
 
+            try
+            {
+                _ = m_scriptManager.ApplyPendingReload();
+            }
+            catch (Exception exception)
+            {
+                BootLog($"Script reload failed: {exception}");
+            }
+
             m_shell.Tick((float)now, delta);
 
             if (m_frameCount == 0)
@@ -138,6 +158,8 @@ public sealed class EditorHost : IDisposable
         BootLog("Dispose start.");
 
         m_shell.layerStack.PopOverlay(m_editorLayer);
+        m_scriptManager.CompilationCompleted -= OnScriptCompilationCompleted;
+        m_scriptManager.Dispose();
         m_platformApplication.DestroyImGuiContext(m_window);
         Shell.Shutdown();
         m_window.Dispose();
@@ -159,6 +181,32 @@ public sealed class EditorHost : IDisposable
         }
 
         return evnt is WindowCloseEvent closeEvent && closeEvent.windowId == m_window.windowId;
+    }
+
+    private static void OnScriptCompilationCompleted(ScriptCompilationResult result)
+    {
+        if (result.success)
+            Log.Info("Script compilation succeeded: {0}", result.outputDirectory ?? "Unknown output");
+
+        foreach (ScriptDiagnostic diagnostic in result.diagnostics)
+        {
+            string location = diagnostic.filePath is null
+                ? string.Empty
+                : $"{diagnostic.filePath}({diagnostic.line},{diagnostic.column}): ";
+            string message = $"{location}{diagnostic.id}: {diagnostic.message}";
+            switch (diagnostic.severity)
+            {
+                case ScriptDiagnosticSeverity.Error:
+                    Log.Error(message);
+                    break;
+                case ScriptDiagnosticSeverity.Warning:
+                    Log.Warn(message);
+                    break;
+                default:
+                    Log.Info(message);
+                    break;
+            }
+        }
     }
 
     private void BootLog(string message)

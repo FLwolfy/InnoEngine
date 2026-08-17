@@ -3,13 +3,14 @@ namespace Inno.Engine.Scene;
 /// <summary>
 /// Base component for user code driven by scene lifecycle callbacks.
 /// </summary>
-public abstract class GameBehavior : GameComponent
+public abstract class GameBehavior : GameComponent, ISceneLifecycleObject
 {
     private bool m_enabled = true;
 
     /// <summary>
     /// Gets or sets whether this behavior participates in lifecycle updates.
     /// </summary>
+    [Inno.Core.Serialization.SerializableProperty(Inno.Core.Serialization.PropertyVisibility.Hide)]
     public bool enabled
     {
         get => m_enabled;
@@ -94,4 +95,32 @@ public abstract class GameBehavior : GameComponent
     internal void DispatchEnable() => OnEnable();
     internal void DispatchDisable() => OnDisable();
     internal void DispatchDestroy() => OnDestroy();
+
+    bool ISceneLifecycleObject.lifecycleIsActive => isActiveAndEnabled;
+    bool ISceneLifecycleObject.lifecycleIsDestroyed => isDestroyed;
+    bool ISceneLifecycleObject.lifecycleAwakeCalled
+    {
+        get => lifecycleAwakeCalled;
+        set => lifecycleAwakeCalled = value;
+    }
+    bool ISceneLifecycleObject.lifecycleStartCalled
+    {
+        get => lifecycleStartCalled;
+        set => lifecycleStartCalled = value;
+    }
+    bool ISceneLifecycleObject.lifecycleWasEnabled
+    {
+        get => lifecycleWasEnabled;
+        set => lifecycleWasEnabled = value;
+    }
+    bool ISceneLifecycleObject.lifecycleDestroyCalled
+    {
+        get => lifecycleDestroyCalled;
+        set => lifecycleDestroyCalled = value;
+    }
+    void ISceneLifecycleObject.DispatchAwake() => Awake();
+    void ISceneLifecycleObject.DispatchStart() => Start();
+    void ISceneLifecycleObject.DispatchEnable() => OnEnable();
+    void ISceneLifecycleObject.DispatchDisable() => OnDisable();
+    void ISceneLifecycleObject.DispatchDestroy() => OnDestroy();
 }

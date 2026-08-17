@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Inno.Assets.Core;
 using Inno.Assets.Loader;
 using Inno.Assets.Types;
+using Inno.Core.Assemblies;
 using Inno.Core.Identity;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
@@ -23,7 +24,10 @@ public sealed class AssetLoaderTests : IDisposable
     {
         _ = typeof(PrivateConstructorAssetImporter);
         IdentityManager.Initialize();
-        TypeCacheManager.Initialize();
+        AssemblyManager.Initialize(new AssemblyManagerOptions
+        {
+            cacheDirectory = Path.Combine(Path.GetTempPath(), "InnoAssetLoaderTests", "Assemblies")
+        });
         SerializationManager.Initialize();
         SlowAssetImporter.Reset();
         ImporterConflictProbe.mode = ImporterConflictMode.None;
@@ -32,7 +36,7 @@ public sealed class AssetLoaderTests : IDisposable
     public void Dispose()
     {
         SerializationManager.Shutdown();
-        TypeCacheManager.Shutdown();
+        AssemblyManager.Shutdown();
         IdentityManager.Shutdown();
     }
 
@@ -64,7 +68,7 @@ public sealed class AssetLoaderTests : IDisposable
             loader.Load("Private/item.privateasset", typeof(PrivateConstructorAsset)));
 
         Assert.Equal("private", asset.value);
-        TypeCacheManager.Rebuild();
+        AssemblyManager.Rebuild();
         Assert.Same(asset, loader.Load("Private/item.privateasset", typeof(PrivateConstructorAsset)));
     }
 

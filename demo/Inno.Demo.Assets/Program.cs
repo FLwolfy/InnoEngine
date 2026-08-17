@@ -8,9 +8,9 @@ using Inno.Assets;
 using Inno.Assets.Core;
 using Inno.Assets.File;
 using Inno.Assets.Types;
+using Inno.Core.Assemblies;
 using Inno.Core.Identity;
 using Inno.Core.Logging;
-using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 
 namespace Inno.Demo.Assets;
@@ -19,14 +19,17 @@ internal static class Program
 {
     private static int Main()
     {
+        string executionRoot = Directory.GetCurrentDirectory();
         LogManager.Initialize();
         LogManager.RegisterSink(new ConsoleLogSink());
         LogManager.SetMinimumLevel(LogLevel.Debug);
         IdentityManager.Initialize();
-        TypeCacheManager.Initialize();
+        AssemblyManager.Initialize(new AssemblyManagerOptions
+        {
+            cacheDirectory = Path.Combine(executionRoot, "Library", "Assemblies")
+        });
         SerializationManager.Initialize();
 
-        string executionRoot = Directory.GetCurrentDirectory();
         string assetsRoot = Path.Combine(executionRoot, "Assets");
         string artifactsRoot = Path.Combine(executionRoot, "Artifacts");
         string relativePath = "Notes/readme.txt";
@@ -94,7 +97,7 @@ internal static class Program
             AssetManager.SourceFileSystemChanged -= OnSourceChanged;
             AssetManager.Shutdown();
             SerializationManager.Shutdown();
-            TypeCacheManager.Shutdown();
+            AssemblyManager.Shutdown();
             IdentityManager.Shutdown();
             LogManager.Shutdown();
         }

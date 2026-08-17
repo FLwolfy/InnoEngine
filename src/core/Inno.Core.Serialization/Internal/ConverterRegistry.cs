@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
+using Inno.Core.Assemblies;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization.Converters;
 
@@ -10,88 +11,41 @@ namespace Inno.Core.Serialization;
 
 internal static class ConverterRegistry
 {
-    private static readonly object s_sync = new();
-    private static readonly Dictionary<Type, ConverterInvoker?> s_cache = [];
-    private static readonly Dictionary<Type, object> s_converterInstances = [];
-    private static IReadOnlyList<Type> s_registrations = [];
+    private static readonly ConverterTypeRegistry S_REGISTRY = new();
     private static bool s_isInitialized;
-    private static int s_cachedAssemblyCount = -1;
 
     internal static void Initialize()
     {
-        lock (s_sync)
-        {
-            s_isInitialized = true;
-            RefreshInternal();
-        }
+        s_isInitialized = true;
+        S_REGISTRY.Refresh();
     }
 
     internal static void Refresh()
     {
-        lock (s_sync)
-        {
-            if (s_isInitialized)
-                RefreshInternal();
-        }
+        if (s_isInitialized)
+            S_REGISTRY.Refresh();
     }
 
     internal static void Shutdown()
     {
-        lock (s_sync)
-        {
-            s_cache.Clear();
-            s_converterInstances.Clear();
-            s_registrations = [];
-            s_cachedAssemblyCount = -1;
-            s_isInitialized = false;
-        }
+        S_REGISTRY.Clear();
+        s_isInitialized = false;
     }
 
     internal static ConverterInvoker? Resolve(Type valueType)
     {
         ArgumentNullException.ThrowIfNull(valueType);
-        Type normalizedType = Nullable.GetUnderlyingType(valueType) ?? valueType;
-        lock (s_sync)
-        {
-            if (!s_isInitialized)
-                throw new InvalidOperationException("The serialization converter registry is not initialized.");
-
-            int assemblyCount = AppDomain.CurrentDomain.GetAssemblies().Length;
-            if (assemblyCount != s_cachedAssemblyCount)
-                RefreshInternal();
-            if (s_cache.TryGetValue(normalizedType, out ConverterInvoker? cached))
-                return cached;
-
-            ConverterInvoker? resolved = ResolveUncached(normalizedType);
-            s_cache.Add(normalizedType, resolved);
-            return resolved;
-        }
+        if (!s_isInitialized)
+            throw new InvalidOperationException("The serialization converter registry is not initialized.");
+        return S_REGISTRY.Resolve(Nullable.GetUnderlyingType(valueType) ?? valueType);
     }
 
-    private static void RefreshInternal()
-    {
-        IReadOnlyList<Type> registrations = TypeCache.GetTypesWithAttribute<SerializationExtensionAttribute>();
-        for (int i = 0; i < registrations.Count; i++)
-        {
-            if (!TryGetConverterTargetPattern(registrations[i], out _))
-            {
-                throw new InvalidOperationException(
-                    $"Serialization extension '{registrations[i].FullName}' must inherit SerializationConverter<T>.");
-            }
-        }
-
-        s_registrations = registrations;
-        s_cache.Clear();
-        s_converterInstances.Clear();
-        s_cachedAssemblyCount = AppDomain.CurrentDomain.GetAssemblies().Length;
-    }
-
-    private static ConverterInvoker? ResolveUncached(Type valueType)
+    private static ConverterInvoker? ResolveUncached(ConverterRegistrySnapshot snapshot, Type valueType)
     {
         var candidates = new List<ConverterCandidate>();
-        for (int i = 0; i < s_registrations.Count; i++)
+        for (int i = 0; i < snapshot.registrations.Count; i++)
         {
-            if (TryCreateCandidate(s_registrations[i], valueType, out ConverterCandidate? candidate))
+            if (TryCreateCandidate(snapshot, snapshot.registrations[i], valueType, out ConverterCandidate? candidate))
                 candidates.Add(candidate!);
         }
 
@@ -114,6 +68,7 @@ internal static class ConverterRegistry
     }
 
     private static bool TryCreateCandidate(
+        ConverterRegistrySnapshot snapshot,
         Type registeredType,
         Type valueType,
         out ConverterCandidate? candidate)
@@ -157,7 +112,7 @@ internal static class ConverterRegistry
         if (!targetType.IsAssignableFrom(valueType))
             return false;
 
-        object converter = GetOrCreateConverter(closedConverterType);
+        object converter = GetOrCreateConverter(snapshot, closedConverterType);
 
         Type invokerType = typeof(ConverterInvoker<>).MakeGenericType(targetType);
         var invoker = (ConverterInvoker)Activator.CreateInstance(
@@ -173,9 +128,9 @@ internal static class ConverterRegistry
         return true;
     }
 
-    private static object GetOrCreateConverter(Type converterType)
+    private static object GetOrCreateConverter(ConverterRegistrySnapshot snapshot, Type converterType)
     {
-        if (s_converterInstances.TryGetValue(converterType, out object? converter))
+        if (snapshot.converterInstances.TryGetValue(converterType, out object? converter))
             return converter;
 
         try
@@ -190,7 +145,7 @@ internal static class ConverterRegistry
                 exception);
         }
 
-        s_converterInstances.Add(converterType, converter);
+        snapshot.converterInstances.Add(converterType, converter);
         return converter;
     }
 
@@ -273,6 +228,62 @@ internal static class ConverterRegistry
         Type converterType,
         int distance,
         ConverterInvoker invoker);
+
+    private sealed class ConverterTypeRegistry : TypeRegistry<ConverterRegistrySnapshot>
+    {
+        internal ConverterInvoker? Resolve(Type valueType)
+        {
+            ConverterRegistrySnapshot snapshot = current;
+            lock (snapshot.sync)
+            {
+                if (snapshot.cache.TryGetValue(valueType, out ConverterInvoker? cached))
+                    return cached;
+                ConverterInvoker? resolved = ResolveUncached(snapshot, valueType);
+                snapshot.cache.Add(valueType, resolved);
+                return resolved;
+            }
+        }
+
+        protected override ConverterRegistrySnapshot Build(TypeCacheSnapshot types)
+        {
+            IReadOnlyList<Type> registrations = types
+                .GetTypesWithAttribute<SerializationExtensionAttribute>()
+                .OrderBy(static type => type.FullName, StringComparer.Ordinal)
+                .ToArray();
+            for (int i = 0; i < registrations.Count; i++)
+            {
+                if (!TryGetConverterTargetPattern(registrations[i], out _))
+                {
+                    throw new InvalidOperationException(
+                        $"Serialization extension '{registrations[i].FullName}' must inherit SerializationConverter<T>.");
+                }
+            }
+
+            return new ConverterRegistrySnapshot(registrations);
+        }
+    }
+
+    private sealed class ConverterRegistrySnapshot(IReadOnlyList<Type> registrations) : IDisposable
+    {
+        internal readonly object sync = new();
+        internal readonly Dictionary<Type, ConverterInvoker?> cache = [];
+        internal readonly Dictionary<Type, object> converterInstances = [];
+        internal readonly IReadOnlyList<Type> registrations = registrations;
+
+        public void Dispose()
+        {
+            lock (sync)
+            {
+                foreach (object converter in converterInstances.Values.Distinct(ReferenceEqualityComparer.Instance))
+                {
+                    if (converter is IDisposable disposable)
+                        disposable.Dispose();
+                }
+                cache.Clear();
+                converterInstances.Clear();
+            }
+        }
+    }
 }
 
 internal abstract class ConverterInvoker

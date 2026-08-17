@@ -79,6 +79,8 @@ public sealed class HierarchyPanel : EditorPanel
             ImGuiWidget.SetNextTreeNodeOpen(true);
         }
 
+        bool selected = context.selection.TryGet(out GameScene? selectedScene) &&
+            ReferenceEquals(selectedScene, scene);
         TreeNodeResult result = ImGuiWidget.TreeNode(
             $"scene_{id}",
             () => ImGuiWidget.IconText(
@@ -88,10 +90,14 @@ public sealed class HierarchyPanel : EditorPanel
             new TreeNodeOptions
             {
                 isLeaf = false,
+                selected = selected,
                 showBackground = true,
                 backgroundColor = s_sceneRowColor,
-                suppressHoverHighlight = true
+                suppressHoverHighlight = false
             });
+
+        if (result.isClicked || result.isDoubleClicked)
+            context.selection.Select(scene);
 
         if (ImGuiWidget.DragDropTarget<Guid>(C_SCENE_OBJECT_PAYLOAD, out Guid droppedId))
         {
@@ -440,6 +446,12 @@ public sealed class HierarchyPanel : EditorPanel
 
     private static void PruneSelection(EditorContext context)
     {
+        if (context.selection.TryGet(out GameScene? selectedScene) &&
+            (!selectedScene.isLoaded || !ContainsScene(context.scenes, selectedScene)))
+        {
+            context.selection.Clear();
+            return;
+        }
         if (context.selection.TryGet(out GameObject? gameObject) &&
             (!gameObject.isRuntimeValid || !ContainsScene(context.scenes, gameObject.scene)))
         {

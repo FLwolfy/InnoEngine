@@ -468,6 +468,7 @@ public sealed class AssetLoader : IDisposable
         record.stableTypeId = build.meta.stableAssetTypeId;
         record.meta = build.meta;
         record.payload = build.payload;
+        record.importerGeneration = m_importers.GetGeneration(build.meta.importerId);
         if (canonical is not null)
             record.asset = canonical;
         AddOrReplaceRecordLocked(record);
@@ -969,6 +970,7 @@ public sealed class AssetLoader : IDisposable
         m_runtimeGraph.Clear();
         m_importGraph.Clear();
         m_missingAssets.Clear();
+        m_importers.Dispose();
         lock (m_asyncSync)
         {
             m_inFlightPathLoads.Clear();
@@ -1085,6 +1087,8 @@ public sealed class AssetLoader : IDisposable
         if (!IOFile.Exists(sourcePath) || record.meta.schemaVersion != AssetMeta.C_SCHEMA_VERSION)
             return true;
         if (record.meta.importerVersion != m_importers.FindById(record.meta.importerId)?.version)
+            return true;
+        if (record.importerGeneration != m_importers.GetGeneration(record.meta.importerId))
             return true;
         return !string.Equals(
             record.meta.sourceHash,
@@ -1313,6 +1317,7 @@ public sealed class AssetLoader : IDisposable
         internal byte[] payload = [];
         internal AssetObject? asset;
         internal bool? lastSweepReachability;
+        internal long importerGeneration;
     }
 
     private sealed class MissingAsset : AssetObject;

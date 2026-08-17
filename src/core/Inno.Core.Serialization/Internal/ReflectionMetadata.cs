@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace Inno.Core.Serialization;
 
@@ -10,23 +11,13 @@ internal static class ReflectionMetadata
     private const BindingFlags C_DECLARED_MEMBERS =
         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
 
-    private static readonly object s_sync = new();
-    private static readonly Dictionary<Type, SerializableMember[]> s_members = [];
-    private static readonly Dictionary<Type, MethodInfo[]> s_restoreHooks = [];
+    private static readonly ConditionalWeakTable<Type, MembersBox> S_MEMBERS = new();
+    private static readonly ConditionalWeakTable<Type, RestoreHooksBox> S_RESTORE_HOOKS = new();
 
     internal static SerializableMember[] GetSerializableMembers(Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
-        lock (s_sync)
-        {
-            if (!s_members.TryGetValue(type, out SerializableMember[]? members))
-            {
-                members = BuildSerializableMembers(type);
-                s_members.Add(type, members);
-            }
-
-            return members;
-        }
+        return S_MEMBERS.GetValue(type, static value => new MembersBox(BuildSerializableMembers(value))).members;
     }
 
     internal static IReadOnlyList<SerializedProperty> GetRuntimeProperties(ISerializable value)
@@ -166,16 +157,9 @@ internal static class ReflectionMetadata
 
     private static MethodInfo[] GetRestoreHooks(Type runtimeType)
     {
-        lock (s_sync)
-        {
-            if (!s_restoreHooks.TryGetValue(runtimeType, out MethodInfo[]? hooks))
-            {
-                hooks = BuildRestoreHooks(runtimeType);
-                s_restoreHooks.Add(runtimeType, hooks);
-            }
-
-            return hooks;
-        }
+        return S_RESTORE_HOOKS.GetValue(
+            runtimeType,
+            static value => new RestoreHooksBox(BuildRestoreHooks(value))).hooks;
     }
 
     private static MethodInfo[] BuildRestoreHooks(Type runtimeType)
@@ -218,6 +202,9 @@ internal static class ReflectionMetadata
 
     private static bool RequiresWrite(PropertyVisibility visibility)
         => (visibility & (PropertyVisibility.Deserialize | PropertyVisibility.RuntimeSet)) != 0;
+
+    private sealed record MembersBox(SerializableMember[] members);
+    private sealed record RestoreHooksBox(MethodInfo[] hooks);
 }
 
 internal sealed class SerializableMember

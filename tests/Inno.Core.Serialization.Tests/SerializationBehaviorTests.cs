@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-using Inno.Core.Reflection;
+using Inno.Core.Assemblies;
 using Inno.Core.Serialization.Converters;
 
 using Xunit;
@@ -14,14 +14,17 @@ public sealed class SerializationBehaviorTests : IDisposable
 {
     public SerializationBehaviorTests()
     {
-        TypeCacheManager.Initialize();
+        AssemblyManager.Initialize(new AssemblyManagerOptions
+        {
+            cacheDirectory = Path.Combine(Path.GetTempPath(), "InnoSerializationTests", "Assemblies")
+        });
         SerializationManager.Initialize();
     }
 
     public void Dispose()
     {
         SerializationManager.Shutdown();
-        TypeCacheManager.Shutdown();
+        AssemblyManager.Shutdown();
     }
 
     [Fact]
@@ -44,14 +47,17 @@ public sealed class SerializationBehaviorTests : IDisposable
     }
 
     [Fact]
-    public void Initialize_RequiresTypeCacheManager()
+    public void Initialize_RequiresAssemblyManager()
     {
         SerializationManager.Shutdown();
-        TypeCacheManager.Shutdown();
+        AssemblyManager.Shutdown();
 
         Assert.Throws<InvalidOperationException>(SerializationManager.Initialize);
 
-        TypeCacheManager.Initialize();
+        AssemblyManager.Initialize(new AssemblyManagerOptions
+        {
+            cacheDirectory = Path.Combine(Path.GetTempPath(), "InnoSerializationTests", "Assemblies")
+        });
         SerializationManager.Initialize();
     }
 

@@ -54,21 +54,27 @@ internal sealed class TypeQueryRegistry
 
     public IReadOnlyList<Type> GetSubTypesOf<T>(TypeIdentityRegistry typeIdentityRegistry)
     {
-        int keyId = typeIdentityRegistry.GetOrAddRuntimeTypeId(typeof(T));
-        return m_subclassCache.TryGetValue(keyId, out Type[]? set) ? set : [];
+        return typeIdentityRegistry.TryGetRuntimeTypeId(typeof(T), out int keyId) &&
+               m_subclassCache.TryGetValue(keyId, out Type[]? set)
+            ? set
+            : [];
     }
 
     public IReadOnlyList<Type> GetTypesImplementing<TInterface>(TypeIdentityRegistry typeIdentityRegistry)
     {
-        int keyId = typeIdentityRegistry.GetOrAddRuntimeTypeId(typeof(TInterface));
-        return m_interfaceCache.TryGetValue(keyId, out Type[]? set) ? set : [];
+        return typeIdentityRegistry.TryGetRuntimeTypeId(typeof(TInterface), out int keyId) &&
+               m_interfaceCache.TryGetValue(keyId, out Type[]? set)
+            ? set
+            : [];
     }
 
     public IReadOnlyList<Type> GetTypesWithAttribute<TAttr>(TypeIdentityRegistry typeIdentityRegistry)
         where TAttr : Attribute
     {
-        int keyId = typeIdentityRegistry.GetOrAddRuntimeTypeId(typeof(TAttr));
-        return m_attributeCache.TryGetValue(keyId, out Type[]? set) ? set : [];
+        return typeIdentityRegistry.TryGetRuntimeTypeId(typeof(TAttr), out int keyId) &&
+               m_attributeCache.TryGetValue(keyId, out Type[]? set)
+            ? set
+            : [];
     }
 
     private static void AddToIndex(

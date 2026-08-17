@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Inno.Assets.Core;
 using Inno.Assets.Loader;
 using Inno.Assets.Types;
+using Inno.Core.Assemblies;
 using Inno.Core.Identity;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
@@ -24,7 +25,10 @@ public sealed class AssetManagerContractTests : IDisposable
     {
         _ = typeof(ManagerDependencyImporter);
         IdentityManager.Initialize();
-        TypeCacheManager.Initialize();
+        AssemblyManager.Initialize(new AssemblyManagerOptions
+        {
+            cacheDirectory = Path.Combine(Path.GetTempPath(), "InnoAssetContractTests", "Assemblies")
+        });
         SerializationManager.Initialize();
     }
 
@@ -32,7 +36,7 @@ public sealed class AssetManagerContractTests : IDisposable
     {
         AssetManager.Shutdown();
         SerializationManager.Shutdown();
-        TypeCacheManager.Shutdown();
+        AssemblyManager.Shutdown();
         IdentityManager.Shutdown();
     }
 

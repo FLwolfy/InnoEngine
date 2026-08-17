@@ -28,5 +28,10 @@ public enum AssemblyGroup
     /// <summary>
     /// Plugin assembly group.
     /// </summary>
-    Plugin
+    Plugin,
+
+    /// <summary>
+    /// Editor-only assembly group.
+    /// </summary>
+    Editor
 }

@@ -81,15 +81,21 @@ internal sealed class SceneGraphReferenceMap
         {
             GameObject gameObject => gameObject.scene,
             GameComponent component => component.gameObject.scene,
+            GameSystem system => system.ownerScene
+                ?? throw new InvalidOperationException($"Detached GameSystem reference at '{path}' cannot be serialized."),
             _ => throw new InvalidOperationException(
                 $"Engine object type '{engineObject.GetType().FullName}' cannot be serialized as a scene reference at '{path}'.")
         };
         if (!ReferenceEquals(ownerScene, m_scene))
             throw new InvalidOperationException($"Cross-scene object reference at '{path}' cannot be serialized.");
 
-        EngineReferenceKind kind = engineObject is GameObject
-            ? EngineReferenceKind.GameObject
-            : EngineReferenceKind.GameComponent;
+        EngineReferenceKind kind = engineObject switch
+        {
+            GameObject => EngineReferenceKind.GameObject,
+            GameComponent => EngineReferenceKind.GameComponent,
+            GameSystem => EngineReferenceKind.GameSystem,
+            _ => throw new InvalidOperationException($"Unsupported scene reference at '{path}'.")
+        };
         return new EngineReferenceToken(kind, sourceId);
     }
 

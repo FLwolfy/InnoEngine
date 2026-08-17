@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Inno.Core.Assemblies.TestModule</AssemblyName>
+    <InnoAssemblyGroup>Plugin</InnoAssemblyGroup>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />
+    <ProjectReference Include="..\Inno.Core.Assemblies.TestDependency\Inno.Core.Assemblies.TestDependency.csproj" />
+  </ItemGroup>
+</Project>

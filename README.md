@@ -312,6 +312,12 @@ Inno/
 │  │  │  ├─ Metadata/
 │  │  │  └─ Caching/
 │  │  │
+│  │  ├─ Inno.Core.Assemblies/
+│  │  │  ├─ Inno.Core.Assemblies.csproj
+│  │  │  ├─ Loading/
+│  │  │  ├─ Registry/
+│  │  │  └─ Internal/
+│  │  │
 │  │  └─ Inno.Core.Threading/
 │  │     ├─ Inno.Core.Threading.csproj
 │  │     ├─ Jobs/
@@ -616,7 +622,7 @@ Inno/
 │  │  │  │  └─ GameStartup.cs
 │  │  │  └─ Runtime/
 │  │  │
-│  │  ├─ Inno.Engine.GameFramework/
+│  │  └─ Inno.Engine.GameFramework/
 │  │  │  ├─ Inno.Engine.GameFramework.csproj
 │  │  │  ├─ Components/
 │  │  │  ├─ Gameplay/
@@ -624,13 +630,12 @@ Inno/
 │  │  │  ├─ UI/
 │  │  │  └─ Common/
 │  │  │
-│  │  └─ Inno.Engine.Scripting/
-│  │     ├─ Inno.Engine.Scripting.csproj
-│  │     ├─ Runtime/
-│  │     ├─ Host/
-│  │     └─ Binding/
-│  │
 │  ├─ editor/
+│  │  ├─ Inno.Editor.Scripting/
+│  │  │  ├─ Inno.Editor.Scripting.csproj
+│  │  │  ├─ Compilation/
+│  │  │  └─ ProjectGeneration/
+│  │  │
 │  │  ├─ Inno.Editor.Framework/
 │  │  │  ├─ Inno.Editor.Framework.csproj
 │  │  │  ├─ Docking/

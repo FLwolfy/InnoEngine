@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 using Inno.Core.Serialization;
 using Inno.Native.ImGui;
@@ -12,8 +13,7 @@ namespace Inno.Editor.Inspection.Drawers;
 [PropertyDrawer(typeof(ValueType), useForChildren: true, priority: -100)]
 internal sealed class StructPropertyDrawer : IPropertyDrawer
 {
-    private static readonly Dictionary<Type, MemberInfo[]> s_memberCache = [];
-    private static readonly object C_SYNC = new();
+    private static readonly ConditionalWeakTable<Type, MembersBox> S_MEMBER_CACHE = new();
 
     /// <inheritdoc />
     public void Draw(PropertyDrawContext context)
@@ -55,21 +55,12 @@ internal sealed class StructPropertyDrawer : IPropertyDrawer
 
     private static MemberInfo[] GetMembers(Type type)
     {
-        lock (C_SYNC)
-        {
-            if (s_memberCache.TryGetValue(type, out MemberInfo[]? cached))
-            {
-                return cached;
-            }
-
-            MemberInfo[] members = type
+        return S_MEMBER_CACHE.GetValue(type, static value => new MembersBox(
+            value
                 .GetMembers(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
                 .Where(IsRuntimeVisibleMember)
                 .OrderBy(static member => member.MetadataToken)
-                .ToArray();
-            s_memberCache[type] = members;
-            return members;
-        }
+                .ToArray())).members;
     }
 
     private static bool IsRuntimeVisibleMember(MemberInfo member)
@@ -142,4 +133,6 @@ internal sealed class StructPropertyDrawer : IPropertyDrawer
                 break;
         }
     }
+
+    private sealed record MembersBox(MemberInfo[] members);
 }

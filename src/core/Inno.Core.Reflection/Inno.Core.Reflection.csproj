@@ -5,6 +5,8 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <InnoAssemblyGroup>Core</InnoAssemblyGroup>
+    <InnoScriptApi>Runtime</InnoScriptApi>
+    <InnoScriptGlobalUsings>Inno.Core.Reflection</InnoScriptGlobalUsings>
   </PropertyGroup>
 
 </Project>

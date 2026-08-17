@@ -1,90 +1,93 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Frozen;
 using System.IO;
 using System.Linq;
 
+using Inno.Core.Assemblies;
 using Inno.Core.Reflection;
 
 namespace Inno.Assets.Loader;
 
 internal sealed class AssetImporterRegistry
+    : TypeRegistry<AssetImporterRegistry.Snapshot>
 {
-    private readonly object m_sync = new();
-    private Dictionary<string, AssetImporter> m_byExtension = new(StringComparer.OrdinalIgnoreCase);
-    private Dictionary<string, AssetImporter> m_byId = new(StringComparer.Ordinal);
-    private Type[] m_registrationTypes = [];
+    private readonly object m_generationSync = new();
+    private readonly Dictionary<string, long> m_generations = new(StringComparer.Ordinal);
 
     internal AssetImporter? FindByPath(string relativePath)
     {
-        EnsureFresh();
         string extension = Path.GetExtension(relativePath).ToLowerInvariant();
-        lock (m_sync)
-            return m_byExtension.GetValueOrDefault(extension);
+        return current.byExtension.GetValueOrDefault(extension);
     }
 
     internal AssetImporter? FindById(string importerId)
+        => current.byId.GetValueOrDefault(importerId);
+
+    internal long GetGeneration(string importerId)
     {
-        EnsureFresh();
-        lock (m_sync)
-            return m_byId.GetValueOrDefault(importerId);
+        _ = current;
+        lock (m_generationSync)
+            return m_generations.GetValueOrDefault(importerId);
     }
 
-    internal void EnsureFresh()
+    protected override Snapshot Build(TypeCacheSnapshot types)
     {
-        Type[] discovered = TypeCache.GetTypesWithAttribute<AssetImporterExtensionAttribute>()
+        Type[] discovered = types.GetTypesWithAttribute<AssetImporterExtensionAttribute>()
             .OrderBy(static value => value.FullName, StringComparer.Ordinal)
             .ToArray();
-        lock (m_sync)
+        var byExtension = new Dictionary<string, AssetImporter>(StringComparer.OrdinalIgnoreCase);
+        var byId = new Dictionary<string, AssetImporter>(StringComparer.Ordinal);
+        var typesById = new Dictionary<string, Type>(StringComparer.Ordinal);
+        foreach (Type type in discovered)
         {
-            if (m_registrationTypes.SequenceEqual(discovered))
-                return;
-
-            var byExtension = new Dictionary<string, AssetImporter>(StringComparer.OrdinalIgnoreCase);
-            var byId = new Dictionary<string, AssetImporter>(StringComparer.Ordinal);
-            foreach (Type type in discovered)
+            AssetImporter importer = CreateExtension<AssetImporter>(type);
+            if (string.IsNullOrWhiteSpace(importer.importerId))
+                throw new InvalidOperationException($"Asset importer '{type.FullName}' has an empty importer id.");
+            if (!byId.TryAdd(importer.importerId, importer))
             {
-                if (type.IsAbstract || !typeof(AssetImporter).IsAssignableFrom(type))
+                throw new InvalidOperationException(
+                    $"Asset importer id '{importer.importerId}' is registered by multiple importers.");
+            }
+            typesById.Add(importer.importerId, type);
+
+            foreach (string declaredExtension in importer.supportedExtensions)
+            {
+                string extension = NormalizeExtension(declaredExtension);
+                if (!byExtension.TryAdd(extension, importer))
                 {
                     throw new InvalidOperationException(
-                        $"Asset importer extension '{type.FullName}' must be a non-abstract AssetImporter.");
-                }
-
-                AssetImporter importer;
-                try
-                {
-                    importer = (AssetImporter)(Activator.CreateInstance(type, nonPublic: true)
-                        ?? throw new InvalidOperationException("Activator returned null."));
-                }
-                catch (Exception exception)
-                {
-                    throw new InvalidOperationException(
-                        $"Asset importer '{type.FullName}' requires a parameterless constructor.",
-                        exception);
-                }
-
-                if (string.IsNullOrWhiteSpace(importer.importerId))
-                    throw new InvalidOperationException($"Asset importer '{type.FullName}' has an empty importer id.");
-                if (!byId.TryAdd(importer.importerId, importer))
-                {
-                    throw new InvalidOperationException(
-                        $"Asset importer id '{importer.importerId}' is registered by multiple importers.");
-                }
-
-                foreach (string declaredExtension in importer.supportedExtensions)
-                {
-                    string extension = NormalizeExtension(declaredExtension);
-                    if (!byExtension.TryAdd(extension, importer))
-                    {
-                        throw new InvalidOperationException(
-                            $"Asset extension '{extension}' is registered by both " +
-                            $"'{byExtension[extension].GetType().FullName}' and '{type.FullName}'.");
-                    }
+                        $"Asset extension '{extension}' is registered by both " +
+                        $"'{byExtension[extension].GetType().FullName}' and '{type.FullName}'.");
                 }
             }
+        }
 
-            m_byExtension = byExtension;
-            m_byId = byId;
-            m_registrationTypes = discovered;
+        return new Snapshot(
+            byExtension.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase),
+            byId.ToFrozenDictionary(StringComparer.Ordinal),
+            typesById.ToFrozenDictionary(StringComparer.Ordinal));
+    }
+
+    protected override void OnCommitted(Snapshot previous, Snapshot currentSnapshot)
+    {
+        lock (m_generationSync)
+        {
+            foreach ((string importerId, Type importerType) in currentSnapshot.typesById)
+            {
+                if (!previous.typesById.TryGetValue(importerId, out Type? previousType) || previousType != importerType)
+                    m_generations[importerId] = m_generations.GetValueOrDefault(importerId) + 1;
+            }
+        }
+    }
+
+    protected override void DisposeSnapshot(Snapshot snapshot)
+    {
+        var disposed = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (AssetImporter importer in snapshot.byId.Values)
+        {
+            if (disposed.Add(importer) && importer is IDisposable disposable)
+                disposable.Dispose();
         }
     }
 
@@ -95,4 +98,9 @@ internal sealed class AssetImporterRegistry
         string normalized = extension.Trim().ToLowerInvariant();
         return normalized[0] == '.' ? normalized : "." + normalized;
     }
+
+    internal sealed record Snapshot(
+        FrozenDictionary<string, AssetImporter> byExtension,
+        FrozenDictionary<string, AssetImporter> byId,
+        FrozenDictionary<string, Type> typesById);
 }
