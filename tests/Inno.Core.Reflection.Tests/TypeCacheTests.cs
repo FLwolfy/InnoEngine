@@ -54,11 +54,11 @@ public sealed class TypeCacheTests
     }
 
     [Fact]
-    public void TryGetRuntimeTypeId_ForTypeOutsideInnoNamespace_ReturnsFalse()
+    public void TryGetRuntimeTypeId_ForTypeOutsideInnoNamespace_UsesAssemblyGroup()
     {
         TypeCacheManager.Rebuild();
 
-        Assert.False(TypeCache.TryGetRuntimeTypeId(typeof(OutsideNamespaceType), out _));
+        Assert.True(TypeCache.TryGetRuntimeTypeId(typeof(OutsideNamespaceType), out _));
     }
 
     [Fact]
@@ -75,11 +75,12 @@ public sealed class TypeCacheTests
     }
 
     [Fact]
-    public void TryGetStableTypeId_ForTypeOutsideInnoNamespace_ReturnsFalse()
+    public void TryGetStableTypeId_ForTypeOutsideInnoNamespace_UsesAssemblyGroup()
     {
         TypeCacheManager.Rebuild();
 
-        Assert.False(TypeCache.TryGetStableTypeId(typeof(OutsideStableAnnotatedType), out _));
+        Assert.True(TypeCache.TryGetStableTypeId(typeof(OutsideStableAnnotatedType), out Guid stableId));
+        Assert.Equal(Guid.Parse("33333333-3333-3333-3333-333333333333"), stableId);
     }
 
     [Fact]

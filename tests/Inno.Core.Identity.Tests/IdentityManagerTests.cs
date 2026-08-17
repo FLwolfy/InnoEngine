@@ -70,6 +70,30 @@ public sealed class IdentityManagerTests
     }
 
     [Fact]
+    public void InitializePersistentIdentity_AssignsDetachedIdentityWithoutUnregisterEvent()
+    {
+        IdentityManager.Initialize();
+        var entity = new Entity();
+        Guid persistentId = Guid.NewGuid();
+        int unregisteredCount = 0;
+
+        void OnUnregistered(IIdentityObject _) => unregisteredCount++;
+        IdentityManager.ObjectUnregistered += OnUnregistered;
+        try
+        {
+            IdentityManager.InitializePersistentIdentity(entity, persistentId);
+
+            Assert.Equal(persistentId, GetIdentity(entity).persistentId);
+            Assert.Null(GetIdentity(entity).runtimeId);
+            Assert.Equal(0, unregisteredCount);
+        }
+        finally
+        {
+            IdentityManager.ObjectUnregistered -= OnUnregistered;
+        }
+    }
+
+    [Fact]
     public void Register_AndGet_ByRuntimeId_AndPersistentId_AndExplicitPersistentOverride()
     {
         IdentityManager.Initialize();
@@ -110,6 +134,47 @@ public sealed class IdentityManagerTests
         AssertRuntimeIdIsNull(entity);
         Assert.Null(IdentityManager.Get<IIdentityObject>(runtimeId));
         Assert.Null(IdentityManager.Get<IIdentityObject>(Guid.Empty));
+    }
+
+    [Fact]
+    public void Unregister_EventRunsAfterRemoval_InvokesEveryHandler_AndAggregatesFailures()
+    {
+        IdentityManager.Initialize();
+        var entity = new Entity();
+        Assert.True(IdentityManager.Register(entity));
+        Identity identity = GetIdentity(entity);
+        int successfulHandlers = 0;
+
+        void FailingHandler(IIdentityObject removed)
+        {
+            Assert.Same(entity, removed);
+            Assert.Null(GetIdentity(removed).runtimeId);
+            Assert.Null(IdentityManager.Get<Entity>(identity.persistentId));
+            throw new InvalidOperationException("expected handler failure");
+        }
+
+        void SuccessfulHandler(IIdentityObject removed)
+        {
+            Assert.Same(entity, removed);
+            successfulHandlers++;
+        }
+
+        IdentityManager.ObjectUnregistered += FailingHandler;
+        IdentityManager.ObjectUnregistered += SuccessfulHandler;
+        try
+        {
+            AggregateException exception = Assert.Throws<AggregateException>(
+                () => IdentityManager.Unregister(entity));
+
+            Assert.Single(exception.InnerExceptions);
+            Assert.Equal(1, successfulHandlers);
+            Assert.Null(GetIdentity(entity).runtimeId);
+        }
+        finally
+        {
+            IdentityManager.ObjectUnregistered -= FailingHandler;
+            IdentityManager.ObjectUnregistered -= SuccessfulHandler;
+        }
     }
 
     [Fact]

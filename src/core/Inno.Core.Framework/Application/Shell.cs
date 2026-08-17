@@ -6,8 +6,10 @@ using Inno.Assets;
 using Inno.Core.Coroutines;
 using Inno.Core.Events;
 using Inno.Core.Job;
+using Inno.Core.Identity;
 using Inno.Core.Logging;
 using Inno.Core.Reflection;
+using Inno.Core.Serialization;
 
 namespace Inno.Core.Framework;
 
@@ -108,6 +110,7 @@ public sealed class Shell
             m_coroutines = new CoroutineScheduler();
             m_layers = new LayerStack(() => m_events.CreateHub());
             
+            IdentityManager.Initialize();
             JobSystemManager.Initialize();
             JobSystemManager.SetJobSystem(settings.useSingleThreadJobSystem
                 ? new SingleThreadJobSystem()
@@ -122,6 +125,7 @@ public sealed class Shell
             LogManager.RegisterSink(new FileLogSink(Path.Combine(settings.projectRootDirectory, DEFAULT_LOG_DIRECTORY)));
             
             TypeCacheManager.Initialize();
+            SerializationManager.Initialize();
 
             AssetManager.Initialize(AssetManagerOptions.Create(
                 Path.Combine(settings.projectRootDirectory, DEFAULT_ASSET_DIRECTORY),
@@ -131,8 +135,11 @@ public sealed class Shell
         catch
         {
             AssetManager.Shutdown();
-            JobSystemManager.Shutdown();
+            SerializationManager.Shutdown();
+            TypeCacheManager.Shutdown();
             LogManager.Shutdown();
+            JobSystemManager.Shutdown();
+            IdentityManager.Shutdown();
             throw;
         }
     }
@@ -234,8 +241,11 @@ public sealed class Shell
             m_layers.Dispose();
             m_coroutines.Dispose();
             AssetManager.Shutdown();
-            JobSystemManager.Shutdown();
+            SerializationManager.Shutdown();
+            TypeCacheManager.Shutdown();
             LogManager.Shutdown();
+            JobSystemManager.Shutdown();
+            IdentityManager.Shutdown();
         }
         finally
         {

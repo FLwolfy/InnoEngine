@@ -1,4 +1,5 @@
 using Inno.Core.Framework;
+using Inno.Engine.Assets;
 using Inno.Engine.Scene;
 
 namespace Inno.Engine.Runtime;
@@ -10,6 +11,12 @@ public sealed class GameLayer : Layer
 {
     private readonly GameScene? m_startupScene;
     private readonly bool m_unloadSceneOnDetach;
+
+    static GameLayer()
+    {
+        _ = typeof(SceneAsset).Assembly;
+        _ = typeof(PrefabAsset).Assembly;
+    }
 
     /// <summary>
     /// Creates a game layer. If no startup scene is provided, an empty scene is created on attach.

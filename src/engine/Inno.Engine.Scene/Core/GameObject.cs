@@ -1,0 +1,245 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+using Inno.Core.Serialization;
+using Inno.Engine.Scene.Components;
+
+namespace Inno.Engine.Scene;
+
+/// <summary>
+/// Represents a scene-owned object and exposes its component-oriented API.
+/// </summary>
+[RequiresSerializationConverter]
+public sealed class GameObject : EngineObject, ISerializable
+{
+    private GameScene? m_scene;
+    private Transform? m_transform;
+    private PrefabInstanceInfo? m_prefabInstance;
+    private PrefabConnectionRecord? m_prefabConnection;
+    private string m_name;
+    private bool m_activeSelf = true;
+    private bool m_activeInHierarchy = true;
+
+    internal GameObject(GameScene scene, string name)
+    {
+        m_scene = scene ?? throw new ArgumentNullException(nameof(scene));
+        m_name = name ?? string.Empty;
+    }
+
+    /// <summary>
+    /// Gets whether this object is live in its owning scene.
+    /// </summary>
+    public bool isRuntimeValid => !isDestroyed && m_scene?.Contains(this) == true;
+
+    /// <summary>
+    /// Gets the owning scene.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when this object is destroyed or detached.</exception>
+    public GameScene scene => EnsureAlive();
+
+    /// <summary>
+    /// Gets or sets the display name stored in the owning scene.
+    /// </summary>
+    public string name
+    {
+        get
+        {
+            EnsureAlive();
+            return m_name;
+        }
+        set
+        {
+            EnsureAlive();
+            m_name = value ?? string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Gets the mandatory transform component.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when this object is destroyed or incompletely initialized.</exception>
+    public Transform transform
+    {
+        get
+        {
+            EnsureAlive();
+            return m_transform ?? throw new InvalidOperationException("GameObject transform has not been initialized.");
+        }
+    }
+
+    /// <summary>
+    /// Gets whether this object is explicitly active.
+    /// </summary>
+    public bool activeSelf
+    {
+        get
+        {
+            EnsureAlive();
+            return m_activeSelf;
+        }
+    }
+
+    /// <summary>
+    /// Gets whether this object is active after parent hierarchy state is applied.
+    /// </summary>
+    public bool activeInHierarchy => !isDestroyed && m_activeInHierarchy;
+
+    /// <summary>
+    /// Gets whether this object retains a prefab source connection.
+    /// </summary>
+    public bool isPartOfPrefabInstance => !isDestroyed && m_prefabInstance is not null;
+
+    /// <summary>
+    /// Gets the root of this object's prefab instance connection.
+    /// </summary>
+    public GameObject? prefabInstanceRoot => isDestroyed ? null : m_prefabInstance?.instanceRoot;
+
+    /// <summary>
+    /// Gets read-only information about this object's prefab source connection.
+    /// </summary>
+    public PrefabInstanceInfo? prefabInstance => isDestroyed ? null : m_prefabInstance;
+
+    /// <summary>
+    /// Changes this object's explicit active state and updates its hierarchy subtree.
+    /// </summary>
+    /// <param name="value">New explicit active state.</param>
+    public void SetActive(bool value) => EnsureAlive().SetActive(this, value);
+
+    /// <summary>
+    /// Creates and attaches a component of the requested type.
+    /// </summary>
+    /// <typeparam name="TComponent">Concrete component type.</typeparam>
+    /// <returns>The attached component.</returns>
+    public TComponent AddComponent<TComponent>() where TComponent : GameComponent
+        => (TComponent)AddComponent(typeof(TComponent));
+
+    /// <summary>
+    /// Creates and attaches a component of the requested runtime type.
+    /// </summary>
+    /// <param name="componentType">Concrete component type.</param>
+    /// <returns>The attached component.</returns>
+    public GameComponent AddComponent(Type componentType)
+        => EnsureAlive().AddComponent(this, componentType, persistentId: null, invokeReset: true);
+
+    /// <summary>
+    /// Gets the first attached component assignable to the requested type.
+    /// </summary>
+    /// <typeparam name="TComponent">Requested component type.</typeparam>
+    /// <returns>The first matching component.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no matching component exists.</exception>
+    public TComponent GetComponent<TComponent>() where TComponent : GameComponent
+    {
+        if (TryGetComponent(out TComponent? component) && component is not null)
+            return component;
+        throw new InvalidOperationException($"GameObject '{m_name}' does not contain component '{typeof(TComponent).FullName}'. Add it explicitly before calling GetComponent.");
+    }
+
+    /// <summary>
+    /// Gets the first attached component assignable to a runtime type.
+    /// </summary>
+    /// <param name="componentType">Requested component type.</param>
+    /// <returns>The first matching component.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no matching component exists.</exception>
+    public GameComponent GetComponent(Type componentType)
+    {
+        ArgumentNullException.ThrowIfNull(componentType);
+        GameComponent? component = GetComponents().FirstOrDefault(componentType.IsInstanceOfType);
+        return component ?? throw new InvalidOperationException($"GameObject '{m_name}' does not contain component '{componentType.FullName}'. Add it explicitly before calling GetComponent.");
+    }
+
+    /// <summary>
+    /// Tries to get the first attached component assignable to the requested type.
+    /// </summary>
+    /// <typeparam name="TComponent">Requested component type.</typeparam>
+    /// <param name="component">Matching component when found.</param>
+    /// <returns><see langword="true"/> when a matching component exists.</returns>
+    public bool TryGetComponent<TComponent>(out TComponent? component) where TComponent : GameComponent
+    {
+        if (!isRuntimeValid)
+        {
+            component = null;
+            return false;
+        }
+
+        component = EnsureAlive().GetComponents<TComponent>(this).FirstOrDefault();
+        return component is not null;
+    }
+
+    /// <summary>
+    /// Gets whether a matching component is attached.
+    /// </summary>
+    /// <typeparam name="TComponent">Requested component type.</typeparam>
+    /// <returns><see langword="true"/> when a matching component exists.</returns>
+    public bool HasComponent<TComponent>() where TComponent : GameComponent
+        => TryGetComponent<TComponent>(out _);
+
+    /// <summary>
+    /// Gets all attached components assignable to the requested type in attachment order.
+    /// </summary>
+    /// <typeparam name="TComponent">Requested component type.</typeparam>
+    /// <returns>A stable component snapshot.</returns>
+    public IReadOnlyList<TComponent> GetComponents<TComponent>() where TComponent : GameComponent
+        => EnsureAlive().GetComponents<TComponent>(this);
+
+    /// <summary>
+    /// Gets all attached components in attachment order.
+    /// </summary>
+    /// <returns>A stable component snapshot.</returns>
+    public IReadOnlyList<GameComponent> GetComponents()
+        => EnsureAlive().GetComponents(this);
+
+    /// <summary>
+    /// Restores an attached component to the defaults defined by its optional Reset message.
+    /// </summary>
+    /// <param name="component">GameComponent instance to reset.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="component"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the object is invalid or the component is not attached to it.</exception>
+    public void ResetComponent(GameComponent component)
+    {
+        ArgumentNullException.ThrowIfNull(component);
+        EnsureAlive().ResetComponent(this, component);
+    }
+
+    /// <summary>
+    /// Removes and destroys a specific attached component.
+    /// </summary>
+    /// <param name="component">GameComponent instance to remove.</param>
+    /// <returns><see langword="true"/> when the component was attached and removed.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when attempting to remove the mandatory transform.</exception>
+    public bool RemoveComponent(GameComponent component)
+    {
+        ArgumentNullException.ThrowIfNull(component);
+        return EnsureAlive().RemoveComponent(this, component);
+    }
+
+    internal void BindTransform(Transform transform)
+    {
+        if (m_transform is not null)
+            throw new InvalidOperationException("GameObject transform is already initialized.");
+        m_transform = transform;
+    }
+
+    internal void SetNameDirect(string value) => m_name = value ?? string.Empty;
+    internal void SetActiveSelfDirect(bool value) => m_activeSelf = value;
+    internal void SetActiveInHierarchyDirect(bool value) => m_activeInHierarchy = value;
+    internal void SetPrefabInstanceDirect(PrefabInstanceInfo? value) => m_prefabInstance = value;
+    internal void SetPrefabConnectionDirect(PrefabConnectionRecord? value) => m_prefabConnection = value;
+    internal PrefabConnectionRecord? prefabConnection => m_prefabConnection;
+
+    internal void DestroyDirect()
+    {
+        m_activeInHierarchy = false;
+        m_prefabInstance = null;
+        m_prefabConnection = null;
+        m_scene = null;
+        MarkDestroyed();
+    }
+
+    private GameScene EnsureAlive()
+    {
+        if (isDestroyed || m_scene is null || !m_scene.Contains(this))
+            throw new InvalidOperationException($"GameObject '{m_name}' is destroyed or detached from its scene.");
+        return m_scene;
+    }
+}

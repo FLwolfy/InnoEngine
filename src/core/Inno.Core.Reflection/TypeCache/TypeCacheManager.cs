@@ -12,8 +12,6 @@ namespace Inno.Core.Reflection;
 /// </summary>
 public static class TypeCacheManager
 {
-    private const string C_INNO_NAMESPACE = "Inno";
-
     private static readonly Lock CACHE_SYNC = new();
 
     private static HashSet<int> s_loadedRuntimeTypeIds = [];
@@ -21,6 +19,7 @@ public static class TypeCacheManager
     private static volatile bool s_isDirty;
     private static int s_lastAssemblyCount = -1;
     private static string? s_currentAssemblyNameFilter;
+    private static bool s_isAssemblyLoadSubscribed;
 
     private static event Action? OnRefreshed;
 
@@ -43,6 +42,9 @@ public static class TypeCacheManager
     /// </summary>
     public static void Initialize(string? assemblyName)
     {
+        if (isInitialized)
+            Shutdown();
+
         string? normalizedAssemblyName = NormalizeAssemblyName(assemblyName);
         s_currentAssemblyNameFilter = normalizedAssemblyName;
 
@@ -50,13 +52,42 @@ public static class TypeCacheManager
         InvokeInitializeHooks(normalizedAssemblyName);
         SubscribeRefreshHooks(normalizedAssemblyName);
 
-        AppDomain.CurrentDomain.AssemblyLoad += (_, _) => s_isDirty = true;
+        if (!s_isAssemblyLoadSubscribed)
+        {
+            AppDomain.CurrentDomain.AssemblyLoad += OnAssemblyLoaded;
+            s_isAssemblyLoadSubscribed = true;
+        }
         
         isInitialized = true;
     }
 
     /// <summary>
-    /// Rebuilds TypeCache and identity registry from loaded Inno assemblies.
+    /// Clears discovered type state and detaches assembly-load tracking.
+    /// </summary>
+    public static void Shutdown()
+    {
+        if (s_isAssemblyLoadSubscribed)
+        {
+            AppDomain.CurrentDomain.AssemblyLoad -= OnAssemblyLoaded;
+            s_isAssemblyLoadSubscribed = false;
+        }
+
+        identityRegistry.Rebuild(Array.Empty<Type>());
+        queryRegistry.Rebuild(Array.Empty<Type>(), identityRegistry);
+        lock (CACHE_SYNC)
+        {
+            s_loadedRuntimeTypeIds.Clear();
+            s_loadedStableTypeIds.Clear();
+            s_lastAssemblyCount = -1;
+            s_currentAssemblyNameFilter = null;
+            s_isDirty = false;
+            OnRefreshed = null;
+            isInitialized = false;
+        }
+    }
+
+    /// <summary>
+    /// Rebuilds TypeCache and identity registry from loaded managed Inno assembly groups.
     /// </summary>
     public static void Rebuild()
         => Rebuild(assemblyName: null);
@@ -67,8 +98,14 @@ public static class TypeCacheManager
     public static void Rebuild(string? assemblyName)
     {
         string? normalizedAssemblyName = NormalizeAssemblyName(assemblyName);
-        Assembly[] assemblies = ResolveAssemblies(normalizedAssemblyName);
-        RebuildFromAssemblies(assemblies);
+        while (true)
+        {
+            int assemblyCount = AppDomain.CurrentDomain.GetAssemblies().Length;
+            Assembly[] assemblies = ResolveAssemblies(normalizedAssemblyName);
+            RebuildFromAssemblies(assemblies, assemblyCount);
+            if (AppDomain.CurrentDomain.GetAssemblies().Length == assemblyCount)
+                return;
+        }
     }
 
     /// <summary>
@@ -153,15 +190,15 @@ public static class TypeCacheManager
         }
     }
 
-    private static void RebuildFromAssemblies(Assembly[] assemblies)
+    private static void RebuildFromAssemblies(Assembly[] assemblies, int assemblyCount)
     {
         Type[] discoveredTypes = assemblies
+            .Where(IsDiscoverableAssembly)
             .SelectMany(static a =>
             {
                 try { return a.GetTypes(); }
                 catch { return Type.EmptyTypes; }
             })
-            .Where(static t => t.Namespace?.StartsWith(C_INNO_NAMESPACE, StringComparison.Ordinal) ?? false)
             .ToArray();
 
         identityRegistry.Rebuild(discoveredTypes);
@@ -174,7 +211,7 @@ public static class TypeCacheManager
         {
             s_loadedRuntimeTypeIds = loadedRuntimeTypeIds;
             s_loadedStableTypeIds = loadedStableTypeIds;
-            s_lastAssemblyCount = AppDomain.CurrentDomain.GetAssemblies().Length;
+            s_lastAssemblyCount = assemblyCount;
             s_isDirty = false;
         }
 
@@ -191,6 +228,15 @@ public static class TypeCacheManager
             .Where(a => string.Equals(a.GetName().Name, assemblyName, StringComparison.Ordinal))
             .ToArray();
     }
+
+    private static bool IsDiscoverableAssembly(Assembly assembly)
+    {
+        AssemblyGroup group = assembly.GetInnoAssemblyGroup();
+        return group is AssemblyGroup.Core or AssemblyGroup.Game or AssemblyGroup.Plugin;
+    }
+
+    private static void OnAssemblyLoaded(object? sender, AssemblyLoadEventArgs args)
+        => s_isDirty = true;
 
     private static void InvokeInitializeHooks(string? assemblyNameFilter)
     {
@@ -212,14 +258,15 @@ public static class TypeCacheManager
 
     private static IEnumerable<MethodInfo> EnumerateHookMethods(Type attributeType, string? assemblyNameFilter)
     {
-        Assembly[] assemblies = ResolveAssemblies(assemblyNameFilter);
+        Assembly[] assemblies = ResolveAssemblies(assemblyNameFilter)
+            .Where(IsDiscoverableAssembly)
+            .ToArray();
         IEnumerable<MethodInfo> methods = assemblies
             .SelectMany(static a =>
             {
                 try { return a.GetTypes(); }
                 catch { return Type.EmptyTypes; }
             })
-            .Where(static t => t.Namespace?.StartsWith(C_INNO_NAMESPACE, StringComparison.Ordinal) ?? false)
             .SelectMany(static t => t.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
             .Where(method => method.IsDefined(attributeType, inherit: false));
 

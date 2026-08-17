@@ -14,15 +14,6 @@ public readonly struct AssetManagerOptions
     /// </summary>
     public string artifactRoot { get; init; }
     /// <summary>
-    /// Whether to register built-in importers during initialization.
-    /// </summary>
-    public bool autoRegisterBuiltInImporters { get; init; }
-    /// <summary>
-    /// Whether to discover and register importers through <c>TypeCache</c>.
-    /// </summary>
-    public bool autoRegisterImportersFromTypeCache { get; init; }
-
-    /// <summary>
     /// Whether to enable file-system watch and hot-refresh.
     /// </summary>
     public bool enableFileSystemWatcher { get; init; }
@@ -44,8 +35,6 @@ public readonly struct AssetManagerOptions
         {
             assetRoot = assetRoot,
             artifactRoot = artifactRoot,
-            autoRegisterBuiltInImporters = true,
-            autoRegisterImportersFromTypeCache = false,
             enableFileSystemWatcher = true,
             fileWatcherFlushDelayMs = 80
         };

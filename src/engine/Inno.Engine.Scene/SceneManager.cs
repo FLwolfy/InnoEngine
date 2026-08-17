@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace Inno.Engine.Scene;
 
 /// <summary>
-/// Global scene lifecycle manager for the current runtime.
+/// Manages loaded scene lifecycles for the current runtime.
 /// </summary>
 public static class SceneManager
 {
@@ -130,10 +130,14 @@ public static class SceneManager
             return false;
         }
 
-        scene.Unload();
-        if (ReferenceEquals(s_activeScene, scene))
+        try
         {
-            s_activeScene = s_loadedScenes.Count > 0 ? s_loadedScenes[^1] : null;
+            scene.Unload();
+        }
+        finally
+        {
+            if (ReferenceEquals(s_activeScene, scene))
+                s_activeScene = s_loadedScenes.Count > 0 ? s_loadedScenes[^1] : null;
         }
 
         return true;
@@ -144,13 +148,23 @@ public static class SceneManager
     /// </summary>
     public static void UnloadAllScenes()
     {
+        Exception? firstException = null;
         for (int i = s_loadedScenes.Count - 1; i >= 0; i--)
         {
-            s_loadedScenes[i].Unload();
+            try
+            {
+                s_loadedScenes[i].Unload();
+            }
+            catch (Exception exception)
+            {
+                firstException ??= exception;
+            }
         }
 
         s_loadedScenes.Clear();
         s_activeScene = null;
+        if (firstException is not null)
+            throw new InvalidOperationException("One or more scenes failed while unloading.", firstException);
     }
 
     /// <summary>

@@ -5,14 +5,13 @@ using System.Reflection;
 using Inno.Assets;
 using Inno.Assets.Core;
 using Inno.Assets.File;
-using Inno.Core.Identity;
 using Inno.Editor.ImGui;
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Inspection.Drawers;
 
-[PropertyDrawer(typeof(AssetRef<>))]
+[PropertyDrawer(typeof(AssetObject), useForChildren: true, priority: 100)]
 internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
 {
     private const string C_ASSET_PAYLOAD = "INNO_ASSET";
@@ -36,21 +35,25 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
     /// <inheritdoc />
     public void Draw(PropertyDrawContext context)
     {
-        Type assetType = context.propertyType.GetGenericArguments()[0];
+        Type assetType = context.propertyType;
         AssetCandidate[] candidates = GetCandidates(assetType);
-        Guid persistentId = ReadPersistentId(context.GetValue());
+        object? currentValue = context.GetValue();
+        Guid persistentId = ReadPersistentId(currentValue);
         AssetCandidate? selected = Array.Find(candidates, candidate => candidate.persistentId == persistentId);
         string preview = persistentId == Guid.Empty
             ? "None"
+            : currentValue is AssetObject { isMissing: true } missing
+                ? $"Missing {missing.GetType().Name} [{persistentId}]"
             : selected is null
                 ? $"Missing ({persistentId})"
                 : selected.relativePath;
 
         bool open = NativeImGui.BeginCombo($"##{context.path}", preview);
-        if (ImGuiWidget.DragDropTarget<Guid>(C_ASSET_PAYLOAD, out Guid droppedId) &&
-            Array.Exists(candidates, candidate => candidate.persistentId == droppedId))
+        if (ImGuiWidget.DragDropTarget<Guid>(C_ASSET_PAYLOAD, out Guid droppedId))
         {
-            context.SetValue(CreateReference(assetType, droppedId));
+            AssetCandidate? dropped = Array.Find(candidates, candidate => candidate.persistentId == droppedId);
+            if (dropped is not null)
+                AssignAsset(context, assetType, dropped);
         }
 
         if (!open)
@@ -70,7 +73,8 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
 
         if (NativeImGui.Selectable("None", persistentId == Guid.Empty))
         {
-            context.SetValue(CreateReference(assetType, Guid.Empty));
+            ReleaseCurrentAsset(context);
+            context.SetValue(null);
         }
 
         for (int i = 0; i < candidates.Length; i++)
@@ -84,7 +88,7 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
 
             if (NativeImGui.Selectable(candidate.relativePath, candidate.persistentId == persistentId))
             {
-                context.SetValue(CreateReference(assetType, candidate.persistentId));
+                AssignAsset(context, assetType, candidate);
             }
         }
 
@@ -112,8 +116,7 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
                     continue;
                 }
 
-                Guid persistentId = AssetManager.GetRef<AssetObject>(entry.relativePath).identity.persistentId;
-                if (persistentId != Guid.Empty)
+                if (AssetManager.TryGetPersistentId(entry.relativePath, out Guid persistentId))
                 {
                     candidates.Add(new AssetCandidate(entry.relativePath, persistentId));
                 }
@@ -128,22 +131,37 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
     }
 
     private static Guid ReadPersistentId(object? reference)
+        => reference is AssetObject asset ? asset.identity.persistentId : Guid.Empty;
+
+    private static void AssignAsset(
+        PropertyDrawContext context,
+        Type assetType,
+        AssetCandidate candidate)
     {
-        object? identity = reference?.GetType().GetProperty("identity")?.GetValue(reference);
-        return identity is Identity assetIdentity ? assetIdentity.persistentId : Guid.Empty;
+        if (ReadPersistentId(context.GetValue()) == candidate.persistentId)
+            return;
+        object asset = LoadAsset(assetType, candidate.relativePath);
+        ReleaseCurrentAsset(context);
+        context.SetValue(asset);
     }
 
-    private static object CreateReference(Type assetType, Guid persistentId)
+    private static void ReleaseCurrentAsset(PropertyDrawContext context)
+    {
+        if (context.GetValue() is AssetObject current && !current.isMissing)
+            AssetManager.Unload(current);
+    }
+
+    private static object LoadAsset(Type assetType, string relativePath)
     {
         MethodInfo method = Array.Find(
             typeof(AssetManager).GetMethods(BindingFlags.Public | BindingFlags.Static),
             candidate =>
-                candidate.Name == nameof(AssetManager.GetRef) &&
+                candidate.Name == nameof(AssetManager.Load) &&
                 candidate.IsGenericMethodDefinition &&
                 candidate.GetParameters().Length == 1 &&
-                candidate.GetParameters()[0].ParameterType == typeof(Identity))
-            ?? throw new MissingMethodException(nameof(AssetManager), nameof(AssetManager.GetRef));
-        return method.MakeGenericMethod(assetType).Invoke(null, [new Identity(persistentId)])!;
+                candidate.GetParameters()[0].ParameterType == typeof(string))
+            ?? throw new MissingMethodException(nameof(AssetManager), nameof(AssetManager.Load));
+        return method.MakeGenericMethod(assetType).Invoke(null, [relativePath])!;
     }
 
     private sealed record AssetCandidate(string relativePath, Guid persistentId);

@@ -104,7 +104,7 @@ public sealed class HierarchyPanel : EditorPanel
             return;
         }
 
-        IReadOnlyList<GameObject> roots = scene.GetRootObjects();
+        IReadOnlyList<GameObject> roots = GetRootObjects(scene);
         for (int i = 0; i < roots.Count; i++)
         {
             DrawObject(context, scene, roots[i]);
@@ -240,7 +240,7 @@ public sealed class HierarchyPanel : EditorPanel
 
     private static void DrawVisibilityButton(GameObject gameObject, string id)
     {
-        string icon = gameObject.active ? ImGuiIcon.Eye : ImGuiIcon.EyeSlash;
+        string icon = gameObject.activeSelf ? ImGuiIcon.Eye : ImGuiIcon.EyeSlash;
         float buttonWidth = GetVisibilityButtonWidth();
         float right = NativeImGui.GetWindowPos().X
             + NativeImGui.GetWindowSize().X
@@ -250,9 +250,9 @@ public sealed class HierarchyPanel : EditorPanel
         Vector2 cursor = NativeImGui.GetCursorScreenPos();
         NativeImGui.SetCursorScreenPos(new Vector2(MathF.Max(cursor.X, right), cursor.Y));
         if (ImGuiWidget.IconButton($"hierarchy_visibility_{id}", icon,
-                gameObject.active ? "Deactivate" : "Activate"))
+                gameObject.activeSelf ? "Deactivate" : "Activate"))
         {
-            gameObject.active = !gameObject.active;
+            gameObject.SetActive(!gameObject.activeSelf);
         }
     }
 
@@ -396,7 +396,7 @@ public sealed class HierarchyPanel : EditorPanel
         {
             Transform transform = dropped.GetComponent<Transform>();
             transform.SetParent(null);
-            transform.SetSiblingIndex(scene.GetRootObjects().Count - 1);
+            transform.SetSiblingIndex(GetRootObjects(scene).Count - 1);
         }
         catch (InvalidOperationException exception)
         {
@@ -461,7 +461,7 @@ public sealed class HierarchyPanel : EditorPanel
             return;
         }
 
-        DestroySubtree(gameObject.scene, gameObject);
+        _ = gameObject.scene.DestroyObject(gameObject);
         if (context.selection.TryGet(out GameObject? selected) && ReferenceEquals(selected, gameObject))
         {
             context.selection.Clear();
@@ -486,24 +486,17 @@ public sealed class HierarchyPanel : EditorPanel
         return false;
     }
 
-    private static void DestroySubtree(GameScene scene, GameObject gameObject)
+    private static IReadOnlyList<GameObject> GetRootObjects(GameScene scene)
     {
-        Transform transform = gameObject.GetComponent<Transform>();
-        var children = new List<GameObject>(transform.children.Count);
-        for (int i = 0; i < transform.children.Count; i++)
+        IReadOnlyList<GameObject> objects = scene.GetObjects();
+        var roots = new List<GameObject>(objects.Count);
+        for (int i = 0; i < objects.Count; i++)
         {
-            if (transform.children[i].gameObject is GameObject child)
-            {
-                children.Add(child);
-            }
+            if (objects[i].transform.parent is null)
+                roots.Add(objects[i]);
         }
-
-        for (int i = 0; i < children.Count; i++)
-        {
-            DestroySubtree(scene, children[i]);
-        }
-
-        _ = scene.DestroyObject(gameObject);
+        roots.Sort(static (left, right) => left.transform.siblingIndex.CompareTo(right.transform.siblingIndex));
+        return roots;
     }
 
     private void BeginRename(GameObject gameObject)

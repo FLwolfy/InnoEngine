@@ -30,7 +30,7 @@ internal sealed class SerializableObjectPropertyDrawer : IPropertyDrawer
             return;
         }
 
-        IReadOnlyList<SerializedProperty> properties = serializable.GetSerializedProperties();
+        IReadOnlyList<SerializedProperty> properties = SerializationManager.GetProperties(serializable);
         for (int i = 0; i < properties.Count; i++)
         {
             context.DrawChild(properties[i]);
@@ -62,7 +62,7 @@ internal sealed class SerializableObjectPropertyDrawer : IPropertyDrawer
 
             if (NativeImGui.Selectable(candidate.Name, candidate == runtimeType && value is not null))
             {
-                context.SetValue(ISerializable.CreateSerializableInstance(candidate));
+                context.SetValue(Activator.CreateInstance(candidate, nonPublic: true));
             }
         }
 

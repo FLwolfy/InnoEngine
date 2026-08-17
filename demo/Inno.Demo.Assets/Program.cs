@@ -8,7 +8,10 @@ using Inno.Assets;
 using Inno.Assets.Core;
 using Inno.Assets.File;
 using Inno.Assets.Types;
+using Inno.Core.Identity;
 using Inno.Core.Logging;
+using Inno.Core.Reflection;
+using Inno.Core.Serialization;
 
 namespace Inno.Demo.Assets;
 
@@ -19,6 +22,9 @@ internal static class Program
         LogManager.Initialize();
         LogManager.RegisterSink(new ConsoleLogSink());
         LogManager.SetMinimumLevel(LogLevel.Debug);
+        IdentityManager.Initialize();
+        TypeCacheManager.Initialize();
+        SerializationManager.Initialize();
 
         string executionRoot = Directory.GetCurrentDirectory();
         string assetsRoot = Path.Combine(executionRoot, "Assets");
@@ -43,8 +49,6 @@ internal static class Program
             {
                 assetRoot = assetsRoot,
                 artifactRoot = artifactsRoot,
-                autoRegisterBuiltInImporters = true,
-                autoRegisterImportersFromTypeCache = false,
                 enableFileSystemWatcher = true,
                 fileWatcherFlushDelayMs = 30
             });
@@ -58,12 +62,11 @@ internal static class Program
             Log.Info("[AssetsDemo] Meta path exists: {0} ({1})", File.Exists(metaPath), metaPath);
             Log.Info("[AssetsDemo] Artifact path exists: {0} ({1})", File.Exists(artifactPath), artifactPath);
 
-            bool loadedOk = AssetManager.Load<TextAsset>(relativePath);
-            AssetRef<TextAsset> assetRef = AssetManager.GetRef<TextAsset>(relativePath);
-            TextAsset loaded = AssetManager.Resolve(assetRef)!;
-            Log.Info("[AssetsDemo] Load result={0}", loadedOk);
+            TextAsset loaded = AssetManager.Load<TextAsset>(relativePath);
+            Guid assetId = loaded.identity.persistentId;
+            Log.Info("[AssetsDemo] Load result=true");
             Log.Info("[AssetsDemo] Loaded content: {0}", loaded.content);
-            Log.Info("[AssetsDemo] Identity: {0}", assetRef.identity.persistentId);
+            Log.Info("[AssetsDemo] Identity: {0}", assetId);
 
             bool metaIndexed = SpinWait.SpinUntil(
                 () => AssetManager.TryGetFileSystemEntry("Notes/readme.txt.imeta", out _),
@@ -75,14 +78,11 @@ internal static class Program
 
             SetTextAssetContent(loaded, "updated-by-save");
             bool saved = AssetManager.Save(loaded);
-            TextAsset updated = AssetManager.Resolve(assetRef)!;
+            _ = AssetManager.Unload(loaded);
+            TextAsset updated = AssetManager.Load<TextAsset>(assetId);
             Log.Info("[AssetsDemo] Save(existing)={0}, updated content={1}", saved, updated.content);
 
-            TextAsset? resolvedAsset = AssetManager.Resolve(assetRef);
-            Log.Info("[AssetsDemo] Resolve(ref)={0}, content={1}", resolvedAsset is not null, resolvedAsset?.content ?? "<none>");
-            AssetRef<TextAsset> refreshedRef = AssetManager.GetRef<TextAsset>(relativePath);
-            TextAsset? refreshedAsset = AssetManager.Resolve(refreshedRef);
-            Log.Info("[AssetsDemo] Resolve(refreshedRef)={0}, content={1}", refreshedAsset is not null, refreshedAsset?.content ?? "<none>");
+            Log.Info("[AssetsDemo] Load(id)=true, content={0}", updated.content);
         }
         catch (Exception ex)
         {
@@ -95,6 +95,9 @@ internal static class Program
             Log.Info("[AssetsDemo] Execution root: {0}", executionRoot);
             AssetManager.SourceFileSystemChanged -= OnSourceChanged;
             AssetManager.Shutdown();
+            SerializationManager.Shutdown();
+            TypeCacheManager.Shutdown();
+            IdentityManager.Shutdown();
             LogManager.Shutdown();
         }
         return 0;

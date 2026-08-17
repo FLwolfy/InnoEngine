@@ -5,8 +5,12 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <InnoAssemblyGroup>Game</InnoAssemblyGroup>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\assets\Inno.Assets\Inno.Assets.csproj" />
+    <ProjectReference Include="..\..\src\assets\Inno.Assets.Types\Inno.Assets.Types.csproj" />
+    <ProjectReference Include="..\..\src\engine\Inno.Engine.Assets\Inno.Engine.Assets.csproj" />
     <ProjectReference Include="..\..\src\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" />
     <ProjectReference Include="..\..\src\engine\Inno.Engine.Runtime\Inno.Engine.Runtime.csproj" />
   </ItemGroup>

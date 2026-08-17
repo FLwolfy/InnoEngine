@@ -617,7 +617,9 @@ public sealed class FileBrowserPanel : EditorPanel
 
         _ = ImGuiWidget.DragDropSource<Guid>(
             C_ASSET_PAYLOAD,
-            () => AssetManager.GetRef<Inno.Assets.Core.AssetObject>(entry.relativePath).identity.persistentId,
+            () => AssetManager.TryGetPersistentId(entry.relativePath, out Guid persistentId)
+                ? persistentId
+                : Guid.Empty,
             () => NativeImGui.TextUnformatted(Path.GetFileName(entry.relativePath)));
     }
 

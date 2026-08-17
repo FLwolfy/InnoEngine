@@ -8,6 +8,7 @@ using Inno.Assets.Loader;
 using Inno.Assets.Types;
 using Inno.Core.Identity;
 using Inno.Core.Reflection;
+using Inno.Core.Serialization;
 
 using Xunit;
 
@@ -29,6 +30,7 @@ public sealed class AssetLoaderTests
     public void Import_WritesMetadataAndArtifact_WithoutLoadingAsset()
     {
         TypeCacheManager.Initialize();
+        SerializationManager.Initialize();
 
         string root = CreateRoot();
         string assets = Path.Combine(root, "Assets");
@@ -60,6 +62,7 @@ public sealed class AssetLoaderTests
     public void Load_LoadsExistingMetadataAndArtifactIntoMemory()
     {
         TypeCacheManager.Initialize();
+        SerializationManager.Initialize();
 
         string root = CreateRoot();
         string assets = Path.Combine(root, "Assets");
@@ -76,7 +79,7 @@ public sealed class AssetLoaderTests
             Identity assetId = loader.GetIdentity(relativePath);
             Assert.Null(ResolveText(loader, assetId));
 
-            Assert.True(loader.Load(relativePath, typeof(TextAsset)));
+            Assert.NotNull(loader.Load(relativePath, typeof(TextAsset)));
             TextAsset? loaded = ResolveText(loader, assetId);
 
             Assert.NotNull(loaded);
@@ -93,6 +96,7 @@ public sealed class AssetLoaderTests
     public void Load_ReturnsFalse_WhenArtifactsAreMissingOrStale()
     {
         TypeCacheManager.Initialize();
+        SerializationManager.Initialize();
 
         string root = CreateRoot();
         string assets = Path.Combine(root, "Assets");
@@ -105,20 +109,20 @@ public sealed class AssetLoaderTests
             var loader = new AssetLoader(assets, artifacts);
             loader.RegisterImporter(new TextAssetImporter());
 
-            Assert.False(loader.Load(relativePath, typeof(TextAsset)));
+            Assert.Null(loader.Load(relativePath, typeof(TextAsset)));
 
             Assert.True(loader.Import(relativePath));
-            Assert.True(loader.Load(relativePath, typeof(TextAsset)));
+            Assert.NotNull(loader.Load(relativePath, typeof(TextAsset)));
             Identity assetId = loader.GetIdentity(relativePath);
             Guid persistentId = assetId.persistentId;
             Assert.True(loader.Unload(relativePath));
 
             WriteText(assets, relativePath, "v2");
-            Assert.False(loader.Load(relativePath, typeof(TextAsset)));
+            Assert.Null(loader.Load(relativePath, typeof(TextAsset)));
             Assert.Null(ResolveText(loader, assetId));
 
             Assert.True(loader.Import(relativePath));
-            Assert.True(loader.Load(relativePath, typeof(TextAsset)));
+            Assert.NotNull(loader.Load(relativePath, typeof(TextAsset)));
             TextAsset? reloaded = ResolveText(loader, loader.GetIdentity(relativePath));
             Assert.NotNull(reloaded);
             Assert.Equal("v2", reloaded!.content);
@@ -134,6 +138,7 @@ public sealed class AssetLoaderTests
     public void GetRef_Resolve_AndUnload_TrackLoadedState()
     {
         TypeCacheManager.Initialize();
+        SerializationManager.Initialize();
 
         string root = CreateRoot();
         string assets = Path.Combine(root, "Assets");
@@ -153,7 +158,7 @@ public sealed class AssetLoaderTests
             Assert.True(IsValid(pathId));
             Assert.Null(ResolveText(loader, pathId));
 
-            Assert.True(loader.Load(relativePath, typeof(TextAsset)));
+            Assert.NotNull(loader.Load(relativePath, typeof(TextAsset)));
             TextAsset? resolved = ResolveText(loader, pathId);
             Assert.NotNull(resolved);
             Assert.Equal("ref-content", resolved!.content);
@@ -176,6 +181,7 @@ public sealed class AssetLoaderTests
     public void ImportAndLoad_ReturnFalse_ForTypeMismatchMissingPathAndMissingImporter()
     {
         TypeCacheManager.Initialize();
+        SerializationManager.Initialize();
 
         string root = CreateRoot();
         string assets = Path.Combine(root, "Assets");
@@ -187,15 +193,15 @@ public sealed class AssetLoaderTests
         {
             var noImporterLoader = new AssetLoader(assets, artifacts);
             Assert.False(noImporterLoader.Import(relativePath));
-            Assert.False(noImporterLoader.Load(relativePath, typeof(TextAsset)));
+            Assert.Null(noImporterLoader.Load(relativePath, typeof(TextAsset)));
 
             var loader = new AssetLoader(assets, artifacts);
             loader.RegisterImporter(new TextAssetImporter());
 
             Assert.False(loader.Import("Missing/file.txt"));
-            Assert.False(loader.Load("Missing/file.txt", typeof(TextAsset)));
+            Assert.Null(loader.Load("Missing/file.txt", typeof(TextAsset)));
             Assert.True(loader.Import(relativePath));
-            Assert.False(loader.Load(relativePath, typeof(TextureAsset)));
+            Assert.Null(loader.Load(relativePath, typeof(TextureAsset)));
         }
         finally
         {
@@ -207,6 +213,7 @@ public sealed class AssetLoaderTests
     public void UnloadAll_ClearsEveryLoadedAsset_WithoutDeletingGeneratedFiles()
     {
         TypeCacheManager.Initialize();
+        SerializationManager.Initialize();
 
         string root = CreateRoot();
         string assets = Path.Combine(root, "Assets");
@@ -221,8 +228,8 @@ public sealed class AssetLoaderTests
 
             Assert.True(loader.Import("A/one.txt"));
             Assert.True(loader.Import("B/two.txt"));
-            Assert.True(loader.Load("A/one.txt", typeof(TextAsset)));
-            Assert.True(loader.Load("B/two.txt", typeof(TextAsset)));
+            Assert.NotNull(loader.Load("A/one.txt", typeof(TextAsset)));
+            Assert.NotNull(loader.Load("B/two.txt", typeof(TextAsset)));
 
             Identity one = loader.GetIdentity("A/one.txt");
             Identity two = loader.GetIdentity("B/two.txt");
@@ -252,6 +259,7 @@ public sealed class AssetLoaderTests
     public void Save_UpdatesGeneratedFiles_AndKeepsAssetLoadedWithSameIdentity()
     {
         TypeCacheManager.Initialize();
+        SerializationManager.Initialize();
 
         string root = CreateRoot();
         string assets = Path.Combine(root, "Assets");
@@ -265,7 +273,7 @@ public sealed class AssetLoaderTests
             loader.RegisterImporter(new TextAssetImporter());
 
             Assert.True(loader.Import(relativePath));
-            Assert.True(loader.Load(relativePath, typeof(TextAsset)));
+            Assert.NotNull(loader.Load(relativePath, typeof(TextAsset)));
 
             Identity assetId = loader.GetIdentity(relativePath);
             TextAsset asset = ResolveText(loader, assetId)!;

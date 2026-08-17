@@ -11,11 +11,13 @@
     <ProjectReference Include="..\Inno.Core.Coroutines\Inno.Core.Coroutines.csproj" />
     <ProjectReference Include="..\Inno.Core.Events\Inno.Core.Events.csproj" />
     <ProjectReference Include="..\Inno.Core.Job\Inno.Core.Job.csproj" />
+    <ProjectReference Include="..\Inno.Core.Identity\Inno.Core.Identity.csproj" />
   </ItemGroup>
   
   <ItemGroup>
     <ProjectReference Include="..\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
   </ItemGroup>
 
 </Project>

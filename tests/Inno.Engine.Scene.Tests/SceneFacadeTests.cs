@@ -22,7 +22,7 @@ public sealed class SceneFacadeTests : IDisposable
     }
 
     [Fact]
-    public void CreateObject_StoresDataInWorld_AndReturnsFacade()
+    public void CreateObject_StoresDataInSceneStore_AndReturnsFacade()
     {
         var scene = new GameScene("Test");
 
@@ -30,13 +30,13 @@ public sealed class SceneFacadeTests : IDisposable
 
         Assert.True(gameObject.isRuntimeValid);
         Assert.Equal("Cube", gameObject.name);
-        Assert.True(gameObject.active);
+        Assert.True(gameObject.activeSelf);
         Assert.True(gameObject.HasComponent<Transform>());
         Assert.Single(scene.GetObjects());
     }
 
     [Fact]
-    public void GetObjects_CreatesFacadesFromWorldEntities()
+    public void GetObjects_ReturnsSceneOwnedObjects()
     {
         var scene = new GameScene("Test");
         GameObject a = scene.CreateObject("A");
@@ -69,13 +69,11 @@ public sealed class SceneFacadeTests : IDisposable
         GameObject parent = scene.CreateObject("Parent");
         GameObject child = scene.CreateObject("Child");
         child.GetComponent<Transform>().SetParent(parent.GetComponent<Transform>());
-        scene.world.Process(0.016f);
-
         Assert.True(scene.DestroyObject(parent));
 
-        scene.world.Process(0.016f);
-        Assert.True(child.isRuntimeValid);
-        Assert.True(child.activeInHierarchy);
+        Assert.False(parent.isRuntimeValid);
+        Assert.False(child.isRuntimeValid);
+        Assert.Empty(scene.GetObjects());
     }
 
     [Fact]
@@ -84,10 +82,11 @@ public sealed class SceneFacadeTests : IDisposable
         var scene = new GameScene("Test");
         GameObject gameObject = scene.CreateObject("Actor");
         TestBehaviour behaviour = gameObject.AddComponent<TestBehaviour>();
+        SceneManager.LoadScene(scene);
 
-        scene.world.FixedProcess(0.02f);
-        scene.world.Process(0.016f);
-        scene.world.LateProcess(0.016f);
+        SceneManager.FixedUpdate(0.02f);
+        SceneManager.Update(0.016f);
+        SceneManager.LateUpdate(0.016f);
 
         Assert.Equal(1, behaviour.awakeCount);
         Assert.Equal(1, behaviour.startCount);
@@ -97,7 +96,7 @@ public sealed class SceneFacadeTests : IDisposable
         Assert.Equal(1, behaviour.lateUpdateCount);
 
         behaviour.enabled = false;
-        scene.world.Process(0.016f);
+        SceneManager.Update(0.016f);
 
         Assert.Equal(1, behaviour.disableCount);
     }
@@ -141,17 +140,16 @@ public sealed class SceneFacadeTests : IDisposable
         public int enableCount;
         public int disableCount;
 
-        public override void Awake() => awakeCount++;
-        public override void Start() => startCount++;
-        public override void Update(float deltaTime) => updateCount++;
-        public override void FixedUpdate(float fixedDeltaTime) => fixedUpdateCount++;
-        public override void LateUpdate(float deltaTime) => lateUpdateCount++;
-        public override void OnEnable() => enableCount++;
-        public override void OnDisable() => disableCount++;
+        protected override void Awake() => awakeCount++;
+        protected override void Start() => startCount++;
+        protected override void Update(float deltaTime) => updateCount++;
+        protected override void FixedUpdate(float fixedDeltaTime) => fixedUpdateCount++;
+        protected override void LateUpdate(float deltaTime) => lateUpdateCount++;
+        protected override void OnEnable() => enableCount++;
+        protected override void OnDisable() => disableCount++;
 
-        public override void Reset()
+        private void Reset()
         {
-            base.Reset();
             awakeCount = 0;
             startCount = 0;
             updateCount = 0;

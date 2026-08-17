@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Threading;
 
@@ -29,6 +30,10 @@ public sealed class AssetLoader
     private readonly ObjectPool<AssetObject> m_loadedCache = new();
     private readonly PoolKey<string> m_cachePathKey;
     private readonly PoolKey<Guid> m_cachePersistentIdKey;
+    private readonly Dictionary<Guid, string> m_pathByPersistentId = new();
+    private readonly Lock m_dependencySync = new();
+    private readonly DependencyGraph<string, AssetMeta> m_dependencyGraph = new();
+    private readonly Dictionary<string, HashSet<string>> m_dependenciesByPath = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Absolute source asset root directory.
@@ -105,15 +110,34 @@ public sealed class AssetLoader
     /// <summary>
     /// Loads an asset from existing metadata and artifact files into memory.
     /// </summary>
-    public bool Load(string relativePath, Type requestedAssetType)
+    public AssetObject? Load(string relativePath, Type requestedAssetType)
     {
         ArgumentNullException.ThrowIfNull(requestedAssetType);
 
         string normalized = NormalizeRelativePath(relativePath);
         if (string.IsNullOrWhiteSpace(normalized))
-            return false;
+            return null;
 
-        return TryLoadFromDiskCache(normalized, requestedAssetType, out _);
+        return TryLoadFromDiskCache(normalized, requestedAssetType, out AssetObject? asset) ? asset : null;
+    }
+
+    /// <summary>
+    /// Tries to load an asset from existing metadata and artifact files into memory.
+    /// </summary>
+    /// <param name="relativePath">Source path relative to the asset root.</param>
+    /// <param name="requestedAssetType">Required asset base type.</param>
+    /// <param name="asset">Loaded asset when successful.</param>
+    /// <returns><see langword="true"/> when a compatible asset was loaded.</returns>
+    public bool TryLoad(string relativePath, Type requestedAssetType, out AssetObject? asset)
+    {
+        ArgumentNullException.ThrowIfNull(requestedAssetType);
+        string normalized = NormalizeRelativePath(relativePath);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            asset = null;
+            return false;
+        }
+        return TryLoadFromDiskCache(normalized, requestedAssetType, out asset);
     }
 
     /// <summary>
@@ -133,6 +157,56 @@ public sealed class AssetLoader
     }
 
     /// <summary>
+    /// Resolves a loaded asset or loads it through the persistent identity catalog.
+    /// </summary>
+    /// <param name="identity">Persistent asset identity.</param>
+    /// <param name="requestedAssetType">Required asset base type.</param>
+    /// <returns>The resolved asset, or <see langword="null"/> when the catalog has no compatible entry.</returns>
+    public AssetObject? ResolveOrLoad(Identity identity, Type requestedAssetType)
+    {
+        AssetObject? loaded = Resolve(identity, requestedAssetType);
+        if (loaded is not null)
+            return loaded;
+        string? path = FindPath(identity.persistentId);
+        return path is null ? null : Load(path, requestedAssetType);
+    }
+
+    /// <summary>
+    /// Resolves the current source path for a persistent asset identity.
+    /// </summary>
+    /// <param name="persistentId">Persistent asset identity.</param>
+    /// <returns>The relative source path, or <see langword="null"/> when the catalog has no entry.</returns>
+    public string? FindPath(Guid persistentId)
+    {
+        if (persistentId == Guid.Empty)
+            return null;
+        lock (m_sync)
+        {
+            if (m_pathByPersistentId.TryGetValue(persistentId, out string? cachedPath) &&
+                File.Exists(GetMetaPath(cachedPath)))
+            {
+                return cachedPath;
+            }
+        }
+
+        string[] metaFiles = Directory.GetFiles(assetRoot, "*" + C_META_POSTFIX, SearchOption.AllDirectories);
+        for (int i = 0; i < metaFiles.Length; i++)
+        {
+            string relativeMeta = NormalizeRelativePath(Path.GetRelativePath(assetRoot, metaFiles[i]));
+            string relativePath = relativeMeta[..^C_META_POSTFIX.Length];
+            Guid? candidate = ReadPersistentIdFromMeta(relativePath);
+            if (candidate is not Guid candidateId)
+                continue;
+            lock (m_sync)
+                m_pathByPersistentId[candidateId] = relativePath;
+            if (candidateId == persistentId)
+                return relativePath;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Gets an identity for a path without loading the asset.
     /// </summary>
     public Identity GetIdentity(string relativePath)
@@ -146,7 +220,12 @@ public sealed class AssetLoader
         }
 
         Guid? persistentId = ReadPersistentIdFromMeta(normalized);
-        return persistentId is Guid id ? new Identity(id) : default;
+        if (persistentId is Guid id)
+        {
+            lock (m_sync)
+                m_pathByPersistentId[id] = normalized;
+        }
+        return persistentId.HasValue ? new Identity(persistentId.Value) : default;
     }
 
     /// <summary>
@@ -287,11 +366,19 @@ public sealed class AssetLoader
     /// </summary>
     public void UnloadAll()
     {
+        IReadOnlyList<string> dependencyOrder = m_dependencyGraph.TopologicalSort();
         lock (m_sync)
         {
-            AssetObject[] all = m_loadedCache.All().ToArray();
-            for (int i = 0; i < all.Length; i++)
-                RemoveFromCache(all[i]);
+            var loadedByPath = m_loadedCache.All().ToDictionary(
+                static asset => asset.sourcePath,
+                StringComparer.OrdinalIgnoreCase);
+            for (int i = dependencyOrder.Count - 1; i >= 0; i--)
+            {
+                if (loadedByPath.Remove(dependencyOrder[i], out AssetObject? asset))
+                    RemoveFromCache(asset);
+            }
+            foreach (AssetObject asset in loadedByPath.Values)
+                RemoveFromCache(asset);
         }
     }
 
@@ -308,6 +395,11 @@ public sealed class AssetLoader
 
             m_loadedCache.RemoveAll();
             m_importers.RemoveAll();
+        }
+        lock (m_dependencySync)
+        {
+            m_dependencyGraph.Clear();
+            m_dependenciesByPath.Clear();
         }
     }
 
@@ -359,11 +451,12 @@ public sealed class AssetLoader
 
         lock (m_sync)
         {
-            if (TryGetLoadedAssetByPathNoLock(path, out AssetObject? loaded))
+            if (TryGetLoadedAssetByPathNoLock(path, out AssetObject? loaded) && loaded is not null)
                 RemoveFromCache(loaded);
         }
 
         CleanupGeneratedFiles(path);
+        RemoveDependencyNode(path);
     }
 
     /// <summary>
@@ -374,6 +467,7 @@ public sealed class AssetLoader
         string path = NormalizeRelativePath(relativePath);
         if (string.IsNullOrWhiteSpace(path))
             return;
+        m_dependencyGraph.Invalidate(path);
 
         string absSourcePath = GetAbsoluteSourcePath(path);
         if (!File.Exists(absSourcePath))
@@ -382,7 +476,7 @@ public sealed class AssetLoader
         AssetObject? loaded = null;
         lock (m_sync)
         {
-            if (TryGetLoadedAssetByPathNoLock(path, out AssetObject? cached))
+            if (TryGetLoadedAssetByPathNoLock(path, out AssetObject? cached) && cached is not null)
             {
                 loaded = cached;
                 RemoveFromCache(cached);
@@ -515,6 +609,16 @@ public sealed class AssetLoader
     {
         try
         {
+            lock (m_sync)
+            {
+                AssetObject? cached = m_loadedCache.First(m_cachePathKey, relativePath);
+                if (cached is not null && requestedAssetType.IsAssignableFrom(cached.GetType()))
+                {
+                    asset = cached;
+                    return true;
+                }
+            }
+
             string absSourcePath = GetAbsoluteSourcePath(relativePath);
             if (!File.Exists(absSourcePath))
             {
@@ -553,8 +657,7 @@ public sealed class AssetLoader
             }
 
             byte[] artifactBytes = File.ReadAllBytes(artifactPath);
-            ISerializable serializable = ISerializable.CreateSerializableInstance(runtimeType);
-            if (serializable is not AssetObject restored)
+            if (Activator.CreateInstance(runtimeType, nonPublic: true) is not AssetObject restored)
             {
                 asset = null;
                 return false;
@@ -562,12 +665,16 @@ public sealed class AssetLoader
 
             if (meta.assetStateBytes.Length > 0)
             {
-                SerializingState state = SerializingState.Deserialize(meta.assetStateBytes);
-                ((ISerializable)restored).RestoreState(state);
+                _ = SerializationManager.Decode(meta.assetStateBytes, reader =>
+                {
+                    reader.RestoreProperties(restored);
+                    return true;
+                });
             }
 
             restored.SetSourceInfo(relativePath, sourceHash);
             restored.SetRuntimePayload(artifactBytes);
+            restored.SetDependenciesInternal(ResolveDependencyDescriptors(meta.dependencies));
 
             CacheLoaded(relativePath, restored, meta.persistentId);
             asset = restored;
@@ -612,10 +719,16 @@ public sealed class AssetLoader
 
             imported.SetSourceInfo(relativePath, sourceHash);
             imported.SetRuntimePayload(importResult.artifactBytes);
+            imported.SetDependenciesInternal(ResolveDependencyDescriptors(importResult.dependencies));
             PersistMeta(relativePath, importer, imported, persistentId, importResult.dependencies);
             PersistArtifact(relativePath, importResult.artifactBytes);
 
             return true;
+        }
+        catch (InvalidOperationException exception) when (
+            exception.Message.Contains("Asset dependency cycle", StringComparison.Ordinal))
+        {
+            throw;
         }
         catch
         {
@@ -671,25 +784,31 @@ public sealed class AssetLoader
             importerId = importer.importerId,
             importerVersion = importer.version,
             dependencies = dependencies.ToArray(),
-            assetStateBytes = SerializingState.Serialize(((ISerializable)asset).CaptureState())
+            assetStateBytes = SerializationManager.Encode(writer => writer.WriteProperties(asset))
         };
 
-        if (TypeCache.TryGetStableTypeId(asset.GetType(), out Guid stableTypeId))
-            meta.assetTypeStableId = stableTypeId;
+        UpdateDependencyGraph(relativePath, meta.dependencies, meta);
 
-        byte[] bytes = SerializingState.Serialize(((ISerializable)meta).CaptureState());
+        StableTypeIdAttribute? stableTypeAttribute = asset.GetType()
+            .GetCustomAttribute<StableTypeIdAttribute>(inherit: false);
+        if (stableTypeAttribute is null || !Guid.TryParse(stableTypeAttribute.id, out Guid stableTypeId))
+            throw new InvalidOperationException($"Asset type '{asset.GetType().FullName}' requires StableTypeId before persistence.");
+        meta.assetTypeStableId = stableTypeId;
+
+        byte[] bytes = SerializationManager.Serialize(meta);
         string metaPath = GetMetaPath(relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(metaPath)!);
         WriteAllBytesAtomic(metaPath, bytes);
+        lock (m_sync)
+            m_pathByPersistentId[persistentId] = relativePath;
     }
 
     private AssetMeta DeserializeMeta(string metaPath)
     {
         byte[] bytes = File.ReadAllBytes(metaPath);
-        SerializingState state = SerializingState.Deserialize(bytes);
-
-        var meta = new AssetMeta();
-        ((ISerializable)meta).RestoreState(state);
+        AssetMeta meta = SerializationManager.Deserialize<AssetMeta>(bytes);
+        if (!string.IsNullOrWhiteSpace(meta.relativePath))
+            UpdateDependencyGraph(meta.relativePath, meta.dependencies, meta);
         return meta;
     }
 
@@ -725,6 +844,7 @@ public sealed class AssetLoader
             m_loadedCache.Add(asset)
                 .Set(m_cachePathKey, relativePath)
                 .Set(m_cachePersistentIdKey, identity.persistentId);
+            m_pathByPersistentId[identity.persistentId] = relativePath;
         }
     }
 
@@ -732,6 +852,146 @@ public sealed class AssetLoader
     {
         m_loadedCache.Remove(asset);
         IdentityManager.Unregister(asset);
+    }
+
+    private void UpdateDependencyGraph(string relativePath, IEnumerable<string> dependencies, AssetMeta meta)
+    {
+        string normalizedPath = NormalizeRelativePath(relativePath);
+        var nextDependencies = new HashSet<string>(
+            dependencies.Select(NormalizeRelativePath).Where(static path => !string.IsNullOrWhiteSpace(path)),
+            StringComparer.OrdinalIgnoreCase);
+
+        lock (m_dependencySync)
+        {
+            HashSet<string> previousDependencies = m_dependenciesByPath.TryGetValue(normalizedPath, out HashSet<string>? previous)
+                ? new HashSet<string>(previous, StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (string dependency in previousDependencies)
+                m_dependencyGraph.RemoveDependency(normalizedPath, dependency);
+            m_dependencyGraph.AddNode(normalizedPath);
+            foreach (string dependency in nextDependencies)
+                m_dependencyGraph.AddDependency(normalizedPath, dependency);
+
+            try
+            {
+                _ = m_dependencyGraph.TopologicalSort();
+            }
+            catch (InvalidOperationException exception)
+            {
+                string cycle = FindDependencyCycle(normalizedPath, nextDependencies);
+                foreach (string dependency in nextDependencies)
+                    m_dependencyGraph.RemoveDependency(normalizedPath, dependency);
+                foreach (string dependency in previousDependencies)
+                    m_dependencyGraph.AddDependency(normalizedPath, dependency);
+                throw new InvalidOperationException(
+                    $"Asset dependency cycle detected while registering '{normalizedPath}': {cycle}.",
+                    exception);
+            }
+
+            m_dependenciesByPath[normalizedPath] = nextDependencies;
+            m_dependencyGraph.Invalidate(normalizedPath);
+            _ = m_dependencyGraph.GetOrUpdate(normalizedPath, _ => meta);
+        }
+    }
+
+    private string FindDependencyCycle(string changedPath, IReadOnlyCollection<string> changedDependencies)
+    {
+        var adjacency = m_dependenciesByPath.ToDictionary(
+            static pair => pair.Key,
+            static pair => (IReadOnlyCollection<string>)pair.Value,
+            StringComparer.OrdinalIgnoreCase);
+        adjacency[changedPath] = changedDependencies;
+        foreach (string dependency in changedDependencies)
+        {
+            if (!adjacency.ContainsKey(dependency))
+                adjacency.Add(dependency, Array.Empty<string>());
+        }
+
+        var states = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var stack = new List<string>();
+        foreach (string node in adjacency.Keys)
+        {
+            if (Visit(node, out string cycle))
+                return cycle;
+        }
+        return changedPath;
+
+        bool Visit(string node, out string cycle)
+        {
+            states.TryGetValue(node, out int state);
+            if (state == 2)
+            {
+                cycle = string.Empty;
+                return false;
+            }
+            if (state == 1)
+            {
+                int start = stack.FindIndex(path =>
+                    string.Equals(path, node, StringComparison.OrdinalIgnoreCase));
+                cycle = string.Join(" -> ", stack.Skip(Math.Max(0, start)).Append(node));
+                return true;
+            }
+
+            states[node] = 1;
+            stack.Add(node);
+            if (adjacency.TryGetValue(node, out IReadOnlyCollection<string>? dependencies))
+            {
+                foreach (string dependency in dependencies)
+                {
+                    if (Visit(dependency, out cycle))
+                        return true;
+                }
+            }
+            stack.RemoveAt(stack.Count - 1);
+            states[node] = 2;
+            cycle = string.Empty;
+            return false;
+        }
+    }
+
+    private void RemoveDependencyNode(string relativePath)
+    {
+        string normalizedPath = NormalizeRelativePath(relativePath);
+        lock (m_dependencySync)
+        {
+            m_dependenciesByPath.Remove(normalizedPath);
+            m_dependencyGraph.RemoveNode(normalizedPath);
+        }
+    }
+
+    private AssetDependency[] ResolveDependencyDescriptors(IEnumerable<string> dependencyPaths)
+    {
+        var descriptors = new List<AssetDependency>();
+        var seen = new HashSet<Guid>();
+        foreach (string dependencyPath in dependencyPaths)
+        {
+            string normalized = NormalizeRelativePath(dependencyPath);
+            if (string.IsNullOrWhiteSpace(normalized))
+                continue;
+            string metaPath = GetMetaPath(normalized);
+            if (!File.Exists(metaPath))
+                continue;
+
+            try
+            {
+                AssetMeta meta = SerializationManager.Deserialize<AssetMeta>(File.ReadAllBytes(metaPath));
+                if (meta.persistentId == Guid.Empty || !seen.Add(meta.persistentId))
+                    continue;
+                descriptors.Add(new AssetDependency(
+                    meta.persistentId,
+                    meta.assetTypeStableId,
+                    normalized));
+                lock (m_sync)
+                    m_pathByPersistentId[meta.persistentId] = normalized;
+            }
+            catch
+            {
+                // A stale dependency metadata file remains represented by its path in AssetMeta.
+            }
+        }
+
+        return descriptors.OrderBy(static dependency => dependency.persistentId).ToArray();
     }
 
     private bool TryGetLoadedAssetByPathNoLock(string normalizedPath, out AssetObject? loaded)
@@ -787,7 +1047,7 @@ public sealed class AssetLoader
                 {
                     _ = File.ReadAllBytes(artifactPath);
                     if (meta.assetStateBytes.Length > 0)
-                        _ = SerializingState.Deserialize(meta.assetStateBytes);
+                        _ = SerializationManager.Decode(meta.assetStateBytes, static _ => true);
                 }
             }
             catch
@@ -835,7 +1095,7 @@ public sealed class AssetLoader
 
             lock (m_sync)
             {
-                if (TryGetLoadedAssetByPathNoLock(entry.path, out AssetObject? cached))
+                if (TryGetLoadedAssetByPathNoLock(entry.path, out AssetObject? cached) && cached is not null)
                     RemoveFromCache(cached);
             }
 

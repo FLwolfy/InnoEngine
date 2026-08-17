@@ -62,14 +62,36 @@ internal sealed class StructPropertyDrawer : IPropertyDrawer
                 return cached;
             }
 
-            IEnumerable<MemberInfo> fields = StructSerializer.GetStructSerializableFields(type);
-            IEnumerable<MemberInfo> properties = StructSerializer.GetStructSerializableProperties(type);
-            MemberInfo[] members = fields.Concat(properties)
+            MemberInfo[] members = type
+                .GetMembers(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                .Where(IsRuntimeVisibleMember)
                 .OrderBy(static member => member.MetadataToken)
                 .ToArray();
             s_memberCache[type] = members;
             return members;
         }
+    }
+
+    private static bool IsRuntimeVisibleMember(MemberInfo member)
+    {
+        SerializablePropertyAttribute? attribute =
+            member.GetCustomAttribute<SerializablePropertyAttribute>(inherit: true);
+        PropertyVisibility visibility = attribute?.propertyVisibility ?? PropertyVisibility.Show;
+        if ((visibility & PropertyVisibility.RuntimeGet) == 0)
+            return false;
+
+        return member switch
+        {
+            FieldInfo field =>
+                !field.IsStatic &&
+                (attribute is not null || field.IsPublic && !field.IsInitOnly),
+            PropertyInfo property =>
+                property.GetIndexParameters().Length == 0 &&
+                (attribute is not null ||
+                 property.GetGetMethod(nonPublic: true)?.IsPublic == true &&
+                 property.GetSetMethod(nonPublic: true)?.IsPublic == true),
+            _ => false
+        };
     }
 
     private static PropertyVisibility GetVisibility(MemberInfo member)

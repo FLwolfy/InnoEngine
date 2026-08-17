@@ -1,980 +1,797 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+
+using Inno.Core.Reflection;
+using Inno.Core.Serialization.Converters;
 
 using Xunit;
 
 namespace Inno.Core.Serialization.Tests;
 
-public sealed class SerializationBehaviorTests
+public sealed class SerializationBehaviorTests : IDisposable
 {
-    [Fact]
-    public void SerializablePropertyAttribute_DefaultAndCustomVisibility()
+    public SerializationBehaviorTests()
     {
-        var @default = new SerializablePropertyAttribute();
-        var custom = new SerializablePropertyAttribute(PropertyVisibility.Readonly);
+        TypeCacheManager.Initialize();
+        SerializationManager.Initialize();
+    }
 
-        Assert.Equal(PropertyVisibility.Show, @default.propertyVisibility);
-        Assert.Equal(PropertyVisibility.Readonly, custom.propertyVisibility);
+    public void Dispose()
+    {
+        SerializationManager.Shutdown();
+        TypeCacheManager.Shutdown();
     }
 
     [Fact]
-    public void SerializingState_QueryApis_WorkAsExpected()
+    public void ISerializable_IsPureMarkerInterface()
     {
-        var state = new SerializingState(new Dictionary<string, object?>(StringComparer.Ordinal)
-        {
-            ["name"] = "Player",
-            ["score"] = 42
-        });
-
-        Assert.True(state.Contains("name"));
-        Assert.True(state.TryGetValue("score", out var scoreRaw));
-        Assert.Equal(42, scoreRaw);
-        Assert.Equal("Player", state.GetValue<string>("name"));
-        Assert.Throws<KeyNotFoundException>(() => state.GetValue<string>("missing"));
-        Assert.Throws<InvalidCastException>(() => state.GetValue<int>("name"));
+        Assert.Empty(typeof(ISerializable).GetMethods());
+        Assert.Empty(typeof(ISerializable).GetProperties());
     }
 
     [Fact]
-    public void SerializingState_Serialize_IsDeterministicForStringKeyMaps()
+    public void PublicOperations_RequireExplicitInitialization()
     {
-        var s1 = new SerializingState(new Dictionary<string, object?>(StringComparer.Ordinal)
-        {
-            ["b"] = 2,
-            ["a"] = 1
-        });
-        var s2 = new SerializingState(new Dictionary<string, object?>(StringComparer.Ordinal)
-        {
-            ["a"] = 1,
-            ["b"] = 2
-        });
+        SerializationManager.Shutdown();
 
-        var b1 = SerializingState.Serialize(s1);
-        var b2 = SerializingState.Serialize(s2);
+        Assert.Throws<InvalidOperationException>(
+            () => SerializationManager.Serialize(new DefaultSample()));
 
-        Assert.Equal(b1, b2);
+        SerializationManager.Initialize();
+        Assert.NotEmpty(SerializationManager.Serialize(new DefaultSample()));
     }
 
     [Fact]
-    public void SerializingState_Deserialize_InvalidHeader_Throws()
+    public void Initialize_RequiresTypeCacheManager()
     {
-        using var ms = new MemoryStream();
-        using (var bw = new BinaryWriter(ms))
-        {
-            bw.Write("BAD");
-            bw.Write(1);
-            bw.Write((byte)20); // State kind
-            bw.Write(0);
-        }
+        SerializationManager.Shutdown();
+        TypeCacheManager.Shutdown();
 
-        Assert.Throws<InvalidDataException>(() => SerializingState.Deserialize(ms.ToArray()));
+        Assert.Throws<InvalidOperationException>(SerializationManager.Initialize);
+
+        TypeCacheManager.Initialize();
+        SerializationManager.Initialize();
     }
 
     [Fact]
-    public void SerializingState_Deserialize_LegacyTypeToken_Throws()
+    public void SerializeDeserialize_RoundTripsSupportedDefaultValues()
     {
-        using var ms = new MemoryStream();
-        using (var bw = new BinaryWriter(ms))
+        var source = new DefaultSample
         {
-            bw.Write("INNO");
-            bw.Write(1);
-            bw.Write((byte)20); // BinKind.State
-            bw.Write(1); // key count
-            bw.Write("value");
-            bw.Write((byte)2); // BinKind.Enum
-            bw.Write(typeof(SampleMode).AssemblyQualifiedName!); // legacy token without stable:/runtime:
-            bw.Write((long)SampleMode.Hard);
-        }
-
-        Assert.Throws<InvalidDataException>(() => SerializingState.Deserialize(ms.ToArray()));
-    }
-
-    [Fact]
-    public void SerializingState_SerializeDeserialize_SupportsRuntimeMapAndSequenceTypes()
-    {
-        var map = new CustomMap();
-        map.Add("x", 10);
-        map.Add("y", 20);
-
-        var queue = new ConcurrentQueue<int>(new[] { 4, 5, 6 });
-
-        var state = new SerializingState(new Dictionary<string, object?>(StringComparer.Ordinal)
-        {
-            ["map"] = map,
-            ["queue"] = queue
-        });
-
-        var bytes = SerializingState.Serialize(state);
-        var restored = SerializingState.Deserialize(bytes);
-
-        var rawMap = Assert.IsType<Dictionary<object, object?>>(restored.GetValue<object>("map"));
-        Assert.Equal(10L, Convert.ToInt64(rawMap["x"]));
-        Assert.Equal(20L, Convert.ToInt64(rawMap["y"]));
-
-        var rawQueue = Assert.IsType<List<object?>>(restored.GetValue<object>("queue"));
-        Assert.Equal(new object?[] { 4, 5, 6 }, rawQueue);
-    }
-
-    [Fact]
-    public void ISerializable_CaptureRestore_AndBinaryRoundtrip_WorkForPublicApi()
-    {
-        var source = new SampleSerializable
-        {
-            id = 7,
-            readOnlyValue = "ReadOnly",
-            hiddenValue = "Hidden",
-            serializeOnly = 88,
-            deserializeOnly = 99,
+            enabled = true,
+            count = 42,
+            ratio = 0.75f,
+            price = 19.25m,
+            name = "Player",
+            identity = Guid.Parse("85228e75-032a-4056-a92f-358fc0fdba14"),
             mode = SampleMode.Hard,
-            guid = Guid.Parse("0f7a06c8-d2ef-4c24-a5d1-34b4f12d0124"),
-            stats = new SampleStats { hp = 33, mp = 17 },
-            child = new SampleChild { level = 5 },
-            numbers = new List<int> { 1, 2, 3 },
-            map = new Dictionary<string, int>(StringComparer.Ordinal)
-            {
-                ["z"] = 10,
-                ["a"] = 20
-            },
-            hashSet = new HashSet<int> { 8, 9 },
-            concurrentQueue = new ConcurrentQueue<int>(new[] { 11, 12 }),
-            concurrentMap = new ConcurrentDictionary<string, int>(new[]
-            {
-                new KeyValuePair<string, int>("one", 1),
-                new KeyValuePair<string, int>("two", 2)
-            }),
-            customSequence = new CustomSequence { 13, 14 },
-            customMap = new CustomMap
-            {
-                ["alpha"] = 100,
-                ["beta"] = 200
-            }
+            optional = 8,
+            bytes = [1, 2, 3],
+            numbers = [4, 5, 6],
+            values = [7, 8],
+            map = new Dictionary<int, string> { [2] = "two", [1] = "one" },
+            data = StructSample.Create(11, 12, 13)
         };
 
-        ISerializable serializableSource = source;
-        var state = serializableSource.CaptureState();
-        var bytes = SerializingState.Serialize(state);
-        var restoredState = SerializingState.Deserialize(bytes);
+        byte[] bytes = SerializationManager.Serialize(source);
+        DefaultSample restored = SerializationManager.Deserialize<DefaultSample>(bytes);
 
-        var target = new SampleSerializable();
-        ISerializable serializableTarget = target;
-        serializableTarget.RestoreState(restoredState);
-
-        Assert.Equal(7, target.id);
-        Assert.Equal("ReadOnly", target.readOnlyValue);
-        Assert.Equal("Hidden", target.hiddenValue);
-        Assert.Equal(0, target.serializeOnly); // SerializeOnly should not deserialize.
-        Assert.Equal(0, target.deserializeOnly);
-        Assert.Equal(SampleMode.Hard, target.mode);
-        Assert.Equal(Guid.Parse("0f7a06c8-d2ef-4c24-a5d1-34b4f12d0124"), target.guid);
-        Assert.Equal(33, target.stats.hp);
-        Assert.Equal(17, target.stats.mp);
-        Assert.NotNull(target.child);
-        Assert.Equal(5, target.child.level);
-        Assert.Equal(new[] { 1, 2, 3 }, target.numbers);
-        Assert.Equal(20, target.map["a"]);
-        Assert.Equal(10, target.map["z"]);
-        Assert.True(target.hashSet.SetEquals(new[] { 8, 9 }));
-        Assert.Equal(new[] { 11, 12 }, target.concurrentQueue.ToArray());
-        Assert.Equal(1, target.concurrentMap["one"]);
-        Assert.Equal(2, target.concurrentMap["two"]);
-        Assert.Equal(new[] { 13, 14 }, target.customSequence.ToArray());
-        Assert.Equal(100, target.customMap["alpha"]);
-        Assert.Equal(200, target.customMap["beta"]);
+        Assert.True(restored.enabled);
+        Assert.Equal(42, restored.count);
+        Assert.Equal(0.75f, restored.ratio);
+        Assert.Equal(19.25m, restored.price);
+        Assert.Equal("Player", restored.name);
+        Assert.Equal(source.identity, restored.identity);
+        Assert.Equal(SampleMode.Hard, restored.mode);
+        Assert.Equal(8, restored.optional);
+        Assert.Equal(new byte[] { 1, 2, 3 }, restored.bytes);
+        Assert.Equal(new[] { 4, 5, 6 }, restored.numbers);
+        Assert.Equal(new[] { 7, 8 }, restored.values);
+        Assert.Equal("one", restored.map[1]);
+        Assert.Equal("two", restored.map[2]);
+        Assert.Equal(11, restored.data.x);
+        Assert.Equal(12, restored.data.y);
+        Assert.Equal(13, restored.data.hidden);
+        Assert.Equal(0, restored.data.readOnly);
+        Assert.Equal(24, restored.data.computed);
     }
 
     [Fact]
-    public void ISerializable_GetSerializedProperties_ExposesRuntimeApiAndHonorsVisibility()
+    public void Restore_UpdatesExistingInstance()
     {
-        var instance = new SampleSerializable
-        {
-            id = 1,
-            readOnlyValue = "locked",
-            hiddenValue = "hidden"
-        };
+        var source = new DefaultSample { count = 77, name = "Restored" };
+        var target = new DefaultSample { count = 1, name = "Old" };
 
-        ISerializable serializable = instance;
-        var props = serializable.GetSerializedProperties();
-        Assert.DoesNotContain(props, p => p.name == nameof(SampleSerializable.hiddenValue));
+        SerializationManager.Restore(target, SerializationManager.Serialize(source));
 
-        var idProp = props.Single(p => p.name == nameof(SampleSerializable.id));
-        Assert.Equal(1, idProp.GetValue());
-        idProp.SetValue(5);
-        Assert.Equal(5, instance.id);
-
-        var readOnlyProp = props.Single(p => p.name == nameof(SampleSerializable.readOnlyValue));
-        Assert.Equal("locked", readOnlyProp.GetValue());
-        readOnlyProp.SetValue("new");
-        Assert.Equal("locked", instance.readOnlyValue);
+        Assert.Equal(77, target.count);
+        Assert.Equal("Restored", target.name);
     }
 
     [Fact]
-    public void ISerializable_RestoreState_AppliesDeserializeOnlyMembers()
+    public void Deserialize_UsesNonPublicParameterlessConstructor()
     {
-        var state = new SerializingState(new Dictionary<string, object?>(StringComparer.Ordinal)
+        byte[] bytes = SerializationManager.Encode(static writer => writer.Write("value", 9));
+
+        PrivateConstructorSample restored = SerializationManager.Deserialize<PrivateConstructorSample>(bytes);
+
+        Assert.True(restored.wasConstructed);
+        Assert.Equal(9, restored.value);
+    }
+
+    [Fact]
+    public void Deserialize_WithoutParameterlessConstructor_RequiresConverter()
+    {
+        byte[] bytes = SerializationManager.Encode(static writer => writer.Write("value", 5));
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => SerializationManager.Deserialize<MissingConstructorSample>(bytes));
+
+        Assert.Contains(typeof(MissingConstructorSample).FullName!, exception.Message);
+        Assert.Contains("parameterless constructor", exception.Message);
+    }
+
+    [Fact]
+    public void Deserialize_UsesConverterWhenNoParameterlessConstructorExists()
+    {
+        var source = new ConvertedConstructorSample(31);
+
+        ConvertedConstructorSample restored = SerializationManager.Deserialize<ConvertedConstructorSample>(
+            SerializationManager.Serialize(source));
+
+        Assert.Equal(31, restored.value);
+    }
+
+    [Fact]
+    public void Deserialize_PreservesConstructorFailureAsInnerException()
+    {
+        byte[] bytes = SerializationManager.Encode(static _ => { });
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => SerializationManager.Deserialize<ThrowingConstructorSample>(bytes));
+
+        Assert.IsType<ApplicationException>(exception.InnerException);
+        Assert.Equal("constructor failure", exception.InnerException!.Message);
+    }
+
+    [Fact]
+    public void RequiredConverter_Missing_ThrowsClearError()
+    {
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => SerializationManager.Serialize(new MissingRequiredConverterSample()));
+
+        Assert.Contains(typeof(MissingRequiredConverterSample).FullName!, exception.Message);
+        Assert.Contains("requires an explicit serialization converter", exception.Message);
+    }
+
+    [Fact]
+    public void Visibility_ControlsPersistenceAndRuntimeMetadataStrictly()
+    {
+        var source = new VisibilitySample
         {
-            [nameof(SampleSerializable.deserializeOnly)] = 123
+            shown = 1,
+            hidden = 2,
+            readOnly = 3,
+            transient = 4,
+            serializeOnly = 5,
+            deserializeOnly = 6
+        };
+
+        VisibilitySample restored = SerializationManager.Deserialize<VisibilitySample>(SerializationManager.Serialize(source));
+        Assert.Equal(1, restored.shown);
+        Assert.Equal(2, restored.hidden);
+        Assert.Equal(3, restored.readOnly);
+        Assert.Equal(0, restored.transient);
+        Assert.Equal(0, restored.serializeOnly);
+        Assert.Equal(0, restored.deserializeOnly);
+
+        IReadOnlyList<SerializedProperty> properties = SerializationManager.GetProperties(source);
+        Assert.DoesNotContain(properties, property => property.name == nameof(VisibilitySample.hidden));
+        SerializedProperty shown = properties.Single(property => property.name == nameof(VisibilitySample.shown));
+        Assert.True(shown.canRead);
+        Assert.True(shown.canWrite);
+        shown.SetValue(10);
+        Assert.Equal(10, source.shown);
+
+        SerializedProperty readOnly = properties.Single(property => property.name == nameof(VisibilitySample.readOnly));
+        Assert.True(readOnly.canRead);
+        Assert.False(readOnly.canWrite);
+        Assert.Throws<InvalidOperationException>(() => readOnly.SetValue(12));
+
+        byte[] manual = SerializationManager.Encode(static writer =>
+        {
+            writer.Write(nameof(VisibilitySample.deserializeOnly), 99);
+            writer.Write(nameof(VisibilitySample.serializeOnly), 98);
         });
-
-        var instance = new SampleSerializable();
-        ISerializable serializable = instance;
-        serializable.RestoreState(state);
-
-        Assert.Equal(123, instance.deserializeOnly);
-    }
-
-    [Fact]
-    public void ISerializable_RestoreState_InvokesHooks_BaseBeforeDerived()
-    {
-        ISerializable source = new HookChildSerializable { value = 3 };
-        var state = source.CaptureState();
-        var restored = new HookChildSerializable();
-        ISerializable serializable = restored;
-
-        serializable.RestoreState(state);
-
-        Assert.Equal(new[] { "base", "child" }, restored.hookCalls);
-    }
-
-    [Fact]
-    public void ISerializable_CreateSerializableInstance_SupportsPrivateCtorAndFallback()
-    {
-        var privateCtor = ISerializable.CreateSerializableInstance(typeof(PrivateCtorSerializable));
-        Assert.IsType<PrivateCtorSerializable>(privateCtor);
-        Assert.True(((PrivateCtorSerializable)privateCtor).constructed);
-
-        var fallbackCtor = ISerializable.CreateSerializableInstance(typeof(ThrowingCtorSerializable));
-        Assert.IsType<ThrowingCtorSerializable>(fallbackCtor);
-        Assert.False(((ThrowingCtorSerializable)fallbackCtor).ctorCompleted);
-    }
-
-    [Fact]
-    public void ISerializable_CreateSerializableInstance_InvalidType_Throws()
-    {
-        Assert.Throws<InvalidCastException>(() => ISerializable.CreateSerializableInstance(typeof(string)));
-    }
-
-    [Fact]
-    public void SerializableManager_AutoDiscoversCodec_ForCustomType()
-    {
-        var source = new CodecDrivenSerializable
+        _ = SerializationManager.Decode(manual, reader =>
         {
-            blob = new ExternalBlob { value = 41 }
-        };
-
-        ISerializable serializable = source;
-        SerializingState state = serializable.CaptureState();
-
-        var target = new CodecDrivenSerializable();
-        ((ISerializable)target).RestoreState(state);
-        Assert.Equal(41, target.blob.value);
-
-        byte[] bytes = SerializingState.Serialize(state);
-        SerializingState restoredState = SerializingState.Deserialize(bytes);
-        var fromBinary = new CodecDrivenSerializable();
-        ((ISerializable)fromBinary).RestoreState(restoredState);
-        Assert.Equal(41, fromBinary.blob.value);
-    }
-
-    [Fact]
-    public void SerializableManager_HasCodec_CoversPrimitiveClassAndStructSplitRoutes()
-    {
-        Assert.True(SerializableManager.HasCodec(typeof(int)));
-        Assert.True(SerializableManager.HasCodec(typeof(SampleSerializable)));
-        Assert.True(SerializableManager.HasCodec(typeof(SampleStats)));
-        Assert.True(SerializableManager.HasCodec(typeof(ExternalBlob)));
-    }
-
-    [Fact]
-    public void StructSplitRoute_WorksForStructWithoutISerializable()
-    {
-        var source = new StructHolderSerializable
-        {
-            payload = new PlainPayloadStruct
-            {
-                hp = 77,
-                mp = 55
-            }
-        };
-
-        SerializingState state = ((ISerializable)source).CaptureState();
-        var restored = new StructHolderSerializable();
-        ((ISerializable)restored).RestoreState(state);
-
-        Assert.Equal(77, restored.payload.hp);
-        Assert.Equal(55, restored.payload.mp);
-    }
-
-    [Fact]
-    public void CaptureState_WhenNoCodecAndNoSplitRoute_Throws()
-    {
-        var source = new NoCodecHolderSerializable
-        {
-            value = new NoCodecType { number = 12 }
-        };
-
-        InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() => ((ISerializable)source).CaptureState());
-        Assert.Contains("No serialization codec found", ex.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void CodecInheritanceFallback_UsesBaseCodecWhenDerivedCodecMissing()
-    {
-        var source = new InheritanceHolderSerializable
-        {
-            animal = new DerivedAnimal { name = "fox", level = 3 }
-        };
-
-        SerializingState state = ((ISerializable)source).CaptureState();
-
-        var restored = new InheritanceHolderSerializable();
-        ((ISerializable)restored).RestoreState(state);
-
-        Assert.IsType<DerivedAnimal>(restored.animal);
-        Assert.Equal("fox", restored.animal.name);
-        Assert.Equal(3, restored.animal.level);
-    }
-
-    [Fact]
-    public void CollectionCodec_UsesElementCodecThroughContextRecursion()
-    {
-        var source = new BlobListHolderSerializable
-        {
-            values =
-            [
-                new ExternalBlob { value = 1 },
-                new ExternalBlob { value = 2 },
-                new ExternalBlob { value = 3 }
-            ]
-        };
-
-        SerializingState state = ((ISerializable)source).CaptureState();
-        var restored = new BlobListHolderSerializable();
-        ((ISerializable)restored).RestoreState(state);
-
-        Assert.Equal(new[] { 1, 2, 3 }, restored.values.Select(static b => b.value).ToArray());
-    }
-
-    [Fact]
-    public void MapCodec_UsesValueCodecThroughContextRecursion()
-    {
-        var source = new BlobMapHolderSerializable
-        {
-            values = new Dictionary<string, ExternalBlob>(StringComparer.Ordinal)
-            {
-                ["a"] = new ExternalBlob { value = 10 },
-                ["b"] = new ExternalBlob { value = 20 }
-            }
-        };
-
-        SerializingState state = ((ISerializable)source).CaptureState();
-        var restored = new BlobMapHolderSerializable();
-        ((ISerializable)restored).RestoreState(state);
-
-        Assert.Equal(10, restored.values["a"].value);
-        Assert.Equal(20, restored.values["b"].value);
-    }
-
-    [Fact]
-    public void CaptureState_WhenCycleReferenceExists_Throws()
-    {
-        var a = new CycleNodeSerializable { name = "a" };
-        var b = new CycleNodeSerializable { name = "b" };
-        a.child = b;
-        b.child = a;
-
-        InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() => ((ISerializable)a).CaptureState());
-        Assert.Contains("Cycle reference detected", ex.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void RestoreState_WhenPrimitiveNodeTypeMismatch_Throws()
-    {
-        var state = new SerializingState(new Dictionary<string, object?>(StringComparer.Ordinal)
-        {
-            [nameof(SampleSerializable.id)] = "not-int"
+            reader.RestoreProperties(source);
+            return true;
         });
-
-        var target = new SampleSerializable();
-        Assert.Throws<FormatException>(() => ((ISerializable)target).RestoreState(state));
+        Assert.Equal(99, source.deserializeOnly);
+        Assert.Equal(5, source.serializeOnly);
     }
 
     [Fact]
-    public void RestoreState_WhenNonNullableStructIsNull_Throws()
+    public void MetadataValidation_RejectsInvalidMembersAndDuplicateKeys()
     {
-        var state = new SerializingState(new Dictionary<string, object?>(StringComparer.Ordinal)
+        Assert.Throws<InvalidOperationException>(
+            () => SerializationManager.GetProperties(new MissingSetterSample()));
+        Assert.Throws<InvalidOperationException>(
+            () => SerializationManager.GetProperties(new DuplicateKeyDerivedSample()));
+    }
+
+    [Fact]
+    public void ClassMemberWithoutConverter_FailsWithCompletePath()
+    {
+        var source = new MissingClassHost { child = new MissingChild { value = 1 } };
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => SerializationManager.Serialize(source));
+
+        Assert.Contains("$.child", exception.Message);
+        Assert.Contains("SerializationConverter", exception.Message);
+    }
+
+    [Fact]
+    public void ClassCollectionElementWithoutConverter_FailsWithIndexedPath()
+    {
+        var source = new MissingClassCollectionHost
         {
-            [nameof(StructHolderSerializable.payload)] = null
-        });
-
-        var target = new StructHolderSerializable();
-        InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() => ((ISerializable)target).RestoreState(state));
-        Assert.Contains("cannot be null", ex.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void NullablePrimitive_CaptureRestore_SupportsNullAndValue()
-    {
-        var sourceNull = new NullablePrimitiveSerializable { score = null };
-        var restoredNull = new NullablePrimitiveSerializable();
-        ((ISerializable)restoredNull).RestoreState(((ISerializable)sourceNull).CaptureState());
-        Assert.Null(restoredNull.score);
-
-        var sourceValue = new NullablePrimitiveSerializable { score = 42 };
-        var restoredValue = new NullablePrimitiveSerializable();
-        ((ISerializable)restoredValue).RestoreState(((ISerializable)sourceValue).CaptureState());
-        Assert.Equal(42, restoredValue.score);
-    }
-
-    [Fact]
-    public void CollectionCodec_Deserialize_UsesEnumerableConstructorWhenAvailable()
-    {
-        var source = new CtorSequenceHolderSerializable
-        {
-            values = new CtorSequence(new[] { 3, 5, 8 })
+            children = [new MissingChild { value = 2 }]
         };
 
-        SerializingState state = ((ISerializable)source).CaptureState();
-        var restored = new CtorSequenceHolderSerializable();
-        ((ISerializable)restored).RestoreState(state);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => SerializationManager.Serialize(source));
 
-        Assert.Equal(new[] { 3, 5, 8 }, restored.values.ToArray());
+        Assert.Contains("$.children[0]", exception.Message);
     }
 
     [Fact]
-    public void CollectionCodec_Deserialize_UsesStaticFactoryWhenAvailable()
+    public void ExplicitConverter_RoundTripsNestedClass()
     {
-        var source = new StaticFactorySequenceHolderSerializable
+        var source = new ConvertedChildHost
         {
-            values = StaticFactorySequence.CreateRange(new[] { 1, 4, 9 })
+            child = new ConvertedChild { value = 14 }
         };
 
-        SerializingState state = ((ISerializable)source).CaptureState();
-        var restored = new StaticFactorySequenceHolderSerializable();
-        ((ISerializable)restored).RestoreState(state);
+        ConvertedChildHost restored = SerializationManager.Deserialize<ConvertedChildHost>(
+            SerializationManager.Serialize(source));
 
-        Assert.Equal(new[] { 1, 4, 9 }, restored.values.ToArray());
+        Assert.NotNull(restored.child);
+        Assert.Equal(14, restored.child!.value);
     }
 
     [Fact]
-    public void MapCodec_Deserialize_UsesEnumerableConstructorWhenAvailable()
+    public void ExplicitConverter_CycleFailsWithBothPaths()
     {
-        var source = new CtorMapHolderSerializable
-        {
-            values = new CtorMap(new[]
+        var cycle = new CycleValue();
+        cycle.next = cycle;
+        var source = new CycleHost { value = cycle };
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => SerializationManager.Serialize(source));
+
+        Assert.Contains("Serialization cycle detected", exception.Message);
+        Assert.Contains("$.value", exception.Message);
+        Assert.Contains("$.value.next", exception.Message);
+    }
+
+    [Fact]
+    public void ConverterSelection_PrefersNearestBaseThenExactType()
+    {
+        var nearestSource = new NearestHost { item = new NearestLeaf { value = 21 } };
+        NearestHost nearest = SerializationManager.Deserialize<NearestHost>(SerializationManager.Serialize(nearestSource));
+        Assert.Equal("mid", nearest.item!.selectedBy);
+        Assert.Equal(21, nearest.item.value);
+
+        var exactSource = new ExactHost { item = new ExactLeaf { value = 22 } };
+        ExactHost exact = SerializationManager.Deserialize<ExactHost>(SerializationManager.Serialize(exactSource));
+        Assert.Equal("exact", exact.item!.selectedBy);
+        Assert.Equal(22, exact.item.value);
+    }
+
+    [Fact]
+    public void ConverterSelection_RejectsEqualDistanceAmbiguity()
+    {
+        var source = new AmbiguousHost { item = new AmbiguousValue() };
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => SerializationManager.Serialize(source));
+
+        Assert.Contains("ambiguous converters", exception.Message);
+        Assert.Contains(typeof(AmbiguousValue).FullName!, exception.Message);
+    }
+
+    [Fact]
+    public void OpenGenericConverter_IsClosedFromRequestedType()
+    {
+        var source = new GenericBoxHost { box = new GenericBox<int>(45) };
+
+        GenericBoxHost restored = SerializationManager.Deserialize<GenericBoxHost>(SerializationManager.Serialize(source));
+
+        Assert.NotNull(restored.box);
+        Assert.Equal(45, restored.box!.value);
+    }
+
+    [Fact]
+    public void SerializationContext_IsImmutableAndUsesExactTypeKeys()
+    {
+        var service = new SampleContext();
+        SerializationContext original = SerializationContext.empty;
+        SerializationContext updated = original.With<ISampleContext>(service);
+
+        Assert.False(original.TryGet<ISampleContext>(out _));
+        Assert.True(updated.TryGet<ISampleContext>(out ISampleContext? resolved));
+        Assert.Same(service, resolved);
+        Assert.False(updated.TryGet<SampleContext>(out _));
+        Assert.Same(service, updated.GetRequired<ISampleContext>());
+        Assert.Throws<InvalidOperationException>(() => updated.GetRequired<SampleContext>());
+    }
+
+    [Fact]
+    public void ReaderWriter_ReportDuplicateMissingAndTypePaths()
+    {
+        InvalidOperationException duplicate = Assert.Throws<InvalidOperationException>(() =>
+            SerializationManager.Encode(writer =>
             {
-                new KeyValuePair<string, int>("a", 10),
-                new KeyValuePair<string, int>("b", 20)
-            })
-        };
+                writer.Write("value", 1);
+                writer.Write("value", 2);
+            }));
+        Assert.Contains("$", duplicate.Message);
+        Assert.Contains("value", duplicate.Message);
 
-        SerializingState state = ((ISerializable)source).CaptureState();
-        var restored = new CtorMapHolderSerializable();
-        ((ISerializable)restored).RestoreState(state);
+        byte[] arrayBytes = SerializationManager.Encode(writer =>
+            writer.WriteObjectArray("items", new[] { 1 }, static (_, _) => { }));
+        InvalidOperationException missing = Assert.Throws<InvalidOperationException>(() =>
+            SerializationManager.Decode(arrayBytes, static reader =>
+                reader.ReadObjectArray("items")[0].Read<int>("missing")));
+        Assert.Contains("$.items[0].missing", missing.Message);
 
-        Assert.Equal(10, restored.values["a"]);
-        Assert.Equal(20, restored.values["b"]);
+        byte[] valueBytes = SerializationManager.Encode(static writer => writer.Write("value", "text"));
+        InvalidOperationException mismatch = Assert.Throws<InvalidOperationException>(() =>
+            SerializationManager.Decode(valueBytes, static reader => reader.Read<int>("value")));
+        Assert.Contains("$.value", mismatch.Message);
+
+        InvalidOperationException tryReadMismatch = Assert.Throws<InvalidOperationException>(() =>
+            SerializationManager.Decode(valueBytes, static reader => reader.TryRead<int>("value", out _)));
+        Assert.Contains("$.value", tryReadMismatch.Message);
+        Assert.False(SerializationManager.Decode(valueBytes, static reader => reader.TryRead<int>("missing", out _)));
     }
 
     [Fact]
-    public void SerializableManager_CodecSelection_PrefersCloserAssignableCodec()
+    public void ReaderWriter_AreInvalidOutsideTheirOperation()
     {
-        var source = new CodecDistanceHolderSerializable
-        {
-            entity = new DistanceLeafEntity { name = "leaf" }
-        };
+        SerializationWriter? capturedWriter = null;
+        _ = SerializationManager.Encode(writer => capturedWriter = writer);
+        Assert.Throws<InvalidOperationException>(() => capturedWriter!.Write("late", 1));
 
-        SerializingState state = ((ISerializable)source).CaptureState();
-        var wrapper = Assert.IsType<Dictionary<string, object?>>(state.values[nameof(CodecDistanceHolderSerializable.entity)]);
-        Assert.Equal("mid", Assert.IsType<string>(wrapper["from"]));
+        byte[] bytes = SerializationManager.Encode(static writer => writer.Write("value", 1));
+        SerializationReader? capturedReader = null;
+        _ = SerializationManager.Decode(bytes, reader =>
+        {
+            capturedReader = reader;
+            return true;
+        });
+        Assert.Throws<InvalidOperationException>(() => capturedReader!.Contains("value"));
     }
 
     [Fact]
-    public void SerializableManager_CodecSelection_PrefersExactCodecOverFallback()
+    public void RestoreHooks_RunOnceBaseToDerivedForDefaultAndConverterPaths()
     {
-        var source = new CodecExactHolderSerializable
+        byte[] bytes = SerializationManager.Encode(static writer => writer.Write("value", 3));
+        var target = new HookDerivedSample();
+        _ = SerializationManager.Decode(bytes, reader =>
         {
-            entity = new ExactLeafEntity { value = 7 }
-        };
+            reader.RestoreProperties(target);
+            reader.RestoreProperties(target);
+            return true;
+        });
+        Assert.Equal(new[] { "base", "derived" }, target.calls);
 
-        SerializingState state = ((ISerializable)source).CaptureState();
-        var wrapper = Assert.IsType<Dictionary<string, object?>>(state.values[nameof(CodecExactHolderSerializable.entity)]);
-        Assert.Equal("exact", Assert.IsType<string>(wrapper["from"]));
+        var converted = new ConvertedHookSample { value = 8 };
+        ConvertedHookSample restored = SerializationManager.Deserialize<ConvertedHookSample>(
+            SerializationManager.Serialize(converted));
+        Assert.Equal(1, restored.hookCount);
+
+        var existing = new ConvertedHookSample();
+        SerializationManager.Restore(existing, SerializationManager.Serialize(converted));
+        Assert.Equal(8, existing.value);
+        Assert.Equal(1, existing.hookCount);
     }
-}
 
-public enum SampleMode
-{
-    Easy = 0,
-    Hard = 1
-}
-
-public struct SampleStats
-{
-    [SerializableProperty]
-    public int hp;
-
-    [SerializableProperty]
-    public int mp { get; set; }
-}
-
-public sealed class SampleChild : ISerializable
-{
-    [SerializableProperty]
-    public int level { get; set; }
-}
-
-public class SampleSerializable : ISerializable
-{
-    [SerializableProperty]
-    public int id { get; set; }
-
-    [SerializableProperty(PropertyVisibility.Hide)]
-    public string hiddenValue { get; set; } = string.Empty;
-
-    [SerializableProperty(PropertyVisibility.Readonly)]
-    public string readOnlyValue { get; set; } = string.Empty;
-
-    [SerializableProperty(PropertyVisibility.SerializeOnly)]
-    public int serializeOnly { get; set; }
-
-    [SerializableProperty(PropertyVisibility.DeserializeOnly)]
-    public int deserializeOnly { get; set; }
-
-    [SerializableProperty]
-    public SampleMode mode { get; set; }
-
-    [SerializableProperty]
-    public Guid guid { get; set; }
-
-    [SerializableProperty]
-    public SampleStats stats;
-
-    [SerializableProperty]
-    public SampleChild child { get; set; } = new();
-
-    [SerializableProperty]
-    public List<int> numbers { get; set; } = new();
-
-    [SerializableProperty]
-    public Dictionary<string, int> map { get; set; } = new(StringComparer.Ordinal);
-
-    [SerializableProperty]
-    public HashSet<int> hashSet { get; set; } = [];
-
-    [SerializableProperty]
-    public ConcurrentQueue<int> concurrentQueue { get; set; } = new();
-
-    [SerializableProperty]
-    public ConcurrentDictionary<string, int> concurrentMap { get; set; } = new();
-
-    [SerializableProperty]
-    public CustomSequence customSequence { get; set; } = new();
-
-    [SerializableProperty]
-    public CustomMap customMap { get; set; } = new();
-}
-
-public sealed class CustomSequence : IEnumerable<int>
-{
-    private readonly List<int> m_values = new();
-
-    public void Add(int value) => m_values.Add(value);
-
-    public IEnumerator<int> GetEnumerator() => m_values.GetEnumerator();
-
-    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
-}
-
-public sealed class CustomMap : IEnumerable<KeyValuePair<string, int>>
-{
-    private readonly Dictionary<string, int> m_values = new(StringComparer.Ordinal);
-
-    public void Add(string key, int value) => m_values.Add(key, value);
-
-    public int this[string key]
+    [Fact]
+    public void CompletionCallbacks_RunOnlyAfterSuccessfulDecode()
     {
-        get => m_values[key];
-        set => m_values[key] = value;
+        byte[] bytes = SerializationManager.Encode(static writer => writer.Write("value", 1));
+        var calls = new List<string>();
+        int value = SerializationManager.Decode(bytes, reader =>
+        {
+            reader.OnCompleted(() => calls.Add("completed"));
+            Assert.Empty(calls);
+            return reader.Read<int>("value");
+        });
+        Assert.Equal(1, value);
+        Assert.Equal(new[] { "completed" }, calls);
+
+        calls.Clear();
+        Assert.Throws<InvalidOperationException>(() => SerializationManager.Decode(bytes, reader =>
+        {
+            reader.OnCompleted(() => calls.Add("should-not-run"));
+            return reader.Read<int>("missing");
+        }));
+        Assert.Empty(calls);
     }
 
-    public IEnumerator<KeyValuePair<string, int>> GetEnumerator() => m_values.GetEnumerator();
+    [Fact]
+    public void NonStringMapEncoding_IsDeterministic()
+    {
+        var left = new MapHost { values = new Dictionary<int, string> { [9] = "nine", [1] = "one" } };
+        var right = new MapHost { values = new Dictionary<int, string> { [1] = "one", [9] = "nine" } };
 
-    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        Assert.Equal(SerializationManager.Serialize(left), SerializationManager.Serialize(right));
+    }
+
+    [Fact]
+    public void VersionOnePayload_IsRejected()
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write("INNO");
+            writer.Write(1);
+        }
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(
+            () => SerializationManager.Decode(stream.ToArray(), static _ => true));
+        Assert.Contains("Unsupported serialization version 1", exception.Message);
+    }
 }
 
-public class HookBaseSerializable : ISerializable
+internal enum SampleMode
+{
+    Easy,
+    Hard
+}
+
+internal sealed class DefaultSample : ISerializable
+{
+    [SerializableProperty] public bool enabled { get; set; }
+    [SerializableProperty] public int count { get; set; }
+    [SerializableProperty] public float ratio { get; set; }
+    [SerializableProperty] public decimal price { get; set; }
+    [SerializableProperty] public string name { get; set; } = string.Empty;
+    [SerializableProperty] public Guid identity { get; set; }
+    [SerializableProperty] public SampleMode mode { get; set; }
+    [SerializableProperty] public int? optional { get; set; }
+    [SerializableProperty] public byte[] bytes { get; set; } = [];
+    [SerializableProperty] public int[] numbers { get; set; } = [];
+    [SerializableProperty] public List<int> values { get; set; } = [];
+    [SerializableProperty] public Dictionary<int, string> map { get; set; } = [];
+    [SerializableProperty] public StructSample data { get; set; }
+}
+
+internal struct StructSample
+{
+    public int x;
+    public int y { get; set; }
+    public readonly int readOnly;
+    [SerializableProperty] private int m_hidden;
+    public readonly int computed => x + m_hidden;
+    public readonly int hidden => m_hidden;
+
+    private StructSample(int x, int y, int hidden)
+    {
+        this.x = x;
+        this.y = y;
+        readOnly = 99;
+        m_hidden = hidden;
+    }
+
+    internal static StructSample Create(int x, int y, int hidden) => new(x, y, hidden);
+}
+
+internal sealed class PrivateConstructorSample : ISerializable
+{
+    [SerializableProperty] public int value { get; set; }
+    public bool wasConstructed { get; }
+
+    private PrivateConstructorSample()
+    {
+        wasConstructed = true;
+    }
+}
+
+internal sealed class MissingConstructorSample : ISerializable
+{
+    [SerializableProperty] public int value { get; set; }
+
+    public MissingConstructorSample(int value)
+    {
+        this.value = value;
+    }
+}
+
+internal sealed class ConvertedConstructorSample : ISerializable
+{
+    public int value { get; set; }
+
+    public ConvertedConstructorSample(int value)
+    {
+        this.value = value;
+    }
+}
+
+[SerializationExtension]
+internal sealed class ConvertedConstructorSampleConverter : SerializationConverter<ConvertedConstructorSample>
+{
+    public override void Write(SerializationWriter writer, ConvertedConstructorSample value)
+        => writer.Write("value", value.value);
+
+    public override ConvertedConstructorSample Read(SerializationReader reader)
+        => new(reader.Read<int>("value"));
+
+    public override void Restore(SerializationReader reader, ConvertedConstructorSample target)
+        => target.value = reader.Read<int>("value");
+}
+
+internal sealed class ThrowingConstructorSample : ISerializable
+{
+    private ThrowingConstructorSample()
+    {
+        throw new ApplicationException("constructor failure");
+    }
+}
+
+[RequiresSerializationConverter]
+internal sealed class MissingRequiredConverterSample : ISerializable;
+
+internal sealed class VisibilitySample : ISerializable
+{
+    [SerializableProperty] public int shown { get; set; }
+    [SerializableProperty(PropertyVisibility.Hide)] public int hidden { get; set; }
+    [SerializableProperty(PropertyVisibility.Readonly)] public int readOnly { get; set; }
+    [SerializableProperty(PropertyVisibility.Transient)] public int transient { get; set; }
+    [SerializableProperty(PropertyVisibility.SerializeOnly)] public int serializeOnly { get; set; }
+    [SerializableProperty(PropertyVisibility.DeserializeOnly)] public int deserializeOnly { get; set; }
+}
+
+internal sealed class MissingSetterSample : ISerializable
+{
+    [SerializableProperty]
+    public int value { get; } = 1;
+}
+
+internal class DuplicateKeyBaseSample : ISerializable
 {
     [SerializableProperty]
     public int value { get; set; }
-
-    public List<string> hookCalls { get; } = new();
-
-    [OnSerializableRestored]
-    private void OnBaseRestored()
-    {
-        hookCalls.Add("base");
-    }
 }
 
-public sealed class HookChildSerializable : HookBaseSerializable
-{
-    [OnSerializableRestored]
-    private void OnChildRestored()
-    {
-        hookCalls.Add("child");
-    }
-}
-
-public sealed class PrivateCtorSerializable : ISerializable
-{
-    public bool constructed { get; }
-
-    private PrivateCtorSerializable()
-    {
-        constructed = true;
-    }
-}
-
-public sealed class ThrowingCtorSerializable : ISerializable
-{
-    public bool ctorCompleted { get; }
-
-    private ThrowingCtorSerializable()
-    {
-        ctorCompleted = true;
-        throw new InvalidOperationException("boom");
-    }
-}
-
-public sealed class ExternalBlob
-{
-    public int value;
-}
-
-public sealed class ExternalBlobCodec : SerializationCodec<ExternalBlob>
-{
-    public override bool CanHandleType(Type declaredType)
-        => (Nullable.GetUnderlyingType(declaredType) ?? declaredType) == typeof(ExternalBlob);
-
-    public override object? OnSerialize(in SerializeContext context, ExternalBlob value)
-        => value.value;
-
-    public override ExternalBlob OnDeserialize(in DeserializeContext context, object? node)
-        => new() { value = Convert.ToInt32(node) };
-}
-
-public sealed class CodecDrivenSerializable : ISerializable
+internal sealed class DuplicateKeyDerivedSample : DuplicateKeyBaseSample
 {
     [SerializableProperty]
-    public ExternalBlob blob { get; set; } = new();
+    public new int value { get; set; }
 }
 
-public struct PlainPayloadStruct
-{
-    [SerializableProperty]
-    public int hp;
-
-    [SerializableProperty]
-    public int mp { get; set; }
-}
-
-public sealed class StructHolderSerializable : ISerializable
-{
-    [SerializableProperty]
-    public PlainPayloadStruct payload;
-}
-
-public sealed class NoCodecType
-{
-    public int number { get; set; }
-}
-
-public sealed class NoCodecHolderSerializable : ISerializable
-{
-    [SerializableProperty]
-    public NoCodecType value { get; set; } = new();
-}
-
-public class BaseAnimal
-{
-    public string name { get; set; } = string.Empty;
-}
-
-public sealed class DerivedAnimal : BaseAnimal
-{
-    public int level { get; set; }
-}
-
-public sealed class BaseAnimalCodec : SerializationCodec<BaseAnimal>
-{
-    public override bool CanHandleType(Type declaredType)
-    {
-        Type normalized = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
-        return typeof(BaseAnimal).IsAssignableFrom(normalized);
-    }
-
-    public override object? OnSerialize(in SerializeContext context, BaseAnimal value)
-    {
-        return new Dictionary<string, object?>(StringComparer.Ordinal)
-        {
-            ["name"] = value.name,
-            ["level"] = value is DerivedAnimal d ? d.level : 0
-        };
-    }
-
-    public override BaseAnimal OnDeserialize(in DeserializeContext context, object? node)
-    {
-        Dictionary<string, object?> map = Assert.IsType<Dictionary<string, object?>>(node);
-        return new DerivedAnimal
-        {
-            name = map.TryGetValue("name", out object? nameObj) ? (nameObj as string ?? string.Empty) : string.Empty,
-            level = map.TryGetValue("level", out object? levelObj) ? Convert.ToInt32(levelObj) : 0
-        };
-    }
-}
-
-public sealed class InheritanceHolderSerializable : ISerializable
-{
-    [SerializableProperty]
-    public DerivedAnimal animal { get; set; } = new();
-}
-
-public sealed class BlobListHolderSerializable : ISerializable
-{
-    [SerializableProperty]
-    public List<ExternalBlob> values { get; set; } = new();
-}
-
-public sealed class BlobMapHolderSerializable : ISerializable
-{
-    [SerializableProperty]
-    public Dictionary<string, ExternalBlob> values { get; set; } = new(StringComparer.Ordinal);
-}
-
-public sealed class CycleNodeSerializable : ISerializable
-{
-    [SerializableProperty]
-    public string name { get; set; } = string.Empty;
-
-    [SerializableProperty]
-    public CycleNodeSerializable? child { get; set; }
-}
-
-public sealed class NullablePrimitiveSerializable : ISerializable
-{
-    [SerializableProperty]
-    public int? score { get; set; }
-}
-
-public sealed class CtorSequence : IEnumerable<int>
-{
-    private readonly List<int> m_values;
-
-    public CtorSequence(IEnumerable<int> values)
-    {
-        m_values = values.ToList();
-    }
-
-    public IEnumerator<int> GetEnumerator() => m_values.GetEnumerator();
-
-    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
-}
-
-public sealed class CtorSequenceHolderSerializable : ISerializable
-{
-    [SerializableProperty]
-    public CtorSequence values { get; set; } = new(Array.Empty<int>());
-}
-
-public sealed class StaticFactorySequence : IEnumerable<int>
-{
-    private readonly List<int> m_values;
-
-    private StaticFactorySequence(List<int> values)
-    {
-        m_values = values;
-    }
-
-    public static StaticFactorySequence CreateRange(IEnumerable<int> values)
-    {
-        return new StaticFactorySequence(values.ToList());
-    }
-
-    public IEnumerator<int> GetEnumerator() => m_values.GetEnumerator();
-
-    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
-}
-
-public sealed class StaticFactorySequenceHolderSerializable : ISerializable
-{
-    [SerializableProperty]
-    public StaticFactorySequence values { get; set; } = StaticFactorySequence.CreateRange(Array.Empty<int>());
-}
-
-public sealed class CtorMap : IEnumerable<KeyValuePair<string, int>>
-{
-    private readonly Dictionary<string, int> m_values;
-
-    public CtorMap(IEnumerable<KeyValuePair<string, int>> values)
-    {
-        m_values = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (KeyValuePair<string, int> pair in values)
-            m_values[pair.Key] = pair.Value;
-    }
-
-    public int this[string key] => m_values[key];
-
-    public IEnumerator<KeyValuePair<string, int>> GetEnumerator() => m_values.GetEnumerator();
-
-    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
-}
-
-public sealed class CtorMapHolderSerializable : ISerializable
-{
-    [SerializableProperty]
-    public CtorMap values { get; set; } = new(Array.Empty<KeyValuePair<string, int>>());
-}
-
-public class DistanceRootEntity
-{
-    public string name { get; set; } = string.Empty;
-}
-
-public class DistanceMidEntity : DistanceRootEntity
-{
-}
-
-public sealed class DistanceLeafEntity : DistanceMidEntity
-{
-}
-
-public sealed class DistanceRootEntityCodec : SerializationCodec<DistanceRootEntity>
-{
-    public override bool CanHandleType(Type declaredType)
-    {
-        Type normalized = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
-        return typeof(DistanceRootEntity).IsAssignableFrom(normalized);
-    }
-
-    public override object? OnSerialize(in SerializeContext context, DistanceRootEntity value)
-    {
-        return new Dictionary<string, object?>(StringComparer.Ordinal)
-        {
-            ["from"] = "root",
-            ["name"] = value.name
-        };
-    }
-
-    public override DistanceRootEntity OnDeserialize(in DeserializeContext context, object? node)
-    {
-        Dictionary<string, object?> map = Assert.IsType<Dictionary<string, object?>>(node);
-        return new DistanceLeafEntity
-        {
-            name = map.TryGetValue("name", out object? nameObj) ? (nameObj as string ?? string.Empty) : string.Empty
-        };
-    }
-}
-
-public sealed class DistanceMidEntityCodec : SerializationCodec<DistanceMidEntity>
-{
-    public override bool CanHandleType(Type declaredType)
-    {
-        Type normalized = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
-        return typeof(DistanceMidEntity).IsAssignableFrom(normalized);
-    }
-
-    public override object? OnSerialize(in SerializeContext context, DistanceMidEntity value)
-    {
-        return new Dictionary<string, object?>(StringComparer.Ordinal)
-        {
-            ["from"] = "mid",
-            ["name"] = value.name
-        };
-    }
-
-    public override DistanceMidEntity OnDeserialize(in DeserializeContext context, object? node)
-    {
-        Dictionary<string, object?> map = Assert.IsType<Dictionary<string, object?>>(node);
-        return new DistanceLeafEntity
-        {
-            name = map.TryGetValue("name", out object? nameObj) ? (nameObj as string ?? string.Empty) : string.Empty
-        };
-    }
-}
-
-public sealed class CodecDistanceHolderSerializable : ISerializable
-{
-    [SerializableProperty]
-    public DistanceLeafEntity entity { get; set; } = new();
-}
-
-public class ExactRootEntity
+internal sealed class MissingChild
 {
     public int value { get; set; }
 }
 
-public sealed class ExactLeafEntity : ExactRootEntity
+internal sealed class MissingClassHost : ISerializable
 {
+    [SerializableProperty] public MissingChild? child { get; set; }
 }
 
-public sealed class ExactRootEntityCodec : SerializationCodec<ExactRootEntity>
+internal sealed class MissingClassCollectionHost : ISerializable
 {
-    public override bool CanHandleType(Type declaredType)
-    {
-        Type normalized = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
-        return typeof(ExactRootEntity).IsAssignableFrom(normalized);
-    }
+    [SerializableProperty] public List<MissingChild> children { get; set; } = [];
+}
 
-    public override object? OnSerialize(in SerializeContext context, ExactRootEntity value)
-    {
-        return new Dictionary<string, object?>(StringComparer.Ordinal)
-        {
-            ["from"] = "root-fallback",
-            ["value"] = value.value
-        };
-    }
+internal sealed class ConvertedChild
+{
+    public int value { get; set; }
+}
 
-    public override ExactRootEntity OnDeserialize(in DeserializeContext context, object? node)
+internal sealed class ConvertedChildHost : ISerializable
+{
+    [SerializableProperty] public ConvertedChild? child { get; set; }
+}
+
+internal sealed class CycleValue
+{
+    public CycleValue? next { get; set; }
+}
+
+internal sealed class CycleHost : ISerializable
+{
+    [SerializableProperty] public CycleValue? value { get; set; }
+}
+
+[SerializationExtension]
+internal sealed class CycleValueConverter : SerializationConverter<CycleValue>
+{
+    public override void Write(SerializationWriter writer, CycleValue value)
+        => writer.Write("next", value.next);
+
+    public override CycleValue Read(SerializationReader reader)
+        => new() { next = reader.Read<CycleValue?>("next") };
+}
+
+[SerializationExtension]
+internal sealed class ConvertedChildConverter : SerializationConverter<ConvertedChild>
+{
+    public override void Write(SerializationWriter writer, ConvertedChild value)
+        => writer.Write("value", value.value);
+
+    public override ConvertedChild Read(SerializationReader reader)
+        => new() { value = reader.Read<int>("value") };
+}
+
+internal class NearestBase
+{
+    public int value { get; set; }
+    public string selectedBy { get; set; } = string.Empty;
+}
+
+internal class NearestMid : NearestBase;
+
+internal sealed class NearestLeaf : NearestMid;
+
+internal sealed class NearestHost : ISerializable
+{
+    [SerializableProperty] public NearestLeaf? item { get; set; }
+}
+
+[SerializationExtension]
+internal sealed class NearestBaseConverter : SerializationConverter<NearestBase>
+{
+    public override void Write(SerializationWriter writer, NearestBase value)
+        => writer.Write("value", value.value);
+
+    public override NearestBase Read(SerializationReader reader)
+        => new NearestLeaf { value = reader.Read<int>("value"), selectedBy = "base" };
+}
+
+[SerializationExtension]
+internal sealed class NearestMidConverter : SerializationConverter<NearestMid>
+{
+    public override void Write(SerializationWriter writer, NearestMid value)
+        => writer.Write("value", value.value);
+
+    public override NearestMid Read(SerializationReader reader)
+        => new NearestLeaf { value = reader.Read<int>("value"), selectedBy = "mid" };
+}
+
+internal class ExactBase
+{
+    public int value { get; set; }
+    public string selectedBy { get; set; } = string.Empty;
+}
+
+internal sealed class ExactLeaf : ExactBase;
+
+internal sealed class ExactHost : ISerializable
+{
+    [SerializableProperty] public ExactLeaf? item { get; set; }
+}
+
+[SerializationExtension]
+internal sealed class ExactBaseConverter : SerializationConverter<ExactBase>
+{
+    public override void Write(SerializationWriter writer, ExactBase value)
+        => writer.Write("value", value.value);
+
+    public override ExactBase Read(SerializationReader reader)
+        => new ExactLeaf { value = reader.Read<int>("value"), selectedBy = "base" };
+}
+
+[SerializationExtension]
+internal sealed class ExactLeafConverter : SerializationConverter<ExactLeaf>
+{
+    public override void Write(SerializationWriter writer, ExactLeaf value)
+        => writer.Write("value", value.value);
+
+    public override ExactLeaf Read(SerializationReader reader)
+        => new() { value = reader.Read<int>("value"), selectedBy = "exact" };
+}
+
+internal interface IAmbiguousLeft;
+
+internal interface IAmbiguousRight;
+
+internal sealed class AmbiguousValue : IAmbiguousLeft, IAmbiguousRight;
+
+internal sealed class AmbiguousHost : ISerializable
+{
+    [SerializableProperty] public AmbiguousValue? item { get; set; }
+}
+
+[SerializationExtension]
+internal sealed class AmbiguousLeftConverter : SerializationConverter<IAmbiguousLeft>
+{
+    public override void Write(SerializationWriter writer, IAmbiguousLeft value) { }
+    public override IAmbiguousLeft Read(SerializationReader reader) => new AmbiguousValue();
+}
+
+[SerializationExtension]
+internal sealed class AmbiguousRightConverter : SerializationConverter<IAmbiguousRight>
+{
+    public override void Write(SerializationWriter writer, IAmbiguousRight value) { }
+    public override IAmbiguousRight Read(SerializationReader reader) => new AmbiguousValue();
+}
+
+internal sealed class GenericBox<T>
+{
+    public T value { get; }
+
+    public GenericBox(T value)
     {
-        Dictionary<string, object?> map = Assert.IsType<Dictionary<string, object?>>(node);
-        return new ExactLeafEntity
-        {
-            value = map.TryGetValue("value", out object? valueObj) ? Convert.ToInt32(valueObj) : 0
-        };
+        this.value = value;
     }
 }
 
-public sealed class ExactLeafEntityCodec : SerializationCodec<ExactLeafEntity>
+internal sealed class GenericBoxHost : ISerializable
 {
-    public override bool CanHandleType(Type declaredType)
-    {
-        Type normalized = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
-        return normalized == typeof(ExactLeafEntity);
-    }
-
-    public override object? OnSerialize(in SerializeContext context, ExactLeafEntity value)
-    {
-        return new Dictionary<string, object?>(StringComparer.Ordinal)
-        {
-            ["from"] = "exact",
-            ["value"] = value.value
-        };
-    }
-
-    public override ExactLeafEntity OnDeserialize(in DeserializeContext context, object? node)
-    {
-        Dictionary<string, object?> map = Assert.IsType<Dictionary<string, object?>>(node);
-        return new ExactLeafEntity
-        {
-            value = map.TryGetValue("value", out object? valueObj) ? Convert.ToInt32(valueObj) : 0
-        };
-    }
+    [SerializableProperty] public GenericBox<int>? box { get; set; }
 }
 
-public sealed class CodecExactHolderSerializable : ISerializable
+[SerializationExtension]
+internal sealed class GenericBoxConverter<T> : SerializationConverter<GenericBox<T>>
+{
+    public override void Write(SerializationWriter writer, GenericBox<T> value)
+        => writer.Write("value", value.value);
+
+    public override GenericBox<T> Read(SerializationReader reader)
+        => new(reader.Read<T>("value"));
+}
+
+internal interface ISampleContext;
+
+internal sealed class SampleContext : ISampleContext;
+
+internal class HookBaseSample : ISerializable
+{
+    [SerializableProperty] public int value { get; set; }
+    public List<string> calls { get; } = [];
+
+    [OnSerializableRestored]
+    private void AfterBaseRestore() => calls.Add("base");
+}
+
+internal sealed class HookDerivedSample : HookBaseSample
+{
+    [OnSerializableRestored]
+    private void AfterDerivedRestore() => calls.Add("derived");
+}
+
+internal sealed class ConvertedHookSample : ISerializable
+{
+    public int value { get; set; }
+    public int hookCount { get; private set; }
+
+    [OnSerializableRestored]
+    private void AfterRestore() => hookCount++;
+}
+
+[SerializationExtension]
+internal sealed class ConvertedHookSampleConverter : SerializationConverter<ConvertedHookSample>
+{
+    public override void Write(SerializationWriter writer, ConvertedHookSample value)
+        => writer.Write("value", value.value);
+
+    public override ConvertedHookSample Read(SerializationReader reader)
+        => new() { value = reader.Read<int>("value") };
+
+    public override void Restore(SerializationReader reader, ConvertedHookSample target)
+        => target.value = reader.Read<int>("value");
+}
+
+internal sealed class MapHost : ISerializable
 {
     [SerializableProperty]
-    public ExactLeafEntity entity { get; set; } = new();
+    public Dictionary<int, string> values { get; set; } = [];
 }

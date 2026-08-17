@@ -12,6 +12,7 @@
     <ProjectReference Include="..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />
     <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
     <ProjectReference Include="..\..\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" />
+    <ProjectReference Include="..\..\engine\Inno.Engine.Assets\Inno.Engine.Assets.csproj" />
     <ProjectReference Include="..\..\assets\Inno.Assets.Core\Inno.Assets.Core.csproj" />
     <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" />
     <ProjectReference Include="..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" />

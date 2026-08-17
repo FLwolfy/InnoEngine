@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 
-using Inno.Core.ECS;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 using Inno.Editor.ImGui;
@@ -65,28 +65,26 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
 
     private static void DrawComponents(InspectorDrawContext context, GameObject gameObject)
     {
-        IReadOnlyList<Component> components = gameObject.GetComponents();
-        Type? removeType = null;
+        IReadOnlyList<GameComponent> components = gameObject.GetComponents();
+        GameComponent? componentToRemove = null;
         for (int i = 0; i < components.Count; i++)
         {
-            if (components[i] is not GameBehavior behavior)
-            {
-                continue;
-            }
-
-            Type componentType = behavior.GetType();
-            string componentId = behavior.identity.persistentId.ToString("N");
+            GameComponent component = components[i];
+            Type componentType = component.GetType();
+            string componentId = component.identity.persistentId.ToString("N");
             bool open = ImGuiWidget.CollapsingCard(
                 componentId,
                 componentType.Name,
-                () =>
-                {
-                    bool enabled = behavior.enabled;
-                    if (ImGuiWidget.CompactCheckbox($"enabled_{componentId}", ref enabled))
+                component is GameBehavior behavior
+                    ? () =>
                     {
-                        behavior.enabled = enabled;
+                        bool enabled = behavior.enabled;
+                        if (ImGuiWidget.CompactCheckbox($"enabled_{componentId}", ref enabled))
+                        {
+                            behavior.enabled = enabled;
+                        }
                     }
-                },
+                    : null,
                 componentType == typeof(Transform)
                     ? null
                     : () =>
@@ -94,16 +92,21 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
                         if (ImGuiWidget.IconButton($"remove_component_{componentId}", ImGuiIcon.Xmark,
                                 "Remove Component"))
                         {
-                            removeType = componentType;
+                            componentToRemove = component;
                         }
                     });
 
             if (ImGuiWidget.BeginContextMenu($"##component_menu_{componentId}"))
             {
+                if (NativeImGui.MenuItem("Reset Component"))
+                {
+                    gameObject.ResetComponent(component);
+                }
+
                 bool canRemove = componentType != typeof(Transform);
                 if (NativeImGui.MenuItem("Remove Component", string.Empty, false, canRemove))
                 {
-                    removeType = componentType;
+                    componentToRemove = component;
                 }
 
                 ImGuiWidget.EndContextMenu();
@@ -115,7 +118,7 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
             }
 
             NativeImGui.Unindent();
-            IReadOnlyList<SerializedProperty> properties = ((ISerializable)behavior).GetSerializedProperties();
+            IReadOnlyList<SerializedProperty> properties = SerializationManager.GetProperties(component);
             for (int propertyIndex = 0; propertyIndex < properties.Count; propertyIndex++)
             {
                 context.properties.Draw(
@@ -128,9 +131,9 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
             NativeImGui.TreePop();
         }
 
-        if (removeType is not null)
+        if (componentToRemove is not null)
         {
-            _ = gameObject.RemoveComponent(removeType);
+            _ = gameObject.RemoveComponent(componentToRemove);
         }
     }
 
@@ -151,7 +154,7 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
             return;
         }
 
-        IReadOnlyList<Type> componentTypes = TypeCache.GetSubTypesOf<GameBehavior>();
+        IReadOnlyList<Type> componentTypes = TypeCache.GetSubTypesOf<GameComponent>();
         for (int i = 0; i < componentTypes.Count; i++)
         {
             Type componentType = componentTypes[i];
@@ -187,15 +190,7 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
             return false;
         }
 
-        IReadOnlyList<Component> components = gameObject.GetComponents();
-        for (int i = 0; i < components.Count; i++)
-        {
-            if (components[i].GetType() == componentType)
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return componentType.IsDefined(typeof(AllowMultipleComponentAttribute), inherit: false) ||
+            !gameObject.GetComponents().Any(component => component.GetType() == componentType);
     }
 }

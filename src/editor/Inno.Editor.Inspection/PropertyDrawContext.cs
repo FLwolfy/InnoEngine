@@ -116,7 +116,7 @@ public sealed class PropertyDrawContext
             $"{path}.{property.name}",
             property.name,
             property.propertyType,
-            isReadOnly ? PropertyVisibility.Readonly : property.visibility,
+            isReadOnly || !property.canWrite ? PropertyVisibility.Readonly : property.visibility,
             property.GetValue,
             property.SetValue);
     }

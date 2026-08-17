@@ -126,7 +126,7 @@ internal sealed class IdentityRegistry
             }
 
             Identity identity = obj.GetIdentity();
-            if (!TryGetLiveObject(entry, out IIdentityObject? activeObject))
+            if (!TryGetLiveObject(entry!, out IIdentityObject? activeObject))
             {
                 m_slotByObject.Remove(obj);
                 RemoveSlotBySlotNoLock(objectSlot);
@@ -376,7 +376,7 @@ internal sealed class IdentityRegistry
             return false;
         }
 
-        return entry.TryGetObject(out obj);
+        return entry!.TryGetObject(out obj);
     }
 
     private bool TryGetLiveEntryBySlotNoLock(int slot, out RegistryEntry? entry, out int denseIndex)
@@ -481,7 +481,7 @@ internal sealed class IdentityRegistry
 
         if (removed.TryGetObject(out IIdentityObject? removedObj))
         {
-            m_slotByObject.Remove(removedObj);
+            m_slotByObject.Remove(removedObj!);
         }
 
         if (m_slotByPersistent.TryGetValue(removed.persistentId, out int mappedSlot) &&
@@ -513,7 +513,7 @@ internal sealed class IdentityRegistry
         m_sparseToDense[lastSlot] = denseIndex;
         if (m_active[denseIndex].TryGetObject(out IIdentityObject? movedObj))
         {
-            if (m_slotByObject.TryGetValue(movedObj, out RegistrySlot? movedSlot))
+            if (m_slotByObject.TryGetValue(movedObj!, out RegistrySlot? movedSlot))
             {
                 movedSlot.slot = lastSlot;
             }

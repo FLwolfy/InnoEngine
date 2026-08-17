@@ -3,326 +3,229 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Threading;
 
 using Inno.Assets.Core;
-using Inno.Assets.File;
+using Inno.Assets.Loader;
 using Inno.Assets.Types;
 using Inno.Core.Identity;
+using Inno.Core.Reflection;
+using Inno.Core.Serialization;
 
 using Xunit;
 
 namespace Inno.Assets.Tests;
 
-public sealed class AssetManagerTests
+public sealed class AssetManagerTests : IDisposable
 {
-    [Fact]
-    public void PublicApis_ThrowOrReturnFalse_WhenManagerIsNotInitialized()
+    public AssetManagerTests()
+    {
+        IdentityManager.Initialize();
+        TypeCacheManager.Initialize();
+        SerializationManager.Initialize();
+    }
+
+    public void Dispose()
     {
         AssetManager.Shutdown();
+        SerializationManager.Shutdown();
+        TypeCacheManager.Shutdown();
+        IdentityManager.Shutdown();
+    }
 
+    [Fact]
+    public void PublicApis_RejectUseBeforeInitialization()
+    {
         Assert.Throws<InvalidOperationException>(() => AssetManager.Import("Missing/nope.txt"));
         Assert.Throws<InvalidOperationException>(() => AssetManager.Load<TextAsset>("Missing/nope.txt"));
-        Assert.Throws<InvalidOperationException>(() => AssetManager.GetRef<TextAsset>("Missing/nope.txt"));
-        Assert.Throws<InvalidOperationException>(() => AssetManager.GetRef<TextAsset>(default(Identity)));
+        Assert.Throws<InvalidOperationException>(() => AssetManager.Load<TextAsset>(Guid.NewGuid()));
         Assert.Throws<InvalidOperationException>(() => AssetManager.GetLoadedPaths());
         Assert.False(AssetManager.Unload("Missing/nope.txt"));
     }
 
     [Fact]
-    public void Import_ReturnsFalse_ForMissingPath()
+    public void PathAndPersistentIdLoads_ShareOneInstanceAndCountManualHolds()
     {
-        string root = CreateRoot();
-        string assets = Path.Combine(root, "Assets");
-        string artifacts = Path.Combine(root, "Library", "Artifacts");
+        using TestAssetWorkspace workspace = new();
+        workspace.Write("Text/shared.txt", "shared");
+        AssetManager.Initialize(workspace.options);
+        Assert.True(AssetManager.Import("Text/shared.txt"));
+        Assert.True(AssetManager.TryGetPersistentId("Text/shared.txt", out Guid persistentId));
 
-        try
-        {
-            AssetManager.Initialize(CreateOptions(assets, artifacts, enableWatcher: false));
+        TextAsset first = AssetManager.Load<TextAsset>("Text/shared.txt");
+        TextAsset second = AssetManager.Load<TextAsset>(persistentId);
 
-            Assert.False(AssetManager.Import("Missing/nope.txt"));
-        }
-        finally
-        {
-            AssetManager.Shutdown();
-            DeleteRoot(root);
-        }
+        Assert.Same(first, second);
+        Assert.Equal("shared", first.content);
+        Assert.True(AssetManager.Unload(first));
+        Assert.Single(AssetManager.GetLoadedPaths());
+        Assert.True(AssetManager.Unload(second));
+        Assert.Empty(AssetManager.GetLoadedPaths());
     }
 
     [Fact]
-    public void Import_ReturnsFalse_WhenNoImporterMatches()
+    public void AutomaticallyDiscoveredImporter_AndOwnerHold_RetainTransitiveDependencies()
     {
-        string root = CreateRoot();
-        string assets = Path.Combine(root, "Assets");
-        string artifacts = Path.Combine(root, "Library", "Artifacts");
-        string relativePath = "Config/import.txt";
-        WriteSourceFile(assets, relativePath, "imported");
+        using TestAssetWorkspace workspace = new();
+        workspace.Write("Text/dependency.txt", "dependency");
+        workspace.Write("Graphs/root.dependency", "Text/dependency.txt");
+        AssetManager.Initialize(workspace.options);
+        Assert.True(AssetManager.Import("Text/dependency.txt"));
+        Assert.True(AssetManager.Import("Graphs/root.dependency"));
 
-        try
-        {
-            AssetManager.Initialize(new AssetManagerOptions
-            {
-                assetRoot = assets,
-                artifactRoot = artifacts,
-                autoRegisterBuiltInImporters = false,
-                autoRegisterImportersFromTypeCache = false,
-                enableFileSystemWatcher = false,
-                fileWatcherFlushDelayMs = 20
-            });
+        DependencyAsset root = AssetManager.Load<DependencyAsset>("Graphs/root.dependency");
+        var owner = new TestOwner();
+        Assert.True(IdentityManager.Register(owner));
+        AssetManager.TrackDependencies(owner, root);
+        Assert.True(AssetManager.Unload(root));
 
-            Assert.False(AssetManager.Import(relativePath));
-            Assert.False(System.IO.File.Exists(Path.Combine(assets, relativePath + ".imeta")));
-            Assert.False(System.IO.File.Exists(Path.Combine(artifacts, relativePath + ".abin")));
-        }
-        finally
-        {
-            AssetManager.Shutdown();
-            DeleteRoot(root);
-        }
+        Assert.Equal(
+            new[] { "Graphs/root.dependency", "Text/dependency.txt" },
+            AssetManager.GetLoadedPaths().OrderBy(static path => path, StringComparer.Ordinal));
+
+        Assert.True(IdentityManager.Unregister(owner));
+        Assert.Empty(AssetManager.GetLoadedPaths());
     }
 
     [Fact]
-    public void Import_WritesOutputs_WithoutLoadingConcreteAsset()
+    public void DirectAssetReference_RestoresMissingPlaceholderAndCanBeSavedAgain()
     {
-        string root = CreateRoot();
-        string assets = Path.Combine(root, "Assets");
-        string artifacts = Path.Combine(root, "Library", "Artifacts");
-        string relativePath = "Config/import.txt";
-        WriteSourceFile(assets, relativePath, "imported");
+        using TestAssetWorkspace workspace = new();
+        workspace.Write("Text/missing.txt", "value");
+        AssetManager.Initialize(workspace.options);
+        Assert.True(AssetManager.Import("Text/missing.txt"));
+        TextAsset loaded = AssetManager.Load<TextAsset>("Text/missing.txt");
+        Guid persistentId = loaded.identity.persistentId;
+        byte[] bytes = SerializationManager.Serialize(new AssetHolder { asset = loaded });
+        Assert.True(AssetManager.Unload(loaded));
 
-        try
-        {
-            AssetManager.Initialize(CreateOptions(assets, artifacts, enableWatcher: false));
+        workspace.Delete("Text/missing.txt");
+        workspace.Delete("Text/missing.txt.imeta");
+        workspace.DeleteArtifact("Text/missing.txt.abin");
 
-            Assert.True(AssetManager.Import(relativePath));
-            Assert.True(System.IO.File.Exists(Path.Combine(assets, relativePath + ".imeta")));
-            Assert.True(System.IO.File.Exists(Path.Combine(artifacts, relativePath + ".abin")));
+        AssetHolder restored = SerializationManager.Deserialize<AssetHolder>(bytes);
 
-            AssetRef<TextAsset> assetRef = AssetManager.GetRef<TextAsset>(relativePath);
-
-            Assert.True(assetRef.isValid);
-            Assert.Null(AssetManager.Resolve(assetRef));
-            Assert.Empty(AssetManager.GetLoadedPaths());
-
-            Assert.True(AssetManager.Load<TextAsset>(relativePath));
-            TextAsset? resolved = AssetManager.Resolve(assetRef);
-            Assert.NotNull(resolved);
-            Assert.Equal("imported", resolved!.content);
-        }
-        finally
-        {
-            AssetManager.Shutdown();
-            DeleteRoot(root);
-        }
+        Assert.NotNull(restored.asset);
+        Assert.True(restored.asset!.isMissing);
+        Assert.Equal(persistentId, restored.asset.identity.persistentId);
+        Assert.Equal("Text/missing.txt", restored.asset.sourcePath);
+        Assert.NotEmpty(SerializationManager.Serialize(restored));
     }
 
     [Fact]
-    public void GetRef_ReturnsPersistentHandleWithoutLoading_WhenMetadataExists()
+    public void TrackSerializedReferences_IncludesHiddenSerializableMembers()
     {
-        string root = CreateRoot();
-        string assets = Path.Combine(root, "Assets");
-        string artifacts = Path.Combine(root, "Library", "Artifacts");
-        string relativePath = "Config/handle.txt";
-        WriteSourceFile(assets, relativePath, "handle");
+        using TestAssetWorkspace workspace = new();
+        workspace.Write("Text/hidden.txt", "hidden");
+        AssetManager.Initialize(workspace.options);
+        Assert.True(AssetManager.Import("Text/hidden.txt"));
+        TextAsset asset = AssetManager.Load<TextAsset>("Text/hidden.txt");
+        var owner = new TestOwner();
+        Assert.True(IdentityManager.Register(owner));
 
-        try
-        {
-            AssetManager.Initialize(CreateOptions(assets, artifacts, enableWatcher: false));
+        AssetManager.TrackSerializedReferences(owner, new HiddenAssetHolder(asset));
+        Assert.True(AssetManager.Unload(asset));
+        Assert.Single(AssetManager.GetLoadedPaths());
 
-            AssetRef<TextAsset> refBeforeLoad = AssetManager.GetRef<TextAsset>(relativePath);
-            Assert.True(refBeforeLoad.isValid);
-            Assert.Null(AssetManager.Resolve(refBeforeLoad));
-
-            Assert.True(AssetManager.Import(relativePath));
-            Assert.True(AssetManager.Load<TextAsset>(relativePath));
-            TextAsset? resolved = AssetManager.Resolve(refBeforeLoad);
-
-            Assert.NotNull(resolved);
-            Assert.Equal("handle", resolved!.content);
-            Assert.Equal(refBeforeLoad.identity.persistentId, resolved.identity.persistentId);
-        }
-        finally
-        {
-            AssetManager.Shutdown();
-            DeleteRoot(root);
-        }
+        Assert.True(IdentityManager.Unregister(owner));
+        Assert.Empty(AssetManager.GetLoadedPaths());
     }
 
     [Fact]
-    public void IdentityRef_Resolve_Unload_AndUnloadAll_Work()
+    public void Import_RejectsDependencyCycleWithCompletePathChain()
     {
-        string root = CreateRoot();
-        string assets = Path.Combine(root, "Assets");
-        string artifacts = Path.Combine(root, "Library", "Artifacts");
-        WriteSourceFile(assets, "A/one.txt", "one");
-        WriteSourceFile(assets, "B/two.txt", "two");
+        using TestAssetWorkspace workspace = new();
+        workspace.Write("Graphs/a.dependency", "Graphs/b.dependency");
+        AssetManager.Initialize(workspace.options);
+        Assert.True(AssetManager.Import("Graphs/a.dependency"));
+        workspace.Write("Graphs/b.dependency", "Graphs/a.dependency");
 
-        try
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => AssetManager.Import("Graphs/b.dependency"));
+
+        Assert.Contains("Graphs/a.dependency", exception.Message);
+        Assert.Contains("Graphs/b.dependency", exception.Message);
+        Assert.Contains("->", exception.Message);
+    }
+
+    private sealed class AssetHolder : ISerializable
+    {
+        [SerializableProperty]
+        public TextAsset? asset { get; set; }
+    }
+
+    private sealed class HiddenAssetHolder(TextAsset asset) : ISerializable
+    {
+        [SerializableProperty(PropertyVisibility.Hide)]
+        private TextAsset? m_asset = asset;
+
+        internal TextAsset? Value => m_asset;
+    }
+
+    private sealed class TestOwner : IIdentityObject;
+
+    private sealed class TestAssetWorkspace : IDisposable
+    {
+        private readonly string m_root = Path.Combine(
+            Path.GetTempPath(),
+            "InnoAssetManagerTests",
+            Guid.NewGuid().ToString("N"));
+
+        internal TestAssetWorkspace()
         {
-            AssetManager.Initialize(CreateOptions(assets, artifacts, enableWatcher: false));
-
-            Assert.True(AssetManager.Import("A/one.txt"));
-            Assert.True(AssetManager.Import("B/two.txt"));
-            Assert.True(AssetManager.Load<TextAsset>("A/one.txt"));
-            Assert.True(AssetManager.Load<TextAsset>("B/two.txt"));
-
-            AssetRef<TextAsset> one = AssetManager.GetRef<TextAsset>("A/one.txt");
-            AssetRef<TextAsset> two = AssetManager.GetRef<TextAsset>("B/two.txt");
-
-            Assert.Equal(new[] { "A/one.txt", "B/two.txt" }, AssetManager.GetLoadedPaths());
-            Assert.Equal("one", AssetManager.Resolve(one)!.content);
-            Assert.Equal("two", AssetManager.Resolve(two)!.content);
-
-            Assert.True(AssetManager.Unload(one));
-            Assert.Null(AssetManager.Resolve(one));
-            Assert.NotNull(AssetManager.Resolve(two));
-
-            AssetManager.UnloadAll();
-            Assert.Empty(AssetManager.GetLoadedPaths());
-            Assert.Null(AssetManager.Resolve(two));
+            Directory.CreateDirectory(assetRoot);
+            Directory.CreateDirectory(artifactRoot);
         }
-        finally
+
+        internal string assetRoot => Path.Combine(m_root, "Assets");
+        internal string artifactRoot => Path.Combine(m_root, "Artifacts");
+        internal AssetManagerOptions options => AssetManagerOptions.Create(assetRoot, artifactRoot);
+
+        internal void Write(string relativePath, string content)
+        {
+            string path = Path.Combine(assetRoot, relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            System.IO.File.WriteAllText(path, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        }
+
+        internal void Delete(string relativePath)
+        {
+            string path = Path.Combine(assetRoot, relativePath);
+            if (System.IO.File.Exists(path))
+                System.IO.File.Delete(path);
+        }
+
+        internal void DeleteArtifact(string relativePath)
+        {
+            string path = Path.Combine(artifactRoot, relativePath);
+            if (System.IO.File.Exists(path))
+                System.IO.File.Delete(path);
+        }
+
+        public void Dispose()
         {
             AssetManager.Shutdown();
-            DeleteRoot(root);
+            if (Directory.Exists(m_root))
+                Directory.Delete(m_root, recursive: true);
         }
     }
+}
 
-    [Fact]
-    public void Rescan_ReimportsDiskOutputs_AndReloadsOnlyAlreadyLoadedAssets()
+[StableTypeId("dbb8bd75-4038-457a-8f75-a51194f89750")]
+internal sealed class DependencyAsset : AssetObject;
+
+internal sealed class DependencyAssetImporter : AssetImporter<DependencyAsset>
+{
+    private static readonly IReadOnlyList<string> C_EXTENSIONS = new[] { ".dependency" };
+
+    public override string importerId => "inno.tests.dependency";
+    public override IReadOnlyList<string> supportedExtensions => C_EXTENSIONS;
+
+    public override AssetImportResult<DependencyAsset> ImportTyped(in AssetImportContext context)
     {
-        string root = CreateRoot();
-        string assets = Path.Combine(root, "Assets");
-        string artifacts = Path.Combine(root, "Library", "Artifacts");
-        string loadedPath = "A/loaded.txt";
-        string unloadedPath = "B/unloaded.txt";
-        WriteSourceFile(assets, loadedPath, "loaded-v1");
-        WriteSourceFile(assets, unloadedPath, "unloaded-v1");
-
-        try
-        {
-            AssetManager.Initialize(CreateOptions(assets, artifacts, enableWatcher: false));
-
-            AssetRef<TextAsset> loadedRef = AssetManager.GetRef<TextAsset>(loadedPath);
-            AssetRef<TextAsset> unloadedRef = AssetManager.GetRef<TextAsset>(unloadedPath);
-            Assert.True(loadedRef.isValid);
-            Assert.True(unloadedRef.isValid);
-
-            Assert.True(AssetManager.Load<TextAsset>(loadedPath));
-            Assert.Equal("loaded-v1", AssetManager.Resolve(loadedRef)!.content);
-            Assert.Null(AssetManager.Resolve(unloadedRef));
-
-            byte[] unloadedArtifactBefore = System.IO.File.ReadAllBytes(Path.Combine(artifacts, unloadedPath + ".abin"));
-            WriteSourceFile(assets, loadedPath, "loaded-v2");
-            WriteSourceFile(assets, unloadedPath, "unloaded-v2");
-
-            AssetManager.Rescan();
-
-            TextAsset? loadedAfterRescan = AssetManager.Resolve(loadedRef);
-            Assert.NotNull(loadedAfterRescan);
-            Assert.Equal("loaded-v2", loadedAfterRescan!.content);
-            Assert.Equal(loadedRef.identity.persistentId, loadedAfterRescan.identity.persistentId);
-            Assert.Null(AssetManager.Resolve(unloadedRef));
-
-            byte[] unloadedArtifactAfter = System.IO.File.ReadAllBytes(Path.Combine(artifacts, unloadedPath + ".abin"));
-            Assert.NotEqual(unloadedArtifactBefore, unloadedArtifactAfter);
-
-            Assert.True(AssetManager.Load<TextAsset>(unloadedPath));
-            Assert.Equal("unloaded-v2", AssetManager.Resolve(unloadedRef)!.content);
-        }
-        finally
-        {
-            AssetManager.Shutdown();
-            DeleteRoot(root);
-        }
-    }
-
-    [Fact]
-    public void FileSystemApi_AndWatcherReimport_Work()
-    {
-        string root = CreateRoot();
-        string assets = Path.Combine(root, "Assets");
-        string artifacts = Path.Combine(root, "Library", "Artifacts");
-        string relativePath = "Config/game.txt";
-        string source = Path.Combine(assets, "Config", "game.txt");
-        WriteSourceFile(assets, relativePath, "one");
-
-        try
-        {
-            AssetManager.Initialize(CreateOptions(assets, artifacts, enableWatcher: true));
-            Assert.True(AssetManager.Import(relativePath));
-            Assert.True(AssetManager.Load<TextAsset>(relativePath));
-            AssetRef<TextAsset> assetRef = AssetManager.GetRef<TextAsset>(relativePath);
-
-            string graph = AssetManager.GetFileSystemTreeGraph();
-            Assert.Contains("Assets/", graph);
-            Assert.Contains("game.txt", graph);
-
-            IReadOnlyList<AssetFileEntry> entries = AssetManager.GetFileSystemEntries(includeDirectories: true);
-            Assert.Contains(entries, static x => x.relativePath == "Config/game.txt");
-            Assert.True(AssetManager.TryGetFileSystemEntry("Config/game.txt", out AssetFileEntry entry));
-            Assert.Equal(".txt", entry.extension);
-
-            IReadOnlyList<AssetFileEntry> children = AssetManager.GetFileSystemChildren("Config");
-            Assert.Single(children.Where(static x => x.relativePath == "Config/game.txt"));
-
-            using var changed = new AutoResetEvent(false);
-            AssetManager.SourceFileSystemChanged += OnChanged;
-            try
-            {
-                System.IO.File.WriteAllText(source, "two", Encoding.UTF8);
-                Assert.True(changed.WaitOne(TimeSpan.FromSeconds(3)));
-
-                bool reloaded = SpinWait.SpinUntil(
-                    () => AssetManager.Resolve(assetRef)?.content == "two",
-                    TimeSpan.FromSeconds(2));
-                Assert.True(reloaded);
-            }
-            finally
-            {
-                AssetManager.SourceFileSystemChanged -= OnChanged;
-            }
-
-            void OnChanged(IReadOnlyList<AssetChangedEvent> _)
-                => changed.Set();
-        }
-        finally
-        {
-            AssetManager.Shutdown();
-            DeleteRoot(root);
-        }
-    }
-
-    private static AssetManagerOptions CreateOptions(string assets, string artifacts, bool enableWatcher)
-    {
-        return new AssetManagerOptions
-        {
-            assetRoot = assets,
-            artifactRoot = artifacts,
-            autoRegisterBuiltInImporters = true,
-            autoRegisterImportersFromTypeCache = false,
-            enableFileSystemWatcher = enableWatcher,
-            fileWatcherFlushDelayMs = 20
-        };
-    }
-
-    private static string CreateRoot()
-    {
-        string root = Path.Combine(Path.GetTempPath(), "InnoAssetsTests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        return root;
-    }
-
-    private static void DeleteRoot(string root)
-    {
-        if (Directory.Exists(root))
-            Directory.Delete(root, recursive: true);
-    }
-
-    private static void WriteSourceFile(string assetsRoot, string relativePath, string content)
-    {
-        string path = Path.Combine(assetsRoot, relativePath);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        System.IO.File.WriteAllText(path, content, Encoding.UTF8);
+        string dependency = context.ReadUtf8Text().Trim();
+        return new AssetImportResult<DependencyAsset>(
+            new DependencyAsset(),
+            context.sourceBytes.ToArray(),
+            string.IsNullOrWhiteSpace(dependency) ? [] : new[] { dependency });
     }
 }

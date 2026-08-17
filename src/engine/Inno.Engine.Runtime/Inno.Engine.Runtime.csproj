@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\core\Inno.Core.Framework\Inno.Core.Framework.csproj" />
+    <ProjectReference Include="..\Inno.Engine.Assets\Inno.Engine.Assets.csproj" />
     <ProjectReference Include="..\Inno.Engine.Scene\Inno.Engine.Scene.csproj" />
   </ItemGroup>
 
