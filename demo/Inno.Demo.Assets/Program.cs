@@ -11,6 +11,7 @@ using Inno.Assets.Types;
 using Inno.Core.Assemblies;
 using Inno.Core.Identity;
 using Inno.Core.Logging;
+using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 
 namespace Inno.Demo.Assets;
@@ -28,6 +29,7 @@ internal static class Program
         {
             cacheDirectory = Path.Combine(executionRoot, "Library", "Assemblies")
         });
+        TypeCacheManager.Initialize();
         SerializationManager.Initialize();
 
         string assetsRoot = Path.Combine(executionRoot, "Assets");
@@ -97,6 +99,7 @@ internal static class Program
             AssetManager.SourceFileSystemChanged -= OnSourceChanged;
             AssetManager.Shutdown();
             SerializationManager.Shutdown();
+            TypeCacheManager.Shutdown();
             AssemblyManager.Shutdown();
             IdentityManager.Shutdown();
             LogManager.Shutdown();

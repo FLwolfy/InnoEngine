@@ -51,7 +51,7 @@ internal sealed class SerializableObjectPropertyDrawer : IPropertyDrawer
             context.SetValue(null);
         }
 
-        IReadOnlyList<Type> candidates = TypeCache.GetTypesImplementing<ISerializable>();
+        IReadOnlyList<Type> candidates = TypeCacheManager.GetTypesImplementing<ISerializable>();
         for (int i = 0; i < candidates.Count; i++)
         {
             Type candidate = candidates[i];

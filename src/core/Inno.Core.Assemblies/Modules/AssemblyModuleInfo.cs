@@ -9,7 +9,7 @@ namespace Inno.Core.Assemblies;
 public enum AssemblyModuleStatus
 {
     /// <summary>
-    /// The module generation is visible to TypeCache and registries.
+    /// The module generation is visible to assembly catalog participants.
     /// </summary>
     Active
 }

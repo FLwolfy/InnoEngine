@@ -352,7 +352,7 @@ public sealed class AssetLoader : IDisposable
                 $"Importer '{importer.GetType().FullName}' returned '{product.asset.GetType().FullName}' " +
                 $"instead of '{importer.targetAssetType.FullName}'.");
         }
-        if (!TypeCache.TryGetStableTypeId(product.asset.GetType(), out Guid stableTypeId))
+        if (!TypeCacheManager.TryGetStableTypeId(product.asset.GetType(), out Guid stableTypeId))
         {
             throw new InvalidOperationException(
                 $"Imported asset type '{product.asset.GetType().FullName}' requires a StableTypeId.");
@@ -709,7 +709,7 @@ public sealed class AssetLoader : IDisposable
                 Guid pendingId = m_pendingImportIds[normalized];
                 AssetImporter? pendingImporter = m_importers.FindByPath(normalized);
                 Guid stableType = pendingImporter is not null &&
-                    TypeCache.TryGetStableTypeId(pendingImporter.targetAssetType, out Guid typeId)
+                    TypeCacheManager.TryGetStableTypeId(pendingImporter.targetAssetType, out Guid typeId)
                     ? typeId
                     : Guid.Empty;
                 result[pendingId] = new AssetDependency(pendingId, stableType, normalized);
@@ -1064,7 +1064,7 @@ public sealed class AssetLoader : IDisposable
             return null;
         if (record.asset is not null)
             return record.asset.GetType();
-        return TypeCache.TryResolveType(record.stableTypeId, out Type? type) &&
+        return TypeCacheManager.TryResolveType(record.stableTypeId, out Type? type) &&
             type is not null && typeof(AssetObject).IsAssignableFrom(type)
             ? type
             : m_importers.FindById(record.meta.importerId)?.targetAssetType;
@@ -1073,7 +1073,7 @@ public sealed class AssetLoader : IDisposable
     private Type ResolveDependencyExpectedType(AssetDependency dependency)
     {
         if (dependency.stableTypeId != Guid.Empty &&
-            TypeCache.TryResolveType(dependency.stableTypeId, out Type? type) &&
+            TypeCacheManager.TryResolveType(dependency.stableTypeId, out Type? type) &&
             type is not null && typeof(AssetObject).IsAssignableFrom(type))
         {
             return type;

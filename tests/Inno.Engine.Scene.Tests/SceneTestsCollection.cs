@@ -3,6 +3,7 @@ using System.IO;
 
 using Inno.Core.Assemblies;
 using Inno.Core.Identity;
+using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 
 using Xunit;
@@ -25,12 +26,14 @@ public sealed class SceneTestsFixture : IDisposable
         {
             cacheDirectory = Path.Combine(Path.GetTempPath(), "InnoSceneTests", "Assemblies")
         });
+        TypeCacheManager.Initialize();
         SerializationManager.Initialize();
     }
 
     public void Dispose()
     {
         SerializationManager.Shutdown();
+        TypeCacheManager.Shutdown();
         AssemblyManager.Shutdown();
         IdentityManager.Shutdown();
     }

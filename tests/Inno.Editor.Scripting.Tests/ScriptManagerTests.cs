@@ -42,6 +42,7 @@ public sealed class ScriptManagerTests : IDisposable
         {
             cacheDirectory = Path.Combine(m_projectRoot, "Library", "Assemblies")
         });
+        TypeCacheManager.Initialize();
         SerializationManager.Initialize();
         m_manager = new ScriptManager(new ScriptManagerOptions
         {
@@ -55,6 +56,7 @@ public sealed class ScriptManagerTests : IDisposable
         SceneManager.UnloadAllScenes();
         m_manager.Dispose();
         SerializationManager.Shutdown();
+        TypeCacheManager.Shutdown();
         AssemblyManager.Shutdown();
         IdentityManager.Shutdown();
         if (Directory.Exists(m_projectRoot))
@@ -99,8 +101,8 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(File.Exists(Path.Combine(result.outputDirectory!, "Inno.GameScripts.pdb")));
         Assert.True(File.Exists(Path.Combine(result.outputDirectory!, "Inno.EditorScripts.dll")));
         Assert.True(m_manager.ApplyPendingReload());
-        Type behavior = TypeCache.current.types.Single(type => type.Name == "ProjectBehavior");
-        Type drawer = TypeCache.current.types.Single(type => type.Name == "ProjectBehaviorDrawer");
+        Type behavior = TypeCacheManager.current.types.Single(type => type.Name == "ProjectBehavior");
+        Type drawer = TypeCacheManager.current.types.Single(type => type.Name == "ProjectBehaviorDrawer");
         Assert.Equal(AssemblyGroup.Game, behavior.Assembly.GetInnoAssemblyGroup());
         Assert.Equal(AssemblyGroup.Editor, drawer.Assembly.GetInnoAssemblyGroup());
     }
@@ -114,7 +116,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(m_manager.ApplyPendingReload());
         Type first = ResolveVersionedBehavior();
         Assert.Equal(1, ReadVersion(first));
-        Assert.True(TypeCache.TryGetRuntimeTypeId(first, out int firstRuntimeId));
+        Assert.True(TypeCacheManager.TryGetRuntimeTypeId(first, out int firstRuntimeId));
 
         WriteVersionedBehavior(2);
         ScriptCompilationResult secondCompilation = await m_manager.CompileAsync();
@@ -123,7 +125,7 @@ public sealed class ScriptManagerTests : IDisposable
         Type second = ResolveVersionedBehavior();
         Assert.NotSame(first, second);
         Assert.Equal(2, ReadVersion(second));
-        Assert.True(TypeCache.TryGetRuntimeTypeId(second, out int secondRuntimeId));
+        Assert.True(TypeCacheManager.TryGetRuntimeTypeId(second, out int secondRuntimeId));
         Assert.NotEqual(firstRuntimeId, secondRuntimeId);
 
         Write("VersionedBehavior.cs", "public sealed class VersionedBehavior : GameBehavior {");
@@ -149,7 +151,7 @@ public sealed class ScriptManagerTests : IDisposable
 
         Assert.False(failed.success);
         Assert.False(m_manager.ApplyPendingReload());
-        Assert.DoesNotContain(TypeCache.current.types, type => type.Name == "VersionedBehavior");
+        Assert.DoesNotContain(TypeCacheManager.current.types, type => type.Name == "VersionedBehavior");
     }
 
     [Fact]
@@ -189,7 +191,7 @@ public sealed class ScriptManagerTests : IDisposable
 
         Assert.True(result.success, FormatDiagnostics(result));
         Assert.True(m_manager.ApplyPendingReload());
-        Type consumerType = TypeCache.current.types.Single(type => type.Name == "PluginConsumer");
+        Type consumerType = TypeCacheManager.current.types.Single(type => type.Name == "PluginConsumer");
         object consumer = Activator.CreateInstance(consumerType)!;
         Assert.Equal(42, consumerType.GetProperty("value")!.GetValue(consumer));
     }
@@ -226,11 +228,11 @@ public sealed class ScriptManagerTests : IDisposable
         ScriptCompilationResult firstCompilation = await m_manager.CompileAsync();
         Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
         Assert.True(m_manager.ApplyPendingReload());
-        Type previousType = TypeCache.current.types.Single(type => type.Name == "MigratingBehavior");
+        Type previousType = TypeCacheManager.current.types.Single(type => type.Name == "MigratingBehavior");
         var scene = new GameScene("Hot Reload");
         GameObject gameObject = scene.CreateObject("Actor");
         GameComponent previous = gameObject.AddComponent(previousType);
-        Type previousSystemType = TypeCache.current.types.Single(type => type.Name == "MigratingSystem");
+        Type previousSystemType = TypeCacheManager.current.types.Single(type => type.Name == "MigratingSystem");
         GameSystem previousSystem = scene.AddSystem(previousSystemType);
         SetProperty(previous, "value", 37);
         SetProperty(previousSystem, "value", 51);
@@ -362,7 +364,7 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     private static Type ResolveVersionedBehavior()
-        => TypeCache.current.types.Single(type => type.Name == "VersionedBehavior");
+        => TypeCacheManager.current.types.Single(type => type.Name == "VersionedBehavior");
 
     private static int ReadVersion(Type type)
         => (int)type.GetProperty("version")!.GetValue(Activator.CreateInstance(type))!;

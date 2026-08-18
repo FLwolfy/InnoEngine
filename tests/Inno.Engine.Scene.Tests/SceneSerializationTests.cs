@@ -48,7 +48,7 @@ public sealed class SceneSerializationTests : IDisposable
         Guid childId = child.identity.persistentId;
         byte[] bytes = SerializationManager.Serialize(source);
         Assert.Contains(
-            TypeCache.GetTypesWithAttribute<SerializationExtensionAttribute>(),
+            TypeCacheManager.GetTypesWithAttribute<SerializationExtensionAttribute>(),
             static type => type.Name == "GameSceneConverter");
         SceneManager.LoadScene(source);
         Assert.True(SceneManager.UnloadScene(source));

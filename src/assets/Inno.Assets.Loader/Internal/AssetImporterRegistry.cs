@@ -4,7 +4,6 @@ using System.Collections.Frozen;
 using System.IO;
 using System.Linq;
 
-using Inno.Core.Assemblies;
 using Inno.Core.Reflection;
 
 namespace Inno.Assets.Loader;

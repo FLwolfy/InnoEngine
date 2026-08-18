@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 
 using Inno.Core.Assemblies;
 using Inno.Core.Framework;
+using Inno.Core.Reflection;
 using Inno.Engine.Scene.Assets;
 
 namespace Inno.Editor.Scripting;
@@ -175,7 +176,8 @@ public sealed class ScriptManager : IDisposable
         }
 
         using AssemblyReloadSession reload = AssemblyManager.BeginReload(handle, request);
-        SceneHotReloadMigration migration = SceneHotReloadMigration.Capture(reload.context);
+        TypeCacheReloadContext typeReload = reload.context.GetContext<TypeCacheReloadContext>();
+        SceneHotReloadMigration migration = SceneHotReloadMigration.Capture(typeReload);
         migration.PrepareForActivation();
         if (Shell.isInitialized)
         {

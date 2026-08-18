@@ -29,6 +29,7 @@ public sealed class AssetManagerContractTests : IDisposable
         {
             cacheDirectory = Path.Combine(Path.GetTempPath(), "InnoAssetContractTests", "Assemblies")
         });
+        TypeCacheManager.Initialize();
         SerializationManager.Initialize();
     }
 
@@ -36,6 +37,7 @@ public sealed class AssetManagerContractTests : IDisposable
     {
         AssetManager.Shutdown();
         SerializationManager.Shutdown();
+        TypeCacheManager.Shutdown();
         AssemblyManager.Shutdown();
         IdentityManager.Shutdown();
     }

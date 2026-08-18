@@ -1,4 +1,4 @@
-namespace Inno.Core.Reflection;
+namespace Inno.Core.Assemblies;
 
 /// <summary>
 /// Logical group classification for Inno assemblies.
@@ -14,7 +14,7 @@ public enum AssemblyGroup
     /// Native-level assembly group.
     /// </summary>
     Native,
-    
+
     /// <summary>
     /// Game-level assembly group.
     /// </summary>

@@ -16,18 +16,19 @@ public sealed class AssemblyReloadSession : IDisposable
     {
         m_state = state;
         context = new AssemblyReloadContext(
-            state.previousTypes,
-            state.candidateTypes,
-            state.previousModule.handle);
+            state.previousCatalog,
+            state.candidateCatalog,
+            state.previousModule.handle,
+            state.refresh.contexts);
     }
 
     /// <summary>
-    /// Gets the old and candidate type snapshots used for state migration.
+    /// Gets the old and candidate assembly catalogs and participant migration contexts.
     /// </summary>
     public AssemblyReloadContext context { get; }
 
     /// <summary>
-    /// Atomically publishes the candidate module, TypeCache, and registry snapshots.
+    /// Atomically publishes the candidate module and all participant snapshots.
     /// </summary>
     public void Activate()
     {
@@ -75,9 +76,9 @@ internal sealed class ReloadState
 {
     internal required AssemblyModuleEntry previousModule { get; init; }
     internal required AssemblyModuleEntry candidateModule { get; init; }
-    internal required Inno.Core.Reflection.TypeCacheSnapshot previousTypes { get; init; }
-    internal required Inno.Core.Reflection.TypeCacheSnapshot candidateTypes { get; init; }
-    internal required RegistryRefreshSet registryRefresh { get; init; }
+    internal required AssemblyCatalogSnapshot previousCatalog { get; init; }
+    internal required AssemblyCatalogSnapshot candidateCatalog { get; init; }
+    internal required AssemblyCatalogRefreshSet refresh { get; init; }
     internal bool activated { get; set; }
     internal bool finished { get; set; }
 }

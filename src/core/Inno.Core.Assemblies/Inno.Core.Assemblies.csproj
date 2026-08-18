@@ -6,7 +6,4 @@
     <InnoAssemblyGroup>Core</InnoAssemblyGroup>
   </PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />
-  </ItemGroup>
 </Project>

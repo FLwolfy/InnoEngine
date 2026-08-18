@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using System.Reflection.Emit;
 
+using Inno.Core.Assemblies;
 using Inno.Core.Reflection;
 
 using Xunit;

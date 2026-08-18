@@ -9,4 +9,8 @@
     <InnoScriptGlobalUsings>Inno.Core.Reflection</InnoScriptGlobalUsings>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" />
+  </ItemGroup>
+
 </Project>

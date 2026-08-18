@@ -1,9 +1,8 @@
 using System;
 
-using Inno.Core.Assemblies.Internal;
-using Inno.Core.Reflection;
+using Inno.Core.Reflection.Internal;
 
-namespace Inno.Core.Assemblies;
+namespace Inno.Core.Reflection;
 
 /// <summary>
 /// Builds immutable extension registries from versioned type-cache snapshots.
@@ -14,7 +13,7 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
 {
     private readonly object m_sync = new();
     private readonly RegistryAdapter m_registryAdapter;
-    private readonly RegistryRegistration m_registration;
+    private readonly TypeRegistryRegistration m_registration;
 
     private TSnapshot? m_current;
     private long m_typeCacheVersion = -1;
@@ -26,7 +25,7 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
     protected TypeRegistry()
     {
         m_registryAdapter = new RegistryAdapter(this);
-        m_registration = RegistryCoordinator.Register(m_registryAdapter);
+        m_registration = TypeRegistryCoordinator.Register(m_registryAdapter);
     }
 
     /// <summary>
@@ -47,7 +46,7 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
     public void Refresh()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
-        IRegistryRefreshTransaction transaction = Prepare(TypeCache.current, allowDisposed: false);
+        ITypeRegistryTransaction transaction = Prepare(TypeCacheManager.current, allowDisposed: false);
         transaction.Activate();
         transaction.Complete();
     }
@@ -99,7 +98,7 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
     {
         get
         {
-            TypeCacheSnapshot types = TypeCache.current;
+            TypeCacheSnapshot types = TypeCacheManager.current;
             lock (m_sync)
             {
                 if (m_current is not null && m_typeCacheVersion == types.version)
@@ -115,11 +114,15 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
     /// <summary>
     /// Builds a complete candidate registry without changing the active snapshot.
     /// </summary>
+    /// <param name="types">The candidate type-cache snapshot.</param>
+    /// <returns>The complete immutable registry snapshot.</returns>
     protected abstract TSnapshot Build(TypeCacheSnapshot types);
 
     /// <summary>
     /// Runs after a new snapshot is committed and before the previous snapshot is released.
     /// </summary>
+    /// <param name="previous">The previous active snapshot.</param>
+    /// <param name="current">The newly committed snapshot.</param>
     protected virtual void OnCommitted(TSnapshot previous, TSnapshot current)
     {
     }
@@ -127,6 +130,7 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
     /// <summary>
     /// Releases resources owned by a registry snapshot.
     /// </summary>
+    /// <param name="snapshot">The snapshot that is no longer active.</param>
     protected virtual void DisposeSnapshot(TSnapshot snapshot)
     {
         if (snapshot is IDisposable disposable)
@@ -136,6 +140,9 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
     /// <summary>
     /// Creates a validated extension instance using a parameterless constructor.
     /// </summary>
+    /// <typeparam name="TExtension">The required extension contract.</typeparam>
+    /// <param name="type">The concrete implementation type.</param>
+    /// <returns>A newly created extension instance.</returns>
     protected static TExtension CreateExtension<TExtension>(Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
@@ -158,18 +165,18 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
         }
     }
 
-    private IRegistryRefreshTransaction Prepare(TypeCacheSnapshot types, bool allowDisposed)
+    private ITypeRegistryTransaction Prepare(TypeCacheSnapshot types, bool allowDisposed)
     {
         lock (m_sync)
         {
             if (m_disposed)
             {
                 if (allowDisposed)
-                    return RegistryRefreshTransaction.noop;
+                    return TypeRegistryNoopTransaction.instance;
                 throw new ObjectDisposedException(GetType().FullName);
             }
             if (m_current is not null && m_typeCacheVersion == types.version)
-                return RegistryRefreshTransaction.noop;
+                return TypeRegistryNoopTransaction.instance;
 
             TSnapshot candidate = Build(types);
             return new RegistryTransaction(this, candidate, types.version, m_current, m_typeCacheVersion);
@@ -178,7 +185,7 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
 
     private sealed class RegistryAdapter(TypeRegistry<TSnapshot> owner) : ITypeRegistry
     {
-        public IRegistryRefreshTransaction Prepare(TypeCacheSnapshot types)
+        public ITypeRegistryTransaction Prepare(TypeCacheSnapshot types)
             => owner.Prepare(types, allowDisposed: true);
     }
 
@@ -187,7 +194,7 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
         TSnapshot candidate,
         long candidateVersion,
         TSnapshot? previous,
-        long previousVersion) : IRegistryRefreshTransaction
+        long previousVersion) : ITypeRegistryTransaction
     {
         private bool m_activated;
         private bool m_finished;

@@ -21,7 +21,7 @@ internal sealed class AssetObjectConverter : SerializationConverter<AssetObject>
         Guid persistentId = value.identity.persistentId;
         if (persistentId == Guid.Empty)
             throw new InvalidOperationException($"Asset '{value.GetType().FullName}' has no persistent identity at '{writer.path}'.");
-        if (!TypeCache.TryGetStableTypeId(value.GetType(), out Guid stableTypeId))
+        if (!TypeCacheManager.TryGetStableTypeId(value.GetType(), out Guid stableTypeId))
         {
             throw new InvalidOperationException(
                 $"Asset type '{value.GetType().FullName}' requires a StableTypeId at '{writer.path}'.");

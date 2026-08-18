@@ -19,19 +19,19 @@ public static class SerializationManager
     public static bool isInitialized { get; private set; }
 
     /// <summary>
-    /// Initializes serialization converters from the current <see cref="TypeCache"/> catalog.
+    /// Initializes serialization converters from the current <see cref="TypeCacheManager"/> catalog.
     /// </summary>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when <see cref="TypeCache"/> has not been initialized.
+    /// Thrown when <see cref="TypeCacheManager"/> has not been initialized.
     /// </exception>
     public static void Initialize()
     {
         lock (S_LIFECYCLE_LOCK)
         {
-            if (!TypeCache.isInitialized)
+            if (!TypeCacheManager.isInitialized)
             {
                 throw new InvalidOperationException(
-                    "SerializationManager requires AssemblyManager to be initialized first.");
+                    "SerializationManager requires TypeCacheManager to be initialized first.");
             }
 
             ConverterRegistry.Initialize();
@@ -211,7 +211,7 @@ public static class SerializationManager
         if (!isInitialized)
         {
             throw new InvalidOperationException(
-                "SerializationManager is not initialized. Call AssemblyManager.Initialize() and SerializationManager.Initialize() before using serialization APIs.");
+                "SerializationManager is not initialized. Initialize AssemblyManager, TypeCacheManager, and SerializationManager before using serialization APIs.");
         }
     }
 }

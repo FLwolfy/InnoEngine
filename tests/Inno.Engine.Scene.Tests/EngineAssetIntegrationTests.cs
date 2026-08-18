@@ -243,7 +243,7 @@ public sealed class EngineAssetIntegrationTests : IDisposable
     [Fact]
     public void EngineImporters_AreDiscoveredWithoutManualRegistration()
     {
-        var importerTypes = TypeCache.GetTypesWithAttribute<AssetImporterExtensionAttribute>();
+        var importerTypes = TypeCacheManager.GetTypesWithAttribute<AssetImporterExtensionAttribute>();
 
         Assert.Contains(importerTypes, type => type.Name == "SceneAssetImporter");
         Assert.Contains(importerTypes, type => type.Name == "PrefabAssetImporter");

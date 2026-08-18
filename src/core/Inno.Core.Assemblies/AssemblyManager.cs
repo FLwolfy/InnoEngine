@@ -7,7 +7,6 @@ using System.Runtime.Loader;
 
 using Inno.Core.Assemblies.Internal;
 using Inno.Core.Assemblies.Loading;
-using Inno.Core.Reflection;
 
 namespace Inno.Core.Assemblies;
 
@@ -20,7 +19,8 @@ public static class AssemblyManager
     private static readonly Dictionary<AssemblyModuleHandle, AssemblyModuleEntry> S_MODULES = [];
 
     private static AssemblyManagerOptions s_options = new();
-    private static long s_typeCacheVersion;
+    private static AssemblyCatalogSnapshot s_currentCatalog = new(0, []);
+    private static long s_catalogVersion;
     private static volatile bool s_hostCatalogDirty;
     private static bool s_reloadInProgress;
     private static bool s_assemblyLoadSubscribed;
@@ -48,7 +48,7 @@ public static class AssemblyManager
     }
 
     /// <summary>
-    /// Initializes host discovery and publishes the first type-cache snapshot.
+    /// Initializes host discovery and publishes the first assembly catalog.
     /// </summary>
     public static void Initialize(AssemblyManagerOptions options)
     {
@@ -74,7 +74,6 @@ public static class AssemblyManager
             s_assemblyLoadSubscribed = true;
             isInitialized = true;
             s_hostCatalogDirty = true;
-            TypeCacheManager.ConfigureRefreshProvider(EnsureFresh);
             try
             {
                 RebuildLocked();
@@ -82,6 +81,37 @@ public static class AssemblyManager
             catch
             {
                 ShutdownLocked();
+                throw;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Registers a transactional consumer of the assembly catalog and initializes it from the
+    /// currently active generation.
+    /// </summary>
+    /// <param name="participant">The participant that derives state from catalog snapshots.</param>
+    /// <returns>A registration that removes the participant when disposed.</returns>
+    public static IDisposable RegisterCatalogParticipant(IAssemblyCatalogParticipant participant)
+    {
+        ArgumentNullException.ThrowIfNull(participant);
+        lock (S_SYNC)
+        {
+            EnsureInitialized();
+            EnsureNoReloadInProgress();
+            CatalogParticipantRegistration registration = AssemblyCatalogCoordinator.Register(participant);
+            IAssemblyCatalogTransaction? transaction = null;
+            try
+            {
+                transaction = participant.Prepare(s_currentCatalog);
+                transaction.Activate();
+                transaction.Complete();
+                return registration;
+            }
+            catch
+            {
+                transaction?.Rollback();
+                registration.Dispose();
                 throw;
             }
         }
@@ -183,17 +213,17 @@ public static class AssemblyManager
             AssemblyModuleEntry candidate = StageModule(module, request, previous.generation + 1);
             try
             {
-                TypeCacheSnapshot previousTypes = TypeCache.current;
-                TypeCacheSnapshot candidateTypes = BuildSnapshot(previousTypes, previous, candidate);
-                RegistryRefreshSet registryRefresh = RegistryCoordinator.Prepare(candidateTypes);
+                AssemblyCatalogSnapshot previousCatalog = s_currentCatalog;
+                AssemblyCatalogSnapshot candidateCatalog = BuildCatalog(previous, candidate);
+                AssemblyCatalogRefreshSet refresh = AssemblyCatalogCoordinator.Prepare(candidateCatalog);
                 s_reloadInProgress = true;
                 return new AssemblyReloadSession(new ReloadState
                 {
                     previousModule = previous,
                     candidateModule = candidate,
-                    previousTypes = previousTypes,
-                    candidateTypes = candidateTypes,
-                    registryRefresh = registryRefresh
+                    previousCatalog = previousCatalog,
+                    candidateCatalog = candidateCatalog,
+                    refresh = refresh
                 });
             }
             catch
@@ -230,7 +260,20 @@ public static class AssemblyManager
     }
 
     /// <summary>
-    /// Rebuilds TypeCache and all active type registries from the current assembly catalog.
+    /// Applies pending host assembly changes without rebuilding an unchanged catalog.
+    /// </summary>
+    public static void Refresh()
+    {
+        lock (S_SYNC)
+        {
+            EnsureInitialized();
+            if (s_hostCatalogDirty && !s_reloadInProgress)
+                RebuildLocked();
+        }
+    }
+
+    /// <summary>
+    /// Rebuilds the active assembly catalog and every registered derived-state participant.
     /// </summary>
     public static void Rebuild()
     {
@@ -260,17 +303,17 @@ public static class AssemblyManager
                 return;
 
             S_MODULES[state.previousModule.handle] = state.candidateModule;
-            TypeCacheManager.Commit(state.candidateTypes);
+            s_currentCatalog = state.candidateCatalog;
             try
             {
-                state.registryRefresh.Activate();
+                state.refresh.Activate();
                 state.activated = true;
             }
             catch
             {
                 S_MODULES[state.previousModule.handle] = state.previousModule;
-                TypeCacheManager.Commit(state.previousTypes);
-                state.registryRefresh.Rollback();
+                s_currentCatalog = state.previousCatalog;
+                state.refresh.Rollback();
                 state.finished = true;
                 s_reloadInProgress = false;
                 BeginUnload(state.candidateModule);
@@ -287,7 +330,7 @@ public static class AssemblyManager
             if (!state.activated)
                 throw new InvalidOperationException("The reload session must be activated before completion.");
 
-            state.registryRefresh.Complete();
+            state.refresh.Complete();
             state.finished = true;
             s_reloadInProgress = false;
             return BeginUnload(state.previousModule);
@@ -303,45 +346,34 @@ public static class AssemblyManager
             if (state.activated)
             {
                 S_MODULES[state.previousModule.handle] = state.previousModule;
-                TypeCacheManager.Commit(state.previousTypes);
+                s_currentCatalog = state.previousCatalog;
             }
 
-            state.registryRefresh.Rollback();
+            state.refresh.Rollback();
             state.finished = true;
             s_reloadInProgress = false;
             BeginUnload(state.candidateModule);
         }
     }
 
-    private static void EnsureFresh()
-    {
-        lock (S_SYNC)
-        {
-            while (isInitialized && s_hostCatalogDirty && !s_reloadInProgress)
-                RebuildLocked();
-        }
-    }
-
     private static void RebuildLocked()
     {
-        TypeCacheSnapshot previous = TypeCacheManager.isInitialized
-            ? TypeCacheManager.PeekCurrent()
-            : TypeCacheSnapshot.empty;
+        AssemblyCatalogSnapshot previous = s_currentCatalog;
         s_hostCatalogDirty = false;
         try
         {
-            TypeCacheSnapshot candidate = BuildSnapshot(previous, replaced: null, replacement: null);
-            RegistryRefreshSet registries = RegistryCoordinator.Prepare(candidate);
-            TypeCacheManager.Commit(candidate);
+            AssemblyCatalogSnapshot candidate = BuildCatalog(replaced: null, replacement: null);
+            AssemblyCatalogRefreshSet refresh = AssemblyCatalogCoordinator.Prepare(candidate);
+            s_currentCatalog = candidate;
             try
             {
-                registries.Activate();
-                registries.Complete();
+                refresh.Activate();
+                refresh.Complete();
             }
             catch
             {
-                TypeCacheManager.Commit(previous);
-                registries.Rollback();
+                s_currentCatalog = previous;
+                refresh.Rollback();
                 throw;
             }
         }
@@ -352,13 +384,12 @@ public static class AssemblyManager
         }
     }
 
-    private static TypeCacheSnapshot BuildSnapshot(
-        TypeCacheSnapshot previous,
+    private static AssemblyCatalogSnapshot BuildCatalog(
         AssemblyModuleEntry? replaced,
         AssemblyModuleEntry? replacement)
     {
         Assembly[] assemblies = GetActiveAssemblies(replaced, replacement);
-        return TypeCacheSnapshot.Build(assemblies, previous, ++s_typeCacheVersion);
+        return new AssemblyCatalogSnapshot(++s_catalogVersion, assemblies);
     }
 
     private static Assembly[] GetActiveAssemblies(
@@ -619,21 +650,19 @@ public static class AssemblyManager
             s_assemblyLoadSubscribed = false;
         }
 
-        if (TypeCacheManager.isInitialized)
-        {
-            RegistryRefreshSet registries = RegistryCoordinator.Prepare(TypeCacheSnapshot.empty);
-            TypeCacheManager.Commit(TypeCacheSnapshot.empty);
-            registries.Activate();
-            registries.Complete();
-        }
+        var emptyCatalog = new AssemblyCatalogSnapshot(++s_catalogVersion, []);
+        AssemblyCatalogRefreshSet refresh = AssemblyCatalogCoordinator.Prepare(emptyCatalog);
+        s_currentCatalog = emptyCatalog;
+        refresh.Activate();
+        refresh.Complete();
 
         foreach (AssemblyModuleEntry module in S_MODULES.Values)
             BeginUnload(module);
         S_MODULES.Clear();
-        TypeCacheManager.Shutdown();
         isInitialized = false;
         s_hostCatalogDirty = false;
         s_reloadInProgress = false;
-        s_typeCacheVersion = 0;
+        s_catalogVersion = 0;
+        s_currentCatalog = new AssemblyCatalogSnapshot(0, []);
     }
 }

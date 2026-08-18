@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 
 using Inno.Core.Assemblies;
+using Inno.Core.Reflection;
 using Inno.Core.Serialization.Converters;
 
 using Xunit;
@@ -18,12 +19,14 @@ public sealed class SerializationBehaviorTests : IDisposable
         {
             cacheDirectory = Path.Combine(Path.GetTempPath(), "InnoSerializationTests", "Assemblies")
         });
+        TypeCacheManager.Initialize();
         SerializationManager.Initialize();
     }
 
     public void Dispose()
     {
         SerializationManager.Shutdown();
+        TypeCacheManager.Shutdown();
         AssemblyManager.Shutdown();
     }
 

@@ -571,7 +571,7 @@ internal static class SceneGraphSerialization
 
     private static Guid GetStableComponentTypeId(Type componentType)
     {
-        if (!TypeCache.TryGetStableTypeId(componentType, out Guid stableTypeId))
+        if (!TypeCacheManager.TryGetStableTypeId(componentType, out Guid stableTypeId))
         {
             throw new InvalidOperationException(
                 $"GameComponent type '{componentType.FullName}' requires a loaded StableTypeId before persistence.");
@@ -581,7 +581,7 @@ internal static class SceneGraphSerialization
 
     private static Type ResolveComponentType(Guid stableTypeId)
     {
-        if (!TypeCache.TryResolveType(stableTypeId, out Type? componentType) || componentType is null)
+        if (!TypeCacheManager.TryResolveType(stableTypeId, out Type? componentType) || componentType is null)
             throw new InvalidDataException($"GameComponent stable type id '{stableTypeId}' is not loaded.");
         if (!typeof(GameComponent).IsAssignableFrom(componentType) || componentType.IsAbstract)
         {
@@ -593,14 +593,14 @@ internal static class SceneGraphSerialization
 
     private static Guid GetStableSystemTypeId(Type systemType)
     {
-        if (!TypeCache.TryGetStableTypeId(systemType, out Guid stableTypeId))
+        if (!TypeCacheManager.TryGetStableTypeId(systemType, out Guid stableTypeId))
             throw new InvalidOperationException($"GameSystem type '{systemType.FullName}' requires a loaded StableTypeId.");
         return stableTypeId;
     }
 
     private static Type ResolveSystemType(Guid stableTypeId)
     {
-        if (!TypeCache.TryResolveType(stableTypeId, out Type? systemType) || systemType is null)
+        if (!TypeCacheManager.TryResolveType(stableTypeId, out Type? systemType) || systemType is null)
             throw new InvalidDataException($"GameSystem stable type id '{stableTypeId}' is not loaded.");
         if (!typeof(GameSystem).IsAssignableFrom(systemType) || systemType.IsAbstract)
             throw new InvalidDataException($"Stable type id '{stableTypeId}' resolves to invalid system '{systemType.FullName}'.");

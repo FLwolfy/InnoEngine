@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
-using Inno.Core.Assemblies;
+using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 using Inno.Engine.Scene;
 
@@ -11,13 +11,13 @@ namespace Inno.Engine.Scene.Assets;
 
 internal sealed class SceneHotReloadMigration
 {
-    private readonly AssemblyReloadContext m_context;
+    private readonly TypeCacheReloadContext m_context;
     private readonly List<SceneState> m_scenes;
     private readonly List<Replacement> m_replacements = [];
     private bool m_applied;
     private bool m_finished;
 
-    private SceneHotReloadMigration(AssemblyReloadContext context, List<SceneState> scenes)
+    private SceneHotReloadMigration(TypeCacheReloadContext context, List<SceneState> scenes)
     {
         m_context = context;
         m_scenes = scenes;
@@ -29,7 +29,7 @@ internal sealed class SceneHotReloadMigration
         .Select(static state => (object)state.target)
         .ToArray();
 
-    internal static SceneHotReloadMigration Capture(AssemblyReloadContext context)
+    internal static SceneHotReloadMigration Capture(TypeCacheReloadContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         var scenes = new List<SceneState>();

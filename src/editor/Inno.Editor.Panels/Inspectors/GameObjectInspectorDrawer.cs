@@ -154,7 +154,7 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
             return;
         }
 
-        IReadOnlyList<Type> componentTypes = TypeCache.GetSubTypesOf<GameComponent>();
+        IReadOnlyList<Type> componentTypes = TypeCacheManager.GetSubTypesOf<GameComponent>();
         for (int i = 0; i < componentTypes.Count; i++)
         {
             Type componentType = componentTypes[i];

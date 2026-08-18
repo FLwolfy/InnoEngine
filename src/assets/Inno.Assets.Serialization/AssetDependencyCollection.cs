@@ -30,7 +30,7 @@ public sealed class AssetDependencyCollection
         Guid persistentId = asset.identity.persistentId;
         if (persistentId == Guid.Empty)
             throw new InvalidOperationException($"Asset '{asset.GetType().FullName}' has no persistent identity.");
-        if (!TypeCache.TryGetStableTypeId(asset.GetType(), out Guid stableTypeId))
+        if (!TypeCacheManager.TryGetStableTypeId(asset.GetType(), out Guid stableTypeId))
         {
             throw new InvalidOperationException(
                 $"Asset type '{asset.GetType().FullName}' requires a StableTypeId before it can be referenced persistently.");

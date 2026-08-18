@@ -117,7 +117,7 @@ internal sealed class GameSceneInspectorDrawer : IInspectorDrawer
                 C_SEARCH_BUFFER_SIZE))
             return;
 
-        foreach (Type systemType in TypeCache.GetSubTypesOf<GameSystem>())
+        foreach (Type systemType in TypeCacheManager.GetSubTypesOf<GameSystem>())
         {
             if (!IsAddable(systemType, scene) ||
                 !string.IsNullOrWhiteSpace(m_systemSearch) &&

@@ -9,6 +9,7 @@ using Inno.Core.Events;
 using Inno.Core.Job;
 using Inno.Core.Identity;
 using Inno.Core.Logging;
+using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 
 namespace Inno.Core.Framework;
@@ -131,6 +132,7 @@ public sealed class Shell
                     settings.projectRootDirectory,
                     DEFAULT_ASSEMBLY_CACHE_DIRECTORY)
             });
+            TypeCacheManager.Initialize();
             SerializationManager.Initialize();
 
             AssetManager.Initialize(AssetManagerOptions.Create(
@@ -142,6 +144,7 @@ public sealed class Shell
         {
             AssetManager.Shutdown();
             SerializationManager.Shutdown();
+            TypeCacheManager.Shutdown();
             AssemblyManager.Shutdown();
             LogManager.Shutdown();
             JobSystemManager.Shutdown();
@@ -248,6 +251,7 @@ public sealed class Shell
             m_coroutines.Dispose();
             AssetManager.Shutdown();
             SerializationManager.Shutdown();
+            TypeCacheManager.Shutdown();
             AssemblyManager.Shutdown();
             LogManager.Shutdown();
             JobSystemManager.Shutdown();

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
-using Inno.Core.Assemblies;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization.Converters;
 

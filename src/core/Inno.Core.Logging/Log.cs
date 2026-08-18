@@ -5,7 +5,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading;
 
-using Inno.Core.Reflection;
+using Inno.Core.Assemblies;
 
 namespace Inno.Core.Logging;
 

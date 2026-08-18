@@ -24,10 +24,12 @@ public sealed class AssemblyManagerTests : IDisposable
     public AssemblyManagerTests()
     {
         AssemblyManager.Initialize(new AssemblyManagerOptions { cacheDirectory = m_cacheDirectory });
+        TypeCacheManager.Initialize();
     }
 
     public void Dispose()
     {
+        TypeCacheManager.Shutdown();
         AssemblyManager.Shutdown();
         ForceCollection();
         if (Directory.Exists(m_cacheDirectory))
@@ -38,24 +40,25 @@ public sealed class AssemblyManagerTests : IDisposable
     public void LoadAndReloadPublishOnlyTheActiveGeneration()
     {
         AssemblyModuleHandle handle = LoadVersion("V1");
-        Assert.True(TypeCache.TryResolveType(S_RELOADABLE_TYPE_ID, out Type? previous));
+        Assert.True(TypeCacheManager.TryResolveType(S_RELOADABLE_TYPE_ID, out Type? previous));
         Assert.Equal(1, ReadVersion(previous!));
-        Assert.True(TypeCache.TryGetRuntimeTypeId(previous!, out int previousRuntimeId));
+        Assert.True(TypeCacheManager.TryGetRuntimeTypeId(previous!, out int previousRuntimeId));
 
         using AssemblyReloadSession reload = AssemblyManager.BeginReload(handle, CreateRequest("V2"));
-        Assert.True(reload.context.TryResolveReplacement(previous!, out Type? candidate));
+        TypeCacheReloadContext typeReload = reload.context.GetContext<TypeCacheReloadContext>();
+        Assert.True(typeReload.TryResolveReplacement(previous!, out Type? candidate));
         Assert.NotSame(previous, candidate);
-        Assert.Same(previous, TypeCache.current.types.Single(type => type == previous));
+        Assert.Same(previous, TypeCacheManager.current.types.Single(type => type == previous));
 
         reload.Activate();
 
-        Assert.True(TypeCache.TryResolveType(S_RELOADABLE_TYPE_ID, out Type? current));
+        Assert.True(TypeCacheManager.TryResolveType(S_RELOADABLE_TYPE_ID, out Type? current));
         Assert.Same(candidate, current);
         Assert.Equal(2, ReadVersion(current!));
-        Assert.True(TypeCache.TryGetRuntimeTypeId(current!, out int currentRuntimeId));
+        Assert.True(TypeCacheManager.TryGetRuntimeTypeId(current!, out int currentRuntimeId));
         Assert.NotEqual(previousRuntimeId, currentRuntimeId);
         _ = reload.Complete();
-        Assert.Throws<InvalidOperationException>(() => _ = reload.context.previousTypes);
+        Assert.Throws<InvalidOperationException>(() => _ = typeReload.previous);
     }
 
     [Fact]
@@ -72,7 +75,7 @@ public sealed class AssemblyManagerTests : IDisposable
         reload.Rollback();
 
         Assert.Same(previous, Assert.Single(registry.types));
-        Assert.True(TypeCache.TryResolveType(S_RELOADABLE_TYPE_ID, out Type? restored));
+        Assert.True(TypeCacheManager.TryResolveType(S_RELOADABLE_TYPE_ID, out Type? restored));
         Assert.Same(previous, restored);
     }
 
@@ -80,12 +83,12 @@ public sealed class AssemblyManagerTests : IDisposable
     public void InvalidCandidateLeavesTheActiveGenerationUntouched()
     {
         AssemblyModuleHandle handle = LoadVersion("V1");
-        Assert.True(TypeCache.TryResolveType(S_RELOADABLE_TYPE_ID, out Type? previous));
+        Assert.True(TypeCacheManager.TryResolveType(S_RELOADABLE_TYPE_ID, out Type? previous));
 
         Assert.Throws<InvalidOperationException>(
             () => AssemblyManager.BeginReload(handle, CreateRequest("Invalid")));
 
-        Assert.True(TypeCache.TryResolveType(S_RELOADABLE_TYPE_ID, out Type? current));
+        Assert.True(TypeCacheManager.TryResolveType(S_RELOADABLE_TYPE_ID, out Type? current));
         Assert.Same(previous, current);
         Assert.Equal(1, AssemblyManager.modules.Single().generation);
     }

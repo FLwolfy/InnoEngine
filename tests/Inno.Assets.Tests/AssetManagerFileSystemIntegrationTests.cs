@@ -6,6 +6,7 @@ using Inno.Assets.File;
 using Inno.Assets.Types;
 using Inno.Core.Assemblies;
 using Inno.Core.Identity;
+using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 
 using Xunit;
@@ -21,6 +22,7 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
         {
             cacheDirectory = Path.Combine(Path.GetTempPath(), "InnoAssetFileSystemTests", "Assemblies")
         });
+        TypeCacheManager.Initialize();
         SerializationManager.Initialize();
     }
 
@@ -28,6 +30,7 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
     {
         AssetManager.Shutdown();
         SerializationManager.Shutdown();
+        TypeCacheManager.Shutdown();
         AssemblyManager.Shutdown();
         IdentityManager.Shutdown();
     }

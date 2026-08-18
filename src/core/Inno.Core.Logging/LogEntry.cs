@@ -1,6 +1,6 @@
 using System;
 
-using Inno.Core.Reflection;
+using Inno.Core.Assemblies;
 
 namespace Inno.Core.Logging;
 
