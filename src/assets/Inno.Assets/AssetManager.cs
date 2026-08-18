@@ -10,6 +10,7 @@ using Inno.Assets.File;
 using Inno.Assets.Loader;
 using Inno.Assets.Serialization;
 using Inno.Core.Identity;
+using Inno.Core.Logging;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 
@@ -317,7 +318,22 @@ public static class AssetManager
         AssetLoader? loader = s_loader;
         if (loader is null)
             return;
-        loader.ApplySourceChanges(changes);
+        try
+        {
+            loader.ApplySourceChanges(changes);
+        }
+        catch (Exception exception)
+        {
+            Log.Error("Asset source refresh failed: {0}", exception);
+            try
+            {
+                loader.Rescan();
+            }
+            catch (Exception recoveryException)
+            {
+                Log.Error("Asset source recovery rescan failed: {0}", recoveryException);
+            }
+        }
         InvokeObservers(SourceFileSystemChanged, changes);
     }
 

@@ -3,11 +3,16 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Numerics;
 
+using Inno.Assets;
+using Inno.Core.Events;
 using Inno.Core.Framework;
+using Inno.Core.Logging;
 using Inno.Editor.Core;
+using Inno.Editor.HotKeys;
 using Inno.Editor.ImGui;
 using Inno.Editor.Panels;
 using Inno.Editor.Scripting;
+using Inno.Engine.Scene;
 using Inno.Native.ImGui;
 using Inno.Platform.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
@@ -24,7 +29,9 @@ internal sealed class EditorLayer : Layer
 
     private readonly PlatformImGuiContext m_imgui;
     private readonly ScriptManager m_scriptManager;
-    private readonly EditorContext m_context = new();
+    private readonly EditorHotKeyMap m_hotKeys;
+    private readonly EditorSceneWorkspace m_sceneWorkspace;
+    private readonly EditorContext m_context;
     private readonly EditorPanelRegistry m_panelRegistry = new();
     private readonly Stopwatch m_uiTimer = Stopwatch.StartNew();
 
@@ -32,12 +39,16 @@ internal sealed class EditorLayer : Layer
     private double m_scriptPopupHideAt;
     private bool m_isScriptCompilationActive;
     private bool m_isScriptPopupVisible;
+    private IDisposable? m_saveHotKeyRegistration;
 
     internal EditorLayer(PlatformImGuiContext imgui, ScriptManager scriptManager)
         : base("EditorLayer")
     {
         m_imgui = imgui;
         m_scriptManager = scriptManager;
+        m_hotKeys = EditorHotKeyDefaults.Create();
+        m_sceneWorkspace = new EditorSceneWorkspace();
+        m_context = new EditorContext(m_hotKeys, m_sceneWorkspace);
         ImGuiWidget.SetupStyle();
     }
 
@@ -73,6 +84,12 @@ internal sealed class EditorLayer : Layer
     public override void OnAttach()
     {
         m_context.Attach();
+        _ = Listen<KeyPressedEvent>(OnKeyPressed, priority: 1000);
+        m_saveHotKeyRegistration = m_hotKeys.Register(
+            EditorHotKeyCommands.Save,
+            SaveActiveScene,
+            () => AssetManager.isInitialized && SceneManager.hasActiveScene,
+            priority: 1000);
         EditorPanel[] panels = EditorDefaultPanels.Create();
         for (int i = 0; i < panels.Length; i++)
         {
@@ -83,6 +100,8 @@ internal sealed class EditorLayer : Layer
     public override void OnDetach()
     {
         m_panelRegistry.Clear(m_context);
+        m_saveHotKeyRegistration?.Dispose();
+        m_saveHotKeyRegistration = null;
         m_context.Detach();
     }
 
@@ -90,6 +109,7 @@ internal sealed class EditorLayer : Layer
     {
         m_context.frameDeltaTime = deltaTime;
         m_context.totalTime = Time.time;
+        m_sceneWorkspace.Refresh();
 
         _ = m_imgui.RenderFrame(() =>
         {
@@ -121,6 +141,26 @@ internal sealed class EditorLayer : Layer
 
             m_panelRegistry.panels[index].isOpen = isOpen;
         });
+    }
+
+    private void OnKeyPressed(KeyPressedEvent keyEvent)
+    {
+        if (IsScriptCompilationBlocking())
+            return;
+        if (m_hotKeys.Process(keyEvent))
+            keyEvent.HandleInGlobal();
+    }
+
+    private void SaveActiveScene()
+    {
+        try
+        {
+            _ = m_sceneWorkspace.SaveScene(m_context.scene, m_context.selection.currentDirectory);
+        }
+        catch (Exception exception)
+        {
+            Log.Error("Failed to save the active scene: {0}", exception);
+        }
     }
 
     private void DrawPanels()

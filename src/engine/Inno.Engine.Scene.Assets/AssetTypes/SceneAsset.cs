@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 
 using Inno.Assets;
@@ -26,15 +27,22 @@ public sealed class SceneAsset : AssetObject
     /// <returns>A scene asset ready to pass to <see cref="Inno.Assets.AssetManager.Save(string, AssetObject)"/>.</returns>
     public static SceneAsset Capture(GameScene scene)
     {
+        var asset = new SceneAsset();
+        asset.CaptureFrom(scene);
+        return asset;
+    }
+
+    /// <summary>
+    /// Replaces the pending source content with a fresh capture while preserving this asset identity.
+    /// </summary>
+    /// <param name="scene">Scene to capture.</param>
+    public void CaptureFrom(GameScene scene)
+    {
         ArgumentNullException.ThrowIfNull(scene);
         var dependencyCollection = new AssetDependencyCollection();
         SerializationContext context = SerializationContext.empty.With(dependencyCollection);
-        byte[] payload = SerializationManager.Serialize(scene, context);
-        return new SceneAsset
-        {
-            m_pendingPayload = payload,
-            m_pendingDependencies = dependencyCollection.dependencies.ToArray()
-        };
+        m_pendingPayload = SerializationManager.Serialize(scene, context);
+        m_pendingDependencies = dependencyCollection.dependencies.ToArray();
     }
 
     /// <summary>
@@ -44,7 +52,10 @@ public sealed class SceneAsset : AssetObject
     public GameScene Instantiate()
     {
         SerializationContext context = SerializationContext.empty.With<AssetObject>(this);
-        return SerializationManager.Deserialize<GameScene>(GetPayload(), context);
+        GameScene scene = SerializationManager.Deserialize<GameScene>(GetPayload(), context);
+        if (!string.IsNullOrWhiteSpace(sourcePath))
+            scene.name = Path.GetFileNameWithoutExtension(sourcePath);
+        return scene;
     }
 
     internal byte[] ExportSource()
@@ -69,10 +80,10 @@ public sealed class SceneAsset : AssetObject
 
     private byte[] GetPayload()
     {
-        if (!runtimePayload.IsEmpty)
-            return runtimePayload.ToArray();
         if (m_pendingPayload.Length != 0)
             return (byte[])m_pendingPayload.Clone();
+        if (!runtimePayload.IsEmpty)
+            return runtimePayload.ToArray();
         throw new InvalidOperationException($"Scene asset '{sourcePath}' does not contain an imported or pending scene payload.");
     }
 
@@ -83,5 +94,14 @@ public sealed class SceneAsset : AssetObject
         return AssetManager.isInitialized && identity.persistentId != Guid.Empty
             ? AssetManager.GetDependencies(this).ToArray()
             : [];
+    }
+
+    /// <inheritdoc />
+    protected override void OnRuntimePayloadChanged(
+        ReadOnlyMemory<byte> previousPayload,
+        ReadOnlyMemory<byte> currentPayload)
+    {
+        m_pendingPayload = [];
+        m_pendingDependencies = [];
     }
 }

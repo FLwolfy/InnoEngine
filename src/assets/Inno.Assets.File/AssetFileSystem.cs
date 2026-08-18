@@ -186,7 +186,21 @@ public sealed class AssetFileSystem : IDisposable
         if (m_disposed)
             return;
 
-        Refresh();
+        try
+        {
+            Refresh();
+        }
+        catch (IOException)
+        {
+            // A rename can briefly expose an incomplete directory snapshot. The next watcher
+            // batch or explicit refresh will reconcile it without terminating the host process.
+            return;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // File permissions can change between enumeration and indexing.
+            return;
+        }
         ChangedBatch?.Invoke(changes);
     }
 

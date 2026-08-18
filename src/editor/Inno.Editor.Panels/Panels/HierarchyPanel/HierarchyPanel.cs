@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Numerics;
 
 using Inno.Core.Identity;
-using Inno.Core.Logging;
 using Inno.Editor.Core;
+using Inno.Editor.HotKeys;
 using Inno.Editor.ImGui;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Components;
@@ -20,11 +20,15 @@ namespace Inno.Editor.Panels;
 public sealed class HierarchyPanel : EditorPanel
 {
     private const string C_SCENE_OBJECT_PAYLOAD = "INNO_SCENE_OBJECT";
+    private const string C_SCENE_PAYLOAD = "INNO_SCENE";
     private const nuint C_NAME_BUFFER_SIZE = 512;
 
     private static readonly Vector4 s_sceneRowColor = new(28f / 255f, 26f / 255f, 25f / 255f, 1f);
     private static readonly Vector4 s_inactiveTextColor = new(0.52f, 0.52f, 0.54f, 1f);
 
+    private readonly HierarchySelection m_selection = new();
+    private readonly HierarchySceneCommands m_sceneCommands = new();
+    private readonly HierarchyDragDrop m_dragDrop;
     private readonly HashSet<Guid> m_forceOpenIds = [];
     private readonly HashSet<Guid> m_forceOpenSceneIds = [];
     private readonly HashSet<Guid> m_drawnIds = [];
@@ -33,7 +37,10 @@ public sealed class HierarchyPanel : EditorPanel
     private Guid? m_pendingDeleteId;
     private string m_renameBuffer = string.Empty;
     private bool m_focusRename;
+    private bool m_isFocused;
     private int m_visibleRowIndex;
+    private IDisposable? m_renameHotKeyRegistration;
+    private IDisposable? m_deleteHotKeyRegistration;
 
     /// <summary>
     /// Creates the hierarchy panel.
@@ -41,6 +48,29 @@ public sealed class HierarchyPanel : EditorPanel
     public HierarchyPanel()
         : base("scene.hierarchy", "Hierarchy")
     {
+        m_dragDrop = new HierarchyDragDrop(m_selection);
+    }
+
+    /// <inheritdoc />
+    public override void OnAttach(EditorContext context)
+    {
+        m_renameHotKeyRegistration = context.hotKeys.Register(
+            EditorHotKeyCommands.Rename,
+            () => BeginRenameFromSelection(context),
+            () => CanEditSelection(context));
+        m_deleteHotKeyRegistration = context.hotKeys.Register(
+            EditorHotKeyCommands.Delete,
+            () => RequestDeleteFromSelection(context),
+            () => CanEditSelection(context));
+    }
+
+    /// <inheritdoc />
+    public override void OnDetach(EditorContext context)
+    {
+        m_renameHotKeyRegistration?.Dispose();
+        m_deleteHotKeyRegistration?.Dispose();
+        m_renameHotKeyRegistration = null;
+        m_deleteHotKeyRegistration = null;
     }
 
     /// <inheritdoc />
@@ -48,8 +78,8 @@ public sealed class HierarchyPanel : EditorPanel
     {
         m_drawnIds.Clear();
         m_visibleRowIndex = 0;
-        PruneSelection(context);
-        HandleKeyboardShortcuts(context);
+        m_isFocused = NativeImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows);
+        m_selection.Prune(context);
 
         NativeImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(3f, 2f));
         NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(4f, 1f));
@@ -86,10 +116,7 @@ public sealed class HierarchyPanel : EditorPanel
             ReferenceEquals(selectedScene, scene);
         TreeNodeResult result = ImGuiWidget.TreeNode(
             $"scene_{id}",
-            () => ImGuiWidget.IconText(
-                ImGuiIcon.LayerGroup,
-                scene.name,
-                ReferenceEquals(scene, SceneManager.activeScene)),
+            () => m_selection.DrawSceneRowContent(context, scene),
             new TreeNodeOptions
             {
                 isLeaf = false,
@@ -102,9 +129,14 @@ public sealed class HierarchyPanel : EditorPanel
         if (result.isClicked || result.isDoubleClicked)
             context.selection.Select(scene);
 
+        _ = ImGuiWidget.DragDropSource(
+            C_SCENE_PAYLOAD,
+            sceneId,
+            () => NativeImGui.TextUnformatted(scene.name));
+
         if (ImGuiWidget.DragDropTarget<Guid>(C_SCENE_OBJECT_PAYLOAD, out Guid droppedId))
         {
-            GameObject? moved = MoveToSceneRoot(scene, droppedId);
+            GameObject? moved = m_dragDrop.MoveToSceneRoot(scene, droppedId);
             if (moved is not null)
             {
                 m_forceOpenSceneIds.Add(sceneId);
@@ -118,7 +150,7 @@ public sealed class HierarchyPanel : EditorPanel
             return;
         }
 
-        IReadOnlyList<GameObject> roots = GetRootObjects(scene);
+        IReadOnlyList<GameObject> roots = m_selection.GetRootObjects(scene);
         for (int i = 0; i < roots.Count; i++)
         {
             DrawObject(context, scene, roots[i]);
@@ -179,12 +211,17 @@ public sealed class HierarchyPanel : EditorPanel
             drawDefaultHighlight: false);
         if (isPreviewing)
         {
-            DrawDropPreview(result);
+            m_dragDrop.DrawDropPreview(result);
         }
 
         if (delivered)
         {
-            GameObject? moved = ApplyDrop(scene, droppedId, gameObject, result);
+            GameObject? moved = m_dragDrop.ApplyDrop(
+                scene,
+                droppedId,
+                gameObject,
+                result,
+                m_forceOpenIds);
             if (moved is not null)
                 context.selection.Select(moved);
         }
@@ -295,6 +332,13 @@ public sealed class HierarchyPanel : EditorPanel
             context.selection.Select(created);
         }
 
+        NativeImGui.Separator();
+        if (NativeImGui.MenuItem("Create Scene"))
+        {
+            GameScene createdScene = m_sceneCommands.Create(context);
+            m_forceOpenSceneIds.Add(createdScene.identity.persistentId);
+        }
+
         ImGuiWidget.EndContextMenu();
     }
 
@@ -340,7 +384,7 @@ public sealed class HierarchyPanel : EditorPanel
 
         if (ImGuiWidget.DragDropTarget<Guid>(C_SCENE_OBJECT_PAYLOAD, out Guid droppedId))
         {
-            GameObject? moved = MoveToSceneRoot(context.scene, droppedId);
+            GameObject? moved = m_dragDrop.MoveToSceneRoot(context.scene, droppedId);
             if (moved is not null)
                 context.selection.Select(moved);
         }
@@ -350,6 +394,13 @@ public sealed class HierarchyPanel : EditorPanel
             return;
         }
 
+        if (NativeImGui.MenuItem("Create Scene"))
+        {
+            GameScene createdScene = m_sceneCommands.Create(context);
+            m_forceOpenSceneIds.Add(createdScene.identity.persistentId);
+        }
+
+        NativeImGui.Separator();
         if (NativeImGui.MenuItem("Create Empty"))
         {
             GameObject created = context.scene.CreateObject();
@@ -361,207 +412,32 @@ public sealed class HierarchyPanel : EditorPanel
         ImGuiWidget.EndContextMenu();
     }
 
-    private GameObject? ApplyDrop(
-        GameScene scene,
-        Guid droppedId,
-        GameObject target,
-        in TreeNodeResult result)
+    private bool CanEditSelection(EditorContext context)
+        => m_isFocused &&
+           !NativeImGui.GetIO().WantTextInput &&
+           m_renamingId is null &&
+           context.selection.TryGet(out GameObject? gameObject) &&
+           gameObject.isRuntimeValid;
+
+    private void BeginRenameFromSelection(EditorContext context)
     {
-        GameObject? dropped = IdentityManager.Get<GameObject>(droppedId);
-        if (dropped is null || ReferenceEquals(dropped, target) ||
-            !dropped.isRuntimeValid || !ReferenceEquals(dropped.scene, scene))
-        {
-            return null;
-        }
-
-        try
-        {
-            Transform droppedTransform = dropped.GetComponent<Transform>();
-            Transform targetTransform = target.GetComponent<Transform>();
-            if (IsDescendantOf(targetTransform, droppedTransform))
-                PromoteDirectChildren(droppedTransform);
-            float height = MathF.Max(1f, result.max.Y - result.min.Y);
-            float relativeY = (NativeImGui.GetMousePos().Y - result.min.Y) / height;
-            if (relativeY is >= 0.25f and <= 0.75f)
-            {
-                droppedTransform.SetParent(targetTransform);
-                droppedTransform.SetSiblingIndex(targetTransform.children.Count - 1);
-                m_forceOpenIds.Add(target.identity.persistentId);
-                return dropped;
-            }
-
-            Transform? targetParent = targetTransform.parent;
-            droppedTransform.SetParent(targetParent);
-            int sourceIndex = droppedTransform.siblingIndex;
-            int targetIndex = targetTransform.siblingIndex;
-            if (sourceIndex < targetIndex)
-            {
-                targetIndex--;
-            }
-
-            int desiredIndex = targetIndex + (relativeY > 0.75f ? 1 : 0);
-            droppedTransform.SetSiblingIndex(desiredIndex);
-            return dropped;
-        }
-        catch (InvalidOperationException exception)
-        {
-            Log.Warn("Hierarchy drop was rejected: {0}", exception.Message);
-            return null;
-        }
-    }
-
-    private static GameObject? MoveToSceneRoot(GameScene scene, Guid droppedId)
-    {
-        GameObject? dropped = IdentityManager.Get<GameObject>(droppedId);
-        if (dropped is null || !dropped.isRuntimeValid || !ReferenceEquals(dropped.scene, scene))
-        {
-            return null;
-        }
-
-        try
-        {
-            Transform transform = dropped.GetComponent<Transform>();
-            transform.SetParent(null);
-            transform.SetSiblingIndex(GetRootObjects(scene).Count - 1);
-            return dropped;
-        }
-        catch (InvalidOperationException exception)
-        {
-            Log.Warn("Hierarchy scene root drop was rejected: {0}", exception.Message);
-            return null;
-        }
-    }
-
-    private static void DrawDropPreview(in TreeNodeResult result)
-    {
-        float height = MathF.Max(1f, result.max.Y - result.min.Y);
-        float relativeY = (NativeImGui.GetMousePos().Y - result.min.Y) / height;
-        if (relativeY < 0.25f)
-        {
-            ImGuiWidget.InsertionLine(result.min.X, result.max.X, result.min.Y);
-        }
-        else if (relativeY > 0.75f)
-        {
-            ImGuiWidget.InsertionLine(result.min.X, result.max.X, result.max.Y);
-        }
-        else
-        {
-            Vector2 highlightMin = result.contentMin;
-            highlightMin.X = MathF.Max(
-                result.min.X,
-                highlightMin.X - NativeImGui.GetStyle().ItemInnerSpacing.X);
-            ImGuiWidget.DropTargetHighlight(highlightMin, result.max);
-        }
-    }
-
-    private static bool IsDescendantOf(Transform transform, Transform possibleAncestor)
-    {
-        for (Transform? current = transform.parent; current is not null; current = current.parent)
-        {
-            if (ReferenceEquals(current, possibleAncestor))
-                return true;
-        }
-        return false;
-    }
-
-    private static void PromoteDirectChildren(Transform transform)
-    {
-        Transform? previousParent = transform.parent;
-        int insertionIndex = transform.siblingIndex;
-        List<Transform> children = new(transform.children);
-        for (int i = 0; i < children.Count; i++)
-        {
-            Transform child = children[i];
-            child.SetParent(previousParent);
-            child.SetSiblingIndex(insertionIndex + i);
-        }
-    }
-
-    private void HandleKeyboardShortcuts(EditorContext context)
-    {
-        if (!NativeImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) ||
-            !context.selection.TryGet(out GameObject? gameObject) ||
-            !gameObject.isRuntimeValid)
-        {
-            return;
-        }
-
-        if (m_renamingId is null && NativeImGui.IsKeyPressed(ImGuiKey.F2))
-        {
+        if (context.selection.TryGet(out GameObject? gameObject))
             BeginRename(gameObject);
-        }
-
-        if (m_renamingId is null && NativeImGui.IsKeyPressed(ImGuiKey.Delete))
-        {
-            m_pendingDeleteId = gameObject.identity.persistentId;
-        }
     }
 
-    private static void PruneSelection(EditorContext context)
+    private void RequestDeleteFromSelection(EditorContext context)
     {
-        if (context.selection.TryGet(out GameScene? selectedScene) &&
-            (!selectedScene.isLoaded || !ContainsScene(context.scenes, selectedScene)))
-        {
-            context.selection.Clear();
-            return;
-        }
-        if (context.selection.TryGet(out GameObject? gameObject) &&
-            (!gameObject.isRuntimeValid || !ContainsScene(context.scenes, gameObject.scene)))
-        {
-            context.selection.Clear();
-        }
+        if (context.selection.TryGet(out GameObject? gameObject))
+            m_pendingDeleteId = gameObject.identity.persistentId;
     }
 
     private void ApplyPendingDelete(EditorContext context)
     {
         if (m_pendingDeleteId is not Guid persistentId)
-        {
             return;
-        }
-
         m_pendingDeleteId = null;
-        GameObject? gameObject = IdentityManager.Get<GameObject>(persistentId);
-        if (gameObject is null || !gameObject.isRuntimeValid || !ContainsScene(context.scenes, gameObject.scene))
-        {
-            return;
-        }
-
-        _ = gameObject.scene.DestroyObject(gameObject);
-        if (context.selection.TryGet(out GameObject? selected) && ReferenceEquals(selected, gameObject))
-        {
-            context.selection.Clear();
-        }
-
-        if (m_renamingId == persistentId)
-        {
+        if (m_selection.Delete(context, persistentId) && m_renamingId == persistentId)
             EndRename();
-        }
-    }
-
-    private static bool ContainsScene(IReadOnlyList<GameScene> scenes, GameScene scene)
-    {
-        for (int i = 0; i < scenes.Count; i++)
-        {
-            if (ReferenceEquals(scenes[i], scene))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static IReadOnlyList<GameObject> GetRootObjects(GameScene scene)
-    {
-        IReadOnlyList<GameObject> objects = scene.GetObjects();
-        var roots = new List<GameObject>(objects.Count);
-        for (int i = 0; i < objects.Count; i++)
-        {
-            if (objects[i].transform.parent is null)
-                roots.Add(objects[i]);
-        }
-        roots.Sort(static (left, right) => left.transform.siblingIndex.CompareTo(right.transform.siblingIndex));
-        return roots;
     }
 
     private void BeginRename(GameObject gameObject)
@@ -577,4 +453,5 @@ public sealed class HierarchyPanel : EditorPanel
         m_renameBuffer = string.Empty;
         m_focusRename = false;
     }
+
 }

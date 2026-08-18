@@ -16,16 +16,8 @@ namespace Inno.Editor.Panels;
 /// </summary>
 public sealed class LogPanel : EditorPanel
 {
-    #region Constants
-    private const string C_ICON_BUG = ImGuiIcon.Bug;
-    private const string C_ICON_INFO = ImGuiIcon.CircleInfo;
-    private const string C_ICON_WARN = ImGuiIcon.TriangleExclamation;
-    private const string C_ICON_ERROR = ImGuiIcon.CircleXmark;
-    private const string C_ICON_FATAL = ImGuiIcon.SkullCrossbones;
-    private const string C_ICON_DEFAULT = ImGuiIcon.FileLines;
-    #endregion
-
     #region State
+    private readonly LogPanelContent m_content = new();
     private readonly HashSet<LogLevel> m_filterLevels = Enum.GetValues<LogLevel>().ToHashSet();
     private readonly LogLevel[] m_levels = Enum.GetValues<LogLevel>();
     private readonly HashSet<long> m_openEntries = [];
@@ -143,15 +135,15 @@ public sealed class LogPanel : EditorPanel
     {
         if (entries.Length == 0)
         {
-            DrawDisabledHint("No logs yet.");
+            m_content.DrawDisabledHint("No logs yet.");
             return;
         }
 
-        List<LogEntry> visibleEntries = CollectVisibleEntries(entries);
+        List<LogEntry> visibleEntries = m_content.CollectVisibleEntries(entries, m_filterLevels);
 
         if (visibleEntries.Count == 0)
         {
-            DrawDisabledHint("All logs are filtered out.");
+            m_content.DrawDisabledHint("All logs are filtered out.");
             return;
         }
 
@@ -163,26 +155,27 @@ public sealed class LogPanel : EditorPanel
         while (start < visibleEntries.Count)
         {
             int end = start;
-            while (end + 1 < visibleEntries.Count && IsSameEntryIgnoreTime(visibleEntries[end + 1], visibleEntries[end]))
+            while (end + 1 < visibleEntries.Count &&
+                   m_content.IsSameEntryIgnoreTime(visibleEntries[end + 1], visibleEntries[end]))
             {
                 end++;
             }
 
             if (m_collapse)
             {
-                List<long> runEntryIds = CollectRunEntryIds(visibleEntries, start, end);
+                List<long> runEntryIds = m_content.CollectRunEntryIds(visibleEntries, start, end);
                 long latestEntryId = runEntryIds[^1];
                 bool latestEntryOpen = m_openEntries.Contains(latestEntryId);
-                bool anyOpenInRun = ContainsAnyOpen(runEntryIds);
+                bool anyOpenInRun = m_content.ContainsAnyOpen(runEntryIds, m_openEntries);
 
                 if (latestEntryOpen)
                 {
-                    KeepOnlyLatestOpen(runEntryIds, latestEntryId);
+                    m_content.KeepOnlyLatestOpen(runEntryIds, latestEntryId, m_openEntries);
                 }
                 else if (anyOpenInRun)
                 {
                     bool shouldPromoteLatest = wasCollapseLastFrame && !switchedToCollapse;
-                    CloseAll(runEntryIds);
+                    m_content.CloseAll(runEntryIds, m_openEntries);
 
                     if (shouldPromoteLatest)
                     {
@@ -209,7 +202,7 @@ public sealed class LogPanel : EditorPanel
     #region Entry Card
     private void DrawLogEntry(LogEntry entry, int repeatCount, IReadOnlyList<long> runEntryIds, bool collapseView)
     {
-        (Vector4 levelColor, string levelIcon) = GetLevelVisual(entry.level);
+        (Vector4 levelColor, string levelIcon) = m_content.GetLevelVisual(entry.level);
 
         long entryId = entry.time.Ticks;
         int rowId = entryId.GetHashCode();
@@ -217,8 +210,8 @@ public sealed class LogPanel : EditorPanel
         bool open = m_openEntries.Contains(entryId);
         if (!open)
         {
-            Vector4 collapsedCardBg = GetCollapsedBgColor();
-            Vector4 collapsedCardBorder = GetCollapsedBorderColor();
+            Vector4 collapsedCardBg = m_content.GetCollapsedBgColor();
+            Vector4 collapsedCardBorder = m_content.GetCollapsedBorderColor();
             NativeImGui.PushStyleColor(ImGuiCol.FrameBg, collapsedCardBg);
             NativeImGui.PushStyleColor(ImGuiCol.Border, collapsedCardBorder);
             NativeImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, NativeImGui.GetStyle().FrameRounding);
@@ -256,8 +249,11 @@ public sealed class LogPanel : EditorPanel
             return;
         }
 
-        Vector4 cardBg = GetExpandedBgColor(levelColor);
-        Vector4 cardBorder = LerpColor(new Vector4(0.24f, 0.24f, 0.24f, 1f), levelColor, 0.20f);
+        Vector4 cardBg = m_content.GetExpandedBgColor(levelColor);
+        Vector4 cardBorder = m_content.LerpColor(
+            new Vector4(0.24f, 0.24f, 0.24f, 1f),
+            levelColor,
+            0.20f);
         NativeImGui.PushStyleColor(ImGuiCol.FrameBg, cardBg);
         NativeImGui.PushStyleColor(ImGuiCol.Border, cardBorder);
         NativeImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, NativeImGui.GetStyle().FrameRounding);
@@ -284,7 +280,9 @@ public sealed class LogPanel : EditorPanel
                 }
             }
 
-            NativeImGui.PushStyleColor(ImGuiCol.Separator, LerpColor(cardBg, Vector4.One, 0.12f));
+            NativeImGui.PushStyleColor(
+                ImGuiCol.Separator,
+                m_content.LerpColor(cardBg, Vector4.One, 0.12f));
             NativeImGui.Separator();
             NativeImGui.PopStyleColor();
             DrawDetail(entry);
@@ -299,7 +297,7 @@ public sealed class LogPanel : EditorPanel
     #endregion
 
     #region Entry Header / Detail
-    private static void DrawHeader(
+    private void DrawHeader(
         LogEntry entry,
         int repeatCount,
         Vector4 levelColor,
@@ -314,7 +312,7 @@ public sealed class LogPanel : EditorPanel
         const float c_togglePadX = 6f;
         const float c_togglePadY = 1f;
         
-        string content = isOpen ? entry.message : GetFirstLine(entry.message);
+        string content = isOpen ? entry.message : m_content.GetFirstLine(entry.message);
         string repeatText = repeatCount > 1 ? $" (x{repeatCount})" : string.Empty;
         string prefix = $"{levelIcon} [{entry.level}] ";
         string toggleText = isOpen ? "▼" : "▶";
@@ -328,7 +326,7 @@ public sealed class LogPanel : EditorPanel
         
         if (!isOpen)
         {
-            content = FitTextWithEllipsis(GetFirstLine(entry.message), contentW);
+            content = m_content.FitTextWithEllipsis(m_content.GetFirstLine(entry.message), contentW);
         }
         
         Vector2 tableOuterSize = new(tableOuterW, 0f);
@@ -433,190 +431,4 @@ public sealed class LogPanel : EditorPanel
     }
     #endregion
 
-    #region State Helpers
-    private static void DrawDisabledHint(string text)
-    {
-        NativeImGui.BeginDisabled(true);
-        NativeImGui.TextUnformatted(text);
-        NativeImGui.EndDisabled();
-    }
-
-    private List<LogEntry> CollectVisibleEntries(LogEntry[] entries)
-    {
-        List<LogEntry> visibleEntries = [];
-        for (int i = 0; i < entries.Length; i++)
-        {
-            LogEntry entry = entries[i];
-            if (m_filterLevels.Contains(entry.level))
-            {
-                visibleEntries.Add(entry);
-            }
-        }
-
-        return visibleEntries;
-    }
-
-    private static List<long> CollectRunEntryIds(List<LogEntry> visibleEntries, int start, int end)
-    {
-        List<long> runEntryIds = [];
-        for (int i = start; i <= end; i++)
-        {
-            runEntryIds.Add(visibleEntries[i].time.Ticks);
-        }
-
-        return runEntryIds;
-    }
-
-    private bool ContainsAnyOpen(IReadOnlyList<long> runEntryIds)
-    {
-        for (int i = 0; i < runEntryIds.Count; i++)
-        {
-            if (m_openEntries.Contains(runEntryIds[i]))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private void KeepOnlyLatestOpen(IReadOnlyList<long> runEntryIds, long latestEntryId)
-    {
-        for (int i = 0; i < runEntryIds.Count; i++)
-        {
-            long runEntryId = runEntryIds[i];
-            if (runEntryId != latestEntryId)
-            {
-                m_openEntries.Remove(runEntryId);
-            }
-        }
-    }
-
-    private void CloseAll(IReadOnlyList<long> runEntryIds)
-    {
-        for (int i = 0; i < runEntryIds.Count; i++)
-        {
-            m_openEntries.Remove(runEntryIds[i]);
-        }
-    }
-    #endregion
-
-    #region Visual / Text Helpers
-    private static (Vector4 color, string icon) GetLevelVisual(LogLevel level)
-    {
-        return level switch
-        {
-            LogLevel.Debug => (new Vector4(0.80f, 0.90f, 0.85f, 1f), C_ICON_BUG),
-            LogLevel.Info => (new Vector4(0.20f, 1f, 0.20f, 1f), C_ICON_INFO),
-            LogLevel.Warn => (new Vector4(1f, 1f, 0.20f, 1f), C_ICON_WARN),
-            LogLevel.Error => (new Vector4(1f, 0.20f, 0.20f, 1f), C_ICON_ERROR),
-            LogLevel.Fatal => (new Vector4(1f, 0.20f, 1f, 1f), C_ICON_FATAL),
-            _ => (Vector4.One, C_ICON_DEFAULT)
-        };
-    }
-
-    private static Vector4 LerpColor(Vector4 a, Vector4 b, float t)
-    {
-        t = Math.Clamp(t, 0f, 1f);
-        return new Vector4(
-            a.X + (b.X - a.X) * t,
-            a.Y + (b.Y - a.Y) * t,
-            a.Z + (b.Z - a.Z) * t,
-            1f);
-    }
-
-    private static bool IsSameEntryIgnoreTime(in LogEntry a, in LogEntry b)
-    {
-        return a.level == b.level
-            && a.source.Equals(b.source)
-            && string.Equals(a.category, b.category, StringComparison.Ordinal)
-            && string.Equals(a.message, b.message, StringComparison.Ordinal)
-            && string.Equals(a.file, b.file, StringComparison.Ordinal)
-            && a.line == b.line;
-    }
-
-    private static Vector4 GetCollapsedBgColor()
-    {
-        uint bgU32 = NativeImGui.GetColorU32(ImGuiCol.Button, 0.55f);
-        return NativeImGui.ColorConvertU32ToFloat4(bgU32);
-    }
-
-    private static Vector4 GetCollapsedBorderColor()
-    {
-        uint borderU32 = NativeImGui.GetColorU32(ImGuiCol.Border, 0.65f);
-        return NativeImGui.ColorConvertU32ToFloat4(borderU32);
-    }
-
-    private static Vector4 GetExpandedBgColor(Vector4 levelColor)
-    {
-        return LerpColor(new Vector4(0.10f, 0.10f, 0.10f, 1f), levelColor, 0.12f);
-    }
-    
-    private static string GetFirstLine(string text)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return string.Empty;
-        }
-
-        for (int i = 0; i < text.Length; i++)
-        {
-            char c = text[i];
-            if (c is '\n' or '\r')
-            {
-                return text[..i];
-            }
-        }
-
-        return text;
-    }
-
-    private static string FitTextWithEllipsis(string text, float maxWidth)
-    {
-        const string c_ellipsis = "...";
-        if (string.IsNullOrEmpty(text))
-        {
-            return string.Empty;
-        }
-
-        if (maxWidth <= 1f)
-        {
-            return c_ellipsis;
-        }
-
-        if (NativeImGui.CalcTextSize(text).X <= maxWidth)
-        {
-            return text;
-        }
-
-        float ellipsisW = NativeImGui.CalcTextSize(c_ellipsis).X;
-        if (ellipsisW >= maxWidth)
-        {
-            return c_ellipsis;
-        }
-
-        float maxTextW = maxWidth - ellipsisW;
-        int lo = 0;
-        int hi = text.Length;
-        while (lo < hi)
-        {
-            int mid = (lo + hi + 1) / 2;
-            if (NativeImGui.CalcTextSize(text[..mid]).X <= maxTextW)
-            {
-                lo = mid;
-            }
-            else
-            {
-                hi = mid - 1;
-            }
-        }
-
-        if (lo <= 0)
-        {
-            return c_ellipsis;
-        }
-
-        return text[..lo] + c_ellipsis;
-    }
-    #endregion
 }

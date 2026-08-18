@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 
 using Inno.Assets;
@@ -52,7 +53,10 @@ public sealed class PrefabAsset : AssetObject
             .With<AssetObject>(this);
         if (parent is not null)
             context = context.With(parent);
-        return SerializationManager.Deserialize<GameObject>(GetPayload(), context);
+        GameObject root = SerializationManager.Deserialize<GameObject>(GetPayload(), context);
+        if (!string.IsNullOrWhiteSpace(sourcePath))
+            root.name = Path.GetFileNameWithoutExtension(sourcePath);
+        return root;
     }
 
     internal byte[] ExportSource()

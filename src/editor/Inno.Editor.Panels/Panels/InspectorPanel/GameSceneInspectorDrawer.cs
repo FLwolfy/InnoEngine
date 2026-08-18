@@ -40,11 +40,12 @@ internal sealed class GameSceneInspectorDrawer : IInspectorDrawer
         {
             string name = scene.name;
             NativeImGui.SetNextItemWidth(-1f);
+            bool hasSource = context.editorContext.sceneWorkspace.TryGetSourcePath(scene, out _);
             if (NativeImGui.InputText(
                     $"##scene_name_{scene.identity.persistentId:N}",
                     ref name,
                     C_NAME_BUFFER_SIZE,
-                    ImGuiInputTextFlags.None))
+                    hasSource ? ImGuiInputTextFlags.ReadOnly : ImGuiInputTextFlags.None))
                 scene.name = name;
             NativeImGui.Spacing();
             DrawSystems(context, scene);

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 
 using Inno.Assets.Core;
@@ -602,6 +603,8 @@ internal static class PrefabOverrideProcessor
                 GameObject sourceRoot = SerializationManager.Deserialize<GameObject>(
                     sourceAsset.runtimePayload.Span,
                     context);
+                if (!string.IsNullOrWhiteSpace(sourceAsset.sourcePath))
+                    sourceRoot.name = Path.GetFileNameWithoutExtension(sourceAsset.sourcePath);
                 PrefabConnectionRecord connection = sourceRoot.prefabConnection
                     ?? throw new InvalidOperationException(
                         $"Prefab source asset '{sourceAsset.identity.persistentId}' did not create a source mapping.");
