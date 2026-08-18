@@ -12,7 +12,7 @@ internal sealed class BehaviorLifecycleRunner
         m_scene = scene;
     }
 
-    internal void FixedUpdate(float fixedDeltaTime)
+    internal void FixedUpdate()
     {
         IReadOnlyList<GameBehavior> behaviors = m_scene.GetComponents<GameBehavior>();
         for (int i = 0; i < behaviors.Count; i++)
@@ -21,11 +21,11 @@ internal sealed class BehaviorLifecycleRunner
                 break;
             GameBehavior behavior = behaviors[i];
             if (Prepare(behavior) && behavior.isActiveAndEnabled && m_scene.canDispatch)
-                behavior.DispatchFixedUpdate(fixedDeltaTime);
+                behavior.DispatchFixedUpdate();
         }
     }
 
-    internal void Update(float deltaTime)
+    internal void Update()
     {
         IReadOnlyList<GameBehavior> behaviors = m_scene.GetComponents<GameBehavior>();
         for (int i = 0; i < behaviors.Count; i++)
@@ -42,11 +42,11 @@ internal sealed class BehaviorLifecycleRunner
                 if (!m_scene.canDispatch || behavior.isDestroyed)
                     break;
             }
-            behavior.DispatchUpdate(deltaTime);
+            behavior.DispatchUpdate();
         }
     }
 
-    internal void LateUpdate(float deltaTime)
+    internal void LateUpdate()
     {
         IReadOnlyList<GameBehavior> behaviors = m_scene.GetComponents<GameBehavior>();
         for (int i = 0; i < behaviors.Count; i++)
@@ -55,7 +55,7 @@ internal sealed class BehaviorLifecycleRunner
                 break;
             GameBehavior behavior = behaviors[i];
             if (Prepare(behavior) && behavior.isActiveAndEnabled && behavior.lifecycleStartCalled && m_scene.canDispatch)
-                behavior.DispatchLateUpdate(deltaTime);
+                behavior.DispatchLateUpdate();
         }
     }
 

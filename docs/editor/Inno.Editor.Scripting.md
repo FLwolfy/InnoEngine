@@ -94,6 +94,7 @@ if (editorWindow.isFocused && scripts.TryCompilePending(out Task<ScriptCompilati
 内置脚本 API 当前不注入 global using。脚本必须显式引用逻辑 namespace，例如：
 
 ```csharp
+using InnoEngine.Core;
 using InnoEngine.Scene;
 using InnoEngine.Serialization;
 
@@ -101,8 +102,15 @@ public sealed class PlayerController : GameBehavior
 {
     [SerializableProperty]
     public float speed { get; set; } = 5f;
+
+    protected override void Update()
+    {
+        float frameMovement = speed * Time.deltaTime;
+    }
 }
 ```
+
+`GameBehavior.Update/FixedUpdate/LateUpdate` 与 `GameSystem.OnUpdate/OnFixedUpdate/OnLateUpdate` 都是无参扩展点。帧间隔统一从 `InnoEngine.Core.Time.deltaTime` 或 `Time.fixedDeltaTime` 获取，避免不同生命周期 API 重复传递同一份全局时钟状态。
 
 `StableTypeId` 不是脚本类型的必填 attribute。未声明时使用固定脚本程序集名和完整类型名生成确定性 ID；只有当类型或 namespace 需要重命名且仍要恢复旧 Scene/Prefab 状态时，才需要显式固定它。
 

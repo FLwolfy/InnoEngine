@@ -124,23 +124,23 @@ internal sealed class SceneSystemScheduler
 
     internal void DestroyBehavior(GameBehavior behavior) => m_behaviors.Destroy(behavior);
 
-    internal void FixedUpdate(float fixedDeltaTime)
+    internal void FixedUpdate()
     {
         using IDisposable iteration = m_scene.BeginExecutionPhase();
-        m_behaviors.FixedUpdate(fixedDeltaTime);
+        m_behaviors.FixedUpdate();
         foreach (GameSystem system in m_systems.ToArray())
         {
             if (!m_scene.canDispatch)
                 break;
             if (SceneLifecycle.Prepare(system, m_scene) && system.isActiveAndEnabled)
-                system.DispatchFixedUpdate(fixedDeltaTime);
+                system.DispatchFixedUpdate();
         }
     }
 
-    internal void Update(float deltaTime)
+    internal void Update()
     {
         using IDisposable iteration = m_scene.BeginExecutionPhase();
-        m_behaviors.Update(deltaTime);
+        m_behaviors.Update();
         foreach (GameSystem system in m_systems.ToArray())
         {
             if (!m_scene.canDispatch)
@@ -154,14 +154,14 @@ internal sealed class SceneSystemScheduler
                 if (!m_scene.canDispatch || system.isDestroyed)
                     break;
             }
-            system.DispatchUpdate(deltaTime);
+            system.DispatchUpdate();
         }
     }
 
-    internal void LateUpdate(float deltaTime)
+    internal void LateUpdate()
     {
         using IDisposable iteration = m_scene.BeginExecutionPhase();
-        m_behaviors.LateUpdate(deltaTime);
+        m_behaviors.LateUpdate();
         foreach (GameSystem system in m_systems.ToArray())
         {
             if (!m_scene.canDispatch)
@@ -169,7 +169,7 @@ internal sealed class SceneSystemScheduler
             if (SceneLifecycle.Prepare(system, m_scene) &&
                 system.isActiveAndEnabled &&
                 system.lifecycleStartCalled)
-                system.DispatchLateUpdate(deltaTime);
+                system.DispatchLateUpdate();
         }
     }
 

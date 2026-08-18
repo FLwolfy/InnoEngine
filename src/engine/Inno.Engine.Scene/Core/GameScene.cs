@@ -466,19 +466,19 @@ public sealed class GameScene : EngineObject, ISerializable
     internal void FixedUpdate(float fixedDeltaTime)
     {
         if (canDispatch)
-            m_systems.FixedUpdate(fixedDeltaTime);
+            m_systems.FixedUpdate();
     }
 
     internal void Update(float deltaTime)
     {
         if (canDispatch)
-            m_systems.Update(deltaTime);
+            m_systems.Update();
     }
 
     internal void LateUpdate(float deltaTime)
     {
         if (canDispatch)
-            m_systems.LateUpdate(deltaTime);
+            m_systems.LateUpdate();
     }
 
     private void EnsureOwned(GameObject gameObject)

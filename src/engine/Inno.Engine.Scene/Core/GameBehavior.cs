@@ -38,26 +38,23 @@ public abstract class GameBehavior : GameComponent, ISceneLifecycleObject
     }
 
     /// <summary>
-    /// Called during the variable-rate update stage.
+    /// Called during the variable-rate update stage. Use <c>Time.deltaTime</c> for frame timing.
     /// </summary>
-    /// <param name="deltaTime">Elapsed frame time in seconds.</param>
-    protected virtual void Update(float deltaTime)
+    protected virtual void Update()
     {
     }
 
     /// <summary>
-    /// Called during the fixed-rate update stage.
+    /// Called during the fixed-rate update stage. Use <c>Time.fixedDeltaTime</c> for step timing.
     /// </summary>
-    /// <param name="fixedDeltaTime">Fixed simulation step in seconds.</param>
-    protected virtual void FixedUpdate(float fixedDeltaTime)
+    protected virtual void FixedUpdate()
     {
     }
 
     /// <summary>
-    /// Called during the late update stage.
+    /// Called during the late update stage. Use <c>Time.deltaTime</c> for frame timing.
     /// </summary>
-    /// <param name="deltaTime">Elapsed frame time in seconds.</param>
-    protected virtual void LateUpdate(float deltaTime)
+    protected virtual void LateUpdate()
     {
     }
 
@@ -89,9 +86,9 @@ public abstract class GameBehavior : GameComponent, ISceneLifecycleObject
 
     internal void DispatchAwake() => Awake();
     internal void DispatchStart() => Start();
-    internal void DispatchUpdate(float deltaTime) => Update(deltaTime);
-    internal void DispatchFixedUpdate(float fixedDeltaTime) => FixedUpdate(fixedDeltaTime);
-    internal void DispatchLateUpdate(float deltaTime) => LateUpdate(deltaTime);
+    internal void DispatchUpdate() => Update();
+    internal void DispatchFixedUpdate() => FixedUpdate();
+    internal void DispatchLateUpdate() => LateUpdate();
     internal void DispatchEnable() => OnEnable();
     internal void DispatchDisable() => OnDisable();
     internal void DispatchDestroy() => OnDestroy();

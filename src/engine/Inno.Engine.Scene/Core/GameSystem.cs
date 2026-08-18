@@ -71,18 +71,18 @@ public abstract class GameSystem : EngineObject, ISerializable, ISceneLifecycleO
     {
     }
 
-    /// <summary>Called during the fixed-rate scene stage.</summary>
-    protected virtual void OnFixedUpdate(float fixedDeltaTime)
+    /// <summary>Called during the fixed-rate scene stage. Use <c>Time.fixedDeltaTime</c> for step timing.</summary>
+    protected virtual void OnFixedUpdate()
     {
     }
 
-    /// <summary>Called during the variable-rate scene stage.</summary>
-    protected virtual void OnUpdate(float deltaTime)
+    /// <summary>Called during the variable-rate scene stage. Use <c>Time.deltaTime</c> for frame timing.</summary>
+    protected virtual void OnUpdate()
     {
     }
 
-    /// <summary>Called during the late scene stage.</summary>
-    protected virtual void OnLateUpdate(float deltaTime)
+    /// <summary>Called during the late scene stage. Use <c>Time.deltaTime</c> for frame timing.</summary>
+    protected virtual void OnLateUpdate()
     {
     }
 
@@ -128,9 +128,9 @@ public abstract class GameSystem : EngineObject, ISerializable, ISceneLifecycleO
     }
 
     internal void DispatchReset() => Reset();
-    internal void DispatchFixedUpdate(float fixedDeltaTime) => OnFixedUpdate(fixedDeltaTime);
-    internal void DispatchUpdate(float deltaTime) => OnUpdate(deltaTime);
-    internal void DispatchLateUpdate(float deltaTime) => OnLateUpdate(deltaTime);
+    internal void DispatchFixedUpdate() => OnFixedUpdate();
+    internal void DispatchUpdate() => OnUpdate();
+    internal void DispatchLateUpdate() => OnLateUpdate();
 
     bool ISceneLifecycleObject.lifecycleIsActive => isActiveAndEnabled;
     bool ISceneLifecycleObject.lifecycleIsDestroyed => isDestroyed;
