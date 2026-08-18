@@ -4,12 +4,11 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <InnoAssemblyGroup>Core</InnoAssemblyGroup>
-    <InnoScriptApi>Editor</InnoScriptApi>
-    <InnoScriptGlobalUsings>Inno.Editor.Core</InnoScriptGlobalUsings>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" />
     <ProjectReference Include="..\..\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" />
   </ItemGroup>
 </Project>

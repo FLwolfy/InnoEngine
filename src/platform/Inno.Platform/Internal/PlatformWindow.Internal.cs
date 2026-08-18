@@ -36,7 +36,11 @@ public sealed partial class PlatformWindow
         SDL.GetWindowSize(m_window, ref currentWidth, ref currentHeight);
         m_width = currentWidth;
         m_height = currentHeight;
-        m_nativeHandles = GetNativeHandles(m_window);
+        m_nativeHandles = GetNativeHandles(m_window) with
+        {
+            backendName = "SDL3",
+            backendWindowHandle = (IntPtr)m_window.Handle
+        };
     }
 
     internal void UpdateSize(int width, int height)

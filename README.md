@@ -318,6 +318,12 @@ Inno/
 │  │  │  ├─ Registry/
 │  │  │  └─ Internal/
 │  │  │
+│  │  ├─ Inno.Core.Scripting/
+│  │  │  ├─ Inno.Core.Scripting.csproj
+│  │  │  ├─ ScriptingApiExportAttribute.cs
+│  │  │  ├─ ScriptingApiNamespaceAttribute.cs
+│  │  │  └─ ScriptingGlobalUsingAttribute.cs
+│  │  │
 │  │  └─ Inno.Core.Threading/
 │  │     ├─ Inno.Core.Threading.csproj
 │  │     ├─ Jobs/

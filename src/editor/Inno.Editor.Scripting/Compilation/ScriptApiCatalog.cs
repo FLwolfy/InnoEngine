@@ -5,45 +5,155 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.Loader;
 
+using Inno.Core.Scripting;
+
 namespace Inno.Editor.Scripting;
 
+internal sealed record ScriptApiAssembly(
+    Assembly assembly,
+    IReadOnlyList<Type> exportedTypes);
+
 internal sealed record ScriptApiProfile(
-    IReadOnlyList<Assembly> assemblies,
-    IReadOnlyList<string> globalUsings);
+    string name,
+    IReadOnlyList<ScriptApiAssembly> exports,
+    IReadOnlyList<Assembly> implementationAssemblies,
+    IReadOnlyList<string> globalUsings,
+    IReadOnlyList<string> apiNamespaces);
 
 internal static class ScriptApiCatalog
 {
-    private const string C_API_KEY = "Inno.ScriptApi";
-    private const string C_GLOBAL_USINGS_KEY = "Inno.ScriptGlobalUsings";
-
     internal static ScriptApiProfile Build(bool includeEditor)
     {
         LoadReferencedInnoAssemblies();
         Assembly[] loaded = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(static assembly => !assembly.IsDynamic && !string.IsNullOrWhiteSpace(assembly.Location))
+            .Where(static assembly =>
+                !assembly.IsDynamic &&
+                !string.IsNullOrWhiteSpace(assembly.Location) &&
+                AssemblyLoadContext.GetLoadContext(assembly) == AssemblyLoadContext.Default)
             .ToArray();
         var byName = loaded
-            .GroupBy(static assembly => assembly.GetName().Name ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .Where(static assembly => assembly.GetName().Name is not null)
+            .GroupBy(static assembly => assembly.GetName().Name!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
-        var selected = new HashSet<Assembly>();
-        var globalUsings = new HashSet<string>(StringComparer.Ordinal);
-        foreach (Assembly assembly in loaded)
+
+        var namespaceMappings = loaded
+            .SelectMany(assembly => assembly
+                .GetCustomAttributes<ScriptingApiNamespaceAttribute>()
+                .Where(attribute => Includes(attribute.scope, includeEditor))
+                .Select(attribute => new NamespaceMapping(
+                    attribute.name,
+                    attribute.implementationNamespace,
+                    assembly)))
+            .OrderBy(static mapping => mapping.apiNamespace, StringComparer.Ordinal)
+            .ThenBy(static mapping => mapping.implementationNamespace, StringComparer.Ordinal)
+            .ToArray();
+        ValidateNamespaceMappings(namespaceMappings);
+
+        var exports = new List<ScriptApiAssembly>();
+        var implementationAssemblies = new HashSet<Assembly>();
+        foreach (Assembly assembly in loaded.OrderBy(static value => value.GetName().Name, StringComparer.Ordinal))
         {
-            string api = GetMetadata(assembly, C_API_KEY) ?? "None";
-            if (!string.Equals(api, "Runtime", StringComparison.OrdinalIgnoreCase) &&
-                !(includeEditor && string.Equals(api, "Editor", StringComparison.OrdinalIgnoreCase)))
+            Type[] exportedTypes = assembly
+                .GetCustomAttributes<ScriptingApiExportAttribute>()
+                .Where(attribute => Includes(attribute.scope, includeEditor))
+                .Select(static attribute => attribute.type)
+                .Distinct()
+                .OrderBy(static type => type.FullName, StringComparer.Ordinal)
+                .ToArray();
+            if (exportedTypes.Length == 0)
                 continue;
-            AddWithDependencies(assembly, byName, selected);
-            string? declaredUsings = GetMetadata(assembly, C_GLOBAL_USINGS_KEY);
-            if (declaredUsings is null)
-                continue;
-            foreach (string declaredUsing in declaredUsings.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                globalUsings.Add(declaredUsing);
+            ValidateExports(assembly, exportedTypes, namespaceMappings);
+            exports.Add(new ScriptApiAssembly(assembly, exportedTypes));
+            AddWithDependencies(assembly, byName, implementationAssemblies);
         }
 
+        string[] requestedNamespaces = loaded
+            .SelectMany(static assembly => assembly.GetCustomAttributes<ScriptingGlobalUsingAttribute>())
+            .Where(attribute => Includes(attribute.scope, includeEditor))
+            .Select(static attribute => attribute.namespaceName)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static value => value, StringComparer.Ordinal)
+            .ToArray();
+        string[] globalUsings = ExpandGlobalUsings(requestedNamespaces, namespaceMappings);
+
         return new ScriptApiProfile(
-            selected.OrderBy(static assembly => assembly.GetName().Name, StringComparer.Ordinal).ToArray(),
-            globalUsings.OrderBy(static value => value, StringComparer.Ordinal).ToArray());
+            includeEditor ? "Editor" : "Runtime",
+            exports,
+            implementationAssemblies
+                .OrderBy(static assembly => assembly.GetName().Name, StringComparer.Ordinal)
+                .ToArray(),
+            globalUsings,
+            requestedNamespaces);
+    }
+
+    private static bool Includes(ScriptingApiScope scope, bool includeEditor)
+        => scope == ScriptingApiScope.Runtime || includeEditor && scope == ScriptingApiScope.Editor;
+
+    private static string[] ExpandGlobalUsings(
+        IReadOnlyList<string> requestedNamespaces,
+        IReadOnlyList<NamespaceMapping> mappings)
+    {
+        var result = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string requestedNamespace in requestedNamespaces)
+        {
+            NamespaceMapping[] matches = mappings
+                .Where(mapping => string.Equals(
+                    mapping.apiNamespace,
+                    requestedNamespace,
+                    StringComparison.Ordinal))
+                .ToArray();
+            if (matches.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Script API namespace '{requestedNamespace}' has no implementation namespace mapping.");
+            }
+            foreach (NamespaceMapping match in matches)
+                result.Add(match.implementationNamespace);
+        }
+        return result.OrderBy(static value => value, StringComparer.Ordinal).ToArray();
+    }
+
+    private static void ValidateExports(
+        Assembly assembly,
+        IReadOnlyList<Type> exportedTypes,
+        IReadOnlyList<NamespaceMapping> mappings)
+    {
+        foreach (Type type in exportedTypes)
+        {
+            if (type.Assembly != assembly)
+            {
+                throw new InvalidOperationException(
+                    $"Assembly '{assembly.GetName().Name}' cannot export type '{type.FullName}' owned by another assembly.");
+            }
+            if (!type.IsPublic && !type.IsNestedPublic)
+                throw new InvalidOperationException($"Script API type '{type.FullName}' must be public.");
+            string implementationNamespace = type.Namespace ?? string.Empty;
+            if (!mappings.Any(mapping =>
+                    mapping.assembly == assembly &&
+                    string.Equals(mapping.implementationNamespace, implementationNamespace, StringComparison.Ordinal)))
+            {
+                throw new InvalidOperationException(
+                    $"Script API type '{type.FullName}' is not assigned to a declared script API namespace.");
+            }
+        }
+    }
+
+    private static void ValidateNamespaceMappings(IReadOnlyList<NamespaceMapping> mappings)
+    {
+        foreach (IGrouping<(Assembly assembly, string implementationNamespace), NamespaceMapping> group in mappings
+                     .GroupBy(static mapping => (mapping.assembly, mapping.implementationNamespace)))
+        {
+            string[] apiNamespaces = group
+                .Select(static mapping => mapping.apiNamespace)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (apiNamespaces.Length > 1)
+            {
+                throw new InvalidOperationException(
+                    $"Implementation namespace '{group.Key.implementationNamespace}' in assembly " +
+                    $"'{group.Key.assembly.GetName().Name}' maps to multiple script API namespaces.");
+            }
+        }
     }
 
     private static void AddWithDependencies(
@@ -60,10 +170,6 @@ internal static class ScriptApiCatalog
         }
     }
 
-    private static string? GetMetadata(Assembly assembly, string key)
-        => assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
-            .FirstOrDefault(attribute => string.Equals(attribute.Key, key, StringComparison.Ordinal))?.Value;
-
     private static void LoadReferencedInnoAssemblies()
     {
         Assembly[] loaded = AppDomain.CurrentDomain.GetAssemblies()
@@ -73,10 +179,8 @@ internal static class ScriptApiCatalog
             .ToArray();
         var byName = loaded
             .Where(static assembly => assembly.GetName().Name is not null)
-            .ToDictionary(
-                static assembly => assembly.GetName().Name!,
-                static assembly => assembly,
-                StringComparer.OrdinalIgnoreCase);
+            .GroupBy(static assembly => assembly.GetName().Name!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
         var pending = new Queue<Assembly>(loaded);
         while (pending.Count > 0)
         {
@@ -99,4 +203,9 @@ internal static class ScriptApiCatalog
             }
         }
     }
+
+    private sealed record NamespaceMapping(
+        string apiNamespace,
+        string implementationNamespace,
+        Assembly assembly);
 }

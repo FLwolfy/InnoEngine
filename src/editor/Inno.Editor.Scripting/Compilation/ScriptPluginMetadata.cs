@@ -32,8 +32,11 @@ internal static class ScriptPluginMetadata
         }
 
         return new ScriptApiProfile(
-            profile.assemblies,
-            globalUsings.OrderBy(static value => value, StringComparer.Ordinal).ToArray());
+            profile.name,
+            profile.exports,
+            profile.implementationAssemblies,
+            globalUsings.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
+            profile.apiNamespaces);
     }
 
     private static IEnumerable<(string key, string value)> ReadAssemblyMetadata(string path)

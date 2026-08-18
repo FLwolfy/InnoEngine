@@ -14,6 +14,7 @@
     <ProjectReference Include="..\..\core\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" />
     <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" />
     <ProjectReference Include="..\..\core\Inno.Core.Framework\Inno.Core.Framework.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" />
     <ProjectReference Include="..\..\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" />
     <ProjectReference Include="..\..\engine\Inno.Engine.Scene.Assets\Inno.Engine.Scene.Assets.csproj" />
   </ItemGroup>

@@ -322,7 +322,7 @@ public sealed class AssetLoader : IDisposable
             }
             finally
             {
-                build.asset.ReleaseRuntimeResources();
+                AssetRuntimeAccess.Release(build.asset);
             }
             return true;
         }
@@ -358,7 +358,7 @@ public sealed class AssetLoader : IDisposable
                 $"Imported asset type '{product.asset.GetType().FullName}' requires a StableTypeId.");
         }
 
-        product.asset.InitializeRuntimeState(relativePath, sourceHash, product.runtimePayload, false, 1);
+        AssetRuntimeAccess.Initialize(product.asset, relativePath, sourceHash, product.runtimePayload, false, 1);
         AssetDependency[] runtimeDependencies = ResolveDeclaredDependenciesLocked(context);
         byte[] state = SerializationManager.Encode(writer => writer.WriteProperties(product.asset));
         var meta = new AssetMeta
@@ -398,7 +398,7 @@ public sealed class AssetLoader : IDisposable
             previousState = SerializationManager.Encode(writer => writer.WriteProperties(canonical));
             previousPayload = canonical.runtimePayload.ToArray();
             previousPath = canonical.sourcePath;
-            previousHash = canonical.sourceHash;
+            previousHash = AssetRuntimeAccess.GetSourceHash(canonical);
             previousVersion = canonical.contentVersion;
             previousMissing = canonical.isMissing;
             try
@@ -408,7 +408,8 @@ public sealed class AssetLoader : IDisposable
                     reader.RestoreProperties(canonical);
                     return 0;
                 });
-                canonical.InitializeRuntimeState(
+                AssetRuntimeAccess.Initialize(
+                    canonical,
                     build.meta.relativePath,
                     build.meta.sourceHash,
                     build.payload,
@@ -522,7 +523,7 @@ public sealed class AssetLoader : IDisposable
             }
             finally
             {
-                build.asset.ReleaseRuntimeResources();
+                AssetRuntimeAccess.Release(build.asset);
             }
         }
         catch
@@ -539,7 +540,7 @@ public sealed class AssetLoader : IDisposable
             committed.asset = asset;
             if (asset.identity.runtimeId is null)
                 IdentityManager.Register(asset, persistentId);
-            asset.InitializeRuntimeState(relativePath, build.meta.sourceHash, build.payload, false, 1);
+            AssetRuntimeAccess.Initialize(asset, relativePath, build.meta.sourceHash, build.payload, false, 1);
             AttachDependenciesLocked(committed);
         }
         return true;
@@ -638,7 +639,7 @@ public sealed class AssetLoader : IDisposable
             ? IOFile.ReadAllBytes(GetArtifactPath(record.relativePath))
             : record.payload;
         record.payload = payload;
-        asset.InitializeRuntimeState(record.relativePath, record.meta.sourceHash, payload, false, 1);
+        AssetRuntimeAccess.Initialize(asset, record.relativePath, record.meta.sourceHash, payload, false, 1);
     }
 
     private void AttachDependenciesLocked(AssetRecord record)
@@ -693,7 +694,7 @@ public sealed class AssetLoader : IDisposable
         AssetObject missing = (AssetObject)(Activator.CreateInstance(type, nonPublic: true)
             ?? throw new InvalidOperationException($"Missing asset type '{type.FullName}' cannot be created."));
         IdentityManager.InitializePersistentIdentity(missing, persistentId);
-        missing.InitializeRuntimeState(lastKnownPath, string.Empty, ReadOnlyMemory<byte>.Empty, true, 0);
+        AssetRuntimeAccess.Initialize(missing, lastKnownPath, string.Empty, ReadOnlyMemory<byte>.Empty, true, 0);
         m_missingAssets[persistentId] = new WeakReference<AssetObject>(missing);
         return missing;
     }
@@ -846,7 +847,8 @@ public sealed class AssetLoader : IDisposable
         MoveGeneratedFile(oldArtifact, newArtifact);
         record.relativePath = newNormalized;
         record.meta.relativePath = newNormalized;
-        record.asset?.UpdateSourcePath(newNormalized);
+        if (record.asset is not null)
+            AssetRuntimeAccess.UpdateSourcePath(record.asset, newNormalized);
         m_recordsByPath[newNormalized] = record;
         WriteAtomic(newMeta, SerializationManager.Serialize(record.meta));
     }
@@ -864,7 +866,8 @@ public sealed class AssetLoader : IDisposable
             RemoveRecordLocked(record);
             return;
         }
-        record.asset.InitializeRuntimeState(
+        AssetRuntimeAccess.Initialize(
+            record.asset,
             normalized,
             string.Empty,
             ReadOnlyMemory<byte>.Empty,
@@ -896,14 +899,14 @@ public sealed class AssetLoader : IDisposable
         {
             if (!m_recordsById.TryGetValue(dependentId, out AssetRecord? dependent))
                 continue;
-            locations.Add(new AssetReferenceLocation(
+            locations.Add(AssetRuntimeAccess.CreateReferenceLocation(
                 AssetReferenceKind.AssetDependency,
                 dependentId,
                 dependent.relativePath,
                 "runtimeDependencies"));
         }
         m_recordsById.TryGetValue(id, out AssetRecord? record);
-        return new AssetReferenceInfo(
+        return AssetRuntimeAccess.CreateReferenceInfo(
             id,
             asset.sourcePath,
             asset.contentVersion,
@@ -961,7 +964,7 @@ public sealed class AssetLoader : IDisposable
         {
             if (record.asset is null)
                 continue;
-            record.asset.ReleaseRuntimeResources();
+            AssetRuntimeAccess.Release(record.asset);
             IdentityManager.Unregister(record.asset);
             record.asset = null;
         }
@@ -1102,7 +1105,7 @@ public sealed class AssetLoader : IDisposable
         {
             if (record.asset is not null)
             {
-                record.asset.ReleaseRuntimeResources();
+                AssetRuntimeAccess.Release(record.asset);
                 IdentityManager.Unregister(record.asset);
             }
             record.asset = null;
@@ -1123,7 +1126,7 @@ public sealed class AssetLoader : IDisposable
             reader.RestoreProperties(canonical);
             return 0;
         });
-        canonical.InitializeRuntimeState(sourcePath, sourceHash, payload, isMissing, version);
+        AssetRuntimeAccess.Initialize(canonical, sourcePath, sourceHash, payload, isMissing, version);
     }
 
     private void PublishReloaded(AssetObject asset)

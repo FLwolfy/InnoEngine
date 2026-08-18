@@ -70,10 +70,11 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
         ImGuiPlatformIoNative.SetPlatformGetWindowSize(platformIo, s_platformGetWindowSize);
 
         var mainViewport = ImGuiNative.GetMainViewport();
-        mainViewport.PlatformHandle = (void*)mainWindow.sdlWindow.Handle;
-        mainViewport.PlatformHandleRaw = (void*)mainWindow.sdlWindow.Handle;
+        SDLWindowPtr mainSdlWindow = mainWindow.GetSdlWindow();
+        mainViewport.PlatformHandle = (void*)mainSdlWindow.Handle;
+        mainViewport.PlatformHandleRaw = (void*)mainSdlWindow.Handle;
 
-        RefreshMonitors(mainWindow.sdlWindow);
+        RefreshMonitors(mainSdlWindow);
     }
 
     internal bool OwnsWindow(uint windowId)

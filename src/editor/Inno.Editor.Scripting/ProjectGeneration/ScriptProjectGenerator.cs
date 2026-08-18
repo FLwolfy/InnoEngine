@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Xml.Linq;
 
 namespace Inno.Editor.Scripting;
@@ -22,6 +21,8 @@ internal static class ScriptProjectGenerator
         ScriptApiProfile editorApi = ScriptPluginMetadata.AddGlobalUsings(
             ScriptApiCatalog.Build(includeEditor: true),
             sources.runtimePlugins.Concat(sources.editorPlugins));
+        ScriptApiReferenceSet runtimeApiReferences = ScriptApiReferenceBuilder.Build(options, runtimeApi);
+        ScriptApiReferenceSet editorApiReferences = ScriptApiReferenceBuilder.Build(options, editorApi);
         string gameProjectPath = Path.Combine(options.projectRootDirectory, "Inno.GameScripts.csproj");
         string editorProjectPath = Path.Combine(options.projectRootDirectory, "Inno.EditorScripts.csproj");
 
@@ -30,6 +31,7 @@ internal static class ScriptProjectGenerator
             "Assets/**/*.cs",
             "Assets/**/*.editor.cs",
             runtimeApi,
+            runtimeApiReferences,
             sources.runtimePlugins,
             projectReference: null)
             .Save(gameProjectPath);
@@ -38,6 +40,7 @@ internal static class ScriptProjectGenerator
             "Assets/**/*.editor.cs",
             exclude: null,
             editorApi,
+            editorApiReferences,
             sources.runtimePlugins.Concat(sources.editorPlugins).ToArray(),
             "Inno.GameScripts.csproj")
             .Save(editorProjectPath);
@@ -51,6 +54,7 @@ internal static class ScriptProjectGenerator
         string include,
         string? exclude,
         ScriptApiProfile api,
+        ScriptApiReferenceSet apiReferences,
         IReadOnlyList<string> plugins,
         string? projectReference)
     {
@@ -66,26 +70,21 @@ internal static class ScriptProjectGenerator
             new XElement("EnableDefaultCompileItems", "false"),
             new XElement("ImplicitUsings", "disable"),
             new XElement("Nullable", "enable"),
-            new XElement("LangVersion", "latest"));
+            new XElement("LangVersion", "latest"),
+            new XElement("InnoScriptApiNamespaces", string.Join(";", api.apiNamespaces)));
         var compile = new XElement("Compile", new XAttribute("Include", include));
         if (exclude is not null)
             compile.Add(new XAttribute("Exclude", exclude));
         var compileGroup = new XElement("ItemGroup", compile);
 
         var referenceGroup = new XElement("ItemGroup");
-        string runtimeDirectory = Path.TrimEndingDirectorySeparator(
-            Path.GetFullPath(RuntimeEnvironment.GetRuntimeDirectory()));
-        foreach (string path in api.assemblies
-                     .Select(static assembly => assembly.Location)
-                     .Concat(plugins)
-                     .Where(path => !IsFrameworkAssembly(path, runtimeDirectory))
+        foreach (string path in apiReferences.referencePaths)
+            AddReference(referenceGroup, path);
+        foreach (string path in plugins
                      .Distinct(StringComparer.OrdinalIgnoreCase)
-                     .OrderBy(static path => path, StringComparer.Ordinal))
+                     .OrderBy(static value => value, StringComparer.Ordinal))
         {
-            referenceGroup.Add(new XElement("Reference",
-                new XAttribute("Include", Path.GetFileNameWithoutExtension(path)),
-                new XElement("HintPath", path),
-                new XElement("Private", "false")));
+            AddReference(referenceGroup, path);
         }
 
         var usingGroup = new XElement("ItemGroup",
@@ -113,10 +112,13 @@ internal static class ScriptProjectGenerator
         return new XDocument(project);
     }
 
-    private static bool IsFrameworkAssembly(string path, string runtimeDirectory)
+    private static void AddReference(XElement group, string path)
     {
-        string assemblyPath = Path.GetFullPath(path);
-        return assemblyPath.StartsWith(runtimeDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        var reference = new XElement("Reference",
+            new XAttribute("Include", Path.GetFileNameWithoutExtension(path)),
+            new XElement("HintPath", path),
+            new XElement("Private", "false"));
+        group.Add(reference);
     }
 
     private static string CreateSolution()

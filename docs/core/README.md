@@ -7,6 +7,7 @@ Core 层提供不依赖具体游戏内容的基础设施。程序集关系中最
 ```mermaid
 flowchart LR
     A["Assemblies<br/>程序集代际与事务"] --> R["Reflection<br/>TypeCache 与 TypeRegistry"]
+    SAPI["Scripting<br/>显式脚本 API 声明"] --> ES["Editor Scripting<br/>裁剪引用与编译"]
     R --> S["Serialization<br/>Converter Registry"]
     C["Coroutines"] --> F["Framework / Shell"]
     E["Events"] --> F
@@ -20,6 +21,7 @@ flowchart LR
 | 项目 | 主要 namespace | 作用 |
 | --- | --- | --- |
 | [Inno.Core.Assemblies](Inno.Core.Assemblies.md) | `Inno.Core.Assemblies` | 活动程序集目录、shadow copy、collectible ALC、事务式 Reload |
+| [Inno.Core.Scripting](Inno.Core.Scripting.md) | `Inno.Core.Scripting` | 每项目显式脚本 API、profile 与 namespace 分组 attribute |
 | [Inno.Core.Reflection](Inno.Core.Reflection.md) | `Inno.Core.Reflection` | 类型发现、Stable/Runtime Type ID、通用 `TypeRegistry<TSnapshot>` |
 | [Inno.Core.Serialization](Inno.Core.Serialization.md) | `Inno.Core.Serialization` | 二进制对象图序列化、属性元数据和 Converter |
 | [Inno.Core.Framework](Inno.Core.Framework.md) | `Inno.Core.Framework` | `Shell`、Layer 栈、帧循环与 `Time` |

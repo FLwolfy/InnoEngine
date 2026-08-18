@@ -41,6 +41,13 @@ public sealed partial class PlatformApplication : IDisposable
     public partial IReadOnlyList<PlatformWindow> GetWindows();
 
     /// <summary>
+    /// Registers an optional platform backend integration for this application instance.
+    /// </summary>
+    /// <param name="extension">The extension that receives native integration callbacks.</param>
+    /// <returns>A registration that removes the extension when disposed.</returns>
+    public partial IDisposable RegisterExtension(IPlatformApplicationExtension extension);
+
+    /// <summary>
     /// Releases all platform resources owned by this application instance.
     /// </summary>
     public partial void Dispose();

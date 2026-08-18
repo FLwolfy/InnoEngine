@@ -17,7 +17,7 @@ internal sealed unsafe class PlatformImGuiSdlRenderer : IDisposable
 
     internal PlatformImGuiSdlRenderer(PlatformWindow window)
     {
-        m_renderer = SDL.CreateRenderer(window.sdlWindow, (byte*)0);
+        m_renderer = SDL.CreateRenderer(window.GetSdlWindow(), (byte*)0);
         if (m_renderer.IsNull)
         {
             throw SDL.GetErrorAsException() ?? new InvalidOperationException("SDL_CreateRenderer failed.");

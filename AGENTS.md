@@ -72,3 +72,10 @@
 - Wiki 正文默认使用中文以便项目查阅；API 名称、代码、代码注释和公开 XML 注释保持英文。不要复制大段源码，用小而完整的示例解释组合方式。
 - 文档应区分“当前稳定行为”“内部实现细节”“未来规划”，不得把规划写成已经存在的 API。
 - 续写前先从对应目录运行公开类型/成员检索并阅读相关 `.csproj` 依赖；完成后检查 Markdown 链接、页面索引和源码签名是否一致。
+
+## 12. Scripting API 清单
+- 参与脚本 API 的每个项目只允许一个根级 `ScriptingApi.cs`，不得把导出 attribute 分散到业务源码。
+- 使用 `ScriptingApiExport` 逐类型显式导出；禁止恢复按程序集暴露全部 public API 的 metadata/property 机制。
+- 使用稳定脚本分组名（如 `InnoEngine.Scene`、`InnoEngine.Mathematics`、`InnoEditor.Inspection`）和 `ScriptingApiNamespace` 映射真实 CLR namespace。
+- 新增模块（如 Rendering）只修改自己的 `ScriptingApi.cs`，不得在 Editor 编译器中维护中央程序集/type 白名单。
+- 运行时编译和 IDE project 必须共用同一组裁剪 reference assemblies；修改清单后需同时验证两条路径。

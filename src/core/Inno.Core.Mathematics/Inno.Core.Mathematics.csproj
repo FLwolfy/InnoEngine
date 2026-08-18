@@ -5,8 +5,10 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <InnoAssemblyGroup>Core</InnoAssemblyGroup>
-    <InnoScriptApi>Runtime</InnoScriptApi>
-    <InnoScriptGlobalUsings>Inno.Core.Mathematics</InnoScriptGlobalUsings>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Core.Scripting\Inno.Core.Scripting.csproj" />
+  </ItemGroup>
 
 </Project>

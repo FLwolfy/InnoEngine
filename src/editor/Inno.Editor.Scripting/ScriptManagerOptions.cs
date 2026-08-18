@@ -25,4 +25,5 @@ public sealed class ScriptManagerOptions
 
     internal string assetDirectory => Path.Combine(projectRootDirectory, "Assets");
     internal string outputDirectory => Path.Combine(projectRootDirectory, "Library", "ScriptAssemblies");
+    internal string scriptApiDirectory => Path.Combine(projectRootDirectory, "Library", "ScriptApi");
 }

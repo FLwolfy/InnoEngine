@@ -5,8 +5,6 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <InnoAssemblyGroup>Core</InnoAssemblyGroup>
-    <InnoScriptApi>Runtime</InnoScriptApi>
-    <InnoScriptGlobalUsings>Inno.Core.Framework</InnoScriptGlobalUsings>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,6 +13,7 @@
     <ProjectReference Include="..\Inno.Core.Events\Inno.Core.Events.csproj" />
     <ProjectReference Include="..\Inno.Core.Job\Inno.Core.Job.csproj" />
     <ProjectReference Include="..\Inno.Core.Identity\Inno.Core.Identity.csproj" />
+    <ProjectReference Include="..\Inno.Core.Scripting\Inno.Core.Scripting.csproj" />
   </ItemGroup>
   
   <ItemGroup>

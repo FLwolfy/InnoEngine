@@ -5,4 +5,7 @@
     <Nullable>enable</Nullable>
     <InnoAssemblyGroup>Core</InnoAssemblyGroup>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Core.Scripting\Inno.Core.Scripting.csproj" />
+  </ItemGroup>
 </Project>

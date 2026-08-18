@@ -12,4 +12,15 @@ public readonly record struct PlatformNativeHandles(
     IntPtr windowHandle,
     IntPtr displayHandle = default,
     PlatformNativeHandleKind handleKind = PlatformNativeHandleKind.Unknown
-);
+)
+{
+    /// <summary>
+    /// Gets the active window backend name, such as <c>SDL3</c>.
+    /// </summary>
+    public string backendName { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Gets the opaque window handle owned by the active window backend.
+    /// </summary>
+    public IntPtr backendWindowHandle { get; init; }
+}

@@ -7,8 +7,6 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
     <InnoAssemblyGroup>Core</InnoAssemblyGroup>
-    <InnoScriptApi>Runtime</InnoScriptApi>
-    <InnoScriptGlobalUsings>Inno.Assets</InnoScriptGlobalUsings>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,6 +14,7 @@
     <ProjectReference Include="..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Storage\Inno.Core.Storage.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" />
     <ProjectReference Include="..\Inno.Assets.Loader\Inno.Assets.Loader.csproj" PrivateAssets="compile"/>
     <ProjectReference Include="..\Inno.Assets.Serialization\Inno.Assets.Serialization.csproj" PrivateAssets="compile" />
   </ItemGroup>

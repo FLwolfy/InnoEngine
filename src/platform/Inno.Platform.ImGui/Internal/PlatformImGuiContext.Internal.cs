@@ -483,7 +483,7 @@ public sealed unsafe partial class PlatformImGuiContext
         io.MouseDrawCursor = false;
         UpdateDisplayMetrics(io);
         io.DeltaTime = deltaTimeSeconds > 0f ? deltaTimeSeconds : (1f / 60f);
-        UpdateMouseData(io, m_window.sdlWindow);
+        UpdateMouseData(io, m_window.GetSdlWindow());
         UpdateTextInputState(io);
         
         m_isFrameActive = true;
@@ -607,7 +607,7 @@ public sealed unsafe partial class PlatformImGuiContext
         var io = ImGuiNative.GetIO();
         if (m_textInputActive)
         {
-            var textInputWindow = m_textInputWindow.IsNull ? m_window.sdlWindow : m_textInputWindow;
+            var textInputWindow = m_textInputWindow.IsNull ? m_window.GetSdlWindow() : m_textInputWindow;
             _ = SDL.StopTextInput(textInputWindow);
             m_textInputWindow = SDLWindowPtr.Null;
             m_textInputActive = false;
@@ -637,11 +637,12 @@ public sealed unsafe partial class PlatformImGuiContext
     {
         var windowWidth = 0;
         var windowHeight = 0;
-        SDL.GetWindowSize(m_window.sdlWindow, ref windowWidth, ref windowHeight);
+        SDLWindowPtr sdlWindow = m_window.GetSdlWindow();
+        SDL.GetWindowSize(sdlWindow, ref windowWidth, ref windowHeight);
 
         var pixelWidth = 0;
         var pixelHeight = 0;
-        SDL.GetWindowSizeInPixels(m_window.sdlWindow, ref pixelWidth, ref pixelHeight);
+        SDL.GetWindowSizeInPixels(sdlWindow, ref pixelWidth, ref pixelHeight);
 
         io.DisplaySize = new Vector2(windowWidth, windowHeight);
 
@@ -688,7 +689,7 @@ public sealed unsafe partial class PlatformImGuiContext
         var keyboardFocus = SDL.GetKeyboardFocus();
         if (keyboardFocus.IsNull)
         {
-            return m_window.sdlWindow;
+            return m_window.GetSdlWindow();
         }
 
         var focusedWindowId = SDL.GetWindowID(keyboardFocus);
@@ -697,7 +698,7 @@ public sealed unsafe partial class PlatformImGuiContext
             return keyboardFocus;
         }
 
-        return m_window.sdlWindow;
+        return m_window.GetSdlWindow();
     }
 
     private static void UpdateMouseData(ImGuiIOPtr io, SDLWindowPtr window)

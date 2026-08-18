@@ -1,15 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
-using Inno.Engine.Scene;
 
 namespace Inno.Engine.Scene.Assets;
 
-internal sealed class SceneHotReloadMigration
+internal sealed class SceneHotReloadMigration : ISceneReloadMigration
 {
     private readonly TypeCacheReloadContext m_context;
     private readonly List<SceneState> m_scenes;
@@ -156,6 +154,13 @@ internal sealed class SceneHotReloadMigration
         }
         m_finished = true;
     }
+
+    IReadOnlyList<object> ISceneReloadMigration.retiredObjects => retiredObjects;
+    void ISceneReloadMigration.PrepareForActivation() => PrepareForActivation();
+    void ISceneReloadMigration.Apply() => Apply();
+    void ISceneReloadMigration.RollbackStructure() => RollbackStructure();
+    void ISceneReloadMigration.RestorePreviousState() => RestorePreviousState();
+    void ISceneReloadMigration.Complete() => Complete();
 
     private static ObjectState CaptureState(EngineObject target)
     {

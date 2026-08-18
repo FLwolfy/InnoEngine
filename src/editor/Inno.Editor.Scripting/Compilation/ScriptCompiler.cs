@@ -41,7 +41,9 @@ internal static class ScriptCompiler
         ScriptApiProfile editorApi = ScriptPluginMetadata.AddGlobalUsings(
             ScriptApiCatalog.Build(includeEditor: true),
             runtimePlugins.Concat(editorPlugins));
-        IReadOnlyList<MetadataReference> platformReferences = CreatePlatformReferences();
+        ScriptApiReferenceSet runtimeApiReferences = ScriptApiReferenceBuilder.Build(options, runtimeApi);
+        ScriptApiReferenceSet editorApiReferences = ScriptApiReferenceBuilder.Build(options, editorApi);
+        IReadOnlyList<MetadataReference> platformReferences = FrameworkReferenceResolver.CreateRuntimeReferences();
         string gameAssemblyPath = Path.Combine(outputDirectory, C_GAME_ASSEMBLY_NAME + ".dll");
         string editorAssemblyPath = Path.Combine(outputDirectory, C_EDITOR_ASSEMBLY_NAME + ".dll");
 
@@ -49,6 +51,7 @@ internal static class ScriptCompiler
             C_GAME_ASSEMBLY_NAME,
             sources.gameSources,
             runtimeApi,
+            runtimeApiReferences,
             platformReferences,
             runtimePlugins,
             gameAssemblyPath,
@@ -62,6 +65,7 @@ internal static class ScriptCompiler
             C_EDITOR_ASSEMBLY_NAME,
             sources.editorSources,
             editorApi,
+            editorApiReferences,
             platformReferences.Concat([gameReference]).ToArray(),
             runtimePlugins.Concat(editorPlugins).ToArray(),
             editorAssemblyPath,
@@ -87,6 +91,7 @@ internal static class ScriptCompiler
         string assemblyName,
         IReadOnlyList<string> sourcePaths,
         ScriptApiProfile api,
+        ScriptApiReferenceSet apiReferences,
         IReadOnlyList<MetadataReference> platformReferences,
         IReadOnlyList<string> pluginPaths,
         string outputPath,
@@ -123,8 +128,8 @@ internal static class ScriptCompiler
             if (!string.IsNullOrWhiteSpace(reference.Display))
                 references[reference.Display!] = reference;
         }
-        foreach (Assembly assembly in api.assemblies)
-            references[assembly.Location] = MetadataReference.CreateFromFile(assembly.Location);
+        foreach (string referencePath in apiReferences.referencePaths)
+            references[referencePath] = MetadataReference.CreateFromFile(referencePath);
         foreach (string pluginPath in pluginPaths)
             references[pluginPath] = MetadataReference.CreateFromFile(pluginPath);
 
@@ -153,18 +158,6 @@ internal static class ScriptCompiler
             .Select(ToDiagnostic)
             .ToArray();
         return new CompilationResult(emit.Success, diagnostics);
-    }
-
-    private static IReadOnlyList<MetadataReference> CreatePlatformReferences()
-    {
-        string? trustedPlatformAssemblies = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string;
-        if (string.IsNullOrWhiteSpace(trustedPlatformAssemblies))
-            throw new InvalidOperationException("Trusted platform assembly metadata is unavailable.");
-        return trustedPlatformAssemblies
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(static path => MetadataReference.CreateFromFile(path))
-            .ToArray();
     }
 
     private static bool TryCopyPlugins(

@@ -11,14 +11,57 @@ namespace Inno.Platform.ImGui;
 /// </summary>
 public static class PlatformApplicationImGuiExtensions
 {
-    private sealed class ImGuiState
+    private sealed unsafe class ImGuiState : IPlatformApplicationExtension
     {
-        internal readonly Dictionary<uint, PlatformImGuiContext> contexts = [];
+        private readonly PlatformApplication m_application;
+        private IDisposable? m_registration;
+
+        internal ImGuiState(PlatformApplication application)
+        {
+            m_application = application;
+        }
+
+        internal Dictionary<uint, PlatformImGuiContext> contexts { get; } = [];
+
+        internal void Register()
+        {
+            m_registration = m_application.RegisterExtension(this);
+        }
+
+        void IPlatformApplicationExtension.ProcessNativeEvent(
+            PlatformApplication application,
+            PlatformNativeEvent nativeEvent)
+        {
+            if (!string.Equals(nativeEvent.backendName, "SDL3", StringComparison.Ordinal) ||
+                nativeEvent.data == IntPtr.Zero)
+            {
+                return;
+            }
+            ref SDLEvent sdlEvent = ref Unsafe.AsRef<SDLEvent>(nativeEvent.data.ToPointer());
+            foreach (PlatformImGuiContext context in contexts.Values)
+                context.ProcessEvent(ref sdlEvent);
+        }
+
+        void IPlatformApplicationExtension.RenderLiveResizeWindow(
+            PlatformApplication application,
+            uint windowId)
+        {
+            foreach (PlatformImGuiContext context in contexts.Values)
+                context.RenderLiveResizeWindow(windowId);
+        }
+
+        void IPlatformApplicationExtension.OnApplicationDisposing(PlatformApplication application)
+        {
+            foreach (PlatformImGuiContext context in contexts.Values)
+                context.Dispose();
+            contexts.Clear();
+            s_states.Remove(application);
+            m_registration?.Dispose();
+            m_registration = null;
+        }
     }
 
     private static readonly ConditionalWeakTable<PlatformApplication, ImGuiState> s_states = new();
-    private static readonly object s_hookLock = new();
-    private static bool s_hooksInstalled;
 
     /// <summary>
     /// Creates or returns an existing ImGui context bound to the provided platform window.
@@ -36,16 +79,11 @@ public static class PlatformApplicationImGuiExtensions
         ArgumentNullException.ThrowIfNull(window);
 
         if (window.isClosed)
-        {
             throw new InvalidOperationException("Cannot create an ImGui context for a closed window.");
-        }
 
-        EnsureHooksInstalled();
-        var state = s_states.GetOrCreateValue(application);
-        if (state.contexts.TryGetValue(window.windowId, out var existing))
-        {
+        ImGuiState state = s_states.GetValue(application, CreateState);
+        if (state.contexts.TryGetValue(window.windowId, out PlatformImGuiContext? existing))
             return existing;
-        }
 
         var context = new PlatformImGuiContext(window, contextFlags);
         state.contexts[window.windowId] = context;
@@ -62,79 +100,17 @@ public static class PlatformApplicationImGuiExtensions
         ArgumentNullException.ThrowIfNull(application);
         ArgumentNullException.ThrowIfNull(window);
 
-        if (!s_states.TryGetValue(application, out var state))
-        {
+        if (!s_states.TryGetValue(application, out ImGuiState? state))
             return;
-        }
-
-        if (!state.contexts.Remove(window.windowId, out var context))
-        {
+        if (!state.contexts.Remove(window.windowId, out PlatformImGuiContext? context))
             return;
-        }
-
         context.Dispose();
     }
 
-    private static void EnsureHooksInstalled()
+    private static ImGuiState CreateState(PlatformApplication application)
     {
-        if (s_hooksInstalled)
-        {
-            return;
-        }
-
-        lock (s_hookLock)
-        {
-            if (s_hooksInstalled)
-            {
-                return;
-            }
-
-            PlatformApplicationHooks.s_onSdlEvent += OnSdlEvent;
-            PlatformApplicationHooks.s_onLiveResizeRedraw += OnLiveResizeRedraw;
-            PlatformApplicationHooks.s_onDisposing += OnApplicationDisposing;
-            s_hooksInstalled = true;
-        }
-    }
-
-    private static void OnSdlEvent(PlatformApplication application, ref SDLEvent sdlEvent)
-    {
-        if (!s_states.TryGetValue(application, out var state))
-        {
-            return;
-        }
-
-        foreach (var context in state.contexts.Values)
-        {
-            context.ProcessEvent(ref sdlEvent);
-        }
-    }
-
-    private static void OnLiveResizeRedraw(PlatformApplication application, uint windowId)
-    {
-        if (!s_states.TryGetValue(application, out var state))
-        {
-            return;
-        }
-
-        foreach (var context in state.contexts.Values)
-        {
-            context.RenderLiveResizeWindow(windowId);
-        }
-    }
-
-    private static void OnApplicationDisposing(PlatformApplication application)
-    {
-        if (!s_states.TryGetValue(application, out var state))
-        {
-            return;
-        }
-
-        foreach (var context in state.contexts.Values)
-        {
-            context.Dispose();
-        }
-
-        state.contexts.Clear();
-        s_states.Remove(application);
+        var state = new ImGuiState(application);
+        state.Register();
+        return state;
     }
 }

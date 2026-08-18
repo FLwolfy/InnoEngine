@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Inno.Core.Events;
@@ -15,6 +16,7 @@ public sealed unsafe partial class PlatformApplication
 {
     private readonly List<Event> m_pendingEvents = [];
     private readonly Dictionary<uint, PlatformWindow> m_windows = [];
+    private readonly List<IPlatformApplicationExtension> m_extensions = [];
     private SDLEventFilter? m_liveResizeEventWatch;
     private SDLMainThreadCallback? m_liveResizeMainThreadCallback;
     private GCHandle m_liveResizeEventWatchHandle;
@@ -131,6 +133,16 @@ public sealed unsafe partial class PlatformApplication
         }
     }
 
+    public partial IDisposable RegisterExtension(IPlatformApplicationExtension extension)
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        ArgumentNullException.ThrowIfNull(extension);
+        if (m_extensions.Contains(extension))
+            throw new InvalidOperationException("The platform extension is already registered.");
+        m_extensions.Add(extension);
+        return new ExtensionRegistration(this, extension);
+    }
+
     private bool TryDequeuePendingEvent(out Event? evnt)
     {
         if (m_pendingEventReadIndex >= m_pendingEvents.Count)
@@ -158,7 +170,7 @@ public sealed unsafe partial class PlatformApplication
         SDLEvent sdlEvent = default;
         while (SDL.PollEvent(ref sdlEvent))
         {
-            PlatformApplicationHooks.DispatchSdlEvent(this, ref sdlEvent);
+            DispatchNativeEvent(ref sdlEvent);
 
             if (!TryTranslateEvent(ref sdlEvent, out var translatedEvent))
             {
@@ -197,7 +209,9 @@ public sealed unsafe partial class PlatformApplication
             m_liveResizeMainThreadCallback = null;
         }
 
-        PlatformApplicationHooks.OnDisposing(this);
+        foreach (IPlatformApplicationExtension extension in m_extensions.ToArray())
+            extension.OnApplicationDisposing(this);
+        m_extensions.Clear();
 
         foreach (var window in m_windows.Values)
         {
@@ -258,7 +272,39 @@ public sealed unsafe partial class PlatformApplication
         Interlocked.Exchange(ref application.m_liveResizeRedrawQueued, 0);
         if (windowId != 0)
         {
-            PlatformApplicationHooks.DispatchLiveResizeRedraw(application, windowId);
+            application.DispatchLiveResizeRedraw(windowId);
+        }
+    }
+
+    private void DispatchNativeEvent(ref SDLEvent sdlEvent)
+    {
+        var nativeEvent = new PlatformNativeEvent("SDL3", (IntPtr)Unsafe.AsPointer(ref sdlEvent));
+        foreach (IPlatformApplicationExtension extension in m_extensions.ToArray())
+            extension.ProcessNativeEvent(this, nativeEvent);
+    }
+
+    private void DispatchLiveResizeRedraw(uint windowId)
+    {
+        foreach (IPlatformApplicationExtension extension in m_extensions.ToArray())
+            extension.RenderLiveResizeWindow(this, windowId);
+    }
+
+    private void UnregisterExtension(IPlatformApplicationExtension extension)
+        => m_extensions.Remove(extension);
+
+    private sealed class ExtensionRegistration(
+        PlatformApplication application,
+        IPlatformApplicationExtension extension) : IDisposable
+    {
+        private PlatformApplication? m_application = application;
+        private IPlatformApplicationExtension? m_extension = extension;
+
+        public void Dispose()
+        {
+            PlatformApplication? owner = Interlocked.Exchange(ref m_application, null);
+            IPlatformApplicationExtension? registered = Interlocked.Exchange(ref m_extension, null);
+            if (owner is not null && registered is not null)
+                owner.UnregisterExtension(registered);
         }
     }
 

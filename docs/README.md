@@ -10,9 +10,9 @@
 | --- | --- | --- |
 | [Core](core/README.md) | 程序集、反射、序列化、框架、事件、协程、任务、数学、存储等基础设施 | 已完成 |
 | [Assets](assets/README.md) | 资产门面、资产模型、文件索引、Importer、序列化桥接与内置资产类型 | 已完成 |
-| Engine | Scene、Rendering 等运行时能力 | 待补充 |
-| Editor | 编辑器宿主、Inspection、Scripting、Panels 等 | 待补充 |
-| Platform / Native | 窗口、图形后端与原生集成 | 待补充 |
+| [Engine](engine/README.md) | Scene、Rendering 等运行时能力 | 部分完成 |
+| [Editor](editor/README.md) | 编辑器宿主、Inspection、Scripting、Panels 等 | 部分完成 |
+| [Platform](platform/README.md) / Native | 窗口、图形后端与原生集成 | 部分完成 |
 
 ## 推荐阅读路线
 
@@ -20,9 +20,10 @@
 
 1. [Inno.Core.Assemblies](core/Inno.Core.Assemblies.md)：活动程序集目录与事务式 Reload。
 2. [Inno.Core.Reflection](core/Inno.Core.Reflection.md)：TypeCache、Stable Type ID 与通用 TypeRegistry。
-3. [Inno.Core.Serialization](core/Inno.Core.Serialization.md)：属性序列化与 Converter 扩展。
-4. [Inno.Assets.Loader](assets/Inno.Assets.Loader.md)：Importer 发现、导入缓存与加载。
-5. [Inno.Assets](assets/Inno.Assets.md)：应用层使用的资产系统门面。
+3. [Inno.Core.Scripting](core/Inno.Core.Scripting.md)：每项目显式脚本 API 清单。
+4. [Inno.Core.Serialization](core/Inno.Core.Serialization.md)：属性序列化与 Converter 扩展。
+5. [Inno.Assets.Loader](assets/Inno.Assets.Loader.md)：Importer 发现、导入缓存与加载。
+6. [Inno.Assets](assets/Inno.Assets.md)：应用层使用的资产系统门面。
 
 如果只想开始写游戏脚本，通常先看 [Framework](core/Inno.Core.Framework.md)、[Mathematics](core/Inno.Core.Mathematics.md) 和 [Assets](assets/README.md) 即可。
 

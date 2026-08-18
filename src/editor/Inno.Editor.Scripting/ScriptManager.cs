@@ -177,7 +177,7 @@ public sealed class ScriptManager : IDisposable
 
         using AssemblyReloadSession reload = AssemblyManager.BeginReload(handle, request);
         TypeCacheReloadContext typeReload = reload.context.GetContext<TypeCacheReloadContext>();
-        SceneHotReloadMigration migration = SceneHotReloadMigration.Capture(typeReload);
+        ISceneReloadMigration migration = SceneReloadService.Capture(typeReload);
         migration.PrepareForActivation();
         if (Shell.isInitialized)
         {
