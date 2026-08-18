@@ -31,7 +31,7 @@ public sealed class LogPanel : EditorPanel
     private readonly HashSet<long> m_openEntries = [];
 
     private bool m_collapse = true;
-    private int m_lastSnapshotCount = -1;
+    private long m_lastSnapshotVersion = -1;
     private bool m_requestScrollToBottom = true;
     private bool m_lastRenderedCollapse = true;
     #endregion
@@ -76,7 +76,6 @@ public sealed class LogPanel : EditorPanel
         if (NativeImGui.Button("Clear"))
         {
             context.logs.Clear();
-            m_lastSnapshotCount = 0;
             m_requestScrollToBottom = true;
         }
     }
@@ -120,13 +119,9 @@ public sealed class LogPanel : EditorPanel
     {
         NativeImGui.BeginChild("LogRegion", Vector2.Zero);
 
-        LogEntry[] entries = context.logs.Snapshot();
-        int previousSnapshotCount = m_lastSnapshotCount;
-        bool hasNewEntries = previousSnapshotCount >= 0 && entries.Length > previousSnapshotCount;
-        if (entries.Length != previousSnapshotCount)
-        {
-            m_lastSnapshotCount = entries.Length;
-        }
+        LogEntry[] entries = context.logs.Snapshot(out long snapshotVersion);
+        bool hasNewEntries = m_lastSnapshotVersion >= 0 && snapshotVersion != m_lastSnapshotVersion;
+        m_lastSnapshotVersion = snapshotVersion;
 
         bool scrollAtBottom = NativeImGui.GetScrollY() >= NativeImGui.GetScrollMaxY() - 1f;
         bool shouldScrollToBottom = m_requestScrollToBottom || (hasNewEntries && scrollAtBottom);

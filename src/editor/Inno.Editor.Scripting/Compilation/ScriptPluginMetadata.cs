@@ -36,7 +36,8 @@ internal static class ScriptPluginMetadata
             profile.exports,
             profile.implementationAssemblies,
             globalUsings.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
-            profile.apiNamespaces);
+            profile.apiNamespaces,
+            profile.namespaceMappings);
     }
 
     private static IEnumerable<(string key, string value)> ReadAssemblyMetadata(string path)

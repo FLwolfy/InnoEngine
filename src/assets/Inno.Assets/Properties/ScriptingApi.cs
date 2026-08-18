@@ -8,7 +8,3 @@ using Inno.Core.Scripting;
 
 [assembly: ScriptingApiExport(typeof(AssetManager), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(AssetManagerOptions), ScriptingApiScope.Runtime)]
-
-[assembly: ScriptingGlobalUsing(
-    "InnoEngine.Assets",
-    ScriptingApiScope.Runtime)]

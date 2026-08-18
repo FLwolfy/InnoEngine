@@ -11,7 +11,7 @@ using ImGuiNative = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Platform.ImGui;
 
-public sealed unsafe partial class PlatformImGuiContext
+public sealed partial class PlatformImGuiContext
 {
     private const float DEFAULT_KEY_REPEAT_DELAY_SECONDS = 0.275f;
     private const float DEFAULT_KEY_REPEAT_RATE_SECONDS = 0.050f;
@@ -37,8 +37,10 @@ public sealed unsafe partial class PlatformImGuiContext
     private TimeSpan m_lastLiveResizeLockTime;
     private TimeSpan m_lastLiveResizeRenderTime;
     private Action? m_lastDrawFrame;
+    private IntPtr m_iniFilename;
     private uint m_liveResizeLockedWindowId;
     private readonly bool m_enableSmoothResize;
+    private bool m_hasStartedFrame;
     private bool m_isFrameActive;
     private bool m_textInputActive;
     private bool m_disposed;
@@ -77,12 +79,39 @@ public sealed unsafe partial class PlatformImGuiContext
         io.MouseDrawCursor = false;
         io.Fonts.RendererHasTextures = true;
         ConfigureKeyRepeat(io);
-        ConfigureFonts(io);
+        ConfigureFonts(m_context, io);
         ImGuiPackedColor.EnsureInitialized();
 
         UpdateDisplayMetrics(io);
         m_viewports = enableViewports ? new PlatformImGuiViewportBackend(window) : null;
         m_renderer = new PlatformImGuiSdlRenderer(window);
+    }
+
+    public partial void SetIniFile(string? filePath)
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (m_hasStartedFrame)
+            throw new InvalidOperationException("The ImGui layout file must be configured before the first frame.");
+
+        ImGuiNative.SetCurrentContext(m_context);
+        var io = ImGuiNative.GetIO();
+        if (m_iniFilename != IntPtr.Zero)
+        {
+            Marshal.FreeCoTaskMem(m_iniFilename);
+            m_iniFilename = IntPtr.Zero;
+        }
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            SetIniFilename(io, IntPtr.Zero);
+            return;
+        }
+
+        string fullPath = Path.GetFullPath(filePath);
+        string? directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+        m_iniFilename = Marshal.StringToCoTaskMemUTF8(fullPath);
+        SetIniFilename(io, m_iniFilename);
     }
 
     private static void ConfigureKeyRepeat(ImGuiIOPtr io)
@@ -91,43 +120,87 @@ public sealed unsafe partial class PlatformImGuiContext
         io.KeyRepeatRate = DEFAULT_KEY_REPEAT_RATE_SECONDS;
     }
 
-    private static void ConfigureFonts(ImGuiIOPtr io)
+    public partial void RegisterFontStyle(
+        ImGuiFontStyle style,
+        string filePath,
+        float fontSizePixels)
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (m_hasStartedFrame)
+            throw new InvalidOperationException("Font styles must be registered before the first ImGui frame.");
+        ImGuiFont.ValidateStyle(style);
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        if (!float.IsFinite(fontSizePixels) || fontSizePixels <= 0f)
+            throw new ArgumentOutOfRangeException(nameof(fontSizePixels));
+
+        string fullPath = Path.GetFullPath(filePath);
+        if (!File.Exists(fullPath))
+            throw new FileNotFoundException("The font file does not exist.", fullPath);
+
+        ImGuiNative.SetCurrentContext(m_context);
+        ImGuiIOPtr io = ImGuiNative.GetIO();
+        ImFontPtr loadedFont = LoadFont(io.Fonts, fullPath, fontSizePixels);
+        if (loadedFont.IsNull)
+            throw new InvalidOperationException($"Could not load the font '{fullPath}'.");
+
+        ResolveFontPaths(out _, out List<string> iconFontPaths);
+        MergeIconFontsIntoCurrentBaseFont(io.Fonts, iconFontPaths);
+        ImGuiFont.RegisterStyle(m_context, style, loadedFont);
+        if (style == ImGuiFontStyle.Regular)
+            io.FontDefault = loadedFont;
+    }
+
+    private static void ConfigureFonts(ImGuiContextPtr context, ImGuiIOPtr io)
     {
         var fonts = io.Fonts;
         fonts.Clear();
 
         ResolveFontPaths(out var fontPaths, out var iconFontPaths);
-        ImFont* defaultFont = null;
+        var styleFonts = new Dictionary<ImGuiFontStyle, ImFontPtr>();
+        ImFontPtr defaultFont = ImFontPtr.Null;
         var preferredIndex = FindPreferredFontIndex(fontPaths);
         for (var i = 0; i < fontPaths.Count; i++)
         {
-            var loadedFont = fonts.AddFontFromFileTTF(fontPaths[i], DEFAULT_FONT_SIZE_PIXELS);
-            if (loadedFont == null)
+            ImFontPtr loadedFont = LoadFont(fonts, fontPaths[i], DEFAULT_FONT_SIZE_PIXELS);
+            if (loadedFont.IsNull)
             {
                 continue;
             }
 
             MergeIconFontsIntoCurrentBaseFont(fonts, iconFontPaths);
+            styleFonts[GetFontStyle(fontPaths[i])] = loadedFont;
             if (i == preferredIndex)
             {
                 defaultFont = loadedFont;
             }
-            else if (defaultFont == null)
+            else if (defaultFont.IsNull)
             {
                 defaultFont = loadedFont;
             }
         }
 
-        if (defaultFont == null)
+        if (defaultFont.IsNull)
         {
-            defaultFont = fonts.AddFontDefault();
-            if (defaultFont != null)
+            defaultFont = LoadDefaultFont(fonts);
+            if (!defaultFont.IsNull)
             {
                 MergeIconFontsIntoCurrentBaseFont(fonts, iconFontPaths);
             }
         }
 
         io.FontDefault = defaultFont;
+        if (!defaultFont.IsNull && !styleFonts.ContainsKey(ImGuiFontStyle.Regular))
+            styleFonts[ImGuiFontStyle.Regular] = defaultFont;
+        ImGuiFont.RegisterContext(context, styleFonts);
+    }
+
+    private static ImGuiFontStyle GetFontStyle(string fontPath)
+    {
+        string name = Path.GetFileNameWithoutExtension(fontPath);
+        bool bold = name.Contains("Bold", StringComparison.OrdinalIgnoreCase);
+        bool italic = name.Contains("Italic", StringComparison.OrdinalIgnoreCase);
+        return (bold ? ImGuiFontStyle.Bold : ImGuiFontStyle.Regular) |
+               (italic ? ImGuiFontStyle.Italic : ImGuiFontStyle.Regular);
     }
 
     private static int FindPreferredFontIndex(List<string> fontPaths)
@@ -217,7 +290,7 @@ public sealed unsafe partial class PlatformImGuiContext
         }
     }
 
-    private static void MergeIconFontsIntoCurrentBaseFont(ImFontAtlasPtr fonts, List<string> iconFontPaths)
+    private static unsafe void MergeIconFontsIntoCurrentBaseFont(ImFontAtlasPtr fonts, List<string> iconFontPaths)
     {
         if (iconFontPaths.Count == 0)
         {
@@ -308,13 +381,10 @@ public sealed unsafe partial class PlatformImGuiContext
 
             case SDLEventType.TextInput:
             {
-                if (sdlEvent.Text.Text != null)
+                string? text = GetTextInputText(sdlEvent);
+                if (!string.IsNullOrEmpty(text))
                 {
-                    var text = Marshal.PtrToStringUTF8((IntPtr)sdlEvent.Text.Text);
-                    if (!string.IsNullOrEmpty(text))
-                    {
-                        io.AddInputCharactersUTF8(text);
-                    }
+                    io.AddInputCharactersUTF8(text);
                 }
                 break;
             }
@@ -478,6 +548,7 @@ public sealed unsafe partial class PlatformImGuiContext
         }
 
         ImGuiNative.SetCurrentContext(m_context);
+        m_hasStartedFrame = true;
 
         var io = ImGuiNative.GetIO();
         io.MouseDrawCursor = false;
@@ -525,7 +596,7 @@ public sealed unsafe partial class PlatformImGuiContext
                 ImGuiNative.SetCurrentContext(m_context);
             }
 
-            return new IntPtr(drawData);
+            return GetDrawDataAddress(drawData);
         }
         finally
         {
@@ -629,7 +700,13 @@ public sealed unsafe partial class PlatformImGuiContext
         m_cursors.Clear();
         m_viewports?.Dispose();
         m_renderer.Dispose();
+        ImGuiFont.UnregisterContext(m_context);
         ImGuiNative.DestroyContext(m_context);
+        if (m_iniFilename != IntPtr.Zero)
+        {
+            Marshal.FreeCoTaskMem(m_iniFilename);
+            m_iniFilename = IntPtr.Zero;
+        }
         m_disposed = true;
     }
 
@@ -663,7 +740,7 @@ public sealed unsafe partial class PlatformImGuiContext
         var targetWindow = ResolveTextInputWindow();
         if (io.WantTextInput)
         {
-            if (!m_textInputActive || m_textInputWindow.Handle != targetWindow.Handle)
+            if (!m_textInputActive || m_textInputWindow != targetWindow)
             {
                 if (m_textInputActive && !m_textInputWindow.IsNull)
                 {
@@ -683,6 +760,21 @@ public sealed unsafe partial class PlatformImGuiContext
             m_textInputActive = false;
         }
     }
+
+    private static unsafe void SetIniFilename(ImGuiIOPtr io, IntPtr fileName)
+    {
+        io.IniFilename = (byte*)fileName;
+    }
+
+    private static unsafe ImFontPtr LoadFont(ImFontAtlasPtr fonts, string filePath, float fontSizePixels) =>
+        fonts.AddFontFromFileTTF(filePath, fontSizePixels);
+
+    private static unsafe ImFontPtr LoadDefaultFont(ImFontAtlasPtr fonts) => fonts.AddFontDefault();
+
+    private static unsafe string? GetTextInputText(SDLEvent sdlEvent) =>
+        sdlEvent.Text.Text == null ? null : Marshal.PtrToStringUTF8((IntPtr)sdlEvent.Text.Text);
+
+    private static unsafe IntPtr GetDrawDataAddress(ImDrawDataPtr drawData) => new(drawData);
 
     private SDLWindowPtr ResolveTextInputWindow()
     {

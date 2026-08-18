@@ -26,6 +26,7 @@ public sealed class HierarchyPanel : EditorPanel
     private static readonly Vector4 s_inactiveTextColor = new(0.52f, 0.52f, 0.54f, 1f);
 
     private readonly HashSet<Guid> m_forceOpenIds = [];
+    private readonly HashSet<Guid> m_forceOpenSceneIds = [];
     private readonly HashSet<Guid> m_drawnIds = [];
     private readonly HashSet<Guid> m_initializedSceneIds = [];
     private Guid? m_renamingId;
@@ -50,7 +51,7 @@ public sealed class HierarchyPanel : EditorPanel
         PruneSelection(context);
         HandleKeyboardShortcuts(context);
 
-        NativeImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(3f, 0f));
+        NativeImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(3f, 2f));
         NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(4f, 1f));
         try
         {
@@ -74,7 +75,9 @@ public sealed class HierarchyPanel : EditorPanel
     {
         Guid sceneId = ((IIdentityObject)scene).GetIdentity().persistentId;
         string id = sceneId.ToString("N");
-        if (m_initializedSceneIds.Add(sceneId))
+        bool shouldOpen = m_initializedSceneIds.Add(sceneId);
+        shouldOpen |= m_forceOpenSceneIds.Remove(sceneId);
+        if (shouldOpen)
         {
             ImGuiWidget.SetNextTreeNodeOpen(true);
         }
@@ -101,7 +104,12 @@ public sealed class HierarchyPanel : EditorPanel
 
         if (ImGuiWidget.DragDropTarget<Guid>(C_SCENE_OBJECT_PAYLOAD, out Guid droppedId))
         {
-            MoveToSceneRoot(scene, droppedId);
+            GameObject? moved = MoveToSceneRoot(scene, droppedId);
+            if (moved is not null)
+            {
+                m_forceOpenSceneIds.Add(sceneId);
+                context.selection.Select(moved);
+            }
         }
 
         DrawSceneContextMenu(context, scene, id);
@@ -167,7 +175,8 @@ public sealed class HierarchyPanel : EditorPanel
         bool delivered = ImGuiWidget.DragDropTarget(
             C_SCENE_OBJECT_PAYLOAD,
             out Guid droppedId,
-            out bool isPreviewing);
+            out bool isPreviewing,
+            drawDefaultHighlight: false);
         if (isPreviewing)
         {
             DrawDropPreview(result);
@@ -175,7 +184,9 @@ public sealed class HierarchyPanel : EditorPanel
 
         if (delivered)
         {
-            ApplyDrop(scene, droppedId, gameObject, result);
+            GameObject? moved = ApplyDrop(scene, droppedId, gameObject, result);
+            if (moved is not null)
+                context.selection.Select(moved);
         }
 
         DrawObjectContextMenu(context, gameObject, id);
@@ -264,7 +275,7 @@ public sealed class HierarchyPanel : EditorPanel
 
     private static float GetVisibilityButtonWidth() => ImGuiWidget.GetIconButtonSize().X;
 
-    private static void DrawSceneContextMenu(EditorContext context, GameScene scene, string id)
+    private void DrawSceneContextMenu(EditorContext context, GameScene scene, string id)
     {
         if (!ImGuiWidget.BeginContextMenu($"##scene_context_{id}"))
         {
@@ -280,6 +291,7 @@ public sealed class HierarchyPanel : EditorPanel
         if (NativeImGui.MenuItem("Create Empty"))
         {
             GameObject created = scene.CreateObject();
+            m_forceOpenSceneIds.Add(((IIdentityObject)scene).GetIdentity().persistentId);
             context.selection.Select(created);
         }
 
@@ -298,6 +310,7 @@ public sealed class HierarchyPanel : EditorPanel
         {
             GameObject child = gameObject.scene.CreateObject();
             child.GetComponent<Transform>().SetParent(gameObject.GetComponent<Transform>());
+            m_forceOpenIds.Add(gameObject.identity.persistentId);
             context.selection.Select(child);
             BeginRename(child);
         }
@@ -327,7 +340,9 @@ public sealed class HierarchyPanel : EditorPanel
 
         if (ImGuiWidget.DragDropTarget<Guid>(C_SCENE_OBJECT_PAYLOAD, out Guid droppedId))
         {
-            MoveToSceneRoot(context.scene, droppedId);
+            GameObject? moved = MoveToSceneRoot(context.scene, droppedId);
+            if (moved is not null)
+                context.selection.Select(moved);
         }
 
         if (!ImGuiWidget.BeginContextMenu("##hierarchy_blank_context"))
@@ -338,6 +353,7 @@ public sealed class HierarchyPanel : EditorPanel
         if (NativeImGui.MenuItem("Create Empty"))
         {
             GameObject created = context.scene.CreateObject();
+            m_forceOpenSceneIds.Add(((IIdentityObject)context.scene).GetIdentity().persistentId);
             context.selection.Select(created);
             BeginRename(created);
         }
@@ -345,7 +361,7 @@ public sealed class HierarchyPanel : EditorPanel
         ImGuiWidget.EndContextMenu();
     }
 
-    private void ApplyDrop(
+    private GameObject? ApplyDrop(
         GameScene scene,
         Guid droppedId,
         GameObject target,
@@ -355,13 +371,15 @@ public sealed class HierarchyPanel : EditorPanel
         if (dropped is null || ReferenceEquals(dropped, target) ||
             !dropped.isRuntimeValid || !ReferenceEquals(dropped.scene, scene))
         {
-            return;
+            return null;
         }
 
         try
         {
             Transform droppedTransform = dropped.GetComponent<Transform>();
             Transform targetTransform = target.GetComponent<Transform>();
+            if (IsDescendantOf(targetTransform, droppedTransform))
+                PromoteDirectChildren(droppedTransform);
             float height = MathF.Max(1f, result.max.Y - result.min.Y);
             float relativeY = (NativeImGui.GetMousePos().Y - result.min.Y) / height;
             if (relativeY is >= 0.25f and <= 0.75f)
@@ -369,7 +387,7 @@ public sealed class HierarchyPanel : EditorPanel
                 droppedTransform.SetParent(targetTransform);
                 droppedTransform.SetSiblingIndex(targetTransform.children.Count - 1);
                 m_forceOpenIds.Add(target.identity.persistentId);
-                return;
+                return dropped;
             }
 
             Transform? targetParent = targetTransform.parent;
@@ -383,19 +401,21 @@ public sealed class HierarchyPanel : EditorPanel
 
             int desiredIndex = targetIndex + (relativeY > 0.75f ? 1 : 0);
             droppedTransform.SetSiblingIndex(desiredIndex);
+            return dropped;
         }
         catch (InvalidOperationException exception)
         {
             Log.Warn("Hierarchy drop was rejected: {0}", exception.Message);
+            return null;
         }
     }
 
-    private static void MoveToSceneRoot(GameScene scene, Guid droppedId)
+    private static GameObject? MoveToSceneRoot(GameScene scene, Guid droppedId)
     {
         GameObject? dropped = IdentityManager.Get<GameObject>(droppedId);
         if (dropped is null || !dropped.isRuntimeValid || !ReferenceEquals(dropped.scene, scene))
         {
-            return;
+            return null;
         }
 
         try
@@ -403,10 +423,12 @@ public sealed class HierarchyPanel : EditorPanel
             Transform transform = dropped.GetComponent<Transform>();
             transform.SetParent(null);
             transform.SetSiblingIndex(GetRootObjects(scene).Count - 1);
+            return dropped;
         }
         catch (InvalidOperationException exception)
         {
             Log.Warn("Hierarchy scene root drop was rejected: {0}", exception.Message);
+            return null;
         }
     }
 
@@ -421,6 +443,37 @@ public sealed class HierarchyPanel : EditorPanel
         else if (relativeY > 0.75f)
         {
             ImGuiWidget.InsertionLine(result.min.X, result.max.X, result.max.Y);
+        }
+        else
+        {
+            Vector2 highlightMin = result.contentMin;
+            highlightMin.X = MathF.Max(
+                result.min.X,
+                highlightMin.X - NativeImGui.GetStyle().ItemInnerSpacing.X);
+            ImGuiWidget.DropTargetHighlight(highlightMin, result.max);
+        }
+    }
+
+    private static bool IsDescendantOf(Transform transform, Transform possibleAncestor)
+    {
+        for (Transform? current = transform.parent; current is not null; current = current.parent)
+        {
+            if (ReferenceEquals(current, possibleAncestor))
+                return true;
+        }
+        return false;
+    }
+
+    private static void PromoteDirectChildren(Transform transform)
+    {
+        Transform? previousParent = transform.parent;
+        int insertionIndex = transform.siblingIndex;
+        List<Transform> children = new(transform.children);
+        for (int i = 0; i < children.Count; i++)
+        {
+            Transform child = children[i];
+            child.SetParent(previousParent);
+            child.SetSiblingIndex(insertionIndex + i);
         }
     }
 

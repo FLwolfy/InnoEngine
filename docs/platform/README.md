@@ -5,4 +5,4 @@
 | 项目 | 作用 | 状态 |
 | --- | --- | --- |
 | [Inno.Platform](Inno.Platform.md) | 应用、窗口、事件轮询和可选后端集成契约 | 已完成 |
-| Inno.Platform.ImGui | Dear ImGui 的 SDL3 实现 | 待补充 |
+| [Inno.Platform.ImGui](Inno.Platform.ImGui.md) | Dear ImGui context、SDL3 渲染、viewport 与 layout 持久化 | 已完成 |

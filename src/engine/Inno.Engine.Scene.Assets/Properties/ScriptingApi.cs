@@ -8,7 +8,3 @@ using Inno.Engine.Scene.Assets;
 
 [assembly: ScriptingApiExport(typeof(PrefabAsset), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(SceneAsset), ScriptingApiScope.Runtime)]
-
-[assembly: ScriptingGlobalUsing(
-    "InnoEngine.Scene",
-    ScriptingApiScope.Runtime)]

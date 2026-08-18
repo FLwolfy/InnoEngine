@@ -54,7 +54,7 @@ public sealed class PlayerState : ISerializable
 | API | 说明 |
 | --- | --- |
 | `ISerializable` | 声明引用类型参与属性序列化。 |
-| `[SerializableProperty(visibility)]` | 标注 field/property；默认 `Show`。属性 `propertyVisibility` 暴露规则。 |
+| `[SerializableProperty(visibility)]` | 标注 field/property；默认 `Show`。`propertyVisibility` 暴露规则，`order` 控制同一声明类型内的处理顺序。 |
 | `[OnSerializableRestored]` | 标记无参实例方法，在完整 restore 成功后调用。 |
 | `[RequiresSerializationConverter]` | 强制该 class 必须由显式 Converter 处理。 |
 | `[SerializationExtension]` | 标记 Converter class，让 TypeCache/Registry 自动发现。 |
@@ -87,6 +87,22 @@ foreach (SerializedProperty property in SerializationManager.GetProperties(state
         property.SetValue(value);
 }
 ```
+
+### 成员顺序
+
+CLR 将 field 与 property 存放在不同 metadata table 中，因此 `MetadataToken` 不能表达两者在 C# 源码中的交错顺序。Inno 脚本编译器会在生成运行时代码时自动把源码声明顺序写入 `SerializablePropertyAttribute.order`，所以 GameScripts/EditorScripts 中混合声明的 field 和 property 会按脚本顺序出现在 Inspector 和序列化管线中。
+
+普通预编译程序集可以在需要跨 field/property 固定顺序时显式声明：
+
+```csharp
+[SerializableProperty(order = 0)]
+public int firstProperty { get; set; }
+
+[SerializableProperty(order = 1)]
+public int secondField;
+```
+
+继承层级仍保持 base type 在前、derived type 在后；`order` 只比较同一个 declaring type 内的成员。
 
 ## SerializationContext
 

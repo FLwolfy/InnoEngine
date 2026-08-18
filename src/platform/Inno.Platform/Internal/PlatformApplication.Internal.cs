@@ -12,7 +12,7 @@ namespace Inno.Platform;
 /// <summary>
 /// Platform runtime entry point responsible for window creation and platform event polling.
 /// </summary>
-public sealed unsafe partial class PlatformApplication
+public sealed partial class PlatformApplication
 {
     private readonly List<Event> m_pendingEvents = [];
     private readonly Dictionary<uint, PlatformWindow> m_windows = [];
@@ -25,7 +25,7 @@ public sealed unsafe partial class PlatformApplication
     private int m_pendingEventReadIndex;
     private bool m_disposed;
 
-    private void Initialize()
+    private unsafe void Initialize()
     {
         if (OperatingSystem.IsMacOS())
         {
@@ -93,6 +93,12 @@ public sealed unsafe partial class PlatformApplication
     public partial IReadOnlyList<PlatformWindow> GetWindows()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
+
+        return GetWindowsCore();
+    }
+
+    private unsafe IReadOnlyList<PlatformWindow> GetWindowsCore()
+    {
 
         var count = 0;
         var nativeWindows = SDL.GetWindows(ref count);
@@ -172,7 +178,7 @@ public sealed unsafe partial class PlatformApplication
         {
             DispatchNativeEvent(ref sdlEvent);
 
-            if (!TryTranslateEvent(ref sdlEvent, out var translatedEvent))
+            if (!TryTranslateEvent(ref sdlEvent, out var translatedEvent) || translatedEvent is null)
             {
                 continue;
             }
@@ -276,7 +282,7 @@ public sealed unsafe partial class PlatformApplication
         }
     }
 
-    private void DispatchNativeEvent(ref SDLEvent sdlEvent)
+    private unsafe void DispatchNativeEvent(ref SDLEvent sdlEvent)
     {
         var nativeEvent = new PlatformNativeEvent("SDL3", (IntPtr)Unsafe.AsPointer(ref sdlEvent));
         foreach (IPlatformApplicationExtension extension in m_extensions.ToArray())
@@ -335,6 +341,16 @@ public sealed unsafe partial class PlatformApplication
 
                 evnt = new WindowCloseEvent(sdlEvent.Window.WindowID);
                 return true;
+
+            case SDLEventType.WindowFocusGained:
+            case SDLEventType.WindowFocusLost:
+            {
+                bool isFocused = eventType == SDLEventType.WindowFocusGained;
+                if (m_windows.TryGetValue(sdlEvent.Window.WindowID, out PlatformWindow? focusedWindow))
+                    focusedWindow.UpdateFocus(isFocused);
+                evnt = new WindowFocusChangedEvent(sdlEvent.Window.WindowID, isFocused);
+                return true;
+            }
 
             case SDLEventType.KeyDown:
             {

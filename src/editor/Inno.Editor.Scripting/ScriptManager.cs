@@ -1,10 +1,12 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
 using Inno.Core.Assemblies;
 using Inno.Core.Framework;
+using Inno.Core.Logging;
 using Inno.Core.Reflection;
 using Inno.Engine.Scene.Assets;
 
@@ -21,10 +23,13 @@ public sealed class ScriptManager : IDisposable
     private readonly CancellationTokenSource m_lifetimeCancellation = new();
 
     private FileSystemWatcher? m_watcher;
-    private CancellationTokenSource? m_debounceCancellation;
     private ScriptCompilationResult? m_pendingCompilation;
     private AssemblyModuleHandle? m_scriptModule;
+    private string m_compilationStatus = "Waiting for script changes.";
+    private long m_lastCompileRequestTimestamp;
     private long m_generation;
+    private float m_compilationProgress;
+    private bool m_compileRequested;
     private bool m_disposed;
 
     /// <summary>
@@ -37,16 +42,35 @@ public sealed class ScriptManager : IDisposable
             throw new ArgumentException("Project root directory is required.", nameof(options));
         if (options.debounceMilliseconds < 0)
             throw new ArgumentOutOfRangeException(nameof(options), "Debounce duration cannot be negative.");
+        if (options.retainedCompilationGenerations < 1)
+            throw new ArgumentOutOfRangeException(nameof(options), "At least one compilation generation must be retained.");
         m_options = new ScriptManagerOptions
         {
             projectRootDirectory = Path.GetFullPath(options.projectRootDirectory),
             autoCompile = options.autoCompile,
-            debounceMilliseconds = options.debounceMilliseconds
+            debounceMilliseconds = options.debounceMilliseconds,
+            retainedCompilationGenerations = options.retainedCompilationGenerations
         };
     }
 
     /// <summary>Gets whether a compilation currently owns the compiler gate.</summary>
     public bool isCompiling { get; private set; }
+
+    /// <summary>Gets whether source or plugin changes are waiting to be compiled.</summary>
+    public bool isCompilationPending
+    {
+        get
+        {
+            lock (m_sync)
+                return m_compileRequested;
+        }
+    }
+
+    /// <summary>Gets the current compilation progress in the inclusive range from zero to one.</summary>
+    public float compilationProgress => Volatile.Read(ref m_compilationProgress);
+
+    /// <summary>Gets a short description of the current compilation stage.</summary>
+    public string compilationStatus => Volatile.Read(ref m_compilationStatus);
 
     /// <summary>Gets the most recently completed compilation.</summary>
     public ScriptCompilationResult? lastCompilation { get; private set; }
@@ -62,6 +86,8 @@ public sealed class ScriptManager : IDisposable
         ObjectDisposedException.ThrowIf(m_disposed, this);
         Directory.CreateDirectory(m_options.assetDirectory);
         Directory.CreateDirectory(m_options.outputDirectory);
+        m_generation = Math.Max(m_generation, FindLatestCompilationGeneration());
+        PruneCompilationOutputs();
         GenerateProjectFiles();
         if (m_watcher is null)
         {
@@ -81,20 +107,38 @@ public sealed class ScriptManager : IDisposable
     }
 
     /// <summary>
-    /// Debounces and schedules compilation without mutating runtime state on the watcher thread.
+    /// Marks scripts as changed without compiling on the file-watcher thread.
     /// </summary>
     public void RequestCompile()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
-        CancellationTokenSource cancellation;
         lock (m_sync)
         {
-            m_debounceCancellation?.Cancel();
-            m_debounceCancellation?.Dispose();
-            cancellation = new CancellationTokenSource();
-            m_debounceCancellation = cancellation;
+            m_compileRequested = true;
+            m_lastCompileRequestTimestamp = Environment.TickCount64;
         }
-        _ = CompileAfterDelayAsync(cancellation.Token);
+    }
+
+    /// <summary>
+    /// Starts a pending compilation after the configured quiet period has elapsed.
+    /// </summary>
+    /// <param name="compilation">The started compilation task, or <see langword="null"/> when none was ready.</param>
+    /// <returns><see langword="true"/> when a pending compilation was started.</returns>
+    public bool TryCompilePending(out Task<ScriptCompilationResult>? compilation)
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        lock (m_sync)
+        {
+            long elapsed = Environment.TickCount64 - m_lastCompileRequestTimestamp;
+            if (!m_compileRequested || isCompiling || elapsed < m_options.debounceMilliseconds)
+            {
+                compilation = null;
+                return false;
+            }
+            m_compileRequested = false;
+        }
+        compilation = CompileAsync().AsTask();
+        return true;
     }
 
     /// <summary>
@@ -112,13 +156,18 @@ public sealed class ScriptManager : IDisposable
         try
         {
             isCompiling = true;
+            SetCompilationProgress(0f, "Generating IDE project files...");
             long generation = Interlocked.Increment(ref m_generation);
             ScriptCompilationResult result;
             try
             {
                 ScriptProjectGenerator.Generate(m_options);
                 result = await ScriptCompiler
-                    .CompileAsync(m_options, generation, effectiveCancellation)
+                    .CompileAsync(
+                        m_options,
+                        generation,
+                        SetCompilationProgress,
+                        effectiveCancellation)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (effectiveCancellation.IsCancellationRequested)
@@ -144,6 +193,10 @@ public sealed class ScriptManager : IDisposable
                 lastCompilation = result;
                 m_pendingCompilation = result.success ? result : null;
             }
+            PruneCompilationOutputs();
+            SetCompilationProgress(
+                1f,
+                result.success ? "Script compilation completed." : "Script compilation failed.");
             CompilationCompleted?.Invoke(result);
             return result;
         }
@@ -230,9 +283,7 @@ public sealed class ScriptManager : IDisposable
         }
         lock (m_sync)
         {
-            m_debounceCancellation?.Cancel();
-            m_debounceCancellation?.Dispose();
-            m_debounceCancellation = null;
+            m_compileRequested = false;
             m_pendingCompilation = null;
         }
         if (m_scriptModule is AssemblyModuleHandle handle && AssemblyManager.isInitialized)
@@ -241,26 +292,72 @@ public sealed class ScriptManager : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private async Task CompileAfterDelayAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await Task.Delay(m_options.debounceMilliseconds, cancellationToken).ConfigureAwait(false);
-            await CompileAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (ObjectDisposedException)
-        {
-        }
-    }
-
     private void OnProjectFileChanged(object sender, FileSystemEventArgs args)
     {
-        if (m_disposed || !IsScriptInput(args.FullPath))
+        if (m_disposed || !m_options.autoCompile || !IsScriptInput(args.FullPath))
             return;
         RequestCompile();
+    }
+
+    private void SetCompilationProgress(float progress, string status)
+    {
+        Volatile.Write(ref m_compilationProgress, Math.Clamp(progress, 0f, 1f));
+        Volatile.Write(ref m_compilationStatus, status);
+    }
+
+    private long FindLatestCompilationGeneration()
+    {
+        long latest = 0;
+        foreach (string directory in Directory.EnumerateDirectories(m_options.outputDirectory))
+        {
+            if (long.TryParse(
+                    Path.GetFileName(directory),
+                    System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out long generation))
+            {
+                latest = Math.Max(latest, generation);
+            }
+        }
+        return latest;
+    }
+
+    private void PruneCompilationOutputs()
+    {
+        string[] obsoleteDirectories = Directory
+            .EnumerateDirectories(m_options.outputDirectory)
+            .Select(static directory => new
+            {
+                path = directory,
+                name = Path.GetFileName(directory)
+            })
+            .Where(static candidate => long.TryParse(
+                candidate.name,
+                System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out _))
+            .OrderByDescending(static candidate => long.Parse(
+                candidate.name,
+                System.Globalization.CultureInfo.InvariantCulture))
+            .Skip(m_options.retainedCompilationGenerations)
+            .Select(static candidate => candidate.path)
+            .ToArray();
+
+        for (int i = 0; i < obsoleteDirectories.Length; i++)
+        {
+            try
+            {
+                Directory.Delete(obsoleteDirectories[i], recursive: true);
+            }
+            catch (IOException exception)
+            {
+                Log.Warn("Could not remove obsolete script generation '{0}': {1}", obsoleteDirectories[i], exception.Message);
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                Log.Warn("Could not remove obsolete script generation '{0}': {1}", obsoleteDirectories[i], exception.Message);
+            }
+        }
     }
 
     private static bool IsScriptInput(string path)

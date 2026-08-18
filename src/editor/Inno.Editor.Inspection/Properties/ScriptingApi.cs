@@ -12,7 +12,3 @@ using Inno.Editor.Inspection;
 [assembly: ScriptingApiExport(typeof(InspectorDrawerAttribute), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(PropertyDrawContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(PropertyDrawerAttribute), ScriptingApiScope.Editor)]
-
-[assembly: ScriptingGlobalUsing(
-    "InnoEditor.Inspection",
-    ScriptingApiScope.Editor)]

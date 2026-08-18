@@ -14,6 +14,7 @@ internal static class ScriptProjectGenerator
     internal static void Generate(ScriptManagerOptions options)
     {
         Directory.CreateDirectory(options.projectRootDirectory);
+        DeleteStaleGeneratedGlobalUsings(options.ideDirectory);
         ScriptSourceSet sources = ScriptSourceSet.Discover(options.assetDirectory);
         ScriptApiProfile runtimeApi = ScriptPluginMetadata.AddGlobalUsings(
             ScriptApiCatalog.Build(includeEditor: false),
@@ -22,7 +23,22 @@ internal static class ScriptProjectGenerator
             ScriptApiCatalog.Build(includeEditor: true),
             sources.runtimePlugins.Concat(sources.editorPlugins));
         ScriptApiReferenceSet runtimeApiReferences = ScriptApiReferenceBuilder.Build(options, runtimeApi);
-        ScriptApiReferenceSet editorApiReferences = ScriptApiReferenceBuilder.Build(options, editorApi);
+        ScriptApiReferenceSet editorApiReferences = ScriptApiReferenceBuilder.Build(
+            options,
+            editorApi,
+            runtimeApi,
+            runtimeApiReferences);
+        string apiMapDirectory = Path.Combine(options.ideDirectory, "ScriptApiMaps");
+        Directory.CreateDirectory(apiMapDirectory);
+        string gameApiMapPath = Path.Combine(
+            apiMapDirectory,
+            "Inno.GameScripts" + ScriptApiMapBuilder.C_FILE_EXTENSION);
+        string editorApiMapPath = Path.Combine(
+            apiMapDirectory,
+            "Inno.EditorScripts" + ScriptApiMapBuilder.C_FILE_EXTENSION);
+        File.WriteAllText(gameApiMapPath, ScriptApiMapBuilder.Build(runtimeApi));
+        File.WriteAllText(editorApiMapPath, ScriptApiMapBuilder.Build(editorApi));
+        string codeAnalysisPath = CopyCodeAnalysisAssembly(options.ideDirectory);
         string gameProjectPath = Path.Combine(options.projectRootDirectory, "Inno.GameScripts.csproj");
         string editorProjectPath = Path.Combine(options.projectRootDirectory, "Inno.EditorScripts.csproj");
 
@@ -33,6 +49,8 @@ internal static class ScriptProjectGenerator
             runtimeApi,
             runtimeApiReferences,
             sources.runtimePlugins,
+            gameApiMapPath,
+            codeAnalysisPath,
             projectReference: null)
             .Save(gameProjectPath);
         CreateProject(
@@ -42,11 +60,36 @@ internal static class ScriptProjectGenerator
             editorApi,
             editorApiReferences,
             sources.runtimePlugins.Concat(sources.editorPlugins).ToArray(),
+            editorApiMapPath,
+            codeAnalysisPath,
             "Inno.GameScripts.csproj")
             .Save(editorProjectPath);
         File.WriteAllText(
             Path.Combine(options.projectRootDirectory, "InnoProject.sln"),
             CreateSolution());
+    }
+
+    private static void DeleteStaleGeneratedGlobalUsings(string ideDirectory)
+    {
+        if (!Directory.Exists(ideDirectory))
+            return;
+        foreach (string path in Directory.EnumerateFiles(
+                     ideDirectory,
+                     "*.GlobalUsings.g.cs",
+                     SearchOption.AllDirectories))
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static string CopyCodeAnalysisAssembly(string ideDirectory)
+    {
+        string analyzerDirectory = Path.Combine(ideDirectory, "Analyzers");
+        Directory.CreateDirectory(analyzerDirectory);
+        string sourcePath = typeof(LogicalScriptingApiAnalyzer).Assembly.Location;
+        string destinationPath = Path.Combine(analyzerDirectory, Path.GetFileName(sourcePath));
+        File.Copy(sourcePath, destinationPath, overwrite: true);
+        return destinationPath;
     }
 
     private static XDocument CreateProject(
@@ -56,6 +99,8 @@ internal static class ScriptProjectGenerator
         ScriptApiProfile api,
         ScriptApiReferenceSet apiReferences,
         IReadOnlyList<string> plugins,
+        string apiMapPath,
+        string codeAnalysisPath,
         string? projectReference)
     {
         var earlyPropertyGroup = new XElement("PropertyGroup",
@@ -66,19 +111,19 @@ internal static class ScriptProjectGenerator
         var propertyGroup = new XElement("PropertyGroup",
             new XElement("TargetFramework", "net9.0"),
             new XElement("AssemblyName", assemblyName),
+            new XElement("DefaultItemExcludes", "$(DefaultItemExcludes);Library/**"),
             new XElement("EnableDefaultItems", "false"),
             new XElement("EnableDefaultCompileItems", "false"),
             new XElement("ImplicitUsings", "disable"),
             new XElement("Nullable", "enable"),
-            new XElement("LangVersion", "latest"),
-            new XElement("InnoScriptApiNamespaces", string.Join(";", api.apiNamespaces)));
+            new XElement("LangVersion", "latest"));
         var compile = new XElement("Compile", new XAttribute("Include", include));
         if (exclude is not null)
             compile.Add(new XAttribute("Exclude", exclude));
         var compileGroup = new XElement("ItemGroup", compile);
 
         var referenceGroup = new XElement("ItemGroup");
-        foreach (string path in apiReferences.referencePaths)
+        foreach (string path in apiReferences.ideReferencePaths)
             AddReference(referenceGroup, path);
         foreach (string path in plugins
                      .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -87,10 +132,15 @@ internal static class ScriptProjectGenerator
             AddReference(referenceGroup, path);
         }
 
-        var usingGroup = new XElement("ItemGroup",
-            api.globalUsings.Select(static value => new XElement("Using", new XAttribute("Include", value))));
         var folderGroup = new XElement("ItemGroup",
             new XElement("Folder", new XAttribute("Include", "Assets/")));
+        var codeAnalysisGroup = new XElement("ItemGroup",
+            new XElement("Analyzer",
+                new XAttribute("Include", codeAnalysisPath),
+                new XElement("Visible", "false")),
+            new XElement("AdditionalFiles",
+                new XAttribute("Include", apiMapPath),
+                new XElement("Visible", "false")));
         var project = new XElement("Project",
             earlyPropertyGroup,
             new XElement("Import",
@@ -99,8 +149,14 @@ internal static class ScriptProjectGenerator
             propertyGroup,
             compileGroup,
             referenceGroup,
-            usingGroup,
-            folderGroup);
+            codeAnalysisGroup);
+        if (api.globalUsings.Count > 0)
+        {
+            project.Add(new XElement("ItemGroup",
+                api.globalUsings.Select(static value =>
+                    new XElement("Using", new XAttribute("Include", value)))));
+        }
+        project.Add(folderGroup);
         if (projectReference is not null)
         {
             project.Add(new XElement("ItemGroup",
@@ -118,6 +174,9 @@ internal static class ScriptProjectGenerator
             new XAttribute("Include", Path.GetFileNameWithoutExtension(path)),
             new XElement("HintPath", path),
             new XElement("Private", "false"));
+        string documentationPath = Path.ChangeExtension(path, ".xml");
+        if (File.Exists(documentationPath))
+            reference.Add(new XElement("DocumentationFile", documentationPath));
         group.Add(reference);
     }
 

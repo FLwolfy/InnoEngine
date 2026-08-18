@@ -33,6 +33,11 @@ public sealed partial class PlatformWindow : IDisposable
     public bool isClosed => m_isClosed;
 
     /// <summary>
+    /// Gets whether this window currently owns platform input focus.
+    /// </summary>
+    public bool isFocused => m_isFocused;
+
+    /// <summary>
     /// Gets native window handles for graphics backends and platform integration.
     /// </summary>
     public PlatformNativeHandles nativeHandles => m_nativeHandles;

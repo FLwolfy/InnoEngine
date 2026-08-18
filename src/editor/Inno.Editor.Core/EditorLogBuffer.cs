@@ -12,6 +12,7 @@ public sealed class EditorLogBuffer : ILogSink
     private readonly Queue<LogEntry> m_entries = new();
     private readonly object m_sync = new();
     private int m_capacity = 1024;
+    private long m_version;
 
     /// <summary>
     /// Gets or sets maximum retained log entry count.
@@ -23,8 +24,12 @@ public sealed class EditorLogBuffer : ILogSink
         {
             lock (m_sync)
             {
-                m_capacity = value < 16 ? 16 : value;
+                int normalizedCapacity = value < 16 ? 16 : value;
+                if (m_capacity == normalizedCapacity)
+                    return;
+                m_capacity = normalizedCapacity;
                 TrimExcessUnsafe();
+                m_version++;
             }
         }
     }
@@ -39,6 +44,7 @@ public sealed class EditorLogBuffer : ILogSink
         {
             m_entries.Enqueue(entry);
             TrimExcessUnsafe();
+            m_version++;
         }
     }
 
@@ -47,8 +53,19 @@ public sealed class EditorLogBuffer : ILogSink
     /// </summary>
     public LogEntry[] Snapshot()
     {
+        return Snapshot(out _);
+    }
+
+    /// <summary>
+    /// Returns a snapshot of buffered entries and its monotonic content version.
+    /// </summary>
+    /// <param name="version">Receives the version associated with the returned snapshot.</param>
+    /// <returns>A stable copy of the currently buffered entries.</returns>
+    public LogEntry[] Snapshot(out long version)
+    {
         lock (m_sync)
         {
+            version = m_version;
             return m_entries.ToArray();
         }
     }
@@ -61,6 +78,7 @@ public sealed class EditorLogBuffer : ILogSink
         lock (m_sync)
         {
             m_entries.Clear();
+            m_version++;
         }
     }
 

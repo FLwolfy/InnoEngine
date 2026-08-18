@@ -50,65 +50,69 @@ public static class Log
         => Write(LogLevel.Debug, message, args);
 
     /// <summary>
-    /// Writes a formatted info-level message.
+    /// Writes an info-level message using the object's string representation.
     /// </summary>
-    /// <param name="message">The composite format string.</param>
-    /// <param name="args">The format arguments.</param>
+    /// <param name="obj">The object to log.</param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Info(object? obj)
         => Write(LogLevel.Info, $"{obj}", null);
     
     /// <summary>
-    /// Writes a warning-level message using the object's string representation.
+    /// Writes a formatted info-level message.
     /// </summary>
-    /// <param name="obj">The object to log.</param>
+    /// <param name="message">The composite format string.</param>
+    /// <param name="args">The format arguments.</param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Info(string message, params object[]? args)
         => Write(LogLevel.Info, message, args);
 
+    /// <summary>
+    /// Writes a warning-level message using the object's string representation.
+    /// </summary>
+    /// <param name="obj">The object to log.</param>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void Warn(object? obj)
+        => Write(LogLevel.Warn, $"{obj}", null);
+    
     /// <summary>
     /// Writes a formatted warning-level message.
     /// </summary>
     /// <param name="message">The composite format string.</param>
     /// <param name="args">The format arguments.</param>
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void Warn(object? obj)
-        => Write(LogLevel.Warn, $"{obj}", null);
-    
+    public static void Warn(string message, params object[]? args)
+        => Write(LogLevel.Warn, message, args);
+
     /// <summary>
     /// Writes an error-level message using the object's string representation.
     /// </summary>
     /// <param name="obj">The object to log.</param>
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void Warn(string message, params object[]? args)
-        => Write(LogLevel.Warn, message, args);
-
+    public static void Error(object? obj)
+        => Write(LogLevel.Error, $"{obj}", null);
+    
     /// <summary>
     /// Writes a formatted error-level message.
     /// </summary>
     /// <param name="message">The composite format string.</param>
     /// <param name="args">The format arguments.</param>
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void Error(object? obj)
-        => Write(LogLevel.Error, $"{obj}", null);
-    
+    public static void Error(string message, params object[]? args)
+        => Write(LogLevel.Error, message, args);
+
     /// <summary>
     /// Writes a fatal-level message using the object's string representation.
     /// </summary>
     /// <param name="obj">The object to log.</param>
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void Error(string message, params object[]? args)
-        => Write(LogLevel.Error, message, args);
+    public static void Fatal(object? obj)
+        => Write(LogLevel.Fatal, $"{obj}", null);
 
     /// <summary>
     /// Writes a formatted fatal-level message.
     /// </summary>
     /// <param name="message">The composite format string.</param>
     /// <param name="args">The format arguments.</param>
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    public static void Fatal(object? obj)
-        => Write(LogLevel.Fatal, $"{obj}", null);
-
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Fatal(string message, params object[]? args)
         => Write(LogLevel.Fatal, message, args);

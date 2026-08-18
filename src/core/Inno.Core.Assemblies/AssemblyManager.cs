@@ -17,6 +17,7 @@ public static class AssemblyManager
 {
     private static readonly object S_SYNC = new();
     private static readonly Dictionary<AssemblyModuleHandle, AssemblyModuleEntry> S_MODULES = [];
+    private static readonly List<AssemblyUnloadMonitor> S_PENDING_UNLOADS = [];
 
     private static AssemblyManagerOptions s_options = new();
     private static AssemblyCatalogSnapshot s_currentCatalog = new(0, []);
@@ -67,6 +68,8 @@ public static class AssemblyManager
                 preloadEntryAssemblyDependencies = options.preloadEntryAssemblyDependencies
             };
             Directory.CreateDirectory(s_options.cacheDirectory);
+            CleanupRetiredShadowDirectories();
+            CleanupStaleShadowDirectories();
             if (s_options.preloadEntryAssemblyDependencies)
                 PreloadInnoHostDependencies();
 
@@ -413,6 +416,7 @@ public static class AssemblyManager
         AssemblyLoadRequest request,
         int generation)
     {
+        CleanupRetiredShadowDirectories();
         ValidateRequest(request);
         string generationDirectory = Path.Combine(
             s_options.cacheDirectory,
@@ -512,7 +516,13 @@ public static class AssemblyManager
         }
         catch
         {
-            loadContext.Unload();
+            if (request.collectible)
+            {
+                var reference = new WeakReference(loadContext, trackResurrection: false);
+                loadContext.Unload();
+                S_PENDING_UNLOADS.Add(new AssemblyUnloadMonitor(reference, generationDirectory));
+                CleanupRetiredShadowDirectories();
+            }
             throw;
         }
     }
@@ -540,7 +550,38 @@ public static class AssemblyManager
 
         var reference = new WeakReference(module.loadContext, trackResurrection: false);
         module.loadContext.Unload();
-        return new AssemblyUnloadMonitor(reference);
+        var monitor = new AssemblyUnloadMonitor(reference, module.shadowDirectory);
+        S_PENDING_UNLOADS.Add(monitor);
+        CleanupRetiredShadowDirectories();
+        return monitor;
+    }
+
+    private static void CleanupRetiredShadowDirectories()
+    {
+        for (int i = S_PENDING_UNLOADS.Count - 1; i >= 0; i--)
+        {
+            if (S_PENDING_UNLOADS[i].TryCleanupShadowDirectory())
+                S_PENDING_UNLOADS.RemoveAt(i);
+        }
+    }
+
+    private static void CleanupStaleShadowDirectories()
+    {
+        foreach (string directory in Directory.EnumerateDirectories(s_options.cacheDirectory))
+        {
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+            catch (IOException)
+            {
+                // A still-reachable load context can keep its shadow files locked until a later refresh.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // A later manager initialization can retry cleanup after external file handles are released.
+            }
+        }
     }
 
     private static void ValidateRequest(AssemblyLoadRequest request)

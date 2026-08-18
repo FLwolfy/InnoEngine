@@ -11,7 +11,3 @@ using Inno.Core.Scripting;
 [assembly: ScriptingApiExport(typeof(AssetReferenceInfo), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(AssetReferenceKind), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(AssetReferenceLocation), ScriptingApiScope.Runtime)]
-
-[assembly: ScriptingGlobalUsing(
-    "InnoEngine.Assets",
-    ScriptingApiScope.Runtime)]

@@ -31,6 +31,17 @@ Shutdown 会停止 worker、排空队列，并 Dispose 所有实现 `IDisposable
 
 格式化采用 `string.Format`。调用方类型名作为 `category`；调用程序集的 `Inno.AssemblyGroup` metadata 解析为 `source`。类型/程序集 metadata 使用弱缓存，不固定热重载 ALC。
 
+`Log` 已作为 Runtime Scripting API 导出到逻辑 namespace `InnoEngine.Logging`。Project 脚本不引用真实的 `Inno.Core.Logging` namespace：
+
+```csharp
+using InnoEngine.Logging;
+
+Log.Info("Player spawned at {0}", transform.localPosition);
+Log.Warn("Health is low: {0}", health);
+```
+
+只导出便捷门面 `Log`；`LogManager`、sink 和内部日志分发配置仍由 Host 管理，不向游戏脚本开放。
+
 ## LogManager
 
 | API | 说明 |

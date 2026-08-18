@@ -75,7 +75,8 @@ internal sealed class GameSceneInspectorDrawer : IInspectorDrawer
                 {
                     if (ImGuiWidget.IconButton($"remove_system_{systemId}", ImGuiIcon.Xmark, "Remove System"))
                         systemToRemove = system;
-                });
+                },
+                dimmed: !system.enabled);
             if (ImGuiWidget.BeginContextMenu($"##system_menu_{systemId}"))
             {
                 if (NativeImGui.MenuItem("Reset System"))
@@ -85,18 +86,28 @@ internal sealed class GameSceneInspectorDrawer : IInspectorDrawer
                 ImGuiWidget.EndContextMenu();
             }
             if (!open)
+            {
+                NativeImGui.Dummy(new Vector2(0f, 3f));
                 continue;
+            }
 
             NativeImGui.Unindent();
-            foreach (SerializedProperty property in SerializationManager.GetProperties(system))
-            {
-                context.properties.Draw(
-                    context.editorContext,
-                    $"scene.{scene.identity.persistentId:N}.{systemId}",
-                    property);
-            }
+            ImGuiWidget.CardBody(
+                systemId,
+                () =>
+                {
+                    foreach (SerializedProperty property in SerializationManager.GetProperties(system))
+                    {
+                        context.properties.Draw(
+                            context.editorContext,
+                            $"scene.{scene.identity.persistentId:N}.{systemId}",
+                            property);
+                    }
+                },
+                dimmed: !system.enabled);
             NativeImGui.Indent();
             NativeImGui.TreePop();
+            NativeImGui.Dummy(new Vector2(0f, 3f));
         }
 
         if (systemToRemove is not null)

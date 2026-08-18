@@ -22,7 +22,3 @@ using Inno.Engine.Scene.Components;
 [assembly: ScriptingApiExport(typeof(PrefabInstanceInfo), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(SceneManager), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(Transform), ScriptingApiScope.Runtime)]
-
-[assembly: ScriptingGlobalUsing(
-    "InnoEngine.Scene",
-    ScriptingApiScope.Runtime)]

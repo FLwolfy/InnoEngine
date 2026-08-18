@@ -21,7 +21,3 @@ using Inno.Core.Serialization.Converters;
 [assembly: ScriptingApiExport(typeof(SerializationExtensionAttribute), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(SerializationReader), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(SerializationWriter), ScriptingApiScope.Runtime)]
-
-[assembly: ScriptingGlobalUsing(
-    "InnoEngine.Serialization",
-    ScriptingApiScope.Runtime)]

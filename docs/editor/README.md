@@ -6,5 +6,7 @@ Editor Wiki 当前优先覆盖脚本编译与热重载入口；其他 Editor 项
 
 | 项目 | 作用 | 状态 |
 | --- | --- | --- |
+| [Inno.Editor.Application](Inno.Editor.Application.md) | Editor 可执行入口、project directory 与主循环 | 已完成 |
 | [Inno.Editor.Scripting](Inno.Editor.Scripting.md) | Project 脚本发现、裁剪 reference assembly、Roslyn 编译、IDE 工程与程序集热重载 | 已完成 |
-| Inno.Editor.Core / ImGui / Inspection / Panels / Application | 编辑器 UI 与宿主 | 待补充 |
+| [Inno.Editor.ImGui](Inno.Editor.ImGui.md) | 编辑器通用 ImGui 控件与样式 | 部分完成 |
+| Inno.Editor.Core / Inspection / Panels / Application | 编辑器状态、属性绘制、Panel 与宿主 | 待补充 |

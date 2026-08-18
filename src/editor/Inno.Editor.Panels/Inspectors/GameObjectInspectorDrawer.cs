@@ -72,10 +72,11 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
             GameComponent component = components[i];
             Type componentType = component.GetType();
             string componentId = component.identity.persistentId.ToString("N");
+            GameBehavior? behavior = component as GameBehavior;
             bool open = ImGuiWidget.CollapsingCard(
                 componentId,
                 componentType.Name,
-                component is GameBehavior behavior
+                behavior is not null
                     ? () =>
                     {
                         bool enabled = behavior.enabled;
@@ -94,7 +95,8 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
                         {
                             componentToRemove = component;
                         }
-                    });
+                    },
+                dimmed: behavior is { enabled: false });
 
             if (ImGuiWidget.BeginContextMenu($"##component_menu_{componentId}"))
             {
@@ -114,21 +116,29 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
 
             if (!open)
             {
+                NativeImGui.Dummy(new Vector2(0f, 3f));
                 continue;
             }
 
             NativeImGui.Unindent();
-            IReadOnlyList<SerializedProperty> properties = SerializationManager.GetProperties(component);
-            for (int propertyIndex = 0; propertyIndex < properties.Count; propertyIndex++)
-            {
-                context.properties.Draw(
-                    context.editorContext,
-                    $"gameObject.{gameObject.identity.persistentId:N}.{componentId}",
-                    properties[propertyIndex]);
-            }
+            ImGuiWidget.CardBody(
+                componentId,
+                () =>
+                {
+                    IReadOnlyList<SerializedProperty> properties = SerializationManager.GetProperties(component);
+                    for (int propertyIndex = 0; propertyIndex < properties.Count; propertyIndex++)
+                    {
+                        context.properties.Draw(
+                            context.editorContext,
+                            $"gameObject.{gameObject.identity.persistentId:N}.{componentId}",
+                            properties[propertyIndex]);
+                    }
+                },
+                dimmed: behavior is { enabled: false });
 
             NativeImGui.Indent();
             NativeImGui.TreePop();
+            NativeImGui.Dummy(new Vector2(0f, 3f));
         }
 
         if (componentToRemove is not null)

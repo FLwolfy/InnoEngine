@@ -3,6 +3,8 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1573;CS1591</NoWarn>
     <InnoAssemblyGroup>Core</InnoAssemblyGroup>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
@@ -11,5 +13,6 @@
     <ProjectReference Include="..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" />
     <ProjectReference Include="..\..\core\Inno.Core.Mathematics\Inno.Core.Mathematics.csproj" />
     <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" />
+    <ProjectReference Include="..\..\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" />
   </ItemGroup>
 </Project>

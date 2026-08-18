@@ -14,7 +14,7 @@ public sealed class ScriptManagerOptions
     public required string projectRootDirectory { get; init; }
 
     /// <summary>
-    /// Gets or sets whether source and plugin changes trigger compilation automatically.
+    /// Gets or sets whether source and plugin changes create a pending focus-gated compilation request.
     /// </summary>
     public bool autoCompile { get; init; } = true;
 
@@ -23,7 +23,13 @@ public sealed class ScriptManagerOptions
     /// </summary>
     public int debounceMilliseconds { get; init; } = 250;
 
+    /// <summary>
+    /// Gets or sets the number of recent script compilation output generations retained on disk.
+    /// </summary>
+    public int retainedCompilationGenerations { get; init; } = 3;
+
     internal string assetDirectory => Path.Combine(projectRootDirectory, "Assets");
+    internal string ideDirectory => Path.Combine(projectRootDirectory, "Library", "IDE");
     internal string outputDirectory => Path.Combine(projectRootDirectory, "Library", "ScriptAssemblies");
     internal string scriptApiDirectory => Path.Combine(projectRootDirectory, "Library", "ScriptApi");
 }

@@ -8,7 +8,3 @@ using Inno.Core.Scripting;
 
 [assembly: ScriptingApiExport(typeof(IIdentityObject), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(Identity), ScriptingApiScope.Runtime)]
-
-[assembly: ScriptingGlobalUsing(
-    "InnoEngine.Core",
-    ScriptingApiScope.Runtime)]

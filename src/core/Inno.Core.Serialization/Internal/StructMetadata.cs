@@ -24,7 +24,8 @@ internal static class StructMetadata
         var names = new HashSet<string>(StringComparer.Ordinal);
         MemberInfo[] candidates = structType
             .GetMembers(C_MEMBERS)
-            .OrderBy(static member => member.MetadataToken)
+            .OrderBy(GetSerializableOrder)
+            .ThenBy(static member => member.MetadataToken)
             .ToArray();
         for (int i = 0; i < candidates.Length; i++)
         {
@@ -51,6 +52,12 @@ internal static class StructMetadata
         }
 
         return [.. members];
+    }
+
+    private static int GetSerializableOrder(MemberInfo member)
+    {
+        return member.GetCustomAttribute<SerializablePropertyAttribute>(inherit: true)?.order
+            ?? int.MaxValue;
     }
 
     private static StructMember? TryCreateField(Type structType, FieldInfo field)

@@ -15,6 +15,7 @@ public sealed partial class PlatformWindow
     private int m_width;
     private int m_height;
     private bool m_isClosed;
+    private bool m_isFocused;
     private readonly PlatformNativeHandles m_nativeHandles;
     private bool m_disposed;
     internal SDLWindowPtr sdlWindow => m_window;
@@ -36,6 +37,7 @@ public sealed partial class PlatformWindow
         SDL.GetWindowSize(m_window, ref currentWidth, ref currentHeight);
         m_width = currentWidth;
         m_height = currentHeight;
+        m_isFocused = ((SDLWindowFlags)SDL.GetWindowFlags(m_window) & SDLWindowFlags.InputFocus) != 0;
         m_nativeHandles = GetNativeHandles(m_window) with
         {
             backendName = "SDL3",
@@ -52,6 +54,11 @@ public sealed partial class PlatformWindow
     internal void MarkClosed()
     {
         m_isClosed = true;
+    }
+
+    internal void UpdateFocus(bool isFocused)
+    {
+        m_isFocused = isFocused;
     }
     
     public partial void RequestClose()
@@ -73,6 +80,7 @@ public sealed partial class PlatformWindow
 
         m_window = SDLWindowPtr.Null;
         m_isClosed = true;
+        m_isFocused = false;
         m_disposed = true;
     }
 

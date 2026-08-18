@@ -7,7 +7,3 @@ using Inno.Core.Scripting;
     ScriptingApiScope.Runtime)]
 
 [assembly: ScriptingApiExport(typeof(StableTypeIdAttribute), ScriptingApiScope.Runtime)]
-
-[assembly: ScriptingGlobalUsing(
-    "InnoEngine.Reflection",
-    ScriptingApiScope.Runtime)]

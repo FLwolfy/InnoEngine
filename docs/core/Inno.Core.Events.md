@@ -70,6 +70,7 @@ dispatcher.Flush();
 | Window | `WindowEvent` | `windowId` |
 | Window | `WindowResizeEvent` | `width`、`height` |
 | Window | `WindowCloseEvent` | 基类数据 |
+| Window | `WindowFocusChangedEvent` | `isFocused` |
 
 Keyboard/Mouse 枚举详见 [Inno.Core.Input](Inno.Core.Input.md)。
 

@@ -73,13 +73,19 @@ public readonly struct TreeNodeResult
     /// </summary>
     public Vector2 max { get; }
 
+    /// <summary>
+    /// Gets the minimum screen coordinate of the row's interactive content, excluding tree indentation.
+    /// </summary>
+    public Vector2 contentMin { get; }
+
     internal TreeNodeResult(
         bool isOpen,
         bool isClicked,
         bool isDoubleClicked,
         bool isHovered,
         Vector2 min,
-        Vector2 max)
+        Vector2 max,
+        Vector2 contentMin)
     {
         this.isOpen = isOpen;
         this.isClicked = isClicked;
@@ -87,6 +93,7 @@ public readonly struct TreeNodeResult
         this.isHovered = isHovered;
         this.min = min;
         this.max = max;
+        this.contentMin = contentMin;
     }
 }
 
@@ -149,6 +156,7 @@ public static partial class ImGuiWidget
         public Vector2 min;
         public Vector2 max;
         public uint color;
+        public bool isInteractionHighlight;
     }
 
     public static bool TreeNode(
@@ -209,14 +217,23 @@ public static partial class ImGuiWidget
         PushTransparentTreeNodeHeaderColors();
         bool isOpen = NativeImGui.TreeNodeEx($"##{id}", flags);
         NativeImGui.PopStyleColor(3);
+        float nativeRowMaxY = NativeImGui.GetItemRectMax().Y;
         if (!isLeaf && NativeImGui.IsItemToggledOpen())
             s_openStatesById[id] = isOpen;
 
-        TreeHighlightRect contentRect = DrawTreeNodeContentContainer(id, nodeCursor, onDraw);
+        TreeHighlightRect contentRect = DrawTreeNodeContentContainer(
+            id,
+            nodeCursor,
+            nativeRowMaxY,
+            onDraw,
+            out Vector2 interactionMin);
         bool hovered = NativeImGui.IsMouseHoveringRect(contentRect.min, contentRect.max);
         bool clicked = NativeImGui.IsItemClicked(ImGuiMouseButton.Left);
         bool doubleClicked = hovered && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
-        if (options.selected || (hovered && !options.suppressHoverHighlight))
+        bool showHoverHighlight = hovered &&
+                                  !options.suppressHoverHighlight &&
+                                  !ImGuiP.IsDragDropActive();
+        if (options.selected || showHoverHighlight)
             AddTreeHighlightRect(contentRect, options.selected);
         else if (options.showBackground)
             AddTreeBackgroundRect(contentRect, options.backgroundColor);
@@ -236,7 +253,8 @@ public static partial class ImGuiWidget
             doubleClicked,
             hovered,
             contentRect.min,
-            contentRect.max);
+            contentRect.max,
+            interactionMin);
     }
 
     public static void SetNextTreeNodeOpen(bool open)
@@ -257,7 +275,12 @@ public static partial class ImGuiWidget
         return state;
     }
 
-    private static TreeHighlightRect DrawTreeNodeContentContainer(string id, Vector2 nodeCursor, Action onDraw)
+    private static TreeHighlightRect DrawTreeNodeContentContainer(
+        string id,
+        Vector2 nodeCursor,
+        float nativeRowMaxY,
+        Action onDraw,
+        out Vector2 interactionMin)
     {
         Vector2 windowPos = NativeImGui.GetWindowPos();
         Vector2 windowSize = NativeImGui.GetWindowSize();
@@ -277,11 +300,12 @@ public static partial class ImGuiWidget
         TreeHighlightRect rect = new()
         {
             min = new Vector2(windowPos.X, MathF.Min(nodeCursor.Y, contentMin.Y)),
-            max = new Vector2(contentRightX, contentMax.Y)
+            max = new Vector2(contentRightX, MathF.Max(nativeRowMaxY, contentMax.Y))
         };
 
         Vector2 hitMin = new(contentX, rect.min.Y);
         Vector2 hitMax = rect.max;
+        interactionMin = hitMin;
         NativeImGui.SetCursorScreenPos(hitMin);
         NativeImGui.SetNextItemAllowOverlap();
         _ = NativeImGui.InvisibleButton($"##tree_content_hit_{id}", hitMax - hitMin);
@@ -335,10 +359,13 @@ public static partial class ImGuiWidget
         if (s_previousHighlightRects.Count == 0)
             return;
 
+        bool isDragging = ImGuiP.IsDragDropActive();
         ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
         for (int i = 0; i < s_previousHighlightRects.Count; i++)
         {
             TreeHighlightRect rect = s_previousHighlightRects[i];
+            if (isDragging && rect.isInteractionHighlight)
+                continue;
             drawList.AddRectFilled(rect.min, rect.max, rect.color);
         }
     }
@@ -524,12 +551,14 @@ public static partial class ImGuiWidget
     private static void AddTreeHighlightRect(TreeHighlightRect rect, bool selected)
     {
         rect.color = NativeImGui.GetColorU32(selected ? ImGuiCol.Header : ImGuiCol.HeaderHovered);
+        rect.isInteractionHighlight = true;
         s_highlightRects.Add(rect);
     }
 
     private static void AddTreeBackgroundRect(TreeHighlightRect rect, Vector4 color)
     {
         rect.color = NativeImGui.ColorConvertFloat4ToU32(color);
+        rect.isInteractionHighlight = false;
         s_highlightRects.Add(rect);
     }
 

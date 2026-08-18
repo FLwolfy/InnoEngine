@@ -1,27 +1,18 @@
 using System;
 using System.IO;
 
-using Inno.Editor.Scripting;
-
 namespace Inno.Editor.Application;
 
 internal static class Program
 {
+    private const string TEMPORARY_PROJECT_DIRECTORY = "/Users/aaronliao/Dev/GameEngineDev/InnoProject";
+
     private static int Main(string[] args)
     {
         try
         {
-            if (args.Length == 2 && string.Equals(args[0], "--generate-project", StringComparison.Ordinal))
-            {
-                using var scripts = new ScriptManager(new ScriptManagerOptions
-                {
-                    projectRootDirectory = Path.GetFullPath(args[1]),
-                    autoCompile = false
-                });
-                scripts.GenerateProjectFiles();
-                return 0;
-            }
-            using EditorHost host = new();
+            string projectDirectory = args.Length > 0 ? args[0] : Path.GetFullPath(TEMPORARY_PROJECT_DIRECTORY);
+            using EditorHost host = new(projectDirectory);
             int exitCode = host.Run();
             return exitCode;
         }

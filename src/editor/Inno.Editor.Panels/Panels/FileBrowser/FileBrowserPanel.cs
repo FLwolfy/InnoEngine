@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Numerics;
 using System.Text;
@@ -29,6 +30,7 @@ public sealed class FileBrowserPanel : EditorPanel
     private const float C_GRID_SCALE_DEFAULT = 3f;
     private const float C_GRID_SCALE_MIN = 1f;
     private const float C_GRID_SCALE_MAX = 10f;
+    private const float C_LIST_ROW_SPACING = 2f;
     private const int C_SEARCH_BUFFER_SIZE = 256;
     private const string C_ASSET_PAYLOAD = "INNO_ASSET";
 
@@ -208,7 +210,7 @@ public sealed class FileBrowserPanel : EditorPanel
     #region Tree
     private void DrawTreeEntry(EditorContext context, string relativePath, string label, bool isRoot)
     {
-        IReadOnlyList<AssetFileEntry> children = AssetManager.GetFileSystemChildren(relativePath);
+        IReadOnlyList<AssetFileEntry> children = GetVisibleChildren(relativePath);
         List<AssetFileEntry> sorted = SortTreeEntries(children);
 
         bool isDirectory = isRoot || IsDirectoryPath(relativePath);
@@ -500,8 +502,12 @@ public sealed class FileBrowserPanel : EditorPanel
         for (int i = 0; i < entries.Count; i++)
         {
             AssetFileEntry entry = entries[i];
+            if (i > 0)
+                NativeImGui.TableNextRow(ImGuiTableRowFlags.None, C_LIST_ROW_SPACING);
             NativeImGui.TableNextRow();
-            NativeImGui.TableSetBgColor(i % 2 == 0 ? ImGuiTableBgTarget.RowBg0 : ImGuiTableBgTarget.RowBg1, i % 2 == 0 ? rowBg : rowAltBg);
+            NativeImGui.TableSetBgColor(
+                ImGuiTableBgTarget.RowBg0,
+                i % 2 == 0 ? rowBg : rowAltBg);
 
             DrawNameCell(context, entry);
             DrawTextCell(GetTypeText(entry), S_TEXT);
@@ -536,9 +542,9 @@ public sealed class FileBrowserPanel : EditorPanel
         string name = Path.GetFileName(entry.relativePath);
         bool selected = string.Equals(context.selection.selectedPath, entry.relativePath, StringComparison.Ordinal);
 
-        NativeImGui.PushStyleColor(ImGuiCol.Header, S_ACCENT);
-        NativeImGui.PushStyleColor(ImGuiCol.HeaderHovered, S_ACCENT);
-        NativeImGui.PushStyleColor(ImGuiCol.HeaderActive, S_ACCENT);
+        NativeImGui.PushStyleColor(ImGuiCol.Header, Vector4.Zero);
+        NativeImGui.PushStyleColor(ImGuiCol.HeaderHovered, Vector4.Zero);
+        NativeImGui.PushStyleColor(ImGuiCol.HeaderActive, Vector4.Zero);
         Vector2 iconTextPos = NativeImGui.GetCursorScreenPos();
         if (NativeImGui.Selectable($"##entry_{entry.relativePath}", selected, ImGuiSelectableFlags.SpanAllColumns))
         {
@@ -546,9 +552,19 @@ public sealed class FileBrowserPanel : EditorPanel
             RequestRevealTreePath(entry.relativePath);
         }
 
+        bool itemHovered = NativeImGui.IsItemHovered();
+        bool itemActive = NativeImGui.IsItemActive();
+        if (selected || itemHovered)
+        {
+            Vector4 highlight = itemActive
+                ? LerpColor(S_ACCENT, Vector4.One, 0.16f)
+                : S_ACCENT;
+            NativeImGui.TableSetBgColor(
+                ImGuiTableBgTarget.RowBg1,
+                NativeImGui.ColorConvertFloat4ToU32(highlight));
+        }
         DrawAssetDragSource(entry);
 
-        bool itemHovered = NativeImGui.IsItemHovered();
         NativeImGui.SameLine(iconTextPos.X - NativeImGui.GetWindowPos().X, 0f);
         ImGuiWidget.IconText(icon, name, false);
 
@@ -588,7 +604,7 @@ public sealed class FileBrowserPanel : EditorPanel
     {
         float cellSize = GetGridCellSize();
         string icon = entry.isDirectory ? ImGuiIcon.Folder : GetFileIcon(entry.relativePath);
-        string name = FitTextWithEllipsis(Path.GetFileName(entry.relativePath), cellSize - 10f);
+        string name = Path.GetFileName(entry.relativePath);
         bool selected = string.Equals(context.selection.selectedPath, entry.relativePath, StringComparison.Ordinal);
         Vector2 itemSize = new(cellSize - C_GRID_CELL_PADDING, cellSize - C_GRID_CELL_PADDING);
 
@@ -646,14 +662,24 @@ public sealed class FileBrowserPanel : EditorPanel
         float fontSize = NativeImGui.GetFontSize();
         float iconFontSize = fontSize * scale;
         Vector2 iconSize = NativeImGui.CalcTextSize(icon) * scale;
-        Vector2 nameSize = NativeImGui.CalcTextSize(name);
-        float labelY = max.Y - nameSize.Y - 4f;
+        string[] nameLines = FitTextToLines(name, MathF.Max(1f, size.X - 10f), 2);
+        float lineHeight = NativeImGui.CalcTextSize("A").Y;
+        float labelHeight = lineHeight * nameLines.Length;
+        float labelY = max.Y - labelHeight - 4f;
         float iconAreaCenterY = min.Y + (labelY - min.Y) * 0.5f;
         Vector2 iconPos = new(min.X + (size.X - iconSize.X) * 0.5f, iconAreaCenterY - iconSize.Y * 0.5f);
-        Vector2 namePos = new(min.X + (size.X - nameSize.X) * 0.5f, labelY);
 
+        drawList.PushClipRect(min, max, true);
         drawList.AddText(font.Handle, iconFontSize, iconPos, textColor, icon);
-        drawList.AddText(font.Handle, fontSize, namePos, textColor, name);
+        for (int i = 0; i < nameLines.Length; i++)
+        {
+            Vector2 lineSize = NativeImGui.CalcTextSize(nameLines[i]);
+            Vector2 linePosition = new(
+                min.X + (size.X - lineSize.X) * 0.5f,
+                labelY + lineHeight * i);
+            drawList.AddText(font.Handle, fontSize, linePosition, textColor, nameLines[i]);
+        }
+        drawList.PopClipRect();
     }
 
     private float GetGridCellSize()
@@ -756,7 +782,7 @@ public sealed class FileBrowserPanel : EditorPanel
 
         if (m_entryScopeFilter == EntryScopeFilter.CurrentOnly)
         {
-            IReadOnlyList<AssetFileEntry> children = AssetManager.GetFileSystemChildren(context.selection.currentDirectory);
+            IReadOnlyList<AssetFileEntry> children = GetVisibleChildren(context.selection.currentDirectory);
             for (int i = 0; i < children.Count; i++)
                 entries.Add(children[i]);
         }
@@ -806,7 +832,7 @@ public sealed class FileBrowserPanel : EditorPanel
 
     private static void CollectEntriesRecursive(string directory, List<AssetFileEntry> entries)
     {
-        IReadOnlyList<AssetFileEntry> children = AssetManager.GetFileSystemChildren(directory);
+        IReadOnlyList<AssetFileEntry> children = GetVisibleChildren(directory);
         for (int i = 0; i < children.Count; i++)
         {
             AssetFileEntry child = children[i];
@@ -830,6 +856,18 @@ public sealed class FileBrowserPanel : EditorPanel
         });
 
         return sorted;
+    }
+
+    private static IReadOnlyList<AssetFileEntry> GetVisibleChildren(string relativePath)
+    {
+        IReadOnlyList<AssetFileEntry> children = AssetManager.GetFileSystemChildren(relativePath);
+        var visible = new List<AssetFileEntry>(children.Count);
+        for (int i = 0; i < children.Count; i++)
+        {
+            if (FileBrowserEntryFilter.IsVisible(children[i]))
+                visible.Add(children[i]);
+        }
+        return visible;
     }
     #endregion
 
@@ -1032,16 +1070,55 @@ public sealed class FileBrowserPanel : EditorPanel
         return string.IsNullOrEmpty(directory) ? string.Empty : NormalizePath(directory);
     }
 
-    private static string FitTextWithEllipsis(string text, float maxWidth)
+    private static string[] FitTextToLines(string text, float maxWidth, int maxLines)
     {
-        const string c_ellipsis = "...";
-        if (NativeImGui.CalcTextSize(text).X <= maxWidth)
-            return text;
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxLines, 1);
+        if (string.IsNullOrEmpty(text))
+            return [string.Empty];
 
-        while (text.Length > 0 && NativeImGui.CalcTextSize(text + c_ellipsis).X > maxWidth)
-            text = text[..^1];
+        List<string> elements = [];
+        TextElementEnumerator enumerator = StringInfo.GetTextElementEnumerator(text);
+        while (enumerator.MoveNext())
+            elements.Add(enumerator.GetTextElement());
 
-        return text.Length == 0 ? c_ellipsis : text + c_ellipsis;
+        List<string> lines = new(maxLines);
+        int offset = 0;
+        for (int lineIndex = 0; lineIndex < maxLines && offset < elements.Count; lineIndex++)
+        {
+            string remaining = string.Concat(elements.GetRange(offset, elements.Count - offset));
+            if (NativeImGui.CalcTextSize(remaining).X <= maxWidth)
+            {
+                lines.Add(remaining);
+                break;
+            }
+
+            bool isLastLine = lineIndex == maxLines - 1;
+            string suffix = isLastLine ? "..." : string.Empty;
+            int count = 0;
+            string candidate = string.Empty;
+            while (offset + count < elements.Count)
+            {
+                string next = candidate + elements[offset + count];
+                if (NativeImGui.CalcTextSize(next + suffix).X > maxWidth)
+                    break;
+                candidate = next;
+                count++;
+            }
+
+            if (count == 0)
+            {
+                lines.Add(isLastLine && NativeImGui.CalcTextSize("...").X <= maxWidth
+                    ? "..."
+                    : elements[offset]);
+                offset++;
+                continue;
+            }
+
+            lines.Add(candidate + suffix);
+            offset += count;
+        }
+
+        return lines.Count == 0 ? [string.Empty] : lines.ToArray();
     }
 
     private static bool IsAncestorOrSelf(string candidateAncestor, string path)

@@ -29,4 +29,14 @@ ISceneReloadMigration migration =
 
 调用顺序必须与程序集事务一致：先 capture/prepare，再 `AssemblyReloadSession.Activate()`，随后 apply/complete；异常时先回滚 Scene 结构，再 rollback 程序集，最后恢复旧生命周期状态。
 
-接口公开是为了消除 `Scene.Assets -> Editor.Scripting` 的 friend assembly，而不是游戏脚本 API。该类型没有出现在项目的 `ScriptingApi.cs` 中，因此 GameScripts/EditorScripts 都看不到它。
+接口公开是为了消除 `Scene.Assets -> Editor.Scripting` 的 friend assembly，而不是游戏脚本 API。该类型没有出现在项目的 `Properties/ScriptingApi.cs` 中，因此 GameScripts/EditorScripts 都看不到它。
+
+## Reload 与多实例约束
+
+脚本候选代际在 Scene 状态捕获阶段会使用新类型重新检查 Component/System 数量：
+
+- 同一 GameObject 上，同一候选 Component 类型存在多个实例，但新类型没有 `[AllowMultipleComponent]` 时，整个 reload 被拒绝。
+- 同一 Scene 中，同一候选 System 类型存在多个实例，但新类型没有 `[AllowMultipleSystem]` 时，整个 reload 被拒绝。
+- 旧脚本代际、Scene 对象与序列化状态保持不变；错误会包含 Scene/GameObject identity、类型和重复数量。
+
+这里不会自动删除“多出来”的实例，因为无法可靠判断哪一个实例及其引用、序列化数据应该保留。用户应先删除重复实例，或恢复相应 allow-multiple attribute，再触发下一次编译。

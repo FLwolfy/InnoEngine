@@ -12,6 +12,14 @@ namespace Inno.Core.Serialization;
 public sealed class SerializablePropertyAttribute : Attribute
 {
     /// <summary>
+    /// Gets or sets the member order within its declaring type.
+    /// </summary>
+    /// <remarks>
+    /// Lower values are processed first. The script compiler fills this value from source declaration order.
+    /// </remarks>
+    public int order { get; set; } = int.MaxValue;
+
+    /// <summary>
     /// Gets the visibility of the annotated member.
     /// </summary>
     public PropertyVisibility propertyVisibility { get; }

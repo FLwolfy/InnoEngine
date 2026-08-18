@@ -18,7 +18,3 @@ using Inno.Core.Mathematics;
 [assembly: ScriptingApiExport(typeof(Vector3Int), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(Vector4), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(Vector4Int), ScriptingApiScope.Runtime)]
-
-[assembly: ScriptingGlobalUsing(
-    "InnoEngine.Mathematics",
-    ScriptingApiScope.Runtime)]

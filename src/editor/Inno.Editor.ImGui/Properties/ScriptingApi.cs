@@ -11,7 +11,3 @@ using Inno.Editor.ImGui;
 [assembly: ScriptingApiExport(typeof(InlineRenameResult), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(TreeNodeOptions), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(TreeNodeResult), ScriptingApiScope.Editor)]
-
-[assembly: ScriptingGlobalUsing(
-    "InnoEditor.ImGui",
-    ScriptingApiScope.Editor)]

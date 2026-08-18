@@ -27,12 +27,24 @@
 
 ## PlatformWindow 与 native handle
 
-窗口公开 `windowId`、`title`、`width`、`height`、`isClosed`、`RequestClose()`、`Dispose()`。`nativeHandles` 除操作系统窗口/display handle 外，还提供：
+窗口公开 `windowId`、`title`、`width`、`height`、`isClosed`、`isFocused`、`RequestClose()`、`Dispose()`。输入 focus 改变时，Platform 同时更新 `isFocused` 并产生 `WindowFocusChangedEvent`。`nativeHandles` 除操作系统窗口/display handle 外，还提供：
 
 - `backendName`：当前窗口后端名。
 - `backendWindowHandle`：后端自己的不透明窗口 handle。
 
 后端集成可以据此构造自己的 native wrapper，普通业务代码不应持有该 handle。
+
+## ImGui layout 文件
+
+`Inno.Platform.ImGui.PlatformImGuiContext.SetIniFile(string?)` 在首帧之前设置 Dear ImGui 的 layout 持久化文件。相对路径会转换为绝对路径，父目录会按需创建；传入 `null` 或空白字符串会关闭 ini 持久化。首帧开始后再调用会抛出 `InvalidOperationException`。
+
+Editor Host 当前在创建 ImGui context 后立即配置：
+
+```csharp
+imgui.SetIniFile(Path.Combine(projectRoot, "editor.ini"));
+```
+
+因此 layout 跟随 Project，读取与保存位置固定为 `<Project>/editor.ini`，不再使用进程工作目录下的 `imgui.ini`。
 
 ## 注册示例
 

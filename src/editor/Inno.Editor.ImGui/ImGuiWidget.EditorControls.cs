@@ -30,6 +30,9 @@ public enum InlineRenameResult
 public static partial class ImGuiWidget
 {
     private static readonly Vector4 s_cardHeaderColor = new(0.42f, 0.39f, 0.51f, 1f);
+    private static readonly Vector4 s_cardBodyColor = new(0.12f, 0.12f, 0.14f, 1f);
+    private static readonly Vector4 s_cardBodyBorderColor = new(0.28f, 0.27f, 0.32f, 1f);
+    private static readonly Vector4 s_cardDisabledTextColor = new(0.52f, 0.52f, 0.54f, 1f);
     private static readonly Vector4 s_iconHoveredColor = new(0.76f, 0.69f, 0.94f, 1f);
 
     /// <summary>
@@ -285,13 +288,15 @@ public static partial class ImGuiWidget
     /// <param name="drawLeadingControl">Optional control drawn before the title.</param>
     /// <param name="drawTrailingControl">Optional control aligned to the right edge.</param>
     /// <param name="defaultOpen">Whether the card starts expanded.</param>
+    /// <param name="dimmed">Whether header controls and title use the inactive text color.</param>
     /// <returns><see langword="true"/> when card content should be drawn.</returns>
     public static bool CollapsingCard(
         string id,
         string title,
         Action? drawLeadingControl = null,
         Action? drawTrailingControl = null,
-        bool defaultOpen = true)
+        bool defaultOpen = true,
+        bool dimmed = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         ArgumentNullException.ThrowIfNull(title);
@@ -306,26 +311,36 @@ public static partial class ImGuiWidget
         NativeImGui.PushStyleColor(ImGuiCol.Header, s_cardHeaderColor);
         NativeImGui.PushStyleColor(ImGuiCol.HeaderHovered, s_cardHeaderColor);
         NativeImGui.PushStyleColor(ImGuiCol.HeaderActive, s_cardHeaderColor);
+        NativeImGui.PushStyleColor(ImGuiCol.Text, Vector4.Zero);
         NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(4f, 1f));
-        Vector2 persistentHeaderMin = NativeImGui.GetCursorScreenPos();
-        Vector2 persistentHeaderMax = persistentHeaderMin + new Vector2(
-            NativeImGui.GetContentRegionAvail().X,
-            NativeImGui.GetFrameHeight());
+        Vector2 headerCursor = NativeImGui.GetCursorScreenPos();
+        (float cardLeft, float cardRight) = GetFullWidthCardBounds(headerCursor);
+        Vector2 persistentHeaderMin = new(cardLeft, headerCursor.Y);
+        Vector2 persistentHeaderMax = new(cardRight, headerCursor.Y + NativeImGui.GetFrameHeight());
         NativeImGui.GetWindowDrawList().AddRectFilled(
             persistentHeaderMin,
             persistentHeaderMax,
             NativeImGui.ColorConvertFloat4ToU32(s_cardHeaderColor),
             1f);
         bool open = NativeImGui.TreeNodeEx($"##card_{id}", flags);
-        Vector2 headerMin = NativeImGui.GetItemRectMin();
-        Vector2 headerMax = NativeImGui.GetItemRectMax();
+        Vector2 itemHeaderMin = NativeImGui.GetItemRectMin();
+        Vector2 itemHeaderMax = NativeImGui.GetItemRectMax();
+        Vector2 headerMin = new(cardLeft, itemHeaderMin.Y);
+        Vector2 headerMax = new(cardRight, itemHeaderMax.Y);
         Vector2 contentCursor = NativeImGui.GetCursorScreenPos();
         NativeImGui.PopStyleVar();
-        NativeImGui.PopStyleColor(3);
+        NativeImGui.PopStyleColor(4);
 
-        float contentX = headerMin.X + NativeImGui.GetTreeNodeToLabelSpacing();
+        float contentX = itemHeaderMin.X + NativeImGui.GetTreeNodeToLabelSpacing();
+        DrawDisclosureIndicator(
+            new Vector2(itemHeaderMin.X, headerMin.Y),
+            new Vector2(contentX, headerMax.Y),
+            open,
+            dimmed);
         float contentY = headerMin.Y + MathF.Max(0f, (headerMax.Y - headerMin.Y - NativeImGui.GetFrameHeight()) * 0.5f);
         NativeImGui.SetCursorScreenPos(new Vector2(contentX, contentY));
+        if (dimmed)
+            NativeImGui.PushStyleColor(ImGuiCol.Text, s_cardDisabledTextColor);
         NativeImGui.BeginGroup();
         if (drawLeadingControl is not null)
         {
@@ -345,8 +360,97 @@ public static partial class ImGuiWidget
                 contentY));
             drawTrailingControl();
         }
+        if (dimmed)
+            NativeImGui.PopStyleColor();
 
         NativeImGui.SetCursorScreenPos(contentCursor);
         return open;
+    }
+
+    /// <summary>
+    /// Draws a vertically centered disclosure triangle with button-style hover feedback.
+    /// </summary>
+    /// <param name="min">Minimum screen coordinate of the indicator area.</param>
+    /// <param name="max">Maximum screen coordinate of the indicator area.</param>
+    /// <param name="open">Whether the represented content is expanded.</param>
+    /// <param name="dimmed">Whether to draw the indicator with inactive text color.</param>
+    public static void DrawDisclosureIndicator(
+        Vector2 min,
+        Vector2 max,
+        bool open,
+        bool dimmed = false)
+    {
+        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
+        if (NativeImGui.IsMouseHoveringRect(min, max))
+        {
+            Vector4 hovered = NativeImGui.ColorConvertU32ToFloat4(
+                NativeImGui.GetColorU32(ImGuiCol.ButtonHovered, 0.82f));
+            drawList.AddRectFilled(
+                min,
+                max,
+                NativeImGui.ColorConvertFloat4ToU32(hovered),
+                NativeImGui.GetStyle().FrameRounding);
+        }
+
+        string indicator = open ? "▼" : "▶";
+        Vector2 indicatorSize = NativeImGui.CalcTextSize(indicator);
+        Vector2 indicatorPosition = new(
+            min.X + MathF.Max(0f, (max.X - min.X - indicatorSize.X) * 0.5f),
+            min.Y + MathF.Max(0f, (max.Y - min.Y - indicatorSize.Y) * 0.5f));
+        uint color = NativeImGui.ColorConvertFloat4ToU32(
+            dimmed
+                ? s_cardDisabledTextColor
+                : NativeImGui.ColorConvertU32ToFloat4(NativeImGui.GetColorU32(ImGuiCol.Text)));
+        drawList.AddText(indicatorPosition, color, indicator);
+    }
+
+    /// <summary>
+    /// Draws the expanded content of a collapsible card inside a framed body.
+    /// </summary>
+    /// <param name="id">Stable card identifier.</param>
+    /// <param name="drawContent">Callback that draws the card content.</param>
+    /// <param name="dimmed">Whether the content is visually disabled and non-interactive.</param>
+    public static void CardBody(string id, Action drawContent, bool dimmed = false)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentNullException.ThrowIfNull(drawContent);
+
+        Vector2 originalCursor = NativeImGui.GetCursorScreenPos();
+        (float cardLeft, float cardRight) = GetFullWidthCardBounds(originalCursor);
+        NativeImGui.SetCursorScreenPos(new Vector2(cardLeft, originalCursor.Y));
+        NativeImGui.PushStyleColor(ImGuiCol.FrameBg, s_cardBodyColor);
+        NativeImGui.PushStyleColor(ImGuiCol.Border, s_cardBodyBorderColor);
+        NativeImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, NativeImGui.GetStyle().FrameRounding);
+        NativeImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1f);
+        NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(7f, 5f));
+        ImGuiChildFlags childFlags = ImGuiChildFlags.FrameStyle | ImGuiChildFlags.AutoResizeY;
+        ImGuiWindowFlags windowFlags = ImGuiWindowFlags.NoScrollbar |
+                                       ImGuiWindowFlags.NoScrollWithMouse |
+                                       ImGuiWindowFlags.NoSavedSettings;
+        if (NativeImGui.BeginChild(
+                $"##card_body_{id}",
+                new Vector2(MathF.Max(1f, cardRight - cardLeft), 0f),
+                childFlags,
+                windowFlags))
+        {
+            if (dimmed)
+                NativeImGui.BeginDisabled(true);
+            drawContent();
+            if (dimmed)
+                NativeImGui.EndDisabled();
+        }
+        NativeImGui.EndChild();
+        float nextY = NativeImGui.GetCursorScreenPos().Y;
+        NativeImGui.PopStyleVar(3);
+        NativeImGui.PopStyleColor(2);
+        NativeImGui.SetCursorScreenPos(new Vector2(originalCursor.X, nextY));
+    }
+
+    private static (float left, float right) GetFullWidthCardBounds(Vector2 cursor)
+    {
+        float horizontalPadding = NativeImGui.GetStyle().WindowPadding.X;
+        float left = cursor.X - horizontalPadding;
+        float right = cursor.X + NativeImGui.GetContentRegionAvail().X + horizontalPadding;
+        return (left, MathF.Max(left + 1f, right));
     }
 }

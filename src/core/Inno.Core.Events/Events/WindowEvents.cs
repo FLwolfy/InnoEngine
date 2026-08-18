@@ -34,3 +34,14 @@ public class WindowResizeEvent(uint windowId, int width, int height) : WindowEve
 public class WindowCloseEvent(uint windowId) : WindowEvent(windowId)
 {
 }
+
+/// <summary>
+/// Raised when a window gains or loses input focus.
+/// </summary>
+public class WindowFocusChangedEvent(uint windowId, bool isFocused) : WindowEvent(windowId)
+{
+    /// <summary>
+    /// Gets whether the window has input focus after the change.
+    /// </summary>
+    public bool isFocused { get; } = isFocused;
+}

@@ -65,6 +65,7 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
                         $"Replacement '{replacementType.FullName}' is not a concrete {requiredBase.Name}.");
                 }
             }
+            ValidateMultiplicity(scene, structure, context);
             scenes.Add(new SceneState(scene, engineObjects, sourceIds, states));
         }
         return new SceneHotReloadMigration(context, scenes);
@@ -203,6 +204,53 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
             replacementSystem.lifecycleStartCalled = previousSystem.lifecycleStartCalled;
             replacementSystem.lifecycleWasEnabled = false;
         }
+    }
+
+    private static void ValidateMultiplicity(
+        GameScene scene,
+        SceneStructureSnapshot structure,
+        TypeCacheReloadContext context)
+    {
+        foreach (SceneObjectStructureSnapshot entry in structure.objects)
+        {
+            foreach (IGrouping<Type, GameComponent> group in entry.components.GroupBy(
+                         component => ResolveActiveType(component.GetType(), context)))
+            {
+                if (group.Count() <= 1 ||
+                    group.Key.IsDefined(typeof(AllowMultipleComponentAttribute), inherit: true))
+                {
+                    continue;
+                }
+                throw new InvalidOperationException(
+                    $"Script reload would leave GameObject '{entry.gameObject.name}' " +
+                    $"({entry.gameObject.identity.persistentId}) with {group.Count()} instances of unique component " +
+                    $"'{group.Key.FullName}'. Remove duplicate components or restore " +
+                    $"[{nameof(AllowMultipleComponentAttribute)}] before reloading.");
+            }
+        }
+
+        foreach (IGrouping<Type, GameSystem> group in scene.GetSystems().GroupBy(
+                     system => ResolveActiveType(system.GetType(), context)))
+        {
+            if (group.Count() <= 1 ||
+                group.Key.IsDefined(typeof(AllowMultipleSystemAttribute), inherit: false))
+            {
+                continue;
+            }
+            throw new InvalidOperationException(
+                $"Script reload would leave scene '{scene.name}' ({scene.identity.persistentId}) with " +
+                $"{group.Count()} instances of unique system '{group.Key.FullName}'. Remove duplicate systems or restore " +
+                $"[{nameof(AllowMultipleSystemAttribute)}] before reloading.");
+        }
+    }
+
+    private static Type ResolveActiveType(Type type, TypeCacheReloadContext context)
+    {
+        if (!context.IsRetiredType(type))
+            return type;
+        return context.TryResolveReplacement(type, out Type? replacement) && replacement is not null
+            ? replacement
+            : type;
     }
 
     private static void RestoreState(SceneState sceneState, bool useCurrentTargets)

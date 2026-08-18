@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Linq;
 
 namespace Inno.Core.Assemblies;
 
@@ -23,11 +25,15 @@ public enum AssemblyUnloadStatus
 /// </summary>
 public sealed class AssemblyUnloadMonitor
 {
+    private readonly object m_sync = new();
     private readonly WeakReference? m_loadContext;
+    private readonly string? m_shadowDirectory;
+    private bool m_isShadowDirectoryCleaned;
 
-    internal AssemblyUnloadMonitor(WeakReference? loadContext)
+    internal AssemblyUnloadMonitor(WeakReference? loadContext, string? shadowDirectory = null)
     {
         m_loadContext = loadContext;
+        m_shadowDirectory = shadowDirectory;
     }
 
     /// <summary>
@@ -39,7 +45,48 @@ public sealed class AssemblyUnloadMonitor
     /// Gets the current cooperative unload state.
     /// </summary>
     public AssemblyUnloadStatus status
-        => m_loadContext is null || !m_loadContext.IsAlive
-            ? AssemblyUnloadStatus.Completed
-            : AssemblyUnloadStatus.Pending;
+    {
+        get
+        {
+            if (m_loadContext is not null && m_loadContext.IsAlive)
+                return AssemblyUnloadStatus.Pending;
+            _ = TryCleanupShadowDirectory();
+            return AssemblyUnloadStatus.Completed;
+        }
+    }
+
+    internal bool TryCleanupShadowDirectory()
+    {
+        if (m_loadContext is not null && m_loadContext.IsAlive)
+            return false;
+        lock (m_sync)
+        {
+            if (m_isShadowDirectoryCleaned)
+                return true;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(m_shadowDirectory) && Directory.Exists(m_shadowDirectory))
+                {
+                    Directory.Delete(m_shadowDirectory, recursive: true);
+                    string? moduleDirectory = Path.GetDirectoryName(m_shadowDirectory);
+                    if (!string.IsNullOrWhiteSpace(moduleDirectory) &&
+                        Directory.Exists(moduleDirectory) &&
+                        !Directory.EnumerateFileSystemEntries(moduleDirectory).Any())
+                    {
+                        Directory.Delete(moduleDirectory);
+                    }
+                }
+                m_isShadowDirectoryCleaned = true;
+                return true;
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+    }
 }

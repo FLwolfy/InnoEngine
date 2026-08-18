@@ -13,12 +13,17 @@ internal sealed record ScriptApiAssembly(
     Assembly assembly,
     IReadOnlyList<Type> exportedTypes);
 
+internal sealed record ScriptApiNamespaceMapping(
+    string apiNamespace,
+    string implementationNamespace);
+
 internal sealed record ScriptApiProfile(
     string name,
     IReadOnlyList<ScriptApiAssembly> exports,
     IReadOnlyList<Assembly> implementationAssemblies,
     IReadOnlyList<string> globalUsings,
-    IReadOnlyList<string> apiNamespaces);
+    IReadOnlyList<string> apiNamespaces,
+    IReadOnlyList<ScriptApiNamespaceMapping> namespaceMappings);
 
 internal static class ScriptApiCatalog
 {
@@ -75,6 +80,17 @@ internal static class ScriptApiCatalog
             .OrderBy(static value => value, StringComparer.Ordinal)
             .ToArray();
         string[] globalUsings = ExpandGlobalUsings(requestedNamespaces, namespaceMappings);
+        string[] apiNamespaces = namespaceMappings
+            .Select(static mapping => mapping.apiNamespace)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static value => value, StringComparer.Ordinal)
+            .ToArray();
+        ScriptApiNamespaceMapping[] publicMappings = namespaceMappings
+            .Select(static mapping => new ScriptApiNamespaceMapping(
+                mapping.apiNamespace,
+                mapping.implementationNamespace))
+            .Distinct()
+            .ToArray();
 
         return new ScriptApiProfile(
             includeEditor ? "Editor" : "Runtime",
@@ -83,7 +99,8 @@ internal static class ScriptApiCatalog
                 .OrderBy(static assembly => assembly.GetName().Name, StringComparer.Ordinal)
                 .ToArray(),
             globalUsings,
-            requestedNamespaces);
+            apiNamespaces,
+            publicMappings);
     }
 
     private static bool Includes(ScriptingApiScope scope, bool includeEditor)
@@ -93,24 +110,18 @@ internal static class ScriptApiCatalog
         IReadOnlyList<string> requestedNamespaces,
         IReadOnlyList<NamespaceMapping> mappings)
     {
-        var result = new HashSet<string>(StringComparer.Ordinal);
         foreach (string requestedNamespace in requestedNamespaces)
         {
-            NamespaceMapping[] matches = mappings
-                .Where(mapping => string.Equals(
+            if (!mappings.Any(mapping => string.Equals(
                     mapping.apiNamespace,
                     requestedNamespace,
-                    StringComparison.Ordinal))
-                .ToArray();
-            if (matches.Length == 0)
+                    StringComparison.Ordinal)))
             {
                 throw new InvalidOperationException(
                     $"Script API namespace '{requestedNamespace}' has no implementation namespace mapping.");
             }
-            foreach (NamespaceMapping match in matches)
-                result.Add(match.implementationNamespace);
         }
-        return result.OrderBy(static value => value, StringComparer.Ordinal).ToArray();
+        return requestedNamespaces.ToArray();
     }
 
     private static void ValidateExports(

@@ -121,6 +121,21 @@ public static partial class ImGuiWidget
     }
 
     /// <summary>
+    /// Draws a rectangular drag-and-drop target highlight in screen coordinates.
+    /// </summary>
+    /// <param name="min">Minimum target coordinate.</param>
+    /// <param name="max">Maximum target coordinate.</param>
+    public static void DropTargetHighlight(Vector2 min, Vector2 max)
+    {
+        NativeImGui.GetForegroundDrawList().AddRect(
+            min,
+            max,
+            NativeImGui.GetColorU32(ImGuiCol.DragDropTarget),
+            1f,
+            2f);
+    }
+
+    /// <summary>
     /// Converts an identifier into a readable editor label.
     /// </summary>
     /// <param name="name">Source identifier.</param>

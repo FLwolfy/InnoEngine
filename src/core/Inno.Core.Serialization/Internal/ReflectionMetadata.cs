@@ -73,7 +73,8 @@ internal static class ReflectionMetadata
             Type declaringType = hierarchy[depth];
             MemberInfo[] declaredMembers = declaringType
                 .GetMembers(C_DECLARED_MEMBERS)
-                .OrderBy(static member => member.MetadataToken)
+                .OrderBy(GetSerializableOrder)
+                .ThenBy(static member => member.MetadataToken)
                 .ToArray();
             for (int i = 0; i < declaredMembers.Length; i++)
             {
@@ -101,6 +102,12 @@ internal static class ReflectionMetadata
         }
 
         return [.. members];
+    }
+
+    private static int GetSerializableOrder(MemberInfo member)
+    {
+        return member.GetCustomAttribute<SerializablePropertyAttribute>(inherit: true)?.order
+            ?? int.MaxValue;
     }
 
     private static SerializableMember CreateFieldMember(

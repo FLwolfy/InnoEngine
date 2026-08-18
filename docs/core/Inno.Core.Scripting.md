@@ -6,10 +6,10 @@
 
 ## 设计边界
 
-- 每个参与脚本 API 的项目只保留一个根级 `ScriptingApi.cs`。
+- 每个参与脚本 API 的项目只保留一个 `Properties/ScriptingApi.cs`。清单由类型所属程序集维护，不设置反向依赖全部模块的中央清单项目。
 - 清单必须逐类型显式导出，不允许用“整个 public assembly 都可用”代替。
-- `InnoEngine.Scene`、`InnoEngine.Mathematics` 等名称是稳定的脚本 API 分组；它们映射到一个或多个真实 CLR namespace。
-- 导出不会复制或包装运行时类型。脚本生成的程序集仍引用真实 `Inno.*` 类型标识，热重载、`TypeCacheManager` 和序列化看到的都是同一个类型体系。
+- `InnoEngine.Scene`、`InnoEngine.Mathematics` 等名称是稳定且可直接 `using` 的脚本 API namespace；它们映射到一个或多个真实 CLR namespace。
+- 导出会为 IDE 生成逻辑 API facade，但 facade 只是编辑期代码模型。Editor 内的热编译仍将逻辑 namespace 转换为真实类型身份，因此热重载、`TypeCacheManager` 和序列化看到的是真实 `Inno.*` 类型体系。
 - 该项目不知道源文件目录、Roslyn、程序集加载上下文或 Scene 迁移。
 
 ## Public API
@@ -27,7 +27,7 @@
 ScriptingApiExportAttribute(Type type, ScriptingApiScope scope)
 ```
 
-将一个由当前 assembly 拥有的 public 类型加入指定 profile。类型必须在同一 `ScriptingApi.cs` 中所属的 `ScriptingApiNamespace` 映射内。依赖程序集不能代替它的所有者导出类型。
+将一个由当前 assembly 拥有的 public 类型加入指定 profile。类型必须在同一 `Properties/ScriptingApi.cs` 中所属的 `ScriptingApiNamespace` 映射内。依赖程序集不能代替它的所有者导出类型。
 
 ### ScriptingApiNamespaceAttribute
 
@@ -38,7 +38,7 @@ ScriptingApiNamespaceAttribute(
     ScriptingApiScope scope)
 ```
 
-把稳定脚本分组映射到真实 namespace。一个脚本分组可以有多个实现 namespace，例如 Scene 同时映射核心类型和 Components：
+把稳定脚本 namespace 映射到真实 namespace。一个脚本 namespace 可以有多个实现 namespace，例如 Scene 同时映射核心类型和 Components：
 
 ```csharp
 [assembly: ScriptingApiNamespace(
@@ -52,7 +52,21 @@ ScriptingApiNamespaceAttribute(
     ScriptingApiScope.Runtime)]
 ```
 
-这里没有生成 `GameObject` 包装器。这样可以避免 facade 对象和真实 Scene 对象产生身份、泛型或序列化不兼容。
+脚本可以直接写：
+
+```csharp
+using InnoEngine.Scene;
+
+public sealed class PlayerController : GameBehavior
+{
+}
+```
+
+Editor 会为 IDE 生成一个真正声明 `InnoEngine.Scene.GameBehavior` 等编译期类型的 metadata-only facade。它只保留已导出 API，且生成的 IDE csproj 不参考任何真实引擎 DLL，所以 `Inno.*` 无法被 IDE 解析。
+
+运行时热编译不使用 facade 产物；`ScriptCompiler` 在内存中将已声明的逻辑 `using` 改写到对应实现 namespace，并使用保留真实程序集身份的裁剪参考集编译。最终 IL 因此仍引用 `Inno.Engine.Scene.GameBehavior`，不会把 facade 类型带入运行时。
+
+脚本直接写 `using Inno.Engine.Scene;` 会得到 `INNO2001` 错误；使用已导出类型却没有导入对应逻辑 namespace 会得到 `INNO2002`。这两个诊断同时用于运行时 Roslyn 编译和生成的 IDE 工程。
 
 ### ScriptingGlobalUsingAttribute
 
@@ -62,9 +76,11 @@ ScriptingGlobalUsingAttribute(
     ScriptingApiScope scope)
 ```
 
-请求脚本编译器把一个脚本 API 分组的全部实现 namespace 注入 global usings。参数使用稳定分组名，而不是直接重复 CLR namespace。
+请求脚本编译器把一个脚本 API namespace 的全部实现 namespace 注入 global usings。参数使用稳定逻辑名，而不是直接重复 CLR namespace。
 
-## 标准 ScriptingApi.cs
+该能力当前仅作为可选扩展保留；引擎内置的 `Properties/ScriptingApi.cs` 均不声明 global using。GameScripts 和 EditorScripts 必须显式 `using InnoEngine.*` 或 `using InnoEditor.*`，避免项目 API 因隐式导入而难以审查。
+
+## 标准 Properties/ScriptingApi.cs
 
 Scene 项目的清单形式如下：
 
@@ -89,12 +105,9 @@ using Inno.Engine.Scene.Components;
 [assembly: ScriptingApiExport(typeof(GameScene), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(Transform), ScriptingApiScope.Runtime)]
 
-[assembly: ScriptingGlobalUsing(
-    "InnoEngine.Scene",
-    ScriptingApiScope.Runtime)]
 ```
 
-未来新增 Render 项目时，只在 `Inno.Rendering/ScriptingApi.cs` 声明 `InnoEngine.Rendering` 及其导出类型；无需修改 `AssemblyManager`、TypeCache 或中央项目名单。
+未来新增 Render 项目时，只在 `Inno.Rendering/Properties/ScriptingApi.cs` 声明 `InnoEngine.Rendering` 及其导出类型；无需修改 `AssemblyManager`、TypeCache 或中央项目名单。
 
 ## 成员可见性
 
@@ -104,7 +117,8 @@ using Inno.Engine.Scene.Components;
 
 ## 常见误区
 
-- `ScriptingGlobalUsing` 不是访问权限；真正的边界来自显式 export 和裁剪 reference assembly。
+- `ScriptingGlobalUsing` 不是访问权限；真正的边界来自显式 export、IDE 逻辑 facade、运行时裁剪 reference assembly 和逻辑 namespace 分析器。
+- 内置模块不要声明 `ScriptingGlobalUsing`；保留 attribute 是为了未来受控 profile 或第三方扩展使用。
 - 不要为方便而导出整个 Manager/Registry 程序集。先导出脚本确实需要的最小类型。
-- 不要在多个文件分散 assembly attribute。每个项目唯一的 `ScriptingApi.cs` 是可审查的 API 清单。
-- 脚本 API 分组名是稳定的组织契约；真实 CLR namespace 仍决定运行时类型身份。
+- 不要在多个文件分散 assembly attribute。每个项目唯一的 `Properties/ScriptingApi.cs` 是可审查的 API 清单。
+- 脚本 API namespace 是稳定的源码契约；真实 CLR namespace 仍决定运行时类型身份。

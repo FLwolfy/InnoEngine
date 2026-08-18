@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Threading.Tasks;
 
 using Inno.Assets;
 using Inno.Core.Events;
@@ -17,11 +19,9 @@ namespace Inno.Editor.Application;
 /// </summary>
 public sealed class EditorHost : IDisposable
 {
-    // NOTE: This project root should be changed to project selection
-    private static readonly string PROJECT_ROOT = "/Users/aaronliao/Dev/GameEngineDev/InnoProject";
-    
     private readonly PlatformApplication m_platformApplication;
     private readonly PlatformWindow m_window;
+    private readonly HashSet<uint> m_focusedWindowIds = [];
     private readonly Shell m_shell;
     private readonly ScriptManager m_scriptManager;
     private readonly PlatformImGuiContext m_imgui;
@@ -30,14 +30,19 @@ public sealed class EditorHost : IDisposable
     private bool m_running;
     private bool m_disposed;
     private bool m_hasRenderedFrame;
+    private Task<ScriptCompilationResult>? m_scriptCompilationTask;
     private int m_frameCount;
 
     /// <summary>
-    /// Creates the editor host with default window and shell settings.
+    /// Creates the editor host for an existing or empty project directory.
     /// </summary>
-    public EditorHost()
+    /// <param name="projectDirectory">The project directory to open or initialize.</param>
+    /// <exception cref="ArgumentException">Thrown when the project directory is empty.</exception>
+    /// <exception cref="IOException">Thrown when the path points to a file.</exception>
+    public EditorHost(string projectDirectory)
     {
-        m_bootLogPath = Path.Combine(Directory.GetCurrentDirectory(), "EditorBoot.log");
+        this.projectDirectory = PrepareProjectDirectory(projectDirectory);
+        m_bootLogPath = Path.Combine(this.projectDirectory, "EditorBoot.log");
         BootLog("EditorHost ctor start.");
         m_platformApplication = new PlatformApplication();
         BootLog("PlatformApplication created.");
@@ -49,6 +54,8 @@ public sealed class EditorHost : IDisposable
             resizable = true,
             highPixelDensity = true
         });
+        if (m_window.isFocused)
+            m_focusedWindowIds.Add(m_window.windowId);
         BootLog($"Window created. id={m_window.windowId}, size={m_window.width}x{m_window.height}.");
 
         m_shell = Shell.Initialize(new ShellSettings
@@ -58,13 +65,13 @@ public sealed class EditorHost : IDisposable
             maxUpdateStepsPerTick = 8,
             useSingleThreadJobSystem = false,
             jobWorkerCount = 0,
-            projectRootDirectory = Path.GetFullPath(PROJECT_ROOT)
+            projectRootDirectory = this.projectDirectory
         });
         BootLog("Shell created.");
 
         m_scriptManager = new ScriptManager(new ScriptManagerOptions
         {
-            projectRootDirectory = Path.GetFullPath(PROJECT_ROOT)
+            projectRootDirectory = this.projectDirectory
         });
         m_scriptManager.CompilationCompleted += OnScriptCompilationCompleted;
         m_scriptManager.Start();
@@ -75,15 +82,19 @@ public sealed class EditorHost : IDisposable
             ImGuiContextFlags.EnableViewports
             | ImGuiContextFlags.EnableDocking
             | ImGuiContextFlags.EnableSmoothResize);
+        m_imgui.SetIniFile(Path.Combine(this.projectDirectory, "editor.ini"));
         BootLog("ImGui context created.");
 
         BootLog($"AssetManager initialized={AssetManager.isInitialized} root='{AssetManager.assetRoot}'.");
 
-        m_editorLayer = new EditorLayer(m_imgui);
+        m_editorLayer = new EditorLayer(m_imgui, m_scriptManager);
         m_shell.layerStack.PushOverlay(m_editorLayer);
         m_running = true;
         BootLog("EditorHost ctor done.");
     }
+
+    /// <summary>Gets the normalized project directory owned by this host.</summary>
+    public string projectDirectory { get; }
 
     /// <summary>
     /// Runs the editor loop until window/application quit is requested.
@@ -106,6 +117,7 @@ public sealed class EditorHost : IDisposable
                 if (evnt is null)
                     continue;
 
+                UpdateFocusedWindows(evnt);
                 m_shell.eventDispatcher.Enqueue(evnt);
                 if (ShouldClose(evnt))
                 {
@@ -126,14 +138,8 @@ public sealed class EditorHost : IDisposable
             if (m_frameCount == 0)
                 BootLog("About to execute first shell.Tick.");
 
-            try
-            {
-                _ = m_scriptManager.ApplyPendingReload();
-            }
-            catch (Exception exception)
-            {
-                BootLog($"Script reload failed: {exception}");
-            }
+            CompleteScriptCompilationIfReady();
+            StartScriptCompilationIfReady();
 
             m_shell.Tick((float)now, delta);
 
@@ -183,11 +189,19 @@ public sealed class EditorHost : IDisposable
         return evnt is WindowCloseEvent closeEvent && closeEvent.windowId == m_window.windowId;
     }
 
+    private static string PrepareProjectDirectory(string projectDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(projectDirectory))
+            throw new ArgumentException("Project directory is required.", nameof(projectDirectory));
+        string normalizedPath = Path.GetFullPath(projectDirectory);
+        if (File.Exists(normalizedPath))
+            throw new IOException($"Project directory '{normalizedPath}' points to a file.");
+        Directory.CreateDirectory(normalizedPath);
+        return normalizedPath;
+    }
+
     private static void OnScriptCompilationCompleted(ScriptCompilationResult result)
     {
-        if (result.success)
-            Log.Info("Script compilation succeeded: {0}", result.outputDirectory ?? "Unknown output");
-
         foreach (ScriptDiagnostic diagnostic in result.diagnostics)
         {
             string location = diagnostic.filePath is null
@@ -206,6 +220,57 @@ public sealed class EditorHost : IDisposable
                     Log.Info(message);
                     break;
             }
+        }
+    }
+
+    private void StartScriptCompilationIfReady()
+    {
+        if (m_scriptCompilationTask is not null || !HasEditorFocus())
+            return;
+        if (!m_scriptManager.TryCompilePending(out Task<ScriptCompilationResult>? compilation))
+            return;
+        m_scriptCompilationTask = compilation;
+        m_editorLayer.BeginScriptCompilation();
+    }
+
+    private bool HasEditorFocus()
+        => m_focusedWindowIds.Count > 0;
+
+    private void UpdateFocusedWindows(Event evnt)
+    {
+        if (evnt is WindowFocusChangedEvent focusChanged)
+        {
+            if (focusChanged.isFocused)
+                m_focusedWindowIds.Add(focusChanged.windowId);
+            else
+                m_focusedWindowIds.Remove(focusChanged.windowId);
+        }
+        else if (evnt is WindowCloseEvent closeEvent)
+        {
+            m_focusedWindowIds.Remove(closeEvent.windowId);
+        }
+    }
+
+    private void CompleteScriptCompilationIfReady()
+    {
+        Task<ScriptCompilationResult>? compilation = m_scriptCompilationTask;
+        if (compilation is null || !compilation.IsCompleted)
+            return;
+        try
+        {
+            ScriptCompilationResult result = compilation.GetAwaiter().GetResult();
+            if (result.success)
+                _ = m_scriptManager.ApplyPendingReload();
+        }
+        catch (Exception exception)
+        {
+            Log.Error("Script reload failed: {0}", exception);
+            BootLog($"Script reload failed: {exception}");
+        }
+        finally
+        {
+            m_scriptCompilationTask = null;
+            m_editorLayer.EndScriptCompilation();
         }
     }
 

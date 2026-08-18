@@ -47,6 +47,8 @@ AssemblyManager.Shutdown();
 
 `cacheDirectory` 用来存放 generation shadow copy，不能留空。`preloadEntryAssemblyDependencies=true` 会沿入口程序集引用图预加载相关 Inno host assembly，让尚未发生静态调用的模块也进入初始 catalog。
 
+Shadow generation 是可再生缓存，不是序列化状态。collectible ALC 仍可达时目录会保留；`AssemblyUnloadMonitor` 观察到 ALC 不再可达后会协作式删除对应目录，后续 module staging 也会重试。Editor 异常退出或旧 ALC 一直存活时，下一次 `AssemblyManager.Initialize` 会清理上次进程遗留的 cache directory。非 collectible module 在当前进程中无法安全回收，只能在下一次进程初始化时清理其文件。
+
 ## AssemblyManager
 
 | 成员 | 说明 |
