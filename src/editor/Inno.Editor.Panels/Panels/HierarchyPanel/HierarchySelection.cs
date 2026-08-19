@@ -25,7 +25,7 @@ internal sealed class HierarchySelection
             context.selection.Clear();
     }
 
-    internal bool Delete(EditorContext context, Guid persistentId)
+    internal bool DeleteObject(EditorContext context, Guid persistentId)
     {
         GameObject? gameObject = IdentityManager.Get<GameObject>(persistentId);
         if (gameObject is null || !gameObject.isRuntimeValid || !ContainsScene(context.scenes, gameObject.scene))

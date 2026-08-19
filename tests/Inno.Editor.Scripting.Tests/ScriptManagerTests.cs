@@ -17,6 +17,7 @@ using Inno.Editor.ImGui;
 using Inno.Editor.Inspection;
 using Inno.Editor.Scripting;
 using Inno.Engine.Scene;
+using Inno.Engine.Scene.Assets;
 
 using Xunit;
 
@@ -34,6 +35,7 @@ public sealed class ScriptManagerTests : IDisposable
     {
         Directory.CreateDirectory(Path.Combine(m_projectRoot, "Assets"));
         _ = Assembly.Load(typeof(GameBehavior).Assembly.GetName());
+        _ = Assembly.Load(typeof(SceneAsset).Assembly.GetName());
         _ = Assembly.Load(typeof(AssetImporter).Assembly.GetName());
         _ = Assembly.Load(typeof(TextAsset).Assembly.GetName());
         _ = Assembly.Load(typeof(EditorContext).Assembly.GetName());
@@ -142,6 +144,61 @@ public sealed class ScriptManagerTests : IDisposable
         Type drawer = TypeCacheManager.current.types.Single(type => type.Name == "ProjectBehaviorDrawer");
         Assert.Equal(AssemblyGroup.Game, behavior.Assembly.GetInnoAssemblyGroup());
         Assert.Equal(AssemblyGroup.Editor, drawer.Assembly.GetInnoAssemblyGroup());
+    }
+
+    [Fact]
+    public void SceneWorkspaceSaveRenamesTheExistingSceneAsset()
+    {
+        var workspace = new EditorSceneWorkspace();
+        GameScene scene = workspace.CreateScene();
+        scene.name = "Original";
+        string originalPath = workspace.SaveScene(scene, "Scenes");
+        Assert.True(AssetManager.TryGetPersistentId(originalPath, out Guid persistentId));
+
+        scene.name = "Renamed";
+        Assert.True(workspace.IsDirty(scene));
+        string renamedPath = workspace.SaveScene(scene, "Scenes");
+
+        Assert.Equal("Scenes/Renamed.innoscene", renamedPath);
+        Assert.False(AssetManager.TryGetFileSystemEntry(originalPath, out _));
+        Assert.True(AssetManager.TryGetPersistentId(renamedPath, out Guid renamedId));
+        Assert.Equal(persistentId, renamedId);
+        Assert.False(workspace.IsDirty(scene));
+    }
+
+    [Fact]
+    public void SceneWorkspaceOpenSceneLoadsAdditivelyAtTheBottom()
+    {
+        var workspace = new EditorSceneWorkspace();
+        GameScene source = workspace.CreateScene();
+        source.name = "Additive";
+        string sourcePath = workspace.SaveScene(source, "Scenes");
+        Assert.True(SceneManager.UnloadScene(source));
+        GameScene existing = workspace.CreateScene();
+
+        GameScene opened = workspace.OpenScene(sourcePath);
+
+        Assert.Equal([existing, opened], SceneManager.loadedScenes);
+        Assert.Same(opened, SceneManager.activeScene);
+        Assert.Equal("Additive", opened.name);
+    }
+
+    [Fact]
+    public void SceneWorkspaceCloseSceneRemovesOnlyTheLoadedInstance()
+    {
+        var workspace = new EditorSceneWorkspace();
+        GameScene first = workspace.CreateScene();
+        GameScene second = workspace.CreateScene();
+
+        Assert.True(workspace.CloseScene(second));
+
+        Assert.Equal([first], SceneManager.loadedScenes);
+        Assert.Same(first, SceneManager.activeScene);
+        Assert.True(second.isDestroyed);
+        Assert.False(workspace.CloseScene(second));
+        Assert.False(workspace.CloseScene(first));
+        Assert.True(first.isLoaded);
+        Assert.False(first.isDestroyed);
     }
 
     [Fact]

@@ -13,12 +13,15 @@ bool open = ImGuiWidget.CollapsingCard(
     drawLeadingControl: DrawEnabledToggle,
     drawTrailingControl: DrawRemoveButton,
     defaultOpen: true,
-    dimmed: !enabled);
+    dimmed: !enabled,
+    trailingControlWidth: ImGuiWidget.GetIconButtonSize().X);
 ```
 
 `dimmed` 为 `true` 时，leading control、标题和 trailing control 使用与 Hierarchy inactive GameObject 相同的灰色文本色。GameBehavior 与 GameSystem Inspector 已把该参数绑定到各自的 `enabled` 状态。
 
-Header 的 disclosure triangle 由 `DrawDisclosureIndicator` 统一绘制：glyph 根据 header 高度精确垂直居中，hover 使用与 Log card disclosure button 相同的 ButtonHovered 反馈。底层 TreeNode 仍负责 open state 和点击命中，因此没有第二套折叠状态。
+Header 的 disclosure triangle 由 `DrawDisclosureIndicator` 统一绘制：保留 `▶ / ▼` glyph，并根据实际 header bounds 居中。卡片、disabled text 与 disclosure hover 颜色都来自 `EditorPalette`，便于主题统一替换。底层 TreeNode 仍负责 open state 和点击命中，因此没有第二套折叠状态。
+
+`trailingControlWidth` 可以为多个右侧按钮预留固定宽度。Component 与 System Inspector 使用它放置 Move Up、Move Down 与 Remove。
 
 展开内容使用配套的 `CardBody` 绘制：
 

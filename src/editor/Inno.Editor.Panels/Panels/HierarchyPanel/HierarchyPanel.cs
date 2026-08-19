@@ -57,11 +57,11 @@ public sealed class HierarchyPanel : EditorPanel
         m_renameHotKeyRegistration = context.hotKeys.Register(
             EditorHotKeyCommands.Rename,
             () => BeginRenameFromSelection(context),
-            () => CanEditSelection(context));
+            () => CanRenameSelection(context));
         m_deleteHotKeyRegistration = context.hotKeys.Register(
             EditorHotKeyCommands.Delete,
             () => RequestDeleteFromSelection(context),
-            () => CanEditSelection(context));
+            () => CanDeleteSelection(context));
     }
 
     /// <inheritdoc />
@@ -133,6 +133,20 @@ public sealed class HierarchyPanel : EditorPanel
             C_SCENE_PAYLOAD,
             sceneId,
             () => NativeImGui.TextUnformatted(scene.name));
+
+        bool sceneDelivered = ImGuiWidget.DragDropTarget(
+            C_SCENE_PAYLOAD,
+            out Guid droppedSceneId,
+            out bool isScenePreviewing,
+            drawDefaultHighlight: false);
+        if (isScenePreviewing)
+            m_dragDrop.DrawSceneDropPreview(result);
+        if (sceneDelivered)
+        {
+            GameScene? movedScene = m_dragDrop.ReorderScene(scene, droppedSceneId, result);
+            if (movedScene is not null)
+                context.selection.Select(movedScene);
+        }
 
         if (ImGuiWidget.DragDropTarget<Guid>(C_SCENE_OBJECT_PAYLOAD, out Guid droppedId))
         {
@@ -319,6 +333,7 @@ public sealed class HierarchyPanel : EditorPanel
             return;
         }
 
+        context.selection.Select(scene);
         bool isActive = ReferenceEquals(scene, SceneManager.activeScene);
         if (NativeImGui.MenuItem("Set Active Scene", string.Empty, false, !isActive))
         {
@@ -337,6 +352,13 @@ public sealed class HierarchyPanel : EditorPanel
         {
             GameScene createdScene = m_sceneCommands.Create(context);
             m_forceOpenSceneIds.Add(createdScene.identity.persistentId);
+        }
+
+        NativeImGui.Separator();
+        bool canDelete = context.scenes.Count > 1;
+        if (NativeImGui.MenuItem("Delete", "Delete", false, canDelete))
+        {
+            m_pendingDeleteId = scene.identity.persistentId;
         }
 
         ImGuiWidget.EndContextMenu();
@@ -412,12 +434,24 @@ public sealed class HierarchyPanel : EditorPanel
         ImGuiWidget.EndContextMenu();
     }
 
-    private bool CanEditSelection(EditorContext context)
+    private bool CanRenameSelection(EditorContext context)
         => m_isFocused &&
            !NativeImGui.GetIO().WantTextInput &&
            m_renamingId is null &&
            context.selection.TryGet(out GameObject? gameObject) &&
            gameObject.isRuntimeValid;
+
+    private bool CanDeleteSelection(EditorContext context)
+    {
+        if (!m_isFocused || NativeImGui.GetIO().WantTextInput || m_renamingId is not null)
+            return false;
+        if (context.selection.TryGet(out GameObject? gameObject))
+            return gameObject.isRuntimeValid;
+        return context.selection.TryGet(out GameScene? scene) &&
+               scene.isLoaded &&
+               !scene.isDestroyed &&
+               context.scenes.Count > 1;
+    }
 
     private void BeginRenameFromSelection(EditorContext context)
     {
@@ -428,7 +462,12 @@ public sealed class HierarchyPanel : EditorPanel
     private void RequestDeleteFromSelection(EditorContext context)
     {
         if (context.selection.TryGet(out GameObject? gameObject))
+        {
             m_pendingDeleteId = gameObject.identity.persistentId;
+            return;
+        }
+        if (context.selection.TryGet(out GameScene? scene))
+            m_pendingDeleteId = scene.identity.persistentId;
     }
 
     private void ApplyPendingDelete(EditorContext context)
@@ -436,7 +475,16 @@ public sealed class HierarchyPanel : EditorPanel
         if (m_pendingDeleteId is not Guid persistentId)
             return;
         m_pendingDeleteId = null;
-        if (m_selection.Delete(context, persistentId) && m_renamingId == persistentId)
+        GameScene? scene = IdentityManager.Get<GameScene>(persistentId);
+        bool deleted = scene is not null && scene.isLoaded
+            ? m_sceneCommands.Delete(context, scene)
+            : m_selection.DeleteObject(context, persistentId);
+        if (deleted && scene is not null)
+        {
+            m_initializedSceneIds.Remove(persistentId);
+            m_forceOpenSceneIds.Remove(persistentId);
+        }
+        if (deleted && m_renamingId == persistentId)
             EndRename();
     }
 

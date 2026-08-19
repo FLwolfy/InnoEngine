@@ -190,6 +190,29 @@ public sealed class GameObject : EngineObject, ISerializable
         => EnsureAlive().GetComponents(this);
 
     /// <summary>
+    /// Gets the attachment index of a component on this object.
+    /// </summary>
+    /// <param name="component">Attached component to locate.</param>
+    /// <returns>The zero-based attachment index.</returns>
+    public int GetComponentIndex(GameComponent component)
+    {
+        ArgumentNullException.ThrowIfNull(component);
+        return EnsureAlive().GetComponentIndex(this, component);
+    }
+
+    /// <summary>
+    /// Moves an attached component to a requested attachment index.
+    /// The mandatory Transform always remains at index zero.
+    /// </summary>
+    /// <param name="component">Attached component to move.</param>
+    /// <param name="componentIndex">Requested zero-based attachment index.</param>
+    public void SetComponentIndex(GameComponent component, int componentIndex)
+    {
+        ArgumentNullException.ThrowIfNull(component);
+        EnsureAlive().SetComponentIndex(this, component, componentIndex);
+    }
+
+    /// <summary>
     /// Restores an attached component to the defaults defined by its optional Reset message.
     /// </summary>
     /// <param name="component">GameComponent instance to reset.</param>

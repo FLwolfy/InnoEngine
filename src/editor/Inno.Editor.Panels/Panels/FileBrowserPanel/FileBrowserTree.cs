@@ -17,6 +17,8 @@ internal sealed class FileBrowserTree
     private readonly FileBrowserData m_data;
     private readonly FileBrowserNavigation m_navigation;
     private readonly FileBrowserDragDrop m_dragDrop;
+    private readonly Action<string> m_beginRename;
+    private readonly Action<string> m_requestDelete;
 
     private bool m_rootOpenRequest = true;
     private bool m_currentDirectoryOpenRequest;
@@ -29,11 +31,15 @@ internal sealed class FileBrowserTree
     internal FileBrowserTree(
         FileBrowserData data,
         FileBrowserNavigation navigation,
-        FileBrowserDragDrop dragDrop)
+        FileBrowserDragDrop dragDrop,
+        Action<string> beginRename,
+        Action<string> requestDelete)
     {
         m_data = data;
         m_navigation = navigation;
         m_dragDrop = dragDrop;
+        m_beginRename = beginRename;
+        m_requestDelete = requestDelete;
     }
 
     internal void DrawEntry(
@@ -63,7 +69,10 @@ internal sealed class FileBrowserTree
         if (!isRoot && AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry resolvedEntry))
             treeEntry = resolvedEntry;
         if (treeEntry is not null)
+        {
+            DrawContextMenu(context, treeEntry.relativePath);
             m_dragDrop.DrawAssetSource(treeEntry);
+        }
         if (result.isDoubleClicked)
         {
             if (treeEntry is not null)
@@ -84,6 +93,18 @@ internal sealed class FileBrowserTree
             DrawEntry(context, child.relativePath, Path.GetFileName(child.relativePath), false);
         }
         NativeImGui.TreePop();
+    }
+
+    private void DrawContextMenu(EditorContext context, string relativePath)
+    {
+        if (!ImGuiWidget.BeginContextMenu($"##asset_tree_context_{relativePath}"))
+            return;
+        context.selection.SetSelectedPath(relativePath);
+        if (NativeImGui.MenuItem("Rename", "F2"))
+            m_beginRename(relativePath);
+        if (NativeImGui.MenuItem("Delete", "Delete"))
+            m_requestDelete(relativePath);
+        ImGuiWidget.EndContextMenu();
     }
 
     internal void PrepareOpenRequests(EditorContext context)

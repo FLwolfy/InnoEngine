@@ -21,6 +21,7 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
     private const nuint C_NAME_BUFFER_SIZE = 512;
     private const nuint C_SEARCH_BUFFER_SIZE = 256;
 
+    private readonly InspectorCardControls m_cardControls = new();
     private string m_componentSearch = string.Empty;
 
     /// <inheritdoc />
@@ -63,7 +64,7 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
         }
     }
 
-    private static void DrawComponents(InspectorDrawContext context, GameObject gameObject)
+    private void DrawComponents(InspectorDrawContext context, GameObject gameObject)
     {
         IReadOnlyList<GameComponent> components = gameObject.GetComponents();
         GameComponent? componentToRemove = null;
@@ -88,15 +89,16 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
                     : null,
                 componentType == typeof(Transform)
                     ? null
-                    : () =>
-                    {
-                        if (ImGuiWidget.IconButton($"remove_component_{componentId}", ImGuiIcon.Xmark,
-                                "Remove Component"))
-                        {
-                            componentToRemove = component;
-                        }
-                    },
-                dimmed: behavior is { enabled: false });
+                    : () => m_cardControls.DrawComponent(
+                        gameObject,
+                        component,
+                        i,
+                        components.Count,
+                        () => componentToRemove = component),
+                dimmed: behavior is { enabled: false },
+                trailingControlWidth: componentType == typeof(Transform)
+                    ? 0f
+                    : m_cardControls.width);
 
             if (ImGuiWidget.BeginContextMenu($"##component_menu_{componentId}"))
             {

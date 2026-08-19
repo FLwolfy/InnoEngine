@@ -21,6 +21,7 @@ internal sealed class GameSceneInspectorDrawer : IInspectorDrawer
     private const nuint C_NAME_BUFFER_SIZE = 512;
     private const nuint C_SEARCH_BUFFER_SIZE = 256;
 
+    private readonly InspectorCardControls m_cardControls = new();
     private string m_systemSearch = string.Empty;
 
     /// <inheritdoc />
@@ -40,12 +41,11 @@ internal sealed class GameSceneInspectorDrawer : IInspectorDrawer
         {
             string name = scene.name;
             NativeImGui.SetNextItemWidth(-1f);
-            bool hasSource = context.editorContext.sceneWorkspace.TryGetSourcePath(scene, out _);
             if (NativeImGui.InputText(
                     $"##scene_name_{scene.identity.persistentId:N}",
                     ref name,
                     C_NAME_BUFFER_SIZE,
-                    hasSource ? ImGuiInputTextFlags.ReadOnly : ImGuiInputTextFlags.None))
+                    ImGuiInputTextFlags.None))
                 scene.name = name;
             NativeImGui.Spacing();
             DrawSystems(context, scene);
@@ -57,11 +57,13 @@ internal sealed class GameSceneInspectorDrawer : IInspectorDrawer
         }
     }
 
-    private static void DrawSystems(InspectorDrawContext context, GameScene scene)
+    private void DrawSystems(InspectorDrawContext context, GameScene scene)
     {
         GameSystem? systemToRemove = null;
-        foreach (GameSystem system in scene.GetSystems())
+        IReadOnlyList<GameSystem> systems = scene.GetSystems();
+        for (int i = 0; i < systems.Count; i++)
         {
+            GameSystem system = systems[i];
             string systemId = system.identity.persistentId.ToString("N");
             bool open = ImGuiWidget.CollapsingCard(
                 systemId,
@@ -72,12 +74,14 @@ internal sealed class GameSceneInspectorDrawer : IInspectorDrawer
                     if (ImGuiWidget.CompactCheckbox($"enabled_{systemId}", ref enabled))
                         system.enabled = enabled;
                 },
-                () =>
-                {
-                    if (ImGuiWidget.IconButton($"remove_system_{systemId}", ImGuiIcon.Xmark, "Remove System"))
-                        systemToRemove = system;
-                },
-                dimmed: !system.enabled);
+                () => m_cardControls.DrawSystem(
+                    scene,
+                    system,
+                    i,
+                    systems.Count,
+                    () => systemToRemove = system),
+                dimmed: !system.enabled,
+                trailingControlWidth: m_cardControls.width);
             if (ImGuiWidget.BeginContextMenu($"##system_menu_{systemId}"))
             {
                 if (NativeImGui.MenuItem("Reset System"))

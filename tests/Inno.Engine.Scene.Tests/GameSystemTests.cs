@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 using Inno.Core.Reflection;
@@ -95,6 +96,27 @@ public sealed class GameSystemTests : IDisposable
         Assert.Same(restoredSystem, restoredComponent.system);
     }
 
+    [Fact]
+    public void ManualSystemOrderIsIndependentFromExecutionPriorityAndBreaksPriorityTies()
+    {
+        var scene = new GameScene("System Order");
+        var execution = new List<string>();
+        var highA = new OrderedSystem("High A", 10, execution);
+        var low = new OrderedSystem("Low", -10, execution);
+        var highB = new OrderedSystem("High B", 10, execution);
+        scene.AddSystem(highA);
+        scene.AddSystem(low);
+        scene.AddSystem(highB);
+
+        scene.SetSystemIndex(highB, 0);
+
+        Assert.Equal([highB, highA, low], scene.GetSystems());
+        Assert.Equal(0, scene.GetSystemIndex(highB));
+        SceneManager.LoadScene(scene);
+        SceneManager.Update(0.016f);
+        Assert.Equal(["Low", "High B", "High A"], execution);
+    }
+
     private sealed class ResettableSystem : GameSystem
     {
         internal int resetCount;
@@ -124,6 +146,17 @@ public sealed class GameSystemTests : IDisposable
         protected override void OnFixedUpdate() => fixedCount++;
         protected override void OnUpdate() => updateCount++;
         protected override void OnLateUpdate() => lateCount++;
+    }
+
+    [AllowMultipleSystem]
+    private sealed class OrderedSystem(
+        string label,
+        int executionOrder,
+        ICollection<string> execution) : GameSystem
+    {
+        public override int order => executionOrder;
+
+        protected override void OnUpdate() => execution.Add(label);
     }
 }
 

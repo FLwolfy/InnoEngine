@@ -232,6 +232,184 @@ public static class AssetManager
         return saved;
     }
 
+    /// <summary>
+    /// Moves a source asset while preserving its persistent identity and generated metadata.
+    /// </summary>
+    /// <param name="sourceRelativePath">Existing source-relative path.</param>
+    /// <param name="targetRelativePath">New source-relative path.</param>
+    /// <exception cref="FileNotFoundException">Thrown when the source does not exist.</exception>
+    /// <exception cref="IOException">Thrown when the target source or metadata already exists.</exception>
+    public static void Move(string sourceRelativePath, string targetRelativePath)
+    {
+        EnsureOwnerThread();
+        string sourcePath = NormalizeMutationPath(sourceRelativePath, nameof(sourceRelativePath));
+        string targetPath = NormalizeMutationPath(targetRelativePath, nameof(targetRelativePath));
+        if (string.Equals(sourcePath, targetPath, StringComparison.Ordinal))
+            return;
+
+        AssetFileSystem fileSystem = GetFileSystem();
+        AssetLoader loader = GetLoader();
+        if (fileSystem.isWatching)
+        {
+            IReadOnlyList<AssetChangedEvent> pending = fileSystem.WaitForIdle(out bool requiresFullRescan);
+            if (pending.Count > 0 || requiresFullRescan)
+                ApplySourceChanges(pending, requiresFullRescan);
+        }
+
+        string absoluteSource = Path.Combine(assetRoot, sourcePath);
+        string absoluteTarget = Path.Combine(assetRoot, targetPath);
+        bool isDirectory = Directory.Exists(absoluteSource);
+        if (!isDirectory && !System.IO.File.Exists(absoluteSource))
+            throw new FileNotFoundException($"Asset source '{sourcePath}' does not exist.", absoluteSource);
+        if (Directory.Exists(absoluteTarget) || System.IO.File.Exists(absoluteTarget))
+            throw new IOException($"Asset move target '{targetPath}' already exists.");
+        if (System.IO.File.Exists(absoluteTarget + ".imeta"))
+            throw new IOException($"Asset move target metadata '{targetPath}.imeta' already exists.");
+
+        bool restartWatcher = fileSystem.isWatching;
+        fileSystem.Stop();
+        Directory.CreateDirectory(Path.GetDirectoryName(absoluteTarget)!);
+        var change = new AssetChangedEvent(targetPath, WatcherChangeTypes.Renamed, sourcePath);
+        Dictionary<string, Guid> previousIds = CapturePreviousIds(loader, [change]);
+        try
+        {
+            MovePhysicalSource(absoluteSource, absoluteTarget, isDirectory);
+            loader.ApplySourceChanges([change]);
+            fileSystem.Refresh();
+            AssetChange[] committed = CreateCommittedChanges(loader, [change], previousIds, requiresFullRescan: false);
+            InvokeObservers(Changed, new AssetChangeSet(Interlocked.Increment(ref s_revision), committed));
+        }
+        catch
+        {
+            TryRollbackPhysicalMove(absoluteSource, absoluteTarget, isDirectory);
+            TryRollbackMetadataMove(absoluteSource + ".imeta", absoluteTarget + ".imeta");
+            loader.Rescan();
+            fileSystem.Refresh();
+            throw;
+        }
+        finally
+        {
+            if (restartWatcher)
+                fileSystem.Start();
+        }
+    }
+
+    /// <summary>
+    /// Deletes a source asset and its metadata while retaining a Library tombstone for existing references.
+    /// </summary>
+    /// <param name="relativePath">Existing source-relative file or directory path.</param>
+    /// <exception cref="FileNotFoundException">Thrown when the source does not exist.</exception>
+    public static void Delete(string relativePath)
+    {
+        EnsureOwnerThread();
+        string sourcePath = NormalizeMutationPath(relativePath, nameof(relativePath));
+        AssetFileSystem fileSystem = GetFileSystem();
+        AssetLoader loader = GetLoader();
+        DrainPendingChanges(fileSystem);
+
+        string absoluteSource = Path.Combine(assetRoot, sourcePath);
+        bool isDirectory = Directory.Exists(absoluteSource);
+        if (!isDirectory && !System.IO.File.Exists(absoluteSource))
+            throw new FileNotFoundException($"Asset source '{sourcePath}' does not exist.", absoluteSource);
+
+        AssetChangedEvent[] changes = CreateDeletionEvents(fileSystem, sourcePath);
+        Dictionary<string, Guid> previousIds = CapturePreviousIds(loader, changes);
+        string transactionRoot = Path.Combine(
+            libraryRoot,
+            "AssetDatabase",
+            "Transactions",
+            Guid.NewGuid().ToString("N"));
+        string stagedSource = Path.Combine(transactionRoot, "source");
+        string sourceMeta = absoluteSource + ".imeta";
+        string stagedMeta = Path.Combine(transactionRoot, "source.imeta");
+        bool restartWatcher = fileSystem.isWatching;
+        fileSystem.Stop();
+        Directory.CreateDirectory(transactionRoot);
+        AssetChange[] committed;
+        try
+        {
+            MovePhysicalSource(absoluteSource, stagedSource, isDirectory);
+            if (System.IO.File.Exists(sourceMeta))
+                System.IO.File.Move(sourceMeta, stagedMeta);
+            loader.ApplySourceChanges(changes);
+            fileSystem.Refresh();
+            committed = CreateCommittedChanges(loader, changes, previousIds, requiresFullRescan: false);
+        }
+        catch
+        {
+            RestoreStagedDeletion(absoluteSource, stagedSource, isDirectory);
+            RestoreStagedMetadata(sourceMeta, stagedMeta);
+            loader.Rescan();
+            fileSystem.Refresh();
+            DeleteTransactionDirectorySafely(transactionRoot);
+            throw;
+        }
+        finally
+        {
+            if (restartWatcher)
+                fileSystem.Start();
+        }
+        DeleteTransactionDirectorySafely(transactionRoot);
+        InvokeObservers(Changed, new AssetChangeSet(Interlocked.Increment(ref s_revision), committed));
+        CollectArtifactsIfDue(loader, force: true);
+    }
+
+    /// <summary>Creates a tracked source directory and its persistent metadata.</summary>
+    /// <param name="relativePath">New source-relative directory path.</param>
+    /// <exception cref="DirectoryNotFoundException">Thrown when the parent directory does not exist.</exception>
+    /// <exception cref="IOException">Thrown when the target already exists.</exception>
+    public static void CreateDirectory(string relativePath)
+    {
+        EnsureOwnerThread();
+        string sourcePath = NormalizeMutationPath(relativePath, nameof(relativePath));
+        AssetFileSystem fileSystem = GetFileSystem();
+        AssetLoader loader = GetLoader();
+        DrainPendingChanges(fileSystem);
+
+        string absolutePath = Path.Combine(assetRoot, sourcePath);
+        string parentPath = Path.GetDirectoryName(absolutePath)!;
+        if (!Directory.Exists(parentPath))
+        {
+            throw new DirectoryNotFoundException(
+                $"Asset directory parent '{Path.GetDirectoryName(sourcePath)}' does not exist.");
+        }
+        if (Directory.Exists(absolutePath) || System.IO.File.Exists(absolutePath))
+            throw new IOException($"Asset directory target '{sourcePath}' already exists.");
+        if (System.IO.File.Exists(absolutePath + ".imeta"))
+            throw new IOException($"Asset directory target metadata '{sourcePath}.imeta' already exists.");
+
+        bool restartWatcher = fileSystem.isWatching;
+        fileSystem.Stop();
+        var change = new AssetChangedEvent(sourcePath, WatcherChangeTypes.Created);
+        try
+        {
+            Directory.CreateDirectory(absolutePath);
+            loader.Rescan();
+            fileSystem.Refresh();
+            AssetChange[] committed = CreateCommittedChanges(
+                loader,
+                [change],
+                new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase),
+                requiresFullRescan: false);
+            InvokeObservers(Changed, new AssetChangeSet(Interlocked.Increment(ref s_revision), committed));
+        }
+        catch
+        {
+            if (Directory.Exists(absolutePath))
+                Directory.Delete(absolutePath, recursive: true);
+            if (System.IO.File.Exists(absolutePath + ".imeta"))
+                System.IO.File.Delete(absolutePath + ".imeta");
+            loader.Rescan();
+            fileSystem.Refresh();
+            throw;
+        }
+        finally
+        {
+            if (restartWatcher)
+                fileSystem.Start();
+        }
+    }
+
     /// <summary>Reconciles source files, generated files and the persistent catalog.</summary>
     public static void Rescan()
     {
@@ -420,6 +598,30 @@ public static class AssetManager
         InvokeObservers(Changed, new AssetChangeSet(Interlocked.Increment(ref s_revision), committed));
     }
 
+    private static void DrainPendingChanges(AssetFileSystem fileSystem)
+    {
+        if (!fileSystem.isWatching)
+            return;
+        IReadOnlyList<AssetChangedEvent> pending = fileSystem.WaitForIdle(out bool requiresFullRescan);
+        if (pending.Count > 0 || requiresFullRescan)
+            ApplySourceChanges(pending, requiresFullRescan);
+    }
+
+    private static AssetChangedEvent[] CreateDeletionEvents(
+        AssetFileSystem fileSystem,
+        string sourcePath)
+    {
+        string prefix = sourcePath + "/";
+        return fileSystem.GetEntries()
+            .Where(entry =>
+                string.Equals(entry.relativePath, sourcePath, StringComparison.OrdinalIgnoreCase) ||
+                entry.relativePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(static entry => entry.relativePath.Length)
+            .Select(static entry => new AssetChangedEvent(entry.relativePath, WatcherChangeTypes.Deleted))
+            .DefaultIfEmpty(new AssetChangedEvent(sourcePath, WatcherChangeTypes.Deleted))
+            .ToArray();
+    }
+
     private static void OnAssetReloaded(AssetObject asset)
         => InvokeObservers(AssetReloaded, asset);
 
@@ -510,6 +712,94 @@ public static class AssetManager
         {
             throw new InvalidOperationException(
                 "Asset database mutations must run on the thread that initialized AssetManager.");
+        }
+    }
+
+    private static string NormalizeMutationPath(string relativePath, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+            throw new ArgumentException("Asset source path is required.", parameterName);
+        if (Path.IsPathRooted(relativePath))
+            throw new ArgumentException("Asset source paths must be relative.", parameterName);
+        string normalized = relativePath.Replace('\\', '/').Trim('/');
+        if (normalized.Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Any(static segment => segment == ".."))
+        {
+            throw new ArgumentException("Asset source paths cannot escape the configured root.", parameterName);
+        }
+        return normalized;
+    }
+
+    private static void MovePhysicalSource(string sourcePath, string targetPath, bool isDirectory)
+    {
+        if (isDirectory)
+            Directory.Move(sourcePath, targetPath);
+        else
+            System.IO.File.Move(sourcePath, targetPath);
+    }
+
+    private static void TryRollbackPhysicalMove(string sourcePath, string targetPath, bool isDirectory)
+    {
+        try
+        {
+            bool targetExists = isDirectory ? Directory.Exists(targetPath) : System.IO.File.Exists(targetPath);
+            bool sourceExists = isDirectory ? Directory.Exists(sourcePath) : System.IO.File.Exists(sourcePath);
+            if (targetExists && !sourceExists)
+                MovePhysicalSource(targetPath, sourcePath, isDirectory);
+        }
+        catch
+        {
+            // The following catalog rescan reports any remaining physical conflict.
+        }
+    }
+
+    private static void TryRollbackMetadataMove(string sourcePath, string targetPath)
+    {
+        try
+        {
+            if (System.IO.File.Exists(targetPath) && !System.IO.File.Exists(sourcePath))
+                System.IO.File.Move(targetPath, sourcePath);
+        }
+        catch
+        {
+            // The following catalog rescan reports any remaining metadata conflict.
+        }
+    }
+
+    private static void RestoreStagedDeletion(
+        string sourcePath,
+        string stagedSource,
+        bool isDirectory)
+    {
+        if (isDirectory ? Directory.Exists(stagedSource) : System.IO.File.Exists(stagedSource))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
+            MovePhysicalSource(stagedSource, sourcePath, isDirectory);
+        }
+    }
+
+    private static void RestoreStagedMetadata(string metaPath, string stagedMetaPath)
+    {
+        if (!System.IO.File.Exists(stagedMetaPath))
+            return;
+        Directory.CreateDirectory(Path.GetDirectoryName(metaPath)!);
+        System.IO.File.Move(stagedMetaPath, metaPath);
+    }
+
+    private static void DeleteTransactionDirectorySafely(string transactionRoot)
+    {
+        try
+        {
+            if (Directory.Exists(transactionRoot))
+                Directory.Delete(transactionRoot, recursive: true);
+        }
+        catch (IOException)
+        {
+            // Rebuildable transaction debris is retried by later Library maintenance.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Read-only transaction debris must not roll back an already committed deletion.
         }
     }
 

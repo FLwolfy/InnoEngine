@@ -823,7 +823,9 @@ public sealed class AssetLoader : IDisposable
             if (!m_recordsById.TryGetValue(persistentId, out record))
                 return null;
         }
-        return LoadRecordLocked(record, requestedAssetType);
+        return record.meta.isTombstone && record.asset is null
+            ? null
+            : LoadRecordLocked(record, requestedAssetType);
     }
 
     private AssetObject? LoadRecordLocked(AssetRecord record, Type requestedAssetType)
@@ -1120,6 +1122,7 @@ public sealed class AssetLoader : IDisposable
 
     private void ApplySourceChangesLocked(IReadOnlyList<AssetChangedEvent> changes)
     {
+        IReadOnlyDictionary<string, int> ambiguousRenames = AssociateUntrackedRenamesLocked(changes);
         foreach (AssetChangedEvent change in changes)
         {
             if (IsInternalGeneratedPath(change.relativePath))
@@ -1136,6 +1139,8 @@ public sealed class AssetLoader : IDisposable
             }
             ImportLocked(NormalizeRelativePath(change.relativePath));
         }
+        foreach ((string path, int matchCount) in ambiguousRenames)
+            RecordAmbiguousRenameDiagnosticLocked(path, matchCount);
     }
 
     private void HandleRenameLocked(string oldPath, string newPath)
@@ -1227,34 +1232,49 @@ public sealed class AssetLoader : IDisposable
     private void HandleDeletedLocked(string relativePath)
     {
         string normalized = NormalizeRelativePath(relativePath);
-        AssetRecord? record = FindRecordLocked(normalized);
-        if (record is null)
+        string prefix = normalized + "/";
+        AssetRecord[] records = m_recordsByPath.Values
+            .Where(record =>
+                string.Equals(record.relativePath, normalized, StringComparison.OrdinalIgnoreCase) ||
+                record.relativePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(static record => record.relativePath.Length)
+            .ToArray();
+        if (records.Length == 0)
             return;
-        record.meta.importStatus = (int)AssetImportStatus.Missing;
-        record.meta.diagnostics = [$"Source '{normalized}' is missing."];
-        if (!IOFile.Exists(GetMetaPath(normalized)))
+
+        for (int i = 0; i < records.Length; i++)
         {
+            AssetRecord record = records[i];
+            string recordPath = record.relativePath;
+            DeleteIfExists(GetMetaPath(recordPath));
+            m_recordsByPath.Remove(recordPath);
+            m_importGraph.RemoveNode(recordPath);
+
+            if (record.persistentId == Guid.Empty)
+                continue;
+
+            record.meta.isTombstone = true;
+            record.meta.importStatus = (int)AssetImportStatus.Missing;
+            record.meta.diagnostics = [$"Source '{recordPath}' was removed."];
             record.meta.artifactKey = string.Empty;
             record.meta.lastSuccessfulArtifactKey = string.Empty;
             record.meta.assetStateBytes = [];
             record.meta.runtimeDependencies = [];
             record.meta.importDependencies = [];
-            if (record.persistentId != Guid.Empty)
+            record.payload = [];
+            m_runtimeGraph.ReplaceDependencies(record.persistentId, []);
+            if (record.asset is not null)
             {
-                m_runtimeGraph.ReplaceDependencies(record.persistentId, []);
-                m_importGraph.ReplaceDependencies(record.relativePath, []);
+                m_dependencyRetention.Remove(record.asset);
+                AssetRuntimeHost.Initialize(
+                    record.asset,
+                    recordPath,
+                    record.meta.sourceHash,
+                    ReadOnlyMemory<byte>.Empty,
+                    true,
+                    record.asset.contentVersion + 1);
+                PublishReloaded(record.asset);
             }
-        }
-        if (record.asset is not null)
-        {
-            AssetRuntimeHost.Initialize(
-                record.asset,
-                normalized,
-                record.meta.sourceHash,
-                ReadOnlyMemory<byte>.Empty,
-                true,
-                record.asset.contentVersion + 1);
-            PublishReloaded(record.asset);
         }
         CommitCatalogLocked();
     }
@@ -1372,6 +1392,22 @@ public sealed class AssetLoader : IDisposable
             return null;
         if (sourceMeta.persistentId == Guid.Empty)
             return null;
+        if (m_recordsById.TryGetValue(sourceMeta.persistentId, out AssetRecord? tombstone) &&
+            tombstone.meta.isTombstone)
+        {
+            tombstone.relativePath = relativePath;
+            tombstone.persistentId = sourceMeta.persistentId;
+            tombstone.meta = new AssetMeta
+            {
+                relativePath = relativePath,
+                persistentId = sourceMeta.persistentId,
+                importerId = sourceMeta.importerId,
+                importerVersion = sourceMeta.importerSettingsVersion,
+                importStatus = (int)AssetImportStatus.Pending
+            };
+            AddOrReplaceRecordLocked(tombstone);
+            return tombstone;
+        }
         if (m_recordsById.TryGetValue(sourceMeta.persistentId, out AssetRecord? sameId) &&
             !string.Equals(sameId.relativePath, relativePath, StringComparison.OrdinalIgnoreCase))
         {
@@ -1387,19 +1423,20 @@ public sealed class AssetLoader : IDisposable
                 return sameId;
             }
         }
-        record = new AssetRecord
+        record = m_recordsById.GetValueOrDefault(sourceMeta.persistentId) ?? new AssetRecord();
+        record.relativePath = relativePath;
+        record.persistentId = sourceMeta.persistentId;
+        if (record.meta.isTombstone)
         {
-            relativePath = relativePath,
-            persistentId = sourceMeta.persistentId,
-            meta = new AssetMeta
+            record.meta = new AssetMeta
             {
                 relativePath = relativePath,
                 persistentId = sourceMeta.persistentId,
                 importerId = sourceMeta.importerId,
                 importerVersion = sourceMeta.importerSettingsVersion,
                 importStatus = (int)AssetImportStatus.Pending
-            }
-        };
+            };
+        }
         AddOrReplaceRecordLocked(record);
         return record;
     }
@@ -1704,7 +1741,9 @@ public sealed class AssetLoader : IDisposable
     }
 
     private void CommitCatalogLocked()
-        => m_catalog.Commit(m_recordsByPath.Values
+        => m_catalog.Commit(m_recordsById.Values
+            .Concat(m_recordsByPath.Values.Where(static record => record.persistentId == Guid.Empty))
+            .Distinct()
             .Select(static record => record.meta)
             .OrderBy(static meta => meta.relativePath, StringComparer.OrdinalIgnoreCase)
             .ToArray());
@@ -1713,6 +1752,21 @@ public sealed class AssetLoader : IDisposable
     {
         if (string.IsNullOrWhiteSpace(meta.relativePath))
             return;
+        if (meta.isTombstone)
+        {
+            if (meta.persistentId == Guid.Empty)
+                return;
+            AssetRecord tombstone = FindRecordByIdWithoutLoading(meta.persistentId) ?? new AssetRecord();
+            if (!string.IsNullOrWhiteSpace(tombstone.relativePath))
+                m_recordsByPath.Remove(tombstone.relativePath);
+            tombstone.relativePath = meta.relativePath;
+            tombstone.persistentId = meta.persistentId;
+            tombstone.stableTypeId = meta.stableAssetTypeId;
+            tombstone.meta = meta;
+            tombstone.payload = [];
+            m_recordsById[meta.persistentId] = tombstone;
+            return;
+        }
         AssetRecord record = meta.persistentId == Guid.Empty
             ? m_recordsByPath.GetValueOrDefault(meta.relativePath) ?? new AssetRecord()
             : FindRecordByIdWithoutLoading(meta.persistentId) ?? new AssetRecord();
@@ -1769,15 +1823,17 @@ public sealed class AssetLoader : IDisposable
             record.meta.relativePath = relativePath;
             record.meta.persistentId = sourceMeta.persistentId;
             record.meta.isDirectory = true;
+            record.meta.isTombstone = false;
             record.meta.importStatus = (int)AssetImportStatus.Imported;
+            record.meta.diagnostics = [];
             AddOrReplaceRecordLocked(record);
         }
     }
 
-    private void TryAssociateUntrackedRenameLocked(string relativePath, string absoluteSourcePath)
+    private int TryAssociateUntrackedRenameLocked(string relativePath, string absoluteSourcePath)
     {
         if (m_recordsByPath.ContainsKey(relativePath) || IOFile.Exists(GetMetaPath(relativePath)))
-            return;
+            return 0;
         string fingerprint = ComputeSha256Hex(IOFile.ReadAllBytes(absoluteSourcePath));
         AssetRecord[] matches = m_recordsByPath.Values
             .Where(record =>
@@ -1787,6 +1843,48 @@ public sealed class AssetLoader : IDisposable
             .ToArray();
         if (matches.Length == 1)
             HandleRenameLocked(matches[0].relativePath, relativePath);
+        return matches.Length;
+    }
+
+    private IReadOnlyDictionary<string, int> AssociateUntrackedRenamesLocked(
+        IReadOnlyList<AssetChangedEvent> changes)
+    {
+        var ambiguous = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < changes.Count; i++)
+        {
+            AssetChangedEvent change = changes[i];
+            if (change.changeType.HasFlag(WatcherChangeTypes.Deleted) ||
+                change.changeType.HasFlag(WatcherChangeTypes.Renamed) ||
+                IsInternalGeneratedPath(change.relativePath))
+            {
+                continue;
+            }
+
+            string relativePath = NormalizeRelativePath(change.relativePath);
+            string absolutePath = GetSourcePath(relativePath);
+            if (IOFile.Exists(absolutePath))
+            {
+                int matches = TryAssociateUntrackedRenameLocked(relativePath, absolutePath);
+                if (matches > 1)
+                    ambiguous[relativePath] = matches;
+            }
+        }
+        return ambiguous;
+    }
+
+    private void RecordAmbiguousRenameDiagnosticLocked(string relativePath, int matchCount)
+    {
+        AssetRecord? record = FindRecordLocked(relativePath);
+        if (record is null)
+            return;
+        string diagnostic =
+            $"Warning: source '{relativePath}' matched {matchCount} removed assets; " +
+            "a new persistent identity was assigned instead of guessing a rename.";
+        record.meta.diagnostics = record.meta.diagnostics
+            .Append(diagnostic)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        CommitCatalogLocked();
     }
 
     private void HandleDirectoryRenameLocked(string oldPath, string newPath)

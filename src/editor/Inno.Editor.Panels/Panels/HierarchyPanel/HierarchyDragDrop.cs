@@ -84,6 +84,45 @@ internal sealed class HierarchyDragDrop
         }
     }
 
+    internal GameScene? ReorderScene(
+        GameScene target,
+        Guid droppedId,
+        in TreeNodeResult result)
+    {
+        GameScene? dropped = IdentityManager.Get<GameScene>(droppedId);
+        if (dropped is null || ReferenceEquals(dropped, target) ||
+            !dropped.isLoaded || !target.isLoaded)
+        {
+            return null;
+        }
+
+        try
+        {
+            int sourceIndex = SceneManager.GetSceneIndex(dropped);
+            int targetIndex = SceneManager.GetSceneIndex(target);
+            bool insertAfter = NativeImGui.GetMousePos().Y >= (result.min.Y + result.max.Y) * 0.5f;
+            int insertionIndex = targetIndex + (insertAfter ? 1 : 0);
+            if (sourceIndex < insertionIndex)
+                insertionIndex--;
+            SceneManager.SetSceneIndex(dropped, insertionIndex);
+            return dropped;
+        }
+        catch (InvalidOperationException exception)
+        {
+            Log.Warn("Scene reorder was rejected: {0}", exception.Message);
+            return null;
+        }
+    }
+
+    internal void DrawSceneDropPreview(in TreeNodeResult result)
+    {
+        bool insertAfter = NativeImGui.GetMousePos().Y >= (result.min.Y + result.max.Y) * 0.5f;
+        ImGuiWidget.InsertionLine(
+            result.min.X,
+            result.max.X,
+            insertAfter ? result.max.Y : result.min.Y);
+    }
+
     internal void DrawDropPreview(in TreeNodeResult result)
     {
         float height = MathF.Max(1f, result.max.Y - result.min.Y);

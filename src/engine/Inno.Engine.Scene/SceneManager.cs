@@ -27,6 +27,40 @@ public static class SceneManager
     public static IReadOnlyList<GameScene> loadedScenes => s_loadedScenes.ToArray();
 
     /// <summary>
+    /// Gets the hierarchy index of a loaded scene.
+    /// </summary>
+    /// <param name="scene">Loaded scene to locate.</param>
+    /// <returns>The zero-based scene index.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the scene is not loaded.</exception>
+    public static int GetSceneIndex(GameScene scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        int index = s_loadedScenes.IndexOf(scene);
+        return index >= 0
+            ? index
+            : throw new InvalidOperationException("Only a loaded scene has a hierarchy index.");
+    }
+
+    /// <summary>
+    /// Moves a loaded scene to a hierarchy index without changing the active scene.
+    /// </summary>
+    /// <param name="scene">Loaded scene to move.</param>
+    /// <param name="sceneIndex">Requested zero-based hierarchy index.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the scene is not loaded.</exception>
+    public static void SetSceneIndex(GameScene scene, int sceneIndex)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        int currentIndex = s_loadedScenes.IndexOf(scene);
+        if (currentIndex < 0)
+            throw new InvalidOperationException("Only a loaded scene can be reordered.");
+        int targetIndex = Math.Clamp(sceneIndex, 0, s_loadedScenes.Count - 1);
+        if (currentIndex == targetIndex)
+            return;
+        s_loadedScenes.RemoveAt(currentIndex);
+        s_loadedScenes.Insert(targetIndex, scene);
+    }
+
+    /// <summary>
     /// Loads a scene as the active scene, unloading the previous scene first.
     /// </summary>
     /// <param name="scene">Scene to load.</param>

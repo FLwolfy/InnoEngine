@@ -285,6 +285,7 @@ public static partial class ImGuiWidget
     /// <param name="drawTrailingControl">Optional control aligned to the right edge.</param>
     /// <param name="defaultOpen">Whether the card starts expanded.</param>
     /// <param name="dimmed">Whether header controls and title use the inactive text color.</param>
+    /// <param name="trailingControlWidth">Optional width reserved for the trailing control group.</param>
     /// <returns><see langword="true"/> when card content should be drawn.</returns>
     public static bool CollapsingCard(
         string id,
@@ -292,10 +293,18 @@ public static partial class ImGuiWidget
         Action? drawLeadingControl = null,
         Action? drawTrailingControl = null,
         bool defaultOpen = true,
-        bool dimmed = false)
+        bool dimmed = false,
+        float trailingControlWidth = 0f)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         ArgumentNullException.ThrowIfNull(title);
+        if (trailingControlWidth < 0f)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(trailingControlWidth),
+                trailingControlWidth,
+                "Trailing control width cannot be negative.");
+        }
         ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags.SpanAvailWidth
             | ImGuiTreeNodeFlags.AllowOverlap
             | ImGuiTreeNodeFlags.OpenOnArrow;
@@ -349,7 +358,9 @@ public static partial class ImGuiWidget
 
         if (drawTrailingControl is not null)
         {
-            float trailingWidth = NativeImGui.GetFrameHeight();
+            float trailingWidth = trailingControlWidth > 0f
+                ? trailingControlWidth
+                : NativeImGui.GetFrameHeight();
             NativeImGui.SetCursorScreenPos(new Vector2(
                 MathF.Max(contentX, headerMax.X - trailingWidth),
                 contentY));

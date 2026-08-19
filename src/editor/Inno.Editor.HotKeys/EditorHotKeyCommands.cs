@@ -5,7 +5,7 @@ namespace Inno.Editor.HotKeys;
 /// </summary>
 public static class EditorHotKeyCommands
 {
-    /// <summary>Saves the active editor document.</summary>
+    /// <summary>Saves all open editor scenes.</summary>
     public const string Save = "file.save";
 
     /// <summary>Renames the current selection.</summary>

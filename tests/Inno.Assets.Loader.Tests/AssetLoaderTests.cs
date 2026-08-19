@@ -300,10 +300,17 @@ public sealed class AssetLoaderTests : IDisposable
         Assert.True(asset.isMissing);
         Assert.Equal(persistentId, asset.identity.persistentId);
         Assert.True(asset.runtimePayload.IsEmpty);
+        Assert.False(System.IO.File.Exists(workspace.SourcePath("Text/new.txt.imeta")));
+        Assert.False(loader.TryGetInfo("Text/new.txt", out _));
+        Assert.True(loader.TryGetInfo(persistentId, out AssetInfo? tombstone));
+        Assert.NotNull(tombstone);
+        Assert.Equal(AssetImportStatus.Missing, tombstone.status);
+        Assert.True(tombstone.artifactKey.isEmpty);
+        Assert.True(tombstone.lastSuccessfulArtifactKey.isEmpty);
     }
 
     [Fact]
-    public void DeletedCanonicalInstance_RecoversInPlaceWhenSourceReturns()
+    public void RecreatedSourceWithoutMetadata_ReceivesNewIdentity()
     {
         using TestWorkspace workspace = new();
         workspace.WriteText("Text/recover.txt", "one");
@@ -319,9 +326,119 @@ public sealed class AssetLoaderTests : IDisposable
             new Inno.Assets.File.AssetChangedEvent("Text/recover.txt", WatcherChangeTypes.Created)
         ]);
 
-        Assert.False(asset.isMissing);
-        Assert.Equal("two", asset.content);
-        Assert.Same(asset, loader.Load("Text/recover.txt", typeof(TextAsset)));
+        TextAsset replacement = Assert.IsType<TextAsset>(
+            loader.Load("Text/recover.txt", typeof(TextAsset)));
+        Assert.True(asset.isMissing);
+        Assert.False(replacement.isMissing);
+        Assert.Equal("two", replacement.content);
+        Assert.NotEqual(asset.identity.persistentId, replacement.identity.persistentId);
+        Assert.Same(asset, loader.Load(asset.identity.persistentId, typeof(TextAsset)));
+    }
+
+    [Fact]
+    public void Tombstone_SurvivesCatalogRestartWithoutOccupyingItsFormerPath()
+    {
+        using TestWorkspace workspace = new();
+        workspace.WriteText("Text/value.txt", "one");
+        Guid oldId;
+        using (AssetLoader loader = workspace.CreateLoader())
+        {
+            loader.Rescan();
+            Assert.True(loader.TryGetPersistentId("Text/value.txt", out oldId));
+            workspace.DeleteSource("Text/value.txt");
+            loader.ApplySourceChanges([
+                new Inno.Assets.File.AssetChangedEvent("Text/value.txt", WatcherChangeTypes.Deleted)
+            ]);
+        }
+
+        workspace.WriteText("Text/value.txt", "two");
+        using AssetLoader restarted = workspace.CreateLoader();
+        restarted.Rescan();
+
+        Assert.True(restarted.TryGetInfo(oldId, out AssetInfo? tombstone));
+        Assert.Equal(AssetImportStatus.Missing, tombstone!.status);
+        Assert.True(restarted.TryGetPersistentId("Text/value.txt", out Guid newId));
+        Assert.NotEqual(oldId, newId);
+    }
+
+    [Fact]
+    public void RestoredSourceAndMetadata_ReactivatesOriginalIdentityInPlace()
+    {
+        using TestWorkspace workspace = new();
+        workspace.WriteText("Text/recover.txt", "one");
+        using var loader = workspace.CreateLoader();
+        TextAsset asset = Assert.IsType<TextAsset>(loader.Load("Text/recover.txt", typeof(TextAsset)));
+        Guid id = asset.identity.persistentId;
+        byte[] metadata = System.IO.File.ReadAllBytes(workspace.SourcePath("Text/recover.txt.imeta"));
+
+        workspace.DeleteSource("Text/recover.txt");
+        loader.ApplySourceChanges([
+            new Inno.Assets.File.AssetChangedEvent("Text/recover.txt", WatcherChangeTypes.Deleted)
+        ]);
+        workspace.WriteText("Text/recover.txt", "two");
+        System.IO.File.WriteAllBytes(workspace.SourcePath("Text/recover.txt.imeta"), metadata);
+        loader.ApplySourceChanges([
+            new Inno.Assets.File.AssetChangedEvent("Text/recover.txt", WatcherChangeTypes.Created)
+        ]);
+
+        TextAsset restored = Assert.IsType<TextAsset>(loader.Load("Text/recover.txt", typeof(TextAsset)));
+        Assert.Same(asset, restored);
+        Assert.Equal(id, restored.identity.persistentId);
+        Assert.False(restored.isMissing);
+        Assert.Equal("two", restored.content);
+    }
+
+    [Fact]
+    public void DeleteCreateRenameFallback_PreservesIdentityOnlyWhenFingerprintMatchIsUnique()
+    {
+        using TestWorkspace workspace = new();
+        workspace.WriteText("Text/old.txt", "value");
+        using var loader = workspace.CreateLoader();
+        loader.Rescan();
+        Assert.True(loader.TryGetPersistentId("Text/old.txt", out Guid id));
+
+        workspace.Move("Text/old.txt", "Text/new.txt");
+        loader.ApplySourceChanges([
+            new Inno.Assets.File.AssetChangedEvent("Text/old.txt", WatcherChangeTypes.Deleted),
+            new Inno.Assets.File.AssetChangedEvent("Text/new.txt", WatcherChangeTypes.Created)
+        ]);
+
+        Assert.True(loader.TryGetPersistentId("Text/new.txt", out Guid movedId));
+        Assert.Equal(id, movedId);
+        Assert.False(System.IO.File.Exists(workspace.SourcePath("Text/old.txt.imeta")));
+        Assert.True(System.IO.File.Exists(workspace.SourcePath("Text/new.txt.imeta")));
+    }
+
+    [Fact]
+    public void AmbiguousDeleteCreateRenameFallback_DoesNotGuessAnIdentity()
+    {
+        using TestWorkspace workspace = new();
+        workspace.WriteText("Text/first.txt", "same");
+        workspace.WriteText("Text/second.txt", "same");
+        using var loader = workspace.CreateLoader();
+        loader.Rescan();
+        Assert.True(loader.TryGetPersistentId("Text/first.txt", out Guid firstId));
+        Assert.True(loader.TryGetPersistentId("Text/second.txt", out Guid secondId));
+
+        workspace.DeleteSource("Text/first.txt");
+        workspace.DeleteSource("Text/second.txt");
+        workspace.WriteText("Text/new.txt", "same");
+        loader.ApplySourceChanges([
+            new Inno.Assets.File.AssetChangedEvent("Text/first.txt", WatcherChangeTypes.Deleted),
+            new Inno.Assets.File.AssetChangedEvent("Text/second.txt", WatcherChangeTypes.Deleted),
+            new Inno.Assets.File.AssetChangedEvent("Text/new.txt", WatcherChangeTypes.Created)
+        ]);
+
+        Assert.True(loader.TryGetPersistentId("Text/new.txt", out Guid newId));
+        Assert.NotEqual(firstId, newId);
+        Assert.NotEqual(secondId, newId);
+        Assert.True(loader.TryGetInfo("Text/new.txt", out AssetInfo? newInfo));
+        Assert.Contains(newInfo!.diagnostics, diagnostic =>
+            diagnostic.Contains("matched 2 removed assets", StringComparison.Ordinal));
+        Assert.True(loader.TryGetInfo(firstId, out AssetInfo? firstTombstone));
+        Assert.True(loader.TryGetInfo(secondId, out AssetInfo? secondTombstone));
+        Assert.Equal(AssetImportStatus.Missing, firstTombstone!.status);
+        Assert.Equal(AssetImportStatus.Missing, secondTombstone!.status);
     }
 
     [Fact]

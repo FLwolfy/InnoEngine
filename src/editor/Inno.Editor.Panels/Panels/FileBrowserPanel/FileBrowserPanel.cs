@@ -7,6 +7,7 @@ using System.Text;
 using Inno.Assets;
 using Inno.Assets.File;
 using Inno.Editor.Core;
+using Inno.Editor.HotKeys;
 using Inno.Editor.ImGui;
 using Inno.Native.ImGui;
 using Inno.Platform.ImGui;
@@ -48,6 +49,7 @@ public sealed class FileBrowserPanel : EditorPanel
     private readonly FileBrowserNavigation m_navigation = new();
     private readonly FileBrowserDragDrop m_dragDrop = new();
     private readonly FileBrowserChangeTracker m_changeTracker = new();
+    private readonly FileBrowserAssetCommands m_assetCommands = new();
     private readonly FileBrowserTree m_tree;
 
     private float m_treeWidth = C_TREE_WIDTH;
@@ -56,6 +58,14 @@ public sealed class FileBrowserPanel : EditorPanel
     private FileBrowserEntryTypeFilter m_entryTypeFilter = FileBrowserEntryTypeFilter.All;
     private FileBrowserEntryScopeFilter m_entryScopeFilter = FileBrowserEntryScopeFilter.CurrentOnly;
     private float m_gridScale = C_GRID_SCALE_DEFAULT;
+    private string m_renamingPath = string.Empty;
+    private string m_renameBuffer = string.Empty;
+    private string m_pendingDeletePath = string.Empty;
+    private bool m_openRenamePopup;
+    private bool m_focusRename;
+    private bool m_isFocused;
+    private IDisposable? m_renameHotKeyRegistration;
+    private IDisposable? m_deleteHotKeyRegistration;
     #endregion
 
     #region Types
@@ -74,27 +84,49 @@ public sealed class FileBrowserPanel : EditorPanel
     public FileBrowserPanel()
         : base("asset.file-browser", "File")
     {
-        m_tree = new FileBrowserTree(m_data, m_navigation, m_dragDrop);
+        m_tree = new FileBrowserTree(
+            m_data,
+            m_navigation,
+            m_dragDrop,
+            BeginRename,
+            RequestDelete);
     }
 
     /// <inheritdoc />
     public override void OnAttach(EditorContext context)
     {
         m_changeTracker.Attach(context);
+        m_renameHotKeyRegistration = context.hotKeys.Register(
+            EditorHotKeyCommands.Rename,
+            () => BeginRename(context.selection.selectedPath),
+            () => m_isFocused && m_assetCommands.CanMutateSelection(context),
+            priority: 10);
+        m_deleteHotKeyRegistration = context.hotKeys.Register(
+            EditorHotKeyCommands.Delete,
+            () => RequestDelete(context.selection.selectedPath),
+            () => m_isFocused && m_assetCommands.CanMutateSelection(context),
+            priority: 10);
     }
 
     /// <inheritdoc />
     public override void OnDetach(EditorContext context)
     {
         m_changeTracker.Detach();
+        m_renameHotKeyRegistration?.Dispose();
+        m_deleteHotKeyRegistration?.Dispose();
+        m_renameHotKeyRegistration = null;
+        m_deleteHotKeyRegistration = null;
     }
 
     /// <inheritdoc />
     public override void OnRender(EditorContext context)
     {
+        m_isFocused = NativeImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows);
         PushBrowserStyle();
         DrawBrowser(context);
+        DrawRenamePopup(context);
         PopBrowserStyle();
+        ApplyPendingDelete(context);
     }
     #endregion
 
@@ -210,7 +242,7 @@ public sealed class FileBrowserPanel : EditorPanel
     private void DrawToolbar(EditorContext context)
     {
         DrawNavigationBar(context);
-        DrawViewAndSearchBar();
+        DrawViewAndSearchBar(context);
     }
 
     private void DrawNavigationBar(EditorContext context)
@@ -247,7 +279,7 @@ public sealed class FileBrowserPanel : EditorPanel
         NativeImGui.PopStyleVar();
     }
 
-    private void DrawViewAndSearchBar()
+    private void DrawViewAndSearchBar(EditorContext context)
     {
         NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(5f, 1f));
 
@@ -255,6 +287,19 @@ public sealed class FileBrowserPanel : EditorPanel
         if (NativeImGui.SmallButton($"{m_viewMode}##ViewMode"))
             m_viewMode = m_viewMode == ViewMode.List ? ViewMode.Grid : ViewMode.List;
 
+        NativeImGui.SameLine(0f, 4f);
+
+        if (NativeImGui.SmallButton("New Folder##CreateAssetFolder"))
+        {
+            try
+            {
+                BeginRename(m_assetCommands.CreateFolder(context));
+            }
+            catch (Exception exception)
+            {
+                Inno.Core.Logging.Log.Error("Failed to create an asset folder: {0}", exception);
+            }
+        }
         NativeImGui.PopStyleColor(3);
         NativeImGui.SameLine(0f, 4f);
 
@@ -445,6 +490,7 @@ public sealed class FileBrowserPanel : EditorPanel
         }
 
         bool itemActive = NativeImGui.IsItemActive();
+        DrawEntryContextMenu(context, entry.relativePath);
         if (selected || itemHovered)
         {
             Vector4 highlight = itemActive
@@ -512,6 +558,7 @@ public sealed class FileBrowserPanel : EditorPanel
             HandleEntryActivation(context, entry, doubleClicked);
         }
 
+        DrawEntryContextMenu(context, entry.relativePath);
         m_dragDrop.DrawAssetSource(entry);
         DrawGridItemVisual(icon, name, selected, m_gridScale);
         NativeImGui.PopStyleColor(3);
@@ -531,6 +578,98 @@ public sealed class FileBrowserPanel : EditorPanel
 
         context.selection.SetSelectedPath(entry.relativePath);
         m_tree.RequestRevealPath(entry.relativePath);
+    }
+
+    private void DrawEntryContextMenu(EditorContext context, string relativePath)
+    {
+        if (!ImGuiWidget.BeginContextMenu($"##asset_context_{relativePath}"))
+            return;
+        context.selection.SetSelectedPath(relativePath);
+        if (NativeImGui.MenuItem("Rename", "F2"))
+            BeginRename(relativePath);
+        if (NativeImGui.MenuItem("Delete", "Delete"))
+            RequestDelete(relativePath);
+        ImGuiWidget.EndContextMenu();
+    }
+
+    private void BeginRename(string? relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath) ||
+            !AssetManager.TryGetFileSystemEntry(relativePath, out _))
+        {
+            return;
+        }
+        m_renamingPath = relativePath;
+        m_renameBuffer = Path.GetFileName(relativePath);
+        m_openRenamePopup = true;
+        m_focusRename = true;
+    }
+
+    private void RequestDelete(string? relativePath)
+    {
+        if (!string.IsNullOrWhiteSpace(relativePath))
+            m_pendingDeletePath = relativePath;
+    }
+
+    private void ApplyPendingDelete(EditorContext context)
+    {
+        if (string.IsNullOrEmpty(m_pendingDeletePath))
+            return;
+        string path = m_pendingDeletePath;
+        m_pendingDeletePath = string.Empty;
+        try
+        {
+            m_assetCommands.Delete(context, path);
+        }
+        catch (Exception exception)
+        {
+            Inno.Core.Logging.Log.Error("Failed to delete asset '{0}': {1}", path, exception);
+        }
+    }
+
+    private void DrawRenamePopup(EditorContext context)
+    {
+        const string C_POPUP_ID = "Rename Asset##FileBrowserRename";
+        if (m_openRenamePopup)
+        {
+            NativeImGui.OpenPopup(C_POPUP_ID, ImGuiPopupFlags.NoReopen);
+            m_openRenamePopup = false;
+        }
+        if (!NativeImGui.BeginPopupModal(C_POPUP_ID, ImGuiWindowFlags.AlwaysAutoResize))
+            return;
+
+        if (m_focusRename)
+        {
+            NativeImGui.SetKeyboardFocusHere();
+            m_focusRename = false;
+        }
+        NativeImGui.SetNextItemWidth(320f);
+        bool submitted = NativeImGui.InputText(
+            "##AssetRenameInput",
+            ref m_renameBuffer,
+            512,
+            ImGuiInputTextFlags.EnterReturnsTrue | ImGuiInputTextFlags.AutoSelectAll);
+        bool cancel = NativeImGui.IsKeyPressed(ImGuiKey.Escape);
+        if (submitted || NativeImGui.Button("Rename"))
+        {
+            try
+            {
+                m_assetCommands.Rename(context, m_renamingPath, m_renameBuffer);
+                NativeImGui.CloseCurrentPopup();
+            }
+            catch (Exception exception)
+            {
+                Inno.Core.Logging.Log.Error(
+                    "Failed to rename asset '{0}' to '{1}': {2}",
+                    m_renamingPath,
+                    m_renameBuffer,
+                    exception);
+            }
+        }
+        NativeImGui.SameLine();
+        if (cancel || NativeImGui.Button("Cancel"))
+            NativeImGui.CloseCurrentPopup();
+        NativeImGui.EndPopup();
     }
 
     private static unsafe void DrawGridItemVisual(string icon, string name, bool selected, float scale)

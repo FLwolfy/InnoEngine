@@ -197,6 +197,36 @@ internal sealed class SceneStore
     internal IReadOnlyList<GameComponent> GetComponents(GameObject owner)
         => GetAliveRecord(owner).components.Where(IsLocallyVisible).ToArray();
 
+    internal int GetComponentIndex(GameObject owner, GameComponent component)
+    {
+        ArgumentNullException.ThrowIfNull(component);
+        SceneObjectRecord record = GetAliveRecord(owner);
+        int index = record.components.IndexOf(component);
+        return index >= 0 && IsLocallyVisible(component)
+            ? index
+            : throw new InvalidOperationException("The component is not attached to the requested GameObject.");
+    }
+
+    internal void SetComponentIndex(GameObject owner, GameComponent component, int componentIndex)
+    {
+        if (isExecuting || hasPendingChanges)
+            throw new InvalidOperationException("Components cannot be reordered during a scene execution phase.");
+        SceneObjectRecord record = GetAliveRecord(owner);
+        int currentIndex = GetComponentIndex(owner, component);
+        if (component is Components.Transform)
+        {
+            if (componentIndex != 0)
+                throw new InvalidOperationException("The mandatory Transform component must remain at index zero.");
+            return;
+        }
+
+        int targetIndex = Math.Clamp(componentIndex, 1, record.components.Count - 1);
+        if (currentIndex == targetIndex)
+            return;
+        record.components.RemoveAt(currentIndex);
+        record.components.Insert(targetIndex, component);
+    }
+
     internal IReadOnlyList<TComponent> GetComponents<TComponent>(GameObject owner)
         where TComponent : GameComponent
         => GetAliveRecord(owner).components.Where(IsLocallyVisible).OfType<TComponent>().ToArray();

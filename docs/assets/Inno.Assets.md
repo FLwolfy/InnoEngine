@@ -38,6 +38,9 @@ AssetManager.Initialize(AssetManagerOptions.Create(
 - `WaitForIdle`
 - `Import`
 - `Save`
+- `Move`
+- `Delete`
+- `CreateDirectory`
 - `Rescan`
 - Manager 的 `LoadAsync` 提交阶段
 - `BuildAsync`
@@ -75,6 +78,9 @@ Observer 按订阅顺序在 owner thread 调用。某个 observer 抛异常会�
 | `Import(path)` | 显式导入单一受支持 source。 |
 | `Save(asset)` | 导出到现有 source path。 |
 | `Save(path,asset)` | 为新资产建立初始 source identity。 |
+| `Move(oldPath,newPath)` | 事务式移动 source 与 `.imeta`，保留 persistent ID、canonical instance 和 artifact。 |
+| `Delete(path)` | 事务式删除 file/directory source 与 sidecar；释放路径并保留 ID tombstone。 |
+| `CreateDirectory(path)` | 创建带稳定 `.imeta` 的 source folder；folder 不生成 artifact。 |
 | `Rescan()` | 对账全部 source/meta/catalog/artifact。 |
 
 初始化会自动 `Rescan`，无需为已有文件逐个调用 `Import`。
@@ -121,17 +127,22 @@ FileBrowser List 使用 `AssetFileEntry.nameWithoutExtension` 显示名字，Gri
 5. CAS artifact 不移动，内容不变时 key 不变；
 6. 发布带 ID、oldPath、newPath 的 `Moved`。
 
-平台若只报告 delete+create，full reconcile 会按缺失 record 和 fingerprint 做唯一匹配；存在歧义时记录 `Conflict`，不会猜测。
+平台若只报告 delete+create，Loader 会在提交删除前按缺失 record 和 fingerprint 做唯一匹配。存在歧义时不会猜测：新 source 获得新 ID，旧 ID 各自进入 tombstone，并在新记录上保留明确 diagnostic。
+
+FileBrowser 的 New Folder、Rename 和 Delete 全部调用 AssetManager 的事务 API。`Move` 会暂停 watcher、提交单一 `Moved` change，然后恢复 watcher；目标 source 或 `.imeta` 已存在时明确失败，不进行覆盖。
 
 ### delete/recovery
 
-- 只删除 source、保留 `.imeta`：状态 `Missing`，ID 与 last-successful artifact 保留；同路径恢复后原位复活 canonical instance。
-- source 和 `.imeta` 都删除：保留最小 tombstone 供旧引用显示 missing，artifact 变为 GC 候选。
+- watcher quiet window 内出现 delete+create：折叠为 `Modified`，保留 ID，不产生短暂 Missing。
+- quiet window 后确认 source 已删除：自动删除孤立 `.imeta`，旧路径立即释放；Catalog 仅按 ID 保留最小 tombstone，current/last-successful artifact 引用立即清空。
+- 同路径稍后重新创建但没有原 `.imeta`：视为新资产并生成新 ID，不会误继承已删除资产的身份。
+- source 与原 `.imeta` 一起恢复：在 ID 无冲突时可以重新采用原 identity；若旧 canonical 仍存在则原位恢复。
+- source 和 `.imeta` 同时删除：与确认后的 source-only delete 结果一致。
 - duplicate source + meta：已知原路径保留 ID，新副本获得新 ID，避免两个路径争用同一身份。
 
 ## CAS 回收
 
-AssetManager 启动、`WaitForIdle` 和低频 idle update 会回收不可达 bundle。以下 key 保留：current、last-successful，以及当前 transaction 所需内容。超出 size limit 时优先删除最旧不可达 bundle；正常情况下还尊重 grace period。
+AssetManager 启动、`WaitForIdle` 和低频 idle update 会回收不可达 bundle。确认删除会立即解除 Catalog 中的 current/last-successful 引用；物理 bundle 仍由 reachability、共享引用、size limit 和 grace period 决定何时删除。超出 size limit 时优先删除最旧不可达 bundle；正常情况下尊重 grace period。
 
 CAS 目录只占磁盘，不会因存在就常驻运行内存。Artifact key 与 Assembly runtime generation 都不会写入 Scene/Prefab schema。
 

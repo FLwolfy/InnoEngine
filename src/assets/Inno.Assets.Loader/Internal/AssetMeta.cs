@@ -28,6 +28,7 @@ internal sealed class AssetMeta : ISerializable
     [SerializableProperty] internal string lastSuccessfulArtifactKey { get; set; } = string.Empty;
     [SerializableProperty] internal string[] diagnostics { get; set; } = [];
     [SerializableProperty] internal bool isDirectory { get; set; }
+    [SerializableProperty] internal bool isTombstone { get; set; }
 }
 
 internal struct AssetDependencyData

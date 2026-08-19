@@ -117,6 +117,31 @@ public sealed class SceneSerializationTests : IDisposable
     }
 
     [Fact]
+    public void SceneRoundtripPreservesManualComponentAndSystemOrder()
+    {
+        var source = new GameScene("Manual Order");
+        GameObject gameObject = source.CreateObject("Object");
+        _ = gameObject.AddComponent<OrderComponentA>();
+        OrderComponentB componentB = gameObject.AddComponent<OrderComponentB>();
+        gameObject.SetComponentIndex(componentB, 1);
+        _ = source.AddSystem<OrderSerializationSystemA>();
+        OrderSerializationSystemB systemB = source.AddSystem<OrderSerializationSystemB>();
+        source.SetSystemIndex(systemB, 0);
+
+        byte[] bytes = SerializationManager.Serialize(source);
+        SceneManager.LoadScene(source);
+        Assert.True(SceneManager.UnloadScene(source));
+        GameScene restored = SerializationManager.Deserialize<GameScene>(bytes);
+
+        Assert.Equal(
+            [typeof(Transform), typeof(OrderComponentB), typeof(OrderComponentA)],
+            Assert.Single(restored.GetObjects()).GetComponents().Select(static component => component.GetType()));
+        Assert.Equal(
+            [typeof(OrderSerializationSystemB), typeof(OrderSerializationSystemA)],
+            restored.GetSystems().Select(static system => system.GetType()));
+    }
+
+    [Fact]
     public void PrefabCapture_RejectsReferenceOutsideCapturedSubtreeWithDiagnosticContext()
     {
         var scene = new GameScene("Boundary");
@@ -192,3 +217,9 @@ internal sealed class ReferenceComponent : GameComponent
         resetCount++;
     }
 }
+
+[StableTypeId("f7bc9bf3-288a-45b3-9caa-26289d66c181")]
+internal sealed class OrderSerializationSystemA : GameSystem;
+
+[StableTypeId("6924359d-798d-4384-bdb2-1b0e34ab3fbb")]
+internal sealed class OrderSerializationSystemB : GameSystem;

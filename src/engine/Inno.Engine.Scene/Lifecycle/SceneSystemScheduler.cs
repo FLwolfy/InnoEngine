@@ -55,7 +55,6 @@ internal sealed class SceneSystemScheduler
         {
             system.RegisterIdentity(persistentId);
             m_systems.Add(system);
-            Sort();
             if (invokeReset)
                 system.DispatchReset();
         }
@@ -89,10 +88,27 @@ internal sealed class SceneSystemScheduler
         if (!m_systems.Contains(system))
             throw new InvalidOperationException($"GameSystem '{system.GetType().FullName}' is not registered.");
         system.DispatchReset();
-        Sort();
     }
 
     internal IReadOnlyList<GameSystem> GetSystems() => m_systems.ToArray();
+
+    internal int GetIndex(GameSystem system)
+    {
+        int index = m_systems.IndexOf(system);
+        return index >= 0
+            ? index
+            : throw new InvalidOperationException("The GameSystem is not registered with this scene.");
+    }
+
+    internal void SetIndex(GameSystem system, int systemIndex)
+    {
+        int currentIndex = GetIndex(system);
+        int targetIndex = Math.Clamp(systemIndex, 0, m_systems.Count - 1);
+        if (currentIndex == targetIndex)
+            return;
+        m_systems.RemoveAt(currentIndex);
+        m_systems.Insert(targetIndex, system);
+    }
 
     internal void ReplaceForReload(GameSystem previous, GameSystem replacement)
     {
@@ -109,7 +125,6 @@ internal sealed class SceneSystemScheduler
         {
             replacement.RegisterIdentity(persistentId);
             m_systems[index] = replacement;
-            Sort();
         }
         catch
         {
@@ -128,7 +143,7 @@ internal sealed class SceneSystemScheduler
     {
         using IDisposable iteration = m_scene.BeginExecutionPhase();
         m_behaviors.FixedUpdate();
-        foreach (GameSystem system in m_systems.ToArray())
+        foreach (GameSystem system in GetExecutionSnapshot())
         {
             if (!m_scene.canDispatch)
                 break;
@@ -141,7 +156,7 @@ internal sealed class SceneSystemScheduler
     {
         using IDisposable iteration = m_scene.BeginExecutionPhase();
         m_behaviors.Update();
-        foreach (GameSystem system in m_systems.ToArray())
+        foreach (GameSystem system in GetExecutionSnapshot())
         {
             if (!m_scene.canDispatch)
                 break;
@@ -162,7 +177,7 @@ internal sealed class SceneSystemScheduler
     {
         using IDisposable iteration = m_scene.BeginExecutionPhase();
         m_behaviors.LateUpdate();
-        foreach (GameSystem system in m_systems.ToArray())
+        foreach (GameSystem system in GetExecutionSnapshot())
         {
             if (!m_scene.canDispatch)
                 break;
@@ -191,12 +206,6 @@ internal sealed class SceneSystemScheduler
         }
     }
 
-    private void Sort()
-    {
-        GameSystem[] ordered = m_systems
-            .OrderBy(static system => system.order)
-            .ToArray();
-        m_systems.Clear();
-        m_systems.AddRange(ordered);
-    }
+    private GameSystem[] GetExecutionSnapshot()
+        => m_systems.OrderBy(static system => system.order).ToArray();
 }

@@ -87,7 +87,7 @@ internal sealed class EditorLayer : Layer
         _ = Listen<KeyPressedEvent>(OnKeyPressed, priority: 1000);
         m_saveHotKeyRegistration = m_hotKeys.Register(
             EditorHotKeyCommands.Save,
-            SaveActiveScene,
+            SaveOpenScenes,
             () => AssetManager.isInitialized && SceneManager.hasActiveScene,
             priority: 1000);
         EditorPanel[] panels = EditorDefaultPanels.Create();
@@ -151,15 +151,17 @@ internal sealed class EditorLayer : Layer
             keyEvent.HandleInGlobal();
     }
 
-    private void SaveActiveScene()
+    private void SaveOpenScenes()
     {
         try
         {
-            _ = m_sceneWorkspace.SaveScene(m_context.scene, m_context.selection.currentDirectory);
+            IReadOnlyList<GameScene> scenes = SceneManager.loadedScenes;
+            for (int i = 0; i < scenes.Count; i++)
+                _ = m_sceneWorkspace.SaveScene(scenes[i], m_context.selection.currentDirectory);
         }
         catch (Exception exception)
         {
-            Log.Error("Failed to save the active scene: {0}", exception);
+            Log.Error("Failed to save open scenes: {0}", exception);
         }
     }
 

@@ -18,7 +18,7 @@ public sealed class SceneFacadeTests : IDisposable
 
     public void Dispose()
     {
-        SceneManager.UnloadActiveScene();
+        SceneManager.UnloadAllScenes();
     }
 
     [Fact]
@@ -47,6 +47,41 @@ public sealed class SceneFacadeTests : IDisposable
             .OrderBy(static id => id)];
 
         Assert.Equal(new[] { a.identity.persistentId, b.identity.persistentId }.OrderBy(static id => id), ids);
+    }
+
+    [Fact]
+    public void LoadedScenesCanBeReorderedWithoutChangingTheActiveScene()
+    {
+        var first = new GameScene("First");
+        var second = new GameScene("Second");
+        var third = new GameScene("Third");
+        SceneManager.LoadSceneAdditive(first);
+        SceneManager.LoadSceneAdditive(second);
+        SceneManager.LoadSceneAdditive(third);
+
+        SceneManager.SetSceneIndex(first, 2);
+
+        Assert.Equal([second, third, first], SceneManager.loadedScenes);
+        Assert.Equal(2, SceneManager.GetSceneIndex(first));
+        Assert.Same(third, SceneManager.activeScene);
+    }
+
+    [Fact]
+    public void ComponentsCanBeReorderedWhileTransformRemainsFirst()
+    {
+        var scene = new GameScene("Components");
+        GameObject gameObject = scene.CreateObject("Object");
+        OrderComponentA first = gameObject.AddComponent<OrderComponentA>();
+        OrderComponentB second = gameObject.AddComponent<OrderComponentB>();
+
+        gameObject.SetComponentIndex(second, 1);
+
+        Assert.Equal(
+            [typeof(Transform), typeof(OrderComponentB), typeof(OrderComponentA)],
+            gameObject.GetComponents().Select(static component => component.GetType()));
+        Assert.Equal(1, gameObject.GetComponentIndex(second));
+        Assert.Throws<InvalidOperationException>(() =>
+            gameObject.SetComponentIndex(gameObject.transform, 1));
     }
 
     [Fact]
@@ -198,3 +233,7 @@ public sealed class SceneFacadeTests : IDisposable
         }
     }
 }
+
+internal sealed class OrderComponentA : GameComponent;
+
+internal sealed class OrderComponentB : GameComponent;

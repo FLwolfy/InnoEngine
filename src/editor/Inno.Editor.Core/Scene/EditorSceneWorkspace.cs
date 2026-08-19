@@ -98,6 +98,11 @@ public sealed class EditorSceneWorkspace
         }
         if (string.IsNullOrEmpty(document.sourcePath))
             return true;
+        if (!string.Equals(scene.name, GetAssetName(document.sourcePath), StringComparison.Ordinal))
+        {
+            document.isDirty = true;
+            return true;
+        }
 
         long now = Stopwatch.GetTimestamp();
         if (now < document.nextRefreshTimestamp)
@@ -126,9 +131,15 @@ public sealed class EditorSceneWorkspace
     {
         ArgumentNullException.ThrowIfNull(scene);
         SceneDocument document = GetOrCreateDocument(scene);
-        string relativePath = string.IsNullOrEmpty(document.sourcePath)
-            ? CreateUniquePath(currentDirectory, scene.name, C_SCENE_EXTENSION)
-            : document.sourcePath;
+        string relativePath;
+        if (string.IsNullOrEmpty(document.sourcePath))
+        {
+            relativePath = CreateUniquePath(currentDirectory, scene.name, C_SCENE_EXTENSION);
+        }
+        else
+        {
+            relativePath = RenameSceneSourceIfNeeded(scene, document);
+        }
         SaveSceneAtPath(scene, relativePath);
         return relativePath;
     }
@@ -146,10 +157,16 @@ public sealed class EditorSceneWorkspace
         string currentPath = document.sourcePath;
         string currentParent = NormalizePath(Path.GetDirectoryName(currentPath));
         string targetDirectory = NormalizePath(currentDirectory);
-        string relativePath = !string.IsNullOrEmpty(currentPath) &&
-                              string.Equals(currentParent, targetDirectory, StringComparison.Ordinal)
-            ? currentPath
-            : CreateUniquePath(targetDirectory, scene.name, C_SCENE_EXTENSION);
+        string relativePath;
+        if (!string.IsNullOrEmpty(currentPath) &&
+            string.Equals(currentParent, targetDirectory, StringComparison.Ordinal))
+        {
+            relativePath = RenameSceneSourceIfNeeded(scene, document);
+        }
+        else
+        {
+            relativePath = CreateUniquePath(targetDirectory, scene.name, C_SCENE_EXTENSION);
+        }
         SaveSceneAtPath(scene, relativePath);
         return relativePath;
     }
@@ -170,24 +187,52 @@ public sealed class EditorSceneWorkspace
     }
 
     /// <summary>
-    /// Opens a scene asset as the active editor scene.
+    /// Opens a scene asset additively as the active editor scene.
     /// </summary>
     /// <param name="relativePath">Scene asset source-relative path.</param>
-    /// <returns>The newly loaded scene.</returns>
+    /// <returns>The existing loaded instance or the newly loaded scene.</returns>
     public GameScene OpenScene(string relativePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
         string normalizedPath = NormalizePath(relativePath);
+        SceneDocument? existing = m_documents.Values.FirstOrDefault(document =>
+            document.scene.isLoaded &&
+            !document.scene.isDestroyed &&
+            string.Equals(document.sourcePath, normalizedPath, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            SceneManager.SetActiveScene(existing.scene);
+            return existing.scene;
+        }
+
         SceneAsset asset = AssetManager.Load<SceneAsset>(normalizedPath);
         GameScene scene = asset.Instantiate();
         scene.name = GetAssetName(normalizedPath);
         byte[] savedHash = ComputeSceneHash(scene);
-        SceneManager.LoadScene(scene);
-        m_documents.Clear();
+        SceneManager.LoadSceneAdditive(scene);
         m_documents.Add(
             scene.identity.persistentId,
             new SceneDocument(scene, normalizedPath, asset.identity.persistentId, savedHash));
         return scene;
+    }
+
+    /// <summary>
+    /// Closes a loaded scene and removes its editor document state without deleting its source asset.
+    /// </summary>
+    /// <param name="scene">Loaded scene to close.</param>
+    /// <returns><see langword="true"/> when the scene was loaded and closed.</returns>
+    public bool CloseScene(GameScene scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        if (scene.isDestroyed)
+            return false;
+        if (scene.isLoaded && SceneManager.loadedScenes.Count <= 1)
+            return false;
+        Guid sceneId = scene.identity.persistentId;
+        bool closed = SceneManager.UnloadScene(scene);
+        if (closed)
+            m_documents.Remove(sceneId);
+        return closed;
     }
 
     /// <summary>
@@ -289,8 +334,7 @@ public sealed class EditorSceneWorkspace
         string sourcePath = NormalizePath(asset.sourcePath);
         string sourceName = GetAssetName(sourcePath);
         bool pathChanged = !string.Equals(document.sourcePath, sourcePath, StringComparison.Ordinal);
-        bool nameChanged = !string.Equals(scene.name, sourceName, StringComparison.Ordinal);
-        if (!pathChanged && !nameChanged)
+        if (!pathChanged)
             return;
 
         bool wasDirty = document.isDirty ||
@@ -338,6 +382,24 @@ public sealed class EditorSceneWorkspace
                 document.savedHash = ComputeSceneHash(document.scene);
             document.isDirty = wasDirty;
         }
+    }
+
+    private static string RenameSceneSourceIfNeeded(GameScene scene, SceneDocument document)
+    {
+        string currentPath = NormalizePath(document.sourcePath);
+        string directory = NormalizePath(Path.GetDirectoryName(currentPath));
+        string targetPath = Combine(directory, SanitizeFileName(scene.name) + C_SCENE_EXTENSION);
+        if (string.Equals(currentPath, targetPath, StringComparison.Ordinal))
+            return currentPath;
+        if (AssetManager.TryGetFileSystemEntry(targetPath, out _))
+        {
+            throw new IOException(
+                $"Scene asset '{targetPath}' already exists. Choose a different scene name before saving.");
+        }
+
+        AssetManager.Move(currentPath, targetPath);
+        document.sourcePath = targetPath;
+        return targetPath;
     }
 
     private static void ApplyPrefabRename(string oldPath, string newPath)

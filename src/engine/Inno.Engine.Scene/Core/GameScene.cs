@@ -193,12 +193,38 @@ public sealed class GameScene : EngineObject, ISerializable
     }
 
     /// <summary>
-    /// Gets registered systems in execution order.
+    /// Gets registered systems in display and serialization order.
+    /// Explicit <see cref="GameSystem.order"/> values independently control lifecycle execution priority.
     /// </summary>
     public IReadOnlyList<GameSystem> GetSystems()
     {
         EnsureNotDestroyed();
         return m_systems.GetSystems();
+    }
+
+    /// <summary>
+    /// Gets the display index of a registered system.
+    /// </summary>
+    /// <param name="system">Registered system to locate.</param>
+    /// <returns>The zero-based display index.</returns>
+    public int GetSystemIndex(GameSystem system)
+    {
+        EnsureNotDestroyed();
+        ArgumentNullException.ThrowIfNull(system);
+        return m_systems.GetIndex(system);
+    }
+
+    /// <summary>
+    /// Moves a registered system to a requested display and serialization index.
+    /// This operation does not change its explicit <see cref="GameSystem.order"/>.
+    /// </summary>
+    /// <param name="system">Registered system to move.</param>
+    /// <param name="systemIndex">Requested zero-based display index.</param>
+    public void SetSystemIndex(GameSystem system, int systemIndex)
+    {
+        EnsureNotDestroyed();
+        ArgumentNullException.ThrowIfNull(system);
+        m_systems.SetIndex(system, systemIndex);
     }
 
     internal GameSystem AddSystem(Type systemType, Guid? persistentId, bool invokeReset)
@@ -288,6 +314,18 @@ public sealed class GameScene : EngineObject, ISerializable
     {
         EnsureOwned(owner);
         return m_store.GetComponents(owner);
+    }
+
+    internal int GetComponentIndex(GameObject owner, GameComponent component)
+    {
+        EnsureOwned(owner);
+        return m_store.GetComponentIndex(owner, component);
+    }
+
+    internal void SetComponentIndex(GameObject owner, GameComponent component, int componentIndex)
+    {
+        EnsureOwned(owner);
+        m_store.SetComponentIndex(owner, component, componentIndex);
     }
 
     internal IReadOnlyList<TComponent> GetComponents<TComponent>(GameObject owner)
