@@ -450,10 +450,15 @@ public sealed class AssetLoader : IDisposable
         m_activeImports.Add(relativePath);
         try
         {
-            byte[] sourceBytes = IOFile.ReadAllBytes(sourcePath);
+            byte[] sourceBytes = ReadStableSourceBytes(sourcePath, out AssetSourceFileStamp sourceStamp);
             try
             {
-                ImportBuild build = BuildImportLocked(relativePath, sourceBytes, importer, persistentId);
+                ImportBuild build = BuildImportLocked(
+                    relativePath,
+                    sourceBytes,
+                    importer,
+                    persistentId,
+                    sourceStamp);
                 try
                 {
                     CommitBuildLocked(build, writeSource: false, sourceBytes);
@@ -529,14 +534,16 @@ public sealed class AssetLoader : IDisposable
         string relativePath,
         byte[] sourceBytes,
         AssetImporter importer,
-        Guid persistentId)
+        Guid persistentId,
+        AssetSourceFileStamp sourceStamp = default)
     {
         string sourceHash = ComputeSha256Hex(sourceBytes);
         var context = new AssetImportContext(
             relativePath,
             GetSourcePath(relativePath),
             sourceBytes,
-            sourceHash);
+            sourceHash,
+            persistentId);
         AssetImportProduct product = importer
             .ImportInternalAsync(context, CancellationToken.None)
             .AsTask()
@@ -578,6 +585,7 @@ public sealed class AssetLoader : IDisposable
             importerImplementationFingerprint = implementationFingerprint,
             diagnostics = product.diagnostics.ToArray()
         };
+        ApplySourceStamp(meta, sourceStamp);
         ValidateImportDependenciesLocked(meta);
         return new ImportBuild(
             meta,
@@ -661,6 +669,15 @@ public sealed class AssetLoader : IDisposable
         {
             if (writeSource)
                 WriteAtomic(sourcePath, sourceBytes);
+            if (!AssetSourceFileStamp.TryCapture(sourcePath, out AssetSourceFileStamp sourceStamp))
+                throw new IOException($"Source '{build.meta.relativePath}' changed while its import was committing.");
+            if (!writeSource && !SourceStampMatches(build.meta, sourceStamp))
+            {
+                throw new IOException(
+                    $"Source '{build.meta.relativePath}' changed while its importer was running.");
+            }
+            ApplySourceStamp(build.meta, sourceStamp);
+            ValidateImportDependencySnapshotsLocked(build.meta);
             AssetArtifactKey artifactKey = m_artifacts.Commit(
                 CreateImportFingerprint(build.meta),
                 build.outputs);
@@ -781,7 +798,13 @@ public sealed class AssetLoader : IDisposable
     {
         AssetRecord? record = FindRecordLocked(relativePath);
         bool sourceExists = IOFile.Exists(GetSourcePath(relativePath));
-        if (record is null || (sourceExists && IsStale(record)))
+        bool stale = false;
+        bool catalogChanged = false;
+        if (record is not null && sourceExists)
+            stale = IsStale(record, out catalogChanged);
+        if (catalogChanged && !stale)
+            CommitCatalogLocked();
+        if (record is null || stale)
         {
             if (!ImportLocked(relativePath))
                 return record is null ? null : LoadRecordLocked(record, requestedAssetType);
@@ -952,7 +975,9 @@ public sealed class AssetLoader : IDisposable
                 continue;
             }
             AssetRecord? dependencyRecord = FindRecordLocked(normalized);
-            if ((dependencyRecord is null || IsStale(dependencyRecord)) && !ImportLocked(normalized))
+            bool dependencyStale = dependencyRecord is null ||
+                                   IsStale(dependencyRecord, out _);
+            if (dependencyStale && !ImportLocked(normalized))
             {
                 throw new InvalidOperationException(
                     $"Runtime dependency '{normalized}' referenced by '{context.relativePath}' cannot be imported.");
@@ -984,6 +1009,25 @@ public sealed class AssetLoader : IDisposable
         }
     }
 
+    private void ValidateImportDependencySnapshotsLocked(AssetMeta candidate)
+    {
+        for (int i = 0; i < candidate.importDependencies.Length; i++)
+        {
+            AssetImportDependencyData dependency = candidate.importDependencies[i];
+            string fingerprint = ComputeImportDependencyFingerprintLocked(
+                ref dependency,
+                out bool metadataChanged);
+            if (!string.Equals(dependency.fingerprint, fingerprint, StringComparison.Ordinal))
+            {
+                throw new IOException(
+                    $"Import dependency '{dependency.key}' changed while " +
+                    $"'{candidate.relativePath}' was importing.");
+            }
+            if (metadataChanged)
+                candidate.importDependencies[i] = dependency;
+        }
+    }
+
     private void RescanLocked()
     {
         LoadCatalogLocked();
@@ -1006,7 +1050,7 @@ public sealed class AssetLoader : IDisposable
             AssetRecord? record = FindRecordLocked(relative);
             if (record is null ||
                 record.asset?.isMissing == true ||
-                IsStale(record) ||
+                IsStale(record, out _) ||
                 !m_artifacts.TryGet(
                     new AssetArtifactKey(record.meta.artifactKey),
                     "asset-state",
@@ -1166,11 +1210,17 @@ public sealed class AssetLoader : IDisposable
         UpdateGraphsLocked(record);
         CommitCatalogLocked();
 
+        bool catalogChanged = false;
+        bool stale = importer is not null && IsStale(record, out catalogChanged);
         if (importer is not null &&
             (!string.Equals(importer.importerId, record.meta.importerId, StringComparison.Ordinal) ||
-             IsStale(record)))
+             stale))
         {
             ImportLocked(newNormalized);
+        }
+        else if (catalogChanged)
+        {
+            CommitCatalogLocked();
         }
     }
 
@@ -1430,8 +1480,9 @@ public sealed class AssetLoader : IDisposable
         return typeof(MissingAsset);
     }
 
-    private bool IsStale(AssetRecord record)
+    private bool IsStale(AssetRecord record, out bool catalogChanged)
     {
+        catalogChanged = false;
         string sourcePath = GetSourcePath(record.relativePath);
         if (!IOFile.Exists(sourcePath) || record.meta.schemaVersion != AssetMeta.C_SCHEMA_VERSION)
             return true;
@@ -1450,19 +1501,35 @@ public sealed class AssetLoader : IDisposable
             return true;
         if (record.meta.importStatus != (int)AssetImportStatus.Imported)
             return true;
-        if (!string.Equals(
-                record.meta.sourceHash,
-                ComputeSha256Hex(IOFile.ReadAllBytes(sourcePath)),
-                StringComparison.Ordinal))
-        {
+        if (!AssetSourceFileStamp.TryCapture(sourcePath, out AssetSourceFileStamp sourceStamp))
             return true;
+        if (!SourceStampMatches(record.meta, sourceStamp))
+        {
+            byte[] sourceBytes = ReadStableSourceBytes(sourcePath, out sourceStamp);
+            if (!string.Equals(
+                    record.meta.sourceHash,
+                    ComputeSha256Hex(sourceBytes),
+                    StringComparison.Ordinal))
+            {
+                return true;
+            }
+            ApplySourceStamp(record.meta, sourceStamp);
+            catalogChanged = true;
         }
         for (int i = 0; i < record.meta.importDependencies.Length; i++)
         {
             AssetImportDependencyData dependency = record.meta.importDependencies[i];
+            string fingerprint = ComputeImportDependencyFingerprintLocked(
+                ref dependency,
+                out bool dependencyChanged);
+            if (dependencyChanged)
+            {
+                record.meta.importDependencies[i] = dependency;
+                catalogChanged = true;
+            }
             if (!string.Equals(
                     dependency.fingerprint,
-                    ComputeImportDependencyFingerprintLocked(dependency),
+                    fingerprint,
                     StringComparison.Ordinal))
             {
                 return true;
@@ -1894,6 +1961,68 @@ public sealed class AssetLoader : IDisposable
         return m_sourcePolicy.IsIgnored(relativePath, isDirectory);
     }
 
+    private static byte[] ReadStableSourceBytes(
+        string sourcePath,
+        out AssetSourceFileStamp sourceStamp)
+    {
+        const int C_MAX_ATTEMPTS = 3;
+        for (int attempt = 0; attempt < C_MAX_ATTEMPTS; attempt++)
+        {
+            if (!AssetSourceFileStamp.TryCapture(sourcePath, out AssetSourceFileStamp before))
+                throw new FileNotFoundException("Asset source is unavailable.", sourcePath);
+            byte[] bytes = IOFile.ReadAllBytes(sourcePath);
+            if (AssetSourceFileStamp.TryCapture(sourcePath, out AssetSourceFileStamp after) &&
+                before == after &&
+                bytes.LongLength == after.length)
+            {
+                sourceStamp = after;
+                return bytes;
+            }
+        }
+
+        throw new IOException($"Asset source '{sourcePath}' did not remain stable while it was read.");
+    }
+
+    private static bool SourceStampMatches(AssetMeta meta, AssetSourceFileStamp sourceStamp)
+        => sourceStamp.isValid &&
+           meta.sourceLength == sourceStamp.length &&
+           meta.sourceLastWriteUtcTicks == sourceStamp.lastWriteUtcTicks &&
+           meta.sourceCreationTimeUtcTicks == sourceStamp.creationTimeUtcTicks;
+
+    private static bool SourceStampMatches(
+        AssetImportDependencyData dependency,
+        AssetSourceFileStamp sourceStamp)
+        => dependency.sourceStampValid &&
+           sourceStamp.isValid &&
+           dependency.sourceLength == sourceStamp.length &&
+           dependency.sourceLastWriteUtcTicks == sourceStamp.lastWriteUtcTicks &&
+           dependency.sourceCreationTimeUtcTicks == sourceStamp.creationTimeUtcTicks;
+
+    private static void ApplySourceStamp(AssetMeta meta, AssetSourceFileStamp sourceStamp)
+    {
+        if (!sourceStamp.isValid)
+        {
+            meta.sourceLength = -1;
+            meta.sourceLastWriteUtcTicks = 0;
+            meta.sourceCreationTimeUtcTicks = 0;
+            return;
+        }
+
+        meta.sourceLength = sourceStamp.length;
+        meta.sourceLastWriteUtcTicks = sourceStamp.lastWriteUtcTicks;
+        meta.sourceCreationTimeUtcTicks = sourceStamp.creationTimeUtcTicks;
+    }
+
+    private static void ApplySourceStamp(
+        ref AssetImportDependencyData dependency,
+        AssetSourceFileStamp sourceStamp)
+    {
+        dependency.sourceStampValid = sourceStamp.isValid;
+        dependency.sourceLength = sourceStamp.length;
+        dependency.sourceLastWriteUtcTicks = sourceStamp.lastWriteUtcTicks;
+        dependency.sourceCreationTimeUtcTicks = sourceStamp.creationTimeUtcTicks;
+    }
+
     private static string ComputeSha256Hex(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes));
 
     private static void AddArtifactKey(HashSet<string> reachable, string value)
@@ -1955,20 +2084,28 @@ public sealed class AssetLoader : IDisposable
             key = dependency.key,
             fingerprint = dependency.fingerprint
         };
-        result.fingerprint = ComputeImportDependencyFingerprintLocked(result);
+        result.fingerprint = ComputeImportDependencyFingerprintLocked(ref result, out _);
         return result;
     }
 
-    private string ComputeImportDependencyFingerprintLocked(AssetImportDependencyData dependency)
+    private string ComputeImportDependencyFingerprintLocked(
+        ref AssetImportDependencyData dependency,
+        out bool metadataChanged)
     {
+        metadataChanged = false;
         switch ((AssetImportDependencyKind)dependency.kind)
         {
             case AssetImportDependencyKind.Source:
             {
                 string sourcePath = GetSourcePath(NormalizeRelativePath(dependency.key));
-                return IOFile.Exists(sourcePath)
-                    ? ComputeSha256Hex(IOFile.ReadAllBytes(sourcePath))
-                    : "MISSING";
+                if (!AssetSourceFileStamp.TryCapture(sourcePath, out AssetSourceFileStamp sourceStamp))
+                    return "MISSING";
+                if (SourceStampMatches(dependency, sourceStamp))
+                    return dependency.fingerprint;
+                byte[] sourceBytes = ReadStableSourceBytes(sourcePath, out sourceStamp);
+                ApplySourceStamp(ref dependency, sourceStamp);
+                metadataChanged = true;
+                return ComputeSha256Hex(sourceBytes);
             }
             case AssetImportDependencyKind.Artifact:
                 return Guid.TryParse(dependency.key, out Guid id) &&

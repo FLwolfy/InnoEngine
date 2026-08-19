@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -6,6 +7,7 @@ using Inno.Assets;
 using Inno.Assets.Core;
 using Inno.Core.Assemblies;
 using Inno.Core.Framework;
+using Inno.Core.Logging;
 using Inno.Core.Reflection;
 using Inno.Engine.Scene.Assets;
 
@@ -245,6 +247,7 @@ public sealed class ScriptManager : IDisposable
             migration.RestorePreviousState();
             throw;
         }
+        ReportMigrationDiagnostics(migration.diagnostics);
         return true;
     }
 
@@ -282,6 +285,17 @@ public sealed class ScriptManager : IDisposable
             _ = AssemblyManager.Unload(handle);
         m_lifetimeCancellation.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    private static void ReportMigrationDiagnostics(
+        IReadOnlyList<SceneReloadDiagnostic> diagnostics)
+    {
+        for (int i = 0; i < diagnostics.Count; i++)
+        {
+            SceneReloadDiagnostic diagnostic = diagnostics[i];
+            if (diagnostic.severity == SceneReloadDiagnosticSeverity.Warning)
+                Log.Warn("{0}: {1}", diagnostic.code, diagnostic.message);
+        }
     }
 
     private void OnAssetDatabaseChanged(AssetChangeSet changeSet)

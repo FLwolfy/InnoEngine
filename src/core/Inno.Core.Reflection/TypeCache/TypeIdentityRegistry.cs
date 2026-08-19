@@ -15,6 +15,7 @@ internal sealed class TypeIdentityRegistry
 {
     // RFC 4122 DNS namespace UUID, used to build deterministic UUIDv5 for auto stable ids.
     private static readonly Guid C_STABLE_NAMESPACE_GUID = Guid.Parse("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
+    private const string C_GENERATED_STABLE_TYPE_METADATA_KEY = "Inno.StableTypeId";
 
     private readonly Lock m_sync = new();
     private Dictionary<Type, Guid> m_stableByType = [];
@@ -41,7 +42,7 @@ internal sealed class TypeIdentityRegistry
         {
             lock (m_sync)
             {
-                return m_typeByStable.Count;
+                return m_stableByType.Count;
             }
         }
     }
@@ -57,10 +58,13 @@ internal sealed class TypeIdentityRegistry
 
         var stableByType = new Dictionary<Type, Guid>();
         var typeByStable = new Dictionary<Guid, Type>();
+        IReadOnlyDictionary<Assembly, IReadOnlyDictionary<string, GeneratedStableTypeMapping>> mappings =
+            BuildGeneratedMappings(sourceTypes);
 
         foreach (Type type in sourceTypes)
         {
             StableTypeIdAttribute? attr = type.GetCustomAttribute<StableTypeIdAttribute>(inherit: false);
+            GeneratedStableTypeMapping? mapping = null;
             Guid stableId;
             if (attr is not null)
             {
@@ -68,6 +72,15 @@ internal sealed class TypeIdentityRegistry
                 {
                     throw new InvalidOperationException(
                         $"Type '{type.FullName}' has invalid StableTypeId '{attr.id}'.");
+                }
+            }
+            else if (mappings.TryGetValue(type.Assembly, out IReadOnlyDictionary<string, GeneratedStableTypeMapping>? assemblyMappings) &&
+                     assemblyMappings.TryGetValue(type.FullName ?? type.Name, out mapping))
+            {
+                if (!Guid.TryParse(mapping.id, out stableId))
+                {
+                    throw new InvalidOperationException(
+                        $"Type '{type.FullName}' has invalid generated StableTypeId '{mapping.id}'.");
                 }
             }
             else
@@ -83,6 +96,8 @@ internal sealed class TypeIdentityRegistry
             }
 
             stableByType[type] = stableId;
+            if (mapping is not null)
+                AddFormerStableIds(typeByStable, type, mapping.formerIds);
         }
 
         var orderedTypes = sourceTypes
@@ -223,6 +238,92 @@ internal sealed class TypeIdentityRegistry
         return CreateGuidV5(C_STABLE_NAMESPACE_GUID, key);
     }
 
+    private static IReadOnlyDictionary<Assembly, IReadOnlyDictionary<string, GeneratedStableTypeMapping>>
+        BuildGeneratedMappings(IReadOnlyList<Type> sourceTypes)
+    {
+        var result = new Dictionary<Assembly, IReadOnlyDictionary<string, GeneratedStableTypeMapping>>();
+        foreach (IGrouping<Assembly, Type> group in sourceTypes.GroupBy(static type => type.Assembly))
+        {
+            AssemblyMetadataAttribute[] attributes = group.Key
+                .GetCustomAttributes<AssemblyMetadataAttribute>()
+                .Where(static attribute => string.Equals(
+                    attribute.Key,
+                    C_GENERATED_STABLE_TYPE_METADATA_KEY,
+                    StringComparison.Ordinal))
+                .ToArray();
+            if (attributes.Length == 0)
+                continue;
+
+            var availableTypes = group.ToDictionary(
+                static type => type.FullName ?? type.Name,
+                StringComparer.Ordinal);
+            var mappings = new Dictionary<string, GeneratedStableTypeMapping>(StringComparer.Ordinal);
+            foreach (AssemblyMetadataAttribute attribute in attributes)
+            {
+                GeneratedStableTypeMapping mapping = ParseGeneratedMapping(
+                    group.Key.GetName().Name ?? string.Empty,
+                    attribute.Value);
+                if (string.IsNullOrWhiteSpace(mapping.typeName))
+                    throw new InvalidOperationException("A generated StableTypeId mapping requires a type name.");
+                if (!availableTypes.ContainsKey(mapping.typeName))
+                {
+                    throw new InvalidOperationException(
+                        $"Generated StableTypeId mapping refers to missing type '{mapping.typeName}' " +
+                        $"in assembly '{group.Key.GetName().Name}'.");
+                }
+                if (!mappings.TryAdd(mapping.typeName, mapping))
+                {
+                    throw new InvalidOperationException(
+                        $"Type '{mapping.typeName}' has more than one generated StableTypeId mapping.");
+                }
+            }
+            result.Add(group.Key, mappings);
+        }
+        return result;
+    }
+
+    private static GeneratedStableTypeMapping ParseGeneratedMapping(
+        string assemblyName,
+        string? value)
+    {
+        string[] parts = (value ?? string.Empty).Split('|', 4, StringSplitOptions.None);
+        if (parts.Length != 4 || !string.Equals(parts[0], "v1", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Assembly '{assemblyName}' has invalid generated StableTypeId metadata '{value}'.");
+        }
+        string[] formerIds = string.IsNullOrWhiteSpace(parts[2])
+            ? []
+            : parts[2].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return new GeneratedStableTypeMapping(parts[3], parts[1], formerIds);
+    }
+
+    private static void AddFormerStableIds(
+        IDictionary<Guid, Type> typeByStable,
+        Type type,
+        IReadOnlyList<string> formerIds)
+    {
+        foreach (string formerIdValue in formerIds)
+        {
+            if (!Guid.TryParse(formerIdValue, out Guid formerId))
+            {
+                throw new InvalidOperationException(
+                    $"Type '{type.FullName}' has invalid former StableTypeId '{formerIdValue}'.");
+            }
+            if (typeByStable.TryGetValue(formerId, out Type? existing))
+            {
+                if (existing != type)
+                {
+                    throw new InvalidOperationException(
+                        $"Former StableTypeId '{formerId}' conflicts between " +
+                        $"'{existing.FullName}' and '{type.FullName}'.");
+                }
+                continue;
+            }
+            typeByStable.Add(formerId, type);
+        }
+    }
+
     private static Guid CreateGuidV5(Guid namespaceId, string name)
     {
         byte[] ns = namespaceId.ToByteArray();
@@ -252,4 +353,9 @@ internal sealed class TypeIdentityRegistry
         (guidBytes[4], guidBytes[5]) = (guidBytes[5], guidBytes[4]);
         (guidBytes[6], guidBytes[7]) = (guidBytes[7], guidBytes[6]);
     }
+
+    private sealed record GeneratedStableTypeMapping(
+        string typeName,
+        string id,
+        IReadOnlyList<string> formerIds);
 }

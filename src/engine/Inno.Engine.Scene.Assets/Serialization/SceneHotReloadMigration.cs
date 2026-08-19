@@ -12,6 +12,7 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
     private readonly TypeCacheReloadContext m_context;
     private readonly List<SceneState> m_scenes;
     private readonly List<Replacement> m_replacements = [];
+    private readonly List<SceneReloadDiagnostic> m_diagnostics = [];
     private bool m_applied;
     private bool m_finished;
 
@@ -26,6 +27,8 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
         .Where(state => m_context.IsRetiredType(state.target.GetType()))
         .Select(static state => (object)state.target)
         .ToArray();
+
+    internal IReadOnlyList<SceneReloadDiagnostic> diagnostics => m_diagnostics;
 
     internal static SceneHotReloadMigration Capture(TypeCacheReloadContext context)
     {
@@ -55,8 +58,12 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
             {
                 if (!context.TryResolveReplacement(state.target.GetType(), out Type? replacementType) || replacementType is null)
                 {
+                    _ = context.previous.TryGetStableTypeId(
+                        state.target.GetType(),
+                        out Guid stableTypeId);
                     throw new InvalidOperationException(
-                        $"Live type '{state.target.GetType().FullName}' has no replacement with the same StableTypeId.");
+                        $"Live type '{state.target.GetType().FullName}' with StableTypeId " +
+                        $"'{stableTypeId:D}' has no replacement in the candidate assembly generation.");
                 }
                 Type requiredBase = state.target is GameSystem ? typeof(GameSystem) : typeof(GameComponent);
                 if (!requiredBase.IsAssignableFrom(replacementType) || replacementType.IsAbstract)
@@ -157,6 +164,7 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
     }
 
     IReadOnlyList<object> ISceneReloadMigration.retiredObjects => retiredObjects;
+    IReadOnlyList<SceneReloadDiagnostic> ISceneReloadMigration.diagnostics => diagnostics;
     void ISceneReloadMigration.PrepareForActivation() => PrepareForActivation();
     void ISceneReloadMigration.Apply() => Apply();
     void ISceneReloadMigration.RollbackStructure() => RollbackStructure();
@@ -166,8 +174,9 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
     private static ObjectState CaptureState(EngineObject target)
     {
         var serializable = (ISerializable)target;
-        byte[] bytes = SerializationManager.Encode(writer => writer.WriteProperties(serializable));
-        return new ObjectState(target, bytes);
+        IReadOnlyList<SerializationPropertySnapshot> properties =
+            SerializationManager.CaptureProperties(serializable);
+        return new ObjectState(target, properties);
     }
 
     private static EngineObject CreateReplacement(EngineObject previous, Type replacementType)
@@ -253,7 +262,7 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
             : type;
     }
 
-    private static void RestoreState(SceneState sceneState, bool useCurrentTargets)
+    private void RestoreState(SceneState sceneState, bool useCurrentTargets)
     {
         EngineObject[] currentObjects = sceneState.engineObjects
             .Select(engineObject => sceneState.states.FirstOrDefault(state => ReferenceEquals(state.target, engineObject))
@@ -269,14 +278,37 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
             foreach (ObjectState state in sceneState.states)
             {
                 ISerializable target = (ISerializable)(useCurrentTargets ? state.currentTarget : state.target);
-                SerializationManager.Decode(state.bytes, reader =>
+                SerializationPropertyRestoreResult result = SerializationManager.RestoreProperties(
+                    target,
+                    state.properties,
+                    useCurrentTargets
+                        ? SerializationPropertyRestoreMode.Compatible
+                        : SerializationPropertyRestoreMode.Strict);
+                if (!useCurrentTargets)
+                    continue;
+                for (int i = 0; i < result.failures.Count; i++)
                 {
-                    reader.RestoreProperties(target);
-                    return 0;
-                });
+                    SerializationPropertyRestoreFailure failure = result.failures[i];
+                    string previousType = GetTypeDisplayName(failure.previousPropertyType);
+                    string currentType = GetTypeDisplayName(failure.currentPropertyType);
+                    m_diagnostics.Add(new SceneReloadDiagnostic(
+                        "INNOHR0001",
+                        SceneReloadDiagnosticSeverity.Warning,
+                        $"Hot reload skipped '{target.GetType().FullName}.{failure.name}' because " +
+                        $"serialized type '{previousType}' is incompatible with '{currentType}'. " +
+                        $"The new member default value was preserved. {failure.message}",
+                        sceneState.scene.identity.persistentId,
+                        ((EngineObject)target).identity.persistentId,
+                        failure.name,
+                        previousType,
+                        currentType));
+                }
             }
         }
     }
+
+    private static string GetTypeDisplayName(Type type)
+        => type.FullName ?? type.Name;
 
     private IEnumerable<ObjectState> RetiredStates()
         => m_scenes.SelectMany(static scene => scene.states)
@@ -294,10 +326,12 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
         IReadOnlyDictionary<EngineObject, Guid> sourceIds,
         List<ObjectState> states);
 
-    private sealed class ObjectState(EngineObject target, byte[] bytes)
+    private sealed class ObjectState(
+        EngineObject target,
+        IReadOnlyList<SerializationPropertySnapshot> properties)
     {
         internal EngineObject target { get; } = target;
-        internal byte[] bytes { get; } = bytes;
+        internal IReadOnlyList<SerializationPropertySnapshot> properties { get; } = properties;
         internal EngineObject currentTarget { get; set; } = target;
     }
 

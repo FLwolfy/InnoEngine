@@ -8,11 +8,11 @@
 
 | Source | Asset | Importer | Named outputs |
 | --- | --- | --- | --- |
-| `*.cs` | `ScriptSourceAsset` | `CSharpScriptImporter` | `source`, `diagnostics`, `asset-state` |
+| `*.cs` | `ScriptSourceAsset` | `CSharpScriptImporter` | `source`, `diagnostics`, `type-manifest`, `asset-state` |
 | `*.dll` | `ManagedPluginAsset` | `ManagedPluginImporter` | `assembly`, optional `symbols`/`dependencies`, `asset-state` |
 | `*.innoasmdef` | `ScriptAssemblyDefinitionAsset` | `ScriptAssemblyDefinitionImporter` | `source`, `asset-state` |
 
-每个受支持 source 都有 `.imeta` 和 persistent ID。C# 语法错误不会取消 source identity；parse diagnostics 进入 source asset，聚合 assembly build 可以失败并继续运行旧程序集。
+每个受支持 source 都有 `.imeta` 和 persistent ID。`type-manifest` 保存该 source 的声明、位置和 partial 信息；聚合编译后还会生成 assembly 级 `*.types.json`，记录可附加类型最终使用的 source identity、Stable Type ID、类型种类和 canonical source。C# 语法错误不会取消 source identity；parse diagnostics 进入 source asset，聚合 assembly build 可以失败并继续运行旧程序集。
 
 Compiler 读取已提交 artifact snapshot，不直接读取正在被外部编辑器写入的 source/plugin 文件。这样一次 build 的 fingerprint、语法树和 plugin bytes 来自同一 Catalog revision。
 
@@ -54,6 +54,7 @@ Compiler 读取已提交 artifact snapshot，不直接读取正在被外部编�
 │  │     ├─ *.dll
 │  │     ├─ *.pdb
 │  │     ├─ *.xml
+│  │     ├─ *.types.json
 │  │     └─ diagnostics
 │  ├─ ScriptApi/
 │  └─ IDE/
@@ -151,7 +152,16 @@ public sealed class PlayerController : GameBehavior
 - API/export/comment/MVID 变化会改变 facade/build fingerprint。
 - `AssetManagerOptions` 等 host initialization 类型不导出；脚本只看到查询、加载、Importer writer 与 Build Processor 所需契约。
 
-`StableTypeId` 不是每个脚本类型的必填项。程序集名与完整类型名不变时 fallback ID 稳定；若要重命名 type/namespace 并迁移已有 Scene 状态，才应显式固定旧 ID。
+`StableTypeId` 不是普通脚本 Component/System 的必填项。编译器使用下列 canonical source 规则：
+
+- 每个 `.cs` 的 `.imeta` persistent ID 是 source identity；
+- 文件名与 `GameBehavior`/`GameSystem` 类型名匹配的文件是默认 canonical source；`*.editor.cs` 比较时会忽略 `.editor`；
+- 单文件只有一个可附加类型时，即使文件名与类型名暂时不一致，也能无歧义继承该 source identity，并给出命名 warning；
+- partial 类型只有 canonical 文件提供身份，其他 partial 文件只是 compilation input；
+- 一个文件包含多个可附加类型时，只为同名主类型自动分配 source-based ID；其他类型给出 `INNO2001`，应拆文件或显式添加 `[StableTypeId]`；
+- 显式 `[StableTypeId]` 始终优先，适合跨 source 移动、特殊多类型布局和手动迁移。
+
+自动 Stable Type ID 由 canonical `.cs.imeta` persistent ID 确定性派生，因此移动文件、文件与类型一起改名、或在唯一 source 内改名都不会改变 Scene 中的类型身份。旧版“程序集名 + 完整类型名”fallback 会作为读取别名保留，所以启用新规则后已有 Scene/Prefab 仍能解析；重新保存时写入新的 canonical ID。
 
 ## IDE 工程
 
@@ -176,6 +186,10 @@ Plugin 的 `ScriptingGlobalUsing` metadata 仍会合并到它可见的 profile�
 
 成功 build 通过 `AssemblyManager.BeginReload` 准备候选 TypeCache/Registry。`SceneReloadService` 捕获脚本 Component/System 的 Stable Type ID、serialized state、identity、顺序、引用和 lifecycle flags；Activate 后创建新实例并原位替换，全部成功才 Complete。
 
+Serialized state 使用逐成员兼容迁移：成员类型保持兼容时恢复旧值；新增成员保留新默认值；删除成员忽略旧数据；同名成员改成不兼容类型时保留新默认值并输出 `INNOHR0001` warning，不会仅因单个字段变化回滚整个程序集。普通 Serialization API 仍保持严格模式。
+
 失败时 Scene 结构和 Assembly transaction 一起 rollback。Edit Mode 不触发生命周期；Runtime reload 会对旧 active instance 调用 `OnDisable`，新 instance 在下一次正常 update 调用 `OnEnable`，不会重复 `Awake`/`Start`，也不会调用 `Reset`/`OnDestroy`。
+
+如果候选 generation 缺少 live Component/System 的 replacement，reload diagnostic 会同时包含 retiring CLR type name 与 Stable Type ID，便于将重命名后的类型重新绑定到原身份。
 
 无法自动迁移 static 字段、后台 Thread/Task、第三方事件订阅或外部裸 CLR 引用。用户代码需要在 `OnDisable` 释放这些资源。

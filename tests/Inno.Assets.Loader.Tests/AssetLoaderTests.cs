@@ -132,6 +132,68 @@ public sealed class AssetLoaderTests : IDisposable
     }
 
     [Fact]
+    public void CurrentCatalogStamp_LoadsArtifactWithoutOpeningSourceContent()
+    {
+        using TestWorkspace workspace = new();
+        workspace.WriteText("Text/cached.txt", "cached");
+        using (AssetLoader first = workspace.CreateLoader())
+            first.Rescan();
+        using AssetLoader loader = workspace.CreateLoader();
+        loader.Rescan();
+        using var sourceLock = new FileStream(
+            workspace.SourcePath("Text/cached.txt"),
+            FileMode.Open,
+            FileAccess.ReadWrite,
+            FileShare.None);
+
+        TextAsset asset = Assert.IsType<TextAsset>(
+            loader.Load("Text/cached.txt", typeof(TextAsset)));
+
+        Assert.Equal("cached", asset.content);
+    }
+
+    [Fact]
+    public void ChangedStampWithEqualContent_DoesNotReimportCanonicalAsset()
+    {
+        using TestWorkspace workspace = new();
+        workspace.WriteText("Text/touched.txt", "value");
+        using var loader = workspace.CreateLoader();
+        TextAsset before = Assert.IsType<TextAsset>(
+            loader.Load("Text/touched.txt", typeof(TextAsset)));
+        long version = before.contentVersion;
+        string sourcePath = workspace.SourcePath("Text/touched.txt");
+        System.IO.File.SetLastWriteTimeUtc(
+            sourcePath,
+            System.IO.File.GetLastWriteTimeUtc(sourcePath).AddSeconds(1));
+
+        TextAsset after = Assert.IsType<TextAsset>(
+            loader.Load("Text/touched.txt", typeof(TextAsset)));
+
+        Assert.Same(before, after);
+        Assert.Equal(version, after.contentVersion);
+    }
+
+    [Fact]
+    public void CurrentDependencyStamp_DoesNotOpenSourceDependencyContent()
+    {
+        using TestWorkspace workspace = new();
+        workspace.WriteText("Import/schema.inc", "schema");
+        workspace.WriteText("Import/root.importgraph", "Import/schema.inc");
+        using var loader = workspace.CreateLoader();
+        Assert.True(loader.Import("Import/root.importgraph"));
+        using var sourceLock = new FileStream(
+            workspace.SourcePath("Import/schema.inc"),
+            FileMode.Open,
+            FileAccess.ReadWrite,
+            FileShare.None);
+
+        ImportGraphAsset asset = Assert.IsType<ImportGraphAsset>(
+            loader.Load("Import/root.importgraph", typeof(ImportGraphAsset)));
+
+        Assert.False(asset.isMissing);
+    }
+
+    [Fact]
     public async Task ConcurrentAsyncLoads_ShareImportAndCancellationOnlyCancelsOneWaiter()
     {
         using TestWorkspace workspace = new();

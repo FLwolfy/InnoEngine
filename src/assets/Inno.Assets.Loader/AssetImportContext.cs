@@ -21,16 +21,19 @@ public sealed class AssetImportContext
     /// <param name="absolutePath">The absolute source path.</param>
     /// <param name="sourceBytes">The raw source bytes.</param>
     /// <param name="sourceHash">The deterministic source hash.</param>
+    /// <param name="persistentId">The persistent identity assigned to the source asset.</param>
     internal AssetImportContext(
         string relativePath,
         string absolutePath,
         ReadOnlyMemory<byte> sourceBytes,
-        string sourceHash)
+        string sourceHash,
+        Guid persistentId)
     {
         this.relativePath = relativePath ?? throw new ArgumentNullException(nameof(relativePath));
         this.absolutePath = absolutePath ?? throw new ArgumentNullException(nameof(absolutePath));
         this.sourceBytes = sourceBytes;
         this.sourceHash = sourceHash ?? throw new ArgumentNullException(nameof(sourceHash));
+        this.persistentId = persistentId;
     }
 
     /// <summary>Gets the source-relative path.</summary>
@@ -44,6 +47,9 @@ public sealed class AssetImportContext
 
     /// <summary>Gets the deterministic source hash.</summary>
     public string sourceHash { get; }
+
+    /// <summary>Gets the persistent identity assigned to the source asset.</summary>
+    public Guid persistentId { get; }
 
     /// <summary>Gets the normalized lower-case source extension.</summary>
     public string extension => Path.GetExtension(relativePath).ToLowerInvariant();

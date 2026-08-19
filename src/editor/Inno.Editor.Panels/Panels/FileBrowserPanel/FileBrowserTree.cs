@@ -59,12 +59,22 @@ internal sealed class FileBrowserTree
             () => ImGuiWidget.IconText(icon, label, isCurrentDirectory),
             new TreeNodeOptions { selected = selected, isLeaf = isLeaf });
 
-        if (!isRoot && AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry treeEntry))
+        AssetFileEntry? treeEntry = null;
+        if (!isRoot && AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry resolvedEntry))
+            treeEntry = resolvedEntry;
+        if (treeEntry is not null)
             m_dragDrop.DrawAssetSource(treeEntry);
-        if (result.isClicked || result.isDoubleClicked)
+        if (result.isDoubleClicked)
+        {
+            if (treeEntry is not null)
+                m_navigation.OpenEntry(context, treeEntry, this);
+            else if (isDirectory)
+                m_navigation.NavigateTo(context, relativePath, relativePath);
+        }
+        else if (result.isClicked)
+        {
             context.selection.SetSelectedPath(relativePath);
-        if (isDirectory && result.isDoubleClicked)
-            m_navigation.NavigateTo(context, relativePath, relativePath);
+        }
         if (!result.isOpen)
             return;
 

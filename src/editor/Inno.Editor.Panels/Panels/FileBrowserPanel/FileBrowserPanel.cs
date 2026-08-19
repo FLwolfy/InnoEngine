@@ -433,13 +433,17 @@ public sealed class FileBrowserPanel : EditorPanel
         NativeImGui.PushStyleColor(ImGuiCol.HeaderHovered, Vector4.Zero);
         NativeImGui.PushStyleColor(ImGuiCol.HeaderActive, Vector4.Zero);
         Vector2 iconTextPos = NativeImGui.GetCursorScreenPos();
-        if (NativeImGui.Selectable($"##entry_{entry.relativePath}", selected, ImGuiSelectableFlags.SpanAllColumns))
+        bool activated = NativeImGui.Selectable(
+            $"##entry_{entry.relativePath}",
+            selected,
+            ImGuiSelectableFlags.SpanAllColumns | ImGuiSelectableFlags.AllowDoubleClick);
+        bool itemHovered = NativeImGui.IsItemHovered();
+        bool doubleClicked = itemHovered && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
+        if (activated)
         {
-            context.selection.SetSelectedPath(entry.relativePath);
-            m_tree.RequestRevealPath(entry.relativePath);
+            HandleEntryActivation(context, entry, doubleClicked);
         }
 
-        bool itemHovered = NativeImGui.IsItemHovered();
         bool itemActive = NativeImGui.IsItemActive();
         if (selected || itemHovered)
         {
@@ -454,9 +458,6 @@ public sealed class FileBrowserPanel : EditorPanel
 
         NativeImGui.SameLine(iconTextPos.X - NativeImGui.GetWindowPos().X, 0f);
         ImGuiWidget.IconText(icon, name, false);
-
-        if (itemHovered && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
-            m_navigation.OpenEntry(context, entry, m_tree);
 
         NativeImGui.PopStyleColor(3);
     }
@@ -496,19 +497,40 @@ public sealed class FileBrowserPanel : EditorPanel
         Vector2 itemSize = new(cellSize - C_GRID_CELL_PADDING, cellSize - C_GRID_CELL_PADDING);
 
         NativeImGui.PushID(entry.relativePath);
-        if (NativeImGui.InvisibleButton("##GridItem", itemSize))
+        NativeImGui.PushStyleColor(ImGuiCol.Header, Vector4.Zero);
+        NativeImGui.PushStyleColor(ImGuiCol.HeaderHovered, Vector4.Zero);
+        NativeImGui.PushStyleColor(ImGuiCol.HeaderActive, Vector4.Zero);
+        bool activated = NativeImGui.Selectable(
+            "##GridItem",
+            selected,
+            ImGuiSelectableFlags.AllowDoubleClick,
+            itemSize);
+        bool doubleClicked = NativeImGui.IsItemHovered() &&
+                             NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
+        if (activated)
         {
-            context.selection.SetSelectedPath(entry.relativePath);
-            m_tree.RequestRevealPath(entry.relativePath);
+            HandleEntryActivation(context, entry, doubleClicked);
         }
 
         m_dragDrop.DrawAssetSource(entry);
-
-        if (NativeImGui.IsItemHovered() && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
-            m_navigation.OpenEntry(context, entry, m_tree);
-
         DrawGridItemVisual(icon, name, selected, m_gridScale);
+        NativeImGui.PopStyleColor(3);
         NativeImGui.PopID();
+    }
+
+    private void HandleEntryActivation(
+        EditorContext context,
+        AssetFileEntry entry,
+        bool doubleClicked)
+    {
+        if (doubleClicked)
+        {
+            m_navigation.OpenEntry(context, entry, m_tree);
+            return;
+        }
+
+        context.selection.SetSelectedPath(entry.relativePath);
+        m_tree.RequestRevealPath(entry.relativePath);
     }
 
     private static unsafe void DrawGridItemVisual(string icon, string name, bool selected, float scale)

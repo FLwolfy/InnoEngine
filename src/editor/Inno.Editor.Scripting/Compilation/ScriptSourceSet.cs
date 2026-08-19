@@ -127,7 +127,11 @@ internal sealed record ScriptSourceSet(
             throw new InvalidDataException(
                 $"Script source '{entry.relativePath}' has no committed source artifact.");
         }
-        return new ScriptSourceInput(GetAbsolutePath(entry.relativePath), source.absolutePath);
+        return new ScriptSourceInput(
+            entry.relativePath,
+            GetAbsolutePath(entry.relativePath),
+            source.absolutePath,
+            info.persistentId);
     }
 
     private static ScriptPluginInput CreatePluginInput(AssetFileEntry entry)
@@ -183,7 +187,10 @@ internal sealed record ScriptSourceSet(
         {
             Append(hash, entry.relativePath);
             if (AssetManager.TryGetInfo(entry.relativePath, out AssetInfo? info) && info is not null)
+            {
+                Append(hash, info.persistentId.ToString("D"));
                 Append(hash, info.artifactKey.value);
+            }
         }
         Append(hash, typeof(ScriptCompiler).Assembly.ManifestModule.ModuleVersionId.ToString("D"));
         return Convert.ToHexString(hash.GetHashAndReset());
@@ -271,7 +278,11 @@ internal sealed record ScriptAssemblyInput(
     bool nullable,
     bool allowUnsafe);
 
-internal sealed record ScriptSourceInput(string sourcePath, string snapshotPath);
+internal sealed record ScriptSourceInput(
+    string relativePath,
+    string sourcePath,
+    string snapshotPath,
+    Guid persistentId);
 
 internal sealed record ScriptPluginInput(
     string sourcePath,

@@ -67,7 +67,7 @@ if (TypeCacheManager.TryGetStableTypeId(typeof(PlayerController), out Guid id) &
 
 ## Stable Type ID 与 Runtime Type ID
 
-没有 attribute 时，Stable ID 由 `程序集简单名 + 完整类型名` 生成确定性 UUIDv5。相同逻辑类型跨 generation 保持一致；重命名类型或程序集会改变自动 ID。
+普通 Host/Plugin 类型在没有 attribute 时，Stable ID 由 `程序集简单名 + 完整类型名` 生成确定性 UUIDv5。脚本编译器可以通过 assembly metadata 提供 source-based canonical ID 和 former-ID aliases；TypeCache 只验证并消费这些映射，不依赖 Asset/Scripting 项目。类型级 `[StableTypeId]` 始终优先于编译器映射。
 
 需要重命名兼容时显式固定：
 
@@ -79,6 +79,8 @@ public sealed class PlayerController : GameBehavior
 ```
 
 `StableTypeIdAttribute.id` 是 Guid 字符串。无效字符串或重复 ID 会让候选快照验证失败，从而保留旧 generation。
+
+`TryGetStableTypeId` 始终返回 canonical ID；`TryResolveType` 同时接受 canonical ID 和编译器声明的 former aliases。aliases 只用于读取旧持久数据，不会成为重新序列化时写出的 ID。
 
 Runtime Type ID 是只适用于当前活动 `Type` 实例的整数。新 ALC 里的替代 Type 会获得新的 runtime ID，不能写入持久化数据。
 

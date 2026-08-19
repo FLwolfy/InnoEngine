@@ -73,6 +73,24 @@ public sealed class TypeCacheTests : IDisposable
     }
 
     [Fact]
+    public void GeneratedIdentitySupportsFormerIdsAndExplicitAttributeTakesPrecedence()
+    {
+        Guid generatedId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        Guid formerId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+
+        Assert.True(TypeCacheManager.TryGetStableTypeId(typeof(GeneratedMappedType), out Guid stableId));
+        Assert.Equal(generatedId, stableId);
+        Assert.True(TypeCacheManager.TryResolveType(formerId, out Type? formerResolved));
+        Assert.Equal(typeof(GeneratedMappedType), formerResolved);
+
+        Assert.True(TypeCacheManager.TryGetStableTypeId(typeof(StableAnnotatedTypeA), out Guid explicitId));
+        Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), explicitId);
+        Assert.False(TypeCacheManager.TryResolveType(
+            Guid.Parse("66666666-6666-6666-6666-666666666666"),
+            out _));
+    }
+
+    [Fact]
     public void AssemblyGroupIncludesTypesOutsideInnoNamespace()
     {
         Assert.True(TypeCacheManager.TryGetRuntimeTypeId(typeof(OutsideNamespaceType), out _));
@@ -182,3 +200,4 @@ public sealed class StableAnnotatedTypeA;
 public struct StableAnnotatedTypeB;
 
 public sealed class DeterministicStableType;
+public sealed class GeneratedMappedType;

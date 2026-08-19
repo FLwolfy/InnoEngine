@@ -120,6 +120,53 @@ public sealed class SerializationBehaviorTests : IDisposable
     }
 
     [Fact]
+    public void CompatiblePropertyRestore_SkipsIncompatibleMembersAndPreservesDefaults()
+    {
+        var previous = new PreviousSchemaSample
+        {
+            changed = 42,
+            compatible = "preserved",
+            removed = 9
+        };
+        IReadOnlyList<SerializationPropertySnapshot> snapshots =
+            SerializationManager.CaptureProperties(previous);
+        var current = new CurrentSchemaSample();
+
+        SerializationPropertyRestoreResult result = SerializationManager.RestoreProperties(
+            current,
+            snapshots,
+            SerializationPropertyRestoreMode.Compatible);
+
+        Assert.False(result.success);
+        Assert.Equal(1, result.restoredCount);
+        Assert.Equal(1, result.ignoredCount);
+        SerializationPropertyRestoreFailure failure = Assert.Single(result.failures);
+        Assert.Equal(nameof(PreviousSchemaSample.changed), failure.name);
+        Assert.Equal(typeof(int), failure.previousPropertyType);
+        Assert.Equal(typeof(string), failure.currentPropertyType);
+        Assert.Equal("default", current.changed);
+        Assert.Equal("preserved", current.compatible);
+        Assert.Equal(17, current.added);
+        Assert.Equal(1, current.restoreCount);
+    }
+
+    [Fact]
+    public void StrictPropertyRestore_ThrowsForAnIncompatibleMember()
+    {
+        IReadOnlyList<SerializationPropertySnapshot> snapshots =
+            SerializationManager.CaptureProperties(new PreviousSchemaSample { changed = 42 });
+        var current = new CurrentSchemaSample();
+
+        Assert.Throws<InvalidOperationException>(() => SerializationManager.RestoreProperties(
+            current,
+            snapshots,
+            SerializationPropertyRestoreMode.Strict));
+
+        Assert.Equal("default", current.changed);
+        Assert.Equal(0, current.restoreCount);
+    }
+
+    [Fact]
     public void Deserialize_UsesNonPublicParameterlessConstructor()
     {
         byte[] bytes = SerializationManager.Encode(static writer => writer.Write("value", 9));
@@ -463,6 +510,24 @@ internal enum SampleMode
 {
     Easy,
     Hard
+}
+
+internal sealed class PreviousSchemaSample : ISerializable
+{
+    [SerializableProperty] public int changed { get; set; }
+    [SerializableProperty(PropertyVisibility.Hide)] public string compatible { get; set; } = string.Empty;
+    [SerializableProperty] public int removed { get; set; }
+}
+
+internal sealed class CurrentSchemaSample : ISerializable
+{
+    [SerializableProperty] public string changed { get; set; } = "default";
+    [SerializableProperty(PropertyVisibility.Hide)] public string compatible { get; set; } = "new";
+    [SerializableProperty] public int added { get; set; } = 17;
+    public int restoreCount { get; private set; }
+
+    [OnSerializableRestored]
+    private void AfterRestore() => restoreCount++;
 }
 
 internal sealed class DefaultSample : ISerializable

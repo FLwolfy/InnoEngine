@@ -66,6 +66,52 @@ public static class SerializationManager
     }
 
     /// <summary>
+    /// Captures each persistent property as an independent value for schema-aware migration.
+    /// </summary>
+    /// <param name="value">The object whose serializable properties should be captured.</param>
+    /// <param name="context">Optional immutable converter context.</param>
+    /// <returns>Ordered independent property snapshots.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the manager is not initialized.</exception>
+    public static IReadOnlyList<SerializationPropertySnapshot> CaptureProperties(
+        ISerializable value,
+        SerializationContext? context = null)
+    {
+        EnsureInitialized();
+        ArgumentNullException.ThrowIfNull(value);
+        return PropertySnapshotPipeline.Capture(value, context ?? SerializationContext.empty);
+    }
+
+    /// <summary>
+    /// Restores independently captured properties into an existing object.
+    /// </summary>
+    /// <param name="target">The object receiving compatible property values.</param>
+    /// <param name="snapshots">The previously captured property snapshots.</param>
+    /// <param name="mode">The failure policy for matching but incompatible properties.</param>
+    /// <param name="context">Optional immutable converter context.</param>
+    /// <returns>A summary containing restored, ignored, and skipped properties.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="mode"/> is unknown.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when strict restoration or an object-level callback fails.</exception>
+    public static SerializationPropertyRestoreResult RestoreProperties(
+        ISerializable target,
+        IReadOnlyList<SerializationPropertySnapshot> snapshots,
+        SerializationPropertyRestoreMode mode = SerializationPropertyRestoreMode.Strict,
+        SerializationContext? context = null)
+    {
+        EnsureInitialized();
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(snapshots);
+        if (!Enum.IsDefined(mode))
+            throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unknown property restore mode.");
+        return PropertySnapshotPipeline.Restore(
+            target,
+            snapshots,
+            mode,
+            context ?? SerializationContext.empty);
+    }
+
+    /// <summary>
     /// Serializes a complete serializable root object into deterministic version-two bytes.
     /// </summary>
     /// <typeparam name="T">The declared concrete root type.</typeparam>

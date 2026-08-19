@@ -12,7 +12,7 @@ public sealed class ScriptSourceAsset : AssetObject
     [SerializableProperty]
     public ScriptAssemblyScope scope { get; private set; }
 
-    /// <summary>Gets top-level type names declared by the source.</summary>
+    /// <summary>Gets syntax-level type names declared by the source.</summary>
     [SerializableProperty]
     public string[] declaredTypeNames { get; private set; } = [];
 

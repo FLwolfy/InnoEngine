@@ -57,7 +57,7 @@ ISceneReloadMigration migration =
     SceneReloadService.Capture(typeCacheReloadContext);
 ```
 
-`ISceneReloadMigration` 提供 `retiredObjects`、`PrepareForActivation`、`Apply`、`RollbackStructure`、`RestorePreviousState`、`Complete`。Editor Scripting 的顺序是：
+`ISceneReloadMigration` 提供 `retiredObjects`、`diagnostics`、`PrepareForActivation`、`Apply`、`RollbackStructure`、`RestorePreviousState`、`Complete`。Editor Scripting 的顺序是：
 
 1. capture/prepare Scene state；
 2. activate Assembly/TypeCache/Registry candidate；
@@ -75,6 +75,12 @@ Reload 会使用候选类型重新验证数量：
 - 多个同类型 System 但新类型缺少 `[AllowMultipleSystem]`：拒绝整个 reload。
 
 系统不会自动删除“多出来”的实例，因为无法可靠判断应保留哪一个及其引用/serialized state。旧代际和 Scene 结构保持活动，用户修复类型声明或删除重复实例后再编译。
+
+## Serialized member compatibility
+
+Scene migration 按成员独立捕获状态。候选类型中名称相同且可解码的成员正常恢复；新增成员保留新默认值；删除成员忽略旧数据；同名成员类型不兼容时只跳过该成员，保留新实例的字段初始化值。
+
+跳过项以 `INNOHR0001` warning 写入 `diagnostics`，包含 Scene/Object persistent ID、成员名、旧声明类型和新声明类型。Editor 只在程序集事务成功提交后输出这些 warning。实例创建、Stable Type ID、数量约束、Scene 结构或对象级 restore hook 错误仍回滚整个 reload。
 
 ## 生命周期迁移
 

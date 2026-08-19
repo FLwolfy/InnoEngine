@@ -8,6 +8,7 @@ internal sealed class SerializationOperation
 {
     private readonly List<Action> m_completionCallbacks = [];
     private readonly HashSet<object> m_scheduledObjects = new(ReferenceComparer.instance);
+    private readonly List<object> m_scheduledObjectOrder = [];
     private readonly Dictionary<object, string> m_capturePaths = new(ReferenceComparer.instance);
     private bool m_isActive = true;
 
@@ -36,6 +37,7 @@ internal sealed class SerializationOperation
         EnsureActive();
         if (!m_scheduledObjects.Add(value))
             return;
+        m_scheduledObjectOrder.Add(value);
 
         Action? callback = ReflectionMetadata.CreateRestoreCallback(value);
         if (callback is not null)
@@ -52,6 +54,36 @@ internal sealed class SerializationOperation
         }
 
         m_capturePaths.Add(value, path);
+    }
+
+    internal Checkpoint CreateCheckpoint()
+    {
+        EnsureActive();
+        return new Checkpoint(m_completionCallbacks.Count, m_scheduledObjectOrder.Count);
+    }
+
+    internal void Rollback(Checkpoint checkpoint)
+    {
+        EnsureActive();
+        if (checkpoint.callbackCount < 0 ||
+            checkpoint.callbackCount > m_completionCallbacks.Count ||
+            checkpoint.scheduledObjectCount < 0 ||
+            checkpoint.scheduledObjectCount > m_scheduledObjectOrder.Count)
+        {
+            throw new InvalidOperationException("The serialization operation checkpoint is invalid.");
+        }
+
+        if (m_completionCallbacks.Count > checkpoint.callbackCount)
+        {
+            m_completionCallbacks.RemoveRange(
+                checkpoint.callbackCount,
+                m_completionCallbacks.Count - checkpoint.callbackCount);
+        }
+        for (int i = m_scheduledObjectOrder.Count - 1; i >= checkpoint.scheduledObjectCount; i--)
+        {
+            m_scheduledObjects.Remove(m_scheduledObjectOrder[i]);
+            m_scheduledObjectOrder.RemoveAt(i);
+        }
     }
 
     internal void ExitCapture(object value)
@@ -73,6 +105,7 @@ internal sealed class SerializationOperation
             m_isActive = false;
             m_completionCallbacks.Clear();
             m_scheduledObjects.Clear();
+            m_scheduledObjectOrder.Clear();
             m_capturePaths.Clear();
         }
     }
@@ -85,8 +118,11 @@ internal sealed class SerializationOperation
         m_isActive = false;
         m_completionCallbacks.Clear();
         m_scheduledObjects.Clear();
+        m_scheduledObjectOrder.Clear();
         m_capturePaths.Clear();
     }
+
+    internal readonly record struct Checkpoint(int callbackCount, int scheduledObjectCount);
 
     private sealed class ReferenceComparer : IEqualityComparer<object>
     {

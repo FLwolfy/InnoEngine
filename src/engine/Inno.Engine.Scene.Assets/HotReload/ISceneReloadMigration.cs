@@ -13,6 +13,11 @@ public interface ISceneReloadMigration
     IReadOnlyList<object> retiredObjects { get; }
 
     /// <summary>
+    /// Gets non-fatal compatibility decisions produced while applying the migration.
+    /// </summary>
+    IReadOnlyList<SceneReloadDiagnostic> diagnostics { get; }
+
+    /// <summary>
     /// Disables active retiring lifecycle objects before the new assembly generation becomes active.
     /// </summary>
     void PrepareForActivation();

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -30,10 +31,12 @@ internal sealed class CSharpScriptImporter : AssetImporter<ScriptSourceAsset>
             context.relativePath,
             Encoding.UTF8,
             cancellationToken);
-        string[] declaredTypes = tree.GetRoot(cancellationToken)
+        BaseTypeDeclarationSyntax[] declarations = tree.GetRoot(cancellationToken)
             .DescendantNodes()
             .OfType<BaseTypeDeclarationSyntax>()
-            .Select(static declaration => declaration.Identifier.ValueText)
+            .ToArray();
+        string[] declaredTypes = declarations
+            .Select(GetDeclaredTypeName)
             .Distinct(StringComparer.Ordinal)
             .OrderBy(static value => value, StringComparer.Ordinal)
             .ToArray();
@@ -55,5 +58,47 @@ internal sealed class CSharpScriptImporter : AssetImporter<ScriptSourceAsset>
             "diagnostics",
             Encoding.UTF8.GetBytes(string.Join(Environment.NewLine, diagnostics)),
             cancellationToken).ConfigureAwait(false);
+        var typeManifest = new ScriptSourceTypeManifest(
+            1,
+            context.persistentId,
+            context.relativePath,
+            declarations.Select(CreateTypeDeclaration).ToArray());
+        await output.WriteArtifactAsync(
+            "type-manifest",
+            JsonSerializer.SerializeToUtf8Bytes(
+                typeManifest,
+                new JsonSerializerOptions { WriteIndented = true }),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private static ScriptSourceTypeDeclaration CreateTypeDeclaration(
+        BaseTypeDeclarationSyntax declaration)
+    {
+        FileLinePositionSpan span = declaration.Identifier.GetLocation().GetLineSpan();
+        return new ScriptSourceTypeDeclaration(
+            GetDeclaredTypeName(declaration),
+            declaration.Kind().ToString(),
+            declaration.Modifiers.Any(static modifier => modifier.IsKind(SyntaxKind.PartialKeyword)),
+            span.StartLinePosition.Line + 1,
+            span.StartLinePosition.Character + 1);
+    }
+
+    private static string GetDeclaredTypeName(BaseTypeDeclarationSyntax declaration)
+    {
+        string[] containingTypes = declaration.Ancestors()
+            .OfType<BaseTypeDeclarationSyntax>()
+            .Reverse()
+            .Select(static value => value.Identifier.ValueText)
+            .Append(declaration.Identifier.ValueText)
+            .ToArray();
+        string nestedTypeName = string.Join("+", containingTypes);
+        string[] namespaces = declaration.Ancestors()
+            .OfType<BaseNamespaceDeclarationSyntax>()
+            .Reverse()
+            .Select(static value => value.Name.ToString())
+            .ToArray();
+        return namespaces.Length == 0
+            ? nestedTypeName
+            : string.Join(".", namespaces) + "." + nestedTypeName;
     }
 }

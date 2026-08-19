@@ -269,10 +269,12 @@ public sealed class ScriptManagerTests : IDisposable
         Type previousType = TypeCacheManager.current.types.Single(type => type.Name == "MigratingBehavior");
         var scene = new GameScene("Hot Reload");
         GameObject gameObject = scene.CreateObject("Actor");
+        GameObject referencedObject = scene.CreateObject("Referenced");
         GameComponent previous = gameObject.AddComponent(previousType);
         Type previousSystemType = TypeCacheManager.current.types.Single(type => type.Name == "MigratingSystem");
         GameSystem previousSystem = scene.AddSystem(previousSystemType);
         SetProperty(previous, "value", 37);
+        previousType.GetProperty("target")!.SetValue(previous, referencedObject);
         SetProperty(previousSystem, "value", 51);
         Guid persistentId = previous.identity.persistentId;
         Guid systemPersistentId = previousSystem.identity.persistentId;
@@ -297,6 +299,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.Equal(1, GetProperty(previous, "disableCount"));
         Assert.Equal(persistentId, current.identity.persistentId);
         Assert.Equal(37, GetProperty(current, "value"));
+        Assert.Same(referencedObject, current.GetType().GetProperty("target")!.GetValue(current));
         Assert.Equal(1, GetProperty(current, "awakeCount"));
         Assert.Equal(1, GetProperty(current, "startCount"));
         Assert.Equal(1, GetProperty(current, "enableCount"));
@@ -323,6 +326,59 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
+    public void RuntimeReload_SkipsAnIncompatiblePropertyAndPreservesTheNewDefault()
+    {
+        WriteChangingPropertyBehavior(useString: false);
+        ScriptCompilationResult firstCompilation = Compile();
+        Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
+        Assert.True(m_manager.ApplyPendingReload());
+        Type previousType = TypeCacheManager.current.types.Single(type => type.Name == "ChangingPropertyBehavior");
+        var scene = new GameScene("Changing Property");
+        GameObject gameObject = scene.CreateObject("Actor");
+        GameComponent previous = gameObject.AddComponent(previousType);
+        SetField(previous, "changed", 42);
+        SetField(previous, "compatible", 73);
+        SceneManager.LoadScene(scene);
+
+        WriteChangingPropertyBehavior(useString: true);
+        ScriptCompilationResult secondCompilation = Compile();
+
+        Assert.True(secondCompilation.success, FormatDiagnostics(secondCompilation));
+        Assert.True(m_manager.ApplyPendingReload());
+        GameComponent current = gameObject.GetComponents()
+            .Single(component => component.GetType().Name == "ChangingPropertyBehavior");
+        Assert.Equal("default", GetField(current, "changed"));
+        Assert.Equal(73, GetField(current, "compatible"));
+        Assert.True(previous.isDestroyed);
+    }
+
+    [Fact]
+    public void MissingLiveReplacement_ReportsTheRetiringStableTypeId()
+    {
+        const string previousStableTypeId = "1b11fc01-68f7-48c5-a228-ad2dd311ee6a";
+        WriteIdentityProbe(previousStableTypeId);
+        ScriptCompilationResult firstCompilation = Compile();
+        Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
+        Assert.True(m_manager.ApplyPendingReload());
+        Type previousType = TypeCacheManager.current.types.Single(type => type.Name == "IdentityProbe");
+        var scene = new GameScene("Identity Probe");
+        GameObject gameObject = scene.CreateObject("Actor");
+        GameComponent previous = gameObject.AddComponent(previousType);
+        SceneManager.LoadScene(scene);
+
+        WriteIdentityProbe("69df8ec0-e28d-4769-9e8a-0a83ef18d62c");
+        ScriptCompilationResult secondCompilation = Compile();
+        Assert.True(secondCompilation.success, FormatDiagnostics(secondCompilation));
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => m_manager.ApplyPendingReload());
+
+        Assert.Contains(previousStableTypeId, exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("IdentityProbe", exception.Message, StringComparison.Ordinal);
+        Assert.Same(previous, gameObject.GetComponents().Single(component => component.GetType() == previousType));
+    }
+
+    [Fact]
     public void ScriptSourcesAreCatalogedWithMetadataAndImmutableSourceArtifacts()
     {
         Write("Scripts/Tracked.cs", "using InnoEngine.Scene; public sealed class Tracked : GameBehavior { }");
@@ -337,11 +393,110 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.Equal("inno.editor.csharp-script", info.importerId);
         Assert.True(AssetManager.TryGetArtifact(info.persistentId, "source", out AssetArtifactInfo? source));
         Assert.NotNull(source);
+        Assert.True(AssetManager.TryGetArtifact(
+            info.persistentId,
+            "type-manifest",
+            out AssetArtifactInfo? typeManifest));
+        Assert.NotNull(typeManifest);
+        Assert.Contains(info.persistentId.ToString("D"), File.ReadAllText(typeManifest.absolutePath));
         Assert.Equal(
             File.ReadAllText(Path.Combine(m_projectRoot, "Assets", "Scripts", "Tracked.cs")),
             File.ReadAllText(source.absolutePath));
         Assert.NotNull(result.outputDirectory);
+        Assert.True(File.Exists(Path.Combine(
+            result.outputDirectory!,
+            "Inno.GameScripts.types.json")));
         Assert.DoesNotMatch(@"[/\\]ScriptAssemblies[/\\]\d+$", result.outputDirectory!);
+    }
+
+    [Fact]
+    public void ImplicitAttachableTypeIdentitySurvivesFileAndTypeRename()
+    {
+        Write("RenameProbe.cs", """
+            using InnoEngine.Scene;
+            public sealed class RenameProbe : GameBehavior { }
+            """);
+        ScriptCompilationResult firstCompilation = Compile();
+        Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
+        Assert.True(m_manager.ApplyPendingReload());
+        Type previous = TypeCacheManager.current.types.Single(type => type.Name == "RenameProbe");
+        Assert.True(TypeCacheManager.TryGetStableTypeId(previous, out Guid previousStableTypeId));
+        Assert.True(AssetManager.TryGetInfo("RenameProbe.cs", out AssetInfo? previousInfo));
+        Assert.NotNull(previousInfo);
+        var scene = new GameScene("Rename Probe");
+        GameObject gameObject = scene.CreateObject("Actor");
+        GameComponent previousComponent = gameObject.AddComponent(previous);
+        SceneManager.LoadScene(scene);
+
+        MoveWithMeta("RenameProbe.cs", "RenamedProbe.cs");
+        Write("RenamedProbe.cs", """
+            using InnoEngine.Scene;
+            public sealed class RenamedProbe : GameBehavior { }
+            """);
+        ScriptCompilationResult secondCompilation = Compile();
+
+        Assert.True(secondCompilation.success, FormatDiagnostics(secondCompilation));
+        Assert.True(m_manager.ApplyPendingReload());
+        Type current = TypeCacheManager.current.types.Single(type => type.Name == "RenamedProbe");
+        Assert.True(TypeCacheManager.TryGetStableTypeId(current, out Guid currentStableTypeId));
+        Assert.Equal(previousStableTypeId, currentStableTypeId);
+        Assert.True(TypeCacheManager.TryResolveType(previousStableTypeId, out Type? resolved));
+        Assert.Equal(current, resolved);
+        GameComponent currentComponent = gameObject.GetComponents()
+            .Single(component => component.GetType() == current);
+        Assert.NotSame(previousComponent, currentComponent);
+        Assert.True(previousComponent.isDestroyed);
+        Assert.True(AssetManager.TryGetInfo("RenamedProbe.cs", out AssetInfo? currentInfo));
+        Assert.NotNull(currentInfo);
+        Assert.Equal(previousInfo.persistentId, currentInfo.persistentId);
+    }
+
+    [Fact]
+    public void PartialAttachableTypeUsesOnlyItsMatchingCanonicalSource()
+    {
+        Write("PartialProbe.cs", """
+            using InnoEngine.Scene;
+            public sealed partial class PartialProbe : GameBehavior { }
+            """);
+        Write("PartialProbe.State.cs", """
+            public sealed partial class PartialProbe
+            {
+                public int value => 7;
+            }
+            """);
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.True(result.success, FormatDiagnostics(result));
+        Assert.DoesNotContain(result.diagnostics, static diagnostic =>
+            diagnostic.id is "INNO2001" or "INNO2003" or "INNO2004");
+        Assert.True(m_manager.ApplyPendingReload());
+        Type type = TypeCacheManager.current.types.Single(value => value.Name == "PartialProbe");
+        Assert.True(TypeCacheManager.TryGetStableTypeId(type, out Guid stableTypeId));
+        Assert.True(AssetManager.TryGetInfo("PartialProbe.cs", out AssetInfo? canonicalInfo));
+        Assert.NotNull(canonicalInfo);
+        Assert.NotEqual(Guid.Empty, stableTypeId);
+        Assert.True(TypeCacheManager.TryResolveType(stableTypeId, out Type? resolved));
+        Assert.Equal(type, resolved);
+    }
+
+    [Fact]
+    public void AdditionalAttachableTypeInOneFileRequiresExplicitIdentityOrSeparateSource()
+    {
+        Write("PrimaryProbe.cs", """
+            using InnoEngine.Scene;
+
+            public sealed class PrimaryProbe : GameBehavior { }
+            public sealed class SecondaryProbe : GameBehavior { }
+            """);
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.True(result.success, FormatDiagnostics(result));
+        Assert.Contains(result.diagnostics, static diagnostic =>
+            diagnostic.id == "INNO2001" &&
+            diagnostic.severity == ScriptDiagnosticSeverity.Warning &&
+            diagnostic.message.Contains("SecondaryProbe", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -448,6 +603,9 @@ public sealed class ScriptManagerTests : IDisposable
                 public int value { get; set; }
 
                 [SerializableProperty]
+                public GameObject? target { get; set; }
+
+                [SerializableProperty]
                 public int awakeCount { get; set; }
 
                 [SerializableProperty]
@@ -502,11 +660,48 @@ public sealed class ScriptManagerTests : IDisposable
             }
             """);
 
+    private void WriteIdentityProbe(string stableTypeId)
+        => Write("IdentityProbe.cs", $$"""
+            using InnoEngine.Reflection;
+            using InnoEngine.Scene;
+
+            [StableTypeId("{{stableTypeId}}")]
+            public sealed class IdentityProbe : GameBehavior
+            {
+            }
+            """);
+
+    private void WriteChangingPropertyBehavior(bool useString)
+        => Write("ChangingPropertyBehavior.cs", $$"""
+            using InnoEngine.Reflection;
+            using InnoEngine.Scene;
+            using InnoEngine.Serialization;
+
+            [StableTypeId("98f01b0c-8aa5-4f21-b160-0bd42d159247")]
+            public sealed class ChangingPropertyBehavior : GameBehavior
+            {
+                [SerializableProperty]
+                private {{(useString ? "string changed = \"default\";" : "int changed = 10;")}}
+
+                [SerializableProperty]
+                private int compatible = 20;
+            }
+            """);
+
     private void Write(string relativePath, string content)
     {
         string path = Path.Combine(m_projectRoot, "Assets", relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content);
+    }
+
+    private void MoveWithMeta(string sourceRelativePath, string destinationRelativePath)
+    {
+        string sourcePath = Path.Combine(m_projectRoot, "Assets", sourceRelativePath);
+        string destinationPath = Path.Combine(m_projectRoot, "Assets", destinationRelativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+        File.Move(sourcePath, destinationPath);
+        File.Move(sourcePath + ".imeta", destinationPath + ".imeta");
     }
 
     private static Type ResolveVersionedBehavior()
@@ -520,6 +715,16 @@ public sealed class ScriptManagerTests : IDisposable
 
     private static void SetProperty(object target, string propertyName, int value)
         => target.GetType().GetProperty(propertyName)!.SetValue(target, value);
+
+    private static object? GetField(object target, string fieldName)
+        => target.GetType().GetField(
+            fieldName,
+            BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target);
+
+    private static void SetField(object target, string fieldName, object value)
+        => target.GetType().GetField(
+            fieldName,
+            BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(target, value);
 
     private static string FormatDiagnostics(ScriptCompilationResult result)
         => string.Join(

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -273,6 +274,28 @@ internal static class ScriptCompiler
             runtimeTrees,
             references.Values,
             validationCompilation.Options);
+        progress.Begin($"Resolving {assemblyName} script type identities...");
+        ScriptTypeAnalysisResult typeAnalysis = ScriptTypeAnalyzer.Analyze(
+            runtimeCompilation,
+            sources,
+            cancellationToken);
+        if (typeAnalysis.mappings.Count > 0)
+        {
+            SyntaxTree mappingTree = CSharpSyntaxTree.ParseText(
+                SourceText.From(
+                    ScriptTypeAnalyzer.CreateMappingSource(typeAnalysis.mappings),
+                    Encoding.UTF8),
+                parseOptions,
+                $"<{assemblyName}.ScriptTypeIds.g.cs>",
+                cancellationToken);
+            runtimeCompilation = runtimeCompilation.AddSyntaxTrees(mappingTree);
+        }
+        progress.Complete($"Resolved {assemblyName} script type identities.");
+        if (typeAnalysis.diagnostics.Any(static diagnostic =>
+                diagnostic.severity == ScriptDiagnosticSeverity.Error))
+        {
+            return new CompilationResult(false, typeAnalysis.diagnostics);
+        }
         progress.Begin($"Checking {assemblyName} compilation diagnostics...");
         Diagnostic[] preEmitDiagnostics = runtimeCompilation
             .GetDiagnostics(cancellationToken)
@@ -285,7 +308,9 @@ internal static class ScriptCompiler
         {
             return new CompilationResult(
                 false,
-                preEmitDiagnostics.Select(ToDiagnostic).ToArray());
+                typeAnalysis.diagnostics
+                    .Concat(preEmitDiagnostics.Select(ToDiagnostic))
+                    .ToArray());
         }
 
         string pdbPath = Path.ChangeExtension(outputPath, ".pdb");
@@ -300,12 +325,22 @@ internal static class ScriptCompiler
             xmlDocumentationStream: documentationStream,
             options: new EmitOptions(debugInformationFormat: DebugInformationFormat.PortablePdb),
             cancellationToken: cancellationToken);
+        if (emit.Success)
+        {
+            await File.WriteAllTextAsync(
+                GetTypeManifestPath(outputPath),
+                JsonSerializer.Serialize(
+                    typeAnalysis.manifest,
+                    new JsonSerializerOptions { WriteIndented = true }),
+                cancellationToken).ConfigureAwait(false);
+        }
         progress.Complete($"Emitted {assemblyName}.");
-        ScriptDiagnostic[] diagnostics = preEmitDiagnostics
-            .Concat(emit.Diagnostics)
-            .Where(static diagnostic => diagnostic.Severity != DiagnosticSeverity.Hidden)
-            .Distinct(DiagnosticComparer.Instance)
-            .Select(ToDiagnostic)
+        ScriptDiagnostic[] diagnostics = typeAnalysis.diagnostics
+            .Concat(preEmitDiagnostics
+                .Concat(emit.Diagnostics)
+                .Where(static diagnostic => diagnostic.Severity != DiagnosticSeverity.Hidden)
+                .Distinct(DiagnosticComparer.Instance)
+                .Select(ToDiagnostic))
             .ToArray();
         return new CompilationResult(emit.Success, diagnostics);
     }
@@ -445,7 +480,8 @@ internal static class ScriptCompiler
             string path = Path.Combine(outputDirectory, assembly.name + ".dll");
             if (!File.Exists(path) ||
                 !File.Exists(Path.ChangeExtension(path, ".pdb")) ||
-                !File.Exists(Path.ChangeExtension(path, ".xml")))
+                !File.Exists(Path.ChangeExtension(path, ".xml")) ||
+                !File.Exists(GetTypeManifestPath(path)))
             {
                 return false;
             }
@@ -537,6 +573,9 @@ internal static class ScriptCompiler
     private static string FormatDiagnostic(ScriptDiagnostic diagnostic)
         => $"{diagnostic.severity}|{diagnostic.id}|{diagnostic.filePath}|" +
            $"{diagnostic.line}|{diagnostic.column}|{diagnostic.message}";
+
+    private static string GetTypeManifestPath(string assemblyPath)
+        => Path.ChangeExtension(assemblyPath, ".types.json");
 
     private static void AppendHash(IncrementalHash hash, string value)
     {

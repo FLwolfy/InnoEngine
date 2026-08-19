@@ -29,11 +29,7 @@ public enum InlineRenameResult
 
 public static partial class ImGuiWidget
 {
-    private static readonly Vector4 s_cardHeaderColor = new(0.42f, 0.39f, 0.51f, 1f);
-    private static readonly Vector4 s_cardBodyColor = new(0.12f, 0.12f, 0.14f, 1f);
-    private static readonly Vector4 s_cardBodyBorderColor = new(0.28f, 0.27f, 0.32f, 1f);
-    private static readonly Vector4 s_cardDisabledTextColor = new(0.52f, 0.52f, 0.54f, 1f);
-    private static readonly Vector4 s_iconHoveredColor = new(0.76f, 0.69f, 0.94f, 1f);
+    private const float C_DISCLOSURE_BUTTON_INSET = 2f;
 
     /// <summary>
     /// Draws a single-line search field with a stable identifier.
@@ -168,7 +164,7 @@ public static partial class ImGuiWidget
         bool active = NativeImGui.IsItemActive();
 
         uint color = hovered || active
-            ? NativeImGui.ColorConvertFloat4ToU32(s_iconHoveredColor)
+            ? NativeImGui.ColorConvertFloat4ToU32(EditorPalette.compactControlHovered)
             : NativeImGui.GetColorU32(ImGuiCol.Text);
         NativeImGui.GetWindowDrawList().AddText(cursor + (controlSize - iconSize) * 0.5f, color, icon);
 
@@ -225,7 +221,7 @@ public static partial class ImGuiWidget
         if (value)
         {
             drawList.AddRectFilled(min, max, textColor, 1f);
-            uint checkColor = NativeImGui.ColorConvertFloat4ToU32(s_cardHeaderColor);
+            uint checkColor = NativeImGui.ColorConvertFloat4ToU32(EditorPalette.inspectorCardHeader);
             drawList.AddLine(
                 min + new Vector2(size * 0.22f, size * 0.52f),
                 min + new Vector2(size * 0.43f, size * 0.72f),
@@ -247,7 +243,7 @@ public static partial class ImGuiWidget
             drawList.AddRect(
                 min - Vector2.One,
                 max + Vector2.One,
-                NativeImGui.ColorConvertFloat4ToU32(s_iconHoveredColor),
+                NativeImGui.ColorConvertFloat4ToU32(EditorPalette.compactControlHovered),
                 1f,
                 1.5f);
         }
@@ -308,9 +304,9 @@ public static partial class ImGuiWidget
             flags |= ImGuiTreeNodeFlags.DefaultOpen;
         }
 
-        NativeImGui.PushStyleColor(ImGuiCol.Header, s_cardHeaderColor);
-        NativeImGui.PushStyleColor(ImGuiCol.HeaderHovered, s_cardHeaderColor);
-        NativeImGui.PushStyleColor(ImGuiCol.HeaderActive, s_cardHeaderColor);
+        NativeImGui.PushStyleColor(ImGuiCol.Header, EditorPalette.inspectorCardHeader);
+        NativeImGui.PushStyleColor(ImGuiCol.HeaderHovered, EditorPalette.inspectorCardHeader);
+        NativeImGui.PushStyleColor(ImGuiCol.HeaderActive, EditorPalette.inspectorCardHeader);
         NativeImGui.PushStyleColor(ImGuiCol.Text, Vector4.Zero);
         NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(4f, 1f));
         Vector2 headerCursor = NativeImGui.GetCursorScreenPos();
@@ -320,13 +316,12 @@ public static partial class ImGuiWidget
         NativeImGui.GetWindowDrawList().AddRectFilled(
             persistentHeaderMin,
             persistentHeaderMax,
-            NativeImGui.ColorConvertFloat4ToU32(s_cardHeaderColor),
+            NativeImGui.ColorConvertFloat4ToU32(EditorPalette.inspectorCardHeader),
             1f);
         bool open = NativeImGui.TreeNodeEx($"##card_{id}", flags);
         Vector2 itemHeaderMin = NativeImGui.GetItemRectMin();
-        Vector2 itemHeaderMax = NativeImGui.GetItemRectMax();
-        Vector2 headerMin = new(cardLeft, itemHeaderMin.Y);
-        Vector2 headerMax = new(cardRight, itemHeaderMax.Y);
+        Vector2 headerMin = new(cardLeft, persistentHeaderMin.Y);
+        Vector2 headerMax = new(cardRight, persistentHeaderMax.Y);
         Vector2 contentCursor = NativeImGui.GetCursorScreenPos();
         NativeImGui.PopStyleVar();
         NativeImGui.PopStyleColor(4);
@@ -340,7 +335,7 @@ public static partial class ImGuiWidget
         float contentY = headerMin.Y + MathF.Max(0f, (headerMax.Y - headerMin.Y - NativeImGui.GetFrameHeight()) * 0.5f);
         NativeImGui.SetCursorScreenPos(new Vector2(contentX, contentY));
         if (dimmed)
-            NativeImGui.PushStyleColor(ImGuiCol.Text, s_cardDisabledTextColor);
+            NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.inspectorCardDisabledText);
         NativeImGui.BeginGroup();
         if (drawLeadingControl is not null)
         {
@@ -380,26 +375,28 @@ public static partial class ImGuiWidget
         bool open,
         bool dimmed = false)
     {
+        Vector2 availableSize = Vector2.Max(Vector2.Zero, max - min);
+        float buttonSize = MathF.Max(
+            1f,
+            MathF.Min(availableSize.X, availableSize.Y) - C_DISCLOSURE_BUTTON_INSET * 2f);
+        Vector2 buttonMin = min + (availableSize - new Vector2(buttonSize)) * 0.5f;
+        Vector2 buttonMax = buttonMin + new Vector2(buttonSize);
         ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
-        if (NativeImGui.IsMouseHoveringRect(min, max))
+        if (NativeImGui.IsMouseHoveringRect(buttonMin, buttonMax))
         {
-            Vector4 hovered = NativeImGui.ColorConvertU32ToFloat4(
-                NativeImGui.GetColorU32(ImGuiCol.ButtonHovered, 0.82f));
             drawList.AddRectFilled(
-                min,
-                max,
-                NativeImGui.ColorConvertFloat4ToU32(hovered),
+                buttonMin,
+                buttonMax,
+                NativeImGui.ColorConvertFloat4ToU32(EditorPalette.inspectorCardDisclosureHovered),
                 NativeImGui.GetStyle().FrameRounding);
         }
 
         string indicator = open ? "▼" : "▶";
         Vector2 indicatorSize = NativeImGui.CalcTextSize(indicator);
-        Vector2 indicatorPosition = new(
-            min.X + MathF.Max(0f, (max.X - min.X - indicatorSize.X) * 0.5f),
-            min.Y + MathF.Max(0f, (max.Y - min.Y - indicatorSize.Y) * 0.5f));
+        Vector2 indicatorPosition = buttonMin + (new Vector2(buttonSize) - indicatorSize) * 0.5f;
         uint color = NativeImGui.ColorConvertFloat4ToU32(
             dimmed
-                ? s_cardDisabledTextColor
+                ? EditorPalette.inspectorCardDisabledText
                 : NativeImGui.ColorConvertU32ToFloat4(NativeImGui.GetColorU32(ImGuiCol.Text)));
         drawList.AddText(indicatorPosition, color, indicator);
     }
@@ -418,8 +415,8 @@ public static partial class ImGuiWidget
         Vector2 originalCursor = NativeImGui.GetCursorScreenPos();
         (float cardLeft, float cardRight) = GetFullWidthCardBounds(originalCursor);
         NativeImGui.SetCursorScreenPos(new Vector2(cardLeft, originalCursor.Y));
-        NativeImGui.PushStyleColor(ImGuiCol.FrameBg, s_cardBodyColor);
-        NativeImGui.PushStyleColor(ImGuiCol.Border, s_cardBodyBorderColor);
+        NativeImGui.PushStyleColor(ImGuiCol.FrameBg, EditorPalette.inspectorCardBody);
+        NativeImGui.PushStyleColor(ImGuiCol.Border, EditorPalette.inspectorCardBodyBorder);
         NativeImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, NativeImGui.GetStyle().FrameRounding);
         NativeImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1f);
         NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(7f, 5f));

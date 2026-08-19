@@ -19,6 +19,8 @@ SerializationManager.Initialize();
 | `isInitialized` | Converter catalog 是否可用。 |
 | `Initialize()` / `Shutdown()` | 创建或清空 Converter Registry。 |
 | `GetProperties(ISerializable)` | 返回稳定排序且允许运行时读取的 `SerializedProperty`。 |
+| `CaptureProperties(ISerializable, context?)` | 把每个持久成员独立编码为带原声明类型的迁移快照。 |
+| `RestoreProperties(target, snapshots, mode, context?)` | 以严格或兼容策略恢复独立成员快照。 |
 | `Serialize<T>(T, context?)` | 把 class `ISerializable` 根对象编码为 version-two bytes。 |
 | `Deserialize<T>(ReadOnlySpan<byte>, context?)` | 创建并恢复一个新根对象。 |
 | `Restore<T>(T target, ReadOnlySpan<byte>, context?)` | 将数据恢复到既有实例，适合身份必须保留的对象。 |
@@ -103,6 +105,24 @@ public int secondField;
 ```
 
 继承层级仍保持 base type 在前、derived type 在后；`order` 只比较同一个 declaring type 内的成员。
+
+### Schema-aware property migration
+
+逐成员快照用于热重载和其他需要容忍 schema 演进的流程，不会改变普通 `Serialize` / `Deserialize` / `Restore` 的严格行为：
+
+```csharp
+IReadOnlyList<SerializationPropertySnapshot> snapshots =
+    SerializationManager.CaptureProperties(previous);
+
+SerializationPropertyRestoreResult result = SerializationManager.RestoreProperties(
+    current,
+    snapshots,
+    SerializationPropertyRestoreMode.Compatible);
+```
+
+`SerializationPropertyRestoreMode.Strict` 在第一个匹配但不可解码的成员处抛异常。`Compatible` 使用独立的 operation checkpoint 跳过该成员，撤销它注册的 completion callback，保留目标对象构造后的默认值，并在 `failures` 中记录旧类型、新类型和错误信息。
+
+已删除成员计入 `ignoredCount`，新增成员自然保持默认值。所有兼容成员完成后，目标的 `[OnSerializableRestored]` 仍只执行一次；对象级 restore hook 失败属于严重错误，不会被 compatible 模式吞掉。
 
 ## SerializationContext
 
@@ -195,4 +215,5 @@ Vector2[] decoded = SerializationManager.Decode(bytes, reader =>
 - Writer/Reader 都是 operation-scoped；在操作外使用会失败。
 - 循环引用和外部对象身份通常需要 Converter + context + `OnCompleted` 协作解决。
 - Restore callback 只在整个操作成功后提交完成通知；异常时不会执行 completion callbacks。
+- Compatible property restore 只跳过单个成员的数据/类型不兼容；对象结构或 restore hook 错误仍由上层事务处理。
 - 格式当前称为 version two；更改二进制 schema 时必须保持兼容或明确提供迁移。
