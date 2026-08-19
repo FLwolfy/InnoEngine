@@ -1,5 +1,6 @@
 using System;
 
+using Inno.Assets.Core;
 using Inno.Core.Serialization;
 
 namespace Inno.Assets.Loader;
@@ -18,6 +19,12 @@ internal sealed class AssetMeta : ISerializable
     [SerializableProperty] internal byte[] assetStateBytes { get; set; } = [];
     [SerializableProperty] internal AssetDependencyData[] runtimeDependencies { get; set; } = [];
     [SerializableProperty] internal AssetImportDependencyData[] importDependencies { get; set; } = [];
+    [SerializableProperty] internal int importStatus { get; set; } = (int)AssetImportStatus.Pending;
+    [SerializableProperty] internal string importerImplementationFingerprint { get; set; } = string.Empty;
+    [SerializableProperty] internal string artifactKey { get; set; } = string.Empty;
+    [SerializableProperty] internal string lastSuccessfulArtifactKey { get; set; } = string.Empty;
+    [SerializableProperty] internal string[] diagnostics { get; set; } = [];
+    [SerializableProperty] internal bool isDirectory { get; set; }
 }
 
 internal struct AssetDependencyData

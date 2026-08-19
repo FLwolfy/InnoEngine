@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace Inno.Assets.File;
 
 /// <summary>
@@ -5,6 +7,12 @@ namespace Inno.Assets.File;
 /// </summary>
 public sealed class AssetFileEntry
 {
+    /// <summary>Gets the final source path segment, including its extension.</summary>
+    public string name => Path.GetFileName(relativePath);
+
+    /// <summary>Gets the final source path segment without its last extension.</summary>
+    public string nameWithoutExtension => isDirectory ? name : Path.GetFileNameWithoutExtension(name);
+
     /// <summary>Gets the source-relative entry path.</summary>
     public string relativePath { get; internal set; } = string.Empty;
     /// <summary>Gets the source-relative parent path.</summary>

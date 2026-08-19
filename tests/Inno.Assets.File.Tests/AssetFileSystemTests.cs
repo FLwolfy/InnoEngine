@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -59,7 +60,7 @@ public sealed class AssetFileSystemTests
     }
 
     [Fact]
-    public void Watcher_EmitsChangedBatch_WhenFileChanged()
+    public void Watcher_PublishesChangesOnlyWhenOwnerPolls()
     {
         string root = CreateRoot();
         try
@@ -69,22 +70,64 @@ public sealed class AssetFileSystemTests
             System.IO.File.WriteAllText(file, "a");
 
             using var fs = new AssetFileSystem(root, autoStart: true, flushDelayMs: 20);
-            using var changed = new AutoResetEvent(false);
-            AssetChangedEvent[]? batch = null;
-
-            fs.ChangedBatch += changes =>
-            {
-                batch = changes.ToArray();
-                changed.Set();
-            };
-
             System.IO.File.WriteAllText(file, "b");
-            bool signaled = changed.WaitOne(TimeSpan.FromSeconds(2));
+            IReadOnlyList<AssetChangedEvent> batch = fs.WaitForIdle();
 
-            Assert.True(signaled);
-            Assert.NotNull(batch);
-            Assert.Contains(batch!, static x => x.relativePath == "Config/watch.txt");
+            Assert.Contains(batch, static x => x.relativePath == "Config/watch.txt");
             Assert.True(fs.Exists("Config/watch.txt"));
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Fact]
+    public void Entries_ExposeLastExtensionDisplayNameAndFilterDatabaseNoise()
+    {
+        string root = CreateRoot();
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "Scripts"));
+            System.IO.File.WriteAllText(Path.Combine(root, "Scripts", "Tool.editor.cs"), "class Tool {} ");
+            System.IO.File.WriteAllText(Path.Combine(root, "Scripts", "Tool.editor.cs.imeta"), "meta");
+            System.IO.File.WriteAllText(Path.Combine(root, "Scripts", "Tool.pdb"), "symbols");
+            System.IO.File.WriteAllText(Path.Combine(root, ".DS_Store"), "noise");
+
+            using var fileSystem = new AssetFileSystem(root, autoStart: false);
+            AssetFileEntry entry = Assert.Single(
+                fileSystem.GetEntries(includeDirectories: false));
+
+            Assert.Equal("Tool.editor.cs", entry.name);
+            Assert.Equal("Tool.editor", entry.nameWithoutExtension);
+            Assert.Equal(".cs", entry.extension);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Fact]
+    public void Watcher_RenameCarriesOldAndNewPathsThroughOwnerPolling()
+    {
+        string root = CreateRoot();
+        try
+        {
+            string oldPath = Path.Combine(root, "old.txt");
+            string newPath = Path.Combine(root, "new.txt");
+            System.IO.File.WriteAllText(oldPath, "value");
+            using var fileSystem = new AssetFileSystem(root, autoStart: true, flushDelayMs: 20);
+
+            System.IO.File.Move(oldPath, newPath);
+            IReadOnlyList<AssetChangedEvent> changes = fileSystem.WaitForIdle();
+
+            AssetChangedEvent moved = Assert.Single(changes, static change =>
+                change.changeType.HasFlag(WatcherChangeTypes.Renamed));
+            Assert.Equal("old.txt", moved.oldRelativePath);
+            Assert.Equal("new.txt", moved.relativePath);
+            Assert.False(fileSystem.Exists("old.txt"));
+            Assert.True(fileSystem.Exists("new.txt"));
         }
         finally
         {

@@ -33,6 +33,21 @@ A few principles I want to keep pushing toward:
 
 The repository is split into several major areas such as engine/runtime code, editor code, tools, samples, tests, native interop, and documentation. The following is an example of an **IDEAL** repo structure. This will **NOT** be exactly the same as the real one.
 
+For the current source-level project map and public APIs, use the [InnoEngine Wiki](docs/README.md). In particular, the active asset/script architecture is documented in [Assets](docs/assets/README.md) and [Editor Scripting](docs/editor/Inno.Editor.Scripting.md); the large tree below remains an aspirational layout, not a list of projects that currently exist.
+
+The implemented asset dependency direction is:
+
+```mermaid
+flowchart LR
+    Core["Inno.Assets.Core"] --> Loader["Inno.Assets.Loader"]
+    File["Inno.Assets.File"] --> Loader
+    Loader --> Manager["Inno.Assets"]
+    Serialization["Inno.Assets.Serialization"] --> Manager
+    Manager --> Scene["Inno.Engine.Scene.Assets"]
+    Manager --> Scripting["Inno.Editor.Scripting"]
+    Assemblies["Inno.Core.Assemblies"] --> Scripting
+```
+
 ```
 Inno/
 ├─ global.json

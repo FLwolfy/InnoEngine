@@ -4,17 +4,23 @@ using System.Collections.Generic;
 namespace Inno.Assets.Core;
 
 /// <summary>
-/// Centralizes the internal runtime contract consumed by the asset loading assembly.
+/// Provides the narrow host-side bridge used to commit imported state to asset instances.
 /// </summary>
-internal static class AssetRuntimeAccess
+/// <remarks>
+/// Game code should treat asset instances as immutable. This bridge exists for asset database
+/// hosts that need to restore canonical instances without relying on friend assemblies.
+/// </remarks>
+public static class AssetRuntimeHost
 {
-    internal static string GetSourceHash(AssetObject asset)
+    /// <summary>Gets the source fingerprint currently committed to an asset.</summary>
+    public static string GetSourceHash(AssetObject asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
         return asset.sourceHash;
     }
 
-    internal static void Initialize(
+    /// <summary>Commits imported runtime state to a canonical asset instance.</summary>
+    public static void Initialize(
         AssetObject asset,
         string relativePath,
         string sourceHash,
@@ -26,26 +32,30 @@ internal static class AssetRuntimeAccess
         asset.InitializeRuntimeState(relativePath, sourceHash, payload, isMissing, version);
     }
 
-    internal static void UpdateSourcePath(AssetObject asset, string relativePath)
+    /// <summary>Updates the source path of a canonical asset without changing its content.</summary>
+    public static void UpdateSourcePath(AssetObject asset, string relativePath)
     {
         ArgumentNullException.ThrowIfNull(asset);
         asset.UpdateSourcePath(relativePath);
     }
 
-    internal static void Release(AssetObject asset)
+    /// <summary>Releases runtime resources owned by a canonical asset.</summary>
+    public static void Release(AssetObject asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
         asset.ReleaseRuntimeResources();
     }
 
-    internal static AssetReferenceLocation CreateReferenceLocation(
+    /// <summary>Creates one engine-known asset reference location.</summary>
+    public static AssetReferenceLocation CreateReferenceLocation(
         AssetReferenceKind kind,
         Guid ownerId,
         string ownerName,
         string propertyPath)
         => new(kind, ownerId, ownerName, propertyPath);
 
-    internal static AssetReferenceInfo CreateReferenceInfo(
+    /// <summary>Creates an immutable asset reference diagnostic snapshot.</summary>
+    public static AssetReferenceInfo CreateReferenceInfo(
         Guid persistentId,
         string sourcePath,
         long contentVersion,

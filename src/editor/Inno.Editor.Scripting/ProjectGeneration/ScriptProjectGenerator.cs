@@ -2,26 +2,25 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Xml.Linq;
 
 namespace Inno.Editor.Scripting;
 
 internal static class ScriptProjectGenerator
 {
-    private static readonly Guid C_GAME_PROJECT_ID = Guid.Parse("F61A6A9D-C87D-4964-BE8A-A28361A1D3A1");
-    private static readonly Guid C_EDITOR_PROJECT_ID = Guid.Parse("CA7049EB-739C-4EB8-A994-F937E71BCFC4");
-
     internal static void Generate(ScriptManagerOptions options)
     {
         Directory.CreateDirectory(options.projectRootDirectory);
-        DeleteStaleGeneratedGlobalUsings(options.ideDirectory);
-        ScriptSourceSet sources = ScriptSourceSet.Discover(options.assetDirectory);
+        ScriptSourceSet sources = ScriptSourceSet.Discover();
         ScriptApiProfile runtimeApi = ScriptPluginMetadata.AddGlobalUsings(
             ScriptApiCatalog.Build(includeEditor: false),
-            sources.runtimePlugins);
+            sources.runtimePlugins.Select(static plugin => plugin.sourcePath));
         ScriptApiProfile editorApi = ScriptPluginMetadata.AddGlobalUsings(
             ScriptApiCatalog.Build(includeEditor: true),
-            sources.runtimePlugins.Concat(sources.editorPlugins));
+            sources.runtimePlugins.Concat(sources.editorPlugins)
+                .Select(static plugin => plugin.sourcePath));
         ScriptApiReferenceSet runtimeApiReferences = ScriptApiReferenceBuilder.Build(options, runtimeApi);
         ScriptApiReferenceSet editorApiReferences = ScriptApiReferenceBuilder.Build(
             options,
@@ -30,56 +29,40 @@ internal static class ScriptProjectGenerator
             runtimeApiReferences);
         string apiMapDirectory = Path.Combine(options.ideDirectory, "ScriptApiMaps");
         Directory.CreateDirectory(apiMapDirectory);
-        string gameApiMapPath = Path.Combine(
-            apiMapDirectory,
-            "Inno.GameScripts" + ScriptApiMapBuilder.C_FILE_EXTENSION);
-        string editorApiMapPath = Path.Combine(
-            apiMapDirectory,
-            "Inno.EditorScripts" + ScriptApiMapBuilder.C_FILE_EXTENSION);
-        File.WriteAllText(gameApiMapPath, ScriptApiMapBuilder.Build(runtimeApi));
-        File.WriteAllText(editorApiMapPath, ScriptApiMapBuilder.Build(editorApi));
         string codeAnalysisPath = CopyCodeAnalysisAssembly(options.ideDirectory);
-        string gameProjectPath = Path.Combine(options.projectRootDirectory, "Inno.GameScripts.csproj");
-        string editorProjectPath = Path.Combine(options.projectRootDirectory, "Inno.EditorScripts.csproj");
-
-        CreateProject(
-            "Inno.GameScripts",
-            "Assets/**/*.cs",
-            "Assets/**/*.editor.cs",
-            runtimeApi,
-            runtimeApiReferences,
-            sources.runtimePlugins,
-            gameApiMapPath,
-            codeAnalysisPath,
-            projectReference: null)
-            .Save(gameProjectPath);
-        CreateProject(
-            "Inno.EditorScripts",
-            "Assets/**/*.editor.cs",
-            exclude: null,
-            editorApi,
-            editorApiReferences,
-            sources.runtimePlugins.Concat(sources.editorPlugins).ToArray(),
-            editorApiMapPath,
-            codeAnalysisPath,
-            "Inno.GameScripts.csproj")
-            .Save(editorProjectPath);
+        foreach (ScriptAssemblyInput assembly in sources.assemblies)
+        {
+            bool editor = assembly.scope == ScriptAssemblyScope.Editor;
+            ScriptApiProfile api = editor ? editorApi : runtimeApi;
+            ScriptApiReferenceSet references = editor ? editorApiReferences : runtimeApiReferences;
+            IReadOnlyList<string> plugins = editor
+                ? sources.runtimePlugins.Concat(sources.editorPlugins)
+                    .Select(static plugin => plugin.sourcePath)
+                    .ToArray()
+                : sources.runtimePlugins.Select(static plugin => plugin.sourcePath).ToArray();
+            string apiMapPath = Path.Combine(
+                apiMapDirectory,
+                assembly.name + ScriptApiMapBuilder.C_FILE_EXTENSION);
+            File.WriteAllText(apiMapPath, ScriptApiMapBuilder.Build(api));
+            CreateProject(
+                    assembly.name,
+                    ToProjectRelativePaths(
+                        options,
+                        assembly.sources.Select(static source => source.sourcePath).ToArray()),
+                    api,
+                    references,
+                    plugins,
+                    apiMapPath,
+                    codeAnalysisPath,
+                    assembly.references.Select(static reference => reference + ".csproj").ToArray(),
+                    assembly.defines,
+                    assembly.nullable,
+                    assembly.allowUnsafe)
+                .Save(Path.Combine(options.projectRootDirectory, assembly.name + ".csproj"));
+        }
         File.WriteAllText(
             Path.Combine(options.projectRootDirectory, "InnoProject.sln"),
-            CreateSolution());
-    }
-
-    private static void DeleteStaleGeneratedGlobalUsings(string ideDirectory)
-    {
-        if (!Directory.Exists(ideDirectory))
-            return;
-        foreach (string path in Directory.EnumerateFiles(
-                     ideDirectory,
-                     "*.GlobalUsings.g.cs",
-                     SearchOption.AllDirectories))
-        {
-            File.Delete(path);
-        }
+            CreateSolution(sources.assemblies));
     }
 
     private static string CopyCodeAnalysisAssembly(string ideDirectory)
@@ -94,14 +77,16 @@ internal static class ScriptProjectGenerator
 
     private static XDocument CreateProject(
         string assemblyName,
-        string include,
-        string? exclude,
+        IReadOnlyList<string> sourcePaths,
         ScriptApiProfile api,
         ScriptApiReferenceSet apiReferences,
         IReadOnlyList<string> plugins,
         string apiMapPath,
         string codeAnalysisPath,
-        string? projectReference)
+        IReadOnlyList<string> projectReferences,
+        IReadOnlyList<string> defines,
+        bool nullable,
+        bool allowUnsafe)
     {
         var earlyPropertyGroup = new XElement("PropertyGroup",
             new XElement("BaseOutputPath", "Library/IDE/bin/" + assemblyName + "/"),
@@ -115,12 +100,14 @@ internal static class ScriptProjectGenerator
             new XElement("EnableDefaultItems", "false"),
             new XElement("EnableDefaultCompileItems", "false"),
             new XElement("ImplicitUsings", "disable"),
-            new XElement("Nullable", "enable"),
+            new XElement("Nullable", nullable ? "enable" : "disable"),
+            new XElement("AllowUnsafeBlocks", allowUnsafe ? "true" : "false"),
+            new XElement("DefineConstants", string.Join(";", defines)),
             new XElement("LangVersion", "latest"));
-        var compile = new XElement("Compile", new XAttribute("Include", include));
-        if (exclude is not null)
-            compile.Add(new XAttribute("Exclude", exclude));
-        var compileGroup = new XElement("ItemGroup", compile);
+        var compileGroup = new XElement(
+            "ItemGroup",
+            sourcePaths.Select(static path =>
+                new XElement("Compile", new XAttribute("Include", path))));
 
         var referenceGroup = new XElement("ItemGroup");
         foreach (string path in apiReferences.ideReferencePaths)
@@ -157,16 +144,25 @@ internal static class ScriptProjectGenerator
                     new XElement("Using", new XAttribute("Include", value)))));
         }
         project.Add(folderGroup);
-        if (projectReference is not null)
+        if (projectReferences.Count > 0)
         {
             project.Add(new XElement("ItemGroup",
-                new XElement("ProjectReference", new XAttribute("Include", projectReference))));
+                projectReferences.Select(static reference =>
+                    new XElement("ProjectReference", new XAttribute("Include", reference)))));
         }
         project.Add(new XElement("Import",
             new XAttribute("Project", "Sdk.targets"),
             new XAttribute("Sdk", "Microsoft.NET.Sdk")));
         return new XDocument(project);
     }
+
+    private static string[] ToProjectRelativePaths(
+        ScriptManagerOptions options,
+        IReadOnlyList<string> absolutePaths)
+        => absolutePaths
+            .Select(path => Path.GetRelativePath(options.projectRootDirectory, path).Replace('\\', '/'))
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
 
     private static void AddReference(XElement group, string path)
     {
@@ -180,30 +176,40 @@ internal static class ScriptProjectGenerator
         group.Add(reference);
     }
 
-    private static string CreateSolution()
+    private static string CreateSolution(IReadOnlyList<ScriptAssemblyInput> assemblies)
     {
-        string gameProjectId = "{" + C_GAME_PROJECT_ID.ToString().ToUpperInvariant() + "}";
-        string editorProjectId = "{" + C_EDITOR_PROJECT_ID.ToString().ToUpperInvariant() + "}";
-        return $$"""
-            Microsoft Visual Studio Solution File, Format Version 12.00
-            # Visual Studio Version 17
-            VisualStudioVersion = 17.0.31903.59
-            MinimumVisualStudioVersion = 10.0.40219.1
-            Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.GameScripts", "Inno.GameScripts.csproj", "{{gameProjectId}}"
-            EndProject
-            Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.EditorScripts", "Inno.EditorScripts.csproj", "{{editorProjectId}}"
-            EndProject
-            Global
-            	GlobalSection(SolutionConfigurationPlatforms) = preSolution
-            		Debug|Any CPU = Debug|Any CPU
-            	EndGlobalSection
-            	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-            		{{gameProjectId}}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-            		{{gameProjectId}}.Debug|Any CPU.Build.0 = Debug|Any CPU
-            		{{editorProjectId}}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-            		{{editorProjectId}}.Debug|Any CPU.Build.0 = Debug|Any CPU
-            	EndGlobalSection
-            EndGlobal
-            """;
+        var builder = new StringBuilder();
+        builder.AppendLine("Microsoft Visual Studio Solution File, Format Version 12.00");
+        builder.AppendLine("# Visual Studio Version 17");
+        builder.AppendLine("VisualStudioVersion = 17.0.31903.59");
+        builder.AppendLine("MinimumVisualStudioVersion = 10.0.40219.1");
+        foreach (ScriptAssemblyInput assembly in assemblies)
+        {
+            string id = FormatProjectId(assembly.name);
+            builder.AppendLine(
+                $"Project(\"{{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}}\") = " +
+                $"\"{assembly.name}\", \"{assembly.name}.csproj\", \"{id}\"");
+            builder.AppendLine("EndProject");
+        }
+        builder.AppendLine("Global");
+        builder.AppendLine("\tGlobalSection(SolutionConfigurationPlatforms) = preSolution");
+        builder.AppendLine("\t\tDebug|Any CPU = Debug|Any CPU");
+        builder.AppendLine("\tEndGlobalSection");
+        builder.AppendLine("\tGlobalSection(ProjectConfigurationPlatforms) = postSolution");
+        foreach (ScriptAssemblyInput assembly in assemblies)
+        {
+            string id = FormatProjectId(assembly.name);
+            builder.AppendLine($"\t\t{id}.Debug|Any CPU.ActiveCfg = Debug|Any CPU");
+            builder.AppendLine($"\t\t{id}.Debug|Any CPU.Build.0 = Debug|Any CPU");
+        }
+        builder.AppendLine("\tEndGlobalSection");
+        builder.AppendLine("EndGlobal");
+        return builder.ToString();
+    }
+
+    private static string FormatProjectId(string assemblyName)
+    {
+        byte[] bytes = SHA256.HashData(Encoding.UTF8.GetBytes("Inno.ScriptProject:" + assemblyName));
+        return "{" + new Guid(bytes.AsSpan(0, 16)).ToString().ToUpperInvariant() + "}";
     }
 }

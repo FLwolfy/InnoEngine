@@ -47,6 +47,7 @@ public sealed class FileBrowserPanel : EditorPanel
     private readonly FileBrowserData m_data = new();
     private readonly FileBrowserNavigation m_navigation = new();
     private readonly FileBrowserDragDrop m_dragDrop = new();
+    private readonly FileBrowserChangeTracker m_changeTracker = new();
     private readonly FileBrowserTree m_tree;
 
     private float m_treeWidth = C_TREE_WIDTH;
@@ -74,6 +75,18 @@ public sealed class FileBrowserPanel : EditorPanel
         : base("asset.file-browser", "File")
     {
         m_tree = new FileBrowserTree(m_data, m_navigation, m_dragDrop);
+    }
+
+    /// <inheritdoc />
+    public override void OnAttach(EditorContext context)
+    {
+        m_changeTracker.Attach(context);
+    }
+
+    /// <inheritdoc />
+    public override void OnDetach(EditorContext context)
+    {
+        m_changeTracker.Detach();
     }
 
     /// <inheritdoc />
@@ -413,7 +426,7 @@ public sealed class FileBrowserPanel : EditorPanel
     {
         _ = NativeImGui.TableSetColumnIndex(0);
         string icon = entry.isDirectory ? ImGuiIcon.Folder : GetFileIcon(entry.relativePath);
-        string name = Path.GetFileName(entry.relativePath);
+        string name = entry.nameWithoutExtension;
         bool selected = string.Equals(context.selection.selectedPath, entry.relativePath, StringComparison.Ordinal);
 
         NativeImGui.PushStyleColor(ImGuiCol.Header, Vector4.Zero);

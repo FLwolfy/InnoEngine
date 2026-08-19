@@ -26,7 +26,7 @@ namespace Inno.Assets.Loader;
 public sealed class AssetLoader : IDisposable
 {
     internal const string C_META_POSTFIX = ".imeta";
-    internal const string C_ARTIFACT_POSTFIX = ".abin";
+    internal const string C_LEGACY_ARTIFACT_POSTFIX = ".abin";
 
     [ThreadStatic]
     private static AssetLoader? t_activeLoader;
@@ -37,6 +37,7 @@ public sealed class AssetLoader : IDisposable
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<Guid, Task<AssetObject?>> m_inFlightIdLoads = [];
     private readonly AssetImporterRegistry m_importers = new();
+    private readonly AssetBuildProcessorRegistry m_buildProcessors = new();
     private readonly Dictionary<string, AssetRecord> m_recordsByPath = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<Guid, AssetRecord> m_recordsById = [];
     private readonly Dictionary<Guid, WeakReference<AssetObject>> m_missingAssets = [];
@@ -45,29 +46,44 @@ public sealed class AssetLoader : IDisposable
     private readonly ConditionalWeakTable<AssetObject, AssetDependencySet> m_dependencyRetention = new();
     private readonly HashSet<string> m_activeImports = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Guid> m_pendingImportIds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly AssetArtifactStore m_artifacts;
+    private readonly AssetCatalogStore m_catalog;
+    private readonly AssetSourcePolicy m_sourcePolicy;
 
     private bool m_disposed;
+    private long m_importerRegistryVersion = -1;
+    private long m_buildProcessorRegistryVersion = -1;
 
-    /// <summary>Creates an asset loader for one source and artifact root pair.</summary>
+    /// <summary>Creates an asset loader for one source and Library root pair.</summary>
     /// <param name="assetRoot">The absolute source root.</param>
-    /// <param name="artifactRoot">The absolute generated artifact root.</param>
-    public AssetLoader(string assetRoot, string artifactRoot)
+    /// <param name="libraryRoot">The absolute rebuildable Library root.</param>
+    /// <param name="sourcePolicy">The source filtering policy, or <see langword="null"/> for defaults.</param>
+    public AssetLoader(
+        string assetRoot,
+        string libraryRoot,
+        AssetSourcePolicy? sourcePolicy = null)
     {
         if (string.IsNullOrWhiteSpace(assetRoot))
             throw new ArgumentException("Asset root is required.", nameof(assetRoot));
-        if (string.IsNullOrWhiteSpace(artifactRoot))
-            throw new ArgumentException("Artifact root is required.", nameof(artifactRoot));
+        if (string.IsNullOrWhiteSpace(libraryRoot))
+            throw new ArgumentException("Library root is required.", nameof(libraryRoot));
         this.assetRoot = Path.GetFullPath(assetRoot);
-        this.artifactRoot = Path.GetFullPath(artifactRoot);
+        this.libraryRoot = Path.GetFullPath(libraryRoot);
         Directory.CreateDirectory(this.assetRoot);
-        Directory.CreateDirectory(this.artifactRoot);
+        Directory.CreateDirectory(this.libraryRoot);
+        m_sourcePolicy = sourcePolicy ?? AssetSourcePolicy.defaultPolicy;
+        m_artifacts = new AssetArtifactStore(this.libraryRoot);
+        m_catalog = new AssetCatalogStore(this.libraryRoot);
     }
 
     /// <summary>Gets the absolute source root.</summary>
     public string assetRoot { get; }
 
-    /// <summary>Gets the absolute generated artifact root.</summary>
-    public string artifactRoot { get; }
+    /// <summary>Gets the absolute rebuildable Library root.</summary>
+    public string libraryRoot { get; }
+
+    /// <summary>Gets the derived content-addressed artifact root.</summary>
+    public string artifactRoot => m_artifacts.root;
 
     /// <summary>Occurs after a loaded canonical asset is updated in place.</summary>
     public event Action<AssetObject>? AssetReloaded;
@@ -229,6 +245,114 @@ public sealed class AssetLoader : IDisposable
         Execute(() => ApplySourceChangesLocked(changes));
     }
 
+    /// <summary>Waits for pending import and build work.</summary>
+    public void WaitForIdle()
+        => Execute(static () => { });
+
+    /// <summary>Collects unreachable content-addressed artifacts.</summary>
+    /// <param name="gracePeriod">The minimum age of an unreachable bundle.</param>
+    /// <param name="maximumSizeBytes">The cache size limit, or zero for no limit.</param>
+    /// <returns>The number of removed artifact bundles.</returns>
+    public int CollectArtifacts(TimeSpan gracePeriod, long maximumSizeBytes)
+    {
+        return Execute(() =>
+        {
+            HashSet<string> reachable = [];
+            foreach (AssetRecord record in m_recordsByPath.Values)
+            {
+                AddArtifactKey(reachable, record.meta.artifactKey);
+                AddArtifactKey(reachable, record.meta.lastSuccessfulArtifactKey);
+            }
+            return m_artifacts.Collect(reachable, gracePeriod, maximumSizeBytes);
+        });
+    }
+
+    /// <summary>Refreshes extension registries and reimports affected sources when their snapshot changed.</summary>
+    /// <returns><see langword="true"/> when the importer registry changed.</returns>
+    public bool RefreshRegistries()
+    {
+        return Execute(() =>
+        {
+            long version = m_importers.snapshotVersion;
+            long buildVersion = m_buildProcessors.snapshotVersion;
+            if (version == m_importerRegistryVersion &&
+                buildVersion == m_buildProcessorRegistryVersion)
+                return false;
+            RescanLocked();
+            return true;
+        });
+    }
+
+    /// <summary>Tries to get a catalog snapshot by source-relative path.</summary>
+    public bool TryGetInfo(string relativePath, out AssetInfo? info)
+    {
+        string normalized = NormalizeRelativePath(relativePath);
+        AssetInfo? result = Execute(() => CreateInfo(FindRecordLocked(normalized)));
+        info = result;
+        return result is not null;
+    }
+
+    /// <summary>Tries to get a catalog snapshot by persistent identity.</summary>
+    public bool TryGetInfo(Guid persistentId, out AssetInfo? info)
+    {
+        AssetInfo? result = Execute(() => m_recordsById.TryGetValue(persistentId, out AssetRecord? record)
+            ? CreateInfo(record)
+            : null);
+        info = result;
+        return result is not null;
+    }
+
+    /// <summary>Tries to resolve a named output from the current artifact bundle.</summary>
+    public bool TryGetArtifact(
+        Guid persistentId,
+        string outputName,
+        out AssetArtifactInfo? artifact)
+    {
+        AssetArtifactInfo? result = Execute(() =>
+        {
+            if (!m_recordsById.TryGetValue(persistentId, out AssetRecord? record))
+                return null;
+            return m_artifacts.TryGet(
+                new AssetArtifactKey(record.meta.artifactKey),
+                outputName,
+                out AssetArtifactInfo? found)
+                ? found
+                : null;
+        });
+        artifact = result;
+        return result is not null;
+    }
+
+    /// <summary>Runs the registered aggregate processor for a definition asset.</summary>
+    /// <param name="definition">The build definition asset.</param>
+    /// <param name="inputs">The immutable input catalog snapshots.</param>
+    /// <param name="cancellationToken">Cancellation for the candidate build.</param>
+    /// <returns>The content-addressed output bundle key.</returns>
+    public ValueTask<AssetArtifactKey> BuildAsync(
+        AssetObject definition,
+        IReadOnlyList<AssetInfo> inputs,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(inputs);
+        AssetArtifactKey key = Execute(() =>
+        {
+            AssetBuildProcessor processor = m_buildProcessors.Find(definition.GetType())
+                ?? throw new InvalidOperationException(
+                    $"No asset build processor accepts '{definition.GetType().FullName}'.");
+            var output = new AssetArtifactWriter();
+            processor.BuildInternalAsync(definition, inputs, output, cancellationToken)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+            if (output.outputs.Count == 0)
+                throw new InvalidOperationException("An asset build processor produced no outputs.");
+            string fingerprint = CreateBuildFingerprint(processor, definition, inputs);
+            return m_artifacts.Commit(fingerprint, output.outputs);
+        });
+        return ValueTask.FromResult(key);
+    }
+
     /// <summary>Tries to resolve a persistent identity without loading the asset.</summary>
     /// <param name="relativePath">The source-relative path.</param>
     /// <param name="persistentId">The resolved identity.</param>
@@ -306,8 +430,20 @@ public sealed class AssetLoader : IDisposable
         if (importer is null)
             return false;
 
-        Guid persistentId = FindRecordLocked(relativePath)?.persistentId
+        AssetRecord? existingRecord = FindRecordLocked(relativePath);
+        Guid persistentId = existingRecord?.persistentId
             ?? m_pendingImportIds.GetValueOrDefault(relativePath);
+        if (persistentId == Guid.Empty &&
+            TryReadSourceMeta(GetMetaPath(relativePath), out AssetSourceMeta sourceMeta))
+        {
+            persistentId = sourceMeta.persistentId;
+            AssetRecord? sameId = FindRecordByIdWithoutLoading(persistentId);
+            if (sameId is not null &&
+                !string.Equals(sameId.relativePath, relativePath, StringComparison.OrdinalIgnoreCase))
+            {
+                persistentId = Guid.NewGuid();
+            }
+        }
         if (persistentId == Guid.Empty)
             persistentId = Guid.NewGuid();
         m_pendingImportIds[relativePath] = persistentId;
@@ -315,22 +451,78 @@ public sealed class AssetLoader : IDisposable
         try
         {
             byte[] sourceBytes = IOFile.ReadAllBytes(sourcePath);
-            ImportBuild build = BuildImportLocked(relativePath, sourceBytes, importer, persistentId);
             try
             {
-                CommitBuildLocked(build, writeSource: false, sourceBytes);
+                ImportBuild build = BuildImportLocked(relativePath, sourceBytes, importer, persistentId);
+                try
+                {
+                    CommitBuildLocked(build, writeSource: false, sourceBytes);
+                }
+                finally
+                {
+                    AssetRuntimeHost.Release(build.asset);
+                }
+                return true;
             }
-            finally
+            catch (Exception exception)
             {
-                AssetRuntimeAccess.Release(build.asset);
+                RecordImportFailureLocked(
+                    relativePath,
+                    sourceBytes,
+                    importer,
+                    persistentId,
+                    exception);
+                return false;
             }
-            return true;
+        }
+        catch (IOException exception)
+        {
+            RecordImportFailureLocked(relativePath, [], importer, persistentId, exception);
+            return false;
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            RecordImportFailureLocked(relativePath, [], importer, persistentId, exception);
+            return false;
         }
         finally
         {
             m_activeImports.Remove(relativePath);
             m_pendingImportIds.Remove(relativePath);
         }
+    }
+
+    private void RecordImportFailureLocked(
+        string relativePath,
+        byte[] sourceBytes,
+        AssetImporter importer,
+        Guid persistentId,
+        Exception exception)
+    {
+        AssetRecord record = FindRecordLocked(relativePath) ?? new AssetRecord
+        {
+            relativePath = relativePath,
+            persistentId = persistentId
+        };
+        record.relativePath = relativePath;
+        record.persistentId = persistentId;
+        record.meta.relativePath = relativePath;
+        record.meta.persistentId = persistentId;
+        record.meta.sourceHash = sourceBytes.Length == 0 ? string.Empty : ComputeSha256Hex(sourceBytes);
+        record.meta.importerId = importer.importerId;
+        record.meta.importerVersion = importer.version;
+        record.meta.importerImplementationFingerprint = GetImporterImplementationFingerprint(importer);
+        if (record.meta.stableAssetTypeId == Guid.Empty &&
+            TypeCacheManager.TryGetStableTypeId(importer.targetAssetType, out Guid stableTypeId))
+        {
+            record.meta.stableAssetTypeId = stableTypeId;
+            record.stableTypeId = stableTypeId;
+        }
+        record.meta.importStatus = (int)AssetImportStatus.Failed;
+        record.meta.diagnostics = [$"{exception.GetType().Name}: {exception.Message}"];
+        AddOrReplaceRecordLocked(record);
+        WriteSourceMeta(record.meta);
+        CommitCatalogLocked();
     }
 
     private ImportBuild BuildImportLocked(
@@ -345,7 +537,11 @@ public sealed class AssetLoader : IDisposable
             GetSourcePath(relativePath),
             sourceBytes,
             sourceHash);
-        AssetImportProduct product = importer.ImportInternal(context);
+        AssetImportProduct product = importer
+            .ImportInternalAsync(context, CancellationToken.None)
+            .AsTask()
+            .GetAwaiter()
+            .GetResult();
         if (!importer.targetAssetType.IsInstanceOfType(product.asset))
         {
             throw new InvalidOperationException(
@@ -358,9 +554,13 @@ public sealed class AssetLoader : IDisposable
                 $"Imported asset type '{product.asset.GetType().FullName}' requires a StableTypeId.");
         }
 
-        AssetRuntimeAccess.Initialize(product.asset, relativePath, sourceHash, product.runtimePayload, false, 1);
         AssetDependency[] runtimeDependencies = ResolveDeclaredDependenciesLocked(context);
         byte[] state = SerializationManager.Encode(writer => writer.WriteProperties(product.asset));
+        AssetRuntimeHost.Initialize(product.asset, relativePath, sourceHash, product.runtimePayload, false, 1);
+        var outputs = new Dictionary<string, ReadOnlyMemory<byte>>(product.outputs, StringComparer.Ordinal);
+        if (!outputs.TryAdd("asset-state", state))
+            throw new InvalidOperationException("The artifact output name 'asset-state' is reserved.");
+        string implementationFingerprint = GetImporterImplementationFingerprint(importer);
         var meta = new AssetMeta
         {
             persistentId = persistentId,
@@ -371,10 +571,20 @@ public sealed class AssetLoader : IDisposable
             stableAssetTypeId = stableTypeId,
             assetStateBytes = state,
             runtimeDependencies = runtimeDependencies.Select(ToData).ToArray(),
-            importDependencies = context.importDependencies.Select(ToData).ToArray()
+            importDependencies = context.importDependencies
+                .Select(CreateImportDependencyDataLocked)
+                .ToArray(),
+            importStatus = (int)AssetImportStatus.Imported,
+            importerImplementationFingerprint = implementationFingerprint,
+            diagnostics = product.diagnostics.ToArray()
         };
         ValidateImportDependenciesLocked(meta);
-        return new ImportBuild(meta, product.asset, product.runtimePayload.ToArray(), runtimeDependencies);
+        return new ImportBuild(
+            meta,
+            product.asset,
+            product.runtimePayload.ToArray(),
+            outputs,
+            runtimeDependencies);
     }
 
     private void CommitBuildLocked(ImportBuild build, bool writeSource, byte[] sourceBytes)
@@ -391,14 +601,27 @@ public sealed class AssetLoader : IDisposable
         {
             if (canonical.GetType() != build.asset.GetType())
             {
-                throw new InvalidOperationException(
-                    $"Loaded asset '{build.meta.relativePath}' cannot change type from " +
-                    $"'{canonical.GetType().FullName}' to '{build.asset.GetType().FullName}'.");
+                AssetObject replaced = canonical;
+                AssetRuntimeHost.Initialize(
+                    replaced,
+                    build.meta.relativePath,
+                    build.meta.sourceHash,
+                    replaced.runtimePayload,
+                    true,
+                    replaced.contentVersion + 1);
+                AssetRuntimeHost.Release(replaced);
+                IdentityManager.Unregister(replaced);
+                existing!.asset = null;
+                canonical = null;
+                PublishReloaded(replaced);
             }
+        }
+        if (canonical is not null)
+        {
             previousState = SerializationManager.Encode(writer => writer.WriteProperties(canonical));
             previousPayload = canonical.runtimePayload.ToArray();
             previousPath = canonical.sourcePath;
-            previousHash = AssetRuntimeAccess.GetSourceHash(canonical);
+            previousHash = AssetRuntimeHost.GetSourceHash(canonical);
             previousVersion = canonical.contentVersion;
             previousMissing = canonical.isMissing;
             try
@@ -408,7 +631,7 @@ public sealed class AssetLoader : IDisposable
                     reader.RestoreProperties(canonical);
                     return 0;
                 });
-                AssetRuntimeAccess.Initialize(
+                AssetRuntimeHost.Initialize(
                     canonical,
                     build.meta.relativePath,
                     build.meta.sourceHash,
@@ -432,23 +655,24 @@ public sealed class AssetLoader : IDisposable
 
         string sourcePath = GetSourcePath(build.meta.relativePath);
         string metaPath = GetMetaPath(build.meta.relativePath);
-        string artifactPath = GetArtifactPath(build.meta.relativePath);
         FileSnapshot sourceSnapshot = CaptureFile(sourcePath);
         FileSnapshot metaSnapshot = CaptureFile(metaPath);
-        FileSnapshot artifactSnapshot = CaptureFile(artifactPath);
         try
         {
             if (writeSource)
                 WriteAtomic(sourcePath, sourceBytes);
-            WriteAtomic(metaPath, SerializationManager.Serialize(build.meta));
-            WriteAtomic(artifactPath, build.payload);
+            AssetArtifactKey artifactKey = m_artifacts.Commit(
+                CreateImportFingerprint(build.meta),
+                build.outputs);
+            build.meta.artifactKey = artifactKey.value;
+            build.meta.lastSuccessfulArtifactKey = artifactKey.value;
+            WriteSourceMeta(build.meta);
         }
         catch
         {
             if (writeSource)
                 RestoreFile(sourcePath, sourceSnapshot);
             RestoreFile(metaPath, metaSnapshot);
-            RestoreFile(artifactPath, artifactSnapshot);
             if (canonical is not null && previousState is not null && previousPayload is not null)
             {
                 RestoreCanonical(
@@ -474,6 +698,7 @@ public sealed class AssetLoader : IDisposable
             record.asset = canonical;
         AddOrReplaceRecordLocked(record);
         UpdateGraphsLocked(record);
+        CommitCatalogLocked();
         if (canonical is not null)
         {
             AttachDependenciesLocked(record);
@@ -492,8 +717,14 @@ public sealed class AssetLoader : IDisposable
         AssetImporter? importer = m_importers.FindByPath(relativePath);
         if (importer is null || !importer.targetAssetType.IsInstanceOfType(asset))
             return false;
-        if (!importer.TryExportInternal(asset, out byte[] sourceBytes))
+        ReadOnlyMemory<byte>? exported = importer
+            .ExportInternalAsync(asset, CancellationToken.None)
+            .AsTask()
+            .GetAwaiter()
+            .GetResult();
+        if (exported is null)
             return false;
+        byte[] sourceBytes = exported.Value.ToArray();
         Guid persistentId = asset.identity.persistentId;
         if (persistentId == Guid.Empty)
             persistentId = Guid.NewGuid();
@@ -523,7 +754,7 @@ public sealed class AssetLoader : IDisposable
             }
             finally
             {
-                AssetRuntimeAccess.Release(build.asset);
+                AssetRuntimeHost.Release(build.asset);
             }
         }
         catch
@@ -540,7 +771,7 @@ public sealed class AssetLoader : IDisposable
             committed.asset = asset;
             if (asset.identity.runtimeId is null)
                 IdentityManager.Register(asset, persistentId);
-            AssetRuntimeAccess.Initialize(asset, relativePath, build.meta.sourceHash, build.payload, false, 1);
+            AssetRuntimeHost.Initialize(asset, relativePath, build.meta.sourceHash, build.payload, false, 1);
             AttachDependenciesLocked(committed);
         }
         return true;
@@ -549,10 +780,11 @@ public sealed class AssetLoader : IDisposable
     private AssetObject? LoadPathLocked(string relativePath, Type requestedAssetType)
     {
         AssetRecord? record = FindRecordLocked(relativePath);
-        if (record is null || IsStale(record))
+        bool sourceExists = IOFile.Exists(GetSourcePath(relativePath));
+        if (record is null || (sourceExists && IsStale(record)))
         {
             if (!ImportLocked(relativePath))
-                return null;
+                return record is null ? null : LoadRecordLocked(record, requestedAssetType);
             record = FindRecordLocked(relativePath);
         }
         return record is null ? null : LoadRecordLocked(record, requestedAssetType);
@@ -635,11 +867,14 @@ public sealed class AssetLoader : IDisposable
             reader.RestoreProperties(asset);
             return 0;
         });
-        byte[] payload = IOFile.Exists(GetArtifactPath(record.relativePath))
-            ? IOFile.ReadAllBytes(GetArtifactPath(record.relativePath))
-            : record.payload;
+        byte[] payload = m_artifacts.Read(
+            new AssetArtifactKey(record.meta.artifactKey),
+            "runtime");
+        if (payload.Length == 0 && record.payload.Length > 0)
+            payload = record.payload;
         record.payload = payload;
-        AssetRuntimeAccess.Initialize(asset, record.relativePath, record.meta.sourceHash, payload, false, 1);
+        bool isMissing = record.meta.importStatus == (int)AssetImportStatus.Missing;
+        AssetRuntimeHost.Initialize(asset, record.relativePath, record.meta.sourceHash, payload, isMissing, 1);
     }
 
     private void AttachDependenciesLocked(AssetRecord record)
@@ -694,7 +929,7 @@ public sealed class AssetLoader : IDisposable
         AssetObject missing = (AssetObject)(Activator.CreateInstance(type, nonPublic: true)
             ?? throw new InvalidOperationException($"Missing asset type '{type.FullName}' cannot be created."));
         IdentityManager.InitializePersistentIdentity(missing, persistentId);
-        AssetRuntimeAccess.Initialize(missing, lastKnownPath, string.Empty, ReadOnlyMemory<byte>.Empty, true, 0);
+        AssetRuntimeHost.Initialize(missing, lastKnownPath, string.Empty, ReadOnlyMemory<byte>.Empty, true, 0);
         m_missingAssets[persistentId] = new WeakReference<AssetObject>(missing);
         return missing;
     }
@@ -752,20 +987,30 @@ public sealed class AssetLoader : IDisposable
     private void RescanLocked()
     {
         LoadCatalogLocked();
+        EnsureDirectoryMetadataLocked();
         string[] sourceFiles = Directory.GetFiles(assetRoot, "*", SearchOption.AllDirectories)
-            .Where(path => !path.EndsWith(C_META_POSTFIX, StringComparison.OrdinalIgnoreCase))
+            .Where(path => !IsSourceIgnored(
+                NormalizeRelativePath(Path.GetRelativePath(assetRoot, path)),
+                isDirectory: false))
             .ToArray();
         foreach (string sourceFile in sourceFiles)
         {
             string relative = NormalizeRelativePath(Path.GetRelativePath(assetRoot, sourceFile));
             AssetImporter? importer = m_importers.FindByPath(relative);
             if (importer is null)
+            {
+                TrackUnsupportedSourceLocked(relative);
                 continue;
+            }
+            TryAssociateUntrackedRenameLocked(relative, sourceFile);
             AssetRecord? record = FindRecordLocked(relative);
             if (record is null ||
                 record.asset?.isMissing == true ||
                 IsStale(record) ||
-                !IOFile.Exists(GetArtifactPath(relative)))
+                !m_artifacts.TryGet(
+                    new AssetArtifactKey(record.meta.artifactKey),
+                    "asset-state",
+                    out _))
             {
                 ImportLocked(relative);
             }
@@ -773,37 +1018,58 @@ public sealed class AssetLoader : IDisposable
 
         foreach (AssetRecord record in m_recordsByPath.Values.ToArray())
         {
-            if (IOFile.Exists(GetSourcePath(record.relativePath)))
+            if (IOFile.Exists(GetSourcePath(record.relativePath)) ||
+                Directory.Exists(GetSourcePath(record.relativePath)))
                 continue;
             HandleDeletedLocked(record.relativePath);
         }
+        CommitCatalogLocked();
+        m_importerRegistryVersion = m_importers.snapshotVersion;
+        m_buildProcessorRegistryVersion = m_buildProcessors.snapshotVersion;
     }
 
     private void LoadCatalogLocked()
     {
+        AssetMeta[] catalogEntries = m_catalog.Load();
+        for (int i = 0; i < catalogEntries.Length; i++)
+            MergeCatalogMetaLocked(catalogEntries[i]);
+
         foreach (string metaPath in Directory.GetFiles(assetRoot, "*" + C_META_POSTFIX, SearchOption.AllDirectories))
         {
             string relativeMeta = NormalizeRelativePath(Path.GetRelativePath(assetRoot, metaPath));
             string relative = relativeMeta[..^C_META_POSTFIX.Length];
+            if (Directory.Exists(GetSourcePath(relative)))
+                continue;
             try
             {
-                AssetMeta meta = SerializationManager.Deserialize<AssetMeta>(IOFile.ReadAllBytes(metaPath));
-                if (meta.schemaVersion != AssetMeta.C_SCHEMA_VERSION || meta.persistentId == Guid.Empty)
+                AssetSourceMeta sourceMeta = SerializationManager.Deserialize<AssetSourceMeta>(
+                    IOFile.ReadAllBytes(metaPath));
+                if (sourceMeta.schemaVersion == AssetSourceMeta.C_SCHEMA_VERSION &&
+                    sourceMeta.persistentId != Guid.Empty)
+                {
+                    AssetRecord? existing = FindRecordByIdWithoutLoading(sourceMeta.persistentId);
+                    if (existing is not null &&
+                        !string.Equals(existing.relativePath, relative, StringComparison.OrdinalIgnoreCase) &&
+                        IOFile.Exists(GetSourcePath(existing.relativePath)))
+                    {
+                        sourceMeta.persistentId = Guid.NewGuid();
+                        WriteAtomic(metaPath, SerializationManager.Serialize(sourceMeta));
+                    }
                     continue;
-                AssetRecord record = FindRecordLocked(relative) ?? new AssetRecord();
-                record.relativePath = relative;
-                record.persistentId = meta.persistentId;
-                record.stableTypeId = meta.stableAssetTypeId;
-                record.meta = meta;
-                record.payload = IOFile.Exists(GetArtifactPath(relative))
-                    ? IOFile.ReadAllBytes(GetArtifactPath(relative))
-                    : [];
-                AddOrReplaceRecordLocked(record);
-                UpdateGraphsLocked(record);
+                }
+
+                AssetMeta legacyMeta = SerializationManager.Deserialize<AssetMeta>(IOFile.ReadAllBytes(metaPath));
+                if (legacyMeta.schemaVersion == AssetMeta.C_SCHEMA_VERSION &&
+                    legacyMeta.persistentId != Guid.Empty)
+                {
+                    legacyMeta.relativePath = relative;
+                    MigrateLegacyRecordLocked(legacyMeta);
+                }
             }
             catch
             {
-                // Generated metadata is a cache and is repaired from source by Rescan.
+                // A corrupt sidecar remains visible as a catalog diagnostic and is never allowed
+                // to terminate the host during source reconciliation.
             }
         }
     }
@@ -832,25 +1098,80 @@ public sealed class AssetLoader : IDisposable
     {
         string oldNormalized = NormalizeRelativePath(oldPath);
         string newNormalized = NormalizeRelativePath(newPath);
+        if (Directory.Exists(GetSourcePath(newNormalized)))
+        {
+            HandleDirectoryRenameLocked(oldNormalized, newNormalized);
+            return;
+        }
         AssetRecord? record = FindRecordLocked(oldNormalized);
         if (record is null)
         {
             ImportLocked(newNormalized);
             return;
         }
-        m_recordsByPath.Remove(oldNormalized);
         string oldMeta = GetMetaPath(oldNormalized);
         string newMeta = GetMetaPath(newNormalized);
-        string oldArtifact = GetArtifactPath(oldNormalized);
-        string newArtifact = GetArtifactPath(newNormalized);
-        MoveGeneratedFile(oldMeta, newMeta);
-        MoveGeneratedFile(oldArtifact, newArtifact);
+        if (TryReadSourceMeta(newMeta, out AssetSourceMeta targetMeta) &&
+            targetMeta.persistentId != record.persistentId)
+        {
+            record.meta.importStatus = (int)AssetImportStatus.Conflict;
+            record.meta.diagnostics =
+            [
+                $"Rename target '{newNormalized}' already owns persistent id " +
+                $"'{targetMeta.persistentId}'."
+            ];
+            CommitCatalogLocked();
+            return;
+        }
+
+        if (IOFile.Exists(oldMeta) && !IOFile.Exists(newMeta))
+            MoveGeneratedFile(oldMeta, newMeta);
+        m_recordsByPath.Remove(oldNormalized);
+        m_importGraph.RemoveNode(oldNormalized);
         record.relativePath = newNormalized;
         record.meta.relativePath = newNormalized;
-        if (record.asset is not null)
-            AssetRuntimeAccess.UpdateSourcePath(record.asset, newNormalized);
+        AssetImporter? importer = m_importers.FindByPath(newNormalized);
+        if (importer is null)
+        {
+            record.meta.importStatus = (int)AssetImportStatus.Unsupported;
+            record.meta.diagnostics =
+                [$"No importer supports '{Path.GetExtension(newNormalized)}'."];
+            record.meta.importerId = string.Empty;
+            record.meta.artifactKey = string.Empty;
+            if (record.asset is not null)
+            {
+                AssetObject replaced = record.asset;
+                AssetRuntimeHost.Initialize(
+                    replaced,
+                    newNormalized,
+                    record.meta.sourceHash,
+                    ReadOnlyMemory<byte>.Empty,
+                    true,
+                    replaced.contentVersion + 1);
+                AssetRuntimeHost.Release(replaced);
+                IdentityManager.Unregister(replaced);
+                record.asset = null;
+                PublishReloaded(replaced);
+            }
+        }
+        else
+        {
+            record.meta.importStatus = (int)AssetImportStatus.Imported;
+            record.meta.diagnostics = [];
+            if (record.asset is not null)
+                AssetRuntimeHost.UpdateSourcePath(record.asset, newNormalized);
+        }
         m_recordsByPath[newNormalized] = record;
-        WriteAtomic(newMeta, SerializationManager.Serialize(record.meta));
+        WriteSourceMeta(record.meta);
+        UpdateGraphsLocked(record);
+        CommitCatalogLocked();
+
+        if (importer is not null &&
+            (!string.Equals(importer.importerId, record.meta.importerId, StringComparison.Ordinal) ||
+             IsStale(record)))
+        {
+            ImportLocked(newNormalized);
+        }
     }
 
     private void HandleDeletedLocked(string relativePath)
@@ -859,22 +1180,33 @@ public sealed class AssetLoader : IDisposable
         AssetRecord? record = FindRecordLocked(normalized);
         if (record is null)
             return;
-        DeleteIfExists(GetMetaPath(normalized));
-        DeleteIfExists(GetArtifactPath(normalized));
-        if (record.asset is null)
+        record.meta.importStatus = (int)AssetImportStatus.Missing;
+        record.meta.diagnostics = [$"Source '{normalized}' is missing."];
+        if (!IOFile.Exists(GetMetaPath(normalized)))
         {
-            RemoveRecordLocked(record);
-            return;
+            record.meta.artifactKey = string.Empty;
+            record.meta.lastSuccessfulArtifactKey = string.Empty;
+            record.meta.assetStateBytes = [];
+            record.meta.runtimeDependencies = [];
+            record.meta.importDependencies = [];
+            if (record.persistentId != Guid.Empty)
+            {
+                m_runtimeGraph.ReplaceDependencies(record.persistentId, []);
+                m_importGraph.ReplaceDependencies(record.relativePath, []);
+            }
         }
-        AssetRuntimeAccess.Initialize(
-            record.asset,
-            normalized,
-            string.Empty,
-            ReadOnlyMemory<byte>.Empty,
-            true,
-            record.asset.contentVersion + 1);
-        record.payload = [];
-        PublishReloaded(record.asset);
+        if (record.asset is not null)
+        {
+            AssetRuntimeHost.Initialize(
+                record.asset,
+                normalized,
+                record.meta.sourceHash,
+                ReadOnlyMemory<byte>.Empty,
+                true,
+                record.asset.contentVersion + 1);
+            PublishReloaded(record.asset);
+        }
+        CommitCatalogLocked();
     }
 
     private IReadOnlyList<AssetDependency> GetDependenciesLocked(Guid persistentId, bool recursive)
@@ -899,14 +1231,14 @@ public sealed class AssetLoader : IDisposable
         {
             if (!m_recordsById.TryGetValue(dependentId, out AssetRecord? dependent))
                 continue;
-            locations.Add(AssetRuntimeAccess.CreateReferenceLocation(
+            locations.Add(AssetRuntimeHost.CreateReferenceLocation(
                 AssetReferenceKind.AssetDependency,
                 dependentId,
                 dependent.relativePath,
                 "runtimeDependencies"));
         }
         m_recordsById.TryGetValue(id, out AssetRecord? record);
-        return AssetRuntimeAccess.CreateReferenceInfo(
+        return AssetRuntimeHost.CreateReferenceInfo(
             id,
             asset.sourcePath,
             asset.contentVersion,
@@ -935,7 +1267,6 @@ public sealed class AssetLoader : IDisposable
                 continue;
             }
             candidate.record.lastSweepReachability = false;
-            RemoveRecordLocked(candidate.record, removeGeneratedFiles: false);
             released++;
         }
         return released;
@@ -964,7 +1295,7 @@ public sealed class AssetLoader : IDisposable
         {
             if (record.asset is null)
                 continue;
-            AssetRuntimeAccess.Release(record.asset);
+            AssetRuntimeHost.Release(record.asset);
             IdentityManager.Unregister(record.asset);
             record.asset = null;
         }
@@ -974,6 +1305,7 @@ public sealed class AssetLoader : IDisposable
         m_importGraph.Clear();
         m_missingAssets.Clear();
         m_importers.Dispose();
+        m_buildProcessors.Dispose();
         lock (m_asyncSync)
         {
             m_inFlightPathLoads.Clear();
@@ -986,35 +1318,49 @@ public sealed class AssetLoader : IDisposable
         if (m_recordsByPath.TryGetValue(relativePath, out AssetRecord? record))
             return record;
         string metaPath = GetMetaPath(relativePath);
-        if (!IOFile.Exists(metaPath))
+        if (!TryReadSourceMeta(metaPath, out AssetSourceMeta sourceMeta))
             return null;
-        try
+        if (sourceMeta.persistentId == Guid.Empty)
+            return null;
+        if (m_recordsById.TryGetValue(sourceMeta.persistentId, out AssetRecord? sameId) &&
+            !string.Equals(sameId.relativePath, relativePath, StringComparison.OrdinalIgnoreCase))
         {
-            AssetMeta meta = SerializationManager.Deserialize<AssetMeta>(IOFile.ReadAllBytes(metaPath));
-            if (meta.schemaVersion != AssetMeta.C_SCHEMA_VERSION)
-                return null;
-            record = new AssetRecord
+            if (IOFile.Exists(GetSourcePath(sameId.relativePath)) ||
+                Directory.Exists(GetSourcePath(sameId.relativePath)))
+            {
+                sourceMeta.persistentId = Guid.NewGuid();
+                WriteAtomic(metaPath, SerializationManager.Serialize(sourceMeta));
+            }
+            else
+            {
+                HandleRenameLocked(sameId.relativePath, relativePath);
+                return sameId;
+            }
+        }
+        record = new AssetRecord
+        {
+            relativePath = relativePath,
+            persistentId = sourceMeta.persistentId,
+            meta = new AssetMeta
             {
                 relativePath = relativePath,
-                persistentId = meta.persistentId,
-                stableTypeId = meta.stableAssetTypeId,
-                meta = meta,
-                payload = IOFile.Exists(GetArtifactPath(relativePath))
-                    ? IOFile.ReadAllBytes(GetArtifactPath(relativePath))
-                    : []
-            };
-            AddOrReplaceRecordLocked(record);
-            UpdateGraphsLocked(record);
-            return record;
-        }
-        catch
-        {
-            return null;
-        }
+                persistentId = sourceMeta.persistentId,
+                importerId = sourceMeta.importerId,
+                importerVersion = sourceMeta.importerSettingsVersion,
+                importStatus = (int)AssetImportStatus.Pending
+            }
+        };
+        AddOrReplaceRecordLocked(record);
+        return record;
     }
 
     private void AddOrReplaceRecordLocked(AssetRecord record)
     {
+        if (record.persistentId == Guid.Empty)
+        {
+            m_recordsByPath[record.relativePath] = record;
+            return;
+        }
         if (m_recordsById.TryGetValue(record.persistentId, out AssetRecord? sameId) &&
             !ReferenceEquals(sameId, record) &&
             !string.Equals(sameId.relativePath, record.relativePath, StringComparison.OrdinalIgnoreCase))
@@ -1030,14 +1376,14 @@ public sealed class AssetLoader : IDisposable
     private void RemoveRecordLocked(AssetRecord record, bool removeGeneratedFiles = true)
     {
         m_recordsByPath.Remove(record.relativePath);
-        m_recordsById.Remove(record.persistentId);
-        m_runtimeGraph.RemoveNode(record.persistentId);
+        if (record.persistentId != Guid.Empty)
+        {
+            m_recordsById.Remove(record.persistentId);
+            m_runtimeGraph.RemoveNode(record.persistentId);
+        }
         m_importGraph.RemoveNode(record.relativePath);
         if (removeGeneratedFiles)
-        {
             DeleteIfExists(GetMetaPath(record.relativePath));
-            DeleteIfExists(GetArtifactPath(record.relativePath));
-        }
     }
 
     private void UpdateGraphsLocked(AssetRecord record)
@@ -1091,12 +1437,38 @@ public sealed class AssetLoader : IDisposable
             return true;
         if (record.meta.importerVersion != m_importers.FindById(record.meta.importerId)?.version)
             return true;
+        AssetImporter? importer = m_importers.FindById(record.meta.importerId);
+        if (importer is null ||
+            !string.Equals(
+                record.meta.importerImplementationFingerprint,
+                GetImporterImplementationFingerprint(importer),
+                StringComparison.Ordinal))
+        {
+            return true;
+        }
         if (record.importerGeneration != m_importers.GetGeneration(record.meta.importerId))
             return true;
-        return !string.Equals(
-            record.meta.sourceHash,
-            ComputeSha256Hex(IOFile.ReadAllBytes(sourcePath)),
-            StringComparison.Ordinal);
+        if (record.meta.importStatus != (int)AssetImportStatus.Imported)
+            return true;
+        if (!string.Equals(
+                record.meta.sourceHash,
+                ComputeSha256Hex(IOFile.ReadAllBytes(sourcePath)),
+                StringComparison.Ordinal))
+        {
+            return true;
+        }
+        for (int i = 0; i < record.meta.importDependencies.Length; i++)
+        {
+            AssetImportDependencyData dependency = record.meta.importDependencies[i];
+            if (!string.Equals(
+                    dependency.fingerprint,
+                    ComputeImportDependencyFingerprintLocked(dependency),
+                    StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void RollbackLoadLocked(AssetLoadTransaction transaction)
@@ -1105,7 +1477,7 @@ public sealed class AssetLoader : IDisposable
         {
             if (record.asset is not null)
             {
-                AssetRuntimeAccess.Release(record.asset);
+                AssetRuntimeHost.Release(record.asset);
                 IdentityManager.Unregister(record.asset);
             }
             record.asset = null;
@@ -1126,7 +1498,7 @@ public sealed class AssetLoader : IDisposable
             reader.RestoreProperties(canonical);
             return 0;
         });
-        AssetRuntimeAccess.Initialize(canonical, sourcePath, sourceHash, payload, isMissing, version);
+        AssetRuntimeHost.Initialize(canonical, sourcePath, sourceHash, payload, isMissing, version);
     }
 
     private void PublishReloaded(AssetObject asset)
@@ -1228,30 +1600,313 @@ public sealed class AssetLoader : IDisposable
         return Path.GetRelativePath(assetRoot, fullPath).Replace('\\', '/');
     }
 
+    private AssetInfo? CreateInfo(AssetRecord? record)
+    {
+        if (record is null)
+            return null;
+        return new AssetInfo(
+            record.persistentId,
+            record.relativePath,
+            record.meta.isDirectory ? AssetSourceKind.Directory : AssetSourceKind.File,
+            Enum.IsDefined(typeof(AssetImportStatus), record.meta.importStatus)
+                ? (AssetImportStatus)record.meta.importStatus
+                : AssetImportStatus.Failed,
+            record.meta.importerId,
+            record.stableTypeId,
+            new AssetArtifactKey(record.meta.artifactKey),
+            new AssetArtifactKey(record.meta.lastSuccessfulArtifactKey),
+            record.meta.diagnostics);
+    }
+
+    private void TrackUnsupportedSourceLocked(string relativePath)
+    {
+        AssetRecord record = m_recordsByPath.GetValueOrDefault(relativePath) ?? new AssetRecord();
+        if (record.persistentId != Guid.Empty)
+            m_recordsById.Remove(record.persistentId);
+        record.relativePath = relativePath;
+        record.persistentId = Guid.Empty;
+        record.stableTypeId = Guid.Empty;
+        record.meta.relativePath = relativePath;
+        record.meta.persistentId = Guid.Empty;
+        record.meta.importerId = string.Empty;
+        record.meta.stableAssetTypeId = Guid.Empty;
+        record.meta.importStatus = (int)AssetImportStatus.Unsupported;
+        record.meta.diagnostics = [$"No importer supports '{Path.GetExtension(relativePath)}'."];
+        record.meta.artifactKey = string.Empty;
+        m_recordsByPath[relativePath] = record;
+    }
+
+    private void CommitCatalogLocked()
+        => m_catalog.Commit(m_recordsByPath.Values
+            .Select(static record => record.meta)
+            .OrderBy(static meta => meta.relativePath, StringComparer.OrdinalIgnoreCase)
+            .ToArray());
+
+    private void MergeCatalogMetaLocked(AssetMeta meta)
+    {
+        if (string.IsNullOrWhiteSpace(meta.relativePath))
+            return;
+        AssetRecord record = meta.persistentId == Guid.Empty
+            ? m_recordsByPath.GetValueOrDefault(meta.relativePath) ?? new AssetRecord()
+            : FindRecordByIdWithoutLoading(meta.persistentId) ?? new AssetRecord();
+        if (!string.IsNullOrWhiteSpace(record.relativePath) &&
+            !string.Equals(record.relativePath, meta.relativePath, StringComparison.OrdinalIgnoreCase))
+        {
+            m_recordsByPath.Remove(record.relativePath);
+        }
+        record.relativePath = meta.relativePath;
+        record.persistentId = meta.persistentId;
+        record.stableTypeId = meta.stableAssetTypeId;
+        record.meta = meta;
+        record.payload = m_artifacts.Read(new AssetArtifactKey(meta.artifactKey), "runtime");
+        record.importerGeneration = m_importers.GetGeneration(meta.importerId);
+        AddOrReplaceRecordLocked(record);
+        if (record.persistentId != Guid.Empty)
+            UpdateGraphsLocked(record);
+    }
+
+    private AssetRecord? FindRecordByIdWithoutLoading(Guid persistentId)
+        => m_recordsById.TryGetValue(persistentId, out AssetRecord? record) ? record : null;
+
+    private void EnsureDirectoryMetadataLocked()
+    {
+        foreach (string directoryPath in Directory.GetDirectories(assetRoot, "*", SearchOption.AllDirectories))
+        {
+            string relativePath = NormalizeRelativePath(Path.GetRelativePath(assetRoot, directoryPath));
+            if (IsSourceIgnored(relativePath, isDirectory: true))
+                continue;
+            string metaPath = GetMetaPath(relativePath);
+            AssetSourceMeta sourceMeta;
+            if (!TryReadSourceMeta(metaPath, out sourceMeta!))
+            {
+                sourceMeta = new AssetSourceMeta
+                {
+                    persistentId = Guid.NewGuid(),
+                    sourceKind = (int)AssetSourceKind.Directory
+                };
+                WriteAtomic(metaPath, SerializationManager.Serialize(sourceMeta));
+            }
+
+            AssetRecord? record = FindRecordByIdWithoutLoading(sourceMeta.persistentId);
+            if (record is not null &&
+                !string.Equals(record.relativePath, relativePath, StringComparison.OrdinalIgnoreCase) &&
+                Directory.Exists(GetSourcePath(record.relativePath)))
+            {
+                sourceMeta.persistentId = Guid.NewGuid();
+                WriteAtomic(metaPath, SerializationManager.Serialize(sourceMeta));
+                record = null;
+            }
+            record ??= new AssetRecord();
+            record.relativePath = relativePath;
+            record.persistentId = sourceMeta.persistentId;
+            record.meta.relativePath = relativePath;
+            record.meta.persistentId = sourceMeta.persistentId;
+            record.meta.isDirectory = true;
+            record.meta.importStatus = (int)AssetImportStatus.Imported;
+            AddOrReplaceRecordLocked(record);
+        }
+    }
+
+    private void TryAssociateUntrackedRenameLocked(string relativePath, string absoluteSourcePath)
+    {
+        if (m_recordsByPath.ContainsKey(relativePath) || IOFile.Exists(GetMetaPath(relativePath)))
+            return;
+        string fingerprint = ComputeSha256Hex(IOFile.ReadAllBytes(absoluteSourcePath));
+        AssetRecord[] matches = m_recordsByPath.Values
+            .Where(record =>
+                !record.meta.isDirectory &&
+                !IOFile.Exists(GetSourcePath(record.relativePath)) &&
+                string.Equals(record.meta.sourceHash, fingerprint, StringComparison.Ordinal))
+            .ToArray();
+        if (matches.Length == 1)
+            HandleRenameLocked(matches[0].relativePath, relativePath);
+    }
+
+    private void HandleDirectoryRenameLocked(string oldPath, string newPath)
+    {
+        string oldPrefix = oldPath + "/";
+        AssetRecord[] records = m_recordsByPath.Values
+            .Where(record =>
+                string.Equals(record.relativePath, oldPath, StringComparison.OrdinalIgnoreCase) ||
+                record.relativePath.StartsWith(oldPrefix, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(static record => record.relativePath.Length)
+            .ToArray();
+        if (records.Length == 0)
+        {
+            EnsureDirectoryMetadataLocked();
+            CommitCatalogLocked();
+            return;
+        }
+
+        string oldFolderMeta = GetMetaPath(oldPath);
+        string newFolderMeta = GetMetaPath(newPath);
+        if (IOFile.Exists(oldFolderMeta) && !IOFile.Exists(newFolderMeta))
+            MoveGeneratedFile(oldFolderMeta, newFolderMeta);
+
+        for (int i = 0; i < records.Length; i++)
+        {
+            AssetRecord record = records[i];
+            string suffix = record.relativePath.Length == oldPath.Length
+                ? string.Empty
+                : record.relativePath[oldPath.Length..];
+            string destination = newPath + suffix;
+            m_recordsByPath.Remove(record.relativePath);
+            m_importGraph.RemoveNode(record.relativePath);
+            record.relativePath = destination;
+            record.meta.relativePath = destination;
+            record.meta.importStatus = (int)AssetImportStatus.Imported;
+            record.meta.diagnostics = [];
+            if (record.asset is not null)
+                AssetRuntimeHost.UpdateSourcePath(record.asset, destination);
+            m_recordsByPath[destination] = record;
+            UpdateGraphsLocked(record);
+        }
+        CommitCatalogLocked();
+    }
+
+    private void MigrateLegacyRecordLocked(AssetMeta legacyMeta)
+    {
+        string legacyArtifactPath = GetLegacyArtifactPath(legacyMeta.relativePath);
+        var outputs = new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal)
+        {
+            ["asset-state"] = legacyMeta.assetStateBytes
+        };
+        if (IOFile.Exists(legacyArtifactPath))
+            outputs["runtime"] = IOFile.ReadAllBytes(legacyArtifactPath);
+        AssetImporter? importer = m_importers.FindById(legacyMeta.importerId);
+        legacyMeta.importerImplementationFingerprint = importer is null
+            ? string.Empty
+            : GetImporterImplementationFingerprint(importer);
+        legacyMeta.importStatus = (int)AssetImportStatus.Imported;
+        AssetArtifactKey artifactKey = m_artifacts.Commit(CreateImportFingerprint(legacyMeta), outputs);
+        legacyMeta.artifactKey = artifactKey.value;
+        legacyMeta.lastSuccessfulArtifactKey = artifactKey.value;
+        MergeCatalogMetaLocked(legacyMeta);
+        WriteSourceMeta(legacyMeta);
+        CommitCatalogLocked();
+        DeleteIfExists(legacyArtifactPath);
+    }
+
+    private void WriteSourceMeta(AssetMeta meta)
+    {
+        string metaPath = GetMetaPath(meta.relativePath);
+        _ = TryReadSourceMeta(metaPath, out AssetSourceMeta existing);
+        var sourceMeta = new AssetSourceMeta
+        {
+            persistentId = meta.persistentId,
+            sourceKind = meta.isDirectory
+                ? (int)AssetSourceKind.Directory
+                : (int)AssetSourceKind.File,
+            importerId = meta.importerId,
+            importerSettingsVersion = existing?.importerSettingsVersion ?? 0,
+            importerSettingsBytes = existing?.importerSettingsBytes ?? []
+        };
+        WriteAtomic(metaPath, SerializationManager.Serialize(sourceMeta));
+    }
+
+    private static bool TryReadSourceMeta(string metaPath, out AssetSourceMeta sourceMeta)
+    {
+        sourceMeta = null!;
+        if (!IOFile.Exists(metaPath))
+            return false;
+        try
+        {
+            sourceMeta = SerializationManager.Deserialize<AssetSourceMeta>(IOFile.ReadAllBytes(metaPath));
+            return sourceMeta.schemaVersion == AssetSourceMeta.C_SCHEMA_VERSION &&
+                   sourceMeta.persistentId != Guid.Empty;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private string CreateImportFingerprint(AssetMeta meta)
+    {
+        var parts = new List<string>
+        {
+            "Inno.AssetImport.v1",
+            meta.sourceHash,
+            meta.importerId,
+            meta.importerVersion.ToString(),
+            meta.importerImplementationFingerprint
+        };
+        foreach (AssetDependencyData dependency in meta.runtimeDependencies
+                     .OrderBy(static value => value.persistentId))
+        {
+            parts.Add(dependency.persistentId.ToString("D"));
+            if (m_recordsById.TryGetValue(dependency.persistentId, out AssetRecord? record))
+                parts.Add(record.meta.artifactKey);
+        }
+        foreach (AssetImportDependencyData dependency in meta.importDependencies
+                     .OrderBy(static value => value.kind)
+                     .ThenBy(static value => value.key, StringComparer.Ordinal))
+        {
+            parts.Add(dependency.kind.ToString());
+            parts.Add(dependency.key);
+            parts.Add(dependency.fingerprint);
+        }
+        return string.Join("\n", parts);
+    }
+
+    private static string GetImporterImplementationFingerprint(AssetImporter importer)
+        => $"{importer.GetType().Assembly.ManifestModule.ModuleVersionId:D}:" +
+           $"{importer.GetType().FullName}";
+
+    private static string CreateBuildFingerprint(
+        AssetBuildProcessor processor,
+        AssetObject definition,
+        IReadOnlyList<AssetInfo> inputs)
+    {
+        var parts = new List<string>
+        {
+            "Inno.AssetBuild.v1",
+            processor.processorId,
+            processor.version.ToString(),
+            processor.GetType().Assembly.ManifestModule.ModuleVersionId.ToString("D"),
+            definition.identity.persistentId.ToString("D")
+        };
+        foreach (AssetInfo input in inputs.OrderBy(static value => value.persistentId))
+        {
+            parts.Add(input.persistentId.ToString("D"));
+            parts.Add(input.artifactKey.value);
+        }
+        return string.Join("\n", parts);
+    }
+
     private string GetSourcePath(string relativePath) => Path.Combine(assetRoot, relativePath);
     private string GetMetaPath(string relativePath) => GetSourcePath(relativePath) + C_META_POSTFIX;
-    private string GetArtifactPath(string relativePath) => Path.Combine(artifactRoot, relativePath + C_ARTIFACT_POSTFIX);
+
+    private string GetLegacyArtifactPath(string relativePath)
+    {
+        string projectRoot = Directory.GetParent(assetRoot)?.FullName ?? assetRoot;
+        return Path.Combine(projectRoot, "Artifacts", relativePath + C_LEGACY_ARTIFACT_POSTFIX);
+    }
+
+    private bool IsSourceIgnored(string relativePath, bool isDirectory)
+    {
+        string[] segments = relativePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < segments.Length - (isDirectory ? 0 : 1); i++)
+        {
+            if (m_sourcePolicy.IsIgnored(segments[i], isDirectory: true))
+                return true;
+        }
+        return m_sourcePolicy.IsIgnored(relativePath, isDirectory);
+    }
 
     private static string ComputeSha256Hex(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes));
 
+    private static void AddArtifactKey(HashSet<string> reachable, string value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+            reachable.Add(value.ToUpperInvariant());
+    }
+
     private bool IsInternalGeneratedPath(string relativePath)
-        => relativePath.EndsWith(C_META_POSTFIX, StringComparison.OrdinalIgnoreCase) ||
-           relativePath.EndsWith(C_ARTIFACT_POSTFIX, StringComparison.OrdinalIgnoreCase);
+        => AssetSourcePolicy.IsGeneratedPath(relativePath);
 
     private static void WriteAtomic(string targetPath, byte[] bytes)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
-        string temporaryPath = targetPath + ".tmp-" + Guid.NewGuid().ToString("N");
-        try
-        {
-            IOFile.WriteAllBytes(temporaryPath, bytes);
-            IOFile.Move(temporaryPath, targetPath, overwrite: true);
-        }
-        finally
-        {
-            DeleteIfExists(temporaryPath);
-        }
-    }
+        => AssetFileTransaction.WriteAtomic(targetPath, bytes);
 
     private static FileSnapshot CaptureFile(string path)
         => IOFile.Exists(path)
@@ -1274,7 +1929,9 @@ public sealed class AssetLoader : IDisposable
         if (!IOFile.Exists(sourcePath))
             return;
         Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
-        IOFile.Move(sourcePath, targetPath, overwrite: true);
+        if (IOFile.Exists(targetPath))
+            throw new IOException($"Generated metadata target '{targetPath}' already exists.");
+        IOFile.Move(sourcePath, targetPath);
     }
 
     private static void DeleteIfExists(string path)
@@ -1290,12 +1947,40 @@ public sealed class AssetLoader : IDisposable
         lastKnownPath = dependency.lastKnownPath
     };
 
-    private static AssetImportDependencyData ToData(AssetImportDependency dependency) => new()
+    private AssetImportDependencyData CreateImportDependencyDataLocked(AssetImportDependency dependency)
     {
-        kind = (int)dependency.kind,
-        key = dependency.key,
-        fingerprint = dependency.fingerprint
-    };
+        var result = new AssetImportDependencyData
+        {
+            kind = (int)dependency.kind,
+            key = dependency.key,
+            fingerprint = dependency.fingerprint
+        };
+        result.fingerprint = ComputeImportDependencyFingerprintLocked(result);
+        return result;
+    }
+
+    private string ComputeImportDependencyFingerprintLocked(AssetImportDependencyData dependency)
+    {
+        switch ((AssetImportDependencyKind)dependency.kind)
+        {
+            case AssetImportDependencyKind.Source:
+            {
+                string sourcePath = GetSourcePath(NormalizeRelativePath(dependency.key));
+                return IOFile.Exists(sourcePath)
+                    ? ComputeSha256Hex(IOFile.ReadAllBytes(sourcePath))
+                    : "MISSING";
+            }
+            case AssetImportDependencyKind.Artifact:
+                return Guid.TryParse(dependency.key, out Guid id) &&
+                       m_recordsById.TryGetValue(id, out AssetRecord? record)
+                    ? record.meta.artifactKey
+                    : "MISSING";
+            case AssetImportDependencyKind.Custom:
+                return dependency.fingerprint;
+            default:
+                return "UNKNOWN";
+        }
+    }
 
     private static AssetDependency[] GetDirectDependencies(AssetMeta meta)
         => meta.runtimeDependencies.Select(static value => new AssetDependency(
@@ -1339,6 +2024,7 @@ public sealed class AssetLoader : IDisposable
         AssetMeta meta,
         AssetObject asset,
         byte[] payload,
+        IReadOnlyDictionary<string, ReadOnlyMemory<byte>> outputs,
         AssetDependency[] dependencies);
 
     private readonly record struct SweepCandidate(

@@ -1,12 +1,11 @@
 using System;
-using System.IO;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Inno.Assets;
+using Inno.Assets.Core;
 using Inno.Core.Assemblies;
 using Inno.Core.Framework;
-using Inno.Core.Logging;
 using Inno.Core.Reflection;
 using Inno.Engine.Scene.Assets;
 
@@ -21,13 +20,13 @@ public sealed class ScriptManager : IDisposable
     private readonly ScriptManagerOptions m_options;
     private readonly SemaphoreSlim m_compileGate = new(1, 1);
     private readonly CancellationTokenSource m_lifetimeCancellation = new();
+    private readonly ScriptArtifactCache m_artifactCache;
 
-    private FileSystemWatcher? m_watcher;
     private ScriptCompilationResult? m_pendingCompilation;
     private AssemblyModuleHandle? m_scriptModule;
+    private string? m_activeCompilationDirectory;
     private string m_compilationStatus = "Waiting for script changes.";
     private long m_lastCompileRequestTimestamp;
-    private long m_generation;
     private float m_compilationProgress;
     private bool m_compileRequested;
     private bool m_disposed;
@@ -42,15 +41,13 @@ public sealed class ScriptManager : IDisposable
             throw new ArgumentException("Project root directory is required.", nameof(options));
         if (options.debounceMilliseconds < 0)
             throw new ArgumentOutOfRangeException(nameof(options), "Debounce duration cannot be negative.");
-        if (options.retainedCompilationGenerations < 1)
-            throw new ArgumentOutOfRangeException(nameof(options), "At least one compilation generation must be retained.");
         m_options = new ScriptManagerOptions
         {
-            projectRootDirectory = Path.GetFullPath(options.projectRootDirectory),
+            projectRootDirectory = System.IO.Path.GetFullPath(options.projectRootDirectory),
             autoCompile = options.autoCompile,
-            debounceMilliseconds = options.debounceMilliseconds,
-            retainedCompilationGenerations = options.retainedCompilationGenerations
+            debounceMilliseconds = options.debounceMilliseconds
         };
+        m_artifactCache = new ScriptArtifactCache(m_options.outputDirectory);
     }
 
     /// <summary>Gets whether a compilation currently owns the compiler gate.</summary>
@@ -79,29 +76,20 @@ public sealed class ScriptManager : IDisposable
     public event Action<ScriptCompilationResult>? CompilationCompleted;
 
     /// <summary>
-    /// Generates IDE files, starts file observation, and requests the initial compilation.
+    /// Generates IDE files, subscribes to the Asset Database, and requests the initial compilation.
     /// </summary>
     public void Start()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
-        Directory.CreateDirectory(m_options.assetDirectory);
-        Directory.CreateDirectory(m_options.outputDirectory);
-        m_generation = Math.Max(m_generation, FindLatestCompilationGeneration());
-        PruneCompilationOutputs();
+        if (!AssetManager.isInitialized)
+            throw new InvalidOperationException("ScriptManager requires AssetManager to be initialized first.");
+        System.IO.Directory.CreateDirectory(m_options.assetDirectory);
+        System.IO.Directory.CreateDirectory(m_options.outputDirectory);
+        _ = m_artifactCache.Collect([]);
+        AssetManager.Rescan();
         GenerateProjectFiles();
-        if (m_watcher is null)
-        {
-            m_watcher = new FileSystemWatcher(m_options.assetDirectory)
-            {
-                IncludeSubdirectories = true,
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
-                EnableRaisingEvents = true
-            };
-            m_watcher.Changed += OnProjectFileChanged;
-            m_watcher.Created += OnProjectFileChanged;
-            m_watcher.Deleted += OnProjectFileChanged;
-            m_watcher.Renamed += OnProjectFileChanged;
-        }
+        AssetManager.Changed -= OnAssetDatabaseChanged;
+        AssetManager.Changed += OnAssetDatabaseChanged;
         if (m_options.autoCompile)
             RequestCompile();
     }
@@ -148,6 +136,11 @@ public sealed class ScriptManager : IDisposable
         CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (AssetManager.isInitialized)
+        {
+            AssetManager.Update();
+            AssetManager.Rescan();
+        }
         using CancellationTokenSource linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
             m_lifetimeCancellation.Token);
@@ -157,7 +150,6 @@ public sealed class ScriptManager : IDisposable
         {
             isCompiling = true;
             SetCompilationProgress(0f, "Generating IDE project files...");
-            long generation = Interlocked.Increment(ref m_generation);
             ScriptCompilationResult result;
             try
             {
@@ -165,7 +157,6 @@ public sealed class ScriptManager : IDisposable
                 result = await ScriptCompiler
                     .CompileAsync(
                         m_options,
-                        generation,
                         SetCompilationProgress,
                         effectiveCancellation)
                     .ConfigureAwait(false);
@@ -193,7 +184,6 @@ public sealed class ScriptManager : IDisposable
                 lastCompilation = result;
                 m_pendingCompilation = result.success ? result : null;
             }
-            PruneCompilationOutputs();
             SetCompilationProgress(
                 1f,
                 result.success ? "Script compilation completed." : "Script compilation failed.");
@@ -225,6 +215,8 @@ public sealed class ScriptManager : IDisposable
         if (m_scriptModule is not AssemblyModuleHandle handle)
         {
             m_scriptModule = AssemblyManager.Load(request);
+            m_activeCompilationDirectory = pending.outputDirectory;
+            _ = m_artifactCache.Collect([m_activeCompilationDirectory]);
             return true;
         }
 
@@ -243,6 +235,8 @@ public sealed class ScriptManager : IDisposable
             migration.Apply();
             migration.Complete();
             _ = reload.Complete();
+            m_activeCompilationDirectory = pending.outputDirectory;
+            _ = m_artifactCache.Collect([m_activeCompilationDirectory]);
         }
         catch
         {
@@ -260,11 +254,16 @@ public sealed class ScriptManager : IDisposable
     public void GenerateProjectFiles()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (AssetManager.isInitialized)
+        {
+            AssetManager.Update();
+            AssetManager.Rescan();
+        }
         ScriptProjectGenerator.Generate(m_options);
     }
 
     /// <summary>
-    /// Stops observation and unloads the active script module.
+    /// Stops Asset Database observation and unloads the active script module.
     /// </summary>
     public void Dispose()
     {
@@ -272,15 +271,8 @@ public sealed class ScriptManager : IDisposable
             return;
         m_disposed = true;
         m_lifetimeCancellation.Cancel();
-        if (m_watcher is not null)
-        {
-            m_watcher.EnableRaisingEvents = false;
-            m_watcher.Changed -= OnProjectFileChanged;
-            m_watcher.Created -= OnProjectFileChanged;
-            m_watcher.Deleted -= OnProjectFileChanged;
-            m_watcher.Renamed -= OnProjectFileChanged;
-            m_watcher.Dispose();
-        }
+        if (AssetManager.isInitialized)
+            AssetManager.Changed -= OnAssetDatabaseChanged;
         lock (m_sync)
         {
             m_compileRequested = false;
@@ -292,11 +284,18 @@ public sealed class ScriptManager : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private void OnProjectFileChanged(object sender, FileSystemEventArgs args)
+    private void OnAssetDatabaseChanged(AssetChangeSet changeSet)
     {
-        if (m_disposed || !m_options.autoCompile || !IsScriptInput(args.FullPath))
+        if (m_disposed || !m_options.autoCompile)
             return;
-        RequestCompile();
+        for (int i = 0; i < changeSet.changes.Count; i++)
+        {
+            AssetChange change = changeSet.changes[i];
+            if (!IsScriptInput(change.relativePath) && !IsScriptInput(change.oldRelativePath))
+                continue;
+            RequestCompile();
+            return;
+        }
     }
 
     private void SetCompilationProgress(float progress, string status)
@@ -305,64 +304,10 @@ public sealed class ScriptManager : IDisposable
         Volatile.Write(ref m_compilationStatus, status);
     }
 
-    private long FindLatestCompilationGeneration()
-    {
-        long latest = 0;
-        foreach (string directory in Directory.EnumerateDirectories(m_options.outputDirectory))
-        {
-            if (long.TryParse(
-                    Path.GetFileName(directory),
-                    System.Globalization.NumberStyles.None,
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    out long generation))
-            {
-                latest = Math.Max(latest, generation);
-            }
-        }
-        return latest;
-    }
-
-    private void PruneCompilationOutputs()
-    {
-        string[] obsoleteDirectories = Directory
-            .EnumerateDirectories(m_options.outputDirectory)
-            .Select(static directory => new
-            {
-                path = directory,
-                name = Path.GetFileName(directory)
-            })
-            .Where(static candidate => long.TryParse(
-                candidate.name,
-                System.Globalization.NumberStyles.None,
-                System.Globalization.CultureInfo.InvariantCulture,
-                out _))
-            .OrderByDescending(static candidate => long.Parse(
-                candidate.name,
-                System.Globalization.CultureInfo.InvariantCulture))
-            .Skip(m_options.retainedCompilationGenerations)
-            .Select(static candidate => candidate.path)
-            .ToArray();
-
-        for (int i = 0; i < obsoleteDirectories.Length; i++)
-        {
-            try
-            {
-                Directory.Delete(obsoleteDirectories[i], recursive: true);
-            }
-            catch (IOException exception)
-            {
-                Log.Warn("Could not remove obsolete script generation '{0}': {1}", obsoleteDirectories[i], exception.Message);
-            }
-            catch (UnauthorizedAccessException exception)
-            {
-                Log.Warn("Could not remove obsolete script generation '{0}': {1}", obsoleteDirectories[i], exception.Message);
-            }
-        }
-    }
-
     private static bool IsScriptInput(string path)
         => path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
            path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
            path.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase) ||
-           path.EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase);
+           path.EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase) ||
+           path.EndsWith(".innoasmdef", StringComparison.OrdinalIgnoreCase);
 }

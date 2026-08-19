@@ -1,3 +1,7 @@
+using System;
+
+using Inno.Assets.File;
+
 namespace Inno.Assets;
 
 /// <summary>
@@ -5,38 +9,45 @@ namespace Inno.Assets;
 /// </summary>
 public readonly struct AssetManagerOptions
 {
-    /// <summary>
-    /// Root folder containing source assets.
-    /// </summary>
+    /// <summary>Gets the root folder containing source assets.</summary>
     public string assetRoot { get; init; }
-    /// <summary>
-    /// Root folder containing imported runtime artifacts.
-    /// </summary>
-    public string artifactRoot { get; init; }
-    /// <summary>
-    /// Whether to enable file-system watch and hot-refresh.
-    /// </summary>
+
+    /// <summary>Gets the root folder containing rebuildable project data.</summary>
+    public string libraryRoot { get; init; }
+
+    /// <summary>Gets whether file-system watching is enabled.</summary>
     public bool enableFileSystemWatcher { get; init; }
 
-    /// <summary>
-    /// File watcher change coalescing delay in milliseconds.
-    /// </summary>
+    /// <summary>Gets the watcher change coalescing delay in milliseconds.</summary>
     public int fileWatcherFlushDelayMs { get; init; }
+
+    /// <summary>Gets the source filtering policy.</summary>
+    public AssetSourcePolicy? sourcePolicy { get; init; }
+
+    /// <summary>Gets the rebuildable cache policy.</summary>
+    public AssetCacheOptions cacheOptions { get; init; }
 
     /// <summary>
     /// Creates options with sensible defaults for most projects.
     /// </summary>
     /// <param name="assetRoot">Source assets root folder.</param>
-    /// <param name="artifactRoot">Artifacts root folder.</param>
+    /// <param name="libraryRoot">Rebuildable Library folder.</param>
     /// <returns>Initialized options value.</returns>
-    public static AssetManagerOptions Create(string assetRoot, string artifactRoot)
+    public static AssetManagerOptions Create(string assetRoot, string libraryRoot)
     {
+        if (string.IsNullOrWhiteSpace(assetRoot))
+            throw new ArgumentException("Asset root is required.", nameof(assetRoot));
+        if (string.IsNullOrWhiteSpace(libraryRoot))
+            throw new ArgumentException("Library root is required.", nameof(libraryRoot));
+
         return new AssetManagerOptions
         {
             assetRoot = assetRoot,
-            artifactRoot = artifactRoot,
+            libraryRoot = libraryRoot,
             enableFileSystemWatcher = true,
-            fileWatcherFlushDelayMs = 80
+            fileWatcherFlushDelayMs = 80,
+            sourcePolicy = AssetSourcePolicy.defaultPolicy,
+            cacheOptions = AssetCacheOptions.CreateDefault()
         };
     }
 }

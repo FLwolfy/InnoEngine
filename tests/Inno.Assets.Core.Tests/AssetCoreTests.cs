@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Reflection;
+using System.Collections.Generic;
 
 using Inno.Assets.Core;
 using Inno.Assets.Types;
@@ -56,5 +57,54 @@ public sealed class AssetCoreTests
         Assert.False(typeof(AssetObject).GetProperty(nameof(AssetObject.sourcePath))!.SetMethod?.IsPublic ?? false);
         Assert.Null(typeof(AssetObject).GetProperty(nameof(AssetObject.contentVersion))!.SetMethod);
         Assert.Null(typeof(AssetObject).GetProperty(nameof(AssetObject.runtimePayload))!.SetMethod);
+    }
+
+    [Fact]
+    public void ArtifactKey_NormalizesAndComparesHexadecimalValues()
+    {
+        var lower = new AssetArtifactKey("  abcd  ");
+        var upper = new AssetArtifactKey("ABCD");
+
+        Assert.Equal("ABCD", lower.value);
+        Assert.Equal(lower, upper);
+        Assert.False(lower.isEmpty);
+        Assert.True(AssetArtifactKey.empty.isEmpty);
+    }
+
+    [Fact]
+    public void AssetInfo_ExposesAnImmutableCatalogSnapshot()
+    {
+        Guid id = Guid.NewGuid();
+        var info = new AssetInfo(
+            id,
+            "Scripts/Player.cs",
+            AssetSourceKind.File,
+            AssetImportStatus.Imported,
+            "inno.editor.csharp-script",
+            Guid.NewGuid(),
+            new AssetArtifactKey("AA"),
+            new AssetArtifactKey("BB"),
+            new[] { "diagnostic" });
+
+        Assert.Equal(id, info.persistentId);
+        Assert.Equal(AssetSourceKind.File, info.sourceKind);
+        Assert.Equal(AssetImportStatus.Imported, info.status);
+        Assert.All(
+            typeof(AssetInfo).GetProperties(BindingFlags.Instance | BindingFlags.Public),
+            static property => Assert.Null(property.SetMethod));
+    }
+
+    [Fact]
+    public void ChangeSet_PreservesMoveIdentityAndRevision()
+    {
+        Guid id = Guid.NewGuid();
+        var change = new AssetChange(AssetChangeKind.Moved, id, "B/value.txt", "A/value.txt");
+        var set = new AssetChangeSet(42, new List<AssetChange> { change });
+
+        Assert.Equal(42, set.revision);
+        Assert.False(set.isEmpty);
+        Assert.Equal(id, set.changes[0].persistentId);
+        Assert.Equal("A/value.txt", set.changes[0].oldRelativePath);
+        Assert.Equal("B/value.txt", set.changes[0].relativePath);
     }
 }

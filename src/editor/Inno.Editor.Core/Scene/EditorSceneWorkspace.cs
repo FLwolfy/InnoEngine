@@ -7,7 +7,7 @@ using System.Linq;
 using System.Security.Cryptography;
 
 using Inno.Assets;
-using Inno.Assets.File;
+using Inno.Assets.Core;
 using Inno.Assets.Serialization;
 using Inno.Core.Logging;
 using Inno.Core.Serialization;
@@ -26,7 +26,7 @@ public sealed class EditorSceneWorkspace
     private const string C_PREFAB_EXTENSION = ".innoprefab";
 
     private readonly Dictionary<Guid, SceneDocument> m_documents = [];
-    private readonly ConcurrentQueue<AssetChangedEvent> m_sourceChanges = new();
+    private readonly ConcurrentQueue<AssetChange> m_sourceChanges = new();
 
     private bool m_isAttached;
 
@@ -50,11 +50,11 @@ public sealed class EditorSceneWorkspace
     /// </summary>
     public void Refresh()
     {
-        while (m_sourceChanges.TryDequeue(out AssetChangedEvent change))
+        while (m_sourceChanges.TryDequeue(out AssetChange change))
         {
             try
             {
-                if (change.changeType.HasFlag(WatcherChangeTypes.Renamed))
+                if (change.kind == AssetChangeKind.Moved)
                     ApplyRename(change.oldRelativePath, change.relativePath);
             }
             catch (Exception exception)
@@ -227,7 +227,7 @@ public sealed class EditorSceneWorkspace
     {
         if (m_isAttached)
             return;
-        AssetManager.SourceFileSystemChanged += OnSourceFileSystemChanged;
+        AssetManager.Changed += OnAssetDatabaseChanged;
         m_isAttached = true;
     }
 
@@ -235,7 +235,7 @@ public sealed class EditorSceneWorkspace
     {
         if (!m_isAttached)
             return;
-        AssetManager.SourceFileSystemChanged -= OnSourceFileSystemChanged;
+        AssetManager.Changed -= OnAssetDatabaseChanged;
         m_isAttached = false;
         Clear();
     }
@@ -364,10 +364,10 @@ public sealed class EditorSceneWorkspace
         }
     }
 
-    private void OnSourceFileSystemChanged(IReadOnlyList<AssetChangedEvent> changes)
+    private void OnAssetDatabaseChanged(AssetChangeSet changeSet)
     {
-        for (int i = 0; i < changes.Count; i++)
-            m_sourceChanges.Enqueue(changes[i]);
+        for (int i = 0; i < changeSet.changes.Count; i++)
+            m_sourceChanges.Enqueue(changeSet.changes[i]);
     }
 
     private static byte[] ComputeSceneHash(GameScene scene)

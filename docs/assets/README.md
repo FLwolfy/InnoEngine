@@ -1,43 +1,87 @@
 # Assets API
 
-[返回 Wiki 首页](../README.md) · [前往 Core](../core/README.md)
+[返回 Wiki 首页](../README.md) · [前往 Core](../core/README.md) · [Editor Scripting](../editor/Inno.Editor.Scripting.md)
 
-Assets 层把磁盘源文件、`.meta` 身份、Importer、缓存产物与运行时 `AssetObject` 连接起来。大多数业务代码只调用 `AssetManager`；Importer 作者主要依赖 Loader 与 Core。
+Assets 层把 Project 的 `Assets` 目录作为唯一 Source Database。受支持的文件会获得稳定 `.imeta`、Catalog 记录和内容寻址 artifact；目录获得 `.imeta` 但没有 runtime artifact；未知文件仍可见，状态为 `Unsupported`，不会被隐式当成 `BinaryAsset`。
 
 ```mermaid
 flowchart LR
-    F["Inno.Assets.File<br/>文件索引与变更"] --> L["Inno.Assets.Loader<br/>Importer 与加载缓存"]
-    C["Inno.Assets.Core<br/>资产对象与引用"] --> L
-    T["Inno.Assets.Types<br/>Text / Binary"] --> L
-    S["Inno.Assets.Serialization<br/>引用转换"] --> A["Inno.Assets<br/>AssetManager 门面"]
-    L --> A
-    F --> A
+    FS["Inno.Assets.File<br/>Source policy / index / poll"] --> AM["Inno.Assets<br/>AssetManager owner-thread orchestration"]
+    CORE["Inno.Assets.Core<br/>public contracts"] --> LOAD["Inno.Assets.Loader<br/>import / build / catalog / CAS"]
+    TYPES["Inno.Assets.Types<br/>Text / Binary"] --> LOAD
+    LOAD --> AM
+    SER["Inno.Assets.Serialization<br/>asset references"] --> AM
+    AM --> SCRIPT["Inno.Editor.Scripting<br/>script assets and assembly builds"]
+    AM --> SCENE["Inno.Engine.Scene.Assets<br/>scene / prefab assets"]
 ```
 
-## 项目目录
+## 项目边界
 
-| 项目 | 主要 namespace | 作用 |
-| --- | --- | --- |
-| [Inno.Assets](Inno.Assets.md) | `Inno.Assets` | 系统初始化、加载、保存、导入、查询和文件变更事件 |
-| [Inno.Assets.Core](Inno.Assets.Core.md) | `Inno.Assets.Core` | `AssetObject`、依赖与引用诊断模型 |
-| [Inno.Assets.File](Inno.Assets.File.md) | `Inno.Assets.File` | Project 文件树索引、路径/ID 映射与 watcher 事件 |
-| [Inno.Assets.Loader](Inno.Assets.Loader.md) | `Inno.Assets.Loader` | Importer 扩展、导入上下文、Artifact 和加载缓存 |
-| [Inno.Assets.Serialization](Inno.Assets.Serialization.md) | `Inno.Assets.Serialization` | AssetObject 引用序列化桥接与依赖收集 |
-| [Inno.Assets.Types](Inno.Assets.Types.md) | `Inno.Assets.Types` | 内置 `TextAsset`、`BinaryAsset` |
+| 项目 | 稳定职责 |
+| --- | --- |
+| [Inno.Assets](Inno.Assets.md) | 应用组合根、owner-thread `Update`、查询、保存、变更发布与缓存策略 |
+| [Inno.Assets.Core](Inno.Assets.Core.md) | `AssetObject`、artifact/catalog 快照、状态、依赖与 change-set 契约 |
+| [Inno.Assets.File](Inno.Assets.File.md) | 物理 Source Tree、过滤、索引与只入队的 watcher |
+| [Inno.Assets.Loader](Inno.Assets.Loader.md) | Importer/Build Processor Registry、`.imeta`、Catalog、CAS、canonical instance |
+| [Inno.Assets.Serialization](Inno.Assets.Serialization.md) | `AssetObject` 引用编码、恢复与依赖收集 |
+| [Inno.Assets.Types](Inno.Assets.Types.md) | 内置 `TextAsset` 与 `BinaryAsset` |
+
+没有额外的 `Inno.Assets.Database` 或 `Inno.Assets.Pipeline` 程序集。Catalog、Artifact Store 和 transaction helper 都是 Loader 内部协作对象，避免为实现细节制造程序集依赖环。
+
+## Project 磁盘布局
+
+```text
+<Project>/
+├─ Assets/
+│  ├─ Config/game.json
+│  ├─ Config/game.json.imeta
+│  ├─ Scripts/Player.cs
+│  └─ Scripts/Player.cs.imeta
+└─ Library/
+   ├─ AssetDatabase/
+   │  ├─ Catalog.snapshot
+   │  └─ Catalog.journal
+   ├─ Artifacts/ab/cd/<sha256>/
+   │  ├─ manifest
+   │  └─ outputs/*.bin
+   ├─ Assemblies/
+   ├─ ScriptApi/
+   └─ IDE/
+```
+
+`.imeta` 进入版本控制；`Library` 完全可重建，不应进入版本控制。Artifact 路径不包含 source path，因此移动源文件不会搬动 artifact。
 
 ## 最小工作流
 
 ```csharp
-AssetManager.Initialize(new AssetManagerOptions
-{
-    assetRoot = Path.Combine(projectRoot, "Assets"),
-    artifactRoot = Path.Combine(projectRoot, "Library", "Artifacts")
-});
+AssetManager.Initialize(AssetManagerOptions.Create(
+    Path.Combine(projectRoot, "Assets"),
+    Path.Combine(projectRoot, "Library")));
 
-TextAsset text = AssetManager.Load<TextAsset>("Data/settings.json");
-Console.WriteLine(text.content);
+// Call once at the start of each host frame.
+AssetManager.Update();
+
+TextAsset settings = AssetManager.Load<TextAsset>("Config/game.json");
+Console.WriteLine(settings.content);
 
 AssetManager.Shutdown();
 ```
 
-在完整应用中优先让 `Shell.Initialize` 管理顺序。自定义 Importer 会由 `TypeCacheManager` 和 Loader Registry 自动发现；程序集候选代际在激活前会先建立完整 Registry，因此失败不会暴露半更新状态。
+完整应用通常由 `Shell` 建立初始化顺序，并在每帧最前面调用 `AssetManager.Update()`。Importer 与 Build Processor 由基于 TypeCache 的 Registry 自动发现；Assembly reload 候选会先准备完整 Registry snapshot，冲突不会暴露半更新状态。
+
+## 身份、路径与类型
+
+- source persistent ID 来自 `.imeta`，不是路径 hash；文件或目录移动后 ID 不变。
+- runtime Type 的 Stable Type ID 与 source persistent ID 是两套身份。脚本文件改名不会改变 Component/System 类型身份。
+- 同一 persistent ID 在运行时最多对应一个 canonical `AssetObject`。
+- 扩展名改变时 source ID 保留；若导入类型兼容则原位更新，不兼容时产生 replacement/missing 语义。
+- Scene/Prefab 名称由文件名决定，但普通 prefab instance override 不会被源文件改名覆盖。
+
+## 支持与 Unsupported
+
+“支持”表示当前活动 `AssetImporterRegistry` 中有 Importer 接受该扩展名。新增脚本 Importer 并成功 reload 后，Registry version 改变，下一次 `AssetManager.Update()` 会重新对账并导入新支持的文件。没有 Importer 的文件：
+
+- 出现在 FileBrowser 和 Source index；
+- Catalog 状态为 `Unsupported`；
+- 不生成 `.imeta` 或假 artifact；
+- 不使用 Binary fallback。

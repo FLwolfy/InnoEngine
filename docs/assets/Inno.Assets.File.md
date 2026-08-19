@@ -2,70 +2,58 @@
 
 [上一页：Assets.Core](Inno.Assets.Core.md) · [Assets 索引](README.md) · [下一页：Assets.Loader](Inno.Assets.Loader.md)
 
-`Inno.Assets.File` 提供源目录的内存索引和批量文件变更事件。公开入口是 `AssetFileSystem`；底层 watcher 与 batch normalizer 是 internal 实现。
+`Inno.Assets.File` 只负责物理 Source Tree：过滤、只读索引和 watcher 原始事件队列。Watcher 线程不调用 Loader、AssetManager 或 Editor observer。
+
+## AssetSourcePolicy
+
+`AssetSourcePolicy` 集中管理默认 ignore 项，FileBrowser 不再维护第二套规则。默认排除 IDE/VCS/build 目录、系统噪声文件、swap/backup/temporary 文件、`.imeta`、旧 `.abin`，以及 plugin companion `.pdb` 与 `.deps.json`。Companion 仍由 DLL Importer 作为依赖读取。
+
+可通过构造函数追加 filename、directory、prefix、suffix 规则。`defaultPolicy` 是默认实例，`IsIgnored(path,isDirectory)` 可用于工具侧一致过滤。
 
 ## AssetFileSystem
 
 ```csharp
-using AssetFileSystem files = new(
+using var files = new AssetFileSystem(
     assetRoot,
     autoStart: true,
-    flushDelayMs: 80);
+    flushDelayMs: 80,
+    sourcePolicy: AssetSourcePolicy.defaultPolicy);
+
+IReadOnlyList<AssetChangedEvent> changes = files.PollChanges();
 ```
 
-| 成员 | 说明 |
+| API | 行为 |
 | --- | --- |
-| `assetRoot` | 构造时规范化的绝对根目录。 |
-| `isWatching` | FileSystemWatcher 是否活动。 |
-| `ChangedBatch` | batch 已规范化且 index 已 Refresh 后触发。 |
-| `Start()` / `Stop()` | 开始/停止 watcher。Start after Dispose 会失败。 |
-| `Refresh()` | 递归重建当前源树索引。 |
-| `Exists(relativePath)` | entry 是否存在。 |
-| `TryGetEntry(relativePath, out entry)` | 尝试按路径解析。 |
-| `GetEntries(includeDirectories=true)` | 稳定排序快照。 |
-| `GetChildren(parentRelativePath)` | 直接 children；目录优先。 |
-| `WaitForIdle()` | 等待当前 watcher 事件完全 flush；未监视时立即返回。 |
-| `Dispose()` | 停 watcher 并释放资源。 |
+| `Start` / `Stop` | 控制 watcher。 |
+| `Refresh` | 在调用线程递归重建 source index。 |
+| `PollChanges` | 在调用线程取出 quiet batch，并刷新 index。 |
+| `WaitForIdle` | 等待 quiet window 后 poll；主要用于测试和工具。 |
+| `Exists` / `TryGetEntry` | 按规范相对路径查询。 |
+| `GetEntries` / `GetChildren` | 返回稳定只读快照。 |
 
-路径必须为 source-relative，分隔符规范为 `/`；包含 `..` 越界或 rooted path 会被拒绝。根目录 entry 的 relative path 是空字符串。
+不存在 `ChangedBatch` 回调。Owner 必须显式 poll，因此公共 observer 不会意外运行在 `FileSystemWatcher` ThreadPool callback 上。
+
+`FileSystemWatcher.Error` 或 buffer overflow 只设置 `requiresFullRescan`；异常不会逃逸 watcher thread。AssetManager 在下一次 `Update()` 做完整对账。
 
 ## AssetFileEntry
 
-Loader 对外返回的 entry 可读取：
+| 属性 | 示例 `Scripts/Tool.editor.cs` |
+| --- | --- |
+| `relativePath` | `Scripts/Tool.editor.cs` |
+| `parentRelativePath` | `Scripts` |
+| `name` | `Tool.editor.cs` |
+| `nameWithoutExtension` | `Tool.editor` |
+| `extension` | `.cs` |
+| `isDirectory` | `false` |
 
-- `relativePath`
-- `parentRelativePath`
-- `isDirectory`
-- `extension`：文件为 lower-case 扩展名（含 `.`），目录为空。
+`nameWithoutExtension` 只去掉最后一层扩展名，正是 FileBrowser List 的显示语义。选择、拖拽、双击和保存仍使用完整 `relativePath`。
 
-这些属性只有 internal setter，调用者应把 entry 当作只读索引节点。
+## Rename/delete 规范化
 
-## AssetChangedEvent
+`AssetChangedEvent` 保存 `relativePath`、`changeType` 和可选 `oldRelativePath`。Normalizer 会合并同一 quiet window 内的重复 create/change/delete，并优先保留原生 rename 的 old/new 关系。
 
-readonly struct 构造函数：
+目录 rename 后 index 会按真实磁盘 subtree 重建，不依赖操作系统一定为每个 child 发送事件。若原生平台只报告 delete+create，Loader 在 full reconcile 中使用缺失记录与 source fingerprint 做无歧义关联。
 
-```csharp
-new AssetChangedEvent(relativePath, changeType, oldRelativePath: "");
-```
+## 路径安全
 
-属性 `relativePath`、`changeType`（`System.IO.WatcherChangeTypes`）、`oldRelativePath`。Rename 才有旧路径；一个归一化 batch 的 changeType 可能组合 Created/Changed/Renamed flags。
-
-```csharp
-files.ChangedBatch += changes =>
-{
-    foreach (AssetChangedEvent change in changes)
-    {
-        if (change.changeType.HasFlag(WatcherChangeTypes.Renamed))
-            Console.WriteLine($"{change.oldRelativePath} -> {change.relativePath}");
-    }
-};
-```
-
-## Batch 语义
-
-- 短时间内同一路径的 create/change/delete 会合并。
-- Rename 优先保留新旧路径关系。
-- `.imeta` / `.abin` 生成变更由内部 watcher 过滤，避免资产系统响应自己的输出。
-- `WaitForIdle` 在一个 debounce window 内没有新 generation 才返回；内部还有安全超时。
-
-通常应用不直接创建该类型，而通过 [AssetManager 文件树 API](Inno.Assets.md#文件树查询) 访问并自动过滤生成项。
+所有查询接受 source-relative path，内部统一 `/`。Rooted path 和会逃离 `assetRoot` 的 traversal 会抛出 `ArgumentException`。根目录 entry 的 `relativePath` 是空字符串。

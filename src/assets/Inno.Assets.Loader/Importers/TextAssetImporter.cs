@@ -1,5 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 using Inno.Assets.Core;
 using Inno.Assets.Loader;
@@ -13,7 +16,10 @@ internal sealed class TextAssetImporter : AssetImporter<TextAsset>
     public override IReadOnlyList<string> supportedExtensions { get; } =
         [".txt", ".json", ".yaml", ".yml", ".md", ".xml"];
 
-    protected override AssetImportResult<TextAsset> Import(AssetImportContext context)
+    protected override async ValueTask ImportAsync(
+        AssetImportContext context,
+        AssetImportWriter<TextAsset> output,
+        CancellationToken cancellationToken)
     {
         string content = context.ReadUtf8Text();
         string hint = context.extension switch
@@ -27,12 +33,15 @@ internal sealed class TextAssetImporter : AssetImporter<TextAsset>
         };
 
         var asset = new TextAsset(content, hint);
-        return new AssetImportResult<TextAsset>(asset, Encoding.UTF8.GetBytes(content));
+        output.SetAsset(asset);
+        await output.WriteArtifactAsync(
+            "runtime",
+            Encoding.UTF8.GetBytes(content),
+            cancellationToken).ConfigureAwait(false);
     }
 
-    protected override bool TryExport(TextAsset asset, out byte[] sourceBytes)
-    {
-        sourceBytes = Encoding.UTF8.GetBytes(asset.content);
-        return true;
-    }
+    protected override ValueTask<ReadOnlyMemory<byte>?> ExportAsync(
+        TextAsset asset,
+        CancellationToken cancellationToken)
+        => ValueTask.FromResult<ReadOnlyMemory<byte>?>(Encoding.UTF8.GetBytes(asset.content));
 }

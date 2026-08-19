@@ -159,9 +159,9 @@ public sealed class SceneFacadeTests : IDisposable
 
         protected override void Awake() => awakeCount++;
         protected override void Start() => startCount++;
-        protected override void Update(float deltaTime) => updateCount++;
-        protected override void FixedUpdate(float fixedDeltaTime) => fixedUpdateCount++;
-        protected override void LateUpdate(float deltaTime) => lateUpdateCount++;
+        protected override void Update() => updateCount++;
+        protected override void FixedUpdate() => fixedUpdateCount++;
+        protected override void LateUpdate() => lateUpdateCount++;
         protected override void OnEnable() => enableCount++;
         protected override void OnDisable() => disableCount++;
 

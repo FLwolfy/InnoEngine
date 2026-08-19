@@ -2,22 +2,22 @@
 
 [上一页：Inno.Assets](Inno.Assets.md) · [Assets 索引](README.md) · [下一页：Assets.File](Inno.Assets.File.md)
 
-`Inno.Assets.Core` 定义所有资产共有的运行时对象、持久依赖描述和引用诊断模型。它不负责磁盘 IO 或 Importer 选择。
+`Inno.Assets.Core` 只定义不依赖文件系统或 Importer 实现的公共契约。它不选择 DLL、不扫描路径，也不持有可变 Catalog。
 
 ## AssetObject
 
-所有资产类型派生自 `AssetObject`；它实现 `ISerializable` 与 `IIdentityObject`。
+所有运行时资产派生自 `AssetObject`。重要成员：
 
-| 成员 | 说明 |
+| 成员 | 语义 |
 | --- | --- |
-| `sourcePath` | 源根目录下的规范化相对路径；序列化为 Hide。 |
-| `name` | 有路径时取文件名，否则为 CLR 类型名。 |
-| `identity` | 当前 persistent/runtime Identity。 |
-| `isMissing` | 是否是无法解析真实文件的持久 placeholder。 |
-| `contentVersion` | 每次成功提交运行时内容后递增/更新。 |
-| `runtimePayload` | Importer 生成的只读 runtime artifact bytes。 |
-| `OnRuntimePayloadChanged(previous,current)` | `protected virtual`，新 payload 提交后调用。 |
-| `OnUnloading()` | `protected virtual`，运行时资源释放前只调用一次。 |
+| `sourcePath` | 当前 source-relative path；移动时由 host 原位更新。 |
+| `name` | 有路径时为完整文件名，否则为 CLR 类型名。 |
+| `identity` | persistent/runtime Identity。 |
+| `isMissing` | source 当前不可用或旧类型已被替换。 |
+| `contentVersion` | canonical 内容每次成功提交后变化。 |
+| `runtimePayload` | Importer 的 runtime named output 的只读视图。 |
+| `OnRuntimePayloadChanged` | 新 payload 提交后的 `protected virtual` 扩展点。 |
+| `OnUnloading` | 释放 runtime resource 前调用一次。 |
 
 ```csharp
 public sealed class AudioAsset : AssetObject
@@ -40,52 +40,56 @@ public sealed class AudioAsset : AssetObject
 }
 ```
 
-不要保存 `runtimePayload` 内部 array 的可变引用；公开 API 只给 `ReadOnlyMemory<byte>`。
+## Catalog 与 artifact 快照
 
-## AssetDependency
+### AssetImportStatus
 
-readonly value descriptor：
+| 值 | 说明 |
+| --- | --- |
+| `Unsupported` | 当前没有 Importer；没有假 artifact。 |
+| `Pending` | 等待 import/commit。 |
+| `Imported` | current artifact 有效。 |
+| `Failed` | 最新 import 失败；diagnostics 可读，旧 successful artifact 可继续服务。 |
+| `Missing` | source 不可用，persistent identity 仍保留。 |
+| `Conflict` | metadata/identity 冲突，系统拒绝猜测或覆盖。 |
+
+`AssetSourceKind` 区分 `File` 与 `Directory`。
+
+### AssetArtifactKey
+
+`AssetArtifactKey` 是规范化为大写的不可变内容键，支持 value equality、`==`、`!=` 与 `isEmpty`。它不是 generation number，不写入 Scene/Prefab 类型状态。
+
+### AssetArtifactInfo
+
+描述一个 named output：`key`、`outputName`、`absolutePath`、`contentHash`、`length`。`absolutePath` 指向 `Library` 内不可变缓存，不应作为可移植持久引用保存。
+
+### AssetInfo
+
+`AssetInfo` 是不可变 Catalog snapshot：`persistentId`、`relativePath`、`sourceKind`、`status`、`importerId`、`stableAssetTypeId`、`artifactKey`、`lastSuccessfulArtifactKey`、`diagnostics`。它适合 Editor、build graph 和诊断读取；不提供修改 Catalog 的 setter。
+
+## 变更契约
+
+`AssetChangeKind`：`Added`、`Modified`、`Moved`、`Removed`、`Missing`、`Replaced`、`StatusChanged`。
+
+`AssetChange` 同时携带 persistent ID、当前路径和移动前路径。`AssetChangeSet` 用单调递增 `revision` 包装一次原子提交后的完整变更列表。
 
 ```csharp
-AssetDependency dependency = new(
-    persistentId,
-    stableTypeId,
-    "Textures/player.png");
+AssetManager.Changed += changeSet =>
+{
+    foreach (AssetChange change in changeSet.changes)
+    {
+        if (change.kind == AssetChangeKind.Moved)
+            Console.WriteLine($"{change.oldRelativePath} -> {change.relativePath}");
+    }
+};
 ```
 
-| 属性 | 说明 |
-| --- | --- |
-| `persistentId` | 被引用资产的持久身份；构造时不可为空。 |
-| `stableTypeId` | 预期资产类型的 Stable Type ID。 |
-| `lastKnownPath` | 诊断与 fallback 路径。 |
+## AssetDependency 与引用诊断
 
-Equality、hash 和 `==/!=` 只按 `persistentId`，因此路径变化不改变依赖身份。
+`AssetDependency` 的 equality 只使用 `persistentId`；`stableTypeId` 和 `lastKnownPath` 用于类型验证、恢复和诊断。路径改变不改变依赖身份。
 
-## 引用诊断
+`AssetReferenceInfo`/`AssetReferenceLocation` 描述引擎已知引用位置，不等价于 CLR GC 引用计数。`AssetReferenceKind` 包含资产依赖、序列化属性、Scene、Prefab、Editor 与 runtime subsystem 等来源。
 
-`AssetReferenceInfo` 由 Loader 构造，包含：
+## Runtime host 边界
 
-- `persistentId`
-- `sourcePath`
-- `contentVersion`
-- `isLoaded`
-- `lastSweepReachability`：上一次 unused sweep 是否发现外部 managed 引用，未检查时 null。
-- `knownReferenceCount`
-- `references`：`AssetReferenceLocation` 列表。
-
-`AssetReferenceLocation` 属性：
-
-| 属性 | 说明 |
-| --- | --- |
-| `kind` | 引用分类。 |
-| `ownerId` | owner 持久 ID，可无。 |
-| `ownerName` | 可读 owner 名称。 |
-| `propertyPath` | 序列化/子系统相对路径。 |
-
-`AssetReferenceKind` 值：`AssetDependency`、`SerializedProperty`、`SceneResource`、`PrefabSource`、`Editor`、`RuntimeSubsystem`。
-
-engine-known reference 仅用于诊断，不等于 CLR GC 的强引用数量，也不直接决定能否 unload。
-
-## Missing placeholder
-
-序列化引用的 persistent ID 存在，但源资产暂不可用时，Loader 可返回类型兼容、`isMissing=true` 的 canonical placeholder。这样引用身份不会消失；资源重新出现后可原位恢复内容。
+`AssetRuntimeHost` 是最小 public host bridge，用来提交 canonical state、更新 source path 和释放资源。它公开是为了避免 friend assembly，不会由任何 `Properties/ScriptingApi.cs` 导出。游戏脚本只能看到显式 facade exports，不能借此修改资产内部状态。

@@ -30,6 +30,15 @@ internal sealed class AssetImporterRegistry
             return m_generations.GetValueOrDefault(importerId);
     }
 
+    internal long snapshotVersion
+    {
+        get
+        {
+            _ = current;
+            return TypeCacheManager.current.version;
+        }
+    }
+
     protected override Snapshot Build(TypeCacheSnapshot types)
     {
         Type[] discovered = types.GetTypesWithAttribute<AssetImporterExtensionAttribute>()

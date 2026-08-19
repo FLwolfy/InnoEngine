@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 using Inno.Assets.Core;
 using Inno.Assets.Loader;
@@ -12,16 +14,19 @@ internal sealed class BinaryAssetImporter : AssetImporter<BinaryAsset>
 {
     public override IReadOnlyList<string> supportedExtensions { get; } = [".bytes", ".bin", ".dat"];
 
-    protected override AssetImportResult<BinaryAsset> Import(AssetImportContext context)
+    protected override async ValueTask ImportAsync(
+        AssetImportContext context,
+        AssetImportWriter<BinaryAsset> output,
+        CancellationToken cancellationToken)
     {
         byte[] payload = context.sourceBytes.ToArray();
         var asset = new BinaryAsset(payload.Length);
-        return new AssetImportResult<BinaryAsset>(asset, payload);
+        output.SetAsset(asset);
+        await output.WriteArtifactAsync("runtime", payload, cancellationToken).ConfigureAwait(false);
     }
 
-    protected override bool TryExport(BinaryAsset asset, out byte[] sourceBytes)
-    {
-        sourceBytes = asset.runtimePayload.ToArray();
-        return true;
-    }
+    protected override ValueTask<ReadOnlyMemory<byte>?> ExportAsync(
+        BinaryAsset asset,
+        CancellationToken cancellationToken)
+        => ValueTask.FromResult<ReadOnlyMemory<byte>?>(asset.runtimePayload);
 }

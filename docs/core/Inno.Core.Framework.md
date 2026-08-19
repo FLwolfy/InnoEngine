@@ -15,7 +15,19 @@
 | `maxUpdateStepsPerTick` | `8` | 单次 Tick 最大 fixed step 数，必须大于 0。 |
 | `useSingleThreadJobSystem` | `false` | 是否使用确定性的单线程 Job 后端。 |
 | `jobWorkerCount` | `0` | Work-stealing worker 数，0 表示自动。 |
-| `projectRootDirectory` | 当前目录 | Project 根目录；派生 Assets、Artifacts、Logs、Library 路径。 |
+| `projectRootDirectory` | 当前目录 | Project 根目录；派生 `Assets`、`Library`、`Library/Assemblies` 与 `Logs`。 |
+
+默认 Project layout：
+
+```text
+<Project>/
+├─ Assets/              # 唯一 source database
+├─ Library/             # catalog, CAS, script API, IDE and assembly cache
+│  └─ Assemblies/       # AssemblyManager shadow generations
+└─ Logs/
+```
+
+`Artifacts` 不再是独立 Project root；它固定派生为 `Library/Artifacts`。
 
 ## Shell API
 
@@ -48,14 +60,15 @@ Shell.Shutdown();
 
 ```mermaid
 flowchart TD
-    A["Job BeginFrame"] --> B["EventDispatcher.Flush"]
-    B --> C["Time.Update"]
-    C --> D["CoroutineScheduler.Tick"]
-    D --> E["0..N 次 Layer.OnFixedUpdate"]
-    E --> F["Layer.OnUpdate"]
-    F --> G["Layer.OnLateUpdate"]
-    G --> H["Job EndFrame"]
-    H --> I["DrainMainThreadQueue"]
+    A["Job BeginFrame"] --> B["AssetManager.Update<br/>owner-thread source commit"]
+    B --> C["EventDispatcher.Flush"]
+    C --> D["Time.Update"]
+    D --> E["CoroutineScheduler.Tick"]
+    E --> F["0..N 次 Layer.OnFixedUpdate"]
+    F --> G["Layer.OnUpdate"]
+    G --> H["Layer.OnLateUpdate"]
+    H --> I["Job EndFrame"]
+    I --> J["DrainMainThreadQueue"]
 ```
 
 达到 `maxUpdateStepsPerTick` 后仍存在陈旧 fixed debt 时会丢弃 accumulator，防止 spiral of death。

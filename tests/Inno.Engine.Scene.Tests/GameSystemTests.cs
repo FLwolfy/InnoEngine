@@ -121,9 +121,9 @@ public sealed class GameSystemTests : IDisposable
         protected override void OnEnable() => enableCount++;
         protected override void OnDisable() => disableCount++;
         protected override void OnDestroy() => destroyCount++;
-        protected override void OnFixedUpdate(float fixedDeltaTime) => fixedCount++;
-        protected override void OnUpdate(float deltaTime) => updateCount++;
-        protected override void OnLateUpdate(float deltaTime) => lateCount++;
+        protected override void OnFixedUpdate() => fixedCount++;
+        protected override void OnUpdate() => updateCount++;
+        protected override void OnLateUpdate() => lateCount++;
     }
 }
 

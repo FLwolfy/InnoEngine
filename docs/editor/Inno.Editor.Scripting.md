@@ -1,72 +1,99 @@
 # Inno.Editor.Scripting
 
-[Editor 索引](README.md) · [Core Scripting](../core/Inno.Core.Scripting.md) · [Assemblies](../core/Inno.Core.Assemblies.md) · [Wiki 首页](../README.md)
+[Editor 索引](README.md) · [Core Scripting](../core/Inno.Core.Scripting.md) · [Assets](../assets/README.md) · [Assemblies](../core/Inno.Core.Assemblies.md)
 
-`Inno.Editor.Scripting` 管理一个 Project 的 C# 源文件、IDE 工程和脚本程序集代际。它只存在于 Editor；Runtime 通过 `Inno.Core.Assemblies` 接收已编译模块。
+`Inno.Editor.Scripting` 把 C# source、managed plugin 与 assembly definition 当成正式资产，再把它们编译为可回滚的 collectible Script Module。文件发现和变化来源是 Asset Database；该项目没有自己的 `FileSystemWatcher`，也不递归扫描 Project 目录。
 
-## 输入与输出
+## Source 资产
+
+| Source | Asset | Importer | Named outputs |
+| --- | --- | --- | --- |
+| `*.cs` | `ScriptSourceAsset` | `CSharpScriptImporter` | `source`, `diagnostics`, `asset-state` |
+| `*.dll` | `ManagedPluginAsset` | `ManagedPluginImporter` | `assembly`, optional `symbols`/`dependencies`, `asset-state` |
+| `*.innoasmdef` | `ScriptAssemblyDefinitionAsset` | `ScriptAssemblyDefinitionImporter` | `source`, `asset-state` |
+
+每个受支持 source 都有 `.imeta` 和 persistent ID。C# 语法错误不会取消 source identity；parse diagnostics 进入 source asset，聚合 assembly build 可以失败并继续运行旧程序集。
+
+Compiler 读取已提交 artifact snapshot，不直接读取正在被外部编辑器写入的 source/plugin 文件。这样一次 build 的 fingerprint、语法树和 plugin bytes 来自同一 Catalog revision。
+
+## Assembly Definition
+
+```json
+{
+  "name": "Project.Gameplay",
+  "scope": "Runtime",
+  "references": ["Project.Common"],
+  "defines": ["GAMEPLAY_DEBUG"],
+  "nullable": true,
+  "allowUnsafe": false
+}
+```
+
+最近父目录的 `.innoasmdef` 决定脚本归属。没有 definition 时：
+
+- `*.editor.cs` 进入 `Inno.EditorScripts`；
+- 其他 `.cs` 进入 `Inno.GameScripts`。
+
+显式 asmdef 优先于 filename convention。Editor assembly 可引用 Runtime；Runtime 引用 Editor 会在候选 build 前失败。引用 cycle、未知 assembly、保留名冲突同样作为 compilation diagnostic 返回。
+
+固定 builtin assembly name 不取 Project 文件夹名，因此 Project 改名不会改变 fallback Stable Type ID。
+
+## Project 布局
 
 ```text
 <Project>/
-├─ Assets/**/*.cs                 # GameScripts
-├─ Assets/**/*.editor.cs          # EditorScripts
-├─ Assets/Plugins/**/*.dll        # Runtime plugin
-├─ Assets/Plugins/**/*.editor.dll # Editor-only plugin
-├─ Library/ScriptApi/             # 裁剪 reference assemblies
-│  └─ <profile>/<fingerprint>/
-│     ├─ Runtime/              # 运行时 Roslyn 使用的真实类型身份参考集
-│     └─ IDE/                  # 仅包含 InnoEngine.* / InnoEditor.* 的逻辑 API facade
-├─ Library/ScriptAssemblies/      # 最近若干代实际脚本 DLL/PDB
-├─ Library/IDE/                   # IDE bin/obj
-│  ├─ Analyzers/                  # 项目本地的脚本 API 边界 Analyzer
-│  └─ ScriptApiMaps/              # 逻辑 namespace 到实现 namespace 的生成映射
+├─ Assets/
+│  ├─ Scripts/**/*.cs
+│  ├─ Plugins/**/*.dll
+│  └─ **/*.innoasmdef
+├─ Library/
+│  ├─ AssetDatabase/
+│  ├─ Artifacts/
+│  │  ├─ ab/cd/<asset-key>/...
+│  │  └─ ScriptAssemblies/<build-key>/
+│  │     ├─ *.dll
+│  │     ├─ *.pdb
+│  │     ├─ *.xml
+│  │     └─ diagnostics
+│  ├─ ScriptApi/
+│  └─ IDE/
 ├─ Inno.GameScripts.csproj
 ├─ Inno.EditorScripts.csproj
+├─ <asmdef-name>.csproj
 └─ InnoProject.sln
 ```
 
-`Inno.GameScripts` 只能看到 Runtime profile；`Inno.EditorScripts` 同时看到 Runtime、Editor profile，并引用 GameScripts。
+`ScriptAssemblies` 不再出现 `1/2/3...` 数字 generation。目录名是内容 build key：相同输入直接复用，不同输入得到不同 immutable candidate。Editor 启动和成功 reload 后会按 active path、7 天 grace period 与 4 GiB 上限清理不可达 build cache；目录存在只占磁盘，不等于 ALC 常驻内存。
 
-## 脚本 API 如何生效
-
-1. `ScriptApiCatalog` 读取各引擎项目唯一的 `Properties/ScriptingApi.cs` assembly attributes。
-2. 每个 profile 生成两组用途严格分离的 metadata-only reference assembly。
-3. IDE 工程只引用 `Inno.ScriptApi.Runtime.dll` 和可选的 `Inno.ScriptApi.Editor.dll`。这些 facade 在 metadata 中真正定义 `InnoEngine.*` / `InnoEditor.*` 类型，因此显式 `using` 会被 IDE 实际使用，而不是触发生成器的标记。
-4. IDE csproj 不引用真实的 `Inno.Core.*`、`Inno.Engine.*` 或 `Inno.Assets.*` DLL；未导出类型与实现 namespace 都无法解析。
-5. Editor 内的运行时 Roslyn 编译使用另一组保留真实 CLR 类型身份的裁剪参考集。它仅在内存中把逻辑 `using` 转换为声明的实现 namespace。
-6. facade 同时生成同名 XML documentation，将已导出类型和成员的 `summary`、`param`、`returns` 与 `see` 重写到逻辑 namespace。
-7. 最终热重载脚本 DLL 直接引用真实引擎类型；IDE facade 只用于代码模型与 IDE 诊断，永远不作为脚本运行时依赖加载。
-
-这意味着 Rider 不会再因为某个项目被标为 Runtime 而看到该程序集全部 public API。比如导出 `StableTypeIdAttribute` 后，脚本仍无法解析 `TypeCacheManager`。
+AssemblyManager 自己的 runtime generation 仍存在于 assembly shadow cache，用于区分 collectible ALC；它不写入 `.imeta`、Scene、Prefab 或 artifact identity。
 
 ## ScriptManagerOptions
 
-| 属性 | 默认值 | 说明 |
+| 属性 | 默认 | 说明 |
 | --- | --- | --- |
-| `required projectRootDirectory` | 无 | 包含 Assets 与 Library 的 Project 根目录。 |
-| `autoCompile` | `true` | `Start()` 后是否创建首次编译请求，并在文件变化后标记脚本 dirty。 |
-| `debounceMilliseconds` | `250` | dirty 文件在允许编译前必须保持不变的时间。 |
-| `retainedCompilationGenerations` | `3` | 在 `Library/ScriptAssemblies` 中保留的最近编译代数，必须至少为 1。 |
+| `projectRootDirectory` | required | 包含 Assets/Library 的 Project root。 |
+| `autoCompile` | `true` | 初始和 Asset change 是否产生 focus-gated compile request。 |
+| `debounceMilliseconds` | `250` | request 可消费前的 quiet period。 |
+
+已移除 `retainedCompilationGenerations`。
 
 ## ScriptManager
 
 | 成员 | 说明 |
 | --- | --- |
-| `isCompiling` | 当前是否持有编译 gate。 |
-| `isCompilationPending` | 是否有 source/plugin 变化等待宿主消费。 |
-| `compilationProgress` | 已完成编译工作单元的比例，范围为 0 到 1。 |
-| `compilationStatus` | 当前编译阶段的短说明。 |
-| `lastCompilation` | 最近一次完整 Game/Editor 编译结果。 |
-| `CompilationCompleted` | 每次完整编译后触发。 |
-| `Start()` | 创建目录、生成 IDE 文件、启动 watcher，并按选项请求编译。 |
-| `RequestCompile()` | 只标记 dirty 并重置静默计时，不启动编译。 |
-| `TryCompilePending(out task)` | 静默时间满足后消费 dirty 请求并启动一次编译。宿主可在 focus 安全点调用。 |
-| `CompileAsync(...)` | 编译 GameScripts 和 EditorScripts；任一失败都不产生待激活代际。 |
-| `ApplyPendingReload()` | 在主线程安全点加载首次代际，或事务式替换当前代际。 |
-| `GenerateProjectFiles()` | 重新生成两个 csproj 和 solution。 |
-| `Dispose()` | 停止 watcher、取消任务并卸载活动脚本模块。 |
-
-典型宿主流程：
+| `isCompiling` | compiler gate 是否被占用。 |
+| `isCompilationPending` | 是否有等待 focus safe point 的请求。 |
+| `compilationProgress` | 真实已完成工作项比例。 |
+| `compilationStatus` | 当前 stage。 |
+| `lastCompilation` | 最近完整结果。 |
+| `CompilationCompleted` | compile attempt 完成事件。 |
+| `Start` | 建立 IDE 文件、订阅 `AssetManager.Changed`、请求初始 build。 |
+| `RequestCompile` | 标记 dirty，不直接编译。 |
+| `TryCompilePending` | quiet period 后消费请求。 |
+| `CompileAsync` | 从 Asset snapshot 编译完整 assembly graph。 |
+| `ApplyPendingReload` | 主线程安全点首次 Load 或事务 Reload。 |
+| `GenerateProjectFiles` | 从 Asset Catalog/asmdef 图生成显式 Compile items。 |
+| `Dispose` | 取消任务、取消 Asset observer、卸载活动 Script Module。 |
 
 ```csharp
 using var scripts = new ScriptManager(new ScriptManagerOptions
@@ -76,8 +103,8 @@ using var scripts = new ScriptManager(new ScriptManagerOptions
 
 scripts.Start();
 
-// Call only while the editor owns focus.
-if (editorWindow.isFocused && scripts.TryCompilePending(out Task<ScriptCompilationResult>? task))
+// Consume only after editor focus returns and at a frame boundary.
+if (window.isFocused && scripts.TryCompilePending(out Task<ScriptCompilationResult>? task))
 {
     ScriptCompilationResult result = await task;
     if (result.success)
@@ -85,86 +112,70 @@ if (editorWindow.isFocused && scripts.TryCompilePending(out Task<ScriptCompilati
 }
 ```
 
-当前 Editor Host 只在主窗口或 detached viewport 重新获得 focus、且 watcher 静默期结束后消费请求。文件监听线程始终只写 dirty 状态。
+成功编译不写 Info log；Warning/Error 与源位置保留。失败 candidate 不替换活动 generation。
 
-编译开始后交互立即锁定，固定宽度 modal 也会立即进入 `120 ms` 淡入，不再使用延迟显示阈值。即使编译在一帧内完成，窗口仍会完成淡入、至少保持 `350 ms`，再用 `140 ms` 淡出。进度由项目生成、源码解析、API Analyzer、编译诊断、Emit 与 Reload 准备等真实完成项计算；Roslyn 的单次诊断或 Emit 没有内部百分比回调，因此条形图会在该工作项执行期间停留，完成后再推进，而不会用计时器伪造中间进度。编译、候选验证与热重载全部完成后才进入淡出阶段。
+## 编译进度 modal
 
-生成的 IDE 工程会把 `Library/**` 排除出可见项目树，并把 Analyzer 与 API map 标记为不可见；它们仍参与构建，但 Rider 中只保留 `Assets` 与 `Dependencies`。facade reference 还会显式绑定同代 XML documentation，确保逻辑 `InnoEngine.*` 类型 hover 能读取从实现 API 迁移来的注释。
+Editor 在 focus safe point 开始编译后锁定交互。Modal 使用固定宽度，并始终完成淡入、最短停留和淡出，即使实际编译少于 120 ms。
 
-内置脚本 API 当前不注入 global using。脚本必须显式引用逻辑 namespace，例如：
+进度由 project generation、source parse、API analysis、diagnostics、emit 和 reload preparation 等真实工作项推进。Roslyn 单次 Emit 没有内部百分比 callback，因此执行某个工作项时进度会停留，完成后跳到下一个比例；不会用计时器伪造连续进度。
+
+## Scripting API facade
+
+脚本只能引用各项目 `Properties/ScriptingApi.cs` 明确导出的逻辑 API：
 
 ```csharp
-using InnoEngine.Core;
+using InnoEngine.Logging;
+using InnoEngine.Reflection;
 using InnoEngine.Scene;
 using InnoEngine.Serialization;
 
+[StableTypeId("c14f7138-0c5c-4e69-8376-cec8edc3056c")]
 public sealed class PlayerController : GameBehavior
 {
     [SerializableProperty]
-    public float speed { get; set; } = 5f;
+    private float m_speed = 5f;
 
     protected override void Update()
     {
-        float frameMovement = speed * Time.deltaTime;
+        Log.Debug("Speed: {0}", m_speed);
     }
 }
 ```
 
-`GameBehavior.Update/FixedUpdate/LateUpdate` 与 `GameSystem.OnUpdate/OnFixedUpdate/OnLateUpdate` 都是无参扩展点。帧间隔统一从 `InnoEngine.Core.Time.deltaTime` 或 `Time.fixedDeltaTime` 获取，避免不同生命周期 API 重复传递同一份全局时钟状态。
+- IDE facade 真正定义 `InnoEngine.*` / `InnoEditor.*` metadata 类型，并携带重写后的 XML documentation。
+- IDE csproj 不引用真实 `Inno.*` 实现程序集，因此实现 namespace 无法解析。
+- Runtime Roslyn 使用保持真实 CLR identity 的裁剪 reference set，并把逻辑 using 重写为声明的实现 namespace。
+- 内建 API 不声明 global using；脚本必须显式 `using InnoEngine.*`。
+- `ScriptingGlobalUsing` 能力只保留给明确声明它的第三方 plugin。
+- API/export/comment/MVID 变化会改变 facade/build fingerprint。
+- `AssetManagerOptions` 等 host initialization 类型不导出；脚本只看到查询、加载、Importer writer 与 Build Processor 所需契约。
 
-`StableTypeId` 不是脚本类型的必填 attribute。未声明时使用固定脚本程序集名和完整类型名生成确定性 ID；只有当类型或 namespace 需要重命名且仍要恢复旧 Scene/Prefab 状态时，才需要显式固定它。
+`StableTypeId` 不是每个脚本类型的必填项。程序集名与完整类型名不变时 fallback ID 稳定；若要重命名 type/namespace 并迁移已有 Scene 状态，才应显式固定旧 ID。
 
-脚本编译还会为 `[SerializableProperty]` 自动补充同一类型内的源码声明顺序。field 与 property 可以交错书写，Inspector 与序列化结果不会再把所有 field 强制排到 property 前面；脚本作者不需要手动填写 `order`。
+## IDE 工程
 
-Editor 的进程内 Debug 脚本编译会定义 `DEBUG` 与 `TRACE`，与生成 IDE 工程的 Debug configuration 保持一致。因此 `Log.Debug(...)` 不会因为运行时 Roslyn 缺少条件编译符号而被意外移除。
+Generator 从 Asset Catalog 与 asmdef graph 生成每个 assembly 的 SDK-style csproj：
 
-```csharp
-using InnoEngine.Reflection;
+- `EnableDefaultItems=false`；
+- 只有明确 `Assets/**/*.cs` Compile item；
+- `Library` 不显示为 source folder；
+- Editor project 引用允许的 Runtime project；
+- facade reference 绑定同 fingerprint XML documentation；
+- `bin`/`obj`/analyzer/map 全部位于 `Library/IDE`。
 
-[StableTypeId("1b26f2aa-c7dd-4a61-b226-f9763bfd3eca")]
-public sealed class RenamablePlayerController : GameBehavior
-{
-}
-```
+IDE 工程是补全和诊断模型；Editor 实际热编译仍使用进程内 Roslyn 与同一 API/catalog 输入。
 
-直接写实现 namespace 时，IDE 因为根本没有真实引擎程序集参考而无法解析 `Inno`；边界 Analyzer 可同时给出更具体的改写建议：
+## Plugin
 
-```text
-INNO2001: Use scripting namespace 'InnoEngine.Scene' instead of implementation namespace 'Inno.Engine.Scene'
-```
+`Assets/**/Plugins/*.dll` 必须是 managed .NET assembly。`.editor.dll` 只提供给 Editor scope；其他 DLL 可供 Runtime 和 Editor。PDB/deps 是 DLL source unit 的 companion dependency，不单独变成 `BinaryAsset`。
 
-新增 Rendering 等模块时，只需在该项目唯一的 `Properties/ScriptingApi.cs` 声明 `ScriptingApiNamespace("InnoEngine.Rendering", ...)` 和逐类型 exports。下一次生成 IDE 工程/编译时映射会自动进入两个 profile，不需要改 ScriptCompiler 中央名单。
+Plugin 的 `ScriptingGlobalUsing` metadata 仍会合并到它可见的 profile。Assembly simple-name 冲突、坏 PE 或缺失依赖会使 candidate build 失败，旧脚本保持活动。
 
-## 编译结果与诊断
+## Reload 与 Scene 状态
 
-- `ScriptCompilationResult.success`：两个程序集是否全部成功。
-- `diagnostics`：`ScriptDiagnostic` 列表。
-- `outputDirectory`：本代输出目录。
-- `ScriptDiagnostic`：包含 `id`、`severity`、`message`、`filePath`、`line`、`column`。
-- `ScriptDiagnosticSeverity`：`Info`、`Warning`、`Error`。
+成功 build 通过 `AssemblyManager.BeginReload` 准备候选 TypeCache/Registry。`SceneReloadService` 捕获脚本 Component/System 的 Stable Type ID、serialized state、identity、顺序、引用和 lifecycle flags；Activate 后创建新实例并原位替换，全部成功才 Complete。
 
-失败时旧代际继续运行，`ApplyPendingReload()` 返回 `false`。
+失败时 Scene 结构和 Assembly transaction 一起 rollback。Edit Mode 不触发生命周期；Runtime reload 会对旧 active instance 调用 `OnDisable`，新 instance 在下一次正常 update 调用 `OnEnable`，不会重复 `Awake`/`Start`，也不会调用 `Reset`/`OnDestroy`。
 
-Editor Host 不再为成功编译写入 Info 日志；Warning、Error 和源位置诊断保持不变。
-
-## Editor 与 Scene 生命周期
-
-当前 Editor Layer 负责编辑 Scene，但不会调用 `SceneManager.Update()`，因此在 Inspector 中切换 `GameBehavior.enabled` 只修改被序列化的编辑状态，不会在 Edit Mode 执行 `Awake`、`OnEnable`、`OnDisable`、`Start` 或 `Update`。这些回调需要 Scene 进入由 Runtime `GameLayer` 驱动的正常生命周期后才会执行。
-
-在正常生命周期中，启用 active Behavior 会调用 `OnEnable`，禁用会调用 `OnDisable`；`OnDestroy` 只在已经进入过 Runtime 生命周期的实例被移除、GameObject 被销毁或 Scene 被卸载时调用。它不是禁用通知。未来 Editor Play Mode 应通过独立的 Runtime Scene/session 驱动这些回调，而不应让 Inspector 的 Edit Mode 操作直接冒充 Play Mode。
-
-`Library/ScriptAssemblies/<number>` 中的数字是持久递增的编译 generation，而不是内存对象编号。每代目录保存该次 GameScripts/EditorScripts 的 DLL、PDB 与复制后的插件，只占用磁盘空间；`ScriptManager` 启动时会从现有最大编号继续，并自动删除超过 `retainedCompilationGenerations` 的旧目录。活动程序集会先由 `AssemblyManager` shadow copy 到自己的 generation 目录，因此清理这些编译输入不会卸载正在运行的脚本。旧脚本是否仍占用内存由 collectible `AssemblyLoadContext` 的协作式卸载状态决定，与这些目录是否存在无关。
-
-generation 只是 Editor 编译事务的运行编号，不是 Scene/Prefab schema，也不会写入任何资产或序列化数据。类型状态迁移使用 Stable Type ID；Importer 持久缓存兼容性使用 importer 自己的显式 `version`。重新启动 Editor 后，只需从磁盘上仍存在的最大 generation 继续编号，编号跳跃或旧目录被删除都不影响资产兼容性。
-
-## Code Analysis
-
-逻辑脚本 API Analyzer 已直接归入 `Inno.Editor.Scripting/CodeAnalysis`，使用统一的 `Inno.Editor.Scripting` namespace，不再存在独立的 `Inno.Editor.Scripting.CodeAnalysis` 程序集。运行时 Roslyn 编译直接创建 `LogicalScriptingApiAnalyzer`；IDE 工程生成器把当前 Scripting 程序集复制到 `Library/IDE/Analyzers`，因此 IDE 与运行时共享同一套 `INNO2001`、`INNO2002` 规则实现。
-
-`CodeAnalysis/Documentation/AnalyzerReleases.Shipped.md` 与 `AnalyzerReleases.Unshipped.md` 是 Roslyn 规则版本记录，被明确归类在 Analyzer 子目录中，并作为构建输入保留。
-
-## 热重载边界
-
-成功代际通过 `AssemblyManager.BeginReload()` 准备，Scene 层通过 `SceneReloadService` 捕获并迁移脚本 Component/System。成功后提交并卸载旧 ALC；失败时同时回滚 Scene 结构和程序集 catalog。
-
-无法自动迁移的内容仍包括用户 static 状态、后台线程、第三方事件订阅和外部裸对象引用。脚本应在 `OnDisable()` 释放这些资源。
+无法自动迁移 static 字段、后台 Thread/Task、第三方事件订阅或外部裸 CLR 引用。用户代码需要在 `OnDisable` 释放这些资源。

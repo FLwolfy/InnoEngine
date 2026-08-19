@@ -1,12 +1,9 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
-using System.Threading;
 
 using Inno.Assets;
 using Inno.Assets.Core;
-using Inno.Assets.File;
 using Inno.Assets.Types;
 using Inno.Core.Assemblies;
 using Inno.Core.Identity;
@@ -33,39 +30,40 @@ internal static class Program
         SerializationManager.Initialize();
 
         string assetsRoot = Path.Combine(executionRoot, "Assets");
-        string artifactsRoot = Path.Combine(executionRoot, "Artifacts");
+        string libraryRoot = Path.Combine(executionRoot, "Library");
         string relativePath = "Notes/readme.txt";
         string metaPath = Path.Combine(assetsRoot, relativePath + ".imeta");
-        string artifactPath = Path.Combine(artifactsRoot, relativePath + ".abin");
 
-        using var changed = new AutoResetEvent(false);
-        void OnSourceChanged(IReadOnlyList<AssetChangedEvent> changes)
+        void OnSourceChanged(AssetChangeSet changes)
         {
-            Log.Info("[AssetsDemo] Source changed batch: {0}", changes.Count);
-            for (int i = 0; i < changes.Count; i++)
-                Log.Info("  - {0}: {1}", changes[i].changeType, changes[i].relativePath);
-
-            changed.Set();
+            Log.Info("[AssetsDemo] Committed asset revision {0}: {1} changes", changes.revision, changes.changes.Count);
+            for (int i = 0; i < changes.changes.Count; i++)
+                Log.Info("  - {0}: {1}", changes.changes[i].kind, changes.changes[i].relativePath);
         }
 
         try
         {
-            AssetManager.Initialize(new AssetManagerOptions
+            AssetManager.Initialize(AssetManagerOptions.Create(assetsRoot, libraryRoot) with
             {
-                assetRoot = assetsRoot,
-                artifactRoot = artifactsRoot,
-                enableFileSystemWatcher = true,
                 fileWatcherFlushDelayMs = 30
             });
-            AssetManager.SourceFileSystemChanged += OnSourceChanged;
+            AssetManager.Changed += OnSourceChanged;
 
             var created = new TextAsset("hello-from-asset-manager", "plain");
             bool createdOk = AssetManager.Save(relativePath, created);
             Log.Info("[AssetsDemo] Save(new) result={0}", createdOk);
             Log.Info("[AssetsDemo] Assets root: {0}", assetsRoot);
-            Log.Info("[AssetsDemo] Artifacts root: {0}", artifactsRoot);
+            Log.Info("[AssetsDemo] Library root: {0}", libraryRoot);
+            Log.Info("[AssetsDemo] Artifacts root: {0}", AssetManager.artifactRoot);
             Log.Info("[AssetsDemo] Meta path exists: {0} ({1})", File.Exists(metaPath), metaPath);
-            Log.Info("[AssetsDemo] Artifact path exists: {0} ({1})", File.Exists(artifactPath), artifactPath);
+            bool hasArtifact = AssetManager.TryGetArtifact(
+                created.identity.persistentId,
+                "runtime",
+                out AssetArtifactInfo? artifact);
+            Log.Info(
+                "[AssetsDemo] Runtime artifact exists: {0} ({1})",
+                hasArtifact,
+                artifact?.absolutePath ?? string.Empty);
 
             TextAsset loaded = AssetManager.Load<TextAsset>(relativePath);
             Guid assetId = loaded.identity.persistentId;
@@ -73,9 +71,7 @@ internal static class Program
             Log.Info("[AssetsDemo] Loaded content: {0}", loaded.content);
             Log.Info("[AssetsDemo] Identity: {0}", assetId);
 
-            bool sourceIndexed = SpinWait.SpinUntil(
-                () => AssetManager.TryGetFileSystemEntry(relativePath, out _),
-                TimeSpan.FromSeconds(2));
+            bool sourceIndexed = AssetManager.TryGetFileSystemEntry(relativePath, out _);
             Log.Info("[AssetsDemo] Source indexed: {0}", sourceIndexed);
 
             Log.Info("[AssetsDemo] Indexed entries: {0}", AssetManager.GetFileSystemEntries().Count);
@@ -96,7 +92,7 @@ internal static class Program
         finally
         {
             Log.Info("[AssetsDemo] Execution root: {0}", executionRoot);
-            AssetManager.SourceFileSystemChanged -= OnSourceChanged;
+            AssetManager.Changed -= OnSourceChanged;
             AssetManager.Shutdown();
             SerializationManager.Shutdown();
             TypeCacheManager.Shutdown();

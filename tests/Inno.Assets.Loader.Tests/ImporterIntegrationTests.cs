@@ -47,7 +47,7 @@ public sealed class ImporterIntegrationTests : IDisposable
     {
         using TestWorkspace workspace = new();
         workspace.Write(relativePath, Encoding.UTF8.GetBytes("content"));
-        using var loader = new AssetLoader(workspace.assetRoot, workspace.artifactRoot);
+        using var loader = new AssetLoader(workspace.assetRoot, workspace.libraryRoot);
 
         Assert.True(loader.Import(relativePath));
         TextAsset asset = Assert.IsType<TextAsset>(loader.Load(relativePath, typeof(TextAsset)));
@@ -60,7 +60,7 @@ public sealed class ImporterIntegrationTests : IDisposable
     {
         using TestWorkspace workspace = new();
         workspace.Write("Data/blob.bytes", [1, 2, 3, 4]);
-        using var loader = new AssetLoader(workspace.assetRoot, workspace.artifactRoot);
+        using var loader = new AssetLoader(workspace.assetRoot, workspace.libraryRoot);
 
         BinaryAsset binary = Assert.IsType<BinaryAsset>(loader.Load("Data/blob.bytes", typeof(BinaryAsset)));
 
@@ -71,7 +71,7 @@ public sealed class ImporterIntegrationTests : IDisposable
     public void ExportableBuiltInAsset_RoundTripsThroughPublicLoaderContract()
     {
         using TestWorkspace workspace = new();
-        using var loader = new AssetLoader(workspace.assetRoot, workspace.artifactRoot);
+        using var loader = new AssetLoader(workspace.assetRoot, workspace.libraryRoot);
         var source = new TextAsset("saved", "plain");
 
         Assert.True(loader.Save("Text/saved.txt", source));
@@ -110,11 +110,11 @@ public sealed class ImporterIntegrationTests : IDisposable
         internal TestWorkspace()
         {
             Directory.CreateDirectory(assetRoot);
-            Directory.CreateDirectory(artifactRoot);
+            Directory.CreateDirectory(libraryRoot);
         }
 
         internal string assetRoot => Path.Combine(m_root, "Assets");
-        internal string artifactRoot => Path.Combine(m_root, "Artifacts");
+        internal string libraryRoot => Path.Combine(m_root, "Library");
 
         internal void Write(string relativePath, byte[] bytes)
         {

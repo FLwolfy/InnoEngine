@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 using Inno.Assets.Core;
 
@@ -22,8 +24,12 @@ public abstract class AssetImporter
     /// <summary>Gets the normalized source extensions accepted by this importer.</summary>
     public abstract IReadOnlyList<string> supportedExtensions { get; }
 
-    internal abstract AssetImportProduct ImportInternal(AssetImportContext context);
-    internal abstract bool TryExportInternal(AssetObject asset, out byte[] sourceBytes);
+    internal abstract ValueTask<AssetImportProduct> ImportInternalAsync(
+        AssetImportContext context,
+        CancellationToken cancellationToken);
+    internal abstract ValueTask<ReadOnlyMemory<byte>?> ExportInternalAsync(
+        AssetObject asset,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -35,38 +41,55 @@ public abstract class AssetImporter<TAsset> : AssetImporter where TAsset : Asset
     /// <inheritdoc/>
     public sealed override Type targetAssetType => typeof(TAsset);
 
-    /// <summary>Imports one source into a managed asset and runtime payload.</summary>
+    /// <summary>Imports one source into a managed asset and named artifact outputs.</summary>
     /// <param name="context">The import transaction context.</param>
-    /// <returns>The typed import result.</returns>
-    protected abstract AssetImportResult<TAsset> Import(AssetImportContext context);
+    /// <param name="output">The candidate output writer.</param>
+    /// <param name="cancellationToken">Cancellation for the import.</param>
+    /// <returns>An operation that completes when the candidate has been fully staged.</returns>
+    protected abstract ValueTask ImportAsync(
+        AssetImportContext context,
+        AssetImportWriter<TAsset> output,
+        CancellationToken cancellationToken);
 
-    /// <summary>Tries to export an asset back into source bytes.</summary>
+    /// <summary>Exports an asset back into source bytes.</summary>
     /// <param name="asset">The asset to export.</param>
-    /// <param name="sourceBytes">The exported source bytes when supported.</param>
-    /// <returns><see langword="true"/> when exporting is supported.</returns>
-    protected virtual bool TryExport(TAsset asset, out byte[] sourceBytes)
+    /// <param name="cancellationToken">Cancellation for the export.</param>
+    /// <returns>The source bytes, or <see langword="null"/> when export is unsupported.</returns>
+    protected virtual ValueTask<ReadOnlyMemory<byte>?> ExportAsync(
+        TAsset asset,
+        CancellationToken cancellationToken)
+        => ValueTask.FromResult<ReadOnlyMemory<byte>?>(null);
+
+    internal sealed override async ValueTask<AssetImportProduct> ImportInternalAsync(
+        AssetImportContext context,
+        CancellationToken cancellationToken)
     {
-        sourceBytes = [];
-        return false;
+        var writer = new AssetImportWriter<TAsset>(context);
+        await ImportAsync(context, writer, cancellationToken).ConfigureAwait(false);
+        return writer.Complete();
     }
 
-    internal sealed override AssetImportProduct ImportInternal(AssetImportContext context)
-    {
-        AssetImportResult<TAsset> result = Import(context);
-        return new AssetImportProduct(result.asset, result.runtimePayload);
-    }
-
-    internal sealed override bool TryExportInternal(AssetObject asset, out byte[] sourceBytes)
+    internal sealed override ValueTask<ReadOnlyMemory<byte>?> ExportInternalAsync(
+        AssetObject asset,
+        CancellationToken cancellationToken)
     {
         if (asset is TAsset typed)
-            return TryExport(typed, out sourceBytes);
-        sourceBytes = [];
-        return false;
+            return ExportAsync(typed, cancellationToken);
+        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(null);
     }
 }
 
-internal readonly struct AssetImportProduct(AssetObject asset, ReadOnlyMemory<byte> runtimePayload)
+internal readonly struct AssetImportProduct(
+    AssetObject asset,
+    IReadOnlyDictionary<string, ReadOnlyMemory<byte>> outputs,
+    IReadOnlyList<string> diagnostics)
 {
     internal AssetObject asset { get; } = asset ?? throw new ArgumentNullException(nameof(asset));
-    internal ReadOnlyMemory<byte> runtimePayload { get; } = runtimePayload;
+    internal IReadOnlyDictionary<string, ReadOnlyMemory<byte>> outputs { get; } = outputs;
+    internal IReadOnlyList<string> diagnostics { get; } = diagnostics;
+
+    internal ReadOnlyMemory<byte> runtimePayload
+        => outputs.TryGetValue("runtime", out ReadOnlyMemory<byte> bytes)
+            ? bytes
+            : ReadOnlyMemory<byte>.Empty;
 }

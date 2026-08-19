@@ -28,10 +28,10 @@ public sealed class EngineAssetIntegrationTests : IDisposable
     public EngineAssetIntegrationTests(SceneTestsFixture _)
     {
         string assetRoot = Path.Combine(m_root, "Assets");
-        string artifactRoot = Path.Combine(m_root, "Artifacts");
+        string libraryRoot = Path.Combine(m_root, "Library");
         Directory.CreateDirectory(assetRoot);
-        Directory.CreateDirectory(artifactRoot);
-        AssetManagerOptions options = AssetManagerOptions.Create(assetRoot, artifactRoot);
+        Directory.CreateDirectory(libraryRoot);
+        AssetManagerOptions options = AssetManagerOptions.Create(assetRoot, libraryRoot);
         options = options with { enableFileSystemWatcher = false };
         AssetManager.Initialize(options);
     }
@@ -59,7 +59,7 @@ public sealed class EngineAssetIntegrationTests : IDisposable
 
         Assert.Same(captured, byPath);
         Assert.Same(byPath, byId);
-        Assert.Equal("Captured", first.name);
+        Assert.Equal("sample", first.name);
         Assert.Equal("Object", Assert.Single(first.GetObjects()).name);
         Assert.NotEqual(first.identity.persistentId, second.identity.persistentId);
         Assert.NotEqual(
@@ -206,14 +206,11 @@ public sealed class EngineAssetIntegrationTests : IDisposable
         byte[] sceneBytes = SerializationManager.Serialize(targetScene);
         string sourcePath = Path.Combine(m_root, "Assets", relativePath);
         string metaPath = sourcePath + ".imeta";
-        string artifactPath = Path.Combine(m_root, "Artifacts", relativePath + ".abin");
         byte[] sourceBytes = File.ReadAllBytes(sourcePath);
         byte[] metaBytes = File.ReadAllBytes(metaPath);
-        byte[] artifactBytes = File.ReadAllBytes(artifactPath);
 
         File.Delete(sourcePath);
         File.Delete(metaPath);
-        File.Delete(artifactPath);
         AssetManager.Rescan();
         Assert.True(prefab.isMissing);
         DestroyScene(targetScene);
@@ -224,10 +221,8 @@ public sealed class EngineAssetIntegrationTests : IDisposable
         byte[] preservedBytes = SerializationManager.Serialize(missingScene);
 
         Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
-        Directory.CreateDirectory(Path.GetDirectoryName(artifactPath)!);
         File.WriteAllBytes(sourcePath, sourceBytes);
         File.WriteAllBytes(metaPath, metaBytes);
-        File.WriteAllBytes(artifactPath, artifactBytes);
         AssetManager.Rescan();
         Assert.False(prefab.isMissing);
         DestroyScene(missingScene);
@@ -248,6 +243,56 @@ public sealed class EngineAssetIntegrationTests : IDisposable
         Assert.Contains(importerTypes, type => type.Name == "SceneAssetImporter");
         Assert.Contains(importerTypes, type => type.Name == "PrefabAssetImporter");
         Assert.Null(typeof(AssetManager).GetMethod("RegisterImporter"));
+    }
+
+    [Fact]
+    public void ExternalSceneRename_PreservesIdentityAndUsesFileNameAsSceneName()
+    {
+        var source = new GameScene("Original Name");
+        source.CreateObject("Object");
+        SceneAsset asset = SceneAsset.Capture(source);
+        Assert.True(AssetManager.Save("Scenes/old.innoscene", asset));
+        Guid id = asset.identity.persistentId;
+        string oldPath = Path.Combine(m_root, "Assets", "Scenes", "old.innoscene");
+        string newPath = Path.Combine(m_root, "Assets", "Scenes", "renamed.innoscene");
+
+        File.Move(oldPath, newPath);
+        AssetManager.Rescan();
+
+        Assert.Equal(id, asset.identity.persistentId);
+        Assert.Equal("Scenes/renamed.innoscene", asset.sourcePath);
+        Assert.Same(asset, AssetManager.Load<SceneAsset>(id));
+        GameScene instance = asset.Instantiate();
+        Assert.Equal("renamed", instance.name);
+
+        DestroyScene(source);
+        DestroyScene(instance);
+    }
+
+    [Fact]
+    public void ExternalPrefabRename_PreservesIdentityAndRenamesOnlyTheSourceRoot()
+    {
+        var sourceScene = new GameScene("Source");
+        GameObject root = sourceScene.CreateObject("Old Root");
+        sourceScene.CreateObject("Child").transform.SetParent(root.transform);
+        PrefabAsset asset = PrefabAsset.Capture(root);
+        Assert.True(AssetManager.Save("Prefabs/old.innoprefab", asset));
+        Guid id = asset.identity.persistentId;
+        string oldPath = Path.Combine(m_root, "Assets", "Prefabs", "old.innoprefab");
+        string newPath = Path.Combine(m_root, "Assets", "Prefabs", "renamed.innoprefab");
+
+        File.Move(oldPath, newPath);
+        AssetManager.Rescan();
+        var targetScene = new GameScene("Target");
+        GameObject instance = asset.Instantiate(targetScene);
+
+        Assert.Equal(id, asset.identity.persistentId);
+        Assert.Equal("Prefabs/renamed.innoprefab", asset.sourcePath);
+        Assert.Equal("renamed", instance.name);
+        Assert.Equal("Child", Assert.Single(instance.transform.children).gameObject.name);
+
+        DestroyScene(sourceScene);
+        DestroyScene(targetScene);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

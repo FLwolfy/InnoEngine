@@ -20,6 +20,7 @@ public sealed class AssetFileSystem : IDisposable
     private readonly PoolKey<string> m_extensionKey;
     private readonly Lock m_sync = new();
     private readonly AssetWatcher m_watcher;
+    private readonly AssetSourcePolicy m_sourcePolicy;
     private bool m_disposed;
 
     /// <summary>Gets the absolute source asset root.</summary>
@@ -28,22 +29,23 @@ public sealed class AssetFileSystem : IDisposable
     /// <summary>Gets whether source file watching is active.</summary>
     public bool isWatching => m_watcher.isWatching;
 
-    /// <summary>
-    /// Raised after batched source file-system changes are detected and index refresh completes.
-    /// </summary>
-    public event Action<IReadOnlyList<AssetChangedEvent>>? ChangedBatch;
-
     /// <summary>Creates an indexed source file system.</summary>
     /// <param name="assetRoot">The absolute source root.</param>
     /// <param name="autoStart">Whether file watching should start immediately.</param>
     /// <param name="flushDelayMs">The watcher batch delay in milliseconds.</param>
-    public AssetFileSystem(string assetRoot, bool autoStart = true, int flushDelayMs = 80)
+    /// <param name="sourcePolicy">The source filtering policy, or <see langword="null"/> for defaults.</param>
+    public AssetFileSystem(
+        string assetRoot,
+        bool autoStart = true,
+        int flushDelayMs = 80,
+        AssetSourcePolicy? sourcePolicy = null)
     {
         if (string.IsNullOrWhiteSpace(assetRoot))
             throw new ArgumentException("Asset root is required.", nameof(assetRoot));
 
         this.assetRoot = Path.GetFullPath(assetRoot);
         Directory.CreateDirectory(this.assetRoot);
+        m_sourcePolicy = sourcePolicy ?? AssetSourcePolicy.defaultPolicy;
 
         m_pathKey = m_entries.DefineKey<string>("filesystem.path", PoolKeyFlags.Unique);
         m_parentPathKey = m_entries.DefineKey<string>("filesystem.parent");
@@ -53,7 +55,6 @@ public sealed class AssetFileSystem : IDisposable
         Refresh();
 
         m_watcher = new AssetWatcher(this.assetRoot, flushDelayMs);
-        m_watcher.ChangedBatch += OnWatcherChangedBatch;
         if (autoStart)
             m_watcher.Start();
     }
@@ -159,15 +160,46 @@ public sealed class AssetFileSystem : IDisposable
         }
     }
 
-    /// <summary>Waits until all queued watcher changes have been processed.</summary>
-    public void WaitForIdle()
+    /// <summary>Polls normalized changes and refreshes the indexed source snapshot.</summary>
+    /// <returns>The changes observed since the previous poll.</returns>
+    public IReadOnlyList<AssetChangedEvent> PollChanges()
+        => PollChanges(out _);
+
+    /// <summary>Polls changes and reports whether watcher recovery requires a full rescan.</summary>
+    /// <param name="requiresFullRescan">Whether the watcher reported an unreliable event stream.</param>
+    /// <returns>The changes observed since the previous poll.</returns>
+    public IReadOnlyList<AssetChangedEvent> PollChanges(out bool requiresFullRescan)
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        WatcherPollResult result = m_watcher.Poll(force: false);
+        requiresFullRescan = result.requiresFullRescan;
+        if (result.changes.Count > 0 || requiresFullRescan)
+            RefreshSafely();
+        return result.changes;
+    }
+
+    /// <summary>Waits for a quiet watcher window, refreshes the index, and returns queued changes.</summary>
+    public IReadOnlyList<AssetChangedEvent> WaitForIdle()
+        => WaitForIdle(out _);
+
+    /// <summary>Waits for queued changes and reports whether a full rescan is required.</summary>
+    /// <param name="requiresFullRescan">Whether the watcher reported an unreliable event stream.</param>
+    /// <returns>The normalized queued changes.</returns>
+    public IReadOnlyList<AssetChangedEvent> WaitForIdle(out bool requiresFullRescan)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
 
         if (!m_watcher.isWatching)
-            return;
+        {
+            requiresFullRescan = false;
+            return Array.Empty<AssetChangedEvent>();
+        }
 
-        m_watcher.WaitForIdle();
+        WatcherPollResult result = m_watcher.WaitForIdle();
+        requiresFullRescan = result.requiresFullRescan;
+        if (result.changes.Count > 0 || requiresFullRescan)
+            RefreshSafely();
+        return result.changes;
     }
 
     /// <inheritdoc/>
@@ -177,11 +209,10 @@ public sealed class AssetFileSystem : IDisposable
             return;
 
         m_disposed = true;
-        m_watcher.ChangedBatch -= OnWatcherChangedBatch;
         m_watcher.Dispose();
     }
 
-    private void OnWatcherChangedBatch(IReadOnlyList<AssetChangedEvent> changes)
+    private void RefreshSafely()
     {
         if (m_disposed)
             return;
@@ -201,7 +232,6 @@ public sealed class AssetFileSystem : IDisposable
             // File permissions can change between enumeration and indexing.
             return;
         }
-        ChangedBatch?.Invoke(changes);
     }
 
     private void IndexDirectoryRecursive(string absoluteDirectoryPath, string relativeDirectoryPath)
@@ -213,6 +243,8 @@ public sealed class AssetFileSystem : IDisposable
         {
             string name = Path.GetFileName(absoluteChildDirectory);
             string childRelativePath = CombineRelativePath(normalizedDirectory, name);
+            if (m_sourcePolicy.IsIgnored(childRelativePath, isDirectory: true))
+                continue;
             IndexDirectoryRecursive(absoluteChildDirectory, childRelativePath);
         }
 
@@ -220,6 +252,8 @@ public sealed class AssetFileSystem : IDisposable
         {
             string name = Path.GetFileName(absoluteFile);
             string fileRelativePath = CombineRelativePath(normalizedDirectory, name);
+            if (m_sourcePolicy.IsIgnored(fileRelativePath, isDirectory: false))
+                continue;
             AddOrUpdateEntry(fileRelativePath, isDirectory: false);
         }
     }

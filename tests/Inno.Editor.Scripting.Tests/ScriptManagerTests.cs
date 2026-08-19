@@ -4,6 +4,8 @@ using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 
+using Inno.Assets;
+using Inno.Assets.Core;
 using Inno.Assets.Loader;
 using Inno.Assets.Types;
 using Inno.Core.Assemblies;
@@ -44,6 +46,12 @@ public sealed class ScriptManagerTests : IDisposable
         });
         TypeCacheManager.Initialize();
         SerializationManager.Initialize();
+        AssetManager.Initialize(AssetManagerOptions.Create(
+            Path.Combine(m_projectRoot, "Assets"),
+            Path.Combine(m_projectRoot, "Library")) with
+        {
+            enableFileSystemWatcher = false
+        });
         m_manager = new ScriptManager(new ScriptManagerOptions
         {
             projectRootDirectory = m_projectRoot,
@@ -55,6 +63,7 @@ public sealed class ScriptManagerTests : IDisposable
     {
         SceneManager.UnloadAllScenes();
         m_manager.Dispose();
+        AssetManager.Shutdown();
         SerializationManager.Shutdown();
         TypeCacheManager.Shutdown();
         AssemblyManager.Shutdown();
@@ -64,9 +73,14 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public async Task RuntimeAndEditorScriptsCompileWithProfileGlobalUsings()
+    public void RuntimeAndEditorScriptsCompileWithExplicitFacadeUsings()
     {
         Write("ProjectBehavior.CS", """
+            using InnoEngine.Assets;
+            using InnoEngine.Reflection;
+            using InnoEngine.Scene;
+            using InnoEngine.Serialization;
+
             [StableTypeId("f2278b82-f39a-4d87-8dc5-440c52971c51")]
             public class ProjectBehavior : GameBehavior
             {
@@ -79,11 +93,34 @@ public sealed class ScriptManagerTests : IDisposable
             {
                 public override string[] supportedExtensions => [".project"];
 
-                protected override AssetImportResult<TextAsset> Import(AssetImportContext context)
-                    => new(new TextAsset(context.ReadUtf8Text()), default);
+                protected override async System.Threading.Tasks.ValueTask ImportAsync(
+                    AssetImportContext context,
+                    AssetImportWriter<TextAsset> output,
+                    System.Threading.CancellationToken cancellationToken)
+                {
+                    output.SetAsset(new TextAsset(context.ReadUtf8Text()));
+                    await output.WriteArtifactAsync("runtime", context.sourceBytes, cancellationToken);
+                }
+            }
+
+            [AssetBuildProcessorExtension]
+            public sealed class ProjectBuildProcessor : AssetBuildProcessor<TextAsset>
+            {
+                protected override System.Threading.Tasks.ValueTask BuildAsync(
+                    AssetBuildContext<TextAsset> context,
+                    AssetArtifactWriter output,
+                    System.Threading.CancellationToken cancellationToken)
+                {
+                    return output.WriteAsync(
+                        "result",
+                        System.BitConverter.GetBytes(context.inputs.Count),
+                        cancellationToken);
+                }
             }
             """);
         Write("ProjectTools.EDITOR.CS", """
+            using InnoEditor.Inspection;
+
             [PropertyDrawer(typeof(ProjectBehavior))]
             public sealed class ProjectBehaviorDrawer : IPropertyDrawer
             {
@@ -93,7 +130,7 @@ public sealed class ScriptManagerTests : IDisposable
             }
             """);
 
-        ScriptCompilationResult result = await m_manager.CompileAsync();
+        ScriptCompilationResult result = Compile();
 
         Assert.True(result.success, FormatDiagnostics(result));
         Assert.NotNull(result.outputDirectory);
@@ -108,10 +145,10 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public async Task SuccessfulRecompileReplacesTheActiveTypeAndFailureKeepsIt()
+    public void SuccessfulRecompileReplacesTheActiveTypeAndFailureKeepsIt()
     {
         WriteVersionedBehavior(1);
-        ScriptCompilationResult firstCompilation = await m_manager.CompileAsync();
+        ScriptCompilationResult firstCompilation = Compile();
         Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
         Assert.True(m_manager.ApplyPendingReload());
         Type first = ResolveVersionedBehavior();
@@ -119,7 +156,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(TypeCacheManager.TryGetRuntimeTypeId(first, out int firstRuntimeId));
 
         WriteVersionedBehavior(2);
-        ScriptCompilationResult secondCompilation = await m_manager.CompileAsync();
+        ScriptCompilationResult secondCompilation = Compile();
         Assert.True(secondCompilation.success, FormatDiagnostics(secondCompilation));
         Assert.True(m_manager.ApplyPendingReload());
         Type second = ResolveVersionedBehavior();
@@ -129,7 +166,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.NotEqual(firstRuntimeId, secondRuntimeId);
 
         Write("VersionedBehavior.cs", "public sealed class VersionedBehavior : GameBehavior {");
-        ScriptCompilationResult failed = await m_manager.CompileAsync();
+        ScriptCompilationResult failed = Compile();
         Assert.False(failed.success);
         Assert.Contains(failed.diagnostics, diagnostic =>
             diagnostic.severity == ScriptDiagnosticSeverity.Error &&
@@ -140,14 +177,14 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public async Task FailedCompilationDiscardsAnUnappliedSuccessfulCandidate()
+    public void FailedCompilationDiscardsAnUnappliedSuccessfulCandidate()
     {
         WriteVersionedBehavior(1);
-        ScriptCompilationResult successful = await m_manager.CompileAsync();
+        ScriptCompilationResult successful = Compile();
         Assert.True(successful.success, FormatDiagnostics(successful));
 
         Write("VersionedBehavior.cs", "public sealed class VersionedBehavior : GameBehavior {");
-        ScriptCompilationResult failed = await m_manager.CompileAsync();
+        ScriptCompilationResult failed = Compile();
 
         Assert.False(failed.success);
         Assert.False(m_manager.ApplyPendingReload());
@@ -155,25 +192,25 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public async Task GameScriptsCannotUseEditorProfileButEditorScriptsCan()
+    public void GameScriptsCannotUseEditorProfileButEditorScriptsCan()
     {
-        const string source = "public sealed class EditorApiProbe { public EditorContext? context { get; set; } }";
+        const string source = "using InnoEditor.Core; public sealed class EditorApiProbe { public EditorContext? context { get; set; } }";
         Write("EditorApiProbe.cs", source);
 
-        ScriptCompilationResult runtimeResult = await m_manager.CompileAsync();
+        ScriptCompilationResult runtimeResult = Compile();
 
         Assert.False(runtimeResult.success);
         Assert.Contains(runtimeResult.diagnostics, diagnostic => diagnostic.id == "CS0246");
         File.Delete(Path.Combine(m_projectRoot, "Assets", "EditorApiProbe.cs"));
         Write("EditorApiProbe.editor.cs", source);
 
-        ScriptCompilationResult editorResult = await m_manager.CompileAsync();
+        ScriptCompilationResult editorResult = Compile();
 
         Assert.True(editorResult.success, FormatDiagnostics(editorResult));
     }
 
     [Fact]
-    public async Task LocalPluginMetadataProvidesScriptGlobalUsings()
+    public void LocalPluginMetadataProvidesScriptGlobalUsings()
     {
         string pluginDirectory = Path.Combine(m_projectRoot, "Assets", "Plugins");
         Directory.CreateDirectory(pluginDirectory);
@@ -187,7 +224,7 @@ public sealed class ScriptManagerTests : IDisposable
             }
             """);
 
-        ScriptCompilationResult result = await m_manager.CompileAsync();
+        ScriptCompilationResult result = Compile();
 
         Assert.True(result.success, FormatDiagnostics(result));
         Assert.True(m_manager.ApplyPendingReload());
@@ -199,16 +236,17 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void GenerateProjectFilesMirrorsRuntimeClassificationAndReferences()
     {
-        Write("Runtime.cs", "public sealed class RuntimeScript : GameBehavior { }");
+        Write("Runtime.cs", "using InnoEngine.Scene; public sealed class RuntimeScript : GameBehavior { }");
         Write("Tools.editor.cs", "public sealed class EditorScript { }");
 
         m_manager.GenerateProjectFiles();
 
         string gameProject = File.ReadAllText(Path.Combine(m_projectRoot, "Inno.GameScripts.csproj"));
         string editorProject = File.ReadAllText(Path.Combine(m_projectRoot, "Inno.EditorScripts.csproj"));
-        Assert.Contains("Assets/**/*.cs", gameProject);
-        Assert.Contains("Exclude=\"Assets/**/*.editor.cs\"", gameProject);
-        Assert.Contains("Assets/**/*.editor.cs", editorProject);
+        Assert.Contains("Compile Include=\"Assets/Runtime.cs\"", gameProject);
+        Assert.DoesNotContain("Tools.editor.cs", gameProject);
+        Assert.Contains("Compile Include=\"Assets/Tools.editor.cs\"", editorProject);
+        Assert.DoesNotContain("Library/**.cs", gameProject);
         Assert.Contains("Inno.GameScripts.csproj", editorProject);
         Assert.Contains("<EnableDefaultItems>false</EnableDefaultItems>", gameProject);
         Assert.Contains("<Folder Include=\"Assets/\"", gameProject);
@@ -222,10 +260,10 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public async Task RuntimeReloadReplacesLiveBehaviorAndPreservesLifecycleState()
+    public void RuntimeReloadReplacesLiveBehaviorAndPreservesLifecycleState()
     {
         WriteMigratingBehavior(1);
-        ScriptCompilationResult firstCompilation = await m_manager.CompileAsync();
+        ScriptCompilationResult firstCompilation = Compile();
         Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
         Assert.True(m_manager.ApplyPendingReload());
         Type previousType = TypeCacheManager.current.types.Single(type => type.Name == "MigratingBehavior");
@@ -246,7 +284,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.Equal(1, GetProperty(previousSystem, "awakeCount"));
 
         WriteMigratingBehavior(2);
-        ScriptCompilationResult secondCompilation = await m_manager.CompileAsync();
+        ScriptCompilationResult secondCompilation = Compile();
         Assert.True(secondCompilation.success, FormatDiagnostics(secondCompilation));
         Assert.True(m_manager.ApplyPendingReload());
         GameComponent current = gameObject.GetComponents()
@@ -284,8 +322,109 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.Equal(2, GetProperty(currentSystem, "updateCount"));
     }
 
+    [Fact]
+    public void ScriptSourcesAreCatalogedWithMetadataAndImmutableSourceArtifacts()
+    {
+        Write("Scripts/Tracked.cs", "using InnoEngine.Scene; public sealed class Tracked : GameBehavior { }");
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.True(result.success, FormatDiagnostics(result));
+        Assert.True(File.Exists(Path.Combine(m_projectRoot, "Assets", "Scripts", "Tracked.cs.imeta")));
+        Assert.True(AssetManager.TryGetInfo("Scripts/Tracked.cs", out AssetInfo? info));
+        Assert.NotNull(info);
+        Assert.Equal(AssetImportStatus.Imported, info.status);
+        Assert.Equal("inno.editor.csharp-script", info.importerId);
+        Assert.True(AssetManager.TryGetArtifact(info.persistentId, "source", out AssetArtifactInfo? source));
+        Assert.NotNull(source);
+        Assert.Equal(
+            File.ReadAllText(Path.Combine(m_projectRoot, "Assets", "Scripts", "Tracked.cs")),
+            File.ReadAllText(source.absolutePath));
+        Assert.NotNull(result.outputDirectory);
+        Assert.DoesNotMatch(@"[/\\]ScriptAssemblies[/\\]\d+$", result.outputDirectory!);
+    }
+
+    [Fact]
+    public void AssemblyDefinitionsControlScopeReferencesAndGeneratedIdeProjects()
+    {
+        Write("Runtime/Runtime.innoasmdef", """
+            {
+              "name": "Project.Runtime",
+              "scope": "Runtime",
+              "references": [],
+              "defines": ["PROJECT_RUNTIME"],
+              "nullable": true,
+              "allowUnsafe": false
+            }
+            """);
+        Write("Runtime/RuntimeType.cs", "public sealed class RuntimeType { }");
+        Write("Editor/Editor.innoasmdef", """
+            {
+              "name": "Project.Editor",
+              "scope": "Editor",
+              "references": ["Project.Runtime"],
+              "defines": [],
+              "nullable": true,
+              "allowUnsafe": false
+            }
+            """);
+        Write("Editor/EditorType.cs", "public sealed class EditorType { public RuntimeType value = new(); }");
+
+        ScriptCompilationResult result = Compile();
+        m_manager.GenerateProjectFiles();
+
+        Assert.True(result.success, FormatDiagnostics(result));
+        Assert.True(File.Exists(Path.Combine(result.outputDirectory!, "Project.Runtime.dll")));
+        Assert.True(File.Exists(Path.Combine(result.outputDirectory!, "Project.Editor.dll")));
+        string editorProject = File.ReadAllText(Path.Combine(m_projectRoot, "Project.Editor.csproj"));
+        Assert.Contains("Project.Runtime.csproj", editorProject);
+        Assert.Contains("Assets/Editor/EditorType.cs", editorProject);
+        Assert.DoesNotContain("<Compile Include=\"Library", editorProject);
+    }
+
+    [Fact]
+    public void RuntimeAssemblyDefinitionCannotReferenceEditorAssembly()
+    {
+        Write("Editor/Editor.innoasmdef", """
+            { "name": "Project.Editor", "scope": "Editor", "references": [] }
+            """);
+        Write("Editor/Tool.cs", "public sealed class Tool { }");
+        Write("Runtime/Runtime.innoasmdef", """
+            { "name": "Project.Runtime", "scope": "Runtime", "references": ["Project.Editor"] }
+            """);
+        Write("Runtime/Game.cs", "public sealed class Game { }");
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.False(result.success);
+        Assert.Contains(result.diagnostics, static diagnostic =>
+            diagnostic.message.Contains("cannot reference editor assembly", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void AssetManagerOptionsIsNotPartOfTheScriptFacade()
+    {
+        Write("HiddenHostOptions.cs", """
+            using InnoEngine.Assets;
+            public sealed class HiddenHostOptions
+            {
+                public AssetManagerOptions value;
+            }
+            """);
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.False(result.success);
+        Assert.Contains(result.diagnostics, static diagnostic =>
+            diagnostic.id == "CS0246" &&
+            diagnostic.message.Contains("AssetManagerOptions", StringComparison.Ordinal));
+    }
+
     private void WriteVersionedBehavior(int version)
         => Write("VersionedBehavior.cs", $$"""
+            using InnoEngine.Reflection;
+            using InnoEngine.Scene;
+
             [StableTypeId("4bd6efba-f60e-4d7a-a508-f79a2278317a")]
             public sealed class VersionedBehavior : GameBehavior
             {
@@ -293,8 +432,15 @@ public sealed class ScriptManagerTests : IDisposable
             }
             """);
 
+    private ScriptCompilationResult Compile()
+        => m_manager.CompileAsync().AsTask().GetAwaiter().GetResult();
+
     private void WriteMigratingBehavior(int generation)
         => Write("MigratingBehavior.cs", $$"""
+            using InnoEngine.Reflection;
+            using InnoEngine.Scene;
+            using InnoEngine.Serialization;
+
             [StableTypeId("c14f7138-0c5c-4e69-8376-cec8edc3056c")]
             public sealed class MigratingBehavior : GameBehavior
             {
@@ -322,7 +468,7 @@ public sealed class ScriptManagerTests : IDisposable
                 protected override void Start() => startCount++;
                 protected override void OnEnable() => enableCount++;
                 protected override void OnDisable() => disableCount++;
-                protected override void Update(float deltaTime) => updateCount++;
+                protected override void Update() => updateCount++;
             }
 
             [StableTypeId("ed10ef42-6a0f-4fd1-b178-8714a0d349d8")]
@@ -352,7 +498,7 @@ public sealed class ScriptManagerTests : IDisposable
                 protected override void Start() => startCount++;
                 protected override void OnEnable() => enableCount++;
                 protected override void OnDisable() => disableCount++;
-                protected override void OnUpdate(float deltaTime) => updateCount++;
+                protected override void OnUpdate() => updateCount++;
             }
             """);
 

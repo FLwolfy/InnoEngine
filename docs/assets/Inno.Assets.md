@@ -2,11 +2,9 @@
 
 [Assets 索引](README.md) · [下一页：Assets.Core](Inno.Assets.Core.md) · [Wiki 首页](../README.md)
 
-`Inno.Assets` 是应用层资产门面。它组合 File index、Loader、Serialization resolver 与 watcher，提供强类型同步/异步加载、导入、保存、引用诊断和变更事件。游戏与编辑器业务优先调用这里，而不是直接持有 `AssetLoader`。
+`Inno.Assets` 是应用级门面。它组合 Source index、Loader、Serialization resolver 与缓存策略，并规定所有 Catalog/canonical object/public observer 变更只能在初始化线程提交。
 
-## 初始化
-
-AssetManager 依赖 Identity、TypeCache 和 Serialization 已初始化：
+## 初始化与目录
 
 ```csharp
 IdentityManager.Initialize();
@@ -16,91 +14,126 @@ SerializationManager.Initialize();
 
 AssetManager.Initialize(AssetManagerOptions.Create(
     Path.Combine(projectRoot, "Assets"),
-    Path.Combine(projectRoot, "Library", "Artifacts")));
+    Path.Combine(projectRoot, "Library")));
 ```
 
-`AssetManagerOptions.Create` 默认开启 watcher，debounce 为 80 ms。也可显式构造：
+`AssetManagerOptions`：
 
 | 属性 | 说明 |
 | --- | --- |
-| `assetRoot` | 源资产根目录，必填。 |
-| `artifactRoot` | 导入产物根目录，必填。 |
-| `enableFileSystemWatcher` | 是否监视源文件变化并热刷新。 |
-| `fileWatcherFlushDelayMs` | watcher 合并事件的毫秒窗口。 |
+| `assetRoot` | 唯一 Source Database 根目录。 |
+| `libraryRoot` | 可重建的 Project Library 根目录。 |
+| `enableFileSystemWatcher` | 是否观察外部文件系统变更。 |
+| `fileWatcherFlushDelayMs` | raw event quiet/debounce 窗口。 |
+| `sourcePolicy` | 统一 Source ignore policy。 |
+| `cacheOptions` | CAS 最大容量和 unreachable grace period。 |
+
+`artifactRoot` 不再是 option。`AssetManager.artifactRoot` 是只读派生值 `<libraryRoot>/Artifacts`。`AssetCacheOptions.CreateDefault()` 当前使用 4 GiB 上限和 7 天 grace period。
+
+## Owner-thread 模型
+
+`Initialize` 记录当前 managed thread。以下 mutation 必须从该线程调用：
+
+- `Update`
+- `WaitForIdle`
+- `Import`
+- `Save`
+- `Rescan`
+- Manager 的 `LoadAsync` 提交阶段
+- `BuildAsync`
+
+`Shell.Tick()` 在每帧开始调用 `AssetManager.Update()`。Watcher callback 只 enqueue；`Update` 才 poll、对账、commit 和发布 observer。
+
+```csharp
+while (running)
+{
+    AssetManager.Update();
+    // Run frame work against one committed asset snapshot.
+}
+```
+
+`WaitForIdle()` 适合测试、batch 工具和需要同步等待 source quiet window 的命令。它不是普通 frame loop 的替代品。
 
 ## 状态与事件
 
 | 成员 | 说明 |
 | --- | --- |
 | `isInitialized` | 服务是否可用。 |
-| `assetRoot` / `artifactRoot` | 初始化后的绝对路径；关闭后为空。 |
-| `SourceFileSystemChanged` | 规范化变更已经应用到 Loader/File index 后触发。 |
-| `AssetReloaded` | 已加载 canonical asset 已原位更新后触发。 |
-| `Initialize(options)` / `Shutdown()` | 建立/释放全局服务。重复 Initialize 会先关闭旧服务。 |
+| `assetRoot` / `libraryRoot` / `artifactRoot` | 初始化后的绝对路径。 |
+| `Changed` | 一次 commit 后的 `AssetChangeSet`。 |
+| `AssetReloaded` | loaded canonical asset 已原位更新。 |
 
-Observer 异常被隔离，不能回滚已经提交的 Manager 状态。Shutdown 会清除事件订阅。
+Observer 按订阅顺序在 owner thread 调用。某个 observer 抛异常会被隔离，不能回滚已经提交的 transaction，也不会阻止后续 observer。
 
-## 加载 API
+## 加载与保存
 
 | API | 行为 |
 | --- | --- |
-| `Load<TAsset>(string relativePath)` | 按源相对路径加载 canonical instance；失败/类型不兼容抛异常。 |
-| `Load<TAsset>(Guid persistentId)` | 按持久 ID 加载。 |
-| `TryLoad<TAsset>(path/id, out asset)` | 安全失败返回 false。 |
-| `LoadAsync<TAsset>(path/id, CancellationToken)` | 异步等待共享 in-flight load，返回同一 canonical instance。 |
+| `Load<T>(path/id)` | 返回 canonical instance；缺失或类型不兼容时抛异常。 |
+| `TryLoad<T>(path/id,out asset)` | 安全失败。 |
+| `LoadAsync<T>(path/id,token)` | 保持异步 API 形状，但 canonical commit 仍受 owner-thread 约束。 |
+| `Import(path)` | 显式导入单一受支持 source。 |
+| `Save(asset)` | 导出到现有 source path。 |
+| `Save(path,asset)` | 为新资产建立初始 source identity。 |
+| `Rescan()` | 对账全部 source/meta/catalog/artifact。 |
+
+初始化会自动 `Rescan`，无需为已有文件逐个调用 `Import`。
+
+## Catalog 与 artifact 查询
+
+| API | 说明 |
+| --- | --- |
+| `TryGetInfo(path/id,out info)` | 读取 immutable `AssetInfo`。 |
+| `TryGetArtifact(id,outputName,out info)` | 定位 named output。 |
+| `TryGetPersistentId(path,out id)` | 不加载 runtime object 查询 source identity。 |
+| `TryGetAssetType(path,out type)` | 从 Catalog/Importer 解析类型。 |
+| `BuildAsync(definition,inputs,token)` | 调用自动发现的 aggregate Build Processor。 |
+| `GetDependencies(asset,recursive)` | runtime dependency graph。 |
+| `GetReferenceInfo(asset)` | engine-known reference diagnostics。 |
+| `GetLoadedPaths()` | 当前 canonical cache path snapshot。 |
+| `UnloadUnusedAssets()` | 协作式释放无外部 managed root 的实例。 |
 
 ```csharp
-TextAsset config = AssetManager.Load<TextAsset>("Config/game.json");
-
-if (AssetManager.TryGetPersistentId("Config/game.json", out Guid id))
+if (AssetManager.TryGetInfo("Scripts/Player.cs", out AssetInfo? script) &&
+    script.status == AssetImportStatus.Imported &&
+    AssetManager.TryGetArtifact(script.persistentId, "source", out AssetArtifactInfo? source))
 {
-    TextAsset same = await AssetManager.LoadAsync<TextAsset>(id);
-    Debug.Assert(ReferenceEquals(config, same));
+    Console.WriteLine(source.absolutePath);
 }
 ```
 
-调用者 cancellation 只取消当前等待，不会取消其他调用者共享的底层加载。
+## Source 文件树
 
-## 导入与保存
+`GetFileSystemEntries`、`GetFileSystemChildren` 和 `TryGetFileSystemEntry` 返回统一 Source Policy 过滤后的视图。`.imeta`、artifact、IDE cache 和默认系统噪声不出现；Unsupported source 仍出现。
 
-| API | 说明 |
-| --- | --- |
-| `Import(relativePath)` | 用支持该扩展名的 Importer 生成 `.imeta` 与 artifact；被处理时 true。 |
-| `Save(AssetObject)` | 导出到现有 `sourcePath`；未保存对象会失败。 |
-| `Save(relativePath, AssetObject)` | 给新资产指定初始路径并导出。 |
-| `Rescan()` | 对账源文件、metadata、artifact、持久 catalog 与文件索引。 |
+FileBrowser List 使用 `AssetFileEntry.nameWithoutExtension` 显示名字，Grid 保持完整 `name`。所有实际命令始终使用完整 `relativePath`。
 
-Save 依赖 Importer 覆盖 `TryExport`。成功导入/保存后 File index 会 Refresh。
+## 外部 rename/delete/recovery
 
-## Catalog 和引用查询
+### source-only rename
 
-| API | 说明 |
-| --- | --- |
-| `TryGetAssetType(path, out Type?)` | 不加载资产，仅从 metadata 解析具体类型。 |
-| `TryGetPersistentId(path, out Guid)` | 不加载资产，解析持久 ID。 |
-| `GetLoadedPaths()` | 已加载 canonical asset 的稳定路径快照。 |
-| `GetDependencies(asset, recursive=false)` | 直接或传递 runtime asset dependencies。 |
-| `GetReferenceInfo(asset)` | engine-known 引用位置诊断；不是 CLR strong-reference 计数。 |
-| `UnloadUnusedAssets()` | 释放无外部 managed reference 的 canonical asset，返回数量。 |
+当操作系统只移动 source、没有移动 `.imeta`：
 
-`UnloadUnusedAssets` 会触发资产的运行时资源释放，但只要外部仍保留强引用就不会回收对应实例。
+1. native rename old/new path 优先关联；
+2. Loader 检查目标 meta identity 冲突；
+3. `.imeta` 无 overwrite 地移动到新路径；
+4. Catalog path 与 loaded canonical `sourcePath` 原位更新；
+5. CAS artifact 不移动，内容不变时 key 不变；
+6. 发布带 ID、oldPath、newPath 的 `Moved`。
 
-## 文件树查询
+平台若只报告 delete+create，full reconcile 会按缺失 record 和 fingerprint 做唯一匹配；存在歧义时记录 `Conflict`，不会猜测。
 
-| API | 说明 |
-| --- | --- |
-| `GetFileSystemEntries(includeDirectories=true)` | 全部源文件/目录快照。 |
-| `GetFileSystemChildren(parentRelativePath)` | 某目录直接 children，目录排在文件前。 |
-| `TryGetFileSystemEntry(relativePath, out entry)` | 解析单个 entry。 |
-| `WaitForIdle()` | 等待已观察到的 watcher 变更完成 debounce、应用与事件回调。 |
+### delete/recovery
 
-Manager 会从这些公开结果中过滤 `.imeta` 和 `.abin` 生成文件。
+- 只删除 source、保留 `.imeta`：状态 `Missing`，ID 与 last-successful artifact 保留；同路径恢复后原位复活 canonical instance。
+- source 和 `.imeta` 都删除：保留最小 tombstone 供旧引用显示 missing，artifact 变为 GC 候选。
+- duplicate source + meta：已知原路径保留 ID，新副本获得新 ID，避免两个路径争用同一身份。
 
-## Reload 语义
+## CAS 回收
 
-当源文件更新并成功重新导入时，Loader 优先更新已有 canonical `AssetObject` 的状态，而不是让所有引用突然指向新对象。`contentVersion` 递增，`OnRuntimePayloadChanged` 被调用，随后发出 `AssetReloaded`。
+AssetManager 启动、`WaitForIdle` 和低频 idle update 会回收不可达 bundle。以下 key 保留：current、last-successful，以及当前 transaction 所需内容。超出 size limit 时优先删除最旧不可达 bundle；正常情况下还尊重 grace period。
 
-Importer 自身所在 assembly generation 变化时，即使开发者没有提升持久 `version`，本进程中的 Registry 也会将对应 importerId 的现有资产视为待重新导入；跨进程缓存仍以显式 importer `version` 为契约。
+CAS 目录只占磁盘，不会因存在就常驻运行内存。Artifact key 与 Assembly runtime generation 都不会写入 Scene/Prefab schema。
 
 ## 关闭顺序
 
@@ -112,4 +145,4 @@ AssemblyManager.Shutdown();
 IdentityManager.Shutdown();
 ```
 
-完整应用直接使用 `Shell.Shutdown()` 即可。
+完整宿主直接调用 `Shell.Shutdown()`。

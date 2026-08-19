@@ -24,7 +24,7 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
 
     static AssetReferencePropertyDrawer()
     {
-        AssetManager.SourceFileSystemChanged += static _ =>
+        AssetManager.Changed += static _ =>
         {
             lock (C_SYNC)
             {

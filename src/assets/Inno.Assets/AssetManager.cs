@@ -22,12 +22,14 @@ namespace Inno.Assets;
 /// </summary>
 public static class AssetManager
 {
-    private const string C_META_POSTFIX = ".imeta";
-    private const string C_ARTIFACT_POSTFIX = ".abin";
     private static readonly Lock S_LIFECYCLE_LOCK = new();
 
     private static AssetLoader? s_loader;
     private static AssetFileSystem? s_fileSystem;
+    private static int s_ownerThreadId;
+    private static long s_revision;
+    private static AssetCacheOptions s_cacheOptions;
+    private static long s_lastArtifactCollectionTimestamp;
 
     /// <summary>Gets whether asset services are initialized.</summary>
     public static bool isInitialized { get; private set; }
@@ -35,11 +37,14 @@ public static class AssetManager
     /// <summary>Gets the absolute source asset root.</summary>
     public static string assetRoot { get; private set; } = string.Empty;
 
+    /// <summary>Gets the absolute root containing rebuildable asset database data.</summary>
+    public static string libraryRoot { get; private set; } = string.Empty;
+
     /// <summary>Gets the absolute generated artifact root.</summary>
     public static string artifactRoot { get; private set; } = string.Empty;
 
-    /// <summary>Occurs after normalized source file changes have been applied.</summary>
-    public static event Action<IReadOnlyList<AssetChangedEvent>>? SourceFileSystemChanged;
+    /// <summary>Occurs after an asset database transaction has committed.</summary>
+    public static event Action<AssetChangeSet>? Changed;
 
     /// <summary>Occurs after a canonical loaded asset has been updated in place.</summary>
     public static event Action<AssetObject>? AssetReloaded;
@@ -59,28 +64,34 @@ public static class AssetManager
             throw new InvalidOperationException("AssetManager requires SerializationManager to be initialized first.");
         if (string.IsNullOrWhiteSpace(options.assetRoot))
             throw new ArgumentException("Asset root is required.", nameof(options));
-        if (string.IsNullOrWhiteSpace(options.artifactRoot))
-            throw new ArgumentException("Artifact root is required.", nameof(options));
+        if (string.IsNullOrWhiteSpace(options.libraryRoot))
+            throw new ArgumentException("Library root is required.", nameof(options));
 
         lock (S_LIFECYCLE_LOCK)
         {
             ShutdownLocked();
             assetRoot = Path.GetFullPath(options.assetRoot);
-            artifactRoot = Path.GetFullPath(options.artifactRoot);
-            AssetLoader loader = new(assetRoot, artifactRoot);
+            libraryRoot = Path.GetFullPath(options.libraryRoot);
+            artifactRoot = Path.Combine(libraryRoot, "Artifacts");
+            AssetLoader loader = new(assetRoot, libraryRoot, options.sourcePolicy);
             AssetFileSystem fileSystem = new(
                 assetRoot,
                 autoStart: false,
-                options.fileWatcherFlushDelayMs);
+                options.fileWatcherFlushDelayMs,
+                options.sourcePolicy);
             loader.AssetReloaded += OnAssetReloaded;
-            fileSystem.ChangedBatch += OnSourceChanges;
             s_loader = loader;
             s_fileSystem = fileSystem;
+            s_ownerThreadId = Environment.CurrentManagedThreadId;
+            s_revision = 0;
+            s_cacheOptions = options.cacheOptions;
+            s_lastArtifactCollectionTimestamp = 0;
             isInitialized = true;
             AssetSerializationServices.SetReferenceResolver(ResolveSerializedReference);
             try
             {
                 loader.Rescan();
+                CollectArtifactsIfDue(loader, force: true);
                 fileSystem.Refresh();
                 if (options.enableFileSystemWatcher)
                     fileSystem.Start();
@@ -153,16 +164,17 @@ public static class AssetManager
     /// <param name="relativePath">The source-relative path.</param>
     /// <param name="cancellationToken">Cancellation for the current caller's wait.</param>
     /// <returns>The canonical asset instance.</returns>
-    public static async ValueTask<TAsset> LoadAsync<TAsset>(
+    public static ValueTask<TAsset> LoadAsync<TAsset>(
         string relativePath,
         CancellationToken cancellationToken = default)
         where TAsset : AssetObject
     {
-        AssetObject? asset = await GetLoader()
-            .LoadAsync(relativePath, typeof(TAsset), cancellationToken)
-            .ConfigureAwait(false);
-        return asset as TAsset ?? throw new InvalidOperationException(
+        EnsureOwnerThread();
+        cancellationToken.ThrowIfCancellationRequested();
+        AssetObject? asset = GetLoader().Load(relativePath, typeof(TAsset));
+        TAsset result = asset as TAsset ?? throw new InvalidOperationException(
             $"Asset '{relativePath}' cannot be loaded as '{typeof(TAsset).FullName}'.");
+        return ValueTask.FromResult(result);
     }
 
     /// <summary>Asynchronously loads a canonical asset by persistent identity.</summary>
@@ -170,16 +182,17 @@ public static class AssetManager
     /// <param name="persistentId">The persistent asset identity.</param>
     /// <param name="cancellationToken">Cancellation for the current caller's wait.</param>
     /// <returns>The canonical asset instance.</returns>
-    public static async ValueTask<TAsset> LoadAsync<TAsset>(
+    public static ValueTask<TAsset> LoadAsync<TAsset>(
         Guid persistentId,
         CancellationToken cancellationToken = default)
         where TAsset : AssetObject
     {
-        AssetObject? asset = await GetLoader()
-            .LoadAsync(persistentId, typeof(TAsset), cancellationToken)
-            .ConfigureAwait(false);
-        return asset as TAsset ?? throw new InvalidOperationException(
+        EnsureOwnerThread();
+        cancellationToken.ThrowIfCancellationRequested();
+        AssetObject? asset = GetLoader().Load(persistentId, typeof(TAsset));
+        TAsset result = asset as TAsset ?? throw new InvalidOperationException(
             $"Asset '{persistentId}' cannot be loaded as '{typeof(TAsset).FullName}'.");
+        return ValueTask.FromResult(result);
     }
 
     /// <summary>Imports one source asset.</summary>
@@ -187,6 +200,7 @@ public static class AssetManager
     /// <returns><see langword="true"/> when an importer handled the source.</returns>
     public static bool Import(string relativePath)
     {
+        EnsureOwnerThread();
         bool imported = GetLoader().Import(relativePath);
         if (imported)
             GetFileSystem().Refresh();
@@ -198,6 +212,7 @@ public static class AssetManager
     /// <returns><see langword="true"/> when an importer exported the asset.</returns>
     public static bool Save(AssetObject asset)
     {
+        EnsureOwnerThread();
         bool saved = GetLoader().Save(asset);
         if (saved)
             GetFileSystem().Refresh();
@@ -210,6 +225,7 @@ public static class AssetManager
     /// <returns><see langword="true"/> when an importer exported the asset.</returns>
     public static bool Save(string relativePath, AssetObject asset)
     {
+        EnsureOwnerThread();
         bool saved = GetLoader().Save(relativePath, asset);
         if (saved)
             GetFileSystem().Refresh();
@@ -219,8 +235,25 @@ public static class AssetManager
     /// <summary>Reconciles source files, generated files and the persistent catalog.</summary>
     public static void Rescan()
     {
+        EnsureOwnerThread();
         GetLoader().Rescan();
         GetFileSystem().Refresh();
+    }
+
+    /// <summary>Applies queued source and build changes on the initialization thread.</summary>
+    public static void Update()
+    {
+        EnsureOwnerThread();
+        AssetFileSystem fileSystem = GetFileSystem();
+        IReadOnlyList<AssetChangedEvent> changes = fileSystem.PollChanges(out bool requiresFullRescan);
+        bool registriesChanged = GetLoader().RefreshRegistries();
+        if (changes.Count == 0 && !requiresFullRescan && !registriesChanged)
+        {
+            CollectArtifactsIfDue(GetLoader(), force: false);
+            return;
+        }
+        ApplySourceChanges(changes, requiresFullRescan || registriesChanged);
+        CollectArtifactsIfDue(GetLoader(), force: false);
     }
 
     /// <summary>Collects assets that have no external managed references.</summary>
@@ -240,6 +273,45 @@ public static class AssetManager
     /// <returns><see langword="true"/> when catalog metadata exists.</returns>
     public static bool TryGetPersistentId(string relativePath, out Guid persistentId)
         => GetLoader().TryGetPersistentId(relativePath, out persistentId);
+
+    /// <summary>Tries to get a catalog snapshot by source-relative path.</summary>
+    /// <param name="relativePath">The source-relative path.</param>
+    /// <param name="info">The catalog snapshot when available.</param>
+    /// <returns><see langword="true"/> when the path is cataloged.</returns>
+    public static bool TryGetInfo(string relativePath, out AssetInfo? info)
+        => GetLoader().TryGetInfo(relativePath, out info);
+
+    /// <summary>Tries to get a catalog snapshot by persistent identity.</summary>
+    /// <param name="persistentId">The persistent asset identity.</param>
+    /// <param name="info">The catalog snapshot when available.</param>
+    /// <returns><see langword="true"/> when the identity is cataloged.</returns>
+    public static bool TryGetInfo(Guid persistentId, out AssetInfo? info)
+        => GetLoader().TryGetInfo(persistentId, out info);
+
+    /// <summary>Tries to resolve a named artifact output.</summary>
+    /// <param name="persistentId">The artifact owner identity.</param>
+    /// <param name="outputName">The named output.</param>
+    /// <param name="artifact">The output information when available.</param>
+    /// <returns><see langword="true"/> when the output exists.</returns>
+    public static bool TryGetArtifact(
+        Guid persistentId,
+        string outputName,
+        out AssetArtifactInfo? artifact)
+        => GetLoader().TryGetArtifact(persistentId, outputName, out artifact);
+
+    /// <summary>Runs an aggregate asset build using the processor registered for a definition.</summary>
+    /// <param name="definition">The build definition asset.</param>
+    /// <param name="inputs">The immutable input catalog snapshots.</param>
+    /// <param name="cancellationToken">Cancellation for the candidate build.</param>
+    /// <returns>The content-addressed output bundle key.</returns>
+    public static ValueTask<AssetArtifactKey> BuildAsync(
+        AssetObject definition,
+        IReadOnlyList<AssetInfo> inputs,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureOwnerThread();
+        return GetLoader().BuildAsync(definition, inputs, cancellationToken);
+    }
 
     /// <summary>Gets source paths for all canonical loaded assets.</summary>
     /// <returns>A stable source-relative path snapshot.</returns>
@@ -264,13 +336,13 @@ public static class AssetManager
     /// <param name="includeDirectories">Whether directories should be included.</param>
     /// <returns>The stable source entry snapshot.</returns>
     public static IReadOnlyList<AssetFileEntry> GetFileSystemEntries(bool includeDirectories = true)
-        => FilterGenerated(GetFileSystem().GetEntries(includeDirectories));
+        => GetFileSystem().GetEntries(includeDirectories);
 
     /// <summary>Gets immediate indexed children of a source directory.</summary>
     /// <param name="parentRelativePath">The source-relative parent path.</param>
     /// <returns>The immediate child entry snapshot.</returns>
     public static IReadOnlyList<AssetFileEntry> GetFileSystemChildren(string parentRelativePath)
-        => FilterGenerated(GetFileSystem().GetChildren(parentRelativePath));
+        => GetFileSystem().GetChildren(parentRelativePath);
 
     /// <summary>Tries to resolve an indexed source entry.</summary>
     /// <param name="relativePath">The source-relative path.</param>
@@ -278,16 +350,20 @@ public static class AssetManager
     /// <returns><see langword="true"/> when the entry exists and is not generated metadata.</returns>
     public static bool TryGetFileSystemEntry(string relativePath, out AssetFileEntry entry)
     {
-        if (IsGeneratedPath(relativePath))
-        {
-            entry = null!;
-            return false;
-        }
         return GetFileSystem().TryGetEntry(relativePath, out entry);
     }
 
     /// <summary>Waits until queued source watcher changes have been processed.</summary>
-    public static void WaitForIdle() => GetFileSystem().WaitForIdle();
+    public static void WaitForIdle()
+    {
+        EnsureOwnerThread();
+        AssetFileSystem fileSystem = GetFileSystem();
+        IReadOnlyList<AssetChangedEvent> changes = fileSystem.WaitForIdle(out bool requiresFullRescan);
+        if (changes.Count > 0 || requiresFullRescan)
+            ApplySourceChanges(changes, requiresFullRescan);
+        GetLoader().WaitForIdle();
+        CollectArtifactsIfDue(GetLoader(), force: true);
+    }
 
     internal static AssetObject ResolveSerializedReference(
         Guid persistentId,
@@ -313,14 +389,20 @@ public static class AssetManager
         }
     }
 
-    private static void OnSourceChanges(IReadOnlyList<AssetChangedEvent> changes)
+    private static void ApplySourceChanges(
+        IReadOnlyList<AssetChangedEvent> changes,
+        bool requiresFullRescan)
     {
         AssetLoader? loader = s_loader;
         if (loader is null)
             return;
+        Dictionary<string, Guid> previousIds = CapturePreviousIds(loader, changes);
         try
         {
-            loader.ApplySourceChanges(changes);
+            if (requiresFullRescan)
+                loader.Rescan();
+            else
+                loader.ApplySourceChanges(changes);
         }
         catch (Exception exception)
         {
@@ -334,7 +416,8 @@ public static class AssetManager
                 Log.Error("Asset source recovery rescan failed: {0}", recoveryException);
             }
         }
-        InvokeObservers(SourceFileSystemChanged, changes);
+        AssetChange[] committed = CreateCommittedChanges(loader, changes, previousIds, requiresFullRescan);
+        InvokeObservers(Changed, new AssetChangeSet(Interlocked.Increment(ref s_revision), committed));
     }
 
     private static void OnAssetReloaded(AssetObject asset)
@@ -367,19 +450,85 @@ public static class AssetManager
             ? s_fileSystem
             : throw new InvalidOperationException("AssetManager is not initialized.");
 
-    private static IReadOnlyList<AssetFileEntry> FilterGenerated(IReadOnlyList<AssetFileEntry> entries)
-        => entries.Where(static entry => entry.isDirectory || !IsGeneratedPath(entry.relativePath)).ToArray();
+    private static Dictionary<string, Guid> CapturePreviousIds(
+        AssetLoader loader,
+        IReadOnlyList<AssetChangedEvent> changes)
+    {
+        var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < changes.Count; i++)
+        {
+            AssetChangedEvent change = changes[i];
+            string path = string.IsNullOrWhiteSpace(change.oldRelativePath)
+                ? change.relativePath
+                : change.oldRelativePath;
+            if (loader.TryGetPersistentId(path, out Guid id))
+                result[path] = id;
+        }
+        return result;
+    }
 
-    private static bool IsGeneratedPath(string relativePath)
-        => relativePath.EndsWith(C_META_POSTFIX, StringComparison.OrdinalIgnoreCase) ||
-           relativePath.EndsWith(C_ARTIFACT_POSTFIX, StringComparison.OrdinalIgnoreCase);
+    private static AssetChange[] CreateCommittedChanges(
+        AssetLoader loader,
+        IReadOnlyList<AssetChangedEvent> changes,
+        IReadOnlyDictionary<string, Guid> previousIds,
+        bool requiresFullRescan)
+    {
+        if (requiresFullRescan && changes.Count == 0)
+            return [new AssetChange(AssetChangeKind.StatusChanged, Guid.Empty, string.Empty)];
+
+        var result = new List<AssetChange>(changes.Count);
+        for (int i = 0; i < changes.Count; i++)
+        {
+            AssetChangedEvent change = changes[i];
+            bool moved = change.changeType.HasFlag(WatcherChangeTypes.Renamed);
+            bool deleted = change.changeType.HasFlag(WatcherChangeTypes.Deleted);
+            Guid id = Guid.Empty;
+            if (!loader.TryGetPersistentId(change.relativePath, out id))
+            {
+                string previousPath = moved ? change.oldRelativePath : change.relativePath;
+                _ = previousIds.TryGetValue(previousPath, out id);
+            }
+            AssetChangeKind kind = moved
+                ? AssetChangeKind.Moved
+                : deleted
+                    ? System.IO.File.Exists(Path.Combine(assetRoot, change.relativePath + ".imeta"))
+                        ? AssetChangeKind.Missing
+                        : AssetChangeKind.Removed
+                    : change.changeType.HasFlag(WatcherChangeTypes.Created)
+                        ? AssetChangeKind.Added
+                        : AssetChangeKind.Modified;
+            result.Add(new AssetChange(kind, id, change.relativePath, change.oldRelativePath));
+        }
+        return result.ToArray();
+    }
+
+    private static void EnsureOwnerThread()
+    {
+        if (!isInitialized)
+            throw new InvalidOperationException("AssetManager is not initialized.");
+        if (Environment.CurrentManagedThreadId != s_ownerThreadId)
+        {
+            throw new InvalidOperationException(
+                "Asset database mutations must run on the thread that initialized AssetManager.");
+        }
+    }
+
+    private static void CollectArtifactsIfDue(AssetLoader loader, bool force)
+    {
+        long now = Environment.TickCount64;
+        if (!force && now - s_lastArtifactCollectionTimestamp < 60_000)
+            return;
+        s_lastArtifactCollectionTimestamp = now;
+        _ = loader.CollectArtifacts(
+            s_cacheOptions.garbageCollectionGracePeriod,
+            s_cacheOptions.maximumSizeBytes);
+    }
 
     private static void ShutdownLocked()
     {
         AssetSerializationServices.SetReferenceResolver(null);
         if (s_fileSystem is not null)
         {
-            s_fileSystem.ChangedBatch -= OnSourceChanges;
             s_fileSystem.Dispose();
         }
         if (s_loader is not null)
@@ -390,9 +539,14 @@ public static class AssetManager
         s_fileSystem = null;
         s_loader = null;
         assetRoot = string.Empty;
+        libraryRoot = string.Empty;
         artifactRoot = string.Empty;
+        s_ownerThreadId = 0;
+        s_revision = 0;
+        s_cacheOptions = default;
+        s_lastArtifactCollectionTimestamp = 0;
         isInitialized = false;
-        SourceFileSystemChanged = null;
+        Changed = null;
         AssetReloaded = null;
     }
 }

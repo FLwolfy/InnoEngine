@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 using Inno.Assets.Core;
@@ -277,17 +278,19 @@ public sealed class AssetManagerContractTests : IDisposable
         internal TestAssetWorkspace()
         {
             Directory.CreateDirectory(assetRoot);
-            Directory.CreateDirectory(artifactRoot);
+            Directory.CreateDirectory(libraryRoot);
         }
 
         internal string assetRoot => Path.Combine(m_root, "Assets");
-        internal string artifactRoot => Path.Combine(m_root, "Artifacts");
+        internal string libraryRoot => Path.Combine(m_root, "Library");
         internal AssetManagerOptions options => new()
         {
             assetRoot = assetRoot,
-            artifactRoot = artifactRoot,
+            libraryRoot = libraryRoot,
             enableFileSystemWatcher = false,
-            fileWatcherFlushDelayMs = 20
+            fileWatcherFlushDelayMs = 20,
+            sourcePolicy = Inno.Assets.File.AssetSourcePolicy.defaultPolicy,
+            cacheOptions = AssetCacheOptions.CreateDefault()
         };
 
         internal void Write(string relativePath, string content)
@@ -322,13 +325,15 @@ internal sealed class ManagerDependencyImporter : AssetImporter<ManagerDependenc
     public override string importerId => "inno.tests.manager-dependency";
     public override IReadOnlyList<string> supportedExtensions { get; } = [".managerdep"];
 
-    protected override AssetImportResult<ManagerDependencyAsset> Import(AssetImportContext context)
+    protected override ValueTask ImportAsync(
+        AssetImportContext context,
+        AssetImportWriter<ManagerDependencyAsset> output,
+        CancellationToken cancellationToken)
     {
         string dependency = context.ReadUtf8Text().Trim();
         if (!string.IsNullOrWhiteSpace(dependency))
-            context.DependsOnAsset(dependency);
-        return new AssetImportResult<ManagerDependencyAsset>(
-            new ManagerDependencyAsset(),
-            context.sourceBytes);
+            output.DependsOnAsset(dependency);
+        output.SetAsset(new ManagerDependencyAsset());
+        return output.WriteArtifactAsync("runtime", context.sourceBytes, cancellationToken);
     }
 }

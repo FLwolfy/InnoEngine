@@ -20,7 +20,7 @@ namespace Inno.Core.Framework;
 public sealed class Shell
 {
     private const string DEFAULT_ASSET_DIRECTORY = "Assets";
-    private const string DEFAULT_ARTIFACT_DIRECTORY = "Artifacts";
+    private const string DEFAULT_LIBRARY_DIRECTORY = "Library";
     private const string DEFAULT_LOG_DIRECTORY = "Logs";
     private const string DEFAULT_ASSEMBLY_CACHE_DIRECTORY = "Library/Assemblies";
 
@@ -137,7 +137,7 @@ public sealed class Shell
 
             AssetManager.Initialize(AssetManagerOptions.Create(
                 Path.Combine(settings.projectRootDirectory, DEFAULT_ASSET_DIRECTORY),
-                Path.Combine(settings.projectRootDirectory, DEFAULT_ARTIFACT_DIRECTORY)
+                Path.Combine(settings.projectRootDirectory, DEFAULT_LIBRARY_DIRECTORY)
             ));
         }
         catch
@@ -201,6 +201,7 @@ public sealed class Shell
 
         try
         {
+            AssetManager.Update();
             m_events.Flush();
             Time.Update(totalTime, delta);
             m_coroutines.Tick(delta);

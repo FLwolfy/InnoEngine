@@ -1,4 +1,7 @@
+using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 using Inno.Assets.Core;
 using Inno.Assets.Loader;
@@ -21,21 +24,24 @@ internal sealed class SceneAssetImporter : AssetImporter<SceneAsset>
     public override IReadOnlyList<string> supportedExtensions => s_extensions;
 
     /// <inheritdoc />
-    protected override AssetImportResult<SceneAsset> Import(AssetImportContext context)
+    protected override async ValueTask ImportAsync(
+        AssetImportContext context,
+        AssetImportWriter<SceneAsset> output,
+        CancellationToken cancellationToken)
     {
         SceneAsset asset = SceneAsset.Import(
             context.sourceBytes.ToArray(),
             out byte[] artifact,
             out AssetDependency[] dependencies);
         for (int i = 0; i < dependencies.Length; i++)
-            context.DependsOnAsset(dependencies[i]);
-        return new AssetImportResult<SceneAsset>(asset, artifact);
+            output.DependsOnAsset(dependencies[i]);
+        output.SetAsset(asset);
+        await output.WriteArtifactAsync("runtime", artifact, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    protected override bool TryExport(SceneAsset asset, out byte[] sourceBytes)
-    {
-        sourceBytes = asset.ExportSource();
-        return true;
-    }
+    protected override ValueTask<ReadOnlyMemory<byte>?> ExportAsync(
+        SceneAsset asset,
+        CancellationToken cancellationToken)
+        => ValueTask.FromResult<ReadOnlyMemory<byte>?>(asset.ExportSource());
 }

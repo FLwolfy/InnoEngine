@@ -46,10 +46,18 @@ internal sealed class FileBrowserData
         entries.Sort(static (left, right) =>
         {
             int byName = string.Compare(
-                Path.GetFileName(left.relativePath),
-                Path.GetFileName(right.relativePath),
+                left.nameWithoutExtension,
+                right.nameWithoutExtension,
                 StringComparison.OrdinalIgnoreCase);
-            return byName != 0 ? byName : string.CompareOrdinal(left.relativePath, right.relativePath);
+            if (byName != 0)
+                return byName;
+            int byExtension = string.Compare(
+                left.extension,
+                right.extension,
+                StringComparison.OrdinalIgnoreCase);
+            return byExtension != 0
+                ? byExtension
+                : string.CompareOrdinal(left.relativePath, right.relativePath);
         });
         return entries;
     }
@@ -108,13 +116,6 @@ internal sealed class FileBrowserData
 
     internal IReadOnlyList<AssetFileEntry> GetVisibleChildren(string relativePath)
     {
-        IReadOnlyList<AssetFileEntry> children = AssetManager.GetFileSystemChildren(relativePath);
-        var visible = new List<AssetFileEntry>(children.Count);
-        for (int i = 0; i < children.Count; i++)
-        {
-            if (FileBrowserEntryFilter.IsVisible(children[i]))
-                visible.Add(children[i]);
-        }
-        return visible;
+        return AssetManager.GetFileSystemChildren(relativePath);
     }
 }
