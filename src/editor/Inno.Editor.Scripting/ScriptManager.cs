@@ -174,7 +174,7 @@ public sealed class ScriptManager : IDisposable
                     [new ScriptDiagnostic(
                         "INNO0001",
                         ScriptDiagnosticSeverity.Error,
-                        exception.Message,
+                        exception.ToString(),
                         filePath: null,
                         line: 0,
                         column: 0)],

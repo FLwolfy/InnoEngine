@@ -22,6 +22,9 @@ public sealed class LogicalScriptingApiAnalyzer : DiagnosticAnalyzer
     /// <summary>Diagnostic identifier for a missing logical namespace import.</summary>
     public const string missingLogicalNamespaceDiagnosticId = "INNO2002";
 
+    /// <summary>Diagnostic identifier for a forbidden compilation-wide namespace import.</summary>
+    public const string compilationWideUsingDiagnosticId = "INNO2003";
+
     private static readonly DiagnosticDescriptor s_directImplementationNamespace = new(
         directImplementationNamespaceDiagnosticId,
         "Implementation namespace is not part of the scripting API",
@@ -38,9 +41,20 @@ public sealed class LogicalScriptingApiAnalyzer : DiagnosticAnalyzer
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor s_compilationWideUsing = new(
+        compilationWideUsingDiagnosticId,
+        "Compilation-wide namespace imports are not supported",
+        "Use an ordinary using directive in each source file",
+        "Inno Scripting",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
-        => ImmutableArray.Create(s_directImplementationNamespace, s_missingLogicalNamespace);
+        => ImmutableArray.Create(
+            s_directImplementationNamespace,
+            s_missingLogicalNamespace,
+            s_compilationWideUsing);
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)
@@ -49,6 +63,9 @@ public sealed class LogicalScriptingApiAnalyzer : DiagnosticAnalyzer
         context.EnableConcurrentExecution();
         context.RegisterCompilationStartAction(startContext =>
         {
+            startContext.RegisterSyntaxNodeAction(
+                AnalyzeCompilationWideUsing,
+                SyntaxKind.UsingDirective);
             ScriptApiMap map = ScriptApiMap.Read(
                 startContext.Options.AdditionalFiles,
                 startContext.CancellationToken);
@@ -66,6 +83,16 @@ public sealed class LogicalScriptingApiAnalyzer : DiagnosticAnalyzer
                 SyntaxKind.QualifiedName,
                 SyntaxKind.AliasQualifiedName);
         });
+    }
+
+    private static void AnalyzeCompilationWideUsing(SyntaxNodeAnalysisContext context)
+    {
+        var usingDirective = (UsingDirectiveSyntax)context.Node;
+        if (usingDirective.GlobalKeyword == default)
+            return;
+        context.ReportDiagnostic(Diagnostic.Create(
+            s_compilationWideUsing,
+            usingDirective.GlobalKeyword.GetLocation()));
     }
 
     private static void AnalyzeUsing(SyntaxNodeAnalysisContext context, ScriptApiMap map)

@@ -11,7 +11,6 @@ namespace Inno.Editor.Scripting;
 internal sealed class ScriptApiUsingRewriter : CSharpSyntaxRewriter
 {
     private readonly IReadOnlyDictionary<string, string[]> m_mappings;
-    private readonly HashSet<string> m_additionalGlobalUsings = new(StringComparer.Ordinal);
 
     internal ScriptApiUsingRewriter(IReadOnlyList<ScriptApiNamespaceMapping> mappings)
     {
@@ -27,19 +26,39 @@ internal sealed class ScriptApiUsingRewriter : CSharpSyntaxRewriter
                 StringComparer.Ordinal);
     }
 
-    internal IReadOnlyCollection<string> additionalGlobalUsings => m_additionalGlobalUsings;
+    public override SyntaxNode? VisitCompilationUnit(CompilationUnitSyntax node)
+        => base.VisitCompilationUnit(node.WithUsings(RewriteUsings(node.Usings)));
 
-    public override SyntaxNode? VisitUsingDirective(UsingDirectiveSyntax node)
+    public override SyntaxNode? VisitFileScopedNamespaceDeclaration(FileScopedNamespaceDeclarationSyntax node)
+        => base.VisitFileScopedNamespaceDeclaration(node.WithUsings(RewriteUsings(node.Usings)));
+
+    public override SyntaxNode? VisitNamespaceDeclaration(NamespaceDeclarationSyntax node)
+        => base.VisitNamespaceDeclaration(node.WithUsings(RewriteUsings(node.Usings)));
+
+    private SyntaxList<UsingDirectiveSyntax> RewriteUsings(SyntaxList<UsingDirectiveSyntax> usings)
     {
-        if (node.Alias is not null || node.StaticKeyword != default || node.Name is null ||
-            !m_mappings.TryGetValue(node.Name.ToString(), out string[]? implementations) ||
-            implementations.Length == 0)
+        var result = new List<UsingDirectiveSyntax>(usings.Count);
+        foreach (UsingDirectiveSyntax usingDirective in usings)
         {
-            return base.VisitUsingDirective(node);
-        }
+            if (usingDirective.Alias is not null ||
+                usingDirective.StaticKeyword != default ||
+                usingDirective.Name is null ||
+                !m_mappings.TryGetValue(usingDirective.Name.ToString(), out string[]? implementations) ||
+                implementations.Length == 0)
+            {
+                result.Add(usingDirective);
+                continue;
+            }
 
-        for (int i = 1; i < implementations.Length; i++)
-            m_additionalGlobalUsings.Add(implementations[i]);
-        return node.WithName(SyntaxFactory.ParseName(implementations[0]).WithTriviaFrom(node.Name));
+            for (int i = 0; i < implementations.Length; i++)
+            {
+                UsingDirectiveSyntax rewritten = usingDirective.WithName(
+                    SyntaxFactory.ParseName(implementations[i]).WithTriviaFrom(usingDirective.Name));
+                if (i > 0)
+                    rewritten = rewritten.WithLeadingTrivia(default(SyntaxTriviaList));
+                result.Add(rewritten);
+            }
+        }
+        return SyntaxFactory.List(result);
     }
 }

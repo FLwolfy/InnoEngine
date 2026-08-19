@@ -7,6 +7,7 @@ using Inno.Editor.ImGui;
     ScriptingApiScope.Editor)]
 
 [assembly: ScriptingApiExport(typeof(EditorPalette), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorStyleMetrics), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ImGuiWidget), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(InlineRenameResult), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(TreeNodeOptions), ScriptingApiScope.Editor)]

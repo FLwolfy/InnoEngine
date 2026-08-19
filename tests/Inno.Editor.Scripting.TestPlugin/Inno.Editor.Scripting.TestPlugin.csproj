@@ -5,7 +5,4 @@
     <Nullable>enable</Nullable>
     <AssemblyName>Inno.Editor.Scripting.TestPlugin</AssemblyName>
   </PropertyGroup>
-  <ItemGroup>
-    <AssemblyMetadata Include="Inno.ScriptGlobalUsings" Value="ProjectPluginApi" />
-  </ItemGroup>
 </Project>

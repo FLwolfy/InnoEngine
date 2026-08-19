@@ -147,10 +147,35 @@ public sealed class PlayerController : GameBehavior
 - IDE facade 真正定义 `InnoEngine.*` / `InnoEditor.*` metadata 类型，并携带重写后的 XML documentation。
 - IDE csproj 不引用真实 `Inno.*` 实现程序集，因此实现 namespace 无法解析。
 - Runtime Roslyn 使用保持真实 CLR identity 的裁剪 reference set，并把逻辑 using 重写为声明的实现 namespace。
-- 内建 API 不声明 global using；脚本必须显式 `using InnoEngine.*`。
-- `ScriptingGlobalUsing` 能力只保留给明确声明它的第三方 plugin。
+- 所有脚本文件必须显式声明自己使用的 `InnoEngine.*` / `InnoEditor.*` namespace。
+- 编译范围导入、MSBuild `Using` item、隐式导入和 plugin metadata 注入均不受支持。
 - API/export/comment/MVID 变化会改变 facade/build fingerprint。
 - `AssetManagerOptions` 等 host initialization 类型不导出；脚本只看到查询、加载、Importer writer 与 Build Processor 所需契约。
+
+Editor facade 按 feature 分布：
+
+| Facade | 来源 |
+| --- | --- |
+| `InnoEditor.Core` / `Commands` / `Menus` / `DragDrop` / `Panels` | `Inno.Editor.Core` contracts |
+| `InnoEditor.Assets` | `Inno.Editor.Assets` extension contracts |
+| `InnoEditor.Scene` / `Inspection` | `Inno.Editor.Scene` extension contracts |
+| `InnoEditor.ImGui` | `EditorPalette`、`EditorStyleMetrics` 与 widgets |
+
+菜单直接声明在 Action 上，不需要 package class 或集中注册：
+
+```csharp
+using InnoEditor.Menus;
+using InnoEditor.Commands;
+
+public sealed class MaterialSurface;
+
+[EditorAction("rendering.create-material", typeof(MaterialSurface))]
+[EditorMenu(typeof(MaterialSurface), "Create/Rendering/Material")]
+public sealed class CreateMaterialAction : EditorAction
+{
+    public override void Execute(EditorActionContext context) { }
+}
+```
 
 `StableTypeId` 不是普通脚本 Component/System 的必填项。编译器使用下列 canonical source 规则：
 
@@ -180,7 +205,7 @@ IDE 工程是补全和诊断模型；Editor 实际热编译仍使用进程内 Ro
 
 `Assets/**/Plugins/*.dll` 必须是 managed .NET assembly。`.editor.dll` 只提供给 Editor scope；其他 DLL 可供 Runtime 和 Editor。PDB/deps 是 DLL source unit 的 companion dependency，不单独变成 `BinaryAsset`。
 
-Plugin 的 `ScriptingGlobalUsing` metadata 仍会合并到它可见的 profile。Assembly simple-name 冲突、坏 PE 或缺失依赖会使 candidate build 失败，旧脚本保持活动。
+Plugin 类型只能通过脚本文件中的普通 `using` 显式导入。Assembly simple-name 冲突、坏 PE 或缺失依赖会使 candidate build 失败，旧脚本保持活动。
 
 ## Reload 与 Scene 状态
 

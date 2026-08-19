@@ -36,8 +36,13 @@ public static partial class ImGuiWidget
 
             if (highlight)
             {
-                float lineY = cursor.Y + NativeImGui.GetTextLineHeight() - 2f;
-                drawList.AddLine(new Vector2(cursor.X, lineY), new Vector2(textPos.X + textSize.X, lineY), color, 1f);
+                float lineY = cursor.Y + NativeImGui.GetTextLineHeight() -
+                              ImGuiWidget.style.textDecorationOffset;
+                drawList.AddLine(
+                    new Vector2(cursor.X, lineY),
+                    new Vector2(textPos.X + textSize.X, lineY),
+                    color,
+                    ImGuiWidget.style.borderSize);
             }
 
             NativeImGui.Dummy(new Vector2(

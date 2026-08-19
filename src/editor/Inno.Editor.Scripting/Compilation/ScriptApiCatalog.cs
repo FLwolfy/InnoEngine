@@ -21,7 +21,6 @@ internal sealed record ScriptApiProfile(
     string name,
     IReadOnlyList<ScriptApiAssembly> exports,
     IReadOnlyList<Assembly> implementationAssemblies,
-    IReadOnlyList<string> globalUsings,
     IReadOnlyList<string> apiNamespaces,
     IReadOnlyList<ScriptApiNamespaceMapping> namespaceMappings);
 
@@ -72,14 +71,6 @@ internal static class ScriptApiCatalog
             AddWithDependencies(assembly, byName, implementationAssemblies);
         }
 
-        string[] requestedNamespaces = loaded
-            .SelectMany(static assembly => assembly.GetCustomAttributes<ScriptingGlobalUsingAttribute>())
-            .Where(attribute => Includes(attribute.scope, includeEditor))
-            .Select(static attribute => attribute.namespaceName)
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(static value => value, StringComparer.Ordinal)
-            .ToArray();
-        string[] globalUsings = ExpandGlobalUsings(requestedNamespaces, namespaceMappings);
         string[] apiNamespaces = namespaceMappings
             .Select(static mapping => mapping.apiNamespace)
             .Distinct(StringComparer.Ordinal)
@@ -98,31 +89,12 @@ internal static class ScriptApiCatalog
             implementationAssemblies
                 .OrderBy(static assembly => assembly.GetName().Name, StringComparer.Ordinal)
                 .ToArray(),
-            globalUsings,
             apiNamespaces,
             publicMappings);
     }
 
     private static bool Includes(ScriptingApiScope scope, bool includeEditor)
         => scope == ScriptingApiScope.Runtime || includeEditor && scope == ScriptingApiScope.Editor;
-
-    private static string[] ExpandGlobalUsings(
-        IReadOnlyList<string> requestedNamespaces,
-        IReadOnlyList<NamespaceMapping> mappings)
-    {
-        foreach (string requestedNamespace in requestedNamespaces)
-        {
-            if (!mappings.Any(mapping => string.Equals(
-                    mapping.apiNamespace,
-                    requestedNamespace,
-                    StringComparison.Ordinal)))
-            {
-                throw new InvalidOperationException(
-                    $"Script API namespace '{requestedNamespace}' has no implementation namespace mapping.");
-            }
-        }
-        return requestedNamespaces.ToArray();
-    }
 
     private static void ValidateExports(
         Assembly assembly,

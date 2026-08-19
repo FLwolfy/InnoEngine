@@ -29,8 +29,6 @@ public enum InlineRenameResult
 
 public static partial class ImGuiWidget
 {
-    private const float C_DISCLOSURE_BUTTON_INSET = 2f;
-
     /// <summary>
     /// Draws a single-line search field with a stable identifier.
     /// </summary>
@@ -66,9 +64,11 @@ public static partial class ImGuiWidget
         ref string query,
         string hint,
         nuint capacity = 256,
-        float width = 280f)
+        float width = -1f)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        if (width < 0f)
+            width = style.searchPopupWidth;
         if (!NativeImGui.BeginPopup(id))
         {
             return false;
@@ -184,7 +184,7 @@ public static partial class ImGuiWidget
     public static Vector2 GetIconButtonSize()
     {
         float iconSlotWidth = NativeImGui.GetTextLineHeight();
-        return new Vector2(iconSlotWidth + 6f, NativeImGui.GetFrameHeight());
+        return new Vector2(iconSlotWidth + style.iconLabelSpacing, NativeImGui.GetFrameHeight());
     }
 
     /// <summary>
@@ -194,9 +194,11 @@ public static partial class ImGuiWidget
     /// <param name="value">Mutable checked state.</param>
     /// <param name="size">Visual square size in pixels.</param>
     /// <returns><see langword="true"/> when the value changed.</returns>
-    public static bool CompactCheckbox(string id, ref bool value, float size = 13f)
+    public static bool CompactCheckbox(string id, ref bool value, float size = -1f)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        if (size < 0f)
+            size = style.compactCheckboxSize;
         if (size <= 0f)
         {
             throw new ArgumentOutOfRangeException(nameof(size), size, "Checkbox size must be positive.");
@@ -316,8 +318,8 @@ public static partial class ImGuiWidget
         NativeImGui.PushStyleColor(ImGuiCol.Header, EditorPalette.inspectorCardHeader);
         NativeImGui.PushStyleColor(ImGuiCol.HeaderHovered, EditorPalette.inspectorCardHeader);
         NativeImGui.PushStyleColor(ImGuiCol.HeaderActive, EditorPalette.inspectorCardHeader);
-        NativeImGui.PushStyleColor(ImGuiCol.Text, Vector4.Zero);
-        NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(4f, 1f));
+        NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.transparent);
+        NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, style.inspectorCardHeaderPadding);
         Vector2 headerCursor = NativeImGui.GetCursorScreenPos();
         (float cardLeft, float cardRight) = GetFullWidthCardBounds(headerCursor);
         Vector2 persistentHeaderMin = new(cardLeft, headerCursor.Y);
@@ -349,7 +351,7 @@ public static partial class ImGuiWidget
         if (drawLeadingControl is not null)
         {
             drawLeadingControl();
-            NativeImGui.SameLine(0f, 4f);
+            NativeImGui.SameLine(0f, style.inspectorHeaderControlSpacing);
         }
 
         NativeImGui.AlignTextToFramePadding();
@@ -389,7 +391,7 @@ public static partial class ImGuiWidget
         Vector2 availableSize = Vector2.Max(Vector2.Zero, max - min);
         float buttonSize = MathF.Max(
             1f,
-            MathF.Min(availableSize.X, availableSize.Y) - C_DISCLOSURE_BUTTON_INSET * 2f);
+            MathF.Min(availableSize.X, availableSize.Y) - style.disclosureButtonInset * 2f);
         Vector2 buttonMin = min + (availableSize - new Vector2(buttonSize)) * 0.5f;
         Vector2 buttonMax = buttonMin + new Vector2(buttonSize);
         ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
@@ -408,7 +410,7 @@ public static partial class ImGuiWidget
         uint color = NativeImGui.ColorConvertFloat4ToU32(
             dimmed
                 ? EditorPalette.inspectorCardDisabledText
-                : NativeImGui.ColorConvertU32ToFloat4(NativeImGui.GetColorU32(ImGuiCol.Text)));
+                : EditorPalette.text);
         drawList.AddText(indicatorPosition, color, indicator);
     }
 
@@ -429,8 +431,8 @@ public static partial class ImGuiWidget
         NativeImGui.PushStyleColor(ImGuiCol.FrameBg, EditorPalette.inspectorCardBody);
         NativeImGui.PushStyleColor(ImGuiCol.Border, EditorPalette.inspectorCardBodyBorder);
         NativeImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, NativeImGui.GetStyle().FrameRounding);
-        NativeImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1f);
-        NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(7f, 5f));
+        NativeImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, style.borderSize);
+        NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, style.inspectorCardBodyPadding);
         ImGuiChildFlags childFlags = ImGuiChildFlags.FrameStyle | ImGuiChildFlags.AutoResizeY;
         ImGuiWindowFlags windowFlags = ImGuiWindowFlags.NoScrollbar |
                                        ImGuiWindowFlags.NoScrollWithMouse |

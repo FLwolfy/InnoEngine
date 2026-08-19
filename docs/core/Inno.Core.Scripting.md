@@ -68,17 +68,9 @@ Editor 会为 IDE 生成一个真正声明 `InnoEngine.Scene.GameBehavior` 等�
 
 脚本直接写 `using Inno.Engine.Scene;` 会得到 `INNO2001` 错误；使用已导出类型却没有导入对应逻辑 namespace 会得到 `INNO2002`。这两个诊断同时用于运行时 Roslyn 编译和生成的 IDE 工程。
 
-### ScriptingGlobalUsingAttribute
+### Namespace 导入规则
 
-```csharp
-ScriptingGlobalUsingAttribute(
-    string namespaceName,
-    ScriptingApiScope scope)
-```
-
-请求脚本编译器把一个脚本 API namespace 的全部实现 namespace 注入 global usings。参数使用稳定逻辑名，而不是直接重复 CLR namespace。
-
-该能力当前仅作为可选扩展保留；引擎内置的 `Properties/ScriptingApi.cs` 均不声明 global using。GameScripts 和 EditorScripts 必须显式 `using InnoEngine.*` 或 `using InnoEditor.*`，避免项目 API 因隐式导入而难以审查。
+每个脚本文件必须通过普通 `using InnoEngine.*` 或 `using InnoEditor.*` 显式导入自己使用的逻辑 namespace。编译范围导入、隐式导入、MSBuild `Using` item 和 plugin metadata 注入均被禁止。运行时编译器会把每个文件中的逻辑 namespace 映射为该文件可见的实现 namespace，不会把导入扩散到其他源码文件。
 
 ## 标准 Properties/ScriptingApi.cs
 
@@ -117,8 +109,8 @@ using Inno.Engine.Scene.Components;
 
 ## 常见误区
 
-- `ScriptingGlobalUsing` 不是访问权限；真正的边界来自显式 export、IDE 逻辑 facade、运行时裁剪 reference assembly 和逻辑 namespace 分析器。
-- 内置模块不要声明 `ScriptingGlobalUsing`；保留 attribute 是为了未来受控 profile 或第三方扩展使用。
+- Namespace 导入不是访问权限；真正的边界来自显式 export、IDE 逻辑 facade、运行时裁剪 reference assembly 和逻辑 namespace 分析器。
+- 不要通过生成源码、项目项或 plugin metadata 注入编译范围导入；每个脚本文件都应显式声明依赖。
 - 不要为方便而导出整个 Manager/Registry 程序集。先导出脚本确实需要的最小类型。
 - 不要在多个文件分散 assembly attribute。每个项目唯一的 `Properties/ScriptingApi.cs` 是可审查的 API 清单。
 - 脚本 API namespace 是稳定的源码契约；真实 CLR namespace 仍决定运行时类型身份。

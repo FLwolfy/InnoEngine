@@ -12,9 +12,13 @@ using Inno.Core.Assemblies;
 using Inno.Core.Identity;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
+using Inno.Editor.Assets.AssetEditors;
 using Inno.Editor.Core;
+using Inno.Editor.Core.Commands;
 using Inno.Editor.ImGui;
-using Inno.Editor.Inspection;
+using Inno.Editor.Interactions;
+using Inno.Editor.Scene.Inspection;
+using Inno.Editor.Scene.Workspace;
 using Inno.Editor.Scripting;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Assets;
@@ -40,6 +44,7 @@ public sealed class ScriptManagerTests : IDisposable
         _ = Assembly.Load(typeof(TextAsset).Assembly.GetName());
         _ = Assembly.Load(typeof(EditorContext).Assembly.GetName());
         _ = Assembly.Load(typeof(ImGuiWidget).Assembly.GetName());
+        _ = Assembly.Load(typeof(AssetEditor).Assembly.GetName());
         _ = Assembly.Load(typeof(IPropertyDrawer).Assembly.GetName());
         IdentityManager.Initialize();
         AssemblyManager.Initialize(new AssemblyManagerOptions
@@ -267,7 +272,100 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public void LocalPluginMetadataProvidesScriptGlobalUsings()
+    public void EditorScriptsCanDeclareEveryInteractionExtensionKind()
+    {
+        Write("InteractionExtensions.editor.cs", """
+            using InnoEditor.Assets;
+            using InnoEditor.Commands;
+            using InnoEditor.Core;
+            using InnoEditor.DragDrop;
+            using InnoEditor.Menus;
+            using InnoEditor.Panels;
+            using InnoEngine.Assets;
+
+            public sealed class TestSurface;
+            public sealed class TestDynamicSurface;
+            public sealed class TestDropSurface;
+
+            [EditorAction("tests.interactions.execute", typeof(TestSurface))]
+            [EditorMenu(typeof(TestSurface), "Tools/Create/Execute")]
+            public sealed class ScriptAction : EditorAction
+            {
+                public override void Execute(EditorActionContext context)
+                {
+                }
+            }
+
+            [EditorMenuSource(typeof(TestDynamicSurface))]
+            public sealed class ScriptMenuSource : EditorMenuSource
+            {
+                public override void Build(EditorMenuContext context, EditorMenuBuilder builder)
+                    => builder.Add("Dynamic", "tests.interactions.execute");
+            }
+
+            [AssetEditor(typeof(TextAsset))]
+            public sealed class ScriptAssetEditor : AssetEditor
+            {
+                public override bool CanOpen(AssetEditorContext context) => true;
+            }
+
+            [EditorDrop(typeof(TestDropSurface))]
+            public sealed class ScriptDrop : EditorDrop<string, string>
+            {
+                protected override EditorDropStatus Query(EditorDropContext<string, string> context)
+                    => EditorDropStatus.Accept();
+
+                protected override EditorDropResult Drop(EditorDropContext<string, string> context)
+                    => EditorDropResult.Accepted();
+            }
+
+            [EditorPanel("tests.script-panel", "Script Panel", order: 900, defaultOpen: false)]
+            public sealed class ScriptPanel : EditorPanel, IEditorPanelReloadState
+            {
+                public override void Draw(EditorContext context)
+                {
+                }
+
+                public System.ReadOnlyMemory<byte> CaptureReloadState()
+                    => System.ReadOnlyMemory<byte>.Empty;
+
+                public void RestoreReloadState(System.ReadOnlyMemory<byte> state)
+                {
+                }
+            }
+            """);
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.True(result.success, FormatDiagnostics(result));
+        Assert.True(m_manager.ApplyPendingReload());
+        Assert.Contains(TypeCacheManager.current.types, static type => type.Name == "ScriptAction");
+        Assert.Contains(TypeCacheManager.current.types, static type => type.Name == "ScriptAssetEditor");
+        Assert.Contains(TypeCacheManager.current.types, static type => type.Name == "ScriptDrop");
+        Assert.Contains(TypeCacheManager.current.types, static type => type.Name == "ScriptPanel");
+    }
+
+    [Fact]
+    public void GameScriptsCannotAccessInteractionFacades()
+    {
+        Write("ForbiddenEditorAction.cs", """
+            using InnoEditor.Commands;
+            public sealed class ForbiddenEditorAction : EditorAction
+            {
+                public override void Execute(EditorActionContext context)
+                {
+                }
+            }
+            """);
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.False(result.success);
+        Assert.Contains(result.diagnostics, static diagnostic => diagnostic.id == "CS0246");
+    }
+
+    [Fact]
+    public void LocalPluginTypesRequireAnExplicitNamespaceImport()
     {
         string pluginDirectory = Path.Combine(m_projectRoot, "Assets", "Plugins");
         Directory.CreateDirectory(pluginDirectory);
@@ -275,6 +373,8 @@ public sealed class ScriptManagerTests : IDisposable
             Path.Combine(AppContext.BaseDirectory, "Plugins", "Inno.Editor.Scripting.TestPlugin.dll"),
             Path.Combine(pluginDirectory, "ProjectPlugin.dll"));
         Write("PluginConsumer.cs", """
+            using ProjectPluginApi;
+
             public sealed class PluginConsumer
             {
                 public int value => PluginValue.value;
@@ -288,6 +388,22 @@ public sealed class ScriptManagerTests : IDisposable
         Type consumerType = TypeCacheManager.current.types.Single(type => type.Name == "PluginConsumer");
         object consumer = Activator.CreateInstance(consumerType)!;
         Assert.Equal(42, consumerType.GetProperty("value")!.GetValue(consumer));
+    }
+
+    [Fact]
+    public void CompilationWideUsingDirectivesAreRejected()
+    {
+        Write(
+            "ForbiddenUsing.cs",
+            string.Concat(
+                "global",
+                " using InnoEngine.Scene;\n\n",
+                "public sealed class ForbiddenUsingBehavior : GameBehavior { }"));
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.False(result.success);
+        Assert.Contains(result.diagnostics, static diagnostic => diagnostic.id == "INNO2003");
     }
 
     [Fact]

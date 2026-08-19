@@ -9,12 +9,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Inno.Editor.HotKeys\Inno.Editor.HotKeys.csproj" />
-    <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" />
-    <ProjectReference Include="..\..\assets\Inno.Assets.Serialization\Inno.Assets.Serialization.csproj" />
-    <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Events\Inno.Core.Events.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Input\Inno.Core.Input.csproj" />
     <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" />
-    <ProjectReference Include="..\..\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" />
-    <ProjectReference Include="..\..\engine\Inno.Engine.Scene.Assets\Inno.Engine.Scene.Assets.csproj" />
   </ItemGroup>
 </Project>

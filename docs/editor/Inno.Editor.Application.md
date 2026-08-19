@@ -2,7 +2,7 @@
 
 [Editor 索引](README.md) · [Editor Scripting](Inno.Editor.Scripting.md) · [Wiki 首页](../README.md)
 
-`Inno.Editor.Application` 是 Editor 可执行入口，负责把 Platform、Shell、ImGui、Editor Panels 和项目 ScriptManager 组合成主循环。
+`Inno.Editor.Application` 是 Editor 可执行入口。它只组合 Platform、Shell、ImGui 与一个 `EditorRuntime`；Assets、Scene、Diagnostics、Scripting feature 全部由 Attribute 自动发现。
 
 ## 启动参数
 
@@ -35,3 +35,9 @@ return host.Run();
 | `Dispose()` | 停止脚本监听，卸载 Shell/ImGui/Platform 资源。 |
 
 `editor.ini`、Editor boot log、Assets 与脚本产物都以 `projectDirectory` 为根目录，不再依赖编译时硬编码路径。
+
+## EditorLayer 边界
+
+`EditorLayer` 只持有 `PlatformImGuiContext` 与 `EditorRuntime`。它把 Layer 的 Attach/LateUpdate/Detach 和按键事件转交给 Runtime，不知道 Scene、Asset、Log、菜单或脚本编译状态。
+
+每帧安全点顺序为：Runtime 更新 Module → 绘制统一主菜单与自动发现 Panel → flush deferred Action → 绘制统一 Modal。脚本编译弹窗位于 `Inno.Editor.Scripting`，由 `ScriptingModule` 驱动真实进度并通过 Modal renderer 固定在主 viewport 中心。Application 不包含 Scene action、Asset 类型判断、context menu 排列或 ScriptManager 状态机。

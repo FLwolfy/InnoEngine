@@ -14,13 +14,8 @@ internal static class ScriptProjectGenerator
     {
         Directory.CreateDirectory(options.projectRootDirectory);
         ScriptSourceSet sources = ScriptSourceSet.Discover();
-        ScriptApiProfile runtimeApi = ScriptPluginMetadata.AddGlobalUsings(
-            ScriptApiCatalog.Build(includeEditor: false),
-            sources.runtimePlugins.Select(static plugin => plugin.sourcePath));
-        ScriptApiProfile editorApi = ScriptPluginMetadata.AddGlobalUsings(
-            ScriptApiCatalog.Build(includeEditor: true),
-            sources.runtimePlugins.Concat(sources.editorPlugins)
-                .Select(static plugin => plugin.sourcePath));
+        ScriptApiProfile runtimeApi = ScriptApiCatalog.Build(includeEditor: false);
+        ScriptApiProfile editorApi = ScriptApiCatalog.Build(includeEditor: true);
         ScriptApiReferenceSet runtimeApiReferences = ScriptApiReferenceBuilder.Build(options, runtimeApi);
         ScriptApiReferenceSet editorApiReferences = ScriptApiReferenceBuilder.Build(
             options,
@@ -137,12 +132,6 @@ internal static class ScriptProjectGenerator
             compileGroup,
             referenceGroup,
             codeAnalysisGroup);
-        if (api.globalUsings.Count > 0)
-        {
-            project.Add(new XElement("ItemGroup",
-                api.globalUsings.Select(static value =>
-                    new XElement("Using", new XAttribute("Include", value)))));
-        }
         project.Add(folderGroup);
         if (projectReferences.Count > 0)
         {

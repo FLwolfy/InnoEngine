@@ -99,10 +99,6 @@ public readonly struct TreeNodeResult
 
 public static partial class ImGuiWidget
 {
-    private const float C_TREE_GUIDE_LEFT_OFFSET = 1f;
-
-    private static readonly Vector4 s_treeGuideColor = new(0.62f, 0.62f, 0.66f, 1f);
-
     private static readonly Dictionary<nuint, TreeWindowState> s_treeStatesByWindow = [];
     private static bool s_hasNextTreeNodeOpen;
     private static bool s_nextTreeNodeOpen;
@@ -314,10 +310,9 @@ public static partial class ImGuiWidget
 
     private static void PushTransparentTreeNodeHeaderColors()
     {
-        Vector4 transparent = Vector4.Zero;
-        NativeImGui.PushStyleColor(ImGuiCol.Header, transparent);
-        NativeImGui.PushStyleColor(ImGuiCol.HeaderHovered, transparent);
-        NativeImGui.PushStyleColor(ImGuiCol.HeaderActive, transparent);
+        NativeImGui.PushStyleColor(ImGuiCol.Header, EditorPalette.transparent);
+        NativeImGui.PushStyleColor(ImGuiCol.HeaderHovered, EditorPalette.transparent);
+        NativeImGui.PushStyleColor(ImGuiCol.HeaderActive, EditorPalette.transparent);
     }
 
     private static void BeginTreeFrameIfNeeded()
@@ -345,12 +340,12 @@ public static partial class ImGuiWidget
             return;
 
         MergeTreeLineSegments();
-        uint color = NativeImGui.ColorConvertFloat4ToU32(s_treeGuideColor);
+        uint color = NativeImGui.ColorConvertFloat4ToU32(EditorPalette.treeGuide);
         ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
         for (int i = 0; i < s_mergedLineSegments.Count; i++)
         {
             TreeLineSegment line = s_mergedLineSegments[i];
-            drawList.AddLine(line.from, line.to, color, 1f);
+            drawList.AddLine(line.from, line.to, color, style.borderSize);
         }
     }
 
@@ -404,16 +399,19 @@ public static partial class ImGuiWidget
 
         ImGuiStylePtr style = NativeImGui.GetStyle();
         float textLineHeight = NativeImGui.GetTextLineHeight();
-        float lineOverlap = 1f;
+        float lineOverlap = ImGuiWidget.style.treeGuideLineOverlap;
         float rowMinY = nodeCursor.Y - style.ItemSpacing.Y - lineOverlap;
         float rowMaxY = nodeCursor.Y + textLineHeight + style.ItemSpacing.Y + lineOverlap;
         float rowCenterY = nodeCursor.Y + textLineHeight * 0.5f;
         float nodeToLabel = NativeImGui.GetTreeNodeToLabelSpacing();
-        float guideOffset = nodeToLabel * 0.5f - C_TREE_GUIDE_LEFT_OFFSET;
-        float disclosureGap = MathF.Max(3f, nodeToLabel * 0.25f);
+        float guideOffset = nodeToLabel * 0.5f - ImGuiWidget.style.treeGuideLeftOffset;
+        float disclosureGap = MathF.Max(
+            ImGuiWidget.style.treeDisclosureMinimumGap,
+            nodeToLabel * 0.25f);
         float labelStartX = nodeCursor.X + nodeToLabel;
         float fileConnectorPadding = MathF.Max(1f, style.ItemInnerSpacing.X);
-        float folderConnectorPadding = fileConnectorPadding * 2f + 2f;
+        float folderConnectorPadding = fileConnectorPadding * 2f +
+                                       ImGuiWidget.style.treeFolderConnectorPadding;
         float targetX = hasDisclosureArrow
             ? nodeCursor.X + guideOffset - folderConnectorPadding
             : labelStartX - fileConnectorPadding;

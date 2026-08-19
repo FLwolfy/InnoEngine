@@ -33,7 +33,7 @@ A few principles I want to keep pushing toward:
 
 The repository is split into several major areas such as engine/runtime code, editor code, tools, samples, tests, native interop, and documentation. The following is an example of an **IDEAL** repo structure. This will **NOT** be exactly the same as the real one.
 
-For the current source-level project map and public APIs, use the [InnoEngine Wiki](docs/README.md). In particular, the active asset/script architecture is documented in [Assets](docs/assets/README.md) and [Editor Scripting](docs/editor/Inno.Editor.Scripting.md); the large tree below remains an aspirational layout, not a list of projects that currently exist.
+For the current source-level project map and public APIs, use the [InnoEngine Wiki](docs/README.md). In particular, the active architectures are documented in [Assets](docs/assets/README.md), [Editor](docs/editor/README.md), and [Editor Scripting](docs/editor/Inno.Editor.Scripting.md); the large tree below remains an aspirational layout, not a list of projects that currently exist.
 
 The implemented asset dependency direction is:
 
@@ -242,7 +242,6 @@ Inno/
 │  ├─ core/
 │  │  ├─ Inno.Core/
 │  │  │  ├─ Inno.Core.csproj
-│  │  │  ├─ GlobalUsings.cs
 │  │  │  ├─ Diagnostics/
 │  │  │  │  ├─ Guard.cs
 │  │  │  │  ├─ ThrowHelper.cs
@@ -336,8 +335,7 @@ Inno/
 │  │  ├─ Inno.Core.Scripting/
 │  │  │  ├─ Inno.Core.Scripting.csproj
 │  │  │  ├─ ScriptingApiExportAttribute.cs
-│  │  │  ├─ ScriptingApiNamespaceAttribute.cs
-│  │  │  └─ ScriptingGlobalUsingAttribute.cs
+│  │  │  └─ ScriptingApiNamespaceAttribute.cs
 │  │  │
 │  │  └─ Inno.Core.Threading/
 │  │     ├─ Inno.Core.Threading.csproj

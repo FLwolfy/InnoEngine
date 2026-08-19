@@ -40,13 +40,8 @@ internal static class ScriptCompiler
         progress.Complete("Project scripts discovered.");
 
         progress.Begin("Building the script API profile...");
-        ScriptApiProfile runtimeApi = ScriptPluginMetadata.AddGlobalUsings(
-            ScriptApiCatalog.Build(includeEditor: false),
-            sources.runtimePlugins.Select(static plugin => plugin.assemblyArtifactPath));
-        ScriptApiProfile editorApi = ScriptPluginMetadata.AddGlobalUsings(
-            ScriptApiCatalog.Build(includeEditor: true),
-            sources.runtimePlugins.Concat(sources.editorPlugins)
-                .Select(static plugin => plugin.assemblyArtifactPath));
+        ScriptApiProfile runtimeApi = ScriptApiCatalog.Build(includeEditor: false);
+        ScriptApiProfile editorApi = ScriptApiCatalog.Build(includeEditor: true);
         progress.Complete("Script API profile built.");
         progress.Begin("Resolving script references...");
         ScriptApiReferenceSet runtimeApiReferences = ScriptApiReferenceBuilder.Build(options, runtimeApi);
@@ -192,7 +187,6 @@ internal static class ScriptCompiler
             SourceText.From(
                 CreateGeneratedSource(
                     assemblyName,
-                    api.globalUsings,
                     scope == ScriptAssemblyScope.Editor),
                 Encoding.UTF8),
             parseOptions,
@@ -256,19 +250,6 @@ internal static class ScriptCompiler
                 tree.FilePath,
                 Encoding.UTF8))
             .ToArray();
-        if (usingRewriter.additionalGlobalUsings.Count > 0)
-        {
-            string additionalUsings = string.Join(
-                Environment.NewLine,
-                usingRewriter.additionalGlobalUsings.Select(static value => $"global using global::{value};"));
-            runtimeTrees = runtimeTrees
-                .Append(CSharpSyntaxTree.ParseText(
-                    SourceText.From(additionalUsings, Encoding.UTF8),
-                    parseOptions,
-                    $"<{assemblyName}.ScriptApiUsings.g.cs>",
-                    cancellationToken))
-                .ToArray();
-        }
         var runtimeCompilation = CSharpCompilation.Create(
             assemblyName,
             runtimeTrees,
@@ -464,8 +445,6 @@ internal static class ScriptCompiler
                 AppendHash(hash, mapping.apiNamespace);
                 AppendHash(hash, mapping.implementationNamespace);
             }
-            foreach (string globalUsing in profile.globalUsings)
-                AppendHash(hash, globalUsing);
         }
     }
 
@@ -586,14 +565,11 @@ internal static class ScriptCompiler
 
     private static string CreateGeneratedSource(
         string assemblyName,
-        IReadOnlyList<string> globalUsings,
         bool isEditorAssembly)
     {
-        string usings = string.Join(Environment.NewLine, globalUsings.Select(static value => $"global using {value};"));
         string assemblyGroup = isEditorAssembly ? "Editor" : "Game";
         return $"""
             #nullable enable
-            {usings}
             [assembly: System.Reflection.AssemblyMetadata("Inno.AssemblyGroup", "{assemblyGroup}")]
             [assembly: System.Reflection.AssemblyMetadata("Inno.ScriptAssembly", "{assemblyName}")]
             """;

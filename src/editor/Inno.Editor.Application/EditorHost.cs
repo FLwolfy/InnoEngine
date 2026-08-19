@@ -2,13 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Threading.Tasks;
 
 using Inno.Assets;
 using Inno.Core.Events;
 using Inno.Core.Framework;
 using Inno.Core.Logging;
-using Inno.Editor.Scripting;
 using Inno.Platform;
 using Inno.Platform.ImGui;
 
@@ -23,14 +21,12 @@ public sealed class EditorHost : IDisposable
     private readonly PlatformWindow m_window;
     private readonly HashSet<uint> m_focusedWindowIds = [];
     private readonly Shell m_shell;
-    private readonly ScriptManager m_scriptManager;
     private readonly PlatformImGuiContext m_imgui;
     private readonly EditorLayer m_editorLayer;
     private readonly string m_bootLogPath;
     private bool m_running;
     private bool m_disposed;
     private bool m_hasRenderedFrame;
-    private Task<ScriptCompilationResult>? m_scriptCompilationTask;
     private int m_frameCount;
 
     /// <summary>
@@ -69,14 +65,6 @@ public sealed class EditorHost : IDisposable
         });
         BootLog("Shell created.");
 
-        m_scriptManager = new ScriptManager(new ScriptManagerOptions
-        {
-            projectRootDirectory = this.projectDirectory
-        });
-        m_scriptManager.CompilationCompleted += OnScriptCompilationCompleted;
-        m_scriptManager.Start();
-        BootLog("Script manager started.");
-
         m_imgui = m_platformApplication.CreateImGuiContext(
             m_window,
             ImGuiContextFlags.EnableViewports
@@ -87,8 +75,14 @@ public sealed class EditorHost : IDisposable
 
         BootLog($"AssetManager initialized={AssetManager.isInitialized} root='{AssetManager.assetRoot}'.");
 
-        m_editorLayer = new EditorLayer(m_imgui, m_scriptManager);
+        m_editorLayer = new EditorLayer(m_imgui, this.projectDirectory)
+        {
+            isFocused = HasEditorFocus()
+        };
         m_shell.layerStack.PushOverlay(m_editorLayer);
+        BootLog($"Editor layer attached with {m_editorLayer.panelCount} panel(s).");
+        if (m_editorLayer.panelCount == 0)
+            throw new InvalidOperationException("No editor panels were discovered from the active host assemblies.");
         m_running = true;
         BootLog("EditorHost ctor done.");
     }
@@ -138,9 +132,7 @@ public sealed class EditorHost : IDisposable
             if (m_frameCount == 0)
                 BootLog("About to execute first shell.Tick.");
 
-            CompleteScriptCompilationIfReady();
-            StartScriptCompilationIfReady();
-
+            m_editorLayer.isFocused = HasEditorFocus();
             m_shell.Tick((float)now, delta);
 
             if (m_frameCount == 0)
@@ -164,8 +156,6 @@ public sealed class EditorHost : IDisposable
         BootLog("Dispose start.");
 
         m_shell.layerStack.PopOverlay(m_editorLayer);
-        m_scriptManager.CompilationCompleted -= OnScriptCompilationCompleted;
-        m_scriptManager.Dispose();
         m_platformApplication.DestroyImGuiContext(m_window);
         Shell.Shutdown();
         m_window.Dispose();
@@ -200,39 +190,6 @@ public sealed class EditorHost : IDisposable
         return normalizedPath;
     }
 
-    private static void OnScriptCompilationCompleted(ScriptCompilationResult result)
-    {
-        foreach (ScriptDiagnostic diagnostic in result.diagnostics)
-        {
-            string location = diagnostic.filePath is null
-                ? string.Empty
-                : $"{diagnostic.filePath}({diagnostic.line},{diagnostic.column}): ";
-            string message = $"{location}{diagnostic.id}: {diagnostic.message}";
-            switch (diagnostic.severity)
-            {
-                case ScriptDiagnosticSeverity.Error:
-                    Log.Error(message);
-                    break;
-                case ScriptDiagnosticSeverity.Warning:
-                    Log.Warn(message);
-                    break;
-                default:
-                    Log.Info(message);
-                    break;
-            }
-        }
-    }
-
-    private void StartScriptCompilationIfReady()
-    {
-        if (m_scriptCompilationTask is not null || !HasEditorFocus())
-            return;
-        if (!m_scriptManager.TryCompilePending(out Task<ScriptCompilationResult>? compilation))
-            return;
-        m_scriptCompilationTask = compilation;
-        m_editorLayer.BeginScriptCompilation();
-    }
-
     private bool HasEditorFocus()
         => m_focusedWindowIds.Count > 0;
 
@@ -248,29 +205,6 @@ public sealed class EditorHost : IDisposable
         else if (evnt is WindowCloseEvent closeEvent)
         {
             m_focusedWindowIds.Remove(closeEvent.windowId);
-        }
-    }
-
-    private void CompleteScriptCompilationIfReady()
-    {
-        Task<ScriptCompilationResult>? compilation = m_scriptCompilationTask;
-        if (compilation is null || !compilation.IsCompleted)
-            return;
-        try
-        {
-            ScriptCompilationResult result = compilation.GetAwaiter().GetResult();
-            if (result.success)
-                _ = m_scriptManager.ApplyPendingReload();
-        }
-        catch (Exception exception)
-        {
-            Log.Error("Script reload failed: {0}", exception);
-            BootLog($"Script reload failed: {exception}");
-        }
-        finally
-        {
-            m_scriptCompilationTask = null;
-            m_editorLayer.EndScriptCompilation();
         }
     }
 

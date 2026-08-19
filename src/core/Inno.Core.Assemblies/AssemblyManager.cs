@@ -645,29 +645,53 @@ public static class AssemblyManager
     private static void PreloadInnoHostDependencies()
     {
         Assembly? entry = Assembly.GetEntryAssembly();
-        if (entry is null)
+        Assembly[] roots = AppDomain.CurrentDomain.GetAssemblies()
+            .Where(static assembly => !assembly.IsDynamic)
+            .Where(static assembly => AssemblyLoadContext.GetLoadContext(assembly) == AssemblyLoadContext.Default)
+            .Where(assembly => ReferenceEquals(assembly, entry) ||
+                               (assembly.GetName().Name ?? string.Empty).StartsWith(
+                                   "Inno.",
+                                   StringComparison.Ordinal))
+            .Distinct()
+            .ToArray();
+        if (roots.Length == 0)
             return;
 
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var pending = new Queue<Assembly>();
-        pending.Enqueue(entry);
+        foreach (Assembly root in roots)
+        {
+            string rootName = root.GetName().Name ?? string.Empty;
+            if (!string.IsNullOrEmpty(rootName))
+                visited.Add(rootName);
+            pending.Enqueue(root);
+        }
+        foreach (AssemblyName dependency in HostDependencyManifest.GetInnoRuntimeAssemblies(roots))
+            TryEnqueueHostAssembly(dependency, visited, pending);
+
         while (pending.Count > 0)
         {
             Assembly assembly = pending.Dequeue();
             foreach (AssemblyName reference in assembly.GetReferencedAssemblies())
-            {
-                string name = reference.Name ?? string.Empty;
-                if (!name.StartsWith("Inno.", StringComparison.Ordinal) || !visited.Add(name))
-                    continue;
-                try
-                {
-                    pending.Enqueue(Assembly.Load(reference));
-                }
-                catch (FileNotFoundException)
-                {
-                    // Optional engine modules can be absent from a host deployment.
-                }
-            }
+                TryEnqueueHostAssembly(reference, visited, pending);
+        }
+    }
+
+    private static void TryEnqueueHostAssembly(
+        AssemblyName assemblyName,
+        ISet<string> visited,
+        Queue<Assembly> pending)
+    {
+        string name = assemblyName.Name ?? string.Empty;
+        if (!name.StartsWith("Inno.", StringComparison.Ordinal) || !visited.Add(name))
+            return;
+        try
+        {
+            pending.Enqueue(Assembly.Load(assemblyName));
+        }
+        catch (FileNotFoundException)
+        {
+            // Optional engine modules can be absent from a host deployment.
         }
     }
 
