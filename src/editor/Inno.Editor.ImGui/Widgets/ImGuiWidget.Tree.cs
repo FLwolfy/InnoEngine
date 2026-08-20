@@ -13,7 +13,7 @@ namespace Inno.Editor.ImGui.Widgets;
 /// </summary>
 public static partial class ImGuiWidget
 {
-    private static readonly Dictionary<nuint, TreeWidgetWindowState> s_treeStatesByWindow = [];
+    private static readonly Dictionary<int, TreeWidgetWindowState> s_treeStatesByWindow = [];
     private static bool s_hasNextTreeNodeOpen;
     private static bool s_nextTreeNodeOpen;
 
@@ -151,9 +151,9 @@ public static partial class ImGuiWidget
         s_nextTreeNodeOpen = open;
     }
 
-    private static unsafe TreeWidgetWindowState GetTreeWindowState()
+    private static TreeWidgetWindowState GetTreeWindowState()
     {
-        nuint windowKey = (nuint)NativeImGui.GetWindowDrawList().Handle;
+        int windowKey = NativeImGui.GetWindowDrawList().GetHashCode();
         if (!s_treeStatesByWindow.TryGetValue(windowKey, out TreeWidgetWindowState? state))
         {
             state = new TreeWidgetWindowState();

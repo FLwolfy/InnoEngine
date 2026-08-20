@@ -12,14 +12,14 @@ using Inno.Core.Assemblies;
 using Inno.Core.Identity;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
-using Inno.Editor.Assets.AssetEditors;
 using Inno.Editor.Core;
-using Inno.Editor.Core.Commands;
+using Inno.Editor.Interactions.Actions;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.Widgets;
 using Inno.Editor.Interactions;
-using Inno.Editor.Scene.Inspection;
-using Inno.Editor.Scene.Workspace;
+using Inno.Editor.Panel.FileBrowser.AssetEditors;
+using Inno.Editor.Panel.Hierarchy.Workspace;
+using Inno.Editor.Panel.Inspector;
 using Inno.Editor.Scripting;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Assets;
@@ -277,27 +277,23 @@ public sealed class ScriptManagerTests : IDisposable
     {
         Write("InteractionExtensions.editor.cs", """
             using InnoEditor.Assets;
-            using InnoEditor.Commands;
+            using InnoEditor.Actions;
             using InnoEditor.Core;
             using InnoEditor.DragDrop;
             using InnoEditor.Menus;
             using InnoEditor.Panels;
             using InnoEngine.Assets;
 
-            public sealed class TestSurface;
-            public sealed class TestDynamicSurface;
-            public sealed class TestDropSurface;
-
-            [EditorAction("tests.interactions.execute", typeof(TestSurface))]
-            [EditorMenu(typeof(TestSurface), "Tools/Create/Execute")]
+            [EditorAction("tests.interactions.execute", "tests/interactions")]
+            [EditorMenu("tests/interactions", "Tools/Create/Execute")]
             public sealed class ScriptAction : EditorAction
             {
-                public override void Execute(EditorActionContext context)
+                protected override void Execute(EditorActionContext context)
                 {
                 }
             }
 
-            [EditorMenuSource(typeof(TestDynamicSurface))]
+            [EditorMenuSource("tests/interactions.dynamic")]
             public sealed class ScriptMenuSource : EditorMenuSource
             {
                 public override void Build(EditorMenuContext context, EditorMenuBuilder builder)
@@ -310,7 +306,7 @@ public sealed class ScriptManagerTests : IDisposable
                 public override bool CanOpen(AssetEditorContext context) => true;
             }
 
-            [EditorDrop(typeof(TestDropSurface))]
+            [EditorDrop("tests/interactions.drop")]
             public sealed class ScriptDrop : EditorDrop<string, string>
             {
                 protected override EditorDropStatus Query(EditorDropContext<string, string> context)
@@ -350,10 +346,10 @@ public sealed class ScriptManagerTests : IDisposable
     public void GameScriptsCannotAccessInteractionFacades()
     {
         Write("ForbiddenEditorAction.cs", """
-            using InnoEditor.Commands;
+            using InnoEditor.Actions;
             public sealed class ForbiddenEditorAction : EditorAction
             {
-                public override void Execute(EditorActionContext context)
+                protected override void Execute(EditorActionContext context)
                 {
                 }
             }

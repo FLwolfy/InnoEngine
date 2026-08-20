@@ -1,0 +1,35 @@
+using Inno.Editor.Core;
+using Inno.Editor.Core.Panels;
+using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Widgets;
+using NativeImGui = Inno.Native.ImGui.ImGui;
+
+namespace Inno.Editor.Panel.Stats;
+
+/// <summary>
+/// Shows lightweight runtime metrics.
+/// </summary>
+[EditorPanel("diagnostics.stats", "Stats", order: 500)]
+public sealed class StatsPanel : EditorPanel
+{
+    private readonly FrameStatisticsSampler m_statistics = new();
+
+    /// <summary>
+    /// Creates the panel.
+    /// </summary>
+    public StatsPanel()
+    {
+    }
+
+    /// <inheritdoc />
+    public override void Draw(EditorContext context)
+    {
+        m_statistics.Update(context.frame.totalTime, context.frame.deltaTime);
+
+        NativeImGui.TextUnformatted($"Time: {context.frame.totalTime:F2}s");
+        NativeImGui.TextUnformatted($"Delta: {m_statistics.deltaTime * 1000f:F2} ms");
+        NativeImGui.TextUnformatted($"FPS: {m_statistics.framesPerSecond:F1}");
+        NativeImGui.Separator();
+        ImGuiWidget.Hint("No Scene/Game panel in this phase.");
+    }
+}

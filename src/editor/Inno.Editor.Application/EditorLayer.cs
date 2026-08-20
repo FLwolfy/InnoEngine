@@ -1,7 +1,8 @@
 using Inno.Core.Events;
 using Inno.Core.Framework;
-using Inno.Editor.Interactions;
+using Inno.Editor.Core;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Runtime;
 using Inno.Editor.ImGui.Widgets;
 using Inno.Platform.ImGui;
 
@@ -11,14 +12,14 @@ namespace Inno.Editor.Application;
 internal sealed class EditorLayer : Layer
 {
     private readonly PlatformImGuiContext m_imgui;
-    private readonly EditorRuntime m_runtime;
+    private readonly ImGuiEditorRuntime m_runtime;
 
     internal EditorLayer(PlatformImGuiContext imgui, string projectDirectory)
         : base("EditorLayer")
     {
         m_imgui = imgui;
         ImGuiWidget.SetupStyle();
-        m_runtime = new EditorRuntime(projectDirectory);
+        m_runtime = new ImGuiEditorRuntime(projectDirectory);
     }
 
     internal int panelCount => m_runtime.panelCount;
@@ -38,7 +39,7 @@ internal sealed class EditorLayer : Layer
     /// <inheritdoc />
     public override void OnLateUpdate(float deltaTime)
     {
-        m_runtime.Update(deltaTime, Time.time, isFocused);
+        m_runtime.Update(new EditorFrame(deltaTime, Time.time, isFocused));
         _ = m_imgui.RenderFrame(m_runtime.Draw);
     }
 }

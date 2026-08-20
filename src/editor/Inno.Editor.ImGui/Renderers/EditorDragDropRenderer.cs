@@ -1,7 +1,7 @@
 using System;
 
-using Inno.Editor.Core;
-using Inno.Editor.Core.DragDrop;
+using Inno.Editor.Interactions;
+using Inno.Editor.Interactions.DragDrop;
 using Inno.Editor.ImGui.Widgets;
 
 namespace Inno.Editor.ImGui.Renderers;
@@ -14,34 +14,32 @@ public static class EditorDragDropRenderer
     /// <summary>
     /// Publishes managed drag data for the most recently submitted ImGui item.
     /// </summary>
-    /// <param name="context">The source surface and managed data used to begin the drag session.</param>
+    /// <param name="interaction">The interaction area and target that produced the drag source.</param>
+    /// <param name="data">The managed drag data published by the source.</param>
     /// <param name="drawPreview">An optional callback that draws the native drag preview.</param>
     /// <returns><see langword="true"/> while the item is an active drag source.</returns>
-    public static bool Source(EditorDragContext context, Action? drawPreview = null)
+    public static bool Source(
+        EditorInteraction interaction,
+        EditorDragData data,
+        Action? drawPreview = null)
     {
-        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(data);
         return ImGuiWidget.DragDropSource(
             C_EDITOR_PAYLOAD,
-            () => context.editorContext.BeginDrag(context),
+            () => interaction.BeginDrag(data),
             drawPreview);
     }
 
     /// <summary>
     /// Evaluates and, on delivery, accepts a managed drag on the most recently submitted ImGui item.
     /// </summary>
-    /// <param name="editorContext">The shared editor context that owns the managed drag session.</param>
-    /// <param name="surface">The exact interaction surface of the target item.</param>
-    /// <param name="target">The managed target object exposed to typed drop handlers.</param>
+    /// <param name="interaction">The interaction area and managed drop target.</param>
     /// <param name="placement">The requested position relative to the target.</param>
     /// <returns>The native preview state together with the managed compatibility and delivery results.</returns>
     public static EditorDropWidgetResult Target(
-        EditorContext editorContext,
-        Type surface,
-        object target,
+        EditorInteraction interaction,
         EditorDropPlacement placement = EditorDropPlacement.None)
     {
-        ArgumentNullException.ThrowIfNull(editorContext);
-        ArgumentNullException.ThrowIfNull(target);
         bool delivered = ImGuiWidget.DragDropTarget(
             C_EDITOR_PAYLOAD,
             out Guid token,
@@ -49,13 +47,9 @@ public static class EditorDragDropRenderer
             drawDefaultHighlight: false);
         if (!isPreviewing && !delivered)
             return EditorDropWidgetResult.none;
-        if (!editorContext.TryGetDragData(token, out EditorDragData? data) || data is null)
-            return EditorDropWidgetResult.none;
-
-        var context = new EditorDropContext(editorContext, surface, data, target, placement);
-        EditorDropStatus status = editorContext.QueryDrop(token, context);
+        EditorDropStatus status = interaction.QueryDrop(token, placement);
         EditorDropResult result = delivered && status.canDrop
-            ? editorContext.Drop(token, context)
+            ? interaction.Drop(token, placement)
             : EditorDropResult.rejected;
         return new EditorDropWidgetResult(isPreviewing, status, result);
     }

@@ -84,4 +84,4 @@ Tree 行高至少采用原生 `TreeNode` frame 高度，不会因为某行只有
 
 `DragDropTarget(..., drawDefaultHighlight: false)` 可关闭 ImGui 默认目标框，适合需要按鼠标在行内位置绘制互斥反馈的复合目标。
 
-`DragDropSource<TPayload>` 与 `DragDropTarget<TPayload>` 的公开调用同样不要求 `unsafe`；`TPayload` 只需满足 `unmanaged`。指针拷贝被限制在 Widget 的 private native helper 中。
+`EditorDragDropRenderer` 只向 native payload 写入固定 session token；业务对象保留在 Interactions 的 managed session 中。Panel 与 Widget 的公开调用不要求 `unsafe`，FileBrowser 的 Grid 文本和搜索框也只使用安全的 Widget/ImGui API。

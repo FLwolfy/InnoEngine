@@ -10,16 +10,19 @@ namespace Inno.Editor.Interactions;
 internal sealed class EditorExtensionActivator
 {
     private readonly EditorContext m_context;
+    private readonly EditorInteractions m_interactions;
     private readonly Type[] m_moduleTypes;
     private readonly Dictionary<Type, object> m_instances = [];
     private readonly HashSet<Type> m_constructing = [];
 
     internal EditorExtensionActivator(
         EditorContext context,
+        EditorInteractions interactions,
         IEnumerable<Type> moduleTypes,
         IEnumerable<object>? retainedInstances = null)
     {
         m_context = context ?? throw new ArgumentNullException(nameof(context));
+        m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
         m_moduleTypes = moduleTypes
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
             .ToArray();
@@ -83,6 +86,8 @@ internal sealed class EditorExtensionActivator
     {
         if (parameterType == typeof(EditorContext))
             return m_context;
+        if (parameterType == typeof(EditorInteractions))
+            return m_interactions;
 
         Type[] matches = m_moduleTypes
             .Where(parameterType.IsAssignableFrom)
@@ -93,7 +98,8 @@ internal sealed class EditorExtensionActivator
         {
             throw new InvalidOperationException(
                 $"Editor extension '{ownerType.FullName}' requests unsupported constructor dependency " +
-                $"'{parameterType.FullName}'. Only EditorContext and discovered EditorModule types are injectable.");
+                $"'{parameterType.FullName}'. Only EditorContext, EditorInteractions, and discovered " +
+                "EditorModule types are injectable.");
         }
         throw new InvalidOperationException(
             $"Editor extension '{ownerType.FullName}' has ambiguous module dependency " +

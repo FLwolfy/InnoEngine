@@ -2,179 +2,118 @@
 
 [Editor 索引](README.md) · [Interactions](Inno.Editor.Interactions.md) · [Wiki 首页](../README.md)
 
-`Inno.Editor.Core` 只保存扩展作者真正需要的中立契约：Module、Panel、Action、Menu、Drop、Selection 与 Rename state。它不知道 ImGui、TypeCache、Scene、Asset、Logging，也不存在 Service Locator。
+`Inno.Editor.Core` 只保存 Editor 的被动生命周期契约。它不知道 Action、Menu、Selection、ImGui、Assets、Scene 或具体 Panel，因此可以被任意表现后端和 feature 安全引用。
 
-## 最小模型
+## 目录与职责
 
-```mermaid
-flowchart LR
-    Module["EditorModule（可选共享状态）"] --> Panel["EditorPanel"]
-    Module --> Action["EditorAction"]
-    Module --> Drop["EditorDrop"]
-    Action --> Menu["EditorMenu Attribute"]
-    Action --> Shortcut["EditorShortcut Attribute"]
-    Context["EditorContext"] --> Selection["Selection"]
-    Context --> Action
+```text
+Inno.Editor.Core/
+├─ Runtime/
+│  ├─ EditorContext.cs
+│  ├─ EditorFrame.cs
+│  └─ EditorRuntime.cs
+├─ Panels/
+│  ├─ EditorPanel.cs
+│  ├─ EditorModal.cs
+│  └─ IEditorPanelReloadState.cs
+├─ EditorModule.cs
+└─ Properties/ScriptingApi.cs
 ```
 
-扩展类型由 Attribute 自动发现。类型只允许一个构造函数；构造参数只能是 `EditorContext` 或一个已发现的 `EditorModule`。因此不用 `Add()`、`Register()`、`GetService()` 或静态 singleton。
+旧的 Commands、Menus、DragDrop、Selection 和 Rename 状态均不属于 Core，现已迁入 `Inno.Editor.Interactions` 或对应 Panel。
+
+## Runtime API
+
+| API | 说明 |
+| --- | --- |
+| `EditorContext` | 只读项目根目录和最新 `EditorFrame`；不提供 service locator。 |
+| `EditorFrame` | 一帧的 `deltaTime`、`totalTime`、`isFocused` 不可变快照。 |
+| `EditorRuntime` | 表现无关的 `Start`、`Update(EditorFrame)`、`Dispose` 抽象。 |
+
+`EditorContext` 是扩展共享的中立数据，不承担路由：
+
+```csharp
+var context = new EditorContext(projectDirectory);
+Console.WriteLine(context.projectDirectory);
+```
+
+业务扩展若需要 Action/Menu/Selection，应由构造函数接收 `EditorInteractions`，而不是向 `EditorContext` 添加新服务属性。
 
 ## Module
 
-只有多个扩展需要共享状态或生命周期时才创建 Module：
+`EditorModule` 表示跨 Panel 共享、随扩展 generation 启停的 feature 状态：
 
 ```csharp
 [EditorModule(order: 100)]
 public sealed class AnimationModule : EditorModule
 {
-    public AnimationDocument? activeDocument { get; private set; }
+    protected override void OnStart(EditorContext context)
+    {
+    }
 
     protected override void OnUpdate(EditorContext context)
     {
-        // Update feature state before panels are drawn.
+    }
+
+    protected override void OnStop(EditorContext context)
+    {
     }
 }
 ```
 
-Panel 或 Action 直接构造注入：
+Module、Panel、Action、Menu source 和 Drop handler 可以在唯一构造函数中请求 `EditorContext`、`EditorInteractions` 或一个无歧义的已发现 `EditorModule`。不存在手工注册表。
+
+## Panel
 
 ```csharp
-public sealed class AnimationPanel(AnimationModule animation) : EditorPanel
+[EditorPanel("animation.graph", "Animator", order: 500, defaultOpen: true)]
+public sealed class AnimatorPanel(AnimationModule animation) : EditorPanel
 {
     public override void Draw(EditorContext context)
     {
-        // Use animation directly.
+        // Render the panel body.
     }
 }
 ```
 
-## Action 与快捷键
+`EditorPanelAttribute.id` 必须稳定且全局唯一；它用于 View 菜单、窗口 identity 和 reload 状态。`title` 只用于显示，可以变化。
 
-Action 是所有可执行编辑器行为的唯一模型。`EditorAction<TTarget>` 自动完成 target 类型检查；`Query` 决定菜单/快捷键此时是否显示、是否启用和是否勾选。
-
-`EditorActionAttribute.surface` 是精确匹配条件。一个 Action 需要同时由多个 surface 调用（例如同一个 Rename 同时来自 Panel 快捷键和 entry context menu）时，将 Action surface 留空，并依靠强类型 target 限定适用对象；如果填写了 surface，菜单、快捷键或直接执行所提供的 surface 必须与它相同。`EditorMenuAttribute.surface` 始终表示菜单出现的位置。
+运行时始终按 ID 迁移 `isOpen`。需要迁移更多中立状态时实现 `IEditorPanelReloadState`，只返回不引用插件对象的字节：
 
 ```csharp
-public sealed class AnimationSurface;
+public ReadOnlyMemory<byte> CaptureReloadState() => m_stateBytes;
 
-[EditorAction("animation.create-state", typeof(AnimationSurface))]
-[EditorShortcut(KeyCode.N, primary: true, surface: typeof(AnimationSurface))]
-public sealed class CreateStateAction(AnimationModule animation)
-    : EditorAction<AnimationDocument>
+public void RestoreReloadState(ReadOnlyMemory<byte> state)
 {
-    protected override EditorActionState Query(
-        EditorActionContext<AnimationDocument> context)
-        => context.target.isReadOnly
-            ? EditorActionState.disabled
-            : EditorActionState.enabled;
-
-    protected override void Execute(
-        EditorActionContext<AnimationDocument> context)
-    {
-        context.target.CreateState();
-    }
+    m_stateBytes = state.ToArray();
 }
 ```
 
-内建通用 ID 位于 `EditorActionIds`：Save、Open、Rename、Delete、Reset、Remove、TogglePanel。领域 ID 放在领域项目，例如 `SceneActionIds` 和 `AssetActionIds`。
+## Modal
 
-### 跨帧 Action Interaction
-
-Rename 与 Select 都是 Action。Select/Clear 由 `EditorActionIds.Select` 和 `EditorActionIds.ClearSelection` 路由；`EditorSelectionState` 的写入口是 internal，Panel、Drop 和领域命令统一调用 `EditorContext.Select(surface, target)`，该方法仍然执行 Attribute 发现的 Action，而不是直接改变状态。
-
-Rename 的特殊点不是它属于另一种服务，而是它需要跨多帧保存尚未提交的文本。`EditorAction` 因此提供通用的 `BeginInteraction<TState>()`：Action 可以发布任意类型的中立状态，并配置 Validate、Complete 和 Cancel callback。呈现层使用 `EditorContext.TryGetInteraction<TState>()` 按 action ID、surface 和 target 获取当前状态。
+`EditorModal` 是被发现的阻塞或非阻塞浮层契约。具体位置、尺寸、淡入淡出和输入阻塞由 ImGui runtime 统一处理。
 
 ```csharp
-[EditorAction("animation.rename-state")]
-public sealed class RenameAnimationStateAction : EditorAction<AnimationState>
+[EditorModal("animation.baking", "Baking Animation", order: 200)]
+public sealed class AnimationBakeModal(AnimationModule animation) : EditorModal
 {
-    protected override void Execute(EditorActionContext<AnimationState> context)
-    {
-        _ = BeginInteraction(
-            context,
-            context.target.name,
-            value => context.target.name = value.Trim(),
-            value => string.IsNullOrWhiteSpace(value)
-                ? EditorValidationResult.Invalid("A name is required.")
-                : EditorValidationResult.valid);
-    }
-}
-```
+    public override bool isVisible => animation.isBaking;
+    public override bool blocksInteraction => true;
 
-`EditorActionInteraction<TState>` 只保存 target、surface、state 与完成规则，不知道 ImGui、Asset 或 Scene。它同样可以支持分步创建、参数预览、路径选择等未来操作。Open、Delete 等立即完成的 Action 不需要开启 Interaction。
-
-## 任意层级菜单
-
-菜单直接标在 Action 上，路径中的 `/` 没有层数限制：
-
-```csharp
-[EditorAction("animation.create-blend-tree", typeof(AnimationSurface))]
-[EditorMenu(
-    typeof(AnimationSurface),
-    "Create/State Machine/Blend Tree",
-    order: 300,
-    separatorBefore: true)]
-public sealed class CreateBlendTreeAction : EditorAction<AnimationDocument>
-{
-    protected override void Execute(
-        EditorActionContext<AnimationDocument> context)
-    {
-    }
-}
-```
-
-需要根据 TypeCache 或运行时数据生成条目时使用 `EditorMenuSource`：
-
-```csharp
-[EditorMenuSource(typeof(AnimationSurface))]
-public sealed class AnimationNodeMenuSource : EditorMenuSource
-{
-    public override void Build(EditorMenuContext context, EditorMenuBuilder builder)
-    {
-        builder.Add("Create/Node/Clip", "animation.create-node", argument: typeof(ClipNode));
-    }
-}
-```
-
-所有主菜单、右键菜单和搜索菜单进入相同的 `EditorMenuModel`，由同一个 ImGui renderer 绘制，因此 hover、separator、disabled、checked 和快捷键标签一致。
-
-## Typed Drag and Drop
-
-```csharp
-[EditorDrop(typeof(AnimationSurface), priority: 100)]
-public sealed class ClipDrop : EditorDrop<ClipAsset, AnimationDropTarget>
-{
-    protected override EditorDropStatus Query(
-        EditorDropContext<ClipAsset, AnimationDropTarget> context)
-        => context.target.canAccept
-            ? EditorDropStatus.Accept()
-            : EditorDropStatus.rejected;
-
-    protected override EditorDropResult Drop(
-        EditorDropContext<ClipAsset, AnimationDropTarget> context)
-    {
-        context.target.Add(context.source);
-        return EditorDropResult.Accepted(context.source);
-    }
-}
-```
-
-Native ImGui payload 只保存一个 `Guid` session token；真实对象由 runtime 管理。程序集 generation 改变、source 无效或 drop 完成时 session 自动取消。
-
-## Panel 与 Modal
-
-```csharp
-[EditorPanel("animation.graph", "Animator", order: 600)]
-public sealed class AnimationPanel(AnimationModule animation) : EditorPanel
-{
     public override void Draw(EditorContext context)
     {
+        // Draw body only; do not position the popup here.
     }
 }
 ```
 
-Panel 不注册自身，也不保存 title/id；这些稳定信息全部在 Attribute。Reload 总是保留 `isOpen`；实现 `IEditorPanelReloadState` 后还可以迁移纯字节状态。非 dockable UI 使用 `[EditorModal]`，runtime 统一处理居中、淡入淡出和交互阻塞。
+## Scripting API
 
-## Scripting facade
+EditorScripts 使用逻辑命名空间 `InnoEditor.Core` 和 `InnoEditor.Panels`。只导出 Context、Frame、Runtime、Module、Panel、Modal 及其 Attribute/状态接口；所有脚本必须显式写普通 `using`。
 
-EditorScripts 使用 `InnoEditor.Core`、`InnoEditor.Commands`、`InnoEditor.Menus`、`InnoEditor.DragDrop`、`InnoEditor.Panels`。完全禁止 global using；每个脚本必须显式声明普通 `using`。Registry、TypeCache snapshot、runtime router 和 mutable catalog 不进入 facade。
+## 边界规则
+
+- 不向 Core 添加 Rename、Open、Save、Asset 或 Scene 等 feature 概念。
+- 不向 Context 添加 `IWhateverService` 集合或可变注册接口。
+- 不在 Core 引用 ImGui。
+- Action/Menu/Drag/Selection 统一见 [Interactions](Inno.Editor.Interactions.md)。

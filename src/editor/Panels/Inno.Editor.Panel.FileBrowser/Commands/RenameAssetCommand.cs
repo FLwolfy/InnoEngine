@@ -1,0 +1,84 @@
+using Inno.Assets.File;
+using Inno.Editor.Panel.FileBrowser.AssetEditors;
+using Inno.Editor.Interactions.Actions;
+using Inno.Editor.Interactions.Menus;
+using Inno.Core.Input;
+using Inno.Core.Logging;
+using Inno.Editor.Panel.FileBrowser;
+using Inno.Editor.ImGui.Widgets;
+
+namespace Inno.Editor.Panel.FileBrowser.Commands;
+
+[EditorAction(FileBrowserActions.Rename, priority: 100)]
+[EditorMenu(FileBrowserAreas.Browser, "Rename", order: 100)]
+[EditorShortcut(FileBrowserAreas.Browser, KeyCode.F2)]
+internal sealed class RenameAssetCommand(AssetEditorModule assets) : EditorAction<AssetFileEntry>
+{
+    private AssetEditorContext? m_asset;
+    private string m_buffer = string.Empty;
+    private bool m_requestFocus;
+
+    protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
+        => TryGetAssetContext(context, out _) ? EditorActionState.enabled : EditorActionState.hidden;
+
+    protected override void Execute(EditorActionContext<AssetFileEntry> context)
+    {
+        if (!TryGetAssetContext(context, out AssetEditorContext? assetContext) || assetContext is null)
+            return;
+        m_asset = assetContext;
+        m_buffer = assetContext.name;
+        m_requestFocus = true;
+        Activate(context);
+    }
+
+    protected override bool Present(EditorActionContext<AssetFileEntry> context)
+    {
+        if (m_asset is null ||
+            !context.TryGetArgument(out InlineRenamePresentation? presentation) ||
+            presentation is null)
+        {
+            return false;
+        }
+
+        InlineRenameResult result = ImGuiWidget.InlineRename(
+            presentation.id,
+            ref m_buffer,
+            ref m_requestFocus,
+            presentation.bufferSize,
+            presentation.width);
+        if (result == InlineRenameResult.Cancel)
+        {
+            Cancel();
+            return true;
+        }
+        if (result != InlineRenameResult.Commit)
+            return true;
+
+        EditorValidationResult validation = assets.ValidateRename(m_asset, m_buffer);
+        if (!validation.isValid)
+        {
+            Log.Warn("Asset rename was rejected: {0}", validation.message);
+            m_requestFocus = true;
+            return true;
+        }
+        assets.Rename(m_asset, m_buffer);
+        Complete();
+        return true;
+    }
+
+    protected override void OnCompleted() => ClearState();
+
+    protected override void OnCancelled() => ClearState();
+
+    private void ClearState()
+    {
+        m_asset = null;
+        m_buffer = string.Empty;
+        m_requestFocus = false;
+    }
+
+    private bool TryGetAssetContext(
+        EditorActionContext<AssetFileEntry> context,
+        out AssetEditorContext? assetContext)
+        => assets.TryCreateContext(context.editor, context.target.relativePath, out assetContext);
+}

@@ -6,22 +6,24 @@ using System.Reflection;
 using Inno.Core.Logging;
 using Inno.Core.Reflection;
 using Inno.Editor.Core;
-using Inno.Editor.Core.Commands;
-using Inno.Editor.Core.DragDrop;
-using Inno.Editor.Core.Menus;
 using Inno.Editor.Core.Panels;
+using Inno.Editor.Interactions.Actions;
+using Inno.Editor.Interactions.DragDrop;
+using Inno.Editor.Interactions.Menus;
 
 namespace Inno.Editor.Interactions;
 
 internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatalog.Snapshot>
 {
     private readonly EditorContext m_context;
+    private readonly EditorInteractions m_interactions;
     private readonly Dictionary<string, PanelState> m_panelStates = new(StringComparer.Ordinal);
     private Snapshot? m_active;
 
-    internal EditorExtensionCatalog(EditorContext context)
+    internal EditorExtensionCatalog(EditorContext context, EditorInteractions interactions)
     {
         m_context = context ?? throw new ArgumentNullException(nameof(context));
+        m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
     }
 
     internal Snapshot extensions
@@ -58,6 +60,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             .ToArray();
         var activator = new EditorExtensionActivator(
             m_context,
+            m_interactions,
             moduleTypes,
             m_active?.instances);
 
@@ -269,7 +272,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         EditorMenuSource source = activator.CreateExtension<EditorMenuSource>(type);
         return type.GetCustomAttributes<EditorMenuSourceAttribute>(false)
             .Select(attribute => new MenuSourceRegistration(
-                attribute.surface,
+                attribute.area,
                 attribute.priority,
                 type,
                 source));
@@ -284,7 +287,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             .Select(attribute => new DropRegistration(
                 drop.sourceType,
                 drop.targetType,
-                attribute.surface,
+                attribute.area,
                 attribute.priority,
                 type,
                 drop));
@@ -315,29 +318,30 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
 
     private static void ValidateActions(ActionRegistration[] actions)
     {
-        foreach (IGrouping<(string Id, Type? Surface, Type? Target, int Priority), ActionRegistration> group in
+        foreach (IGrouping<(string Action, string Area, Type? Target, int Priority), ActionRegistration> group in
                  actions.GroupBy(static value => (
-                     value.attribute.id,
-                     value.attribute.surface,
+                     value.attribute.action,
+                     value.attribute.area,
                      value.action.targetType,
                      value.attribute.priority)))
         {
             if (group.Count() > 1)
             {
                 throw new InvalidOperationException(
-                    $"Editor action '{group.Key.Id}' has conflicting registrations for surface " +
-                    $"'{group.Key.Surface?.FullName ?? "*"}' and target '{group.Key.Target?.FullName ?? "*"}'.");
+                    $"Editor action '{group.Key.Action}' has conflicting registrations for area " +
+                    $"'{(string.IsNullOrEmpty(group.Key.Area) ? "*" : group.Key.Area)}' and target " +
+                    $"'{group.Key.Target?.FullName ?? "*"}'.");
             }
         }
     }
 
     private static void ValidateDrops(DropRegistration[] drops)
     {
-        foreach (IGrouping<(Type Source, Type Target, Type? Surface, int Priority), DropRegistration> group in
+        foreach (IGrouping<(Type Source, Type Target, string Area, int Priority), DropRegistration> group in
                  drops.GroupBy(static value => (
                      value.sourceType,
                      value.targetType,
-                     value.surface,
+                     value.area,
                      value.priority)))
         {
             if (group.Count() > 1)
@@ -382,7 +386,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         EditorShortcutAttribute[] shortcuts);
 
     internal sealed record MenuSourceRegistration(
-        Type surface,
+        string area,
         int priority,
         Type type,
         EditorMenuSource source);
@@ -390,7 +394,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
     internal sealed record DropRegistration(
         Type sourceType,
         Type targetType,
-        Type? surface,
+        string area,
         int priority,
         Type type,
         EditorDrop drop);

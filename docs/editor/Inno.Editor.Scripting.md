@@ -156,24 +156,29 @@ Editor facade 按 feature 分布：
 
 | Facade | 来源 |
 | --- | --- |
-| `InnoEditor.Core` / `Commands` / `Menus` / `DragDrop` / `Panels` | `Inno.Editor.Core` contracts |
-| `InnoEditor.Assets` | `Inno.Editor.Assets` extension contracts |
-| `InnoEditor.Scene` / `Inspection` | `Inno.Editor.Scene` extension contracts |
+| `InnoEditor.Core` / `Panels` | `Inno.Editor.Core` lifecycle contracts |
+| `InnoEditor.Interactions` / `Actions` / `Menus` / `DragDrop` | `Inno.Editor.Interactions` contracts |
+| `InnoEditor.Assets` | `Inno.Editor.Panel.FileBrowser` AssetEditor contracts |
+| `InnoEditor.Hierarchy` | `Inno.Editor.Panel.Hierarchy` workspace/drop contracts |
+| `InnoEditor.Inspection` | `Inno.Editor.Panel.Inspector` drawer contracts |
 | `InnoEditor.ImGui` | `EditorPalette`、`EditorStyleMetrics` 与 widgets |
 
 菜单直接声明在 Action 上，不需要 package class 或集中注册：
 
 ```csharp
 using InnoEditor.Menus;
-using InnoEditor.Commands;
+using InnoEditor.Actions;
 
-public sealed class MaterialSurface;
+public static class RenderingAreas
+{
+    public const string MaterialBrowser = "panel/rendering.material-browser";
+}
 
-[EditorAction("rendering.create-material", typeof(MaterialSurface))]
-[EditorMenu(typeof(MaterialSurface), "Create/Rendering/Material")]
+[EditorAction("rendering.create-material", RenderingAreas.MaterialBrowser)]
+[EditorMenu(RenderingAreas.MaterialBrowser, "Create/Rendering/Material")]
 public sealed class CreateMaterialAction : EditorAction
 {
-    public override void Execute(EditorActionContext context) { }
+    protected override void Execute(EditorActionContext context) { }
 }
 ```
 

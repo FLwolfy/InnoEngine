@@ -3,10 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 
 using Inno.Core.Logging;
-using Inno.Editor.Core.Commands;
-using Inno.Editor.Core.Menus;
 using Inno.Editor.Core.Panels;
-using Inno.Editor.Interactions.Commands;
+using Inno.Editor.Interactions.Actions;
 
 namespace Inno.Editor.Interactions.Menus;
 
@@ -22,11 +20,11 @@ internal sealed class EditorMenuCatalog(
         {
             foreach (EditorMenuAttribute menu in registration.menus)
             {
-                if (menu.surface != context.surface)
+                if (!string.Equals(menu.area, context.area, StringComparison.Ordinal))
                     continue;
                 placements.Add(new Placement(
                     NormalizePath(menu.path),
-                    registration.attribute.id,
+                    registration.attribute.action,
                     menu.order,
                     menu.separatorBefore,
                     argument: null));
@@ -35,7 +33,7 @@ internal sealed class EditorMenuCatalog(
 
         foreach (EditorExtensionCatalog.MenuSourceRegistration registration in catalog.extensions.menuSources)
         {
-            if (registration.surface != context.surface)
+            if (!string.Equals(registration.area, context.area, StringComparison.Ordinal))
                 continue;
             try
             {
@@ -57,13 +55,13 @@ internal sealed class EditorMenuCatalog(
             }
         }
 
-        if (context.surface == typeof(Inno.Editor.Core.EditorSurface.MainMenu))
+        if (string.Equals(context.area, EditorAreas.MainMenu, StringComparison.Ordinal))
         {
             foreach (EditorExtensionCatalog.PanelRegistration panel in catalog.extensions.panels)
             {
                 placements.Add(new Placement(
                     $"View/{panel.attribute.title}",
-                    EditorActionIds.TogglePanel,
+                    EditorActions.TogglePanel,
                     panel.attribute.order,
                     separatorBefore: false,
                     panel.panel));

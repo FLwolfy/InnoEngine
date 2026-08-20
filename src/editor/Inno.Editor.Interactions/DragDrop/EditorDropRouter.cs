@@ -1,8 +1,7 @@
 using System;
 
 using Inno.Core.Logging;
-using Inno.Editor.Core.DragDrop;
-using Inno.Editor.Interactions.Internal;
+using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Interactions.DragDrop;
 
@@ -95,8 +94,8 @@ internal sealed class EditorDropRouter(EditorExtensionCatalog catalog)
         int bestTargetDistance = int.MaxValue;
         foreach (EditorExtensionCatalog.DropRegistration registration in catalog.extensions.drops)
         {
-            bool exactSurface = registration.surface is not null;
-            if (exactSurface && registration.surface != context.surface)
+            bool exactArea = !string.IsNullOrEmpty(registration.area);
+            if (exactArea && !string.Equals(registration.area, context.area, StringComparison.Ordinal))
                 continue;
             if (!EditorTypeDistance.TryGet(sourceType, registration.sourceType, out int sourceDistance) ||
                 !EditorTypeDistance.TryGet(targetType, registration.targetType, out int targetDistance))
@@ -104,8 +103,8 @@ internal sealed class EditorDropRouter(EditorExtensionCatalog catalog)
                 continue;
             }
             if (best is null ||
-                exactSurface && best.surface is null ||
-                exactSurface == (best.surface is not null) &&
+                exactArea && string.IsNullOrEmpty(best.area) ||
+                exactArea == !string.IsNullOrEmpty(best.area) &&
                 (sourceDistance < bestSourceDistance ||
                  sourceDistance == bestSourceDistance && targetDistance < bestTargetDistance ||
                  sourceDistance == bestSourceDistance && targetDistance == bestTargetDistance &&

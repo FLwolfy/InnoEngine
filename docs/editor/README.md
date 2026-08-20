@@ -2,34 +2,49 @@
 
 [返回 Wiki 首页](../README.md) · [Core](../core/README.md) · [Assets](../assets/README.md)
 
-Editor 按“中立契约 → 通用交互运行时 → 领域 feature → Application 组合根”分层。Core 与 Interactions 不引用 Scene、Assets 或 Diagnostics，领域类型只存在于对应 feature project。
+Editor 采用“被动核心 → 后端无关交互 → ImGui 表现 → 独立 Panel feature → Application 组合根”的单向分层。Core 与 Interactions 不引用 Assets、Scene 或任何具体 Panel；业务行为由各 Panel 项目通过 Attribute 自发现。
 
-| 项目 | 作用 | 状态 |
-| --- | --- | --- |
-| [Inno.Editor.Core](Inno.Editor.Core.md) | Module/Action/Menu/Drop/Panel/Selection 公共契约 | 已完成 |
-| [Inno.Editor.Interactions](Inno.Editor.Interactions.md) | 单一 TypeCache Catalog、constructor injection、router 与 runtime | 已完成 |
-| [Inno.Editor.Assets](Inno.Editor.Assets.md) | AssetEditor、File Browser、Asset action/menu/drop | 已完成 |
-| [Inno.Editor.Scene](Inno.Editor.Scene.md) | Scene Workspace、Hierarchy、Inspection、Scene action/menu/drop | 已完成 |
-| [Inno.Editor.Diagnostics](Inno.Editor.Diagnostics.md) | Diagnostics Module、Logging 与 Stats | 已完成 |
-| [Inno.Editor.Application](Inno.Editor.Application.md) | Editor 可执行入口、project directory 与主循环 | 已完成 |
-| [Inno.Editor.Scripting](Inno.Editor.Scripting.md) | Asset-backed Roslyn 编译、IDE facade 与程序集热重载 | 已完成 |
-| [Inno.Editor.ImGui](Inno.Editor.ImGui.md) | 菜单/拖放渲染桥、统一 Widget、Palette 与 Style metrics | 已完成 |
+## 项目索引
+
+| 项目 | 职责 |
+| --- | --- |
+| [Inno.Editor.Core](Inno.Editor.Core.md) | `EditorContext`、frame/runtime、Module、Panel、Modal 的最小契约。 |
+| [Inno.Editor.Interactions](Inno.Editor.Interactions.md) | Action、area、menu、shortcut、selection、drag/drop 与扩展代际。 |
+| [Inno.Editor.ImGui](Inno.Editor.ImGui.md) | ImGui runtime、renderer、统一 Widget、Palette 与 Style metrics。 |
+| [Inno.Editor.Scripting](Inno.Editor.Scripting.md) | Asset-backed Roslyn 编译、facade、IDE 工程与热重载。 |
+| [Inno.Editor.Panel.FileBrowser](Inno.Editor.Panel.FileBrowser.md) | AssetEditor、文件浏览、Asset 操作与 Asset-side drag/drop。 |
+| [Inno.Editor.Panel.Hierarchy](Inno.Editor.Panel.Hierarchy.md) | Scene workspace、Hierarchy、Scene/GameObject 操作与排序。 |
+| [Inno.Editor.Panel.Inspector](Inno.Editor.Panel.Inspector.md) | Inspector/Property Drawer 与 Component/System 操作。 |
+| [Inno.Editor.Panel.Logging](Inno.Editor.Panel.Logging.md) | Editor 日志缓冲与 Log Panel。 |
+| [Inno.Editor.Panel.Stats](Inno.Editor.Panel.Stats.md) | 平滑后的帧统计与 Stats Panel。 |
+| [Inno.Editor.Application](Inno.Editor.Application.md) | Platform、Shell、ImGui 和全部 feature 的组合根。 |
+
+## 依赖方向
 
 ```mermaid
 flowchart TD
     Core["Inno.Editor.Core"] --> Interactions["Inno.Editor.Interactions"]
     Core --> ImGui["Inno.Editor.ImGui"]
-    Core --> Assets["Inno.Editor.Assets"]
-    Core --> Scene["Inno.Editor.Scene"]
-    ImGui --> Assets
-    ImGui --> Scene
-    ImGui --> Diagnostics["Inno.Editor.Diagnostics"]
-    Assets --> Scene
-    Assets --> Application["Inno.Editor.Application"]
-    Scene --> Application
-    Diagnostics --> Application
-    Interactions --> Application
-    Scripting["Inno.Editor.Scripting"] --> Application
+    Interactions --> ImGui
+    Core --> Panels["Inno.Editor.Panel.*"]
+    Interactions --> Panels
+    ImGui --> Panels
+    Core --> Scripting["Inno.Editor.Scripting"]
+    ImGui --> Scripting
+    Panels --> Application["Inno.Editor.Application"]
+    Scripting --> Application
+    ImGui --> Application
 ```
 
-箭头表示基础能力流向使用者，与 `.csproj` 中“使用者引用基础项目”的书写方向相反。`Inno.Editor.Scene` 可以提供 SceneAsset/Prefab 与 Asset Browser 的集成；通用 `Inno.Editor.Assets` 不知道 GameScene/GameObject。
+箭头表示基础能力流向使用者。五个 Panel project 彼此不引用；跨面板操作只传递共享领域类型，例如 `AssetFileEntry`、`AssetInfo`、`GameScene` 和 `GameObject`。
+
+## 扩展入口
+
+- 新 Panel：继承 `EditorPanel` 并添加 `[EditorPanel]`。
+- 新操作：继承 `EditorAction` 或 `EditorAction<TTarget>` 并添加 `[EditorAction]`。
+- 右键或主菜单：在 Action 上添加任意层级的 `[EditorMenu(area, "A/B/C")]`。
+- 动态菜单：继承 `EditorMenuSource` 并添加 `[EditorMenuSource(area)]`。
+- 拖放：继承 `EditorDrop<TSource,TTarget>` 并添加 `[EditorDrop(area)]`。
+- 选择、焦点和打开等交互：通过 `interactions.For(area, target)` 获取轻量 `EditorInteraction`。
+
+具体例子见 [Interactions](Inno.Editor.Interactions.md) 与各 Panel 页面。EditorScripts 必须显式 `using InnoEditor.*;`；项目完全禁止 global using。

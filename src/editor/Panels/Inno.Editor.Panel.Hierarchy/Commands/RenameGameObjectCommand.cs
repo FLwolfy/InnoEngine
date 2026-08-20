@@ -1,0 +1,69 @@
+using Inno.Editor.Interactions.Actions;
+using Inno.Editor.Interactions.Menus;
+using Inno.Editor.Panel.Hierarchy;
+using Inno.Core.Input;
+using Inno.Engine.Scene;
+using Inno.Editor.ImGui.Widgets;
+
+namespace Inno.Editor.Panel.Hierarchy.Commands;
+
+[EditorAction(HierarchyActions.RenameGameObject, priority: 100)]
+[EditorMenu(HierarchyAreas.Hierarchy, "Rename", order: 200)]
+[EditorShortcut(HierarchyAreas.Hierarchy, KeyCode.F2)]
+internal sealed class RenameGameObjectCommand : EditorAction<GameObject>
+{
+    private GameObject? m_gameObject;
+    private string m_buffer = string.Empty;
+    private bool m_requestFocus;
+
+    protected override EditorActionState Query(EditorActionContext<GameObject> context)
+        => context.target.isRuntimeValid
+            ? EditorActionState.enabled
+            : EditorActionState.hidden;
+
+    protected override void Execute(EditorActionContext<GameObject> context)
+    {
+        m_gameObject = context.target;
+        m_buffer = context.target.name;
+        m_requestFocus = true;
+        Activate(context);
+    }
+
+    protected override bool Present(EditorActionContext<GameObject> context)
+    {
+        if (m_gameObject is null ||
+            !context.TryGetArgument(out InlineRenamePresentation? presentation) ||
+            presentation is null)
+        {
+            return false;
+        }
+
+        InlineRenameResult result = ImGuiWidget.InlineRename(
+            presentation.id,
+            ref m_buffer,
+            ref m_requestFocus,
+            presentation.bufferSize,
+            presentation.width);
+        if (result == InlineRenameResult.Cancel)
+        {
+            Cancel();
+            return true;
+        }
+        if (result != InlineRenameResult.Commit)
+            return true;
+        m_gameObject.name = string.IsNullOrWhiteSpace(m_buffer) ? "GameObject" : m_buffer.Trim();
+        Complete();
+        return true;
+    }
+
+    protected override void OnCompleted() => ClearState();
+
+    protected override void OnCancelled() => ClearState();
+
+    private void ClearState()
+    {
+        m_gameObject = null;
+        m_buffer = string.Empty;
+        m_requestFocus = false;
+    }
+}
