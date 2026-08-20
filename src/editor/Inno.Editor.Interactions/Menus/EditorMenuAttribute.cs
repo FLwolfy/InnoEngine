@@ -1,6 +1,6 @@
 using System;
 
-namespace Inno.Editor.Interactions.Menus;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Places an editor action at an arbitrary path on a menu surface.</summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]

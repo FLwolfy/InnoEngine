@@ -15,7 +15,7 @@ using Inno.Editor.Core;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Assets;
 
-namespace Inno.Editor.Panel.Hierarchy.Workspace;
+namespace Inno.Editor.Panel.Hierarchy;
 
 /// <summary>
 /// Tracks editor scene documents, their source paths, and serialized dirty state.

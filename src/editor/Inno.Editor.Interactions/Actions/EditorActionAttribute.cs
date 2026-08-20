@@ -1,6 +1,6 @@
 using System;
 
-namespace Inno.Editor.Interactions.Actions;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Registers an editor action for automatic discovery and dispatch.</summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Inno.Editor.Interactions.Menus;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Contains a complete immutable menu tree.</summary>
 public sealed class EditorMenuModel

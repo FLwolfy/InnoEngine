@@ -3,7 +3,7 @@ using System;
 using Inno.Core.Events;
 using Inno.Core.Input;
 
-namespace Inno.Editor.Interactions.Actions;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Describes one keyboard gesture used to invoke an editor command.</summary>
 public readonly record struct HotKeyGesture

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using Inno.Core.Events;
 using Inno.Editor.Core;
 
-namespace Inno.Editor.Interactions.Runtime;
+namespace Inno.Editor.Interactions;
 
 /// <summary>
 /// Hosts attribute-discovered editor extensions without depending on a presentation backend.

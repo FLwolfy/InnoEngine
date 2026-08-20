@@ -1,10 +1,7 @@
-using Inno.Editor.Interactions.Actions;
-using Inno.Editor.Interactions.Menus;
-using Inno.Engine.Scene;
-using Inno.Editor.Panel.Hierarchy;
 using Inno.Editor.Interactions;
+using Inno.Engine.Scene;
 
-namespace Inno.Editor.Panel.Hierarchy.Commands;
+namespace Inno.Editor.Panel.Hierarchy;
 
 [EditorAction(HierarchyActions.CreateChildGameObject)]
 [EditorMenu(HierarchyAreas.Hierarchy, "Create Empty Child", order: 100)]

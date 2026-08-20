@@ -1,9 +1,8 @@
 using System;
 using System.Collections.Generic;
 
-using Inno.Editor.Interactions.Actions;
 
-namespace Inno.Editor.Interactions.Menus;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Represents one immutable contextual menu node.</summary>
 public sealed class EditorMenuItem

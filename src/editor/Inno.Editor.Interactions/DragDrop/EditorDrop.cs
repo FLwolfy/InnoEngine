@@ -2,7 +2,7 @@ using System;
 
 using Inno.Editor.Core;
 
-namespace Inno.Editor.Interactions.DragDrop;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Defines one discoverable typed editor drop operation.</summary>
 public abstract class EditorDrop

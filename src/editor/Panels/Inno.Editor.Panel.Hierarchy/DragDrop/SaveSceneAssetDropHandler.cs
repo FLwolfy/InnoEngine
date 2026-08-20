@@ -1,12 +1,11 @@
 using Inno.Assets;
 using Inno.Assets.File;
-using Inno.Editor.Panel.Hierarchy.Workspace;
 
 using Inno.Editor.Core;
-using Inno.Editor.Interactions.DragDrop;
+using Inno.Editor.Interactions;
 using Inno.Engine.Scene;
 
-namespace Inno.Editor.Panel.Hierarchy.DragDrop;
+namespace Inno.Editor.Panel.Hierarchy;
 
 [EditorDrop("panel/asset.file-browser")]
 internal sealed class SaveSceneAssetDropHandler

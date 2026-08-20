@@ -1,6 +1,5 @@
-using Inno.Editor.Core;
 
-namespace Inno.Editor.Core.Panels;
+namespace Inno.Editor.Core;
 
 /// <summary>
 /// Base class for editor panel implementations.

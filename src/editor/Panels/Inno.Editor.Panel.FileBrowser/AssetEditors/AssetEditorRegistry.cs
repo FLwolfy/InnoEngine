@@ -5,7 +5,7 @@ using System.Reflection;
 
 using Inno.Core.Reflection;
 
-namespace Inno.Editor.Panel.FileBrowser.AssetEditors;
+namespace Inno.Editor.Panel.FileBrowser;
 
 internal sealed class AssetEditorRegistry : TypeRegistry<AssetEditorRegistry.Snapshot>
 {

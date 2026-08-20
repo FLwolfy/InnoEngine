@@ -3,11 +3,10 @@ using System.Linq;
 using System.Reflection;
 
 using Inno.Core.Reflection;
-using Inno.Editor.Interactions.Menus;
+using Inno.Editor.Interactions;
 using Inno.Engine.Scene;
-using Inno.Editor.Panel.Inspector;
 
-namespace Inno.Editor.Panel.Inspector.Menus;
+namespace Inno.Editor.Panel.Inspector;
 
 [EditorMenuSource(InspectorAreas.System)]
 internal sealed class AddSystemMenuProvider : EditorMenuSource

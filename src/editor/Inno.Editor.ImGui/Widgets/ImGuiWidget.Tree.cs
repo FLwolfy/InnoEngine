@@ -2,11 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 
-using Inno.Editor.ImGui;
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
-namespace Inno.Editor.ImGui.Widgets;
+namespace Inno.Editor.ImGui.ImGuiWidget;
 
 /// <summary>
 /// Provides reusable editor controls and rendering helpers built on the native ImGui API.
@@ -456,4 +455,102 @@ public static partial class ImGuiWidget
         s_highlightRects.Add(rect);
     }
 
+}
+
+/// <summary>Configures an interactive tree row.</summary>
+public readonly struct TreeNodeOptions
+{
+    /// <summary>Gets whether the row is selected.</summary>
+    public bool selected { get; init; }
+
+    /// <summary>Gets whether the row has no expandable children.</summary>
+    public bool isLeaf { get; init; }
+
+    /// <summary>Gets whether a custom background is drawn behind an unselected row.</summary>
+    public bool showBackground { get; init; }
+
+    /// <summary>Gets the custom background color used when <see cref="showBackground"/> is enabled.</summary>
+    public Vector4 backgroundColor { get; init; }
+
+    /// <summary>Gets whether the row keeps its configured background while hovered.</summary>
+    public bool suppressHoverHighlight { get; init; }
+}
+
+/// <summary>Describes interaction state produced by a tree row.</summary>
+public readonly struct TreeNodeResult
+{
+    internal TreeNodeResult(
+        bool isOpen,
+        bool isClicked,
+        bool isDoubleClicked,
+        bool isHovered,
+        Vector2 min,
+        Vector2 max,
+        Vector2 contentMin)
+    {
+        this.isOpen = isOpen;
+        this.isClicked = isClicked;
+        this.isDoubleClicked = isDoubleClicked;
+        this.isHovered = isHovered;
+        this.min = min;
+        this.max = max;
+        this.contentMin = contentMin;
+    }
+
+    /// <summary>Gets whether child content should be rendered.</summary>
+    public bool isOpen { get; }
+
+    /// <summary>Gets whether the content row was clicked.</summary>
+    public bool isClicked { get; }
+
+    /// <summary>Gets whether the content row was double-clicked.</summary>
+    public bool isDoubleClicked { get; }
+
+    /// <summary>Gets whether the full row is hovered.</summary>
+    public bool isHovered { get; }
+
+    /// <summary>Gets the row minimum screen coordinate.</summary>
+    public Vector2 min { get; }
+
+    /// <summary>Gets the row maximum screen coordinate.</summary>
+    public Vector2 max { get; }
+
+    /// <summary>Gets the minimum screen coordinate of the row's interactive content, excluding tree indentation.</summary>
+    public Vector2 contentMin { get; }
+}
+
+internal sealed class TreeWidgetWindowState
+{
+    internal readonly List<TreeWidgetNodeState> treeNodeStack = [];
+    internal readonly List<string> lastNodeIdsByDepth = [];
+    internal readonly List<TreeWidgetLineSegment> lineSegments = [];
+    internal readonly List<TreeWidgetLineSegment> previousLineSegments = [];
+    internal readonly List<TreeWidgetLineSegment> normalizedLineSegments = [];
+    internal readonly List<TreeWidgetLineSegment> mergedLineSegments = [];
+    internal readonly List<TreeWidgetHighlightRect> highlightRects = [];
+    internal readonly List<TreeWidgetHighlightRect> previousHighlightRects = [];
+    internal readonly Dictionary<string, bool> hasNextSiblingById = new(StringComparer.Ordinal);
+    internal readonly Dictionary<string, bool> openStatesById = new(StringComparer.Ordinal);
+    internal int lastFrame = -1;
+}
+
+internal struct TreeWidgetNodeState
+{
+    internal string id;
+    internal Vector2 cursor;
+}
+
+internal struct TreeWidgetLineSegment
+{
+    internal Vector2 from;
+    internal Vector2 to;
+}
+
+internal struct TreeWidgetHighlightRect
+{
+    internal Vector2 min;
+    internal Vector2 max;
+    internal uint color;
+    internal bool isInteractionHighlight;
+    internal bool isHoverHighlight;
 }

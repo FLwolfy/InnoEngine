@@ -9,8 +9,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\core\Inno.Core.Events\Inno.Core.Events.csproj" />
-    <ProjectReference Include="..\..\core\Inno.Core.Input\Inno.Core.Input.csproj" />
-    <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
   </ItemGroup>
+
+  <ItemGroup />
 </Project>

@@ -2,12 +2,11 @@ using System;
 using System.Collections.Generic;
 
 using Inno.Editor.Core;
-using Inno.Editor.Interactions.DragDrop;
+using Inno.Editor.Interactions;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Components;
-using Inno.Editor.Panel.Hierarchy;
 
-namespace Inno.Editor.Panel.Hierarchy.DragDrop;
+namespace Inno.Editor.Panel.Hierarchy;
 
 [EditorDrop(HierarchyAreas.Hierarchy)]
 internal sealed class ReparentGameObjectDropHandler

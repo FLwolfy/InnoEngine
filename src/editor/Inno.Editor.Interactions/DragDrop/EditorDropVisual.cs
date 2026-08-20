@@ -1,4 +1,4 @@
-namespace Inno.Editor.Interactions.DragDrop;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Defines the standard visual used for a compatible drop target.</summary>
 public enum EditorDropVisual

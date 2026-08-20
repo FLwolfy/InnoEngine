@@ -4,13 +4,12 @@ using System.Diagnostics;
 
 using Inno.Core.Events;
 using Inno.Editor.Core;
-using Inno.Editor.ImGui.Renderers;
-using Inno.Editor.ImGui.Widgets;
+using Inno.Editor.ImGui.ImGuiWidget;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Editor.Interactions;
-using Inno.Editor.Interactions.Runtime;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
-namespace Inno.Editor.ImGui.Runtime;
+namespace Inno.Editor.ImGui;
 
 /// <summary>
 /// Presents the backend-independent editor interaction runtime through ImGui.
@@ -91,7 +90,7 @@ public sealed class ImGuiEditorRuntime : Inno.Editor.Core.EditorRuntime
             if (!extension.panel.isOpen)
                 continue;
             bool isOpen = extension.panel.isOpen;
-            ImGuiWidget.PanelWindow(extension.title, ref isOpen, () =>
+            EditorWidget.PanelWindow(extension.title, ref isOpen, () =>
             {
                 extension.panel.Draw(context);
                 if (NativeImGui.IsWindowFocused(Inno.Native.ImGui.ImGuiFocusedFlags.RootAndChildWindows))

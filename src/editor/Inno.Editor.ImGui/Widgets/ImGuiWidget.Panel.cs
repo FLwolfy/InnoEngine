@@ -1,10 +1,9 @@
 using System;
 
-using Inno.Editor.ImGui;
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
-namespace Inno.Editor.ImGui.Widgets;
+namespace Inno.Editor.ImGui.ImGuiWidget;
 
 /// <summary>
 /// Reusable editor widgets built on top of <see cref="ImGui"/>.

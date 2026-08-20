@@ -1,9 +1,8 @@
 using System;
 
 using Inno.Editor.Core;
-using Inno.Editor.Interactions.Actions;
 
-namespace Inno.Editor.Interactions.Menus;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Provides contextual state while constructing an editor menu.</summary>
 public sealed class EditorMenuContext

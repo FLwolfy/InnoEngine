@@ -1,4 +1,4 @@
-namespace Inno.Editor.Interactions.DragDrop;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Describes the observable result of a completed editor drop.</summary>
 public readonly record struct EditorDropResult

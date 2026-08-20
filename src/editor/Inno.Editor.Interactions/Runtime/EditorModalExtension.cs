@@ -1,6 +1,6 @@
-using Inno.Editor.Core.Panels;
+using Inno.Editor.Core;
 
-namespace Inno.Editor.Interactions.Runtime;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Describes one active modal extension.</summary>
 public sealed class EditorModalExtension

@@ -1,14 +1,9 @@
 using Inno.Core.Scripting;
 using Inno.Editor.Panel.Inspector;
-using Inno.Editor.Panel.Inspector.DragDrop;
 
 [assembly: ScriptingApiNamespace(
     "InnoEditor.Inspection",
     "Inno.Editor.Panel.Inspector",
-    ScriptingApiScope.Editor)]
-[assembly: ScriptingApiNamespace(
-    "InnoEditor.Inspection",
-    "Inno.Editor.Panel.Inspector.DragDrop",
     ScriptingApiScope.Editor)]
 
 [assembly: ScriptingApiExport(typeof(InspectorAreas), ScriptingApiScope.Editor)]

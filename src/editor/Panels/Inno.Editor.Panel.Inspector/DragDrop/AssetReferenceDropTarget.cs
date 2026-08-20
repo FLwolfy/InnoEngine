@@ -1,6 +1,6 @@
 using System;
 
-namespace Inno.Editor.Panel.Inspector.DragDrop;
+namespace Inno.Editor.Panel.Inspector;
 
 /// <summary>Provides an assignable asset-reference property drop target.</summary>
 public sealed class AssetReferenceDropTarget

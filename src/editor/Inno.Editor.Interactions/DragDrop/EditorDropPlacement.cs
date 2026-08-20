@@ -1,4 +1,4 @@
-namespace Inno.Editor.Interactions.DragDrop;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Describes the requested placement relative to an editor drop target.</summary>
 public enum EditorDropPlacement

@@ -2,11 +2,10 @@ using System;
 using System.Numerics;
 using System.Text;
 
-using Inno.Editor.ImGui;
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
-namespace Inno.Editor.ImGui.Widgets;
+namespace Inno.Editor.ImGui.ImGuiWidget;
 
 /// <summary>
 /// Provides reusable editor controls and rendering helpers built on the native ImGui API.

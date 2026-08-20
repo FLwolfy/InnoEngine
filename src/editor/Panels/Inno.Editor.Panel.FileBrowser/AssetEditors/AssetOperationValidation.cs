@@ -1,4 +1,4 @@
-namespace Inno.Editor.Panel.FileBrowser.AssetEditors;
+namespace Inno.Editor.Panel.FileBrowser;
 
 /// <summary>Describes whether an editor asset operation may proceed.</summary>
 public readonly record struct AssetOperationValidation

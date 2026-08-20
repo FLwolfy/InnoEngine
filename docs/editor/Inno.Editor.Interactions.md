@@ -171,11 +171,6 @@ public sealed class ClipToStateDrop
 
 ## EditorScripts facade
 
-逻辑命名空间为：
-
-- `InnoEditor.Interactions`
-- `InnoEditor.Actions`
-- `InnoEditor.Menus`
-- `InnoEditor.DragDrop`
+物理源码无论位于 `Actions`、`Menus`、`DragDrop`、`Runtime` 或 `Selection`，都使用项目级 namespace `Inno.Editor.Interactions`。EditorScripts 对应的唯一逻辑 namespace 是 `InnoEditor.Interactions`。
 
 脚本只能看到明确导出的契约，不能看到 Router、Catalog、TypeCache snapshot 或实现侧 `Inno.*`。完全禁止 global using。

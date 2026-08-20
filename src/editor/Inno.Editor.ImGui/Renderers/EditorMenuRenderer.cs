@@ -2,12 +2,11 @@ using System;
 using System.Collections.Generic;
 
 using Inno.Editor.Interactions;
-using Inno.Editor.Interactions.Menus;
-using Inno.Editor.Interactions.Actions;
-using Inno.Editor.ImGui.Widgets;
+using Inno.Editor.ImGui.ImGuiWidget;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
-namespace Inno.Editor.ImGui.Renderers;
+namespace Inno.Editor.ImGui;
 
 /// <summary>Renders immutable editor menu models through ImGui.</summary>
 public static class EditorMenuRenderer
@@ -26,10 +25,10 @@ public static class EditorMenuRenderer
         EditorMenuModel menu = interaction.BuildMenu();
         if (menu.items.Count == 0)
             return false;
-        if (!ImGuiWidget.BeginContextMenu(id))
+        if (!EditorWidget.BeginContextMenu(id))
             return false;
         DrawItems(interaction, menu.items);
-        ImGuiWidget.EndContextMenu();
+        EditorWidget.EndContextMenu();
         return true;
     }
 
@@ -47,10 +46,10 @@ public static class EditorMenuRenderer
         EditorMenuModel menu = interaction.BuildMenu();
         if (menu.items.Count == 0)
             return false;
-        if (!ImGuiWidget.BeginWindowContextMenu(id))
+        if (!EditorWidget.BeginWindowContextMenu(id))
             return false;
         DrawItems(interaction, menu.items);
-        ImGuiWidget.EndContextMenu();
+        EditorWidget.EndContextMenu();
         return true;
     }
 

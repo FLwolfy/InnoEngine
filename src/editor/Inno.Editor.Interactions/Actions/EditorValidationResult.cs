@@ -1,4 +1,4 @@
-namespace Inno.Editor.Interactions.Actions;
+namespace Inno.Editor.Interactions;
 
 /// <summary>
 /// Describes whether a requested editor operation is valid and carries a diagnostic when it is rejected.

@@ -1,6 +1,6 @@
 using System;
 
-namespace Inno.Editor.Interactions.Menus;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Contributes dynamic entries to one or more editor menu surfaces.</summary>
 public abstract class EditorMenuSource

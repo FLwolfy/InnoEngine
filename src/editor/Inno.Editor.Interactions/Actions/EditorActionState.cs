@@ -1,4 +1,4 @@
-namespace Inno.Editor.Interactions.Actions;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Describes the current presentation and availability of an editor action.</summary>
 public readonly record struct EditorActionState

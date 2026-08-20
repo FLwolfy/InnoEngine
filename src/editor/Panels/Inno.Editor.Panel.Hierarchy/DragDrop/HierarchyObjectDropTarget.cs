@@ -1,10 +1,9 @@
-using Inno.Editor.Panel.Hierarchy.DragDrop;
 
 using System;
 
 using Inno.Engine.Scene;
 
-namespace Inno.Editor.Panel.Hierarchy.DragDrop;
+namespace Inno.Editor.Panel.Hierarchy;
 
 /// <summary>Identifies a game object hierarchy drop target.</summary>
 public sealed class HierarchyObjectDropTarget

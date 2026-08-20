@@ -4,9 +4,8 @@ using System.Collections.Generic;
 using Inno.Core.Events;
 using Inno.Core.Logging;
 using Inno.Editor.Core;
-using Inno.Editor.Interactions;
 
-namespace Inno.Editor.Interactions.Actions;
+namespace Inno.Editor.Interactions;
 
 internal sealed class EditorActionRouter(
     EditorExtensionCatalog catalog,

@@ -9,10 +9,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\Inno.Editor.Core\Inno.Editor.Core.csproj" />
-    <ProjectReference Include="..\..\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" />
     <ProjectReference Include="..\..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" />
-    <ProjectReference Include="..\..\..\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" />
-    <ProjectReference Include="..\..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" />
   </ItemGroup>
 </Project>

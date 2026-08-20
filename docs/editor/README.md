@@ -38,6 +38,13 @@ flowchart TD
 
 箭头表示基础能力流向使用者。五个 Panel project 彼此不引用；跨面板操作只传递共享领域类型，例如 `AssetFileEntry`、`AssetInfo`、`GameScene` 和 `GameObject`。
 
+## 源码与依赖约定
+
+- 每个 Editor 项目的源码统一使用项目名作为物理 namespace；功能目录不产生子 namespace。例如 Inspector 的 `Commands`、`PropertyDrawing` 与 `Presentation` 都使用 `Inno.Editor.Panel.Inspector`。
+- 唯一例外是 `Inno.Editor.ImGui/Widgets`，其 namespace 固定为 `Inno.Editor.ImGui.ImGuiWidget`，且目录中只允许 `ImGuiWidget.*.cs`。
+- 目录按功能命名，不使用 `Internal` 目录表达访问级别。
+- 每个 Editor `.csproj` 的第一个 ProjectReference `ItemGroup` 保存实现依赖并设置 `PrivateAssets="compile"`；第二个分组只保留真正出现在 public/protected API 中的传递依赖。
+
 ## 扩展入口
 
 - 新 Panel：继承 `EditorPanel` 并添加 `[EditorPanel]`。

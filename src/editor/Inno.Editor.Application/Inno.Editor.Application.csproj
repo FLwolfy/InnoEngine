@@ -10,22 +10,24 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Inno.Editor.Core\Inno.Editor.Core.csproj" />
-    <ProjectReference Include="..\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" />
-    <ProjectReference Include="..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" />
-    <ProjectReference Include="..\Inno.Editor.Scripting\Inno.Editor.Scripting.csproj" />
-    <ProjectReference Include="..\Panels\Inno.Editor.Panel.FileBrowser\Inno.Editor.Panel.FileBrowser.csproj" />
-    <ProjectReference Include="..\Panels\Inno.Editor.Panel.Hierarchy\Inno.Editor.Panel.Hierarchy.csproj" />
-    <ProjectReference Include="..\Panels\Inno.Editor.Panel.Inspector\Inno.Editor.Panel.Inspector.csproj" />
-    <ProjectReference Include="..\Panels\Inno.Editor.Panel.Logging\Inno.Editor.Panel.Logging.csproj" />
-    <ProjectReference Include="..\Panels\Inno.Editor.Panel.Stats\Inno.Editor.Panel.Stats.csproj" />
-    <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" />
-    <ProjectReference Include="..\..\core\Inno.Core.Framework\Inno.Core.Framework.csproj" />
-    <ProjectReference Include="..\..\core\Inno.Core.Events\Inno.Core.Events.csproj" />
-    <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" />
-    <ProjectReference Include="..\..\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" />
-    <ProjectReference Include="..\..\engine\Inno.Engine.Scene.Assets\Inno.Engine.Scene.Assets.csproj" />
-    <ProjectReference Include="..\..\platform\Inno.Platform\Inno.Platform.csproj" />
-    <ProjectReference Include="..\..\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" />
+    <ProjectReference Include="..\Inno.Editor.Core\Inno.Editor.Core.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Editor.Scripting\Inno.Editor.Scripting.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Panels\Inno.Editor.Panel.FileBrowser\Inno.Editor.Panel.FileBrowser.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Panels\Inno.Editor.Panel.Hierarchy\Inno.Editor.Panel.Hierarchy.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Panels\Inno.Editor.Panel.Inspector\Inno.Editor.Panel.Inspector.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Panels\Inno.Editor.Panel.Logging\Inno.Editor.Panel.Logging.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Panels\Inno.Editor.Panel.Stats\Inno.Editor.Panel.Stats.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Framework\Inno.Core.Framework.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Events\Inno.Core.Events.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\engine\Inno.Engine.Scene.Assets\Inno.Engine.Scene.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\platform\Inno.Platform\Inno.Platform.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" PrivateAssets="compile" />
   </ItemGroup>
+
+  <ItemGroup />
 </Project>

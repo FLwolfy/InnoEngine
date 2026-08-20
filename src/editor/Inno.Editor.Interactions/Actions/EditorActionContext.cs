@@ -3,7 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 
 using Inno.Editor.Core;
 
-namespace Inno.Editor.Interactions.Actions;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Provides contextual state to an editor action.</summary>
 public class EditorActionContext

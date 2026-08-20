@@ -1,6 +1,6 @@
 using System;
 
-namespace Inno.Editor.Core.Panels;
+namespace Inno.Editor.Core;
 
 /// <summary>Optionally migrates presentation-neutral panel state across assembly reloads.</summary>
 public interface IEditorPanelReloadState

@@ -2,7 +2,7 @@ using System;
 
 using Inno.Core.Input;
 
-namespace Inno.Editor.Interactions.Actions;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Associates an editor action with a keyboard shortcut.</summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]

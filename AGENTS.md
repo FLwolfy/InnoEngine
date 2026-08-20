@@ -7,7 +7,7 @@
 
 ## 2. 命名规范
 - 文件名与主类型名保持一致。
-- 命名空间与目录层级保持一致。
+- 默认命名空间与目录层级保持一致；`src/editor` 使用第 13 节定义的项目级命名空间规则。
 - 类型名使用 `PascalCase`。
 - 接口以 `I` 前缀。
 - 成员参数使用语义化 `camelCase`。
@@ -85,3 +85,11 @@
 - 运行时编译和 IDE project 必须共用同一组裁剪 reference assemblies；修改清单后需同时验证两条路径。
 - 完全禁止 compilation-wide/global using，包括手写指令、MSBuild `Using` item、隐式导入和通过 metadata 注入。所有源码与脚本必须在使用它们的文件中显式声明普通 `using`。
 - 脚本必须使用逻辑 namespace（如 `using InnoEngine.Scene;`），不得直接使用实现侧 `Inno.*` namespace。
+
+## 13. Editor 项目组织与引用边界
+- `src/editor` 中每个项目的业务源码统一使用与 `.csproj`/程序集名称完全相同的命名空间；功能目录只负责组织文件，不追加到命名空间。例如 `Inno.Editor.Panel.Inspector/PropertyDrawing/Drawers` 中的类型仍使用 `namespace Inno.Editor.Panel.Inspector;`。
+- 唯一命名空间例外是 `Inno.Editor.ImGui/Widgets`：其中所有类型使用 `namespace Inno.Editor.ImGui.ImGuiWidget;`。
+- `Inno.Editor.ImGui/Widgets` 只允许 `ImGuiWidget.*.cs` 文件。Widget 的 presentation、options、result 与私有状态应收口到对应的 `ImGuiWidget.<Feature>.cs`，不得创建独立的 Widget helper 文件。
+- Editor 项目内部按实际功能建立目录（如 `Commands`、`DragDrop`、`Presentation`、`PropertyDrawing`）；禁止使用含义模糊的 `Internal` 目录。访问级别由 C# 声明表达，不由目录名表达。
+- Editor `.csproj` 的 `ProjectReference` 必须按公开 API 边界分组：第一个 `ItemGroup` 只放未出现在任何 public/protected API 中的实现依赖，并逐项设置 `PrivateAssets="compile"`；第二个 `ItemGroup` 只放公开签名、公开基类或公开接口实际泄漏的依赖。没有使用的引用应直接删除。
+- `ProjectReference` 是否公开必须根据真实 API 签名判断，不能因为运行时会使用某程序集就默认向下游传递。调整公开类型、基类、参数、返回值或属性后，应同步复核引用分组。

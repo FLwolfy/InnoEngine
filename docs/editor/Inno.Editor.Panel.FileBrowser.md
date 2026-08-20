@@ -18,7 +18,7 @@
 ## 为新 Asset 添加双击与右键行为
 
 ```csharp
-using Inno.Editor.Panel.FileBrowser.AssetEditors;
+using Inno.Editor.Panel.FileBrowser;
 
 [AssetEditor(typeof(AnimationClipAsset), useForChildren: true, priority: 100)]
 public sealed class AnimationClipEditor : AssetEditor

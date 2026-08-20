@@ -1,11 +1,9 @@
 using Inno.Assets;
 using Inno.Assets.Core;
 using Inno.Assets.File;
-using Inno.Editor.Panel.FileBrowser.AssetEditors;
-using Inno.Editor.Interactions.Actions;
-using Inno.Editor.Panel.FileBrowser;
+using Inno.Editor.Interactions;
 
-namespace Inno.Editor.Panel.FileBrowser.Commands;
+namespace Inno.Editor.Panel.FileBrowser;
 
 [EditorAction(EditorActions.Open, FileBrowserAreas.Browser, priority: 100)]
 internal sealed class OpenAssetCommand(AssetEditorModule assets) : EditorAction<AssetFileEntry>

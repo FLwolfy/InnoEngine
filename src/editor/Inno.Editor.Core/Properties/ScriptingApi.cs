@@ -1,9 +1,7 @@
 using Inno.Core.Scripting;
 using Inno.Editor.Core;
-using Inno.Editor.Core.Panels;
 
 [assembly: ScriptingApiNamespace("InnoEditor.Core", "Inno.Editor.Core", ScriptingApiScope.Editor)]
-[assembly: ScriptingApiNamespace("InnoEditor.Panels", "Inno.Editor.Core.Panels", ScriptingApiScope.Editor)]
 
 [assembly: ScriptingApiExport(typeof(EditorContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorFrame), ScriptingApiScope.Editor)]

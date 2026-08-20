@@ -156,8 +156,8 @@ Editor facade 按 feature 分布：
 
 | Facade | 来源 |
 | --- | --- |
-| `InnoEditor.Core` / `Panels` | `Inno.Editor.Core` lifecycle contracts |
-| `InnoEditor.Interactions` / `Actions` / `Menus` / `DragDrop` | `Inno.Editor.Interactions` contracts |
+| `InnoEditor.Core` | `Inno.Editor.Core` lifecycle contracts |
+| `InnoEditor.Interactions` | `Inno.Editor.Interactions` Action、Menu、Selection 与 Drag/Drop contracts |
 | `InnoEditor.Assets` | `Inno.Editor.Panel.FileBrowser` AssetEditor contracts |
 | `InnoEditor.Hierarchy` | `Inno.Editor.Panel.Hierarchy` workspace/drop contracts |
 | `InnoEditor.Inspection` | `Inno.Editor.Panel.Inspector` drawer contracts |
@@ -166,8 +166,7 @@ Editor facade 按 feature 分布：
 菜单直接声明在 Action 上，不需要 package class 或集中注册：
 
 ```csharp
-using InnoEditor.Menus;
-using InnoEditor.Actions;
+using InnoEditor.Interactions;
 
 public static class RenderingAreas
 {

@@ -1,11 +1,12 @@
 using System;
 using System.Numerics;
 
-using Inno.Editor.ImGui.Widgets;
+using Inno.Editor.ImGui.ImGuiWidget;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
-namespace Inno.Editor.ImGui.Renderers;
+namespace Inno.Editor.ImGui;
 
 /// <summary>Renders centered editor modals consistently on the main viewport.</summary>
 public static class EditorModalRenderer
@@ -34,7 +35,7 @@ public static class EditorModalRenderer
         NativeImGui.SetNextWindowViewport(viewport.ID);
         NativeImGui.SetNextWindowPos(center, ImGuiCond.Always, new Vector2(0.5f, 0.5f));
         NativeImGui.SetNextWindowSize(
-            new Vector2(ImGuiWidget.style.modalWidth, 0f),
+            new Vector2(EditorWidget.style.modalWidth, 0f),
             ImGuiCond.Always);
         NativeImGui.PushStyleVar(ImGuiStyleVar.Alpha, alpha);
         ImGuiWindowFlags flags = ImGuiWindowFlags.AlwaysAutoResize |

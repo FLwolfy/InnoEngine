@@ -1,9 +1,8 @@
 using System;
 
 using Inno.Core.Logging;
-using Inno.Editor.Interactions;
 
-namespace Inno.Editor.Interactions.DragDrop;
+namespace Inno.Editor.Interactions;
 
 internal sealed class EditorDropRouter(EditorExtensionCatalog catalog)
 {

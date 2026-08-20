@@ -1,11 +1,8 @@
 using Inno.Assets.File;
-using Inno.Editor.Panel.FileBrowser.AssetEditors;
-using Inno.Editor.Interactions.Actions;
-using Inno.Editor.Interactions.Menus;
+using Inno.Editor.Interactions;
 using Inno.Core.Input;
-using Inno.Editor.Panel.FileBrowser;
 
-namespace Inno.Editor.Panel.FileBrowser.Commands;
+namespace Inno.Editor.Panel.FileBrowser;
 
 [EditorAction(FileBrowserActions.Delete, priority: 100)]
 [EditorMenu(FileBrowserAreas.Browser, "Delete", order: 200)]

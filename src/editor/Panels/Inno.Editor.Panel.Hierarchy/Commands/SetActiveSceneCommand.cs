@@ -1,9 +1,7 @@
-using Inno.Editor.Interactions.Actions;
-using Inno.Editor.Interactions.Menus;
+using Inno.Editor.Interactions;
 using Inno.Engine.Scene;
-using Inno.Editor.Panel.Hierarchy;
 
-namespace Inno.Editor.Panel.Hierarchy.Commands;
+namespace Inno.Editor.Panel.Hierarchy;
 
 [EditorAction(HierarchyActions.SetActiveScene)]
 [EditorMenu(HierarchyAreas.Hierarchy, "Set Active Scene", order: 100)]

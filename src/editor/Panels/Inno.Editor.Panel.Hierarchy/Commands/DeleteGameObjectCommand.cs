@@ -1,10 +1,8 @@
-using Inno.Editor.Interactions.Actions;
-using Inno.Editor.Interactions.Menus;
-using Inno.Editor.Panel.Hierarchy;
+using Inno.Editor.Interactions;
 using Inno.Core.Input;
 using Inno.Engine.Scene;
 
-namespace Inno.Editor.Panel.Hierarchy.Commands;
+namespace Inno.Editor.Panel.Hierarchy;
 
 [EditorAction(HierarchyActions.DeleteGameObject, priority: 100)]
 [EditorMenu(HierarchyAreas.Hierarchy, "Delete", order: 300)]

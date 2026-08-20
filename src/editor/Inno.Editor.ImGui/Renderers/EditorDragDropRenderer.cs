@@ -1,10 +1,10 @@
 using System;
 
 using Inno.Editor.Interactions;
-using Inno.Editor.Interactions.DragDrop;
-using Inno.Editor.ImGui.Widgets;
+using Inno.Editor.ImGui.ImGuiWidget;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 
-namespace Inno.Editor.ImGui.Renderers;
+namespace Inno.Editor.ImGui;
 
 /// <summary>Bridges managed editor drag sessions to the native ImGui payload API.</summary>
 public static class EditorDragDropRenderer
@@ -24,7 +24,7 @@ public static class EditorDragDropRenderer
         Action? drawPreview = null)
     {
         ArgumentNullException.ThrowIfNull(data);
-        return ImGuiWidget.DragDropSource(
+        return EditorWidget.DragDropSource(
             C_EDITOR_PAYLOAD,
             () => interaction.BeginDrag(data),
             drawPreview);
@@ -40,7 +40,7 @@ public static class EditorDragDropRenderer
         EditorInteraction interaction,
         EditorDropPlacement placement = EditorDropPlacement.None)
     {
-        bool delivered = ImGuiWidget.DragDropTarget(
+        bool delivered = EditorWidget.DragDropTarget(
             C_EDITOR_PAYLOAD,
             out Guid token,
             out bool isPreviewing,

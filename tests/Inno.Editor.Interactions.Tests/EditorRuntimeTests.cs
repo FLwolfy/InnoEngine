@@ -6,13 +6,7 @@ using System.Reflection;
 using Inno.Core.Assemblies;
 using Inno.Core.Reflection;
 using Inno.Editor.Core;
-using Inno.Editor.Core.Panels;
 using Inno.Editor.Interactions;
-using Inno.Editor.Interactions.Actions;
-using Inno.Editor.Interactions.DragDrop;
-using Inno.Editor.Interactions.Menus;
-using Inno.Editor.Interactions.Runtime;
-using Inno.Editor.Interactions.Selection;
 using Xunit;
 
 namespace Inno.Editor.Interactions.Tests;

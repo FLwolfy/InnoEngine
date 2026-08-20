@@ -1,4 +1,4 @@
-namespace Inno.Editor.Core.Panels;
+namespace Inno.Editor.Core;
 
 /// <summary>Defines non-dockable modal editor content.</summary>
 public abstract class EditorModal

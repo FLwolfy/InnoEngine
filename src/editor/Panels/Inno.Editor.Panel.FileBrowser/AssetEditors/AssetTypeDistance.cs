@@ -1,6 +1,6 @@
 using System;
 
-namespace Inno.Editor.Panel.FileBrowser.AssetEditors;
+namespace Inno.Editor.Panel.FileBrowser;
 
 internal static class AssetTypeDistance
 {

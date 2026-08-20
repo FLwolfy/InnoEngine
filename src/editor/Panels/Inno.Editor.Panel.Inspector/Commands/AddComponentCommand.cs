@@ -1,10 +1,9 @@
 using System;
 
-using Inno.Editor.Interactions.Actions;
+using Inno.Editor.Interactions;
 using Inno.Engine.Scene;
-using Inno.Editor.Panel.Inspector;
 
-namespace Inno.Editor.Panel.Inspector.Commands;
+namespace Inno.Editor.Panel.Inspector;
 
 [EditorAction(InspectorActions.AddComponent, InspectorAreas.Component)]
 internal sealed class AddComponentCommand : EditorAction<GameObject>

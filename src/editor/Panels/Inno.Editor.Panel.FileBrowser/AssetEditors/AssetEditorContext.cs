@@ -4,7 +4,7 @@ using Inno.Assets.Core;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 
-namespace Inno.Editor.Panel.FileBrowser.AssetEditors;
+namespace Inno.Editor.Panel.FileBrowser;
 
 /// <summary>Provides an immutable snapshot for an asset editor operation.</summary>
 public sealed class AssetEditorContext

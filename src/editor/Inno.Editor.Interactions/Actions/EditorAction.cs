@@ -1,6 +1,6 @@
 using System;
 
-namespace Inno.Editor.Interactions.Actions;
+namespace Inno.Editor.Interactions;
 
 /// <summary>
 /// Defines one automatically discovered editor operation and owns its complete multi-frame lifecycle.

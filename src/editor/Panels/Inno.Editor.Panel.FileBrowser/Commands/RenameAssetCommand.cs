@@ -1,13 +1,11 @@
 using Inno.Assets.File;
-using Inno.Editor.Panel.FileBrowser.AssetEditors;
-using Inno.Editor.Interactions.Actions;
-using Inno.Editor.Interactions.Menus;
+using Inno.Editor.Interactions;
 using Inno.Core.Input;
 using Inno.Core.Logging;
-using Inno.Editor.Panel.FileBrowser;
-using Inno.Editor.ImGui.Widgets;
+using Inno.Editor.ImGui.ImGuiWidget;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 
-namespace Inno.Editor.Panel.FileBrowser.Commands;
+namespace Inno.Editor.Panel.FileBrowser;
 
 [EditorAction(FileBrowserActions.Rename, priority: 100)]
 [EditorMenu(FileBrowserAreas.Browser, "Rename", order: 100)]
@@ -40,7 +38,7 @@ internal sealed class RenameAssetCommand(AssetEditorModule assets) : EditorActio
             return false;
         }
 
-        InlineRenameResult result = ImGuiWidget.InlineRename(
+        InlineRenameResult result = EditorWidget.InlineRename(
             presentation.id,
             ref m_buffer,
             ref m_requestFocus,

@@ -1,19 +1,9 @@
 using Inno.Core.Scripting;
 using Inno.Editor.Panel.FileBrowser;
-using Inno.Editor.Panel.FileBrowser.AssetEditors;
-using Inno.Editor.Panel.FileBrowser.Selection;
 
 [assembly: ScriptingApiNamespace(
     "InnoEditor.Assets",
     "Inno.Editor.Panel.FileBrowser",
-    ScriptingApiScope.Editor)]
-[assembly: ScriptingApiNamespace(
-    "InnoEditor.Assets",
-    "Inno.Editor.Panel.FileBrowser.AssetEditors",
-    ScriptingApiScope.Editor)]
-[assembly: ScriptingApiNamespace(
-    "InnoEditor.Assets",
-    "Inno.Editor.Panel.FileBrowser.Selection",
     ScriptingApiScope.Editor)]
 
 [assembly: ScriptingApiExport(typeof(AssetEditor), ScriptingApiScope.Editor)]

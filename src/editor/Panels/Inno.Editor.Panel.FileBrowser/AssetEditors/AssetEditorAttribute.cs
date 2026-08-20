@@ -1,6 +1,6 @@
 using System;
 
-namespace Inno.Editor.Panel.FileBrowser.AssetEditors;
+namespace Inno.Editor.Panel.FileBrowser;
 
 /// <summary>Associates an asset editor with an imported asset type.</summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]

@@ -16,9 +16,13 @@ Inno.Editor.Core/
 │  ├─ EditorPanel.cs
 │  ├─ EditorModal.cs
 │  └─ IEditorPanelReloadState.cs
-├─ EditorModule.cs
+├─ Modules/
+│  ├─ EditorModule.cs
+│  └─ EditorModuleAttribute.cs
 └─ Properties/ScriptingApi.cs
 ```
+
+所有目录中的类型都使用物理 namespace `Inno.Editor.Core`；目录只表达职责，不扩展 namespace。
 
 旧的 Commands、Menus、DragDrop、Selection 和 Rename 状态均不属于 Core，现已迁入 `Inno.Editor.Interactions` 或对应 Panel。
 
@@ -109,7 +113,7 @@ public sealed class AnimationBakeModal(AnimationModule animation) : EditorModal
 
 ## Scripting API
 
-EditorScripts 使用逻辑命名空间 `InnoEditor.Core` 和 `InnoEditor.Panels`。只导出 Context、Frame、Runtime、Module、Panel、Modal 及其 Attribute/状态接口；所有脚本必须显式写普通 `using`。
+EditorScripts 使用唯一逻辑命名空间 `InnoEditor.Core`。它导出 Context、Frame、Runtime、Module、Panel、Modal 及其 Attribute/状态接口；所有脚本必须显式写普通 `using`。
 
 ## 边界规则
 

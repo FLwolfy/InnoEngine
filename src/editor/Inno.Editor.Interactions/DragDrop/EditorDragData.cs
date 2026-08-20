@@ -1,6 +1,6 @@
 using System;
 
-namespace Inno.Editor.Interactions.DragDrop;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Contains the managed source object and label for one editor drag operation.</summary>
 public sealed class EditorDragData

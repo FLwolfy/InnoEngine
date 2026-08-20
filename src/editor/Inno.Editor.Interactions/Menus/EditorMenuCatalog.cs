@@ -3,10 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 
 using Inno.Core.Logging;
-using Inno.Editor.Core.Panels;
-using Inno.Editor.Interactions.Actions;
+using Inno.Editor.Core;
 
-namespace Inno.Editor.Interactions.Menus;
+namespace Inno.Editor.Interactions;
 
 internal sealed class EditorMenuCatalog(
     EditorExtensionCatalog catalog,

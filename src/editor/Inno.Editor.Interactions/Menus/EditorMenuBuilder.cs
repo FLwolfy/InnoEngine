@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Inno.Editor.Interactions.Menus;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Collects dynamic menu item placements.</summary>
 public sealed class EditorMenuBuilder

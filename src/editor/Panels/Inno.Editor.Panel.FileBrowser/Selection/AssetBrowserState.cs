@@ -1,12 +1,10 @@
-using Inno.Editor.Panel.FileBrowser.Selection;
 
 using System;
 
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
-using Inno.Editor.Panel.FileBrowser;
 
-namespace Inno.Editor.Panel.FileBrowser.Selection;
+namespace Inno.Editor.Panel.FileBrowser;
 
 /// <summary>Stores asset browser navigation independently from global object selection.</summary>
 public sealed class AssetBrowserState

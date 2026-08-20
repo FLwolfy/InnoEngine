@@ -13,12 +13,12 @@ using Inno.Core.Identity;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 using Inno.Editor.Core;
-using Inno.Editor.Interactions.Actions;
-using Inno.Editor.ImGui;
-using Inno.Editor.ImGui.Widgets;
 using Inno.Editor.Interactions;
-using Inno.Editor.Panel.FileBrowser.AssetEditors;
-using Inno.Editor.Panel.Hierarchy.Workspace;
+using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.ImGuiWidget;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
+using Inno.Editor.Panel.FileBrowser;
+using Inno.Editor.Panel.Hierarchy;
 using Inno.Editor.Panel.Inspector;
 using Inno.Editor.Scripting;
 using Inno.Engine.Scene;
@@ -277,11 +277,8 @@ public sealed class ScriptManagerTests : IDisposable
     {
         Write("InteractionExtensions.editor.cs", """
             using InnoEditor.Assets;
-            using InnoEditor.Actions;
             using InnoEditor.Core;
-            using InnoEditor.DragDrop;
-            using InnoEditor.Menus;
-            using InnoEditor.Panels;
+            using InnoEditor.Interactions;
             using InnoEngine.Assets;
 
             [EditorAction("tests.interactions.execute", "tests/interactions")]
@@ -346,7 +343,7 @@ public sealed class ScriptManagerTests : IDisposable
     public void GameScriptsCannotAccessInteractionFacades()
     {
         Write("ForbiddenEditorAction.cs", """
-            using InnoEditor.Actions;
+            using InnoEditor.Interactions;
             public sealed class ForbiddenEditorAction : EditorAction
             {
                 protected override void Execute(EditorActionContext context)

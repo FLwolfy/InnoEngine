@@ -1,7 +1,7 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
 
-namespace Inno.Editor.Interactions.Selection;
+namespace Inno.Editor.Interactions;
 
 /// <summary>
 /// Stores editor-wide object selection state.

@@ -1,4 +1,4 @@
-namespace Inno.Editor.Interactions.DragDrop;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Describes whether and how a target accepts the active drag.</summary>
 public readonly record struct EditorDropStatus

@@ -1,11 +1,10 @@
 using System;
 
 using Inno.Editor.Core;
-using Inno.Editor.Interactions.DragDrop;
+using Inno.Editor.Interactions;
 using Inno.Engine.Scene;
-using Inno.Editor.Panel.Hierarchy;
 
-namespace Inno.Editor.Panel.Hierarchy.DragDrop;
+namespace Inno.Editor.Panel.Hierarchy;
 
 [EditorDrop(HierarchyAreas.Hierarchy)]
 internal sealed class MoveGameObjectToSceneDropHandler

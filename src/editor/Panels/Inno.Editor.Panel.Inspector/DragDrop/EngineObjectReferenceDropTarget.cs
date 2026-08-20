@@ -1,10 +1,9 @@
-using Inno.Editor.Panel.Inspector.DragDrop;
 
 using System;
 
 using Inno.Engine.Scene;
 
-namespace Inno.Editor.Panel.Inspector.DragDrop;
+namespace Inno.Editor.Panel.Inspector;
 
 /// <summary>Provides an assignable engine-object-reference property drop target.</summary>
 public sealed class EngineObjectReferenceDropTarget

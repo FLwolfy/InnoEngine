@@ -1,8 +1,8 @@
 using Inno.Assets;
 using Inno.Assets.Core;
-using Inno.Editor.Interactions.DragDrop;
+using Inno.Editor.Interactions;
 
-namespace Inno.Editor.Panel.FileBrowser.AssetEditors;
+namespace Inno.Editor.Panel.FileBrowser;
 
 /// <summary>Customizes editor interactions for one imported asset type.</summary>
 public abstract class AssetEditor

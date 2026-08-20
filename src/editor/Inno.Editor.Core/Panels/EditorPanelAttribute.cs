@@ -1,6 +1,6 @@
 using System;
 
-namespace Inno.Editor.Core.Panels;
+namespace Inno.Editor.Core;
 
 /// <summary>Registers an editor panel for automatic discovery.</summary>
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]

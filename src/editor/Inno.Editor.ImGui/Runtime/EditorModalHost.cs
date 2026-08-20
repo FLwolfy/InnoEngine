@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 
 using Inno.Editor.Core;
-using Inno.Editor.ImGui.Renderers;
-using Inno.Editor.ImGui.Widgets;
-using Inno.Editor.Interactions.Runtime;
+using Inno.Editor.ImGui.ImGuiWidget;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
+using Inno.Editor.Interactions;
 
-namespace Inno.Editor.ImGui.Runtime;
+namespace Inno.Editor.ImGui;
 
 internal sealed class EditorModalHost
 {
@@ -83,11 +83,11 @@ internal sealed class EditorModalHost
             {
                 m_hideAt = Math.Max(
                     now,
-                    m_visibleAt + ImGuiWidget.style.modalMinimumVisibleSeconds);
+                    m_visibleAt + EditorWidget.style.modalMinimumVisibleSeconds);
             }
             m_requested = requested;
             if (isVisible && !requested &&
-                now >= m_hideAt + ImGuiWidget.style.modalFadeOutSeconds)
+                now >= m_hideAt + EditorWidget.style.modalFadeOutSeconds)
             {
                 isVisible = false;
             }
@@ -97,10 +97,10 @@ internal sealed class EditorModalHost
         {
             if (m_requested || now <= m_hideAt)
             {
-                double fadeIn = (now - m_visibleAt) / ImGuiWidget.style.modalFadeInSeconds;
+                double fadeIn = (now - m_visibleAt) / EditorWidget.style.modalFadeInSeconds;
                 return (float)Math.Clamp(fadeIn, 0.05, 1.0);
             }
-            double fadeOut = (now - m_hideAt) / ImGuiWidget.style.modalFadeOutSeconds;
+            double fadeOut = (now - m_hideAt) / EditorWidget.style.modalFadeOutSeconds;
             return (float)Math.Clamp(1.0 - fadeOut, 0.05, 1.0);
         }
     }

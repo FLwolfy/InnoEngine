@@ -1,8 +1,6 @@
-using Inno.Editor.Interactions.Actions;
-using Inno.Editor.Interactions.Menus;
-using Inno.Editor.Panel.Inspector;
+using Inno.Editor.Interactions;
 
-namespace Inno.Editor.Panel.Inspector.Commands;
+namespace Inno.Editor.Panel.Inspector;
 
 [EditorAction(InspectorActions.RemoveSystem, priority: 100)]
 [EditorMenu(InspectorAreas.System, "Remove System", order: 200)]

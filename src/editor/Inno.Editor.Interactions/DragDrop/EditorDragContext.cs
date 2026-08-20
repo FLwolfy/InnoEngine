@@ -2,7 +2,7 @@ using System;
 
 using Inno.Editor.Core;
 
-namespace Inno.Editor.Interactions.DragDrop;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Provides contextual state while beginning an editor drag.</summary>
 public sealed class EditorDragContext

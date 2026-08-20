@@ -9,21 +9,23 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\assets\Inno.Assets.Core\Inno.Assets.Core.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\assets\Inno.Assets.File\Inno.Assets.File.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\assets\Inno.Assets.Serialization\Inno.Assets.Serialization.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\core\Inno.Core.Identity\Inno.Core.Identity.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\engine\Inno.Engine.Scene.Assets\Inno.Engine.Scene.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\Inno.Editor.Core\Inno.Editor.Core.csproj" />
-    <ProjectReference Include="..\..\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" />
-    <ProjectReference Include="..\..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" />
-    <ProjectReference Include="..\..\..\assets\Inno.Assets\Inno.Assets.csproj" />
-    <ProjectReference Include="..\..\..\assets\Inno.Assets.Core\Inno.Assets.Core.csproj" />
-    <ProjectReference Include="..\..\..\assets\Inno.Assets.File\Inno.Assets.File.csproj" />
-    <ProjectReference Include="..\..\..\assets\Inno.Assets.Serialization\Inno.Assets.Serialization.csproj" />
-    <ProjectReference Include="..\..\..\core\Inno.Core.Identity\Inno.Core.Identity.csproj" />
-    <ProjectReference Include="..\..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" />
-    <ProjectReference Include="..\..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />
-    <ProjectReference Include="..\..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
-    <ProjectReference Include="..\..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" />
     <ProjectReference Include="..\..\..\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" />
-    <ProjectReference Include="..\..\..\engine\Inno.Engine.Scene.Assets\Inno.Engine.Scene.Assets.csproj" />
-    <ProjectReference Include="..\..\..\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" />
-    <ProjectReference Include="..\..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" />
   </ItemGroup>
 </Project>

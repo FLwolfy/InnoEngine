@@ -1,10 +1,8 @@
-using Inno.Editor.Interactions.Actions;
-using Inno.Editor.Panel.Hierarchy.Workspace;
+using Inno.Editor.Interactions;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Assets;
-using Inno.Editor.Panel.Hierarchy;
 
-namespace Inno.Editor.Panel.Hierarchy.Commands;
+namespace Inno.Editor.Panel.Hierarchy;
 
 [EditorAction(EditorActions.Open, priority: 200)]
 internal sealed class OpenSceneAssetAction(EditorSceneWorkspace workspace) : EditorAction<SceneAsset>

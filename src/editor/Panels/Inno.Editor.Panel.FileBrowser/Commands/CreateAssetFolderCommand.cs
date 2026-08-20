@@ -2,12 +2,9 @@ using System;
 
 using Inno.Assets;
 using Inno.Assets.File;
-using Inno.Editor.Interactions.Actions;
-using Inno.Editor.Interactions.Menus;
-using Inno.Editor.Panel.FileBrowser;
 using Inno.Editor.Interactions;
 
-namespace Inno.Editor.Panel.FileBrowser.Commands;
+namespace Inno.Editor.Panel.FileBrowser;
 
 [EditorAction(FileBrowserActions.CreateFolder, FileBrowserAreas.Browser)]
 [EditorMenu(FileBrowserAreas.Browser, "Create/Folder", order: 100)]

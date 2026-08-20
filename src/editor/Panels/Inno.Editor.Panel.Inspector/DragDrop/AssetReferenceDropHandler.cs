@@ -1,8 +1,8 @@
 using Inno.Assets;
 using Inno.Assets.Core;
-using Inno.Editor.Interactions.DragDrop;
+using Inno.Editor.Interactions;
 
-namespace Inno.Editor.Panel.Inspector.DragDrop;
+namespace Inno.Editor.Panel.Inspector;
 
 [EditorDrop(InspectorAreas.AssetReference, priority: 100)]
 internal sealed class AssetReferenceDropHandler

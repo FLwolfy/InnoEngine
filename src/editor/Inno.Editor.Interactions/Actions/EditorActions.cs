@@ -1,4 +1,4 @@
-namespace Inno.Editor.Interactions.Actions;
+namespace Inno.Editor.Interactions;
 
 /// <summary>Defines stable names for editor-wide action protocols.</summary>
 public static class EditorActions

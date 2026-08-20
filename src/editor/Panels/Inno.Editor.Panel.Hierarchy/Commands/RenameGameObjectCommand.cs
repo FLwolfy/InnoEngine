@@ -1,11 +1,10 @@
-using Inno.Editor.Interactions.Actions;
-using Inno.Editor.Interactions.Menus;
-using Inno.Editor.Panel.Hierarchy;
+using Inno.Editor.Interactions;
 using Inno.Core.Input;
 using Inno.Engine.Scene;
-using Inno.Editor.ImGui.Widgets;
+using Inno.Editor.ImGui.ImGuiWidget;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 
-namespace Inno.Editor.Panel.Hierarchy.Commands;
+namespace Inno.Editor.Panel.Hierarchy;
 
 [EditorAction(HierarchyActions.RenameGameObject, priority: 100)]
 [EditorMenu(HierarchyAreas.Hierarchy, "Rename", order: 200)]
@@ -38,7 +37,7 @@ internal sealed class RenameGameObjectCommand : EditorAction<GameObject>
             return false;
         }
 
-        InlineRenameResult result = ImGuiWidget.InlineRename(
+        InlineRenameResult result = EditorWidget.InlineRename(
             presentation.id,
             ref m_buffer,
             ref m_requestFocus,
