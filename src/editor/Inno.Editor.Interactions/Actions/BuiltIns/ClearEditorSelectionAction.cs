@@ -5,5 +5,8 @@ namespace Inno.Editor.Interactions;
 internal sealed class ClearEditorSelectionAction : EditorAction
 {
     protected override void Execute(EditorActionContext context)
-        => context.interactions.selection.Clear();
+    {
+        context.interactions.PrepareSelectionChange(null);
+        context.interactions.selection.Clear();
+    }
 }

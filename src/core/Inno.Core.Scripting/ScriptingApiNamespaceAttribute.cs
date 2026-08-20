@@ -8,6 +8,8 @@ namespace Inno.Core.Scripting;
 /// <remarks>
 /// Multiple implementation namespaces can map to the same script API namespace. This keeps
 /// script organization stable without introducing wrapper types with different runtime identities.
+/// A feature assembly may declare a mapping for a dependency namespace when that feature owns the
+/// decision to expose selected dependency types.
 /// </remarks>
 [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = true)]
 public sealed class ScriptingApiNamespaceAttribute : Attribute

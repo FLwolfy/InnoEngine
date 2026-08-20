@@ -75,6 +75,7 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
             Type componentType = component.GetType();
             string componentId = component.identity.persistentId.ToString("N");
             GameBehavior? behavior = component as GameBehavior;
+            var editorTarget = new ComponentEditorTarget(gameObject, component);
             bool open = EditorWidget.CollapsingCard(
                 componentId,
                 componentType.Name,
@@ -98,18 +99,15 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
                         () => context.interactions
                             .For(
                                 InspectorAreas.Component,
-                                new ComponentEditorTarget(gameObject, component))
+                                editorTarget)
                             .Enqueue(InspectorActions.RemoveComponent))),
                 dimmed: behavior is { enabled: false },
                 trailingControlWidth: componentType == typeof(Transform)
                     ? 0f
-                    : m_cardControls.width);
-
-            _ = EditorMenuRenderer.ContextMenu(
-                $"##component_menu_{componentId}",
-                context.interactions.For(
-                    InspectorAreas.Component,
-                    new ComponentEditorTarget(gameObject, component)));
+                    : m_cardControls.width,
+                drawContextMenu: () => _ = EditorMenuRenderer.ContextMenu(
+                    $"##component_menu_{componentId}",
+                    context.interactions.For(InspectorAreas.Component, editorTarget)));
 
             if (!open)
             {

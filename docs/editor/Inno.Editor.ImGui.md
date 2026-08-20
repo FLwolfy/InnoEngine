@@ -50,7 +50,8 @@ bool open = ImGuiWidget.CollapsingCard(
     drawTrailingControl: DrawRemoveButton,
     defaultOpen: true,
     dimmed: !enabled,
-    trailingControlWidth: ImGuiWidget.GetIconButtonSize().X);
+    trailingControlWidth: ImGuiWidget.GetIconButtonSize().X,
+    drawContextMenu: DrawHeaderContextMenu);
 ```
 
 `dimmed` 为 `true` 时，leading control、标题和 trailing control 使用与 Hierarchy inactive GameObject 相同的灰色文本色。GameBehavior 与 GameSystem Inspector 已把该参数绑定到各自的 `enabled` 状态。
@@ -58,6 +59,8 @@ bool open = ImGuiWidget.CollapsingCard(
 Header 的 disclosure triangle 由 `DrawDisclosureIndicator` 统一绘制：保留 `▶ / ▼` glyph，并根据实际 header bounds 居中。卡片、disabled text 与 disclosure hover 颜色都来自 `EditorPalette`，便于主题统一替换。底层 TreeNode 仍负责 open state 和点击命中，因此没有第二套折叠状态。
 
 `trailingControlWidth` 可以为多个右侧按钮预留固定宽度。Component 与 System Inspector 使用它放置 Move Up、Move Down 与 Remove。
+
+`drawContextMenu` 在完整 Header TreeNode 仍是当前 ImGui item 时执行，因此右键命中覆盖整个 Header，而不会错误绑定到 enabled checkbox、标题或末尾按钮。Component、Transform 与 System 都使用相同入口。
 
 展开内容使用配套的 `CardBody` 绘制：
 
@@ -74,7 +77,7 @@ if (open)
 
 `CardBody` 提供统一的背景、边框与内边距；`dimmed` 为 `true` 时，正文整体灰化且不可编辑，但 header 中的 enabled checkbox 仍可用于重新启用对象。相邻卡片之间的外部间距由调用方控制。
 
-其余常用控件包括 `SearchInput`、`BeginSearchPopup`/`EndSearchPopup`、`InlineRename`、`IconButton`、`CompactCheckbox`、`CenteredButton`。每个组件位于对应的 `ImGuiWidget.<Component>.cs`，避免继续形成一个混合所有控件的 EditorControls 文件。`InlineRename` 不缩放字体，通过 `inlineRenameFramePadding` 和 `inlineRenameVerticalInset` 在 Tree/Table/Grid 行内形成较矮且垂直居中的编辑框。所有需要 identity 的控件都应传入稳定且在当前 ImGui scope 内唯一的 `id`。
+其余常用控件包括 `SearchInput`、`BeginSearchPopup`/`EndSearchPopup`、`InlineRename`、`IconButton`、`CompactCheckbox`、`CenteredButton`。每个组件位于对应的 `ImGuiWidget.<Component>.cs`，避免继续形成一个混合所有控件的 EditorControls 文件。`InlineRename` 不缩放字体，通过 `inlineRenameFramePadding` 和 `inlineRenameVerticalInset` 在 Tree/Table/Grid 行内形成较矮且垂直居中的编辑框；其结果明确区分 Enter `Commit`、`FocusLost` 与 Escape `Cancel`，因此 feature 可以为校验失败定义一致的收尾规则。所有需要 identity 的控件都应传入稳定且在当前 ImGui scope 内唯一的 `id`。
 
 ## Tree 与拖拽反馈
 

@@ -31,6 +31,8 @@ public sealed class ScriptingModule : EditorModule, IDisposable
         });
         m_manager.CompilationCompleted += OnCompilationCompleted;
         m_manager.Start();
+        if (m_manager.TryCompilePending(out Task<ScriptCompilationResult>? compilation))
+            m_compilation = compilation;
     }
 
     /// <inheritdoc />

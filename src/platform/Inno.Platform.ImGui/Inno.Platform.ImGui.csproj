@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <InnoAssemblyGroup>Core</InnoAssemblyGroup>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);CS0108</NoWarn>
   </PropertyGroup>
   
   <ItemGroup>

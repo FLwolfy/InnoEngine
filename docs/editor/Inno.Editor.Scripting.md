@@ -73,8 +73,8 @@ AssemblyManager 自己的 runtime generation 仍存在于 assembly shadow cache�
 | 属性 | 默认 | 说明 |
 | --- | --- | --- |
 | `projectRootDirectory` | required | 包含 Assets/Library 的 Project root。 |
-| `autoCompile` | `true` | 初始和 Asset change 是否产生 focus-gated compile request。 |
-| `debounceMilliseconds` | `250` | request 可消费前的 quiet period。 |
+| `autoCompile` | `true` | 启动与后续 Asset change 是否产生自动编译请求。首次请求立即执行；后续请求等待 focus safe point。 |
+| `debounceMilliseconds` | `250` | 后续 change request 可消费前的 quiet period；首次编译不受影响。 |
 
 已移除 `retainedCompilationGenerations`。
 
@@ -104,7 +104,7 @@ using var scripts = new ScriptManager(new ScriptManagerOptions
 
 scripts.Start();
 
-// Consume only after editor focus returns and at a frame boundary.
+// The initial request is immediately ready. Later requests wait for a focused frame boundary.
 if (window.isFocused && scripts.TryCompilePending(out Task<ScriptCompilationResult>? task))
 {
     ScriptCompilationResult result = await task;

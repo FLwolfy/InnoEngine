@@ -21,6 +21,7 @@ public static partial class ImGuiWidget
     /// <param name="defaultOpen">Whether the card starts expanded.</param>
     /// <param name="dimmed">Whether header controls and title use the inactive text color.</param>
     /// <param name="trailingControlWidth">The optional width reserved for the trailing control group.</param>
+    /// <param name="drawContextMenu">An optional callback that binds a context menu to the complete header item.</param>
     /// <returns><see langword="true"/> when card content should be drawn; otherwise, <see langword="false"/>.</returns>
     public static bool CollapsingCard(
         string id,
@@ -29,7 +30,8 @@ public static partial class ImGuiWidget
         Action? drawTrailingControl = null,
         bool defaultOpen = true,
         bool dimmed = false,
-        float trailingControlWidth = 0f)
+        float trailingControlWidth = 0f,
+        Action? drawContextMenu = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         ArgumentNullException.ThrowIfNull(title);
@@ -67,6 +69,7 @@ public static partial class ImGuiWidget
         Vector2 contentCursor = NativeImGui.GetCursorScreenPos();
         NativeImGui.PopStyleVar();
         NativeImGui.PopStyleColor(4);
+        drawContextMenu?.Invoke();
 
         float contentX = itemHeaderMin.X + NativeImGui.GetTreeNodeToLabelSpacing();
         DrawDisclosureIndicator(

@@ -15,6 +15,7 @@ namespace Inno.Editor.Panel.FileBrowser;
 public sealed class AssetEditorModule : EditorModule, IDisposable
 {
     private readonly AssetEditorRegistry m_editors = new();
+    private readonly AssetIconRegistry m_icons = new();
     private readonly EditorInteractions m_interactions;
     private bool m_disposed;
 
@@ -131,8 +132,21 @@ public sealed class AssetEditorModule : EditorModule, IDisposable
         return data is not null;
     }
 
+    internal string ResolveIcon(AssetFileEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        if (entry.isDirectory)
+            return Inno.Platform.ImGui.ImGuiIcon.Folder;
+        _ = AssetManager.TryGetAssetType(entry.relativePath, out Type? assetType);
+        if (m_icons.TryResolve(assetType, entry.relativePath, out string icon))
+        {
+            return icon;
+        }
+        return FileBrowserUtility.GetDefaultFileIcon();
+    }
+
     /// <summary>
-    /// Releases the current asset-editor registry snapshot.
+    /// Releases the current asset-editor and asset-icon registry snapshots.
     /// </summary>
     public void Dispose()
     {
@@ -140,6 +154,7 @@ public sealed class AssetEditorModule : EditorModule, IDisposable
             return;
         m_disposed = true;
         m_editors.Dispose();
+        m_icons.Dispose();
     }
 
     private static AssetOperationValidation ValidateRename(

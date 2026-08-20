@@ -20,7 +20,7 @@ internal sealed record ScriptApiReferenceSet(
 
 internal static class ScriptApiReferenceBuilder
 {
-    private const string C_REFERENCE_SCHEMA_VERSION = "3";
+    private const string C_REFERENCE_SCHEMA_VERSION = "4";
 
     internal static ScriptApiReferenceSet Build(
         ScriptManagerOptions options,
@@ -32,8 +32,11 @@ internal static class ScriptApiReferenceBuilder
         string directory = Path.Combine(options.scriptApiDirectory, profile.name, fingerprint);
         Directory.CreateDirectory(directory);
         string[] implementationPaths = GetImplementationPaths(profile);
-        HashSet<Type> exportedTypes = profile.exports
-            .SelectMany(static export => export.exportedTypes)
+        ScriptApiTypeExport[] allExports = profile.exports
+            .SelectMany(static export => export.exports)
+            .ToArray();
+        HashSet<Type> exportedTypes = allExports
+            .Select(static export => export.type)
             .ToHashSet();
         var runtimeReferencePaths = new List<string>(profile.exports.Count);
         string runtimeDirectory = Path.Combine(directory, "Runtime");
@@ -49,16 +52,17 @@ internal static class ScriptApiReferenceBuilder
         }
 
         HashSet<Type> baseTypes = baseProfile?.exports
-            .SelectMany(static export => export.exportedTypes)
+            .SelectMany(static export => export.exports)
+            .Select(static export => export.type)
             .ToHashSet() ?? [];
-        Type[] logicalTypes = exportedTypes
-            .Where(type => !baseTypes.Contains(type))
-            .OrderBy(static type => type.FullName, StringComparer.Ordinal)
+        ScriptApiTypeExport[] logicalExports = allExports
+            .Where(export => !baseTypes.Contains(export.type))
+            .OrderBy(static export => export.type.FullName, StringComparer.Ordinal)
             .ToArray();
         var ideReferencePaths = new List<string>();
         if (baseReferences is not null)
             ideReferencePaths.AddRange(baseReferences.ideReferencePaths);
-        if (logicalTypes.Length > 0)
+        if (logicalExports.Length > 0)
         {
             string logicalDirectory = Path.Combine(directory, "IDE");
             Directory.CreateDirectory(logicalDirectory);
@@ -69,7 +73,7 @@ internal static class ScriptApiReferenceBuilder
                 EmitLogicalReferenceAssembly(
                     assemblyName,
                     referencePath,
-                    logicalTypes,
+                    logicalExports,
                     exportedTypes,
                     profile.namespaceMappings,
                     baseReferences?.ideReferencePaths ?? []);
@@ -77,8 +81,9 @@ internal static class ScriptApiReferenceBuilder
             WriteLogicalDocumentation(
                 referencePath,
                 assemblyName,
-                logicalTypes,
-                profile.namespaceMappings);
+                logicalExports,
+                profile.namespaceMappings,
+                profile.typeMappings);
             ideReferencePaths.Add(referencePath);
         }
         return new ScriptApiReferenceSet(runtimeReferencePaths, ideReferencePaths);
@@ -123,7 +128,7 @@ internal static class ScriptApiReferenceBuilder
                 optimizationLevel: OptimizationLevel.Release,
                 allowUnsafe: true,
                 deterministic: true,
-                concurrentBuild: true,
+                concurrentBuild: false,
                 nullableContextOptions: NullableContextOptions.Enable,
                 metadataImportOptions: MetadataImportOptions.Public));
         string temporaryPath = referencePath + ".tmp";
@@ -151,7 +156,7 @@ internal static class ScriptApiReferenceBuilder
     private static void EmitLogicalReferenceAssembly(
         string assemblyName,
         string referencePath,
-        IReadOnlyList<Type> types,
+        IReadOnlyList<ScriptApiTypeExport> exports,
         IReadOnlySet<Type> exportedTypes,
         IReadOnlyList<ScriptApiNamespaceMapping> namespaceMappings,
         IReadOnlyList<string> baseReferencePaths)
@@ -162,7 +167,7 @@ internal static class ScriptApiReferenceBuilder
                 static group => group.Key,
                 static group => group.First().apiNamespace,
                 StringComparer.Ordinal);
-        string source = ScriptApiStubSourceBuilder.BuildLogical(types, exportedTypes, mappings);
+        string source = ScriptApiStubSourceBuilder.BuildLogical(exports, exportedTypes, mappings);
         SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(
             SourceText.From(source, Encoding.UTF8),
             new CSharpParseOptions(LanguageVersion.Latest),
@@ -185,7 +190,7 @@ internal static class ScriptApiReferenceBuilder
                 optimizationLevel: OptimizationLevel.Release,
                 allowUnsafe: true,
                 deterministic: true,
-                concurrentBuild: true,
+                concurrentBuild: false,
                 nullableContextOptions: NullableContextOptions.Enable,
                 metadataImportOptions: MetadataImportOptions.Public));
         string temporaryPath = referencePath + ".tmp";
@@ -213,8 +218,9 @@ internal static class ScriptApiReferenceBuilder
     private static void WriteLogicalDocumentation(
         string referencePath,
         string assemblyName,
-        IReadOnlyList<Type> types,
-        IReadOnlyList<ScriptApiNamespaceMapping> namespaceMappings)
+        IReadOnlyList<ScriptApiTypeExport> exports,
+        IReadOnlyList<ScriptApiNamespaceMapping> namespaceMappings,
+        IReadOnlyList<ScriptApiTypeMapping> typeMappings)
     {
         Dictionary<string, string> mappings = namespaceMappings
             .GroupBy(static mapping => mapping.implementationNamespace, StringComparer.Ordinal)
@@ -225,8 +231,9 @@ internal static class ScriptApiReferenceBuilder
         ScriptApiDocumentationBuilder.Write(
             Path.ChangeExtension(referencePath, ".xml"),
             assemblyName,
-            types,
-            mappings);
+            exports,
+            mappings,
+            typeMappings);
     }
 
     private static string CreateFingerprint(ScriptApiProfile profile)
@@ -237,8 +244,13 @@ internal static class ScriptApiReferenceBuilder
         foreach (ScriptApiAssembly export in profile.exports)
         {
             builder.Append('|').Append(export.assembly.ManifestModule.ModuleVersionId.ToString("D"));
-            foreach (Type type in export.exportedTypes)
-                builder.Append('|').Append(type.AssemblyQualifiedName);
+            foreach (ScriptApiTypeExport typeExport in export.exports)
+            {
+                builder.Append('|')
+                    .Append(typeExport.type.AssemblyQualifiedName)
+                    .Append('>')
+                    .Append(typeExport.name);
+            }
         }
         foreach (string apiNamespace in profile.apiNamespaces)
             builder.Append('|').Append(apiNamespace);

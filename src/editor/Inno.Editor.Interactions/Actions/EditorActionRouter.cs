@@ -93,6 +93,28 @@ internal sealed class EditorActionRouter(
             registration.action.CancelInternal();
     }
 
+    internal void LosePresentationExcept(object? target)
+    {
+        var visited = new HashSet<EditorAction>(ReferenceEqualityComparer.Instance);
+        foreach (EditorExtensionCatalog.ActionRegistration registration in catalog.extensions.actions)
+        {
+            EditorAction action = registration.action;
+            if (!visited.Add(action) || !action.isActive || action.IsActiveFor(target))
+                continue;
+            try
+            {
+                action.LosePresentationInternal();
+            }
+            catch (Exception exception)
+            {
+                Log.Error(
+                    "Editor action '{0}' failed while losing presentation focus: {1}",
+                    registration.attribute.action,
+                    exception);
+            }
+        }
+    }
+
     internal bool TryGetShortcut(string action, string area, out HotKeyGesture gesture)
     {
         EditorShortcutAttribute? best = null;

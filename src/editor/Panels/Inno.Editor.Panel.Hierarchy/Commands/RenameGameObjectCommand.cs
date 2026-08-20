@@ -48,16 +48,38 @@ internal sealed class RenameGameObjectCommand : EditorAction<GameObject>
             Cancel();
             return true;
         }
+        if (result == InlineRenameResult.FocusLost)
+        {
+            CommitName();
+            return true;
+        }
         if (result != InlineRenameResult.Commit)
             return true;
-        m_gameObject.name = string.IsNullOrWhiteSpace(m_buffer) ? "GameObject" : m_buffer.Trim();
-        Complete();
+        CommitName();
         return true;
     }
 
     protected override void OnCompleted() => ClearState();
 
     protected override void OnCancelled() => ClearState();
+
+    protected override void OnPresentationLost()
+    {
+        if (m_gameObject is null || !m_gameObject.isRuntimeValid)
+        {
+            Cancel();
+            return;
+        }
+        CommitName();
+    }
+
+    private void CommitName()
+    {
+        if (m_gameObject is null)
+            return;
+        m_gameObject.name = string.IsNullOrWhiteSpace(m_buffer) ? "GameObject" : m_buffer.Trim();
+        Complete();
+    }
 
     private void ClearState()
     {

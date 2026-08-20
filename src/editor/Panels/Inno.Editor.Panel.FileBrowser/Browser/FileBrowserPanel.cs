@@ -181,6 +181,7 @@ public sealed class FileBrowserPanel : EditorPanel
             m_tree.PrepareOpenRequests(context);
             m_tree.DrawEntry(context, string.Empty, "Assets", true);
             m_tree.ClearOpenRequests();
+            HandleBackgroundSelection(context);
             m_contextMenu.DrawBackground(
                 context,
                 "##asset_tree_background_context",
@@ -323,6 +324,7 @@ public sealed class FileBrowserPanel : EditorPanel
         if (NativeImGui.BeginChild("##EntriesScroll", Vector2.Zero, ImGuiChildFlags.None))
         {
             DrawEntriesTable(context, entries, m_assets.browser.currentDirectory);
+            HandleBackgroundSelection(context);
             m_contextMenu.DrawBackground(
                 context,
                 "##asset_list_background_context",
@@ -339,6 +341,7 @@ public sealed class FileBrowserPanel : EditorPanel
         if (NativeImGui.BeginChild("##EntriesScroll", new Vector2(0f, -sliderHeight), ImGuiChildFlags.None))
         {
             DrawGrid(context, entries);
+            HandleBackgroundSelection(context);
             m_contextMenu.DrawBackground(
                 context,
                 "##asset_grid_background_context",
@@ -347,6 +350,18 @@ public sealed class FileBrowserPanel : EditorPanel
 
         NativeImGui.EndChild();
         DrawGridScaleSlider();
+    }
+
+    private void HandleBackgroundSelection(EditorContext context)
+    {
+        if (!NativeImGui.IsWindowHovered() ||
+            NativeImGui.IsAnyItemHovered() ||
+            !NativeImGui.IsMouseReleased(ImGuiMouseButton.Left))
+        {
+            return;
+        }
+
+        m_assets.browser.Select(context, null);
     }
 
     private void DrawGridScaleSlider()
@@ -449,7 +464,7 @@ public sealed class FileBrowserPanel : EditorPanel
     private void DrawNameCell(EditorContext context, AssetFileEntry entry)
     {
         _ = NativeImGui.TableSetColumnIndex(0);
-        string icon = entry.isDirectory ? ImGuiIcon.Folder : GetFileIcon(entry.relativePath);
+        string icon = m_assets.ResolveIcon(entry);
         string name = entry.nameWithoutExtension;
         bool selected = string.Equals(m_assets.browser.GetSelectedPath(context), entry.relativePath, StringComparison.Ordinal);
         bool editing = m_rename.IsEditing(context, entry.relativePath, FileBrowserPresentation.List);
@@ -553,7 +568,7 @@ public sealed class FileBrowserPanel : EditorPanel
     private void DrawGridItem(EditorContext context, AssetFileEntry entry)
     {
         float cellSize = GetGridCellSize();
-        string icon = entry.isDirectory ? ImGuiIcon.Folder : GetFileIcon(entry.relativePath);
+        string icon = m_assets.ResolveIcon(entry);
         string name = Path.GetFileName(entry.relativePath);
         bool selected = string.Equals(m_assets.browser.GetSelectedPath(context), entry.relativePath, StringComparison.Ordinal);
         bool editing = m_rename.IsEditing(context, entry.relativePath, FileBrowserPresentation.Grid);

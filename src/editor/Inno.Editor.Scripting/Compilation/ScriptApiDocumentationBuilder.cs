@@ -12,12 +12,14 @@ internal static class ScriptApiDocumentationBuilder
     internal static void Write(
         string outputPath,
         string assemblyName,
-        IReadOnlyList<Type> types,
-        IReadOnlyDictionary<string, string> namespaceMappings)
+        IReadOnlyList<ScriptApiTypeExport> exports,
+        IReadOnlyDictionary<string, string> namespaceMappings,
+        IReadOnlyList<ScriptApiTypeMapping> typeMappings)
     {
         var outputMembers = new List<XElement>();
         var emittedNames = new HashSet<string>(StringComparer.Ordinal);
-        foreach (IGrouping<Assembly, Type> group in types.GroupBy(static type => type.Assembly))
+        foreach (IGrouping<Assembly, ScriptApiTypeExport> group in exports.GroupBy(
+                     static export => export.type.Assembly))
         {
             string documentationPath = Path.ChangeExtension(group.Key.Location, ".xml");
             if (!File.Exists(documentationPath))
@@ -27,17 +29,46 @@ internal static class ScriptApiDocumentationBuilder
                 .Element("members")?
                 .Elements("member")
                 .ToArray() ?? [];
-            foreach (Type type in group)
+            foreach (ScriptApiTypeExport export in group)
             {
+                Type type = export.type;
                 string typeName = GetDocumentationTypeName(type);
                 foreach (XElement member in members.Where(member => BelongsToType(member, typeName)))
                 {
                     var copy = new XElement(member);
-                    RewriteDocumentationIdentities(copy, namespaceMappings);
+                    RewriteDocumentationIdentities(copy, namespaceMappings, typeMappings);
                     string? name = copy.Attribute("name")?.Value;
                     if (name is not null && emittedNames.Add(name))
                         outputMembers.Add(copy);
                 }
+            }
+        }
+        foreach (ScriptApiTypeExport export in exports.Where(export => !string.Equals(
+                     export.name,
+                     GetRuntimeTypeName(export.type),
+                     StringComparison.Ordinal)))
+        {
+            ScriptApiTypeMapping mapping = typeMappings.Single(value =>
+                string.Equals(
+                    value.implementationNamespace,
+                    export.type.Namespace ?? string.Empty,
+                    StringComparison.Ordinal) &&
+                string.Equals(value.implementationName, GetRuntimeTypeName(export.type), StringComparison.Ordinal) &&
+                string.Equals(value.apiName, export.name, StringComparison.Ordinal));
+            string facadeTypeName = mapping.apiNamespace + "." + mapping.apiName;
+            AddFallbackDocumentation(
+                outputMembers,
+                emittedNames,
+                "T:" + facadeTypeName,
+                $"Provides the {mapping.apiName} values exposed by the script API.");
+            foreach (FieldInfo field in export.type.GetFields(
+                         BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly))
+            {
+                AddFallbackDocumentation(
+                    outputMembers,
+                    emittedNames,
+                    "F:" + facadeTypeName + "." + field.Name,
+                    $"Provides the {field.Name} value from {mapping.apiName}.");
             }
         }
 
@@ -67,15 +98,38 @@ internal static class ScriptApiDocumentationBuilder
     private static string GetDocumentationTypeName(Type type)
         => (type.FullName ?? type.Name).Replace('+', '.');
 
+    private static string GetRuntimeTypeName(Type type)
+    {
+        int aritySeparator = type.Name.IndexOf('`');
+        return aritySeparator < 0 ? type.Name : type.Name[..aritySeparator];
+    }
+
+    private static void AddFallbackDocumentation(
+        ICollection<XElement> outputMembers,
+        ISet<string> emittedNames,
+        string memberName,
+        string summary)
+    {
+        if (!emittedNames.Add(memberName))
+            return;
+        outputMembers.Add(new XElement(
+            "member",
+            new XAttribute("name", memberName),
+            new XElement("summary", summary)));
+    }
+
     private static void RewriteDocumentationIdentities(
         XElement member,
-        IReadOnlyDictionary<string, string> namespaceMappings)
+        IReadOnlyDictionary<string, string> namespaceMappings,
+        IReadOnlyList<ScriptApiTypeMapping> typeMappings)
     {
         foreach (XAttribute attribute in member.DescendantsAndSelf().Attributes())
         {
             if (attribute.Name.LocalName is not ("name" or "cref"))
                 continue;
-            attribute.Value = RewriteNamespace(attribute.Value, namespaceMappings);
+            attribute.Value = RewriteTypeNames(
+                RewriteNamespace(attribute.Value, namespaceMappings),
+                typeMappings);
         }
     }
 
@@ -89,6 +143,22 @@ internal static class ScriptApiDocumentationBuilder
             value = value.Replace(
                 implementationNamespace,
                 apiNamespace,
+                StringComparison.Ordinal);
+        }
+        return value;
+    }
+
+    private static string RewriteTypeNames(
+        string value,
+        IReadOnlyList<ScriptApiTypeMapping> typeMappings)
+    {
+        foreach (ScriptApiTypeMapping mapping in typeMappings
+                     .OrderByDescending(static mapping =>
+                         mapping.apiNamespace.Length + mapping.implementationName.Length))
+        {
+            value = value.Replace(
+                mapping.apiNamespace + "." + mapping.implementationName,
+                mapping.apiNamespace + "." + mapping.apiName,
                 StringComparison.Ordinal);
         }
         return value;

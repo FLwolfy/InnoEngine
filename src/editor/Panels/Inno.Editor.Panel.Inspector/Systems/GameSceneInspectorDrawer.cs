@@ -65,6 +65,7 @@ internal sealed class GameSceneInspectorDrawer : IInspectorDrawer
         {
             GameSystem system = systems[i];
             string systemId = system.identity.persistentId.ToString("N");
+            var editorTarget = new SystemEditorTarget(scene, system);
             bool open = EditorWidget.CollapsingCard(
                 systemId,
                 system.GetType().Name,
@@ -82,15 +83,13 @@ internal sealed class GameSceneInspectorDrawer : IInspectorDrawer
                     () => context.interactions
                         .For(
                             InspectorAreas.System,
-                            new SystemEditorTarget(scene, system))
+                            editorTarget)
                         .Enqueue(InspectorActions.RemoveSystem)),
                 dimmed: !system.enabled,
-                trailingControlWidth: m_cardControls.width);
-            _ = EditorMenuRenderer.ContextMenu(
-                $"##system_menu_{systemId}",
-                context.interactions.For(
-                    InspectorAreas.System,
-                    new SystemEditorTarget(scene, system)));
+                trailingControlWidth: m_cardControls.width,
+                drawContextMenu: () => _ = EditorMenuRenderer.ContextMenu(
+                    $"##system_menu_{systemId}",
+                    context.interactions.For(InspectorAreas.System, editorTarget)));
             if (!open)
             {
                 NativeImGui.Dummy(new Vector2(0f, EditorWidget.style.inspectorCardSpacing));

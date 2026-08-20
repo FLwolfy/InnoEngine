@@ -37,6 +37,21 @@ public abstract class EditorAction : IDisposable
 
     internal void CancelInternal() => Cancel();
 
+    internal void LosePresentationInternal()
+    {
+        if (!m_isActive)
+            return;
+        try
+        {
+            OnPresentationLost();
+        }
+        finally
+        {
+            if (m_isActive)
+                Cancel();
+        }
+    }
+
     internal bool IsActiveFor(object? target)
         => m_isActive && Equals(m_activeTarget, target);
 
@@ -97,6 +112,16 @@ public abstract class EditorAction : IDisposable
     protected virtual void OnCancelled()
     {
     }
+
+    /// <summary>
+    /// Runs when this action's active target loses editor presentation focus.
+    /// </summary>
+    /// <remarks>
+    /// The default behavior cancels the active operation. An action that owns an editable value may override this
+    /// method to validate and commit that value. The operation is cancelled automatically when an override returns
+    /// without calling <see cref="Complete"/> or <see cref="Cancel"/>.
+    /// </remarks>
+    protected virtual void OnPresentationLost() => Cancel();
 
     /// <summary>Cancels active work and releases this action instance.</summary>
     public void Dispose()

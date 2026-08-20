@@ -6,7 +6,7 @@
 
 ## 设计边界
 
-- 每个参与脚本 API 的项目只保留一个 `Properties/ScriptingApi.cs`。清单由类型所属程序集维护，不设置反向依赖全部模块的中央清单项目。
+- 每个参与脚本 API 的 feature 项目只保留一个 `Properties/ScriptingApi.cs`。清单通常导出本项目类型，也可以选择性导出依赖项目的类型；不设置反向依赖全部模块的中央清单项目。
 - 清单必须逐类型显式导出，不允许用“整个 public assembly 都可用”代替。
 - `InnoEngine.Scene`、`InnoEngine.Mathematics` 等名称是稳定且可直接 `using` 的脚本 API namespace；它们映射到一个或多个真实 CLR namespace。
 - 导出会为 IDE 生成逻辑 API facade，但 facade 只是编辑期代码模型。Editor 内的热编译仍将逻辑 namespace 转换为真实类型身份，因此热重载、`TypeCacheManager` 和序列化看到的是真实 `Inno.*` 类型体系。
@@ -25,9 +25,23 @@
 
 ```csharp
 ScriptingApiExportAttribute(Type type, ScriptingApiScope scope)
+ScriptingApiExportAttribute(Type type, string name, ScriptingApiScope scope)
 ```
 
-将一个由当前 assembly 拥有的 public 类型加入指定 profile。类型必须在同一 `Properties/ScriptingApi.cs` 中所属的 `ScriptingApiNamespace` 映射内。依赖程序集不能代替它的所有者导出类型。
+将一个 public runtime 类型加入指定 profile。声明 assembly 不需要拥有该类型，因此上层 feature 可以有选择地导出底层依赖的类型；reference builder 始终按 `type.Assembly` 生成 runtime reference，CLR 类型身份不会被错误地改成声明 assembly。该实现 namespace 必须存在唯一的 `ScriptingApiNamespace` 映射。
+
+第二个重载只改变脚本 facade 中的类型名称，最终运行时 IL 仍引用原始 CLR 类型。Editor 会同步处理 IDE reference、普通 `using`、完全限定类型名和 XML documentation identity。例如：
+
+```csharp
+[assembly: ScriptingApiExport(
+    typeof(ImGuiIcon),
+    "AssetIconKind",
+    ScriptingApiScope.Editor)]
+```
+
+EditorScripts 看到的是 `AssetIconKind`，Host 和运行时仍使用 `ImGuiIcon`。已有 XML 注释会迁移到别名后的 identity；没有 XML 文档的别名常量目录会获得基础 fallback 文档。泛型类型不能更名，因为 C# 不支持为开放泛型声明普通 using alias。
+
+例如 FileBrowser feature 可以在自己的 `ScriptingApi.cs` 中导出 `Inno.Platform.ImGui.ImGuiIcon`，而不需要让底层 ImGui 项目知道 `InnoEditor.Assets`。清单所有权因此属于“决定公开该能力的 feature”，类型的运行时所有权仍属于原程序集。
 
 ### ScriptingApiNamespaceAttribute
 

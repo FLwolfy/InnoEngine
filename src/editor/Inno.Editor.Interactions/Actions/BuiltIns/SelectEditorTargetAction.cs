@@ -5,5 +5,8 @@ namespace Inno.Editor.Interactions;
 internal sealed class SelectEditorTargetAction : EditorAction<object>
 {
     protected override void Execute(EditorActionContext<object> context)
-        => context.interactions.selection.Select(context.target);
+    {
+        context.interactions.PrepareSelectionChange(context.target);
+        context.interactions.selection.Select(context.target);
+    }
 }

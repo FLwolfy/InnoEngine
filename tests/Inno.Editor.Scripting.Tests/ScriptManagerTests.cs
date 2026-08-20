@@ -81,6 +81,25 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task InitialAutomaticCompilationDoesNotWaitForFocusOrDebounce()
+    {
+        Write("InitialCompileProbe.cs", "public sealed class InitialCompileProbe { }");
+        using var automaticManager = new ScriptManager(new ScriptManagerOptions
+        {
+            projectRootDirectory = m_projectRoot,
+            autoCompile = true,
+            debounceMilliseconds = 60_000
+        });
+
+        automaticManager.Start();
+
+        Assert.True(automaticManager.TryCompilePending(out Task<ScriptCompilationResult>? compilation));
+        Assert.NotNull(compilation);
+        ScriptCompilationResult result = await compilation!;
+        Assert.True(result.success, FormatDiagnostics(result));
+    }
+
+    [Fact]
     public void RuntimeAndEditorScriptsCompileWithExplicitFacadeUsings()
     {
         Write("ProjectBehavior.CS", """
@@ -283,6 +302,8 @@ public sealed class ScriptManagerTests : IDisposable
 
             [EditorAction("tests.interactions.execute", "tests/interactions")]
             [EditorMenu("tests/interactions", "Tools/Create/Execute")]
+            [AssetIcon(typeof(TextAsset), AssetIconKind.FileImage, priority: 100)]
+            [AssetIcon(".binary-icon", AssetIconKind.FileAudio, priority: 100)]
             public sealed class ScriptAction : EditorAction
             {
                 protected override void Execute(EditorActionContext context)
@@ -337,6 +358,144 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.Contains(TypeCacheManager.current.types, static type => type.Name == "ScriptAssetEditor");
         Assert.Contains(TypeCacheManager.current.types, static type => type.Name == "ScriptDrop");
         Assert.Contains(TypeCacheManager.current.types, static type => type.Name == "ScriptPanel");
+
+        using IDisposable iconRegistry = CreateAssetIconRegistry();
+        Assert.Equal(ResolveImGuiIcon("FileImage"), ResolveAssetIcon(iconRegistry, typeof(TextAsset)));
+        Assert.Equal(
+            ResolveImGuiIcon("FileAudio"),
+            ResolveAssetIcon(iconRegistry, typeof(BinaryAsset), "Assets/Test.binary-icon"));
+    }
+
+    [Fact]
+    public void AssetIconKindFacadeAliasesEveryImGuiIconConstant()
+    {
+        string[] iconNames = GetImGuiIconType()
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(static field => field.IsLiteral && field.FieldType == typeof(string))
+            .Select(static field => field.Name)
+            .OrderBy(static name => name, StringComparer.Ordinal)
+            .ToArray();
+        string fields = string.Join(
+            Environment.NewLine,
+            iconNames.Select(static name =>
+                $"    public const string {name} = AssetIconKind.{name};"));
+        Write("AssetIconCatalog.editor.cs", $$"""
+            using InnoEditor.Assets;
+
+            public static class AssetIconCatalog
+            {
+            {{fields}}
+                public const string FullyQualified = InnoEditor.Assets.AssetIconKind.File;
+            }
+            """);
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.True(result.success, FormatDiagnostics(result));
+        string documentationPath = Directory.EnumerateFiles(
+            Path.Combine(m_projectRoot, "Library", "ScriptApi", "Editor"),
+            "Inno.ScriptApi.Editor.xml",
+            SearchOption.AllDirectories).Single();
+        string documentation = File.ReadAllText(documentationPath);
+        Assert.Contains("T:InnoEditor.Assets.AssetIconKind", documentation);
+        Assert.Contains("F:InnoEditor.Assets.AssetIconKind.File", documentation);
+        Assert.Contains("Provides the File value from AssetIconKind.", documentation);
+    }
+
+    [Fact]
+    public void RemovingScriptAssetIconDeclarationRestoresBuiltInIcon()
+    {
+        Write("AssetIconReloadProbe.editor.cs", """
+            using InnoEditor.Assets;
+            using InnoEngine.Assets;
+
+            [AssetIcon(typeof(TextAsset), AssetIconKind.FileImage, priority: 100)]
+            public sealed class AssetIconReloadProbe
+            {
+            }
+            """);
+
+        ScriptCompilationResult initial = Compile();
+
+        Assert.True(initial.success, FormatDiagnostics(initial));
+        Assert.True(m_manager.ApplyPendingReload());
+        using IDisposable iconRegistry = CreateAssetIconRegistry();
+        Assert.Equal(
+            ResolveImGuiIcon("FileImage"),
+            ResolveAssetIcon(iconRegistry, typeof(TextAsset), "Assets/Test.txt"));
+
+        Write("AssetIconReloadProbe.editor.cs", """
+            public sealed class AssetIconReloadProbe
+            {
+            }
+            """);
+
+        ScriptCompilationResult updated = Compile();
+
+        Assert.True(updated.success, FormatDiagnostics(updated));
+        Assert.True(m_manager.ApplyPendingReload());
+        Assert.Equal(
+            ResolveImGuiIcon("FileLines"),
+            ResolveAssetIcon(iconRegistry, typeof(TextAsset), "Assets/Test.txt"));
+    }
+
+    [Theory]
+    [InlineData("Assets/Scripts/Player.cs", "FileCode")]
+    [InlineData("Assets/Scenes/Main.innoscene", "LayerGroup")]
+    [InlineData("Assets/Prefabs/Player.innoprefab", "Cube")]
+    [InlineData("Assets/Plugins/Physics.dll", "Plug")]
+    [InlineData("Assets/Scripts/Game.innoasmdef", "Gears")]
+    [InlineData("Assets/Data/Settings.JSON", "FileLines")]
+    public void BuiltInAssetIconsResolveFromFileExtensions(string relativePath, string iconName)
+    {
+        using IDisposable iconRegistry = CreateAssetIconRegistry();
+
+        Assert.Equal(
+            ResolveImGuiIcon(iconName),
+            ResolveAssetIcon(iconRegistry, assetType: null, relativePath: relativePath));
+    }
+
+    [Fact]
+    public void RemovingOnlyScriptAssetIconDeclarationLeavesCustomAssetUnregistered()
+    {
+        Write("CustomIconAsset.editor.cs", """
+            using InnoEditor.Assets;
+            using InnoEngine.Assets;
+
+            [AssetIcon(typeof(CustomIconAsset), AssetIconKind.FileImage)]
+            public sealed class CustomIconAsset : AssetObject
+            {
+            }
+            """);
+
+        ScriptCompilationResult initial = Compile();
+
+        Assert.True(initial.success, FormatDiagnostics(initial));
+        Assert.True(m_manager.ApplyPendingReload());
+        using IDisposable iconRegistry = CreateAssetIconRegistry();
+        Type initialAssetType = TypeCacheManager.current.types.Single(
+            static type => type.Name == "CustomIconAsset");
+        Assert.Equal(ResolveImGuiIcon("FileImage"), ResolveAssetIcon(iconRegistry, initialAssetType));
+
+        Write("CustomIconAsset.editor.cs", """
+            using InnoEngine.Assets;
+
+            public sealed class CustomIconAsset : AssetObject
+            {
+            }
+            """);
+
+        ScriptCompilationResult updated = Compile();
+
+        Assert.True(updated.success, FormatDiagnostics(updated));
+        Assert.True(m_manager.ApplyPendingReload());
+        Type updatedAssetType = TypeCacheManager.current.types.Single(
+            static type => type.Name == "CustomIconAsset");
+        Assert.False(TryResolveAssetIcon(
+            iconRegistry,
+            updatedAssetType,
+            "Assets/CustomIconAsset.unknown",
+            out _));
     }
 
     [Fact]
@@ -892,6 +1051,52 @@ public sealed class ScriptManagerTests : IDisposable
         => target.GetType().GetField(
             fieldName,
             BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(target, value);
+
+    private static IDisposable CreateAssetIconRegistry()
+    {
+        Type? registryType = typeof(AssetIconAttribute).Assembly.GetType(
+            "Inno.Editor.Panel.FileBrowser.AssetIconRegistry",
+            throwOnError: true);
+        Assert.NotNull(registryType);
+        object? registry = Activator.CreateInstance(registryType!, nonPublic: true);
+        Assert.NotNull(registry);
+        return Assert.IsAssignableFrom<IDisposable>(registry);
+    }
+
+    private static string ResolveAssetIcon(
+        IDisposable registry,
+        Type? assetType,
+        string relativePath = "Assets/Unknown.unknown")
+    {
+        Assert.True(TryResolveAssetIcon(registry, assetType, relativePath, out string icon));
+        return icon;
+    }
+
+    private static bool TryResolveAssetIcon(
+        IDisposable registry,
+        Type? assetType,
+        string relativePath,
+        out string icon)
+    {
+        MethodInfo? resolveIcon = registry.GetType().GetMethod(
+            "TryResolve",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(resolveIcon);
+        object?[] arguments = [assetType, relativePath, null];
+        bool resolved = Assert.IsType<bool>(resolveIcon!.Invoke(registry, arguments));
+        icon = Assert.IsType<string>(arguments[2]);
+        return resolved;
+    }
+
+    private static Type GetImGuiIconType()
+        => Assembly.Load("Inno.Platform.ImGui").GetType(
+            "Inno.Platform.ImGui.ImGuiIcon",
+            throwOnError: true)!;
+
+    private static string ResolveImGuiIcon(string name)
+        => Assert.IsType<string>(GetImGuiIconType().GetField(
+            name,
+            BindingFlags.Public | BindingFlags.Static)!.GetRawConstantValue());
 
     private static string FormatDiagnostics(ScriptCompilationResult result)
         => string.Join(

@@ -14,8 +14,12 @@ public sealed class ScriptManagerOptions
     public required string projectRootDirectory { get; init; }
 
     /// <summary>
-    /// Gets or sets whether source and plugin changes create a pending focus-gated compilation request.
+    /// Gets or sets whether startup and subsequent source changes request automatic compilation.
     /// </summary>
+    /// <remarks>
+    /// The initial request starts immediately. Later change requests are consumed only at a focused
+    /// Editor safe point after the configured debounce duration.
+    /// </remarks>
     public bool autoCompile { get; init; } = true;
 
     /// <summary>

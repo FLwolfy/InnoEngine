@@ -31,6 +31,7 @@ public sealed class ScriptManager : IDisposable
     private long m_lastCompileRequestTimestamp;
     private float m_compilationProgress;
     private bool m_compileRequested;
+    private bool m_initialCompileRequested;
     private bool m_disposed;
 
     /// <summary>
@@ -97,7 +98,14 @@ public sealed class ScriptManager : IDisposable
         AssetManager.Changed -= OnAssetDatabaseChanged;
         AssetManager.Changed += OnAssetDatabaseChanged;
         if (m_options.autoCompile)
-            RequestCompile();
+        {
+            lock (m_sync)
+            {
+                m_compileRequested = true;
+                m_initialCompileRequested = true;
+                m_lastCompileRequestTimestamp = Environment.TickCount64;
+            }
+        }
     }
 
     /// <summary>
@@ -116,6 +124,7 @@ public sealed class ScriptManager : IDisposable
     /// <summary>
     /// Starts a pending compilation after the configured quiet period has elapsed.
     /// </summary>
+    /// <remarks>The initial automatic request is immediately ready and does not observe the debounce duration.</remarks>
     /// <param name="compilation">The started compilation task, or <see langword="null"/> when none was ready.</param>
     /// <returns><see langword="true"/> when a pending compilation was started.</returns>
     public bool TryCompilePending(out Task<ScriptCompilationResult>? compilation)
@@ -124,12 +133,15 @@ public sealed class ScriptManager : IDisposable
         lock (m_sync)
         {
             long elapsed = Environment.TickCount64 - m_lastCompileRequestTimestamp;
-            if (!m_compileRequested || isCompiling || elapsed < m_options.debounceMilliseconds)
+            if (!m_compileRequested ||
+                isCompiling ||
+                !m_initialCompileRequested && elapsed < m_options.debounceMilliseconds)
             {
                 compilation = null;
                 return false;
             }
             m_compileRequested = false;
+            m_initialCompileRequested = false;
         }
         compilation = CompileAsync().AsTask();
         return true;
@@ -290,6 +302,7 @@ public sealed class ScriptManager : IDisposable
         lock (m_sync)
         {
             m_compileRequested = false;
+            m_initialCompileRequested = false;
             m_pendingCompilation = null;
         }
         if (m_scriptModule is AssemblyModuleHandle handle && AssemblyManager.isInitialized)

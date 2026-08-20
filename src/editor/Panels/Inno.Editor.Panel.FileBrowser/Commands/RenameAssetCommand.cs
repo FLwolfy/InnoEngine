@@ -49,24 +49,49 @@ internal sealed class RenameAssetCommand(AssetEditorModule assets) : EditorActio
             Cancel();
             return true;
         }
-        if (result != InlineRenameResult.Commit)
-            return true;
-
-        EditorValidationResult validation = assets.ValidateRename(m_asset, m_buffer);
-        if (!validation.isValid)
+        if (result == InlineRenameResult.FocusLost)
         {
-            Log.Warn("Asset rename was rejected: {0}", validation.message);
-            m_requestFocus = true;
+            _ = TryCommit(keepActiveWhenInvalid: false);
             return true;
         }
-        assets.Rename(m_asset, m_buffer);
-        Complete();
+        if (result != InlineRenameResult.Commit)
+            return true;
+        _ = TryCommit(keepActiveWhenInvalid: true);
         return true;
     }
 
     protected override void OnCompleted() => ClearState();
 
     protected override void OnCancelled() => ClearState();
+
+    protected override void OnPresentationLost()
+        => _ = TryCommit(keepActiveWhenInvalid: false);
+
+    private bool TryCommit(bool keepActiveWhenInvalid)
+    {
+        if (m_asset is null)
+        {
+            Cancel();
+            return false;
+        }
+
+        EditorValidationResult validation = assets.ValidateRename(m_asset, m_buffer);
+        if (!validation.isValid)
+        {
+            Log.Warn("Asset rename was rejected: {0}", validation.message);
+            if (keepActiveWhenInvalid)
+                m_requestFocus = true;
+            else
+                Cancel();
+            return false;
+        }
+
+        AssetEditorContext asset = m_asset;
+        string name = m_buffer;
+        Complete();
+        assets.Rename(asset, name);
+        return true;
+    }
 
     private void ClearState()
     {

@@ -79,6 +79,9 @@ public sealed class EditorInteractions
         m_focusedTarget = target;
     }
 
+    internal void PrepareSelectionChange(object? target)
+        => Actions.LosePresentationExcept(target);
+
     internal EditorActionState Query(
         string action,
         string area,

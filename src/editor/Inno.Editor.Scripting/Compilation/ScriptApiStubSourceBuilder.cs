@@ -22,29 +22,40 @@ internal static class ScriptApiStubSourceBuilder
     [ThreadStatic]
     private static IReadOnlyDictionary<string, string>? s_namespaceMappings;
 
+    [ThreadStatic]
+    private static IReadOnlyDictionary<Type, string>? s_typeNames;
+
     internal static string BuildImplementation(
         ScriptApiAssembly export,
         IReadOnlySet<Type> exportedTypes)
         => Build(
-            export.exportedTypes,
+            export.exports.Select(static value => value.type).ToArray(),
             exportedTypes,
             export.assembly.GetName().Version ?? new Version(1, 0, 0, 0),
-            namespaceMappings: null);
+            namespaceMappings: null,
+            typeNames: null);
 
     internal static string BuildLogical(
-        IReadOnlyList<Type> types,
+        IReadOnlyList<ScriptApiTypeExport> exports,
         IReadOnlySet<Type> exportedTypes,
         IReadOnlyDictionary<string, string> namespaceMappings)
-        => Build(types, exportedTypes, new Version(1, 0, 0, 0), namespaceMappings);
+        => Build(
+            exports.Select(static value => value.type).ToArray(),
+            exportedTypes,
+            new Version(1, 0, 0, 0),
+            namespaceMappings,
+            exports.ToDictionary(static value => value.type, static value => value.name));
 
     private static string Build(
         IReadOnlyList<Type> types,
         IReadOnlySet<Type> exportedTypes,
         Version version,
-        IReadOnlyDictionary<string, string>? namespaceMappings)
+        IReadOnlyDictionary<string, string>? namespaceMappings,
+        IReadOnlyDictionary<Type, string>? typeNames)
     {
         s_exportedTypes = exportedTypes;
         s_namespaceMappings = namespaceMappings;
+        s_typeNames = typeNames;
         try
         {
             var builder = new StringBuilder();
@@ -68,6 +79,7 @@ internal static class ScriptApiStubSourceBuilder
         {
             s_exportedTypes = null;
             s_namespaceMappings = null;
+            s_typeNames = null;
         }
     }
 
@@ -84,6 +96,7 @@ internal static class ScriptApiStubSourceBuilder
             return;
         }
 
+        AppendAttributeUsage(builder, type);
         builder.Append("public ");
         if (type.IsClass)
         {
@@ -120,10 +133,25 @@ internal static class ScriptApiStubSourceBuilder
         builder.AppendLine("}");
     }
 
+    private static void AppendAttributeUsage(StringBuilder builder, Type type)
+    {
+        if (!typeof(Attribute).IsAssignableFrom(type))
+            return;
+        AttributeUsageAttribute usage = type.GetCustomAttribute<AttributeUsageAttribute>(inherit: true)
+            ?? new AttributeUsageAttribute(AttributeTargets.All);
+        builder.Append("[global::System.AttributeUsage((global::System.AttributeTargets)")
+            .Append(((int)usage.ValidOn).ToString(CultureInfo.InvariantCulture))
+            .Append(", AllowMultiple = ")
+            .Append(usage.AllowMultiple ? "true" : "false")
+            .Append(", Inherited = ")
+            .Append(usage.Inherited ? "true" : "false")
+            .AppendLine(")]");
+    }
+
     private static void AppendEnum(StringBuilder builder, Type type)
     {
         builder.Append("public enum ")
-            .Append(RemoveArity(type.Name))
+            .Append(GetTypeName(type))
             .Append(" : ")
             .Append(FormatType(Enum.GetUnderlyingType(type)))
             .AppendLine()
@@ -157,7 +185,7 @@ internal static class ScriptApiStubSourceBuilder
 
     private static void AppendNamedType(StringBuilder builder, Type type)
     {
-        builder.Append(RemoveArity(type.Name));
+        builder.Append(GetTypeName(type));
         Type[] arguments = type.GetGenericArguments()
             .Where(static argument => argument.DeclaringMethod is null)
             .ToArray();
@@ -270,7 +298,7 @@ internal static class ScriptApiStubSourceBuilder
             builder.Append("    ")
                 .Append(GetAccessibility(constructor))
                 .Append(' ')
-                .Append(RemoveArity(type.Name))
+                .Append(GetTypeName(type))
                 .Append('(');
             AppendParameters(builder, constructor.GetParameters());
             builder.AppendLine(") => throw new global::System.NotImplementedException();");
@@ -526,6 +554,13 @@ internal static class ScriptApiStubSourceBuilder
     private static string FormatNamedTypeName(Type type, bool removeGenericArities)
     {
         string implementationNamespace = type.Namespace ?? string.Empty;
+        if (s_typeNames is not null && s_typeNames.TryGetValue(type, out string? typeName))
+        {
+            string aliasNamespace = ResolveNamespace(implementationNamespace);
+            return string.IsNullOrEmpty(aliasNamespace)
+                ? typeName
+                : aliasNamespace + "." + typeName;
+        }
         string fullName = type.FullName ?? type.Name;
         string relativeName = string.IsNullOrEmpty(implementationNamespace)
             ? fullName
@@ -544,6 +579,11 @@ internal static class ScriptApiStubSourceBuilder
            s_namespaceMappings.TryGetValue(implementationNamespace, out string? apiNamespace)
             ? apiNamespace
             : implementationNamespace;
+
+    private static string GetTypeName(Type type)
+        => s_typeNames is not null && s_typeNames.TryGetValue(type, out string? name)
+            ? name
+            : RemoveArity(type.Name);
 
     private static bool IsApiMethod(MethodInfo method)
     {

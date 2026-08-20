@@ -55,8 +55,10 @@ public static partial class ImGuiWidget
         }
         if (NativeImGui.IsKeyPressed(ImGuiKey.Escape))
             return InlineRenameResult.Cancel;
-        return submitted || NativeImGui.IsItemDeactivated()
-            ? InlineRenameResult.Commit
+        if (submitted)
+            return InlineRenameResult.Commit;
+        return NativeImGui.IsItemDeactivated()
+            ? InlineRenameResult.FocusLost
             : InlineRenameResult.None;
     }
 }
@@ -100,6 +102,9 @@ public enum InlineRenameResult
 
     /// <summary>Indicates that the edited text should be committed.</summary>
     Commit,
+
+    /// <summary>Indicates that the input lost focus and its valid value should be committed before closing.</summary>
+    FocusLost,
 
     /// <summary>Indicates that the edited text should be discarded.</summary>
     Cancel

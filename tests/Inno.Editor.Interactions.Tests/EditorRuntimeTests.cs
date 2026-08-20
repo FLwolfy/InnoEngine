@@ -121,6 +121,20 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void ChangingSelectionFinishesThePreviousTargetsActivePresentation()
+    {
+        var target = new InteractionTarget();
+        EditorInteraction interaction = m_runtime.interactions.For(TestAreas.Other, target);
+        Assert.True(interaction.Select());
+        Assert.True(interaction.Execute(TestActionIds.CommitOnPresentationLost));
+
+        Assert.True(m_runtime.interactions.For(TestAreas.Other, new DerivedTarget()).Select());
+
+        Assert.Equal("Committed on focus loss", target.committedValue);
+        Assert.False(interaction.IsActive(TestActionIds.CommitOnPresentationLost));
+    }
+
+    [Fact]
     public void SelectionAndFocusUseTheLightweightAreaHandle()
     {
         var target = new DerivedTarget();
@@ -188,6 +202,7 @@ public static class TestActionIds
     public const string Deferred = "tests.deferred";
     public const string Menu = "tests.menu";
     public const string Interaction = "tests.interaction";
+    public const string CommitOnPresentationLost = "tests.commit-on-presentation-lost";
 }
 
 public class BaseTarget;
@@ -310,6 +325,28 @@ public sealed class InteractionAction : EditorAction<InteractionTarget>
     }
 
     protected override void OnCancelled() => m_value = string.Empty;
+}
+
+[EditorAction(TestActionIds.CommitOnPresentationLost)]
+public sealed class CommitOnPresentationLostAction : EditorAction<InteractionTarget>
+{
+    private InteractionTarget? m_target;
+
+    protected override void Execute(EditorActionContext<InteractionTarget> context)
+    {
+        m_target = context.target;
+        Activate(context);
+    }
+
+    protected override void OnPresentationLost()
+    {
+        if (m_target is not null)
+            m_target.committedValue = "Committed on focus loss";
+        m_target = null;
+        Complete();
+    }
+
+    protected override void OnCancelled() => m_target = null;
 }
 
 [EditorAction(TestActionIds.Menu)]

@@ -240,7 +240,7 @@ internal static class ScriptCompiler
                     .ToArray());
         }
 
-        var usingRewriter = new ScriptApiUsingRewriter(api.namespaceMappings);
+        var usingRewriter = new ScriptApiUsingRewriter(api.namespaceMappings, api.typeMappings);
         var propertyOrderRewriter = new SerializablePropertyOrderRewriter();
         SyntaxTree[] runtimeTrees = syntaxTrees
             .Select(tree => CSharpSyntaxTree.Create(
@@ -437,8 +437,12 @@ internal static class ScriptCompiler
                          .OrderBy(static value => value.assembly.GetName().Name, StringComparer.Ordinal))
             {
                 AppendHash(hash, export.assembly.ManifestModule.ModuleVersionId.ToString("D"));
-                foreach (Type type in export.exportedTypes)
+                foreach (ScriptApiTypeExport typeExport in export.exports)
+                {
+                    Type type = typeExport.type;
                     AppendHash(hash, type.AssemblyQualifiedName ?? type.FullName ?? type.Name);
+                    AppendHash(hash, typeExport.name);
+                }
             }
             foreach (ScriptApiNamespaceMapping mapping in profile.namespaceMappings)
             {

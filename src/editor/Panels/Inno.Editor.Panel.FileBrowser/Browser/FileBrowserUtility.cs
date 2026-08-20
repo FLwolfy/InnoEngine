@@ -90,10 +90,7 @@ internal static class FileBrowserUtility
         return string.IsNullOrEmpty(extension) ? "FILE" : extension.TrimStart('.').ToUpperInvariant();
     }
 
-    internal static string GetFileIcon(string relativePath)
-        => string.Equals(Path.GetExtension(relativePath), ".png", StringComparison.OrdinalIgnoreCase)
-            ? ImGuiIcon.FileImage
-            : ImGuiIcon.File;
+    internal static string GetDefaultFileIcon() => ImGuiIcon.File;
 
     internal static IReadOnlyList<(string Label, string Path)> BuildBreadcrumbParts(string relativePath)
     {
