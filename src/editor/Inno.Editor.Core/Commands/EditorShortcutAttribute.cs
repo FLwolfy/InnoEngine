@@ -8,7 +8,12 @@ namespace Inno.Editor.Core.Commands;
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class EditorShortcutAttribute : Attribute
 {
-    /// <summary>Creates a global shortcut.</summary>
+    /// <summary>
+    /// Creates a shortcut that can be dispatched from any focused interaction surface.
+    /// </summary>
+    /// <param name="key">The non-modifier key that triggers the action.</param>
+    /// <param name="modifiers">The exact additional modifier keys required by the gesture.</param>
+    /// <param name="primary">Whether the platform primary modifier, Command on macOS or Control elsewhere, is required.</param>
     public EditorShortcutAttribute(
         KeyCode key,
         KeyModifier modifiers = KeyModifier.None,
@@ -17,7 +22,13 @@ public sealed class EditorShortcutAttribute : Attribute
     {
     }
 
-    /// <summary>Creates a shortcut scoped to an interaction surface.</summary>
+    /// <summary>
+    /// Creates a shortcut scoped to an exact interaction surface.
+    /// </summary>
+    /// <param name="surface">The exact focused surface that accepts the shortcut, or <see langword="null"/> for any surface.</param>
+    /// <param name="key">The non-modifier key that triggers the action.</param>
+    /// <param name="modifiers">The exact additional modifier keys required by the gesture.</param>
+    /// <param name="primary">Whether the platform primary modifier, Command on macOS or Control elsewhere, is required.</param>
     public EditorShortcutAttribute(
         Type? surface,
         KeyCode key,

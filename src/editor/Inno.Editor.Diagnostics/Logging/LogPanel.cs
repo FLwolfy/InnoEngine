@@ -37,9 +37,11 @@ public sealed class LogPanel : EditorPanel
     /// <summary>
     /// Creates the panel.
     /// </summary>
+    /// <param name="diagnostics">The automatically discovered diagnostics module that owns the rolling log buffer.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="diagnostics"/> is <see langword="null"/>.</exception>
     public LogPanel(DiagnosticsModule diagnostics)
     {
-        m_diagnostics = diagnostics;
+        m_diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
     }
 
     /// <inheritdoc />

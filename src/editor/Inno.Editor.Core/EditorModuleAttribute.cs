@@ -6,7 +6,10 @@ namespace Inno.Editor.Core;
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class EditorModuleAttribute : Attribute
 {
-    /// <summary>Creates a module registration.</summary>
+    /// <summary>
+    /// Creates a module registration with a deterministic lifecycle order.
+    /// </summary>
+    /// <param name="order">The ascending order used to start and update the module.</param>
     public EditorModuleAttribute(int order = 0)
     {
         this.order = order;

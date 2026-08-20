@@ -6,7 +6,14 @@ namespace Inno.Editor.Core.Commands;
 /// <summary>Provides contextual state to an editor action.</summary>
 public class EditorActionContext
 {
-    /// <summary>Creates an action context.</summary>
+    /// <summary>
+    /// Creates an action context that describes one query or execution request.
+    /// </summary>
+    /// <param name="editor">The shared editor context.</param>
+    /// <param name="surface">The interaction surface that issued the request.</param>
+    /// <param name="target">The optional object the action operates on.</param>
+    /// <param name="argument">An optional placement-specific argument.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="editor"/> or <paramref name="surface"/> is <see langword="null"/>.</exception>
     public EditorActionContext(
         EditorContext editor,
         Type surface,
@@ -31,7 +38,12 @@ public class EditorActionContext
     /// <summary>Gets the optional action argument.</summary>
     public object? argument { get; }
 
-    /// <summary>Tries to read the argument as the requested type.</summary>
+    /// <summary>
+    /// Tries to read the optional action argument as the requested reference type.
+    /// </summary>
+    /// <typeparam name="T">The reference type expected by the action implementation.</typeparam>
+    /// <param name="value">The typed argument when the method succeeds.</param>
+    /// <returns><see langword="true"/> when the argument is assignable to <typeparamref name="T"/>; otherwise, <see langword="false"/>.</returns>
     public bool TryGetArgument<T>([NotNullWhen(true)] out T? value)
         where T : class
     {
@@ -40,11 +52,21 @@ public class EditorActionContext
     }
 }
 
-/// <summary>Provides a strongly typed target to an editor action.</summary>
+/// <summary>
+/// Provides a strongly typed target to an editor action implementation.
+/// </summary>
+/// <typeparam name="TTarget">The target type required by the action.</typeparam>
 public sealed class EditorActionContext<TTarget> : EditorActionContext
     where TTarget : class
 {
-    /// <summary>Creates a typed action context.</summary>
+    /// <summary>
+    /// Creates a typed action context for a validated target.
+    /// </summary>
+    /// <param name="editor">The shared editor context.</param>
+    /// <param name="surface">The interaction surface that issued the request.</param>
+    /// <param name="target">The validated strongly typed target.</param>
+    /// <param name="argument">An optional placement-specific argument.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="editor"/>, <paramref name="surface"/>, or <paramref name="target"/> is <see langword="null"/>.</exception>
     public EditorActionContext(
         EditorContext editor,
         Type surface,

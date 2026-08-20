@@ -3,7 +3,11 @@ namespace Inno.Editor.Core.DragDrop;
 /// <summary>Describes whether and how a target accepts the active drag.</summary>
 public readonly record struct EditorDropStatus
 {
-    /// <summary>Creates a drop compatibility status.</summary>
+    /// <summary>
+    /// Creates the compatibility and presentation state of a potential drop target.
+    /// </summary>
+    /// <param name="canDrop">Whether the active source may be delivered to the target.</param>
+    /// <param name="visual">The standard visual requested for the target.</param>
     public EditorDropStatus(bool canDrop, EditorDropVisual visual)
     {
         this.canDrop = canDrop;
@@ -19,7 +23,11 @@ public readonly record struct EditorDropStatus
     /// <summary>Gets an incompatible drop status.</summary>
     public static EditorDropStatus rejected => new(false, EditorDropVisual.None);
 
-    /// <summary>Creates an accepted drop status.</summary>
+    /// <summary>
+    /// Creates an accepted drop status with the requested standard target visual.
+    /// </summary>
+    /// <param name="visual">The standard visual drawn while the compatible source hovers the target.</param>
+    /// <returns>An accepted drop status.</returns>
     public static EditorDropStatus Accept(EditorDropVisual visual = EditorDropVisual.Highlight)
         => new(true, visual);
 }

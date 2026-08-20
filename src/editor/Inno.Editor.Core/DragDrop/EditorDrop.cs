@@ -11,14 +11,26 @@ public abstract class EditorDrop
     /// <summary>Gets the accepted drop target type.</summary>
     public abstract Type targetType { get; }
 
-    /// <summary>Evaluates a potential drop.</summary>
+    /// <summary>
+    /// Evaluates whether the current managed source may be dropped on the supplied target.
+    /// </summary>
+    /// <param name="context">The untyped source, target, surface, and requested placement.</param>
+    /// <returns>The compatibility state and standard target visual.</returns>
     public abstract EditorDropStatus Query(EditorDropContext context);
 
-    /// <summary>Executes a delivered drop.</summary>
+    /// <summary>
+    /// Executes a delivered drop after a successful compatibility query.
+    /// </summary>
+    /// <param name="context">The untyped source, target, surface, and requested placement.</param>
+    /// <returns>The observable selection and reveal result of the operation.</returns>
     public abstract EditorDropResult Drop(EditorDropContext context);
 }
 
-/// <summary>Defines a typed drop operation.</summary>
+/// <summary>
+/// Defines a typed drop operation for one managed source and target pair.
+/// </summary>
+/// <typeparam name="TSource">The managed drag-source type accepted by the operation.</typeparam>
+/// <typeparam name="TTarget">The managed drop-target type accepted by the operation.</typeparam>
 public abstract class EditorDrop<TSource, TTarget> : EditorDrop
     where TSource : class
     where TTarget : class
@@ -30,6 +42,8 @@ public abstract class EditorDrop<TSource, TTarget> : EditorDrop
     public sealed override Type targetType => typeof(TTarget);
 
     /// <inheritdoc />
+    /// <param name="context">The untyped drop context supplied by the runtime router.</param>
+    /// <returns>The typed handler result, or a rejected state when the source or target is incompatible.</returns>
     public sealed override EditorDropStatus Query(EditorDropContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -39,6 +53,8 @@ public abstract class EditorDrop<TSource, TTarget> : EditorDrop
     }
 
     /// <inheritdoc />
+    /// <param name="context">The untyped drop context supplied by the runtime router.</param>
+    /// <returns>The typed handler result, or a rejected result when the source or target is incompatible.</returns>
     public sealed override EditorDropResult Drop(EditorDropContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -47,14 +63,26 @@ public abstract class EditorDrop<TSource, TTarget> : EditorDrop
         return Drop(new EditorDropContext<TSource, TTarget>(context, source, target));
     }
 
-    /// <summary>Evaluates a typed drop.</summary>
+    /// <summary>
+    /// Evaluates whether the strongly typed source may be dropped on the strongly typed target.
+    /// </summary>
+    /// <param name="context">The typed source, target, surface, and requested placement.</param>
+    /// <returns>The compatibility state and standard target visual.</returns>
     protected abstract EditorDropStatus Query(EditorDropContext<TSource, TTarget> context);
 
-    /// <summary>Executes a typed drop.</summary>
+    /// <summary>
+    /// Executes a delivered drop for the strongly typed source and target.
+    /// </summary>
+    /// <param name="context">The typed source, target, surface, and requested placement.</param>
+    /// <returns>The observable selection and reveal result of the operation.</returns>
     protected abstract EditorDropResult Drop(EditorDropContext<TSource, TTarget> context);
 }
 
-/// <summary>Provides strongly typed source and target values to a drop operation.</summary>
+/// <summary>
+/// Provides strongly typed source and target values to a drop operation.
+/// </summary>
+/// <typeparam name="TSource">The managed drag-source type.</typeparam>
+/// <typeparam name="TTarget">The managed drop-target type.</typeparam>
 public sealed class EditorDropContext<TSource, TTarget>
     where TSource : class
     where TTarget : class

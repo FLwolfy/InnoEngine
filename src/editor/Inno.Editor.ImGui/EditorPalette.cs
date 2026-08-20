@@ -158,10 +158,18 @@ public static class EditorPalette
     /// <summary>Gets the opaque asset browser accent.</summary>
     public static Vector4 assetAccent { get; } = new(0.50f, 0.45f, 0.62f, 1f);
 
-    /// <summary>Gets a hover treatment derived from a base theme color.</summary>
+    /// <summary>
+    /// Gets a hover treatment derived from a base theme color.
+    /// </summary>
+    /// <param name="color">The base theme color.</param>
+    /// <returns>The base color blended toward the palette text color using the standard hover amount.</returns>
     public static Vector4 GetHovered(Vector4 color) => Lerp(color, text, 0.16f);
 
-    /// <summary>Gets an active treatment derived from a base theme color.</summary>
+    /// <summary>
+    /// Gets an active treatment derived from a base theme color.
+    /// </summary>
+    /// <param name="color">The base theme color.</param>
+    /// <returns>The base color blended toward the palette text color using the standard active amount.</returns>
     public static Vector4 GetActive(Vector4 color) => Lerp(color, text, 0.24f);
 
     /// <summary>Gets scene row background.</summary>
@@ -221,19 +229,37 @@ public static class EditorPalette
     /// <summary>Gets active log header button background.</summary>
     public static Vector4 logToggleActive { get; } = new(0.8156863f, 0.77254903f, 0.9647059f, 0.4501961f);
 
-    /// <summary>Gets the expanded log card background for a severity color.</summary>
+    /// <summary>
+    /// Gets the expanded log card background derived from a severity color.
+    /// </summary>
+    /// <param name="severityColor">The palette color representing the log severity.</param>
+    /// <returns>The standard expanded-card base blended with the severity color.</returns>
     public static Vector4 GetLogExpandedCard(Vector4 severityColor)
         => Lerp(logExpandedBase, severityColor, 0.12f);
 
-    /// <summary>Gets the expanded log card border for a severity color.</summary>
+    /// <summary>
+    /// Gets the expanded log card border derived from a severity color.
+    /// </summary>
+    /// <param name="severityColor">The palette color representing the log severity.</param>
+    /// <returns>The standard expanded-border base blended with the severity color.</returns>
     public static Vector4 GetLogExpandedBorder(Vector4 severityColor)
         => Lerp(logExpandedBorderBase, severityColor, 0.20f);
 
-    /// <summary>Gets the separator color used inside an expanded log card.</summary>
+    /// <summary>
+    /// Gets the separator color used inside an expanded log card.
+    /// </summary>
+    /// <param name="cardColor">The resolved background color of the expanded card.</param>
+    /// <returns>The card color blended toward the palette text color.</returns>
     public static Vector4 GetLogSeparator(Vector4 cardColor)
         => Lerp(cardColor, text, 0.12f);
 
-    /// <summary>Linearly interpolates two palette colors.</summary>
+    /// <summary>
+    /// Linearly interpolates two palette colors using a clamped amount.
+    /// </summary>
+    /// <param name="from">The color returned when <paramref name="amount"/> is zero.</param>
+    /// <param name="to">The color returned when <paramref name="amount"/> is one.</param>
+    /// <param name="amount">The interpolation amount, clamped to the inclusive zero-to-one range.</param>
+    /// <returns>The component-wise interpolated color.</returns>
     public static Vector4 Lerp(Vector4 from, Vector4 to, float amount)
     {
         float value = Math.Clamp(amount, 0f, 1f);

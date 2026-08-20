@@ -3,7 +3,13 @@ namespace Inno.Editor.Core.Commands;
 /// <summary>Describes the current presentation and availability of an editor action.</summary>
 public readonly record struct EditorActionState
 {
-    /// <summary>Creates an action state.</summary>
+    /// <summary>
+    /// Creates the contextual presentation state of an editor action.
+    /// </summary>
+    /// <param name="isVisible">Whether the action should be included in the current presentation.</param>
+    /// <param name="isEnabled">Whether the action can execute in the current context.</param>
+    /// <param name="isChecked">Whether the action is currently presented as checked.</param>
+    /// <param name="displayName">An optional contextual label that replaces the static placement label.</param>
     public EditorActionState(
         bool isVisible,
         bool isEnabled,

@@ -5,7 +5,13 @@ namespace Inno.Editor.Core.DragDrop;
 /// <summary>Provides contextual state while beginning an editor drag.</summary>
 public sealed class EditorDragContext
 {
-    /// <summary>Creates a drag context.</summary>
+    /// <summary>
+    /// Creates the contextual request used to begin a managed editor drag session.
+    /// </summary>
+    /// <param name="editorContext">The shared editor context.</param>
+    /// <param name="surface">The interaction surface that produced the drag source.</param>
+    /// <param name="data">The managed source object, label, and validity predicate.</param>
+    /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null"/>.</exception>
     public EditorDragContext(EditorContext editorContext, Type surface, EditorDragData data)
     {
         this.editorContext = editorContext ?? throw new ArgumentNullException(nameof(editorContext));

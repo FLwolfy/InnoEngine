@@ -31,7 +31,11 @@ public sealed class EditorRuntime : IDisposable
     private bool m_started;
     private bool m_disposed;
 
-    /// <summary>Creates an editor runtime for one project.</summary>
+    /// <summary>
+    /// Creates an editor runtime that discovers and coordinates one project's active extension generation.
+    /// </summary>
+    /// <param name="projectDirectory">The project root containing the Asset and Library directories.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="projectDirectory"/> is empty.</exception>
     public EditorRuntime(string projectDirectory)
     {
         m_context = new RuntimeContext(this, projectDirectory);
@@ -47,7 +51,10 @@ public sealed class EditorRuntime : IDisposable
     /// <summary>Gets the number of discovered dockable panels.</summary>
     public int panelCount => m_catalog.extensions.panels.Length;
 
-    /// <summary>Activates the current extension generation.</summary>
+    /// <summary>
+    /// Builds, validates, and activates the current TypeCache extension generation.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">Thrown after the runtime has been disposed.</exception>
     public void Start()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -57,7 +64,13 @@ public sealed class EditorRuntime : IDisposable
         m_started = true;
     }
 
-    /// <summary>Updates all active feature modules.</summary>
+    /// <summary>
+    /// Flushes queued actions and updates every active feature module for one editor frame.
+    /// </summary>
+    /// <param name="deltaTime">The elapsed frame time in seconds.</param>
+    /// <param name="totalTime">The absolute editor runtime in seconds.</param>
+    /// <param name="isFocused">Whether an editor viewport currently owns application focus.</param>
+    /// <exception cref="ObjectDisposedException">Thrown after the runtime has been disposed.</exception>
     public void Update(float deltaTime, float totalTime, bool isFocused)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -70,7 +83,10 @@ public sealed class EditorRuntime : IDisposable
         m_catalog.UpdateModules();
     }
 
-    /// <summary>Draws the main menu, panels, drag state, queued actions, and modals.</summary>
+    /// <summary>
+    /// Draws the main menu, all open panels, queued interactions, and active modals for one ImGui frame.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">Thrown after the runtime has been disposed.</exception>
     public void Draw()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -92,7 +108,11 @@ public sealed class EditorRuntime : IDisposable
         m_modals.Draw(m_context, extensions.modals, now);
     }
 
-    /// <summary>Dispatches a keyboard event through attribute-declared shortcuts.</summary>
+    /// <summary>
+    /// Dispatches an unhandled keyboard event through attribute-declared contextual shortcuts.
+    /// </summary>
+    /// <param name="keyEvent">The keyboard event received from the application event stream.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="keyEvent"/> is <see langword="null"/>.</exception>
     public void HandleKeyPressed(KeyPressedEvent keyEvent)
     {
         ArgumentNullException.ThrowIfNull(keyEvent);

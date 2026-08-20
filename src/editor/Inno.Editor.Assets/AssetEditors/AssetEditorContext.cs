@@ -8,7 +8,16 @@ namespace Inno.Editor.Assets.AssetEditors;
 /// <summary>Provides an immutable snapshot for an asset editor operation.</summary>
 public sealed class AssetEditorContext
 {
-    /// <summary>Creates an asset editor context.</summary>
+    /// <summary>
+    /// Creates an immutable snapshot used by one asset-editor operation.
+    /// </summary>
+    /// <param name="editorContext">The shared editor context.</param>
+    /// <param name="relativePath">The normalized source-relative path of the entry.</param>
+    /// <param name="name">The final source path segment displayed by the Asset Browser.</param>
+    /// <param name="isDirectory">Whether the source entry represents a directory.</param>
+    /// <param name="info">The committed Asset Catalog snapshot when the entry is tracked.</param>
+    /// <param name="assetType">The imported runtime asset type when it can be resolved without loading.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="editorContext"/>, <paramref name="relativePath"/>, or <paramref name="name"/> is <see langword="null"/>.</exception>
     public AssetEditorContext(
         EditorContext editorContext,
         string relativePath,

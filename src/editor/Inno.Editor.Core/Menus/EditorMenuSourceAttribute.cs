@@ -6,7 +6,12 @@ namespace Inno.Editor.Core.Menus;
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class EditorMenuSourceAttribute : Attribute
 {
-    /// <summary>Creates a menu source registration.</summary>
+    /// <summary>
+    /// Creates a dynamic menu-source registration for an exact interaction surface.
+    /// </summary>
+    /// <param name="surface">The exact menu surface that receives placements from the source.</param>
+    /// <param name="priority">The ordering priority used when multiple dynamic sources contribute to the surface.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="surface"/> is <see langword="null"/>.</exception>
     public EditorMenuSourceAttribute(Type surface, int priority = 0)
     {
         this.surface = surface ?? throw new ArgumentNullException(nameof(surface));

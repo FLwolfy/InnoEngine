@@ -6,7 +6,14 @@ namespace Inno.Editor.Core.Panels;
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class EditorPanelAttribute : Attribute
 {
-    /// <summary>Creates an editor panel registration.</summary>
+    /// <summary>
+    /// Creates a dockable panel registration with stable identity and presentation metadata.
+    /// </summary>
+    /// <param name="id">The stable identity used for View-menu routing and reload-state retention.</param>
+    /// <param name="title">The visible dockable-window title.</param>
+    /// <param name="order">The stable panel and generated View-menu ordering value.</param>
+    /// <param name="defaultOpen">Whether a newly discovered panel is visible before retained state is available.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="id"/> or <paramref name="title"/> is empty.</exception>
     public EditorPanelAttribute(
         string id,
         string title,

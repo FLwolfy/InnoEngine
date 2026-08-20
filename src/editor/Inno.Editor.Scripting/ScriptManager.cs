@@ -36,6 +36,10 @@ public sealed class ScriptManager : IDisposable
     /// <summary>
     /// Creates a script manager for one project.
     /// </summary>
+    /// <param name="options">The project root, automatic compilation policy, and debounce configuration.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">Thrown when the configured project root is empty.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the configured debounce duration is negative.</exception>
     public ScriptManager(ScriptManagerOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -134,6 +138,10 @@ public sealed class ScriptManager : IDisposable
     /// <summary>
     /// Compiles both script assemblies and queues a successful generation for main-thread activation.
     /// </summary>
+    /// <param name="cancellationToken">A token that cancels compilation without replacing the active script generation.</param>
+    /// <returns>The complete diagnostics, output path, and activation request produced by the compilation attempt.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown after the manager has been disposed.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken"/> or the manager lifetime token is canceled.</exception>
     public async ValueTask<ScriptCompilationResult> CompileAsync(
         CancellationToken cancellationToken = default)
     {
@@ -202,6 +210,8 @@ public sealed class ScriptManager : IDisposable
     /// <summary>
     /// Applies the latest successful compilation at a caller-controlled main-thread safe point.
     /// </summary>
+    /// <returns><see langword="true"/> when a pending generation was loaded or reloaded successfully; otherwise, <see langword="false"/>.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown after the manager has been disposed.</exception>
     public bool ApplyPendingReload()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -254,6 +264,7 @@ public sealed class ScriptManager : IDisposable
     /// <summary>
     /// Generates standard SDK-style game/editor projects and a solution for IDE tooling.
     /// </summary>
+    /// <exception cref="ObjectDisposedException">Thrown after the manager has been disposed.</exception>
     public void GenerateProjectFiles()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);

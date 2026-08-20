@@ -27,6 +27,9 @@ public enum InlineRenameResult
     Cancel
 }
 
+/// <summary>
+/// Provides reusable editor controls and rendering helpers built on the native ImGui API.
+/// </summary>
 public static partial class ImGuiWidget
 {
     /// <summary>

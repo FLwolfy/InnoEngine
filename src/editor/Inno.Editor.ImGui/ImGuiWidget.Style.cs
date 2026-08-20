@@ -250,6 +250,9 @@ public sealed class EditorStyleMetrics
     public float textDecorationOffset { get; } = 2f;
 }
 
+/// <summary>
+/// Provides reusable editor controls and rendering helpers built on the native ImGui API.
+/// </summary>
 public static partial class ImGuiWidget
 {
     /// <summary>Gets centralized editor layout metrics.</summary>

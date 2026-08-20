@@ -12,7 +12,11 @@ public readonly record struct HotKeyGesture
         ? KeyModifier.Super
         : KeyModifier.Control;
 
-    /// <summary>Creates an exact keyboard gesture.</summary>
+    /// <summary>
+    /// Creates a keyboard gesture with an exact set of modifier keys.
+    /// </summary>
+    /// <param name="key">The non-modifier key in the gesture.</param>
+    /// <param name="modifiers">The exact modifier keys required by the gesture.</param>
     public HotKeyGesture(KeyCode key, KeyModifier modifiers = KeyModifier.None)
     {
         this.key = key;
@@ -25,11 +29,19 @@ public readonly record struct HotKeyGesture
     /// <summary>Gets the required modifiers.</summary>
     public KeyModifier modifiers { get; }
 
-    /// <summary>Creates a gesture using the platform primary modifier.</summary>
+    /// <summary>
+    /// Creates a gesture that includes the platform primary modifier.
+    /// </summary>
+    /// <param name="key">The non-modifier key in the gesture.</param>
+    /// <param name="additionalModifiers">Additional modifiers combined with Command on macOS or Control elsewhere.</param>
+    /// <returns>A platform-aware keyboard gesture.</returns>
     public static HotKeyGesture Primary(KeyCode key, KeyModifier additionalModifiers = KeyModifier.None)
         => new(key, S_PRIMARY_MODIFIER | additionalModifiers);
 
-    /// <summary>Formats the gesture for an editor menu shortcut label.</summary>
+    /// <summary>
+    /// Formats the gesture as a human-readable editor menu shortcut label.
+    /// </summary>
+    /// <returns>A platform-aware textual representation of the gesture.</returns>
     public override string ToString()
     {
         string prefix = string.Empty;
@@ -44,7 +56,11 @@ public readonly record struct HotKeyGesture
         return prefix + key;
     }
 
-    /// <summary>Returns whether a key event exactly matches this gesture.</summary>
+    /// <summary>
+    /// Returns whether a non-repeating key event exactly matches this gesture.
+    /// </summary>
+    /// <param name="keyEvent">The keyboard event to compare.</param>
+    /// <returns><see langword="true"/> when the key and normalized modifiers match; otherwise, <see langword="false"/>.</returns>
     public bool Matches(KeyPressedEvent keyEvent)
         => !keyEvent.repeat && keyEvent.key == key && Normalize(keyEvent.modifiers) == Normalize(modifiers);
 

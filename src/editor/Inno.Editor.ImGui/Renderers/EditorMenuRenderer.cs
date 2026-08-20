@@ -11,7 +11,12 @@ namespace Inno.Editor.ImGui;
 /// <summary>Renders immutable editor menu models through ImGui.</summary>
 public static class EditorMenuRenderer
 {
-    /// <summary>Draws a right-click menu for the most recently submitted item.</summary>
+    /// <summary>
+    /// Draws a resolved right-click menu for the most recently submitted ImGui item.
+    /// </summary>
+    /// <param name="id">The stable popup identifier in the current ImGui ID scope.</param>
+    /// <param name="context">The editor, menu surface, and optional operation target.</param>
+    /// <returns><see langword="true"/> while the context popup is open and its items were drawn.</returns>
     public static bool ContextMenu(string id, EditorMenuContext context)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -23,7 +28,10 @@ public static class EditorMenuRenderer
         return true;
     }
 
-    /// <summary>Draws the editor main menu bar.</summary>
+    /// <summary>
+    /// Draws the complete editor main menu bar for the supplied menu context.
+    /// </summary>
+    /// <param name="context">The main-menu surface and shared editor context.</param>
     public static void MainMenu(EditorMenuContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -33,7 +41,11 @@ public static class EditorMenuRenderer
         NativeImGui.EndMainMenuBar();
     }
 
-    /// <summary>Draws menu nodes into the currently open popup or menu.</summary>
+    /// <summary>
+    /// Recursively draws resolved menu nodes into the currently open popup or menu.
+    /// </summary>
+    /// <param name="context">The menu context used to resolve shortcuts and enqueue selected actions.</param>
+    /// <param name="items">The immutable menu nodes to draw in display order.</param>
     public static void DrawItems(EditorMenuContext context, IReadOnlyList<EditorMenuItem> items)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -74,6 +86,9 @@ public static class EditorMenuRenderer
     }
 
     /// <summary>Draws matching leaf commands as a flat searchable list.</summary>
+    /// <param name="context">The menu context used to enqueue selected actions.</param>
+    /// <param name="items">The immutable menu tree whose leaves should be searched.</param>
+    /// <param name="search">The case-insensitive text matched against each slash-delimited leaf path.</param>
     /// <returns><see langword="true"/> when a command was selected.</returns>
     public static bool DrawSearchItems(
         EditorMenuContext context,

@@ -4,7 +4,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1573;CS1591</NoWarn>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
     <InnoAssemblyGroup>Editor</InnoAssemblyGroup>
   </PropertyGroup>
 

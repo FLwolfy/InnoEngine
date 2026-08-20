@@ -3,7 +3,11 @@ namespace Inno.Editor.Assets.AssetEditors;
 /// <summary>Describes whether an editor asset operation may proceed.</summary>
 public readonly record struct AssetOperationValidation
 {
-    /// <summary>Creates an asset operation validation result.</summary>
+    /// <summary>
+    /// Creates the validation result returned before an asset transaction begins.
+    /// </summary>
+    /// <param name="isValid">Whether the requested asset operation may proceed.</param>
+    /// <param name="message">The user-facing rejection diagnostic, or an empty string for a valid result.</param>
     public AssetOperationValidation(bool isValid, string message)
     {
         this.isValid = isValid;
@@ -19,7 +23,11 @@ public readonly record struct AssetOperationValidation
     /// <summary>Gets a successful validation result.</summary>
     public static AssetOperationValidation valid => new(true, string.Empty);
 
-    /// <summary>Creates a failed validation result.</summary>
+    /// <summary>
+    /// Creates a failed asset-operation validation result.
+    /// </summary>
+    /// <param name="message">The user-facing diagnostic explaining why the operation was rejected.</param>
+    /// <returns>An invalid validation result containing the supplied diagnostic.</returns>
     public static AssetOperationValidation Invalid(string message)
         => new(false, message ?? string.Empty);
 }

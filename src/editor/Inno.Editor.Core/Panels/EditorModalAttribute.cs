@@ -6,7 +6,13 @@ namespace Inno.Editor.Core.Panels;
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class EditorModalAttribute : Attribute
 {
-    /// <summary>Creates a modal registration.</summary>
+    /// <summary>
+    /// Creates a centered modal registration with a stable identity and draw order.
+    /// </summary>
+    /// <param name="id">The stable identity used to retain modal transition state across refreshes.</param>
+    /// <param name="title">The visible title rendered by the modal host.</param>
+    /// <param name="order">The stable ordering value when multiple modals are visible.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="id"/> or <paramref name="title"/> is empty.</exception>
     public EditorModalAttribute(string id, string title, int order = 0)
     {
         if (string.IsNullOrWhiteSpace(id))

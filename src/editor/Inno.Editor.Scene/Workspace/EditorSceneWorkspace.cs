@@ -284,6 +284,8 @@ public sealed class EditorSceneWorkspace : EditorModule
     }
 
     /// <summary>Begins renaming a game object.</summary>
+    /// <param name="gameObject">The live game object represented by the hierarchy rename control.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="gameObject"/> is <see langword="null"/>.</exception>
     public void BeginRename(GameObject gameObject)
     {
         ArgumentNullException.ThrowIfNull(gameObject);
@@ -304,7 +306,10 @@ public sealed class EditorSceneWorkspace : EditorModule
         rename = null;
     }
 
-    /// <summary>Attaches the workspace to asset changes and ensures an editable scene exists.</summary>
+    /// <summary>
+    /// Attaches the workspace to Asset Database changes and ensures an editable scene exists.
+    /// </summary>
+    /// <param name="context">The shared editor context for the active runtime.</param>
     protected override void OnStart(EditorContext context)
     {
         if (m_isAttached)
@@ -315,7 +320,10 @@ public sealed class EditorSceneWorkspace : EditorModule
         m_isAttached = true;
     }
 
-    /// <summary>Detaches the workspace and releases any scene it created for the editor.</summary>
+    /// <summary>
+    /// Refreshes source synchronization and retires completed hierarchy rename sessions.
+    /// </summary>
+    /// <param name="context">The shared editor context containing current frame state.</param>
     protected override void OnUpdate(EditorContext context)
     {
         Refresh();
@@ -323,7 +331,10 @@ public sealed class EditorSceneWorkspace : EditorModule
             rename = null;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Detaches the workspace from Asset Database changes and releases any scene it created for the editor.
+    /// </summary>
+    /// <param name="context">The shared editor context for the runtime being stopped.</param>
     protected override void OnStop(EditorContext context)
     {
         if (!m_isAttached)

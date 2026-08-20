@@ -51,6 +51,7 @@ public sealed class EditorLogBuffer : ILogSink
     /// <summary>
     /// Returns a snapshot of buffered entries.
     /// </summary>
+    /// <returns>A stable copy of the currently buffered entries in arrival order.</returns>
     public LogEntry[] Snapshot()
     {
         return Snapshot(out _);

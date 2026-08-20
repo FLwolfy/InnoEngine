@@ -7,6 +7,9 @@ using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.ImGui;
 
+/// <summary>
+/// Provides reusable editor controls and rendering helpers built on the native ImGui API.
+/// </summary>
 public static partial class ImGuiWidget
 {
     /// <summary>

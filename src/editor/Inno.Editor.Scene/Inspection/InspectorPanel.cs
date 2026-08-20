@@ -19,9 +19,11 @@ public sealed class InspectorPanel : EditorPanel
     /// <summary>
     /// Creates the panel.
     /// </summary>
+    /// <param name="inspection">The scene inspection module that owns drawer registries and property rendering.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="inspection"/> is <see langword="null"/>.</exception>
     public InspectorPanel(SceneInspectionModule inspection)
     {
-        m_inspection = inspection;
+        m_inspection = inspection ?? throw new ArgumentNullException(nameof(inspection));
     }
 
     /// <inheritdoc />

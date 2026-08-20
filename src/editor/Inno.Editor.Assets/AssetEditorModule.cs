@@ -124,17 +124,22 @@ public sealed class AssetEditorModule : EditorModule, IDisposable
         rename = null;
     }
 
+    /// <inheritdoc />
     protected override void OnUpdate(EditorContext context)
     {
         if (rename?.isCompleted == true)
             rename = null;
     }
 
+    /// <inheritdoc />
     protected override void OnStop(EditorContext context)
     {
         CancelRename();
     }
 
+    /// <summary>
+    /// Cancels active rename state and releases the current asset-editor registry snapshot.
+    /// </summary>
     public void Dispose()
     {
         if (m_disposed)

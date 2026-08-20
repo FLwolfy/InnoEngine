@@ -5,7 +5,15 @@ namespace Inno.Editor.Core.DragDrop;
 /// <summary>Provides contextual state to an editor drop handler.</summary>
 public sealed class EditorDropContext
 {
-    /// <summary>Creates a drop context.</summary>
+    /// <summary>
+    /// Creates the contextual request used to query or deliver a managed drop.
+    /// </summary>
+    /// <param name="editorContext">The shared editor context.</param>
+    /// <param name="surface">The target interaction surface.</param>
+    /// <param name="data">The active managed drag data.</param>
+    /// <param name="target">The managed target object exposed to typed handlers.</param>
+    /// <param name="placement">The requested position relative to the target.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="editorContext"/>, <paramref name="surface"/>, <paramref name="data"/>, or <paramref name="target"/> is <see langword="null"/>.</exception>
     public EditorDropContext(
         EditorContext editorContext,
         Type surface,

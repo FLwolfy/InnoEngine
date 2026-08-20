@@ -93,6 +93,7 @@ public sealed class EditorHost : IDisposable
     /// <summary>
     /// Runs the editor loop until window/application quit is requested.
     /// </summary>
+    /// <returns>The process exit code produced after the main editor window closes.</returns>
     public int Run()
     {
         BootLog("Run loop start.");

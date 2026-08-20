@@ -8,7 +8,15 @@ public sealed class EditorMenuBuilder
 {
     private readonly List<EditorMenuPlacement> m_items = [];
 
-    /// <summary>Adds a command placement to the current menu.</summary>
+    /// <summary>
+    /// Adds a dynamic action placement to the menu currently being constructed.
+    /// </summary>
+    /// <param name="path">The slash-delimited path used to create parent menus and the leaf label.</param>
+    /// <param name="actionId">The stable identifier of the action invoked by the leaf.</param>
+    /// <param name="order">The stable ordering value among sibling placements.</param>
+    /// <param name="separatorBefore">Whether a visual separator should precede the leaf placement.</param>
+    /// <param name="argument">An optional placement-specific value forwarded to the action context.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="path"/> or <paramref name="actionId"/> is empty.</exception>
     public void Add(
         string path,
         string actionId,
@@ -30,7 +38,14 @@ public sealed class EditorMenuBuilder
 /// <summary>Describes one dynamically contributed menu placement.</summary>
 public sealed class EditorMenuPlacement
 {
-    /// <summary>Creates a dynamic menu placement.</summary>
+    /// <summary>
+    /// Creates an immutable dynamic menu placement.
+    /// </summary>
+    /// <param name="path">The slash-delimited path used to create parent menus and the leaf label.</param>
+    /// <param name="actionId">The stable identifier of the action invoked by the leaf.</param>
+    /// <param name="order">The stable ordering value among sibling placements.</param>
+    /// <param name="separatorBefore">Whether a visual separator should precede the leaf placement.</param>
+    /// <param name="argument">An optional placement-specific value forwarded to the action context.</param>
     public EditorMenuPlacement(
         string path,
         string actionId,

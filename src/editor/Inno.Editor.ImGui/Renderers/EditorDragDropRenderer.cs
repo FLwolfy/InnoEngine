@@ -10,7 +10,12 @@ public static class EditorDragDropRenderer
 {
     private const string C_EDITOR_PAYLOAD = "INNO_EDITOR_INTERACTION";
 
-    /// <summary>Publishes managed drag data for the most recently submitted item.</summary>
+    /// <summary>
+    /// Publishes managed drag data for the most recently submitted ImGui item.
+    /// </summary>
+    /// <param name="context">The source surface and managed data used to begin the drag session.</param>
+    /// <param name="drawPreview">An optional callback that draws the native drag preview.</param>
+    /// <returns><see langword="true"/> while the item is an active drag source.</returns>
     public static bool Source(EditorDragContext context, Action? drawPreview = null)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -20,7 +25,14 @@ public static class EditorDragDropRenderer
             drawPreview);
     }
 
-    /// <summary>Evaluates and accepts a managed drag on the most recently submitted item.</summary>
+    /// <summary>
+    /// Evaluates and, on delivery, accepts a managed drag on the most recently submitted ImGui item.
+    /// </summary>
+    /// <param name="editorContext">The shared editor context that owns the managed drag session.</param>
+    /// <param name="surface">The exact interaction surface of the target item.</param>
+    /// <param name="target">The managed target object exposed to typed drop handlers.</param>
+    /// <param name="placement">The requested position relative to the target.</param>
+    /// <returns>The native preview state together with the managed compatibility and delivery results.</returns>
     public static EditorDropWidgetResult Target(
         EditorContext editorContext,
         Type surface,
@@ -51,7 +63,12 @@ public static class EditorDragDropRenderer
 /// <summary>Reports the preview and delivery state of an ImGui editor drop target.</summary>
 public readonly record struct EditorDropWidgetResult
 {
-    /// <summary>Creates a drag-and-drop widget result.</summary>
+    /// <summary>
+    /// Creates a combined native-preview and managed-drop result.
+    /// </summary>
+    /// <param name="isPreviewing">Whether a compatible native payload is currently hovering the target.</param>
+    /// <param name="status">The compatibility and visual state returned by the managed drop router.</param>
+    /// <param name="result">The result produced when the payload was delivered.</param>
     public EditorDropWidgetResult(
         bool isPreviewing,
         EditorDropStatus status,

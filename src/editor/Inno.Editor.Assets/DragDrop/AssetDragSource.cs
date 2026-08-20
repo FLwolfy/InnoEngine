@@ -7,7 +7,13 @@ namespace Inno.Editor.Assets.DragDrop;
 /// <summary>Identifies a dragged asset without loading its runtime object.</summary>
 public sealed record AssetDragSource
 {
-    /// <summary>Creates an asset drag source.</summary>
+    /// <summary>
+    /// Creates a lightweight drag source that identifies an asset without loading its runtime object.
+    /// </summary>
+    /// <param name="persistentId">The stable Asset Database identity, or an empty value for an untracked source.</param>
+    /// <param name="relativePath">The normalized source-relative asset path.</param>
+    /// <param name="assetType">The imported runtime asset type when it can be resolved.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="relativePath"/> is <see langword="null"/>.</exception>
     public AssetDragSource(Guid persistentId, string relativePath, Type? assetType)
     {
         this.persistentId = persistentId;

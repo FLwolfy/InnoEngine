@@ -9,7 +9,13 @@ namespace Inno.Editor.ImGui.Renderers;
 /// <summary>Renders centered editor modals consistently on the main viewport.</summary>
 public static class EditorModalRenderer
 {
-    /// <summary>Draws a centered modal with a caller-provided opacity.</summary>
+    /// <summary>
+    /// Draws a fixed-width modal centered in the main viewport work area with a caller-provided opacity.
+    /// </summary>
+    /// <param name="id">The stable popup identity independent of the visible title.</param>
+    /// <param name="title">The visible modal title.</param>
+    /// <param name="alpha">The opacity applied to the complete modal window.</param>
+    /// <param name="content">The callback that draws the modal body.</param>
     public static void Draw(
         string id,
         string title,
@@ -41,7 +47,11 @@ public static class EditorModalRenderer
         NativeImGui.PopStyleVar();
     }
 
-    /// <summary>Closes a modal popup if it is currently open.</summary>
+    /// <summary>
+    /// Closes a modal popup if it is currently open.
+    /// </summary>
+    /// <param name="id">The stable popup identity used when the modal was opened.</param>
+    /// <param name="title">The visible title used when the modal was opened.</param>
     public static void Close(string id, string title)
     {
         string popupId = $"{title}##{id}";

@@ -11,7 +11,11 @@ public sealed class SceneInspectionModule : EditorModule, System.IDisposable
     private readonly PropertyDrawerRegistry m_properties;
     private readonly SerializedPropertyRenderer m_renderer;
 
-    /// <summary>Creates the scene inspection module.</summary>
+    /// <summary>
+    /// Creates the scene inspection module and its generation-aware drawer registries.
+    /// </summary>
+    /// <param name="workspace">The shared scene workspace available to drawers that require scene state.</param>
+    /// <exception cref="System.ArgumentNullException">Thrown when <paramref name="workspace"/> is <see langword="null"/>.</exception>
     public SceneInspectionModule(EditorSceneWorkspace workspace)
     {
         System.ArgumentNullException.ThrowIfNull(workspace);
