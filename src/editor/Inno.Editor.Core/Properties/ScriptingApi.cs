@@ -20,6 +20,8 @@ using Inno.Editor.Core.Panels;
 
 [assembly: ScriptingApiExport(typeof(EditorAction), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorAction<>), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorActionInteraction), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorActionInteraction<>), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorActionAttribute), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorActionContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorActionContext<>), ScriptingApiScope.Editor)]

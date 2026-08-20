@@ -3,6 +3,7 @@ using Inno.Core.Logging;
 using Inno.Editor.Core;
 using Inno.Editor.Core.Panels;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Widgets;
 using Inno.Editor.Scene.Inspection;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 

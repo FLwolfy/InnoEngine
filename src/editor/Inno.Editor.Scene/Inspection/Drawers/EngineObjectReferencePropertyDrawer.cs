@@ -9,6 +9,8 @@ using Inno.Editor.Core;
 using Inno.Editor.Core.DragDrop;
 using Inno.Editor.Scene.Inspection;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Renderers;
+using Inno.Editor.ImGui.Widgets;
 using Inno.Editor.Scene.Workspace;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Components;

@@ -8,6 +8,7 @@ using Inno.Editor.Core;
 using Inno.Editor.Assets.AssetEditors;
 using Inno.Editor.Core.DragDrop;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Renderers;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Assets.FileBrowser;

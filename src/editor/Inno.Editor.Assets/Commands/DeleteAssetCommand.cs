@@ -6,7 +6,7 @@ using Inno.Core.Input;
 
 namespace Inno.Editor.Assets.Commands;
 
-[EditorAction(EditorActionIds.Delete, typeof(AssetSurface.Browser), priority: 100)]
+[EditorAction(EditorActionIds.Delete, priority: 100)]
 [EditorMenu(typeof(AssetSurface.ContextMenu), "Delete", order: 200)]
 [EditorShortcut(typeof(FileBrowser.FileBrowserPanel), KeyCode.Delete)]
 internal sealed class DeleteAssetCommand(AssetEditorModule assets) : EditorAction<AssetSelectionTarget>

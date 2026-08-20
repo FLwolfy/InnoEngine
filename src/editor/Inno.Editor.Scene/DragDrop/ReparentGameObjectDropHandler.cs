@@ -46,7 +46,7 @@ internal sealed class ReparentGameObjectDropHandler
                 PromoteDirectChildren(sourceTransform);
             sourceTransform.SetParent(targetTransform);
             sourceTransform.SetSiblingIndex(targetTransform.children.Count - 1);
-            context.editor.selection.Select(source);
+            _ = context.editor.Select(context.surface, source);
             return EditorDropResult.Accepted(source, target);
         }
 
@@ -58,7 +58,7 @@ internal sealed class ReparentGameObjectDropHandler
             targetIndex--;
         sourceTransform.SetSiblingIndex(
             targetIndex + (context.placement == EditorDropPlacement.After ? 1 : 0));
-        context.editor.selection.Select(source);
+        _ = context.editor.Select(context.surface, source);
         return EditorDropResult.Accepted(source);
     }
 

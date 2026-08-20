@@ -4,6 +4,7 @@ using System.Numerics;
 using Inno.Editor.Core;
 using Inno.Editor.Core.DragDrop;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Widgets;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Scene.Hierarchy;

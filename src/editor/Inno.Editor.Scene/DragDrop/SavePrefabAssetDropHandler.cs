@@ -17,12 +17,9 @@ internal sealed class SavePrefabAssetDropHandler
     : EditorDrop<GameObject, AssetDirectoryDropTarget>
 {
     private readonly EditorSceneWorkspace m_workspace;
-    private readonly AssetEditorModule m_assets;
-
-    internal SavePrefabAssetDropHandler(EditorSceneWorkspace workspace, AssetEditorModule assets)
+    internal SavePrefabAssetDropHandler(EditorSceneWorkspace workspace)
     {
         m_workspace = workspace;
-        m_assets = assets;
     }
 
     protected override EditorDropStatus Query(
@@ -35,7 +32,8 @@ internal sealed class SavePrefabAssetDropHandler
         EditorDropContext<GameObject, AssetDirectoryDropTarget> context)
     {
         string path = m_workspace.SavePrefab(context.source, context.target.relativePath);
-        m_assets.browser.Select(context.editor, path);
-        return EditorDropResult.Accepted(new AssetSelectionTarget(path));
+        var selection = new AssetSelectionTarget(path);
+        _ = context.editor.Select(typeof(AssetSurface.Browser), selection);
+        return EditorDropResult.Accepted(selection);
     }
 }

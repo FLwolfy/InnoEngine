@@ -23,6 +23,6 @@ internal sealed class DeleteSceneCommand(EditorSceneWorkspace workspace) : Edito
         if (!workspace.CloseScene(context.target))
             return;
         if (context.editor.selection.TryGet(out GameScene? selected) && ReferenceEquals(selected, context.target))
-            context.editor.selection.Clear();
+            _ = context.editor.Select(context.surface, null);
     }
 }

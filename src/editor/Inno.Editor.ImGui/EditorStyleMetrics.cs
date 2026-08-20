@@ -1,10 +1,6 @@
 using System.Numerics;
 
-using Inno.Native.ImGui;
-
 namespace Inno.Editor.ImGui;
-
-using NativeImGui = Inno.Native.ImGui.ImGui;
 
 /// <summary>Defines named editor layout metrics used by widgets and feature panels.</summary>
 public sealed class EditorStyleMetrics
@@ -30,8 +26,29 @@ public sealed class EditorStyleMetrics
     /// <summary>Gets standard frame padding.</summary>
     public Vector2 framePadding { get; } = new(6f, 2f);
 
+    /// <summary>Gets the uniform content padding of editor context menus.</summary>
+    public Vector2 menuWindowPadding { get; } = new(8f, 6f);
+
+    /// <summary>Gets the uniform item padding of editor context menus.</summary>
+    public Vector2 menuFramePadding { get; } = new(8f, 3f);
+
+    /// <summary>Gets the uniform spacing between editor context-menu items.</summary>
+    public Vector2 menuItemSpacing { get; } = new(4f, 2f);
+
+    /// <summary>Gets editor context-menu corner rounding.</summary>
+    public float menuRounding { get; } = 3f;
+
+    /// <summary>Gets editor context-menu border thickness.</summary>
+    public float menuBorderSize { get; } = 1f;
+
     /// <summary>Gets compact frame padding.</summary>
     public Vector2 compactFramePadding { get; } = new(4f, 1f);
+
+    /// <summary>Gets the compact inner padding of inline rename fields.</summary>
+    public Vector2 inlineRenameFramePadding { get; } = new(4f, 0f);
+
+    /// <summary>Gets the vertical inset that centers an inline rename field within its row.</summary>
+    public float inlineRenameVerticalInset { get; } = 1f;
 
     /// <summary>Gets toolbar frame padding.</summary>
     public Vector2 toolbarFramePadding { get; } = new(5f, 1f);
@@ -113,9 +130,6 @@ public sealed class EditorStyleMetrics
 
     /// <summary>Gets spacing between asset list rows.</summary>
     public float assetListRowSpacing { get; } = 2f;
-
-    /// <summary>Gets the asset rename input width.</summary>
-    public float assetRenameWidth { get; } = 320f;
 
     /// <summary>Gets spacing between inspector cards.</summary>
     public float inspectorCardSpacing { get; } = 3f;
@@ -248,56 +262,4 @@ public sealed class EditorStyleMetrics
 
     /// <summary>Gets the vertical offset of text decorations from the baseline.</summary>
     public float textDecorationOffset { get; } = 2f;
-}
-
-/// <summary>
-/// Provides reusable editor controls and rendering helpers built on the native ImGui API.
-/// </summary>
-public static partial class ImGuiWidget
-{
-    /// <summary>Gets centralized editor layout metrics.</summary>
-    public static EditorStyleMetrics style { get; } = new();
-
-    /// <summary>Applies the centralized editor layout and palette to ImGui.</summary>
-    public static void SetupStyle()
-    {
-        ImGuiStylePtr nativeStyle = NativeImGui.GetStyle();
-        ApplyLayoutStyle(nativeStyle);
-        EditorPalette.Apply(nativeStyle);
-    }
-
-    private static void ApplyLayoutStyle(ImGuiStylePtr nativeStyle)
-    {
-        nativeStyle.Alpha = 1f;
-        nativeStyle.DisabledAlpha = style.disabledAlpha;
-        nativeStyle.FontScaleMain = style.fontScale;
-        nativeStyle.WindowPadding = style.windowPadding;
-        nativeStyle.WindowRounding = style.windowRounding;
-        nativeStyle.WindowBorderSize = style.borderSize;
-        nativeStyle.WindowMinSize = style.windowMinimumSize;
-        nativeStyle.WindowTitleAlign = new Vector2(0.5f, 0.5f);
-        nativeStyle.WindowMenuButtonPosition = ImGuiDir.Right;
-        nativeStyle.ChildRounding = style.windowRounding;
-        nativeStyle.ChildBorderSize = style.borderSize;
-        nativeStyle.PopupRounding = style.windowRounding;
-        nativeStyle.PopupBorderSize = 0f;
-        nativeStyle.FramePadding = style.framePadding;
-        nativeStyle.FrameRounding = style.frameRounding;
-        nativeStyle.FrameBorderSize = 0f;
-        nativeStyle.ItemSpacing = style.itemSpacing;
-        nativeStyle.ItemInnerSpacing = style.itemInnerSpacing;
-        nativeStyle.CellPadding = style.cellPadding;
-        nativeStyle.IndentSpacing = style.indentSpacing;
-        nativeStyle.ColumnsMinSpacing = style.columnMinimumSpacing;
-        nativeStyle.ScrollbarSize = style.scrollbarSize;
-        nativeStyle.ScrollbarRounding = style.frameRounding;
-        nativeStyle.GrabMinSize = style.grabMinimumSize;
-        nativeStyle.GrabRounding = style.frameRounding;
-        nativeStyle.TabRounding = style.frameRounding;
-        nativeStyle.TabBorderSize = 0f;
-        nativeStyle.TabBarOverlineSize = 0f;
-        nativeStyle.ColorButtonPosition = ImGuiDir.Right;
-        nativeStyle.ButtonTextAlign = new Vector2(0.5f, 0.5f);
-        nativeStyle.SelectableTextAlign = Vector2.Zero;
-    }
 }

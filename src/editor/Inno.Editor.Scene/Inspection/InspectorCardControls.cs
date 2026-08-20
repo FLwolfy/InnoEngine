@@ -2,6 +2,7 @@ using System;
 
 using Inno.Core.Logging;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Widgets;
 using Inno.Engine.Scene;
 using Inno.Platform.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;

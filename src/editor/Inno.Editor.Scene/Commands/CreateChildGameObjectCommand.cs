@@ -17,7 +17,7 @@ internal sealed class CreateChildGameObjectCommand : EditorAction<GameObject>
     {
         GameObject child = context.target.scene.CreateObject();
         child.transform.SetParent(context.target.transform);
-        context.editor.selection.Select(child);
+        _ = context.editor.Select(typeof(SceneSurface.HierarchyObject), child);
         _ = context.editor.Execute(
             EditorActionIds.Rename,
             typeof(SceneSurface.HierarchyObject),

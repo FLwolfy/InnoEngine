@@ -15,6 +15,6 @@ internal sealed class OpenSceneAssetAction(EditorSceneWorkspace workspace) : Edi
         if (context.argument is not AssetEditorContext assetContext)
             return;
         GameScene scene = workspace.OpenScene(assetContext.relativePath);
-        context.editor.selection.Select(scene);
+        _ = context.editor.Select(typeof(SceneSurface.HierarchyScene), scene);
     }
 }

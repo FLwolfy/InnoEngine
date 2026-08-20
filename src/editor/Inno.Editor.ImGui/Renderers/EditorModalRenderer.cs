@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 
+using Inno.Editor.ImGui.Widgets;
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 

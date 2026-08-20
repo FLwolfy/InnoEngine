@@ -4,6 +4,24 @@
 
 `Inno.Editor.ImGui` 提供编辑器统一控件、菜单/拖放渲染桥和视觉配置。它只包装可复用的 UI 原语，不持有 Scene、Selection 或 Panel 业务状态。
 
+```text
+Inno.Editor.ImGui/
+├─ EditorPalette.cs
+├─ EditorStyleMetrics.cs
+├─ Renderers/
+└─ Widgets/
+   ├─ ImGuiWidget.Style.cs
+   ├─ ImGuiWidget.Search.cs
+   ├─ ImGuiWidget.ContextMenu.cs
+   ├─ ImGuiWidget.InlineRename.cs
+   ├─ ImGuiWidget.Controls.cs
+   ├─ ImGuiWidget.Card.cs
+   ├─ ImGuiWidget.Tree.cs
+   └─ ...
+```
+
+Palette 与 Style Metrics 并列位于项目根目录。所有 `ImGuiWidget.*.cs` 位于 `Widgets`，namespace 统一为 `Inno.Editor.ImGui.Widgets`；实现统一组成 `static partial ImGuiWidget`，可复用入口全部是 static 方法。Options、Result 等纯数据值类型也位于同一 Widgets namespace。
+
 ## Palette 与 Style
 
 所有主题颜色集中在 `EditorPalette`：原生 ImGui col、Inspector、Hierarchy、Asset Browser、Logging、轴颜色与 drag target 都不在 Panel 中声明。换主题只需替换这一个 palette surface。
@@ -15,6 +33,10 @@
 ## Menu renderer
 
 `EditorMenuRenderer` 是唯一调用原生 `BeginMenu/MenuItem` 的业务渲染桥。它递归绘制任意层级的 `EditorMenuModel`，从 Action Attribute 自动读取快捷键标签，并把点击排入 Action queue。Panel 只提供 `EditorMenuContext(surface, target)`。
+
+`ContextMenu` 绑定最近提交的 ImGui item；`WindowContextMenu` 只响应当前 window 中没有 item 占用的背景区域。两者都会先构建菜单模型，模型没有可见条目时不会打开原生 popup，因此不会显示空的黑色菜单框。
+
+所有 context menu 在 `BeginContextMenu` / `EndContextMenu` 范围内应用同一组 `EditorPalette.menu*` 颜色和 `EditorStyleMetrics.menu*` padding、spacing、rounding 与 border。Panel 的局部 Table/Tree style 不会再改变 popup 外观。Popup 打开时，Tree、disclosure 等自绘控件会暂停其底层 hover feedback；原生 popup 本身接收鼠标事件，避免 hover 或点击继续影响菜单后面的 entry。
 
 ## CollapsingCard
 
@@ -50,7 +72,7 @@ if (open)
 
 `CardBody` 提供统一的背景、边框与内边距；`dimmed` 为 `true` 时，正文整体灰化且不可编辑，但 header 中的 enabled checkbox 仍可用于重新启用对象。相邻卡片之间的外部间距由调用方控制。
 
-其余常用控件包括 `SearchInput`、`BeginSearchPopup`/`EndSearchPopup`、`InlineRename`、`IconButton`、`CompactCheckbox`、`CenteredButton`。所有需要 identity 的控件都应传入稳定且在当前 ImGui scope 内唯一的 `id`。
+其余常用控件包括 `SearchInput`、`BeginSearchPopup`/`EndSearchPopup`、`InlineRename`、`IconButton`、`CompactCheckbox`、`CenteredButton`。每个组件位于对应的 `ImGuiWidget.<Component>.cs`，避免继续形成一个混合所有控件的 EditorControls 文件。`InlineRename` 不缩放字体，通过 `inlineRenameFramePadding` 和 `inlineRenameVerticalInset` 在 Tree/Table/Grid 行内形成较矮且垂直居中的编辑框。所有需要 identity 的控件都应传入稳定且在当前 ImGui scope 内唯一的 `id`。
 
 ## Tree 与拖拽反馈
 

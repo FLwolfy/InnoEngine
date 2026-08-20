@@ -1,7 +1,5 @@
 using Inno.Editor.Assets;
 
-using Inno.Editor.Assets.Selection;
-
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -9,9 +7,9 @@ using System.IO;
 using Inno.Assets;
 using Inno.Assets.File;
 using Inno.Editor.Core;
-using Inno.Editor.Core.Commands;
-using Inno.Editor.Core.Menus;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Renderers;
+using Inno.Editor.ImGui.Widgets;
 using Inno.Native.ImGui;
 using Inno.Platform.ImGui;
 using static Inno.Editor.Assets.FileBrowser.FileBrowserUtility;
@@ -24,6 +22,8 @@ internal sealed class FileBrowserTree
     private readonly FileBrowserData m_data;
     private readonly FileBrowserNavigation m_navigation;
     private readonly FileBrowserDragDrop m_dragDrop;
+    private readonly FileBrowserRename m_rename;
+    private readonly FileBrowserContextMenu m_contextMenu;
     private readonly AssetEditorModule m_assets;
 
     private bool m_rootOpenRequest = true;
@@ -38,11 +38,15 @@ internal sealed class FileBrowserTree
         FileBrowserData data,
         FileBrowserNavigation navigation,
         FileBrowserDragDrop dragDrop,
+        FileBrowserRename rename,
+        FileBrowserContextMenu contextMenu,
         AssetEditorModule assets)
     {
         m_data = data;
         m_navigation = navigation;
         m_dragDrop = dragDrop;
+        m_rename = rename;
+        m_contextMenu = contextMenu;
         m_assets = assets;
     }
 
@@ -60,33 +64,73 @@ internal sealed class FileBrowserTree
         bool isCurrentDirectory = isDirectory &&
                                   string.Equals(m_assets.browser.currentDirectory, relativePath, StringComparison.Ordinal);
         string icon = isDirectory ? ImGuiIcon.Folder : GetFileIcon(relativePath);
+        bool editing = !isRoot && m_rename.IsEditing(
+            context,
+            relativePath,
+            FileBrowserPresentation.Tree);
         string nodeId = $"tree_{(isRoot ? "root" : relativePath)}";
         if (ShouldOpenTreeEntry(relativePath, isRoot, isDirectory))
             ImGuiWidget.SetNextTreeNodeOpen(true);
 
         TreeNodeResult result = ImGuiWidget.TreeNode(
             nodeId,
-            () => ImGuiWidget.IconText(icon, label, isCurrentDirectory),
+            () => DrawRowContent(
+                context,
+                nodeId,
+                relativePath,
+                label,
+                icon,
+                isCurrentDirectory,
+                editing),
             new TreeNodeOptions { selected = selected, isLeaf = isLeaf });
 
         AssetFileEntry? treeEntry = null;
         if (!isRoot && AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry resolvedEntry))
             treeEntry = resolvedEntry;
-        if (treeEntry is not null)
+        if (treeEntry is not null && (result.isClicked || result.isDoubleClicked))
         {
-            DrawContextMenu(context, treeEntry.relativePath);
-            m_dragDrop.DrawAssetSource(context, treeEntry);
-        }
-        if (result.isDoubleClicked)
-        {
-            if (treeEntry is not null)
+            bool shouldOpen = m_rename.HandleActivation(
+                context,
+                treeEntry.relativePath,
+                FileBrowserPresentation.Tree,
+                selected,
+                result.isDoubleClicked);
+            if (shouldOpen)
                 m_navigation.OpenEntry(context, treeEntry, this);
-            else if (isDirectory)
-                m_navigation.NavigateTo(context, relativePath, relativePath);
+            else
+                m_assets.browser.Select(context, relativePath);
         }
-        else if (result.isClicked)
+        else if (isRoot && result.isDoubleClicked)
+        {
+            m_navigation.NavigateTo(context, relativePath, relativePath);
+        }
+        else if (isRoot && result.isClicked)
         {
             m_assets.browser.Select(context, relativePath);
+        }
+        if (treeEntry is not null)
+        {
+            m_rename.TryBeginDelayed(
+                context,
+                treeEntry.relativePath,
+                FileBrowserPresentation.Tree);
+            if (!editing)
+            {
+                m_contextMenu.DrawEntry(
+                    context,
+                    $"##asset_tree_context_{treeEntry.relativePath}",
+                    treeEntry.relativePath,
+                    FileBrowserPresentation.Tree);
+                m_dragDrop.DrawAssetSource(context, treeEntry);
+            }
+        }
+        else if (isRoot)
+        {
+            m_contextMenu.DrawDirectory(
+                context,
+                "##asset_tree_root_context",
+                string.Empty,
+                FileBrowserPresentation.Tree);
         }
         if (!result.isOpen)
             return;
@@ -99,16 +143,29 @@ internal sealed class FileBrowserTree
         NativeImGui.TreePop();
     }
 
-    private void DrawContextMenu(EditorContext context, string relativePath)
+    private void DrawRowContent(
+        EditorContext context,
+        string id,
+        string relativePath,
+        string label,
+        string icon,
+        bool isCurrentDirectory,
+        bool editing)
     {
-        if (NativeImGui.IsItemClicked(ImGuiMouseButton.Right))
-            m_assets.browser.Select(context, relativePath);
-        _ = EditorMenuRenderer.ContextMenu(
-            $"##asset_tree_context_{relativePath}",
-            new EditorMenuContext(
-                context,
-                typeof(AssetSurface.ContextMenu),
-                new AssetSelectionTarget(relativePath)));
+        if (!editing)
+        {
+            ImGuiWidget.IconText(icon, label, isCurrentDirectory);
+            return;
+        }
+
+        ImGuiWidget.IconText(icon, string.Empty, false);
+        NativeImGui.SameLine(0f, 0f);
+        m_rename.Draw(
+            context,
+            id,
+            relativePath,
+            FileBrowserPresentation.Tree,
+            NativeImGui.GetContentRegionAvail().X);
     }
 
     internal void PrepareOpenRequests(EditorContext context)

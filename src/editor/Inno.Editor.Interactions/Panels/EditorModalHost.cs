@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.Renderers;
+using Inno.Editor.ImGui.Widgets;
 
 namespace Inno.Editor.Interactions.Panels;
 

@@ -9,6 +9,8 @@ using Inno.Editor.Core;
 using Inno.Editor.Core.Commands;
 using Inno.Editor.Core.Menus;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Renderers;
+using Inno.Editor.ImGui.Widgets;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Components;
 using Inno.Native.ImGui;
@@ -32,7 +34,7 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
         var gameObject = (GameObject)context.target;
         if (!gameObject.isRuntimeValid || !gameObject.scene.isLoaded)
         {
-            context.editorContext.selection.Clear();
+            _ = context.editorContext.Select(context.editorContext.focusedSurface, null);
             NativeImGui.TextUnformatted("Selected GameObject is not available in the active scene.");
             return;
         }

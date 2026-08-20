@@ -52,6 +52,8 @@ public sealed class AnimationPanel(AnimationModule animation) : EditorPanel
 
 Action 是所有可执行编辑器行为的唯一模型。`EditorAction<TTarget>` 自动完成 target 类型检查；`Query` 决定菜单/快捷键此时是否显示、是否启用和是否勾选。
 
+`EditorActionAttribute.surface` 是精确匹配条件。一个 Action 需要同时由多个 surface 调用（例如同一个 Rename 同时来自 Panel 快捷键和 entry context menu）时，将 Action surface 留空，并依靠强类型 target 限定适用对象；如果填写了 surface，菜单、快捷键或直接执行所提供的 surface 必须与它相同。`EditorMenuAttribute.surface` 始终表示菜单出现的位置。
+
 ```csharp
 public sealed class AnimationSurface;
 
@@ -75,6 +77,31 @@ public sealed class CreateStateAction(AnimationModule animation)
 ```
 
 内建通用 ID 位于 `EditorActionIds`：Save、Open、Rename、Delete、Reset、Remove、TogglePanel。领域 ID 放在领域项目，例如 `SceneActionIds` 和 `AssetActionIds`。
+
+### 跨帧 Action Interaction
+
+Rename 与 Select 都是 Action。Select/Clear 由 `EditorActionIds.Select` 和 `EditorActionIds.ClearSelection` 路由；`EditorSelectionState` 的写入口是 internal，Panel、Drop 和领域命令统一调用 `EditorContext.Select(surface, target)`，该方法仍然执行 Attribute 发现的 Action，而不是直接改变状态。
+
+Rename 的特殊点不是它属于另一种服务，而是它需要跨多帧保存尚未提交的文本。`EditorAction` 因此提供通用的 `BeginInteraction<TState>()`：Action 可以发布任意类型的中立状态，并配置 Validate、Complete 和 Cancel callback。呈现层使用 `EditorContext.TryGetInteraction<TState>()` 按 action ID、surface 和 target 获取当前状态。
+
+```csharp
+[EditorAction("animation.rename-state")]
+public sealed class RenameAnimationStateAction : EditorAction<AnimationState>
+{
+    protected override void Execute(EditorActionContext<AnimationState> context)
+    {
+        _ = BeginInteraction(
+            context,
+            context.target.name,
+            value => context.target.name = value.Trim(),
+            value => string.IsNullOrWhiteSpace(value)
+                ? EditorValidationResult.Invalid("A name is required.")
+                : EditorValidationResult.valid);
+    }
+}
+```
+
+`EditorActionInteraction<TState>` 只保存 target、surface、state 与完成规则，不知道 ImGui、Asset 或 Scene。它同样可以支持分步创建、参数预览、路径选择等未来操作。Open、Delete 等立即完成的 Action 不需要开启 Interaction。
 
 ## 任意层级菜单
 

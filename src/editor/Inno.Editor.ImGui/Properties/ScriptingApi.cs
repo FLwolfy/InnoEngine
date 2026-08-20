@@ -1,9 +1,14 @@
 using Inno.Core.Scripting;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Widgets;
 
 [assembly: ScriptingApiNamespace(
     "InnoEditor.ImGui",
     "Inno.Editor.ImGui",
+    ScriptingApiScope.Editor)]
+[assembly: ScriptingApiNamespace(
+    "InnoEditor.ImGui",
+    "Inno.Editor.ImGui.Widgets",
     ScriptingApiScope.Editor)]
 
 [assembly: ScriptingApiExport(typeof(EditorPalette), ScriptingApiScope.Editor)]

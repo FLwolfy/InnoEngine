@@ -2,6 +2,7 @@ using Inno.Core.Events;
 using Inno.Core.Framework;
 using Inno.Editor.Interactions;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Widgets;
 using Inno.Platform.ImGui;
 
 namespace Inno.Editor.Application;

@@ -12,7 +12,6 @@ using Inno.Assets.Serialization;
 using Inno.Core.Logging;
 using Inno.Core.Serialization;
 using Inno.Editor.Core;
-using Inno.Editor.Core.Commands;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Assets;
 
@@ -33,9 +32,6 @@ public sealed class EditorSceneWorkspace : EditorModule
 
     private GameScene? m_ownedScene;
     private bool m_isAttached;
-
-    /// <summary>Gets the active presentation-neutral hierarchy rename session.</summary>
-    public EditorRenameSession? rename { get; private set; }
 
     /// <summary>Gets all scenes currently available to editor features.</summary>
     public IReadOnlyList<GameScene> scenes => SceneManager.loadedScenes;
@@ -283,29 +279,6 @@ public sealed class EditorSceneWorkspace : EditorModule
         }
     }
 
-    /// <summary>Begins renaming a game object.</summary>
-    /// <param name="gameObject">The live game object represented by the hierarchy rename control.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="gameObject"/> is <see langword="null"/>.</exception>
-    public void BeginRename(GameObject gameObject)
-    {
-        ArgumentNullException.ThrowIfNull(gameObject);
-        CancelRename();
-        rename = new EditorRenameSession(
-            gameObject,
-            gameObject.name,
-            _ => EditorValidationResult.valid,
-            value => gameObject.name = string.IsNullOrWhiteSpace(value)
-                ? "GameObject"
-                : value.Trim());
-    }
-
-    /// <summary>Cancels the active hierarchy rename.</summary>
-    public void CancelRename()
-    {
-        rename?.Cancel();
-        rename = null;
-    }
-
     /// <summary>
     /// Attaches the workspace to Asset Database changes and ensures an editable scene exists.
     /// </summary>
@@ -321,14 +294,12 @@ public sealed class EditorSceneWorkspace : EditorModule
     }
 
     /// <summary>
-    /// Refreshes source synchronization and retires completed hierarchy rename sessions.
+    /// Refreshes source synchronization for loaded editor documents.
     /// </summary>
     /// <param name="context">The shared editor context containing current frame state.</param>
     protected override void OnUpdate(EditorContext context)
     {
         Refresh();
-        if (rename?.isCompleted == true)
-            rename = null;
     }
 
     /// <summary>
@@ -344,7 +315,6 @@ public sealed class EditorSceneWorkspace : EditorModule
             SceneManager.UnloadAllScenes();
         m_ownedScene = null;
         m_isAttached = false;
-        CancelRename();
         Clear();
     }
 

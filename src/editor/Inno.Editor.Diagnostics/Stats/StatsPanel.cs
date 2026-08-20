@@ -1,6 +1,7 @@
 using Inno.Editor.Core;
 using Inno.Editor.Core.Panels;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Widgets;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Diagnostics.Stats;

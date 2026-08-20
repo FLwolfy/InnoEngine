@@ -3,7 +3,7 @@ using System;
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
-namespace Inno.Editor.ImGui;
+namespace Inno.Editor.ImGui.Widgets;
 
 /// <summary>
 /// Provides reusable editor controls and rendering helpers built on the native ImGui API.

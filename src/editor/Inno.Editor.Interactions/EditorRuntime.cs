@@ -7,6 +7,8 @@ using Inno.Editor.Core.Commands;
 using Inno.Editor.Core.DragDrop;
 using Inno.Editor.Core.Menus;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Renderers;
+using Inno.Editor.ImGui.Widgets;
 using Inno.Editor.Interactions.Commands;
 using Inno.Editor.Interactions.DragDrop;
 using Inno.Editor.Interactions.Menus;
@@ -131,6 +133,12 @@ public sealed class EditorRuntime : IDisposable
     private void Enqueue(string actionId, EditorActionContext context)
         => m_actions.Enqueue(actionId, context);
 
+    private bool TryGetInteraction<TState>(
+        string actionId,
+        EditorActionContext context,
+        out EditorActionInteraction<TState>? interaction)
+        => m_actions.TryGetInteraction(actionId, context, out interaction);
+
     private EditorMenuModel BuildMenu(EditorMenuContext context)
         => m_menus.Build(context);
 
@@ -160,9 +168,9 @@ public sealed class EditorRuntime : IDisposable
         m_actions.Clear();
         m_drops.Cancel();
         m_modals.Clear();
+        _ = m_context.Select(typeof(EditorSurface.Global), null);
         m_catalog.Shutdown();
         m_catalog.Dispose();
-        m_context.selection.Clear();
         GC.SuppressFinalize(this);
     }
 
@@ -206,6 +214,12 @@ public sealed class EditorRuntime : IDisposable
 
         protected override void OnEnqueue(string actionId, EditorActionContext context)
             => m_runtime.Enqueue(actionId, context);
+
+        protected override bool OnTryGetInteraction<TState>(
+            string actionId,
+            EditorActionContext context,
+            out EditorActionInteraction<TState>? interaction)
+            => m_runtime.TryGetInteraction(actionId, context, out interaction);
 
         protected override EditorMenuModel OnBuildMenu(EditorMenuContext context)
             => m_runtime.BuildMenu(context);

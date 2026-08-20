@@ -2,8 +2,9 @@ using System;
 
 using Inno.Editor.Core;
 using Inno.Editor.Core.DragDrop;
+using Inno.Editor.ImGui.Widgets;
 
-namespace Inno.Editor.ImGui;
+namespace Inno.Editor.ImGui.Renderers;
 
 /// <summary>Bridges managed editor drag sessions to the native ImGui payload API.</summary>
 public static class EditorDragDropRenderer

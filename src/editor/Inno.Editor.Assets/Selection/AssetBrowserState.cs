@@ -40,13 +40,10 @@ public sealed class AssetBrowserState
     public void Select(EditorContext context, string? relativePath)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (string.IsNullOrWhiteSpace(relativePath))
-        {
-            context.selection.Clear();
-            return;
-        }
-
-        context.selection.Select(new AssetSelectionTarget(Normalize(relativePath)));
+        object? target = string.IsNullOrWhiteSpace(relativePath)
+            ? null
+            : new AssetSelectionTarget(Normalize(relativePath));
+        _ = context.Select(typeof(AssetSurface.Browser), target);
     }
 
     private static string Normalize(string? relativePath)

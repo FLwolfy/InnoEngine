@@ -65,6 +65,20 @@ internal sealed class EditorActionRouter(
 
     internal void Clear() => m_pending.Clear();
 
+    internal bool TryGetInteraction<TState>(
+        string actionId,
+        EditorActionContext context,
+        out EditorActionInteraction<TState>? interaction)
+    {
+        EditorExtensionCatalog.ActionRegistration? registration = Resolve(actionId, context);
+        if (registration is null)
+        {
+            interaction = null;
+            return false;
+        }
+        return registration.action.TryGetInteraction(context.target, out interaction);
+    }
+
     internal bool TryGetShortcut(
         string actionId,
         Type surface,

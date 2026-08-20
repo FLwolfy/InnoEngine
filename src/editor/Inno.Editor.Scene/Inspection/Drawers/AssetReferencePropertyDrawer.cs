@@ -14,6 +14,8 @@ using Inno.Editor.Core;
 using Inno.Editor.Core.DragDrop;
 using Inno.Editor.Scene.Inspection;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Renderers;
+using Inno.Editor.ImGui.Widgets;
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 

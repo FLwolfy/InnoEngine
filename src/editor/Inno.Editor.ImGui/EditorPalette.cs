@@ -29,6 +29,24 @@ public static class EditorPalette
     /// <summary>Gets the editor popup background.</summary>
     public static Vector4 popupBackground { get; } = new(0.09803922f, 0.09803922f, 0.09803922f, 1f);
 
+    /// <summary>Gets text color used by editor context menus.</summary>
+    public static Vector4 menuText => text;
+
+    /// <summary>Gets the background used by editor context menus.</summary>
+    public static Vector4 menuBackground => popupBackground;
+
+    /// <summary>Gets the resting background of an editor context-menu item.</summary>
+    public static Vector4 menuItem => transparent;
+
+    /// <summary>Gets the hovered background of an editor context-menu item.</summary>
+    public static Vector4 menuItemHovered => accentHovered;
+
+    /// <summary>Gets the active background of an editor context-menu item.</summary>
+    public static Vector4 menuItemActive => accentActive;
+
+    /// <summary>Gets the separator color used by editor context menus.</summary>
+    public static Vector4 menuSeparator => border;
+
     /// <summary>Gets the standard border color.</summary>
     public static Vector4 border { get; } = new(0.32f, 0.34f, 0.37f, 0.65f);
 

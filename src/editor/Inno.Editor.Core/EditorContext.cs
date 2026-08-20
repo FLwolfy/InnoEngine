@@ -113,6 +113,36 @@ public abstract class EditorContext
             new EditorActionContext(this, surface, target, argument));
     }
 
+    /// <summary>
+    /// Selects a target, or clears selection, through the built-in selection actions.
+    /// </summary>
+    /// <param name="surface">The interaction surface requesting the selection change.</param>
+    /// <param name="target">The target to select, or <see langword="null"/> to clear selection.</param>
+    /// <returns><see langword="true"/> when the corresponding selection action executed successfully; otherwise, <see langword="false"/>.</returns>
+    public bool Select(Type surface, object? target)
+        => target is null
+            ? Execute(EditorActionIds.ClearSelection, surface)
+            : Execute(EditorActionIds.Select, surface, target);
+
+    /// <summary>
+    /// Tries to resolve type-safe cross-frame state owned by the best matching editor action.
+    /// </summary>
+    /// <typeparam name="TState">The interaction state type expected by the caller.</typeparam>
+    /// <param name="actionId">The stable identifier of the action that owns the interaction.</param>
+    /// <param name="surface">The interaction surface used to resolve the action implementation.</param>
+    /// <param name="target">The optional target associated with the interaction.</param>
+    /// <param name="interaction">The active typed interaction when resolution succeeds.</param>
+    /// <returns><see langword="true"/> when a matching action owns an active interaction for the supplied target; otherwise, <see langword="false"/>.</returns>
+    public bool TryGetInteraction<TState>(
+        string actionId,
+        Type surface,
+        object? target,
+        out EditorActionInteraction<TState>? interaction)
+        => OnTryGetInteraction(
+            actionId,
+            new EditorActionContext(this, surface, target),
+            out interaction);
+
     /// <summary>Builds a complete menu for a surface and target.</summary>
     /// <param name="surface">The interaction surface whose menu placements should be collected.</param>
     /// <param name="target">The optional object the resulting menu operates on.</param>
@@ -176,6 +206,17 @@ public abstract class EditorContext
     /// <param name="actionId">The stable identifier of the action to enqueue.</param>
     /// <param name="context">The complete contextual action request.</param>
     protected abstract void OnEnqueue(string actionId, EditorActionContext context);
+
+    /// <summary>Resolves active cross-frame state through the active runtime.</summary>
+    /// <typeparam name="TState">The interaction state type expected by the caller.</typeparam>
+    /// <param name="actionId">The stable identifier of the action that owns the interaction.</param>
+    /// <param name="context">The complete contextual action request.</param>
+    /// <param name="interaction">The active typed interaction when resolution succeeds.</param>
+    /// <returns><see langword="true"/> when a matching active interaction exists; otherwise, <see langword="false"/>.</returns>
+    protected abstract bool OnTryGetInteraction<TState>(
+        string actionId,
+        EditorActionContext context,
+        out EditorActionInteraction<TState>? interaction);
 
     /// <summary>Builds a menu through the active runtime.</summary>
     /// <param name="context">The surface and optional target used to collect menu placements.</param>

@@ -1,12 +1,15 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 
 using Inno.Assets;
 using Inno.Core.Assemblies;
 using Inno.Core.Identity;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
+using Inno.Editor.Assets;
+using Inno.Editor.Assets.Selection;
 using Inno.Editor.Core;
 using Inno.Editor.Core.Commands;
 using Inno.Editor.Core.DragDrop;
@@ -115,6 +118,96 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void AssetEntryContextMenuContainsEntryOperations()
+    {
+        AssetManager.CreateDirectory("Context Target");
+
+        EditorMenuModel menu = m_runtime.context.BuildMenu(
+            typeof(AssetSurface.ContextMenu),
+            new AssetSelectionTarget("Context Target"));
+
+        Assert.Equal(["Rename", "Delete"], menu.items.Select(static item => item.label));
+        Assert.All(menu.items, static item => Assert.True(item.status.isEnabled));
+    }
+
+    [Fact]
+    public void AssetBackgroundContextMenuCreatesFolderInTargetDirectory()
+    {
+        AssetManager.CreateDirectory("Parent");
+        var target = new AssetDirectoryTarget("Parent");
+
+        EditorMenuModel menu = m_runtime.context.BuildMenu(
+            typeof(AssetSurface.ContextMenu),
+            target);
+
+        EditorMenuItem create = Assert.Single(menu.items);
+        Assert.Equal("Create", create.label);
+        EditorMenuItem folder = Assert.Single(create.children);
+        Assert.Equal("Folder", folder.label);
+        Assert.True(folder.status.isEnabled);
+
+        Assert.True(m_runtime.context.Execute(
+            AssetActionIds.CreateFolder,
+            typeof(AssetSurface.ContextMenu),
+            target));
+        Assert.True(AssetManager.TryGetFileSystemEntry("Parent/New Folder", out _));
+    }
+
+    [Fact]
+    public void ActionInteractionPreservesEditableStateUntilAValidatedCompletion()
+    {
+        var target = new InteractionTarget();
+        Assert.True(m_runtime.context.Execute(
+            TestActionIds.Interaction,
+            typeof(OtherSurface),
+            target));
+        Assert.True(m_runtime.context.TryGetInteraction(
+            TestActionIds.Interaction,
+            typeof(OtherSurface),
+            target,
+            out EditorActionInteraction<string>? interaction));
+        Assert.NotNull(interaction);
+
+        interaction.state = string.Empty;
+        EditorValidationResult rejected = interaction.Complete();
+
+        Assert.False(rejected.isValid);
+        Assert.False(interaction.isCompleted);
+        Assert.Null(target.committedValue);
+
+        interaction.state = "Renamed";
+        EditorValidationResult accepted = interaction.Complete();
+
+        Assert.True(accepted.isValid);
+        Assert.True(interaction.isCompleted);
+        Assert.Equal("Renamed", target.committedValue);
+        Assert.False(interaction.Complete().isValid);
+        Assert.False(m_runtime.context.TryGetInteraction<string>(
+            TestActionIds.Interaction,
+            typeof(OtherSurface),
+            target,
+            out _));
+    }
+
+    [Fact]
+    public void SelectionChangesAreDispatchedThroughBuiltInActions()
+    {
+        var target = new DerivedTarget();
+
+        Assert.True(m_runtime.context.Select(typeof(OtherSurface), target));
+        Assert.Same(target, m_runtime.context.selection.selectedTarget);
+
+        Assert.True(m_runtime.context.Select(typeof(OtherSurface), null));
+        Assert.Null(m_runtime.context.selection.selectedTarget);
+        Assert.Null(typeof(EditorSelectionState).GetMethod(
+            "Select",
+            BindingFlags.Instance | BindingFlags.Public));
+        Assert.Null(typeof(EditorSelectionState).GetMethod(
+            "Clear",
+            BindingFlags.Instance | BindingFlags.Public));
+    }
+
+    [Fact]
     public void TypedDropRoutesAndCancelsItsManagedSession()
     {
         var source = new DragSource();
@@ -156,6 +249,7 @@ public static class TestActionIds
     public const string Resolve = "tests.resolve";
     public const string Deferred = "tests.deferred";
     public const string Menu = "tests.menu";
+    public const string Interaction = "tests.interaction";
 }
 
 public sealed class SpecialSurface;
@@ -164,6 +258,11 @@ public sealed class TestMenuSurface;
 public sealed class DropSurface;
 public class BaseTarget;
 public sealed class DerivedTarget : BaseTarget;
+
+public sealed class InteractionTarget
+{
+    public string? committedValue { get; set; }
+}
 
 [EditorModule]
 public sealed class TestModule : EditorModule
@@ -227,6 +326,21 @@ public sealed class DeferredAction : EditorAction
     public static int executeCount;
 
     public override void Execute(EditorActionContext context) => executeCount++;
+}
+
+[EditorAction(TestActionIds.Interaction)]
+public sealed class InteractionAction : EditorAction<InteractionTarget>
+{
+    protected override void Execute(EditorActionContext<InteractionTarget> context)
+    {
+        _ = BeginInteraction(
+            context,
+            "Initial",
+            value => context.target.committedValue = value,
+            static value => string.IsNullOrWhiteSpace(value)
+                ? EditorValidationResult.Invalid("A name is required.")
+                : EditorValidationResult.valid);
+    }
 }
 
 [EditorAction(TestActionIds.Menu)]

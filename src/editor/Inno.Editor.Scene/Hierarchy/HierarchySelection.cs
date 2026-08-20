@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using Inno.Core.Identity;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Widgets;
 using Inno.Editor.Scene.Workspace;
 using Inno.Engine.Scene;
 using Inno.Platform.ImGui;
@@ -20,12 +21,12 @@ internal sealed class HierarchySelection(EditorSceneWorkspace workspace)
         if (context.selection.TryGet(out GameScene? selectedScene) &&
             (!selectedScene.isLoaded || !ContainsScene(workspace.scenes, selectedScene)))
         {
-            context.selection.Clear();
+            _ = context.Select(typeof(SceneSurface.HierarchyBlank), null);
             return;
         }
         if (context.selection.TryGet(out GameObject? gameObject) &&
             (!gameObject.isRuntimeValid || !ContainsScene(workspace.scenes, gameObject.scene)))
-            context.selection.Clear();
+            _ = context.Select(typeof(SceneSurface.HierarchyBlank), null);
     }
 
     internal bool DeleteObject(EditorContext context, Guid persistentId)
@@ -36,7 +37,7 @@ internal sealed class HierarchySelection(EditorSceneWorkspace workspace)
 
         _ = gameObject.scene.DestroyObject(gameObject);
         if (context.selection.TryGet(out GameObject? selected) && ReferenceEquals(selected, gameObject))
-            context.selection.Clear();
+            _ = context.Select(typeof(SceneSurface.HierarchyBlank), null);
         return true;
     }
 

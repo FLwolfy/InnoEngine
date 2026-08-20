@@ -2,118 +2,29 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 
+using Inno.Editor.ImGui;
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
-namespace Inno.Editor.ImGui;
-
-/// <summary>
-/// Configures an interactive tree row.
-/// </summary>
-public readonly struct TreeNodeOptions
-{
-    /// <summary>
-    /// Gets whether the row is selected.
-    /// </summary>
-    public bool selected { get; init; }
-
-    /// <summary>
-    /// Gets whether the row has no expandable children.
-    /// </summary>
-    public bool isLeaf { get; init; }
-
-    /// <summary>
-    /// Gets whether a custom background is drawn behind an unselected row.
-    /// </summary>
-    public bool showBackground { get; init; }
-
-    /// <summary>
-    /// Gets the custom background color used when <see cref="showBackground"/> is enabled.
-    /// </summary>
-    public Vector4 backgroundColor { get; init; }
-
-    /// <summary>
-    /// Gets whether the row keeps its configured background while hovered.
-    /// </summary>
-    public bool suppressHoverHighlight { get; init; }
-}
-
-/// <summary>
-/// Describes interaction state produced by a tree row.
-/// </summary>
-public readonly struct TreeNodeResult
-{
-    /// <summary>
-    /// Gets whether child content should be rendered.
-    /// </summary>
-    public bool isOpen { get; }
-
-    /// <summary>
-    /// Gets whether the content row was clicked.
-    /// </summary>
-    public bool isClicked { get; }
-
-    /// <summary>
-    /// Gets whether the content row was double-clicked.
-    /// </summary>
-    public bool isDoubleClicked { get; }
-
-    /// <summary>
-    /// Gets whether the full row is hovered.
-    /// </summary>
-    public bool isHovered { get; }
-
-    /// <summary>
-    /// Gets the row minimum screen coordinate.
-    /// </summary>
-    public Vector2 min { get; }
-
-    /// <summary>
-    /// Gets the row maximum screen coordinate.
-    /// </summary>
-    public Vector2 max { get; }
-
-    /// <summary>
-    /// Gets the minimum screen coordinate of the row's interactive content, excluding tree indentation.
-    /// </summary>
-    public Vector2 contentMin { get; }
-
-    internal TreeNodeResult(
-        bool isOpen,
-        bool isClicked,
-        bool isDoubleClicked,
-        bool isHovered,
-        Vector2 min,
-        Vector2 max,
-        Vector2 contentMin)
-    {
-        this.isOpen = isOpen;
-        this.isClicked = isClicked;
-        this.isDoubleClicked = isDoubleClicked;
-        this.isHovered = isHovered;
-        this.min = min;
-        this.max = max;
-        this.contentMin = contentMin;
-    }
-}
+namespace Inno.Editor.ImGui.Widgets;
 
 /// <summary>
 /// Provides reusable editor controls and rendering helpers built on the native ImGui API.
 /// </summary>
 public static partial class ImGuiWidget
 {
-    private static readonly Dictionary<nuint, TreeWindowState> s_treeStatesByWindow = [];
+    private static readonly Dictionary<nuint, TreeWidgetWindowState> s_treeStatesByWindow = [];
     private static bool s_hasNextTreeNodeOpen;
     private static bool s_nextTreeNodeOpen;
 
-    private static List<TreeNodeState> s_treeNodeStack => GetTreeWindowState().treeNodeStack;
+    private static List<TreeWidgetNodeState> s_treeNodeStack => GetTreeWindowState().treeNodeStack;
     private static List<string> s_lastNodeIdsByDepth => GetTreeWindowState().lastNodeIdsByDepth;
-    private static List<TreeLineSegment> s_lineSegments => GetTreeWindowState().lineSegments;
-    private static List<TreeLineSegment> s_previousLineSegments => GetTreeWindowState().previousLineSegments;
-    private static List<TreeLineSegment> s_normalizedLineSegments => GetTreeWindowState().normalizedLineSegments;
-    private static List<TreeLineSegment> s_mergedLineSegments => GetTreeWindowState().mergedLineSegments;
-    private static List<TreeHighlightRect> s_highlightRects => GetTreeWindowState().highlightRects;
-    private static List<TreeHighlightRect> s_previousHighlightRects => GetTreeWindowState().previousHighlightRects;
+    private static List<TreeWidgetLineSegment> s_lineSegments => GetTreeWindowState().lineSegments;
+    private static List<TreeWidgetLineSegment> s_previousLineSegments => GetTreeWindowState().previousLineSegments;
+    private static List<TreeWidgetLineSegment> s_normalizedLineSegments => GetTreeWindowState().normalizedLineSegments;
+    private static List<TreeWidgetLineSegment> s_mergedLineSegments => GetTreeWindowState().mergedLineSegments;
+    private static List<TreeWidgetHighlightRect> s_highlightRects => GetTreeWindowState().highlightRects;
+    private static List<TreeWidgetHighlightRect> s_previousHighlightRects => GetTreeWindowState().previousHighlightRects;
     private static Dictionary<string, bool> s_hasNextSiblingById => GetTreeWindowState().hasNextSiblingById;
     private static Dictionary<string, bool> s_openStatesById => GetTreeWindowState().openStatesById;
 
@@ -121,41 +32,6 @@ public static partial class ImGuiWidget
     {
         get => GetTreeWindowState().lastFrame;
         set => GetTreeWindowState().lastFrame = value;
-    }
-
-    private sealed class TreeWindowState
-    {
-        internal readonly List<TreeNodeState> treeNodeStack = [];
-        internal readonly List<string> lastNodeIdsByDepth = [];
-        internal readonly List<TreeLineSegment> lineSegments = [];
-        internal readonly List<TreeLineSegment> previousLineSegments = [];
-        internal readonly List<TreeLineSegment> normalizedLineSegments = [];
-        internal readonly List<TreeLineSegment> mergedLineSegments = [];
-        internal readonly List<TreeHighlightRect> highlightRects = [];
-        internal readonly List<TreeHighlightRect> previousHighlightRects = [];
-        internal readonly Dictionary<string, bool> hasNextSiblingById = new(StringComparer.Ordinal);
-        internal readonly Dictionary<string, bool> openStatesById = new(StringComparer.Ordinal);
-        internal int lastFrame = -1;
-    }
-
-    private struct TreeNodeState
-    {
-        public string id;
-        public Vector2 cursor;
-    }
-
-    private struct TreeLineSegment
-    {
-        public Vector2 from;
-        public Vector2 to;
-    }
-
-    private struct TreeHighlightRect
-    {
-        public Vector2 min;
-        public Vector2 max;
-        public uint color;
-        public bool isInteractionHighlight;
     }
 
     /// <summary>
@@ -228,14 +104,15 @@ public static partial class ImGuiWidget
         if (!isLeaf && NativeImGui.IsItemToggledOpen())
             s_openStatesById[id] = isOpen;
 
-        TreeHighlightRect contentRect = DrawTreeNodeContentContainer(
+        TreeWidgetHighlightRect contentRect = DrawTreeNodeContentContainer(
             id,
             nodeCursor,
             nativeRowMaxY,
             onDraw,
             out Vector2 interactionMin);
-        bool hovered = NativeImGui.IsMouseHoveringRect(contentRect.min, contentRect.max);
-        bool clicked = NativeImGui.IsItemClicked(ImGuiMouseButton.Left);
+        bool hovered = !IsPopupBlockingInteraction() &&
+                       NativeImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenOverlappedByItem);
+        bool clicked = hovered && NativeImGui.IsItemClicked(ImGuiMouseButton.Left);
         bool doubleClicked = hovered && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
         bool showHoverHighlight = hovered &&
                                   !options.suppressHoverHighlight &&
@@ -247,7 +124,7 @@ public static partial class ImGuiWidget
 
         if (isOpen && !isLeaf)
         {
-            s_treeNodeStack.Add(new TreeNodeState
+            s_treeNodeStack.Add(new TreeWidgetNodeState
             {
                 id = id,
                 cursor = nodeCursor
@@ -274,19 +151,19 @@ public static partial class ImGuiWidget
         s_nextTreeNodeOpen = open;
     }
 
-    private static unsafe TreeWindowState GetTreeWindowState()
+    private static unsafe TreeWidgetWindowState GetTreeWindowState()
     {
         nuint windowKey = (nuint)NativeImGui.GetWindowDrawList().Handle;
-        if (!s_treeStatesByWindow.TryGetValue(windowKey, out TreeWindowState? state))
+        if (!s_treeStatesByWindow.TryGetValue(windowKey, out TreeWidgetWindowState? state))
         {
-            state = new TreeWindowState();
+            state = new TreeWidgetWindowState();
             s_treeStatesByWindow[windowKey] = state;
         }
 
         return state;
     }
 
-    private static TreeHighlightRect DrawTreeNodeContentContainer(
+    private static TreeWidgetHighlightRect DrawTreeNodeContentContainer(
         string id,
         Vector2 nodeCursor,
         float nativeRowMaxY,
@@ -308,7 +185,7 @@ public static partial class ImGuiWidget
 
         Vector2 contentMin = NativeImGui.GetItemRectMin();
         Vector2 contentMax = NativeImGui.GetItemRectMax();
-        TreeHighlightRect rect = new()
+        TreeWidgetHighlightRect rect = new()
         {
             min = new Vector2(windowPos.X, MathF.Min(nodeCursor.Y, contentMin.Y)),
             max = new Vector2(contentRightX, MathF.Max(nativeRowMaxY, contentMax.Y))
@@ -359,7 +236,7 @@ public static partial class ImGuiWidget
         ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
         for (int i = 0; i < s_mergedLineSegments.Count; i++)
         {
-            TreeLineSegment line = s_mergedLineSegments[i];
+            TreeWidgetLineSegment line = s_mergedLineSegments[i];
             drawList.AddLine(line.from, line.to, color, style.borderSize);
         }
     }
@@ -370,11 +247,13 @@ public static partial class ImGuiWidget
             return;
 
         bool isDragging = ImGuiP.IsDragDropActive();
+        bool popupBlocksInteraction = IsPopupBlockingInteraction();
         ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
         for (int i = 0; i < s_previousHighlightRects.Count; i++)
         {
-            TreeHighlightRect rect = s_previousHighlightRects[i];
-            if (isDragging && rect.isInteractionHighlight)
+            TreeWidgetHighlightRect rect = s_previousHighlightRects[i];
+            if (isDragging && rect.isInteractionHighlight ||
+                popupBlocksInteraction && rect.isHoverHighlight)
                 continue;
             drawList.AddRectFilled(rect.min, rect.max, rect.color);
         }
@@ -433,7 +312,7 @@ public static partial class ImGuiWidget
 
         for (int i = 0; i < s_treeNodeStack.Count - 1; i++)
         {
-            TreeNodeState ancestorState = s_treeNodeStack[i];
+            TreeWidgetNodeState ancestorState = s_treeNodeStack[i];
             if (s_hasNextSiblingById.TryGetValue(ancestorState.id, out bool ancestorHasNextSibling) && ancestorHasNextSibling)
             {
                 float ancestorX = ancestorState.cursor.X + guideOffset;
@@ -441,7 +320,7 @@ public static partial class ImGuiWidget
             }
         }
 
-        TreeNodeState parentState = s_treeNodeStack[^1];
+        TreeWidgetNodeState parentState = s_treeNodeStack[^1];
         float branchX = parentState.cursor.X + guideOffset;
         float branchStartY = parentState.cursor.Y + textLineHeight * 0.5f + disclosureGap;
         AddTreeLine(new Vector2(branchX, branchStartY), new Vector2(branchX, hasNextSibling ? rowMaxY : rowCenterY));
@@ -451,7 +330,7 @@ public static partial class ImGuiWidget
 
     private static void AddTreeLine(Vector2 from, Vector2 to)
     {
-        s_lineSegments.Add(new TreeLineSegment
+        s_lineSegments.Add(new TreeWidgetLineSegment
         {
             from = from,
             to = to
@@ -469,7 +348,7 @@ public static partial class ImGuiWidget
         s_mergedLineSegments.Clear();
         for (int i = 0; i < s_previousLineSegments.Count; i++)
         {
-            TreeLineSegment line = s_previousLineSegments[i];
+            TreeWidgetLineSegment line = s_previousLineSegments[i];
             Vector2 from = SnapTreeLinePoint(line.from);
             Vector2 to = SnapTreeLinePoint(line.to);
             bool vertical = MathF.Abs(to.X - from.X) < MathF.Abs(to.Y - from.Y);
@@ -478,7 +357,7 @@ public static partial class ImGuiWidget
                 (from, to) = (to, from);
             }
 
-            s_normalizedLineSegments.Add(new TreeLineSegment
+            s_normalizedLineSegments.Add(new TreeWidgetLineSegment
             {
                 from = from,
                 to = to
@@ -488,9 +367,9 @@ public static partial class ImGuiWidget
         s_normalizedLineSegments.Sort(CompareTreeLineSegments);
         for (int i = 0; i < s_normalizedLineSegments.Count; i++)
         {
-            TreeLineSegment current = s_normalizedLineSegments[i];
+            TreeWidgetLineSegment current = s_normalizedLineSegments[i];
             if (s_mergedLineSegments.Count > 0 &&
-                TryMergeTreeLineSegments(s_mergedLineSegments[^1], current, out TreeLineSegment merged))
+                TryMergeTreeLineSegments(s_mergedLineSegments[^1], current, out TreeWidgetLineSegment merged))
             {
                 s_mergedLineSegments[^1] = merged;
                 continue;
@@ -500,7 +379,7 @@ public static partial class ImGuiWidget
         }
     }
 
-    private static int CompareTreeLineSegments(TreeLineSegment left, TreeLineSegment right)
+    private static int CompareTreeLineSegments(TreeWidgetLineSegment left, TreeWidgetLineSegment right)
     {
         bool leftVertical = IsVerticalTreeLine(left);
         bool rightVertical = IsVerticalTreeLine(right);
@@ -524,9 +403,9 @@ public static partial class ImGuiWidget
     }
 
     private static bool TryMergeTreeLineSegments(
-        TreeLineSegment left,
-        TreeLineSegment right,
-        out TreeLineSegment merged)
+        TreeWidgetLineSegment left,
+        TreeWidgetLineSegment right,
+        out TreeWidgetLineSegment merged)
     {
         const float epsilon = 0.1f;
         bool vertical = IsVerticalTreeLine(left);
@@ -556,22 +435,24 @@ public static partial class ImGuiWidget
         return true;
     }
 
-    private static bool IsVerticalTreeLine(TreeLineSegment line)
+    private static bool IsVerticalTreeLine(TreeWidgetLineSegment line)
     {
         return MathF.Abs(line.to.X - line.from.X) < MathF.Abs(line.to.Y - line.from.Y);
     }
 
-    private static void AddTreeHighlightRect(TreeHighlightRect rect, bool selected)
+    private static void AddTreeHighlightRect(TreeWidgetHighlightRect rect, bool selected)
     {
         rect.color = NativeImGui.GetColorU32(selected ? ImGuiCol.Header : ImGuiCol.HeaderHovered);
         rect.isInteractionHighlight = true;
+        rect.isHoverHighlight = !selected;
         s_highlightRects.Add(rect);
     }
 
-    private static void AddTreeBackgroundRect(TreeHighlightRect rect, Vector4 color)
+    private static void AddTreeBackgroundRect(TreeWidgetHighlightRect rect, Vector4 color)
     {
         rect.color = NativeImGui.ColorConvertFloat4ToU32(color);
         rect.isInteractionHighlight = false;
+        rect.isHoverHighlight = false;
         s_highlightRects.Add(rect);
     }
 

@@ -24,7 +24,7 @@ public sealed class EditorSelectionState
     /// Selects a target object.
     /// </summary>
     /// <param name="target">Target to select.</param>
-    public void Select(object target)
+    internal void Select(object target)
     {
         ArgumentNullException.ThrowIfNull(target);
         if (Equals(m_selectedTarget, target))
@@ -39,7 +39,7 @@ public sealed class EditorSelectionState
     /// <summary>
     /// Clears the current selection.
     /// </summary>
-    public void Clear()
+    internal void Clear()
     {
         if (m_selectedTarget is null)
         {

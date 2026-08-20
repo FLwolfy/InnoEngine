@@ -9,6 +9,12 @@ public static class EditorActionIds
     /// <summary>Opens the current target.</summary>
     public const string Open = "file.open";
 
+    /// <summary>Selects the current target.</summary>
+    public const string Select = "edit.select";
+
+    /// <summary>Clears the current editor selection.</summary>
+    public const string ClearSelection = "edit.clear-selection";
+
     /// <summary>Renames the current target.</summary>
     public const string Rename = "edit.rename";
 

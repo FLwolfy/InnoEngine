@@ -39,7 +39,7 @@ internal sealed class ReorderSceneDropHandler
         if (sourceIndex < insertionIndex)
             insertionIndex--;
         SceneManager.SetSceneIndex(source, insertionIndex);
-        context.editor.selection.Select(source);
+        _ = context.editor.Select(context.surface, source);
         return EditorDropResult.Accepted(source);
     }
 }

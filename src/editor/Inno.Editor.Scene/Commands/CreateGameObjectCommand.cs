@@ -17,7 +17,7 @@ internal sealed class CreateGameObjectCommand : EditorAction<GameScene>
     protected override void Execute(EditorActionContext<GameScene> context)
     {
         GameObject created = context.target.CreateObject();
-        context.editor.selection.Select(created);
+        _ = context.editor.Select(typeof(SceneSurface.HierarchyObject), created);
         _ = context.editor.Execute(
             EditorActionIds.Rename,
             typeof(SceneSurface.HierarchyObject),

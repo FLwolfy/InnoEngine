@@ -26,6 +26,7 @@ using Inno.Editor.Assets.Selection;
 [assembly: ScriptingApiExport(typeof(AssetEditorContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(AssetOperationValidation), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(AssetBrowserState), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(AssetDirectoryTarget), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(AssetSelectionTarget), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(AssetSurface), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(AssetActionIds), ScriptingApiScope.Editor)]

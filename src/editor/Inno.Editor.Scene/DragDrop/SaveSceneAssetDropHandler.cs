@@ -17,12 +17,9 @@ internal sealed class SaveSceneAssetDropHandler
     : EditorDrop<GameScene, AssetDirectoryDropTarget>
 {
     private readonly EditorSceneWorkspace m_workspace;
-    private readonly AssetEditorModule m_assets;
-
-    internal SaveSceneAssetDropHandler(EditorSceneWorkspace workspace, AssetEditorModule assets)
+    internal SaveSceneAssetDropHandler(EditorSceneWorkspace workspace)
     {
         m_workspace = workspace;
-        m_assets = assets;
     }
 
     protected override EditorDropStatus Query(
@@ -35,7 +32,8 @@ internal sealed class SaveSceneAssetDropHandler
         EditorDropContext<GameScene, AssetDirectoryDropTarget> context)
     {
         string path = m_workspace.SaveSceneToDirectory(context.source, context.target.relativePath);
-        m_assets.browser.Select(context.editor, path);
-        return EditorDropResult.Accepted(new AssetSelectionTarget(path));
+        var selection = new AssetSelectionTarget(path);
+        _ = context.editor.Select(typeof(AssetSurface.Browser), selection);
+        return EditorDropResult.Accepted(selection);
     }
 }

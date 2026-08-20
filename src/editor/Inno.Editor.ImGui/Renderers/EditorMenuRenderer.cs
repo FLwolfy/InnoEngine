@@ -4,9 +4,10 @@ using System.Collections.Generic;
 using Inno.Editor.Core;
 using Inno.Editor.Core.Menus;
 using Inno.Editor.Core.Commands;
+using Inno.Editor.ImGui.Widgets;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
-namespace Inno.Editor.ImGui;
+namespace Inno.Editor.ImGui.Renderers;
 
 /// <summary>Renders immutable editor menu models through ImGui.</summary>
 public static class EditorMenuRenderer
@@ -21,12 +22,49 @@ public static class EditorMenuRenderer
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         ArgumentNullException.ThrowIfNull(context);
+        if (!ShouldResolveItemContextMenu(id))
+            return false;
+        EditorMenuModel menu = context.editorContext.BuildMenu(context.surface, context.target);
+        if (menu.items.Count == 0)
+            return false;
         if (!ImGuiWidget.BeginContextMenu(id))
             return false;
-        DrawItems(context, context.editorContext.BuildMenu(context.surface, context.target).items);
+        DrawItems(context, menu.items);
         ImGuiWidget.EndContextMenu();
         return true;
     }
+
+    /// <summary>
+    /// Draws a resolved right-click menu when the current ImGui window's unoccupied background is clicked.
+    /// </summary>
+    /// <param name="id">The stable popup identifier in the current ImGui ID scope.</param>
+    /// <param name="context">The editor, menu surface, and directory target for the background operation.</param>
+    /// <returns><see langword="true"/> while the background context popup is open and its items were drawn.</returns>
+    public static bool WindowContextMenu(string id, EditorMenuContext context)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentNullException.ThrowIfNull(context);
+        if (!ShouldResolveWindowContextMenu(id))
+            return false;
+        EditorMenuModel menu = context.editorContext.BuildMenu(context.surface, context.target);
+        if (menu.items.Count == 0)
+            return false;
+        if (!ImGuiWidget.BeginWindowContextMenu(id))
+            return false;
+        DrawItems(context, menu.items);
+        ImGuiWidget.EndContextMenu();
+        return true;
+    }
+
+    private static bool ShouldResolveItemContextMenu(string id)
+        => NativeImGui.IsPopupOpen(id) ||
+           NativeImGui.IsItemHovered() && NativeImGui.IsMouseReleased(Inno.Native.ImGui.ImGuiMouseButton.Right);
+
+    private static bool ShouldResolveWindowContextMenu(string id)
+        => NativeImGui.IsPopupOpen(id) ||
+           NativeImGui.IsWindowHovered() &&
+           !NativeImGui.IsAnyItemHovered() &&
+           NativeImGui.IsMouseReleased(Inno.Native.ImGui.ImGuiMouseButton.Right);
 
     /// <summary>
     /// Draws the complete editor main menu bar for the supplied menu context.

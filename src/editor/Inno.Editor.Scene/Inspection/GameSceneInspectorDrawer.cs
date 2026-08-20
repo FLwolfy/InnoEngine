@@ -9,6 +9,8 @@ using Inno.Editor.Core;
 using Inno.Editor.Core.Commands;
 using Inno.Editor.Core.Menus;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Renderers;
+using Inno.Editor.ImGui.Widgets;
 using Inno.Engine.Scene;
 using Inno.Native.ImGui;
 using Inno.Platform.ImGui;
@@ -31,7 +33,7 @@ internal sealed class GameSceneInspectorDrawer : IInspectorDrawer
         var scene = (GameScene)context.target;
         if (!scene.isLoaded || scene.isDestroyed)
         {
-            context.editorContext.selection.Clear();
+            _ = context.editorContext.Select(context.editorContext.focusedSurface, null);
             NativeImGui.TextUnformatted("Selected scene is no longer loaded.");
             return;
         }

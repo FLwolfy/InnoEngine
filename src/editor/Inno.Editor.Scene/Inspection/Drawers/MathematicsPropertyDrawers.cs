@@ -2,6 +2,7 @@ using System;
 
 using Inno.Core.Mathematics;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Widgets;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 using NumericsVector4 = System.Numerics.Vector4;
 

@@ -16,6 +16,7 @@ using Inno.Editor.Assets.AssetEditors;
 using Inno.Editor.Core;
 using Inno.Editor.Core.Commands;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Widgets;
 using Inno.Editor.Interactions;
 using Inno.Editor.Scene.Inspection;
 using Inno.Editor.Scene.Workspace;

@@ -6,7 +6,7 @@ using Inno.Core.Input;
 
 namespace Inno.Editor.Assets.Commands;
 
-[EditorAction(EditorActionIds.Rename, typeof(AssetSurface.Browser), priority: 100)]
+[EditorAction(EditorActionIds.Rename, priority: 100)]
 [EditorMenu(typeof(AssetSurface.ContextMenu), "Rename", order: 100)]
 [EditorShortcut(typeof(FileBrowser.FileBrowserPanel), KeyCode.F2)]
 internal sealed class RenameAssetCommand(AssetEditorModule assets) : EditorAction<AssetSelectionTarget>
@@ -17,7 +17,13 @@ internal sealed class RenameAssetCommand(AssetEditorModule assets) : EditorActio
     protected override void Execute(EditorActionContext<AssetSelectionTarget> context)
     {
         if (TryGetAssetContext(context, out AssetEditorContext? assetContext) && assetContext is not null)
-            assets.BeginRename(assetContext);
+        {
+            _ = BeginInteraction(
+                context,
+                assetContext.name,
+                value => assets.Rename(assetContext, value),
+                value => assets.ValidateRename(assetContext, value));
+        }
     }
 
     private bool TryGetAssetContext(

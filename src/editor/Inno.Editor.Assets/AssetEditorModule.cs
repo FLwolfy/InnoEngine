@@ -24,8 +24,6 @@ public sealed class AssetEditorModule : EditorModule, IDisposable
     /// <summary>Gets shared Asset Browser navigation and selection state.</summary>
     public AssetBrowserState browser { get; } = new();
 
-    internal EditorRenameSession? rename { get; private set; }
-
     internal bool TryCreateContext(
         EditorContext editor,
         string relativePath,
@@ -65,22 +63,28 @@ public sealed class AssetEditorModule : EditorModule, IDisposable
         }
     }
 
-    internal void BeginRename(AssetEditorContext context)
+    internal EditorValidationResult ValidateRename(
+        AssetEditorContext context,
+        string newName)
     {
-        CancelRename();
-        string sourcePath = Normalize(context.relativePath);
         AssetEditor editor = m_editors.Resolve(context.assetType);
-        rename = new EditorRenameSession(
-            new AssetSelectionTarget(sourcePath),
-            context.name,
-            value => ToEditorValidation(ValidateRename(
-                editor,
-                context,
-                sourcePath,
-                value,
-                validateEditor: true,
-                out _)),
-            value => CommitRename(editor, context, sourcePath, value));
+        return ToEditorValidation(ValidateRename(
+            editor,
+            context,
+            Normalize(context.relativePath),
+            newName,
+            validateEditor: true,
+            out _));
+    }
+
+    internal void Rename(AssetEditorContext context, string newName)
+    {
+        AssetEditor editor = m_editors.Resolve(context.assetType);
+        CommitRename(
+            editor,
+            context,
+            Normalize(context.relativePath),
+            newName);
     }
 
     internal bool Delete(AssetEditorContext context)
@@ -94,7 +98,7 @@ public sealed class AssetEditorModule : EditorModule, IDisposable
         }
         string path = context.relativePath;
         AssetManager.Delete(path);
-        browser.Select(context.editorContext, null);
+        _ = context.editorContext.Select(typeof(AssetSurface.Browser), null);
         try
         {
             editor.OnDeleted(context);
@@ -118,34 +122,14 @@ public sealed class AssetEditorModule : EditorModule, IDisposable
         return data is not null;
     }
 
-    internal void CancelRename()
-    {
-        rename?.Cancel();
-        rename = null;
-    }
-
-    /// <inheritdoc />
-    protected override void OnUpdate(EditorContext context)
-    {
-        if (rename?.isCompleted == true)
-            rename = null;
-    }
-
-    /// <inheritdoc />
-    protected override void OnStop(EditorContext context)
-    {
-        CancelRename();
-    }
-
     /// <summary>
-    /// Cancels active rename state and releases the current asset-editor registry snapshot.
+    /// Releases the current asset-editor registry snapshot.
     /// </summary>
     public void Dispose()
     {
         if (m_disposed)
             return;
         m_disposed = true;
-        CancelRename();
         m_editors.Dispose();
     }
 
@@ -196,7 +180,9 @@ public sealed class AssetEditorModule : EditorModule, IDisposable
         if (!validation.isValid)
             throw new InvalidOperationException(validation.message);
         AssetManager.Move(sourcePath, targetPath);
-        browser.Select(context.editorContext, targetPath);
+        _ = context.editorContext.Select(
+            typeof(AssetSurface.Browser),
+            new Selection.AssetSelectionTarget(targetPath));
         try
         {
             editor.OnRenamed(context, sourcePath, targetPath);

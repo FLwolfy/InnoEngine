@@ -8,6 +8,7 @@ using Inno.Editor.Core;
 using Inno.Editor.Core.Panels;
 using Inno.Editor.Diagnostics;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Widgets;
 using Inno.Native.ImGui;
 using Inno.Platform.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;

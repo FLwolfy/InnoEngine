@@ -7,6 +7,7 @@ using System.Numerics;
 using Inno.Assets;
 using Inno.Assets.File;
 using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.Widgets;
 using Inno.Native.ImGui;
 using Inno.Platform.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
