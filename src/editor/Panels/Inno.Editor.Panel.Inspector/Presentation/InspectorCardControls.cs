@@ -16,7 +16,7 @@ internal sealed class InspectorCardControls
 {
     private const int C_CONTROL_COUNT = 3;
 
-    internal float width => EditorWidget.GetIconButtonSize().X * C_CONTROL_COUNT;
+    internal float width => EditorWidget.GetCompactClickableTextSize().X * C_CONTROL_COUNT;
 
     internal void DrawComponent(
         SceneEdits edits,
@@ -93,7 +93,7 @@ internal sealed class InspectorCardControls
             $"Move {targetKind} Down",
             targetKind);
         NativeImGui.SameLine(0f, 0f);
-        if (EditorWidget.IconButton(
+        if (EditorWidget.ClickableText(
                 $"remove_{targetKind}_{targetId:N}",
                 ImGuiIcon.Xmark,
                 $"Remove {targetKind}"))
@@ -112,7 +112,7 @@ internal sealed class InspectorCardControls
         string targetKind)
     {
         NativeImGui.BeginDisabled(!canMove);
-        bool pressed = EditorWidget.IconButton(
+        bool pressed = EditorWidget.ClickableText(
             $"move_{targetKind}_{targetId:N}_{targetIndex}",
             icon,
             tooltip);

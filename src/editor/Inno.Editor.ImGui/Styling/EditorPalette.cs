@@ -173,6 +173,9 @@ public static class EditorPalette
     /// <summary>Gets the muted asset browser text color.</summary>
     public static Vector4 assetTextMuted { get; } = new(0.54f, 0.54f, 0.56f, 1f);
 
+    /// <summary>Gets the subdued text color used by asset browser breadcrumb paths.</summary>
+    public static Vector4 assetBreadcrumbText { get; } = new(0.86f, 0.86f, 0.86f, 0.5f);
+
     /// <summary>Gets the opaque asset browser accent.</summary>
     public static Vector4 assetAccent { get; } = new(0.50f, 0.45f, 0.62f, 1f);
 

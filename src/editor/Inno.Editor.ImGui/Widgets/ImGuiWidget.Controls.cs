@@ -12,68 +12,6 @@ namespace Inno.Editor.ImGui.ImGuiWidget;
 public static partial class ImGuiWidget
 {
     /// <summary>
-    /// Draws a compact icon-only button without a persistent background.
-    /// </summary>
-    /// <param name="id">Stable control identifier.</param>
-    /// <param name="icon">Visible icon glyph.</param>
-    /// <param name="tooltip">Optional hover tooltip.</param>
-    /// <returns><see langword="true"/> when the button is pressed.</returns>
-    public static bool IconButton(string id, string icon, string? tooltip = null)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(id);
-        ArgumentNullException.ThrowIfNull(icon);
-
-        Vector2 iconSize = NativeImGui.CalcTextSize(icon);
-        Vector2 controlSize = GetIconButtonSize();
-        Vector2 cursor = NativeImGui.GetCursorScreenPos();
-        bool pressed = NativeImGui.InvisibleButton($"##icon_button_{id}", controlSize);
-        bool hovered = NativeImGui.IsItemHovered();
-        bool active = NativeImGui.IsItemActive();
-
-        DrawIconButtonPresentation(
-            NativeImGui.GetWindowDrawList(),
-            cursor,
-            controlSize,
-            icon,
-            iconSize,
-            hovered,
-            active);
-
-        if (!string.IsNullOrWhiteSpace(tooltip) && hovered && NativeImGui.BeginTooltip())
-        {
-            NativeImGui.TextUnformatted(tooltip);
-            NativeImGui.EndTooltip();
-        }
-
-        return pressed;
-    }
-
-    /// <summary>
-    /// Gets the fixed control size used by <see cref="IconButton"/>.
-    /// </summary>
-    /// <returns>A size with the same fixed-width icon slot convention as IconText.</returns>
-    public static Vector2 GetIconButtonSize()
-    {
-        float iconSlotWidth = NativeImGui.GetTextLineHeight();
-        return new Vector2(iconSlotWidth + style.iconLabelSpacing, NativeImGui.GetFrameHeight());
-    }
-
-    private static void DrawIconButtonPresentation(
-        ImDrawListPtr drawList,
-        Vector2 minimum,
-        Vector2 controlSize,
-        string icon,
-        Vector2 iconSize,
-        bool hovered,
-        bool active)
-    {
-        uint color = hovered || active
-            ? NativeImGui.ColorConvertFloat4ToU32(EditorPalette.compactControlHovered)
-            : NativeImGui.GetColorU32(ImGuiCol.Text);
-        drawList.AddText(minimum + (controlSize - iconSize) * 0.5f, color, icon);
-    }
-
-    /// <summary>
     /// Draws a compact checkbox whose checked fill uses the current text color.
     /// </summary>
     /// <param name="id">Stable control identifier.</param>

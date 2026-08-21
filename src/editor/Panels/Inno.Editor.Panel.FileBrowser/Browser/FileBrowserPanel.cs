@@ -964,10 +964,10 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
         if (NativeImGui.BeginChild("##BreadcrumbBar", new Vector2(0f, height), ImGuiChildFlags.None, ImGuiWindowFlags.HorizontalScrollbar))
         {
             DrawBreadcrumbTopSeparator();
-            NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, framePadding);
-            PushButtonColors(EditorPalette.assetAccent);
             float contentHeight = contentWidth > NativeImGui.GetWindowSize().X ? EditorWidget.style.assetBreadcrumbHeight : height;
-            NativeImGui.SetCursorPosY(MathF.Max(0f, (contentHeight - NativeImGui.GetFrameHeight()) * 0.5f));
+            float itemHeight = EditorWidget.GetClickableTextSize("A", framePadding).Y;
+            NativeImGui.SetCursorPosY(MathF.Max(0f, (contentHeight - itemHeight) * 0.5f));
+            NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.assetBreadcrumbText);
 
             for (int i = 0; i < parts.Count; i++)
             {
@@ -975,16 +975,18 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
                 if (i > 0)
                 {
                     NativeImGui.SameLine(0f, EditorWidget.style.assetBreadcrumbSpacing);
-                    NativeImGui.TextUnformatted(">");
+                    EditorWidget.CenteredText(">", new Vector2(
+                        NativeImGui.CalcTextSize(">").X,
+                        itemHeight));
                     NativeImGui.SameLine(0f, EditorWidget.style.assetBreadcrumbSpacing);
                 }
 
-                if (NativeImGui.SmallButton($"{label}##crumb_{path}"))
+                Vector2 itemSize = EditorWidget.GetClickableTextSize(label, framePadding);
+                if (EditorWidget.ClickableText($"crumb_{path}", label, itemSize))
                     m_navigation.NavigateTo(context, path);
             }
 
-            NativeImGui.PopStyleColor(3);
-            NativeImGui.PopStyleVar();
+            NativeImGui.PopStyleColor();
         }
 
         NativeImGui.EndChild();

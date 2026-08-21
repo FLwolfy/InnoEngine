@@ -78,7 +78,7 @@ public static partial class ImGuiWidget
             hovered |= mouseHovered;
             pressed |= mouseHovered && NativeImGui.IsMouseClicked(ImGuiMouseButton.Left);
 
-            DrawIconButtonPresentation(
+            DrawClickableTextPresentation(
                 NativeImGui.GetWindowDrawList(),
                 itemMinimum,
                 itemMaximum - itemMinimum,

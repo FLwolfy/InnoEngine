@@ -256,14 +256,14 @@ public sealed class HierarchyPanel : EditorPanel
         NativeImGui.SameLine();
         Vector2 cursor = NativeImGui.GetCursorScreenPos();
         NativeImGui.SetCursorScreenPos(new Vector2(MathF.Max(cursor.X, right), cursor.Y));
-        if (EditorWidget.IconButton($"hierarchy_visibility_{id}", icon,
+        if (EditorWidget.ClickableText($"hierarchy_visibility_{id}", icon,
                 gameObject.activeSelf ? "Deactivate" : "Activate"))
         {
             m_edits.SetGameObjectActive(gameObject, !gameObject.activeSelf);
         }
     }
 
-    private static float GetVisibilityButtonWidth() => EditorWidget.GetIconButtonSize().X;
+    private static float GetVisibilityButtonWidth() => EditorWidget.GetCompactClickableTextSize().X;
 
     private void DrawSceneContextMenu(EditorContext context, GameScene scene, string id)
     {
