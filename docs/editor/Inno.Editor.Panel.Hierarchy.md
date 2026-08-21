@@ -47,17 +47,17 @@ Scene、GameObject 的创建、删除、排序、parent 修改、名称和 activ
 
 ## 下次打开项目
 
-Workspace 自动保存已打开且有 source path 的 Scene 顺序、active Scene，以及可稳定重建的 Scene/GameObject/Component/System selection。恢复时 Scene 仍采用 additive load；缺失或无法加载的 Scene 被跳过并记录 warning。没有保存的 Scene、全部 Scene 被关闭或全部恢复失败时，Hierarchy 保持为空，不会隐式创建 Untitled Scene。
+Workspace 自动保存已打开且有 source path 的 Scene 顺序与 active Scene。Scene/GameObject/Component/System selection 不跨启动保存。恢复时 Scene 仍采用 additive load；缺失或无法加载的 Scene 被跳过并记录 warning。没有保存的 Scene、全部 Scene 被关闭或全部恢复失败时，Hierarchy 保持为空，不会隐式创建 Untitled Scene。
 
 Scene setup 写在 `editor.ini` 的 `[InnoEditor][Module.scene-workspace]` 中，可直接阅读和编辑。正常关闭窗口时会在 Scene 被卸载前强制捕获一次；启动时若 Asset Database 或脚本类型尚未准备完成，则保留这些路径并重试，不会用空 Workspace 覆盖已保存 setup。
 
-恢复会分别等待 Source Index 与脚本 TypeCache：源文件在磁盘存在但 Asset Database 尚未完成首轮对账时，不将它误判为 missing；Scene 中引用的脚本 Component/System 尚未激活时，也不会清空已保存路径。两项依赖都准备好后，候选 Scene 一次性 additive 提交并恢复 active Scene 与 selection。
+恢复会分别等待 Source Index 与脚本 TypeCache：源文件在磁盘存在但 Asset Database 尚未完成首轮对账时，不将它误判为 missing；Scene 中引用的脚本 Component/System 尚未激活时，也不会清空已保存路径。两项依赖都准备好后，候选 Scene 一次性 additive 提交并恢复 active Scene，selection 保持为空。
 
 未保存 Scene 的完整内容和 dirty 修改不会隐式写进 Workspace。它们必须通过 Save 进入 `.innoscene`；否则下次启动只恢复最后保存版本。这一边界避免项目状态文件悄悄成为第二份 Scene 数据库。
 
 ## 保存
 
-Command/Ctrl+S 是共享 `EditorActions.Save`，由本 feature 为 active Scene 提供实现。Scene 名称与 `.innoscene` 文件名同步；dirty Scene 在 Hierarchy 中显示斜体和 `*`。将 Scene/GameObject 拖到任意 Asset directory 字符串 target 时分别保存 SceneAsset/PrefabAsset。
+Command/Ctrl+S 是共享 `EditorActions.Save`，由本 feature 提供实现，并自动出现在主菜单 `File/Save`。Scene 名称与 `.innoscene` 文件名同步；dirty Scene 在 Hierarchy 中显示斜体和 `*`。将 Scene/GameObject 拖到任意 Asset directory 字符串 target 时分别保存 SceneAsset/PrefabAsset。
 
 ## Scripting API
 

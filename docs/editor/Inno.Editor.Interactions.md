@@ -171,6 +171,8 @@ public sealed class ClipToStateDrop
 
 `EditorInteractionRuntime` 从当前 TypeCache snapshot 原子构建 Module、Action、Menu source、Drop、Panel 和 Modal。候选冲突或构造失败会拒绝新 snapshot，旧 generation 继续工作。Host 类型实例会尽量保留；插件类型会 Detach/Stop/Dispose，避免固定旧 ALC。
 
+一个 snapshot 激活时先 Attach 全部 Panel，再按 `EditorModuleAttribute.order` 启动 Module；关闭或替换时反向执行，先 Stop Module，再 Detach Panel。这样 Panel 的订阅与呈现对象在任何会产生启动日志或异步工作的 Module 之前就绪。Logging Module 使用基础设施最高优先级，保证其 sink 先于 Scripting Module 注册，因此首次脚本编译的 warning/error 也会进入 Log Panel。
+
 ## Undo / Redo
 
 每个 `EditorInteractions` 拥有一个 `EditorHistory`。History 不保存 Action 实例、Scene 对象、插件 `Type` 或来自 collectible ALC 的委托；稳定记录由四项组成：
@@ -272,6 +274,8 @@ openScenes=["Scenes/Main.innoscene","Scenes/UI.innoscene"]
 [InnoEditor][Panel.asset-browser-panel]
 filter=""
 viewMode="List"
+listNameSeparator=0.4
+listTypeSeparator=0.7
 
 [InnoEditor][Panels]
 asset.file-browser=true
@@ -285,6 +289,8 @@ scene.hierarchy=true
 Workspace provider 的恢复状态按实例弱跟踪。只有成功完成 `RestoreWorkspaceState` 的 provider 才能参与后续 capture；脚本启动、TypeCache 重建或 Registry 事务在恢复回调中触发重入刷新时，同一个 provider 不会被再次调用，也不会用尚未初始化的默认字段覆盖磁盘 section。被新 snapshot 保留的 Module/Panel 仍以实际恢复状态为准，而不是仅因实例相同就跳过首次恢复。
 
 Undo 栈、dirty Scene 内容、runtime 对象和编译中间态不会跨进程保存。它们要么无法安全跨代际恢复，要么本身可以由 Asset Database 和脚本构建图重建。
+
+Selection 同样是当前 Editor session 的瞬时交互状态，不写入 `editor.ini`。Scene Workspace 只保存打开顺序与 active Scene；项目恢复完成后 selection 保持为空，直到用户或明确的打开操作重新选择对象。
 
 Scene 内容历史由独立的 [Inno.Editor.Scene](Inno.Editor.Scene.md) 实现。它不会为一次小修改序列化整张 Scene 图，而是按属性、元素、子树、placement 或文档记录最小 payload。
 

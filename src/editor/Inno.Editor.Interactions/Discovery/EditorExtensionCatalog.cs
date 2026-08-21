@@ -181,12 +181,10 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
 
     private void Activate(Snapshot snapshot)
     {
-        // Publish before starting modules so a TypeCache query performed during startup can
+        // Publish before attaching extensions so a TypeCache query performed during startup can
         // retain these host instances instead of treating them as an abandoned candidate.
         m_active = snapshot;
         m_interactions.history.UpdateHandlers(CreateHistoryHandlerMap(snapshot.historyHandlers));
-        for (int i = 0; i < snapshot.modules.Length; i++)
-            snapshot.modules[i].module.Start(m_context);
         for (int i = 0; i < snapshot.panels.Length; i++)
         {
             PanelRegistration registration = snapshot.panels[i];
@@ -200,12 +198,16 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
                 Log.Error("Editor panel '{0}' failed to attach: {1}", registration.attribute.id, exception);
             }
         }
+        for (int i = 0; i < snapshot.modules.Length; i++)
+            snapshot.modules[i].module.Start(m_context);
         m_workspace.Restore(snapshot.workspace);
     }
 
     private void Deactivate(Snapshot snapshot)
     {
         CapturePanelStates(snapshot);
+        for (int i = snapshot.modules.Length - 1; i >= 0; i--)
+            snapshot.modules[i].module.Stop(m_context);
         for (int i = snapshot.panels.Length - 1; i >= 0; i--)
         {
             PanelRegistration registration = snapshot.panels[i];
@@ -218,8 +220,6 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
                 Log.Error("Editor panel '{0}' failed to detach: {1}", registration.attribute.id, exception);
             }
         }
-        for (int i = snapshot.modules.Length - 1; i >= 0; i--)
-            snapshot.modules[i].module.Stop(m_context);
         if (ReferenceEquals(m_active, snapshot))
             m_active = null;
     }
@@ -229,6 +229,11 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         CapturePanelStates(previous);
         m_workspace.Save(previous.workspace, previous.panels);
         var retained = new HashSet<object>(next.instances, ReferenceEqualityComparer.Instance);
+        for (int i = previous.modules.Length - 1; i >= 0; i--)
+        {
+            if (!retained.Contains(previous.modules[i].module))
+                previous.modules[i].module.Stop(m_context);
+        }
         for (int i = previous.panels.Length - 1; i >= 0; i--)
         {
             PanelRegistration registration = previous.panels[i];
@@ -243,22 +248,12 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
                 Log.Error("Editor panel '{0}' failed to detach: {1}", registration.attribute.id, exception);
             }
         }
-        for (int i = previous.modules.Length - 1; i >= 0; i--)
-        {
-            if (!retained.Contains(previous.modules[i].module))
-                previous.modules[i].module.Stop(m_context);
-        }
 
         var existing = new HashSet<object>(previous.instances, ReferenceEqualityComparer.Instance);
-        // Publish the candidate before starting new extensions so refreshes triggered by startup
+        // Publish the candidate before attaching new extensions so refreshes triggered by startup
         // retain the newly active generation instead of reactivating the stopped snapshot.
         m_active = next;
         m_interactions.history.UpdateHandlers(CreateHistoryHandlerMap(next.historyHandlers));
-        for (int i = 0; i < next.modules.Length; i++)
-        {
-            if (!existing.Contains(next.modules[i].module))
-                next.modules[i].module.Start(m_context);
-        }
         for (int i = 0; i < next.panels.Length; i++)
         {
             PanelRegistration registration = next.panels[i];
@@ -273,6 +268,11 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
                 registration.panel.isOpen = false;
                 Log.Error("Editor panel '{0}' failed to attach: {1}", registration.attribute.id, exception);
             }
+        }
+        for (int i = 0; i < next.modules.Length; i++)
+        {
+            if (!existing.Contains(next.modules[i].module))
+                next.modules[i].module.Start(m_context);
         }
         m_workspace.Restore(next.workspace);
     }

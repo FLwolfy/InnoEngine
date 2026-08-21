@@ -107,7 +107,9 @@ CLR 层的 icon 常量仍是 ImGui 所需的 `const string` glyph；`AssetIconKi
 - Tree/List/Grid 的未占用背景收到左键点击时会清除当前 Asset selection。
 - SceneAsset 打开 Action 由 Hierarchy feature 实现，但使用全局 Open 语义和共享路径参数，不形成 Panel project 引用。
 
-Asset Browser Module 会在 Workspace 中保存当前目录与 Asset persistent ID；路径外部移动时优先按 ID 恢复选择，路径已删除时逐级回退到仍存在的父目录。Panel 自己保存 List/Grid 模式、搜索过滤、scope/type filter、tree 宽度和 grid scale。
+Asset Browser Module 只在 Workspace 中保存当前目录；Asset selection 属于当前 Editor session，不写入 `editor.ini`。运行期间若选中的路径被外部移动，Change Tracker 仍会按本次 session 的路径变化同步 selection；被删除时则清除。Panel 自己保存 List/Grid 模式、搜索过滤、scope/type filter、tree 宽度、grid scale，以及 List 中 Name/Type/Source 两个分隔位置。列分隔位置以 `0..1` 的归一化值写入 `listNameSeparator` 和 `listTypeSeparator`，因此 Panel 宽度变化后仍能恢复相同比例。
+
+List 的三个 column 使用同一个内容 inset，手动 splitter 只占用独立 hit area，不会吞掉 Name、Type 或 Source 的左右留白。Grid 图标和文件名使用 draw-list overlay 绘制，不通过 `SetCursorScreenPos` 移动布局 cursor；图标先从卡片中扣除顶部、水平和 label 间距，再按剩余区域等比缩小。最终位置使用 baked glyph 的 `X0/Y0/X1/Y1` 可见边界计算，所以 Font Awesome 中左右 bearing 不对称的 Cube、Folder 等图标也会把真实轮廓中心放在卡片水平中心线上，并且不会越过卡片上沿。Selectable 仍是唯一负责 cell 尺寸与输入的 ImGui item。Inline Rename 必须临时移动 cursor 时，会在恢复布局位置后提交零尺寸 item，避免扩展 parent boundary 的 ImGui assertion。
 
 ## Scripting API
 

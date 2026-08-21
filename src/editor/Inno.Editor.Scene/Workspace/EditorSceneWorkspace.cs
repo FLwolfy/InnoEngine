@@ -37,19 +37,15 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
     private bool m_isAttached;
     private string[]? m_pendingScenePaths;
     private string m_pendingActivePath = string.Empty;
-    private string m_pendingSelectionScene = string.Empty;
-    private string m_pendingSelectionKind = string.Empty;
-    private int[] m_pendingSelectionObjectPath = [];
-    private int m_pendingSelectionIndex = -1;
     private long m_nextRestoreAttemptTimestamp;
     private long m_waitingTypeCatalogVersion = -1;
 
     /// <summary>
-    /// Creates a scene workspace and optionally enables editor selection restoration.
+    /// Creates a scene workspace and optionally enables editor selection coordination.
     /// </summary>
     /// <param name="interactions">
     /// The active editor interaction entry point. The extension runtime supplies this dependency automatically;
-    /// direct tooling callers may omit it when selection restoration is unnecessary.
+    /// direct tooling callers may omit it when selection coordination is unnecessary.
     /// </param>
     public EditorSceneWorkspace(EditorInteractions? interactions = null)
     {
@@ -314,10 +310,6 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
         {
             writer.Set("openScenes", m_pendingScenePaths);
             writer.Set("activeScene", m_pendingActivePath);
-            writer.Set("selectionScene", m_pendingSelectionScene);
-            writer.Set("selectionKind", m_pendingSelectionKind);
-            writer.Set("selectionObjectPath", m_pendingSelectionObjectPath);
-            writer.Set("selectionIndex", m_pendingSelectionIndex);
             return;
         }
         string[] scenePaths = SceneManager.loadedScenes
@@ -327,7 +319,6 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
         writer.Set("openScenes", scenePaths);
         if (SceneManager.activeScene is GameScene active && TryGetSourcePath(active, out string activePath))
             writer.Set("activeScene", activePath);
-        CaptureSelection(writer);
     }
 
     /// <inheritdoc />
@@ -336,10 +327,6 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
         ArgumentNullException.ThrowIfNull(reader);
         string[] paths = reader.Get("openScenes", Array.Empty<string>());
         m_pendingActivePath = reader.Get("activeScene", string.Empty);
-        m_pendingSelectionScene = reader.Get("selectionScene", string.Empty);
-        m_pendingSelectionKind = reader.Get("selectionKind", string.Empty);
-        m_pendingSelectionObjectPath = reader.Get("selectionObjectPath", Array.Empty<int>());
-        m_pendingSelectionIndex = reader.Get("selectionIndex", -1);
         if (paths.Length == 0)
         {
             m_pendingScenePaths = null;
@@ -540,75 +527,6 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
             m_sourceChanges.Enqueue(changeSet.changes[i]);
     }
 
-    private void CaptureSelection(EditorWorkspaceStateWriter writer)
-    {
-        object? selected = m_interactions?.selection.selectedTarget;
-        GameScene? scene = selected switch
-        {
-            GameScene value => value,
-            GameObject value => value.scene,
-            GameComponent value when !value.isDestroyed => value.gameObject.scene,
-            GameSystem value when !value.isDestroyed => FindSystemScene(value),
-            _ => null
-        };
-        if (scene is null || !TryGetSourcePath(scene, out string scenePath))
-            return;
-
-        writer.Set("selectionScene", scenePath);
-        switch (selected)
-        {
-            case GameScene:
-                writer.Set("selectionKind", "scene");
-                break;
-            case GameObject gameObject:
-                writer.Set("selectionKind", "object");
-                writer.Set("selectionObjectPath", GetObjectPath(gameObject));
-                break;
-            case GameComponent component:
-                writer.Set("selectionKind", "component");
-                writer.Set("selectionObjectPath", GetObjectPath(component.gameObject));
-                writer.Set("selectionIndex", component.gameObject.GetComponentIndex(component));
-                break;
-            case GameSystem system:
-                writer.Set("selectionKind", "system");
-                writer.Set("selectionIndex", scene.GetSystemIndex(system));
-                break;
-        }
-    }
-
-    private void RestoreSelection()
-    {
-        if (m_interactions is null)
-            return;
-        string scenePath = m_pendingSelectionScene;
-        SceneDocument? document = m_documents.Values.FirstOrDefault(value =>
-            string.Equals(value.sourcePath, scenePath, StringComparison.OrdinalIgnoreCase));
-        if (document is null)
-            return;
-
-        object? target = document.scene;
-        string kind = m_pendingSelectionKind;
-        int[] path = m_pendingSelectionObjectPath;
-        if (kind is "object" or "component" && path.Length > 0)
-        {
-            GameObject? gameObject = ResolveObjectPath(document.scene, path);
-            target = gameObject;
-            if (kind == "component" && gameObject is not null)
-            {
-                int index = m_pendingSelectionIndex;
-                IReadOnlyList<GameComponent> components = gameObject.GetComponents();
-                target = index >= 0 && index < components.Count ? components[index] : gameObject;
-            }
-        }
-        else if (kind == "system")
-        {
-            int index = m_pendingSelectionIndex;
-            IReadOnlyList<GameSystem> systems = document.scene.GetSystems();
-            target = index >= 0 && index < systems.Count ? systems[index] : document.scene;
-        }
-        _ = m_interactions.For(m_interactions.focusedArea, target).Select();
-    }
-
     private void TryRestorePendingScenes()
     {
         if (m_pendingScenePaths is null)
@@ -689,7 +607,8 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
             string.Equals(document.sourcePath, m_pendingActivePath, StringComparison.OrdinalIgnoreCase));
         if (activeDocument is not null && activeDocument.scene.isLoaded)
             SceneManager.SetActiveScene(activeDocument.scene);
-        RestoreSelection();
+        if (m_interactions is not null)
+            _ = m_interactions.For(m_interactions.focusedArea).Select();
         m_pendingScenePaths = null;
         m_waitingTypeCatalogVersion = -1;
     }
@@ -719,43 +638,6 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
             }
         }
     }
-
-    private static int[] GetObjectPath(GameObject gameObject)
-    {
-        var path = new List<int>();
-        for (Transform current = gameObject.transform; ; current = current.parent)
-        {
-            path.Add(current.siblingIndex);
-            if (current.parent is null)
-                break;
-        }
-        path.Reverse();
-        return path.ToArray();
-    }
-
-    private static GameObject? ResolveObjectPath(GameScene scene, IReadOnlyList<int> path)
-    {
-        if (path.Count == 0)
-            return null;
-        Transform[] roots = scene.GetObjects()
-            .Select(static gameObject => gameObject.transform)
-            .Where(static transform => transform.parent is null)
-            .OrderBy(static transform => transform.siblingIndex)
-            .ToArray();
-        if (path[0] < 0 || path[0] >= roots.Length)
-            return null;
-        Transform current = roots[path[0]];
-        for (int i = 1; i < path.Count; i++)
-        {
-            if (path[i] < 0 || path[i] >= current.children.Count)
-                return null;
-            current = current.children[path[i]];
-        }
-        return current.gameObject;
-    }
-
-    private static GameScene? FindSystemScene(GameSystem system)
-        => SceneManager.loadedScenes.FirstOrDefault(scene => scene.GetSystems().Contains(system));
 
     internal SceneDocumentSnapshot CaptureDocumentSnapshot(GameScene scene)
     {

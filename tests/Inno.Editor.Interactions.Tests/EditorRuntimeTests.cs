@@ -36,6 +36,7 @@ public sealed class EditorRuntimeTests : IDisposable
         TestModule.rebuildDuringRestore = false;
         TestPanel.attachCount = 0;
         TestPanel.detachCount = 0;
+        TestPanel.firstAttachPrecededModuleStart = false;
         DeferredAction.executeCount = 0;
         NeutralHistoryHandler.value = 0;
         UpdateBarrierModule.block = false;
@@ -70,6 +71,7 @@ public sealed class EditorRuntimeTests : IDisposable
     {
         Assert.True(TestModule.startCount > 0);
         Assert.True(TestPanel.attachCount > 0);
+        Assert.True(TestPanel.firstAttachPrecededModuleStart);
         Assert.True(m_runtime.panelCount >= 1);
     }
 
@@ -530,10 +532,13 @@ public sealed class TestPanel(TestModule module) : EditorPanel
 {
     public static int attachCount;
     public static int detachCount;
+    public static bool firstAttachPrecededModuleStart;
 
     protected override void OnAttach(EditorContext context)
     {
         _ = module;
+        if (attachCount == 0)
+            firstAttachPrecededModuleStart = TestModule.startCount == 0;
         attachCount++;
     }
 

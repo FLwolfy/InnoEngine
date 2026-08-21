@@ -3,13 +3,16 @@ using Inno.Editor.Core;
 namespace Inno.Editor.Interactions;
 
 [EditorAction(EditorActions.TogglePanel, EditorAreas.MainMenu)]
-internal sealed class TogglePanelAction : EditorAction<EditorPanel>
+internal sealed class TogglePanelAction : EditorAction
 {
-    protected override EditorActionState Query(EditorActionContext<EditorPanel> context)
-        => new(true, true, context.target.isOpen);
+    protected override EditorActionState Query(EditorActionContext context)
+        => context.TryGetArgument(out EditorPanel? panel)
+            ? new EditorActionState(true, true, panel.isOpen)
+            : EditorActionState.hidden;
 
-    protected override void Execute(EditorActionContext<EditorPanel> context)
+    protected override void Execute(EditorActionContext context)
     {
-        context.target.isOpen = !context.target.isOpen;
+        if (context.TryGetArgument(out EditorPanel? panel))
+            panel.isOpen = !panel.isOpen;
     }
 }

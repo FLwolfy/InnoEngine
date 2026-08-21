@@ -35,7 +35,7 @@ public static partial class ImGuiWidget
         nativeStyle.WindowBorderSize = style.borderSize;
         nativeStyle.WindowMinSize = style.windowMinimumSize;
         nativeStyle.WindowTitleAlign = new Vector2(0.5f, 0.5f);
-        nativeStyle.WindowMenuButtonPosition = ImGuiDir.Right;
+        nativeStyle.WindowMenuButtonPosition = ImGuiDir.None;
         nativeStyle.ChildRounding = style.windowRounding;
         nativeStyle.ChildBorderSize = style.borderSize;
         nativeStyle.PopupRounding = style.windowRounding;

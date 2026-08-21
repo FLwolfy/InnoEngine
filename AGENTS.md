@@ -105,6 +105,7 @@
 - 保存、打开、选择等纯工作流操作默认不进入数据 Undo；它们只有在确实修改项目数据时才记录对应的数据部分。
 - 跨启动的项目语义状态由 Module/Panel 实现 `IEditorWorkspaceState`，不进行中央注册。Provider ID 必须稳定且全局唯一，持久值只允许可重新解析的中立数据。
 - `editor.ini` 是统一且可读的项目级 Editor settings 文档：标准 ImGui section 保存 layout；每个 Module/Panel 分别使用 `[InnoEditor][Module.<id>]` / `[InnoEditor][Panel.<id>]`；Panel 开关使用 `[InnoEditor][Panels]`。禁止用 Base64 或单一 opaque payload 包装全部 Workspace。Undo 栈、dirty Scene 内容、runtime 引用和编译中间态不得持久化。
+- Editor Selection 是当前 session 的瞬时交互状态，不得写入 `editor.ini`。Workspace 可以保存可独立解释的导航位置、已打开文档和 active document，但启动后不得自动恢复 Asset、Scene、GameObject、Component 或 System selection。
 - Editor 正常退出时必须先捕获全部 Workspace provider，再捕获最新 ImGui layout，最后在 Module 停止和 Scene 卸载前强制原子写入一次完整 `editor.ini`。运行期间仍可节流保存，但不能把它当作退出保存的替代品。
 - Editor Scene 修改统一进入 `Inno.Editor.Scene.SceneEdits`。普通属性只保存单 property bytes；Component/System 保存 element identity/type/index/state；GameObject 删除保存最小 subtree；层级只保存受影响 placement；禁止为小修改序列化或恢复完整 Scene。
 - Workspace restore 必须容忍缺失 Asset、损坏 payload 和脚本类型尚未进入 TypeCache。候选未完整准备好前不得破坏当前可编辑状态。
@@ -118,3 +119,7 @@
 - 删除或重构 API 时同步修改所有调用方，不保留旧 overload、旧 namespace facade、转发类型或 `[Obsolete]` 兼容层，除非用户明确要求保留。
 - 以上规则不禁止保障当前运行正确性所需的运行时标识，例如 TypeCache/Assembly generation、并发 revision、change counter、content hash、artifact fingerprint、MVID、job handle generation，以及只用于拒绝损坏或错误格式输入的严格 magic/header。它们不得演变成读取多代 legacy schema 的兼容机制。
 - 代码审查或清理包含 `version`、`legacy`、`migration`、`compatibility`、`former`、`deprecated` 等名称的实现时，必须先判断其是否只服务于旧数据/API；如果是，应连同测试和文档一起删除，而不是继续扩展。
+
+## 16. 完成提示音
+- 完成用户要求的代码或文件操作并通过必要验证后，默认播放 `/System/Library/Sounds/Glass.aiff` 作为完成提示音，无需用户在每次任务中重复要求。
+- 如果当前环境无法访问音频设备，应在最终结果中明确说明提示音未能播放；用户明确要求静默时不播放。

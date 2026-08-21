@@ -42,12 +42,6 @@ public sealed class AssetEditorModule : EditorModule, IEditorWorkspaceState, IDi
     {
         ArgumentNullException.ThrowIfNull(writer);
         writer.Set("currentDirectory", browser.currentDirectory);
-        if (m_interactions.selection.selectedTarget is AssetFileEntry selected)
-        {
-            writer.Set("selectedPath", selected.relativePath);
-            if (AssetManager.TryGetPersistentId(selected.relativePath, out Guid persistentId))
-                writer.Set("selectedId", persistentId);
-        }
     }
 
     /// <inheritdoc />
@@ -61,17 +55,6 @@ public sealed class AssetEditorModule : EditorModule, IEditorWorkspaceState, IDi
             directory = Normalize(Path.GetDirectoryName(directory));
         }
         browser.SetCurrentDirectory(directory);
-
-        if (m_context is null)
-            return;
-        string selectedPath = reader.Get("selectedPath", string.Empty);
-        if (reader.TryGet("selectedId", out Guid selectedId) &&
-            AssetManager.TryGetInfo(selectedId, out AssetInfo? info) &&
-            info is not null && !string.IsNullOrEmpty(info.relativePath))
-        {
-            selectedPath = info.relativePath;
-        }
-        browser.Select(m_context, selectedPath);
     }
 
     internal EditorInteractions interactions => m_interactions;

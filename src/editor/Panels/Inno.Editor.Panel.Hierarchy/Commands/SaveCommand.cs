@@ -10,6 +10,7 @@ using Inno.Engine.Scene;
 namespace Inno.Editor.Panel.Hierarchy;
 
 [EditorAction(EditorActions.Save)]
+[EditorMenu(EditorAreas.MainMenu, "File/Save", order: 100)]
 [EditorShortcut(KeyCode.S, primary: true)]
 internal sealed class SaveCommand(EditorSceneWorkspace workspace) : EditorAction
 {

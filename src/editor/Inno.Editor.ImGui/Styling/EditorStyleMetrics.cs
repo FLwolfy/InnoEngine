@@ -197,11 +197,20 @@ public sealed class EditorStyleMetrics
     /// <summary>Gets spacing between asset browser toolbar sections.</summary>
     public float assetToolbarSectionSpacing { get; } = 5f;
 
-    /// <summary>Gets the asset list name-column width.</summary>
-    public float assetListNameColumnWidth { get; } = 244f;
+    /// <summary>Gets the default normalized position of the asset list name/type separator.</summary>
+    public float assetListNameSeparatorPosition { get; } = 0.4f;
 
-    /// <summary>Gets the asset list type-column width.</summary>
-    public float assetListTypeColumnWidth { get; } = 164f;
+    /// <summary>Gets the default normalized position of the asset list type/source separator.</summary>
+    public float assetListTypeSeparatorPosition { get; } = 0.7f;
+
+    /// <summary>Gets the minimum normalized width reserved for each asset list column.</summary>
+    public float assetListMinimumColumnRatio { get; } = 0.1f;
+
+    /// <summary>Gets the horizontal hit width of an asset list column separator.</summary>
+    public float assetListSeparatorHitWidth { get; } = 8f;
+
+    /// <summary>Gets the horizontal inset between an asset list separator and column content.</summary>
+    public float assetListContentHorizontalPadding { get; } = 6f;
 
     /// <summary>Gets horizontal padding for asset grid labels.</summary>
     public float assetGridLabelHorizontalPadding { get; } = 10f;
@@ -214,6 +223,15 @@ public sealed class EditorStyleMetrics
 
     /// <summary>Gets the scale bias added to asset grid icons.</summary>
     public float assetGridScaleBias { get; } = 2f;
+
+    /// <summary>Gets the top inset reserved above an asset grid icon.</summary>
+    public float assetGridIconTopPadding { get; } = 8f;
+
+    /// <summary>Gets the horizontal inset that constrains an asset grid icon inside its card.</summary>
+    public float assetGridIconHorizontalPadding { get; } = 8f;
+
+    /// <summary>Gets the vertical spacing between an asset grid icon and its label.</summary>
+    public float assetGridIconLabelSpacing { get; } = 6f;
 
     /// <summary>Gets spacing around breadcrumb separators.</summary>
     public float assetBreadcrumbSpacing { get; } = 4f;

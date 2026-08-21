@@ -6,7 +6,7 @@ using Inno.Editor.Core;
 namespace Inno.Editor.Panel.Logging;
 
 /// <summary>Owns the editor diagnostic streams for one editor runtime.</summary>
-[EditorModule(order: 300)]
+[EditorModule(order: int.MinValue)]
 public sealed class LoggingModule : EditorModule, IDisposable
 {
     private bool m_started;

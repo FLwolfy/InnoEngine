@@ -30,10 +30,14 @@ public static partial class ImGuiWidget
         bool hovered = NativeImGui.IsItemHovered();
         bool active = NativeImGui.IsItemActive();
 
-        uint color = hovered || active
-            ? NativeImGui.ColorConvertFloat4ToU32(EditorPalette.compactControlHovered)
-            : NativeImGui.GetColorU32(ImGuiCol.Text);
-        NativeImGui.GetWindowDrawList().AddText(cursor + (controlSize - iconSize) * 0.5f, color, icon);
+        DrawIconButtonPresentation(
+            NativeImGui.GetWindowDrawList(),
+            cursor,
+            controlSize,
+            icon,
+            iconSize,
+            hovered,
+            active);
 
         if (!string.IsNullOrWhiteSpace(tooltip) && hovered && NativeImGui.BeginTooltip())
         {
@@ -52,6 +56,21 @@ public static partial class ImGuiWidget
     {
         float iconSlotWidth = NativeImGui.GetTextLineHeight();
         return new Vector2(iconSlotWidth + style.iconLabelSpacing, NativeImGui.GetFrameHeight());
+    }
+
+    private static void DrawIconButtonPresentation(
+        ImDrawListPtr drawList,
+        Vector2 minimum,
+        Vector2 controlSize,
+        string icon,
+        Vector2 iconSize,
+        bool hovered,
+        bool active)
+    {
+        uint color = hovered || active
+            ? NativeImGui.ColorConvertFloat4ToU32(EditorPalette.compactControlHovered)
+            : NativeImGui.GetColorU32(ImGuiCol.Text);
+        drawList.AddText(minimum + (controlSize - iconSize) * 0.5f, color, icon);
     }
 
     /// <summary>
