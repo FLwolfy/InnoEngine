@@ -213,10 +213,13 @@ public sealed class EditorStyleMetrics
     public float assetListContentHorizontalPadding { get; } = 6f;
 
     /// <summary>Gets horizontal padding for asset grid labels.</summary>
-    public float assetGridLabelHorizontalPadding { get; } = 10f;
+    public float assetGridLabelHorizontalPadding { get; } = 6f;
 
     /// <summary>Gets bottom padding for asset grid labels.</summary>
-    public float assetGridLabelBottomPadding { get; } = 4f;
+    public float assetGridLabelBottomPadding { get; } = 3f;
+
+    /// <summary>Gets the additional vertical spacing between asset grid label lines.</summary>
+    public float assetGridLabelLineSpacing { get; } = -2f;
 
     /// <summary>Gets fixed padding added to calculated asset grid cells.</summary>
     public float assetGridFixedCellPadding { get; } = 8f;
@@ -225,13 +228,13 @@ public sealed class EditorStyleMetrics
     public float assetGridScaleBias { get; } = 2f;
 
     /// <summary>Gets the top inset reserved above an asset grid icon.</summary>
-    public float assetGridIconTopPadding { get; } = 8f;
+    public float assetGridIconTopPadding { get; } = 6f;
 
     /// <summary>Gets the horizontal inset that constrains an asset grid icon inside its card.</summary>
-    public float assetGridIconHorizontalPadding { get; } = 8f;
+    public float assetGridIconHorizontalPadding { get; } = 6f;
 
     /// <summary>Gets the vertical spacing between an asset grid icon and its label.</summary>
-    public float assetGridIconLabelSpacing { get; } = 6f;
+    public float assetGridIconLabelSpacing { get; } = 4f;
 
     /// <summary>Gets spacing around breadcrumb separators.</summary>
     public float assetBreadcrumbSpacing { get; } = 4f;

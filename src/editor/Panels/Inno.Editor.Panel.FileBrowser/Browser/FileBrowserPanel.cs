@@ -24,6 +24,7 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
 {
     #region Constants
     private const int C_SEARCH_BUFFER_SIZE = 256;
+    private const int C_GRID_LABEL_LINE_COUNT = 2;
     #endregion
 
     #region State
@@ -785,10 +786,18 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
             float width = MathF.Max(
                 1f,
                 itemMax.X - itemMin.X - EditorWidget.style.assetGridLabelHorizontalPadding);
-            float y = itemMax.Y -
-                      NativeImGui.GetTextLineHeight() -
-                      EditorWidget.style.assetGridLabelBottomPadding -
-                      EditorWidget.style.inlineRenameVerticalInset * 2f;
+            float lineHeight = NativeImGui.GetTextLineHeight();
+            float lineAdvance = MathF.Max(
+                1f,
+                lineHeight + EditorWidget.style.assetGridLabelLineSpacing);
+            float labelAreaHeight = lineHeight +
+                                    lineAdvance * (C_GRID_LABEL_LINE_COUNT - 1);
+            float labelAreaTop = itemMax.Y -
+                                 EditorWidget.style.assetGridLabelBottomPadding -
+                                 labelAreaHeight;
+            float y = labelAreaTop +
+                      (labelAreaHeight - lineHeight) * 0.5f -
+                      EditorWidget.style.inlineRenameVerticalInset;
             NativeImGui.SetCursorScreenPos(new Vector2(
                 itemMin.X + EditorWidget.style.assetGridLabelHorizontalPadding * 0.5f,
                 y));
@@ -860,14 +869,23 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
         string[] nameLines = FitTextToLines(
             name,
             MathF.Max(1f, size.X - EditorWidget.style.assetGridLabelHorizontalPadding),
-            2);
-        float lineHeight = NativeImGui.CalcTextSize("A").Y;
-        float labelHeight = lineHeight * Math.Max(1, nameLines.Length);
-        float labelY = max.Y - labelHeight - EditorWidget.style.assetGridLabelBottomPadding;
+            C_GRID_LABEL_LINE_COUNT);
+        float lineHeight = NativeImGui.GetTextLineHeight();
+        float lineAdvance = MathF.Max(
+            1f,
+            lineHeight + EditorWidget.style.assetGridLabelLineSpacing);
+        float labelAreaHeight = lineHeight +
+                                lineAdvance * (C_GRID_LABEL_LINE_COUNT - 1);
+        float labelAreaTop = max.Y -
+                             EditorWidget.style.assetGridLabelBottomPadding -
+                             labelAreaHeight;
+        float labelHeight = lineHeight +
+                            lineAdvance * Math.Max(0, nameLines.Length - 1);
+        float labelY = labelAreaTop + (labelAreaHeight - labelHeight) * 0.5f;
         float iconAreaTop = min.Y + EditorWidget.style.assetGridIconTopPadding;
         float iconAreaBottom = MathF.Max(
             iconAreaTop + 1f,
-            labelY - EditorWidget.style.assetGridIconLabelSpacing);
+            labelAreaTop - EditorWidget.style.assetGridIconLabelSpacing);
         float maximumIconWidth = MathF.Max(
             1f,
             size.X - EditorWidget.style.assetGridIconHorizontalPadding * 2f);
@@ -904,7 +922,7 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
             Vector2 lineSize = NativeImGui.CalcTextSize(nameLines[i]);
             Vector2 linePosition = new(
                 min.X + (size.X - lineSize.X) * 0.5f,
-                labelY + lineHeight * i);
+                labelY + lineAdvance * i);
             NativeImGui.AddText(drawList, linePosition, textColor, nameLines[i]);
         }
         NativeImGui.PopClipRect();
