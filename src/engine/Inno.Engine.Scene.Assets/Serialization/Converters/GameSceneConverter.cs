@@ -75,7 +75,7 @@ internal sealed class GameSceneConverter : SerializationConverter<GameScene>
         ArgumentNullException.ThrowIfNull(target);
         SceneGraphSerialization.ValidateScene(reader);
         Guid sceneId = reader.Read<Guid>(SceneGraphSerialization.C_SCENE_ID_KEY);
-        target.ValidateRestoreTarget(sceneId);
+        target.PrepareRestoreTarget(sceneId);
         target.name = reader.Read<string>(SceneGraphSerialization.C_NAME_KEY);
         try
         {

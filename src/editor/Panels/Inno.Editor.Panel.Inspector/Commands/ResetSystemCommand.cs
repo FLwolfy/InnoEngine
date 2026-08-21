@@ -12,5 +12,9 @@ internal sealed class ResetSystemCommand : EditorAction<SystemEditorTarget>
             : EditorActionState.disabled;
 
     protected override void Execute(EditorActionContext<SystemEditorTarget> context)
-        => context.target.scene.ResetSystem(context.target.system);
+        => SceneSnapshotOperation.Execute(
+            context,
+            $"Reset {context.target.system.GetType().Name}",
+            context.target.scene,
+            () => context.target.scene.ResetSystem(context.target.system));
 }

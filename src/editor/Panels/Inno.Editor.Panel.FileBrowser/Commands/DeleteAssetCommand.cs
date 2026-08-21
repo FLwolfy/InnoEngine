@@ -15,7 +15,7 @@ internal sealed class DeleteAssetCommand(AssetEditorModule assets) : EditorActio
     protected override void Execute(EditorActionContext<AssetFileEntry> context)
     {
         if (TryGetAssetContext(context, out AssetEditorContext? assetContext) && assetContext is not null)
-            _ = assets.Delete(assetContext);
+            _ = AssetDeleteOperation.Execute(context, assets, assetContext);
     }
 
     private bool TryGetAssetContext(

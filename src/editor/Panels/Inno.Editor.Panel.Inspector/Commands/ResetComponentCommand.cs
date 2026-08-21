@@ -12,5 +12,9 @@ internal sealed class ResetComponentCommand : EditorAction<ComponentEditorTarget
             : EditorActionState.disabled;
 
     protected override void Execute(EditorActionContext<ComponentEditorTarget> context)
-        => context.target.gameObject.ResetComponent(context.target.component);
+        => SceneSnapshotOperation.Execute(
+            context,
+            $"Reset {context.target.component.GetType().Name}",
+            context.target.gameObject.scene,
+            () => context.target.gameObject.ResetComponent(context.target.component));
 }

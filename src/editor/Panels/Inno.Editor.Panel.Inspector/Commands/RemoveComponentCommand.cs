@@ -15,6 +15,12 @@ internal sealed class RemoveComponentCommand : EditorAction<ComponentEditorTarge
     protected override void Execute(EditorActionContext<ComponentEditorTarget> context)
     {
         if (context.target.component is not Transform)
-            _ = context.target.gameObject.RemoveComponent(context.target.component);
+        {
+            SceneSnapshotOperation.Execute(
+                context,
+                $"Remove {context.target.component.GetType().Name}",
+                context.target.gameObject.scene,
+                () => _ = context.target.gameObject.RemoveComponent(context.target.component));
+        }
     }
 }

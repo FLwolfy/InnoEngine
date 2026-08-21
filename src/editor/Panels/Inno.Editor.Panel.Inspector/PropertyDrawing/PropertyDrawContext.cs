@@ -1,6 +1,8 @@
 using System;
+using System.Linq;
 
 using Inno.Core.Serialization;
+using Inno.Engine.Scene;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 
@@ -82,10 +84,31 @@ public sealed class PropertyDrawContext
     /// <param name="value">New value.</param>
     public void SetValue(object? value)
     {
-        if (!isReadOnly)
+        if (isReadOnly)
+            return;
+        object? before = m_getter();
+        if (Equals(before, value))
+            return;
+        object? selected = interactions.selection.selectedTarget;
+        GameScene? scene = ResolveScene(selected);
+        if (scene is not null)
         {
-            m_setter(value);
+            SceneSnapshotOperation.Execute(
+                interactions,
+                $"Change {label}",
+                scene,
+                () => m_setter(value),
+                new ScenePropertyHistoryKey(scene.identity.persistentId, path));
+            return;
         }
+
+        m_setter(value);
+        interactions.history.RecordValue<object?>(
+            $"Change {label}",
+            before,
+            value,
+            m_setter,
+            new PropertyHistoryKey(interactions.selection.selectedTarget, path));
     }
 
     /// <summary>
@@ -163,5 +186,29 @@ public sealed class PropertyDrawContext
             m_renderer);
         IPropertyDrawer drawer = m_renderer.Resolve(childType);
         drawer.Draw(childContext);
+    }
+
+    private readonly record struct PropertyHistoryKey(object? target, string path);
+
+    private readonly record struct ScenePropertyHistoryKey(Guid sceneId, string path);
+
+    private static GameScene? ResolveScene(object? target)
+        => target switch
+        {
+            GameScene scene => scene,
+            GameObject gameObject => gameObject.scene,
+            GameComponent component when !component.isDestroyed => component.gameObject.scene,
+            GameSystem system when !system.isDestroyed => ResolveSystemScene(system),
+            _ => null
+        };
+
+    private static GameScene? ResolveSystemScene(GameSystem system)
+    {
+        foreach (GameScene scene in SceneManager.loadedScenes)
+        {
+            if (scene.GetSystems().Contains(system))
+                return scene;
+        }
+        return null;
     }
 }

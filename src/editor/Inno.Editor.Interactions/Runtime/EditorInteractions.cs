@@ -20,10 +20,18 @@ public sealed class EditorInteractions
     internal EditorInteractions(EditorContext editor)
     {
         m_editor = editor ?? throw new ArgumentNullException(nameof(editor));
+        history = new EditorHistory();
     }
 
-    /// <summary>Gets the shared read-only editor selection state.</summary>
+    /// <summary>
+    /// Gets the shared read-only editor selection state.
+    /// </summary>
     public EditorSelectionState selection { get; } = new();
+
+    /// <summary>
+    /// Gets the transactional Undo and Redo history owned by this editor runtime.
+    /// </summary>
+    public EditorHistory history { get; }
 
     /// <summary>Gets the area that most recently received keyboard focus.</summary>
     public string focusedArea => m_focusedArea;
@@ -65,6 +73,7 @@ public sealed class EditorInteractions
         Actions.Clear();
         Drops.Cancel();
         _ = For(EditorAreas.Global).Select();
+        history.Dispose();
     }
 
     internal bool DispatchShortcut(KeyPressedEvent keyEvent)

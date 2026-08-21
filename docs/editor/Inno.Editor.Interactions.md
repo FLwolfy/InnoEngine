@@ -171,6 +171,90 @@ public sealed class ClipToStateDrop
 
 `EditorInteractionRuntime` 从当前 TypeCache snapshot 原子构建 Module、Action、Menu source、Drop、Panel 和 Modal。候选冲突或构造失败会拒绝新 snapshot，旧 generation 继续工作。Host 类型实例会尽量保留；插件类型会 Detach/Stop/Dispose，避免固定旧 ALC。
 
+## Undo / Redo
+
+每个 `EditorInteractions` 拥有一个 `EditorHistory`。Action 通过 `context.history` 使用它，不需要额外注册，也不需要把 Action 设计成简单 inverse：
+
+```csharp
+EditorHistoryResult result = context.history.Execute(
+    "Create State",
+    execute: () =>
+    {
+        graph.CreateState(id);
+        return EditorHistoryResult.Success();
+    },
+    undo: () =>
+    {
+        graph.RemoveState(id);
+        return EditorHistoryResult.Success();
+    });
+```
+
+初始 execute 失败时不会产生历史项。Undo 或 Redo 失败时，操作保持在原栈，因此目标恢复后可以重试，也可以由用户清空历史。执行新的操作会释放整个 Redo 分支；历史默认最多保留 256 个顶层操作，淘汰时调用 `Dispose()`，允许文件删除等操作清理暂存资源。
+
+已经由 UI 应用的值使用 `RecordValue`，相同 `mergeKey` 的连续输入会合并为一项：
+
+```csharp
+target.weight = edited;
+context.history.RecordValue(
+    "Change Weight",
+    before,
+    edited,
+    value => target.weight = value,
+    $"weight:{target.id}");
+```
+
+多个修改使用事务；事务的 Undo 按反序执行，Redo 按正序执行，中途失败会尽力回滚已经完成的子步骤：
+
+```csharp
+using EditorHistoryTransaction transaction = context.history.BeginTransaction("Create Controller");
+// Execute or RecordApplied child operations.
+transaction.Commit();
+```
+
+复杂图操作应派生 `EditorHistoryOperation` 并保存中立快照，而不是只保存一个可能失效的对象引用。Scene feature 使用完整序列化图快照恢复对象 ID、引用、Component/System 和层级顺序。脚本 assembly generation 切换前会清空 history，防止旧插件实例被历史 delegate 固定。
+
+内建 `Edit/Undo` 与 `Edit/Redo` 菜单自动显示下一操作名称。快捷键为 Command/Ctrl+Z、Command/Ctrl+Shift+Z，并额外支持 Command/Ctrl+Y。
+
+## Workspace 存储
+
+Interactions 自动协调 Core 的 `IEditorWorkspaceState` provider，并把项目语义状态写入：
+
+```text
+<Project>/editor.ini
+```
+
+每个 provider 使用独立、可读且带版本号的 INI section。单个复杂值使用一行 JSON 表示数组或字符串，不使用 Base64，也不把全部状态包进 opaque payload：
+
+```ini
+[InnoEditor][Project]
+SchemaVersion=2
+
+[InnoEditor][Module.scene-workspace]
+Version=1
+activeScene="Scenes/Main.innoscene"
+openScenes=["Scenes/Main.innoscene","Scenes/UI.innoscene"]
+
+[InnoEditor][Panel.asset-browser-panel]
+Version=1
+filter=""
+viewMode="List"
+
+[InnoEditor][Panels]
+asset.file-browser=true
+scene.hierarchy=true
+```
+
+文件通过临时文件 flush 后原子替换，并在运行期间进行约两秒的内容变化节流。退出时 Application 会在扩展停止前强制捕获所有 provider 和最新 ImGui layout，然后强制写入完整文档。未知 provider section 会保留，因此暂时移除插件不会销毁其设置；损坏的单个值只影响所属 provider。Panel 的 `isOpen` 按稳定 Panel ID 自动保存，不要求 Panel 实现接口。
+
+`EditorProjectSettings` 在内存中分别维护 ImGui layout 和具名 Inno Editor sections，避免 ImGui 覆盖 workspace 或 workspace 覆盖布局。旧版 Base64 `[InnoEditor][Workspace]` 及 `Library/Editor/Workspace.json` 会自动迁移。
+
+Workspace provider 的恢复状态按实例弱跟踪。只有成功完成 `RestoreWorkspaceState` 的 provider 才能参与后续 capture；脚本启动、TypeCache 重建或 Registry 事务在恢复回调中触发重入刷新时，同一个 provider 不会被再次调用，也不会用尚未初始化的默认字段覆盖磁盘 section。被新 snapshot 保留的 Module/Panel 仍以实际恢复状态为准，而不是仅因实例相同就跳过首次恢复。
+
+Undo 栈、dirty Scene 内容、runtime 对象和编译中间态不会跨进程保存。它们要么无法安全跨代际恢复，要么本身可以由 Asset Database 和脚本构建图重建。
+
+Scene 内容历史遵循两条规则：结构修改保存前后 Scene snapshot，并在保持 `GameScene` 实例的情况下重建其内部对象图；值修改若可能跨对象图重建，则只捕获 persistent ID，并在 Undo/Redo 时解析当前对象。历史操作不能保存可能已经 destroyed 的裸 Scene 对象回调。
+
 ## EditorScripts facade
 
 物理源码无论位于 `Actions`、`Menus`、`DragDrop`、`Runtime` 或 `Selection`，都使用项目级 namespace `Inno.Editor.Interactions`。EditorScripts 对应的唯一逻辑 namespace 是 `InnoEditor.Interactions`。

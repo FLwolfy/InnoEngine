@@ -29,6 +29,19 @@ public sealed class ImGuiEditorRuntime : Inno.Editor.Core.EditorRuntime
         m_runtime = new EditorInteractionRuntime(context);
     }
 
+    /// <summary>
+    /// Creates an ImGui editor runtime over an existing project context.
+    /// </summary>
+    /// <param name="context">The shared editor context that owns project settings and frame state.</param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="context"/> is <see langword="null"/>.
+    /// </exception>
+    public ImGuiEditorRuntime(EditorContext context)
+        : base(context ?? throw new ArgumentNullException(nameof(context)))
+    {
+        m_runtime = new EditorInteractionRuntime(context);
+    }
+
     /// <summary>Gets the active presentation-independent interaction entry point.</summary>
     public EditorInteractions interactions => m_runtime.interactions;
 
@@ -40,6 +53,18 @@ public sealed class ImGuiEditorRuntime : Inno.Editor.Core.EditorRuntime
 
     /// <inheritdoc />
     public override void Update(EditorFrame frame) => m_runtime.Update(frame);
+
+    /// <summary>
+    /// Captures all active editor workspace providers and flushes their project state to disk.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">
+    /// Thrown after this runtime has been disposed.
+    /// </exception>
+    public void SaveWorkspace()
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        m_runtime.SaveWorkspace();
+    }
 
     /// <summary>Draws the complete editor frame through ImGui.</summary>
     public void Draw()

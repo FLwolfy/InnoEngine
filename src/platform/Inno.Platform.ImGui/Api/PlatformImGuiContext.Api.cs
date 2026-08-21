@@ -27,6 +27,21 @@ public sealed partial class PlatformImGuiContext : IDisposable
     public partial void SetIniFile(string? filePath);
 
     /// <summary>
+    /// Loads Dear ImGui layout settings from an application-owned text document.
+    /// </summary>
+    /// <param name="settings">The Dear ImGui layout text, or an empty string when no layout exists.</param>
+    /// <exception cref="InvalidOperationException">Thrown after the first ImGui frame has started.</exception>
+    public partial void LoadIniSettings(string? settings);
+
+    /// <summary>
+    /// Captures Dear ImGui layout settings when the layout is dirty or when capture is explicitly forced.
+    /// </summary>
+    /// <param name="settings">The complete Dear ImGui layout text when capture succeeds.</param>
+    /// <param name="force">Whether to capture even when Dear ImGui did not request persistence.</param>
+    /// <returns><see langword="true"/> when layout text was captured.</returns>
+    public partial bool TryCaptureIniSettings(out string settings, bool force = false);
+
+    /// <summary>
     /// Renders one ImGui frame by running the provided draw callback.
     /// </summary>
     /// <param name="drawFrame">Draw callback that issues ImGui commands for this frame.</param>

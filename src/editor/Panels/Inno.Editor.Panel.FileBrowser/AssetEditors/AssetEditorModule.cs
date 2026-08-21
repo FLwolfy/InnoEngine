@@ -12,11 +12,14 @@ namespace Inno.Editor.Panel.FileBrowser;
 
 /// <summary>Owns shared Asset Browser state and asset-type extension dispatch.</summary>
 [EditorModule(order: 100)]
-public sealed class AssetEditorModule : EditorModule, IDisposable
+public sealed class AssetEditorModule : EditorModule, IEditorWorkspaceState, IDisposable
 {
+    private const string C_WORKSPACE_STATE_ID = "asset-browser";
+
     private readonly AssetEditorRegistry m_editors = new();
     private readonly AssetIconRegistry m_icons = new();
     private readonly EditorInteractions m_interactions;
+    private EditorContext? m_context;
     private bool m_disposed;
 
     /// <summary>Creates the Asset Browser feature module.</summary>
@@ -30,6 +33,49 @@ public sealed class AssetEditorModule : EditorModule, IDisposable
 
     /// <summary>Gets shared Asset Browser navigation and selection state.</summary>
     public AssetBrowserState browser { get; }
+
+    /// <inheritdoc />
+    public string workspaceStateId => C_WORKSPACE_STATE_ID;
+
+    /// <inheritdoc />
+    public int workspaceStateVersion => 1;
+
+    /// <inheritdoc />
+    public void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        writer.Set("currentDirectory", browser.currentDirectory);
+        if (m_interactions.selection.selectedTarget is AssetFileEntry selected)
+        {
+            writer.Set("selectedPath", selected.relativePath);
+            if (AssetManager.TryGetPersistentId(selected.relativePath, out Guid persistentId))
+                writer.Set("selectedId", persistentId);
+        }
+    }
+
+    /// <inheritdoc />
+    public void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+        string directory = reader.Get("currentDirectory", string.Empty);
+        while (!string.IsNullOrEmpty(directory) &&
+               (!AssetManager.TryGetFileSystemEntry(directory, out AssetFileEntry entry) || !entry.isDirectory))
+        {
+            directory = Normalize(Path.GetDirectoryName(directory));
+        }
+        browser.SetCurrentDirectory(directory);
+
+        if (m_context is null)
+            return;
+        string selectedPath = reader.Get("selectedPath", string.Empty);
+        if (reader.TryGet("selectedId", out Guid selectedId) &&
+            AssetManager.TryGetInfo(selectedId, out AssetInfo? info) &&
+            info is not null && !string.IsNullOrEmpty(info.relativePath))
+        {
+            selectedPath = info.relativePath;
+        }
+        browser.Select(m_context, selectedPath);
+    }
 
     internal EditorInteractions interactions => m_interactions;
 
@@ -90,11 +136,22 @@ public sealed class AssetEditorModule : EditorModule, IDisposable
     internal void Rename(AssetEditorContext context, string newName)
     {
         AssetEditor editor = m_editors.Resolve(context.assetType);
-        CommitRename(
+        AssetOperationValidation validation = ValidateRename(
             editor,
             context,
             Normalize(context.relativePath),
-            newName);
+            newName,
+            validateEditor: false,
+            out string targetPath);
+        if (!validation.isValid)
+            throw new InvalidOperationException(validation.message);
+        string sourcePath = Normalize(context.relativePath);
+        EditorHistoryResult result = m_interactions.history.Execute(
+            "Rename Asset",
+            () => MoveAsset(editor, context, sourcePath, targetPath),
+            () => MoveAsset(editor, context, targetPath, sourcePath));
+        if (!result.succeeded)
+            throw new InvalidOperationException(result.message);
     }
 
     internal bool Delete(AssetEditorContext context)
@@ -145,6 +202,18 @@ public sealed class AssetEditorModule : EditorModule, IDisposable
         return FileBrowserUtility.GetDefaultFileIcon();
     }
 
+    /// <inheritdoc />
+    protected override void OnStart(EditorContext context)
+    {
+        m_context = context ?? throw new ArgumentNullException(nameof(context));
+    }
+
+    /// <inheritdoc />
+    protected override void OnStop(EditorContext context)
+    {
+        m_context = null;
+    }
+
     /// <summary>
     /// Releases the current asset-editor and asset-icon registry snapshots.
     /// </summary>
@@ -188,21 +257,12 @@ public sealed class AssetEditorModule : EditorModule, IDisposable
             : AssetOperationValidation.valid;
     }
 
-    private void CommitRename(
+    private static EditorHistoryResult MoveAsset(
         AssetEditor editor,
         AssetEditorContext context,
         string sourcePath,
-        string newName)
+        string targetPath)
     {
-        AssetOperationValidation validation = ValidateRename(
-            editor,
-            context,
-            sourcePath,
-            newName,
-            validateEditor: false,
-            out string targetPath);
-        if (!validation.isValid)
-            throw new InvalidOperationException(validation.message);
         AssetManager.Move(sourcePath, targetPath);
         _ = context.interactions
             .For(
@@ -217,6 +277,7 @@ public sealed class AssetEditorModule : EditorModule, IDisposable
         {
             Log.Error("Asset editor rename hook failed for '{0}': {1}", targetPath, exception);
         }
+        return EditorHistoryResult.Success();
     }
 
     private static EditorValidationResult ToEditorValidation(AssetOperationValidation validation)

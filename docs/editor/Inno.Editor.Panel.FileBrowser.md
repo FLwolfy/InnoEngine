@@ -42,6 +42,8 @@ public sealed class AnimationClipEditor : AssetEditor
 
 Asset Rename/Delete 的物理事务始终由 `AssetManager` 执行。AssetEditor 只能验证以及接收提交后的通知，不能自行移动 source/meta/artifact，因此外部文件变化与 Editor 操作拥有同一身份规则。
 
+Create Folder、Rename 与 Delete 都接入共享 Undo/Redo。Delete 会把 source 和 `.imeta` 暂存到 `<Project>/Library/Editor/Undo`；Undo 恢复原 persistent ID，Redo 再走 `AssetManager.Delete`。Redo 目标发生外部冲突时操作失败并留在 Redo 栈，绝不覆盖新文件。历史被清除或达到容量淘汰时暂存目录自动释放。
+
 为某类 Asset 添加额外右键菜单只需普通 Action：
 
 ```csharp
@@ -104,6 +106,8 @@ CLR 层的 icon 常量仍是 ImGui 所需的 `const string` glyph；`AssetIconKi
 - 输入框失去焦点或 selection 切换到其他 target 时，Rename Action 会提交当前有效名称并结束；无效名称保留原值并结束。
 - Tree/List/Grid 的未占用背景收到左键点击时会清除当前 Asset selection。
 - SceneAsset 打开 Action 由 Hierarchy feature 实现，但使用全局 Open 语义和共享路径参数，不形成 Panel project 引用。
+
+Asset Browser Module 会在 Workspace 中保存当前目录与 Asset persistent ID；路径外部移动时优先按 ID 恢复选择，路径已删除时逐级回退到仍存在的父目录。Panel 自己保存 List/Grid 模式、搜索过滤、scope/type filter、tree 宽度和 grid scale。
 
 ## Scripting API
 

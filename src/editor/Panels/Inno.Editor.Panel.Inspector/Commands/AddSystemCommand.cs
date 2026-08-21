@@ -16,6 +16,12 @@ internal sealed class AddSystemCommand : EditorAction<GameScene>
     protected override void Execute(EditorActionContext<GameScene> context)
     {
         if (context.argument is Type systemType)
-            _ = context.target.AddSystem(systemType);
+        {
+            SceneSnapshotOperation.Execute(
+                context,
+                $"Add {systemType.Name}",
+                context.target,
+                () => _ = context.target.AddSystem(systemType));
+        }
     }
 }

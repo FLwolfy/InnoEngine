@@ -18,7 +18,12 @@ internal sealed class DeleteGameObjectCommand : EditorAction<GameObject>
     {
         if (!context.target.isRuntimeValid)
             return;
-        _ = context.target.scene.DestroyObject(context.target);
+        GameScene scene = context.target.scene;
+        SceneSnapshotOperation.Execute(
+            context.interactions,
+            "Delete GameObject",
+            scene,
+            () => _ = scene.DestroyObject(context.target));
         if (context.interactions.selection.TryGet(out GameObject? selected) && ReferenceEquals(selected, context.target))
             _ = context.interactions.For(context.area).Select();
     }

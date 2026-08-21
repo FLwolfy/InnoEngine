@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 
 using Inno.Core.Assemblies;
 using Inno.Core.Reflection;
@@ -30,6 +32,9 @@ public sealed class EditorRuntimeTests : IDisposable
 
         TestModule.startCount = 0;
         TestModule.stopCount = 0;
+        TestModule.workspaceValue = 0;
+        TestModule.restoredWorkspaceValue = 0;
+        TestModule.rebuildDuringRestore = false;
         TestPanel.attachCount = 0;
         TestPanel.detachCount = 0;
         DeferredAction.executeCount = 0;
@@ -80,6 +85,37 @@ public sealed class EditorRuntimeTests : IDisposable
         m_runtime.Update(new EditorFrame(0.016f, 1f, isFocused: true));
 
         Assert.Equal(1, DeferredAction.executeCount);
+    }
+
+    [Fact]
+    public void BuiltInUndoAndRedoActionsExposeHistoryThroughMenusAndShortcuts()
+    {
+        int value = 0;
+        Assert.True(m_runtime.interactions.history.Execute(
+            "Change Test Value",
+            () =>
+            {
+                value = 1;
+                return EditorHistoryResult.Success();
+            },
+            () =>
+            {
+                value = 0;
+                return EditorHistoryResult.Success();
+            }).succeeded);
+        EditorInteraction global = m_runtime.interactions.For(EditorAreas.Global);
+
+        EditorActionState undo = global.Query(EditorActions.Undo);
+        Assert.True(undo.isEnabled);
+        Assert.Equal("Undo Change Test Value", undo.displayName);
+        Assert.True(global.Execute(EditorActions.Undo));
+        Assert.Equal(0, value);
+
+        EditorActionState redo = global.Query(EditorActions.Redo);
+        Assert.True(redo.isEnabled);
+        Assert.Equal("Redo Change Test Value", redo.displayName);
+        Assert.True(global.Execute(EditorActions.Redo));
+        Assert.Equal(1, value);
     }
 
     [Fact]
@@ -186,6 +222,121 @@ public sealed class EditorRuntimeTests : IDisposable
         Assert.Equal(starts, TestModule.startCount);
         Assert.Equal(attaches, TestPanel.attachCount);
     }
+
+    [Fact]
+    public void WorkspaceStateAndPanelVisibilityRestoreForTheSameProject()
+    {
+        TestModule.workspaceValue = 42;
+        EditorPanelExtension panel = Assert.Single(
+            m_runtime.panels.Where(static value => value.id == "tests.panel"));
+        panel.panel.isOpen = true;
+        m_runtime.Update(new EditorFrame(0.016f, 3f, isFocused: true));
+        m_runtime.Dispose();
+
+        string settingsPath = Path.Combine(m_projectRoot, "editor.ini");
+        Assert.True(File.Exists(settingsPath));
+        Assert.Contains("[InnoEditor][Project]", File.ReadAllText(settingsPath));
+        Assert.Contains("[InnoEditor][Module.tests.workspace]", File.ReadAllText(settingsPath));
+        Assert.False(File.Exists(Path.Combine(m_projectRoot, "Library", "Editor", "Workspace.json")));
+
+        using var restored = new EditorInteractionRuntime(m_projectRoot);
+        restored.Start();
+
+        Assert.Equal(42, TestModule.restoredWorkspaceValue);
+        Assert.True(Assert.Single(
+            restored.panels.Where(static value => value.id == "tests.panel")).panel.isOpen);
+    }
+
+    [Fact]
+    public void UnifiedEditorIniPreservesLayoutAndWorkspaceSectionsTogether()
+    {
+        const string layout = "[Window][Hierarchy]\nPos=10,20\nSize=300,400";
+        var settings = new EditorProjectSettings(m_projectRoot);
+        settings.SetImGuiLayout(layout);
+        settings.SetSection("Module.tests", new Dictionary<string, string>
+        {
+            ["Version"] = "1",
+            ["openScenes"] = "[\"Scenes/Test.innoscene\"]"
+        });
+
+        Assert.True(settings.SaveIfChanged());
+        var restored = new EditorProjectSettings(m_projectRoot);
+
+        Assert.Equal(layout, restored.imguiLayout);
+        Assert.True(restored.TryGetSection(
+            "Module.tests",
+            out IReadOnlyDictionary<string, string> values));
+        Assert.Equal("1", values["Version"]);
+        Assert.Equal("[\"Scenes/Test.innoscene\"]", values["openScenes"]);
+        string document = File.ReadAllText(restored.path);
+        Assert.Contains("[Window][Hierarchy]", document);
+        Assert.Contains("[InnoEditor][Module.tests]", document);
+        Assert.Contains("openScenes=[\"Scenes/Test.innoscene\"]", document);
+        Assert.DoesNotContain("Payload=", document);
+    }
+
+    [Fact]
+    public void LegacyOpaqueWorkspaceMigratesToReadableProviderSections()
+    {
+        m_runtime.Dispose();
+        const string payload = """
+            {
+              "schemaVersion": 1,
+              "states": {
+                "tests.workspace": {
+                  "version": 1,
+                  "values": { "value": 73 }
+                }
+              },
+              "panels": { "tests.panel": true }
+            }
+            """;
+        string encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(payload));
+        File.WriteAllText(
+            Path.Combine(m_projectRoot, "editor.ini"),
+            $"[Window][Hierarchy]{Environment.NewLine}Pos=10,20{Environment.NewLine}{Environment.NewLine}" +
+            $"[InnoEditor][Workspace]{Environment.NewLine}Payload={encoded}{Environment.NewLine}");
+        TestModule.restoredWorkspaceValue = 0;
+
+        using var restored = new EditorInteractionRuntime(m_projectRoot);
+        restored.Start();
+
+        Assert.Equal(73, TestModule.restoredWorkspaceValue);
+        Assert.True(Assert.Single(
+            restored.panels.Where(static value => value.id == "tests.panel")).panel.isOpen);
+        string document = File.ReadAllText(Path.Combine(m_projectRoot, "editor.ini"));
+        Assert.Contains("[InnoEditor][Module.tests.workspace]", document);
+        Assert.Contains("value=73", document);
+        Assert.DoesNotContain("Payload=", document);
+    }
+
+    [Fact]
+    public void StartupRegistryRefreshCannotOverwriteWorkspaceBeforeProvidersRestore()
+    {
+        m_runtime.Dispose();
+        var settings = new EditorProjectSettings(m_projectRoot);
+        settings.SetSection("Module.tests.workspace", new Dictionary<string, string>
+        {
+            ["Version"] = "1",
+            ["value"] = "91"
+        });
+        settings.Save();
+        TestModule.startCount = 0;
+        TestModule.restoredWorkspaceValue = 0;
+        TestModule.rebuildDuringRestore = true;
+
+        using var restored = new EditorInteractionRuntime(m_projectRoot);
+        restored.Start();
+        Assert.Equal(91, TestModule.restoredWorkspaceValue);
+        TestModule.workspaceValue = TestModule.restoredWorkspaceValue;
+        restored.Update(new EditorFrame(0.016f, 0.016f, isFocused: true));
+        restored.SaveWorkspace();
+
+        string document = File.ReadAllText(Path.Combine(m_projectRoot, "editor.ini"));
+        Assert.Contains("[InnoEditor][Module.tests.workspace]", document);
+        Assert.Contains("value=91", document);
+        Assert.False(TestModule.rebuildDuringRestore);
+    }
 }
 
 public static class TestAreas
@@ -223,10 +374,29 @@ public sealed class InteractionTarget
 public sealed record InteractionPresentation(string value, bool submit, bool cancel = false);
 
 [EditorModule]
-public sealed class TestModule : EditorModule
+public sealed class TestModule : EditorModule, IEditorWorkspaceState
 {
     public static int startCount;
     public static int stopCount;
+    public static int workspaceValue;
+    public static int restoredWorkspaceValue;
+    public static bool rebuildDuringRestore;
+
+    public string workspaceStateId => "tests.workspace";
+
+    public int workspaceStateVersion => 1;
+
+    public void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
+        => writer.Set("value", workspaceValue);
+
+    public void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
+    {
+        restoredWorkspaceValue = reader.Get("value", 0);
+        if (!rebuildDuringRestore)
+            return;
+        rebuildDuringRestore = false;
+        TypeCacheManager.Rebuild();
+    }
 
     protected override void OnStart(EditorContext context)
     {

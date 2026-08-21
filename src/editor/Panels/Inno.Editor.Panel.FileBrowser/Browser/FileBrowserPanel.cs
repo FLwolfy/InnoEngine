@@ -20,7 +20,7 @@ namespace Inno.Editor.Panel.FileBrowser;
 /// Asset browser panel with a tree pane and filtered table view.
 /// </summary>
 [EditorPanel("asset.file-browser", "File", order: 300)]
-public sealed class FileBrowserPanel : EditorPanel
+public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
 {
     #region Constants
     private const int C_SEARCH_BUFFER_SIZE = 256;
@@ -52,6 +52,45 @@ public sealed class FileBrowserPanel : EditorPanel
     }
 
     #endregion
+
+    /// <inheritdoc />
+    public string workspaceStateId => "asset-browser-panel";
+
+    /// <inheritdoc />
+    public int workspaceStateVersion => 1;
+
+    /// <inheritdoc />
+    public void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        writer.Set("viewMode", m_viewMode.ToString());
+        writer.Set("filter", m_filter);
+        writer.Set("entryTypeFilter", m_entryTypeFilter.ToString());
+        writer.Set("entryScopeFilter", m_entryScopeFilter.ToString());
+        writer.Set("treeWidth", m_treeWidth);
+        writer.Set("gridScale", m_gridScale);
+    }
+
+    /// <inheritdoc />
+    public void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+        if (Enum.TryParse(reader.Get("viewMode", string.Empty), out ViewMode viewMode))
+            m_viewMode = viewMode;
+        if (Enum.TryParse(reader.Get("entryTypeFilter", string.Empty), out FileBrowserEntryTypeFilter typeFilter))
+            m_entryTypeFilter = typeFilter;
+        if (Enum.TryParse(reader.Get("entryScopeFilter", string.Empty), out FileBrowserEntryScopeFilter scopeFilter))
+            m_entryScopeFilter = scopeFilter;
+        m_filter = reader.Get("filter", string.Empty);
+        m_treeWidth = Math.Clamp(
+            reader.Get("treeWidth", EditorWidget.style.assetTreeWidth),
+            EditorWidget.style.assetTreeMinimumWidth,
+            EditorWidget.style.assetTreeMaximumWidth);
+        m_gridScale = Math.Clamp(
+            reader.Get("gridScale", EditorWidget.style.assetGridDefaultScale),
+            EditorWidget.style.assetGridMinimumScale,
+            EditorWidget.style.assetGridMaximumScale);
+    }
 
     #region Lifecycle
     /// <summary>

@@ -22,7 +22,20 @@ internal sealed class CreateAssetFolderCommand : EditorAction<string>
         int suffix = 1;
         while (AssetManager.TryGetFileSystemEntry(candidate, out _))
             candidate = Combine(parent, $"New Folder {suffix++}");
-        AssetManager.CreateDirectory(candidate);
+        EditorHistoryResult result = context.history.Execute(
+            "Create Folder",
+            () =>
+            {
+                AssetManager.CreateDirectory(candidate);
+                return EditorHistoryResult.Success();
+            },
+            () =>
+            {
+                AssetManager.Delete(candidate);
+                return EditorHistoryResult.Success();
+            });
+        if (!result.succeeded)
+            return;
         if (!AssetManager.TryGetFileSystemEntry(candidate, out AssetFileEntry target))
             return;
         EditorInteraction interaction = context.interactions.For(FileBrowserAreas.Browser, target);

@@ -7,7 +7,7 @@ using Inno.Engine.Scene;
 namespace Inno.Editor.Panel.Hierarchy;
 
 [EditorDrop(HierarchyAreas.Hierarchy)]
-internal sealed class ReorderSceneDropHandler
+internal sealed class ReorderSceneDropHandler(EditorSceneWorkspace workspace)
     : EditorDrop<GameScene, HierarchySceneDropTarget>
 {
     protected override EditorDropStatus Query(
@@ -33,7 +33,11 @@ internal sealed class ReorderSceneDropHandler
         int insertionIndex = targetIndex + (context.placement == EditorDropPlacement.After ? 1 : 0);
         if (sourceIndex < insertionIndex)
             insertionIndex--;
-        SceneManager.SetSceneIndex(source, insertionIndex);
+        SceneWorkspaceOperation.Execute(
+            context.interactions,
+            "Reorder Scene",
+            workspace,
+            () => SceneManager.SetSceneIndex(source, insertionIndex));
         _ = context.interactions.For(context.area, source).Select();
         return EditorDropResult.Accepted(source);
     }

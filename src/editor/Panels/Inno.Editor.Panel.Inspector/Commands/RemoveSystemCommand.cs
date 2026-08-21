@@ -12,5 +12,9 @@ internal sealed class RemoveSystemCommand : EditorAction<SystemEditorTarget>
             : EditorActionState.disabled;
 
     protected override void Execute(EditorActionContext<SystemEditorTarget> context)
-        => _ = context.target.scene.RemoveSystem(context.target.system);
+        => SceneSnapshotOperation.Execute(
+            context,
+            $"Remove {context.target.system.GetType().Name}",
+            context.target.scene,
+            () => _ = context.target.scene.RemoveSystem(context.target.system));
 }

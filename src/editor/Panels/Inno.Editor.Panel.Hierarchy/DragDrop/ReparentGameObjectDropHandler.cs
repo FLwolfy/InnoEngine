@@ -35,14 +35,27 @@ internal sealed class ReparentGameObjectDropHandler
         GameObject target = context.target.gameObject;
         Transform sourceTransform = source.transform;
         Transform targetTransform = target.transform;
+        SceneSnapshotOperation.Execute(
+            context.interactions,
+            "Reparent GameObject",
+            source.scene,
+            () => ApplyDrop(context, sourceTransform, targetTransform));
+        _ = context.interactions.For(context.area, source).Select();
+        return EditorDropResult.Accepted(source, target);
+    }
+
+    private static void ApplyDrop(
+        EditorDropContext<GameObject, HierarchyObjectDropTarget> context,
+        Transform sourceTransform,
+        Transform targetTransform)
+    {
         if (context.placement == EditorDropPlacement.Into)
         {
             if (IsDescendantOf(targetTransform, sourceTransform))
                 PromoteDirectChildren(sourceTransform);
             sourceTransform.SetParent(targetTransform);
             sourceTransform.SetSiblingIndex(targetTransform.children.Count - 1);
-            _ = context.interactions.For(context.area, source).Select();
-            return EditorDropResult.Accepted(source, target);
+            return;
         }
 
         Transform? targetParent = targetTransform.parent;
@@ -53,8 +66,6 @@ internal sealed class ReparentGameObjectDropHandler
             targetIndex--;
         sourceTransform.SetSiblingIndex(
             targetIndex + (context.placement == EditorDropPlacement.After ? 1 : 0));
-        _ = context.interactions.For(context.area, source).Select();
-        return EditorDropResult.Accepted(source);
     }
 
     private static bool IsDescendantOf(Transform transform, Transform possibleAncestor)

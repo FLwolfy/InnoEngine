@@ -241,7 +241,7 @@ public sealed class HierarchyPanel : EditorPanel
         DrawVisibilityButton(gameObject, id);
     }
 
-    private static void DrawVisibilityButton(GameObject gameObject, string id)
+    private void DrawVisibilityButton(GameObject gameObject, string id)
     {
         string icon = gameObject.activeSelf ? ImGuiIcon.Eye : ImGuiIcon.EyeSlash;
         float buttonWidth = GetVisibilityButtonWidth();
@@ -255,11 +255,24 @@ public sealed class HierarchyPanel : EditorPanel
         if (EditorWidget.IconButton($"hierarchy_visibility_{id}", icon,
                 gameObject.activeSelf ? "Deactivate" : "Activate"))
         {
-            gameObject.SetActive(!gameObject.activeSelf);
+            bool before = gameObject.activeSelf;
+            bool after = !before;
+            gameObject.SetActive(after);
+            Guid gameObjectId = gameObject.identity.persistentId;
+            m_interactions.history.RecordValue(
+                after ? "Activate GameObject" : "Deactivate GameObject",
+                before,
+                after,
+                value => ResolveGameObject(gameObjectId).SetActive(value),
+                $"game-object-active:{gameObjectId:N}");
         }
     }
 
     private static float GetVisibilityButtonWidth() => EditorWidget.GetIconButtonSize().X;
+
+    private static GameObject ResolveGameObject(Guid persistentId)
+        => IdentityManager.Get<GameObject>(persistentId)
+           ?? throw new InvalidOperationException($"GameObject '{persistentId}' is no longer available.");
 
     private void DrawSceneContextMenu(EditorContext context, GameScene scene, string id)
     {

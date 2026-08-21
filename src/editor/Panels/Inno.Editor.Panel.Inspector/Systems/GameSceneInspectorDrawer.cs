@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 
+using Inno.Core.Identity;
 using Inno.Core.Serialization;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
@@ -47,7 +48,17 @@ internal sealed class GameSceneInspectorDrawer : IInspectorDrawer
                     ref name,
                     C_NAME_BUFFER_SIZE,
                     ImGuiInputTextFlags.None))
+            {
+                string before = scene.name;
                 scene.name = name;
+                Guid sceneId = scene.identity.persistentId;
+                context.interactions.history.RecordValue(
+                    "Rename Scene",
+                    before,
+                    name,
+                    value => ResolveScene(sceneId).name = value,
+                    $"scene-name:{sceneId:N}");
+            }
             NativeImGui.Spacing();
             DrawSystems(context, scene);
             DrawAddSystem(context, scene);
@@ -73,9 +84,20 @@ internal sealed class GameSceneInspectorDrawer : IInspectorDrawer
                 {
                     bool enabled = system.enabled;
                     if (EditorWidget.CompactCheckbox($"enabled_{systemId}", ref enabled))
+                    {
+                        bool before = system.enabled;
                         system.enabled = enabled;
+                        Guid systemPersistentId = system.identity.persistentId;
+                        context.interactions.history.RecordValue(
+                            enabled ? "Enable System" : "Disable System",
+                            before,
+                            enabled,
+                            value => ResolveSystem(systemPersistentId).enabled = value,
+                            $"system-enabled:{systemId}");
+                    }
                 },
                 () => m_cardControls.DrawSystem(
+                    context.interactions,
                     scene,
                     system,
                     i,
@@ -141,4 +163,12 @@ internal sealed class GameSceneInspectorDrawer : IInspectorDrawer
             NativeImGui.CloseCurrentPopup();
         EditorWidget.EndSearchPopup();
     }
+
+    private static GameScene ResolveScene(Guid persistentId)
+        => IdentityManager.Get<GameScene>(persistentId)
+           ?? throw new InvalidOperationException($"Scene '{persistentId}' is no longer available.");
+
+    private static GameSystem ResolveSystem(Guid persistentId)
+        => IdentityManager.Get<GameSystem>(persistentId)
+           ?? throw new InvalidOperationException($"System '{persistentId}' is no longer available.");
 }

@@ -93,3 +93,16 @@
 - Editor 项目内部按实际功能建立目录（如 `Commands`、`DragDrop`、`Presentation`、`PropertyDrawing`）；禁止使用含义模糊的 `Internal` 目录。访问级别由 C# 声明表达，不由目录名表达。
 - Editor `.csproj` 的 `ProjectReference` 必须按公开 API 边界分组：第一个 `ItemGroup` 只放未出现在任何 public/protected API 中的实现依赖，并逐项设置 `PrivateAssets="compile"`；第二个 `ItemGroup` 只放公开签名、公开基类或公开接口实际泄漏的依赖。没有使用的引用应直接删除。
 - `ProjectReference` 是否公开必须根据真实 API 签名判断，不能因为运行时会使用某程序集就默认向下游传递。调整公开类型、基类、参数、返回值或属性后，应同步复核引用分组。
+
+## 14. Editor History 与 Workspace 状态
+- 可逆 Editor 数据修改统一进入 `EditorInteractions.history`；不要在 Panel 中维护第二套 Undo 栈，也不要把简单 `inverse Action` 当作通用模型。
+- 已由 UI 应用的标量/值修改使用 `RecordValue`，稳定 `mergeKey` 只标识同一个逻辑属性；多步骤修改使用 `BeginTransaction`；图结构或跨对象操作派生 `EditorHistoryOperation` 并保存足以完整恢复的中立快照。
+- Undo/Redo 失败时必须保持操作位于原栈，禁止移动指针或覆盖新状态。新操作必须释放 Redo 分支；被淘汰或清除的 operation 必须释放其文件、对象或插件代际引用。
+- 保存、打开、选择等纯工作流操作默认不进入数据 Undo；它们只有在确实修改项目数据时才记录对应的数据部分。
+- 跨启动的项目语义状态由 Module/Panel 实现 `IEditorWorkspaceState`，不进行中央注册。Provider ID 必须稳定且全局唯一，持久值只允许可重新解析的中立数据。
+- `editor.ini` 是统一且可读的项目级 Editor settings 文档：标准 ImGui section 保存 layout；每个 Module/Panel 分别使用 `[InnoEditor][Module.<id>]` / `[InnoEditor][Panel.<id>]`；Panel 开关使用 `[InnoEditor][Panels]`。禁止用 Base64 或单一 opaque payload 包装全部 Workspace。Undo 栈、dirty Scene 内容、runtime 引用和编译中间态不得持久化。
+- Editor 正常退出时必须先捕获全部 Workspace provider，再捕获最新 ImGui layout，最后在 Module 停止和 Scene 卸载前强制原子写入一次完整 `editor.ini`。运行期间仍可节流保存，但不能把它当作退出保存的替代品。
+- Editor Scene 历史记录不得长期捕获可被图恢复或 workspace 替换销毁的 `GameObject`、`GameComponent`、`GameSystem` 实例；Undo/Redo 回调必须使用 persistent ID 重新解析当前实例，结构修改使用可回滚 Scene snapshot。
+- Workspace restore 必须容忍缺失 Asset、损坏 payload 和脚本类型尚未进入 TypeCache。候选未完整准备好前不得破坏当前可编辑状态。
+- Workspace provider 必须先成功执行一次 `RestoreWorkspaceState`，之后才允许 `CaptureWorkspaceState` 覆盖磁盘 section。扩展 Registry 在启动或脚本激活期间可能重入刷新；恢复协调器必须按 provider 实例弱跟踪 `restoring/restored` 状态，禁止重入回调，也不能因为 provider 被新 snapshot 保留就误判其已经恢复。
+- Scene Workspace 恢复时必须区分“源文件确实缺失”和“Asset Source Index 尚未完成首轮对账”。物理源仍存在时应保留 pending scene setup 并重试，不能把暂时的 Untitled Scene 保存回项目设置。

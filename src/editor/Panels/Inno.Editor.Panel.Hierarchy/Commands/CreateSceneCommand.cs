@@ -9,7 +9,14 @@ internal sealed class CreateSceneCommand(EditorSceneWorkspace workspace) : Edito
 {
     protected override void Execute(EditorActionContext context)
     {
-        GameScene scene = workspace.CreateScene();
+        GameScene? scene = null;
+        SceneWorkspaceOperation.Execute(
+            context,
+            "Create Scene",
+            workspace,
+            () => scene = workspace.CreateScene());
+        if (scene is null)
+            return;
         _ = context.interactions.For(context.area, scene).Select();
     }
 }

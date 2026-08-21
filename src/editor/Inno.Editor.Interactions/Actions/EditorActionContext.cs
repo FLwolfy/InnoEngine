@@ -38,6 +38,11 @@ public class EditorActionContext
     /// <summary>Gets the active interaction entry point.</summary>
     public EditorInteractions interactions { get; }
 
+    /// <summary>
+    /// Gets the transactional history used to record reversible mutations performed by this action.
+    /// </summary>
+    public EditorHistory history => interactions.history;
+
     /// <summary>Gets the stable interaction area.</summary>
     public string area { get; }
 

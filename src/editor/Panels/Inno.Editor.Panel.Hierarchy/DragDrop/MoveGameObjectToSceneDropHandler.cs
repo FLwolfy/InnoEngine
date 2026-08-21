@@ -25,8 +25,15 @@ internal sealed class MoveGameObjectToSceneDropHandler
     {
         GameObject source = context.source;
         GameScene target = context.target.scene;
-        source.transform.SetParent(null);
-        source.transform.SetSiblingIndex(GetRootCount(target) - 1);
+        SceneSnapshotOperation.Execute(
+            context.interactions,
+            "Move GameObject",
+            source.scene,
+            () =>
+            {
+                source.transform.SetParent(null);
+                source.transform.SetSiblingIndex(GetRootCount(target) - 1);
+            });
         _ = context.interactions.For(context.area, source).Select();
         return EditorDropResult.Accepted(source, target);
     }

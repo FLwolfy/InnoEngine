@@ -142,6 +142,29 @@ public sealed class SceneSerializationTests : IDisposable
     }
 
     [Fact]
+    public void LoadedSceneRestoreKeepsSceneIdentityAndRebuildsItsObjectGraph()
+    {
+        var scene = new GameScene("Before");
+        GameObject original = scene.CreateObject("Original");
+        Guid sceneId = scene.identity.persistentId;
+        Guid objectId = original.identity.persistentId;
+        byte[] before = SerializationManager.Serialize(scene);
+        SceneManager.LoadScene(scene);
+
+        scene.name = "After";
+        _ = scene.CreateObject("Added");
+        SerializationManager.Restore(scene, before);
+
+        Assert.Same(scene, SceneManager.activeScene);
+        Assert.Equal(sceneId, scene.identity.persistentId);
+        Assert.Equal("Before", scene.name);
+        GameObject restored = Assert.Single(scene.GetObjects());
+        Assert.Equal(objectId, restored.identity.persistentId);
+        Assert.Equal("Original", restored.name);
+        Assert.True(scene.isLoaded);
+    }
+
+    [Fact]
     public void PrefabCapture_RejectsReferenceOutsideCapturedSubtreeWithDiagnosticContext()
     {
         var scene = new GameScene("Boundary");

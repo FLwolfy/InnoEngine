@@ -16,7 +16,13 @@ internal sealed class DeleteSceneCommand(EditorSceneWorkspace workspace) : Edito
 
     protected override void Execute(EditorActionContext<GameScene> context)
     {
-        if (!workspace.CloseScene(context.target))
+        bool closed = false;
+        SceneWorkspaceOperation.Execute(
+            context,
+            "Close Scene",
+            workspace,
+            () => closed = workspace.CloseScene(context.target));
+        if (!closed)
             return;
         if (context.interactions.selection.TryGet(out GameScene? selected) && ReferenceEquals(selected, context.target))
             _ = context.interactions.For(context.area).Select();

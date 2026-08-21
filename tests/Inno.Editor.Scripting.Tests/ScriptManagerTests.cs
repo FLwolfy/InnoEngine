@@ -192,6 +192,104 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
+    public void SceneEditingCommandsUndoAndRedoComponentsSystemsAndRecreatedTargets()
+    {
+        using var runtime = new EditorInteractionRuntime(m_projectRoot);
+        runtime.Start();
+        GameScene scene = SceneManager.activeScene!;
+        GameObject gameObject = scene.CreateObject("History Target");
+        Guid sceneId = scene.identity.persistentId;
+        Guid gameObjectId = gameObject.identity.persistentId;
+
+        Assert.True(runtime.interactions
+            .For(InspectorAreas.Component, gameObject)
+            .Execute(InspectorActions.AddComponent, typeof(HistoryTestComponent)));
+        Assert.NotNull(gameObject.GetComponent<HistoryTestComponent>());
+
+        Assert.True(runtime.interactions
+            .For(InspectorAreas.System, scene)
+            .Execute(InspectorActions.AddSystem, typeof(HistoryTestSystem)));
+        Assert.Single(scene.GetSystems().OfType<HistoryTestSystem>());
+
+        Assert.True(runtime.interactions.history.Undo().succeeded);
+        GameScene currentScene = IdentityManager.Get<GameScene>(sceneId)!;
+        GameObject currentObject = IdentityManager.Get<GameObject>(gameObjectId)!;
+        Assert.Empty(currentScene.GetSystems().OfType<HistoryTestSystem>());
+        Assert.NotNull(currentObject.GetComponent<HistoryTestComponent>());
+
+        Assert.True(runtime.interactions.history.Undo().succeeded);
+        currentObject = IdentityManager.Get<GameObject>(gameObjectId)!;
+        Assert.False(currentObject.HasComponent<HistoryTestComponent>());
+
+        Assert.True(runtime.interactions.history.Redo().succeeded);
+        currentObject = IdentityManager.Get<GameObject>(gameObjectId)!;
+        Assert.NotNull(currentObject.GetComponent<HistoryTestComponent>());
+
+        Assert.True(runtime.interactions.history.Redo().succeeded);
+        currentScene = IdentityManager.Get<GameScene>(sceneId)!;
+        HistoryTestSystem currentSystem = Assert.Single(currentScene.GetSystems().OfType<HistoryTestSystem>());
+
+        currentObject = IdentityManager.Get<GameObject>(gameObjectId)!;
+        HistoryTestComponent currentComponent = currentObject.GetComponent<HistoryTestComponent>();
+        currentComponent.value = 42;
+        Guid componentId = currentComponent.identity.persistentId;
+        Assert.True(runtime.interactions
+            .For(
+                InspectorAreas.Component,
+                new ComponentEditorTarget(currentObject, currentComponent))
+            .Execute(InspectorActions.ResetComponent));
+        Assert.Equal(7, IdentityManager.Get<HistoryTestComponent>(componentId)!.value);
+        Assert.True(runtime.interactions.history.Undo().succeeded);
+        Assert.Equal(42, IdentityManager.Get<HistoryTestComponent>(componentId)!.value);
+        Assert.True(runtime.interactions.history.Redo().succeeded);
+        Assert.Equal(7, IdentityManager.Get<HistoryTestComponent>(componentId)!.value);
+
+        currentSystem = IdentityManager.Get<HistoryTestSystem>(currentSystem.identity.persistentId)!;
+        currentSystem.value = 84;
+        Guid systemId = currentSystem.identity.persistentId;
+        Assert.True(runtime.interactions
+            .For(
+                InspectorAreas.System,
+                new SystemEditorTarget(currentScene, currentSystem))
+            .Execute(InspectorActions.RemoveSystem));
+        Assert.Null(IdentityManager.Get<HistoryTestSystem>(systemId));
+        Assert.True(runtime.interactions.history.Undo().succeeded);
+        Assert.Equal(84, IdentityManager.Get<HistoryTestSystem>(systemId)!.value);
+        Assert.True(runtime.interactions.history.Redo().succeeded);
+        Assert.Null(IdentityManager.Get<HistoryTestSystem>(systemId));
+    }
+
+    [Fact]
+    public void StableValueHistorySurvivesWorkspaceSceneReplacement()
+    {
+        using var runtime = new EditorInteractionRuntime(m_projectRoot);
+        runtime.Start();
+        GameScene scene = SceneManager.activeScene!;
+        Guid sceneId = scene.identity.persistentId;
+        string originalName = scene.name;
+        scene.name = "Renamed";
+        runtime.interactions.history.RecordValue(
+            "Rename Scene",
+            originalName,
+            scene.name,
+            value => (IdentityManager.Get<GameScene>(sceneId)
+                      ?? throw new InvalidOperationException("Scene is unavailable.")).name = value,
+            $"scene-name:{sceneId:N}");
+
+        Assert.True(runtime.interactions
+            .For(HierarchyAreas.Hierarchy)
+            .Execute(HierarchyActions.CreateScene));
+        Assert.Equal(2, SceneManager.loadedScenes.Count);
+        Assert.True(runtime.interactions.history.Undo().succeeded);
+        Assert.Single(SceneManager.loadedScenes);
+
+        Assert.True(runtime.interactions.history.Undo().succeeded);
+        Assert.Equal(originalName, IdentityManager.Get<GameScene>(sceneId)!.name);
+        Assert.True(runtime.interactions.history.Redo().succeeded);
+        Assert.Equal("Renamed", IdentityManager.Get<GameScene>(sceneId)!.name);
+    }
+
+    [Fact]
     public void SceneWorkspaceOpenSceneLoadsAdditivelyAtTheBottom()
     {
         var workspace = new EditorSceneWorkspace();
@@ -224,6 +322,94 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.False(workspace.CloseScene(first));
         Assert.True(first.isLoaded);
         Assert.False(first.isDestroyed);
+    }
+
+    [Fact]
+    public void SceneWorkspaceStateRestoresSavedScenesInOrderAndSelectsTheActiveScene()
+    {
+        var sourceWorkspace = new EditorSceneWorkspace();
+        GameScene first = sourceWorkspace.CreateScene();
+        first.name = "First";
+        _ = sourceWorkspace.SaveScene(first, "Scenes");
+        GameScene second = sourceWorkspace.CreateScene();
+        second.name = "Second";
+        _ = sourceWorkspace.SaveScene(second, "Scenes");
+        SceneManager.SetActiveScene(first);
+        var writer = new EditorWorkspaceStateWriter();
+        sourceWorkspace.CaptureWorkspaceState(writer);
+
+        SceneManager.UnloadAllScenes();
+        var restoredWorkspace = new EditorSceneWorkspace();
+        var context = new EditorContext(m_projectRoot);
+        restoredWorkspace.Start(context);
+        restoredWorkspace.RestoreWorkspaceState(new EditorWorkspaceStateReader(1, writer.Export()));
+        restoredWorkspace.Update(context);
+
+        Assert.Equal(["First", "Second"], restoredWorkspace.scenes.Select(static scene => scene.name));
+        Assert.Equal("First", restoredWorkspace.activeScene.name);
+        restoredWorkspace.Stop(context);
+    }
+
+    [Fact]
+    public void SceneWorkspaceStateReloadsLastSavedDataInsteadOfDirtyMemory()
+    {
+        var sourceWorkspace = new EditorSceneWorkspace();
+        GameScene scene = sourceWorkspace.CreateScene();
+        scene.name = "Saved";
+        _ = scene.CreateObject("Saved Object");
+        _ = sourceWorkspace.SaveScene(scene, "Scenes");
+        _ = scene.CreateObject("Unsaved Object");
+        var writer = new EditorWorkspaceStateWriter();
+        sourceWorkspace.CaptureWorkspaceState(writer);
+
+        SceneManager.UnloadAllScenes();
+        var restoredWorkspace = new EditorSceneWorkspace();
+        var context = new EditorContext(m_projectRoot);
+        restoredWorkspace.Start(context);
+        restoredWorkspace.RestoreWorkspaceState(new EditorWorkspaceStateReader(1, writer.Export()));
+        restoredWorkspace.Update(context);
+
+        Assert.NotNull(restoredWorkspace.activeScene.FindObject("Saved Object"));
+        Assert.Null(restoredWorkspace.activeScene.FindObject("Unsaved Object"));
+        restoredWorkspace.Stop(context);
+    }
+
+    [Fact]
+    public void EditorRuntimePersistsAndRestoresOpenScenesFromReadableProjectSettings()
+    {
+        using (var runtime = new EditorInteractionRuntime(m_projectRoot))
+        {
+            runtime.Start();
+            runtime.Update(new EditorFrame(0.016f, 1f, isFocused: true));
+            GameScene first = SceneManager.activeScene!;
+            first.name = "Workspace First";
+            Assert.True(runtime.interactions
+                .For(HierarchyAreas.Hierarchy)
+                .Execute(HierarchyActions.CreateScene));
+            SceneManager.activeScene!.name = "Workspace Second";
+            Assert.True(runtime.interactions
+                .For(HierarchyAreas.Hierarchy)
+                .Execute(EditorActions.Save));
+
+            runtime.SaveWorkspace();
+        }
+
+        string settings = File.ReadAllText(Path.Combine(m_projectRoot, "editor.ini"));
+        Assert.Contains("[InnoEditor][Module.scene-workspace]", settings);
+        Assert.Contains(
+            "openScenes=[\"Workspace First.innoscene\",\"Workspace Second.innoscene\"]",
+            settings);
+        Assert.DoesNotContain("Payload=", settings);
+        Assert.Empty(SceneManager.loadedScenes);
+
+        using var restored = new EditorInteractionRuntime(m_projectRoot);
+        restored.Start();
+        restored.Update(new EditorFrame(0.016f, 1f, isFocused: true));
+
+        Assert.Equal(
+            ["Workspace First", "Workspace Second"],
+            SceneManager.loadedScenes.Select(static scene => scene.name));
+        Assert.Equal("Workspace Second", SceneManager.activeScene!.name);
     }
 
     [Fact]
@@ -306,8 +492,18 @@ public sealed class ScriptManagerTests : IDisposable
             [AssetIcon(".binary-icon", AssetIconKind.FileAudio, priority: 100)]
             public sealed class ScriptAction : EditorAction
             {
+                private int m_value;
+
                 protected override void Execute(EditorActionContext context)
                 {
+                    int before = m_value;
+                    m_value++;
+                    context.history.RecordValue(
+                        "Change Script Value",
+                        before,
+                        m_value,
+                        value => m_value = value,
+                        "tests.script-value");
                 }
             }
 
@@ -335,11 +531,20 @@ public sealed class ScriptManagerTests : IDisposable
             }
 
             [EditorPanel("tests.script-panel", "Script Panel", order: 900, defaultOpen: false)]
-            public sealed class ScriptPanel : EditorPanel, IEditorPanelReloadState
+            public sealed class ScriptPanel : EditorPanel, IEditorPanelReloadState, IEditorWorkspaceState
             {
+                public string workspaceStateId => "tests.script-panel";
+                public int workspaceStateVersion => 1;
+
                 public override void Draw(EditorContext context)
                 {
                 }
+
+                public void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
+                    => writer.Set("open", isOpen);
+
+                public void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
+                    => isOpen = reader.Get("open", isOpen);
 
                 public System.ReadOnlyMemory<byte> CaptureReloadState()
                     => System.ReadOnlyMemory<byte>.Empty;
@@ -1103,4 +1308,20 @@ public sealed class ScriptManagerTests : IDisposable
             Environment.NewLine,
             result.diagnostics.Select(diagnostic =>
                 $"{diagnostic.id}: {diagnostic.filePath}({diagnostic.line},{diagnostic.column}) {diagnostic.message}"));
+}
+
+[StableTypeId("753b0a86-dffc-4ac5-bb12-f4ad20179ea0")]
+internal sealed class HistoryTestComponent : GameComponent
+{
+    [SerializableProperty]
+    public int value { get; set; }
+
+    protected override void Reset() => value = 7;
+}
+
+[StableTypeId("ae8468c3-b20a-44ed-916f-172d0244ed51")]
+internal sealed class HistoryTestSystem : GameSystem
+{
+    [SerializableProperty]
+    public int value { get; set; }
 }

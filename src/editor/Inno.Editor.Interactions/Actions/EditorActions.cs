@@ -20,4 +20,14 @@ public static class EditorActions
 
     /// <summary>Toggles one editor panel.</summary>
     public const string TogglePanel = "editor/toggle-panel";
+
+    /// <summary>
+    /// Restores the state preceding the newest reversible editor operation.
+    /// </summary>
+    public const string Undo = "editor/undo";
+
+    /// <summary>
+    /// Reapplies the newest operation successfully reverted by Undo.
+    /// </summary>
+    public const string Redo = "editor/redo";
 }

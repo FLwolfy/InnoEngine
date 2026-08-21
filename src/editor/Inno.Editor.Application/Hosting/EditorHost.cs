@@ -7,6 +7,7 @@ using Inno.Assets;
 using Inno.Core.Events;
 using Inno.Core.Framework;
 using Inno.Core.Logging;
+using Inno.Editor.Core;
 using Inno.Platform;
 using Inno.Platform.ImGui;
 
@@ -70,12 +71,14 @@ public sealed class EditorHost : IDisposable
             ImGuiContextFlags.EnableViewports
             | ImGuiContextFlags.EnableDocking
             | ImGuiContextFlags.EnableSmoothResize);
-        m_imgui.SetIniFile(Path.Combine(this.projectDirectory, "editor.ini"));
+        var editorContext = new EditorContext(this.projectDirectory);
+        m_imgui.SetIniFile(null);
+        m_imgui.LoadIniSettings(editorContext.settings.imguiLayout);
         BootLog("ImGui context created.");
 
         BootLog($"AssetManager initialized={AssetManager.isInitialized} root='{AssetManager.assetRoot}'.");
 
-        m_editorLayer = new EditorLayer(m_imgui, this.projectDirectory)
+        m_editorLayer = new EditorLayer(m_imgui, editorContext)
         {
             isFocused = HasEditorFocus()
         };
@@ -143,6 +146,9 @@ public sealed class EditorHost : IDisposable
             m_frameCount++;
         }
 
+        BootLog(m_editorLayer.SaveProject()
+            ? "Project editor state saved before shutdown."
+            : "Project editor state save failed before shutdown.");
         BootLog("Run loop end.");
         return 0;
     }

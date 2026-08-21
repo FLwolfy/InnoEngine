@@ -16,6 +16,12 @@ internal sealed class AddComponentCommand : EditorAction<GameObject>
     protected override void Execute(EditorActionContext<GameObject> context)
     {
         if (context.argument is Type componentType)
-            _ = context.target.AddComponent(componentType);
+        {
+            SceneSnapshotOperation.Execute(
+                context,
+                $"Add {componentType.Name}",
+                context.target.scene,
+                () => _ = context.target.AddComponent(componentType));
+        }
     }
 }

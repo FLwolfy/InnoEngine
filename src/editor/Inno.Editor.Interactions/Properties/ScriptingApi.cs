@@ -21,6 +21,10 @@ using Inno.Editor.Interactions;
 [assembly: ScriptingApiExport(typeof(EditorShortcutAttribute), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorValidationResult), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(HotKeyGesture), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorHistory), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorHistoryOperation), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorHistoryResult), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorHistoryTransaction), ScriptingApiScope.Editor)]
 
 [assembly: ScriptingApiExport(typeof(EditorMenuAttribute), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorMenuBuilder), ScriptingApiScope.Editor)]

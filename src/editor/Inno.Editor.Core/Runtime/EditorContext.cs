@@ -19,10 +19,16 @@ public sealed class EditorContext
         if (string.IsNullOrWhiteSpace(projectDirectory))
             throw new ArgumentException("A project directory is required.", nameof(projectDirectory));
         this.projectDirectory = Path.GetFullPath(projectDirectory);
+        settings = new EditorProjectSettings(this.projectDirectory);
     }
 
     /// <summary>Gets the normalized project root directory.</summary>
     public string projectDirectory { get; }
+
+    /// <summary>
+    /// Gets the unified per-project settings document containing layout and workspace state.
+    /// </summary>
+    public EditorProjectSettings settings { get; }
 
     /// <summary>Gets the latest immutable editor frame snapshot.</summary>
     public EditorFrame frame { get; internal set; }

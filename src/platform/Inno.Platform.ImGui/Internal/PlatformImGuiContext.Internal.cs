@@ -114,6 +114,34 @@ public sealed partial class PlatformImGuiContext
         SetIniFilename(io, m_iniFilename);
     }
 
+    public partial void LoadIniSettings(string? settings)
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (m_hasStartedFrame)
+            throw new InvalidOperationException("ImGui layout settings must be loaded before the first frame.");
+        if (string.IsNullOrEmpty(settings))
+            return;
+
+        ImGuiNative.SetCurrentContext(m_context);
+        ImGuiNative.LoadIniSettingsFromMemory(settings);
+    }
+
+    public partial bool TryCaptureIniSettings(out string settings, bool force)
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        ImGuiNative.SetCurrentContext(m_context);
+        ImGuiIOPtr io = ImGuiNative.GetIO();
+        if (!force && !io.WantSaveIniSettings)
+        {
+            settings = string.Empty;
+            return false;
+        }
+
+        settings = ImGuiNative.SaveIniSettingsToMemoryS();
+        io.WantSaveIniSettings = false;
+        return true;
+    }
+
     private static void ConfigureKeyRepeat(ImGuiIOPtr io)
     {
         io.KeyRepeatDelay = DEFAULT_KEY_REPEAT_DELAY_SECONDS;

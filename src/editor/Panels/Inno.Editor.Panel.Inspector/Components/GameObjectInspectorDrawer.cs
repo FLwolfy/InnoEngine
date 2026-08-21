@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 
+using Inno.Core.Identity;
 using Inno.Core.Serialization;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
@@ -41,7 +42,7 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
         NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, EditorWidget.style.compactFramePadding);
         try
         {
-            DrawObjectHeader(gameObject);
+            DrawObjectHeader(context, gameObject);
             NativeImGui.Spacing();
             DrawComponents(context, gameObject);
             DrawAddComponent(context, gameObject);
@@ -52,7 +53,7 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
         }
     }
 
-    private static void DrawObjectHeader(GameObject gameObject)
+    private static void DrawObjectHeader(InspectorDrawContext context, GameObject gameObject)
     {
         string name = gameObject.name;
         NativeImGui.SetNextItemWidth(-1f);
@@ -62,7 +63,15 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
                 C_NAME_BUFFER_SIZE,
                 ImGuiInputTextFlags.None))
         {
+            string before = gameObject.name;
             gameObject.name = name;
+            Guid gameObjectId = gameObject.identity.persistentId;
+            context.interactions.history.RecordValue(
+                "Rename GameObject",
+                before,
+                name,
+                value => ResolveGameObject(gameObjectId).name = value,
+                $"game-object-name:{gameObjectId:N}");
         }
     }
 
@@ -85,13 +94,22 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
                         bool enabled = behavior.enabled;
                         if (EditorWidget.CompactCheckbox($"enabled_{componentId}", ref enabled))
                         {
+                            bool before = behavior.enabled;
                             behavior.enabled = enabled;
+                            Guid behaviorId = behavior.identity.persistentId;
+                            context.interactions.history.RecordValue(
+                                enabled ? "Enable Component" : "Disable Component",
+                                before,
+                                enabled,
+                                value => ResolveBehavior(behaviorId).enabled = value,
+                                $"component-enabled:{componentId}");
                         }
                     }
                     : null,
                 (Action?)(componentType == typeof(Transform)
                     ? null
                     : () => m_cardControls.DrawComponent(
+                        context.interactions,
                         gameObject,
                         component,
                         i,
@@ -166,4 +184,12 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
 
         EditorWidget.EndSearchPopup();
     }
+
+    private static GameObject ResolveGameObject(Guid persistentId)
+        => IdentityManager.Get<GameObject>(persistentId)
+           ?? throw new InvalidOperationException($"GameObject '{persistentId}' is no longer available.");
+
+    private static GameBehavior ResolveBehavior(Guid persistentId)
+        => IdentityManager.Get<GameBehavior>(persistentId)
+           ?? throw new InvalidOperationException($"GameBehavior '{persistentId}' is no longer available.");
 }

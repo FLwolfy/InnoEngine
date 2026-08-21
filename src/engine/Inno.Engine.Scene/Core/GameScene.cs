@@ -393,17 +393,22 @@ public sealed class GameScene : EngineObject, ISerializable
         m_sourceAsset = sourceAsset;
     }
 
-    internal void ValidateRestoreTarget(Guid persistentId)
+    internal void PrepareRestoreTarget(Guid persistentId)
     {
         EnsureNotDestroyed();
-        if (m_isLoaded)
-            throw new InvalidOperationException($"Loaded scene '{m_name}' cannot be restored in place.");
-        if (m_store.GetOwnedObjects().Count != 0 || m_systems.GetSystems().Count != 0)
-            throw new InvalidOperationException($"Scene '{m_name}' must be empty before state can be restored.");
         if (identity.persistentId != persistentId)
         {
             throw new InvalidOperationException(
                 $"Scene identity '{identity.persistentId}' does not match serialized identity '{persistentId}'.");
+        }
+
+        foreach (GameSystem system in GetSystems().ToArray())
+            RemoveSystem(system);
+        GameObject[] objects = GetObjects().ToArray();
+        for (int i = 0; i < objects.Length; i++)
+        {
+            if (objects[i].isRuntimeValid)
+                DestroyObject(objects[i]);
         }
     }
 

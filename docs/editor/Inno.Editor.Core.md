@@ -12,6 +12,8 @@ Inno.Editor.Core/
 │  ├─ EditorContext.cs
 │  ├─ EditorFrame.cs
 │  └─ EditorRuntime.cs
+├─ Settings/
+│  └─ EditorProjectSettings.cs
 ├─ Panels/
 │  ├─ EditorPanel.cs
 │  ├─ EditorModal.cs
@@ -19,6 +21,10 @@ Inno.Editor.Core/
 ├─ Modules/
 │  ├─ EditorModule.cs
 │  └─ EditorModuleAttribute.cs
+├─ Workspace/
+│  ├─ IEditorWorkspaceState.cs
+│  ├─ EditorWorkspaceStateReader.cs
+│  └─ EditorWorkspaceStateWriter.cs
 └─ Properties/ScriptingApi.cs
 ```
 
@@ -30,7 +36,8 @@ Inno.Editor.Core/
 
 | API | 说明 |
 | --- | --- |
-| `EditorContext` | 只读项目根目录和最新 `EditorFrame`；不提供 service locator。 |
+| `EditorContext` | 只读项目根目录、统一 `EditorProjectSettings` 和最新 `EditorFrame`；不提供 service locator。 |
+| `EditorProjectSettings` | 协调 `editor.ini` 中互不覆盖的 ImGui layout 与可读具名 section；支持 section 快照、增删、变化保存和退出强制原子保存。 |
 | `EditorFrame` | 一帧的 `deltaTime`、`totalTime`、`isFocused` 不可变快照。 |
 | `EditorRuntime` | 表现无关的 `Start`、`Update(EditorFrame)`、`Dispose` 抽象。 |
 
@@ -39,9 +46,10 @@ Inno.Editor.Core/
 ```csharp
 var context = new EditorContext(projectDirectory);
 Console.WriteLine(context.projectDirectory);
+Console.WriteLine(context.settings.path);
 ```
 
-业务扩展若需要 Action/Menu/Selection，应由构造函数接收 `EditorInteractions`，而不是向 `EditorContext` 添加新服务属性。
+`settings` 是 Context 自己拥有的项目文档，不是可变 service locator。业务扩展若需要 Action/Menu/Selection，仍应由构造函数接收 `EditorInteractions`，而不是向 `EditorContext` 添加新服务属性。
 
 ## Module
 
@@ -114,6 +122,32 @@ public sealed class AnimationBakeModal(AnimationModule animation) : EditorModal
 ## Scripting API
 
 EditorScripts 使用唯一逻辑命名空间 `InnoEditor.Core`。它导出 Context、Frame、Runtime、Module、Panel、Modal 及其 Attribute/状态接口；所有脚本必须显式写普通 `using`。
+
+## 项目 Workspace 状态契约
+
+`IEditorWorkspaceState` 是 Core 中唯一的项目语义状态契约。它不实现磁盘 I/O，也不知道 Scene、Asset 或 ImGui；Module 和 Panel 实现后会被 Interactions 自动发现：
+
+```csharp
+public sealed class AnimationModule : EditorModule, IEditorWorkspaceState
+{
+    public string workspaceStateId => "animation.workspace";
+    public int workspaceStateVersion => 1;
+
+    public void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
+    {
+        writer.Set("controller", m_controllerAssetId);
+        writer.Set("zoom", m_zoom);
+    }
+
+    public void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
+    {
+        m_controllerAssetId = reader.Get("controller", Guid.Empty);
+        m_zoom = reader.Get("zoom", 1f);
+    }
+}
+```
+
+ID 必须稳定且全局唯一；version 由 provider 自己解释。Reader 在无状态时仍会被调用并令 `hasState == false`，因此 feature 可在同一个入口建立默认状态。状态只应保存项目相关、可重新解析的中立值，不保存 runtime 对象、线程、delegate 或插件实例。
 
 ## 边界规则
 

@@ -87,6 +87,16 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
     /// <summary>Flushes actions queued during the current presentation traversal.</summary>
     public void Flush() => m_interactions.Update();
 
+    /// <summary>
+    /// Captures every active workspace provider and atomically flushes changed project state to disk.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">Thrown after this runtime has been disposed.</exception>
+    public void SaveWorkspace()
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        m_catalog.SaveWorkspace();
+    }
+
     /// <summary>Dispatches an unhandled keyboard event through contextual shortcuts.</summary>
     /// <param name="keyEvent">The keyboard event received from the application event stream.</param>
     public void HandleKeyPressed(KeyPressedEvent keyEvent)
@@ -102,8 +112,9 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
         if (m_disposed)
             return;
         m_disposed = true;
+        m_catalog.SaveWorkspace();
         m_interactions.Shutdown();
-        m_catalog.Shutdown();
+        m_catalog.Shutdown(saveWorkspace: false);
         m_catalog.Dispose();
         m_panels = [];
         m_modals = [];

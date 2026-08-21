@@ -8,8 +8,8 @@ Editor 采用“被动核心 → 后端无关交互 → ImGui 表现 → 独立 
 
 | 项目 | 职责 |
 | --- | --- |
-| [Inno.Editor.Core](Inno.Editor.Core.md) | `EditorContext`、frame/runtime、Module、Panel、Modal 的最小契约。 |
-| [Inno.Editor.Interactions](Inno.Editor.Interactions.md) | Action、area、menu、shortcut、selection、drag/drop 与扩展代际。 |
+| [Inno.Editor.Core](Inno.Editor.Core.md) | `EditorContext`、frame/runtime、Module、Panel、Modal 与 Workspace provider 的最小契约。 |
+| [Inno.Editor.Interactions](Inno.Editor.Interactions.md) | Action、area、menu、shortcut、selection、drag/drop、Undo/Redo、Workspace 存储与扩展代际。 |
 | [Inno.Editor.ImGui](Inno.Editor.ImGui.md) | ImGui runtime、renderer、统一 Widget、Palette 与 Style metrics。 |
 | [Inno.Editor.Scripting](Inno.Editor.Scripting.md) | Asset-backed Roslyn 编译、facade、IDE 工程与热重载。 |
 | [Inno.Editor.Panel.FileBrowser](Inno.Editor.Panel.FileBrowser.md) | AssetEditor、文件浏览、Asset 操作与 Asset-side drag/drop。 |
@@ -53,5 +53,7 @@ flowchart TD
 - 动态菜单：继承 `EditorMenuSource` 并添加 `[EditorMenuSource(area)]`。
 - 拖放：继承 `EditorDrop<TSource,TTarget>` 并添加 `[EditorDrop(area)]`。
 - 选择、焦点和打开等交互：通过 `interactions.For(area, target)` 获取轻量 `EditorInteraction`。
+- 可撤销操作：使用 `context.history.Execute`、`RecordValue`、transaction 或自定义 `EditorHistoryOperation`。
+- 项目语义状态：Module/Panel 实现 `IEditorWorkspaceState`，无需注册即可自动保存和恢复。
 
 具体例子见 [Interactions](Inno.Editor.Interactions.md) 与各 Panel 页面。EditorScripts 必须显式 `using InnoEditor.*;`；项目完全禁止 global using。
