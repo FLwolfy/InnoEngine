@@ -2,7 +2,7 @@
 
 [上一页：Assets.File](Inno.Assets.File.md) · [Assets 索引](README.md) · [下一页：Assets.Serialization](Inno.Assets.Serialization.md)
 
-Loader 负责 `.imeta`、versioned Catalog、content-addressed artifact store、Importer/Build Processor Registry、依赖失效、canonical cache 和 missing/replacement 语义。应用业务优先使用 [AssetManager](Inno.Assets.md)。
+Loader 负责 `.imeta`、Catalog、content-addressed artifact store、Importer/Build Processor Registry、依赖失效、canonical cache 和 missing/replacement 语义。应用业务优先使用 [AssetManager](Inno.Assets.md)。
 
 ## 编写 Importer
 
@@ -11,7 +11,6 @@ Loader 负责 `.imeta`、versioned Catalog、content-addressed artifact store、
 public sealed class CsvImporter : AssetImporter<TableAsset>
 {
     public override string importerId => "com.example.csv";
-    public override int version => 2;
     public override IReadOnlyList<string> supportedExtensions { get; } = [".csv"];
 
     protected override async ValueTask ImportAsync(
@@ -46,7 +45,6 @@ Importer 必须是 concrete class、有可访问无参构造函数、标注 `[As
 | 成员 | 说明 |
 | --- | --- |
 | `importerId` | 稳定 importer contract ID；建议显式固定。 |
-| `version` | 跨进程持久输出兼容版本。 |
 | `targetAssetType` | 具体 `AssetObject` 类型。 |
 | `supportedExtensions` | 接受的 source extension。 |
 | `ImportAsync` | 在 candidate writer 上完成单 source import。 |
@@ -81,7 +79,6 @@ Importer 抛异常时 transaction 不提交半成品。Catalog 状态变为 `Fai
 public sealed class AtlasProcessor : AssetBuildProcessor<AtlasDefinitionAsset>
 {
     public override string processorId => "com.example.atlas";
-    public override int version => 3;
 
     protected override ValueTask BuildAsync(
         AssetBuildContext<AtlasDefinitionAsset> context,
@@ -94,7 +91,7 @@ public sealed class AtlasProcessor : AssetBuildProcessor<AtlasDefinitionAsset>
 }
 ```
 
-`AssetManager.BuildAsync` 根据 definition runtime type 找到 Processor。Build key 包含 processor ID/version/MVID、definition identity 和全部输入 artifact key。它适合 Script Assembly、Shader Library、Atlas 等多输入 derived artifact。
+`AssetManager.BuildAsync` 根据 definition runtime type 找到 Processor。Build key 包含 processor ID、implementation MVID、definition identity 和全部输入 artifact key。代码变化会自然改变 MVID 并使缓存失效，不要求开发者维护手工版本号。它适合 Script Assembly、Shader Library、Atlas 等多输入 derived artifact。
 
 ## AssetLoader 公开 API
 
@@ -117,22 +114,20 @@ TextAsset? asset = loader.Load("Data/file.txt", typeof(TextAsset)) as TextAsset;
 | 引用 | `ResolveReference`、`GetDependencies`、`GetReferenceInfo` |
 | 回收 | `UnloadUnusedAssets`、`CollectArtifacts`、`WaitForIdle` |
 
-## `.imeta` v3
+## `.imeta`
 
 Sidecar 只保存不可重建、应进入版本控制的内容：
 
 ```text
-schemaVersion
 persistentId
 sourceKind
 importerId
-importerSettingsVersion
 importerSettingsBytes
 ```
 
 不再保存 relative path、source hash、implementation MVID、import status、dependency graph、asset state 或 artifact payload。路径来自 sidecar 所在位置，其余可重建信息进入 Library Catalog。
 
-文件夹也有 `.imeta`；`Assets` root 本身没有。Loader 可读取旧 v2 meta 并保留 persistent ID。
+文件夹也有 `.imeta`；`Assets` root 本身没有。`.imeta` 不携带 schema version，也不包含旧格式迁移分支；当前源码和当前引擎始终使用同一份直接契约。
 
 ## Catalog 与 journal
 
@@ -154,7 +149,7 @@ Catalog 同时保存 source 与 source dependency 的 cheap file stamp：文件�
 - Watcher overflow/error 触发全量目录 reconciliation；
 - Importer 执行期间 source stamp 再次变化会放弃 candidate，避免把旧内容与新 stamp 一起提交。
 
-Catalog schema 升级后，旧记录会进行一次重导入以建立可信 stamp。`Load(persistentId)` 继续直接读取一致的 Catalog/artifact snapshot；外部变更在 owner-thread `AssetManager.Update()` commit 后对其可见。
+`Load(persistentId)` 继续直接读取一致的 Catalog/artifact snapshot；外部变更在 owner-thread `AssetManager.Update()` commit 后对其可见。
 
 ## Content-addressed artifact store
 

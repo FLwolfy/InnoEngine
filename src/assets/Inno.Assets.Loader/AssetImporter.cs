@@ -15,9 +15,6 @@ public abstract class AssetImporter
     /// <summary>Gets the stable importer implementation identifier.</summary>
     public virtual string importerId => GetType().FullName ?? GetType().Name;
 
-    /// <summary>Gets the importer version used for cache invalidation.</summary>
-    public virtual int version => 1;
-
     /// <summary>Gets the concrete asset type produced by this importer.</summary>
     public abstract Type targetAssetType { get; }
 

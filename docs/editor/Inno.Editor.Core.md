@@ -59,6 +59,10 @@ Console.WriteLine(context.settings.path);
 [EditorModule(order: 100)]
 public sealed class AnimationModule : EditorModule
 {
+    private bool m_isBaking;
+
+    public override bool blocksFollowingUpdates => m_isBaking;
+
     protected override void OnStart(EditorContext context)
     {
     }
@@ -72,6 +76,8 @@ public sealed class AnimationModule : EditorModule
     }
 }
 ```
+
+`blocksFollowingUpdates` 是通用的原子启动/切换屏障：当前 Module 返回 `true` 时，排序在它之后的 Module 本帧不更新，但 Panel 和 Modal 仍可绘制。Scripting 用它保证脚本类型激活后 Scene 才恢复；未来 Shader/Pipeline bootstrap 也可以使用同一机制，避免业务模块互相引用。
 
 Module、Panel、Action、Menu source 和 Drop handler 可以在唯一构造函数中请求 `EditorContext`、`EditorInteractions` 或一个无歧义的已发现 `EditorModule`。不存在手工注册表。
 
@@ -131,7 +137,6 @@ EditorScripts 使用唯一逻辑命名空间 `InnoEditor.Core`。它导出 Conte
 public sealed class AnimationModule : EditorModule, IEditorWorkspaceState
 {
     public string workspaceStateId => "animation.workspace";
-    public int workspaceStateVersion => 1;
 
     public void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
     {

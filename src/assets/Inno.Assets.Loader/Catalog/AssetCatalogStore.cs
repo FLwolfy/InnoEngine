@@ -31,8 +31,6 @@ internal sealed class AssetCatalogStore
         {
             AssetCatalogSnapshot snapshot = SerializationManager.Deserialize<AssetCatalogSnapshot>(
                 IOFile.ReadAllBytes(path));
-            if (snapshot.schemaVersion != AssetCatalogSnapshot.C_SCHEMA_VERSION)
-                return [];
             m_revision = snapshot.revision;
             if (string.Equals(path, m_journalPath, StringComparison.Ordinal))
                 Commit(DeserializeEntries(snapshot.entries));

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 
 using Inno.Core.Assemblies;
 using Inno.Core.Reflection;
@@ -39,6 +38,8 @@ public sealed class EditorRuntimeTests : IDisposable
         TestPanel.detachCount = 0;
         DeferredAction.executeCount = 0;
         NeutralHistoryHandler.value = 0;
+        UpdateBarrierModule.block = false;
+        FollowingUpdateModule.updateCount = 0;
 
         m_runtime = new EditorInteractionRuntime(m_projectRoot);
         m_runtime.Start();
@@ -54,11 +55,37 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void HistoryAndWorkspaceContractsDoNotExposeSchemaVersions()
+    {
+        Assert.Null(typeof(IEditorWorkspaceState).GetProperty("workspaceStateVersion"));
+        Assert.Null(typeof(EditorHistoryChange).GetProperty("version"));
+        ConstructorInfo constructor = Assert.Single(typeof(EditorHistoryHandlerAttribute).GetConstructors());
+        Assert.Collection(
+            constructor.GetParameters(),
+            static parameter => Assert.Equal(typeof(string), parameter.ParameterType));
+    }
+
+    [Fact]
     public void RuntimeDiscoversModulesAndPanelsWithoutRegistrationCalls()
     {
         Assert.True(TestModule.startCount > 0);
         Assert.True(TestPanel.attachCount > 0);
         Assert.True(m_runtime.panelCount >= 1);
+    }
+
+    [Fact]
+    public void BlockingModuleDefersOnlyModulesOrderedAfterIt()
+    {
+        UpdateBarrierModule.block = true;
+
+        m_runtime.Update(new EditorFrame(0.016f, 0.016f, isFocused: true));
+
+        Assert.Equal(0, FollowingUpdateModule.updateCount);
+        UpdateBarrierModule.block = false;
+
+        m_runtime.Update(new EditorFrame(0.016f, 0.032f, isFocused: true));
+
+        Assert.Equal(1, FollowingUpdateModule.updateCount);
     }
 
     [Fact]
@@ -142,7 +169,7 @@ public sealed class EditorRuntimeTests : IDisposable
     {
         int value = 0;
         Assert.True(m_runtime.interactions.history.Execute(
-            "Legacy Change",
+            "Runtime-bound Change",
             () =>
             {
                 value = 1;
@@ -169,7 +196,6 @@ public sealed class EditorRuntimeTests : IDisposable
             "Unavailable Change",
             new EditorHistoryChange(
                 "tests/missing-history-handler",
-                version: 1,
                 EditorHistoryPayload.FromBytes([1, 2, 3])));
 
         Assert.False(m_runtime.interactions.history.canUndo);
@@ -189,7 +215,6 @@ public sealed class EditorRuntimeTests : IDisposable
             "Large Neutral Change",
             new EditorHistoryChange(
                 NeutralHistoryHandler.KIND,
-                version: 1,
                 EditorHistoryPayload.FromBytes(bytes)));
 
         Assert.Equal(0, m_runtime.interactions.history.residentBytes);
@@ -315,7 +340,6 @@ public sealed class EditorRuntimeTests : IDisposable
 
         string settingsPath = Path.Combine(m_projectRoot, "editor.ini");
         Assert.True(File.Exists(settingsPath));
-        Assert.Contains("[InnoEditor][Project]", File.ReadAllText(settingsPath));
         Assert.Contains("[InnoEditor][Module.tests.workspace]", File.ReadAllText(settingsPath));
         Assert.False(File.Exists(Path.Combine(m_projectRoot, "Library", "Editor", "Workspace.json")));
 
@@ -335,7 +359,6 @@ public sealed class EditorRuntimeTests : IDisposable
         settings.SetImGuiLayout(layout);
         settings.SetSection("Module.tests", new Dictionary<string, string>
         {
-            ["Version"] = "1",
             ["openScenes"] = "[\"Scenes/Test.innoscene\"]"
         });
 
@@ -346,47 +369,11 @@ public sealed class EditorRuntimeTests : IDisposable
         Assert.True(restored.TryGetSection(
             "Module.tests",
             out IReadOnlyDictionary<string, string> values));
-        Assert.Equal("1", values["Version"]);
         Assert.Equal("[\"Scenes/Test.innoscene\"]", values["openScenes"]);
         string document = File.ReadAllText(restored.path);
         Assert.Contains("[Window][Hierarchy]", document);
         Assert.Contains("[InnoEditor][Module.tests]", document);
         Assert.Contains("openScenes=[\"Scenes/Test.innoscene\"]", document);
-        Assert.DoesNotContain("Payload=", document);
-    }
-
-    [Fact]
-    public void LegacyOpaqueWorkspaceMigratesToReadableProviderSections()
-    {
-        m_runtime.Dispose();
-        const string payload = """
-            {
-              "schemaVersion": 1,
-              "states": {
-                "tests.workspace": {
-                  "version": 1,
-                  "values": { "value": 73 }
-                }
-              },
-              "panels": { "tests.panel": true }
-            }
-            """;
-        string encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(payload));
-        File.WriteAllText(
-            Path.Combine(m_projectRoot, "editor.ini"),
-            $"[Window][Hierarchy]{Environment.NewLine}Pos=10,20{Environment.NewLine}{Environment.NewLine}" +
-            $"[InnoEditor][Workspace]{Environment.NewLine}Payload={encoded}{Environment.NewLine}");
-        TestModule.restoredWorkspaceValue = 0;
-
-        using var restored = new EditorInteractionRuntime(m_projectRoot);
-        restored.Start();
-
-        Assert.Equal(73, TestModule.restoredWorkspaceValue);
-        Assert.True(Assert.Single(
-            restored.panels.Where(static value => value.id == "tests.panel")).panel.isOpen);
-        string document = File.ReadAllText(Path.Combine(m_projectRoot, "editor.ini"));
-        Assert.Contains("[InnoEditor][Module.tests.workspace]", document);
-        Assert.Contains("value=73", document);
         Assert.DoesNotContain("Payload=", document);
     }
 
@@ -397,7 +384,6 @@ public sealed class EditorRuntimeTests : IDisposable
         var settings = new EditorProjectSettings(m_projectRoot);
         settings.SetSection("Module.tests.workspace", new Dictionary<string, string>
         {
-            ["Version"] = "1",
             ["value"] = "91"
         });
         settings.Save();
@@ -453,7 +439,7 @@ public sealed class InteractionTarget
 
 public sealed record InteractionPresentation(string value, bool submit, bool cancel = false);
 
-[EditorHistoryHandler(NeutralHistoryHandler.KIND, version: 1)]
+[EditorHistoryHandler(NeutralHistoryHandler.KIND)]
 public sealed class NeutralHistoryHandler : EditorHistoryHandler
 {
     public const string KIND = "tests/neutral-value";
@@ -465,7 +451,7 @@ public sealed class NeutralHistoryHandler : EditorHistoryHandler
         byte[] bytes = new byte[sizeof(int) * 2];
         BitConverter.GetBytes(before).CopyTo(bytes, 0);
         BitConverter.GetBytes(after).CopyTo(bytes, sizeof(int));
-        return new EditorHistoryChange(KIND, 1, EditorHistoryPayload.FromBytes(bytes));
+        return new EditorHistoryChange(KIND, EditorHistoryPayload.FromBytes(bytes));
     }
 
     protected override EditorHistoryAvailability Query(
@@ -500,7 +486,6 @@ public sealed class TestModule : EditorModule, IEditorWorkspaceState
 
     public string workspaceStateId => "tests.workspace";
 
-    public int workspaceStateVersion => 1;
 
     public void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
         => writer.Set("value", workspaceValue);
@@ -522,6 +507,22 @@ public sealed class TestModule : EditorModule, IEditorWorkspaceState
     }
 
     protected override void OnStop(EditorContext context) => stopCount++;
+}
+
+[EditorModule(order: -200)]
+public sealed class UpdateBarrierModule : EditorModule
+{
+    public static bool block;
+
+    public override bool blocksFollowingUpdates => block;
+}
+
+[EditorModule(order: -199)]
+public sealed class FollowingUpdateModule : EditorModule
+{
+    public static int updateCount;
+
+    protected override void OnUpdate(EditorContext context) => updateCount++;
 }
 
 [EditorPanel("tests.panel", "Test", defaultOpen: false)]

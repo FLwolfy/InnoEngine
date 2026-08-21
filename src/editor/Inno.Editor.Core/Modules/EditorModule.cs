@@ -7,6 +7,15 @@ namespace Inno.Editor.Core;
 public abstract class EditorModule
 {
     /// <summary>
+    /// Gets whether modules ordered after this module must defer their updates for the current frame.
+    /// </summary>
+    /// <remarks>
+    /// A module may return <see langword="true"/> while completing a project-wide bootstrap or atomic
+    /// transition that later modules must not observe partially. Panels and modals remain drawable.
+    /// </remarks>
+    public virtual bool blocksFollowingUpdates => false;
+
+    /// <summary>
     /// Starts the module after the containing extension generation becomes active.
     /// </summary>
     /// <param name="context">The shared editor context for the active runtime.</param>

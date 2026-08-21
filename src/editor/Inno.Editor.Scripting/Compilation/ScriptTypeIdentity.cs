@@ -8,8 +8,6 @@ internal static class ScriptTypeIdentity
 {
     private static readonly Guid C_SCRIPT_SOURCE_NAMESPACE =
         Guid.Parse("6ca29f90-69d4-4f27-b42b-fdad7cc10e6a");
-    private static readonly Guid C_LEGACY_TYPE_NAMESPACE =
-        Guid.Parse("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
 
     internal static Guid CreateCanonical(Guid sourcePersistentId)
     {
@@ -17,9 +15,6 @@ internal static class ScriptTypeIdentity
             throw new ArgumentException("A script source identity is required.", nameof(sourcePersistentId));
         return CreateGuidV5(C_SCRIPT_SOURCE_NAMESPACE, sourcePersistentId.ToString("D"));
     }
-
-    internal static Guid CreateLegacy(string assemblyName, string typeName)
-        => CreateGuidV5(C_LEGACY_TYPE_NAMESPACE, $"{assemblyName}:{typeName}");
 
     private static Guid CreateGuidV5(Guid namespaceId, string name)
     {

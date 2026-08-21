@@ -8,16 +8,6 @@ namespace Inno.Editor.Interactions;
 public abstract class EditorHistoryHandler
 {
     /// <summary>
-    /// Gets whether this handler can interpret the supplied historical payload schema version.
-    /// </summary>
-    /// <param name="version">The positive schema version stored by the history entry.</param>
-    /// <returns><see langword="true"/> when the payload can be queried and applied.</returns>
-    public virtual bool CanReadVersion(int version)
-        => GetType().GetCustomAttributes(typeof(EditorHistoryHandlerAttribute), false) is
-               [EditorHistoryHandlerAttribute attribute] &&
-           version == attribute.version;
-
-    /// <summary>
     /// Determines whether a neutral change can currently transition in the requested direction.
     /// </summary>
     /// <param name="context">The current-generation editor services.</param>
@@ -61,10 +51,7 @@ public abstract class EditorHistoryHandler
         EditorHistoryContext context,
         EditorHistoryChange change,
         EditorHistoryDirection direction)
-        => CanReadVersion(change.version)
-            ? Query(context, change, direction)
-            : EditorHistoryAvailability.Unavailable(
-                $"History handler '{change.kind}' cannot read payload version {change.version}.");
+        => Query(context, change, direction);
 
     internal EditorHistoryResult ApplyInternal(
         EditorHistoryContext context,

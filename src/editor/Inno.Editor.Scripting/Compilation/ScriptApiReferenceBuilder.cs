@@ -20,8 +20,6 @@ internal sealed record ScriptApiReferenceSet(
 
 internal static class ScriptApiReferenceBuilder
 {
-    private const string C_REFERENCE_SCHEMA_VERSION = "4";
-
     internal static ScriptApiReferenceSet Build(
         ScriptManagerOptions options,
         ScriptApiProfile profile,
@@ -238,7 +236,8 @@ internal static class ScriptApiReferenceBuilder
 
     private static string CreateFingerprint(ScriptApiProfile profile)
     {
-        var builder = new StringBuilder(C_REFERENCE_SCHEMA_VERSION)
+        var builder = new StringBuilder(
+                typeof(ScriptApiReferenceBuilder).Assembly.ManifestModule.ModuleVersionId.ToString("D"))
             .Append('|')
             .Append(profile.name);
         foreach (ScriptApiAssembly export in profile.exports)

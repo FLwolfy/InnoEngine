@@ -17,7 +17,7 @@ public static class ScenePropertySerialization
     /// </summary>
     /// <param name="target">The live scene object containing the property.</param>
     /// <param name="propertyName">The exact serialized member key.</param>
-    /// <returns>Versioned neutral bytes that can be restored into the same logical object identity.</returns>
+    /// <returns>Neutral bytes that can be restored into the same logical object identity.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="target"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="propertyName"/> is empty or unknown.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the target is destroyed or not owned by a loaded scene.</exception>
@@ -36,7 +36,7 @@ public static class ScenePropertySerialization
     /// Captures all persistent properties without serializing the complete scene.
     /// </summary>
     /// <param name="target">The live scene object whose state should be captured.</param>
-    /// <returns>Versioned neutral bytes containing independently encoded properties.</returns>
+    /// <returns>Neutral bytes containing independently encoded properties.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="target"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the target is destroyed or not owned by a loaded scene.</exception>
     public static byte[] CaptureProperties(EngineObject target)

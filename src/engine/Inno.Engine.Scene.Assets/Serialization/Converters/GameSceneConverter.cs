@@ -30,7 +30,6 @@ internal sealed class GameSceneConverter : SerializationConverter<GameScene>
             sourceIds.Add(engineObjects[i], engineObjects[i].identity.persistentId);
         var references = new SceneGraphReferenceMap(value, engineObjects, sourceIds);
 
-        writer.Write(SceneGraphSerialization.C_SCHEMA_VERSION_KEY, SceneGraphSerialization.C_SCENE_SCHEMA_VERSION);
         writer.Write(SceneGraphSerialization.C_SCENE_ID_KEY, value.identity.persistentId);
         writer.Write(SceneGraphSerialization.C_NAME_KEY, value.name);
         using (references.Enter())
@@ -108,9 +107,8 @@ internal sealed class GameSceneConverter : SerializationConverter<GameScene>
             preservePersistentIds,
             references,
             restoreProperties: false);
-        IReadOnlyList<SerializationReader> systemReaders = reader.Contains(SceneGraphSerialization.C_SYSTEMS_KEY)
-            ? reader.ReadObjectArray(SceneGraphSerialization.C_SYSTEMS_KEY)
-            : Array.Empty<SerializationReader>();
+        IReadOnlyList<SerializationReader> systemReaders =
+            reader.ReadObjectArray(SceneGraphSerialization.C_SYSTEMS_KEY);
         IReadOnlyList<(GameSystem system, SerializationReader state)> systemStates =
             SceneGraphSerialization.CreateSystems(scene, systemReaders, preservePersistentIds, references);
         using (references.Enter())

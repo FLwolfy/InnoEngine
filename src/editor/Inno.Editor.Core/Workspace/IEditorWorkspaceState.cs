@@ -11,11 +11,6 @@ public interface IEditorWorkspaceState
     string workspaceStateId { get; }
 
     /// <summary>
-    /// Gets the schema version understood by this provider.
-    /// </summary>
-    int workspaceStateVersion { get; }
-
-    /// <summary>
     /// Captures the provider's current project-specific state.
     /// </summary>
     /// <param name="writer">The isolated state writer assigned to this provider.</param>

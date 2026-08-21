@@ -34,31 +34,6 @@ public static partial class ImGuiWidget
     }
 
     /// <summary>
-    /// Draws a full-width interactive tree row using the legacy highlight and expandability options.
-    /// </summary>
-    /// <param name="id">The stable identifier used to retain expansion state.</param>
-    /// <param name="onDraw">The callback that draws row content after the tree indentation.</param>
-    /// <param name="highlight">Whether the row should use the selected interaction background.</param>
-    /// <param name="openable">Whether the row participates in expansion state.</param>
-    /// <returns><see langword="true"/> when child content should be drawn; otherwise, <see langword="false"/>.</returns>
-    public static bool TreeNode(
-        string id,
-        Action onDraw,
-        bool highlight = false,
-        bool openable = false)
-    {
-        TreeNodeResult result = TreeNode(
-            id,
-            onDraw,
-            new TreeNodeOptions
-            {
-                selected = highlight,
-                isLeaf = openable
-            });
-        return result.isOpen;
-    }
-
-    /// <summary>
     /// Draws a full-width interactive tree row.
     /// </summary>
     /// <param name="id">Stable row identifier.</param>

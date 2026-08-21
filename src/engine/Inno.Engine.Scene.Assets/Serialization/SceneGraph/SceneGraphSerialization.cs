@@ -13,9 +13,6 @@ namespace Inno.Engine.Scene.Assets;
 
 internal static class SceneGraphSerialization
 {
-    internal const int C_SCHEMA_VERSION = 2;
-    internal const int C_SCENE_SCHEMA_VERSION = 3;
-    internal const string C_SCHEMA_VERSION_KEY = "schemaVersion";
     internal const string C_SCENE_ID_KEY = "sceneId";
     internal const string C_NAME_KEY = "name";
     internal const string C_OBJECTS_KEY = "objects";
@@ -319,18 +316,10 @@ internal static class SceneGraphSerialization
 
     internal static void ValidateScene(SerializationReader reader)
     {
-        int version = reader.Read<int>(C_SCHEMA_VERSION_KEY);
-        if (version is not C_SCHEMA_VERSION and not C_SCENE_SCHEMA_VERSION)
-        {
-            throw new InvalidDataException(
-                $"Scene schema version '{version}' at '{reader.path}' is unsupported. " +
-                $"Expected '{C_SCHEMA_VERSION}' or '{C_SCENE_SCHEMA_VERSION}'.");
-        }
         EnsurePersistentId(reader.Read<Guid>(C_SCENE_ID_KEY), $"{reader.path}.{C_SCENE_ID_KEY}");
         _ = reader.Read<string>(C_NAME_KEY);
         ValidateObjects(reader.ReadObjectArray(C_OBJECTS_KEY));
-        if (version >= C_SCENE_SCHEMA_VERSION)
-            ValidateSystems(reader.ReadObjectArray(C_SYSTEMS_KEY));
+        ValidateSystems(reader.ReadObjectArray(C_SYSTEMS_KEY));
     }
 
     internal static void WriteSystems(
@@ -582,7 +571,7 @@ internal static class SceneGraphSerialization
     private static Type ResolveComponentType(Guid stableTypeId)
     {
         if (!TypeCacheManager.TryResolveType(stableTypeId, out Type? componentType) || componentType is null)
-            throw new InvalidDataException($"GameComponent stable type id '{stableTypeId}' is not loaded.");
+            throw new SceneTypeResolutionException(stableTypeId, "component");
         if (!typeof(GameComponent).IsAssignableFrom(componentType) || componentType.IsAbstract)
         {
             throw new InvalidDataException(
@@ -601,7 +590,7 @@ internal static class SceneGraphSerialization
     private static Type ResolveSystemType(Guid stableTypeId)
     {
         if (!TypeCacheManager.TryResolveType(stableTypeId, out Type? systemType) || systemType is null)
-            throw new InvalidDataException($"GameSystem stable type id '{stableTypeId}' is not loaded.");
+            throw new SceneTypeResolutionException(stableTypeId, "system");
         if (!typeof(GameSystem).IsAssignableFrom(systemType) || systemType.IsAbstract)
             throw new InvalidDataException($"Stable type id '{stableTypeId}' resolves to invalid system '{systemType.FullName}'.");
         return systemType;

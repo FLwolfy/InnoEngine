@@ -59,7 +59,6 @@ internal sealed class CSharpScriptImporter : AssetImporter<ScriptSourceAsset>
             Encoding.UTF8.GetBytes(string.Join(Environment.NewLine, diagnostics)),
             cancellationToken).ConfigureAwait(false);
         var typeManifest = new ScriptSourceTypeManifest(
-            1,
             context.persistentId,
             context.relativePath,
             declarations.Select(CreateTypeDeclaration).ToArray());

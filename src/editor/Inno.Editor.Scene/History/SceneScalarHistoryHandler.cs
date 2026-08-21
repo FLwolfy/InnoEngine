@@ -7,7 +7,7 @@ using Inno.Engine.Scene;
 
 namespace Inno.Editor.Scene;
 
-[EditorHistoryHandler(SceneHistoryKinds.Scalar, version: 1)]
+[EditorHistoryHandler(SceneHistoryKinds.Scalar)]
 internal sealed class SceneScalarHistoryHandler : EditorHistoryHandler
 {
     private const double C_MERGE_WINDOW_SECONDS = 1.0;
@@ -90,7 +90,6 @@ internal sealed class SceneScalarHistoryHandler : EditorHistoryHandler
                 current.timestamp);
             merged = new EditorHistoryChange(
                 SceneHistoryKinds.Scalar,
-                version: 1,
                 EditorHistoryPayload.FromBytes(data.Encode()),
                 older.mergeKey);
             return true;

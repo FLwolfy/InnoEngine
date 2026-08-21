@@ -284,20 +284,7 @@ public sealed class EditorProjectSettings
 
     private static IEnumerable<KeyValuePair<string, string>> OrderValues(
         IReadOnlyDictionary<string, string> values)
-    {
-        if (values.TryGetValue("SchemaVersion", out string? schemaVersion))
-            yield return new KeyValuePair<string, string>("SchemaVersion", schemaVersion);
-        if (values.TryGetValue("Version", out string? version))
-            yield return new KeyValuePair<string, string>("Version", version);
-        foreach (KeyValuePair<string, string> pair in values.OrderBy(
-                     static pair => pair.Key,
-                     StringComparer.Ordinal))
-        {
-            if (pair.Key is "SchemaVersion" or "Version")
-                continue;
-            yield return pair;
-        }
-    }
+        => values.OrderBy(static pair => pair.Key, StringComparer.Ordinal);
 
     private static bool TryParseEditorSectionHeader(string line, out string sectionName)
     {

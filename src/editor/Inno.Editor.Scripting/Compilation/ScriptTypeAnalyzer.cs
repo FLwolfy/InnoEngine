@@ -138,26 +138,17 @@ internal static class ScriptTypeAnalyzer
                     ScriptDeclaration declaration = distinctSources[0];
                     diagnostics.Add(CreateDiagnostic(
                         "INNO2001",
-                        ScriptDiagnosticSeverity.Warning,
+                        ScriptDiagnosticSeverity.Error,
                         $"Attachable type '{typeName}' has no unambiguous canonical script source. " +
                         "Move it to a matching file or add an explicit StableTypeId.",
                         declaration));
-                    manifestEntries.Add(CreateManifestEntry(
-                        type,
-                        declaration,
-                        ScriptTypeIdentity.CreateLegacy(compilation.AssemblyName ?? string.Empty, typeName),
-                        explicitIdentity: false,
-                        canonicalSource: false));
                 }
             }
 
             if (canonical is null)
                 continue;
             Guid stableTypeId = ScriptTypeIdentity.CreateCanonical(canonical.source.persistentId);
-            Guid formerStableTypeId = ScriptTypeIdentity.CreateLegacy(
-                compilation.AssemblyName ?? string.Empty,
-                typeName);
-            mappings.Add(new ScriptTypeMapping(typeName, stableTypeId, formerStableTypeId));
+            mappings.Add(new ScriptTypeMapping(typeName, stableTypeId));
             manifestEntries.Add(CreateManifestEntry(
                 type,
                 canonical,
@@ -185,7 +176,7 @@ internal static class ScriptTypeAnalyzer
         }
 
         return new ScriptTypeAnalysisResult(
-            new ScriptTypeManifest(1, compilation.AssemblyName ?? string.Empty, manifestEntries),
+            new ScriptTypeManifest(compilation.AssemblyName ?? string.Empty, manifestEntries),
             mappings,
             diagnostics);
     }
@@ -195,7 +186,7 @@ internal static class ScriptTypeAnalyzer
         var source = new StringBuilder("#nullable enable\n");
         foreach (ScriptTypeMapping mapping in mappings.OrderBy(static value => value.typeName, StringComparer.Ordinal))
         {
-            string value = $"v1|{mapping.stableTypeId:D}|{mapping.formerStableTypeId:D}|{mapping.typeName}";
+            string value = $"{mapping.stableTypeId:D}|{mapping.typeName}";
             source.Append("[assembly: global::System.Reflection.AssemblyMetadataAttribute(")
                 .Append(SymbolDisplay.FormatLiteral("Inno.StableTypeId", quote: true))
                 .Append(", ")

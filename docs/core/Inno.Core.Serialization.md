@@ -24,7 +24,7 @@ SerializationManager.Initialize();
 | `CapturePropertyData(value, name, context?)` | 把一个 persistent property 编码为独立、带版本的中立 bytes。 |
 | `CapturePropertiesData(value, context?)` | 把全部 persistent property snapshots 编码为独立、带版本的中立 bytes。 |
 | `RestorePropertiesData(target, data, mode, context?)` | 从 property-data bytes 恢复既有对象，不序列化 owning graph。 |
-| `Serialize<T>(T, context?)` | 把 class `ISerializable` 根对象编码为 version-two bytes。 |
+| `Serialize<T>(T, context?)` | 把 class `ISerializable` 根对象编码为确定性二进制数据。 |
 | `Deserialize<T>(ReadOnlySpan<byte>, context?)` | 创建并恢复一个新根对象。 |
 | `Restore<T>(T target, ReadOnlySpan<byte>, context?)` | 将数据恢复到既有实例，适合身份必须保留的对象。 |
 | `Encode(Action<SerializationWriter>, context?)` | 用手写 structured schema 编码。 |
@@ -201,7 +201,6 @@ Reader 同样公开 `context`、`path`、`valueType`，仅在当前 decode/resto
 ```csharp
 byte[] bytes = SerializationManager.Encode(writer =>
 {
-    writer.Write("schemaVersion", 1);
     writer.WriteObjectArray("points", points, (item, point) =>
     {
         item.Write("x", point.x);
@@ -221,4 +220,4 @@ Vector2[] decoded = SerializationManager.Decode(bytes, reader =>
 - 循环引用和外部对象身份通常需要 Converter + context + `OnCompleted` 协作解决。
 - Restore callback 只在整个操作成功后提交完成通知；异常时不会执行 completion callbacks。
 - Compatible property restore 只跳过单个成员的数据/类型不兼容；对象结构或 restore hook 错误仍由上层事务处理。
-- 格式当前称为 version two；更改二进制 schema 时必须保持兼容或明确提供迁移。
+- 序列化层只实现当前二进制契约，不包含旧 schema 的兼容读取或迁移分支。不兼容数据会直接失败。

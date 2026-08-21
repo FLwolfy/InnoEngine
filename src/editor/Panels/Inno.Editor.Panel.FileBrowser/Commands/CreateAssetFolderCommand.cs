@@ -33,7 +33,6 @@ internal sealed class CreateAssetFolderCommand : EditorAction<string>
             "Create Folder",
             new EditorHistoryChange(
                 AssetHistoryKinds.SourceOperation,
-                version: 1,
                 EditorHistoryPayload.FromBytes(data.Encode())));
         if (!AssetManager.TryGetFileSystemEntry(candidate, out AssetFileEntry target))
             return;

@@ -15,12 +15,10 @@ public sealed class EditorWorkspaceStateReader
     /// <summary>
     /// Creates a workspace state reader for an optional provider payload.
     /// </summary>
-    /// <param name="version">The stored provider schema version, or zero when no state exists.</param>
     /// <param name="payload">The stored JSON object payload, or <see langword="null"/> when no state exists.</param>
     /// <exception cref="JsonException">Thrown when <paramref name="payload"/> is not a valid JSON object.</exception>
-    public EditorWorkspaceStateReader(int version, string? payload)
+    public EditorWorkspaceStateReader(string? payload)
     {
-        this.version = version;
         hasState = payload is not null;
         m_values = payload is null
             ? []
@@ -32,11 +30,6 @@ public sealed class EditorWorkspaceStateReader
     /// Gets whether compatible storage was found for the provider.
     /// </summary>
     public bool hasState { get; }
-
-    /// <summary>
-    /// Gets the schema version written by the previous provider generation.
-    /// </summary>
-    public int version { get; }
 
     /// <summary>
     /// Tries to deserialize one value by its provider-local key.

@@ -8,7 +8,7 @@ using Inno.Engine.Scene.Assets;
 
 namespace Inno.Editor.Scene;
 
-[EditorHistoryHandler(SceneHistoryKinds.Element, version: 1)]
+[EditorHistoryHandler(SceneHistoryKinds.Element)]
 internal sealed class SceneElementHistoryHandler : EditorHistoryHandler
 {
     protected override EditorHistoryAvailability Query(

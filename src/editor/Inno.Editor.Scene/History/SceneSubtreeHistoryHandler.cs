@@ -8,7 +8,7 @@ using Inno.Engine.Scene.Components;
 
 namespace Inno.Editor.Scene;
 
-[EditorHistoryHandler(SceneHistoryKinds.Subtree, version: 1)]
+[EditorHistoryHandler(SceneHistoryKinds.Subtree)]
 internal sealed class SceneSubtreeHistoryHandler : EditorHistoryHandler
 {
     protected override EditorHistoryAvailability Query(

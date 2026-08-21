@@ -89,7 +89,7 @@ public static class SerializationManager
     /// <param name="value">The serializable object containing the requested property.</param>
     /// <param name="propertyName">The exact serialized member key to capture.</param>
     /// <param name="context">Optional immutable converter context.</param>
-    /// <returns>Versioned bytes containing the property name and encoded value.</returns>
+    /// <returns>Neutral bytes containing the property name and encoded value.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="propertyName"/> is empty or does not identify a persistent property.
@@ -110,7 +110,7 @@ public static class SerializationManager
     }
 
     /// <summary>
-    /// Captures every persistent property as versioned neutral bytes without serializing the owning object graph.
+    /// Captures every persistent property as neutral bytes without serializing the owning object graph.
     /// </summary>
     /// <param name="value">The serializable object whose persistent properties should be captured.</param>
     /// <param name="context">Optional immutable converter context.</param>
@@ -186,7 +186,7 @@ public static class SerializationManager
     }
 
     /// <summary>
-    /// Serializes a complete serializable root object into deterministic version-two bytes.
+    /// Serializes a complete serializable root object into deterministic binary data.
     /// </summary>
     /// <typeparam name="T">The declared concrete root type.</typeparam>
     /// <param name="value">The root object to serialize.</param>
@@ -212,7 +212,7 @@ public static class SerializationManager
     }
 
     /// <summary>
-    /// Deserializes a new serializable root object from version-two bytes.
+    /// Deserializes a new serializable root object from deterministic binary data.
     /// </summary>
     /// <typeparam name="T">The concrete root type to create.</typeparam>
     /// <param name="bytes">The encoded bytes.</param>
@@ -239,7 +239,7 @@ public static class SerializationManager
     }
 
     /// <summary>
-    /// Restores version-two bytes into an existing serializable root object.
+    /// Restores deterministic binary data into an existing serializable root object.
     /// </summary>
     /// <typeparam name="T">The declared target contract.</typeparam>
     /// <param name="target">The existing target object.</param>
@@ -267,7 +267,7 @@ public static class SerializationManager
     }
 
     /// <summary>
-    /// Encodes a manually defined structured schema into deterministic version-two bytes.
+    /// Encodes a manually defined structured schema into deterministic binary data.
     /// </summary>
     /// <param name="write">The callback that writes the root object.</param>
     /// <param name="context">Optional immutable converter context.</param>
@@ -292,7 +292,7 @@ public static class SerializationManager
     }
 
     /// <summary>
-    /// Decodes a manually defined structured schema from version-two bytes.
+    /// Decodes a manually defined structured schema from deterministic binary data.
     /// </summary>
     /// <typeparam name="TResult">The result produced by the read callback.</typeparam>
     /// <param name="bytes">The encoded bytes.</param>

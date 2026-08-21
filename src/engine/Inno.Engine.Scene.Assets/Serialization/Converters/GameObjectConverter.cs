@@ -14,7 +14,6 @@ namespace Inno.Engine.Scene.Assets;
 [SerializationExtension]
 internal sealed class GameObjectConverter : SerializationConverter<GameObject>
 {
-    private const int C_PREFAB_SCHEMA_VERSION = SceneGraphSerialization.C_SCHEMA_VERSION;
     private const string C_SOURCE_ROOT_ID_KEY = "sourceRootId";
 
     public override void Write(SerializationWriter writer, GameObject value)
@@ -60,7 +59,6 @@ internal sealed class GameObjectConverter : SerializationConverter<GameObject>
         }
 
         var references = new SceneGraphReferenceMap(value.scene, engineObjects, sourceIds, value);
-        writer.Write(SceneGraphSerialization.C_SCHEMA_VERSION_KEY, C_PREFAB_SCHEMA_VERSION);
         writer.Write(C_SOURCE_ROOT_ID_KEY, sourceIds[value]);
         using (references.Enter())
         {
@@ -201,13 +199,6 @@ internal sealed class GameObjectConverter : SerializationConverter<GameObject>
 
     private static void ValidatePrefab(SerializationReader reader)
     {
-        int version = reader.Read<int>(SceneGraphSerialization.C_SCHEMA_VERSION_KEY);
-        if (version != C_PREFAB_SCHEMA_VERSION)
-        {
-            throw new InvalidDataException(
-                $"Prefab schema version '{version}' at '{reader.path}' is unsupported. " +
-                $"Expected '{C_PREFAB_SCHEMA_VERSION}'.");
-        }
         Guid rootId = reader.Read<Guid>(C_SOURCE_ROOT_ID_KEY);
         if (rootId == Guid.Empty)
             throw new InvalidDataException($"Prefab source root identity at '{reader.path}' cannot be empty.");

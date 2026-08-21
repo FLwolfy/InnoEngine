@@ -6,7 +6,7 @@ using Inno.Engine.Scene;
 
 namespace Inno.Editor.Scene;
 
-[EditorHistoryHandler(SceneHistoryKinds.Order, version: 1)]
+[EditorHistoryHandler(SceneHistoryKinds.Order)]
 internal sealed class SceneOrderHistoryHandler : EditorHistoryHandler
 {
     protected override EditorHistoryAvailability Query(

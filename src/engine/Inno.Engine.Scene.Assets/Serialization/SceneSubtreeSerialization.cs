@@ -15,7 +15,7 @@ public static class SceneSubtreeSerialization
     /// Captures one live GameObject and all descendants without serializing unrelated scene objects.
     /// </summary>
     /// <param name="root">The live subtree root.</param>
-    /// <returns>Versioned bytes containing the subtree structure, components, properties, and identity references.</returns>
+    /// <returns>Neutral bytes containing the subtree structure, components, properties, and identity references.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="root"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the root is destroyed or detached.</exception>
     public static byte[] Capture(GameObject root)

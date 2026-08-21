@@ -471,7 +471,6 @@ public sealed class SceneEdits : EditorModule
             historyName,
             new EditorHistoryChange(
                 SceneHistoryKinds.Order,
-                version: 1,
                 EditorHistoryPayload.FromBytes(data.Encode())));
     }
 
@@ -576,7 +575,6 @@ public sealed class SceneEdits : EditorModule
             historyName,
             new EditorHistoryChange(
                 SceneHistoryKinds.Property,
-                version: 1,
                 EditorHistoryPayload.FromBytes(data.Encode()),
                 mergeKey));
         return true;
@@ -641,7 +639,6 @@ public sealed class SceneEdits : EditorModule
             name,
             new EditorHistoryChange(
                 SceneHistoryKinds.Document,
-                version: 1,
                 EditorHistoryPayload.FromBytes(data.Encode())));
     }
 
@@ -674,7 +671,6 @@ public sealed class SceneEdits : EditorModule
             name,
             new EditorHistoryChange(
                 kind,
-                version: 1,
                 EditorHistoryPayload.FromBytes(data),
                 mergeKey));
 

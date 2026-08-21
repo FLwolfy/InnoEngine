@@ -424,7 +424,7 @@ internal static class ScriptCompiler
         ScriptApiProfile editorApi)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        AppendHash(hash, "Inno.ScriptAssemblyArtifact.v1");
+        AppendHash(hash, "Inno.ScriptAssemblyArtifact");
         AppendHash(hash, sources.fingerprint);
         AppendProfile(runtimeApi);
         AppendProfile(editorApi);

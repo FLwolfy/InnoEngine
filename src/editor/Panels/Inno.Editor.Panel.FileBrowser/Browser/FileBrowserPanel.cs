@@ -57,9 +57,6 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
     public string workspaceStateId => "asset-browser-panel";
 
     /// <inheritdoc />
-    public int workspaceStateVersion => 1;
-
-    /// <inheritdoc />
     public void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
     {
         ArgumentNullException.ThrowIfNull(writer);

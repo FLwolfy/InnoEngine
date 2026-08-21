@@ -44,6 +44,13 @@ public sealed class AssetLoaderTests : IDisposable
     }
 
     [Fact]
+    public void ExtensionContractsUseImplementationIdentityWithoutManualVersions()
+    {
+        Assert.Null(typeof(AssetImporter).GetProperty("version"));
+        Assert.Null(typeof(AssetBuildProcessor).GetProperty("version"));
+    }
+
+    [Fact]
     public void Import_WritesCacheWithoutCreatingCanonicalInstance()
     {
         using TestWorkspace workspace = new();

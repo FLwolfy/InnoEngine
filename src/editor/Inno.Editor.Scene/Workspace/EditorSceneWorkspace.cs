@@ -43,6 +43,7 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
     private int[] m_pendingSelectionObjectPath = [];
     private int m_pendingSelectionIndex = -1;
     private long m_nextRestoreAttemptTimestamp;
+    private long m_waitingTypeCatalogVersion = -1;
 
     /// <summary>
     /// Creates a scene workspace and optionally enables editor selection restoration.
@@ -58,9 +59,6 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
 
     /// <inheritdoc />
     public string workspaceStateId => "scene-workspace";
-
-    /// <inheritdoc />
-    public int workspaceStateVersion => 1;
 
     /// <summary>
     /// Gets all scenes currently available to editor features.
@@ -359,6 +357,7 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         m_nextRestoreAttemptTimestamp = 0;
+        m_waitingTypeCatalogVersion = -1;
         EnsureEditableScene();
     }
 
@@ -623,6 +622,9 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
     {
         if (m_pendingScenePaths is null)
             return;
+        long typeCatalogVersion = TypeCacheManager.current.version;
+        if (m_waitingTypeCatalogVersion == typeCatalogVersion)
+            return;
         long now = Stopwatch.GetTimestamp();
         if (now < m_nextRestoreAttemptTimestamp)
             return;
@@ -658,12 +660,23 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
                     ComputeSceneHash(scene)));
             }
         }
+        catch (SceneTypeResolutionException exception)
+        {
+            DisposeRestoreCandidates(candidates);
+            m_waitingTypeCatalogVersion = typeCatalogVersion;
+            Log.Error(
+                "Editor scene workspace cannot restore saved scenes because {0} stable type id '{1}' " +
+                "is not present in the active type catalog.",
+                exception.elementKind,
+                exception.stableTypeId);
+            return;
+        }
         catch (Exception exception)
         {
             DisposeRestoreCandidates(candidates);
-            Log.Warn(
-                "Editor scene workspace is waiting for a compatible type catalog before restoring scenes: {0}",
-                exception.Message);
+            Log.Error("Editor scene workspace could not restore saved scenes: {0}", exception);
+            m_pendingScenePaths = null;
+            EnsureEditableScene();
             return;
         }
         if (waitingForSourceIndex)
@@ -690,6 +703,7 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
         RestoreSelection();
         m_ownedScene = null;
         m_pendingScenePaths = null;
+        m_waitingTypeCatalogVersion = -1;
     }
 
     private static void DisposeRestoreCandidates(

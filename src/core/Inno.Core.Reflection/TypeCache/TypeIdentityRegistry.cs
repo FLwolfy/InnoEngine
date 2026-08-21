@@ -96,8 +96,6 @@ internal sealed class TypeIdentityRegistry
             }
 
             stableByType[type] = stableId;
-            if (mapping is not null)
-                AddFormerStableIds(typeByStable, type, mapping.formerIds);
         }
 
         var orderedTypes = sourceTypes
@@ -286,42 +284,13 @@ internal sealed class TypeIdentityRegistry
         string assemblyName,
         string? value)
     {
-        string[] parts = (value ?? string.Empty).Split('|', 4, StringSplitOptions.None);
-        if (parts.Length != 4 || !string.Equals(parts[0], "v1", StringComparison.Ordinal))
+        string[] parts = (value ?? string.Empty).Split('|', 2, StringSplitOptions.None);
+        if (parts.Length != 2)
         {
             throw new InvalidOperationException(
                 $"Assembly '{assemblyName}' has invalid generated StableTypeId metadata '{value}'.");
         }
-        string[] formerIds = string.IsNullOrWhiteSpace(parts[2])
-            ? []
-            : parts[2].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return new GeneratedStableTypeMapping(parts[3], parts[1], formerIds);
-    }
-
-    private static void AddFormerStableIds(
-        IDictionary<Guid, Type> typeByStable,
-        Type type,
-        IReadOnlyList<string> formerIds)
-    {
-        foreach (string formerIdValue in formerIds)
-        {
-            if (!Guid.TryParse(formerIdValue, out Guid formerId))
-            {
-                throw new InvalidOperationException(
-                    $"Type '{type.FullName}' has invalid former StableTypeId '{formerIdValue}'.");
-            }
-            if (typeByStable.TryGetValue(formerId, out Type? existing))
-            {
-                if (existing != type)
-                {
-                    throw new InvalidOperationException(
-                        $"Former StableTypeId '{formerId}' conflicts between " +
-                        $"'{existing.FullName}' and '{type.FullName}'.");
-                }
-                continue;
-            }
-            typeByStable.Add(formerId, type);
-        }
+        return new GeneratedStableTypeMapping(parts[1], parts[0]);
     }
 
     private static Guid CreateGuidV5(Guid namespaceId, string name)
@@ -356,6 +325,5 @@ internal sealed class TypeIdentityRegistry
 
     private sealed record GeneratedStableTypeMapping(
         string typeName,
-        string id,
-        IReadOnlyList<string> formerIds);
+        string id);
 }

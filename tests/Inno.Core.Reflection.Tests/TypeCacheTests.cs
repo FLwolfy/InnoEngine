@@ -73,15 +73,14 @@ public sealed class TypeCacheTests : IDisposable
     }
 
     [Fact]
-    public void GeneratedIdentitySupportsFormerIdsAndExplicitAttributeTakesPrecedence()
+    public void GeneratedIdentityAndExplicitAttributeUseOneCurrentIdentity()
     {
         Guid generatedId = Guid.Parse("44444444-4444-4444-4444-444444444444");
-        Guid formerId = Guid.Parse("55555555-5555-5555-5555-555555555555");
 
         Assert.True(TypeCacheManager.TryGetStableTypeId(typeof(GeneratedMappedType), out Guid stableId));
         Assert.Equal(generatedId, stableId);
-        Assert.True(TypeCacheManager.TryResolveType(formerId, out Type? formerResolved));
-        Assert.Equal(typeof(GeneratedMappedType), formerResolved);
+        Assert.True(TypeCacheManager.TryResolveType(generatedId, out Type? generatedResolved));
+        Assert.Equal(typeof(GeneratedMappedType), generatedResolved);
 
         Assert.True(TypeCacheManager.TryGetStableTypeId(typeof(StableAnnotatedTypeA), out Guid explicitId));
         Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), explicitId);

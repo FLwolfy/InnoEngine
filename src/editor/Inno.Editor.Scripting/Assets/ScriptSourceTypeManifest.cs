@@ -4,7 +4,6 @@ using System.Collections.Generic;
 namespace Inno.Editor.Scripting;
 
 internal sealed record ScriptSourceTypeManifest(
-    int schemaVersion,
     Guid sourcePersistentId,
     string sourcePath,
     IReadOnlyList<ScriptSourceTypeDeclaration> declarations);

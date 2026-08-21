@@ -38,7 +38,11 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
     {
         Snapshot snapshot = extensions;
         for (int i = 0; i < snapshot.modules.Length; i++)
+        {
             snapshot.modules[i].module.Update(m_context);
+            if (snapshot.modules[i].module.blocksFollowingUpdates)
+                break;
+        }
         m_workspace.Update(m_context.frame.totalTime, snapshot.workspace, snapshot.panels);
     }
 
@@ -449,11 +453,6 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         {
             if (string.IsNullOrWhiteSpace(providers[i].id))
                 throw new InvalidOperationException("Editor workspace state ids cannot be empty.");
-            if (providers[i].provider.workspaceStateVersion <= 0)
-            {
-                throw new InvalidOperationException(
-                    $"Editor workspace provider '{providers[i].id}' must use a positive schema version.");
-            }
         }
     }
 

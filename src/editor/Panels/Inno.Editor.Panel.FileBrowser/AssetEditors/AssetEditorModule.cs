@@ -38,9 +38,6 @@ public sealed class AssetEditorModule : EditorModule, IEditorWorkspaceState, IDi
     public string workspaceStateId => C_WORKSPACE_STATE_ID;
 
     /// <inheritdoc />
-    public int workspaceStateVersion => 1;
-
-    /// <inheritdoc />
     public void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
@@ -159,7 +156,6 @@ public sealed class AssetEditorModule : EditorModule, IEditorWorkspaceState, IDi
             "Rename Asset",
             new EditorHistoryChange(
                 AssetHistoryKinds.SourceOperation,
-                version: 1,
                 EditorHistoryPayload.FromBytes(data.Encode())));
     }
 
@@ -203,7 +199,6 @@ public sealed class AssetEditorModule : EditorModule, IEditorWorkspaceState, IDi
             "Delete Asset",
             new EditorHistoryChange(
                 AssetHistoryKinds.SourceOperation,
-                version: 1,
                 EditorHistoryPayload.FromBytes(data.Encode())));
         return true;
     }

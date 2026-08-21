@@ -33,7 +33,6 @@ internal sealed class SceneSubtreeStateConverter : SerializationConverter<SceneS
             sourceIds.Add(allObjects[i], allObjects[i].identity.persistentId);
         var references = new SceneGraphReferenceMap(scene, allObjects, sourceIds, root);
 
-        writer.Write(SceneGraphSerialization.C_SCHEMA_VERSION_KEY, SceneGraphSerialization.C_SCHEMA_VERSION);
         writer.Write(C_ROOT_ID_KEY, root.identity.persistentId);
         using (references.Enter())
         {
@@ -48,9 +47,6 @@ internal sealed class SceneSubtreeStateConverter : SerializationConverter<SceneS
     public override SceneSubtreeState Read(SerializationReader reader)
     {
         ArgumentNullException.ThrowIfNull(reader);
-        int version = reader.Read<int>(SceneGraphSerialization.C_SCHEMA_VERSION_KEY);
-        if (version != SceneGraphSerialization.C_SCHEMA_VERSION)
-            throw new InvalidDataException($"Unsupported scene subtree schema version '{version}'.");
         GameScene scene = reader.context.GetRequired<GameScene>();
         Guid rootId = reader.Read<Guid>(C_ROOT_ID_KEY);
         IReadOnlyList<SerializationReader> objectReaders =

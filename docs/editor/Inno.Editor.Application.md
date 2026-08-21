@@ -38,7 +38,7 @@ return host.Run();
 
 `editor.ini`、Editor boot log、Assets 与脚本产物都以 `projectDirectory` 为根目录。根目录的 `editor.ini` 是统一且可读的 Editor settings 文档：标准 ImGui section 保存 docking/window layout；每个 Module/Panel 拥有独立的 `[InnoEditor][Module.<id>]` 或 `[InnoEditor][Panel.<id>]` section；Panel 开关集中在 `[InnoEditor][Panels]`。这些部分通过同一个原子写入协调器提交，因此不会互相覆盖。
 
-旧版 Base64 `[InnoEditor][Workspace] Payload=...` 与 `Library/Editor/Workspace.json` 会在首次读取时自动迁移为可读 section，成功提交后删除旧数据。`Library` 中不再存在第二份活动 workspace 状态。
+Workspace 只使用 `editor.ini` 中当前的具名可读 section。运行时不会查找 Base64 workspace payload 或 `Library/Editor/Workspace.json`，因此不存在第二份活动 workspace 状态或旧格式迁移路径。
 
 主窗口请求关闭后，`EditorHost` 会在停止 Module、卸载 Scene 和销毁 ImGui context 之前强制执行一次项目保存。顺序固定为：捕获全部 Workspace provider → 捕获最新 ImGui layout → flush 并原子替换 `editor.ini`。即使运行期间的两秒节流尚未到期，正常退出也不会丢失最后一次打开的 Scene setup。
 

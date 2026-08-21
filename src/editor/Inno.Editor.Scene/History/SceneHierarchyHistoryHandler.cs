@@ -9,7 +9,7 @@ using Inno.Engine.Scene.Components;
 
 namespace Inno.Editor.Scene;
 
-[EditorHistoryHandler(SceneHistoryKinds.Hierarchy, version: 1)]
+[EditorHistoryHandler(SceneHistoryKinds.Hierarchy)]
 internal sealed class SceneHierarchyHistoryHandler : EditorHistoryHandler
 {
     protected override EditorHistoryAvailability Query(

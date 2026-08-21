@@ -91,7 +91,7 @@ public static class SceneElementSerialization
         where TElement : EngineObject
     {
         if (!TypeCacheManager.TryResolveType(stableTypeId, out Type? type) || type is null)
-            throw new InvalidDataException($"Scene {kind} stable type id '{stableTypeId}' is not loaded.");
+            throw new SceneTypeResolutionException(stableTypeId, kind);
         if (!typeof(TElement).IsAssignableFrom(type) || type.IsAbstract)
         {
             throw new InvalidDataException(

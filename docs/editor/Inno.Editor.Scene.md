@@ -89,7 +89,7 @@ public sealed class AddAnimationControllerAction(SceneEdits edits)
 
 ## 相关序列化 API
 
-`ScenePropertySerialization`、`SceneSubtreeSerialization` 和 `SceneElementSerialization` 位于 [Inno.Engine.Scene.Assets](../engine/Inno.Engine.Scene.Assets.md)。它们是可复用的 Scene 数据工具，不引用 Editor。属性字节底层使用 [Inno.Core.Serialization](../core/Inno.Core.Serialization.md) 的 versioned property-data 格式。
+`ScenePropertySerialization`、`SceneSubtreeSerialization` 和 `SceneElementSerialization` 位于 [Inno.Engine.Scene.Assets](../engine/Inno.Engine.Scene.Assets.md)。它们是可复用的 Scene 数据工具，不引用 Editor。属性字节底层使用 [Inno.Core.Serialization](../core/Inno.Core.Serialization.md) 的中立 property-data 格式。
 
 ## Scripting API
 

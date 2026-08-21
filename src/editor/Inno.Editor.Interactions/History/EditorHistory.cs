@@ -427,7 +427,6 @@ public sealed class EditorHistory : IDisposable
     {
         merged = null;
         if (!string.Equals(older.kind, newer.kind, StringComparison.Ordinal) ||
-            older.version != newer.version ||
             older.mergeKey is null ||
             !string.Equals(older.mergeKey, newer.mergeKey, StringComparison.Ordinal) ||
             !TryGetHandler(older.kind, out EditorHistoryHandler? handler) ||

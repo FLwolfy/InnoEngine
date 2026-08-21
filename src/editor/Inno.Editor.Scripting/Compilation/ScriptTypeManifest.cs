@@ -4,7 +4,6 @@ using System.Collections.Generic;
 namespace Inno.Editor.Scripting;
 
 internal sealed record ScriptTypeManifest(
-    int schemaVersion,
     string assemblyName,
     IReadOnlyList<ScriptTypeManifestEntry> types);
 
@@ -21,8 +20,7 @@ internal sealed record ScriptTypeManifestEntry(
 
 internal sealed record ScriptTypeMapping(
     string typeName,
-    Guid stableTypeId,
-    Guid formerStableTypeId);
+    Guid stableTypeId);
 
 internal sealed record ScriptTypeAnalysisResult(
     ScriptTypeManifest manifest,

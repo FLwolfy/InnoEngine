@@ -12,16 +12,11 @@ public sealed class EditorHistoryHandlerAttribute : Attribute
     /// Creates a history handler registration.
     /// </summary>
     /// <param name="kind">The stable globally unique change protocol identifier.</param>
-    /// <param name="version">The positive current payload schema version produced by this handler generation.</param>
     /// <exception cref="ArgumentException">Thrown when <paramref name="kind"/> is empty.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="version"/> is not positive.</exception>
-    public EditorHistoryHandlerAttribute(string kind, int version)
+    public EditorHistoryHandlerAttribute(string kind)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(kind);
-        if (version <= 0)
-            throw new ArgumentOutOfRangeException(nameof(version), version, "History handler versions must be positive.");
         this.kind = kind;
-        this.version = version;
     }
 
     /// <summary>
@@ -29,8 +24,4 @@ public sealed class EditorHistoryHandlerAttribute : Attribute
     /// </summary>
     public string kind { get; }
 
-    /// <summary>
-    /// Gets the current payload schema version produced by this handler generation.
-    /// </summary>
-    public int version { get; }
 }

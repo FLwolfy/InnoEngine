@@ -176,7 +176,6 @@ public sealed class ClipToStateDrop
 每个 `EditorInteractions` 拥有一个 `EditorHistory`。History 不保存 Action 实例、Scene 对象、插件 `Type` 或来自 collectible ALC 的委托；稳定记录由四项组成：
 
 - `kind`：全局唯一的协议 ID，例如 `animation/state-property`。
-- `version`：payload schema 版本。
 - `payload`：只含 ID、索引、字符串和序列化字节的中立数据。
 - `mergeKey`：可选的连续编辑合并键。
 
@@ -193,7 +192,6 @@ context.history.RecordApplied(
     "Rename Animation State",
     new EditorHistoryChange(
         "animation/state-name",
-        version: 1,
         EditorHistoryPayload.FromBytes(data),
         mergeKey: $"animation-state:{stateId}:name"));
 ```
@@ -201,7 +199,7 @@ context.history.RecordApplied(
 当前 generation 的 Handler 由 TypeCache 自动发现：
 
 ```csharp
-[EditorHistoryHandler("animation/state-name", version: 1)]
+[EditorHistoryHandler("animation/state-name")]
 public sealed class AnimationStateNameHistoryHandler : EditorHistoryHandler
 {
     protected override EditorHistoryAvailability Query(
@@ -264,19 +262,14 @@ Interactions 自动协调 Core 的 `IEditorWorkspaceState` provider，并把项�
 <Project>/editor.ini
 ```
 
-每个 provider 使用独立、可读且带版本号的 INI section。单个复杂值使用一行 JSON 表示数组或字符串，不使用 Base64，也不把全部状态包进 opaque payload：
+每个 provider 使用独立、可读的 INI section。单个复杂值使用一行 JSON 表示数组或字符串，不使用 Base64，也不把全部状态包进 opaque payload：
 
 ```ini
-[InnoEditor][Project]
-SchemaVersion=2
-
 [InnoEditor][Module.scene-workspace]
-Version=1
 activeScene="Scenes/Main.innoscene"
 openScenes=["Scenes/Main.innoscene","Scenes/UI.innoscene"]
 
 [InnoEditor][Panel.asset-browser-panel]
-Version=1
 filter=""
 viewMode="List"
 
@@ -287,7 +280,7 @@ scene.hierarchy=true
 
 文件通过临时文件 flush 后原子替换，并在运行期间进行约两秒的内容变化节流。退出时 Application 会在扩展停止前强制捕获所有 provider 和最新 ImGui layout，然后强制写入完整文档。未知 provider section 会保留，因此暂时移除插件不会销毁其设置；损坏的单个值只影响所属 provider。Panel 的 `isOpen` 按稳定 Panel ID 自动保存，不要求 Panel 实现接口。
 
-`EditorProjectSettings` 在内存中分别维护 ImGui layout 和具名 Inno Editor sections，避免 ImGui 覆盖 workspace 或 workspace 覆盖布局。旧版 Base64 `[InnoEditor][Workspace]` 及 `Library/Editor/Workspace.json` 会自动迁移。
+`EditorProjectSettings` 在内存中分别维护 ImGui layout 和具名 Inno Editor sections，避免 ImGui 覆盖 workspace 或 workspace 覆盖布局。Workspace 只读取当前具名 section，不包含旧 Base64 payload、旧 JSON 文件或 provider schema-version 迁移逻辑。
 
 Workspace provider 的恢复状态按实例弱跟踪。只有成功完成 `RestoreWorkspaceState` 的 provider 才能参与后续 capture；脚本启动、TypeCache 重建或 Registry 事务在恢复回调中触发重入刷新时，同一个 provider 不会被再次调用，也不会用尚未初始化的默认字段覆盖磁盘 section。被新 snapshot 保留的 Module/Panel 仍以实际恢复状态为准，而不是仅因实例相同就跳过首次恢复。
 

@@ -212,7 +212,7 @@ internal sealed class AssetArtifactStore
         IReadOnlyDictionary<string, ReadOnlyMemory<byte>> outputs)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        Append(hash, "Inno.AssetArtifact.v1");
+        Append(hash, "Inno.AssetArtifact");
         Append(hash, inputFingerprint);
         foreach (KeyValuePair<string, ReadOnlyMemory<byte>> output in outputs
                      .OrderBy(static pair => pair.Key, StringComparer.Ordinal))

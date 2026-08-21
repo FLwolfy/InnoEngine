@@ -297,7 +297,6 @@ public sealed class ScriptManagerTests : IDisposable
             "Script History",
             new EditorHistoryChange(
                 "tests.script-history",
-                version: 1,
                 EditorHistoryPayload.FromBytes([1])));
 
         WriteHistoryHandler(generation: 2);
@@ -370,7 +369,7 @@ public sealed class ScriptManagerTests : IDisposable
         var restoredWorkspace = new EditorSceneWorkspace();
         var context = new EditorContext(m_projectRoot);
         restoredWorkspace.Start(context);
-        restoredWorkspace.RestoreWorkspaceState(new EditorWorkspaceStateReader(1, writer.Export()));
+        restoredWorkspace.RestoreWorkspaceState(new EditorWorkspaceStateReader(writer.Export()));
         restoredWorkspace.Update(context);
 
         Assert.Equal(["First", "Second"], restoredWorkspace.scenes.Select(static scene => scene.name));
@@ -394,7 +393,7 @@ public sealed class ScriptManagerTests : IDisposable
         var restoredWorkspace = new EditorSceneWorkspace();
         var context = new EditorContext(m_projectRoot);
         restoredWorkspace.Start(context);
-        restoredWorkspace.RestoreWorkspaceState(new EditorWorkspaceStateReader(1, writer.Export()));
+        restoredWorkspace.RestoreWorkspaceState(new EditorWorkspaceStateReader(writer.Export()));
         restoredWorkspace.Update(context);
 
         Assert.NotNull(restoredWorkspace.activeScene.FindObject("Saved Object"));
@@ -432,7 +431,19 @@ public sealed class ScriptManagerTests : IDisposable
 
         using var restored = new EditorInteractionRuntime(m_projectRoot);
         restored.Start();
-        restored.Update(new EditorFrame(0.016f, 1f, isFocused: true));
+        float totalTime = 1f;
+        long deadline = Environment.TickCount64 + 10_000;
+        while (Environment.TickCount64 < deadline)
+        {
+            restored.Update(new EditorFrame(0.016f, totalTime, isFocused: true));
+            if (SceneManager.loadedScenes.Select(static scene => scene.name).SequenceEqual(
+                    ["Workspace First", "Workspace Second"]))
+            {
+                break;
+            }
+            totalTime += 0.016f;
+            System.Threading.Thread.Sleep(10);
+        }
 
         Assert.Equal(
             ["Workspace First", "Workspace Second"],
@@ -533,12 +544,11 @@ public sealed class ScriptManagerTests : IDisposable
                         "Change Script Value",
                         new EditorHistoryChange(
                             "tests.script-value",
-                            1,
                             EditorHistoryPayload.FromBytes(data)));
                 }
             }
 
-            [EditorHistoryHandler("tests.script-value", version: 1)]
+            [EditorHistoryHandler("tests.script-value")]
             public sealed class ScriptValueHistoryHandler : EditorHistoryHandler
             {
                 protected override EditorHistoryAvailability Query(
@@ -581,7 +591,6 @@ public sealed class ScriptManagerTests : IDisposable
             public sealed class ScriptPanel : EditorPanel, IEditorPanelReloadState, IEditorWorkspaceState
             {
                 public string workspaceStateId => "tests.script-panel";
-                public int workspaceStateVersion => 1;
 
                 public override void Draw(EditorContext context)
                 {
@@ -1060,7 +1069,7 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public void AdditionalAttachableTypeInOneFileRequiresExplicitIdentityOrSeparateSource()
+    public void AdditionalAttachableTypeWithoutCanonicalSourceFailsCompilation()
     {
         Write("PrimaryProbe.cs", """
             using InnoEngine.Scene;
@@ -1071,10 +1080,10 @@ public sealed class ScriptManagerTests : IDisposable
 
         ScriptCompilationResult result = Compile();
 
-        Assert.True(result.success, FormatDiagnostics(result));
+        Assert.False(result.success);
         Assert.Contains(result.diagnostics, static diagnostic =>
             diagnostic.id == "INNO2001" &&
-            diagnostic.severity == ScriptDiagnosticSeverity.Warning &&
+            diagnostic.severity == ScriptDiagnosticSeverity.Error &&
             diagnostic.message.Contains("SecondaryProbe", StringComparison.Ordinal));
     }
 
@@ -1271,7 +1280,7 @@ public sealed class ScriptManagerTests : IDisposable
         => Write("HistoryHandler.editor.cs", $$"""
             using InnoEditor.Interactions;
 
-            [EditorHistoryHandler("tests.script-history", version: 1)]
+            [EditorHistoryHandler("tests.script-history")]
             public sealed class ScriptHistoryHandler : EditorHistoryHandler
             {
                 protected override EditorHistoryAvailability Query(

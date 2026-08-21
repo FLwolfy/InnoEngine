@@ -10,7 +10,7 @@ using Inno.Engine.Scene.Assets;
 
 namespace Inno.Editor.Scene;
 
-[EditorHistoryHandler(SceneHistoryKinds.Property, version: 1)]
+[EditorHistoryHandler(SceneHistoryKinds.Property)]
 internal sealed class ScenePropertyHistoryHandler : EditorHistoryHandler
 {
     private const double C_MERGE_WINDOW_SECONDS = 1.0;
@@ -101,7 +101,6 @@ internal sealed class ScenePropertyHistoryHandler : EditorHistoryHandler
                 current.timestamp);
             merged = new EditorHistoryChange(
                 SceneHistoryKinds.Property,
-                version: 1,
                 EditorHistoryPayload.FromBytes(data.Encode()),
                 older.mergeKey);
             return true;

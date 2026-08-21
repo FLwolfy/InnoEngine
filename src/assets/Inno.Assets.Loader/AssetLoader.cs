@@ -26,7 +26,6 @@ namespace Inno.Assets.Loader;
 public sealed class AssetLoader : IDisposable
 {
     internal const string C_META_POSTFIX = ".imeta";
-    internal const string C_LEGACY_ARTIFACT_POSTFIX = ".abin";
 
     [ThreadStatic]
     private static AssetLoader? t_activeLoader;
@@ -515,7 +514,6 @@ public sealed class AssetLoader : IDisposable
         record.meta.persistentId = persistentId;
         record.meta.sourceHash = sourceBytes.Length == 0 ? string.Empty : ComputeSha256Hex(sourceBytes);
         record.meta.importerId = importer.importerId;
-        record.meta.importerVersion = importer.version;
         record.meta.importerImplementationFingerprint = GetImporterImplementationFingerprint(importer);
         if (record.meta.stableAssetTypeId == Guid.Empty &&
             TypeCacheManager.TryGetStableTypeId(importer.targetAssetType, out Guid stableTypeId))
@@ -574,7 +572,6 @@ public sealed class AssetLoader : IDisposable
             relativePath = relativePath,
             sourceHash = sourceHash,
             importerId = importer.importerId,
-            importerVersion = importer.version,
             stableAssetTypeId = stableTypeId,
             assetStateBytes = state,
             runtimeDependencies = runtimeDependencies.Select(ToData).ToArray(),
@@ -1090,8 +1087,7 @@ public sealed class AssetLoader : IDisposable
             {
                 AssetSourceMeta sourceMeta = SerializationManager.Deserialize<AssetSourceMeta>(
                     IOFile.ReadAllBytes(metaPath));
-                if (sourceMeta.schemaVersion == AssetSourceMeta.C_SCHEMA_VERSION &&
-                    sourceMeta.persistentId != Guid.Empty)
+                if (sourceMeta.persistentId != Guid.Empty)
                 {
                     AssetRecord? existing = FindRecordByIdWithoutLoading(sourceMeta.persistentId);
                     if (existing is not null &&
@@ -1104,13 +1100,6 @@ public sealed class AssetLoader : IDisposable
                     continue;
                 }
 
-                AssetMeta legacyMeta = SerializationManager.Deserialize<AssetMeta>(IOFile.ReadAllBytes(metaPath));
-                if (legacyMeta.schemaVersion == AssetMeta.C_SCHEMA_VERSION &&
-                    legacyMeta.persistentId != Guid.Empty)
-                {
-                    legacyMeta.relativePath = relative;
-                    MigrateLegacyRecordLocked(legacyMeta);
-                }
             }
             catch
             {
@@ -1402,7 +1391,6 @@ public sealed class AssetLoader : IDisposable
                 relativePath = relativePath,
                 persistentId = sourceMeta.persistentId,
                 importerId = sourceMeta.importerId,
-                importerVersion = sourceMeta.importerSettingsVersion,
                 importStatus = (int)AssetImportStatus.Pending
             };
             AddOrReplaceRecordLocked(tombstone);
@@ -1433,7 +1421,6 @@ public sealed class AssetLoader : IDisposable
                 relativePath = relativePath,
                 persistentId = sourceMeta.persistentId,
                 importerId = sourceMeta.importerId,
-                importerVersion = sourceMeta.importerSettingsVersion,
                 importStatus = (int)AssetImportStatus.Pending
             };
         }
@@ -1521,9 +1508,7 @@ public sealed class AssetLoader : IDisposable
     {
         catalogChanged = false;
         string sourcePath = GetSourcePath(record.relativePath);
-        if (!IOFile.Exists(sourcePath) || record.meta.schemaVersion != AssetMeta.C_SCHEMA_VERSION)
-            return true;
-        if (record.meta.importerVersion != m_importers.FindById(record.meta.importerId)?.version)
+        if (!IOFile.Exists(sourcePath))
             return true;
         AssetImporter? importer = m_importers.FindById(record.meta.importerId);
         if (importer is null ||
@@ -1929,29 +1914,6 @@ public sealed class AssetLoader : IDisposable
         CommitCatalogLocked();
     }
 
-    private void MigrateLegacyRecordLocked(AssetMeta legacyMeta)
-    {
-        string legacyArtifactPath = GetLegacyArtifactPath(legacyMeta.relativePath);
-        var outputs = new Dictionary<string, ReadOnlyMemory<byte>>(StringComparer.Ordinal)
-        {
-            ["asset-state"] = legacyMeta.assetStateBytes
-        };
-        if (IOFile.Exists(legacyArtifactPath))
-            outputs["runtime"] = IOFile.ReadAllBytes(legacyArtifactPath);
-        AssetImporter? importer = m_importers.FindById(legacyMeta.importerId);
-        legacyMeta.importerImplementationFingerprint = importer is null
-            ? string.Empty
-            : GetImporterImplementationFingerprint(importer);
-        legacyMeta.importStatus = (int)AssetImportStatus.Imported;
-        AssetArtifactKey artifactKey = m_artifacts.Commit(CreateImportFingerprint(legacyMeta), outputs);
-        legacyMeta.artifactKey = artifactKey.value;
-        legacyMeta.lastSuccessfulArtifactKey = artifactKey.value;
-        MergeCatalogMetaLocked(legacyMeta);
-        WriteSourceMeta(legacyMeta);
-        CommitCatalogLocked();
-        DeleteIfExists(legacyArtifactPath);
-    }
-
     private void WriteSourceMeta(AssetMeta meta)
     {
         string metaPath = GetMetaPath(meta.relativePath);
@@ -1963,7 +1925,6 @@ public sealed class AssetLoader : IDisposable
                 ? (int)AssetSourceKind.Directory
                 : (int)AssetSourceKind.File,
             importerId = meta.importerId,
-            importerSettingsVersion = existing?.importerSettingsVersion ?? 0,
             importerSettingsBytes = existing?.importerSettingsBytes ?? []
         };
         WriteAtomic(metaPath, SerializationManager.Serialize(sourceMeta));
@@ -1977,8 +1938,7 @@ public sealed class AssetLoader : IDisposable
         try
         {
             sourceMeta = SerializationManager.Deserialize<AssetSourceMeta>(IOFile.ReadAllBytes(metaPath));
-            return sourceMeta.schemaVersion == AssetSourceMeta.C_SCHEMA_VERSION &&
-                   sourceMeta.persistentId != Guid.Empty;
+            return sourceMeta.persistentId != Guid.Empty;
         }
         catch
         {
@@ -1990,10 +1950,9 @@ public sealed class AssetLoader : IDisposable
     {
         var parts = new List<string>
         {
-            "Inno.AssetImport.v1",
+            "Inno.AssetImport",
             meta.sourceHash,
             meta.importerId,
-            meta.importerVersion.ToString(),
             meta.importerImplementationFingerprint
         };
         foreach (AssetDependencyData dependency in meta.runtimeDependencies
@@ -2025,9 +1984,8 @@ public sealed class AssetLoader : IDisposable
     {
         var parts = new List<string>
         {
-            "Inno.AssetBuild.v1",
+            "Inno.AssetBuild",
             processor.processorId,
-            processor.version.ToString(),
             processor.GetType().Assembly.ManifestModule.ModuleVersionId.ToString("D"),
             definition.identity.persistentId.ToString("D")
         };
@@ -2041,12 +1999,6 @@ public sealed class AssetLoader : IDisposable
 
     private string GetSourcePath(string relativePath) => Path.Combine(assetRoot, relativePath);
     private string GetMetaPath(string relativePath) => GetSourcePath(relativePath) + C_META_POSTFIX;
-
-    private string GetLegacyArtifactPath(string relativePath)
-    {
-        string projectRoot = Directory.GetParent(assetRoot)?.FullName ?? assetRoot;
-        return Path.Combine(projectRoot, "Artifacts", relativePath + C_LEGACY_ARTIFACT_POSTFIX);
-    }
 
     private bool IsSourceIgnored(string relativePath, bool isDirectory)
     {

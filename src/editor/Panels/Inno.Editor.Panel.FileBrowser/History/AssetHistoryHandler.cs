@@ -5,7 +5,7 @@ using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
-[EditorHistoryHandler(AssetHistoryKinds.SourceOperation, version: 1)]
+[EditorHistoryHandler(AssetHistoryKinds.SourceOperation)]
 internal sealed class AssetHistoryHandler(AssetEditorModule assets) : EditorHistoryHandler
 {
     protected override EditorHistoryAvailability Query(

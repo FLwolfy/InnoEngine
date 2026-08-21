@@ -13,9 +13,6 @@ public abstract class AssetBuildProcessor
     /// <summary>Gets the stable processor identifier used by build cache keys.</summary>
     public virtual string processorId => GetType().FullName ?? GetType().Name;
 
-    /// <summary>Gets the processor version used by build cache keys.</summary>
-    public virtual int version => 1;
-
     /// <summary>Gets the definition type accepted by this processor.</summary>
     public abstract Type definitionType { get; }
 

@@ -7,6 +7,7 @@ using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 using Inno.Core.Serialization.Converters;
 using Inno.Engine.Scene;
+using Inno.Engine.Scene.Assets;
 using Inno.Engine.Scene.Components;
 
 using Xunit;
@@ -23,6 +24,18 @@ public sealed class SceneSerializationTests : IDisposable
     public void Dispose()
     {
         SceneManager.UnloadAllScenes();
+    }
+
+    [Fact]
+    public void MissingSceneTypeDiagnosticPreservesStableIdentity()
+    {
+        Guid stableTypeId = Guid.Parse("80f1fb70-95f7-4db2-b338-2567cf8bb2c1");
+
+        var exception = new SceneTypeResolutionException(stableTypeId, "component");
+
+        Assert.Equal(stableTypeId, exception.stableTypeId);
+        Assert.Equal("component", exception.elementKind);
+        Assert.Contains(stableTypeId.ToString("D"), exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
