@@ -96,8 +96,8 @@
 
 ## 14. Editor History 与 Workspace 状态
 - 可逆 Editor 数据修改统一进入 `EditorInteractions.history`；不要在 Panel 中维护第二套 Undo 栈，也不要把简单 `inverse Action` 当作通用模型。
-- Feature Module 先完成领域修改，再用 `RecordApplied(name, EditorHistoryChange)` 记录；History payload 只能保存 stable protocol kind/version、persistent ID、Stable Type ID、路径、索引、标量和中立序列化 bytes，禁止捕获 runtime 对象、插件 `Type`、extension 实例或来自 collectible ALC 的委托。
-- 每个 reload-safe 协议必须声明 `[EditorHistoryHandler(kind, version)]`。Handler 的 `Query` 只检查当前 generation 可用性；`Apply` 必须在失败时回滚本次部分修改。Handler Registry 与其他 Editor Registry 一起候选构建和原子切换。
+- Feature Module 先完成领域修改，再用 `RecordApplied(name, EditorHistoryChange)` 记录；History payload 只能保存 stable protocol kind、persistent ID、Stable Type ID、路径、索引、标量和中立序列化 bytes，禁止捕获 runtime 对象、插件 `Type`、extension 实例或来自 collectible ALC 的委托。
+- 每个 reload-safe 协议必须声明 `[EditorHistoryHandler(kind)]`。Handler 的 `Query` 只检查当前 generation 可用性；`Apply` 必须在失败时回滚本次部分修改。Handler Registry 与其他 Editor Registry 一起候选构建和原子切换。
 - `RecordValue`、委托式 `Execute` 与派生 `EditorHistoryOperation` 只允许 Host-only 兼容流程；这些 runtime-bound entry 会在 extension generation 改变时截断，不得用于 EditorScripts 或 Scene/Asset 等长期记录。
 - 稳定 `mergeKey` 只用于同一个逻辑值的连续输入；布尔开关、创建、删除和排序不得合并。多步骤修改使用 `BeginTransaction`，但每个 child 仍必须独立原子化。
 - Undo/Redo 失败时必须保持操作位于原栈，禁止移动指针或覆盖新状态。新操作必须释放 Redo 分支；被淘汰或清除的 operation 必须释放其文件、对象或插件代际引用。
@@ -109,4 +109,12 @@
 - Editor Scene 修改统一进入 `Inno.Editor.Scene.SceneEdits`。普通属性只保存单 property bytes；Component/System 保存 element identity/type/index/state；GameObject 删除保存最小 subtree；层级只保存受影响 placement；禁止为小修改序列化或恢复完整 Scene。
 - Workspace restore 必须容忍缺失 Asset、损坏 payload 和脚本类型尚未进入 TypeCache。候选未完整准备好前不得破坏当前可编辑状态。
 - Workspace provider 必须先成功执行一次 `RestoreWorkspaceState`，之后才允许 `CaptureWorkspaceState` 覆盖磁盘 section。扩展 Registry 在启动或脚本激活期间可能重入刷新；恢复协调器必须按 provider 实例弱跟踪 `restoring/restored` 状态，禁止重入回调，也不能因为 provider 被新 snapshot 保留就误判其已经恢复。
-- Scene Workspace 恢复时必须区分“源文件确实缺失”和“Asset Source Index 尚未完成首轮对账”。物理源仍存在时应保留 pending scene setup 并重试，不能把暂时的 Untitled Scene 保存回项目设置。
+- Scene Workspace 恢复时必须区分“源文件确实缺失”和“Asset Source Index 尚未完成首轮对账”。物理源仍存在时应保留 pending scene setup 并重试，不能用暂时为空的运行时 Scene 集合覆盖项目设置。Editor 允许没有任何已加载 Scene，不得为恢复、启动或删除最后一个 Scene 隐式创建 Untitled Scene。
+
+## 15. 禁止 Legacy 兼容与 Schema Version
+- InnoEngine 是自用且始终按当前源码、当前 Project 数据共同演进的引擎。新增或修改功能时不支持旧版文件、旧版 schema、旧字段、旧缓存目录、旧 namespace、旧 API 或旧序列化布局，也不得为它们添加 fallback reader、migration、compatibility alias、former ID、deprecated wrapper 或双写逻辑。
+- 持久化模型、Attribute、Importer、Build Processor、History、Workspace、Scene、Prefab、Asset metadata、Catalog 和脚本 manifest 不得引入用于 legacy 适配的 `version`、`schemaVersion`、`formatVersion`、`formerVersion` 等字段。格式发生变化时直接更新当前 writer、reader、测试、文档和当前 Project 数据；旧数据可以明确失效并重新生成。
+- 不得因为“未来可能兼容”预留迁移分支。只有用户在具体任务中明确要求导入某一种旧格式时，才可以实现一次性、边界清晰的转换工具；转换逻辑不得进入正常运行路径。
+- 删除或重构 API 时同步修改所有调用方，不保留旧 overload、旧 namespace facade、转发类型或 `[Obsolete]` 兼容层，除非用户明确要求保留。
+- 以上规则不禁止保障当前运行正确性所需的运行时标识，例如 TypeCache/Assembly generation、并发 revision、change counter、content hash、artifact fingerprint、MVID、job handle generation，以及只用于拒绝损坏或错误格式输入的严格 magic/header。它们不得演变成读取多代 legacy schema 的兼容机制。
+- 代码审查或清理包含 `version`、`legacy`、`migration`、`compatibility`、`former`、`deprecated` 等名称的实现时，必须先判断其是否只服务于旧数据/API；如果是，应连同测试和文档一起删除，而不是继续扩展。

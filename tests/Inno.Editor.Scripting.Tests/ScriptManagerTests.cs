@@ -197,6 +197,9 @@ public sealed class ScriptManagerTests : IDisposable
     {
         using var runtime = new EditorInteractionRuntime(m_projectRoot);
         runtime.Start();
+        Assert.True(runtime.interactions
+            .For(HierarchyAreas.Hierarchy)
+            .Execute(HierarchyActions.CreateScene));
         GameScene scene = SceneManager.activeScene!;
         GameObject gameObject = scene.CreateObject("History Target");
         Guid sceneId = scene.identity.persistentId;
@@ -265,6 +268,9 @@ public sealed class ScriptManagerTests : IDisposable
     {
         using var runtime = new EditorInteractionRuntime(m_projectRoot);
         runtime.Start();
+        Assert.True(runtime.interactions
+            .For(HierarchyAreas.Hierarchy)
+            .Execute(HierarchyActions.CreateScene));
         GameScene scene = SceneManager.activeScene!;
         Guid sceneId = scene.identity.persistentId;
         string originalName = scene.name;
@@ -346,9 +352,25 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.Same(first, SceneManager.activeScene);
         Assert.True(second.isDestroyed);
         Assert.False(workspace.CloseScene(second));
-        Assert.False(workspace.CloseScene(first));
-        Assert.True(first.isLoaded);
-        Assert.False(first.isDestroyed);
+        Assert.True(workspace.CloseScene(first));
+        Assert.Empty(SceneManager.loadedScenes);
+        Assert.Null(SceneManager.activeScene);
+        Assert.True(first.isDestroyed);
+    }
+
+    [Fact]
+    public void SceneWorkspaceDoesNotCreateADefaultSceneForEmptyState()
+    {
+        var workspace = new EditorSceneWorkspace();
+        var context = new EditorContext(m_projectRoot);
+        workspace.Start(context);
+
+        workspace.RestoreWorkspaceState(new EditorWorkspaceStateReader(null));
+        workspace.Update(context);
+
+        Assert.Empty(SceneManager.loadedScenes);
+        Assert.Null(workspace.activeScene);
+        workspace.Stop(context);
     }
 
     [Fact]
@@ -373,7 +395,7 @@ public sealed class ScriptManagerTests : IDisposable
         restoredWorkspace.Update(context);
 
         Assert.Equal(["First", "Second"], restoredWorkspace.scenes.Select(static scene => scene.name));
-        Assert.Equal("First", restoredWorkspace.activeScene.name);
+        Assert.Equal("First", restoredWorkspace.activeScene!.name);
         restoredWorkspace.Stop(context);
     }
 
@@ -396,8 +418,8 @@ public sealed class ScriptManagerTests : IDisposable
         restoredWorkspace.RestoreWorkspaceState(new EditorWorkspaceStateReader(writer.Export()));
         restoredWorkspace.Update(context);
 
-        Assert.NotNull(restoredWorkspace.activeScene.FindObject("Saved Object"));
-        Assert.Null(restoredWorkspace.activeScene.FindObject("Unsaved Object"));
+        Assert.NotNull(restoredWorkspace.activeScene!.FindObject("Saved Object"));
+        Assert.Null(restoredWorkspace.activeScene!.FindObject("Unsaved Object"));
         restoredWorkspace.Stop(context);
     }
 
@@ -408,6 +430,10 @@ public sealed class ScriptManagerTests : IDisposable
         {
             runtime.Start();
             runtime.Update(new EditorFrame(0.016f, 1f, isFocused: true));
+            Assert.Empty(SceneManager.loadedScenes);
+            Assert.True(runtime.interactions
+                .For(HierarchyAreas.Hierarchy)
+                .Execute(HierarchyActions.CreateScene));
             GameScene first = SceneManager.activeScene!;
             first.name = "Workspace First";
             Assert.True(runtime.interactions
@@ -418,7 +444,6 @@ public sealed class ScriptManagerTests : IDisposable
                 .For(HierarchyAreas.Hierarchy)
                 .Execute(EditorActions.Save));
 
-            runtime.SaveWorkspace();
         }
 
         string settings = File.ReadAllText(Path.Combine(m_projectRoot, "editor.ini"));
@@ -449,6 +474,53 @@ public sealed class ScriptManagerTests : IDisposable
             ["Workspace First", "Workspace Second"],
             SceneManager.loadedScenes.Select(static scene => scene.name));
         Assert.Equal("Workspace Second", SceneManager.activeScene!.name);
+    }
+
+    [Fact]
+    public void CachedCompilationReplaysCompilerWarnings()
+    {
+        Write(
+            "CachedWarningProbe.cs",
+            "public sealed class CachedWarningProbe { private int unused; }");
+
+        ScriptCompilationResult compiled = Compile();
+        Assert.True(compiled.success, FormatDiagnostics(compiled));
+        ScriptDiagnostic warning = Assert.Single(compiled.diagnostics, static diagnostic =>
+            diagnostic.id == "CS0169" &&
+            diagnostic.severity == ScriptDiagnosticSeverity.Warning);
+
+        ScriptCompilationResult cached = Compile();
+
+        Assert.True(cached.success, FormatDiagnostics(cached));
+        ScriptDiagnostic cachedWarning = Assert.Single(cached.diagnostics, static diagnostic =>
+            diagnostic.id == "CS0169" &&
+            diagnostic.severity == ScriptDiagnosticSeverity.Warning);
+        Assert.Equal(warning, cachedWarning);
+        Assert.Equal(compiled.outputDirectory, cached.outputDirectory);
+    }
+
+    [Fact]
+    public void HierarchyCanDeleteAndRestoreTheOnlyLoadedScene()
+    {
+        using var runtime = new EditorInteractionRuntime(m_projectRoot);
+        runtime.Start();
+        Assert.True(runtime.interactions
+            .For(HierarchyAreas.Hierarchy)
+            .Execute(HierarchyActions.CreateScene));
+        GameScene scene = Assert.Single(SceneManager.loadedScenes);
+        EditorMenuItem delete = Assert.Single(
+            runtime.interactions.For(HierarchyAreas.Hierarchy, scene).BuildMenu().items,
+            static item => item.actionId == HierarchyActions.DeleteScene);
+        Assert.True(delete.status.isEnabled);
+
+        Assert.True(runtime.interactions
+            .For(HierarchyAreas.Hierarchy, scene)
+            .Execute(HierarchyActions.DeleteScene));
+        Assert.Empty(SceneManager.loadedScenes);
+        Assert.Null(SceneManager.activeScene);
+
+        Assert.True(runtime.interactions.history.Undo().succeeded);
+        Assert.Single(SceneManager.loadedScenes);
     }
 
     [Fact]

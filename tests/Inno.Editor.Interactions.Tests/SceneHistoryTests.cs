@@ -198,19 +198,20 @@ public sealed class SceneHistoryTests : IDisposable
     [Fact]
     public void SceneDocumentUndoRecreatesTheSameLogicalScene()
     {
-        GameScene first = m_edits.CreateScene();
-        first.CreateObject("Persistent");
-        Guid firstId = first.identity.persistentId;
-        _ = m_edits.CreateScene();
+        GameScene scene = m_edits.CreateScene();
+        scene.CreateObject("Persistent");
+        Guid sceneId = scene.identity.persistentId;
 
-        Assert.True(m_edits.CloseScene(first));
-        Assert.Null(IdentityManager.Get<GameScene>(firstId));
+        Assert.True(m_edits.CloseScene(scene));
+        Assert.Empty(SceneManager.loadedScenes);
+        Assert.Null(IdentityManager.Get<GameScene>(sceneId));
         Assert.True(m_runtime.interactions.history.Undo().succeeded);
-        GameScene restored = Assert.IsType<GameScene>(IdentityManager.Get<GameScene>(firstId));
+        GameScene restored = Assert.IsType<GameScene>(IdentityManager.Get<GameScene>(sceneId));
         Assert.True(restored.isLoaded);
         Assert.Equal("Persistent", Assert.Single(restored.GetObjects()).name);
         Assert.True(m_runtime.interactions.history.Redo().succeeded);
-        Assert.Null(IdentityManager.Get<GameScene>(firstId));
+        Assert.Empty(SceneManager.loadedScenes);
+        Assert.Null(IdentityManager.Get<GameScene>(sceneId));
     }
 
     [Fact]

@@ -111,9 +111,9 @@ internal static class ScriptCompiler
             compiledPaths.Add(assembly.name, assemblyPath);
         }
 
-        File.WriteAllLines(
-            Path.Combine(stagingDirectory, "diagnostics"),
-            diagnostics.Select(FormatDiagnostic));
+        File.WriteAllText(
+            GetDiagnosticsPath(stagingDirectory),
+            JsonSerializer.Serialize(diagnostics));
         Directory.CreateDirectory(Path.GetDirectoryName(outputDirectory)!);
         if (Directory.Exists(outputDirectory))
             DeleteStagingDirectory(stagingDirectory);
@@ -425,6 +425,7 @@ internal static class ScriptCompiler
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         AppendHash(hash, "Inno.ScriptAssemblyArtifact");
+        AppendHash(hash, typeof(ScriptCompiler).Assembly.ManifestModule.ModuleVersionId.ToString("D"));
         AppendHash(hash, sources.fingerprint);
         AppendProfile(runtimeApi);
         AppendProfile(editorApi);
@@ -458,6 +459,23 @@ internal static class ScriptCompiler
         out ScriptCompilationResult? result)
     {
         result = null;
+        string diagnosticsPath = GetDiagnosticsPath(outputDirectory);
+        if (!File.Exists(diagnosticsPath))
+            return false;
+        ScriptDiagnostic[] diagnostics;
+        try
+        {
+            diagnostics = JsonSerializer.Deserialize<ScriptDiagnostic[]>(
+                File.ReadAllText(diagnosticsPath)) ?? [];
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
         foreach (ScriptAssemblyInput assembly in sources.assemblies)
         {
             string path = Path.Combine(outputDirectory, assembly.name + ".dll");
@@ -493,7 +511,7 @@ internal static class ScriptCompiler
         preloadPaths.AddRange(editorPlugins);
         result = new ScriptCompilationResult(
             success: true,
-            diagnostics: [],
+            diagnostics: diagnostics,
             outputDirectory: outputDirectory,
             loadRequest: new AssemblyLoadRequest
             {
@@ -553,9 +571,8 @@ internal static class ScriptCompiler
         }
     }
 
-    private static string FormatDiagnostic(ScriptDiagnostic diagnostic)
-        => $"{diagnostic.severity}|{diagnostic.id}|{diagnostic.filePath}|" +
-           $"{diagnostic.line}|{diagnostic.column}|{diagnostic.message}";
+    private static string GetDiagnosticsPath(string outputDirectory)
+        => Path.Combine(outputDirectory, "diagnostics.json");
 
     private static string GetTypeManifestPath(string assemblyPath)
         => Path.ChangeExtension(assemblyPath, ".types.json");

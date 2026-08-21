@@ -8,10 +8,10 @@ namespace Inno.Editor.Panel.Hierarchy;
 [EditorAction(HierarchyActions.DeleteScene, priority: 100)]
 [EditorMenu(HierarchyAreas.Hierarchy, "Delete", order: 400, separatorBefore: true)]
 [EditorShortcut(HierarchyAreas.Hierarchy, KeyCode.Delete)]
-internal sealed class DeleteSceneCommand(EditorSceneWorkspace workspace, SceneEdits edits) : EditorAction<GameScene>
+internal sealed class DeleteSceneCommand(SceneEdits edits) : EditorAction<GameScene>
 {
     protected override EditorActionState Query(EditorActionContext<GameScene> context)
-        => context.target is { isLoaded: true, isDestroyed: false } && workspace.scenes.Count > 1
+        => context.target is { isLoaded: true, isDestroyed: false }
             ? EditorActionState.enabled
             : EditorActionState.disabled;
 

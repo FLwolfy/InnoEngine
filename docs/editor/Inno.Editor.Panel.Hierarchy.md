@@ -34,7 +34,7 @@ public sealed class ExportSceneAction : EditorAction<GameScene>
 
 - 双击 SceneAsset 采用 additive load；已打开时只切换 active scene。
 - 打开后选择 `GameScene`，不会被 FileBrowser entry 再次覆盖。
-- Scene 行可拖动重排，最后一个已加载 Scene 不可删除。
+- Scene 行可拖动重排，任意已加载 Scene 都可以关闭，包括最后一个 Scene。
 - GameObject 可同级重排、改变 parent 或移动到 Scene root。
 - ancestor 拖入 descendant 时先提升直属 child，避免形成循环。
 - drop 完成后选择移动对象并请求展开目标。
@@ -47,9 +47,9 @@ Scene、GameObject 的创建、删除、排序、parent 修改、名称和 activ
 
 ## 下次打开项目
 
-Workspace 自动保存已打开且有 source path 的 Scene 顺序、active Scene，以及可稳定重建的 Scene/GameObject/Component/System selection。恢复时 Scene 仍采用 additive load；缺失或无法加载的 Scene 被跳过并记录 warning，全部失败时创建新的 Untitled Scene。
+Workspace 自动保存已打开且有 source path 的 Scene 顺序、active Scene，以及可稳定重建的 Scene/GameObject/Component/System selection。恢复时 Scene 仍采用 additive load；缺失或无法加载的 Scene 被跳过并记录 warning。没有保存的 Scene、全部 Scene 被关闭或全部恢复失败时，Hierarchy 保持为空，不会隐式创建 Untitled Scene。
 
-Scene setup 写在 `editor.ini` 的 `[InnoEditor][Module.scene-workspace]` 中，可直接阅读和编辑。正常关闭窗口时会在 Scene 被卸载前强制捕获一次；启动时若 Asset Database 或脚本类型尚未准备完成，则保留这些路径并重试，不会用临时 Untitled Scene 覆盖已保存 setup。
+Scene setup 写在 `editor.ini` 的 `[InnoEditor][Module.scene-workspace]` 中，可直接阅读和编辑。正常关闭窗口时会在 Scene 被卸载前强制捕获一次；启动时若 Asset Database 或脚本类型尚未准备完成，则保留这些路径并重试，不会用空 Workspace 覆盖已保存 setup。
 
 恢复会分别等待 Source Index 与脚本 TypeCache：源文件在磁盘存在但 Asset Database 尚未完成首轮对账时，不将它误判为 missing；Scene 中引用的脚本 Component/System 尚未激活时，也不会清空已保存路径。两项依赖都准备好后，候选 Scene 一次性 additive 提交并恢复 active Scene 与 selection。
 

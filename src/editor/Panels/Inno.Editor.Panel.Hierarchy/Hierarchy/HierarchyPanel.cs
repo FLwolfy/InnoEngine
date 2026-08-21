@@ -295,16 +295,22 @@ public sealed class HierarchyPanel : EditorPanel
             _ = m_interactions.For(HierarchyAreas.Hierarchy).Select();
         }
 
-        EditorDropWidgetResult drop = EditorDragDropRenderer.Target(
-            m_interactions.For(
-                HierarchyAreas.Hierarchy,
-                new HierarchySceneDropTarget(m_workspace.activeScene)),
-            EditorDropPlacement.Into);
-        ApplyDropResult(drop.result);
+        GameScene? activeScene = m_workspace.activeScene;
+        if (activeScene is not null)
+        {
+            EditorDropWidgetResult drop = EditorDragDropRenderer.Target(
+                m_interactions.For(
+                    HierarchyAreas.Hierarchy,
+                    new HierarchySceneDropTarget(activeScene)),
+                EditorDropPlacement.Into);
+            ApplyDropResult(drop.result);
+        }
 
         _ = EditorMenuRenderer.ContextMenu(
             "##hierarchy_blank_context",
-            m_interactions.For(HierarchyAreas.Hierarchy, m_workspace.activeScene));
+            activeScene is null
+                ? m_interactions.For(HierarchyAreas.Hierarchy)
+                : m_interactions.For(HierarchyAreas.Hierarchy, activeScene));
     }
 
     private void RevealSelection(EditorContext context)

@@ -79,6 +79,11 @@ internal sealed class EditorMenuCatalog(
 
     private void AddPlacement(MutableNode root, Placement placement, EditorMenuContext context)
     {
+        EditorActionContext actionContext = context.CreateActionContext(placement.argument);
+        EditorActionState state = actions.Query(placement.actionId, actionContext);
+        if (!state.isVisible)
+            return;
+
         string[] segments = placement.path.Split('/');
         MutableNode current = root;
         for (int i = 0; i < segments.Length; i++)
@@ -95,13 +100,8 @@ internal sealed class EditorMenuCatalog(
             current = child;
         }
 
-        EditorActionContext actionContext = context.CreateActionContext(placement.argument);
-        EditorActionState state = actions.Query(placement.actionId, actionContext);
-        if (!state.isVisible)
-        {
-            current.isHidden = true;
-            return;
-        }
+        current.order = placement.order;
+        current.separatorBefore = placement.separatorBefore;
         current.actionId = placement.actionId;
         current.argument = placement.argument;
         current.state = state;
@@ -113,7 +113,6 @@ internal sealed class EditorMenuCatalog(
     {
         var result = new List<EditorMenuItem>();
         foreach (MutableNode node in nodes
-                     .Where(static value => !value.isHidden)
                      .OrderBy(static value => value.order)
                      .ThenBy(static value => value.label, StringComparer.Ordinal))
         {
@@ -155,12 +154,11 @@ internal sealed class EditorMenuCatalog(
     private sealed class MutableNode(string label, int order, bool separatorBefore)
     {
         internal string label = label;
-        internal readonly int order = order;
-        internal readonly bool separatorBefore = separatorBefore;
+        internal int order = order;
+        internal bool separatorBefore = separatorBefore;
         internal readonly Dictionary<string, MutableNode> children = new(StringComparer.Ordinal);
         internal string actionId = string.Empty;
         internal object? argument;
         internal EditorActionState state = EditorActionState.hidden;
-        internal bool isHidden;
     }
 }

@@ -33,9 +33,7 @@ internal sealed class SceneDocumentHistoryHandler(EditorSceneWorkspace workspace
                 return EditorHistoryAvailability.Unavailable(
                     $"Scene '{data.snapshot.sceneId}' is no longer loaded.");
             }
-            return SceneManager.loadedScenes.Count > 1
-                ? EditorHistoryAvailability.Available()
-                : EditorHistoryAvailability.Unavailable("The final loaded scene cannot be closed.");
+            return EditorHistoryAvailability.Available();
         }
         catch (Exception exception)
         {

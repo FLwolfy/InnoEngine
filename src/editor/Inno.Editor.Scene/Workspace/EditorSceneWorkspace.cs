@@ -34,7 +34,6 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
     private readonly ConcurrentQueue<AssetChange> m_sourceChanges = new();
     private readonly EditorInteractions? m_interactions;
 
-    private GameScene? m_ownedScene;
     private bool m_isAttached;
     private string[]? m_pendingScenePaths;
     private string m_pendingActivePath = string.Empty;
@@ -66,11 +65,9 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
     public IReadOnlyList<GameScene> scenes => SceneManager.loadedScenes;
 
     /// <summary>
-    /// Gets the active scene.
+    /// Gets the active scene, or <see langword="null"/> when the workspace contains no scenes.
     /// </summary>
-    /// <exception cref="InvalidOperationException">Thrown when no active scene exists.</exception>
-    public GameScene activeScene => SceneManager.activeScene
-        ?? throw new InvalidOperationException("The editor does not have an active scene.");
+    public GameScene? activeScene => SceneManager.activeScene;
 
     /// <summary>
     /// Creates and loads a uniquely named unsaved scene alongside the currently loaded scenes.
@@ -269,8 +266,6 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
         ArgumentNullException.ThrowIfNull(scene);
         if (scene.isDestroyed)
             return false;
-        if (scene.isLoaded && SceneManager.loadedScenes.Count <= 1)
-            return false;
         Guid sceneId = scene.identity.persistentId;
         bool closed = SceneManager.UnloadScene(scene);
         if (closed)
@@ -348,7 +343,6 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
         if (paths.Length == 0)
         {
             m_pendingScenePaths = null;
-            EnsureEditableScene();
             return;
         }
         m_pendingScenePaths = paths
@@ -358,7 +352,6 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
             .ToArray();
         m_nextRestoreAttemptTimestamp = 0;
         m_waitingTypeCatalogVersion = -1;
-        EnsureEditableScene();
     }
 
     /// <summary>
@@ -392,9 +385,7 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
         if (!m_isAttached)
             return;
         AssetManager.Changed -= OnAssetDatabaseChanged;
-        if (m_ownedScene is not null)
-            SceneManager.UnloadAllScenes();
-        m_ownedScene = null;
+        SceneManager.UnloadAllScenes();
         m_isAttached = false;
         Clear();
     }
@@ -676,7 +667,6 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
             DisposeRestoreCandidates(candidates);
             Log.Error("Editor scene workspace could not restore saved scenes: {0}", exception);
             m_pendingScenePaths = null;
-            EnsureEditableScene();
             return;
         }
         if (waitingForSourceIndex)
@@ -695,13 +685,11 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
                 scene.identity.persistentId,
                 new SceneDocument(scene, path, assetId, hash));
         }
-        EnsureEditableScene();
         SceneDocument? activeDocument = m_documents.Values.FirstOrDefault(document =>
             string.Equals(document.sourcePath, m_pendingActivePath, StringComparison.OrdinalIgnoreCase));
         if (activeDocument is not null && activeDocument.scene.isLoaded)
             SceneManager.SetActiveScene(activeDocument.scene);
         RestoreSelection();
-        m_ownedScene = null;
         m_pendingScenePaths = null;
         m_waitingTypeCatalogVersion = -1;
     }
@@ -730,14 +718,6 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
                 document.scene = scene;
             }
         }
-    }
-
-    private void EnsureEditableScene()
-    {
-        if (SceneManager.hasActiveScene)
-            return;
-        m_ownedScene = SceneManager.LoadNewScene();
-        GetOrCreateDocument(m_ownedScene);
     }
 
     private static int[] GetObjectPath(GameObject gameObject)
