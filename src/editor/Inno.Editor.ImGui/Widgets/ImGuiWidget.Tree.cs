@@ -101,7 +101,8 @@ public static partial class ImGuiWidget
             s_treeNodeStack.Add(new TreeWidgetNodeState
             {
                 id = id,
-                cursor = nodeCursor
+                cursor = nodeCursor,
+                rowMaxY = contentRect.max.Y
             });
         }
 
@@ -268,14 +269,10 @@ public static partial class ImGuiWidget
         ImGuiStylePtr style = NativeImGui.GetStyle();
         float textLineHeight = NativeImGui.GetTextLineHeight();
         float lineOverlap = ImGuiWidget.style.treeGuideLineOverlap;
-        float rowMinY = nodeCursor.Y - style.ItemSpacing.Y - lineOverlap;
         float rowMaxY = nodeCursor.Y + textLineHeight + style.ItemSpacing.Y + lineOverlap;
         float rowCenterY = nodeCursor.Y + textLineHeight * 0.5f;
         float nodeToLabel = NativeImGui.GetTreeNodeToLabelSpacing();
         float guideOffset = nodeToLabel * 0.5f - ImGuiWidget.style.treeGuideLeftOffset;
-        float disclosureGap = MathF.Max(
-            ImGuiWidget.style.treeDisclosureMinimumGap,
-            nodeToLabel * 0.25f);
         float labelStartX = nodeCursor.X + nodeToLabel;
         float fileConnectorPadding = MathF.Max(1f, style.ItemInnerSpacing.X);
         float folderConnectorPadding = fileConnectorPadding * 2f +
@@ -290,13 +287,14 @@ public static partial class ImGuiWidget
             if (s_hasNextSiblingById.TryGetValue(ancestorState.id, out bool ancestorHasNextSibling) && ancestorHasNextSibling)
             {
                 float ancestorX = ancestorState.cursor.X + guideOffset;
-                AddTreeLine(new Vector2(ancestorX, rowMinY), new Vector2(ancestorX, rowMaxY));
+                float ancestorStartY = MathF.Max(nodeCursor.Y, ancestorState.rowMaxY);
+                AddTreeLine(new Vector2(ancestorX, ancestorStartY), new Vector2(ancestorX, rowMaxY));
             }
         }
 
         TreeWidgetNodeState parentState = s_treeNodeStack[^1];
         float branchX = parentState.cursor.X + guideOffset;
-        float branchStartY = parentState.cursor.Y + textLineHeight * 0.5f + disclosureGap;
+        float branchStartY = MathF.Max(parentState.rowMaxY, nodeCursor.Y);
         AddTreeLine(new Vector2(branchX, branchStartY), new Vector2(branchX, hasNextSibling ? rowMaxY : rowCenterY));
         if (targetX > branchX)
             AddTreeLine(new Vector2(branchX, rowCenterY), new Vector2(targetX, rowCenterY));
@@ -513,6 +511,7 @@ internal struct TreeWidgetNodeState
 {
     internal string id;
     internal Vector2 cursor;
+    internal float rowMaxY;
 }
 
 internal struct TreeWidgetLineSegment

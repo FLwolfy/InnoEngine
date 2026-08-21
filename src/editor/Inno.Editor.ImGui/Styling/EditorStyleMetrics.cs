@@ -275,9 +275,6 @@ public sealed class EditorStyleMetrics
     /// <summary>Gets the overlap used to join adjacent tree guide segments.</summary>
     public float treeGuideLineOverlap { get; } = 1f;
 
-    /// <summary>Gets the minimum space between a tree disclosure and connector.</summary>
-    public float treeDisclosureMinimumGap { get; } = 3f;
-
     /// <summary>Gets additional connector padding for expandable tree nodes.</summary>
     public float treeFolderConnectorPadding { get; } = 2f;
 
