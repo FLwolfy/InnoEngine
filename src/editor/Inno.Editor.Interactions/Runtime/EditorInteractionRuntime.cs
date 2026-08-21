@@ -97,6 +97,23 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
         m_catalog.SaveWorkspace();
     }
 
+    /// <summary>
+    /// Freezes automatic workspace persistence and writes the final state before extension modules
+    /// begin shutting down.
+    /// </summary>
+    /// <remarks>
+    /// This operation is idempotent. After it succeeds, later disposal cannot recapture transient
+    /// teardown state such as an empty scene workspace.
+    /// </remarks>
+    /// <exception cref="ObjectDisposedException">
+    /// Thrown after this runtime has been disposed.
+    /// </exception>
+    public void PrepareShutdown()
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        m_catalog.PrepareShutdown();
+    }
+
     /// <summary>Dispatches an unhandled keyboard event through contextual shortcuts.</summary>
     /// <param name="keyEvent">The keyboard event received from the application event stream.</param>
     public void HandleKeyPressed(KeyPressedEvent keyEvent)
@@ -111,8 +128,8 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
     {
         if (m_disposed)
             return;
+        m_catalog.PrepareShutdown();
         m_disposed = true;
-        m_catalog.SaveWorkspace();
         m_interactions.Shutdown();
         m_catalog.Shutdown(saveWorkspace: false);
         m_catalog.Dispose();

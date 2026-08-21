@@ -28,6 +28,7 @@ public sealed class EditorHost : IDisposable
     private bool m_running;
     private bool m_disposed;
     private bool m_hasRenderedFrame;
+    private bool m_shutdownStateSaved;
     private int m_frameCount;
 
     /// <summary>
@@ -116,13 +117,14 @@ public sealed class EditorHost : IDisposable
                     continue;
 
                 UpdateFocusedWindows(evnt);
-                m_shell.eventDispatcher.Enqueue(evnt);
                 if (ShouldClose(evnt))
                 {
                     BootLog($"Exit requested by event: {evnt.GetType().Name}.");
+                    SaveBeforeShutdown();
                     m_running = false;
                     break;
                 }
+                m_shell.eventDispatcher.Enqueue(evnt);
             }
 
             if (!m_running || m_window.isClosed)
@@ -146,9 +148,7 @@ public sealed class EditorHost : IDisposable
             m_frameCount++;
         }
 
-        BootLog(m_editorLayer.SaveProject()
-            ? "Project editor state saved before shutdown."
-            : "Project editor state save failed before shutdown.");
+        SaveBeforeShutdown();
         BootLog("Run loop end.");
         return 0;
     }
@@ -199,6 +199,17 @@ public sealed class EditorHost : IDisposable
 
     private bool HasEditorFocus()
         => m_focusedWindowIds.Count > 0;
+
+    private void SaveBeforeShutdown()
+    {
+        if (m_shutdownStateSaved)
+            return;
+
+        m_shutdownStateSaved = m_editorLayer.PrepareShutdown();
+        BootLog(m_shutdownStateSaved
+            ? "Project editor state frozen and saved before shutdown."
+            : "Project editor state save failed before shutdown.");
+    }
 
     private void UpdateFocusedWindows(Event evnt)
     {

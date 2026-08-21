@@ -20,6 +20,7 @@ internal sealed class EditorWorkspaceStore
     private readonly EditorProjectSettings m_settings;
     private readonly ConditionalWeakTable<object, RestoredProvider> m_restoredProviders = new();
     private double m_nextSaveTime;
+    private bool m_isShutdownPrepared;
 
     internal EditorWorkspaceStore(EditorContext context)
     {
@@ -114,6 +115,8 @@ internal sealed class EditorWorkspaceStore
         IReadOnlyList<EditorExtensionCatalog.WorkspaceRegistration> providers,
         IReadOnlyList<EditorExtensionCatalog.PanelRegistration> panels)
     {
+        if (m_isShutdownPrepared)
+            return;
         if (elapsedSeconds < m_nextSaveTime)
             return;
         m_nextSaveTime = elapsedSeconds + C_SAVE_INTERVAL_SECONDS;
@@ -125,6 +128,26 @@ internal sealed class EditorWorkspaceStore
         IReadOnlyList<EditorExtensionCatalog.WorkspaceRegistration> providers,
         IReadOnlyList<EditorExtensionCatalog.PanelRegistration> panels)
     {
+        if (m_isShutdownPrepared)
+        {
+            SaveIfChanged();
+            return;
+        }
+        Capture(providers, panels);
+        SaveIfChanged();
+    }
+
+    internal void PrepareShutdown(
+        IReadOnlyList<EditorExtensionCatalog.WorkspaceRegistration> providers,
+        IReadOnlyList<EditorExtensionCatalog.PanelRegistration> panels)
+    {
+        if (m_isShutdownPrepared)
+            return;
+
+        // Freeze periodic persistence before capturing the terminal workspace snapshot. Module
+        // shutdown may unload scenes and clear panels, and that transient teardown state must
+        // never replace the state the user had immediately before closing the editor.
+        m_isShutdownPrepared = true;
         Capture(providers, panels);
         SaveIfChanged();
     }

@@ -52,12 +52,18 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             m_workspace.Save(m_active.workspace, m_active.panels);
     }
 
+    internal void PrepareShutdown()
+    {
+        if (m_active is not null)
+            m_workspace.PrepareShutdown(m_active.workspace, m_active.panels);
+    }
+
     internal void Shutdown(bool saveWorkspace = true)
     {
         if (m_active is not null)
         {
             if (saveWorkspace)
-                m_workspace.Save(m_active.workspace, m_active.panels);
+                m_workspace.PrepareShutdown(m_active.workspace, m_active.panels);
             Deactivate(m_active);
         }
         m_active = null;

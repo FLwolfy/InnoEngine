@@ -66,6 +66,23 @@ public sealed class ImGuiEditorRuntime : Inno.Editor.Core.EditorRuntime
         m_runtime.SaveWorkspace();
     }
 
+    /// <summary>
+    /// Freezes automatic workspace persistence and writes the final project state before editor
+    /// modules begin shutting down.
+    /// </summary>
+    /// <remarks>
+    /// This operation is idempotent and prevents module teardown from overwriting the saved
+    /// workspace with transient empty state.
+    /// </remarks>
+    /// <exception cref="ObjectDisposedException">
+    /// Thrown after this runtime has been disposed.
+    /// </exception>
+    public void PrepareShutdown()
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        m_runtime.PrepareShutdown();
+    }
+
     /// <summary>Draws the complete editor frame through ImGui.</summary>
     public void Draw()
     {

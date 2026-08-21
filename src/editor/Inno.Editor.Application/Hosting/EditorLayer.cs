@@ -17,7 +17,7 @@ internal sealed class EditorLayer : Layer
     private readonly PlatformImGuiContext m_imgui;
     private readonly EditorContext m_context;
     private readonly ImGuiEditorRuntime m_runtime;
-    private bool m_projectStateSaved;
+    private bool m_isShutdownPrepared;
 
     internal EditorLayer(PlatformImGuiContext imgui, EditorContext context)
         : base("EditorLayer")
@@ -42,29 +42,30 @@ internal sealed class EditorLayer : Layer
     /// <inheritdoc />
     public override void OnDetach()
     {
-        SaveProject();
+        PrepareShutdown();
         m_runtime.Dispose();
     }
 
     /// <inheritdoc />
     public override void OnLateUpdate(float deltaTime)
     {
-        m_projectStateSaved = false;
         m_runtime.Update(new EditorFrame(deltaTime, Time.time, isFocused));
         _ = m_imgui.RenderFrame(m_runtime.Draw);
         SaveLayoutIfChanged();
     }
 
-    internal bool SaveProject()
+    internal bool PrepareShutdown()
     {
-        if (m_projectStateSaved)
+        if (m_isShutdownPrepared)
             return true;
         try
         {
-            m_runtime.SaveWorkspace();
+            // Workspace capture freezes its periodic writer before reading module state. Layout is
+            // captured afterwards while the ImGui context and all panels are still alive.
+            m_runtime.PrepareShutdown();
             CaptureLayout(force: true);
             m_context.settings.Save();
-            m_projectStateSaved = true;
+            m_isShutdownPrepared = true;
             return true;
         }
         catch (Exception exception)
