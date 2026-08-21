@@ -1,10 +1,24 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Inno.Core.Serialization;
 
 internal static class PropertySnapshotPipeline
 {
+    internal static SerializationPropertySnapshot CaptureProperty(
+        ISerializable value,
+        string propertyName,
+        SerializationContext context)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(propertyName);
+        return Capture(value, context).FirstOrDefault(snapshot =>
+                   string.Equals(snapshot.name, propertyName, StringComparison.Ordinal))
+               ?? throw new ArgumentException(
+                   $"Serializable property '{propertyName}' was not found on '{value.GetType().FullName}'.",
+                   nameof(propertyName));
+    }
+
     internal static IReadOnlyList<SerializationPropertySnapshot> Capture(
         ISerializable value,
         SerializationContext context)

@@ -67,6 +67,22 @@ ISceneReloadMigration migration =
 
 该 migration API 是 host boundary，不在 Scripting API facade 中导出。
 
+## 局部 Scene 状态 API
+
+以下 API 为 Editor History、Prefab 工具和其他需要保留 Scene identity 的 host feature 提供最小粒度数据操作：
+
+| API | 说明 |
+| --- | --- |
+| `ScenePropertySerialization.CaptureProperty` | 捕获一个 Scene object 的一个 root serialized property。 |
+| `ScenePropertySerialization.CaptureProperties` | 捕获一个 Component/System 的全部 persistent properties，不包含 owning Scene。 |
+| `ScenePropertySerialization.RestoreProperties` | 使用 Scene reference context 恢复 property-data bytes，支持 Strict/Compatible。 |
+| `SceneSubtreeSerialization.Capture` | 捕获一个 GameObject 与全部 descendants，保留对象/组件 persistent ID。 |
+| `SceneSubtreeSerialization.Restore` | 把 subtree 恢复到指定 Scene、parent 与 sibling index；失败时清理候选 subtree。 |
+| `SceneElementSerialization.RestoreComponent` | 根据 Stable Type ID 与 persistent ID 重建一个 Component，不调用 Reset。 |
+| `SceneElementSerialization.RestoreSystem` | 根据 Stable Type ID 与 persistent ID 重建一个 GameSystem，不调用 Reset。 |
+
+这些 API 不保存 Editor selection、Undo 栈或 workspace；该编排属于 [Inno.Editor.Scene](../editor/Inno.Editor.Scene.md)。Element restore 会先解析当前 TypeCache generation 的类型，验证具体基类与 multiplicity，然后在 property restore 失败时删除新实例，避免泄漏半恢复对象。
+
 ## 多实例约束
 
 Reload 会使用候选类型重新验证数量：

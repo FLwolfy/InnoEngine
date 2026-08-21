@@ -20,6 +20,7 @@ using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Editor.Panel.FileBrowser;
 using Inno.Editor.Panel.Hierarchy;
 using Inno.Editor.Panel.Inspector;
+using Inno.Editor.Scene;
 using Inno.Editor.Scripting;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Assets;
@@ -260,21 +261,15 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public void StableValueHistorySurvivesWorkspaceSceneReplacement()
+    public void NeutralSceneHistorySurvivesAdjacentDocumentUndoAndRedo()
     {
         using var runtime = new EditorInteractionRuntime(m_projectRoot);
         runtime.Start();
         GameScene scene = SceneManager.activeScene!;
         Guid sceneId = scene.identity.persistentId;
         string originalName = scene.name;
-        scene.name = "Renamed";
-        runtime.interactions.history.RecordValue(
-            "Rename Scene",
-            originalName,
-            scene.name,
-            value => (IdentityManager.Get<GameScene>(sceneId)
-                      ?? throw new InvalidOperationException("Scene is unavailable.")).name = value,
-            $"scene-name:{sceneId:N}");
+        var edits = new SceneEdits(new EditorSceneWorkspace(runtime.interactions), runtime.interactions);
+        edits.RenameScene(scene, "Renamed");
 
         Assert.True(runtime.interactions
             .For(HierarchyAreas.Hierarchy)
@@ -287,6 +282,39 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.Equal(originalName, IdentityManager.Get<GameScene>(sceneId)!.name);
         Assert.True(runtime.interactions.history.Redo().succeeded);
         Assert.Equal("Renamed", IdentityManager.Get<GameScene>(sceneId)!.name);
+    }
+
+    [Fact]
+    public void NeutralHistoryUsesTheNewEditorScriptHandlerGenerationAfterReload()
+    {
+        WriteHistoryHandler(generation: 1);
+        ScriptCompilationResult firstCompilation = Compile();
+        Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
+        Assert.True(m_manager.ApplyPendingReload());
+        using var runtime = new EditorInteractionRuntime(m_projectRoot);
+        runtime.Start();
+        runtime.interactions.history.RecordApplied(
+            "Script History",
+            new EditorHistoryChange(
+                "tests.script-history",
+                version: 1,
+                EditorHistoryPayload.FromBytes([1])));
+
+        WriteHistoryHandler(generation: 2);
+        ScriptCompilationResult secondCompilation = Compile();
+        Assert.True(secondCompilation.success, FormatDiagnostics(secondCompilation));
+        Assert.True(m_manager.ApplyPendingReload());
+        _ = runtime.panelCount;
+
+        Assert.True(runtime.interactions.history.canUndo);
+        Assert.True(runtime.interactions.history.Undo().succeeded);
+        Assert.Equal(
+            "2:Undo",
+            File.ReadAllText(Path.Combine(m_projectRoot, "history-handler.txt")));
+        Assert.True(runtime.interactions.history.Redo().succeeded);
+        Assert.Equal(
+            "2:Redo",
+            File.ReadAllText(Path.Combine(m_projectRoot, "history-handler.txt")));
     }
 
     [Fact]
@@ -498,13 +526,32 @@ public sealed class ScriptManagerTests : IDisposable
                 {
                     int before = m_value;
                     m_value++;
-                    context.history.RecordValue(
+                    byte[] data = new byte[sizeof(int) * 2];
+                    System.BitConverter.GetBytes(before).CopyTo(data, 0);
+                    System.BitConverter.GetBytes(m_value).CopyTo(data, sizeof(int));
+                    context.history.RecordApplied(
                         "Change Script Value",
-                        before,
-                        m_value,
-                        value => m_value = value,
-                        "tests.script-value");
+                        new EditorHistoryChange(
+                            "tests.script-value",
+                            1,
+                            EditorHistoryPayload.FromBytes(data)));
                 }
+            }
+
+            [EditorHistoryHandler("tests.script-value", version: 1)]
+            public sealed class ScriptValueHistoryHandler : EditorHistoryHandler
+            {
+                protected override EditorHistoryAvailability Query(
+                    EditorHistoryContext context,
+                    EditorHistoryChange change,
+                    EditorHistoryDirection direction)
+                    => EditorHistoryAvailability.Available();
+
+                protected override EditorHistoryResult Apply(
+                    EditorHistoryContext context,
+                    EditorHistoryChange change,
+                    EditorHistoryDirection direction)
+                    => EditorHistoryResult.Success();
             }
 
             [EditorMenuSource("tests/interactions.dynamic")]
@@ -563,6 +610,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.Contains(TypeCacheManager.current.types, static type => type.Name == "ScriptAssetEditor");
         Assert.Contains(TypeCacheManager.current.types, static type => type.Name == "ScriptDrop");
         Assert.Contains(TypeCacheManager.current.types, static type => type.Name == "ScriptPanel");
+        Assert.Contains(TypeCacheManager.current.types, static type => type.Name == "ScriptValueHistoryHandler");
 
         using IDisposable iconRegistry = CreateAssetIconRegistry();
         Assert.Equal(ResolveImGuiIcon("FileImage"), ResolveAssetIcon(iconRegistry, typeof(TextAsset)));
@@ -1216,6 +1264,32 @@ public sealed class ScriptManagerTests : IDisposable
 
                 [SerializableProperty]
                 private int compatible = 20;
+            }
+            """);
+
+    private void WriteHistoryHandler(int generation)
+        => Write("HistoryHandler.editor.cs", $$"""
+            using InnoEditor.Interactions;
+
+            [EditorHistoryHandler("tests.script-history", version: 1)]
+            public sealed class ScriptHistoryHandler : EditorHistoryHandler
+            {
+                protected override EditorHistoryAvailability Query(
+                    EditorHistoryContext context,
+                    EditorHistoryChange change,
+                    EditorHistoryDirection direction)
+                    => EditorHistoryAvailability.Available();
+
+                protected override EditorHistoryResult Apply(
+                    EditorHistoryContext context,
+                    EditorHistoryChange change,
+                    EditorHistoryDirection direction)
+                {
+                    System.IO.File.WriteAllText(
+                        System.IO.Path.Combine(context.editor.projectDirectory, "history-handler.txt"),
+                        "{{generation}}:" + direction);
+                    return EditorHistoryResult.Success();
+                }
             }
             """);
 

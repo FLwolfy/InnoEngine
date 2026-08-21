@@ -7,6 +7,7 @@ using System.Numerics;
 using Inno.Core.Identity;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
+using Inno.Editor.Scene;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
@@ -28,6 +29,7 @@ public sealed class HierarchyPanel : EditorPanel
 
     private readonly EditorSceneWorkspace m_workspace;
     private readonly EditorInteractions m_interactions;
+    private readonly SceneEdits m_edits;
     private readonly HierarchySelection m_selection;
     private readonly HierarchyDropVisual m_dropVisual = new();
     private readonly HashSet<Guid> m_forceOpenIds = [];
@@ -41,10 +43,12 @@ public sealed class HierarchyPanel : EditorPanel
     /// </summary>
     internal HierarchyPanel(
         EditorSceneWorkspace workspace,
-        EditorInteractions interactions)
+        EditorInteractions interactions,
+        SceneEdits edits)
     {
         m_workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
+        m_edits = edits ?? throw new ArgumentNullException(nameof(edits));
         m_selection = new HierarchySelection(workspace, interactions);
     }
 
@@ -255,24 +259,11 @@ public sealed class HierarchyPanel : EditorPanel
         if (EditorWidget.IconButton($"hierarchy_visibility_{id}", icon,
                 gameObject.activeSelf ? "Deactivate" : "Activate"))
         {
-            bool before = gameObject.activeSelf;
-            bool after = !before;
-            gameObject.SetActive(after);
-            Guid gameObjectId = gameObject.identity.persistentId;
-            m_interactions.history.RecordValue(
-                after ? "Activate GameObject" : "Deactivate GameObject",
-                before,
-                after,
-                value => ResolveGameObject(gameObjectId).SetActive(value),
-                $"game-object-active:{gameObjectId:N}");
+            m_edits.SetGameObjectActive(gameObject, !gameObject.activeSelf);
         }
     }
 
     private static float GetVisibilityButtonWidth() => EditorWidget.GetIconButtonSize().X;
-
-    private static GameObject ResolveGameObject(Guid persistentId)
-        => IdentityManager.Get<GameObject>(persistentId)
-           ?? throw new InvalidOperationException($"GameObject '{persistentId}' is no longer available.");
 
     private void DrawSceneContextMenu(EditorContext context, GameScene scene, string id)
     {

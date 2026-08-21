@@ -1,15 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
+using Inno.Editor.Scene;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Components;
 
 namespace Inno.Editor.Panel.Hierarchy;
 
 [EditorDrop(HierarchyAreas.Hierarchy)]
-internal sealed class ReparentGameObjectDropHandler
+internal sealed class ReparentGameObjectDropHandler(SceneEdits edits)
     : EditorDrop<GameObject, HierarchyObjectDropTarget>
 {
     protected override EditorDropStatus Query(
@@ -35,11 +37,14 @@ internal sealed class ReparentGameObjectDropHandler
         GameObject target = context.target.gameObject;
         Transform sourceTransform = source.transform;
         Transform targetTransform = target.transform;
-        SceneSnapshotOperation.Execute(
-            context.interactions,
+        GameObject[] relatedObjects = sourceTransform.children
+            .Select(static child => child.gameObject)
+            .ToArray();
+        _ = edits.ChangeHierarchy(
+            source,
+            () => ApplyDrop(context, sourceTransform, targetTransform),
             "Reparent GameObject",
-            source.scene,
-            () => ApplyDrop(context, sourceTransform, targetTransform));
+            relatedObjects);
         _ = context.interactions.For(context.area, source).Select();
         return EditorDropResult.Accepted(source, target);
     }

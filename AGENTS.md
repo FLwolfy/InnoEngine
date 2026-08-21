@@ -96,13 +96,17 @@
 
 ## 14. Editor History 与 Workspace 状态
 - 可逆 Editor 数据修改统一进入 `EditorInteractions.history`；不要在 Panel 中维护第二套 Undo 栈，也不要把简单 `inverse Action` 当作通用模型。
-- 已由 UI 应用的标量/值修改使用 `RecordValue`，稳定 `mergeKey` 只标识同一个逻辑属性；多步骤修改使用 `BeginTransaction`；图结构或跨对象操作派生 `EditorHistoryOperation` 并保存足以完整恢复的中立快照。
+- Feature Module 先完成领域修改，再用 `RecordApplied(name, EditorHistoryChange)` 记录；History payload 只能保存 stable protocol kind/version、persistent ID、Stable Type ID、路径、索引、标量和中立序列化 bytes，禁止捕获 runtime 对象、插件 `Type`、extension 实例或来自 collectible ALC 的委托。
+- 每个 reload-safe 协议必须声明 `[EditorHistoryHandler(kind, version)]`。Handler 的 `Query` 只检查当前 generation 可用性；`Apply` 必须在失败时回滚本次部分修改。Handler Registry 与其他 Editor Registry 一起候选构建和原子切换。
+- `RecordValue`、委托式 `Execute` 与派生 `EditorHistoryOperation` 只允许 Host-only 兼容流程；这些 runtime-bound entry 会在 extension generation 改变时截断，不得用于 EditorScripts 或 Scene/Asset 等长期记录。
+- 稳定 `mergeKey` 只用于同一个逻辑值的连续输入；布尔开关、创建、删除和排序不得合并。多步骤修改使用 `BeginTransaction`，但每个 child 仍必须独立原子化。
 - Undo/Redo 失败时必须保持操作位于原栈，禁止移动指针或覆盖新状态。新操作必须释放 Redo 分支；被淘汰或清除的 operation 必须释放其文件、对象或插件代际引用。
+- 大 payload 使用 `EditorHistoryOptions` 自动溢出到 `<Project>/Library/Editor/History`；History 受 entry、resident bytes 与 disk bytes 三重预算限制，缓存不进入 `editor.ini`、Asset metadata 或 Scene 序列化。
 - 保存、打开、选择等纯工作流操作默认不进入数据 Undo；它们只有在确实修改项目数据时才记录对应的数据部分。
 - 跨启动的项目语义状态由 Module/Panel 实现 `IEditorWorkspaceState`，不进行中央注册。Provider ID 必须稳定且全局唯一，持久值只允许可重新解析的中立数据。
 - `editor.ini` 是统一且可读的项目级 Editor settings 文档：标准 ImGui section 保存 layout；每个 Module/Panel 分别使用 `[InnoEditor][Module.<id>]` / `[InnoEditor][Panel.<id>]`；Panel 开关使用 `[InnoEditor][Panels]`。禁止用 Base64 或单一 opaque payload 包装全部 Workspace。Undo 栈、dirty Scene 内容、runtime 引用和编译中间态不得持久化。
 - Editor 正常退出时必须先捕获全部 Workspace provider，再捕获最新 ImGui layout，最后在 Module 停止和 Scene 卸载前强制原子写入一次完整 `editor.ini`。运行期间仍可节流保存，但不能把它当作退出保存的替代品。
-- Editor Scene 历史记录不得长期捕获可被图恢复或 workspace 替换销毁的 `GameObject`、`GameComponent`、`GameSystem` 实例；Undo/Redo 回调必须使用 persistent ID 重新解析当前实例，结构修改使用可回滚 Scene snapshot。
+- Editor Scene 修改统一进入 `Inno.Editor.Scene.SceneEdits`。普通属性只保存单 property bytes；Component/System 保存 element identity/type/index/state；GameObject 删除保存最小 subtree；层级只保存受影响 placement；禁止为小修改序列化或恢复完整 Scene。
 - Workspace restore 必须容忍缺失 Asset、损坏 payload 和脚本类型尚未进入 TypeCache。候选未完整准备好前不得破坏当前可编辑状态。
 - Workspace provider 必须先成功执行一次 `RestoreWorkspaceState`，之后才允许 `CaptureWorkspaceState` 覆盖磁盘 section。扩展 Registry 在启动或脚本激活期间可能重入刷新；恢复协调器必须按 provider 实例弱跟踪 `restoring/restored` 状态，禁止重入回调，也不能因为 provider 被新 snapshot 保留就误判其已经恢复。
 - Scene Workspace 恢复时必须区分“源文件确实缺失”和“Asset Source Index 尚未完成首轮对账”。物理源仍存在时应保留 pending scene setup 并重试，不能把暂时的 Untitled Scene 保存回项目设置。

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 
 using Inno.Core.Reflection;
@@ -83,6 +84,50 @@ public static class SerializationManager
     }
 
     /// <summary>
+    /// Captures one persistent property as independently restorable neutral bytes.
+    /// </summary>
+    /// <param name="value">The serializable object containing the requested property.</param>
+    /// <param name="propertyName">The exact serialized member key to capture.</param>
+    /// <param name="context">Optional immutable converter context.</param>
+    /// <returns>Versioned bytes containing the property name and encoded value.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="propertyName"/> is empty or does not identify a persistent property.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">Thrown when the manager is not initialized.</exception>
+    public static byte[] CapturePropertyData(
+        ISerializable value,
+        string propertyName,
+        SerializationContext? context = null)
+    {
+        EnsureInitialized();
+        ArgumentNullException.ThrowIfNull(value);
+        SerializationPropertySnapshot snapshot = PropertySnapshotPipeline.CaptureProperty(
+            value,
+            propertyName,
+            context ?? SerializationContext.empty);
+        return PropertySnapshotBinaryFormat.Encode([snapshot]);
+    }
+
+    /// <summary>
+    /// Captures every persistent property as versioned neutral bytes without serializing the owning object graph.
+    /// </summary>
+    /// <param name="value">The serializable object whose persistent properties should be captured.</param>
+    /// <param name="context">Optional immutable converter context.</param>
+    /// <returns>Versioned bytes containing independently encoded property values.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the manager is not initialized.</exception>
+    public static byte[] CapturePropertiesData(
+        ISerializable value,
+        SerializationContext? context = null)
+    {
+        EnsureInitialized();
+        ArgumentNullException.ThrowIfNull(value);
+        return PropertySnapshotBinaryFormat.Encode(
+            PropertySnapshotPipeline.Capture(value, context ?? SerializationContext.empty));
+    }
+
+    /// <summary>
     /// Restores independently captured properties into an existing object.
     /// </summary>
     /// <param name="target">The object receiving compatible property values.</param>
@@ -107,6 +152,35 @@ public static class SerializationManager
         return PropertySnapshotPipeline.Restore(
             target,
             snapshots,
+            mode,
+            context ?? SerializationContext.empty);
+    }
+
+    /// <summary>
+    /// Restores one or more independently encoded persistent properties from neutral bytes.
+    /// </summary>
+    /// <param name="target">The existing object receiving the captured values.</param>
+    /// <param name="data">Versioned bytes created by <see cref="CapturePropertyData"/> or <see cref="CapturePropertiesData"/>.</param>
+    /// <param name="mode">The failure policy for matching but incompatible current properties.</param>
+    /// <param name="context">Optional immutable converter context.</param>
+    /// <returns>A summary containing restored, ignored, and skipped properties.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="target"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="mode"/> is unknown.</exception>
+    /// <exception cref="InvalidDataException">Thrown when <paramref name="data"/> is malformed or unsupported.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when strict restoration or an object-level callback fails.</exception>
+    public static SerializationPropertyRestoreResult RestorePropertiesData(
+        ISerializable target,
+        ReadOnlySpan<byte> data,
+        SerializationPropertyRestoreMode mode = SerializationPropertyRestoreMode.Strict,
+        SerializationContext? context = null)
+    {
+        EnsureInitialized();
+        ArgumentNullException.ThrowIfNull(target);
+        if (!Enum.IsDefined(mode))
+            throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unknown property restore mode.");
+        return PropertySnapshotPipeline.Restore(
+            target,
+            PropertySnapshotBinaryFormat.Decode(data),
             mode,
             context ?? SerializationContext.empty);
     }

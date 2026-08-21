@@ -146,12 +146,21 @@ public sealed class AssetEditorModule : EditorModule, IEditorWorkspaceState, IDi
         if (!validation.isValid)
             throw new InvalidOperationException(validation.message);
         string sourcePath = Normalize(context.relativePath);
-        EditorHistoryResult result = m_interactions.history.Execute(
-            "Rename Asset",
-            () => MoveAsset(editor, context, sourcePath, targetPath),
-            () => MoveAsset(editor, context, targetPath, sourcePath));
+        EditorHistoryResult result = MoveAsset(editor, context, sourcePath, targetPath);
         if (!result.succeeded)
             throw new InvalidOperationException(result.message);
+        var data = new AssetHistoryData(
+            AssetHistoryOperationKind.Move,
+            sourcePath,
+            targetPath,
+            isDirectory: context.isDirectory,
+            archive: []);
+        m_interactions.history.RecordApplied(
+            "Rename Asset",
+            new EditorHistoryChange(
+                AssetHistoryKinds.SourceOperation,
+                version: 1,
+                EditorHistoryPayload.FromBytes(data.Encode())));
     }
 
     internal bool Delete(AssetEditorContext context)
@@ -175,6 +184,58 @@ public sealed class AssetEditorModule : EditorModule, IEditorWorkspaceState, IDi
             Log.Error("Asset editor delete hook failed for '{0}': {1}", path, exception);
         }
         return true;
+    }
+
+    internal bool DeleteWithHistory(EditorActionContext context, AssetEditorContext asset)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(asset);
+        byte[] archive = AssetSourceArchive.Capture(asset.relativePath, out bool isDirectory);
+        if (!Delete(asset))
+            return false;
+        var data = new AssetHistoryData(
+            AssetHistoryOperationKind.Delete,
+            Normalize(asset.relativePath),
+            string.Empty,
+            isDirectory,
+            archive);
+        context.history.RecordApplied(
+            "Delete Asset",
+            new EditorHistoryChange(
+                AssetHistoryKinds.SourceOperation,
+                version: 1,
+                EditorHistoryPayload.FromBytes(data.Encode())));
+        return true;
+    }
+
+    internal void MoveFromHistory(string sourcePath, string targetPath)
+    {
+        EditorContext editorContext = m_context
+            ?? throw new InvalidOperationException("Asset editor module is not attached.");
+        if (!TryCreateContext(editorContext, sourcePath, out AssetEditorContext? context) || context is null)
+            throw new InvalidOperationException($"Asset '{sourcePath}' is no longer available.");
+        AssetEditor editor = m_editors.Resolve(context.assetType);
+        EditorHistoryResult result = MoveAsset(editor, context, sourcePath, targetPath);
+        if (!result.succeeded)
+            throw new InvalidOperationException(result.message);
+    }
+
+    internal void DeleteFromHistory(string relativePath)
+    {
+        EditorContext editorContext = m_context
+            ?? throw new InvalidOperationException("Asset editor module is not attached.");
+        if (!TryCreateContext(editorContext, relativePath, out AssetEditorContext? context) || context is null)
+            throw new InvalidOperationException($"Asset '{relativePath}' is no longer available.");
+        if (!Delete(context))
+            throw new InvalidOperationException($"Asset '{relativePath}' could not be deleted.");
+    }
+
+    internal void SelectPath(string relativePath)
+    {
+        object? target = AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry entry)
+            ? entry
+            : null;
+        _ = m_interactions.For(FileBrowserAreas.Browser, target).Select();
     }
 
     internal bool TryCreateDragData(AssetEditorContext context, out EditorDragData? data)

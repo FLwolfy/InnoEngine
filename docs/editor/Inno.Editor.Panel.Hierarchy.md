@@ -1,8 +1,8 @@
 # Inno.Editor.Panel.Hierarchy
 
-[Editor 索引](README.md) · [Engine Scene](../engine/Inno.Engine.Scene.md) · [Inspector](Inno.Editor.Panel.Inspector.md)
+[Editor 索引](README.md) · [Editor Scene](Inno.Editor.Scene.md) · [Inspector](Inno.Editor.Panel.Inspector.md)
 
-该项目拥有 Scene workspace、Hierarchy Panel、Scene/GameObject Action、上下文菜单以及 Scene/GameObject 拖放排序。它通过共享 Assets 和 Scene 类型与其他 feature 协作，不引用 FileBrowser 或 Inspector project。
+该项目拥有 Hierarchy Panel、Scene/GameObject Action、上下文菜单以及 Scene/GameObject 拖放排序。Scene document 和可逆编辑实现位于独立的 `Inno.Editor.Scene`；Hierarchy 只把用户意图交给 `EditorSceneWorkspace` / `SceneEdits`，不维护图快照或 Undo 实现。
 
 ## 公共 API
 
@@ -10,7 +10,6 @@
 | --- | --- |
 | `HierarchyAreas.Hierarchy` | Scene 行、GameObject 行和空白区域的统一 area。 |
 | `HierarchyActions` | Create Scene/Object/Child、Set Active、Rename、Delete。 |
-| `EditorSceneWorkspace` | Scene 新建、加载、dirty、保存、Save As 与资产路径同步。 |
 | `HierarchyObjectDropTarget` | 带 before/after/into 几何语义的对象目标。 |
 | `HierarchySceneDropTarget` | Scene 重排或 GameObject root drop 目标。 |
 
@@ -42,7 +41,7 @@ public sealed class ExportSceneAction : EditorAction<GameScene>
 
 Scene 排序只决定 Hierarchy/SceneManager 顺序；GameSystem 使用显式 `order`。Component 的 Inspector 上下移动仅改变序列化和显示顺序，不隐式改变脚本执行优先级。
 
-Scene、GameObject、Component、System 的创建、删除、Reset、排序、parent 修改和可序列化属性编辑都会进入共享 `EditorHistory`。结构修改保存前后 Scene 图快照并原位恢复，从而保留序列化 identity 与图内引用；多 Scene 的创建、关闭和排序使用 workspace 级快照。
+Scene、GameObject 的创建、删除、排序、parent 修改、名称和 active 修改都会通过 `SceneEdits` 进入共享 `EditorHistory`。对象删除只保存被删子树与外部引用；层级修改只保存受影响对象的 parent/sibling tuple；Scene 重排只保存两个 index，不会复制整张 Scene。
 
 内容编辑 Command 必须创建可逆历史项；Scene/GameObject 创建删除、Component/System 增删 Reset、层级与顺序修改、名称/active/enabled 和序列化属性均属于内容编辑。Open Scene、Set Active Scene、Selection 和 Save 是导航或持久化命令，不修改可撤销内容，因此明确不进入 Undo 栈。新的 feature Command 若不支持 Undo，应同样只限于导航、查询、外部构建或不可逆操作，并在其 Wiki 中声明原因。
 
@@ -62,4 +61,4 @@ Command/Ctrl+S 是共享 `EditorActions.Save`，由本 feature 为 active Scene 
 
 ## Scripting API
 
-EditorScripts 使用 `InnoEditor.Hierarchy`，其中包括 area/action 常量、`EditorSceneWorkspace` 和公开 drop target。没有 global using。
+EditorScripts 使用 `InnoEditor.Hierarchy` 获取 area/action 常量和公开 drop target；Workspace 与 Scene 编辑门面位于 `InnoEditor.Scene`。没有 global using。

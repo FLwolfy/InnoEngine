@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 
 using Inno.Core.Logging;
+using Inno.Editor.Core;
 
 namespace Inno.Editor.Interactions;
 
@@ -16,6 +17,12 @@ public sealed class EditorHistory : IDisposable
     private readonly List<EditorHistoryOperation> m_undo = [];
     private readonly List<EditorHistoryOperation> m_redo = [];
     private readonly Stack<TransactionOperation> m_transactions = [];
+    private readonly EditorHistoryOptions m_options;
+    private readonly EditorHistoryBlobStore m_blobStore;
+
+    private IReadOnlyDictionary<string, EditorHistoryHandler> m_handlers =
+        new Dictionary<string, EditorHistoryHandler>(StringComparer.Ordinal);
+    private EditorHistoryContext? m_context;
     private bool m_isTransitioning;
     private bool m_isDisposed;
 
@@ -25,10 +32,23 @@ public sealed class EditorHistory : IDisposable
     /// <param name="capacity">The maximum number of committed top-level operations retained for Undo.</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="capacity"/> is not positive.</exception>
     public EditorHistory(int capacity = C_DEFAULT_CAPACITY)
+        : this(new EditorHistoryOptions { maxEntries = capacity })
     {
-        if (capacity <= 0)
-            throw new ArgumentOutOfRangeException(nameof(capacity), capacity, "History capacity must be positive.");
-        this.capacity = capacity;
+    }
+
+    /// <summary>
+    /// Creates an empty history with explicit entry, resident-memory, and temporary-disk budgets.
+    /// </summary>
+    /// <param name="options">The validated retention and payload storage options.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when an option contains an invalid capacity.</exception>
+    public EditorHistory(EditorHistoryOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        options.Validate();
+        m_options = options;
+        capacity = options.maxEntries;
+        m_blobStore = new EditorHistoryBlobStore(options.cacheDirectory);
     }
 
     /// <summary>
@@ -57,6 +77,28 @@ public sealed class EditorHistory : IDisposable
     /// Gets the next operation name displayed by the Redo command, or <see langword="null"/> when unavailable.
     /// </summary>
     public string? redoName => m_redo.Count == 0 ? null : m_redo[^1].name;
+
+    /// <summary>
+    /// Gets the diagnostic explaining why the newest Undo entry is a barrier, or <see langword="null"/> when available.
+    /// </summary>
+    public string? undoUnavailableReason => GetUnavailableReason(m_undo, EditorHistoryDirection.Undo);
+
+    /// <summary>
+    /// Gets the diagnostic explaining why the newest Redo entry is a barrier, or <see langword="null"/> when available.
+    /// </summary>
+    public string? redoUnavailableReason => GetUnavailableReason(m_redo, EditorHistoryDirection.Redo);
+
+    /// <summary>
+    /// Gets the estimated resident payload bytes retained by committed Undo and Redo entries.
+    /// </summary>
+    public long residentBytes => Sum(m_undo, static operation => operation.estimatedMemorySize) +
+                                 Sum(m_redo, static operation => operation.estimatedMemorySize);
+
+    /// <summary>
+    /// Gets the estimated temporary disk payload bytes retained by committed Undo and Redo entries.
+    /// </summary>
+    public long diskBytes => Sum(m_undo, static operation => operation.estimatedDiskSize) +
+                             Sum(m_redo, static operation => operation.estimatedDiskSize);
 
     /// <summary>
     /// Begins an atomic group whose child operations appear as one Undo entry.
@@ -103,6 +145,36 @@ public sealed class EditorHistory : IDisposable
     }
 
     /// <summary>
+    /// Applies a neutral change through its current-generation handler and records it only when successful.
+    /// </summary>
+    /// <param name="name">The user-facing operation name.</param>
+    /// <param name="change">The independently owned neutral change whose ownership transfers to the history.</param>
+    /// <returns>The result of applying the change in the Redo direction.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is empty.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="change"/> is <see langword="null"/>.</exception>
+    public EditorHistoryResult Execute(string name, EditorHistoryChange change)
+    {
+        EnsureMutable();
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(change);
+        DataOperation operation;
+        try
+        {
+            operation = new DataOperation(this, name, change);
+        }
+        finally
+        {
+            change.Dispose();
+        }
+        EditorHistoryResult result = Invoke(operation.RedoInternal, name, "execute");
+        if (result.succeeded)
+            Record(operation);
+        else
+            operation.Dispose();
+        return result;
+    }
+
+    /// <summary>
     /// Records a mutation that has already been applied by the caller.
     /// </summary>
     /// <param name="operation">The complete reversible operation representing the applied state.</param>
@@ -112,6 +184,28 @@ public sealed class EditorHistory : IDisposable
         EnsureMutable();
         ArgumentNullException.ThrowIfNull(operation);
         Record(operation);
+    }
+
+    /// <summary>
+    /// Records a neutral change whose mutation has already been applied by its feature facade.
+    /// </summary>
+    /// <param name="name">The user-facing operation name.</param>
+    /// <param name="change">The independently owned neutral change whose ownership transfers to the history.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is empty.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="change"/> is <see langword="null"/>.</exception>
+    public void RecordApplied(string name, EditorHistoryChange change)
+    {
+        EnsureMutable();
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(change);
+        try
+        {
+            Record(new DataOperation(this, name, change));
+        }
+        finally
+        {
+            change.Dispose();
+        }
     }
 
     /// <summary>
@@ -172,6 +266,7 @@ public sealed class EditorHistory : IDisposable
         if (m_isDisposed)
             return;
         Clear();
+        m_blobStore.Dispose();
         m_isDisposed = true;
         GC.SuppressFinalize(this);
     }
@@ -219,6 +314,7 @@ public sealed class EditorHistory : IDisposable
             m_undo[0].Dispose();
             m_undo.RemoveAt(0);
         }
+        EnforceBudgets();
     }
 
     private EditorHistoryResult Transition(
@@ -267,6 +363,136 @@ public sealed class EditorHistory : IDisposable
         ObjectDisposedException.ThrowIf(m_isDisposed, this);
         if (m_isTransitioning)
             throw new InvalidOperationException("History cannot be modified while Undo or Redo is executing.");
+    }
+
+    internal void Attach(EditorContext editor, EditorInteractions interactions)
+    {
+        ArgumentNullException.ThrowIfNull(editor);
+        ArgumentNullException.ThrowIfNull(interactions);
+        m_context = new EditorHistoryContext(editor, interactions);
+    }
+
+    internal void UpdateHandlers(IReadOnlyDictionary<string, EditorHistoryHandler> handlers)
+    {
+        ArgumentNullException.ThrowIfNull(handlers);
+        m_handlers = handlers;
+        DiscardRuntimeBoundEntries();
+    }
+
+    private EditorHistoryChange RetainChange(EditorHistoryChange change)
+        => change.Retain(
+            m_blobStore,
+            m_options.inlinePayloadThreshold,
+            !string.IsNullOrWhiteSpace(m_options.cacheDirectory));
+
+    private bool TryGetHandler(string kind, out EditorHistoryHandler? handler)
+        => m_handlers.TryGetValue(kind, out handler);
+
+    private EditorHistoryAvailability Query(
+        EditorHistoryChange change,
+        EditorHistoryDirection direction)
+    {
+        if (m_context is null)
+            return EditorHistoryAvailability.Unavailable("The editor history is not attached to an interaction runtime.");
+        if (!TryGetHandler(change.kind, out EditorHistoryHandler? handler) || handler is null)
+        {
+            return EditorHistoryAvailability.Unavailable(
+                $"Required history handler '{change.kind}' is not loaded.");
+        }
+        try
+        {
+            return handler.QueryInternal(m_context, change, direction);
+        }
+        catch (Exception exception)
+        {
+            return EditorHistoryAvailability.Unavailable(exception.Message);
+        }
+    }
+
+    private EditorHistoryResult Apply(
+        EditorHistoryChange change,
+        EditorHistoryDirection direction)
+    {
+        EditorHistoryAvailability availability = Query(change, direction);
+        if (!availability.isAvailable)
+            return EditorHistoryResult.Failure(availability.message);
+        EditorHistoryHandler handler = m_handlers[change.kind];
+        return handler.ApplyInternal(m_context!, change, direction);
+    }
+
+    private bool TryMerge(
+        EditorHistoryChange older,
+        EditorHistoryChange newer,
+        out EditorHistoryChange? merged)
+    {
+        merged = null;
+        if (!string.Equals(older.kind, newer.kind, StringComparison.Ordinal) ||
+            older.version != newer.version ||
+            older.mergeKey is null ||
+            !string.Equals(older.mergeKey, newer.mergeKey, StringComparison.Ordinal) ||
+            !TryGetHandler(older.kind, out EditorHistoryHandler? handler) ||
+            handler is null)
+        {
+            return false;
+        }
+        return handler.TryMergeInternal(older, newer, out merged);
+    }
+
+    private void EnforceBudgets()
+    {
+        while (m_undo.Count > 0 &&
+               (residentBytes > m_options.maxResidentBytes || diskBytes > m_options.maxDiskBytes))
+        {
+            m_undo[0].Dispose();
+            m_undo.RemoveAt(0);
+        }
+    }
+
+    private void DiscardRuntimeBoundEntries()
+    {
+        if (m_transactions.Count != 0)
+        {
+            while (m_transactions.TryPop(out TransactionOperation? transaction))
+                transaction.Dispose();
+        }
+
+        int newestUnsafe = m_undo.FindLastIndex(static operation => !operation.isReloadSafe);
+        if (newestUnsafe >= 0)
+        {
+            for (int i = newestUnsafe; i >= 0; i--)
+                m_undo[i].Dispose();
+            m_undo.RemoveRange(0, newestUnsafe + 1);
+        }
+        if (m_redo.Exists(static operation => !operation.isReloadSafe))
+            DisposeAll(m_redo);
+    }
+
+    private string? GetUnavailableReason(
+        IReadOnlyList<EditorHistoryOperation> operations,
+        EditorHistoryDirection direction)
+    {
+        if (operations.Count == 0)
+            return null;
+        EditorHistoryOperation operation = operations[^1];
+        if (operation is DataOperation data)
+        {
+            EditorHistoryAvailability availability = Query(data.change, direction);
+            return availability.isAvailable ? null : availability.message;
+        }
+        bool available = direction == EditorHistoryDirection.Undo
+            ? operation.canUndo
+            : operation.canRedo;
+        return available ? null : $"'{operation.name}' cannot currently be {direction.ToString().ToLowerInvariant()}.";
+    }
+
+    private static long Sum(
+        IReadOnlyList<EditorHistoryOperation> operations,
+        Func<EditorHistoryOperation, long> selector)
+    {
+        long total = 0L;
+        for (int i = 0; i < operations.Count; i++)
+            total = checked(total + selector(operations[i]));
+        return total;
     }
 
     private static EditorHistoryResult Invoke(
@@ -331,6 +557,68 @@ public sealed class EditorHistory : IDisposable
         }
     }
 
+    private sealed class DataOperation : EditorHistoryOperation
+    {
+        private readonly EditorHistory m_owner;
+        private readonly string m_name;
+        private EditorHistoryChange m_change;
+
+        internal DataOperation(EditorHistory owner, string operationName, EditorHistoryChange change)
+        {
+            m_owner = owner;
+            m_name = operationName;
+            m_change = owner.RetainChange(change);
+        }
+
+        public override string name => m_name;
+
+        public override bool canUndo => m_owner.Query(m_change, EditorHistoryDirection.Undo).isAvailable;
+
+        public override bool canRedo => m_owner.Query(m_change, EditorHistoryDirection.Redo).isAvailable;
+
+        public override bool isReloadSafe => true;
+
+        public override long estimatedMemorySize => m_change.residentSize;
+
+        public override long estimatedDiskSize => m_change.diskSize;
+
+        internal EditorHistoryChange change => m_change;
+
+        protected override EditorHistoryResult Undo()
+            => m_owner.Apply(m_change, EditorHistoryDirection.Undo);
+
+        protected override EditorHistoryResult Redo()
+            => m_owner.Apply(m_change, EditorHistoryDirection.Redo);
+
+        protected override bool TryMerge(EditorHistoryOperation newer)
+        {
+            if (newer is not DataOperation candidate ||
+                !m_owner.TryMerge(m_change, candidate.m_change, out EditorHistoryChange? merged) ||
+                merged is null)
+            {
+                return false;
+            }
+            EditorHistoryChange retained;
+            try
+            {
+                retained = m_owner.RetainChange(merged);
+            }
+            finally
+            {
+                merged.Dispose();
+            }
+            m_change.Dispose();
+            m_change = retained;
+            return true;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                m_change.Dispose();
+        }
+    }
+
     private sealed class ValueOperation<T> : EditorHistoryOperation
     {
         private const double C_MERGE_WINDOW_SECONDS = 1.0;
@@ -392,6 +680,18 @@ public sealed class EditorHistory : IDisposable
         internal Guid id => transactionId;
 
         internal int count => m_children.Count;
+
+        public override bool isReloadSafe => m_children.TrueForAll(static operation => operation.isReloadSafe);
+
+        public override bool canUndo => m_children.TrueForAll(static operation => operation.canUndo);
+
+        public override bool canRedo => m_children.TrueForAll(static operation => operation.canRedo);
+
+        public override long estimatedMemorySize
+            => Sum(m_children, static operation => operation.estimatedMemorySize);
+
+        public override long estimatedDiskSize
+            => Sum(m_children, static operation => operation.estimatedDiskSize);
 
         internal void Add(EditorHistoryOperation operation) => m_children.Add(operation);
 

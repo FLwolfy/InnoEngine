@@ -18,7 +18,7 @@ using Inno.Engine.Scene;
 using Inno.Engine.Scene.Assets;
 using Inno.Engine.Scene.Components;
 
-namespace Inno.Editor.Panel.Hierarchy;
+namespace Inno.Editor.Scene;
 
 /// <summary>
 /// Tracks editor scene documents, their source paths, and serialized dirty state.
@@ -62,10 +62,14 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
     /// <inheritdoc />
     public int workspaceStateVersion => 1;
 
-    /// <summary>Gets all scenes currently available to editor features.</summary>
+    /// <summary>
+    /// Gets all scenes currently available to editor features.
+    /// </summary>
     public IReadOnlyList<GameScene> scenes => SceneManager.loadedScenes;
 
-    /// <summary>Gets the active scene.</summary>
+    /// <summary>
+    /// Gets the active scene.
+    /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when no active scene exists.</exception>
     public GameScene activeScene => SceneManager.activeScene
         ?? throw new InvalidOperationException("The editor does not have an active scene.");
@@ -612,7 +616,7 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
             IReadOnlyList<GameSystem> systems = document.scene.GetSystems();
             target = index >= 0 && index < systems.Count ? systems[index] : document.scene;
         }
-        _ = m_interactions.For(HierarchyAreas.Hierarchy, target).Select();
+        _ = m_interactions.For(m_interactions.focusedArea, target).Select();
     }
 
     private void TryRestorePendingScenes()
@@ -759,75 +763,59 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
     private static GameScene? FindSystemScene(GameSystem system)
         => SceneManager.loadedScenes.FirstOrDefault(scene => scene.GetSystems().Contains(system));
 
-    internal WorkspaceSnapshot CaptureSnapshot()
+    internal SceneDocumentSnapshot CaptureDocumentSnapshot(GameScene scene)
     {
-        IReadOnlyList<GameScene> loaded = SceneManager.loadedScenes;
-        var scenes = new SceneSnapshot[loaded.Count];
-        for (int i = 0; i < loaded.Count; i++)
-        {
-            GameScene scene = loaded[i];
-            SceneDocument document = GetOrCreateDocument(scene);
-            scenes[i] = new SceneSnapshot(
-                SerializationManager.Serialize(scene),
-                document.sourcePath,
-                document.sourceAssetId,
-                document.savedHash.ToArray(),
-                document.isDirty);
-        }
-        Guid? selectedId = (m_interactions?.selection.selectedTarget as EngineObject)?.identity.persistentId;
-        int activeIndex = SceneManager.activeScene is GameScene active
-            ? SceneManager.GetSceneIndex(active)
-            : -1;
-        return new WorkspaceSnapshot(scenes, activeIndex, selectedId);
+        ArgumentNullException.ThrowIfNull(scene);
+        SceneDocument document = GetOrCreateDocument(scene);
+        return new SceneDocumentSnapshot(
+            scene.identity.persistentId,
+            SerializationManager.Serialize(scene),
+            document.sourcePath,
+            document.sourceAssetId,
+            document.savedHash.ToArray(),
+            document.isDirty,
+            SceneManager.GetSceneIndex(scene));
     }
 
-    internal EditorHistoryResult RestoreSnapshot(WorkspaceSnapshot snapshot)
+    internal GameScene RestoreDocumentSnapshot(SceneDocumentSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        try
+        GameScene scene = SerializationManager.Deserialize<GameScene>(snapshot.payload);
+        SceneManager.LoadSceneAdditive(scene, makeActive: false);
+        SceneManager.SetSceneIndex(scene, snapshot.sceneIndex);
+        m_documents[scene.identity.persistentId] = new SceneDocument(
+            scene,
+            snapshot.sourcePath,
+            snapshot.sourceAssetId,
+            snapshot.savedHash.ToArray())
         {
-            SceneManager.UnloadAllScenes();
-            m_documents.Clear();
-            for (int i = 0; i < snapshot.scenes.Length; i++)
-            {
-                SceneSnapshot saved = snapshot.scenes[i];
-                GameScene scene = SerializationManager.Deserialize<GameScene>(saved.payload);
-                SceneManager.LoadSceneAdditive(scene, makeActive: false);
-                m_documents.Add(
-                    scene.identity.persistentId,
-                    new SceneDocument(
-                        scene,
-                        saved.sourcePath,
-                        saved.sourceAssetId,
-                        saved.savedHash.ToArray())
-                    {
-                        isDirty = saved.isDirty
-                    });
-            }
-            if (SceneManager.loadedScenes.Count == 0)
-            {
-                GameScene scene = SceneManager.LoadNewScene();
-                GetOrCreateDocument(scene);
-            }
-            else
-            {
-                int activeIndex = Math.Clamp(snapshot.activeIndex, 0, SceneManager.loadedScenes.Count - 1);
-                SceneManager.SetActiveScene(SceneManager.loadedScenes[activeIndex]);
-            }
-            m_ownedScene = SceneManager.activeScene;
-            if (m_interactions is not null)
-            {
-                object target = snapshot.selectedId is Guid id
-                    ? FindEngineObject(id) ?? SceneManager.activeScene!
-                    : SceneManager.activeScene!;
-                _ = m_interactions.For(HierarchyAreas.Hierarchy, target).Select();
-            }
-            return EditorHistoryResult.Success();
-        }
-        catch (Exception exception)
-        {
-            return EditorHistoryResult.Failure(exception.Message);
-        }
+            isDirty = snapshot.isDirty
+        };
+        return scene;
+    }
+
+    internal bool CloseDocumentForHistory(GameScene scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        Guid sceneId = scene.identity.persistentId;
+        bool closed = SceneManager.UnloadScene(scene);
+        if (closed)
+            m_documents.Remove(sceneId);
+        return closed;
+    }
+
+    internal void RestoreEditorState(Guid? activeSceneId, Guid? selectedId)
+    {
+        if (activeSceneId is Guid sceneId && FindEngineObject(sceneId) is GameScene { isLoaded: true } active)
+            SceneManager.SetActiveScene(active);
+        else if (SceneManager.loadedScenes.Count > 0 && SceneManager.activeScene is null)
+            SceneManager.SetActiveScene(SceneManager.loadedScenes[0]);
+
+        if (m_interactions is null)
+            return;
+        object? target = selectedId is Guid id ? FindEngineObject(id) : null;
+        target ??= SceneManager.activeScene;
+        _ = m_interactions.For(m_interactions.focusedArea, target).Select();
     }
 
     private static EngineObject? FindEngineObject(Guid id)
@@ -923,15 +911,12 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
         public long nextRefreshTimestamp;
     }
 
-    internal sealed record WorkspaceSnapshot(
-        SceneSnapshot[] scenes,
-        int activeIndex,
-        Guid? selectedId);
-
-    internal sealed record SceneSnapshot(
+    internal sealed record SceneDocumentSnapshot(
+        Guid sceneId,
         byte[] payload,
         string sourcePath,
         Guid sourceAssetId,
         byte[] savedHash,
-        bool isDirty);
+        bool isDirty,
+        int sceneIndex);
 }

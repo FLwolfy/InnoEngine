@@ -38,6 +38,7 @@ public sealed class EditorRuntimeTests : IDisposable
         TestPanel.attachCount = 0;
         TestPanel.detachCount = 0;
         DeferredAction.executeCount = 0;
+        NeutralHistoryHandler.value = 0;
 
         m_runtime = new EditorInteractionRuntime(m_projectRoot);
         m_runtime.Start();
@@ -116,6 +117,85 @@ public sealed class EditorRuntimeTests : IDisposable
         Assert.Equal("Redo Change Test Value", redo.displayName);
         Assert.True(global.Execute(EditorActions.Redo));
         Assert.Equal(1, value);
+    }
+
+    [Fact]
+    public void NeutralHistorySurvivesATypeCatalogGenerationChange()
+    {
+        NeutralHistoryHandler.value = 14;
+        m_runtime.interactions.history.RecordApplied(
+            "Change Neutral Value",
+            NeutralHistoryHandler.CreateChange(before: 3, after: 14));
+
+        TypeCacheManager.Rebuild();
+        _ = m_runtime.panelCount;
+
+        Assert.True(m_runtime.interactions.history.canUndo);
+        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        Assert.Equal(3, NeutralHistoryHandler.value);
+        Assert.True(m_runtime.interactions.history.Redo().succeeded);
+        Assert.Equal(14, NeutralHistoryHandler.value);
+    }
+
+    [Fact]
+    public void RuntimeBoundHistoryIsDiscardedWhenExtensionsRefresh()
+    {
+        int value = 0;
+        Assert.True(m_runtime.interactions.history.Execute(
+            "Legacy Change",
+            () =>
+            {
+                value = 1;
+                return EditorHistoryResult.Success();
+            },
+            () =>
+            {
+                value = 0;
+                return EditorHistoryResult.Success();
+            }).succeeded);
+
+        TypeCacheManager.Rebuild();
+        _ = m_runtime.panelCount;
+
+        Assert.Equal(1, value);
+        Assert.False(m_runtime.interactions.history.canUndo);
+        Assert.Null(m_runtime.interactions.history.undoName);
+    }
+
+    [Fact]
+    public void MissingHistoryHandlerCreatesAnExplicitBarrier()
+    {
+        m_runtime.interactions.history.RecordApplied(
+            "Unavailable Change",
+            new EditorHistoryChange(
+                "tests/missing-history-handler",
+                version: 1,
+                EditorHistoryPayload.FromBytes([1, 2, 3])));
+
+        Assert.False(m_runtime.interactions.history.canUndo);
+        Assert.Contains("tests/missing-history-handler", m_runtime.interactions.history.undoUnavailableReason);
+        Assert.False(m_runtime.interactions.history.Undo().succeeded);
+        Assert.Equal("Unavailable Change", m_runtime.interactions.history.undoName);
+    }
+
+    [Fact]
+    public void LargeNeutralPayloadSpillsToTheBoundedSessionDiskStore()
+    {
+        NeutralHistoryHandler.value = 32;
+        byte[] bytes = new byte[128 * 1024];
+        BitConverter.GetBytes(9).CopyTo(bytes, 0);
+        BitConverter.GetBytes(32).CopyTo(bytes, sizeof(int));
+        m_runtime.interactions.history.RecordApplied(
+            "Large Neutral Change",
+            new EditorHistoryChange(
+                NeutralHistoryHandler.KIND,
+                version: 1,
+                EditorHistoryPayload.FromBytes(bytes)));
+
+        Assert.Equal(0, m_runtime.interactions.history.residentBytes);
+        Assert.Equal(bytes.LongLength, m_runtime.interactions.history.diskBytes);
+        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        Assert.Equal(9, NeutralHistoryHandler.value);
     }
 
     [Fact]
@@ -372,6 +452,42 @@ public sealed class InteractionTarget
 }
 
 public sealed record InteractionPresentation(string value, bool submit, bool cancel = false);
+
+[EditorHistoryHandler(NeutralHistoryHandler.KIND, version: 1)]
+public sealed class NeutralHistoryHandler : EditorHistoryHandler
+{
+    public const string KIND = "tests/neutral-value";
+
+    public static int value;
+
+    public static EditorHistoryChange CreateChange(int before, int after)
+    {
+        byte[] bytes = new byte[sizeof(int) * 2];
+        BitConverter.GetBytes(before).CopyTo(bytes, 0);
+        BitConverter.GetBytes(after).CopyTo(bytes, sizeof(int));
+        return new EditorHistoryChange(KIND, 1, EditorHistoryPayload.FromBytes(bytes));
+    }
+
+    protected override EditorHistoryAvailability Query(
+        EditorHistoryContext context,
+        EditorHistoryChange change,
+        EditorHistoryDirection direction)
+        => change.payload.length >= sizeof(int) * 2
+            ? EditorHistoryAvailability.Available()
+            : EditorHistoryAvailability.Unavailable("The neutral value payload is truncated.");
+
+    protected override EditorHistoryResult Apply(
+        EditorHistoryContext context,
+        EditorHistoryChange change,
+        EditorHistoryDirection direction)
+    {
+        byte[] bytes = change.payload.ReadBytes();
+        value = BitConverter.ToInt32(
+            bytes,
+            direction == EditorHistoryDirection.Undo ? 0 : sizeof(int));
+        return EditorHistoryResult.Success();
+    }
+}
 
 [EditorModule]
 public sealed class TestModule : EditorModule, IEditorWorkspaceState

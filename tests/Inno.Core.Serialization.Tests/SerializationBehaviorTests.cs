@@ -167,6 +167,67 @@ public sealed class SerializationBehaviorTests : IDisposable
     }
 
     [Fact]
+    public void PropertyData_CapturesAndRestoresOnlyTheRequestedMember()
+    {
+        var source = new DefaultSample
+        {
+            count = 81,
+            name = "Captured"
+        };
+        byte[] data = SerializationManager.CapturePropertyData(source, nameof(DefaultSample.count));
+        var target = new DefaultSample
+        {
+            count = 3,
+            name = "Preserved"
+        };
+
+        SerializationPropertyRestoreResult result = SerializationManager.RestorePropertiesData(target, data);
+
+        Assert.True(result.success);
+        Assert.Equal(1, result.restoredCount);
+        Assert.Equal(81, target.count);
+        Assert.Equal("Preserved", target.name);
+    }
+
+    [Fact]
+    public void PropertyData_RoundTripsAllPersistentMembersWithoutTheOwningObject()
+    {
+        var source = new PreviousSchemaSample
+        {
+            changed = 19,
+            compatible = "Value",
+            removed = 27
+        };
+        byte[] data = SerializationManager.CapturePropertiesData(source);
+        var target = new PreviousSchemaSample();
+
+        SerializationPropertyRestoreResult result = SerializationManager.RestorePropertiesData(target, data);
+
+        Assert.True(result.success);
+        Assert.Equal(3, result.restoredCount);
+        Assert.Equal(19, target.changed);
+        Assert.Equal("Value", target.compatible);
+        Assert.Equal(27, target.removed);
+    }
+
+    [Fact]
+    public void PropertyData_RejectsMalformedOrTrailingBytes()
+    {
+        byte[] data = SerializationManager.CapturePropertyData(
+            new DefaultSample { count = 12 },
+            nameof(DefaultSample.count));
+        byte[] trailing = new byte[data.Length + 1];
+        data.CopyTo(trailing, 0);
+
+        Assert.Throws<InvalidDataException>(() => SerializationManager.RestorePropertiesData(
+            new DefaultSample(),
+            trailing));
+        Assert.ThrowsAny<Exception>(() => SerializationManager.RestorePropertiesData(
+            new DefaultSample(),
+            new byte[] { 1, 2, 3 }));
+    }
+
+    [Fact]
     public void Deserialize_UsesNonPublicParameterlessConstructor()
     {
         byte[] bytes = SerializationManager.Encode(static writer => writer.Write("value", 9));

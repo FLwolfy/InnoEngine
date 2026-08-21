@@ -1,7 +1,7 @@
 using System;
 
 using Inno.Editor.Interactions;
-using Inno.Core.Identity;
+using Inno.Editor.Scene;
 using Inno.Core.Input;
 using Inno.Engine.Scene;
 using Inno.Editor.ImGui.ImGuiWidget;
@@ -12,13 +12,12 @@ namespace Inno.Editor.Panel.Hierarchy;
 [EditorAction(HierarchyActions.RenameGameObject, priority: 100)]
 [EditorMenu(HierarchyAreas.Hierarchy, "Rename", order: 200)]
 [EditorShortcut(HierarchyAreas.Hierarchy, KeyCode.F2)]
-internal sealed class RenameGameObjectCommand : EditorAction<GameObject>
+internal sealed class RenameGameObjectCommand(SceneEdits edits) : EditorAction<GameObject>
 {
     private GameObject? m_gameObject;
     private string m_buffer = string.Empty;
     private bool m_requestFocus;
     private string m_originalName = string.Empty;
-    private EditorHistory? m_history;
 
     protected override EditorActionState Query(EditorActionContext<GameObject> context)
         => context.target.isRuntimeValid
@@ -30,7 +29,6 @@ internal sealed class RenameGameObjectCommand : EditorAction<GameObject>
         m_gameObject = context.target;
         m_buffer = context.target.name;
         m_originalName = context.target.name;
-        m_history = context.history;
         m_requestFocus = true;
         Activate(context);
     }
@@ -85,17 +83,8 @@ internal sealed class RenameGameObjectCommand : EditorAction<GameObject>
         if (m_gameObject is null)
             return;
         string name = string.IsNullOrWhiteSpace(m_buffer) ? "GameObject" : m_buffer.Trim();
-        m_gameObject.name = name;
         if (!string.Equals(m_originalName, name, System.StringComparison.Ordinal))
-        {
-            Guid targetId = m_gameObject.identity.persistentId;
-            m_history?.RecordValue(
-                "Rename GameObject",
-                m_originalName,
-                name,
-                value => ResolveGameObject(targetId).name = value,
-                $"game-object-name:{targetId:N}");
-        }
+            edits.RenameGameObject(m_gameObject, name);
         Complete();
     }
 
@@ -105,11 +94,5 @@ internal sealed class RenameGameObjectCommand : EditorAction<GameObject>
         m_buffer = string.Empty;
         m_requestFocus = false;
         m_originalName = string.Empty;
-        m_history = null;
     }
-
-    private static GameObject ResolveGameObject(Guid persistentId)
-        => IdentityManager.Get<GameObject>(persistentId)
-           ?? throw new System.InvalidOperationException(
-               $"GameObject '{persistentId}' is no longer available.");
 }

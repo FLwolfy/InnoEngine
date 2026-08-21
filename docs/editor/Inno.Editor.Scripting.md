@@ -159,7 +159,8 @@ Editor facade 按 feature 分布：
 | `InnoEditor.Core` | `Inno.Editor.Core` lifecycle contracts |
 | `InnoEditor.Interactions` | `Inno.Editor.Interactions` Action、Menu、Selection 与 Drag/Drop contracts |
 | `InnoEditor.Assets` | `Inno.Editor.Panel.FileBrowser` AssetEditor contracts |
-| `InnoEditor.Hierarchy` | `Inno.Editor.Panel.Hierarchy` workspace/drop contracts |
+| `InnoEditor.Scene` | `Inno.Editor.Scene` document workspace 与 `SceneEdits` 编辑门面 |
+| `InnoEditor.Hierarchy` | `Inno.Editor.Panel.Hierarchy` area/action/drop contracts |
 | `InnoEditor.Inspection` | `Inno.Editor.Panel.Inspector` drawer contracts |
 | `InnoEditor.ImGui` | `EditorPalette`、`EditorStyleMetrics` 与 widgets |
 

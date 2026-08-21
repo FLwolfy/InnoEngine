@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 
 using Inno.Core.Events;
 using Inno.Editor.Core;
@@ -20,7 +21,11 @@ public sealed class EditorInteractions
     internal EditorInteractions(EditorContext editor)
     {
         m_editor = editor ?? throw new ArgumentNullException(nameof(editor));
-        history = new EditorHistory();
+        history = new EditorHistory(new EditorHistoryOptions
+        {
+            cacheDirectory = Path.Combine(editor.projectDirectory, "Library", "Editor", "History")
+        });
+        history.Attach(editor, this);
     }
 
     /// <summary>

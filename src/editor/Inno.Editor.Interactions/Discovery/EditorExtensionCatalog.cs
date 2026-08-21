@@ -117,6 +117,15 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             .ToArray();
         ValidateModals(modals);
 
+        HistoryHandlerRegistration[] historyHandlers = types
+            .GetTypesWithAttribute<EditorHistoryHandlerAttribute>()
+            .OrderBy(static type => type.FullName, StringComparer.Ordinal)
+            .Select(type => CreateHistoryHandlerRegistration(type, activator))
+            .OrderBy(static value => value.attribute.kind, StringComparer.Ordinal)
+            .ThenBy(static value => value.type.FullName, StringComparer.Ordinal)
+            .ToArray();
+        ValidateHistoryHandlers(historyHandlers);
+
         WorkspaceRegistration[] workspace = modules
             .Select(static value => value.module)
             .Concat<object>(panels.Select(static value => value.panel))
@@ -133,6 +142,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             drops,
             panels,
             modals,
+            historyHandlers,
             workspace,
             activator.instances.ToArray());
     }
@@ -170,6 +180,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         // Publish before starting modules so a TypeCache query performed during startup can
         // retain these host instances instead of treating them as an abandoned candidate.
         m_active = snapshot;
+        m_interactions.history.UpdateHandlers(CreateHistoryHandlerMap(snapshot.historyHandlers));
         for (int i = 0; i < snapshot.modules.Length; i++)
             snapshot.modules[i].module.Start(m_context);
         for (int i = 0; i < snapshot.panels.Length; i++)
@@ -213,7 +224,6 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
     {
         CapturePanelStates(previous);
         m_workspace.Save(previous.workspace, previous.panels);
-        m_interactions.history.Clear();
         var retained = new HashSet<object>(next.instances, ReferenceEqualityComparer.Instance);
         for (int i = previous.panels.Length - 1; i >= 0; i--)
         {
@@ -239,6 +249,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         // Publish the candidate before starting new extensions so refreshes triggered by startup
         // retain the newly active generation instead of reactivating the stopped snapshot.
         m_active = next;
+        m_interactions.history.UpdateHandlers(CreateHistoryHandlerMap(next.historyHandlers));
         for (int i = 0; i < next.modules.Length; i++)
         {
             if (!existing.Contains(next.modules[i].module))
@@ -343,6 +354,14 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             type,
             activator.CreateExtension<EditorModal>(type));
 
+    private static HistoryHandlerRegistration CreateHistoryHandlerRegistration(
+        Type type,
+        EditorExtensionActivator activator)
+        => new(
+            type.GetCustomAttribute<EditorHistoryHandlerAttribute>(false)!,
+            type,
+            activator.CreateExtension<EditorHistoryHandler>(type));
+
     private static void ValidateActions(ActionRegistration[] actions)
     {
         foreach (IGrouping<(string Action, string Area, Type? Target, int Priority), ActionRegistration> group in
@@ -394,6 +413,27 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             throw new InvalidOperationException($"Editor modal id '{duplicate}' is registered more than once.");
     }
 
+    private static void ValidateHistoryHandlers(HistoryHandlerRegistration[] handlers)
+    {
+        string? duplicate = handlers
+            .GroupBy(static value => value.attribute.kind, StringComparer.Ordinal)
+            .FirstOrDefault(static group => group.Count() > 1)?.Key;
+        if (duplicate is not null)
+        {
+            throw new InvalidOperationException(
+                $"Editor history handler kind '{duplicate}' is registered more than once.");
+        }
+    }
+
+    private static IReadOnlyDictionary<string, EditorHistoryHandler> CreateHistoryHandlerMap(
+        IReadOnlyList<HistoryHandlerRegistration> handlers)
+    {
+        var result = new Dictionary<string, EditorHistoryHandler>(handlers.Count, StringComparer.Ordinal);
+        for (int i = 0; i < handlers.Count; i++)
+            result.Add(handlers[i].attribute.kind, handlers[i].handler);
+        return result;
+    }
+
     private static void ValidateWorkspace(WorkspaceRegistration[] providers)
     {
         WorkspaceRegistration? duplicate = providers
@@ -424,6 +464,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         DropRegistration[] drops,
         PanelRegistration[] panels,
         ModalRegistration[] modals,
+        HistoryHandlerRegistration[] historyHandlers,
         WorkspaceRegistration[] workspace,
         object[] instances);
 
@@ -459,6 +500,11 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         EditorModalAttribute attribute,
         Type type,
         EditorModal modal);
+
+    internal sealed record HistoryHandlerRegistration(
+        EditorHistoryHandlerAttribute attribute,
+        Type type,
+        EditorHistoryHandler handler);
 
     internal sealed record WorkspaceRegistration(
         string id,

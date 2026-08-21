@@ -173,46 +173,86 @@ public sealed class ClipToStateDrop
 
 ## Undo / Redo
 
-每个 `EditorInteractions` 拥有一个 `EditorHistory`。Action 通过 `context.history` 使用它，不需要额外注册，也不需要把 Action 设计成简单 inverse：
+每个 `EditorInteractions` 拥有一个 `EditorHistory`。History 不保存 Action 实例、Scene 对象、插件 `Type` 或来自 collectible ALC 的委托；稳定记录由四项组成：
+
+- `kind`：全局唯一的协议 ID，例如 `animation/state-property`。
+- `version`：payload schema 版本。
+- `payload`：只含 ID、索引、字符串和序列化字节的中立数据。
+- `mergeKey`：可选的连续编辑合并键。
+
+领域 Module 在修改成功后使用 `RecordApplied`：
 
 ```csharp
-EditorHistoryResult result = context.history.Execute(
-    "Create State",
-    execute: () =>
-    {
-        graph.CreateState(id);
-        return EditorHistoryResult.Success();
-    },
-    undo: () =>
-    {
-        graph.RemoveState(id);
-        return EditorHistoryResult.Success();
-    });
+byte[] data = AnimationHistoryData.Encode(
+    controllerId,
+    stateId,
+    beforeName,
+    afterName);
+
+context.history.RecordApplied(
+    "Rename Animation State",
+    new EditorHistoryChange(
+        "animation/state-name",
+        version: 1,
+        EditorHistoryPayload.FromBytes(data),
+        mergeKey: $"animation-state:{stateId}:name"));
 ```
 
-初始 execute 失败时不会产生历史项。Undo 或 Redo 失败时，操作保持在原栈，因此目标恢复后可以重试，也可以由用户清空历史。执行新的操作会释放整个 Redo 分支；历史默认最多保留 256 个顶层操作，淘汰时调用 `Dispose()`，允许文件删除等操作清理暂存资源。
-
-已经由 UI 应用的值使用 `RecordValue`，相同 `mergeKey` 的连续输入会合并为一项：
+当前 generation 的 Handler 由 TypeCache 自动发现：
 
 ```csharp
-target.weight = edited;
-context.history.RecordValue(
-    "Change Weight",
-    before,
-    edited,
-    value => target.weight = value,
-    $"weight:{target.id}");
+[EditorHistoryHandler("animation/state-name", version: 1)]
+public sealed class AnimationStateNameHistoryHandler : EditorHistoryHandler
+{
+    protected override EditorHistoryAvailability Query(
+        EditorHistoryContext context,
+        EditorHistoryChange change,
+        EditorHistoryDirection direction)
+    {
+        AnimationHistoryData data = AnimationHistoryData.Decode(
+            change.payload.ReadBytes());
+        return AnimationDatabase.Contains(data.controllerId, data.stateId)
+            ? EditorHistoryAvailability.Available()
+            : EditorHistoryAvailability.Unavailable("The animation state no longer exists.");
+    }
+
+    protected override EditorHistoryResult Apply(
+        EditorHistoryContext context,
+        EditorHistoryChange change,
+        EditorHistoryDirection direction)
+    {
+        AnimationHistoryData data = AnimationHistoryData.Decode(
+            change.payload.ReadBytes());
+        string value = direction == EditorHistoryDirection.Undo
+            ? data.beforeName
+            : data.afterName;
+        AnimationDatabase.Rename(data.controllerId, data.stateId, value);
+        return EditorHistoryResult.Success();
+    }
+}
 ```
 
-多个修改使用事务；事务的 Undo 按反序执行，Redo 按正序执行，中途失败会尽力回滚已经完成的子步骤：
+`Query` 不修改状态，只给菜单和快捷键提供可用性与 barrier 原因。`Apply` 必须原子化：失败时自己回滚部分写入并返回 `Failure`。失败的 Undo/Redo 不移动栈指针，因此依赖恢复后可以重试。Handler 缺失、版本不兼容、目标删除或 Stable Type ID 不可解析都会成为明确 barrier，而不是丢弃记录或使用错误对象。
+
+`Execute(name, EditorHistoryChange)` 适合 Handler 自己安全执行初次 Redo 的命令；多数 Editor UI 已先应用修改，因此使用 `RecordApplied`。委托式 `Execute`、`RecordValue` 与自定义 `EditorHistoryOperation` 只保留给 Host-only 兼容场景，它们属于 runtime-bound entry，在扩展 catalog generation 改变时自动截断，不能用于 EditorScripts 或长期历史。
+
+相邻中立记录只有在 `kind`、`version`、非空 `mergeKey` 与 Handler 的 `TryMerge` 都匹配时才会合并。单击开关、创建、删除和排序不设置 merge key；拖动数值、连续文字输入等可合并编辑才设置。
+
+### 事务与资源预算
+
+多个已经独立可逆的修改可以组成一个顶层事务：
 
 ```csharp
 using EditorHistoryTransaction transaction = context.history.BeginTransaction("Create Controller");
-// Execute or RecordApplied child operations.
+// Apply and RecordApplied each independent neutral child change.
 transaction.Commit();
 ```
 
-复杂图操作应派生 `EditorHistoryOperation` 并保存中立快照，而不是只保存一个可能失效的对象引用。Scene feature 使用完整序列化图快照恢复对象 ID、引用、Component/System 和层级顺序。脚本 assembly generation 切换前会清空 history，防止旧插件实例被历史 delegate 固定。
+事务 Undo 按反序、Redo 按正序执行；任一 child 失败时回滚本次已经完成的 child。事务不会替代领域原子性：每个 Handler 仍必须保证自己的单步失败不泄漏半状态。
+
+默认保留 256 个顶层记录，同时受 `EditorHistoryOptions.maxResidentBytes` 与 `maxDiskBytes` 限制。小 payload 驻留内存；达到 `inlinePayloadThreshold` 的 payload 自动进入 `<Project>/Library/Editor/History` session blob store。清空 History、淘汰记录、Runtime 关闭或丢弃 Redo branch 时立即释放对应文件。磁盘 payload 不随 Scene、Prefab、`.imeta` 或 `editor.ini` 持久化。
+
+扩展 reload 会先构建新的 Handler Registry snapshot，再与 Action/Menu/Drop/Panel 一起原子激活。中立 History 不清空，后续 Undo/Redo 总是通过新 generation Handler 解释；旧 delegate entry 会被截断，避免固定旧 ALC。
 
 内建 `Edit/Undo` 与 `Edit/Redo` 菜单自动显示下一操作名称。快捷键为 Command/Ctrl+Z、Command/Ctrl+Shift+Z，并额外支持 Command/Ctrl+Y。
 
@@ -253,7 +293,7 @@ Workspace provider 的恢复状态按实例弱跟踪。只有成功完成 `Resto
 
 Undo 栈、dirty Scene 内容、runtime 对象和编译中间态不会跨进程保存。它们要么无法安全跨代际恢复，要么本身可以由 Asset Database 和脚本构建图重建。
 
-Scene 内容历史遵循两条规则：结构修改保存前后 Scene snapshot，并在保持 `GameScene` 实例的情况下重建其内部对象图；值修改若可能跨对象图重建，则只捕获 persistent ID，并在 Undo/Redo 时解析当前对象。历史操作不能保存可能已经 destroyed 的裸 Scene 对象回调。
+Scene 内容历史由独立的 [Inno.Editor.Scene](Inno.Editor.Scene.md) 实现。它不会为一次小修改序列化整张 Scene 图，而是按属性、元素、子树、placement 或文档记录最小 payload。
 
 ## EditorScripts facade
 

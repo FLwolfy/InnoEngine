@@ -2,12 +2,13 @@ using System;
 
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
+using Inno.Editor.Scene;
 using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Hierarchy;
 
 [EditorDrop(HierarchyAreas.Hierarchy)]
-internal sealed class ReorderSceneDropHandler(EditorSceneWorkspace workspace)
+internal sealed class ReorderSceneDropHandler(SceneEdits edits)
     : EditorDrop<GameScene, HierarchySceneDropTarget>
 {
     protected override EditorDropStatus Query(
@@ -33,11 +34,7 @@ internal sealed class ReorderSceneDropHandler(EditorSceneWorkspace workspace)
         int insertionIndex = targetIndex + (context.placement == EditorDropPlacement.After ? 1 : 0);
         if (sourceIndex < insertionIndex)
             insertionIndex--;
-        SceneWorkspaceOperation.Execute(
-            context.interactions,
-            "Reorder Scene",
-            workspace,
-            () => SceneManager.SetSceneIndex(source, insertionIndex));
+        edits.SetSceneIndex(source, insertionIndex);
         _ = context.interactions.For(context.area, source).Select();
         return EditorDropResult.Accepted(source);
     }

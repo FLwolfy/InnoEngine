@@ -11,7 +11,11 @@ internal sealed class UndoEditorAction : EditorAction
         => new(
             isVisible: true,
             isEnabled: context.history.canUndo,
-            displayName: context.history.undoName is { } name ? $"Undo {name}" : "Undo");
+            displayName: context.history.undoName is { } name
+                ? context.history.undoUnavailableReason is { } reason
+                    ? $"Undo {name} ({reason})"
+                    : $"Undo {name}"
+                : "Undo");
 
     protected override void Execute(EditorActionContext context)
     {

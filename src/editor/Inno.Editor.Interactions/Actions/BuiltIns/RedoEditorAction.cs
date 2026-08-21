@@ -12,7 +12,11 @@ internal sealed class RedoEditorAction : EditorAction
         => new(
             isVisible: true,
             isEnabled: context.history.canRedo,
-            displayName: context.history.redoName is { } name ? $"Redo {name}" : "Redo");
+            displayName: context.history.redoName is { } name
+                ? context.history.redoUnavailableReason is { } reason
+                    ? $"Redo {name} ({reason})"
+                    : $"Redo {name}"
+                : "Redo");
 
     protected override void Execute(EditorActionContext context)
     {

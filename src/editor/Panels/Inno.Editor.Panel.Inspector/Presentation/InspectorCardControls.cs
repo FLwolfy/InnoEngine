@@ -2,10 +2,10 @@ using System;
 
 using Inno.Core.Identity;
 using Inno.Core.Logging;
-using Inno.Editor.Interactions;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
+using Inno.Editor.Scene;
 using Inno.Engine.Scene;
 using Inno.Platform.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
@@ -19,48 +19,44 @@ internal sealed class InspectorCardControls
     internal float width => EditorWidget.GetIconButtonSize().X * C_CONTROL_COUNT;
 
     internal void DrawComponent(
-        EditorInteractions interactions,
-        GameObject owner,
+        SceneEdits edits,
         GameComponent component,
         int componentIndex,
         int componentCount,
         Action requestRemove)
     {
-        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(edits);
         ArgumentNullException.ThrowIfNull(component);
-        Guid ownerId = owner.identity.persistentId;
         Guid componentId = component.identity.persistentId;
         Draw(
-            interactions,
             componentId,
             componentIndex > 1,
             componentIndex < componentCount - 1,
-            targetIndex => ResolveGameObject(ownerId).SetComponentIndex(
-                ResolveComponent(componentId),
-                targetIndex),
+            targetIndex => edits.SetComponentIndex(ResolveComponent(componentId), targetIndex),
             componentIndex,
             requestRemove,
             "Component");
     }
 
     internal void DrawSystem(
-        EditorInteractions interactions,
+        SceneEdits edits,
         GameScene owner,
         GameSystem system,
         int systemIndex,
         int systemCount,
         Action requestRemove)
     {
+        ArgumentNullException.ThrowIfNull(edits);
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(system);
         Guid sceneId = owner.identity.persistentId;
         Guid systemId = system.identity.persistentId;
         Draw(
-            interactions,
             systemId,
             systemIndex > 0,
             systemIndex < systemCount - 1,
-            targetIndex => ResolveScene(sceneId).SetSystemIndex(
+            targetIndex => edits.SetSystemIndex(
+                ResolveScene(sceneId),
                 ResolveSystem(systemId),
                 targetIndex),
             systemIndex,
@@ -69,7 +65,6 @@ internal sealed class InspectorCardControls
     }
 
     private static void Draw(
-        EditorInteractions interactions,
         Guid targetId,
         bool canMoveUp,
         bool canMoveDown,
@@ -81,10 +76,8 @@ internal sealed class InspectorCardControls
         ArgumentNullException.ThrowIfNull(move);
         ArgumentNullException.ThrowIfNull(requestRemove);
         DrawMoveButton(
-            interactions,
             targetId,
             canMoveUp,
-            currentIndex,
             currentIndex - 1,
             move,
             ImGuiIcon.ArrowUp,
@@ -92,10 +85,8 @@ internal sealed class InspectorCardControls
             targetKind);
         NativeImGui.SameLine(0f, 0f);
         DrawMoveButton(
-            interactions,
             targetId,
             canMoveDown,
-            currentIndex,
             currentIndex + 1,
             move,
             ImGuiIcon.ArrowDown,
@@ -112,10 +103,8 @@ internal sealed class InspectorCardControls
     }
 
     private static void DrawMoveButton(
-        EditorInteractions interactions,
         Guid targetId,
         bool canMove,
-        int currentIndex,
         int targetIndex,
         Action<int> move,
         string icon,
@@ -134,22 +123,12 @@ internal sealed class InspectorCardControls
         try
         {
             move(targetIndex);
-            interactions.history.RecordValue(
-                $"Move {targetKind}",
-                currentIndex,
-                targetIndex,
-                move,
-                $"{targetKind}-order:{targetId:N}");
         }
         catch (InvalidOperationException exception)
         {
             Log.Warn("{0} reorder was rejected: {1}", targetKind, exception.Message);
         }
     }
-
-    private static GameObject ResolveGameObject(Guid persistentId)
-        => IdentityManager.Get<GameObject>(persistentId)
-           ?? throw new InvalidOperationException($"GameObject '{persistentId}' is no longer available.");
 
     private static GameComponent ResolveComponent(Guid persistentId)
         => IdentityManager.Get<GameComponent>(persistentId)

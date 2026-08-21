@@ -3,6 +3,7 @@ using Inno.Assets.File;
 
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
+using Inno.Editor.Scene;
 using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Hierarchy;

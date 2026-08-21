@@ -39,6 +39,8 @@ public sealed class AnimationCurveDrawer : IPropertyDrawer
 
 Component card 的上/下按钮改变附加顺序，Transform 保持置顶且不可移除。GameSystem 也可以上下移动和删除，但运行顺序仍由显式 `order` 决定。`enabled=false` 时 header 与 body 使用统一 dimmed 样式，body 保持可辨识但不可编辑。
 
+Inspector 的可序列化属性、Component/System enabled、Add、Remove、Reset 与显示顺序全部通过 `SceneEdits` 记录中立历史。属性修改只编码对应 root property；元素操作保存 Stable Type ID、persistent ID、index 和该元素的属性数据。Undo 不会销毁并重建无关 Scene 对象，连续属性编辑才允许按 property merge key 合并。
+
 ## 引用拖放
 
 Asset reference handler 接受共享 `AssetInfo`；EngineObject handler 接受当前 Scene 中的 `EngineObject`。Drawer 只提交 property target 和 area，具体兼容检查及赋值在 typed Drop handler 中完成。

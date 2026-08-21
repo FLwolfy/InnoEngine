@@ -21,6 +21,9 @@ SerializationManager.Initialize();
 | `GetProperties(ISerializable)` | 返回稳定排序且允许运行时读取的 `SerializedProperty`。 |
 | `CaptureProperties(ISerializable, context?)` | 把每个持久成员独立编码为带原声明类型的迁移快照。 |
 | `RestoreProperties(target, snapshots, mode, context?)` | 以严格或兼容策略恢复独立成员快照。 |
+| `CapturePropertyData(value, name, context?)` | 把一个 persistent property 编码为独立、带版本的中立 bytes。 |
+| `CapturePropertiesData(value, context?)` | 把全部 persistent property snapshots 编码为独立、带版本的中立 bytes。 |
+| `RestorePropertiesData(target, data, mode, context?)` | 从 property-data bytes 恢复既有对象，不序列化 owning graph。 |
 | `Serialize<T>(T, context?)` | 把 class `ISerializable` 根对象编码为 version-two bytes。 |
 | `Deserialize<T>(ReadOnlySpan<byte>, context?)` | 创建并恢复一个新根对象。 |
 | `Restore<T>(T target, ReadOnlySpan<byte>, context?)` | 将数据恢复到既有实例，适合身份必须保留的对象。 |
@@ -121,6 +124,8 @@ SerializationPropertyRestoreResult result = SerializationManager.RestoreProperti
 ```
 
 `SerializationPropertyRestoreMode.Strict` 在第一个匹配但不可解码的成员处抛异常。`Compatible` 使用独立的 operation checkpoint 跳过该成员，撤销它注册的 completion callback，保留目标对象构造后的默认值，并在 `failures` 中记录旧类型、新类型和错误信息。
+
+Editor History 等需要跨 assembly generation 保留数据的系统应使用 `CapturePropertyData` / `RestorePropertiesData`。该格式包含 property key 与原声明类型信息，但不包含 owning object 引用；调用方必须用 persistent ID 在当前 generation 解析目标。格式严格检查版本、长度与 trailing bytes，损坏数据不会被部分接受。
 
 已删除成员计入 `ignoredCount`，新增成员自然保持默认值。所有兼容成员完成后，目标的 `[OnSerializableRestored]` 仍只执行一次；对象级 restore hook 失败属于严重错误，不会被 compatible 模式吞掉。
 

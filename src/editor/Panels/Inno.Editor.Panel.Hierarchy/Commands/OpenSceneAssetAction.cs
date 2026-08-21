@@ -1,4 +1,5 @@
 using Inno.Editor.Interactions;
+using Inno.Editor.Scene;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Assets;
 

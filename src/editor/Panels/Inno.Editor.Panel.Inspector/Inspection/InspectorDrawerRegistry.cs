@@ -6,6 +6,7 @@ using System.Reflection;
 using Inno.Core.Reflection;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
+using Inno.Editor.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
@@ -15,10 +16,12 @@ namespace Inno.Editor.Panel.Inspector;
 internal sealed class InspectorDrawerRegistry : IDisposable
 {
     private readonly InspectorTypeRegistry m_registry;
+    private readonly SceneEdits m_edits;
 
-    internal InspectorDrawerRegistry(EditorInteractions interactions)
+    internal InspectorDrawerRegistry(EditorInteractions interactions, SceneEdits edits)
     {
         m_registry = new InspectorTypeRegistry(interactions);
+        m_edits = edits ?? throw new ArgumentNullException(nameof(edits));
     }
 
     /// <summary>
@@ -39,7 +42,8 @@ internal sealed class InspectorDrawerRegistry : IDisposable
             editorContext,
             m_registry.interactions,
             target,
-            renderer));
+            renderer,
+            m_edits));
         return true;
     }
 

@@ -1,5 +1,6 @@
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
+using Inno.Editor.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
@@ -15,13 +16,15 @@ public sealed class SceneInspectionModule : EditorModule, System.IDisposable
     /// Creates the scene inspection module and its generation-aware drawer registries.
     /// </summary>
     /// <param name="interactions">The active editor interaction entry point supplied to drawers.</param>
+    /// <param name="edits">The scene editing service used to record granular property changes.</param>
     /// <exception cref="System.ArgumentNullException">Thrown when <paramref name="interactions"/> is <see langword="null"/>.</exception>
-    public SceneInspectionModule(EditorInteractions interactions)
+    public SceneInspectionModule(EditorInteractions interactions, SceneEdits edits)
     {
         System.ArgumentNullException.ThrowIfNull(interactions);
-        m_inspectors = new InspectorDrawerRegistry(interactions);
+        System.ArgumentNullException.ThrowIfNull(edits);
+        m_inspectors = new InspectorDrawerRegistry(interactions, edits);
         m_properties = new PropertyDrawerRegistry(interactions);
-        m_renderer = new SerializedPropertyRenderer(m_properties, interactions);
+        m_renderer = new SerializedPropertyRenderer(m_properties, interactions, edits);
     }
 
     internal bool Draw(EditorContext context, object target)

@@ -2,12 +2,13 @@ using System;
 
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
+using Inno.Editor.Scene;
 using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Hierarchy;
 
 [EditorDrop(HierarchyAreas.Hierarchy)]
-internal sealed class MoveGameObjectToSceneDropHandler
+internal sealed class MoveGameObjectToSceneDropHandler(SceneEdits edits)
     : EditorDrop<GameObject, HierarchySceneDropTarget>
 {
     protected override EditorDropStatus Query(
@@ -25,10 +26,8 @@ internal sealed class MoveGameObjectToSceneDropHandler
     {
         GameObject source = context.source;
         GameScene target = context.target.scene;
-        SceneSnapshotOperation.Execute(
-            context.interactions,
-            "Move GameObject",
-            source.scene,
+        _ = edits.ChangeHierarchy(
+            source,
             () =>
             {
                 source.transform.SetParent(null);

@@ -24,6 +24,21 @@ public abstract class EditorHistoryOperation : IDisposable
     /// </summary>
     public virtual bool canRedo => true;
 
+    /// <summary>
+    /// Gets whether this operation contains only neutral data that remains valid after extension handlers reload.
+    /// </summary>
+    public virtual bool isReloadSafe => false;
+
+    /// <summary>
+    /// Gets the estimated number of resident bytes retained exclusively by this operation.
+    /// </summary>
+    public virtual long estimatedMemorySize => 0L;
+
+    /// <summary>
+    /// Gets the estimated number of temporary disk bytes retained exclusively by this operation.
+    /// </summary>
+    public virtual long estimatedDiskSize => 0L;
+
     internal EditorHistoryResult UndoInternal()
     {
         ObjectDisposedException.ThrowIf(m_isDisposed, this);

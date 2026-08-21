@@ -7,6 +7,8 @@ using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Editor.Interactions;
+using Inno.Editor.Scene;
+using Inno.Engine.Scene;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Inspector;
@@ -19,27 +21,38 @@ public sealed class SerializedPropertyRenderer
     private readonly HashSet<string> m_loggedErrors = new(StringComparer.Ordinal);
     private readonly PropertyDrawerRegistry m_drawers;
     private readonly EditorInteractions m_interactions;
+    private readonly SceneEdits m_edits;
 
     internal SerializedPropertyRenderer(
         PropertyDrawerRegistry drawers,
-        EditorInteractions interactions)
+        EditorInteractions interactions,
+        SceneEdits edits)
     {
         m_drawers = drawers ?? throw new ArgumentNullException(nameof(drawers));
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
+        m_edits = edits ?? throw new ArgumentNullException(nameof(edits));
     }
 
     /// <summary>
     /// Draws a root serialized property.
     /// </summary>
     /// <param name="editorContext">Shared editor context.</param>
+    /// <param name="owner">The live scene object that owns the root property.</param>
     /// <param name="ownerPath">Stable owner path.</param>
     /// <param name="property">Serialized property.</param>
-    public void Draw(EditorContext editorContext, string ownerPath, SerializedProperty property)
+    public void Draw(
+        EditorContext editorContext,
+        EngineObject owner,
+        string ownerPath,
+        SerializedProperty property)
     {
         ArgumentNullException.ThrowIfNull(editorContext);
+        ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(property);
         Draw(
             editorContext,
+            owner,
+            property.name,
             $"{ownerPath}.{property.name}",
             property.name,
             property.propertyType,
@@ -50,6 +63,8 @@ public sealed class SerializedPropertyRenderer
 
     internal void Draw(
         EditorContext editorContext,
+        EngineObject owner,
+        string rootPropertyName,
         string path,
         string label,
         Type propertyType,
@@ -60,6 +75,9 @@ public sealed class SerializedPropertyRenderer
         var context = new PropertyDrawContext(
             editorContext,
             m_interactions,
+            m_edits,
+            owner,
+            rootPropertyName,
             path,
             EditorWidget.NicifyName(label),
             propertyType,

@@ -42,7 +42,7 @@ public sealed class AnimationClipEditor : AssetEditor
 
 Asset Rename/Delete 的物理事务始终由 `AssetManager` 执行。AssetEditor 只能验证以及接收提交后的通知，不能自行移动 source/meta/artifact，因此外部文件变化与 Editor 操作拥有同一身份规则。
 
-Create Folder、Rename 与 Delete 都接入共享 Undo/Redo。Delete 会把 source 和 `.imeta` 暂存到 `<Project>/Library/Editor/Undo`；Undo 恢复原 persistent ID，Redo 再走 `AssetManager.Delete`。Redo 目标发生外部冲突时操作失败并留在 Redo 栈，绝不覆盖新文件。历史被清除或达到容量淘汰时暂存目录自动释放。
+Create Folder、Rename 与 Delete 都接入共享中立 Undo/Redo。Rename 只记录 source/target path；Delete 把 source、目录结构和 `.imeta` 编码进 History payload。大 payload 自动落到 `<Project>/Library/Editor/History`，Undo 先在临时目录完整验证 archive，再提交回 Asset root 并 `Rescan`，因此恢复失败不会留下半个目录。原 `.imeta` 会恢复相同 persistent ID；Redo 再走 `AssetManager.Delete`。目标发生外部冲突时操作失败并留在原栈，绝不覆盖新文件。
 
 为某类 Asset 添加额外右键菜单只需普通 Action：
 

@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using Inno.Core.Identity;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
+using Inno.Editor.Scene;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;

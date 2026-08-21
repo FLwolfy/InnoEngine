@@ -1,12 +1,13 @@
 using System;
 
 using Inno.Editor.Interactions;
+using Inno.Editor.Scene;
 using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
 [EditorAction(InspectorActions.AddSystem, InspectorAreas.System)]
-internal sealed class AddSystemCommand : EditorAction<GameScene>
+internal sealed class AddSystemCommand(SceneEdits edits) : EditorAction<GameScene>
 {
     protected override EditorActionState Query(EditorActionContext<GameScene> context)
         => context.target.isLoaded && context.argument is Type
@@ -16,12 +17,6 @@ internal sealed class AddSystemCommand : EditorAction<GameScene>
     protected override void Execute(EditorActionContext<GameScene> context)
     {
         if (context.argument is Type systemType)
-        {
-            SceneSnapshotOperation.Execute(
-                context,
-                $"Add {systemType.Name}",
-                context.target,
-                () => _ = context.target.AddSystem(systemType));
-        }
+            _ = edits.AddSystem(context.target, systemType);
     }
 }

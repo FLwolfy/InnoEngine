@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 
-using Inno.Core.Identity;
 using Inno.Core.Serialization;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
@@ -63,15 +62,7 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
                 C_NAME_BUFFER_SIZE,
                 ImGuiInputTextFlags.None))
         {
-            string before = gameObject.name;
-            gameObject.name = name;
-            Guid gameObjectId = gameObject.identity.persistentId;
-            context.interactions.history.RecordValue(
-                "Rename GameObject",
-                before,
-                name,
-                value => ResolveGameObject(gameObjectId).name = value,
-                $"game-object-name:{gameObjectId:N}");
+            context.edits.RenameGameObject(gameObject, name);
         }
     }
 
@@ -94,23 +85,19 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
                         bool enabled = behavior.enabled;
                         if (EditorWidget.CompactCheckbox($"enabled_{componentId}", ref enabled))
                         {
-                            bool before = behavior.enabled;
-                            behavior.enabled = enabled;
-                            Guid behaviorId = behavior.identity.persistentId;
-                            context.interactions.history.RecordValue(
+                            _ = context.edits.ChangeProperty(
+                                behavior,
+                                "enabled",
+                                () => behavior.enabled = enabled,
                                 enabled ? "Enable Component" : "Disable Component",
-                                before,
-                                enabled,
-                                value => ResolveBehavior(behaviorId).enabled = value,
-                                $"component-enabled:{componentId}");
+                                mergeKey: null);
                         }
                     }
                     : null,
                 (Action?)(componentType == typeof(Transform)
                     ? null
                     : () => m_cardControls.DrawComponent(
-                        context.interactions,
-                        gameObject,
+                        context.edits,
                         component,
                         i,
                         components.Count,
@@ -143,6 +130,7 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
                     {
                         context.properties.Draw(
                             context.editorContext,
+                            component,
                             $"gameObject.{gameObject.identity.persistentId:N}.{componentId}",
                             properties[propertyIndex]);
                     }
@@ -185,11 +173,4 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
         EditorWidget.EndSearchPopup();
     }
 
-    private static GameObject ResolveGameObject(Guid persistentId)
-        => IdentityManager.Get<GameObject>(persistentId)
-           ?? throw new InvalidOperationException($"GameObject '{persistentId}' is no longer available.");
-
-    private static GameBehavior ResolveBehavior(Guid persistentId)
-        => IdentityManager.Get<GameBehavior>(persistentId)
-           ?? throw new InvalidOperationException($"GameBehavior '{persistentId}' is no longer available.");
 }

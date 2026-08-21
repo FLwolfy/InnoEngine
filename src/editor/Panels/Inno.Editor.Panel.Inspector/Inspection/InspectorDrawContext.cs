@@ -2,6 +2,7 @@ using System;
 
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
+using Inno.Editor.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
@@ -28,15 +29,19 @@ public sealed class InspectorDrawContext
     /// </summary>
     public SerializedPropertyRenderer properties { get; }
 
+    internal SceneEdits edits { get; }
+
     internal InspectorDrawContext(
         EditorContext editorContext,
         EditorInteractions interactions,
         object target,
-        SerializedPropertyRenderer properties)
+        SerializedPropertyRenderer properties,
+        SceneEdits edits)
     {
         this.editorContext = editorContext ?? throw new ArgumentNullException(nameof(editorContext));
         this.interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
         this.target = target ?? throw new ArgumentNullException(nameof(target));
         this.properties = properties ?? throw new ArgumentNullException(nameof(properties));
+        this.edits = edits ?? throw new ArgumentNullException(nameof(edits));
     }
 }

@@ -10,6 +10,7 @@ Editor 采用“被动核心 → 后端无关交互 → ImGui 表现 → 独立 
 | --- | --- |
 | [Inno.Editor.Core](Inno.Editor.Core.md) | `EditorContext`、frame/runtime、Module、Panel、Modal 与 Workspace provider 的最小契约。 |
 | [Inno.Editor.Interactions](Inno.Editor.Interactions.md) | Action、area、menu、shortcut、selection、drag/drop、Undo/Redo、Workspace 存储与扩展代际。 |
+| [Inno.Editor.Scene](Inno.Editor.Scene.md) | Scene document workspace、细粒度 Scene 编辑门面与 reload-safe History 协议。 |
 | [Inno.Editor.ImGui](Inno.Editor.ImGui.md) | ImGui runtime、renderer、统一 Widget、Palette 与 Style metrics。 |
 | [Inno.Editor.Scripting](Inno.Editor.Scripting.md) | Asset-backed Roslyn 编译、facade、IDE 工程与热重载。 |
 | [Inno.Editor.Panel.FileBrowser](Inno.Editor.Panel.FileBrowser.md) | AssetEditor、文件浏览、Asset 操作与 Asset-side drag/drop。 |
@@ -26,7 +27,10 @@ flowchart TD
     Core["Inno.Editor.Core"] --> Interactions["Inno.Editor.Interactions"]
     Core --> ImGui["Inno.Editor.ImGui"]
     Interactions --> ImGui
-    Core --> Panels["Inno.Editor.Panel.*"]
+    Core --> Scene["Inno.Editor.Scene"]
+    Interactions --> Scene
+    Scene --> Panels["Inno.Editor.Panel.*"]
+    Core --> Panels
     Interactions --> Panels
     ImGui --> Panels
     Core --> Scripting["Inno.Editor.Scripting"]
@@ -53,7 +57,7 @@ flowchart TD
 - 动态菜单：继承 `EditorMenuSource` 并添加 `[EditorMenuSource(area)]`。
 - 拖放：继承 `EditorDrop<TSource,TTarget>` 并添加 `[EditorDrop(area)]`。
 - 选择、焦点和打开等交互：通过 `interactions.For(area, target)` 获取轻量 `EditorInteraction`。
-- 可撤销操作：使用 `context.history.Execute`、`RecordValue`、transaction 或自定义 `EditorHistoryOperation`。
+- 可撤销操作：领域 Module 先完成修改，再用中立 `EditorHistoryChange` 与 `[EditorHistoryHandler]` 记录；连续值可设置稳定 `mergeKey`，复合修改使用 transaction。
 - 项目语义状态：Module/Panel 实现 `IEditorWorkspaceState`，无需注册即可自动保存和恢复。
 
 具体例子见 [Interactions](Inno.Editor.Interactions.md) 与各 Panel 页面。EditorScripts 必须显式 `using InnoEditor.*;`；项目完全禁止 global using。

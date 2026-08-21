@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Inno.Core.Logging;
 using Inno.Core.Input;
 using Inno.Editor.Interactions;
+using Inno.Editor.Scene;
 using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Hierarchy;

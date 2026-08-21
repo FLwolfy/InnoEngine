@@ -1,4 +1,5 @@
 using Inno.Editor.Interactions;
+using Inno.Editor.Scene;
 using Inno.Core.Input;
 using Inno.Engine.Scene;
 
@@ -7,7 +8,7 @@ namespace Inno.Editor.Panel.Hierarchy;
 [EditorAction(HierarchyActions.DeleteGameObject, priority: 100)]
 [EditorMenu(HierarchyAreas.Hierarchy, "Delete", order: 300)]
 [EditorShortcut(HierarchyAreas.Hierarchy, KeyCode.Delete)]
-internal sealed class DeleteGameObjectCommand : EditorAction<GameObject>
+internal sealed class DeleteGameObjectCommand(SceneEdits edits) : EditorAction<GameObject>
 {
     protected override EditorActionState Query(EditorActionContext<GameObject> context)
         => context.target.isRuntimeValid
@@ -18,12 +19,7 @@ internal sealed class DeleteGameObjectCommand : EditorAction<GameObject>
     {
         if (!context.target.isRuntimeValid)
             return;
-        GameScene scene = context.target.scene;
-        SceneSnapshotOperation.Execute(
-            context.interactions,
-            "Delete GameObject",
-            scene,
-            () => _ = scene.DestroyObject(context.target));
+        _ = edits.DeleteGameObject(context.target);
         if (context.interactions.selection.TryGet(out GameObject? selected) && ReferenceEquals(selected, context.target))
             _ = context.interactions.For(context.area).Select();
     }

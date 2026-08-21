@@ -1,4 +1,5 @@
 using Inno.Editor.Interactions;
+using Inno.Editor.Scene;
 using Inno.Core.Input;
 using Inno.Engine.Scene;
 
@@ -7,7 +8,7 @@ namespace Inno.Editor.Panel.Hierarchy;
 [EditorAction(HierarchyActions.DeleteScene, priority: 100)]
 [EditorMenu(HierarchyAreas.Hierarchy, "Delete", order: 400, separatorBefore: true)]
 [EditorShortcut(HierarchyAreas.Hierarchy, KeyCode.Delete)]
-internal sealed class DeleteSceneCommand(EditorSceneWorkspace workspace) : EditorAction<GameScene>
+internal sealed class DeleteSceneCommand(EditorSceneWorkspace workspace, SceneEdits edits) : EditorAction<GameScene>
 {
     protected override EditorActionState Query(EditorActionContext<GameScene> context)
         => context.target is { isLoaded: true, isDestroyed: false } && workspace.scenes.Count > 1
@@ -16,13 +17,7 @@ internal sealed class DeleteSceneCommand(EditorSceneWorkspace workspace) : Edito
 
     protected override void Execute(EditorActionContext<GameScene> context)
     {
-        bool closed = false;
-        SceneWorkspaceOperation.Execute(
-            context,
-            "Close Scene",
-            workspace,
-            () => closed = workspace.CloseScene(context.target));
-        if (!closed)
+        if (!edits.CloseScene(context.target))
             return;
         if (context.interactions.selection.TryGet(out GameScene? selected) && ReferenceEquals(selected, context.target))
             _ = context.interactions.For(context.area).Select();

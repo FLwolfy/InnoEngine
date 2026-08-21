@@ -1,10 +1,11 @@
 using Inno.Editor.Interactions;
+using Inno.Editor.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
 [EditorAction(InspectorActions.ResetSystem, priority: 100)]
 [EditorMenu(InspectorAreas.System, "Reset System", order: 100)]
-internal sealed class ResetSystemCommand : EditorAction<SystemEditorTarget>
+internal sealed class ResetSystemCommand(SceneEdits edits) : EditorAction<SystemEditorTarget>
 {
     protected override EditorActionState Query(EditorActionContext<SystemEditorTarget> context)
         => !context.target.system.isDestroyed
@@ -12,9 +13,5 @@ internal sealed class ResetSystemCommand : EditorAction<SystemEditorTarget>
             : EditorActionState.disabled;
 
     protected override void Execute(EditorActionContext<SystemEditorTarget> context)
-        => SceneSnapshotOperation.Execute(
-            context,
-            $"Reset {context.target.system.GetType().Name}",
-            context.target.scene,
-            () => context.target.scene.ResetSystem(context.target.system));
+        => edits.ResetSystem(context.target.scene, context.target.system);
 }

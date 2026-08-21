@@ -1,10 +1,9 @@
 using System;
-using System.Linq;
-
 using Inno.Core.Serialization;
-using Inno.Engine.Scene;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
+using Inno.Editor.Scene;
+using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
@@ -16,6 +15,9 @@ public sealed class PropertyDrawContext
     private readonly Func<object?> m_getter;
     private readonly Action<object?> m_setter;
     private readonly SerializedPropertyRenderer m_renderer;
+    private readonly SceneEdits m_edits;
+    private readonly EngineObject m_owner;
+    private readonly string m_rootPropertyName;
 
     /// <summary>
     /// Gets the shared editor context.
@@ -53,6 +55,9 @@ public sealed class PropertyDrawContext
     internal PropertyDrawContext(
         EditorContext editorContext,
         EditorInteractions interactions,
+        SceneEdits edits,
+        EngineObject owner,
+        string rootPropertyName,
         string path,
         string label,
         Type propertyType,
@@ -63,6 +68,11 @@ public sealed class PropertyDrawContext
     {
         this.editorContext = editorContext;
         this.interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
+        m_edits = edits ?? throw new ArgumentNullException(nameof(edits));
+        m_owner = owner ?? throw new ArgumentNullException(nameof(owner));
+        m_rootPropertyName = string.IsNullOrWhiteSpace(rootPropertyName)
+            ? throw new ArgumentException("The root property name is required.", nameof(rootPropertyName))
+            : rootPropertyName;
         this.path = path;
         this.label = label;
         this.propertyType = propertyType;
@@ -86,29 +96,14 @@ public sealed class PropertyDrawContext
     {
         if (isReadOnly)
             return;
-        object? before = m_getter();
-        if (Equals(before, value))
+        if (Equals(m_getter(), value))
             return;
-        object? selected = interactions.selection.selectedTarget;
-        GameScene? scene = ResolveScene(selected);
-        if (scene is not null)
-        {
-            SceneSnapshotOperation.Execute(
-                interactions,
-                $"Change {label}",
-                scene,
-                () => m_setter(value),
-                new ScenePropertyHistoryKey(scene.identity.persistentId, path));
-            return;
-        }
-
-        m_setter(value);
-        interactions.history.RecordValue<object?>(
+        _ = m_edits.ChangeProperty(
+            m_owner,
+            m_rootPropertyName,
+            () => m_setter(value),
             $"Change {label}",
-            before,
-            value,
-            m_setter,
-            new PropertyHistoryKey(interactions.selection.selectedTarget, path));
+            $"scene-property:{m_owner.identity.persistentId:N}:{m_rootPropertyName}");
     }
 
     /// <summary>
@@ -131,6 +126,8 @@ public sealed class PropertyDrawContext
             : PropertyVisibility.Show;
         m_renderer.Draw(
             editorContext,
+            m_owner,
+            m_rootPropertyName,
             $"{path}.{childName}",
             childName,
             childType,
@@ -148,6 +145,8 @@ public sealed class PropertyDrawContext
         ArgumentNullException.ThrowIfNull(property);
         m_renderer.Draw(
             editorContext,
+            m_owner,
+            m_rootPropertyName,
             $"{path}.{property.name}",
             property.name,
             property.propertyType,
@@ -177,6 +176,9 @@ public sealed class PropertyDrawContext
         var childContext = new PropertyDrawContext(
             editorContext,
             interactions,
+            m_edits,
+            m_owner,
+            m_rootPropertyName,
             $"{path}.{childName}",
             childName,
             childType,
@@ -186,29 +188,5 @@ public sealed class PropertyDrawContext
             m_renderer);
         IPropertyDrawer drawer = m_renderer.Resolve(childType);
         drawer.Draw(childContext);
-    }
-
-    private readonly record struct PropertyHistoryKey(object? target, string path);
-
-    private readonly record struct ScenePropertyHistoryKey(Guid sceneId, string path);
-
-    private static GameScene? ResolveScene(object? target)
-        => target switch
-        {
-            GameScene scene => scene,
-            GameObject gameObject => gameObject.scene,
-            GameComponent component when !component.isDestroyed => component.gameObject.scene,
-            GameSystem system when !system.isDestroyed => ResolveSystemScene(system),
-            _ => null
-        };
-
-    private static GameScene? ResolveSystemScene(GameSystem system)
-    {
-        foreach (GameScene scene in SceneManager.loadedScenes)
-        {
-            if (scene.GetSystems().Contains(system))
-                return scene;
-        }
-        return null;
     }
 }

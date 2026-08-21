@@ -1,10 +1,11 @@
 using Inno.Editor.Interactions;
+using Inno.Editor.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
 [EditorAction(InspectorActions.RemoveSystem, priority: 100)]
 [EditorMenu(InspectorAreas.System, "Remove System", order: 200)]
-internal sealed class RemoveSystemCommand : EditorAction<SystemEditorTarget>
+internal sealed class RemoveSystemCommand(SceneEdits edits) : EditorAction<SystemEditorTarget>
 {
     protected override EditorActionState Query(EditorActionContext<SystemEditorTarget> context)
         => !context.target.system.isDestroyed
@@ -12,9 +13,5 @@ internal sealed class RemoveSystemCommand : EditorAction<SystemEditorTarget>
             : EditorActionState.disabled;
 
     protected override void Execute(EditorActionContext<SystemEditorTarget> context)
-        => SceneSnapshotOperation.Execute(
-            context,
-            $"Remove {context.target.system.GetType().Name}",
-            context.target.scene,
-            () => _ = context.target.scene.RemoveSystem(context.target.system));
+        => _ = edits.RemoveSystem(context.target.scene, context.target.system);
 }
