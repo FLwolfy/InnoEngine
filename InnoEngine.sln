@@ -212,6 +212,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.Logging",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.Stats", "src\editor\Panels\Inno.Editor.Panel.Stats\Inno.Editor.Panel.Stats.csproj", "{8677F56B-728D-41F3-8C7B-5FB20E498644}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Diagnostics", "src\core\Inno.Core.Diagnostics\Inno.Core.Diagnostics.csproj", "{BCD6D972-4E61-4C3B-91FE-528137C3857B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Diagnostics.Tests", "tests\Inno.Core.Diagnostics.Tests\Inno.Core.Diagnostics.Tests.csproj", "{9140007C-2964-4D7C-8394-2E2D8FD2513C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -554,6 +558,14 @@ Global
 		{8677F56B-728D-41F3-8C7B-5FB20E498644}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8677F56B-728D-41F3-8C7B-5FB20E498644}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8677F56B-728D-41F3-8C7B-5FB20E498644}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BCD6D972-4E61-4C3B-91FE-528137C3857B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BCD6D972-4E61-4C3B-91FE-528137C3857B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BCD6D972-4E61-4C3B-91FE-528137C3857B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BCD6D972-4E61-4C3B-91FE-528137C3857B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9140007C-2964-4D7C-8394-2E2D8FD2513C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9140007C-2964-4D7C-8394-2E2D8FD2513C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9140007C-2964-4D7C-8394-2E2D8FD2513C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9140007C-2964-4D7C-8394-2E2D8FD2513C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -659,5 +671,7 @@ Global
 		{976925DA-0C00-4227-B040-F143145A8C16} = {16240CF0-290C-7E0D-0DA7-BABEDEA71422}
 		{11F2200C-AF78-482B-918E-2DDDCAD14736} = {16240CF0-290C-7E0D-0DA7-BABEDEA71422}
 		{8677F56B-728D-41F3-8C7B-5FB20E498644} = {16240CF0-290C-7E0D-0DA7-BABEDEA71422}
+		{BCD6D972-4E61-4C3B-91FE-528137C3857B} = {390EB70E-21BA-4C7D-8000-D8CE42F9A3E2}
+		{9140007C-2964-4D7C-8394-2E2D8FD2513C} = {5CEA3D05-0D66-4758-97F1-1B5C727F75B5}
 	EndGlobalSection
 EndGlobal

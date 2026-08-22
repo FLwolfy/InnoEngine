@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 
 using Inno.Core.Logging;
@@ -26,11 +27,26 @@ internal sealed class LogPanelContent
         NativeImGui.EndDisabled();
     }
 
-    internal List<LogEntry> CollectVisibleEntries(
-        LogEntry[] entries,
+    internal EditorConsoleEntry[] Combine(
+        IReadOnlyList<BufferedLogEntry> logs,
+        IReadOnlyList<EditorDiagnosticEntry> diagnostics)
+    {
+        var entries = new EditorConsoleEntry[logs.Count + diagnostics.Count];
+        for (int i = 0; i < logs.Count; i++)
+            entries[i] = EditorConsoleEntry.FromLog(logs[i]);
+        for (int i = 0; i < diagnostics.Count; i++)
+            entries[logs.Count + i] = EditorConsoleEntry.FromDiagnostic(diagnostics[i]);
+        return entries
+            .OrderBy(static entry => entry.time)
+            .ThenBy(static entry => entry.id < 0 ? -entry.id : entry.id)
+            .ToArray();
+    }
+
+    internal List<EditorConsoleEntry> CollectVisibleEntries(
+        EditorConsoleEntry[] entries,
         IReadOnlySet<LogLevel> filterLevels)
     {
-        List<LogEntry> visibleEntries = [];
+        List<EditorConsoleEntry> visibleEntries = [];
         for (int i = 0; i < entries.Length; i++)
         {
             if (filterLevels.Contains(entries[i].level))
@@ -39,11 +55,11 @@ internal sealed class LogPanelContent
         return visibleEntries;
     }
 
-    internal List<long> CollectRunEntryIds(List<LogEntry> visibleEntries, int start, int end)
+    internal List<long> CollectRunEntryIds(List<EditorConsoleEntry> visibleEntries, int start, int end)
     {
         List<long> runEntryIds = [];
         for (int i = start; i <= end; i++)
-            runEntryIds.Add(visibleEntries[i].time.Ticks);
+            runEntryIds.Add(visibleEntries[i].id);
         return runEntryIds;
     }
 
@@ -90,9 +106,12 @@ internal sealed class LogPanelContent
         };
     }
 
-    internal bool IsSameEntryIgnoreTime(in LogEntry a, in LogEntry b)
+    internal bool IsSameEntryIgnoreTime(in EditorConsoleEntry a, in EditorConsoleEntry b)
         => a.level == b.level &&
            a.source.Equals(b.source) &&
+           a.isDiagnostic == b.isDiagnostic &&
+           string.Equals(a.diagnosticSourceId, b.diagnosticSourceId, StringComparison.Ordinal) &&
+           string.Equals(a.code, b.code, StringComparison.Ordinal) &&
            string.Equals(a.category, b.category, StringComparison.Ordinal) &&
            string.Equals(a.message, b.message, StringComparison.Ordinal) &&
            string.Equals(a.file, b.file, StringComparison.Ordinal) &&

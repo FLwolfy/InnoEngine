@@ -1,8 +1,8 @@
 # Inno.Core.Logging
 
-[上一页：Input](Inno.Core.Input.md) · [Core 索引](README.md) · [下一页：Mathematics](Inno.Core.Mathematics.md)
+[上一页：Diagnostics](Inno.Core.Diagnostics.md) · [Core 索引](README.md) · [下一页：Mathematics](Inno.Core.Mathematics.md)
 
-Logging 模块把日志生产与输出分离。`Log` 自动从调用栈解析 category、源码位置和 AssemblyGroup；`LogManager` 在后台线程把 `LogEntry` 分发给多个 `ILogSink`。
+Logging 是基础、追加式日志系统。`Log` 自动从调用栈解析 category、源码位置和 AssemblyGroup，`LogManager` 只负责异步分发不可撤回的日志事件。Compiler、Importer 和 Validator 的可替换当前问题属于独立的 [Inno.Core.Diagnostics](Inno.Core.Diagnostics.md)。
 
 ## 初始化
 

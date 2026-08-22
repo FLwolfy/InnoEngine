@@ -5,6 +5,7 @@ using System.Numerics;
 
 using Inno.Core.Logging;
 using Inno.Editor.Core;
+using Inno.Editor.Interactions;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
@@ -15,7 +16,7 @@ using NativeImGui = Inno.Native.ImGui.ImGui;
 namespace Inno.Editor.Panel.Logging;
 
 /// <summary>
-/// Displays logs from <see cref="EditorLogBuffer"/> with filtering/collapse/detail view.
+/// Displays append-only logs and current diagnostics with filtering, collapse, details, and contextual copy actions.
 /// </summary>
 [EditorPanel("diagnostics.log", "Log", order: 400)]
 public sealed class LogPanel : EditorPanel
@@ -27,36 +28,42 @@ public sealed class LogPanel : EditorPanel
     private readonly HashSet<long> m_openEntries = [];
 
     private bool m_collapse = true;
-    private long m_lastSnapshotVersion = -1;
+    private long m_lastLogVersion = -1;
+    private long m_lastDiagnosticVersion = -1;
     private bool m_requestScrollToBottom = true;
     private bool m_lastRenderedCollapse = true;
-    private readonly LoggingModule m_diagnostics;
+    private readonly LoggingModule m_logging;
+    private readonly EditorInteractions m_interactions;
     #endregion
 
     #region Lifecycle
     /// <summary>
     /// Creates the panel.
     /// </summary>
-    /// <param name="diagnostics">The automatically discovered diagnostics module that owns the rolling log buffer.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="diagnostics"/> is <see langword="null"/>.</exception>
-    public LogPanel(LoggingModule diagnostics)
+    /// <param name="logging">The automatically discovered module that connects both Console data sources.</param>
+    /// <param name="interactions">The editor interaction entry point used by contextual entry commands.</param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="logging"/> or <paramref name="interactions"/> is <see langword="null"/>.
+    /// </exception>
+    public LogPanel(LoggingModule logging, EditorInteractions interactions)
     {
-        m_diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
+        m_logging = logging ?? throw new ArgumentNullException(nameof(logging));
+        m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
     }
 
     /// <inheritdoc />
     public override void Draw(EditorContext context)
     {
         NativeImGui.BeginChild("LogChild", Vector2.Zero);
-        DrawToolbar(context);
+        DrawToolbar();
         NativeImGui.Separator();
-        DrawLogRegion(context);
+        DrawLogRegion();
         NativeImGui.EndChild();
     }
     #endregion
 
     #region Toolbar
-    private void DrawToolbar(EditorContext context)
+    private void DrawToolbar()
     {
         bool collapseChanged = NativeImGui.Checkbox("Collapse", ref m_collapse);
         if (collapseChanged)
@@ -74,7 +81,9 @@ public sealed class LogPanel : EditorPanel
         NativeImGui.SameLine();
         if (NativeImGui.Button("Clear"))
         {
-            m_diagnostics.logs.Clear();
+            m_logging.logs.Clear();
+            m_logging.diagnostics.Clear();
+            m_openEntries.Clear();
             m_requestScrollToBottom = true;
         }
     }
@@ -111,16 +120,23 @@ public sealed class LogPanel : EditorPanel
         NativeImGui.EndCombo();
         return changed;
     }
+
     #endregion
 
     #region Log Region
-    private void DrawLogRegion(EditorContext context)
+    private void DrawLogRegion()
     {
         NativeImGui.BeginChild("LogRegion", Vector2.Zero);
 
-        LogEntry[] entries = m_diagnostics.logs.Snapshot(out long snapshotVersion);
-        bool hasNewEntries = m_lastSnapshotVersion >= 0 && snapshotVersion != m_lastSnapshotVersion;
-        m_lastSnapshotVersion = snapshotVersion;
+        BufferedLogEntry[] logs = m_logging.logs.SnapshotBuffered(out long logVersion);
+        EditorDiagnosticEntry[] diagnostics = m_logging.diagnostics.Snapshot(out long diagnosticVersion);
+        EditorConsoleEntry[] entries = m_content.Combine(logs, diagnostics);
+        RemoveStaleOpenEntries(entries);
+        bool hasNewEntries =
+            m_lastLogVersion >= 0 && logVersion != m_lastLogVersion ||
+            m_lastDiagnosticVersion >= 0 && diagnosticVersion != m_lastDiagnosticVersion;
+        m_lastLogVersion = logVersion;
+        m_lastDiagnosticVersion = diagnosticVersion;
 
         bool scrollAtBottom = NativeImGui.GetScrollY() >=
                               NativeImGui.GetScrollMaxY() - EditorWidget.style.logAutoScrollTolerance;
@@ -139,15 +155,15 @@ public sealed class LogPanel : EditorPanel
     #endregion
 
     #region Entries
-    private void DrawEntries(LogEntry[] entries)
+    private void DrawEntries(EditorConsoleEntry[] entries)
     {
         if (entries.Length == 0)
         {
-            m_content.DrawDisabledHint("No logs yet.");
+            m_content.DrawDisabledHint("No logs or diagnostics yet.");
             return;
         }
 
-        List<LogEntry> visibleEntries = m_content.CollectVisibleEntries(entries, m_filterLevels);
+        List<EditorConsoleEntry> visibleEntries = m_content.CollectVisibleEntries(entries, m_filterLevels);
 
         if (visibleEntries.Count == 0)
         {
@@ -197,7 +213,7 @@ public sealed class LogPanel : EditorPanel
             {
                 for (int i = start; i <= end; i++)
                 {
-                    long entryId = visibleEntries[i].time.Ticks;
+                    long entryId = visibleEntries[i].id;
                     DrawLogEntry(visibleEntries[i], 1, [entryId], collapseView: false);
                 }
             }
@@ -208,11 +224,15 @@ public sealed class LogPanel : EditorPanel
     #endregion
 
     #region Entry Card
-    private void DrawLogEntry(LogEntry entry, int repeatCount, IReadOnlyList<long> runEntryIds, bool collapseView)
+    private void DrawLogEntry(
+        EditorConsoleEntry entry,
+        int repeatCount,
+        IReadOnlyList<long> runEntryIds,
+        bool collapseView)
     {
         (Vector4 levelColor, string levelIcon) = m_content.GetLevelVisual(entry.level);
 
-        long entryId = entry.time.Ticks;
+        long entryId = entry.id;
         int rowId = entryId.GetHashCode();
         NativeImGui.PushID(rowId);
         bool open = m_openEntries.Contains(entryId);
@@ -250,6 +270,7 @@ public sealed class LogPanel : EditorPanel
             }
 
             NativeImGui.EndChild();
+            DrawEntryContextMenu(entry, repeatCount);
             NativeImGui.PopStyleVar(3);
             NativeImGui.PopStyleColor(2);
             NativeImGui.Dummy(new Vector2(0f, EditorWidget.style.logCollapsedSpacing));
@@ -294,6 +315,7 @@ public sealed class LogPanel : EditorPanel
         }
 
         NativeImGui.EndChild();
+        DrawEntryContextMenu(entry, repeatCount);
         NativeImGui.PopStyleVar(3);
         NativeImGui.PopStyleColor(2);
         NativeImGui.Dummy(new Vector2(0f, EditorWidget.style.logExpandedSpacing));
@@ -303,7 +325,7 @@ public sealed class LogPanel : EditorPanel
 
     #region Entry Header / Detail
     private void DrawHeader(
-        LogEntry entry,
+        EditorConsoleEntry entry,
         int repeatCount,
         Vector4 levelColor,
         string levelIcon,
@@ -314,7 +336,7 @@ public sealed class LogPanel : EditorPanel
         toggled = false;
         ImGuiStylePtr style = NativeImGui.GetStyle();
         
-        string content = isOpen ? entry.message : m_content.GetFirstLine(entry.message);
+        string content = isOpen ? entry.displayMessage : m_content.GetFirstLine(entry.displayMessage);
         string repeatText = repeatCount > 1 ? $" (x{repeatCount})" : string.Empty;
         string prefix = $"{levelIcon} [{entry.level}] ";
         string toggleText = isOpen ? "▼" : "▶";
@@ -328,7 +350,7 @@ public sealed class LogPanel : EditorPanel
         
         if (!isOpen)
         {
-            content = m_content.FitTextWithEllipsis(m_content.GetFirstLine(entry.message), contentW);
+            content = m_content.FitTextWithEllipsis(m_content.GetFirstLine(entry.displayMessage), contentW);
         }
         
         Vector2 tableOuterSize = new(tableOuterW, 0f);
@@ -394,7 +416,7 @@ public sealed class LogPanel : EditorPanel
         }
     }
 
-    private static void DrawDetail(LogEntry entry)
+    private static void DrawDetail(EditorConsoleEntry entry)
     {
         string timeText = entry.time.ToString("HH:mm:ss");
         string sourceText = entry.source.ToString();
@@ -404,8 +426,11 @@ public sealed class LogPanel : EditorPanel
         }
 
         string fileText = string.IsNullOrWhiteSpace(entry.file) ? "-" : entry.file;
-        string lineText = entry.line.ToString();
-        string fileWithLineText = entry.line > 0 ? $"{fileText}:{lineText}" : fileText;
+        string fileWithLineText = entry.line > 0
+            ? entry.column > 0
+                ? $"{fileText}:{entry.line}:{entry.column}"
+                : $"{fileText}:{entry.line}"
+            : fileText;
 
         if (NativeImGui.BeginTable("##LogEntryDetails", 2, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.NoHostExtendX))
         {
@@ -416,6 +441,23 @@ public sealed class LogPanel : EditorPanel
             DrawDetailFieldRow("Time:", timeText);
             NativeImGui.EndTable();
         }
+    }
+
+    private void DrawEntryContextMenu(EditorConsoleEntry entry, int repeatCount)
+    {
+        _ = EditorMenuRenderer.ContextMenu(
+            "##LogEntryContextMenu",
+            m_interactions.For(
+                LogPanelAreas.Entry,
+                new LogEntryCopyTarget(entry, repeatCount)));
+    }
+
+    private void RemoveStaleOpenEntries(IReadOnlyList<EditorConsoleEntry> entries)
+    {
+        if (m_openEntries.Count == 0)
+            return;
+        var activeIds = new HashSet<long>(entries.Select(static entry => entry.id));
+        m_openEntries.RemoveWhere(id => !activeIds.Contains(id));
     }
 
     private static void DrawDetailFieldRow(string label, string value)

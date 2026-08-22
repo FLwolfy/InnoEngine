@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 
 using Inno.Core.Logging;
 
@@ -9,9 +11,10 @@ namespace Inno.Editor.Panel.Logging;
 /// </summary>
 public sealed class EditorLogBuffer : ILogSink
 {
-    private readonly Queue<LogEntry> m_entries = new();
+    private readonly Queue<BufferedLogEntry> m_entries = new();
     private readonly object m_sync = new();
     private int m_capacity = 1024;
+    private long m_nextId;
     private long m_version;
 
     /// <summary>
@@ -42,7 +45,9 @@ public sealed class EditorLogBuffer : ILogSink
     {
         lock (m_sync)
         {
-            m_entries.Enqueue(entry);
+            m_entries.Enqueue(new BufferedLogEntry(
+                Interlocked.Increment(ref m_nextId),
+                entry));
             TrimExcessUnsafe();
             m_version++;
         }
@@ -63,6 +68,15 @@ public sealed class EditorLogBuffer : ILogSink
     /// <param name="version">Receives the version associated with the returned snapshot.</param>
     /// <returns>A stable copy of the currently buffered entries.</returns>
     public LogEntry[] Snapshot(out long version)
+    {
+        lock (m_sync)
+        {
+            version = m_version;
+            return m_entries.Select(static entry => entry.entry).ToArray();
+        }
+    }
+
+    internal BufferedLogEntry[] SnapshotBuffered(out long version)
     {
         lock (m_sync)
         {

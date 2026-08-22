@@ -1,7 +1,6 @@
 using System;
 using System.Threading.Tasks;
 
-using Inno.Core.Logging;
 using Inno.Editor.Core;
 
 namespace Inno.Editor.Scripting;
@@ -84,7 +83,7 @@ public sealed class ScriptingModule : EditorModule, IDisposable
         }
         catch (Exception exception)
         {
-            Log.Error("Script reload failed: {0}", exception);
+            ScriptDiagnosticPublisher.PublishReloadFailure(exception);
         }
         finally
         {
@@ -96,27 +95,19 @@ public sealed class ScriptingModule : EditorModule, IDisposable
     private void DisposeManager()
     {
         if (m_manager is null)
+        {
+            ScriptDiagnosticPublisher.ClearAll();
             return;
+        }
         m_manager.CompilationCompleted -= OnCompilationCompleted;
         m_manager.Dispose();
         m_manager = null;
         m_compilation = null;
         m_hideCompilationOnNextUpdate = false;
         m_showCompilation = false;
+        ScriptDiagnosticPublisher.ClearAll();
     }
 
     private static void OnCompilationCompleted(ScriptCompilationResult result)
-    {
-        foreach (ScriptDiagnostic diagnostic in result.diagnostics)
-        {
-            string location = diagnostic.filePath is null
-                ? string.Empty
-                : $"{diagnostic.filePath}({diagnostic.line},{diagnostic.column}): ";
-            string message = $"{location}{diagnostic.id}: {diagnostic.message}";
-            if (diagnostic.severity == ScriptDiagnosticSeverity.Error)
-                Log.Error(message);
-            else if (diagnostic.severity == ScriptDiagnosticSeverity.Warning)
-                Log.Warn(message);
-        }
-    }
+        => ScriptDiagnosticPublisher.PublishCompilation(result);
 }
