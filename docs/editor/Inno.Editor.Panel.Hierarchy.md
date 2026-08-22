@@ -35,13 +35,13 @@ public sealed class ExportSceneAction : EditorAction<GameScene>
 - 双击 SceneAsset 采用 additive load；已打开时只切换 active scene。
 - 打开后选择 `GameScene`，不会被 FileBrowser entry 再次覆盖。
 - Scene 行可拖动重排，任意已加载 Scene 都可以关闭，包括最后一个 Scene。
-- GameObject 可同级重排、改变 parent 或移动到 Scene root。
+- GameObject 可同级重排、改变 parent、移动到其他 Scene root，或直接成为其他 Scene 中对象的 child。
 - ancestor 拖入 descendant 时先提升直属 child，避免形成循环。
 - drop 完成后选择移动对象并请求展开目标。
 
 Scene 排序只决定 Hierarchy/SceneManager 顺序；GameSystem 使用显式 `order`。Component 的 Inspector 上下移动仅改变序列化和显示顺序，不隐式改变脚本执行优先级。
 
-Scene、GameObject 的创建、删除、排序、parent 修改、名称和 active 修改都会通过 `SceneEdits` 进入共享 `EditorHistory`。对象删除只保存被删子树与外部引用；层级修改只保存受影响对象的 parent/sibling tuple；Scene 重排只保存两个 index，不会复制整张 Scene。
+Scene、GameObject 的创建、删除、排序、parent 修改、跨 Scene 移动、名称和 active 修改都会通过 `SceneEdits` 进入共享 `EditorHistory`。对象删除只保存被删子树与外部引用；层级修改只保存受影响对象的 scene/parent/sibling tuple，因此 Undo/Redo 可以把同一对象实例移回原 Scene；Scene 重排只保存两个 index，不会复制整张 Scene。
 
 内容编辑 Command 必须创建可逆历史项；Scene/GameObject 创建删除、Component/System 增删 Reset、层级与顺序修改、名称/active/enabled 和序列化属性均属于内容编辑。Open Scene、Set Active Scene、Selection 和 Save 是导航或持久化命令，不修改可撤销内容，因此明确不进入 Undo 栈。新的 feature Command 若不支持 Undo，应同样只限于导航、查询、外部构建或不可逆操作，并在其 Wiki 中声明原因。
 

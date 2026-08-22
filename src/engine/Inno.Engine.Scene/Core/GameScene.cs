@@ -442,6 +442,81 @@ public sealed class GameScene : EngineObject, ISerializable
         m_hierarchy.SetSiblingIndex(transform, siblingIndex);
     }
 
+    internal void TransferObjectTo(GameObject gameObject, GameScene destination)
+    {
+        EnsureOwned(gameObject);
+        ArgumentNullException.ThrowIfNull(destination);
+        destination.EnsureNotDestroyed();
+        if (ReferenceEquals(this, destination))
+            return;
+        if (m_store.isExecuting || m_store.hasPendingChanges ||
+            destination.m_store.isExecuting || destination.m_store.hasPendingChanges)
+        {
+            throw new InvalidOperationException(
+                "A GameObject cannot move between scenes during a scene execution phase or while structural changes are pending.");
+        }
+
+        Transform rootTransform = gameObject.transform;
+        Transform? previousParent = rootTransform.parent;
+        int previousSiblingIndex = rootTransform.siblingIndex;
+        GameObject[] subtree = EnumerateSubtree(rootTransform).ToArray();
+        var components = new Dictionary<GameObject, GameComponent[]>(ReferenceEqualityComparer.Instance);
+        for (int i = 0; i < subtree.Length; i++)
+            components.Add(subtree[i], m_store.GetComponents(subtree[i]).ToArray());
+
+        if (previousParent is not null)
+            m_hierarchy.SetParent(rootTransform, parent: null, worldPositionStays: true);
+        m_hierarchy.Unregister(rootTransform);
+
+        int transferredCount = 0;
+        bool registeredDestinationHierarchy = false;
+        try
+        {
+            for (int i = 0; i < subtree.Length; i++)
+            {
+                GameObject current = subtree[i];
+                _ = m_store.RemoveObject(current);
+                destination.m_store.AddObject(current);
+                transferredCount++;
+                GameComponent[] attached = components[current];
+                for (int componentIndex = 0; componentIndex < attached.Length; componentIndex++)
+                {
+                    destination.m_store.AddComponent(
+                        current,
+                        attached[componentIndex],
+                        allowsMultiple: true);
+                }
+                current.SetSceneDirect(destination);
+            }
+
+            destination.m_hierarchy.Register(rootTransform);
+            registeredDestinationHierarchy = true;
+            destination.m_activation.RecomputeSubtree(gameObject);
+        }
+        catch
+        {
+            if (registeredDestinationHierarchy)
+                destination.m_hierarchy.Unregister(rootTransform);
+            for (int i = transferredCount - 1; i >= 0; i--)
+            {
+                GameObject current = subtree[i];
+                _ = destination.m_store.RemoveObject(current);
+                m_store.AddObject(current);
+                GameComponent[] attached = components[current];
+                for (int componentIndex = 0; componentIndex < attached.Length; componentIndex++)
+                    m_store.AddComponent(current, attached[componentIndex], allowsMultiple: true);
+                current.SetSceneDirect(this);
+            }
+
+            m_hierarchy.Register(rootTransform);
+            if (previousParent is not null)
+                m_hierarchy.SetParent(rootTransform, previousParent, worldPositionStays: true);
+            m_hierarchy.SetSiblingIndex(rootTransform, previousSiblingIndex);
+            m_activation.RecomputeSubtree(gameObject);
+            throw;
+        }
+    }
+
     internal GameObject CreateObject(
         string name,
         Guid? persistentId,
@@ -536,5 +611,16 @@ public sealed class GameScene : EngineObject, ISerializable
     {
         if (isDestroyed)
             throw new InvalidOperationException($"Scene '{m_name}' has been destroyed and cannot be reused.");
+    }
+
+    private static IEnumerable<GameObject> EnumerateSubtree(Transform root)
+    {
+        yield return root.gameObject;
+        IReadOnlyList<Transform> children = root.children;
+        for (int i = 0; i < children.Count; i++)
+        {
+            foreach (GameObject descendant in EnumerateSubtree(children[i]))
+                yield return descendant;
+        }
     }
 }

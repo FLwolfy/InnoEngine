@@ -16,7 +16,7 @@ internal sealed class MoveGameObjectToSceneDropHandler(SceneEdits edits)
     {
         GameObject source = context.source;
         GameScene target = context.target.scene;
-        return source.isRuntimeValid && ReferenceEquals(source.scene, target)
+        return source.isRuntimeValid && target is { isLoaded: true, isDestroyed: false }
             ? EditorDropStatus.Accept()
             : EditorDropStatus.rejected;
     }
@@ -30,7 +30,10 @@ internal sealed class MoveGameObjectToSceneDropHandler(SceneEdits edits)
             source,
             () =>
             {
-                source.transform.SetParent(null);
+                if (!ReferenceEquals(source.scene, target))
+                    SceneManager.MoveGameObjectToScene(source, target);
+                else
+                    source.transform.SetParent(null);
                 source.transform.SetSiblingIndex(GetRootCount(target) - 1);
             });
         _ = context.interactions.For(context.area, source).Select();

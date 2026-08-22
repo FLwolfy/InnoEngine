@@ -11,6 +11,7 @@ SceneManager.LoadScene(first);                 // Single: unload current set.
 SceneManager.LoadSceneAdditive(second);        // Add to the bottom and make active.
 SceneManager.SetSceneIndex(second, 0);         // Change hierarchy/enumeration order.
 SceneManager.SetActiveScene(first);             // Does not reorder scenes.
+SceneManager.MoveGameObjectToScene(player, second); // Moves the complete subtree.
 ```
 
 `loadedScenes` 返回 Hierarchy 展示顺序的稳定快照。Editor 双击 SceneAsset 使用 additive open；已经打开的同一路径会被激活和选择，而不会创建重复实例。Ctrl/Cmd+S 保存全部打开的 Scene。
@@ -18,6 +19,8 @@ SceneManager.SetActiveScene(first);             // Does not reorder scenes.
 Hierarchy 的 Scene context menu 和 Delete hotkey 会关闭该内存 Scene，但不会删除对应的 SceneAsset。最后一个已加载 Scene 也可以关闭；此时 `SceneManager.activeScene` 为 `null`，Hierarchy 保持为空，直到用户显式创建或打开 Scene。
 
 Scene 顺序决定当前 `SceneManager` 的跨 Scene traversal 顺序，但业务脚本不应把它作为精确的脚本执行顺序契约；显式依赖应放入可排序的 GameSystem 或独立 scheduler。
+
+`MoveGameObjectToScene` 要求 source 与 destination 都已加载。被移动对象会成为目标 Scene 的 root；完整 child subtree、GameObject/Component 实例、persistent ID、世界变换和生命周期状态保持不变。该操作不会通过序列化复制对象，也不会调用 Reset 或 Destroy。
 
 ## Component 顺序
 

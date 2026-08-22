@@ -17,6 +17,7 @@ public sealed class InspectorPanel : EditorPanel
 {
     private readonly SceneInspectionModule m_inspection;
     private readonly EditorInteractions m_interactions;
+    private readonly InspectorLockControl m_lockControl = new();
     private string m_failureState = string.Empty;
 
     /// <summary>
@@ -36,7 +37,7 @@ public sealed class InspectorPanel : EditorPanel
     /// <inheritdoc />
     public override void Draw(EditorContext context)
     {
-        object? target = m_interactions.selection.selectedTarget;
+        object? target = m_lockControl.DrawAndResolve(m_interactions.selection.selectedTarget);
         if (target is null)
         {
             m_failureState = string.Empty;

@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Numerics;
 
 using Inno.Assets;
 using Inno.Assets.Core;
@@ -54,7 +55,9 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
                 : selected.relativePath;
 
         bool open = NativeImGui.BeginCombo($"##{context.path}", preview);
-        _ = EditorDragDropRenderer.Target(
+        Vector2 dropMinimum = NativeImGui.GetItemRectMin();
+        Vector2 dropMaximum = NativeImGui.GetItemRectMax();
+        EditorDropWidgetResult drop = EditorDragDropRenderer.Target(
             context.interactions.For(
                 InspectorAreas.AssetReference,
                 new AssetReferenceDropTarget(
@@ -67,6 +70,8 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
                     if (dropped is not null)
                         AssignAsset(context, assetType, dropped);
                 })));
+        if (drop.isPreviewing && drop.status.canDrop)
+            EditorWidget.DropTargetHighlight(dropMinimum, dropMaximum);
 
         if (!open)
         {

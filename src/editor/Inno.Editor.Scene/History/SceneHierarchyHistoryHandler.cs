@@ -20,25 +20,42 @@ internal sealed class SceneHierarchyHistoryHandler : EditorHistoryHandler
         try
         {
             SceneHierarchyHistoryData data = SceneHierarchyHistoryData.Decode(change.payload.ReadBytes());
-            GameScene? scene = IdentityManager.Get<GameScene>(data.sceneId);
-            if (scene is not { isLoaded: true, isDestroyed: false })
-                return EditorHistoryAvailability.Unavailable($"Scene '{data.sceneId}' is no longer loaded.");
             SceneObjectPlacement[] placements = direction == EditorHistoryDirection.Undo
                 ? data.before
                 : data.after;
+            IReadOnlyDictionary<Guid, Guid> destinationScenes = placements.ToDictionary(
+                static placement => placement.objectId,
+                static placement => placement.sceneId);
             for (int i = 0; i < placements.Length; i++)
             {
                 SceneObjectPlacement placement = placements[i];
+                if (ResolveScene(placement.sceneId) is null)
+                {
+                    return EditorHistoryAvailability.Unavailable(
+                        $"Scene '{placement.sceneId}' is no longer loaded.");
+                }
                 if (IdentityManager.Get<GameObject>(placement.objectId) is not { isRuntimeValid: true })
                 {
                     return EditorHistoryAvailability.Unavailable(
                         $"GameObject '{placement.objectId}' is no longer available.");
                 }
-                if (placement.parentId is Guid parentId &&
-                    IdentityManager.Get<GameObject>(parentId) is not { isRuntimeValid: true })
+                GameObject? parent = null;
+                if (placement.parentId is Guid parentId)
+                {
+                    parent = IdentityManager.Get<GameObject>(parentId);
+                    if (parent is not { isRuntimeValid: true })
+                    {
+                        return EditorHistoryAvailability.Unavailable(
+                            $"Parent GameObject '{parentId}' is no longer available.");
+                    }
+                }
+                if (parent is not null &&
+                    parent.scene.identity.persistentId != placement.sceneId &&
+                    (!destinationScenes.TryGetValue(parent.identity.persistentId, out Guid parentDestination) ||
+                     parentDestination != placement.sceneId))
                 {
                     return EditorHistoryAvailability.Unavailable(
-                        $"Parent GameObject '{parentId}' is no longer available.");
+                        $"Parent GameObject '{parent.identity.persistentId}' does not belong to destination scene '{placement.sceneId}'.");
                 }
             }
             return EditorHistoryAvailability.Available();
@@ -86,6 +103,7 @@ internal sealed class SceneHierarchyHistoryHandler : EditorHistoryHandler
             GameObject gameObject = IdentityManager.Get<GameObject>(placement.objectId)
                 ?? throw new InvalidOperationException($"GameObject '{placement.objectId}' is no longer available.");
             return new SceneObjectPlacement(
+                gameObject.scene.identity.persistentId,
                 placement.objectId,
                 gameObject.transform.parent?.gameObject.identity.persistentId,
                 gameObject.transform.siblingIndex);
@@ -93,6 +111,16 @@ internal sealed class SceneHierarchyHistoryHandler : EditorHistoryHandler
 
     private static void ApplyPlacements(IReadOnlyCollection<SceneObjectPlacement> placements)
     {
+        foreach (SceneObjectPlacement placement in placements.OrderBy(static placement =>
+                     GetHierarchyDepth(ResolveObject(placement.objectId).transform)))
+        {
+            GameObject gameObject = ResolveObject(placement.objectId);
+            GameScene destination = ResolveScene(placement.sceneId)
+                ?? throw new InvalidOperationException($"Scene '{placement.sceneId}' is no longer loaded.");
+            if (!ReferenceEquals(gameObject.scene, destination))
+                SceneManager.MoveGameObjectToScene(gameObject, destination);
+        }
+
         var pending = new List<SceneObjectPlacement>(placements);
         while (pending.Count > 0)
         {
@@ -128,8 +156,21 @@ internal sealed class SceneHierarchyHistoryHandler : EditorHistoryHandler
         return false;
     }
 
+    private static int GetHierarchyDepth(Transform transform)
+    {
+        int depth = 0;
+        for (Transform? current = transform.parent; current is not null; current = current.parent)
+            depth++;
+        return depth;
+    }
+
     private static GameObject ResolveObject(Guid objectId)
         => IdentityManager.Get<GameObject>(objectId) is { isRuntimeValid: true } gameObject
             ? gameObject
             : throw new InvalidOperationException($"GameObject '{objectId}' is no longer available.");
+
+    private static GameScene? ResolveScene(Guid sceneId)
+        => IdentityManager.Get<GameScene>(sceneId) is { isLoaded: true, isDestroyed: false } scene
+            ? scene
+            : null;
 }

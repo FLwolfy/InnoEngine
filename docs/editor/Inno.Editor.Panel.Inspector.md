@@ -4,6 +4,8 @@
 
 该项目拥有 Inspector Panel、Inspector/Property Drawer Registry、serialized property renderer、Component/System 操作、动态 Add 菜单与引用拖放。
 
+Inspector 内容区域右上角提供 lock/unlock 控件。锁定只固定 Inspector 当前展示目标，不修改全局 Selection；Hierarchy 和 File Browser 可以继续选择其他对象，以便把它们拖到被锁定目标的属性上。锁定的 Scene 对象被销毁时会自动解锁，不保留失效引用。
+
 ## Registry 扩展
 
 ```csharp
@@ -43,7 +45,7 @@ Inspector 的可序列化属性、Component/System enabled、Add、Remove、Rese
 
 ## 引用拖放
 
-Asset reference handler 接受共享 `AssetInfo`；EngineObject handler 接受当前 Scene 中的 `EngineObject`。Drawer 只提交 property target 和 area，具体兼容检查及赋值在 typed Drop handler 中完成。
+Asset reference handler 接受共享 `AssetInfo`；EngineObject handler 接受当前 Scene 中的 `EngineObject`。Drawer 只提交 property target 和 area，具体兼容检查及赋值在 typed Drop handler 中完成。兼容的 Asset payload 悬停在 property control 上时使用全局 `DragDropTarget` palette 绘制黄色目标框；不兼容 payload 不显示可接受反馈。
 
 ## Scripting API
 

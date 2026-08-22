@@ -141,6 +141,33 @@ public static class SceneManager
     }
 
     /// <summary>
+    /// Moves a live GameObject and its complete child subtree into another loaded scene.
+    /// The moved object becomes a root in the destination scene and preserves its world transform,
+    /// identity, component instances, and lifecycle state.
+    /// </summary>
+    /// <param name="gameObject">The live GameObject that forms the root of the subtree to move.</param>
+    /// <param name="destination">The loaded scene that will own the complete subtree.</param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="gameObject"/> or <paramref name="destination"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the GameObject is invalid, either scene is not loaded, or a scene is executing structural changes.
+    /// </exception>
+    public static void MoveGameObjectToScene(GameObject gameObject, GameScene destination)
+    {
+        ArgumentNullException.ThrowIfNull(gameObject);
+        ArgumentNullException.ThrowIfNull(destination);
+        if (!gameObject.isRuntimeValid)
+            throw new InvalidOperationException("Only a live GameObject can move between scenes.");
+        GameScene source = gameObject.scene;
+        if (!s_loadedScenes.Contains(source) || !s_loadedScenes.Contains(destination))
+            throw new InvalidOperationException("Both the source and destination scenes must be loaded.");
+        if (ReferenceEquals(source, destination))
+            return;
+        source.TransferObjectTo(gameObject, destination);
+    }
+
+    /// <summary>
     /// Unloads the active scene if one is loaded.
     /// </summary>
     public static void UnloadActiveScene()

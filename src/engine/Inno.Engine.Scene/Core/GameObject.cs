@@ -246,6 +246,8 @@ public sealed class GameObject : EngineObject, ISerializable
     internal void SetNameDirect(string value) => m_name = value ?? string.Empty;
     internal void SetActiveSelfDirect(bool value) => m_activeSelf = value;
     internal void SetActiveInHierarchyDirect(bool value) => m_activeInHierarchy = value;
+    internal void SetSceneDirect(GameScene scene)
+        => m_scene = scene ?? throw new ArgumentNullException(nameof(scene));
     internal void SetPrefabInstanceDirect(PrefabInstanceInfo? value) => m_prefabInstance = value;
     internal void SetPrefabConnectionDirect(PrefabConnectionRecord? value) => m_prefabConnection = value;
     internal PrefabConnectionRecord? prefabConnection => m_prefabConnection;

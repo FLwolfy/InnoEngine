@@ -19,8 +19,7 @@ internal sealed class ReparentGameObjectDropHandler(SceneEdits edits)
     {
         GameObject source = context.source;
         GameObject target = context.target.gameObject;
-        if (ReferenceEquals(source, target) || !source.isRuntimeValid || !target.isRuntimeValid ||
-            !ReferenceEquals(source.scene, target.scene))
+        if (ReferenceEquals(source, target) || !source.isRuntimeValid || !target.isRuntimeValid)
             return EditorDropStatus.rejected;
         return EditorDropStatus.Accept(context.placement switch
         {
@@ -42,7 +41,12 @@ internal sealed class ReparentGameObjectDropHandler(SceneEdits edits)
             .ToArray();
         _ = edits.ChangeHierarchy(
             source,
-            () => ApplyDrop(context, sourceTransform, targetTransform),
+            () =>
+            {
+                if (!ReferenceEquals(source.scene, target.scene))
+                    SceneManager.MoveGameObjectToScene(source, target.scene);
+                ApplyDrop(context, sourceTransform, targetTransform);
+            },
             "Reparent GameObject",
             relatedObjects);
         _ = context.interactions.For(context.area, source).Select();

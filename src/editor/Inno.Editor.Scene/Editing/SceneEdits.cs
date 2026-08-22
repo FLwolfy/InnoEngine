@@ -609,7 +609,6 @@ public sealed class SceneEdits : EditorModule
         if (before.SequenceEqual(after))
             return false;
         var data = new SceneHierarchyHistoryData(
-            gameObject.scene.identity.persistentId,
             before,
             after,
             gameObject.identity.persistentId);
@@ -714,6 +713,7 @@ public sealed class SceneEdits : EditorModule
         {
             GameObject gameObject = gameObjects[i];
             placements[i] = new SceneObjectPlacement(
+                gameObject.scene.identity.persistentId,
                 gameObject.identity.persistentId,
                 gameObject.transform.parent?.gameObject.identity.persistentId,
                 gameObject.transform.siblingIndex);
