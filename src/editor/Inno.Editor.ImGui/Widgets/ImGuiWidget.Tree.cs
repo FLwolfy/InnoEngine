@@ -102,7 +102,8 @@ public static partial class ImGuiWidget
             {
                 id = id,
                 cursor = nodeCursor,
-                rowMaxY = contentRect.max.Y
+                rowMaxY = contentRect.max.Y,
+                hasNextSibling = hasNextSibling
             });
         }
 
@@ -284,7 +285,8 @@ public static partial class ImGuiWidget
         for (int i = 0; i < s_treeNodeStack.Count - 1; i++)
         {
             TreeWidgetNodeState ancestorState = s_treeNodeStack[i];
-            if (s_hasNextSiblingById.TryGetValue(ancestorState.id, out bool ancestorHasNextSibling) && ancestorHasNextSibling)
+            TreeWidgetNodeState pathChildState = s_treeNodeStack[i + 1];
+            if (pathChildState.hasNextSibling)
             {
                 float ancestorX = ancestorState.cursor.X + guideOffset;
                 float ancestorStartY = MathF.Max(nodeCursor.Y, ancestorState.rowMaxY);
@@ -512,6 +514,7 @@ internal struct TreeWidgetNodeState
     internal string id;
     internal Vector2 cursor;
     internal float rowMaxY;
+    internal bool hasNextSibling;
 }
 
 internal struct TreeWidgetLineSegment
