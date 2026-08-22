@@ -134,6 +134,12 @@ public static class EditorPalette
     /// <summary>Gets inspector card header background.</summary>
     public static Vector4 inspectorCardHeader { get; } = new(0.42f, 0.39f, 0.51f, 1f);
 
+    /// <summary>Gets the persistent Inspector target header background.</summary>
+    public static Vector4 inspectorTargetHeader { get; } = new(0.14f, 0.14f, 0.16f, 1f);
+
+    /// <summary>Gets the persistent Inspector target header border.</summary>
+    public static Vector4 inspectorTargetHeaderBorder { get; } = new(0.30f, 0.29f, 0.34f, 1f);
+
     /// <summary>Gets inspector card body background.</summary>
     public static Vector4 inspectorCardBody { get; } = new(0.12f, 0.12f, 0.14f, 1f);
 

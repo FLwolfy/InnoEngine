@@ -17,18 +17,28 @@ using NativeImGui = Inno.Native.ImGui.ImGui;
 namespace Inno.Editor.Panel.Inspector;
 
 [InspectorDrawer(typeof(GameScene))]
-internal sealed class GameSceneInspectorDrawer : IInspectorDrawer
+internal sealed class GameSceneInspectorDrawer : InspectorDrawer<GameScene>
 {
-    private const nuint C_NAME_BUFFER_SIZE = 512;
     private const nuint C_SEARCH_BUFFER_SIZE = 256;
 
     private readonly InspectorCardControls m_cardControls = new();
     private string m_systemSearch = string.Empty;
 
-    /// <inheritdoc />
-    public void Draw(InspectorDrawContext context)
+    public override string icon => ImGuiIcon.LayerGroup;
+
+    protected override string GetName(InspectorDrawContext context, GameScene target)
+        => target.name;
+
+    protected override Action<string>? GetNameSetter(
+        InspectorDrawContext context,
+        GameScene target)
+        => name => context.edits.RenameScene(target, name);
+
+    protected override void DrawHeader(InspectorDrawContext context, GameScene target)
+        => NativeImGui.TextUnformatted(target.isLoaded ? "Loaded Scene" : "Scene");
+
+    protected override void Draw(InspectorDrawContext context, GameScene scene)
     {
-        var scene = (GameScene)context.target;
         if (!scene.isLoaded || scene.isDestroyed)
         {
             _ = context.interactions.For(context.interactions.focusedArea).Select();
@@ -40,17 +50,6 @@ internal sealed class GameSceneInspectorDrawer : IInspectorDrawer
         NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, EditorWidget.style.compactFramePadding);
         try
         {
-            string name = scene.name;
-            NativeImGui.SetNextItemWidth(-1f);
-            if (NativeImGui.InputText(
-                    $"##scene_name_{scene.identity.persistentId:N}",
-                    ref name,
-                    C_NAME_BUFFER_SIZE,
-                    ImGuiInputTextFlags.None))
-            {
-                context.edits.RenameScene(scene, name);
-            }
-            NativeImGui.Spacing();
             DrawSystems(context, scene);
             DrawAddSystem(context, scene);
         }

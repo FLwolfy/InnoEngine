@@ -18,18 +18,38 @@ using NativeImGui = Inno.Native.ImGui.ImGui;
 namespace Inno.Editor.Panel.Inspector;
 
 [InspectorDrawer(typeof(GameObject))]
-internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
+internal sealed class GameObjectInspectorDrawer : InspectorDrawer<GameObject>
 {
-    private const nuint C_NAME_BUFFER_SIZE = 512;
     private const nuint C_SEARCH_BUFFER_SIZE = 256;
 
     private readonly InspectorCardControls m_cardControls = new();
     private string m_componentSearch = string.Empty;
 
-    /// <inheritdoc />
-    public void Draw(InspectorDrawContext context)
+    public override string icon => ImGuiIcon.Cube;
+
+    protected override string GetName(InspectorDrawContext context, GameObject target)
+        => target.name;
+
+    protected override Action<string>? GetNameSetter(
+        InspectorDrawContext context,
+        GameObject target)
+        => name => context.edits.RenameGameObject(target, name);
+
+    protected override void DrawHeader(InspectorDrawContext context, GameObject target)
     {
-        var gameObject = (GameObject)context.target;
+        bool active = target.activeSelf;
+        if (EditorWidget.CompactCheckbox(
+                $"target_active_{target.identity.persistentId:N}",
+                ref active))
+        {
+            context.edits.SetGameObjectActive(target, active);
+        }
+        NativeImGui.SameLine();
+        NativeImGui.TextUnformatted("Active");
+    }
+
+    protected override void Draw(InspectorDrawContext context, GameObject gameObject)
+    {
         if (!gameObject.isRuntimeValid || !gameObject.scene.isLoaded)
         {
             _ = context.interactions.For(context.interactions.focusedArea).Select();
@@ -41,28 +61,12 @@ internal sealed class GameObjectInspectorDrawer : IInspectorDrawer
         NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, EditorWidget.style.compactFramePadding);
         try
         {
-            DrawObjectHeader(context, gameObject);
-            NativeImGui.Spacing();
             DrawComponents(context, gameObject);
             DrawAddComponent(context, gameObject);
         }
         finally
         {
             NativeImGui.PopStyleVar(2);
-        }
-    }
-
-    private static void DrawObjectHeader(InspectorDrawContext context, GameObject gameObject)
-    {
-        string name = gameObject.name;
-        NativeImGui.SetNextItemWidth(-1f);
-        if (NativeImGui.InputText(
-                $"##name_{gameObject.identity.persistentId:N}",
-                ref name,
-                C_NAME_BUFFER_SIZE,
-                ImGuiInputTextFlags.None))
-        {
-            context.edits.RenameGameObject(gameObject, name);
         }
     }
 

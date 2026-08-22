@@ -2,19 +2,24 @@ using Inno.Assets.File;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 using Inno.Editor.ImGui;
+using Inno.Platform.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Inspector;
 
 [InspectorDrawer(typeof(AssetFileEntry))]
-internal sealed class AssetSelectionInspectorDrawer : IInspectorDrawer
+internal sealed class AssetSelectionInspectorDrawer : InspectorDrawer<AssetFileEntry>
 {
-    /// <inheritdoc />
-    public void Draw(InspectorDrawContext context)
-    {
-        var entry = (AssetFileEntry)context.target;
+    public override string icon => ImGuiIcon.File;
 
-        DrawMetadata("Path", entry.relativePath);
+    protected override string GetName(InspectorDrawContext context, AssetFileEntry target)
+        => target.nameWithoutExtension;
+
+    protected override void DrawHeader(InspectorDrawContext context, AssetFileEntry target)
+        => NativeImGui.TextUnformatted(target.relativePath);
+
+    protected override void Draw(InspectorDrawContext context, AssetFileEntry entry)
+    {
         DrawMetadata("Type", entry.isDirectory ? "Directory" : "File");
         if (!entry.isDirectory)
         {

@@ -65,6 +65,13 @@ public sealed class HierarchyPanel : EditorPanel
         try
         {
             IReadOnlyList<GameScene> scenes = m_workspace.scenes;
+            if (scenes.Count > 0)
+            {
+                Vector2 contentOrigin = NativeImGui.GetCursorScreenPos();
+                NativeImGui.SetCursorScreenPos(new Vector2(
+                    contentOrigin.X,
+                    contentOrigin.Y - NativeImGui.GetStyle().WindowPadding.Y));
+            }
             for (int i = 0; i < scenes.Count; i++)
             {
                 DrawScene(context, scenes[i]);

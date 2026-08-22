@@ -1,11 +1,4 @@
-using System;
-using System.Numerics;
-
-using Inno.Editor.ImGui.ImGuiWidget;
-using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Engine.Scene;
-using Inno.Platform.ImGui;
-using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Inspector;
 
@@ -18,13 +11,13 @@ internal sealed class InspectorLockControl
     private bool m_isLocked;
 
     /// <summary>
-    /// Draws the lock control and resolves the target that the Inspector should present this frame.
+    /// Resolves the target that the Inspector should present this frame.
     /// </summary>
     /// <param name="selectedTarget">The current global editor selection.</param>
     /// <returns>
     /// The retained target while locked; otherwise, the current valid global selection.
     /// </returns>
-    internal object? DrawAndResolve(object? selectedTarget)
+    internal object? Resolve(object? selectedTarget)
     {
         if (m_isLocked && !IsValid(m_lockedTarget))
         {
@@ -32,32 +25,32 @@ internal sealed class InspectorLockControl
             m_lockedTarget = null;
         }
 
-        DrawToggle(selectedTarget);
         object? target = m_isLocked ? m_lockedTarget : selectedTarget;
         return IsValid(target) ? target : null;
     }
 
-    private void DrawToggle(object? selectedTarget)
+    /// <summary>
+    /// Gets whether the Inspector is currently retaining a target independently from global selection.
+    /// </summary>
+    internal bool isLocked => m_isLocked;
+
+    /// <summary>
+    /// Toggles target retention using the target currently displayed by the Inspector.
+    /// </summary>
+    /// <param name="displayedTarget">The current valid Inspector target to retain when locking.</param>
+    internal void Toggle(object displayedTarget)
     {
-        Vector2 origin = NativeImGui.GetCursorScreenPos();
-        Vector2 controlSize = EditorWidget.GetCompactClickableTextSize();
-        float right = NativeImGui.GetWindowPos().X
-            + NativeImGui.GetWindowSize().X
-            - NativeImGui.GetStyle().WindowPadding.X
-            - controlSize.X;
-        NativeImGui.SetCursorScreenPos(new Vector2(MathF.Max(origin.X, right), origin.Y));
-        string icon = m_isLocked ? ImGuiIcon.Lock : ImGuiIcon.LockOpen;
-        string tooltip = m_isLocked ? "Unlock Inspector" : "Lock Inspector";
-        if (EditorWidget.ClickableText("inspector_target_lock", icon, controlSize, tooltip))
+        if (m_isLocked)
         {
-            m_isLocked = !m_isLocked;
-            m_lockedTarget = m_isLocked && IsValid(selectedTarget)
-                ? selectedTarget
-                : null;
+            m_isLocked = false;
+            m_lockedTarget = null;
+            return;
         }
 
-        float nextY = MathF.Max(origin.Y + controlSize.Y, NativeImGui.GetCursorScreenPos().Y);
-        NativeImGui.SetCursorScreenPos(new Vector2(origin.X, nextY));
+        if (!IsValid(displayedTarget))
+            return;
+        m_isLocked = true;
+        m_lockedTarget = displayedTarget;
     }
 
     private static bool IsValid(object? target)

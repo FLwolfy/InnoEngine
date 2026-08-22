@@ -8,7 +8,7 @@ using Inno.Editor.Panel.Inspector;
 
 [assembly: ScriptingApiExport(typeof(InspectorAreas), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(InspectorActions), ScriptingApiScope.Editor)]
-[assembly: ScriptingApiExport(typeof(IInspectorDrawer), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(InspectorDrawer<>), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(IPropertyDrawer), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(InspectorDrawContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(InspectorDrawerAttribute), ScriptingApiScope.Editor)]

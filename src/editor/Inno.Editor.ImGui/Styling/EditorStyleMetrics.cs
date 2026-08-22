@@ -133,6 +133,15 @@ public sealed class EditorStyleMetrics
     /// <summary>Gets spacing between inspector cards.</summary>
     public float inspectorCardSpacing { get; } = 3f;
 
+    /// <summary>Gets the inner padding of the persistent Inspector target header.</summary>
+    public Vector2 inspectorTargetHeaderPadding { get; } = new(6f, 4f);
+
+    /// <summary>Gets spacing between the two rows of the persistent Inspector target header.</summary>
+    public float inspectorTargetHeaderRowSpacing { get; } = 1f;
+
+    /// <summary>Gets the font-size multiplier used by the large Inspector target icon.</summary>
+    public float inspectorTargetIconScale { get; } = 1.65f;
+
     /// <summary>Gets inspector card body padding.</summary>
     public Vector2 inspectorCardBodyPadding { get; } = new(7f, 5f);
 

@@ -4,15 +4,39 @@
 
 该项目拥有 Inspector Panel、Inspector/Property Drawer Registry、serialized property renderer、Component/System 操作、动态 Add 菜单与引用拖放。
 
-Inspector 内容区域右上角提供 lock/unlock 控件。锁定只固定 Inspector 当前展示目标，不修改全局 Selection；Hierarchy 和 File Browser 可以继续选择其他对象，以便把它们拖到被锁定目标的属性上。锁定的 Scene 对象被销毁时会自动解锁，不保留失效引用。
+Inspector 为所有可检查目标统一绘制无外部缝隙的 Target Header。Header 的大图标、名称、名称修改能力和第二行内容全部由当前 `InspectorDrawer<TTarget>` 提供；统一容器只负责布局、裁剪、边框和锁定。名称没有 setter 时直接显示为文字，不绘制输入框。第二行严格限制为一行，适合放置 active、tag、路径、标签或其他轻量目标信息。
+
+Target Header 右上角提供 lock/unlock 控件，其交互面积、图标居中与 hover 表现和 Panel Tab Bar 的关闭 X 使用同一套 compact icon widget。锁定只固定 Inspector 当前展示目标，不修改全局 Selection；Hierarchy 和 File Browser 可以继续选择其他对象，以便把它们拖到被锁定目标的属性上。锁定的 Scene 对象被销毁时会自动解锁，不保留失效引用。
 
 ## Registry 扩展
 
 ```csharp
 [InspectorDrawer(typeof(AnimationController))]
-public sealed class AnimationControllerInspector : IInspectorDrawer
+public sealed class AnimationControllerInspector
+    : InspectorDrawer<AnimationController>
 {
-    public void Draw(InspectorDrawContext context)
+    public override string icon => ImGuiIcon.DiagramProject;
+
+    protected override string GetName(
+        InspectorDrawContext context,
+        AnimationController target)
+        => target.name;
+
+    protected override Action<string>? GetNameSetter(
+        InspectorDrawContext context,
+        AnimationController target)
+        => value => target.name = value;
+
+    protected override void DrawHeader(
+        InspectorDrawContext context,
+        AnimationController target)
+    {
+        ImGui.TextUnformatted($"States: {target.stateCount}");
+    }
+
+    protected override void Draw(
+        InspectorDrawContext context,
+        AnimationController target)
     {
     }
 }

@@ -25,25 +25,30 @@ internal sealed class InspectorDrawerRegistry : IDisposable
     }
 
     /// <summary>
-    /// Draws a selected target using the most specific registered drawer.
+    /// Resolves the most specific registered drawer and creates its drawing context.
     /// </summary>
-    internal bool Draw(
+    internal bool TryResolve(
         EditorContext editorContext,
         object target,
-        SerializedPropertyRenderer renderer)
+        SerializedPropertyRenderer renderer,
+        out IInspectorDrawer? drawer,
+        out InspectorDrawContext? context)
     {
         ArgumentNullException.ThrowIfNull(editorContext);
         ArgumentNullException.ThrowIfNull(target);
-        IInspectorDrawer? drawer = m_registry.Resolve(target.GetType());
+        drawer = m_registry.Resolve(target.GetType());
         if (drawer is null)
+        {
+            context = null;
             return false;
+        }
 
-        drawer.Draw(new InspectorDrawContext(
+        context = new InspectorDrawContext(
             editorContext,
             m_registry.interactions,
             target,
             renderer,
-            m_edits));
+            m_edits);
         return true;
     }
 

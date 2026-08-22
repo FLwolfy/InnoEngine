@@ -5,6 +5,7 @@ using System.Numerics;
 
 using Inno.Core.Serialization;
 using Inno.Editor.ImGui;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
@@ -163,7 +164,7 @@ internal sealed class CollectionPropertyDrawer : IPropertyDrawer
                 });
             if (s_mapErrors.TryGetValue(errorPath, out string? error))
             {
-                NativeImGui.TextColored(EditorPalette.error, error);
+                EditorWidget.ColoredText(EditorPalette.error, error);
             }
 
             context.DrawChild(

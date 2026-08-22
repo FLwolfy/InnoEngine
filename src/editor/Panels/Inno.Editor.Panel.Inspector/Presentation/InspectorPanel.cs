@@ -5,7 +5,6 @@ using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Editor.Interactions;
-using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Inspector;
 
@@ -17,7 +16,7 @@ public sealed class InspectorPanel : EditorPanel
 {
     private readonly SceneInspectionModule m_inspection;
     private readonly EditorInteractions m_interactions;
-    private readonly InspectorLockControl m_lockControl = new();
+    private readonly InspectorTargetHeader m_targetHeader;
     private string m_failureState = string.Empty;
 
     /// <summary>
@@ -32,12 +31,13 @@ public sealed class InspectorPanel : EditorPanel
     {
         m_inspection = inspection ?? throw new ArgumentNullException(nameof(inspection));
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
+        m_targetHeader = new InspectorTargetHeader();
     }
 
     /// <inheritdoc />
     public override void Draw(EditorContext context)
     {
-        object? target = m_lockControl.DrawAndResolve(m_interactions.selection.selectedTarget);
+        object? target = m_targetHeader.Resolve(m_interactions.selection.selectedTarget);
         if (target is null)
         {
             m_failureState = string.Empty;
@@ -45,17 +45,28 @@ public sealed class InspectorPanel : EditorPanel
             return;
         }
 
+        if (!m_inspection.TryResolve(
+                context,
+                target,
+                out IInspectorDrawer? drawer,
+                out InspectorDrawContext? drawContext) ||
+            drawer is null ||
+            drawContext is null)
+        {
+            m_failureState = string.Empty;
+            EditorWidget.Hint($"No inspector drawer is registered for {target.GetType().Name}.");
+            return;
+        }
+
+        m_targetHeader.Draw(drawer, drawContext);
         try
         {
-            if (!m_inspection.Draw(context, target))
-            {
-                EditorWidget.Hint($"No inspector drawer is registered for {target.GetType().Name}.");
-            }
+            drawer.Draw(drawContext);
             m_failureState = string.Empty;
         }
         catch (Exception exception)
         {
-            NativeImGui.TextColored(
+            EditorWidget.ColoredText(
                 EditorPalette.error,
                 $"Inspector failed: {exception.Message}");
             string failureState = $"{target.GetType().FullName}:{exception}";

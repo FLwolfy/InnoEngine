@@ -89,6 +89,23 @@ public static partial class ImGuiWidget
         => ClickableText(id, text, GetCompactClickableTextSize(), tooltip);
 
     /// <summary>
+    /// Draws a clickable icon inside the same square interaction slot used by editor close controls.
+    /// The icon has no resting background and changes only its glyph color while hovered or active.
+    /// </summary>
+    /// <param name="id">Stable identifier used by ImGui to track the interaction.</param>
+    /// <param name="icon">The visible icon glyph.</param>
+    /// <param name="tooltip">Optional tooltip displayed while the interaction is hovered.</param>
+    /// <returns><see langword="true"/> when the icon is pressed.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="id"/> is empty.
+    /// </exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="icon"/> is <see langword="null"/>.
+    /// </exception>
+    public static bool ClickableIcon(string id, string icon, string? tooltip = null)
+        => ClickableText(id, icon, GetCompactIconSize(), tooltip);
+
+    /// <summary>
     /// Draws clickable text centered inside an explicitly sized transparent interaction area.
     /// </summary>
     /// <param name="id">Stable identifier used by ImGui to track the interaction.</param>
@@ -176,6 +193,28 @@ public static partial class ImGuiWidget
     }
 
     /// <summary>
+    /// Draws unformatted text with a temporary foreground color.
+    /// </summary>
+    /// <param name="color">The foreground color applied only while drawing the text.</param>
+    /// <param name="text">The literal text to draw without format-string interpretation.</param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="text"/> is <see langword="null"/>.
+    /// </exception>
+    public static void ColoredText(Vector4 color, string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        NativeImGui.PushStyleColor(ImGuiCol.Text, color);
+        try
+        {
+            NativeImGui.TextUnformatted(text);
+        }
+        finally
+        {
+            NativeImGui.PopStyleColor();
+        }
+    }
+
+    /// <summary>
     /// Calculates a clickable text area from visible text and requested inner padding.
     /// </summary>
     /// <param name="text">Visible text whose dimensions determine the content size.</param>
@@ -210,6 +249,16 @@ public static partial class ImGuiWidget
     {
         float iconSlotWidth = NativeImGui.GetTextLineHeight();
         return new Vector2(iconSlotWidth + style.iconLabelSpacing, NativeImGui.GetFrameHeight());
+    }
+
+    /// <summary>
+    /// Gets the square icon interaction size shared by dock-header close controls and compact editor icons.
+    /// </summary>
+    /// <returns>A square size based on the current ImGui font size.</returns>
+    public static Vector2 GetCompactIconSize()
+    {
+        float iconSlotSize = NativeImGui.GetFontSize();
+        return new Vector2(iconSlotSize);
     }
 
     private static void DrawClickableTextPresentation(

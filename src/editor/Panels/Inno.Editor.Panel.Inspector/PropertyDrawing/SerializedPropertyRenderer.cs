@@ -96,7 +96,7 @@ public sealed class SerializedPropertyRenderer
             }
             catch (Exception exception)
             {
-                NativeImGui.TextColored(
+                EditorWidget.ColoredText(
                     EditorPalette.error,
                     $"Error: {exception.Message}");
                 string failureState = $"{exception.GetType().FullName}|{exception.Message}";

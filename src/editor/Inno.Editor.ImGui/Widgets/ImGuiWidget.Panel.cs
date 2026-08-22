@@ -53,7 +53,7 @@ public static partial class ImGuiWidget
         try
         {
             ImGuiStylePtr nativeStyle = NativeImGui.GetStyle();
-            float iconSlotSize = NativeImGui.GetFontSize();
+            float iconSlotSize = GetCompactIconSize().X;
             Vector2 iconSize = NativeImGui.CalcTextSize(ImGuiIcon.Xmark);
             float iconCenteringInset = MathF.Max(0f, (iconSlotSize - iconSize.X) * 0.5f);
             Vector2 itemMaximum = new(
