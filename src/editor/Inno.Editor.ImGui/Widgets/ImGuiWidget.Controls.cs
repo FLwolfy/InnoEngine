@@ -102,4 +102,29 @@ public static partial class ImGuiWidget
         return NativeImGui.Button(label);
     }
 
+    /// <summary>
+    /// Draws a progress bar whose overlay remains centered over the complete bar.
+    /// </summary>
+    /// <param name="fraction">The completed fraction rendered by the progress bar.</param>
+    /// <param name="size">The requested ImGui progress-bar size.</param>
+    /// <param name="overlay">The text drawn at the geometric center of the complete progress bar.</param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="overlay"/> is <see langword="null"/>.
+    /// </exception>
+    public static void CenteredProgressBar(float fraction, Vector2 size, string overlay)
+    {
+        ArgumentNullException.ThrowIfNull(overlay);
+
+        NativeImGui.ProgressBar(fraction, size, string.Empty);
+
+        Vector2 minimum = NativeImGui.GetItemRectMin();
+        Vector2 maximum = NativeImGui.GetItemRectMax();
+        Vector2 textSize = NativeImGui.CalcTextSize(overlay);
+        Vector2 textPosition = minimum + (maximum - minimum - textSize) * 0.5f;
+        NativeImGui.GetWindowDrawList().AddText(
+            textPosition,
+            NativeImGui.GetColorU32(ImGuiCol.Text),
+            overlay);
+    }
+
 }

@@ -11,7 +11,7 @@ using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Logging;
 
-internal sealed class LogPanelContent
+internal sealed class ConsolePanelContent
 {
     private const string C_ICON_BUG = ImGuiIcon.Bug;
     private const string C_ICON_INFO = ImGuiIcon.CircleInfo;
@@ -109,7 +109,7 @@ internal sealed class LogPanelContent
     internal bool IsSameEntryIgnoreTime(in EditorConsoleEntry a, in EditorConsoleEntry b)
         => a.level == b.level &&
            a.source.Equals(b.source) &&
-           a.isDiagnostic == b.isDiagnostic &&
+           a.kind == b.kind &&
            string.Equals(a.diagnosticSourceId, b.diagnosticSourceId, StringComparison.Ordinal) &&
            string.Equals(a.code, b.code, StringComparison.Ordinal) &&
            string.Equals(a.category, b.category, StringComparison.Ordinal) &&

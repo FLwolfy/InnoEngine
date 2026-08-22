@@ -3,9 +3,9 @@ using System.Text;
 
 namespace Inno.Editor.Panel.Logging;
 
-internal sealed class LogEntryCopyTarget
+internal sealed class ConsoleEntryCopyTarget
 {
-    internal LogEntryCopyTarget(EditorConsoleEntry entry, int repeatCount)
+    internal ConsoleEntryCopyTarget(EditorConsoleEntry entry, int repeatCount)
     {
         message = entry.displayMessage;
         fullText = FormatFullText(entry, repeatCount);
@@ -19,6 +19,8 @@ internal sealed class LogEntryCopyTarget
         var builder = new StringBuilder();
         builder.Append('[')
             .Append(entry.time.ToString("yyyy-MM-dd HH:mm:ss.fff"))
+            .Append("] [")
+            .Append(entry.kind)
             .Append("] [")
             .Append(entry.level)
             .Append("] [")

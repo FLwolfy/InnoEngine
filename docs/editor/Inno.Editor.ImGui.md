@@ -79,7 +79,7 @@ if (open)
 
 `CardBody` 提供统一的背景、边框与内边距；`dimmed` 为 `true` 时，正文整体灰化且不可编辑，但 header 中的 enabled checkbox 仍可用于重新启用对象。相邻卡片之间的外部间距由调用方控制。
 
-其余常用控件包括 `SearchInput`、`BeginSearchPopup`/`EndSearchPopup`、`InlineRename`、`IconButton`、`CompactCheckbox`、`CenteredButton`。每个组件位于对应的 `ImGuiWidget.<Component>.cs`，避免继续形成一个混合所有控件的 EditorControls 文件。`GetGlyphVisualBounds` 与 `AddGlyphCentered` 使用 baked font 的 glyph bearing，而不是字符串 advance rectangle，适合把不对称 icon glyph 按实际可见轮廓居中。`InlineRename` 不缩放字体，通过 `inlineRenameFramePadding` 和 `inlineRenameVerticalInset` 在 Tree/Table/Grid 行内形成较矮且垂直居中的编辑框；其结果明确区分 Enter `Commit`、`FocusLost` 与 Escape `Cancel`，因此 feature 可以为校验失败定义一致的收尾规则。所有需要 identity 的控件都应传入稳定且在当前 ImGui scope 内唯一的 `id`。
+其余常用控件包括 `SearchInput`、`BeginSearchPopup`/`EndSearchPopup`、`InlineRename`、`IconButton`、`CompactCheckbox`、`CenteredButton` 和 `CenteredProgressBar`。`CenteredProgressBar` 使用原生进度填充，但把 overlay 独立绘制在完整 bar 的几何中心，因此百分比不会跟随填充边缘移动。每个组件位于对应的 `ImGuiWidget.<Component>.cs`，避免继续形成一个混合所有控件的 EditorControls 文件。`GetGlyphVisualBounds` 与 `AddGlyphCentered` 使用 baked font 的 glyph bearing，而不是字符串 advance rectangle，适合把不对称 icon glyph 按实际可见轮廓居中。`InlineRename` 不缩放字体，通过 `inlineRenameFramePadding` 和 `inlineRenameVerticalInset` 在 Tree/Table/Grid 行内形成较矮且垂直居中的编辑框；其结果明确区分 Enter `Commit`、`FocusLost` 与 Escape `Cancel`，因此 feature 可以为校验失败定义一致的收尾规则。所有需要 identity 的控件都应传入稳定且在当前 ImGui scope 内唯一的 `id`。
 
 ## Tree 与拖拽反馈
 

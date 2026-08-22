@@ -119,9 +119,9 @@ if (window.isFocused && scripts.TryCompilePending(out Task<ScriptCompilationResu
 
 Editor 在 focus safe point 开始编译后锁定交互。Modal 使用固定宽度，并始终完成淡入、最短停留和淡出，即使实际编译少于 120 ms。
 
-进度由 project generation、source parse、API analysis、diagnostics、emit 和 reload preparation 等真实工作项推进。Roslyn 单次 Emit 没有内部百分比 callback，因此执行某个工作项时进度会停留，完成后跳到下一个比例；不会用计时器伪造连续进度。
+进度由 project generation、source parse、API analysis、diagnostics、emit 和 reload preparation 等真实工作项推进。Roslyn 单次 Emit 没有内部百分比 callback，因此执行某个工作项时进度会停留，完成后跳到下一个比例；不会用计时器伪造连续进度。百分比文字固定绘制在完整进度条的几何中心，不随已填充区域移动。
 
-成功 assembly artifact 同时保存完整的 `diagnostics.json`。启动命中内容缓存时会重新发布同一组 warning，而不是只复用 DLL/PDB 后返回空 diagnostics；因此缓存命中与实际 Roslyn emit 对 Log Panel 具有一致的可观察结果。
+成功 assembly artifact 同时保存完整的 `diagnostics.json`。启动命中内容缓存时会重新发布同一组 warning，而不是只复用 DLL/PDB 后返回空 diagnostics；因此缓存命中与实际 Roslyn emit 对 Console Panel 具有一致的可观察结果。
 
 ## Scripting API facade
 

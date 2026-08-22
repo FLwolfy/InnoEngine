@@ -9,7 +9,7 @@
 - `LoggingModule`：随 Editor runtime 启停普通日志和当前诊断订阅。
 - `EditorLogBuffer`：保留有界、追加式日志历史。
 - `EditorDiagnosticBuffer`：按 producer 替换当前诊断，不把过期编译结果写入历史。
-- `LogPanel`：统一排序两种流，并提供等级过滤、折叠和详情显示。
+- `ConsolePanel`：统一排序两种流，并提供来源标识、等级过滤、折叠和详情显示。
 
 当滚动条原本位于底部时，新日志会继续滚到底部；用户向上浏览后不会抢夺滚动位置。按钮、折叠三角、行距与颜色全部来自 `ImGuiWidget`、`EditorStyleMetrics` 和 `EditorPalette`。
 
@@ -19,7 +19,7 @@
 
 Console 还会实时显示 Asset Import/Build/Catalog、Asset Source Database、Scene Workspace、Editor Workspace、Panel Activation 和 Project Persistence 的当前报告。Diagnostic 恢复时对应卡片自动消失；同一失败首次出现时写入的异常 Log 不会随之删除。这使 Console 同时保留“现在需要处理什么”和“过去发生过什么”，但两者不会混成一条不可清理的历史流。
 
-每个折叠或展开的 Console card 都使用统一 Editor Action/Menu 系统提供右键菜单：
+Console card header 只显示等级，例如 `[Info]` 或 `[Error]`。展开后的详情通过 `Kind: Log` 或 `Kind: Diagnostic` 明确来源，`Copy Full Entry` 文本也保留同一来源信息，避免等级相同的历史日志与当前诊断产生歧义。所有 card 都使用统一 Editor Action/Menu 系统提供右键菜单：
 
 - `Copy Message`：复制诊断 code 与消息正文。
 - `Copy Full Entry`：复制时间、等级、category、重复次数和源文件位置。

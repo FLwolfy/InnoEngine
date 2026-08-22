@@ -9,7 +9,7 @@ internal readonly struct EditorConsoleEntry
 {
     private EditorConsoleEntry(
         long id,
-        bool isDiagnostic,
+        EditorConsoleEntryKind kind,
         string diagnosticSourceId,
         string code,
         LogLevel level,
@@ -22,7 +22,7 @@ internal readonly struct EditorConsoleEntry
         int column)
     {
         this.id = id;
-        this.isDiagnostic = isDiagnostic;
+        this.kind = kind;
         this.diagnosticSourceId = diagnosticSourceId;
         this.code = code;
         this.level = level;
@@ -36,7 +36,7 @@ internal readonly struct EditorConsoleEntry
     }
 
     internal long id { get; }
-    internal bool isDiagnostic { get; }
+    internal EditorConsoleEntryKind kind { get; }
     internal string diagnosticSourceId { get; }
     internal string code { get; }
     internal LogLevel level { get; }
@@ -54,7 +54,7 @@ internal readonly struct EditorConsoleEntry
         LogEntry entry = buffered.entry;
         return new EditorConsoleEntry(
             buffered.id,
-            isDiagnostic: false,
+            EditorConsoleEntryKind.Log,
             diagnosticSourceId: string.Empty,
             code: string.Empty,
             entry.level,
@@ -70,7 +70,7 @@ internal readonly struct EditorConsoleEntry
     internal static EditorConsoleEntry FromDiagnostic(EditorDiagnosticEntry entry)
         => new(
             entry.id,
-            isDiagnostic: true,
+            EditorConsoleEntryKind.Diagnostic,
             entry.source.id,
             entry.code,
             entry.severity switch
@@ -87,4 +87,10 @@ internal readonly struct EditorConsoleEntry
             entry.file,
             entry.line,
             entry.column);
+}
+
+internal enum EditorConsoleEntryKind
+{
+    Log,
+    Diagnostic
 }

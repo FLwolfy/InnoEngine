@@ -16,13 +16,13 @@ using NativeImGui = Inno.Native.ImGui.ImGui;
 namespace Inno.Editor.Panel.Logging;
 
 /// <summary>
-/// Displays append-only logs and current diagnostics with filtering, collapse, details, and contextual copy actions.
+/// Displays append-only logs and current diagnostics in the unified editor Console.
 /// </summary>
-[EditorPanel("diagnostics.log", "Log", order: 400)]
-public sealed class LogPanel : EditorPanel
+[EditorPanel("diagnostics.console", "Console", order: 400)]
+public sealed class ConsolePanel : EditorPanel
 {
     #region State
-    private readonly LogPanelContent m_content = new();
+    private readonly ConsolePanelContent m_content = new();
     private readonly HashSet<LogLevel> m_filterLevels = Enum.GetValues<LogLevel>().ToHashSet();
     private readonly LogLevel[] m_levels = Enum.GetValues<LogLevel>();
     private readonly HashSet<long> m_openEntries = [];
@@ -45,7 +45,7 @@ public sealed class LogPanel : EditorPanel
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="logging"/> or <paramref name="interactions"/> is <see langword="null"/>.
     /// </exception>
-    public LogPanel(LoggingModule logging, EditorInteractions interactions)
+    public ConsolePanel(LoggingModule logging, EditorInteractions interactions)
     {
         m_logging = logging ?? throw new ArgumentNullException(nameof(logging));
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
@@ -54,10 +54,10 @@ public sealed class LogPanel : EditorPanel
     /// <inheritdoc />
     public override void Draw(EditorContext context)
     {
-        NativeImGui.BeginChild("LogChild", Vector2.Zero);
+        NativeImGui.BeginChild("ConsoleChild", Vector2.Zero);
         DrawToolbar();
         NativeImGui.Separator();
-        DrawLogRegion();
+        DrawConsoleRegion();
         NativeImGui.EndChild();
     }
     #endregion
@@ -90,7 +90,7 @@ public sealed class LogPanel : EditorPanel
 
     private bool DrawFilterCombo()
     {
-        if (!NativeImGui.BeginCombo("##LogFilter", "Filter", ImGuiComboFlags.WidthFitPreview))
+        if (!NativeImGui.BeginCombo("##ConsoleFilter", "Filter", ImGuiComboFlags.WidthFitPreview))
         {
             return false;
         }
@@ -123,10 +123,10 @@ public sealed class LogPanel : EditorPanel
 
     #endregion
 
-    #region Log Region
-    private void DrawLogRegion()
+    #region Console Region
+    private void DrawConsoleRegion()
     {
-        NativeImGui.BeginChild("LogRegion", Vector2.Zero);
+        NativeImGui.BeginChild("ConsoleRegion", Vector2.Zero);
 
         BufferedLogEntry[] logs = m_logging.logs.SnapshotBuffered(out long logVersion);
         EditorDiagnosticEntry[] diagnostics = m_logging.diagnostics.Snapshot(out long diagnosticVersion);
@@ -207,14 +207,14 @@ public sealed class LogPanel : EditorPanel
                     }
                 }
 
-                DrawLogEntry(visibleEntries[end], end - start + 1, runEntryIds, collapseView: true);
+                DrawConsoleEntry(visibleEntries[end], end - start + 1, runEntryIds, collapseView: true);
             }
             else
             {
                 for (int i = start; i <= end; i++)
                 {
                     long entryId = visibleEntries[i].id;
-                    DrawLogEntry(visibleEntries[i], 1, [entryId], collapseView: false);
+                    DrawConsoleEntry(visibleEntries[i], 1, [entryId], collapseView: false);
                 }
             }
 
@@ -224,7 +224,7 @@ public sealed class LogPanel : EditorPanel
     #endregion
 
     #region Entry Card
-    private void DrawLogEntry(
+    private void DrawConsoleEntry(
         EditorConsoleEntry entry,
         int repeatCount,
         IReadOnlyList<long> runEntryIds,
@@ -248,7 +248,7 @@ public sealed class LogPanel : EditorPanel
 
             ImGuiChildFlags collapsedChildFlags = ImGuiChildFlags.FrameStyle | ImGuiChildFlags.AutoResizeY;
             ImGuiWindowFlags collapsedChildWindowFlags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoSavedSettings;
-            if (NativeImGui.BeginChild("##LogEntryCard", new Vector2(0f, 0f), collapsedChildFlags, collapsedChildWindowFlags))
+            if (NativeImGui.BeginChild("##ConsoleEntryCard", new Vector2(0f, 0f), collapsedChildFlags, collapsedChildWindowFlags))
             {
                 DrawHeader(entry, repeatCount, levelColor, levelIcon, false, collapsedCardBg, out bool toggled);
                 if (toggled)
@@ -288,7 +288,7 @@ public sealed class LogPanel : EditorPanel
 
         ImGuiChildFlags childFlags = ImGuiChildFlags.FrameStyle | ImGuiChildFlags.AutoResizeY;
         ImGuiWindowFlags childWindowFlags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoSavedSettings;
-        if (NativeImGui.BeginChild("##LogEntryCard", new Vector2(0f, 0f), childFlags, childWindowFlags))
+        if (NativeImGui.BeginChild("##ConsoleEntryCard", new Vector2(0f, 0f), childFlags, childWindowFlags))
         {
             DrawHeader(entry, repeatCount, levelColor, levelIcon, true, cardBg, out bool toggled);
             if (toggled)
@@ -335,24 +335,24 @@ public sealed class LogPanel : EditorPanel
     {
         toggled = false;
         ImGuiStylePtr style = NativeImGui.GetStyle();
-        
+
         string content = isOpen ? entry.displayMessage : m_content.GetFirstLine(entry.displayMessage);
         string repeatText = repeatCount > 1 ? $" (x{repeatCount})" : string.Empty;
         string prefix = $"{levelIcon} [{entry.level}] ";
         string toggleText = isOpen ? "▼" : "▶";
-        
+
         float toggleW = NativeImGui.CalcTextSize(toggleText).X + EditorWidget.style.logDisclosurePadding.X * 2f;
         float prefixW = NativeImGui.CalcTextSize(prefix).X + toggleW + style.ItemInnerSpacing.X;
         float suffixW = NativeImGui.CalcTextSize(repeatText).X;
         float suffixColW = MathF.Max(1f, suffixW);
         float tableOuterW = MathF.Max(1f, NativeImGui.GetContentRegionAvail().X);
         float contentW = MathF.Max(1f, tableOuterW - prefixW - suffixColW);
-        
+
         if (!isOpen)
         {
             content = m_content.FitTextWithEllipsis(m_content.GetFirstLine(entry.displayMessage), contentW);
         }
-        
+
         Vector2 tableOuterSize = new(tableOuterW, 0f);
         ImGuiTableFlags flags =
             ImGuiTableFlags.SizingFixedFit |
@@ -432,10 +432,11 @@ public sealed class LogPanel : EditorPanel
                 : $"{fileText}:{entry.line}"
             : fileText;
 
-        if (NativeImGui.BeginTable("##LogEntryDetails", 2, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.NoHostExtendX))
+        if (NativeImGui.BeginTable("##ConsoleEntryDetails", 2, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.NoHostExtendX))
         {
             NativeImGui.TableSetupColumn("##label", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize);
             NativeImGui.TableSetupColumn("##value", ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoResize, 1f);
+            DrawDetailFieldRow("Kind:", entry.kind.ToString());
             DrawDetailFieldRow("File:", fileWithLineText);
             DrawDetailFieldRow("Source:", sourceText);
             DrawDetailFieldRow("Time:", timeText);
@@ -446,10 +447,10 @@ public sealed class LogPanel : EditorPanel
     private void DrawEntryContextMenu(EditorConsoleEntry entry, int repeatCount)
     {
         _ = EditorMenuRenderer.ContextMenu(
-            "##LogEntryContextMenu",
+            "##ConsoleEntryContextMenu",
             m_interactions.For(
-                LogPanelAreas.Entry,
-                new LogEntryCopyTarget(entry, repeatCount)));
+                ConsolePanelAreas.Entry,
+                new ConsoleEntryCopyTarget(entry, repeatCount)));
     }
 
     private void RemoveStaleOpenEntries(IReadOnlyList<EditorConsoleEntry> entries)
