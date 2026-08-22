@@ -84,10 +84,10 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
         if (Enum.TryParse(reader.Get("entryScopeFilter", string.Empty), out FileBrowserEntryScopeFilter scopeFilter))
             m_entryScopeFilter = scopeFilter;
         m_filter = reader.Get("filter", string.Empty);
-        m_treeWidth = Math.Clamp(
-            reader.Get("treeWidth", EditorWidget.style.assetTreeWidth),
-            EditorWidget.style.assetTreeMinimumWidth,
-            EditorWidget.style.assetTreeMaximumWidth);
+        float restoredTreeWidth = reader.Get("treeWidth", EditorWidget.style.assetTreeWidth);
+        m_treeWidth = float.IsFinite(restoredTreeWidth)
+            ? MathF.Max(0f, restoredTreeWidth)
+            : EditorWidget.style.assetTreeWidth;
         m_gridScale = Math.Clamp(
             reader.Get("gridScale", EditorWidget.style.assetGridDefaultScale),
             EditorWidget.style.assetGridMinimumScale,
@@ -153,10 +153,13 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
         {
             ImGuiTableFlags splitFlags =
                 ImGuiTableFlags.NoPadOuterX |
+                ImGuiTableFlags.NoKeepColumnsVisible |
                 ImGuiTableFlags.SizingFixedFit |
                 ImGuiTableFlags.NoSavedSettings;
 
             float splitterWidth = GetTreeSplitterWidth(style);
+            float availableWidth = MathF.Max(0f, NativeImGui.GetContentRegionAvail().X);
+            m_treeWidth = ClampTreeWidth(m_treeWidth, availableWidth, splitterWidth);
             NativeImGui.PushStyleVar(ImGuiStyleVar.CellPadding, Vector2.Zero);
             if (NativeImGui.BeginTable("##FileBrowserSplit", 3, splitFlags))
             {
@@ -169,7 +172,7 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
                 DrawTreePane(context);
 
                 _ = NativeImGui.TableSetColumnIndex(1);
-                DrawTreeSplitter(splitterWidth);
+                DrawTreeSplitter(splitterWidth, availableWidth);
 
                 _ = NativeImGui.TableSetColumnIndex(2);
                 DrawContentPane(context);
@@ -189,7 +192,7 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
         return MathF.Max(EditorWidget.style.assetSplitterMinimumWidth, style.DockingSeparatorSize);
     }
 
-    private void DrawTreeSplitter(float width)
+    private void DrawTreeSplitter(float width, float availableWidth)
     {
         Vector2 size = new(width, MathF.Max(1f, NativeImGui.GetContentRegionAvail().Y));
         _ = NativeImGui.InvisibleButton("##TreeSplitterGrip", size);
@@ -204,7 +207,7 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
             Vector2 delta = NativeImGui.GetMouseDragDelta(ImGuiMouseButton.Left);
             if (MathF.Abs(delta.X) > 0f)
             {
-                m_treeWidth = Math.Clamp(m_treeWidth + delta.X, EditorWidget.style.assetTreeMinimumWidth, EditorWidget.style.assetTreeMaximumWidth);
+                m_treeWidth = ClampTreeWidth(m_treeWidth + delta.X, availableWidth, width);
                 NativeImGui.ResetMouseDragDelta(ImGuiMouseButton.Left);
             }
         }
@@ -213,6 +216,19 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
         Vector2 max = NativeImGui.GetItemRectMax();
         Vector4 color = active ? EditorPalette.assetAccent : hovered ? EditorPalette.assetBorder : EditorPalette.assetBorderSoft;
         NativeImGui.AddRectFilled(NativeImGui.GetWindowDrawList(), min, max, NativeImGui.ColorConvertFloat4ToU32(color));
+    }
+
+    private static float ClampTreeWidth(
+        float requestedWidth,
+        float availableWidth,
+        float splitterWidth)
+    {
+        float combinedPaneWidth = MathF.Max(0f, availableWidth - splitterWidth);
+        float minimumPaneWidth = MathF.Min(
+            EditorWidget.style.assetPaneMinimumVisibleWidth,
+            combinedPaneWidth * 0.5f);
+        float maximumTreeWidth = MathF.Max(minimumPaneWidth, combinedPaneWidth - minimumPaneWidth);
+        return Math.Clamp(requestedWidth, minimumPaneWidth, maximumTreeWidth);
     }
 
     private void DrawTreePane(EditorContext context)

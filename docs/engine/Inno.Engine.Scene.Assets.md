@@ -17,10 +17,10 @@
 var scene = new GameScene("Level");
 scene.CreateObject("Player");
 SceneAsset asset = SceneAsset.Capture(scene);
-AssetManager.Save("Scenes/Level.innoscene", asset);
+AssetManager.Save("Scenes/Level.iscene", asset);
 ```
 
-文件名是 Scene 名称权威来源。保存为 `Scenes/Level.innoscene` 或外部重命名到该路径后，实例名为 `Level`，而不是 source payload 中的旧名称。
+文件名是 Scene 名称权威来源。保存为 `Scenes/Level.iscene` 或外部重命名到该路径后，实例名为 `Level`，而不是 source payload 中的旧名称。
 
 ## PrefabAsset
 
@@ -31,14 +31,14 @@ AssetManager.Save("Scenes/Level.innoscene", asset);
 | `CaptureFrom(GameObject)` | 更新现有 prefab source state。 |
 | `Instantiate(GameScene, Transform?)` | 创建新 identity subtree，并可指定 parent。 |
 
-Prefab root 名称同样跟随 `.innoprefab` 文件名；child 名称保持捕获值。普通 connected instance 的 name/property override 不会因为 source path 改名而被误覆盖。
+Prefab root 名称同样跟随 `.iprefab` 文件名；child 名称保持捕获值。普通 connected instance 的 name/property override 不会因为 source path 改名而被误覆盖。
 
 ## Importer 与数据兼容
 
 | 扩展名 | importer ID | 资产 |
 | --- | --- | --- |
-| `.innoscene` | `inno.engine.scene` | `SceneAsset` |
-| `.innoprefab` | `inno.engine.prefab` | `PrefabAsset` |
+| `.iscene` | `inno.engine.scene` | `SceneAsset` |
+| `.iprefab` | `inno.engine.prefab` | `PrefabAsset` |
 
 Importer 使用统一 async writer，输出 `runtime`，Loader 自动追加 `asset-state`，并把 Scene graph 中的 `AssetObject` 引用登记为 runtime dependencies。Stable Type ID、扩展名和现有序列化 schema 保持兼容。
 

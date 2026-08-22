@@ -10,12 +10,12 @@ using Inno.Engine.Scene.Assets;
 namespace Inno.Engine.Scene.Assets.Importers;
 
 /// <summary>
-/// Imports and exports <c>.innoprefab</c> source state.
+/// Imports and exports <c>.iprefab</c> source state.
 /// </summary>
 [AssetImporterExtension]
 internal sealed class PrefabAssetImporter : AssetImporter<PrefabAsset>
 {
-    private static readonly IReadOnlyList<string> s_extensions = new[] { ".innoprefab" };
+    private static readonly IReadOnlyList<string> s_extensions = new[] { ".iprefab" };
 
     /// <inheritdoc />
     public override string importerId => "inno.engine.prefab";

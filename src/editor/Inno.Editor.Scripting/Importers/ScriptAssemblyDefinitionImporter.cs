@@ -12,7 +12,7 @@ namespace Inno.Editor.Scripting;
 internal sealed class ScriptAssemblyDefinitionImporter : AssetImporter<ScriptAssemblyDefinitionAsset>
 {
     public override string importerId => "inno.editor.script-assembly-definition";
-    public override IReadOnlyList<string> supportedExtensions { get; } = [".innoasmdef"];
+    public override IReadOnlyList<string> supportedExtensions { get; } = [".iasmdef"];
 
     protected override async ValueTask ImportAsync(
         AssetImportContext context,

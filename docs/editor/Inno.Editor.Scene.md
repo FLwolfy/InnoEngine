@@ -35,7 +35,7 @@ flowchart LR
 | `TryGetSourcePath(scene, out path)` | 查询保存后的 source-relative path。 |
 | `Refresh()` | 在 owner thread 消费 Asset rename/missing 变化。 |
 
-Workspace 实现 `IEditorWorkspaceState`。它只把已保存 Scene 的顺序与 active Scene 写入 `[InnoEditor][Module.scene-workspace]`。Selection 属于当前 Editor session，不写入项目设置。未保存 Scene 内容和 dirty 内存同样不会写入 `editor.ini`；它们必须保存为 `.innoscene`。
+Workspace 实现 `IEditorWorkspaceState`。它只把已保存 Scene 的顺序与 active Scene 写入 `[InnoEditor][Module.scene-workspace]`。Selection 属于当前 Editor session，不写入项目设置。未保存 Scene 内容和 dirty 内存同样不会写入 `editor.ini`；它们必须保存为 `.iscene`。
 
 ### SceneEdits
 

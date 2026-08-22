@@ -11,7 +11,7 @@ namespace Inno.Editor.Scripting;
 
 internal sealed class ScriptApiMap
 {
-    internal const string C_FILE_EXTENSION = ".inno-script-api";
+    internal const string C_FILE_EXTENSION = ".i-script-api";
 
     private ScriptApiMap(ImmutableArray<ScriptApiNamespaceMap> namespaces)
     {

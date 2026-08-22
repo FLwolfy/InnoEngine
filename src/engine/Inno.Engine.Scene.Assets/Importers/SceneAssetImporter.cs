@@ -10,12 +10,12 @@ using Inno.Engine.Scene.Assets;
 namespace Inno.Engine.Scene.Assets.Importers;
 
 /// <summary>
-/// Imports and exports <c>.innoscene</c> source state.
+/// Imports and exports <c>.iscene</c> source state.
 /// </summary>
 [AssetImporterExtension]
 internal sealed class SceneAssetImporter : AssetImporter<SceneAsset>
 {
-    private static readonly IReadOnlyList<string> s_extensions = new[] { ".innoscene" };
+    private static readonly IReadOnlyList<string> s_extensions = new[] { ".iscene" };
 
     /// <inheritdoc />
     public override string importerId => "inno.engine.scene";

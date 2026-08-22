@@ -10,7 +10,7 @@
 | --- | --- | --- | --- |
 | `*.cs` | `ScriptSourceAsset` | `CSharpScriptImporter` | `source`, `diagnostics`, `type-manifest`, `asset-state` |
 | `*.dll` | `ManagedPluginAsset` | `ManagedPluginImporter` | `assembly`, optional `symbols`/`dependencies`, `asset-state` |
-| `*.innoasmdef` | `ScriptAssemblyDefinitionAsset` | `ScriptAssemblyDefinitionImporter` | `source`, `asset-state` |
+| `*.iasmdef` | `ScriptAssemblyDefinitionAsset` | `ScriptAssemblyDefinitionImporter` | `source`, `asset-state` |
 
 每个受支持 source 都有 `.imeta` 和 persistent ID。`type-manifest` 保存该 source 的声明、位置和 partial 信息；聚合编译后还会生成 assembly 级 `*.types.json`，记录可附加类型最终使用的 source identity、Stable Type ID、类型种类和 canonical source。C# 语法错误不会取消 source identity；parse diagnostics 进入 source asset，聚合 assembly build 可以失败并继续运行旧程序集。
 
@@ -29,7 +29,7 @@ Compiler 读取已提交 artifact snapshot，不直接读取正在被外部编�
 }
 ```
 
-最近父目录的 `.innoasmdef` 决定脚本归属。没有 definition 时：
+最近父目录的 `.iasmdef` 决定脚本归属。没有 definition 时：
 
 - `*.editor.cs` 进入 `Inno.EditorScripts`；
 - 其他 `.cs` 进入 `Inno.GameScripts`。
@@ -45,7 +45,7 @@ Compiler 读取已提交 artifact snapshot，不直接读取正在被外部编�
 ├─ Assets/
 │  ├─ Scripts/**/*.cs
 │  ├─ Plugins/**/*.dll
-│  └─ **/*.innoasmdef
+│  └─ **/*.iasmdef
 ├─ Library/
 │  ├─ AssetDatabase/
 │  ├─ Artifacts/

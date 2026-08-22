@@ -27,8 +27,8 @@ namespace Inno.Editor.Scene;
 public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
 {
     private const double C_DIRTY_REFRESH_SECONDS = 0.1;
-    private const string C_SCENE_EXTENSION = ".innoscene";
-    private const string C_PREFAB_EXTENSION = ".innoprefab";
+    private const string C_SCENE_EXTENSION = ".iscene";
+    private const string C_PREFAB_EXTENSION = ".iprefab";
 
     private readonly Dictionary<Guid, SceneDocument> m_documents = [];
     private readonly ConcurrentQueue<AssetChange> m_sourceChanges = new();

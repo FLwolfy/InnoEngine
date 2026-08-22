@@ -185,7 +185,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(workspace.IsDirty(scene));
         string renamedPath = workspace.SaveScene(scene, "Scenes");
 
-        Assert.Equal("Scenes/Renamed.innoscene", renamedPath);
+        Assert.Equal("Scenes/Renamed.iscene", renamedPath);
         Assert.False(AssetManager.TryGetFileSystemEntry(originalPath, out _));
         Assert.True(AssetManager.TryGetPersistentId(renamedPath, out Guid renamedId));
         Assert.Equal(persistentId, renamedId);
@@ -449,7 +449,7 @@ public sealed class ScriptManagerTests : IDisposable
         string settings = File.ReadAllText(Path.Combine(m_projectRoot, "editor.ini"));
         Assert.Contains("[InnoEditor][Module.scene-workspace]", settings);
         Assert.Contains(
-            "openScenes=[\"Workspace First.innoscene\",\"Workspace Second.innoscene\"]",
+            "openScenes=[\"Workspace First.iscene\",\"Workspace Second.iscene\"]",
             settings);
         Assert.DoesNotContain("Payload=", settings);
         Assert.Empty(SceneManager.loadedScenes);
@@ -775,10 +775,10 @@ public sealed class ScriptManagerTests : IDisposable
 
     [Theory]
     [InlineData("Assets/Scripts/Player.cs", "FileCode")]
-    [InlineData("Assets/Scenes/Main.innoscene", "LayerGroup")]
-    [InlineData("Assets/Prefabs/Player.innoprefab", "Cube")]
+    [InlineData("Assets/Scenes/Main.iscene", "LayerGroup")]
+    [InlineData("Assets/Prefabs/Player.iprefab", "Cube")]
     [InlineData("Assets/Plugins/Physics.dll", "Plug")]
-    [InlineData("Assets/Scripts/Game.innoasmdef", "Gears")]
+    [InlineData("Assets/Scripts/Game.iasmdef", "Gears")]
     [InlineData("Assets/Data/Settings.JSON", "FileLines")]
     public void BuiltInAssetIconsResolveFromFileExtensions(string relativePath, string iconName)
     {
@@ -1162,7 +1162,7 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void AssemblyDefinitionsControlScopeReferencesAndGeneratedIdeProjects()
     {
-        Write("Runtime/Runtime.innoasmdef", """
+        Write("Runtime/Runtime.iasmdef", """
             {
               "name": "Project.Runtime",
               "scope": "Runtime",
@@ -1173,7 +1173,7 @@ public sealed class ScriptManagerTests : IDisposable
             }
             """);
         Write("Runtime/RuntimeType.cs", "public sealed class RuntimeType { }");
-        Write("Editor/Editor.innoasmdef", """
+        Write("Editor/Editor.iasmdef", """
             {
               "name": "Project.Editor",
               "scope": "Editor",
@@ -1200,11 +1200,11 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void RuntimeAssemblyDefinitionCannotReferenceEditorAssembly()
     {
-        Write("Editor/Editor.innoasmdef", """
+        Write("Editor/Editor.iasmdef", """
             { "name": "Project.Editor", "scope": "Editor", "references": [] }
             """);
         Write("Editor/Tool.cs", "public sealed class Tool { }");
-        Write("Runtime/Runtime.innoasmdef", """
+        Write("Runtime/Runtime.iasmdef", """
             { "name": "Project.Runtime", "scope": "Runtime", "references": ["Project.Editor"] }
             """);
         Write("Runtime/Game.cs", "public sealed class Game { }");

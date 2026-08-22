@@ -361,7 +361,7 @@ public sealed class EditorRuntimeTests : IDisposable
         settings.SetImGuiLayout(layout);
         settings.SetSection("Module.tests", new Dictionary<string, string>
         {
-            ["openScenes"] = "[\"Scenes/Test.innoscene\"]"
+            ["openScenes"] = "[\"Scenes/Test.iscene\"]"
         });
 
         Assert.True(settings.SaveIfChanged());
@@ -371,11 +371,11 @@ public sealed class EditorRuntimeTests : IDisposable
         Assert.True(restored.TryGetSection(
             "Module.tests",
             out IReadOnlyDictionary<string, string> values));
-        Assert.Equal("[\"Scenes/Test.innoscene\"]", values["openScenes"]);
+        Assert.Equal("[\"Scenes/Test.iscene\"]", values["openScenes"]);
         string document = File.ReadAllText(restored.path);
         Assert.Contains("[Window][Hierarchy]", document);
         Assert.Contains("[InnoEditor][Module.tests]", document);
-        Assert.Contains("openScenes=[\"Scenes/Test.innoscene\"]", document);
+        Assert.Contains("openScenes=[\"Scenes/Test.iscene\"]", document);
         Assert.DoesNotContain("Payload=", document);
     }
 

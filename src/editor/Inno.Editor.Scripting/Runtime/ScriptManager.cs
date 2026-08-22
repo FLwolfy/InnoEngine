@@ -347,5 +347,5 @@ public sealed class ScriptManager : IDisposable
            path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
            path.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase) ||
            path.EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase) ||
-           path.EndsWith(".innoasmdef", StringComparison.OrdinalIgnoreCase);
+           path.EndsWith(".iasmdef", StringComparison.OrdinalIgnoreCase);
 }

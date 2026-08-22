@@ -268,8 +268,8 @@ Interactions 自动协调 Core 的 `IEditorWorkspaceState` provider，并把项�
 
 ```ini
 [InnoEditor][Module.scene-workspace]
-activeScene="Scenes/Main.innoscene"
-openScenes=["Scenes/Main.innoscene","Scenes/UI.innoscene"]
+activeScene="Scenes/Main.iscene"
+openScenes=["Scenes/Main.iscene","Scenes/UI.iscene"]
 
 [InnoEditor][Panel.asset-browser-panel]
 filter=""

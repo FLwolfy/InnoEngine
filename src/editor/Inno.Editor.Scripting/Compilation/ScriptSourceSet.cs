@@ -31,7 +31,7 @@ internal sealed record ScriptSourceSet(
         ScriptAssemblyDefinition[] definitions = entries
             .Where(static entry => string.Equals(
                 entry.extension,
-                ".innoasmdef",
+                ".iasmdef",
                 StringComparison.OrdinalIgnoreCase))
             .Select(ParseDefinition)
             .OrderBy(static definition => definition.directory, StringComparer.Ordinal)
@@ -183,7 +183,7 @@ internal sealed record ScriptSourceSet(
         foreach (AssetFileEntry entry in entries.Where(static entry =>
                      string.Equals(entry.extension, ".cs", StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(entry.extension, ".dll", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(entry.extension, ".innoasmdef", StringComparison.OrdinalIgnoreCase)))
+                     string.Equals(entry.extension, ".iasmdef", StringComparison.OrdinalIgnoreCase)))
         {
             Append(hash, entry.relativePath);
             if (AssetManager.TryGetInfo(entry.relativePath, out AssetInfo? info) && info is not null)

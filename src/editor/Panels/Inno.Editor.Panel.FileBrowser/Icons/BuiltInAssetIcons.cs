@@ -11,9 +11,9 @@ namespace Inno.Editor.Panel.FileBrowser;
 [AssetIcon(".bytes", ImGuiIcon.File)]
 [AssetIcon(".bin", ImGuiIcon.File)]
 [AssetIcon(".dat", ImGuiIcon.File)]
-[AssetIcon(".innoscene", ImGuiIcon.LayerGroup)]
-[AssetIcon(".innoprefab", ImGuiIcon.Cube)]
+[AssetIcon(".iscene", ImGuiIcon.LayerGroup)]
+[AssetIcon(".iprefab", ImGuiIcon.Cube)]
 [AssetIcon(".cs", ImGuiIcon.FileCode)]
 [AssetIcon(".dll", ImGuiIcon.Plug)]
-[AssetIcon(".innoasmdef", ImGuiIcon.Gears)]
+[AssetIcon(".iasmdef", ImGuiIcon.Gears)]
 internal static class BuiltInAssetIcons;

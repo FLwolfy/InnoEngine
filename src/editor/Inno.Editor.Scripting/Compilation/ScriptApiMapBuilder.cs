@@ -6,7 +6,7 @@ namespace Inno.Editor.Scripting;
 
 internal static class ScriptApiMapBuilder
 {
-    internal const string C_FILE_EXTENSION = ".inno-script-api";
+    internal const string C_FILE_EXTENSION = ".i-script-api";
 
     internal static string Build(ScriptApiProfile profile)
     {

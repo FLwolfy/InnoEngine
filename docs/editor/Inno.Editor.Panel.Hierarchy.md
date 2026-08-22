@@ -53,11 +53,11 @@ Scene setup 写在 `editor.ini` 的 `[InnoEditor][Module.scene-workspace]` 中�
 
 恢复会分别等待 Source Index 与脚本 TypeCache：源文件在磁盘存在但 Asset Database 尚未完成首轮对账时，不将它误判为 missing；Scene 中引用的脚本 Component/System 尚未激活时，也不会清空已保存路径。两项依赖都准备好后，候选 Scene 一次性 additive 提交并恢复 active Scene，selection 保持为空。
 
-未保存 Scene 的完整内容和 dirty 修改不会隐式写进 Workspace。它们必须通过 Save 进入 `.innoscene`；否则下次启动只恢复最后保存版本。这一边界避免项目状态文件悄悄成为第二份 Scene 数据库。
+未保存 Scene 的完整内容和 dirty 修改不会隐式写进 Workspace。它们必须通过 Save 进入 `.iscene`；否则下次启动只恢复最后保存版本。这一边界避免项目状态文件悄悄成为第二份 Scene 数据库。
 
 ## 保存
 
-Command/Ctrl+S 是共享 `EditorActions.Save`，由本 feature 提供实现，并自动出现在主菜单 `File/Save`。Scene 名称与 `.innoscene` 文件名同步；dirty Scene 在 Hierarchy 中显示斜体和 `*`。将 Scene/GameObject 拖到任意 Asset directory 字符串 target 时分别保存 SceneAsset/PrefabAsset。
+Command/Ctrl+S 是共享 `EditorActions.Save`，由本 feature 提供实现，并自动出现在主菜单 `File/Save`。Scene 名称与 `.iscene` 文件名同步；dirty Scene 在 Hierarchy 中显示斜体和 `*`。将 Scene/GameObject 拖到任意 Asset directory 字符串 target 时分别保存 SceneAsset/PrefabAsset。
 
 ## Scripting API
 

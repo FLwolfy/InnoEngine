@@ -101,11 +101,10 @@ public sealed class EditorStyleMetrics
     /// <summary>Gets default asset tree width.</summary>
     public float assetTreeWidth { get; } = 263f;
 
-    /// <summary>Gets minimum asset tree width.</summary>
-    public float assetTreeMinimumWidth { get; } = 140f;
-
-    /// <summary>Gets maximum asset tree width.</summary>
-    public float assetTreeMaximumWidth { get; } = 520f;
+    /// <summary>
+    /// Gets the minimum visible width retained for either asset browser pane while its splitter is dragged.
+    /// </summary>
+    public float assetPaneMinimumVisibleWidth { get; } = 16f;
 
     /// <summary>Gets the minimum draggable asset browser splitter width.</summary>
     public float assetSplitterMinimumWidth { get; } = 2f;
