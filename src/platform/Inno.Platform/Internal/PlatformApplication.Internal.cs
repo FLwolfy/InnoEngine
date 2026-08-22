@@ -27,6 +27,11 @@ public sealed partial class PlatformApplication
 
     private unsafe void Initialize()
     {
+        // Deliver the activating mouse press to the application as well as focusing the window.
+        // This is required for first-click widgets, double-clicks, and drags across editor viewports.
+        _ = SDL.SetHint(SDL.SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
+        _ = SDL.SetHint(SDL.SDL_HINT_MOUSE_AUTO_CAPTURE, "0");
+
         if (OperatingSystem.IsMacOS())
         {
             // Match traditional key repeat behavior (disable accent press-and-hold popup).

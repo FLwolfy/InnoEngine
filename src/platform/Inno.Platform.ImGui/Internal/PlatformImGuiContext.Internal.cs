@@ -22,26 +22,31 @@ public sealed partial class PlatformImGuiContext
     private const string DEFAULT_ICONS_DIRECTORY_RELATIVE_PATH = "BuiltIn/Icons";
     private const string DEFAULT_FONT_FILE_NAME = "JetBrainsMono-Regular.ttf";
     private const double LIVE_RESIZE_HOVER_LOCK_TIMEOUT_SECONDS = 0.25;
-    private const double LIVE_RESIZE_MIN_REDRAW_INTERVAL_SECONDS = 1.0 / 120.0;
 
     private readonly PlatformWindow m_window;
     private readonly ImGuiContextPtr m_context;
     private readonly PlatformImGuiViewportBackend? m_viewports;
     private readonly PlatformImGuiSdlRenderer m_renderer;
     private readonly Dictionary<ImGuiMouseCursor, SDLCursorPtr> m_cursors = [];
+    private readonly HashSet<uint> m_pendingLiveResizeWindowIds = [];
     private readonly Stopwatch m_frameTimer = Stopwatch.StartNew();
 
     private ImGuiMouseCursor m_currentCursor = ImGuiMouseCursor.None;
     private SDLWindowPtr m_textInputWindow = SDLWindowPtr.Null;
     private TimeSpan m_lastFrameTime;
     private TimeSpan m_lastLiveResizeLockTime;
-    private TimeSpan m_lastLiveResizeRenderTime;
     private Action? m_lastDrawFrame;
     private IntPtr m_iniFilename;
+    private Vector2 m_leftMousePressPosition;
+    private uint m_leftMousePressWindowId;
     private uint m_liveResizeLockedWindowId;
+    private uint m_mouseWindowId;
+    private int m_mouseButtonsDown;
+    private int m_mousePendingLeaveFrame;
     private readonly bool m_enableSmoothResize;
     private bool m_hasStartedFrame;
     private bool m_isFrameActive;
+    private bool m_leftMouseWasDragged;
     private bool m_textInputActive;
     private bool m_disposed;
 
@@ -56,9 +61,11 @@ public sealed partial class PlatformImGuiContext
         ImGuiNative.SetCurrentContext(m_context);
 
         var io = ImGuiNative.GetIO();
+        // SDL cannot reliably identify the viewport beneath a transient NoInputs viewport while
+        // docking, and the official SDL backend disables this capability on macOS. Let Dear ImGui
+        // use its viewport heuristic instead of publishing incorrect hovered viewport identities.
         io.BackendFlags |= ImGuiBackendFlags.HasMouseCursors
             | ImGuiBackendFlags.HasSetMousePos
-            | ImGuiBackendFlags.HasMouseHoveredViewport
             | ImGuiBackendFlags.RendererHasTextures;
         io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard;
 
@@ -366,21 +373,8 @@ public sealed partial class PlatformImGuiContext
             return;
         }
 
-        var viewportWindowId = eventWindowId;
         if (m_enableSmoothResize)
-        {
             RefreshLiveResizeHoverLock(eventType, eventWindowId, ref sdlEvent);
-            viewportWindowId = ResolveViewportEventWindowId(eventWindowId);
-        }
-
-        if (m_viewports != null && m_viewports.TryGetViewportId(viewportWindowId, out var hoveredViewportId))
-        {
-            io.AddMouseViewportEvent(hoveredViewportId);
-        }
-        else if (viewportWindowId == m_window.windowId)
-        {
-            io.AddMouseViewportEvent(ImGuiNative.GetMainViewport().ID);
-        }
 
         m_viewports?.ProcessEvent(ref sdlEvent, eventWindowId);
 
@@ -419,22 +413,15 @@ public sealed partial class PlatformImGuiContext
 
             case SDLEventType.MouseMotion:
             {
-                var mouseX = sdlEvent.Motion.X;
-                var mouseY = sdlEvent.Motion.Y;
-                if ((io.ConfigFlags & ImGuiConfigFlags.ViewportsEnable) != 0)
-                {
-                    var mouseWindow = SDL.GetWindowFromID(eventWindowId);
-                    if (!mouseWindow.IsNull)
-                    {
-                        var windowX = 0;
-                        var windowY = 0;
-                        _ = SDL.GetWindowPosition(mouseWindow, ref windowX, ref windowY);
-                        mouseX += windowX;
-                        mouseY += windowY;
-                    }
-                }
-
-                io.AddMousePosEvent(mouseX, mouseY);
+                m_mouseWindowId = eventWindowId;
+                m_mousePendingLeaveFrame = 0;
+                Vector2 mousePosition = GetEventMousePosition(
+                    io,
+                    eventWindowId,
+                    sdlEvent.Motion.X,
+                    sdlEvent.Motion.Y);
+                UpdateLeftMouseDragState(io, mousePosition);
+                io.AddMousePosEvent(mousePosition.X, mousePosition.Y);
                 break;
             }
 
@@ -442,9 +429,53 @@ public sealed partial class PlatformImGuiContext
             case SDLEventType.MouseButtonUp:
             {
                 var down = eventType == SDLEventType.MouseButtonDown;
+                uint pointerFocusSourceWindowId = 0;
                 if (TryTranslateMouseButton(sdlEvent.Button.Button, out var button))
                 {
+                    int mask = 1 << button;
+                    if (down)
+                    {
+                        m_mouseButtonsDown |= mask;
+                        if (button == 0)
+                        {
+                            m_leftMousePressWindowId = eventWindowId;
+                            m_leftMousePressPosition = GetEventMousePosition(
+                                io,
+                                eventWindowId,
+                                sdlEvent.Button.X,
+                                sdlEvent.Button.Y);
+                            m_leftMouseWasDragged = false;
+                        }
+                    }
+                    else
+                    {
+                        m_mouseButtonsDown &= ~mask;
+                        if (button == 0)
+                        {
+                            Vector2 mousePosition = GetEventMousePosition(
+                                io,
+                                eventWindowId,
+                                sdlEvent.Button.X,
+                                sdlEvent.Button.Y);
+                            UpdateLeftMouseDragState(io, mousePosition);
+                            if (m_leftMouseWasDragged)
+                            {
+                                pointerFocusSourceWindowId = m_leftMousePressWindowId;
+                            }
+
+                            m_leftMousePressPosition = default;
+                            m_leftMousePressWindowId = 0;
+                            m_leftMouseWasDragged = false;
+                        }
+                    }
                     io.AddMouseButtonEvent(button, down);
+                    // Docking can destroy the source viewport before SDL emits MouseUp. Capturing
+                    // the mouse keeps the complete press/release sequence inside this application.
+                    _ = SDL.CaptureMouse(m_mouseButtonsDown != 0);
+                    if (pointerFocusSourceWindowId != 0)
+                    {
+                        m_viewports?.FocusPointerTarget(pointerFocusSourceWindowId);
+                    }
                 }
                 break;
             }
@@ -474,13 +505,22 @@ public sealed partial class PlatformImGuiContext
                 io.AddFocusEvent(false);
                 break;
 
+            case SDLEventType.WindowMouseEnter:
+                m_mouseWindowId = eventWindowId;
+                m_mousePendingLeaveFrame = 0;
+                break;
+
             case SDLEventType.WindowMouseLeave:
-                io.AddMousePosEvent(-float.MaxValue, -float.MaxValue);
+                // SDL may deliver Leave before Enter while crossing viewport windows. Defer the
+                // reset so a matching Enter or Motion event can cancel it without breaking drag.
+                if (m_mouseWindowId == eventWindowId)
+                    m_mousePendingLeaveFrame = ImGuiNative.GetFrameCount() + 1;
                 break;
 
             case SDLEventType.WindowDisplayScaleChanged:
             case SDLEventType.WindowResized:
             case SDLEventType.WindowPixelSizeChanged:
+                m_viewports?.SynchronizeWindow(eventWindowId);
                 UpdateDisplayMetrics(io);
                 break;
 
@@ -504,6 +544,7 @@ public sealed partial class PlatformImGuiContext
             return;
         }
 
+        m_pendingLiveResizeWindowIds.Add(windowId);
         if (m_isFrameActive)
         {
             return;
@@ -516,23 +557,13 @@ public sealed partial class PlatformImGuiContext
             return;
         }
 
-        if (ownsViewportWindow)
-        {
-            m_viewports?.SyncLiveResizeWindow(windowId);
-        }
-
         var now = m_frameTimer.Elapsed;
-        if ((now - m_lastLiveResizeRenderTime).TotalSeconds < LIVE_RESIZE_MIN_REDRAW_INTERVAL_SECONDS)
-        {
-            return;
-        }
-
-        m_lastLiveResizeRenderTime = now;
         m_liveResizeLockedWindowId = windowId;
         m_lastLiveResizeLockTime = now;
         var deltaSeconds = (float)(now - m_lastFrameTime).TotalSeconds;
         m_lastFrameTime = now;
 
+        SynchronizePendingLiveResizeWindows();
         BeginFrame(deltaSeconds);
         try
         {
@@ -555,6 +586,7 @@ public sealed partial class PlatformImGuiContext
         var deltaSeconds = (float)(now - m_lastFrameTime).TotalSeconds;
         m_lastFrameTime = now;
 
+        SynchronizePendingLiveResizeWindows();
         BeginFrame(deltaSeconds);
         try
         {
@@ -582,6 +614,8 @@ public sealed partial class PlatformImGuiContext
         io.MouseDrawCursor = false;
         UpdateDisplayMetrics(io);
         io.DeltaTime = deltaTimeSeconds > 0f ? deltaTimeSeconds : (1f / 60f);
+        ReconcileMouseButtons(io);
+        FlushPendingMouseLeave(io);
         UpdateMouseData(io, m_window.GetSdlWindow());
         UpdateTextInputState(io);
         
@@ -675,26 +709,6 @@ public sealed partial class PlatformImGuiContext
         }
     }
 
-    private uint ResolveViewportEventWindowId(uint eventWindowId)
-    {
-        if (m_liveResizeLockedWindowId == 0 || eventWindowId == m_liveResizeLockedWindowId)
-        {
-            return eventWindowId;
-        }
-
-        if (m_liveResizeLockedWindowId == m_window.windowId)
-        {
-            return m_liveResizeLockedWindowId;
-        }
-
-        if (m_viewports != null && m_viewports.OwnsWindow(m_liveResizeLockedWindowId))
-        {
-            return m_liveResizeLockedWindowId;
-        }
-
-        return eventWindowId;
-    }
-
     public partial void Dispose()
     {
         if (m_disposed)
@@ -711,6 +725,15 @@ public sealed partial class PlatformImGuiContext
             m_textInputWindow = SDLWindowPtr.Null;
             m_textInputActive = false;
         }
+
+        _ = SDL.CaptureMouse(false);
+        m_mouseButtonsDown = 0;
+        m_leftMousePressPosition = default;
+        m_leftMousePressWindowId = 0;
+        m_leftMouseWasDragged = false;
+        m_mouseWindowId = 0;
+        m_mousePendingLeaveFrame = 0;
+        m_pendingLiveResizeWindowIds.Clear();
 
         if ((io.ConfigFlags & ImGuiConfigFlags.ViewportsEnable) != 0)
         {
@@ -829,6 +852,130 @@ public sealed partial class PlatformImGuiContext
         {
             SDL.WarpMouseInWindow(window, io.MousePos.X, io.MousePos.Y);
         }
+    }
+
+    private void SynchronizePendingLiveResizeWindows()
+    {
+        if (m_pendingLiveResizeWindowIds.Count == 0)
+        {
+            return;
+        }
+
+        uint[] windowIds = [.. m_pendingLiveResizeWindowIds];
+        m_pendingLiveResizeWindowIds.Clear();
+        foreach (uint windowId in windowIds)
+        {
+            if (windowId == m_window.windowId)
+                m_renderer.SynchronizeOutputSize();
+            else
+                m_viewports?.SynchronizeWindow(windowId);
+        }
+    }
+
+    private void ReconcileMouseButtons(ImGuiIOPtr io)
+    {
+        if (m_mouseButtonsDown == 0)
+            return;
+
+        uint pointerFocusSourceWindowId = 0;
+        float mouseX = 0f;
+        float mouseY = 0f;
+        uint currentButtons = SDL.GetMouseState(ref mouseX, ref mouseY);
+        ReadOnlySpan<byte> sdlButtons =
+        [
+            SDL.SDL_BUTTON_LEFT,
+            SDL.SDL_BUTTON_RIGHT,
+            SDL.SDL_BUTTON_MIDDLE,
+            SDL.SDL_BUTTON_X1,
+            SDL.SDL_BUTTON_X2
+        ];
+        for (int button = 0; button < sdlButtons.Length; button++)
+        {
+            int trackedMask = 1 << button;
+            if ((m_mouseButtonsDown & trackedMask) == 0)
+                continue;
+
+            uint sdlMask = 1u << (sdlButtons[button] - 1);
+            if ((currentButtons & sdlMask) != 0)
+                continue;
+
+            // Recover when a destroyed viewport prevented the corresponding MouseUp event from
+            // reaching the event queue. Without this release ImGui keeps its active drag forever.
+            m_mouseButtonsDown &= ~trackedMask;
+            io.AddMouseButtonEvent(button, false);
+            if (button == 0)
+            {
+                float globalMouseX = 0f;
+                float globalMouseY = 0f;
+                _ = SDL.GetGlobalMouseState(ref globalMouseX, ref globalMouseY);
+                UpdateLeftMouseDragState(io, new Vector2(globalMouseX, globalMouseY));
+                if (m_leftMouseWasDragged)
+                {
+                    pointerFocusSourceWindowId = m_leftMousePressWindowId;
+                }
+
+                m_leftMousePressPosition = default;
+                m_leftMousePressWindowId = 0;
+                m_leftMouseWasDragged = false;
+            }
+        }
+
+        if (m_mouseButtonsDown == 0)
+            _ = SDL.CaptureMouse(false);
+        if (pointerFocusSourceWindowId != 0)
+            m_viewports?.FocusPointerTarget(pointerFocusSourceWindowId);
+    }
+
+    private static Vector2 GetEventMousePosition(
+        ImGuiIOPtr io,
+        uint windowId,
+        float localX,
+        float localY)
+    {
+        Vector2 position = new(localX, localY);
+        if ((io.ConfigFlags & ImGuiConfigFlags.ViewportsEnable) == 0)
+        {
+            return position;
+        }
+
+        SDLWindowPtr window = SDL.GetWindowFromID(windowId);
+        if (window.IsNull)
+        {
+            return position;
+        }
+
+        var windowX = 0;
+        var windowY = 0;
+        _ = SDL.GetWindowPosition(window, ref windowX, ref windowY);
+        return position + new Vector2(windowX, windowY);
+    }
+
+    private void UpdateLeftMouseDragState(ImGuiIOPtr io, Vector2 mousePosition)
+    {
+        if (m_leftMouseWasDragged || m_leftMousePressWindowId == 0)
+        {
+            return;
+        }
+
+        float dragThreshold = io.MouseDragThreshold;
+        if (Vector2.DistanceSquared(m_leftMousePressPosition, mousePosition) >= dragThreshold * dragThreshold)
+        {
+            m_leftMouseWasDragged = true;
+        }
+    }
+
+    private void FlushPendingMouseLeave(ImGuiIOPtr io)
+    {
+        if (m_mousePendingLeaveFrame == 0 ||
+            m_mouseButtonsDown != 0 ||
+            ImGuiNative.GetFrameCount() < m_mousePendingLeaveFrame)
+        {
+            return;
+        }
+
+        m_mouseWindowId = 0;
+        m_mousePendingLeaveFrame = 0;
+        io.AddMousePosEvent(-float.MaxValue, -float.MaxValue);
     }
 
     private void UpdateMouseCursor(ImGuiIOPtr io)
@@ -1060,6 +1207,7 @@ public sealed partial class PlatformImGuiContext
 
             case SDLEventType.WindowFocusGained:
             case SDLEventType.WindowFocusLost:
+            case SDLEventType.WindowMouseEnter:
             case SDLEventType.WindowMouseLeave:
             case SDLEventType.WindowDisplayScaleChanged:
             case SDLEventType.WindowExposed:

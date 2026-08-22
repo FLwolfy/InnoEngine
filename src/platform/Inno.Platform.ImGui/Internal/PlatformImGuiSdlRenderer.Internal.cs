@@ -36,6 +36,8 @@ internal sealed unsafe class PlatformImGuiSdlRenderer : IDisposable
         ProcessTextureRequests(drawData);
         EnsureFontTexture();
 
+        _ = SDL.SetRenderViewport(m_renderer, SDLRectPtr.Null);
+        _ = SDL.SetRenderClipRect(m_renderer, SDLRectPtr.Null);
         _ = SDL.SetRenderDrawColor(m_renderer, 20, 20, 22, 255);
         _ = SDL.RenderClear(m_renderer);
 
@@ -132,6 +134,28 @@ internal sealed unsafe class PlatformImGuiSdlRenderer : IDisposable
 
         _ = SDL.SetRenderClipRect(m_renderer, SDLRectPtr.Null);
         _ = SDL.RenderPresent(m_renderer);
+    }
+
+    /// <summary>
+    /// Synchronizes the SDL renderer with the current native drawable size.
+    /// </summary>
+    internal void SynchronizeOutputSize()
+    {
+        if (m_disposed || m_renderer.IsNull)
+        {
+            return;
+        }
+
+        // A macOS live-resize expose callback can run before SDL's renderer event watcher has
+        // consumed the matching pixel-size event. Re-applying the disabled presentation mode
+        // makes SDL query the native drawable immediately instead of clipping to its old size.
+        _ = SDL.SetRenderLogicalPresentation(
+            m_renderer,
+            0,
+            0,
+            SDLRendererLogicalPresentation.Disabled);
+        _ = SDL.SetRenderViewport(m_renderer, SDLRectPtr.Null);
+        _ = SDL.SetRenderClipRect(m_renderer, SDLRectPtr.Null);
     }
 
     public void Dispose()
