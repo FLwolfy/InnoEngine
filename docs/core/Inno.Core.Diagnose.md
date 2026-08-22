@@ -148,6 +148,20 @@ Diagnostic
 
 意外异常导致系统持续降级时，可以将完整异常写入 Log，同时发布简洁的当前 Diagnostic。系统恢复后只清除 Diagnostic，不删除历史 Log。
 
+当前内建生产者采用同一规则：
+
+| 子系统 | Diagnostic | Log |
+| --- | --- | --- |
+| Asset Loader | 当前 Import、Build、Catalog、missing reference 与 identity conflict 状态 | 实际发生的 Import/Build/Catalog 异常及完整堆栈 |
+| AssetManager | 增量刷新与 recovery rescan 同时失败后的 Source Database 状态 | 每次 refresh/rescan 失败事件 |
+| Scripting | 当前 compiler 与 reload 结果 | reload 事务抛出的完整异常 |
+| Scene Workspace | 当前无法恢复的 scene setup、持续失败的 document synchronization | 首次进入失败状态的异常，以及被跳过的 missing scene 事件 |
+| Editor Workspace | 当前 capture、restore、save 失败 | 状态首次变化时的完整异常 |
+| Editor Extensions | 当前无法 Attach 的 Panel 集合 | Attach/Detach 的实际失败事件 |
+| Editor Application | 当前无法持久化 `editor.ini` 的状态 | 首次保存失败的完整异常 |
+
+Action、Menu、Drag/Drop、Undo/Redo、Rename/Delete/Open 和 Inspector 单次绘制失败继续只使用 Log；它们是一次调用的结果，不是拥有明确恢复事务的长期状态。
+
 ## 注意事项
 
 - group 必须是当前调用类型内稳定、语义明确的职责名称。

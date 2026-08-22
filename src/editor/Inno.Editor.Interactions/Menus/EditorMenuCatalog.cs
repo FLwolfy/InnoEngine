@@ -11,6 +11,8 @@ internal sealed class EditorMenuCatalog(
     EditorExtensionCatalog catalog,
     EditorActionRouter actions)
 {
+    private readonly HashSet<string> m_sourceFailures = new(StringComparer.Ordinal);
+
     internal EditorMenuModel Build(EditorMenuContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -38,6 +40,8 @@ internal sealed class EditorMenuCatalog(
             {
                 var builder = new EditorMenuBuilder();
                 registration.source.Build(context, builder);
+                string sourceName = registration.type.FullName ?? registration.type.Name;
+                m_sourceFailures.Remove(sourceName);
                 placements.AddRange(builder.items.Select(static item => new Placement(
                     NormalizePath(item.path),
                     item.actionId,
@@ -47,10 +51,14 @@ internal sealed class EditorMenuCatalog(
             }
             catch (Exception exception)
             {
-                Log.Error(
-                    "Editor menu source '{0}' failed: {1}",
-                    registration.type.FullName ?? registration.type.Name,
-                    exception);
+                string sourceName = registration.type.FullName ?? registration.type.Name;
+                if (m_sourceFailures.Add(sourceName))
+                {
+                    Log.Error(
+                        "Editor menu source '{0}' failed: {1}",
+                        sourceName,
+                        exception);
+                }
             }
         }
 

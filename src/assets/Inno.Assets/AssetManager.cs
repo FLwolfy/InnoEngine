@@ -581,17 +581,27 @@ public static class AssetManager
                 loader.Rescan();
             else
                 loader.ApplySourceChanges(changes);
+            AssetManagerDiagnosticPublisher.ResolveSourceDatabase();
         }
         catch (Exception exception)
         {
-            Log.Error("Asset source refresh failed: {0}", exception);
             try
             {
                 loader.Rescan();
+                AssetManagerDiagnosticPublisher.ResolveSourceDatabase();
+                Log.Warn(
+                    "Asset source refresh failed and was recovered by a full rescan: {0}",
+                    exception);
             }
             catch (Exception recoveryException)
             {
-                Log.Error("Asset source recovery rescan failed: {0}", recoveryException);
+                Log.Error(
+                    "Asset source refresh and recovery rescan both failed. Refresh: {0} Recovery: {1}",
+                    exception,
+                    recoveryException);
+                AssetManagerDiagnosticPublisher.PublishSourceDatabaseFailure(
+                    exception,
+                    recoveryException);
             }
         }
         AssetChange[] committed = CreateCommittedChanges(loader, changes, previousIds, requiresFullRescan);
@@ -816,6 +826,7 @@ public static class AssetManager
 
     private static void ShutdownLocked()
     {
+        AssetManagerDiagnosticPublisher.ResolveSourceDatabase();
         AssetSerializationServices.SetReferenceResolver(null);
         if (s_fileSystem is not null)
         {

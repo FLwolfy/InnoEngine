@@ -173,6 +173,8 @@ public sealed class ClipToStateDrop
 
 一个 snapshot 激活时先 Attach 全部 Panel，再按 `EditorModuleAttribute.order` 启动 Module；关闭或替换时反向执行，先 Stop Module，再 Detach Panel。这样 Panel 的订阅与呈现对象在任何会产生启动日志或异步工作的 Module 之前就绪。Logging Module 使用基础设施最高优先级，保证其 sink 先于 Scripting Module 注册，因此首次脚本编译的 warning/error 也会进入 Log Panel。
 
+无法 Attach 的 Panel 会被关闭并进入 `Panel Activation` 当前 Diagnostic；下一次 generation 中成功 Attach、Panel 被移除或 runtime 关闭时自动清除。Detach 是已经发生的 teardown 事件，只写 Log。Workspace provider 的 Capture、Restore 和 `editor.ini` Save 使用三个独立 Diagnostic group：周期重试成功只清除对应 group，完整异常仅在状态变化时进入 Log，避免两秒保存周期反复刷屏。
+
 ## Undo / Redo
 
 每个 `EditorInteractions` 拥有一个 `EditorHistory`。History 不保存 Action 实例、Scene 对象、插件 `Type` 或来自 collectible ALC 的委托；稳定记录由四项组成：

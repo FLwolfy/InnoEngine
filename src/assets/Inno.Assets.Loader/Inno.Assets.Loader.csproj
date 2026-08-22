@@ -10,6 +10,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\core\Inno.Core.Diagnose\Inno.Core.Diagnose.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Storage\Inno.Core.Storage.csproj" PrivateAssets="compile" />

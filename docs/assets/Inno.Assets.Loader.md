@@ -70,6 +70,8 @@ Runtime asset dependency 影响加载保活和引用恢复；Source/Artifact/Cus
 
 Importer 抛异常时 transaction 不提交半成品。Catalog 状态变为 `Failed`、保存 diagnostic，并继续保留 last-successful artifact/canonical state。
 
+Loader 在每次 Catalog commit 后把所有带 persistent ID 的当前 Import 状态同步到 `Inno.Core.Diagnose`。同一 Asset 的下一次成功 Import 会自动清除旧报告；identity conflict 和 Importer 返回的 warning 同样按 Asset ID 独立呈现。单纯删除 Asset 只形成 Catalog tombstone，不向 Console 制造 warning；只有 Engine 实际解析到该 missing reference 时才发布独立的 `Asset Reference` Diagnostic，恢复同一 ID 后自动清除。Unsupported source 没有 persistent ID，因此只保留 Catalog 状态，不伪造全局诊断目标。
+
 ## Aggregate Build Processor
 
 聚合输出使用 `AssetBuildProcessor<TDefinition>`：
@@ -138,6 +140,8 @@ Library/AssetDatabase/
 ```
 
 Catalog 保存 path/ID index、状态、diagnostics、fingerprint、current/last artifact、stable type、dependency graph 和 tombstone。每次 commit 先写 journal，再原子替换 snapshot；启动时优先恢复完整 journal，损坏或不完整尾部不会让 host 崩溃。
+
+Catalog load/commit 持续失败时由 `Asset Catalog` Diagnostic 表示当前降级状态，同时把第一次完整异常写入 Log；下一次成功 commit 会清除 Diagnostic。Aggregate Build 采用独立的 `Asset Build` target group，Build Processor 再次成功且不再返回 warning 后会清除原报告。
 
 ### Source change detection
 

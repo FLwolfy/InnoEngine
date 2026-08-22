@@ -42,6 +42,8 @@ Workspace 只使用 `editor.ini` 中当前的具名可读 section。运行时不
 
 主窗口请求关闭后，`EditorHost` 会在停止 Module、卸载 Scene 和销毁 ImGui context 之前强制执行一次项目保存。顺序固定为：捕获全部 Workspace provider → 捕获最新 ImGui layout → flush 并原子替换 `editor.ini`。即使运行期间的两秒节流尚未到期，正常退出也不会丢失最后一次打开的 Scene setup。
 
+`editor.ini` 写入失败会发布 `Project State Persistence` Diagnostic 并记录一次完整 Log。EditorLayer 以一秒间隔继续尝试，即使 ImGui layout 没有再次变化也不会遗留无法恢复的失败状态；成功保存后只清除 Diagnostic，历史 Log 保留。
+
 ## EditorLayer 边界
 
 `EditorLayer` 只持有 `PlatformImGuiContext` 与 `ImGuiEditorRuntime`。它把 Layer 的 Attach/LateUpdate/Detach 和按键事件转交给 Runtime，不知道 Scene、Asset、Log、菜单或脚本编译状态。

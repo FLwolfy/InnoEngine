@@ -21,6 +21,7 @@
     <ProjectReference Include="..\Panels\Inno.Editor.Panel.Logging\Inno.Editor.Panel.Logging.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Panels\Inno.Editor.Panel.Stats\Inno.Editor.Panel.Stats.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Diagnose\Inno.Core.Diagnose.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Framework\Inno.Core.Framework.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Events\Inno.Core.Events.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />

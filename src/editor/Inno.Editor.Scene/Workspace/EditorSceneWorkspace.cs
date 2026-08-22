@@ -32,6 +32,7 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
 
     private readonly Dictionary<Guid, SceneDocument> m_documents = [];
     private readonly ConcurrentQueue<AssetChange> m_sourceChanges = new();
+    private readonly EditorSceneDiagnosticPublisher m_diagnostics = new();
     private readonly EditorInteractions? m_interactions;
 
     private bool m_isAttached;
@@ -99,20 +100,26 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
             }
         }
 
+        var synchronizedScenes = new HashSet<Guid>();
         foreach (SceneDocument document in m_documents.Values)
         {
             if (document.scene.isDestroyed)
                 continue;
+            Guid sceneId = document.scene.identity.persistentId;
+            synchronizedScenes.Add(sceneId);
             try
             {
                 SynchronizeSource(document.scene, document);
+                m_diagnostics.ResolveSynchronization(sceneId);
             }
             catch (Exception exception)
             {
                 document.isDirty = true;
-                Log.Error("Scene document synchronization failed: {0}", exception);
+                if (m_diagnostics.PublishSynchronizationFailure(document.scene, exception))
+                    Log.Error("Scene document synchronization failed: {0}", exception);
             }
         }
+        m_diagnostics.RetainSynchronizationTargets(synchronizedScenes);
     }
 
     /// <summary>
@@ -265,7 +272,10 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
         Guid sceneId = scene.identity.persistentId;
         bool closed = SceneManager.UnloadScene(scene);
         if (closed)
+        {
             m_documents.Remove(sceneId);
+            m_diagnostics.ResolveSynchronization(sceneId);
+        }
         return closed;
     }
 
@@ -297,6 +307,7 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
     public void Clear()
     {
         m_documents.Clear();
+        m_diagnostics.RetainSynchronizationTargets(new HashSet<Guid>());
         while (m_sourceChanges.TryDequeue(out _))
         {
         }
@@ -330,6 +341,7 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
         if (paths.Length == 0)
         {
             m_pendingScenePaths = null;
+            m_diagnostics.ResolveRestore();
             return;
         }
         m_pendingScenePaths = paths
@@ -375,6 +387,7 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
         SceneManager.UnloadAllScenes();
         m_isAttached = false;
         Clear();
+        m_diagnostics.Dispose();
     }
 
     private void SaveSceneAtPath(GameScene scene, string relativePath)
@@ -523,6 +536,7 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
 
     private void OnAssetDatabaseChanged(AssetChangeSet changeSet)
     {
+        m_waitingTypeCatalogVersion = -1;
         for (int i = 0; i < changeSet.changes.Count; i++)
             m_sourceChanges.Enqueue(changeSet.changes[i]);
     }
@@ -530,7 +544,10 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
     private void TryRestorePendingScenes()
     {
         if (m_pendingScenePaths is null)
+        {
+            m_diagnostics.ResolveRestore();
             return;
+        }
         long typeCatalogVersion = TypeCacheManager.current.version;
         if (m_waitingTypeCatalogVersion == typeCatalogVersion)
             return;
@@ -573,18 +590,23 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
         {
             DisposeRestoreCandidates(candidates);
             m_waitingTypeCatalogVersion = typeCatalogVersion;
-            Log.Error(
-                "Editor scene workspace cannot restore saved scenes because {0} stable type id '{1}' " +
-                "is not present in the active type catalog.",
-                exception.elementKind,
-                exception.stableTypeId);
+            string message =
+                $"{exception.elementKind} stable type id '{exception.stableTypeId}' " +
+                "is not present in the active type catalog.";
+            if (m_diagnostics.PublishRestoreFailure("SCENE-TYPE", message))
+            {
+                Log.Error(
+                    "Editor scene workspace cannot restore saved scenes because {0}",
+                    message);
+            }
             return;
         }
         catch (Exception exception)
         {
             DisposeRestoreCandidates(candidates);
-            Log.Error("Editor scene workspace could not restore saved scenes: {0}", exception);
-            m_pendingScenePaths = null;
+            m_waitingTypeCatalogVersion = typeCatalogVersion;
+            if (m_diagnostics.PublishRestoreFailure("SCENE-RESTORE", exception.Message))
+                Log.Error("Editor scene workspace could not restore saved scenes: {0}", exception);
             return;
         }
         if (waitingForSourceIndex)
@@ -611,6 +633,7 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
             _ = m_interactions.For(m_interactions.focusedArea).Select();
         m_pendingScenePaths = null;
         m_waitingTypeCatalogVersion = -1;
+        m_diagnostics.ResolveRestore();
     }
 
     private static void DisposeRestoreCandidates(
@@ -676,7 +699,10 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
         Guid sceneId = scene.identity.persistentId;
         bool closed = SceneManager.UnloadScene(scene);
         if (closed)
+        {
             m_documents.Remove(sceneId);
+            m_diagnostics.ResolveSynchronization(sceneId);
+        }
         return closed;
     }
 

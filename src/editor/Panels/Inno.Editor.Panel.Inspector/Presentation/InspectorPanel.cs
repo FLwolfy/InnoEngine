@@ -17,6 +17,7 @@ public sealed class InspectorPanel : EditorPanel
 {
     private readonly SceneInspectionModule m_inspection;
     private readonly EditorInteractions m_interactions;
+    private string m_failureState = string.Empty;
 
     /// <summary>
     /// Creates the panel.
@@ -38,6 +39,7 @@ public sealed class InspectorPanel : EditorPanel
         object? target = m_interactions.selection.selectedTarget;
         if (target is null)
         {
+            m_failureState = string.Empty;
             EditorWidget.Hint("Select an asset or scene object.");
             return;
         }
@@ -48,13 +50,22 @@ public sealed class InspectorPanel : EditorPanel
             {
                 EditorWidget.Hint($"No inspector drawer is registered for {target.GetType().Name}.");
             }
+            m_failureState = string.Empty;
         }
         catch (Exception exception)
         {
             NativeImGui.TextColored(
                 EditorPalette.error,
                 $"Inspector failed: {exception.Message}");
-            Log.Error("Inspector failed for target '{0}': {1}", target.GetType().FullName ?? target.GetType().Name, exception);
+            string failureState = $"{target.GetType().FullName}:{exception}";
+            if (!string.Equals(m_failureState, failureState, StringComparison.Ordinal))
+            {
+                Log.Error(
+                    "Inspector failed for target '{0}': {1}",
+                    target.GetType().FullName ?? target.GetType().Name,
+                    exception);
+                m_failureState = failureState;
+            }
         }
     }
 }

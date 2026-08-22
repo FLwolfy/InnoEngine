@@ -18,6 +18,7 @@ internal sealed class EditorWorkspaceStore
     private const string C_PANELS_SECTION = "Panels";
 
     private readonly EditorProjectSettings m_settings;
+    private readonly EditorWorkspaceDiagnosticPublisher m_diagnostics = new();
     private readonly ConditionalWeakTable<object, RestoredProvider> m_restoredProviders = new();
     private double m_nextSaveTime;
     private bool m_isShutdownPrepared;
@@ -45,6 +46,7 @@ internal sealed class EditorWorkspaceStore
         IReadOnlyList<EditorExtensionCatalog.WorkspaceRegistration> providers,
         IReadOnlyList<EditorExtensionCatalog.PanelRegistration> panels)
     {
+        var failures = new List<(string Message, Exception Exception)>();
         for (int i = 0; i < providers.Count; i++)
         {
             IEditorWorkspaceState provider = providers[i].provider;
@@ -64,11 +66,15 @@ internal sealed class EditorWorkspaceStore
             }
             catch (Exception exception)
             {
-                Log.Error(
-                    "Editor workspace provider '{0}' failed to capture state: {1}",
-                    provider.workspaceStateId,
-                    exception);
+                failures.Add((
+                    $"Provider '{provider.workspaceStateId}' failed to capture state: {exception.Message}",
+                    exception));
             }
+        }
+        if (m_diagnostics.PublishCapture(failures.Select(static failure => failure.Message).ToArray()))
+        {
+            for (int i = 0; i < failures.Count; i++)
+                Log.Error("{0} Full exception: {1}", failures[i].Message, failures[i].Exception);
         }
 
         var panelValues = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -79,6 +85,7 @@ internal sealed class EditorWorkspaceStore
 
     internal void Restore(IReadOnlyList<EditorExtensionCatalog.WorkspaceRegistration> providers)
     {
+        var failures = new List<(string Message, Exception Exception)>();
         for (int i = 0; i < providers.Count; i++)
         {
             IEditorWorkspaceState provider = providers[i].provider;
@@ -97,18 +104,25 @@ internal sealed class EditorWorkspaceStore
             catch (Exception exception)
             {
                 _ = m_restoredProviders.Remove(provider);
-                Log.Error(
-                    "Editor workspace provider '{0}' failed to restore state: {1}",
-                    provider.workspaceStateId,
-                    exception);
+                failures.Add((
+                    $"Provider '{provider.workspaceStateId}' failed to restore state: {exception.Message}",
+                    exception));
             }
             finally
             {
                 state.isRestoring = false;
             }
         }
+        if (m_diagnostics.PublishRestore(failures.Select(static failure => failure.Message).ToArray()))
+        {
+            for (int i = 0; i < failures.Count; i++)
+                Log.Error("{0} Full exception: {1}", failures[i].Message, failures[i].Exception);
+        }
         SaveIfChanged();
     }
+
+    internal void ClearDiagnostics()
+        => m_diagnostics.Dispose();
 
     internal void Update(
         double elapsedSeconds,
@@ -168,10 +182,17 @@ internal sealed class EditorWorkspaceStore
         try
         {
             _ = m_settings.SaveIfChanged();
+            m_diagnostics.ResolveSave();
         }
         catch (Exception exception)
         {
-            Log.Error("Editor workspace state could not be saved to '{0}': {1}", m_settings.path, exception);
+            if (m_diagnostics.PublishSave(exception))
+            {
+                Log.Error(
+                    "Editor workspace state could not be saved to '{0}': {1}",
+                    m_settings.path,
+                    exception);
+            }
         }
     }
 

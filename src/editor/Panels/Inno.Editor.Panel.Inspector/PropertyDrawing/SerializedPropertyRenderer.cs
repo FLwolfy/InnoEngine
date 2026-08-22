@@ -18,7 +18,7 @@ namespace Inno.Editor.Panel.Inspector;
 /// </summary>
 public sealed class SerializedPropertyRenderer
 {
-    private readonly HashSet<string> m_loggedErrors = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> m_failureStates = new(StringComparer.Ordinal);
     private readonly PropertyDrawerRegistry m_drawers;
     private readonly EditorInteractions m_interactions;
     private readonly SceneEdits m_edits;
@@ -92,16 +92,19 @@ public sealed class SerializedPropertyRenderer
             {
                 IPropertyDrawer drawer = m_drawers.Resolve(propertyType);
                 EditorWidget.Disabled(context.isReadOnly, () => drawer.Draw(context));
+                m_failureStates.Remove(path);
             }
             catch (Exception exception)
             {
                 NativeImGui.TextColored(
                     EditorPalette.error,
                     $"Error: {exception.Message}");
-                string key = $"{path}|{exception.GetType().FullName}|{exception.Message}";
-                if (m_loggedErrors.Add(key))
+                string failureState = $"{exception.GetType().FullName}|{exception.Message}";
+                if (!m_failureStates.TryGetValue(path, out string? previous) ||
+                    !string.Equals(previous, failureState, StringComparison.Ordinal))
                 {
                     Log.Error("Inspector failed to draw property '{0}': {1}", path, exception);
+                    m_failureStates[path] = failureState;
                 }
             }
         });

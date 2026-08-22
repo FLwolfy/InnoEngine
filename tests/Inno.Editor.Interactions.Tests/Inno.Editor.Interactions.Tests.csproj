@@ -11,6 +11,7 @@
     <ProjectReference Include="..\..\src\assets\Inno.Assets\Inno.Assets.csproj" />
     <ProjectReference Include="..\..\src\assets\Inno.Assets.File\Inno.Assets.File.csproj" />
     <ProjectReference Include="..\..\src\core\Inno.Core.Identity\Inno.Core.Identity.csproj" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Diagnose\Inno.Core.Diagnose.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\src\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
     <ProjectReference Include="..\..\src\editor\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" />
     <ProjectReference Include="..\..\src\editor\Inno.Editor.Core\Inno.Editor.Core.csproj" />

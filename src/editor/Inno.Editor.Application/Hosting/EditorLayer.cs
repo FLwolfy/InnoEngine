@@ -16,8 +16,10 @@ internal sealed class EditorLayer : Layer
 {
     private readonly PlatformImGuiContext m_imgui;
     private readonly EditorContext m_context;
+    private readonly EditorProjectDiagnosticPublisher m_diagnostics = new();
     private readonly ImGuiEditorRuntime m_runtime;
     private bool m_isShutdownPrepared;
+    private double m_nextPersistenceRetryTime;
 
     internal EditorLayer(PlatformImGuiContext imgui, EditorContext context)
         : base("EditorLayer")
@@ -44,6 +46,7 @@ internal sealed class EditorLayer : Layer
     {
         PrepareShutdown();
         m_runtime.Dispose();
+        m_diagnostics.Dispose();
     }
 
     /// <inheritdoc />
@@ -65,23 +68,47 @@ internal sealed class EditorLayer : Layer
             m_runtime.PrepareShutdown();
             CaptureLayout(force: true);
             m_context.settings.Save();
+            m_diagnostics.ResolvePersistence();
             m_isShutdownPrepared = true;
             return true;
         }
         catch (Exception exception)
         {
-            Log.Error("Project editor state could not be saved to '{0}': {1}",
-                m_context.settings.path,
-                exception);
+            if (m_diagnostics.PublishPersistenceFailure(exception))
+            {
+                Log.Error("Project editor state could not be saved to '{0}': {1}",
+                    m_context.settings.path,
+                    exception);
+            }
             return false;
         }
     }
 
     private void SaveLayoutIfChanged()
     {
-        if (!CaptureLayout(force: false))
+        bool layoutChanged = CaptureLayout(force: false);
+        if (!layoutChanged &&
+            (!m_diagnostics.hasPersistenceFailure ||
+             m_context.frame.totalTime < m_nextPersistenceRetryTime))
+        {
             return;
-        _ = m_context.settings.SaveIfChanged();
+        }
+        try
+        {
+            _ = m_context.settings.SaveIfChanged();
+            m_diagnostics.ResolvePersistence();
+            m_nextPersistenceRetryTime = 0;
+        }
+        catch (Exception exception)
+        {
+            m_nextPersistenceRetryTime = m_context.frame.totalTime + 1.0;
+            if (m_diagnostics.PublishPersistenceFailure(exception))
+            {
+                Log.Error("Project editor state could not be saved to '{0}': {1}",
+                    m_context.settings.path,
+                    exception);
+            }
+        }
     }
 
     private bool CaptureLayout(bool force)

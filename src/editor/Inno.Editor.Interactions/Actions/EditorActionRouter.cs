@@ -13,6 +13,8 @@ internal sealed class EditorActionRouter(
     EditorInteractions interactions)
 {
     private readonly Queue<(string Action, EditorActionContext Context)> m_pending = [];
+    private readonly HashSet<string> m_presentationFailures = new(StringComparer.Ordinal);
+    private readonly HashSet<string> m_queryFailures = new(StringComparer.Ordinal);
 
     internal EditorActionState Query(string action, EditorActionContext context)
     {
@@ -21,11 +23,14 @@ internal sealed class EditorActionRouter(
             return EditorActionState.hidden;
         try
         {
-            return registration.action.QueryInternal(context);
+            EditorActionState state = registration.action.QueryInternal(context);
+            m_queryFailures.Remove(action);
+            return state;
         }
         catch (Exception exception)
         {
-            Log.Error("Editor action '{0}' query failed: {1}", action, exception);
+            if (m_queryFailures.Add(action))
+                Log.Error("Editor action '{0}' query failed: {1}", action, exception);
             return EditorActionState.disabled;
         }
     }
@@ -57,12 +62,15 @@ internal sealed class EditorActionRouter(
             return false;
         try
         {
-            return registration.action.PresentInternal(context);
+            bool presented = registration.action.PresentInternal(context);
+            m_presentationFailures.Remove(action);
+            return presented;
         }
         catch (Exception exception)
         {
             registration.action.CancelInternal();
-            Log.Error("Editor action '{0}' presentation failed: {1}", action, exception);
+            if (m_presentationFailures.Add(action))
+                Log.Error("Editor action '{0}' presentation failed: {1}", action, exception);
             return false;
         }
     }
@@ -89,6 +97,8 @@ internal sealed class EditorActionRouter(
     internal void Clear()
     {
         m_pending.Clear();
+        m_presentationFailures.Clear();
+        m_queryFailures.Clear();
         foreach (EditorExtensionCatalog.ActionRegistration registration in catalog.extensions.actions)
             registration.action.CancelInternal();
     }

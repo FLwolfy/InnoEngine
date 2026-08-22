@@ -129,6 +129,8 @@ FileBrowser List 使用 `AssetFileEntry.nameWithoutExtension` 显示名字，Gri
 
 平台若只报告 delete+create，Loader 会在提交删除前按缺失 record 和 fingerprint 做唯一匹配。存在歧义时不会猜测：新 source 获得新 ID，旧 ID 各自进入 tombstone，并在新记录上保留明确 diagnostic。
 
+Watcher 增量刷新失败时会立即尝试 full rescan。第一次失败和 recovery 失败都是需要保留的 Log 事件；只有两条路径都失败、Source Database 仍处于不一致状态时才发布 `Asset Source Database` Diagnostic。后续任一成功 refresh/rescan 会自动清除该状态。
+
 FileBrowser 的 New Folder、Rename 和 Delete 全部调用 AssetManager 的事务 API。`Move` 会暂停 watcher、提交单一 `Moved` change，然后恢复 watcher；目标 source 或 `.imeta` 已存在时明确失败，不进行覆盖。
 
 ### delete/recovery

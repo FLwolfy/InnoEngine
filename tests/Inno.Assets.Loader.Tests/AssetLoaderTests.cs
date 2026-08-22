@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
@@ -10,6 +11,7 @@ using Inno.Assets.Core;
 using Inno.Assets.Loader;
 using Inno.Assets.Types;
 using Inno.Core.Assemblies;
+using Inno.Core.Diagnose;
 using Inno.Core.Identity;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
@@ -490,6 +492,40 @@ public sealed class AssetLoaderTests : IDisposable
     }
 
     [Fact]
+    public void FailedReimport_PublishesCurrentDiagnosticUntilSuccessfulRetry()
+    {
+        using TestWorkspace workspace = new();
+        workspace.WriteText("Data/diagnostic.mutableasset", "valid");
+        using var loader = workspace.CreateLoader();
+        var sink = new TestDiagnosticSink();
+        DiagnosticManager.RegisterSink(sink);
+        try
+        {
+            MutableAsset asset = Assert.IsType<MutableAsset>(
+                loader.Load("Data/diagnostic.mutableasset", typeof(MutableAsset)));
+            workspace.WriteText("Data/diagnostic.mutableasset", "!invalid!");
+
+            Assert.False(loader.Import("Data/diagnostic.mutableasset"));
+            DiagnosticReport report = Assert.Single(sink.reports.Values.Where(value =>
+                value.source.displayName == "Data/diagnostic.mutableasset"));
+            Diagnostic diagnostic = Assert.Single(report.diagnostics);
+            Assert.Equal("ASSET-IMPORT", diagnostic.code);
+            Assert.Equal(DiagnosticSeverity.Error, diagnostic.severity);
+
+            workspace.WriteText("Data/diagnostic.mutableasset", "recovered");
+            Assert.True(loader.Import("Data/diagnostic.mutableasset"));
+            Assert.DoesNotContain(
+                sink.reports.Values,
+                value => value.source.displayName == "Data/diagnostic.mutableasset");
+            Assert.Equal("recovered", asset.value);
+        }
+        finally
+        {
+            DiagnosticManager.UnregisterSink(sink);
+        }
+    }
+
+    [Fact]
     public void FailedSave_PreservesCommittedSourceMetaArtifactAndVersion()
     {
         using TestWorkspace workspace = new();
@@ -733,6 +769,17 @@ public sealed class AssetLoaderTests : IDisposable
             if (Directory.Exists(m_root))
                 Directory.Delete(m_root, recursive: true);
         }
+    }
+
+    private sealed class TestDiagnosticSink : IDiagnosticSink
+    {
+        internal Dictionary<string, DiagnosticReport> reports { get; } = new(StringComparer.Ordinal);
+
+        public void Replace(DiagnosticReport report)
+            => reports[report.source.id] = report;
+
+        public void Clear(DiagnosticSource source)
+            => reports.Remove(source.id);
     }
 }
 

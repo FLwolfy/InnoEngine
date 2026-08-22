@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 
 using Inno.Core.Assemblies;
+using Inno.Core.Diagnose;
 using Inno.Core.Reflection;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
@@ -34,6 +35,7 @@ public sealed class EditorRuntimeTests : IDisposable
         TestModule.workspaceValue = 0;
         TestModule.restoredWorkspaceValue = 0;
         TestModule.rebuildDuringRestore = false;
+        TestModule.captureFailure = false;
         TestPanel.attachCount = 0;
         TestPanel.detachCount = 0;
         TestPanel.firstAttachPrecededModuleStart = false;
@@ -354,6 +356,34 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void WorkspaceCaptureFailure_PublishesCurrentDiagnosticUntilRetrySucceeds()
+    {
+        var sink = new TestDiagnosticSink();
+        DiagnosticManager.RegisterSink(sink);
+        try
+        {
+            TestModule.captureFailure = true;
+            m_runtime.Update(new EditorFrame(0.016f, 3f, isFocused: true));
+
+            DiagnosticReport report = Assert.Single(sink.reports.Values.Where(static value =>
+                value.source.displayName == "Workspace Capture"));
+            Assert.Equal("WORKSPACE-CAPTURE", Assert.Single(report.diagnostics).code);
+
+            TestModule.captureFailure = false;
+            m_runtime.Update(new EditorFrame(0.016f, 6f, isFocused: true));
+
+            Assert.DoesNotContain(
+                sink.reports.Values,
+                static value => value.source.displayName == "Workspace Capture");
+        }
+        finally
+        {
+            TestModule.captureFailure = false;
+            DiagnosticManager.UnregisterSink(sink);
+        }
+    }
+
+    [Fact]
     public void UnifiedEditorIniPreservesLayoutAndWorkspaceSectionsTogether()
     {
         const string layout = "[Window][Hierarchy]\nPos=10,20\nSize=300,400";
@@ -404,6 +434,17 @@ public sealed class EditorRuntimeTests : IDisposable
         Assert.Contains("[InnoEditor][Module.tests.workspace]", document);
         Assert.Contains("value=91", document);
         Assert.False(TestModule.rebuildDuringRestore);
+    }
+
+    private sealed class TestDiagnosticSink : IDiagnosticSink
+    {
+        internal Dictionary<string, DiagnosticReport> reports { get; } = new(StringComparer.Ordinal);
+
+        public void Replace(DiagnosticReport report)
+            => reports[report.source.id] = report;
+
+        public void Clear(DiagnosticSource source)
+            => reports.Remove(source.id);
     }
 }
 
@@ -485,12 +526,17 @@ public sealed class TestModule : EditorModule, IEditorWorkspaceState
     public static int workspaceValue;
     public static int restoredWorkspaceValue;
     public static bool rebuildDuringRestore;
+    public static bool captureFailure;
 
     public string workspaceStateId => "tests.workspace";
 
 
     public void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
-        => writer.Set("value", workspaceValue);
+    {
+        if (captureFailure)
+            throw new InvalidOperationException("The test workspace cannot be captured.");
+        writer.Set("value", workspaceValue);
+    }
 
     public void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
     {

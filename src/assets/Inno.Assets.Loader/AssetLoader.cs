@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using Inno.Assets.Core;
 using Inno.Assets.File;
 using Inno.Core.Identity;
+using Inno.Core.Logging;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 using Inno.Core.Storage;
@@ -47,6 +48,7 @@ public sealed class AssetLoader : IDisposable
     private readonly Dictionary<string, Guid> m_pendingImportIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly AssetArtifactStore m_artifacts;
     private readonly AssetCatalogStore m_catalog;
+    private readonly AssetDiagnosticPublisher m_diagnostics = new();
     private readonly AssetSourcePolicy m_sourcePolicy;
 
     private bool m_disposed;
@@ -334,20 +336,35 @@ public sealed class AssetLoader : IDisposable
     {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(inputs);
+        Guid targetId = definition.identity.persistentId;
+        string displayName = string.IsNullOrWhiteSpace(definition.sourcePath)
+            ? definition.GetType().Name
+            : definition.sourcePath;
         AssetArtifactKey key = Execute(() =>
         {
-            AssetBuildProcessor processor = m_buildProcessors.Find(definition.GetType())
-                ?? throw new InvalidOperationException(
-                    $"No asset build processor accepts '{definition.GetType().FullName}'.");
-            var output = new AssetArtifactWriter();
-            processor.BuildInternalAsync(definition, inputs, output, cancellationToken)
-                .AsTask()
-                .GetAwaiter()
-                .GetResult();
-            if (output.outputs.Count == 0)
-                throw new InvalidOperationException("An asset build processor produced no outputs.");
-            string fingerprint = CreateBuildFingerprint(processor, definition, inputs);
-            return m_artifacts.Commit(fingerprint, output.outputs);
+            try
+            {
+                AssetBuildProcessor processor = m_buildProcessors.Find(definition.GetType())
+                    ?? throw new InvalidOperationException(
+                        $"No asset build processor accepts '{definition.GetType().FullName}'.");
+                var output = new AssetArtifactWriter();
+                processor.BuildInternalAsync(definition, inputs, output, cancellationToken)
+                    .AsTask()
+                    .GetAwaiter()
+                    .GetResult();
+                if (output.outputs.Count == 0)
+                    throw new InvalidOperationException("An asset build processor produced no outputs.");
+                string fingerprint = CreateBuildFingerprint(processor, definition, inputs);
+                AssetArtifactKey result = m_artifacts.Commit(fingerprint, output.outputs);
+                m_diagnostics.PublishBuild(targetId, displayName, output.diagnostics);
+                return result;
+            }
+            catch (Exception exception)
+            {
+                m_diagnostics.PublishBuildFailure(targetId, displayName, exception);
+                Log.Error("Asset build for '{0}' failed: {1}", displayName, exception);
+                throw;
+            }
         });
         return ValueTask.FromResult(key);
     }
@@ -526,6 +543,7 @@ public sealed class AssetLoader : IDisposable
         AddOrReplaceRecordLocked(record);
         WriteSourceMeta(record.meta);
         CommitCatalogLocked();
+        Log.Error("Asset import for '{0}' failed: {1}", relativePath, exception);
     }
 
     private ImportBuild BuildImportLocked(
@@ -930,6 +948,7 @@ public sealed class AssetLoader : IDisposable
             loaded = LoadPathLocked(NormalizeRelativePath(lastKnownPath), expectedType);
         if (loaded is not null)
             return loaded;
+        m_diagnostics.PublishMissingReference(persistentId, lastKnownPath, expectedType);
         if (m_missingAssets.TryGetValue(persistentId, out WeakReference<AssetObject>? weak) &&
             weak.TryGetTarget(out AssetObject? existing) && expectedType.IsInstanceOfType(existing))
         {
@@ -1073,7 +1092,17 @@ public sealed class AssetLoader : IDisposable
 
     private void LoadCatalogLocked()
     {
-        AssetMeta[] catalogEntries = m_catalog.Load();
+        AssetMeta[] catalogEntries;
+        try
+        {
+            catalogEntries = m_catalog.Load();
+        }
+        catch (Exception exception)
+        {
+            if (m_diagnostics.PublishCatalogFailure(exception))
+                Log.Error("Asset catalog load failed: {0}", exception);
+            throw;
+        }
         for (int i = 0; i < catalogEntries.Length; i++)
             MergeCatalogMetaLocked(catalogEntries[i]);
 
@@ -1363,6 +1392,7 @@ public sealed class AssetLoader : IDisposable
         m_runtimeGraph.Clear();
         m_importGraph.Clear();
         m_missingAssets.Clear();
+        m_diagnostics.Dispose();
         m_importers.Dispose();
         m_buildProcessors.Dispose();
         lock (m_asyncSync)
@@ -1726,12 +1756,26 @@ public sealed class AssetLoader : IDisposable
     }
 
     private void CommitCatalogLocked()
-        => m_catalog.Commit(m_recordsById.Values
+    {
+        AssetMeta[] entries = m_recordsById.Values
             .Concat(m_recordsByPath.Values.Where(static record => record.persistentId == Guid.Empty))
             .Distinct()
             .Select(static record => record.meta)
             .OrderBy(static meta => meta.relativePath, StringComparer.OrdinalIgnoreCase)
-            .ToArray());
+            .ToArray();
+        try
+        {
+            m_catalog.Commit(entries);
+            m_diagnostics.ResolveCatalog();
+        }
+        catch (Exception exception)
+        {
+            if (m_diagnostics.PublishCatalogFailure(exception))
+                Log.Error("Asset catalog commit failed: {0}", exception);
+            throw;
+        }
+        m_diagnostics.SynchronizeImports(entries);
+    }
 
     private void MergeCatalogMetaLocked(AssetMeta meta)
     {

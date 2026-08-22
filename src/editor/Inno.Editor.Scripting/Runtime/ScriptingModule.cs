@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 
+using Inno.Core.Logging;
 using Inno.Editor.Core;
 
 namespace Inno.Editor.Scripting;
@@ -84,6 +85,7 @@ public sealed class ScriptingModule : EditorModule, IDisposable
         catch (Exception exception)
         {
             ScriptDiagnosticPublisher.PublishReloadFailure(exception);
+            Log.Error("Script assembly reload failed: {0}", exception);
         }
         finally
         {

@@ -17,6 +17,8 @@
 
 脚本编译使用 `Script Compiler` group，每次编译完成都通过 `Diagnostics.Set` 设置完整结果；下一次干净编译设置空集合后，旧 warning/error 自动消失。脚本 reload 使用独立的 `Script Reload` group，因此编译结果与状态迁移问题不会互相覆盖。普通 Log 仍一直保留到容量淘汰或用户点击 Clear。
 
+Console 还会实时显示 Asset Import/Build/Catalog、Asset Source Database、Scene Workspace、Editor Workspace、Panel Activation 和 Project Persistence 的当前报告。Diagnostic 恢复时对应卡片自动消失；同一失败首次出现时写入的异常 Log 不会随之删除。这使 Console 同时保留“现在需要处理什么”和“过去发生过什么”，但两者不会混成一条不可清理的历史流。
+
 每个折叠或展开的 Console card 都使用统一 Editor Action/Menu 系统提供右键菜单：
 
 - `Copy Message`：复制诊断 code 与消息正文。

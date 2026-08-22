@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using Inno.Core.Logging;
 
@@ -6,6 +7,7 @@ namespace Inno.Editor.Interactions;
 
 internal sealed class EditorDropRouter(EditorExtensionCatalog catalog)
 {
+    private readonly HashSet<string> m_queryFailures = new(StringComparer.Ordinal);
     private Guid m_token;
     private EditorDragData? m_data;
 
@@ -38,11 +40,16 @@ internal sealed class EditorDropRouter(EditorExtensionCatalog catalog)
             return EditorDropStatus.rejected;
         try
         {
-            return registration.drop.Query(context);
+            EditorDropStatus status = registration.drop.Query(context);
+            string dropName = registration.type.FullName ?? registration.type.Name;
+            m_queryFailures.Remove(dropName);
+            return status;
         }
         catch (Exception exception)
         {
-            Log.Error("Editor drop query failed: {0}", exception);
+            string dropName = registration.type.FullName ?? registration.type.Name;
+            if (m_queryFailures.Add(dropName))
+                Log.Error("Editor drop query failed: {0}", exception);
             return EditorDropStatus.rejected;
         }
     }
@@ -72,6 +79,7 @@ internal sealed class EditorDropRouter(EditorExtensionCatalog catalog)
     {
         m_token = Guid.Empty;
         m_data = null;
+        m_queryFailures.Clear();
     }
 
     private bool TryResolve(

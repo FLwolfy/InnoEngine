@@ -12,6 +12,7 @@ namespace Inno.Editor.Interactions;
 internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatalog.Snapshot>
 {
     private readonly EditorContext m_context;
+    private readonly EditorExtensionDiagnosticPublisher m_diagnostics = new();
     private readonly EditorInteractions m_interactions;
     private readonly EditorWorkspaceStore m_workspace;
     private readonly Dictionary<string, PanelState> m_panelStates = new(StringComparer.Ordinal);
@@ -69,6 +70,8 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         m_active = null;
         if (isInitialized)
             Clear();
+        m_diagnostics.Dispose();
+        m_workspace.ClearDiagnostics();
     }
 
     protected override Snapshot Build(TypeCacheSnapshot types)
@@ -191,19 +194,23 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         // retain these host instances instead of treating them as an abandoned candidate.
         m_active = snapshot;
         m_interactions.history.UpdateHandlers(CreateHistoryHandlerMap(snapshot.historyHandlers));
+        m_diagnostics.RetainPanels(new HashSet<string>(StringComparer.Ordinal));
         for (int i = 0; i < snapshot.panels.Length; i++)
         {
             PanelRegistration registration = snapshot.panels[i];
             try
             {
                 registration.panel.Attach(m_context);
+                m_diagnostics.ResolvePanel(registration.attribute.id);
             }
             catch (Exception exception)
             {
                 registration.panel.isOpen = false;
+                m_diagnostics.ReportPanelFailure(registration.attribute.id, exception);
                 Log.Error("Editor panel '{0}' failed to attach: {1}", registration.attribute.id, exception);
             }
         }
+        m_diagnostics.Commit();
         for (int i = 0; i < snapshot.modules.Length; i++)
             snapshot.modules[i].module.Start(m_context);
         m_workspace.Restore(snapshot.workspace);
@@ -228,6 +235,8 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         }
         if (ReferenceEquals(m_active, snapshot))
             m_active = null;
+        m_diagnostics.RetainPanels(new HashSet<string>(StringComparer.Ordinal));
+        m_diagnostics.Commit();
     }
 
     private void Transition(Snapshot previous, Snapshot next)
@@ -260,6 +269,12 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         // retain the newly active generation instead of reactivating the stopped snapshot.
         m_active = next;
         m_interactions.history.UpdateHandlers(CreateHistoryHandlerMap(next.historyHandlers));
+        var retainedPanelIds = new HashSet<string>(
+            next.panels
+                .Where(registration => existing.Contains(registration.panel))
+                .Select(static registration => registration.attribute.id),
+            StringComparer.Ordinal);
+        m_diagnostics.RetainPanels(retainedPanelIds);
         for (int i = 0; i < next.panels.Length; i++)
         {
             PanelRegistration registration = next.panels[i];
@@ -268,13 +283,16 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             try
             {
                 registration.panel.Attach(m_context);
+                m_diagnostics.ResolvePanel(registration.attribute.id);
             }
             catch (Exception exception)
             {
                 registration.panel.isOpen = false;
+                m_diagnostics.ReportPanelFailure(registration.attribute.id, exception);
                 Log.Error("Editor panel '{0}' failed to attach: {1}", registration.attribute.id, exception);
             }
         }
+        m_diagnostics.Commit();
         for (int i = 0; i < next.modules.Length; i++)
         {
             if (!existing.Contains(next.modules[i].module))
