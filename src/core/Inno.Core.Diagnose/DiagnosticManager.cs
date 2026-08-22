@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Inno.Core.Diagnostics;
+namespace Inno.Core.Diagnose;
 
 /// <summary>
 /// Coordinates the complete current diagnostic state published by independent producers.
@@ -46,16 +46,7 @@ public static class DiagnosticManager
         }
     }
 
-    /// <summary>
-    /// Atomically replaces the complete current diagnostics owned by one source.
-    /// </summary>
-    /// <param name="source">The independent producer that owns the diagnostics.</param>
-    /// <param name="diagnostics">
-    /// The complete current diagnostics. An empty collection clears the source's previous report.
-    /// </param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="source"/> is uninitialized.</exception>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="diagnostics"/> is <see langword="null"/>.</exception>
-    public static void Publish(DiagnosticSource source, IEnumerable<Diagnostic> diagnostics)
+    internal static void Set(DiagnosticSource source, IEnumerable<Diagnostic> diagnostics)
     {
         ValidateSource(source);
         ArgumentNullException.ThrowIfNull(diagnostics);
@@ -78,12 +69,7 @@ public static class DiagnosticManager
         }
     }
 
-    /// <summary>
-    /// Clears the current diagnostics owned by one source.
-    /// </summary>
-    /// <param name="source">The independent producer whose current diagnostics should be cleared.</param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="source"/> is uninitialized.</exception>
-    public static void Clear(DiagnosticSource source)
+    internal static void Clear(DiagnosticSource source)
     {
         ValidateSource(source);
         lock (SYNC)

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 
-using Inno.Core.Diagnostics;
+using Inno.Core.Diagnose;
 
 namespace Inno.Editor.Panel.Logging;
 

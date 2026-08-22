@@ -2,56 +2,50 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using Inno.Core.Diagnostics;
+using Inno.Core.Diagnose;
 using Inno.Engine.Scene.Assets;
 
 namespace Inno.Editor.Scripting;
 
 internal static class ScriptDiagnosticPublisher
 {
-    private static readonly DiagnosticSource COMPILER_SOURCE = new(
-        "editor.scripting.compiler",
-        "Script Compiler");
-    private static readonly DiagnosticSource RELOAD_SOURCE = new(
-        "editor.scripting.reload",
-        "Script Reload");
+    private const string C_COMPILER_DIAGNOSTICS = "Script Compiler";
+    private const string C_RELOAD_DIAGNOSTICS = "Script Reload";
 
     internal static void PublishCompilation(ScriptCompilationResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
-        DiagnosticManager.Publish(
-            COMPILER_SOURCE,
+        Diagnostics.Set(
+            C_COMPILER_DIAGNOSTICS,
             result.diagnostics.Select(CreateCompilationDiagnostic));
     }
 
     internal static void PublishReload(IReadOnlyList<SceneReloadDiagnostic> diagnostics)
     {
         ArgumentNullException.ThrowIfNull(diagnostics);
-        DiagnosticManager.Publish(
-            RELOAD_SOURCE,
-            diagnostics.Select(static diagnostic => new Diagnostic(
+        Diagnostics.Set(
+            C_RELOAD_DIAGNOSTICS,
+            diagnostics.Select(static diagnostic =>
                 diagnostic.severity == SceneReloadDiagnosticSeverity.Warning
-                    ? DiagnosticSeverity.Warning
-                    : DiagnosticSeverity.Error,
-                diagnostic.code,
-                diagnostic.message)));
+                    ? Diagnostic.Warning(diagnostic.code, diagnostic.message)
+                    : Diagnostic.Error(diagnostic.code, diagnostic.message)));
     }
 
     internal static void PublishReloadFailure(Exception exception)
     {
         ArgumentNullException.ThrowIfNull(exception);
-        DiagnosticManager.Publish(
-            RELOAD_SOURCE,
-            [new Diagnostic(DiagnosticSeverity.Error, "INNO-RELOAD", exception.ToString())]);
+        Diagnostics.Set(
+            C_RELOAD_DIAGNOSTICS,
+            Diagnostic.Error("INNO-RELOAD", exception.ToString()));
     }
 
     internal static void ClearReload()
-        => DiagnosticManager.Clear(RELOAD_SOURCE);
+        => Diagnostics.Clear(C_RELOAD_DIAGNOSTICS);
 
     internal static void ClearAll()
     {
-        DiagnosticManager.Clear(COMPILER_SOURCE);
-        DiagnosticManager.Clear(RELOAD_SOURCE);
+        Diagnostics.Clear(C_COMPILER_DIAGNOSTICS);
+        Diagnostics.Clear(C_RELOAD_DIAGNOSTICS);
     }
 
     private static Diagnostic CreateCompilationDiagnostic(ScriptDiagnostic diagnostic)
@@ -62,16 +56,24 @@ internal static class ScriptDiagnosticPublisher
                 diagnostic.filePath,
                 diagnostic.line,
                 diagnostic.column);
-        return new Diagnostic(
-            diagnostic.severity switch
-            {
-                ScriptDiagnosticSeverity.Info => DiagnosticSeverity.Info,
-                ScriptDiagnosticSeverity.Warning => DiagnosticSeverity.Warning,
-                ScriptDiagnosticSeverity.Error => DiagnosticSeverity.Error,
-                _ => DiagnosticSeverity.Error
-            },
-            diagnostic.id,
-            diagnostic.message,
-            location);
+        return diagnostic.severity switch
+        {
+            ScriptDiagnosticSeverity.Info => Diagnostic.Info(
+                diagnostic.id,
+                diagnostic.message,
+                location),
+            ScriptDiagnosticSeverity.Warning => Diagnostic.Warning(
+                diagnostic.id,
+                diagnostic.message,
+                location),
+            ScriptDiagnosticSeverity.Error => Diagnostic.Error(
+                diagnostic.id,
+                diagnostic.message,
+                location),
+            _ => Diagnostic.Error(
+                diagnostic.id,
+                diagnostic.message,
+                location)
+        };
     }
 }

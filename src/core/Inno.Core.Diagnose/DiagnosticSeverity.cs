@@ -1,4 +1,4 @@
-namespace Inno.Core.Diagnostics;
+namespace Inno.Core.Diagnose;
 
 /// <summary>
 /// Defines the presentation severity of a diagnostic.

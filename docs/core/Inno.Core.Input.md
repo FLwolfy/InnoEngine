@@ -1,6 +1,6 @@
 # Inno.Core.Input
 
-[上一页：Identity](Inno.Core.Identity.md) · [Core 索引](README.md) · [下一页：Diagnostics](Inno.Core.Diagnostics.md)
+[上一页：Identity](Inno.Core.Identity.md) · [Core 索引](README.md) · [下一页：Diagnose](Inno.Core.Diagnose.md)
 
 Input 项目只定义跨平台输入语义枚举，不维护按键状态。状态采集由 Platform 层完成，事件传递参见 [Inno.Core.Events](Inno.Core.Events.md)。
 

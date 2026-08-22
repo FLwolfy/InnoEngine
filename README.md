@@ -266,9 +266,11 @@ Inno/
 │  │  │  │  └─ PathUtility.cs
 │  │  │  └─ Internals/
 │  │  │
-│  │  ├─ Inno.Core.Diagnostics/
-│  │  │  ├─ Inno.Core.Diagnostics.csproj
+│  │  ├─ Inno.Core.Diagnose/
+│  │  │  ├─ Inno.Core.Diagnose.csproj
 │  │  │  ├─ Diagnostic.cs
+│  │  │  ├─ DiagnosticCallerResolver.cs
+│  │  │  ├─ Diagnostics.cs
 │  │  │  ├─ DiagnosticLocation.cs
 │  │  │  ├─ DiagnosticManager.cs
 │  │  │  ├─ DiagnosticReport.cs

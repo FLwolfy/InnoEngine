@@ -1,6 +1,6 @@
 using System;
 
-namespace Inno.Core.Diagnostics;
+namespace Inno.Core.Diagnose;
 
 /// <summary>
 /// Identifies an optional source location associated with a diagnostic.

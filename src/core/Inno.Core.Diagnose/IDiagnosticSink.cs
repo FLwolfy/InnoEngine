@@ -1,4 +1,4 @@
-namespace Inno.Core.Diagnostics;
+namespace Inno.Core.Diagnose;
 
 /// <summary>
 /// Receives complete diagnostic-state changes from <see cref="DiagnosticManager"/>.

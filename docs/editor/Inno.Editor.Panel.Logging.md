@@ -1,8 +1,8 @@
 # Inno.Editor.Panel.Logging
 
-[Editor 索引](README.md) · [Core Logging](../core/Inno.Core.Logging.md) · [Core Diagnostics](../core/Inno.Core.Diagnostics.md) · [Stats](Inno.Editor.Panel.Stats.md)
+[Editor 索引](README.md) · [Core Logging](../core/Inno.Core.Logging.md) · [Core Diagnose](../core/Inno.Core.Diagnose.md) · [Stats](Inno.Editor.Panel.Stats.md)
 
-该项目同时订阅彼此独立的 `Inno.Core.Logging` 与 `Inno.Core.Diagnostics`，并把两种数据组合成统一的 Editor Console。目录和项目名使用 `Logging`，避免 `Log` 被 ignore 规则或输出目录约定误判。
+该项目同时订阅彼此独立的 `Inno.Core.Logging` 与 `Inno.Core.Diagnose`，并把两种数据组合成统一的 Editor Console。目录和项目名使用 `Logging`，避免 `Log` 被 ignore 规则或输出目录约定误判。
 
 ## 组成
 
@@ -15,7 +15,7 @@
 
 游戏脚本的 `InnoEngine.Logging.Log` 与 Editor Panel 消费的是同一 Core stream。生命周期日志只会在 Scene 真正执行 Runtime lifecycle 时产生；Edit Mode 中单纯切换 enabled 不会伪造 `OnEnable`/`OnDisable`。
 
-脚本编译使用 `editor.scripting.compiler` 诊断 source。每次编译完成都会显式发布完整结果：失败或带 warning 时显示当前结果；下一次干净编译发布空集合后，旧 warning/error 自动消失。脚本 reload 使用独立的 `editor.scripting.reload` source，因此编译结果与状态迁移问题不会互相覆盖。普通 Log 仍一直保留到容量淘汰或用户点击 Clear。
+脚本编译使用 `Script Compiler` group，每次编译完成都通过 `Diagnostics.Set` 设置完整结果；下一次干净编译设置空集合后，旧 warning/error 自动消失。脚本 reload 使用独立的 `Script Reload` group，因此编译结果与状态迁移问题不会互相覆盖。普通 Log 仍一直保留到容量淘汰或用户点击 Clear。
 
 每个折叠或展开的 Console card 都使用统一 Editor Action/Menu 系统提供右键菜单：
 

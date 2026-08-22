@@ -31,7 +31,7 @@ flowchart LR
 | [Inno.Core.Job](Inno.Core.Job.md) | `Inno.Core.Job` | 单线程/工作窃取任务系统和依赖句柄 |
 | [Inno.Core.Identity](Inno.Core.Identity.md) | `Inno.Core.Identity` | 运行时对象 ID、持久 ID 与注册表 |
 | [Inno.Core.Input](Inno.Core.Input.md) | `Inno.Core.Input` | 键盘、鼠标和光标枚举 |
-| [Inno.Core.Diagnostics](Inno.Core.Diagnostics.md) | `Inno.Core.Diagnostics` | Compiler/Importer/Validator 当前诊断、原子替换与订阅 |
+| [Inno.Core.Diagnose](Inno.Core.Diagnose.md) | `Inno.Core.Diagnose` | Compiler/Importer/Validator 当前诊断、原子替换与订阅 |
 | [Inno.Core.Logging](Inno.Core.Logging.md) | `Inno.Core.Logging` | 日志门面、日志项、Console/File Sink |
 | [Inno.Core.Mathematics](Inno.Core.Mathematics.md) | `Inno.Core.Mathematics` | 向量、矩阵、四元数、颜色和矩形 |
 | [Inno.Core.Storage](Inno.Core.Storage.md) | `Inno.Core.Storage` | 依赖图与可索引对象池 |

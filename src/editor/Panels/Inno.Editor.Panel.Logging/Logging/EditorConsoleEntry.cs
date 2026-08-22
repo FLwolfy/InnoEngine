@@ -1,6 +1,6 @@
 using System;
 
-using Inno.Core.Diagnostics;
+using Inno.Core.Diagnose;
 using Inno.Core.Logging;
 
 namespace Inno.Editor.Panel.Logging;

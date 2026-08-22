@@ -1,21 +1,13 @@
 using System;
 
-namespace Inno.Core.Diagnostics;
+namespace Inno.Core.Diagnose;
 
 /// <summary>
 /// Identifies one independent producer whose diagnostics replace its previous publication.
 /// </summary>
 public readonly struct DiagnosticSource : IEquatable<DiagnosticSource>
 {
-    /// <summary>
-    /// Creates a diagnostic source.
-    /// </summary>
-    /// <param name="id">The stable machine-readable identifier used for replacement and clearing.</param>
-    /// <param name="displayName">The user-facing producer name displayed by diagnostic tools.</param>
-    /// <exception cref="ArgumentException">
-    /// Thrown when <paramref name="id"/> or <paramref name="displayName"/> is empty or contains only whitespace.
-    /// </exception>
-    public DiagnosticSource(string id, string displayName)
+    internal DiagnosticSource(string id, string displayName)
     {
         if (string.IsNullOrWhiteSpace(id))
             throw new ArgumentException("A diagnostic source identifier is required.", nameof(id));

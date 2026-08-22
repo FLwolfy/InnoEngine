@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Inno.Core.Diagnostics;
+namespace Inno.Core.Diagnose;
 
 /// <summary>
 /// Represents the complete current diagnostic state published by one source.

@@ -212,9 +212,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.Logging",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.Stats", "src\editor\Panels\Inno.Editor.Panel.Stats\Inno.Editor.Panel.Stats.csproj", "{8677F56B-728D-41F3-8C7B-5FB20E498644}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Diagnostics", "src\core\Inno.Core.Diagnostics\Inno.Core.Diagnostics.csproj", "{BCD6D972-4E61-4C3B-91FE-528137C3857B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Diagnose", "src\core\Inno.Core.Diagnose\Inno.Core.Diagnose.csproj", "{BCD6D972-4E61-4C3B-91FE-528137C3857B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Diagnostics.Tests", "tests\Inno.Core.Diagnostics.Tests\Inno.Core.Diagnostics.Tests.csproj", "{9140007C-2964-4D7C-8394-2E2D8FD2513C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Diagnose.Tests", "tests\Inno.Core.Diagnose.Tests\Inno.Core.Diagnose.Tests.csproj", "{9140007C-2964-4D7C-8394-2E2D8FD2513C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
