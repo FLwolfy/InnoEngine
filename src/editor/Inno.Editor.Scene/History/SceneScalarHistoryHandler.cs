@@ -58,7 +58,7 @@ internal sealed class SceneScalarHistoryHandler : EditorHistoryHandler
                     ((GameObject)target).tag = value;
                     break;
                 case SceneScalarKind.GameObjectLayer:
-                    ((GameObject)target).layer = new Layer(
+                    ((GameObject)target).layer = new GameLayer(
                         int.Parse(value, System.Globalization.CultureInfo.InvariantCulture));
                     break;
                 default:

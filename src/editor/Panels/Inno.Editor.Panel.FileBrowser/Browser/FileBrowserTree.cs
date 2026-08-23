@@ -123,6 +123,8 @@ internal sealed class FileBrowserTree
                     treeEntry.relativePath,
                     FileBrowserPresentation.Tree);
                 m_dragDrop.DrawAssetSource(context, treeEntry);
+                if (treeEntry.isDirectory)
+                    m_dragDrop.DrawDirectoryTarget(context, treeEntry.relativePath);
             }
         }
         else if (isRoot)
@@ -132,6 +134,7 @@ internal sealed class FileBrowserTree
                 "##asset_tree_root_context",
                 string.Empty,
                 FileBrowserPresentation.Tree);
+            m_dragDrop.DrawDirectoryTarget(context, string.Empty);
         }
         if (!result.isOpen)
             return;

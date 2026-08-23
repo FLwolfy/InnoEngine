@@ -13,10 +13,10 @@ public readonly record struct HotKeyGesture
         : KeyModifier.Control;
 
     /// <summary>
-    /// Creates a keyboard gesture with an exact set of modifier keys.
+    /// Creates a keyboard gesture with an exact set of modifier keys after symbolic-key normalization.
     /// </summary>
     /// <param name="key">The non-modifier key in the gesture.</param>
-    /// <param name="modifiers">The exact modifier keys required by the gesture.</param>
+    /// <param name="modifiers">The modifier keys required by the gesture.</param>
     public HotKeyGesture(KeyCode key, KeyModifier modifiers = KeyModifier.None)
     {
         this.key = key;
@@ -57,13 +57,25 @@ public readonly record struct HotKeyGesture
     }
 
     /// <summary>
-    /// Returns whether a non-repeating key event exactly matches this gesture.
+    /// Returns whether a non-repeating key event matches this gesture after normalizing
+    /// the physical Shift used to type a symbolic Plus key.
     /// </summary>
     /// <param name="keyEvent">The keyboard event to compare.</param>
     /// <returns><see langword="true"/> when the key and normalized modifiers match; otherwise, <see langword="false"/>.</returns>
     public bool Matches(KeyPressedEvent keyEvent)
-        => !keyEvent.repeat && keyEvent.key == key && Normalize(keyEvent.modifiers) == Normalize(modifiers);
+        => !keyEvent.repeat &&
+           keyEvent.key == key &&
+           Normalize(key, keyEvent.modifiers) == Normalize(key, modifiers);
 
-    private static KeyModifier Normalize(KeyModifier value)
-        => value & (KeyModifier.Alt | KeyModifier.Control | KeyModifier.Shift | KeyModifier.Super);
+    private static KeyModifier Normalize(KeyCode key, KeyModifier value)
+    {
+        KeyModifier normalized = value &
+                                 (KeyModifier.Alt |
+                                  KeyModifier.Control |
+                                  KeyModifier.Shift |
+                                  KeyModifier.Super);
+        return key == KeyCode.Plus
+            ? normalized & ~KeyModifier.Shift
+            : normalized;
+    }
 }

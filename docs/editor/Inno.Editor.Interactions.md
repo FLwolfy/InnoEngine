@@ -276,6 +276,7 @@ openScenes=["Scenes/Main.iscene","Scenes/UI.iscene"]
 [InnoEditor][Panel.asset-browser-panel]
 filter=""
 viewMode="List"
+treePaneRatio=0.5
 listNameSeparator=0.4
 listTypeSeparator=0.7
 

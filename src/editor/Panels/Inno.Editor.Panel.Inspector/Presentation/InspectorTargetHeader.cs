@@ -36,12 +36,14 @@ internal sealed class InspectorTargetHeader
     {
         ArgumentNullException.ThrowIfNull(drawer);
         ArgumentNullException.ThrowIfNull(context);
-        Vector2 origin = NativeImGui.GetCursorScreenPos();
-        Vector2 windowPadding = NativeImGui.GetStyle().WindowPadding;
-        float left = origin.X - windowPadding.X;
-        float right = origin.X + NativeImGui.GetContentRegionAvail().X + windowPadding.X;
-        float top = origin.Y - windowPadding.Y;
-        NativeImGui.SetCursorScreenPos(new Vector2(left, top));
+        ImGuiWindowPtr parentWindow = ImGuiP.GetCurrentWindow();
+        Vector2 contentCursor = NativeImGui.GetCursorScreenPos();
+        Vector2 parentPadding = parentWindow.WindowPadding;
+        Vector2 headerOrigin = contentCursor - parentPadding;
+        float width = MathF.Max(
+            1f,
+            NativeImGui.GetContentRegionAvail().X + parentPadding.X * 2f);
+        NativeImGui.SetCursorScreenPos(headerOrigin);
 
         NativeImGui.PushStyleColor(ImGuiCol.FrameBg, EditorPalette.inspectorTargetHeader);
         NativeImGui.PushStyleColor(ImGuiCol.Border, EditorPalette.inspectorTargetHeaderBorder);
@@ -56,7 +58,7 @@ internal sealed class InspectorTargetHeader
                                            ImGuiWindowFlags.NoSavedSettings;
             if (NativeImGui.BeginChild(
                     "##inspector_target_header",
-                    new Vector2(MathF.Max(1f, right - left), 0f),
+                    new Vector2(width, 0f),
                     childFlags,
                     windowFlags))
             {
@@ -69,9 +71,9 @@ internal sealed class InspectorTargetHeader
             NativeImGui.PopStyleVar(3);
             NativeImGui.PopStyleColor(2);
         }
-
-        float nextY = NativeImGui.GetCursorScreenPos().Y;
-        NativeImGui.SetCursorScreenPos(new Vector2(origin.X, nextY));
+        NativeImGui.SetCursorScreenPos(new Vector2(
+            contentCursor.X,
+            NativeImGui.GetCursorScreenPos().Y));
     }
 
     private void DrawContent(IInspectionDrawer drawer, InspectionDrawContext context)
@@ -125,17 +127,17 @@ internal sealed class InspectorTargetHeader
         }
         else
         {
+            NativeImGui.AlignTextToFramePadding();
             Vector2 textOrigin = NativeImGui.GetCursorScreenPos();
             ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
             drawList.PushClipRect(
                 textOrigin,
                 textOrigin + new Vector2(nameWidth, rowHeight),
                 true);
-            NativeImGui.AlignTextToFramePadding();
-            NativeImGui.TextUnformatted(name);
+            drawList.AddText(textOrigin, NativeImGui.GetColorU32(ImGuiCol.Text), name);
             drawList.PopClipRect();
-            NativeImGui.SetCursorScreenPos(
-                textOrigin + new Vector2(nameWidth + itemSpacing, 0f));
+            NativeImGui.Dummy(new Vector2(nameWidth, rowHeight));
+            NativeImGui.SameLine(0f, itemSpacing);
         }
 
         string lockIcon = m_lock.isLocked ? ImGuiIcon.Lock : ImGuiIcon.LockOpen;

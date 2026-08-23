@@ -77,10 +77,8 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
         NativeImGui.TextUnformatted("Active");
         NativeImGui.SameLine(0f, EditorWidget.style.inspectorHeaderSectionSpacing);
         float available = NativeImGui.GetContentRegionAvail().X;
-        float tagLabelWidth = NativeImGui.CalcTextSize("Tag").X +
-                              EditorWidget.style.inspectorHeaderControlSpacing;
-        float layerLabelWidth = NativeImGui.CalcTextSize("Layer").X +
-                                EditorWidget.style.inspectorHeaderControlSpacing;
+        float tagLabelWidth = EditorWidget.GetLabelChipSize("Tag").X;
+        float layerLabelWidth = EditorWidget.GetLabelChipSize("Layer").X;
         float controlWidth = MathF.Max(
             1f,
             (available - tagLabelWidth - layerLabelWidth -
@@ -97,6 +95,16 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
             _ = context.interactions.For(context.interactions.focusedArea).Select();
             NativeImGui.TextUnformatted("Selected GameObject is not available in the active scene.");
             return;
+        }
+
+        if (!m_layerSelector.IsLayerDefined(gameObject.layer))
+        {
+            NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.error);
+            ImGuiWidget.WrappedText(
+                $"Layer slot {gameObject.layer.index} is not defined in the current project settings. " +
+                "Choose Default or restore that layer definition.");
+            NativeImGui.PopStyleColor();
+            NativeImGui.Spacing();
         }
 
         NativeImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, EditorWidget.style.compactItemSpacing);

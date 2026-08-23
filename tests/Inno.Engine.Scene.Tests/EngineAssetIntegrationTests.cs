@@ -251,8 +251,8 @@ public sealed class EngineAssetIntegrationTests : IDisposable
     public void GameLayerSettingsAsset_SaveLoadAndReimport_PreservesDefinitionsAndInteractions()
     {
         GameLayerSettingsAsset created = GameLayerSettingsAsset.CreateDefault();
-        var player = new Layer(1);
-        var enemy = new Layer(2);
+        var player = new GameLayer(1);
+        var enemy = new GameLayer(2);
         created.layerStack.Define(player, "Player");
         created.layerStack.Define(enemy, "Enemy");
         created.layerStack.SetInteraction(player, enemy, canInteract: false);

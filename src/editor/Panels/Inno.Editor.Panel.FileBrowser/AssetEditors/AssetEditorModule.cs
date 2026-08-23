@@ -146,6 +146,73 @@ public sealed class AssetEditorModule : EditorModule,
                 EditorHistoryPayload.FromBytes(data.Encode())));
     }
 
+    /// <summary>
+    /// Determines whether an asset source can move into a target directory without conflicts.
+    /// </summary>
+    /// <param name="sourcePath">The current source-relative asset path.</param>
+    /// <param name="targetDirectory">The destination source-relative directory, or an empty string for the root.</param>
+    /// <returns><see langword="true"/> when the requested move is valid.</returns>
+    internal bool CanMoveToDirectory(string sourcePath, string targetDirectory)
+        => TryPrepareMove(
+            sourcePath,
+            targetDirectory,
+            validateEditor: true,
+            out _,
+            out _,
+            out _);
+
+    /// <summary>
+    /// Moves an asset into a directory and records the committed path transaction in Editor history.
+    /// </summary>
+    /// <param name="sourcePath">The current source-relative asset path.</param>
+    /// <param name="targetDirectory">The destination source-relative directory, or an empty string for the root.</param>
+    /// <param name="history">The active history that receives the committed move.</param>
+    /// <returns>The source entry at its committed destination path.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="history"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when validation or the Asset transaction fails.</exception>
+    internal AssetFileEntry MoveToDirectoryWithHistory(
+        string sourcePath,
+        string targetDirectory,
+        EditorHistory history)
+    {
+        ArgumentNullException.ThrowIfNull(history);
+        if (!TryPrepareMove(
+                sourcePath,
+                targetDirectory,
+                validateEditor: true,
+                out AssetEditorContext? context,
+                out AssetEditor? editor,
+                out string targetPath) ||
+            context is null ||
+            editor is null)
+        {
+            throw new InvalidOperationException(
+                $"Asset '{sourcePath}' cannot be moved to '{targetDirectory}'.");
+        }
+
+        string normalizedSource = Normalize(sourcePath);
+        EditorHistoryResult result = MoveAsset(editor, context, normalizedSource, targetPath);
+        if (!result.succeeded)
+            throw new InvalidOperationException(result.message);
+
+        var data = new AssetHistoryData(
+            AssetHistoryOperationKind.Move,
+            normalizedSource,
+            targetPath,
+            context.isDirectory,
+            archive: []);
+        history.RecordApplied(
+            "Move Asset",
+            new EditorHistoryChange(
+                AssetHistoryKinds.SourceOperation,
+                EditorHistoryPayload.FromBytes(data.Encode())));
+
+        return AssetManager.TryGetFileSystemEntry(targetPath, out AssetFileEntry moved)
+            ? moved
+            : throw new InvalidOperationException(
+                $"Moved asset '{targetPath}' is unavailable after the transaction.");
+    }
+
     internal bool Delete(AssetEditorContext context)
     {
         AssetEditor editor = m_editors.Resolve(context.assetType);
@@ -309,6 +376,53 @@ public sealed class AssetEditorModule : EditorModule,
         return validateEditor
             ? editor.ValidateRename(context, targetPath)
             : AssetOperationValidation.valid;
+    }
+
+    private bool TryPrepareMove(
+        string sourcePath,
+        string targetDirectory,
+        bool validateEditor,
+        out AssetEditorContext? context,
+        out AssetEditor? editor,
+        out string targetPath)
+    {
+        context = null;
+        editor = null;
+        targetPath = string.Empty;
+        string source = Normalize(sourcePath);
+        string directory = Normalize(targetDirectory);
+        EditorContext? editorContext = m_context;
+        if (editorContext is null ||
+            string.IsNullOrEmpty(source) ||
+            !TryCreateContext(editorContext, source, out context) ||
+            context is null)
+        {
+            return false;
+        }
+        if (!string.IsNullOrEmpty(directory) &&
+            (!AssetManager.TryGetFileSystemEntry(directory, out AssetFileEntry destination) ||
+             !destination.isDirectory))
+        {
+            return false;
+        }
+
+        string parent = Normalize(Path.GetDirectoryName(source));
+        if (string.Equals(parent, directory, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (context.isDirectory &&
+            (string.Equals(source, directory, StringComparison.OrdinalIgnoreCase) ||
+             directory.StartsWith(source + "/", StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        string name = Path.GetFileName(source);
+        targetPath = string.IsNullOrEmpty(directory) ? name : $"{directory}/{name}";
+        if (AssetManager.TryGetFileSystemEntry(targetPath, out _))
+            return false;
+
+        editor = m_editors.Resolve(context.assetType);
+        return !validateEditor || editor.ValidateRename(context, targetPath).isValid;
     }
 
     private static EditorHistoryResult MoveAsset(

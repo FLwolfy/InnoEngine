@@ -10,19 +10,19 @@ namespace Inno.Engine.Scene.Layers;
 /// Converts a layer identifier through its stable numeric slot.
 /// </summary>
 [SerializationExtension]
-internal sealed class LayerConverter : SerializationConverter<Layer>
+internal sealed class GameLayerConverter : SerializationConverter<GameLayer>
 {
     /// <inheritdoc />
-    public override void Write(SerializationWriter writer, Layer value)
+    public override void Write(SerializationWriter writer, GameLayer value)
     {
         ArgumentNullException.ThrowIfNull(writer);
         writer.Write("index", value.index);
     }
 
     /// <inheritdoc />
-    public override Layer Read(SerializationReader reader)
+    public override GameLayer Read(SerializationReader reader)
     {
         ArgumentNullException.ThrowIfNull(reader);
-        return new Layer(reader.Read<int>("index"));
+        return new GameLayer(reader.Read<int>("index"));
     }
 }

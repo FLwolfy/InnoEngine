@@ -19,9 +19,6 @@ public static partial class ImGuiWidget
     private static List<TreeWidgetNodeState> s_treeNodeStack => GetTreeWindowState().treeNodeStack;
     private static List<string> s_lastNodeIdsByDepth => GetTreeWindowState().lastNodeIdsByDepth;
     private static List<TreeWidgetLineSegment> s_lineSegments => GetTreeWindowState().lineSegments;
-    private static List<TreeWidgetLineSegment> s_previousLineSegments => GetTreeWindowState().previousLineSegments;
-    private static List<TreeWidgetLineSegment> s_normalizedLineSegments => GetTreeWindowState().normalizedLineSegments;
-    private static List<TreeWidgetLineSegment> s_mergedLineSegments => GetTreeWindowState().mergedLineSegments;
     private static List<TreeWidgetHighlightRect> s_highlightRects => GetTreeWindowState().highlightRects;
     private static List<TreeWidgetHighlightRect> s_previousHighlightRects => GetTreeWindowState().previousHighlightRects;
     private static Dictionary<string, bool> s_hasNextSiblingById => GetTreeWindowState().hasNextSiblingById;
@@ -67,8 +64,8 @@ public static partial class ImGuiWidget
         else
             flags |= ImGuiTreeNodeFlags.OpenOnArrow;
 
-        PruneTreeNodeStack(nodeCursor.X);
-        int depth = s_treeNodeStack.Count;
+        int depth = Math.Max(0, ImGuiP.GetCurrentWindow().DC.TreeDepth);
+        PruneTreeNodeStack(depth);
         bool hasNextSibling = TrackSiblingState(id, depth);
         DrawTreeGuideLines(nodeCursor, hasNextSibling, !isLeaf);
         PushTransparentTreeNodeHeaderColors();
@@ -83,6 +80,7 @@ public static partial class ImGuiWidget
             nodeCursor,
             nativeRowMaxY,
             onDraw,
+            options.drawViewportOverlay,
             out Vector2 interactionMin);
         bool hovered = !IsPopupBlockingInteraction() &&
                        NativeImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenOverlappedByItem);
@@ -144,15 +142,19 @@ public static partial class ImGuiWidget
         Vector2 nodeCursor,
         float nativeRowMaxY,
         Action onDraw,
+        Action? drawViewportOverlay,
         out Vector2 interactionMin)
     {
+        ImGuiWindowPtr window = ImGuiP.GetCurrentWindow();
         Vector2 windowPos = NativeImGui.GetWindowPos();
-        Vector2 windowSize = NativeImGui.GetWindowSize();
         float contentX = nodeCursor.X + NativeImGui.GetTreeNodeToLabelSpacing();
-        float contentRightX = windowPos.X + windowSize.X;
-        float contentBottomY = windowPos.Y + windowSize.Y;
+        float contentRightX = window.WorkRect.Max.X;
+        float contentBottomY = window.InnerRect.Max.Y;
+        float contentOffsetX = contentX - windowPos.X + window.Scroll.X -
+                               window.DC.GroupOffset.X -
+                               window.DC.ColumnsOffset.X;
 
-        NativeImGui.SameLine(contentX - windowPos.X, 0f);
+        NativeImGui.SameLine(contentOffsetX, 0f);
         NativeImGui.BeginGroup();
         NativeImGui.PushClipRect(new Vector2(contentX, nodeCursor.Y), new Vector2(contentRightX, contentBottomY), true);
         onDraw();
@@ -170,10 +172,29 @@ public static partial class ImGuiWidget
         Vector2 hitMin = new(contentX, rect.min.Y);
         Vector2 hitMax = rect.max;
         interactionMin = hitMin;
+        DrawTreeNodeViewportOverlay(window, drawViewportOverlay);
+        float contentBoundaryX = window.DC.CursorMaxPos.X;
+        float idealBoundaryX = window.DC.IdealMaxPos.X;
         NativeImGui.SetCursorScreenPos(hitMin);
         NativeImGui.SetNextItemAllowOverlap();
         _ = NativeImGui.InvisibleButton($"##tree_content_hit_{id}", hitMax - hitMin);
+        window.DC.CursorMaxPos.X = contentBoundaryX;
+        window.DC.IdealMaxPos.X = idealBoundaryX;
         return rect;
+    }
+
+    private static void DrawTreeNodeViewportOverlay(
+        ImGuiWindowPtr window,
+        Action? drawViewportOverlay)
+    {
+        if (drawViewportOverlay is null)
+            return;
+
+        float contentBoundaryX = window.DC.CursorMaxPos.X;
+        float idealBoundaryX = window.DC.IdealMaxPos.X;
+        drawViewportOverlay();
+        window.DC.CursorMaxPos.X = contentBoundaryX;
+        window.DC.IdealMaxPos.X = idealBoundaryX;
     }
 
     private static void PushTransparentTreeNodeHeaderColors()
@@ -189,31 +210,42 @@ public static partial class ImGuiWidget
         if (frame == s_lastFrame)
             return;
 
-        s_treeNodeStack.Clear();
-        s_lastNodeIdsByDepth.Clear();
-        s_previousLineSegments.Clear();
-        s_previousLineSegments.AddRange(s_lineSegments);
-        s_lineSegments.Clear();
-        s_previousHighlightRects.Clear();
-        s_previousHighlightRects.AddRange(s_highlightRects);
-        s_highlightRects.Clear();
+        TreeWidgetWindowState state = GetTreeWindowState();
+        Vector2 windowPosition = NativeImGui.GetWindowPos();
+        Vector2 windowSize = NativeImGui.GetWindowSize();
+        Vector2 scroll = new(NativeImGui.GetScrollX(), NativeImGui.GetScrollY());
+        bool canReusePreviousGeometry = state.lastFrame >= 0 &&
+                                        NearlyEqual(state.zoom, style.zoom) &&
+                                        NearlyEqual(state.windowPosition, windowPosition) &&
+                                        NearlyEqual(state.windowSize, windowSize);
+        float verticalScrollTranslation = state.scroll.Y - scroll.Y;
+
+        state.treeNodeStack.Clear();
+        state.lastNodeIdsByDepth.Clear();
+        state.lineSegments.Clear();
+        state.previousHighlightRects.Clear();
+        if (canReusePreviousGeometry)
+            CopyTranslatedTreeHighlights(state, verticalScrollTranslation);
+        state.highlightRects.Clear();
+        state.zoom = style.zoom;
+        state.windowPosition = windowPosition;
+        state.windowSize = windowSize;
+        state.scroll = scroll;
         DrawPreviousTreeHighlightRects();
-        DrawPreviousTreeGuideLines();
         s_lastFrame = frame;
     }
 
-    private static void DrawPreviousTreeGuideLines()
+    private static void CopyTranslatedTreeHighlights(
+        TreeWidgetWindowState state,
+        float verticalTranslation)
     {
-        if (s_previousLineSegments.Count == 0)
-            return;
-
-        MergeTreeLineSegments();
-        uint color = NativeImGui.ColorConvertFloat4ToU32(EditorPalette.treeGuide);
-        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
-        for (int i = 0; i < s_mergedLineSegments.Count; i++)
+        Vector2 translation = new(0f, verticalTranslation);
+        for (int i = 0; i < state.highlightRects.Count; i++)
         {
-            TreeWidgetLineSegment line = s_mergedLineSegments[i];
-            drawList.AddLine(line.from, line.to, color, style.borderSize);
+            TreeWidgetHighlightRect rect = state.highlightRects[i];
+            rect.min += translation;
+            rect.max += translation;
+            state.previousHighlightRects.Add(rect);
         }
     }
 
@@ -235,12 +267,17 @@ public static partial class ImGuiWidget
         }
     }
 
-    private static void PruneTreeNodeStack(float currentCursorX)
+    private static void PruneTreeNodeStack(int nativeDepth)
     {
-        const float epsilon = 0.5f;
-        while (s_treeNodeStack.Count > 0 && currentCursorX <= s_treeNodeStack[^1].cursor.X + epsilon)
+        while (s_treeNodeStack.Count > nativeDepth)
             s_treeNodeStack.RemoveAt(s_treeNodeStack.Count - 1);
     }
+
+    private static bool NearlyEqual(float left, float right)
+        => MathF.Abs(left - right) <= 0.01f;
+
+    private static bool NearlyEqual(Vector2 left, Vector2 right)
+        => NearlyEqual(left.X, right.X) && NearlyEqual(left.Y, right.Y);
 
     private static bool TrackSiblingState(string id, int depth)
     {
@@ -304,114 +341,22 @@ public static partial class ImGuiWidget
 
     private static void AddTreeLine(Vector2 from, Vector2 to)
     {
-        s_lineSegments.Add(new TreeWidgetLineSegment
+        TreeWidgetLineSegment line = new()
         {
-            from = from,
-            to = to
-        });
+            from = SnapTreeLinePoint(from),
+            to = SnapTreeLinePoint(to)
+        };
+        s_lineSegments.Add(line);
+        NativeImGui.GetWindowDrawList().AddLine(
+            line.from,
+            line.to,
+            NativeImGui.ColorConvertFloat4ToU32(EditorPalette.treeGuide),
+            style.borderSize);
     }
 
     private static Vector2 SnapTreeLinePoint(Vector2 point)
     {
         return new Vector2(MathF.Floor(point.X) + 0.5f, MathF.Floor(point.Y) + 0.5f);
-    }
-
-    private static void MergeTreeLineSegments()
-    {
-        s_normalizedLineSegments.Clear();
-        s_mergedLineSegments.Clear();
-        for (int i = 0; i < s_previousLineSegments.Count; i++)
-        {
-            TreeWidgetLineSegment line = s_previousLineSegments[i];
-            Vector2 from = SnapTreeLinePoint(line.from);
-            Vector2 to = SnapTreeLinePoint(line.to);
-            bool vertical = MathF.Abs(to.X - from.X) < MathF.Abs(to.Y - from.Y);
-            if ((vertical && from.Y > to.Y) || (!vertical && from.X > to.X))
-            {
-                (from, to) = (to, from);
-            }
-
-            s_normalizedLineSegments.Add(new TreeWidgetLineSegment
-            {
-                from = from,
-                to = to
-            });
-        }
-
-        s_normalizedLineSegments.Sort(CompareTreeLineSegments);
-        for (int i = 0; i < s_normalizedLineSegments.Count; i++)
-        {
-            TreeWidgetLineSegment current = s_normalizedLineSegments[i];
-            if (s_mergedLineSegments.Count > 0 &&
-                TryMergeTreeLineSegments(s_mergedLineSegments[^1], current, out TreeWidgetLineSegment merged))
-            {
-                s_mergedLineSegments[^1] = merged;
-                continue;
-            }
-
-            s_mergedLineSegments.Add(current);
-        }
-    }
-
-    private static int CompareTreeLineSegments(TreeWidgetLineSegment left, TreeWidgetLineSegment right)
-    {
-        bool leftVertical = IsVerticalTreeLine(left);
-        bool rightVertical = IsVerticalTreeLine(right);
-        int byOrientation = leftVertical.CompareTo(rightVertical);
-        if (byOrientation != 0)
-        {
-            return byOrientation;
-        }
-
-        int byAxis = leftVertical
-            ? left.from.X.CompareTo(right.from.X)
-            : left.from.Y.CompareTo(right.from.Y);
-        if (byAxis != 0)
-        {
-            return byAxis;
-        }
-
-        return leftVertical
-            ? left.from.Y.CompareTo(right.from.Y)
-            : left.from.X.CompareTo(right.from.X);
-    }
-
-    private static bool TryMergeTreeLineSegments(
-        TreeWidgetLineSegment left,
-        TreeWidgetLineSegment right,
-        out TreeWidgetLineSegment merged)
-    {
-        const float epsilon = 0.1f;
-        bool vertical = IsVerticalTreeLine(left);
-        bool sameAxis = vertical == IsVerticalTreeLine(right) &&
-            (vertical
-                ? MathF.Abs(left.from.X - right.from.X) <= epsilon
-                : MathF.Abs(left.from.Y - right.from.Y) <= epsilon);
-        bool touching = vertical
-            ? right.from.Y <= left.to.Y + epsilon
-            : right.from.X <= left.to.X + epsilon;
-        if (!sameAxis || !touching)
-        {
-            merged = default;
-            return false;
-        }
-
-        merged = left;
-        if (vertical)
-        {
-            merged.to.Y = MathF.Max(left.to.Y, right.to.Y);
-        }
-        else
-        {
-            merged.to.X = MathF.Max(left.to.X, right.to.X);
-        }
-
-        return true;
-    }
-
-    private static bool IsVerticalTreeLine(TreeWidgetLineSegment line)
-    {
-        return MathF.Abs(line.to.X - line.from.X) < MathF.Abs(line.to.Y - line.from.Y);
     }
 
     private static void AddTreeHighlightRect(TreeWidgetHighlightRect rect, bool selected)
@@ -449,6 +394,12 @@ public readonly struct TreeNodeOptions
 
     /// <summary>Gets whether the row keeps its configured background while hovered.</summary>
     public bool suppressHoverHighlight { get; init; }
+
+    /// <summary>
+    /// Gets the callback that draws controls fixed to the current viewport without extending the
+    /// tree's horizontal content boundary.
+    /// </summary>
+    public Action? drawViewportOverlay { get; init; }
 }
 
 /// <summary>Describes interaction state produced by a tree row.</summary>
@@ -499,14 +450,15 @@ internal sealed class TreeWidgetWindowState
     internal readonly List<TreeWidgetNodeState> treeNodeStack = [];
     internal readonly List<string> lastNodeIdsByDepth = [];
     internal readonly List<TreeWidgetLineSegment> lineSegments = [];
-    internal readonly List<TreeWidgetLineSegment> previousLineSegments = [];
-    internal readonly List<TreeWidgetLineSegment> normalizedLineSegments = [];
-    internal readonly List<TreeWidgetLineSegment> mergedLineSegments = [];
     internal readonly List<TreeWidgetHighlightRect> highlightRects = [];
     internal readonly List<TreeWidgetHighlightRect> previousHighlightRects = [];
     internal readonly Dictionary<string, bool> hasNextSiblingById = new(StringComparer.Ordinal);
     internal readonly Dictionary<string, bool> openStatesById = new(StringComparer.Ordinal);
     internal int lastFrame = -1;
+    internal float zoom = float.NaN;
+    internal Vector2 windowPosition;
+    internal Vector2 windowSize;
+    internal Vector2 scroll;
 }
 
 internal struct TreeWidgetNodeState

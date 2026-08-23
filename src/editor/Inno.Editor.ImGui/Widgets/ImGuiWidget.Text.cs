@@ -103,7 +103,32 @@ public static partial class ImGuiWidget
     /// Thrown when <paramref name="icon"/> is <see langword="null"/>.
     /// </exception>
     public static bool ClickableIcon(string id, string icon, string? tooltip = null)
-        => ClickableText(id, icon, GetCompactIconSize(), tooltip);
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentNullException.ThrowIfNull(icon);
+        Vector2 controlSize = GetCompactIconSize();
+        Vector2 cursor = NativeImGui.GetCursorScreenPos();
+        bool pressed = NativeImGui.InvisibleButton($"##clickable_icon_{id}", controlSize);
+        bool hovered = NativeImGui.IsItemHovered();
+        bool active = NativeImGui.IsItemActive();
+        uint color = hovered || active
+            ? NativeImGui.ColorConvertFloat4ToU32(EditorPalette.compactControlHovered)
+            : NativeImGui.GetColorU32(ImGuiCol.Text);
+        AddGlyphCentered(
+            NativeImGui.GetWindowDrawList(),
+            NativeImGui.GetFont(),
+            NativeImGui.GetFontSize(),
+            icon,
+            cursor + controlSize * 0.5f,
+            color);
+
+        if (!string.IsNullOrWhiteSpace(tooltip) && hovered && NativeImGui.BeginTooltip())
+        {
+            NativeImGui.TextUnformatted(tooltip);
+            NativeImGui.EndTooltip();
+        }
+        return pressed;
+    }
 
     /// <summary>
     /// Draws clickable text centered inside an explicitly sized transparent interaction area.
@@ -211,6 +236,28 @@ public static partial class ImGuiWidget
         finally
         {
             NativeImGui.PopStyleColor();
+        }
+    }
+
+    /// <summary>
+    /// Draws literal text wrapped to the remaining content width without using a native
+    /// variadic formatting entry point.
+    /// </summary>
+    /// <param name="text">The literal text to draw.</param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="text"/> is <see langword="null"/>.
+    /// </exception>
+    public static void WrappedText(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        NativeImGui.PushTextWrapPos(0f);
+        try
+        {
+            NativeImGui.TextUnformatted(text);
+        }
+        finally
+        {
+            NativeImGui.PopTextWrapPos();
         }
     }
 

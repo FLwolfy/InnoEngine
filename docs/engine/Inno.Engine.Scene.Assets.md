@@ -45,19 +45,19 @@ Importer 使用统一 async writer，输出 `runtime`，Loader 自动追加 `ass
 
 ## GameLayerSettingsAsset
 
-项目层配置固定使用 `Assets/Settings/GameLayers.ilayers`。它是普通 Source Database 资产，因此自动拥有 `.imeta`、persistent ID、Catalog record 和 content-addressed artifact；源文件是可读 JSON，保存 32 个 layer slot 和 32 行对称 interaction masks，不写 schema version 或 legacy payload。
+`Assets/Settings/GameLayers.ilayers` 是唯一会被运行时和 Editor layer picker 识别的项目层配置路径。文件仍是普通 Source Database 资产，因此自动拥有 `.imeta`、persistent ID、Catalog record 和 content-addressed artifact；源文件是可读 JSON，保存 32 个 layer slot 和 32 行对称 interaction masks，不写 schema version 或 legacy payload。
 
 ```csharp
 GameLayerSettingsAsset settings = AssetManager.Load<GameLayerSettingsAsset>(
     GameLayerSettingsAsset.defaultPath);
 
-settings.layerStack.Define(new Layer(1), "Player");
-settings.layerStack.Define(new Layer(2), "Enemy");
-settings.layerStack.SetInteraction(new Layer(1), new Layer(2), false);
+settings.layerStack.Define(new GameLayer(1), "Player");
+settings.layerStack.Define(new GameLayer(2), "Enemy");
+settings.layerStack.SetInteraction(new GameLayer(1), new GameLayer(2), false);
 AssetManager.Save(settings);
 ```
 
-Editor 启动时若该路径不存在，会通过 `AssetManager.Save` 创建默认资产，而不是绕过 Asset Database 直接写文件。外部修改源文件后由 watcher/reimport 原位更新 canonical asset。
+配置移出 `Settings` 后，源文件及 persistent ID 都会保留，但它不再参与项目 layer 解析；Editor 立即切换为只有 `Default` 的内存配置，已加载 GameObject 引用自定义 slot 时发布错误。把同一文件移回 canonical path 后会重新导入其原内容，有效 slot 随即恢复。项目完全没有配置时不会自动创建 source 文件；用户首次显式保存 layer catalog 时才通过 `AssetManager.Save` 在 canonical path 创建正常资产。外部修改 canonical 源文件后由 watcher/reimport 原位更新；删除配置同样立即回到 Default-only 状态。
 
 ## 外部 rename/delete
 

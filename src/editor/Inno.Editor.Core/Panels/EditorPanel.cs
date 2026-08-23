@@ -7,6 +7,12 @@ namespace Inno.Editor.Core;
 public abstract class EditorPanel
 {
     /// <summary>
+    /// Gets whether the presentation backend should inset this panel body by its standard
+    /// window padding.
+    /// </summary>
+    public virtual bool useWindowPadding => true;
+
+    /// <summary>
     /// Gets or sets whether panel is visible.
     /// </summary>
     public bool isOpen { get; set; } = true;

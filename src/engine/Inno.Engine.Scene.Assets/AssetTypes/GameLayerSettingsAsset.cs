@@ -15,7 +15,7 @@ namespace Inno.Engine.Scene.Assets;
 public sealed class GameLayerSettingsAsset : AssetObject
 {
     /// <summary>
-    /// Defines the canonical source-relative path used by Editor and runtime project tooling.
+    /// Defines the only source-relative path recognized as the active project layer catalog.
     /// </summary>
     public const string defaultPath = "Settings/GameLayers.ilayers";
 
@@ -30,10 +30,10 @@ public sealed class GameLayerSettingsAsset : AssetObject
     /// </summary>
     public GameLayerSettingsAsset()
     {
-        layerStack = new LayerStack();
+        layerStack = new GameLayerStack();
     }
 
-    private GameLayerSettingsAsset(LayerStack layerStack)
+    private GameLayerSettingsAsset(GameLayerStack layerStack)
     {
         this.layerStack = layerStack ?? throw new ArgumentNullException(nameof(layerStack));
     }
@@ -42,7 +42,7 @@ public sealed class GameLayerSettingsAsset : AssetObject
     /// Gets the editable layer catalog and interaction matrix owned by this asset.
     /// </summary>
     [SerializableProperty]
-    public LayerStack layerStack { get; private set; }
+    public GameLayerStack layerStack { get; private set; }
 
     /// <summary>
     /// Creates a detached settings asset containing only the built-in default configuration.
@@ -66,7 +66,7 @@ public sealed class GameLayerSettingsAsset : AssetObject
             ?? throw new InvalidOperationException("Game layer settings source is empty.");
         if (document.layers is null || document.interactionMasks is null)
             throw new InvalidOperationException("Game layer settings must declare layers and interaction masks.");
-        return new GameLayerSettingsAsset(LayerStack.Restore(document.layers, document.interactionMasks));
+        return new GameLayerSettingsAsset(GameLayerStack.Restore(document.layers, document.interactionMasks));
     }
 
     private sealed class SourceDocument

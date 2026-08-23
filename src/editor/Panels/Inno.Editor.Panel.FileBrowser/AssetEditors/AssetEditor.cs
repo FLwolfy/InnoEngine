@@ -1,5 +1,6 @@
 using Inno.Assets;
 using Inno.Assets.Core;
+using Inno.Assets.File;
 using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Panel.FileBrowser;
@@ -66,7 +67,7 @@ public abstract class AssetEditor
     /// </summary>
     /// <param name="context">The immutable source and catalog snapshot for the entry.</param>
     /// <returns><see langword="true"/> when drag data can be created; otherwise, <see langword="false"/>.</returns>
-    public virtual bool CanStartDrag(AssetEditorContext context) => !context.isDirectory;
+    public virtual bool CanStartDrag(AssetEditorContext context) => true;
 
     /// <summary>
     /// Creates the managed source, preview label, and validity predicate for an asset drag.
@@ -74,11 +75,25 @@ public abstract class AssetEditor
     /// <param name="context">The immutable source and catalog snapshot for the entry.</param>
     /// <returns>The managed drag data published by the Asset Browser.</returns>
     public virtual EditorDragData CreateDragData(AssetEditorContext context)
-        => new(
+    {
+        if (context.isDirectory &&
+            AssetManager.TryGetFileSystemEntry(context.relativePath, out AssetFileEntry directory))
+        {
+            return new EditorDragData(
+                directory,
+                context.name,
+                () => AssetManager.TryGetFileSystemEntry(
+                    context.relativePath,
+                    out AssetFileEntry current) &&
+                    current.isDirectory);
+        }
+
+        return new EditorDragData(
             context.info ?? (object)context,
             context.name,
             () => context.info is { persistentId: var id } &&
                   id != System.Guid.Empty &&
                   AssetManager.TryGetInfo(id, out AssetInfo? info) &&
                   info?.status is not AssetImportStatus.Missing and not AssetImportStatus.Conflict);
+    }
 }

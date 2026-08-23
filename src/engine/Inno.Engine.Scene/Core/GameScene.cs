@@ -175,7 +175,7 @@ public sealed class GameScene : EngineObject, ISerializable
     /// </summary>
     /// <param name="layer">The layer slot to find.</param>
     /// <returns>The first matching game object, or <see langword="null"/> when no object matches.</returns>
-    public GameObject? FindObjectWithLayer(Layer layer)
+    public GameObject? FindObjectWithLayer(GameLayer layer)
     {
         EnsureNotDestroyed();
         return m_store.FindObjectWithLayer(layer);
@@ -186,7 +186,7 @@ public sealed class GameScene : EngineObject, ISerializable
     /// </summary>
     /// <param name="layer">The layer slot to find.</param>
     /// <returns>A stable snapshot containing every matching game object.</returns>
-    public IReadOnlyList<GameObject> FindObjectsWithLayer(Layer layer)
+    public IReadOnlyList<GameObject> FindObjectsWithLayer(GameLayer layer)
     {
         EnsureNotDestroyed();
         return m_store.FindObjectsWithLayer(layer);
@@ -197,7 +197,7 @@ public sealed class GameScene : EngineObject, ISerializable
     /// </summary>
     /// <param name="layers">The set of accepted layer slots.</param>
     /// <returns>A stable snapshot in scene storage order.</returns>
-    public IReadOnlyList<GameObject> FindObjectsWithLayers(LayerMask layers)
+    public IReadOnlyList<GameObject> FindObjectsWithLayers(GameLayerMask layers)
     {
         EnsureNotDestroyed();
         return m_store.FindObjectsWithLayers(layers);

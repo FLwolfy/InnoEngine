@@ -2,7 +2,9 @@ using System;
 using System.IO;
 
 using Inno.Assets;
+using Inno.Assets.Core;
 using Inno.Assets.File;
+using Inno.Assets.Types;
 using Inno.Core.Assemblies;
 using Inno.Core.Identity;
 using Inno.Core.Reflection;
@@ -26,6 +28,7 @@ public sealed class AssetHistoryTests : IDisposable
         Directory.CreateDirectory(assetRoot);
         IdentityManager.Initialize();
         _ = typeof(AssetEditorModule);
+        _ = typeof(TextAsset);
         AssemblyManager.Initialize(new AssemblyManagerOptions
         {
             cacheDirectory = Path.Combine(m_projectRoot, "Library", "Assemblies")
@@ -113,5 +116,68 @@ public sealed class AssetHistoryTests : IDisposable
 
         Assert.True(m_runtime.interactions.history.Undo().succeeded);
         Assert.True(AssetManager.TryGetFileSystemEntry("ReloadSafe", out _));
+    }
+
+    [Fact]
+    public void FileBrowserDropMovesFilesAndFoldersWithUndoRedo()
+    {
+        AssetManager.CreateDirectory("From");
+        AssetManager.CreateDirectory("From/Folder");
+        AssetManager.CreateDirectory("From/Folder/Child");
+        AssetManager.CreateDirectory("To");
+        Assert.True(AssetManager.Save("From/Value.txt", new TextAsset("value")));
+        Assert.True(AssetManager.TryGetInfo("From/Value.txt", out AssetInfo? file));
+        Assert.NotNull(file);
+
+        Guid fileToken = m_runtime.interactions
+            .For(FileBrowserAreas.Browser, file)
+            .BeginDrag(new EditorDragData(file!, "Value.txt"));
+        EditorInteraction destination = m_runtime.interactions.For(FileBrowserAreas.Browser, "To");
+        Assert.True(destination.QueryDrop(fileToken, EditorDropPlacement.Into).canDrop);
+        Assert.True(destination.Drop(fileToken, EditorDropPlacement.Into).accepted);
+        Assert.True(AssetManager.TryGetFileSystemEntry("To/Value.txt", out _));
+        Assert.False(AssetManager.TryGetFileSystemEntry("From/Value.txt", out _));
+
+        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        Assert.True(AssetManager.TryGetFileSystemEntry("From/Value.txt", out _));
+        Assert.True(m_runtime.interactions.history.Redo().succeeded);
+        Assert.True(AssetManager.TryGetFileSystemEntry("To/Value.txt", out _));
+
+        Assert.True(AssetManager.TryGetFileSystemEntry("From/Folder", out AssetFileEntry folder));
+        Guid folderToken = m_runtime.interactions
+            .For(FileBrowserAreas.Browser, folder)
+            .BeginDrag(new EditorDragData(folder, "Folder"));
+        Assert.True(destination.QueryDrop(folderToken, EditorDropPlacement.Into).canDrop);
+        Assert.True(destination.Drop(folderToken, EditorDropPlacement.Into).accepted);
+        Assert.True(AssetManager.TryGetFileSystemEntry("To/Folder/Child", out _));
+
+        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        Assert.True(AssetManager.TryGetFileSystemEntry("From/Folder/Child", out _));
+    }
+
+    [Fact]
+    public void FileBrowserDropRejectsAFolderOwnDescendantAndNameCollisions()
+    {
+        AssetManager.CreateDirectory("Source");
+        AssetManager.CreateDirectory("Source/Child");
+        AssetManager.CreateDirectory("Target");
+        AssetManager.CreateDirectory("Target/Source");
+        Assert.True(AssetManager.TryGetFileSystemEntry("Source", out AssetFileEntry source));
+
+        Guid descendantToken = m_runtime.interactions
+            .For(FileBrowserAreas.Browser, source)
+            .BeginDrag(new EditorDragData(source, "Source"));
+        Assert.False(m_runtime.interactions
+            .For(FileBrowserAreas.Browser, "Source/Child")
+            .QueryDrop(descendantToken, EditorDropPlacement.Into)
+            .canDrop);
+
+        Guid collisionToken = m_runtime.interactions
+            .For(FileBrowserAreas.Browser, source)
+            .BeginDrag(new EditorDragData(source, "Source"));
+        Assert.False(m_runtime.interactions
+            .For(FileBrowserAreas.Browser, "Target")
+            .QueryDrop(collisionToken, EditorDropPlacement.Into)
+            .canDrop);
     }
 }

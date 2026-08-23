@@ -11,10 +11,10 @@ namespace Inno.Engine.Scene.Layers;
 /// Converts a layer stack to and from its fixed-width neutral serialization state.
 /// </summary>
 [SerializationExtension]
-internal sealed class LayerStackConverter : SerializationConverter<LayerStack>
+internal sealed class GameLayerStackConverter : SerializationConverter<GameLayerStack>
 {
     /// <inheritdoc />
-    public override void Write(SerializationWriter writer, LayerStack value)
+    public override void Write(SerializationWriter writer, GameLayerStack value)
     {
         ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(value);
@@ -25,13 +25,13 @@ internal sealed class LayerStackConverter : SerializationConverter<LayerStack>
     }
 
     /// <inheritdoc />
-    public override LayerStack Read(SerializationReader reader)
+    public override GameLayerStack Read(SerializationReader reader)
     {
         ArgumentNullException.ThrowIfNull(reader);
         string[] serializedNames = reader.Read<string[]>("names");
         string?[] names = serializedNames
             .Select(static name => string.IsNullOrEmpty(name) ? null : name)
             .ToArray();
-        return LayerStack.Restore(names, reader.Read<uint[]>("interactionMasks"));
+        return GameLayerStack.Restore(names, reader.Read<uint[]>("interactionMasks"));
     }
 }

@@ -1,4 +1,6 @@
 using System;
+using System.Numerics;
+
 using Inno.Core.Logging;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
@@ -6,6 +8,8 @@ using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Editor.Inspection;
 using Inno.Editor.Interactions;
+using Inno.Native.ImGui;
+using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Inspector;
 
@@ -19,6 +23,9 @@ public sealed class InspectorPanel : EditorPanel
     private readonly EditorInteractions m_interactions;
     private readonly InspectorTargetHeader m_targetHeader;
     private string m_failureState = string.Empty;
+
+    /// <inheritdoc />
+    public override bool useWindowPadding => false;
 
     /// <summary>
     /// Creates the panel.
@@ -37,6 +44,21 @@ public sealed class InspectorPanel : EditorPanel
 
     /// <inheritdoc />
     public override void Draw(EditorContext context)
+    {
+        if (NativeImGui.BeginChild(
+                "##InspectorScrollRegion",
+                Vector2.Zero,
+                ImGuiChildFlags.None,
+                ImGuiWindowFlags.NoSavedSettings))
+        {
+            EditorWidget.ConstrainedContent(
+                "##InspectorContent",
+                () => DrawContent(context));
+        }
+        NativeImGui.EndChild();
+    }
+
+    private void DrawContent(EditorContext context)
     {
         object? target = m_targetHeader.Resolve(m_interactions.selection.selectedTarget);
         if (target is null)

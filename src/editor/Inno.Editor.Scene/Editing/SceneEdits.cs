@@ -587,7 +587,7 @@ public sealed class SceneEdits : EditorModule
     /// </exception>
     public void SetGameObjectLayer(
         GameObject gameObject,
-        Layer layer,
+        GameLayer layer,
         string historyName = "Set GameObject Layer")
     {
         ArgumentNullException.ThrowIfNull(gameObject);
@@ -597,7 +597,7 @@ public sealed class SceneEdits : EditorModule
             SceneScalarKind.GameObjectLayer,
             gameObject.layer.index.ToString(System.Globalization.CultureInfo.InvariantCulture),
             layer.index.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            value => gameObject.layer = new Layer(
+            value => gameObject.layer = new GameLayer(
                 int.Parse(value, System.Globalization.CultureInfo.InvariantCulture)),
             historyName,
             $"game-object-layer:{gameObject.identity.persistentId:N}");

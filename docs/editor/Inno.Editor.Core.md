@@ -94,7 +94,9 @@ public sealed class AnimatorPanel(AnimationModule animation) : EditorPanel
 }
 ```
 
-`EditorPanelAttribute.id` 必须稳定且全局唯一；它用于 View 菜单、窗口 identity 和 reload 状态。`title` 只用于显示，可以变化。
+`EditorPanel.useWindowPadding` 默认返回 `true`，表示表现后端应使用标准窗口内边距。需要让背景、Tree 行或根滚动区域与 Dock body 边缘对齐的 Panel 可以重写为 `false`；正文仍可通过表现层的统一 content region 恢复恰好一层内边距。这是 Panel 的布局策略，不要求业务代码修改或重置滚动位置。
+
+`EditorPanelAttribute.id` 必须稳定且全局唯一；它用于 Panel 菜单、窗口 identity 和 reload 状态。`title` 只用于显示，可以变化。
 
 运行时始终按 ID 迁移 `isOpen`。需要迁移更多中立状态时实现 `IEditorPanelReloadState`，只返回不引用插件对象的字节：
 

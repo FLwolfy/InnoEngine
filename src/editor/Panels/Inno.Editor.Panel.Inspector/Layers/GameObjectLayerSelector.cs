@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 
+using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using Inno.Editor.Scene;
 using Inno.Engine.Scene;
@@ -40,10 +41,10 @@ internal sealed class GameObjectLayerSelector
     internal void Draw(GameObject target, float width)
     {
         ArgumentNullException.ThrowIfNull(target);
-        LayerStack stack = m_settings.settings.layerStack;
+        GameLayerStack stack = m_settings.settings.layerStack;
         string preview = stack.GetName(target.layer) ?? $"Layer {target.layer.index} (Undefined)";
-        NativeImGui.TextUnformatted("Layer");
-        NativeImGui.SameLine(0f, ImGuiWidget.style.inspectorHeaderControlSpacing);
+        ImGuiWidget.LabelChip("Layer", EditorPalette.inspectorLayerLabel);
+        NativeImGui.SameLine(0f, 0f);
         NativeImGui.SetNextItemWidth(MathF.Max(1f, width));
         if (!NativeImGui.BeginCombo(
                 $"##game_object_layer_{target.identity.persistentId:N}",
@@ -53,14 +54,22 @@ internal sealed class GameObjectLayerSelector
             return;
         }
 
-        IReadOnlyList<LayerDefinition> definitions = stack.GetDefinitions();
+        IReadOnlyList<GameLayerDefinition> definitions = stack.GetDefinitions();
         for (int i = 0; i < definitions.Count; i++)
         {
-            LayerDefinition definition = definitions[i];
+            GameLayerDefinition definition = definitions[i];
             string label = $"{definition.name} ({definition.layer.index})";
             if (NativeImGui.Selectable(label, definition.layer == target.layer))
                 m_edits.SetGameObjectLayer(target, definition.layer);
         }
         NativeImGui.EndCombo();
     }
+
+    /// <summary>
+    /// Determines whether the current project catalog defines a layer slot.
+    /// </summary>
+    /// <param name="layer">The layer slot to resolve.</param>
+    /// <returns><see langword="true"/> when the layer can be selected.</returns>
+    internal bool IsLayerDefined(GameLayer layer)
+        => m_settings.settings.layerStack.IsDefined(layer);
 }

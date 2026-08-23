@@ -32,7 +32,7 @@ internal sealed class SceneStore
     private readonly Dictionary<string, GameObject[]> m_objectQueryCache = new(StringComparer.Ordinal);
     private Dictionary<string, GameObject>? m_firstObjectByName;
     private Dictionary<string, GameObject[]>? m_objectsByTag;
-    private Dictionary<Layer, GameObject[]>? m_objectsByLayer;
+    private Dictionary<GameLayer, GameObject[]>? m_objectsByLayer;
     private GameObject[]? m_objectSnapshotCache;
     private int m_executionDepth;
     private bool m_clearRequested;
@@ -217,7 +217,7 @@ internal sealed class SceneStore
             : Array.Empty<GameObject>();
     }
 
-    internal GameObject? FindObjectWithLayer(Layer layer)
+    internal GameObject? FindObjectWithLayer(GameLayer layer)
     {
         EnsureMetadataIndexes();
         return m_objectsByLayer!.TryGetValue(layer, out GameObject[]? matches) && matches.Length != 0
@@ -225,7 +225,7 @@ internal sealed class SceneStore
             : null;
     }
 
-    internal IReadOnlyList<GameObject> FindObjectsWithLayer(Layer layer)
+    internal IReadOnlyList<GameObject> FindObjectsWithLayer(GameLayer layer)
     {
         EnsureMetadataIndexes();
         return m_objectsByLayer!.TryGetValue(layer, out GameObject[]? matches)
@@ -233,9 +233,9 @@ internal sealed class SceneStore
             : Array.Empty<GameObject>();
     }
 
-    internal IReadOnlyList<GameObject> FindObjectsWithLayers(LayerMask layers)
+    internal IReadOnlyList<GameObject> FindObjectsWithLayers(GameLayerMask layers)
     {
-        if (layers == LayerMask.none)
+        if (layers == GameLayerMask.none)
             return Array.Empty<GameObject>();
         return GetObjects().Where(gameObject => layers.Contains(gameObject.layer)).ToArray();
     }
@@ -526,7 +526,7 @@ internal sealed class SceneStore
 
         var firstByName = new Dictionary<string, GameObject>(StringComparer.Ordinal);
         var byTag = new Dictionary<string, List<GameObject>>(StringComparer.Ordinal);
-        var byLayer = new Dictionary<Layer, List<GameObject>>();
+        var byLayer = new Dictionary<GameLayer, List<GameObject>>();
         IReadOnlyList<GameObject> objects = GetObjects();
         for (int i = 0; i < objects.Count; i++)
         {

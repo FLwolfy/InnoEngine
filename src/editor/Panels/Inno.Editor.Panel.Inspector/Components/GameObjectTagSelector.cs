@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 
+using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Editor.Inspection;
@@ -52,24 +53,26 @@ internal sealed class GameObjectTagSelector
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(target);
         SynchronizeLoadedTags();
+        IReadOnlyList<string> tags = m_catalog.GetTags();
+        float selectorWidth = MathF.Max(1f, width);
+        float popupWidth = CalculatePopupWidth(tags, selectorWidth);
 
-        NativeImGui.TextUnformatted("Tag");
-        NativeImGui.SameLine(0f, EditorWidget.style.inspectorHeaderControlSpacing);
-        NativeImGui.SetNextItemWidth(MathF.Max(1f, width));
-        if (!NativeImGui.BeginCombo(
-                $"##game_object_tag_{target.identity.persistentId:N}",
+        EditorWidget.LabelChip("Tag", EditorPalette.inspectorTagLabel);
+        NativeImGui.SameLine(0f, 0f);
+        if (!EditorWidget.BeginMenuSelector(
+                $"game_object_tag_{target.identity.persistentId:N}",
                 target.tag,
-                ImGuiComboFlags.None))
+                selectorWidth,
+                popupWidth))
         {
             return;
         }
 
         DrawCreateRow(context, target);
         NativeImGui.Separator();
-        IReadOnlyList<string> tags = m_catalog.GetTags();
         for (int i = 0; i < tags.Count; i++)
             DrawTagRow(context, target, tags[i]);
-        NativeImGui.EndCombo();
+        EditorWidget.EndMenuSelector();
     }
 
     private void DrawCreateRow(InspectionDrawContext context, GameObject target)
@@ -87,9 +90,10 @@ internal sealed class GameObjectTagSelector
             C_TAG_BUFFER_SIZE,
             ImGuiInputTextFlags.EnterReturnsTrue);
         NativeImGui.SameLine(0f, spacing);
-        submit |= EditorWidget.ClickableIcon(
+        submit |= EditorWidget.ClickableText(
             $"add_game_object_tag_{target.identity.persistentId:N}",
             ImGuiIcon.Plus,
+            new Vector2(actionSize.X, NativeImGui.GetFrameHeight()),
             "Add and select tag");
         if (!submit || string.IsNullOrWhiteSpace(m_newTag))
             return;
@@ -137,6 +141,32 @@ internal sealed class GameObjectTagSelector
         => m_catalog.Synchronize(
             SceneManager.loadedScenes.SelectMany(static scene => scene.GetObjects())
                 .Select(static gameObject => gameObject.tag));
+
+    private static float CalculatePopupWidth(
+        IReadOnlyList<string> tags,
+        float selectorWidth)
+    {
+        float longestRowWidth = 0f;
+        for (int i = 0; i < tags.Count; i++)
+        {
+            float rowWidth = NativeImGui.CalcTextSize(tags[i]).X;
+            if (!string.Equals(tags[i], GameObject.defaultTag, StringComparison.Ordinal))
+            {
+                rowWidth += EditorWidget.style.menuItemSpacing.X +
+                            EditorWidget.GetCompactIconSize().X;
+            }
+            longestRowWidth = MathF.Max(longestRowWidth, rowWidth);
+        }
+
+        float addRowWidth = NativeImGui.CalcTextSize("Add tag...").X +
+                            EditorWidget.style.menuFramePadding.X * 2f +
+                            EditorWidget.style.menuItemSpacing.X +
+                            EditorWidget.GetCompactIconSize().X;
+        float contentWidth = MathF.Max(longestRowWidth, addRowWidth);
+        return MathF.Max(
+            selectorWidth,
+            contentWidth + EditorWidget.style.menuWindowPadding.X * 2f);
+    }
 
     private void RemoveTag(InspectionDrawContext context, string tag)
     {

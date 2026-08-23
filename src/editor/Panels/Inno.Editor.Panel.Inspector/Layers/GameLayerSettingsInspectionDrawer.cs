@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-
 using Inno.Assets;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
@@ -14,7 +12,7 @@ using NativeImGui = Inno.Native.ImGui.ImGui;
 namespace Inno.Editor.Panel.Inspector;
 
 /// <summary>
-/// Draws and persists the project layer catalog and interaction matrix.
+/// Draws and persists the project layer catalog.
 /// </summary>
 [InspectionDrawer(typeof(GameLayerSettingsAsset))]
 internal sealed class GameLayerSettingsInspectionDrawer : InspectionDrawer<GameLayerSettingsAsset>
@@ -22,7 +20,7 @@ internal sealed class GameLayerSettingsInspectionDrawer : InspectionDrawer<GameL
     private const nuint C_LAYER_NAME_BUFFER_SIZE = 128;
 
     private readonly GameLayerSettingsModule m_settings;
-    private readonly string[] m_nameBuffers = new string[Layer.C_MAX_COUNT];
+    private readonly string[] m_nameBuffers = new string[GameLayer.C_MAX_COUNT];
     private string m_error = string.Empty;
     private bool m_initialized;
     private long m_contentVersion = -1;
@@ -53,31 +51,41 @@ internal sealed class GameLayerSettingsInspectionDrawer : InspectionDrawer<GameL
     /// <inheritdoc />
     protected override void Draw(InspectionDrawContext context, GameLayerSettingsAsset target)
     {
-        if (!ReferenceEquals(target, m_settings.settings))
-            target = m_settings.settings;
+        if (!m_settings.IsCanonical(target))
+        {
+            ImGuiWidget.ColoredText(
+                EditorPalette.error,
+                $"Game layer settings are active only at '{GameLayerSettingsAsset.defaultPath}'.");
+            return;
+        }
+        target = m_settings.settings;
         SynchronizeBuffers(target);
         NativeImGui.TextUnformatted("Layers");
         NativeImGui.Separator();
         DrawLayerRows(target);
-        NativeImGui.Spacing();
-        NativeImGui.TextUnformatted("Interactions");
-        NativeImGui.Separator();
-        DrawInteractionRows(target);
         if (!string.IsNullOrEmpty(m_error))
             ImGuiWidget.ColoredText(EditorPalette.error, m_error);
     }
 
     private void DrawLayerRows(GameLayerSettingsAsset target)
     {
-        LayerStack stack = target.layerStack;
-        float indexWidth = NativeImGui.CalcTextSize("31").X;
-        for (int index = 0; index < Layer.C_MAX_COUNT; index++)
+        GameLayerStack stack = target.layerStack;
+        ImGuiTableFlags flags = ImGuiTableFlags.SizingStretchProp |
+                                ImGuiTableFlags.NoPadOuterX |
+                                ImGuiTableFlags.NoSavedSettings;
+        if (!NativeImGui.BeginTable("##game_layer_definitions", 2, flags))
+            return;
+        NativeImGui.TableSetupColumn("Slot", ImGuiTableColumnFlags.WidthFixed);
+        NativeImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthStretch);
+        for (int index = 0; index < GameLayer.C_MAX_COUNT; index++)
         {
-            var layer = new Layer(index);
+            var layer = new GameLayer(index);
+            NativeImGui.TableNextRow();
+            _ = NativeImGui.TableSetColumnIndex(0);
             NativeImGui.AlignTextToFramePadding();
             NativeImGui.TextUnformatted(index.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            NativeImGui.SameLine(indexWidth + NativeImGui.GetStyle().ItemSpacing.X);
-            if (layer == Layer.defaultLayer)
+            _ = NativeImGui.TableSetColumnIndex(1);
+            if (layer == GameLayer.defaultLayer)
             {
                 NativeImGui.TextUnformatted(stack.GetName(layer) ?? "Default");
                 continue;
@@ -85,56 +93,20 @@ internal sealed class GameLayerSettingsInspectionDrawer : InspectionDrawer<GameL
 
             NativeImGui.SetNextItemWidth(-1f);
             string value = m_nameBuffers[index];
-            if (!NativeImGui.InputTextWithHint(
+            bool submitted = NativeImGui.InputTextWithHint(
                     $"##layer_name_{index}",
                     "Unused",
                     ref value,
                     C_LAYER_NAME_BUFFER_SIZE,
-                    ImGuiInputTextFlags.EnterReturnsTrue))
-            {
-                m_nameBuffers[index] = value;
-                continue;
-            }
+                    ImGuiInputTextFlags.EnterReturnsTrue);
             m_nameBuffers[index] = value;
-            CommitLayerName(target, layer, value);
+            if (submitted || NativeImGui.IsItemDeactivatedAfterEdit())
+                CommitLayerName(target, layer, value);
         }
+        NativeImGui.EndTable();
     }
 
-    private void DrawInteractionRows(GameLayerSettingsAsset target)
-    {
-        LayerStack stack = target.layerStack;
-        IReadOnlyList<LayerDefinition> definitions = stack.GetDefinitions();
-        for (int sourceIndex = 0; sourceIndex < definitions.Count; sourceIndex++)
-        {
-            LayerDefinition source = definitions[sourceIndex];
-            string preview = GetInteractionPreview(stack, source.layer, definitions);
-            NativeImGui.SetNextItemWidth(-1f);
-            if (!NativeImGui.BeginCombo(
-                    $"{source.name}##layer_interactions_{source.layer.index}",
-                    preview,
-                    ImGuiComboFlags.None))
-            {
-                continue;
-            }
-
-            for (int targetIndex = 0; targetIndex < definitions.Count; targetIndex++)
-            {
-                LayerDefinition candidate = definitions[targetIndex];
-                bool enabled = stack.CanInteract(source.layer, candidate.layer);
-                if (!NativeImGui.Checkbox(
-                        $"{candidate.name}##layer_pair_{source.layer.index}_{candidate.layer.index}",
-                        ref enabled))
-                {
-                    continue;
-                }
-                stack.SetInteraction(source.layer, candidate.layer, enabled);
-                Save(target);
-            }
-            NativeImGui.EndCombo();
-        }
-    }
-
-    private void CommitLayerName(GameLayerSettingsAsset target, Layer layer, string value)
+    private void CommitLayerName(GameLayerSettingsAsset target, GameLayer layer, string value)
     {
         try
         {
@@ -154,7 +126,7 @@ internal sealed class GameLayerSettingsInspectionDrawer : InspectionDrawer<GameL
 
     private void Save(GameLayerSettingsAsset target)
     {
-        if (!ReferenceEquals(target, m_settings.settings))
+        if (!m_settings.IsCanonical(target))
             throw new InvalidOperationException("Only the canonical project layer settings can be edited.");
         m_settings.Save();
         m_error = string.Empty;
@@ -164,23 +136,9 @@ internal sealed class GameLayerSettingsInspectionDrawer : InspectionDrawer<GameL
     {
         if (m_initialized && m_contentVersion == target.contentVersion)
             return;
-        for (int index = 0; index < Layer.C_MAX_COUNT; index++)
-            m_nameBuffers[index] = target.layerStack.GetName(new Layer(index)) ?? string.Empty;
+        for (int index = 0; index < GameLayer.C_MAX_COUNT; index++)
+            m_nameBuffers[index] = target.layerStack.GetName(new GameLayer(index)) ?? string.Empty;
         m_initialized = true;
         m_contentVersion = target.contentVersion;
-    }
-
-    private static string GetInteractionPreview(
-        LayerStack stack,
-        Layer source,
-        IReadOnlyList<LayerDefinition> definitions)
-    {
-        int enabled = 0;
-        for (int i = 0; i < definitions.Count; i++)
-        {
-            if (stack.CanInteract(source, definitions[i].layer))
-                enabled++;
-        }
-        return enabled == definitions.Count ? "Everything" : $"{enabled} of {definitions.Count}";
     }
 }

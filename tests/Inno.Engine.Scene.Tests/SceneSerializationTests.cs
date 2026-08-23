@@ -47,8 +47,8 @@ public sealed class SceneSerializationTests : IDisposable
         GameObject child = source.CreateObject("Child");
         root.tag = "Player";
         child.tag = "Companion";
-        root.layer = new Layer(3);
-        child.layer = new Layer(7);
+        root.layer = new GameLayer(3);
+        child.layer = new GameLayer(7);
         child.transform.SetParent(root.transform);
         child.transform.localPosition = new Vector3(1, 2, 3);
         child.SetActive(false);
@@ -81,9 +81,9 @@ public sealed class SceneSerializationTests : IDisposable
         GameObject restoredChild = restored.GetObjects().Single(gameObject => gameObject.identity.persistentId == childId);
         Assert.Equal("Player", restoredRoot.tag);
         Assert.Equal("Companion", restoredChild.tag);
-        Assert.Equal(new Layer(3), restoredRoot.layer);
-        Assert.Equal(new Layer(7), restoredChild.layer);
-        Assert.Same(restoredRoot, restored.FindObjectWithLayer(new Layer(3)));
+        Assert.Equal(new GameLayer(3), restoredRoot.layer);
+        Assert.Equal(new GameLayer(7), restoredChild.layer);
+        Assert.Same(restoredRoot, restored.FindObjectWithLayer(new GameLayer(3)));
         Assert.Same(restoredRoot, restored.FindObjectWithTag("Player"));
         Assert.Equal(new[] { typeof(Transform), typeof(ReferenceComponent) },
             restoredRoot.GetComponents().Select(static component => component.GetType()));
@@ -112,8 +112,8 @@ public sealed class SceneSerializationTests : IDisposable
         GameObject sourceChild = sourceScene.CreateObject("Child");
         sourceRoot.tag = "Spawn";
         sourceChild.tag = "Collectible";
-        sourceRoot.layer = new Layer(4);
-        sourceChild.layer = new Layer(5);
+        sourceRoot.layer = new GameLayer(4);
+        sourceChild.layer = new GameLayer(5);
         sourceChild.transform.SetParent(sourceRoot.transform);
         ReferenceComponent sourceReference = sourceRoot.AddComponent<ReferenceComponent>();
         ReferenceComponent sourceChildReference = sourceChild.AddComponent<ReferenceComponent>();
@@ -134,12 +134,12 @@ public sealed class SceneSerializationTests : IDisposable
         GameObject secondChild = Assert.Single(second.transform.children).gameObject;
         Assert.Equal("Spawn", first.tag);
         Assert.Equal("Collectible", firstChild.tag);
-        Assert.Equal(new Layer(4), first.layer);
-        Assert.Equal(new Layer(5), firstChild.layer);
+        Assert.Equal(new GameLayer(4), first.layer);
+        Assert.Equal(new GameLayer(5), firstChild.layer);
         Assert.Equal("Spawn", second.tag);
         Assert.Equal("Collectible", secondChild.tag);
-        Assert.Equal(new Layer(4), second.layer);
-        Assert.Equal(new Layer(5), secondChild.layer);
+        Assert.Equal(new GameLayer(4), second.layer);
+        Assert.Equal(new GameLayer(5), secondChild.layer);
         ReferenceComponent firstReference = first.GetComponent<ReferenceComponent>();
         ReferenceComponent secondReference = second.GetComponent<ReferenceComponent>();
         Assert.Same(firstChild, firstReference.targetObject);
@@ -180,10 +180,10 @@ public sealed class SceneSerializationTests : IDisposable
     [Fact]
     public void SerializableLayerValues_RoundtripThroughComponentState()
     {
-        var scene = new GameScene("Layer Values");
+        var scene = new GameScene("GameLayer Values");
         LayerValueComponent component = scene.CreateObject("Object").AddComponent<LayerValueComponent>();
-        component.layer = new Layer(9);
-        component.mask = LayerMask.FromLayers([new Layer(2), new Layer(9)]);
+        component.layer = new GameLayer(9);
+        component.mask = GameLayerMask.FromLayers([new GameLayer(2), new GameLayer(9)]);
 
         byte[] bytes = SerializationManager.Serialize(scene);
         SceneManager.LoadScene(scene);
@@ -192,9 +192,9 @@ public sealed class SceneSerializationTests : IDisposable
         LayerValueComponent restoredComponent = Assert.Single(restored.GetObjects())
             .GetComponent<LayerValueComponent>();
 
-        Assert.Equal(new Layer(9), restoredComponent.layer);
-        Assert.True(restoredComponent.mask.Contains(new Layer(2)));
-        Assert.True(restoredComponent.mask.Contains(new Layer(9)));
+        Assert.Equal(new GameLayer(9), restoredComponent.layer);
+        Assert.True(restoredComponent.mask.Contains(new GameLayer(2)));
+        Assert.True(restoredComponent.mask.Contains(new GameLayer(9)));
     }
 
     [Fact]
@@ -307,8 +307,8 @@ internal sealed class OrderSerializationSystemB : GameSystem;
 internal sealed class LayerValueComponent : GameComponent
 {
     [SerializableProperty]
-    public Layer layer { get; set; }
+    public GameLayer layer { get; set; }
 
     [SerializableProperty]
-    public LayerMask mask { get; set; }
+    public GameLayerMask mask { get; set; }
 }

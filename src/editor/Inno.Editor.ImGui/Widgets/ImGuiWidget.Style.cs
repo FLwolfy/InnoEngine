@@ -1,3 +1,4 @@
+using System;
 using System.Numerics;
 
 using Inno.Native.ImGui;
@@ -10,6 +11,8 @@ namespace Inno.Editor.ImGui.ImGuiWidget;
 /// </summary>
 public static partial class ImGuiWidget
 {
+    private static float s_appliedZoom = float.NaN;
+
     /// <summary>
     /// Gets the centralized editor layout metrics shared by every widget and feature panel.
     /// </summary>
@@ -23,6 +26,13 @@ public static partial class ImGuiWidget
         ImGuiStylePtr nativeStyle = NativeImGui.GetStyle();
         ApplyLayoutStyle(nativeStyle);
         EditorPalette.Apply(nativeStyle);
+        s_appliedZoom = style.zoom;
+    }
+
+    internal static void ApplyPendingStyle()
+    {
+        if (float.IsNaN(s_appliedZoom) || MathF.Abs(s_appliedZoom - style.zoom) > 0.0001f)
+            SetupStyle();
     }
 
     private static void ApplyLayoutStyle(ImGuiStylePtr nativeStyle)

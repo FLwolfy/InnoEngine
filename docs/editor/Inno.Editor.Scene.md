@@ -28,7 +28,7 @@ flowchart LR
 | --- | --- |
 | `scenes` / `activeScene` | 查询当前 Editor scene setup。 |
 | `CreateScene()` / `OpenScene(path)` / `CloseScene(scene)` | additive document 生命周期；关闭不删除 Asset。 |
-| `SaveScene(scene, directory)` | 保存到已有 source；未保存 Scene 在 fallback directory 创建 Asset。 |
+| `SaveScene(scene, directory)` | 保存到已有 source；未保存 Scene 在调用方提供的 fallback directory 创建 Asset。全局 Save 传入 File Browser 当前目录。 |
 | `SaveSceneToDirectory(scene, directory)` | 显式保存到目标 Asset directory。 |
 | `SavePrefab(gameObject, directory)` | 从 GameObject 子树保存 PrefabAsset。 |
 | `IsDirty(scene)` | 比较当前序列化 hash、source path 与文件名。 |

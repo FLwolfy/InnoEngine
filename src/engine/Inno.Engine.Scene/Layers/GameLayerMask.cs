@@ -6,23 +6,23 @@ namespace Inno.Engine.Scene.Layers;
 /// <summary>
 /// Stores a compact set of scene layers for rendering, physics, and query filtering.
 /// </summary>
-public readonly struct LayerMask : IEquatable<LayerMask>
+public readonly struct GameLayerMask : IEquatable<GameLayerMask>
 {
     /// <summary>
     /// Gets a mask containing no layers.
     /// </summary>
-    public static LayerMask none { get; } = new(0u);
+    public static GameLayerMask none { get; } = new(0u);
 
     /// <summary>
     /// Gets a mask containing every supported layer.
     /// </summary>
-    public static LayerMask everything { get; } = new(uint.MaxValue);
+    public static GameLayerMask everything { get; } = new(uint.MaxValue);
 
     /// <summary>
     /// Creates a mask from its raw thirty-two-bit representation.
     /// </summary>
     /// <param name="value">The raw mask bits.</param>
-    public LayerMask(uint value)
+    public GameLayerMask(uint value)
     {
         this.value = value;
     }
@@ -40,13 +40,13 @@ public readonly struct LayerMask : IEquatable<LayerMask>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="layers"/> is <see langword="null"/>.
     /// </exception>
-    public static LayerMask FromLayers(IEnumerable<Layer> layers)
+    public static GameLayerMask FromLayers(IEnumerable<GameLayer> layers)
     {
         ArgumentNullException.ThrowIfNull(layers);
         uint bits = 0u;
-        foreach (Layer layer in layers)
+        foreach (GameLayer layer in layers)
             bits |= 1u << layer.index;
-        return new LayerMask(bits);
+        return new GameLayerMask(bits);
     }
 
     /// <summary>
@@ -54,31 +54,31 @@ public readonly struct LayerMask : IEquatable<LayerMask>
     /// </summary>
     /// <param name="layer">The layer to test.</param>
     /// <returns><see langword="true"/> when the layer bit is enabled.</returns>
-    public bool Contains(Layer layer) => (value & (1u << layer.index)) != 0u;
+    public bool Contains(GameLayer layer) => (value & (1u << layer.index)) != 0u;
 
     /// <summary>
     /// Returns a mask with the supplied layer enabled.
     /// </summary>
     /// <param name="layer">The layer to enable.</param>
     /// <returns>The updated immutable mask.</returns>
-    public LayerMask With(Layer layer) => new(value | (1u << layer.index));
+    public GameLayerMask With(GameLayer layer) => new(value | (1u << layer.index));
 
     /// <summary>
     /// Returns a mask with the supplied layer disabled.
     /// </summary>
     /// <param name="layer">The layer to disable.</param>
     /// <returns>The updated immutable mask.</returns>
-    public LayerMask Without(Layer layer) => new(value & ~(1u << layer.index));
+    public GameLayerMask Without(GameLayer layer) => new(value & ~(1u << layer.index));
 
     /// <summary>
     /// Determines whether another mask contains the same layer bits.
     /// </summary>
     /// <param name="other">The mask to compare with this value.</param>
     /// <returns><see langword="true"/> when both masks contain the same bits.</returns>
-    public bool Equals(LayerMask other) => value == other.value;
+    public bool Equals(GameLayerMask other) => value == other.value;
 
     /// <inheritdoc />
-    public override bool Equals(object? obj) => obj is LayerMask other && Equals(other);
+    public override bool Equals(object? obj) => obj is GameLayerMask other && Equals(other);
 
     /// <inheritdoc />
     public override int GetHashCode() => value.GetHashCode();
@@ -92,7 +92,7 @@ public readonly struct LayerMask : IEquatable<LayerMask>
     /// <param name="left">The first mask.</param>
     /// <param name="right">The second mask.</param>
     /// <returns>The bitwise union of both masks.</returns>
-    public static LayerMask operator |(LayerMask left, LayerMask right) => new(left.value | right.value);
+    public static GameLayerMask operator |(GameLayerMask left, GameLayerMask right) => new(left.value | right.value);
 
     /// <summary>
     /// Retains only layer bits enabled in both masks.
@@ -100,14 +100,14 @@ public readonly struct LayerMask : IEquatable<LayerMask>
     /// <param name="left">The first mask.</param>
     /// <param name="right">The second mask.</param>
     /// <returns>The bitwise intersection of both masks.</returns>
-    public static LayerMask operator &(LayerMask left, LayerMask right) => new(left.value & right.value);
+    public static GameLayerMask operator &(GameLayerMask left, GameLayerMask right) => new(left.value & right.value);
 
     /// <summary>
     /// Inverts every layer bit in a mask.
     /// </summary>
     /// <param name="mask">The mask to invert.</param>
     /// <returns>The complement of the supplied mask.</returns>
-    public static LayerMask operator ~(LayerMask mask) => new(~mask.value);
+    public static GameLayerMask operator ~(GameLayerMask mask) => new(~mask.value);
 
     /// <summary>
     /// Determines whether two masks contain the same bits.
@@ -115,7 +115,7 @@ public readonly struct LayerMask : IEquatable<LayerMask>
     /// <param name="left">The first mask.</param>
     /// <param name="right">The second mask.</param>
     /// <returns><see langword="true"/> when both masks are equal.</returns>
-    public static bool operator ==(LayerMask left, LayerMask right) => left.Equals(right);
+    public static bool operator ==(GameLayerMask left, GameLayerMask right) => left.Equals(right);
 
     /// <summary>
     /// Determines whether two masks contain different bits.
@@ -123,5 +123,5 @@ public readonly struct LayerMask : IEquatable<LayerMask>
     /// <param name="left">The first mask.</param>
     /// <param name="right">The second mask.</param>
     /// <returns><see langword="true"/> when both masks differ.</returns>
-    public static bool operator !=(LayerMask left, LayerMask right) => !left.Equals(right);
+    public static bool operator !=(GameLayerMask left, GameLayerMask right) => !left.Equals(right);
 }

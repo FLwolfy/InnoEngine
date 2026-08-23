@@ -10,19 +10,19 @@ namespace Inno.Engine.Scene.Layers;
 /// Converts a layer mask through its stable thirty-two-bit value.
 /// </summary>
 [SerializationExtension]
-internal sealed class LayerMaskConverter : SerializationConverter<LayerMask>
+internal sealed class GameLayerMaskConverter : SerializationConverter<GameLayerMask>
 {
     /// <inheritdoc />
-    public override void Write(SerializationWriter writer, LayerMask value)
+    public override void Write(SerializationWriter writer, GameLayerMask value)
     {
         ArgumentNullException.ThrowIfNull(writer);
         writer.Write("value", value.value);
     }
 
     /// <inheritdoc />
-    public override LayerMask Read(SerializationReader reader)
+    public override GameLayerMask Read(SerializationReader reader)
     {
         ArgumentNullException.ThrowIfNull(reader);
-        return new LayerMask(reader.Read<uint>("value"));
+        return new GameLayerMask(reader.Read<uint>("value"));
     }
 }

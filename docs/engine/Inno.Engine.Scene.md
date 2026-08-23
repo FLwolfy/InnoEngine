@@ -36,16 +36,16 @@ IReadOnlyList<GameObject> players = scene.FindObjectsWithTag("Player");
 
 Name 与 Tag 都按 `StringComparison.Ordinal` 匹配，复数查询保持 Scene storage order。`SceneStore` 对两类查询建立惰性字典索引；Scene 结构或对象 `name/tag` 变化时索引失效，下一次查询重建一次，之后不再线性扫描完整 Scene。Tag 会随 Scene、Prefab 和 prefab override 一起序列化。
 
-## Layer、LayerMask 与 LayerStack
+## GameLayer、GameLayerMask 与 GameLayerStack
 
 `Inno.Engine.Scene.Layers` 将对象所属层、筛选集合与项目配置明确分开：
 
 | 类型 | 职责 |
 | --- | --- |
-| `Layer` | 0–31 的稳定单层索引。`GameObject.layer` 始终只保存一个值。 |
-| `LayerMask` | 32 位多层集合，用于渲染、物理和 Scene 查询过滤。 |
-| `LayerDefinition` | 一个已命名 slot 的只读快照。 |
-| `LayerStack` | 最多 32 个名称及对称 interaction matrix。 |
+| `GameLayer` | 0–31 的稳定单层索引。`GameObject.layer` 始终只保存一个值。 |
+| `GameLayerMask` | 32 位多层集合，用于渲染、物理和 Scene 查询过滤。 |
+| `GameLayerDefinition` | 一个已命名 slot 的只读快照。 |
+| `GameLayerStack` | 最多 32 个名称及对称 interaction matrix。 |
 
 层名称不写入 Scene 或 Prefab。对象只序列化数值 slot，因此重命名配置不会重写资产，也不会破坏引用；移除名称后对象仍保留原 slot，重新定义同一 slot 即可恢复显示语义。
 
@@ -53,10 +53,10 @@ Name 与 Tag 都按 `StringComparison.Ordinal` 匹配，复数查询保持 Scene
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Layers;
 
-LayerStack layers = settings.layerStack;
-Layer player = layers.GetLayer("Player");
-Layer enemy = layers.GetLayer("Enemy");
-LayerMask visible = layers.GetMask(["Player", "Enemy"]);
+GameLayerStack layers = settings.layerStack;
+GameLayer player = layers.GetLayer("Player");
+GameLayer enemy = layers.GetLayer("Enemy");
+GameLayerMask visible = layers.GetMask(["Player", "Enemy"]);
 
 gameObject.layer = player;
 GameObject? firstPlayer = scene.FindObjectWithLayer(player);
@@ -66,7 +66,7 @@ layers.SetInteraction(player, enemy, canInteract: false);
 bool canCollide = layers.CanInteract(player, enemy); // false in both directions
 ```
 
-`Layer.defaultLayer` 固定为 slot 0，名称固定为 `Default`，不能删除。自定义名称按 ordinal 规则唯一。`Layer` 与 `LayerMask` 都有显式 SerializationConverter，可以安全用于 `[SerializableProperty]`。
+`GameLayer.defaultLayer` 固定为 slot 0，名称固定为 `Default`，不能删除。自定义名称按 ordinal 规则唯一。`GameLayer` 与 `GameLayerMask` 都有显式 SerializationConverter，可以安全用于 `[SerializableProperty]`。
 
 ## Component 顺序
 

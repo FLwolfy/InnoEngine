@@ -87,6 +87,7 @@ public sealed class ImGuiEditorRuntime : Inno.Editor.Core.EditorRuntime
     public void Draw()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
+        EditorWidget.ApplyPendingStyle();
         IReadOnlyList<EditorModalExtension> modals = m_runtime.modals;
         double now = m_timer.Elapsed.TotalSeconds;
         bool blocksInteraction = m_modals.Update(modals, now);
@@ -141,7 +142,7 @@ public sealed class ImGuiEditorRuntime : Inno.Editor.Core.EditorRuntime
                         $"panel/{extension.id}",
                         interactions.selection.selectedTarget).Focus();
                 }
-            });
+            }, useWindowPadding: extension.panel.useWindowPadding);
             extension.panel.isOpen = isOpen;
         }
     }

@@ -9,9 +9,9 @@ public sealed class EditorPanelAttribute : Attribute
     /// <summary>
     /// Creates a dockable panel registration with stable identity and presentation metadata.
     /// </summary>
-    /// <param name="id">The stable identity used for View-menu routing and reload-state retention.</param>
+    /// <param name="id">The stable identity used for Panel-menu routing and reload-state retention.</param>
     /// <param name="title">The visible dockable-window title.</param>
-    /// <param name="order">The stable panel and generated View-menu ordering value.</param>
+    /// <param name="order">The stable panel and generated Panel-menu ordering value.</param>
     /// <param name="defaultOpen">Whether a newly discovered panel is visible before retained state is available.</param>
     /// <exception cref="ArgumentException">Thrown when <paramref name="id"/> or <paramref name="title"/> is empty.</exception>
     public EditorPanelAttribute(

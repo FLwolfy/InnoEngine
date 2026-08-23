@@ -19,16 +19,23 @@ public static partial class ImGuiWidget
     /// <param name="isOpen">Visible state.</param>
     /// <param name="drawBody">Panel body callback.</param>
     /// <param name="flags">Window flags.</param>
+    /// <param name="useWindowPadding">Whether the panel body should use the current standard window padding.</param>
     public static void PanelWindow(
         string title,
         ref bool isOpen,
         Action drawBody,
-        ImGuiWindowFlags flags = ImGuiWindowFlags.NoCollapse)
+        ImGuiWindowFlags flags = ImGuiWindowFlags.NoCollapse,
+        bool useWindowPadding = true)
     {
         if (!isOpen)
             return;
 
-        if (NativeImGui.Begin(title, flags))
+        if (!useWindowPadding)
+            NativeImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
+        bool visible = NativeImGui.Begin(title, flags);
+        if (!useWindowPadding)
+            NativeImGui.PopStyleVar();
+        if (visible)
         {
             if (DrawPanelCloseButton(title))
                 isOpen = false;
@@ -38,6 +45,47 @@ public static partial class ImGuiWidget
         }
 
         NativeImGui.End();
+    }
+
+    /// <summary>
+    /// Draws a vertically auto-sized content region that is constrained to the current available
+    /// width and cannot create an independent scroll range.
+    /// </summary>
+    /// <param name="id">Stable identifier used by ImGui to track the content region.</param>
+    /// <param name="drawContent">Callback that draws the complete region contents.</param>
+    /// <param name="useWindowPadding">
+    /// Whether the region should apply the centralized standard window padding exactly once.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="id"/> is empty.
+    /// </exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="drawContent"/> is <see langword="null"/>.
+    /// </exception>
+    public static void ConstrainedContent(
+        string id,
+        Action drawContent,
+        bool useWindowPadding = true)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentNullException.ThrowIfNull(drawContent);
+
+        float width = MathF.Max(1f, NativeImGui.GetContentRegionAvail().X);
+        Vector2 padding = useWindowPadding
+            ? NativeImGui.GetStyle().WindowPadding
+            : Vector2.Zero;
+        float contentWidth = MathF.Max(1f, width - padding.X * 2f);
+        ImGuiChildFlags childFlags = ImGuiChildFlags.AutoResizeY |
+                                     ImGuiChildFlags.AlwaysAutoResize;
+        if (useWindowPadding)
+            childFlags |= ImGuiChildFlags.AlwaysUseWindowPadding;
+        ImGuiWindowFlags windowFlags = ImGuiWindowFlags.NoScrollbar |
+                                       ImGuiWindowFlags.NoScrollWithMouse |
+                                       ImGuiWindowFlags.NoSavedSettings;
+        NativeImGui.SetNextWindowContentSize(new Vector2(contentWidth, 0f));
+        if (NativeImGui.BeginChild(id, new Vector2(width, 0f), childFlags, windowFlags))
+            drawContent();
+        NativeImGui.EndChild();
     }
 
     private static bool DrawPanelCloseButton(string title)

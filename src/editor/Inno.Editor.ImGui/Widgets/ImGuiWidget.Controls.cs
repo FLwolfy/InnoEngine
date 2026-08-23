@@ -12,6 +12,52 @@ namespace Inno.Editor.ImGui.ImGuiWidget;
 public static partial class ImGuiWidget
 {
     /// <summary>
+    /// Gets the layout size of a compact colored label chip using the centralized editor style.
+    /// </summary>
+    /// <param name="label">Visible label text.</param>
+    /// <returns>The size reserved by <see cref="LabelChip"/> for the supplied text.</returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="label"/> is <see langword="null"/>.
+    /// </exception>
+    public static Vector2 GetLabelChipSize(string label)
+    {
+        ArgumentNullException.ThrowIfNull(label);
+        Vector2 textSize = NativeImGui.CalcTextSize(label);
+        return new Vector2(
+            textSize.X + style.labelChipPadding.X * 2f,
+            MathF.Max(
+                NativeImGui.GetFrameHeight(),
+                textSize.Y + style.labelChipPadding.Y * 2f));
+    }
+
+    /// <summary>
+    /// Draws non-interactive text centered on a compact, softly rounded colored background.
+    /// </summary>
+    /// <param name="label">Visible label text.</param>
+    /// <param name="background">Background color drawn behind the label.</param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="label"/> is <see langword="null"/>.
+    /// </exception>
+    public static void LabelChip(string label, Vector4 background)
+    {
+        ArgumentNullException.ThrowIfNull(label);
+        Vector2 size = GetLabelChipSize(label);
+        Vector2 minimum = NativeImGui.GetCursorScreenPos();
+        Vector2 textSize = NativeImGui.CalcTextSize(label);
+        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
+        drawList.AddRectFilled(
+            minimum,
+            minimum + size,
+            NativeImGui.ColorConvertFloat4ToU32(background),
+            style.labelChipRounding);
+        drawList.AddText(
+            minimum + (size - textSize) * 0.5f,
+            NativeImGui.GetColorU32(ImGuiCol.Text),
+            label);
+        NativeImGui.Dummy(size);
+    }
+
+    /// <summary>
     /// Draws a compact checkbox whose checked fill uses the current text color.
     /// </summary>
     /// <param name="id">Stable control identifier.</param>

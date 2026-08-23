@@ -36,11 +36,17 @@ public static partial class ImGuiWidget
             return;
         }
 
-        float resolvedLabelWidth = labelWidth > 0f
+        float availableWidth = MathF.Max(1f, NativeImGui.GetContentRegionAvail().X);
+        float desiredLabelWidth = labelWidth > 0f
             ? labelWidth
-            : Math.Clamp(NativeImGui.GetContentRegionAvail().X * style.propertyLabelRatio,
+            : Math.Clamp(availableWidth * style.propertyLabelRatio,
                 style.propertyLabelMinimumWidth,
                 style.propertyLabelMaximumWidth);
+        float tablePadding = NativeImGui.GetStyle().CellPadding.X * 2f;
+        float maximumLabelWidth = MathF.Max(
+            1f,
+            availableWidth - style.axisValueMinimumWidth - tablePadding);
+        float resolvedLabelWidth = MathF.Min(desiredLabelWidth, maximumLabelWidth);
         NativeImGui.TableSetupColumn("##label", ImGuiTableColumnFlags.WidthFixed, resolvedLabelWidth);
         NativeImGui.TableSetupColumn("##value", ImGuiTableColumnFlags.WidthStretch, 1f);
         NativeImGui.TableNextRow();
@@ -103,7 +109,7 @@ public static partial class ImGuiWidget
     }
 
     /// <summary>
-    /// Draws a horizontal insertion marker in screen coordinates.
+    /// Draws a horizontal insertion marker above normal window content in screen coordinates.
     /// </summary>
     /// <param name="fromX">Marker start X coordinate.</param>
     /// <param name="toX">Marker end X coordinate.</param>
@@ -111,7 +117,7 @@ public static partial class ImGuiWidget
     public static void InsertionLine(float fromX, float toX, float y)
     {
         uint color = NativeImGui.GetColorU32(ImGuiCol.DragDropTarget);
-        NativeImGui.GetWindowDrawList().AddLine(
+        NativeImGui.GetForegroundDrawList().AddLine(
             new Vector2(fromX, y),
             new Vector2(toX, y),
             color,
@@ -119,7 +125,8 @@ public static partial class ImGuiWidget
     }
 
     /// <summary>
-    /// Draws a rectangular drag-and-drop target highlight in screen coordinates.
+    /// Draws the standard yellow rectangular drag-and-drop target highlight above all normal
+    /// window content in screen coordinates.
     /// </summary>
     /// <param name="min">Minimum target coordinate.</param>
     /// <param name="max">Maximum target coordinate.</param>
@@ -129,7 +136,8 @@ public static partial class ImGuiWidget
             min,
             max,
             NativeImGui.GetColorU32(ImGuiCol.DragDropTarget),
-            1f,
+            style.frameRounding,
+            ImDrawFlags.None,
             style.dragMarkerThickness);
     }
 
@@ -199,7 +207,7 @@ public static partial class ImGuiWidget
 
         NativeImGui.Dummy(new Vector2(axisWidth, height));
         NativeImGui.SameLine(0f, 0f);
-        NativeImGui.SetNextItemWidth(MathF.Max(style.axisValueMinimumWidth, width - axisWidth));
+        NativeImGui.SetNextItemWidth(MathF.Max(1f, width - axisWidth));
     }
 
     private static Vector4 GetAxisColor(string axis)

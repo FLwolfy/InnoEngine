@@ -38,6 +38,9 @@ public sealed class HierarchyPanel : EditorPanel
     private readonly HashSet<Guid> m_initializedSceneIds = [];
     private int m_visibleRowIndex;
 
+    /// <inheritdoc />
+    public override bool useWindowPadding => false;
+
     /// <summary>
     /// Creates the hierarchy panel.
     /// </summary>
@@ -55,6 +58,20 @@ public sealed class HierarchyPanel : EditorPanel
     /// <inheritdoc />
     public override void Draw(EditorContext context)
     {
+        if (NativeImGui.BeginChild(
+                "##HierarchyContent",
+                Vector2.Zero,
+                ImGuiChildFlags.None,
+                ImGuiWindowFlags.NoSavedSettings |
+                ImGuiWindowFlags.HorizontalScrollbar))
+        {
+            DrawContent(context);
+        }
+        NativeImGui.EndChild();
+    }
+
+    private void DrawContent(EditorContext context)
+    {
         m_drawnIds.Clear();
         m_visibleRowIndex = 0;
         m_selection.Prune(context);
@@ -70,7 +87,7 @@ public sealed class HierarchyPanel : EditorPanel
                 Vector2 contentOrigin = NativeImGui.GetCursorScreenPos();
                 NativeImGui.SetCursorScreenPos(new Vector2(
                     contentOrigin.X,
-                    contentOrigin.Y - NativeImGui.GetStyle().WindowPadding.Y));
+                    contentOrigin.Y - ImGuiP.GetCurrentWindow().WindowPadding.Y));
             }
             for (int i = 0; i < scenes.Count; i++)
             {
@@ -167,7 +184,8 @@ public sealed class HierarchyPanel : EditorPanel
                 showBackground = true,
                 backgroundColor = m_visibleRowIndex % 2 == 0
                     ? EditorPalette.collectionRow
-                    : EditorPalette.collectionRowAlternate
+                    : EditorPalette.collectionRowAlternate,
+                drawViewportOverlay = () => DrawVisibilityButton(gameObject, id)
             });
         m_visibleRowIndex++;
 
@@ -249,28 +267,26 @@ public sealed class HierarchyPanel : EditorPanel
             NativeImGui.PopStyleColor();
         }
 
-        DrawVisibilityButton(gameObject, id);
     }
 
     private void DrawVisibilityButton(GameObject gameObject, string id)
     {
         string icon = gameObject.activeSelf ? ImGuiIcon.Eye : ImGuiIcon.EyeSlash;
         float buttonWidth = GetVisibilityButtonWidth();
-        float right = NativeImGui.GetWindowPos().X
-            + NativeImGui.GetWindowSize().X
-            - NativeImGui.GetStyle().WindowPadding.X
-            - buttonWidth;
+        float right = ImGuiP.GetCurrentWindow().WorkRect.Max.X -
+                      EditorWidget.style.windowPadding.X -
+                      buttonWidth;
         NativeImGui.SameLine();
         Vector2 cursor = NativeImGui.GetCursorScreenPos();
         NativeImGui.SetCursorScreenPos(new Vector2(MathF.Max(cursor.X, right), cursor.Y));
-        if (EditorWidget.ClickableText($"hierarchy_visibility_{id}", icon,
+        if (EditorWidget.ClickableIcon($"hierarchy_visibility_{id}", icon,
                 gameObject.activeSelf ? "Deactivate" : "Activate"))
         {
             m_edits.SetGameObjectActive(gameObject, !gameObject.activeSelf);
         }
     }
 
-    private static float GetVisibilityButtonWidth() => EditorWidget.GetCompactClickableTextSize().X;
+    private static float GetVisibilityButtonWidth() => EditorWidget.GetCompactIconSize().X;
 
     private void DrawSceneContextMenu(EditorContext context, GameScene scene, string id)
     {

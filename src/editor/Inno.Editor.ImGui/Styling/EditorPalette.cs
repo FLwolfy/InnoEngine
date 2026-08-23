@@ -140,6 +140,12 @@ public static class EditorPalette
     /// <summary>Gets the persistent Inspector target header border.</summary>
     public static Vector4 inspectorTargetHeaderBorder { get; } = new(0.30f, 0.29f, 0.34f, 1f);
 
+    /// <summary>Gets the subdued background of Tag labels in Inspector target headers.</summary>
+    public static Vector4 inspectorTagLabel { get; } = new(0.34f, 0.29f, 0.44f, 1f);
+
+    /// <summary>Gets the subdued background of Layer labels in Inspector target headers.</summary>
+    public static Vector4 inspectorLayerLabel { get; } = new(0.24f, 0.34f, 0.40f, 1f);
+
     /// <summary>Gets inspector card body background.</summary>
     public static Vector4 inspectorCardBody { get; } = new(0.12f, 0.12f, 0.14f, 1f);
 

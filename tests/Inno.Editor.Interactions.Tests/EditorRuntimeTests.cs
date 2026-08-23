@@ -6,6 +6,8 @@ using System.Reflection;
 
 using Inno.Core.Assemblies;
 using Inno.Core.Diagnose;
+using Inno.Core.Events;
+using Inno.Core.Input;
 using Inno.Core.Reflection;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
@@ -239,6 +241,35 @@ public sealed class EditorRuntimeTests : IDisposable
         Assert.Equal(
             ["Asset", "Generated"],
             create.children.Select(static item => item.label));
+    }
+
+    [Fact]
+    public void MainMenuPlacesGeneratedPanelTogglesUnderPanel()
+    {
+        EditorMenuModel menu = m_runtime.interactions
+            .For(EditorAreas.MainMenu)
+            .BuildMenu();
+
+        EditorMenuItem panel = Assert.Single(menu.items.Where(static item => item.label == "Panel"));
+        Assert.Contains(panel.children, static item => item.label == "Test");
+        EditorMenuItem? view = menu.items.SingleOrDefault(static item => item.label == "View");
+        Assert.True(view is null || view.children.All(static item => item.label != "Test"));
+    }
+
+    [Fact]
+    public void PlusGestureTreatsPhysicalShiftAsPartOfTheSymbolicKey()
+    {
+        KeyModifier primary = OperatingSystem.IsMacOS()
+            ? KeyModifier.Super
+            : KeyModifier.Control;
+        var gesture = new HotKeyGesture(KeyCode.Plus, primary);
+
+        Assert.True(gesture.Matches(new KeyPressedEvent(
+            windowId: 0,
+            KeyCode.Plus,
+            primary | KeyModifier.Shift)));
+        Assert.Equal(primary, gesture.modifiers);
+        Assert.DoesNotContain("Shift", gesture.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

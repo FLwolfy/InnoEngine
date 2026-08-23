@@ -9,7 +9,10 @@ using Inno.Assets.Core;
 using Inno.Assets.Loader;
 using Inno.Assets.Types;
 using Inno.Core.Assemblies;
+using Inno.Core.Diagnose;
+using Inno.Core.Events;
 using Inno.Core.Identity;
+using Inno.Core.Input;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 using Inno.Editor.Core;
@@ -25,6 +28,7 @@ using Inno.Editor.Scene;
 using Inno.Editor.Scripting;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Assets;
+using Inno.Engine.Scene.Layers;
 
 using Xunit;
 
@@ -115,6 +119,12 @@ public sealed class ScriptManagerTests : IDisposable
             {
                 [SerializableProperty]
                 public int value { get; set; } = 7;
+
+                [SerializableProperty]
+                public GameLayer layer { get; set; } = GameLayer.defaultLayer;
+
+                [SerializableProperty]
+                public GameLayerMask mask { get; set; } = GameLayerMask.everything;
             }
 
             [AssetImporterExtension]
@@ -271,6 +281,251 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(AssetManager.TryGetPersistentId(renamedPath, out Guid renamedId));
         Assert.Equal(persistentId, renamedId);
         Assert.False(workspace.IsDirty(scene));
+    }
+
+    [Fact]
+    public void GlobalSaveCreatesUnsavedScenesInTheOpenAssetDirectory()
+    {
+        _ = Assembly.Load(typeof(HierarchyPanel).Assembly.GetName());
+        TypeCacheManager.Rebuild();
+        AssetManager.CreateDirectory("Open Folder");
+        var editorContext = new EditorContext(m_projectRoot);
+        editorContext.settings.SetSection(
+            "Module.asset-browser",
+            new System.Collections.Generic.Dictionary<string, string>
+            {
+                ["currentDirectory"] = "\"Open Folder\""
+            });
+
+        using var runtime = new EditorInteractionRuntime(editorContext);
+        runtime.Start();
+        var workspace = new EditorSceneWorkspace(runtime.interactions);
+        GameScene scene = workspace.CreateScene();
+        scene.name = "Current Directory Scene";
+
+        Assert.True(runtime.interactions
+            .For(EditorAreas.MainMenu)
+            .Execute(EditorActions.Save));
+        Assert.True(AssetManager.TryGetFileSystemEntry(
+            "Open Folder/Current Directory Scene.iscene",
+            out _));
+        Assert.False(AssetManager.TryGetFileSystemEntry(
+            "Current Directory Scene.iscene",
+            out _));
+    }
+
+    [Fact]
+    public void GlobalZoomRestoresAndRespondsToMenuAndKeyboardCommands()
+    {
+        var editorContext = new EditorContext(m_projectRoot);
+        editorContext.settings.SetSection(
+            "Module.editor-ui-zoom",
+            new System.Collections.Generic.Dictionary<string, string>
+            {
+                ["zoom"] = "1.2"
+            });
+
+        try
+        {
+            using var runtime = new EditorInteractionRuntime(editorContext);
+            runtime.Start();
+            Assert.Equal(1.2f, EditorWidget.style.zoom, 3);
+            KeyModifier primary = OperatingSystem.IsMacOS()
+                ? KeyModifier.Super
+                : KeyModifier.Control;
+            EditorInteraction mainMenu = runtime.interactions.For(EditorAreas.MainMenu);
+            Assert.True(mainMenu.TryGetShortcut(
+                "editor.ui.zoom-in",
+                out HotKeyGesture zoomInGesture));
+            Assert.Equal(KeyCode.Plus, zoomInGesture.key);
+            Assert.Equal(primary, zoomInGesture.modifiers);
+
+            runtime.HandleKeyPressed(new KeyPressedEvent(
+                windowId: 0,
+                KeyCode.Plus,
+                primary | KeyModifier.Shift));
+            Assert.Equal(1.3f, EditorWidget.style.zoom, 3);
+
+            Assert.True(runtime.interactions
+                .For(EditorAreas.MainMenu)
+                .Execute("editor.ui.zoom-out"));
+            Assert.Equal(1.2f, EditorWidget.style.zoom, 3);
+
+            runtime.HandleKeyPressed(new KeyPressedEvent(
+                windowId: 0,
+                KeyCode.D0,
+                primary));
+            Assert.Equal(1f, EditorWidget.style.zoom, 3);
+
+            runtime.SaveWorkspace();
+            Assert.True(editorContext.settings.TryGetSection(
+                "Module.editor-ui-zoom",
+                out System.Collections.Generic.IReadOnlyDictionary<string, string> values));
+            Assert.Equal("1", values["zoom"]);
+        }
+        finally
+        {
+            _ = EditorWidget.style.ResetZoom();
+        }
+    }
+
+    [Fact]
+    public void FileBrowserSplitterDefaultsToCenterAndRestoresNormalizedRatio()
+    {
+        var editorContext = new EditorContext(m_projectRoot);
+        using (var runtime = new EditorInteractionRuntime(editorContext))
+        {
+            runtime.Start();
+            runtime.SaveWorkspace();
+        }
+
+        Assert.True(editorContext.settings.TryGetSection(
+            "Panel.asset-browser-panel",
+            out System.Collections.Generic.IReadOnlyDictionary<string, string> defaultValues));
+        Assert.Equal("0.5", defaultValues["treePaneRatio"]);
+        Assert.DoesNotContain("treeWidth", defaultValues.Keys);
+
+        editorContext.settings.SetSection(
+            "Panel.asset-browser-panel",
+            new System.Collections.Generic.Dictionary<string, string>
+            {
+                ["treePaneRatio"] = "0.31"
+            });
+        using (var runtime = new EditorInteractionRuntime(editorContext))
+        {
+            runtime.Start();
+            runtime.SaveWorkspace();
+        }
+
+        Assert.True(editorContext.settings.TryGetSection(
+            "Panel.asset-browser-panel",
+            out System.Collections.Generic.IReadOnlyDictionary<string, string> restoredValues));
+        Assert.Equal("0.31", restoredValues["treePaneRatio"]);
+    }
+
+    [Fact]
+    public void MissingLayerSettingsUseDefaultAndReportOnlyUndefinedLoadedAssignments()
+    {
+        _ = Assembly.Load(typeof(InspectorPanel).Assembly.GetName());
+        TypeCacheManager.Rebuild();
+        var sink = new TestDiagnosticSink();
+        DiagnosticManager.RegisterSink(sink);
+        try
+        {
+            Assert.False(AssetManager.TryGetFileSystemEntry(
+                GameLayerSettingsAsset.defaultPath,
+                out _));
+
+            using var runtime = new EditorInteractionRuntime(m_projectRoot);
+            runtime.Start();
+            var workspace = new EditorSceneWorkspace(runtime.interactions);
+            GameObject gameObject = workspace.CreateScene().CreateObject("Undefined GameLayer Object");
+            gameObject.layer = new GameLayer(7);
+
+            Assert.True(UpdateUntil(
+                runtime,
+                () => sink.ContainsCode("GAMEOBJECT-LAYER-UNDEFINED")));
+
+            gameObject.layer = GameLayer.defaultLayer;
+            Assert.True(UpdateUntil(
+                runtime,
+                () => !sink.ContainsCode("GAMEOBJECT-LAYER-UNDEFINED")));
+            Assert.False(AssetManager.TryGetFileSystemEntry(
+                GameLayerSettingsAsset.defaultPath,
+                out _));
+        }
+        finally
+        {
+            DiagnosticManager.UnregisterSink(sink);
+        }
+    }
+
+    [Fact]
+    public void DeletingLayerSettingsFallsBackToDefaultAndReportsLoadedAssignments()
+    {
+        _ = Assembly.Load(typeof(InspectorPanel).Assembly.GetName());
+        TypeCacheManager.Rebuild();
+        GameLayerSettingsAsset settings = GameLayerSettingsAsset.CreateDefault();
+        settings.layerStack.Define(new GameLayer(7), "Gameplay");
+        Assert.True(AssetManager.Save(GameLayerSettingsAsset.defaultPath, settings));
+
+        var sink = new TestDiagnosticSink();
+        DiagnosticManager.RegisterSink(sink);
+        try
+        {
+            using var runtime = new EditorInteractionRuntime(m_projectRoot);
+            runtime.Start();
+            var workspace = new EditorSceneWorkspace(runtime.interactions);
+            GameObject gameObject = workspace.CreateScene().CreateObject("Removed GameLayer Object");
+            gameObject.layer = new GameLayer(7);
+
+            AssetManager.Delete(GameLayerSettingsAsset.defaultPath);
+
+            Assert.True(UpdateUntil(
+                runtime,
+                () => sink.ContainsCode("GAMEOBJECT-LAYER-UNDEFINED")));
+            Assert.False(AssetManager.TryGetFileSystemEntry(
+                GameLayerSettingsAsset.defaultPath,
+                out _));
+        }
+        finally
+        {
+            DiagnosticManager.UnregisterSink(sink);
+        }
+    }
+
+    [Fact]
+    public void MovingLayerSettingsOutsideSettingsDisablesTheCatalogUntilItReturns()
+    {
+        _ = Assembly.Load(typeof(InspectorPanel).Assembly.GetName());
+        TypeCacheManager.Rebuild();
+        var gameplay = new GameLayer(7);
+        GameLayerSettingsAsset settings = GameLayerSettingsAsset.CreateDefault();
+        settings.layerStack.Define(gameplay, "Gameplay");
+        Assert.True(AssetManager.Save(GameLayerSettingsAsset.defaultPath, settings));
+        Guid settingsId = settings.identity.persistentId;
+        AssetManager.CreateDirectory("Archive");
+
+        var sink = new TestDiagnosticSink();
+        DiagnosticManager.RegisterSink(sink);
+        try
+        {
+            using (var runtime = new EditorInteractionRuntime(m_projectRoot))
+            {
+                runtime.Start();
+                var workspace = new EditorSceneWorkspace(runtime.interactions);
+                GameObject gameObject = workspace.CreateScene().CreateObject("Layered Object");
+                gameObject.layer = gameplay;
+                runtime.Update(new EditorFrame(0.016f, 0.016f, isFocused: true));
+                Assert.False(sink.ContainsCode("GAMEOBJECT-LAYER-UNDEFINED"));
+
+                const string movedPath = "Archive/GameLayers.ilayers";
+                AssetManager.Move(GameLayerSettingsAsset.defaultPath, movedPath);
+                Assert.False(AssetManager.TryGetFileSystemEntry(
+                    GameLayerSettingsAsset.defaultPath,
+                    out _));
+                GameLayerSettingsAsset moved = AssetManager.Load<GameLayerSettingsAsset>(movedPath);
+                Assert.Equal(settingsId, moved.identity.persistentId);
+                Assert.Equal("Gameplay", moved.layerStack.GetName(gameplay));
+
+                Assert.True(UpdateUntil(
+                    runtime,
+                    () => sink.ContainsCode("GAMEOBJECT-LAYER-UNDEFINED")));
+
+                AssetManager.Move(movedPath, GameLayerSettingsAsset.defaultPath);
+                Assert.True(UpdateUntil(
+                    runtime,
+                    () => !sink.ContainsCode("GAMEOBJECT-LAYER-UNDEFINED")));
+                GameLayerSettingsAsset restored = AssetManager.Load<GameLayerSettingsAsset>(
+                    GameLayerSettingsAsset.defaultPath);
+                Assert.Equal(settingsId, restored.identity.persistentId);
+                Assert.Equal("Gameplay", restored.layerStack.GetName(gameplay));
+            }
+        }
+        finally
+        {
+            DiagnosticManager.UnregisterSink(sink);
+        }
     }
 
     [Fact]
@@ -1331,6 +1586,21 @@ public sealed class ScriptManagerTests : IDisposable
     private ScriptCompilationResult Compile()
         => m_manager.CompileAsync().AsTask().GetAwaiter().GetResult();
 
+    private static bool UpdateUntil(EditorInteractionRuntime runtime, Func<bool> predicate)
+    {
+        DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+        int frameIndex = 0;
+        while (DateTime.UtcNow < deadline)
+        {
+            runtime.Update(new EditorFrame(0.016f, frameIndex * 0.016f, isFocused: true));
+            if (predicate())
+                return true;
+            frameIndex++;
+            System.Threading.Thread.Sleep(10);
+        }
+        return predicate();
+    }
+
     private void WriteMigratingBehavior(int generation)
         => Write("MigratingBehavior.cs", $$"""
             using InnoEngine.Reflection;
@@ -1544,6 +1814,35 @@ public sealed class ScriptManagerTests : IDisposable
             Environment.NewLine,
             result.diagnostics.Select(diagnostic =>
                 $"{diagnostic.id}: {diagnostic.filePath}({diagnostic.line},{diagnostic.column}) {diagnostic.message}"));
+
+    private sealed class TestDiagnosticSink : IDiagnosticSink
+    {
+        private readonly object m_sync = new();
+        private readonly System.Collections.Generic.Dictionary<string, DiagnosticReport> m_reports =
+            new(StringComparer.Ordinal);
+
+        internal bool ContainsCode(string code)
+        {
+            lock (m_sync)
+            {
+                return m_reports.Values.Any(
+                    report => report.diagnostics.Any(
+                        diagnostic => string.Equals(diagnostic.code, code, StringComparison.Ordinal)));
+            }
+        }
+
+        public void Replace(DiagnosticReport report)
+        {
+            lock (m_sync)
+                m_reports[report.source.id] = report;
+        }
+
+        public void Clear(DiagnosticSource source)
+        {
+            lock (m_sync)
+                m_reports.Remove(source.id);
+        }
+    }
 }
 
 [StableTypeId("753b0a86-dffc-4ac5-bb12-f4ad20179ea0")]

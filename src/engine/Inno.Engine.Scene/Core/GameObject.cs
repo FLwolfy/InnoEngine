@@ -25,7 +25,7 @@ public sealed class GameObject : EngineObject, ISerializable
     private PrefabConnectionRecord? m_prefabConnection;
     private string m_name;
     private string m_tag = defaultTag;
-    private Layer m_layer = Layer.defaultLayer;
+    private GameLayer m_layer = GameLayer.defaultLayer;
     private bool m_activeSelf = true;
     private bool m_activeInHierarchy = true;
 
@@ -95,10 +95,10 @@ public sealed class GameObject : EngineObject, ISerializable
     /// Gets or sets the single runtime layer used to filter this game object.
     /// </summary>
     /// <remarks>
-    /// Layer names are project configuration stored separately from scene data. Scene and prefab
+    /// GameLayer names are project configuration stored separately from scene data. Scene and prefab
     /// serialization persist only the stable numeric layer slot.
     /// </remarks>
-    public Layer layer
+    public GameLayer layer
     {
         get
         {
@@ -321,7 +321,7 @@ public sealed class GameObject : EngineObject, ISerializable
         m_scene?.NotifyObjectMetadataChanged(this);
     }
 
-    internal void SetLayerDirect(Layer value)
+    internal void SetLayerDirect(GameLayer value)
     {
         if (m_layer == value)
             return;

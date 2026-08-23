@@ -15,7 +15,7 @@ internal static class ComponentFieldDrawer
     {
         float spacing = NativeImGui.GetStyle().ItemSpacing.X;
         return MathF.Max(
-            EditorWidget.style.vectorFieldMinimumWidth,
+            1f,
             (NativeImGui.GetContentRegionAvail().X - spacing * (count - 1)) / count);
     }
 

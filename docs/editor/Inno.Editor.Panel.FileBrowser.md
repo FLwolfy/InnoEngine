@@ -4,7 +4,7 @@
 
 该项目完整拥有 File Browser feature：Tree/List/Grid 表现、导航与过滤、Asset selection、AssetEditor 扩展、文件操作 Action、菜单、Asset drag source，以及 `AssetFileEntry` 的 `AssetSelectionInspectionDrawer`。它只引用共享的 `Inno.Editor.Inspection`，不引用 Hierarchy 或 Inspector Panel。
 
-内建 extension icon catalog 将 `.ilayers` 显示为 Layer Group。File Browser 仍只选择 `AssetFileEntry`；Inspector composition root 会在存在 exact asset drawer 时加载 canonical asset 并使用该 drawer，因此项目层设置可以直接编辑，同时 File Browser 的 Rename/Delete/Drag target 语义保持不变。
+内建 extension icon catalog 将 `.ilayers` 显示为 Layer Group。File Browser 仍只选择 `AssetFileEntry`；Inspector composition root 会在存在 exact asset drawer 时加载对应资产。只有 `Assets/Settings/GameLayers.ilayers` 可以作为项目层设置编辑和消费；把它拖到其他目录后文件与 metadata 会正常移动，但 Inspector 会显示位置错误，运行时立即退回 Default-only layer catalog。拖回 canonical path 后重新识别其原内容。
 
 ## 公共扩展 API
 
@@ -45,7 +45,17 @@ public sealed class AnimationClipEditor : AssetEditor
 
 Asset Rename/Delete 的物理事务始终由 `AssetManager` 执行。AssetEditor 只能验证以及接收提交后的通知，不能自行移动 source/meta/artifact，因此外部文件变化与 Editor 操作拥有同一身份规则。
 
-Create Folder、Rename 与 Delete 都接入共享中立 Undo/Redo。Rename 只记录 source/target path；Delete 把 source、目录结构和 `.imeta` 编码进 History payload。大 payload 自动落到 `<Project>/Library/Editor/History`，Undo 先在临时目录完整验证 archive，再提交回 Asset root 并 `Rescan`，因此恢复失败不会留下半个目录。原 `.imeta` 会恢复相同 persistent ID；Redo 再走 `AssetManager.Delete`。目标发生外部冲突时操作失败并留在原栈，绝不覆盖新文件。
+Create Folder、Rename、Move 与 Delete 都接入共享中立 Undo/Redo。Rename/Move 只记录 source/target path；Delete 把 source、目录结构和 `.imeta` 编码进 History payload。大 payload 自动落到 `<Project>/Library/Editor/History`，Undo 先在临时目录完整验证 archive，再提交回 Asset root 并 `Rescan`，因此恢复失败不会留下半个目录。原 `.imeta` 会恢复相同 persistent ID；Redo 再走 `AssetManager.Delete`。目标发生外部冲突时操作失败并留在原栈，绝不覆盖新文件。
+
+## 文件与目录移动
+
+Tree、List 和 Grid 使用同一个 `AssetFileEntry` 目录目标及 `FileBrowserAreas.Browser` drop handler。文件仍以共享 `AssetInfo` 作为 payload，目录以 `AssetFileEntry` 作为 payload；两者都可以拖到任意视图中的目录、Tree 根节点或当前目录空白区域，因此可以从 Grid 拖到 Tree，也可以从 Tree 拖到 List/Grid。
+
+Tree pane 只在名称或层级缩进真实超出 viewport 时产生横向范围，并显示原生水平 scrollbar；短内容没有 scrollbar。Tree 的 label/icon/hit area 只应用一次 `ScrollX`，不会出现内容比 disclosure 或 guide 多移动一份滚动距离的情况。
+
+提交前统一检查目标目录存在、同名冲突、目录拖入自身或 descendant，以及 AssetEditor 对 move 的验证。拖到当前 parent 属于 no-op，不产生 History；成功移动后保留 source/meta identity、选择新路径，并以单个 `Move Asset` 操作进入 Undo/Redo。目录移动由 `AssetManager.Move` 原子处理，目录内子项不单独复制或逐项重建。
+
+所有 Tree/List/Grid 目录目标统一调用 `ImGuiWidget.DropTargetHighlight`。目标框使用全局 `DragDropTarget` 黄色、统一 rounding/thickness，并绘制在 viewport foreground draw list，因此不会被 Table column、Grid cell 或 child window 的 clip rect 截断。
 
 为某类 Asset 添加额外右键菜单只需普通 Action：
 
@@ -111,8 +121,9 @@ CLR 层的 icon 常量仍是 ImGui 所需的 `const string` glyph；`AssetIconKi
 - 输入框失去焦点或 selection 切换到其他 target 时，Rename Action 会提交当前有效名称并结束；无效名称保留原值并结束。
 - Tree/List/Grid 的未占用背景收到左键点击时会清除当前 Asset selection。
 - SceneAsset 打开 Action 由 Hierarchy feature 实现，但使用全局 Open 语义和共享路径参数，不形成 Panel project 引用。
+- 全局 Save 保存尚无 source path 的 Scene 时，使用 File Browser 当前打开目录作为 fallback；已有 source 的 Scene 仍保存回自身路径。
 
-Asset Browser Module 只在 Workspace 中保存当前目录；Asset selection 属于当前 Editor session，不写入 `editor.ini`。运行期间若选中的路径被外部移动，Change Tracker 仍会按本次 session 的路径变化同步 selection；被删除时则清除。Panel 自己保存 List/Grid 模式、搜索过滤、scope/type filter、tree 宽度、grid scale，以及 List 中 Name/Type/Source 两个分隔位置。列分隔位置以 `0..1` 的归一化值写入 `listNameSeparator` 和 `listTypeSeparator`，因此 Panel 宽度变化后仍能恢复相同比例。
+Asset Browser Module 只在 Workspace 中保存当前目录；Asset selection 属于当前 Editor session，不写入 `editor.ini`。运行期间若选中的路径被外部移动，Change Tracker 仍会按本次 session 的路径变化同步 selection；被删除时则清除。Panel 自己保存 List/Grid 模式、搜索过滤、scope/type filter、Tree/Content 分隔比例、grid scale，以及 List 中 Name/Type/Source 两个分隔位置。没有 `[InnoEditor][Panel.asset-browser-panel]` 状态时，Tree 与 Content 在扣除 splitter 后各占一半；拖动后以 `treePaneRatio` 的 `0..1` 归一化值保存，下次打开项目时恢复。列分隔位置同样以 `0..1` 的归一化值写入 `listNameSeparator` 和 `listTypeSeparator`，因此 Panel 宽度变化后仍能恢复相同比例。
 
 List 的三个 column 使用同一个内容 inset，手动 splitter 只占用独立 hit area，不会吞掉 Name、Type 或 Source 的左右留白。Grid 图标和文件名使用 draw-list overlay 绘制，不通过 `SetCursorScreenPos` 移动布局 cursor；图标先从卡片中扣除顶部、水平和 label 间距，再按剩余区域等比缩小。最终位置使用 baked glyph 的 `X0/Y0/X1/Y1` 可见边界计算，所以 Font Awesome 中左右 bearing 不对称的 Cube、Folder 等图标也会把真实轮廓中心放在卡片水平中心线上，并且不会越过卡片上沿。Selectable 仍是唯一负责 cell 尺寸与输入的 ImGui item。Inline Rename 必须临时移动 cursor 时，会在恢复布局位置后提交零尺寸 item，避免扩展 parent boundary 的 ImGui assertion。
 

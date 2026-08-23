@@ -254,14 +254,14 @@ public sealed class SceneHistoryTests : IDisposable
     {
         GameScene scene = m_workspace.CreateScene();
         GameObject gameObject = scene.CreateObject("Layered");
-        var gameplay = new Layer(6);
+        var gameplay = new GameLayer(6);
 
         m_edits.SetGameObjectLayer(gameObject, gameplay);
 
         Assert.Equal(gameplay, gameObject.layer);
         Assert.Same(gameObject, scene.FindObjectWithLayer(gameplay));
         Assert.True(m_runtime.interactions.history.Undo().succeeded);
-        Assert.Equal(Layer.defaultLayer, gameObject.layer);
+        Assert.Equal(GameLayer.defaultLayer, gameObject.layer);
         Assert.Null(scene.FindObjectWithLayer(gameplay));
         Assert.True(m_runtime.interactions.history.Redo().succeeded);
         Assert.Equal(gameplay, gameObject.layer);

@@ -80,6 +80,14 @@ public static partial class ImGuiWidget
         float contentY = headerMin.Y + MathF.Max(
             0f,
             (headerMax.Y - headerMin.Y - NativeImGui.GetFrameHeight()) * 0.5f);
+        float trailingWidth = drawTrailingControl is null
+            ? 0f
+            : trailingControlWidth > 0f
+                ? trailingControlWidth
+                : NativeImGui.GetFrameHeight();
+        float titleRight = headerMax.X - trailingWidth;
+        if (drawTrailingControl is not null)
+            titleRight -= style.inspectorHeaderControlSpacing;
         NativeImGui.SetCursorScreenPos(new Vector2(contentX, contentY));
         if (dimmed)
             NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.inspectorCardDisabledText);
@@ -90,14 +98,20 @@ public static partial class ImGuiWidget
             NativeImGui.SameLine(0f, style.inspectorHeaderControlSpacing);
         }
         NativeImGui.AlignTextToFramePadding();
-        NativeImGui.TextUnformatted(title);
+        Vector2 titleCursor = NativeImGui.GetCursorScreenPos();
+        float titleWidth = MathF.Max(1f, titleRight - titleCursor.X);
+        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
+        drawList.PushClipRect(
+            titleCursor,
+            new Vector2(titleCursor.X + titleWidth, headerMax.Y),
+            true);
+        drawList.AddText(titleCursor, NativeImGui.GetColorU32(ImGuiCol.Text), title);
+        drawList.PopClipRect();
+        NativeImGui.Dummy(new Vector2(titleWidth, NativeImGui.GetFrameHeight()));
         NativeImGui.EndGroup();
 
         if (drawTrailingControl is not null)
         {
-            float trailingWidth = trailingControlWidth > 0f
-                ? trailingControlWidth
-                : NativeImGui.GetFrameHeight();
             NativeImGui.SetCursorScreenPos(new Vector2(
                 MathF.Max(contentX, headerMax.X - trailingWidth),
                 contentY));
@@ -193,7 +207,7 @@ public static partial class ImGuiWidget
 
     private static (float left, float right) GetFullWidthCardBounds(Vector2 cursor)
     {
-        float horizontalPadding = NativeImGui.GetStyle().WindowPadding.X;
+        float horizontalPadding = ImGuiP.GetCurrentWindow().WindowPadding.X;
         float left = cursor.X - horizontalPadding;
         float right = cursor.X + NativeImGui.GetContentRegionAvail().X + horizontalPadding;
         return (left, MathF.Max(left + 1f, right));

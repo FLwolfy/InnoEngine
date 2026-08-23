@@ -565,6 +565,7 @@ public sealed partial class PlatformApplication
             SDL.SDLK_F12 => KeyCode.F12,
 
             SDL.SDLK_PLUS => KeyCode.Plus,
+            SDL.SDLK_EQUALS => KeyCode.Plus,
             SDL.SDLK_COMMA => KeyCode.Comma,
             SDL.SDLK_MINUS => KeyCode.Minus,
             SDL.SDLK_PERIOD => KeyCode.Period,

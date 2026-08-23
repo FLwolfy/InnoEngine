@@ -67,7 +67,7 @@ internal sealed class EditorMenuCatalog(
             foreach (EditorExtensionCatalog.PanelRegistration panel in catalog.extensions.panels)
             {
                 placements.Add(new Placement(
-                    $"View/{panel.attribute.title}",
+                    $"Panel/{panel.attribute.title}",
                     EditorActions.TogglePanel,
                     panel.attribute.order,
                     separatorBefore: false,

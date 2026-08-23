@@ -170,7 +170,7 @@ internal static class SceneGraphSerialization
                 invokeReset: false);
             gameObject.SetTagDirect(
                 objectReader.Read<string>(C_TAG_KEY));
-            gameObject.SetLayerDirect(new Layer(objectReader.Read<int>(C_LAYER_KEY)));
+            gameObject.SetLayerDirect(new GameLayer(objectReader.Read<int>(C_LAYER_KEY)));
             gameObject.SetActiveSelfDirect(objectReader.Read<bool>(C_ACTIVE_SELF_KEY));
             gameObjectBySourceId.Add(sourceObjectId, gameObject);
             componentBySourceId.Add(sourceTransformId, gameObject.transform);

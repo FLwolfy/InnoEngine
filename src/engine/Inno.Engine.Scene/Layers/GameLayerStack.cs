@@ -10,7 +10,7 @@ namespace Inno.Engine.Scene.Layers;
 /// Stores the named layer catalog and symmetric layer-interaction matrix used by a project.
 /// </summary>
 [RequiresSerializationConverter]
-public sealed class LayerStack : ISerializable
+public sealed class GameLayerStack : ISerializable
 {
     private const string C_DEFAULT_LAYER_NAME = "Default";
 
@@ -23,11 +23,11 @@ public sealed class LayerStack : ISerializable
     /// <summary>
     /// Creates a layer stack containing the immutable default layer and interactions between all slots.
     /// </summary>
-    public LayerStack()
+    public GameLayerStack()
     {
-        m_names = new string?[Layer.C_MAX_COUNT];
-        m_names[Layer.defaultLayer.index] = C_DEFAULT_LAYER_NAME;
-        m_interactionMasks = Enumerable.Repeat(uint.MaxValue, Layer.C_MAX_COUNT).ToArray();
+        m_names = new string?[GameLayer.C_MAX_COUNT];
+        m_names[GameLayer.defaultLayer.index] = C_DEFAULT_LAYER_NAME;
+        m_interactionMasks = Enumerable.Repeat(uint.MaxValue, GameLayer.C_MAX_COUNT).ToArray();
     }
 
     /// <summary>
@@ -39,14 +39,14 @@ public sealed class LayerStack : ISerializable
     /// Gets an immutable snapshot of every named layer ordered by slot index.
     /// </summary>
     /// <returns>The ordered layer-definition snapshot.</returns>
-    public IReadOnlyList<LayerDefinition> GetDefinitions()
+    public IReadOnlyList<GameLayerDefinition> GetDefinitions()
     {
         ValidateState();
-        var result = new List<LayerDefinition>();
+        var result = new List<GameLayerDefinition>();
         for (int i = 0; i < m_names.Length; i++)
         {
             if (!string.IsNullOrEmpty(m_names[i]))
-                result.Add(new LayerDefinition(new Layer(i), m_names[i]!));
+                result.Add(new GameLayerDefinition(new GameLayer(i), m_names[i]!));
         }
         return result;
     }
@@ -56,7 +56,7 @@ public sealed class LayerStack : ISerializable
     /// </summary>
     /// <param name="layer">The layer slot to test.</param>
     /// <returns><see langword="true"/> when the slot is defined.</returns>
-    public bool IsDefined(Layer layer)
+    public bool IsDefined(GameLayer layer)
     {
         ValidateState();
         return !string.IsNullOrEmpty(m_names[layer.index]);
@@ -67,7 +67,7 @@ public sealed class LayerStack : ISerializable
     /// </summary>
     /// <param name="layer">The layer slot to resolve.</param>
     /// <returns>The configured name, or <see langword="null"/> when the slot is undefined.</returns>
-    public string? GetName(Layer layer)
+    public string? GetName(GameLayer layer)
     {
         ValidateState();
         return m_names[layer.index];
@@ -82,7 +82,7 @@ public sealed class LayerStack : ISerializable
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="name"/> is empty.
     /// </exception>
-    public bool TryGetLayer(string name, out Layer layer)
+    public bool TryGetLayer(string name, out GameLayer layer)
     {
         string normalized = NormalizeName(name);
         ValidateState();
@@ -90,7 +90,7 @@ public sealed class LayerStack : ISerializable
         {
             if (!string.Equals(m_names[i], normalized, StringComparison.Ordinal))
                 continue;
-            layer = new Layer(i);
+            layer = new GameLayer(i);
             return true;
         }
         layer = default;
@@ -108,11 +108,11 @@ public sealed class LayerStack : ISerializable
     /// <exception cref="KeyNotFoundException">
     /// Thrown when no configured layer has the requested name.
     /// </exception>
-    public Layer GetLayer(string name)
+    public GameLayer GetLayer(string name)
     {
-        if (TryGetLayer(name, out Layer layer))
+        if (TryGetLayer(name, out GameLayer layer))
             return layer;
-        throw new KeyNotFoundException($"Layer '{name}' is not defined.");
+        throw new KeyNotFoundException($"GameLayer '{name}' is not defined.");
     }
 
     /// <summary>
@@ -129,10 +129,10 @@ public sealed class LayerStack : ISerializable
     /// <exception cref="KeyNotFoundException">
     /// Thrown when a supplied name is not configured.
     /// </exception>
-    public LayerMask GetMask(IEnumerable<string> names)
+    public GameLayerMask GetMask(IEnumerable<string> names)
     {
         ArgumentNullException.ThrowIfNull(names);
-        LayerMask result = LayerMask.none;
+        GameLayerMask result = GameLayerMask.none;
         foreach (string name in names)
             result = result.With(GetLayer(name));
         return result;
@@ -146,16 +146,16 @@ public sealed class LayerStack : ISerializable
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="name"/> is invalid or already assigned to another slot.
     /// </exception>
-    public void Define(Layer layer, string name)
+    public void Define(GameLayer layer, string name)
     {
         string normalized = NormalizeName(name);
         ValidateState();
         for (int i = 0; i < m_names.Length; i++)
         {
             if (i != layer.index && string.Equals(m_names[i], normalized, StringComparison.Ordinal))
-                throw new ArgumentException($"Layer name '{normalized}' is already assigned to slot {i}.", nameof(name));
+                throw new ArgumentException($"GameLayer name '{normalized}' is already assigned to slot {i}.", nameof(name));
         }
-        if (layer == Layer.defaultLayer && !string.Equals(normalized, C_DEFAULT_LAYER_NAME, StringComparison.Ordinal))
+        if (layer == GameLayer.defaultLayer && !string.Equals(normalized, C_DEFAULT_LAYER_NAME, StringComparison.Ordinal))
             throw new ArgumentException("The built-in default layer cannot be renamed.", nameof(name));
         m_names[layer.index] = normalized;
     }
@@ -168,10 +168,10 @@ public sealed class LayerStack : ISerializable
     /// <exception cref="InvalidOperationException">
     /// Thrown when attempting to remove the built-in default layer.
     /// </exception>
-    public bool Remove(Layer layer)
+    public bool Remove(GameLayer layer)
     {
         ValidateState();
-        if (layer == Layer.defaultLayer)
+        if (layer == GameLayer.defaultLayer)
             throw new InvalidOperationException("The built-in default layer cannot be removed.");
         if (m_names[layer.index] is null)
             return false;
@@ -184,10 +184,10 @@ public sealed class LayerStack : ISerializable
     /// </summary>
     /// <param name="layer">The source layer whose interaction mask should be returned.</param>
     /// <returns>The mask of layers permitted to interact with the source layer.</returns>
-    public LayerMask GetInteractionMask(Layer layer)
+    public GameLayerMask GetInteractionMask(GameLayer layer)
     {
         ValidateState();
-        return new LayerMask(m_interactionMasks[layer.index]);
+        return new GameLayerMask(m_interactionMasks[layer.index]);
     }
 
     /// <summary>
@@ -196,7 +196,7 @@ public sealed class LayerStack : ISerializable
     /// <param name="first">The first layer slot.</param>
     /// <param name="second">The second layer slot.</param>
     /// <returns><see langword="true"/> when the symmetric interaction pair is enabled.</returns>
-    public bool CanInteract(Layer first, Layer second)
+    public bool CanInteract(GameLayer first, GameLayer second)
     {
         ValidateState();
         return (m_interactionMasks[first.index] & (1u << second.index)) != 0u;
@@ -208,7 +208,7 @@ public sealed class LayerStack : ISerializable
     /// <param name="first">The first layer slot.</param>
     /// <param name="second">The second layer slot.</param>
     /// <param name="canInteract">Whether the two layers should interact.</param>
-    public void SetInteraction(Layer first, Layer second, bool canInteract)
+    public void SetInteraction(GameLayer first, GameLayer second, bool canInteract)
     {
         ValidateState();
         uint firstBit = 1u << first.index;
@@ -229,10 +229,10 @@ public sealed class LayerStack : ISerializable
     /// Creates a detached copy that can be edited without mutating this stack.
     /// </summary>
     /// <returns>An independent stack containing the same definitions and interaction matrix.</returns>
-    public LayerStack Clone()
+    public GameLayerStack Clone()
     {
         ValidateState();
-        return new LayerStack
+        return new GameLayerStack
         {
             m_names = (string?[])m_names.Clone(),
             m_interactionMasks = (uint[])m_interactionMasks.Clone()
@@ -244,7 +244,7 @@ public sealed class LayerStack : ISerializable
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         string normalized = name.Trim();
         if (normalized.Contains('\r') || normalized.Contains('\n'))
-            throw new ArgumentException("Layer names cannot contain line breaks.", nameof(name));
+            throw new ArgumentException("GameLayer names cannot contain line breaks.", nameof(name));
         return normalized;
     }
 
@@ -260,11 +260,11 @@ public sealed class LayerStack : ISerializable
         return (uint[])m_interactionMasks.Clone();
     }
 
-    internal static LayerStack Restore(string?[] names, uint[] interactionMasks)
+    internal static GameLayerStack Restore(string?[] names, uint[] interactionMasks)
     {
         ArgumentNullException.ThrowIfNull(names);
         ArgumentNullException.ThrowIfNull(interactionMasks);
-        var stack = new LayerStack
+        var stack = new GameLayerStack
         {
             m_names = (string?[])names.Clone(),
             m_interactionMasks = (uint[])interactionMasks.Clone()
@@ -275,12 +275,12 @@ public sealed class LayerStack : ISerializable
 
     private void ValidateState()
     {
-        if (m_names is null || m_names.Length != Layer.C_MAX_COUNT)
+        if (m_names is null || m_names.Length != GameLayer.C_MAX_COUNT)
             throw new InvalidOperationException("A layer stack must contain exactly thirty-two name slots.");
-        if (m_interactionMasks is null || m_interactionMasks.Length != Layer.C_MAX_COUNT)
+        if (m_interactionMasks is null || m_interactionMasks.Length != GameLayer.C_MAX_COUNT)
             throw new InvalidOperationException("A layer stack must contain exactly thirty-two interaction masks.");
-        if (!string.Equals(m_names[Layer.defaultLayer.index], C_DEFAULT_LAYER_NAME, StringComparison.Ordinal))
-            throw new InvalidOperationException("Layer slot zero must contain the built-in Default layer.");
+        if (!string.Equals(m_names[GameLayer.defaultLayer.index], C_DEFAULT_LAYER_NAME, StringComparison.Ordinal))
+            throw new InvalidOperationException("GameLayer slot zero must contain the built-in Default layer.");
         var names = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 0; i < m_names.Length; i++)
         {
@@ -289,9 +289,9 @@ public sealed class LayerStack : ISerializable
                 continue;
             string normalized = NormalizeName(name);
             if (!string.Equals(name, normalized, StringComparison.Ordinal))
-                throw new InvalidOperationException($"Layer name in slot {i} is not normalized.");
+                throw new InvalidOperationException($"GameLayer name in slot {i} is not normalized.");
             if (!names.Add(name))
-                throw new InvalidOperationException($"Layer name '{name}' is assigned to more than one slot.");
+                throw new InvalidOperationException($"GameLayer name '{name}' is assigned to more than one slot.");
         }
         for (int i = 0; i < m_interactionMasks.Length; i++)
         {
@@ -300,7 +300,7 @@ public sealed class LayerStack : ISerializable
                 bool forward = (m_interactionMasks[i] & (1u << j)) != 0u;
                 bool reverse = (m_interactionMasks[j] & (1u << i)) != 0u;
                 if (forward != reverse)
-                    throw new InvalidOperationException($"Layer interaction between slots {i} and {j} is not symmetric.");
+                    throw new InvalidOperationException($"GameLayer interaction between slots {i} and {j} is not symmetric.");
             }
         }
     }

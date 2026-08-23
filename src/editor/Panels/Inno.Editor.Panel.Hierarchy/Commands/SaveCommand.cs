@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Inno.Core.Logging;
 using Inno.Core.Input;
 using Inno.Editor.Interactions;
+using Inno.Editor.Panel.FileBrowser;
 using Inno.Editor.Scene;
 using Inno.Engine.Scene;
 
@@ -12,7 +13,9 @@ namespace Inno.Editor.Panel.Hierarchy;
 [EditorAction(EditorActions.Save)]
 [EditorMenu(EditorAreas.MainMenu, "File/Save", order: 100)]
 [EditorShortcut(KeyCode.S, primary: true)]
-internal sealed class SaveCommand(EditorSceneWorkspace workspace) : EditorAction
+internal sealed class SaveCommand(
+    EditorSceneWorkspace workspace,
+    AssetEditorModule assets) : EditorAction
 {
     protected override EditorActionState Query(EditorActionContext context)
         => SceneManager.hasActiveScene ? EditorActionState.enabled : EditorActionState.disabled;
@@ -26,7 +29,7 @@ internal sealed class SaveCommand(EditorSceneWorkspace workspace) : EditorAction
             {
                 _ = workspace.SaveScene(
                     scenes[i],
-                    string.Empty);
+                    assets.browser.currentDirectory);
             }
         }
         catch (Exception exception)
