@@ -627,7 +627,7 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
     private void DrawNameCell(EditorContext context, AssetFileEntry entry)
     {
         _ = NativeImGui.TableSetColumnIndex(0);
-        string icon = m_assets.ResolveIcon(entry);
+        string icon = m_assets.GetIcon(entry);
         string name = entry.nameWithoutExtension;
         bool selected = string.Equals(m_assets.browser.GetSelectedPath(context), entry.relativePath, StringComparison.Ordinal);
         bool editing = m_rename.IsEditing(context, entry.relativePath, FileBrowserPresentation.List);
@@ -739,7 +739,7 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
     private void DrawGridItem(EditorContext context, AssetFileEntry entry)
     {
         float cellSize = GetGridCellSize();
-        string icon = m_assets.ResolveIcon(entry);
+        string icon = m_assets.GetIcon(entry);
         string name = Path.GetFileName(entry.relativePath);
         bool selected = string.Equals(m_assets.browser.GetSelectedPath(context), entry.relativePath, StringComparison.Ordinal);
         bool editing = m_rename.IsEditing(context, entry.relativePath, FileBrowserPresentation.Grid);

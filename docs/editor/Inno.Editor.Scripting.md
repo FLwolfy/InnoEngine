@@ -163,7 +163,7 @@ Editor facade 按 feature 分布：
 | `InnoEditor.Assets` | `Inno.Editor.Panel.FileBrowser` AssetEditor contracts |
 | `InnoEditor.Scene` | `Inno.Editor.Scene` document workspace 与 `SceneEdits` 编辑门面 |
 | `InnoEditor.Hierarchy` | `Inno.Editor.Panel.Hierarchy` area/action/drop contracts |
-| `InnoEditor.Inspection` | `Inno.Editor.Panel.Inspector` drawer contracts |
+| `InnoEditor.Inspection` | `Inno.Editor.Inspection` drawer contracts，以及 `Inno.Editor.Panel.Inspector` 的 area/action/drop contracts |
 | `InnoEditor.ImGui` | `EditorPalette`、`EditorStyleMetrics` 与 widgets |
 
 菜单直接声明在 Action 上，不需要 package class 或集中注册：

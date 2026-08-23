@@ -542,6 +542,37 @@ public sealed class SceneEdits : EditorModule
     }
 
     /// <summary>
+    /// Changes the tag of a live GameObject and records the two ordinal tag strings.
+    /// </summary>
+    /// <param name="gameObject">The live GameObject whose tag should change.</param>
+    /// <param name="tag">The requested non-empty tag.</param>
+    /// <param name="historyName">The user-facing history entry name.</param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="gameObject"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="tag"/> or <paramref name="historyName"/> is empty.
+    /// </exception>
+    public void SetGameObjectTag(
+        GameObject gameObject,
+        string tag,
+        string historyName = "Set GameObject Tag")
+    {
+        ArgumentNullException.ThrowIfNull(gameObject);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tag);
+        ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
+        string requestedTag = tag.Trim();
+        ChangeScalar(
+            gameObject,
+            SceneScalarKind.GameObjectTag,
+            gameObject.tag,
+            requestedTag,
+            value => gameObject.tag = value,
+            historyName,
+            $"game-object-tag:{gameObject.identity.persistentId:N}");
+    }
+
+    /// <summary>
     /// Applies a mutation to one serializable scene property and records only its before and after values.
     /// </summary>
     /// <param name="target">The live scene object containing the root serialized property.</param>

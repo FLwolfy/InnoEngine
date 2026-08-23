@@ -53,6 +53,9 @@ internal sealed class SceneScalarHistoryHandler : EditorHistoryHandler
                 case SceneScalarKind.GameObjectActive:
                     ((GameObject)target).SetActive(string.Equals(value, "1", StringComparison.Ordinal));
                     break;
+                case SceneScalarKind.GameObjectTag:
+                    ((GameObject)target).tag = value;
+                    break;
                 default:
                     throw new InvalidOperationException($"Unsupported scene scalar '{data.scalarKind}'.");
             }
@@ -105,7 +108,9 @@ internal sealed class SceneScalarHistoryHandler : EditorHistoryHandler
         {
             SceneScalarKind.SceneName => IdentityManager.Get<GameScene>(data.targetId) is
                 { isLoaded: true, isDestroyed: false } scene ? scene : null,
-            SceneScalarKind.GameObjectName or SceneScalarKind.GameObjectActive =>
+            SceneScalarKind.GameObjectName or
+                SceneScalarKind.GameObjectActive or
+                SceneScalarKind.GameObjectTag =>
                 IdentityManager.Get<GameObject>(data.targetId) is { isRuntimeValid: true } gameObject
                     ? gameObject
                     : null,

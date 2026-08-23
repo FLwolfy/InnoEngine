@@ -17,6 +17,7 @@ using Inno.Editor.Interactions;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
+using Inno.Editor.Inspection;
 using Inno.Editor.Panel.FileBrowser;
 using Inno.Editor.Panel.Hierarchy;
 using Inno.Editor.Panel.Inspector;
@@ -170,6 +171,86 @@ public sealed class ScriptManagerTests : IDisposable
         Type drawer = TypeCacheManager.current.types.Single(type => type.Name == "ProjectBehaviorDrawer");
         Assert.Equal(AssemblyGroup.Game, behavior.Assembly.GetInnoAssemblyGroup());
         Assert.Equal(AssemblyGroup.Editor, drawer.Assembly.GetInnoAssemblyGroup());
+    }
+
+    [Fact]
+    public void GameScriptsCanUseGameObjectTagsAndSceneTagQueriesThroughTheFacade()
+    {
+        Write("TagFacadeProbe.cs", """
+            using InnoEngine.Scene;
+
+            public static class TagFacadeProbe
+            {
+                public static GameObject? FindPlayer(GameScene scene)
+                {
+                    GameObject gameObject = scene.CreateObject("Player");
+                    gameObject.tag = "Player";
+                    _ = GameObject.defaultTag;
+                    _ = scene.FindObjectsWithTag("Player");
+                    return scene.FindObjectWithTag("Player");
+                }
+            }
+            """);
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.True(result.success, FormatDiagnostics(result));
+    }
+
+    [Fact]
+    public void InspectorTagCatalogPersistsThroughReadableWorkspaceStateAndProtectsTheDefaultTag()
+    {
+        Type catalogType = typeof(SceneInspectionModule).Assembly.GetType(
+            "Inno.Editor.Panel.Inspector.GameObjectTagCatalog",
+            throwOnError: true)!;
+        object catalog = Activator.CreateInstance(
+            catalogType,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            args: null,
+            culture: null)!;
+        MethodInfo add = catalogType.GetMethod(
+            "Add",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        MethodInfo remove = catalogType.GetMethod(
+            "Remove",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        MethodInfo capture = catalogType.GetMethod(
+            "Capture",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        MethodInfo restore = catalogType.GetMethod(
+            "Restore",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        MethodInfo getTags = catalogType.GetMethod(
+            "GetTags",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        Assert.True((bool)add.Invoke(catalog, ["Player"])!);
+        Assert.False((bool)add.Invoke(catalog, [" Player "])!);
+        Assert.False((bool)remove.Invoke(catalog, [GameObject.defaultTag])!);
+
+        var writer = new EditorWorkspaceStateWriter();
+        _ = capture.Invoke(catalog, [writer]);
+        string payload = writer.Export();
+        Assert.Contains("\"tags\"", payload, StringComparison.Ordinal);
+        Assert.Contains(GameObject.defaultTag, payload, StringComparison.Ordinal);
+        Assert.Contains("Player", payload, StringComparison.Ordinal);
+
+        object restored = Activator.CreateInstance(
+            catalogType,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            args: null,
+            culture: null)!;
+        _ = restore.Invoke(restored, [new EditorWorkspaceStateReader(payload)]);
+        var restoredTags = Assert.IsAssignableFrom<System.Collections.Generic.IReadOnlyList<string>>(
+            getTags.Invoke(restored, null));
+        Assert.Contains(GameObject.defaultTag, restoredTags);
+        Assert.Contains("Player", restoredTags);
+
+        Assert.True((bool)remove.Invoke(catalog, ["Player"])!);
+        Assert.DoesNotContain("Player", Assert.IsAssignableFrom<System.Collections.Generic.IReadOnlyList<string>>(
+            getTags.Invoke(catalog, null)));
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 
+using Inno.Editor.Inspection;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
@@ -31,7 +32,7 @@ internal sealed class InspectorTargetHeader
     /// </summary>
     /// <param name="drawer">The resolved target-specific Inspector drawer.</param>
     /// <param name="context">The drawing context for the current target.</param>
-    internal void Draw(IInspectorDrawer drawer, InspectorDrawContext context)
+    internal void Draw(IInspectionDrawer drawer, InspectionDrawContext context)
     {
         ArgumentNullException.ThrowIfNull(drawer);
         ArgumentNullException.ThrowIfNull(context);
@@ -73,7 +74,7 @@ internal sealed class InspectorTargetHeader
         NativeImGui.SetCursorScreenPos(new Vector2(origin.X, nextY));
     }
 
-    private void DrawContent(IInspectorDrawer drawer, InspectorDrawContext context)
+    private void DrawContent(IInspectionDrawer drawer, InspectionDrawContext context)
     {
         NativeImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, EditorWidget.style.compactItemSpacing);
         NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, EditorWidget.style.compactFramePadding);
@@ -82,7 +83,7 @@ internal sealed class InspectorTargetHeader
             float rowHeight = NativeImGui.GetFrameHeight();
             float rowSpacing = EditorWidget.style.inspectorTargetHeaderRowSpacing;
             float headerContentHeight = rowHeight * 2f + rowSpacing;
-            DrawIcon(drawer.icon, headerContentHeight);
+            DrawIcon(drawer.GetIcon(context), headerContentHeight);
             NativeImGui.SameLine();
 
             NativeImGui.BeginGroup();
@@ -98,8 +99,8 @@ internal sealed class InspectorTargetHeader
     }
 
     private void DrawNameRow(
-        IInspectorDrawer drawer,
-        InspectorDrawContext context,
+        IInspectionDrawer drawer,
+        InspectionDrawContext context,
         float rowHeight)
     {
         Vector2 lockSize = EditorWidget.GetCompactIconSize();
@@ -157,8 +158,8 @@ internal sealed class InspectorTargetHeader
     }
 
     private static void DrawCustomRow(
-        IInspectorDrawer drawer,
-        InspectorDrawContext context,
+        IInspectionDrawer drawer,
+        InspectionDrawContext context,
         float rowHeight)
     {
         ImGuiWindowFlags flags = ImGuiWindowFlags.NoScrollbar |

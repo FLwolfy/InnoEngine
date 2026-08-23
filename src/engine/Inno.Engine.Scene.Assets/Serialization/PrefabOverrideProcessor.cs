@@ -130,6 +130,8 @@ internal static class PrefabOverrideProcessor
             PrefabObjectOverrideKind kind = PrefabObjectOverrideKind.None;
             if (!string.Equals(currentObject.name, sourceObject.name, StringComparison.Ordinal))
                 kind |= PrefabObjectOverrideKind.Name;
+            if (!string.Equals(currentObject.tag, sourceObject.tag, StringComparison.Ordinal))
+                kind |= PrefabObjectOverrideKind.Tag;
             if (currentObject.activeSelf != sourceObject.activeSelf)
                 kind |= PrefabObjectOverrideKind.ActiveSelf;
             if (GetMappedParentId(currentObject, connection) != GetMappedParentId(sourceObject, sourceConnection))
@@ -352,6 +354,7 @@ internal static class PrefabOverrideProcessor
                 persistentId: null,
                 transformPersistentId: null,
                 invokeReset: false);
+            target.SetTagDirect(sourceObject.tag);
             target.SetActiveSelfDirect(sourceObject.activeSelf);
             connection.MapObject(sourceId, target);
 
@@ -473,6 +476,8 @@ internal static class PrefabOverrideProcessor
             PrefabObjectOverrideKind kind = connection.overrides.GetStructureOverride(sourceId);
             if ((kind & PrefabObjectOverrideKind.Name) == 0)
                 targetObject.SetNameDirect(sourceObject.name);
+            if ((kind & PrefabObjectOverrideKind.Tag) == 0)
+                targetObject.SetTagDirect(sourceObject.tag);
             if ((kind & PrefabObjectOverrideKind.ActiveSelf) == 0)
                 targetObject.SetActiveSelfDirect(sourceObject.activeSelf);
             if (!ReferenceEquals(targetObject, instanceRoot) &&

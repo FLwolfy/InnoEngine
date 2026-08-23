@@ -15,6 +15,7 @@ internal static class SceneGraphSerialization
 {
     internal const string C_SCENE_ID_KEY = "sceneId";
     internal const string C_NAME_KEY = "name";
+    internal const string C_TAG_KEY = "tag";
     internal const string C_OBJECTS_KEY = "objects";
     internal const string C_SYSTEMS_KEY = "systems";
     internal const string C_SYSTEM_ID_KEY = "systemId";
@@ -69,6 +70,7 @@ internal static class SceneGraphSerialization
             bool parentIsIncluded = parent is not null && included.Contains(parent.gameObject);
             objectWriter.Write(C_OBJECT_ID_KEY, GetSourceId(sourceIds, gameObject));
             objectWriter.Write(C_NAME_KEY, gameObject.name);
+            objectWriter.Write(C_TAG_KEY, gameObject.tag);
             objectWriter.Write(C_ACTIVE_SELF_KEY, gameObject.activeSelf);
             objectWriter.Write(
                 C_PARENT_ID_KEY,
@@ -163,6 +165,10 @@ internal static class SceneGraphSerialization
                 preservePersistentIds ? sourceObjectId : null,
                 preservePersistentIds ? sourceTransformId : null,
                 invokeReset: false);
+            gameObject.SetTagDirect(
+                objectReader.Contains(C_TAG_KEY)
+                    ? objectReader.Read<string>(C_TAG_KEY)
+                    : GameObject.defaultTag);
             gameObject.SetActiveSelfDirect(objectReader.Read<bool>(C_ACTIVE_SELF_KEY));
             gameObjectBySourceId.Add(sourceObjectId, gameObject);
             componentBySourceId.Add(sourceTransformId, gameObject.transform);
@@ -404,6 +410,8 @@ internal static class SceneGraphSerialization
             if (!objectIds.Add(objectId))
                 throw new InvalidDataException($"Duplicate GameObject local identity '{objectId}' at '{objectReader.path}'.");
             _ = objectReader.Read<string>(C_NAME_KEY);
+            if (objectReader.Contains(C_TAG_KEY))
+                _ = GameObject.NormalizeTag(objectReader.Read<string>(C_TAG_KEY));
             _ = objectReader.Read<bool>(C_ACTIVE_SELF_KEY);
             _ = objectReader.Read<Guid>(C_PARENT_ID_KEY);
             _ = objectReader.Read<int>(C_SIBLING_INDEX_KEY);

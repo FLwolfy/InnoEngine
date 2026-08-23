@@ -44,6 +44,8 @@ public sealed class SceneSerializationTests : IDisposable
         var source = new GameScene("Roundtrip");
         GameObject root = source.CreateObject("Root");
         GameObject child = source.CreateObject("Child");
+        root.tag = "Player";
+        child.tag = "Companion";
         child.transform.SetParent(root.transform);
         child.transform.localPosition = new Vector3(1, 2, 3);
         child.SetActive(false);
@@ -74,6 +76,9 @@ public sealed class SceneSerializationTests : IDisposable
         Assert.Equal(2, restored.GetObjects().Count);
         GameObject restoredRoot = restored.GetObjects().Single(gameObject => gameObject.identity.persistentId == rootId);
         GameObject restoredChild = restored.GetObjects().Single(gameObject => gameObject.identity.persistentId == childId);
+        Assert.Equal("Player", restoredRoot.tag);
+        Assert.Equal("Companion", restoredChild.tag);
+        Assert.Same(restoredRoot, restored.FindObjectWithTag("Player"));
         Assert.Equal(new[] { typeof(Transform), typeof(ReferenceComponent) },
             restoredRoot.GetComponents().Select(static component => component.GetType()));
         Assert.Same(restoredRoot.transform, restoredChild.transform.parent);
@@ -99,6 +104,8 @@ public sealed class SceneSerializationTests : IDisposable
         var sourceScene = new GameScene("PrefabSource");
         GameObject sourceRoot = sourceScene.CreateObject("Root");
         GameObject sourceChild = sourceScene.CreateObject("Child");
+        sourceRoot.tag = "Spawn";
+        sourceChild.tag = "Collectible";
         sourceChild.transform.SetParent(sourceRoot.transform);
         ReferenceComponent sourceReference = sourceRoot.AddComponent<ReferenceComponent>();
         ReferenceComponent sourceChildReference = sourceChild.AddComponent<ReferenceComponent>();
@@ -117,6 +124,10 @@ public sealed class SceneSerializationTests : IDisposable
         Assert.NotEqual(first.identity.persistentId, second.identity.persistentId);
         GameObject firstChild = Assert.Single(first.transform.children).gameObject;
         GameObject secondChild = Assert.Single(second.transform.children).gameObject;
+        Assert.Equal("Spawn", first.tag);
+        Assert.Equal("Collectible", firstChild.tag);
+        Assert.Equal("Spawn", second.tag);
+        Assert.Equal("Collectible", secondChild.tag);
         ReferenceComponent firstReference = first.GetComponent<ReferenceComponent>();
         ReferenceComponent secondReference = second.GetComponent<ReferenceComponent>();
         Assert.Same(firstChild, firstReference.targetObject);

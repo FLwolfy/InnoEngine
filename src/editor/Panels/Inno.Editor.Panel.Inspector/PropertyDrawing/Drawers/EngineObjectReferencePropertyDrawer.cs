@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 
 using Inno.Editor.Core;
+using Inno.Editor.Inspection;
 using Inno.Editor.Interactions;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;

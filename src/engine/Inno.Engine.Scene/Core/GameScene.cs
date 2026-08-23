@@ -137,7 +137,36 @@ public sealed class GameScene : EngineObject, ISerializable
     public GameObject? FindObject(string name)
     {
         EnsureNotDestroyed();
-        return m_store.GetObjects().FirstOrDefault(gameObject => string.Equals(gameObject.name, name, StringComparison.Ordinal));
+        ArgumentNullException.ThrowIfNull(name);
+        return m_store.FindObject(name);
+    }
+
+    /// <summary>
+    /// Finds the first game object with an ordinally matching tag in scene storage order.
+    /// </summary>
+    /// <param name="tag">Tag to find.</param>
+    /// <returns>The first match, or <see langword="null"/> when no object matches.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="tag"/> is empty or contains only white-space characters.
+    /// </exception>
+    public GameObject? FindObjectWithTag(string tag)
+    {
+        EnsureNotDestroyed();
+        return m_store.FindObjectWithTag(GameObject.NormalizeTag(tag));
+    }
+
+    /// <summary>
+    /// Finds every game object with an ordinally matching tag in scene storage order.
+    /// </summary>
+    /// <param name="tag">Tag to find.</param>
+    /// <returns>A stable snapshot containing every matching game object.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="tag"/> is empty or contains only white-space characters.
+    /// </exception>
+    public IReadOnlyList<GameObject> FindObjectsWithTag(string tag)
+    {
+        EnsureNotDestroyed();
+        return m_store.FindObjectsWithTag(GameObject.NormalizeTag(tag));
     }
 
     /// <summary>
@@ -231,6 +260,12 @@ public sealed class GameScene : EngineObject, ISerializable
         => m_systems.Add(systemType, persistentId, invokeReset);
 
     internal bool Contains(GameObject gameObject) => !isDestroyed && m_store.Contains(gameObject);
+
+    internal void NotifyObjectMetadataChanged(GameObject gameObject)
+    {
+        EnsureOwned(gameObject);
+        m_store.NotifyObjectMetadataChanged(gameObject);
+    }
 
     internal GameComponent AddComponent(
         GameObject owner,

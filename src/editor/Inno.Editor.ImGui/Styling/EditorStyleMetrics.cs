@@ -184,6 +184,11 @@ public sealed class EditorStyleMetrics
     /// <summary>Gets spacing between leading controls inside card headers.</summary>
     public float inspectorHeaderControlSpacing { get; } = 4f;
 
+    /// <summary>
+    /// Gets spacing between distinct control groups in an Inspector target header row.
+    /// </summary>
+    public float inspectorHeaderSectionSpacing { get; } = 10f;
+
     /// <summary>Gets top padding above inspector add buttons.</summary>
     public float inspectorAddButtonTopPadding { get; } = 7f;
 

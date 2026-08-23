@@ -10,6 +10,7 @@ internal enum PrefabObjectOverrideKind
     ActiveSelf = 1 << 1,
     Parent = 1 << 2,
     SiblingIndex = 1 << 3,
+    Tag = 1 << 4,
 }
 
 internal sealed record PrefabStructureOverride(

@@ -2,7 +2,7 @@
 
 [Editor 索引](README.md) · [Assets](../assets/README.md) · [Hierarchy](Inno.Editor.Panel.Hierarchy.md)
 
-该项目完整拥有 File Browser feature：Tree/List/Grid 表现、导航与过滤、Asset selection、AssetEditor 扩展、文件操作 Action、菜单和 Asset drag source。它不引用 Hierarchy 或 Inspector。
+该项目完整拥有 File Browser feature：Tree/List/Grid 表现、导航与过滤、Asset selection、AssetEditor 扩展、文件操作 Action、菜单、Asset drag source，以及 `AssetFileEntry` 的 `AssetSelectionInspectionDrawer`。它只引用共享的 `Inno.Editor.Inspection`，不引用 Hierarchy 或 Inspector Panel。
 
 ## 公共扩展 API
 
@@ -15,6 +15,7 @@
 | `AssetEditor` / `AssetEditorAttribute` | 为特定 Asset 类型声明 Open/Rename/Delete/Drag 行为。 |
 | `AssetEditorContext` | 当前 `EditorContext`、interactions、路径、Asset 信息和实例。 |
 | `AssetIconAttribute` / `AssetIconKind` | 按 imported Asset 类型或 source extension 配置 Tree/List/Grid 共用图标。 |
+| `AssetEditorModule.GetIcon` | 为其他 Editor presentation 解析完全相同的 Asset 图标。 |
 
 ## 为新 Asset 添加双击与右键行为
 
@@ -96,6 +97,8 @@ Host 代码使用普通 C# alias 将 `ImGuiIcon` 命名为 `AssetIconKind`；Edi
 CLR 层的 icon 常量仍是 ImGui 所需的 `const string` glyph；`AssetIconKind.Xxx` 是 facade/catalog API，而不是另一个 runtime enum。标准 C# Attribute 参数不支持自定义 struct 常量，因此在“不生成重复 enum”的前提下这是唯一能够保持一比一目录和编译期常量的形式。业务声明不需要书写裸字符串。
 
 内建 Text、Binary、Scene、Prefab 和 Scripting 图标全部在 `BuiltInAssetIcons` 上使用 extension overload 声明，没有基于具体 Asset CLR 类型的引用。FileBrowser 项目因此不再引用 `Inno.Assets.Types`、`Inno.Engine.Scene.Assets` 或 `Inno.Editor.Scripting`。内部 `AssetIconRegistry` 扫描当前 TypeCache snapshot 中的声明类型。EditorScripts 热重载时，新增或修改声明会随候选代际原子生效；移除声明或整个容器类型后，Registry 会释放旧映射并恢复优先级较低的内建声明，没有匹配时则使用通用 File icon。
+
+`AssetEditorModule.GetIcon(entry)` 是唯一对外 presentation resolver，同时通过 `IInspectionIconProvider<AssetFileEntry>` 向 Inspection 基础设施提供同一个规则。File Browser 的三种视图与 Asset Inspection Header 都调用该入口，不复制 extension switch，也不各自持有 Registry snapshot。
 
 ## Rename 与打开
 

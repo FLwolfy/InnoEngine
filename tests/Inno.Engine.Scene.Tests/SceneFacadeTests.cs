@@ -30,9 +30,46 @@ public sealed class SceneFacadeTests : IDisposable
 
         Assert.True(gameObject.isRuntimeValid);
         Assert.Equal("Cube", gameObject.name);
+        Assert.Equal(GameObject.defaultTag, gameObject.tag);
         Assert.True(gameObject.activeSelf);
         Assert.True(gameObject.HasComponent<Transform>());
         Assert.Single(scene.GetObjects());
+    }
+
+    [Fact]
+    public void NameAndTagQueriesTrackObjectMetadataChangesInStorageOrder()
+    {
+        var scene = new GameScene("Queries");
+        GameObject first = scene.CreateObject("First");
+        GameObject second = scene.CreateObject("Second");
+        first.tag = "Player";
+        second.tag = "Player";
+
+        Assert.Same(first, scene.FindObject("First"));
+        Assert.Same(first, scene.FindObjectWithTag("Player"));
+        Assert.Equal([first, second], scene.FindObjectsWithTag("Player"));
+
+        first.name = "Renamed";
+        first.tag = "Enemy";
+
+        Assert.Null(scene.FindObject("First"));
+        Assert.Same(first, scene.FindObject("Renamed"));
+        Assert.Same(second, scene.FindObjectWithTag("Player"));
+        Assert.Equal([second], scene.FindObjectsWithTag("Player"));
+        Assert.Equal([first], scene.FindObjectsWithTag("Enemy"));
+    }
+
+    [Fact]
+    public void TagRejectsEmptyValuesAndTrimsSurroundingWhitespace()
+    {
+        var scene = new GameScene("Tags");
+        GameObject gameObject = scene.CreateObject("Object");
+
+        gameObject.tag = "  Player  ";
+
+        Assert.Equal("Player", gameObject.tag);
+        Assert.Throws<ArgumentException>(() => gameObject.tag = "   ");
+        Assert.Throws<ArgumentException>(() => scene.FindObjectWithTag(string.Empty));
     }
 
     [Fact]

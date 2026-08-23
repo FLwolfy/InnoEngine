@@ -22,6 +22,20 @@ Scene 顺序决定当前 `SceneManager` 的跨 Scene traversal 顺序，但业�
 
 `MoveGameObjectToScene` 要求 source 与 destination 都已加载。被移动对象会成为目标 Scene 的 root；完整 child subtree、GameObject/Component 实例、persistent ID、世界变换和生命周期状态保持不变。该操作不会通过序列化复制对象，也不会调用 Reset 或 Destroy。
 
+## Name 与 Tag 查询
+
+每个 `GameObject` 默认使用 `GameObject.defaultTag`（`"Untagged"`），并允许通过普通字符串设置项目 Tag：
+
+```csharp
+player.tag = "Player";
+
+GameObject? named = scene.FindObject("Player Root");
+GameObject? firstPlayer = scene.FindObjectWithTag("Player");
+IReadOnlyList<GameObject> players = scene.FindObjectsWithTag("Player");
+```
+
+Name 与 Tag 都按 `StringComparison.Ordinal` 匹配，复数查询保持 Scene storage order。`SceneStore` 对两类查询建立惰性字典索引；Scene 结构或对象 `name/tag` 变化时索引失效，下一次查询重建一次，之后不再线性扫描完整 Scene。Tag 会随 Scene、Prefab 和 prefab override 一起序列化。
+
 ## Component 顺序
 
 ```csharp

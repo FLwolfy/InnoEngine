@@ -9,6 +9,7 @@ using Inno.Assets;
 using Inno.Assets.Core;
 using Inno.Assets.File;
 using Inno.Editor.Core;
+using Inno.Editor.Inspection;
 using Inno.Editor.Interactions;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;

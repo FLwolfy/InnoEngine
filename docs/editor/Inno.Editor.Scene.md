@@ -44,7 +44,7 @@ Scene setup 因缺少 Stable Type ID 或反序列化失败而暂时无法恢复�
 | 分类 | 成员 |
 | --- | --- |
 | Scene 文档 | `CreateScene`、`CloseScene`、`SetSceneIndex` |
-| GameObject | `CreateGameObject`、`DeleteGameObject`、`RenameGameObject`、`SetGameObjectActive`、`ChangeHierarchy` |
+| GameObject | `CreateGameObject`、`DeleteGameObject`、`RenameGameObject`、`SetGameObjectActive`、`SetGameObjectTag`、`ChangeHierarchy` |
 | Component | `AddComponent`、`RemoveComponent`、`ResetComponent`、`SetComponentIndex` |
 | System | `AddSystem`、`RemoveSystem`、`ResetSystem`、`SetSystemIndex` |
 | 属性 | `ChangeProperty` |
@@ -71,7 +71,7 @@ public sealed class AddAnimationControllerAction(SceneEdits edits)
 | 修改 | payload |
 | --- | --- |
 | serializable property | target persistent ID、root property key、before/after property bytes |
-| name / active | target persistent ID、scalar kind、before/after value |
+| name / active / tag | target persistent ID、scalar kind、before/after value |
 | Component/System | owner、element persistent ID、Stable Type ID、before/after index、property bytes、incoming references |
 | GameObject create/delete | Scene/root/parent ID、sibling index、仅该 subtree bytes、incoming references |
 | hierarchy | 受影响对象的 before/after parent ID 与 sibling index |

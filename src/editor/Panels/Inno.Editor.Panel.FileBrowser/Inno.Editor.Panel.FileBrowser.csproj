@@ -11,7 +11,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\..\assets\Inno.Assets.File\Inno.Assets.File.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
@@ -21,7 +20,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Inno.Editor.Core\Inno.Editor.Core.csproj" />
+    <ProjectReference Include="..\..\Inno.Editor.Inspection\Inno.Editor.Inspection.csproj" />
     <ProjectReference Include="..\..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" />
     <ProjectReference Include="..\..\..\assets\Inno.Assets.Core\Inno.Assets.Core.csproj" />
+    <ProjectReference Include="..\..\..\assets\Inno.Assets.File\Inno.Assets.File.csproj" />
   </ItemGroup>
 </Project>

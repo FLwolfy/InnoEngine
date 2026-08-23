@@ -4,6 +4,7 @@ using Inno.Editor.Core;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
+using Inno.Editor.Inspection;
 using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Panel.Inspector;
@@ -48,8 +49,8 @@ public sealed class InspectorPanel : EditorPanel
         if (!m_inspection.TryResolve(
                 context,
                 target,
-                out IInspectorDrawer? drawer,
-                out InspectorDrawContext? drawContext) ||
+                out IInspectionDrawer? drawer,
+                out InspectionDrawContext? drawContext) ||
             drawer is null ||
             drawContext is null)
         {

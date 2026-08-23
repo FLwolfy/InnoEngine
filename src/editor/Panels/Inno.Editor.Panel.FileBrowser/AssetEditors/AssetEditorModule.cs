@@ -6,13 +6,17 @@ using Inno.Assets.Core;
 using Inno.Assets.File;
 using Inno.Core.Logging;
 using Inno.Editor.Core;
+using Inno.Editor.Inspection;
 using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
 /// <summary>Owns shared Asset Browser state and asset-type extension dispatch.</summary>
 [EditorModule(order: 100)]
-public sealed class AssetEditorModule : EditorModule, IEditorWorkspaceState, IDisposable
+public sealed class AssetEditorModule : EditorModule,
+    IEditorWorkspaceState,
+    IInspectionIconProvider<AssetFileEntry>,
+    IDisposable
 {
     private const string C_WORKSPACE_STATE_ID = "asset-browser";
 
@@ -228,7 +232,18 @@ public sealed class AssetEditorModule : EditorModule, IEditorWorkspaceState, IDi
         return data is not null;
     }
 
-    internal string ResolveIcon(AssetFileEntry entry)
+    /// <summary>
+    /// Resolves the presentation icon registered for an asset type or source extension.
+    /// </summary>
+    /// <param name="entry">The source entry whose presentation icon should be resolved.</param>
+    /// <returns>
+    /// The most specific registered icon, or the built-in directory or file icon when no
+    /// registration matches the entry.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="entry"/> is <see langword="null"/>.
+    /// </exception>
+    public string GetIcon(AssetFileEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
         if (entry.isDirectory)

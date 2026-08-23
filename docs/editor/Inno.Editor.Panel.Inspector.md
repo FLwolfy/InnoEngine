@@ -1,41 +1,50 @@
 # Inno.Editor.Panel.Inspector
 
-[Editor 索引](README.md) · [Hierarchy](Inno.Editor.Panel.Hierarchy.md) · [ImGui](Inno.Editor.ImGui.md)
+[Editor 索引](README.md) · [Inspection](Inno.Editor.Inspection.md) · [Hierarchy](Inno.Editor.Panel.Hierarchy.md) · [ImGui](Inno.Editor.ImGui.md)
 
-该项目拥有 Inspector Panel、Inspector/Property Drawer Registry、serialized property renderer、Component/System 操作、动态 Add 菜单与引用拖放。
+该项目拥有 Inspector Panel、统一 Target Header、Scene 的 Component/System 操作、动态 Add 菜单与引用拖放。可复用 Drawer 契约、Registry 和 serialized property renderer 已归入 `Inno.Editor.Inspection`。
 
-Inspector 为所有可检查目标统一绘制无外部缝隙的 Target Header。Header 的大图标、名称、名称修改能力和第二行内容全部由当前 `InspectorDrawer<TTarget>` 提供；统一容器只负责布局、裁剪、边框和锁定。名称没有 setter 时直接显示为文字，不绘制输入框。第二行严格限制为一行，适合放置 active、tag、路径、标签或其他轻量目标信息。
+Inspector 为所有可检查目标统一绘制无外部缝隙的 Target Header。Header 的大图标、名称、名称修改能力和第二行内容全部由当前 `InspectionDrawer<TTarget>` 提供；统一容器只负责布局、裁剪、边框和锁定。名称没有 setter 时直接显示为文字，不绘制输入框。第二行严格限制为一行，适合放置 active、tag、路径、标签或其他轻量目标信息。
 
 Target Header 右上角提供 lock/unlock 控件，其交互面积、图标居中与 hover 表现和 Panel Tab Bar 的关闭 X 使用同一套 compact icon widget。锁定只固定 Inspector 当前展示目标，不修改全局 Selection；Hierarchy 和 File Browser 可以继续选择其他对象，以便把它们拖到被锁定目标的属性上。锁定的 Scene 对象被销毁时会自动解锁，不保留失效引用。
+
+Asset target Drawer 由 FileBrowser 项目自身提供，并通过 `IInspectionIconProvider<AssetFileEntry>` 复用 `AssetEditorModule` 的 type/extension icon registry；因此 File Browser Tree/List/Grid 与 Inspector Header 始终一致，EditorScripts 热重载图标声明后两处会同时更新。第二行 source path 使用与 File Browser 底部 breadcrumb 相同的半透明 palette color。
+
+GameObject Header 的第二行包含 Active 与项目 Tag picker。Picker 可以选择已有 Tag，也可以输入新 Tag 后按 Enter 或 Add；自定义 Tag 可以直接删除。删除 Tag 会把当前已加载对象上的对应值统一还原为 `Untagged`，Tag 定义与对象修改组成同一个 Undo/Redo 事务。项目 Tag 由 `SceneInspectionModule` 以 `tags=[...]` 保存到 `editor.ini` 的 `[InnoEditor][Module.scene-inspection]` section。Scene 中已经存在但尚未进入 catalog 的 Tag 会被自动同步。修改 Tag 通过 `SceneEdits.SetGameObjectTag` 进入 Undo/Redo，不是 Inspector 私有状态。
 
 ## Registry 扩展
 
 ```csharp
-[InspectorDrawer(typeof(AnimationController))]
+[InspectionDrawer(typeof(AnimationController))]
 public sealed class AnimationControllerInspector
-    : InspectorDrawer<AnimationController>
+    : InspectionDrawer<AnimationController>
 {
     public override string icon => ImGuiIcon.DiagramProject;
 
     protected override string GetName(
-        InspectorDrawContext context,
+        InspectionDrawContext context,
         AnimationController target)
         => target.name;
 
+    protected override string GetIcon(
+        InspectionDrawContext context,
+        AnimationController target)
+        => target.hasErrors ? ImGuiIcon.TriangleExclamation : icon;
+
     protected override Action<string>? GetNameSetter(
-        InspectorDrawContext context,
+        InspectionDrawContext context,
         AnimationController target)
         => value => target.name = value;
 
     protected override void DrawHeader(
-        InspectorDrawContext context,
+        InspectionDrawContext context,
         AnimationController target)
     {
         ImGui.TextUnformatted($"States: {target.stateCount}");
     }
 
     protected override void Draw(
-        InspectorDrawContext context,
+        InspectionDrawContext context,
         AnimationController target)
     {
     }
@@ -50,7 +59,7 @@ public sealed class AnimationCurveDrawer : IPropertyDrawer
 }
 ```
 
-两个 Registry 均基于 `TypeRegistry`，随 TypeCache generation 原子刷新；构造或冲突失败不会发布半成品。Property 顺序按照字段/属性在脚本中的 metadata 顺序统一排序，不再强制 fields 在 properties 前。
+两个 Registry 位于 `Inno.Editor.Inspection`，均基于 `TypeRegistry`，随 TypeCache generation 原子刷新；构造或冲突失败不会发布半成品。Property 顺序按照字段/属性在脚本中的 metadata 顺序统一排序，不再强制 fields 在 properties 前。
 
 ## Area 与 Action
 
@@ -73,4 +82,4 @@ Asset reference handler 接受共享 `AssetInfo`；EngineObject handler 接受�
 
 ## Scripting API
 
-EditorScripts 使用 `InnoEditor.Inspection`，可声明 InspectorDrawer、PropertyDrawer 并使用 draw context。具体内建 Panel、Registry snapshot 和内部 metadata cache 不导出。
+EditorScripts 使用 `InnoEditor.Inspection`，可声明 InspectionDrawer、PropertyDrawer 并使用 draw context。Facade 由 `Inno.Editor.Inspection` 提供；本项目只补充 Inspector area/action 与引用 drop target。具体内建 Panel、Registry snapshot 和内部 metadata cache 不导出。

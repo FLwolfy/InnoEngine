@@ -87,7 +87,8 @@
 - 脚本必须使用逻辑 namespace（如 `using InnoEngine.Scene;`），不得直接使用实现侧 `Inno.*` namespace。
 
 ## 13. Editor 项目组织与引用边界
-- `src/editor` 中每个项目的业务源码统一使用与 `.csproj`/程序集名称完全相同的命名空间；功能目录只负责组织文件，不追加到命名空间。例如 `Inno.Editor.Panel.Inspector/PropertyDrawing/Drawers` 中的类型仍使用 `namespace Inno.Editor.Panel.Inspector;`。
+- `src/editor` 中每个项目的业务源码统一使用与 `.csproj`/程序集名称完全相同的命名空间；功能目录只负责组织文件，不追加到命名空间。例如 `Inno.Editor.Inspection/PropertyDrawing/Drawers` 中的类型仍使用 `namespace Inno.Editor.Inspection;`。
+- 可复用的 InspectionDrawer、PropertyDrawer、Registry 与 serialized property renderer 统一属于 `Inno.Editor.Inspection`；业务 Panel 只在自身项目中实现具体 Drawer，不得为了扩展检查显示而引用 `Inno.Editor.Panel.Inspector`。
 - 唯一命名空间例外是 `Inno.Editor.ImGui/Widgets`：其中所有类型使用 `namespace Inno.Editor.ImGui.ImGuiWidget;`。
 - `Inno.Editor.ImGui/Widgets` 只允许 `ImGuiWidget.*.cs` 文件。Widget 的 presentation、options、result 与私有状态应收口到对应的 `ImGuiWidget.<Feature>.cs`，不得创建独立的 Widget helper 文件。
 - Editor 项目内部按实际功能建立目录（如 `Commands`、`DragDrop`、`Presentation`、`PropertyDrawing`）；禁止使用含义模糊的 `Internal` 目录。访问级别由 C# 声明表达，不由目录名表达。

@@ -29,6 +29,8 @@ internal sealed class SceneStore
     private readonly List<PendingComponentRemoval> m_pendingComponentRemovals = [];
     private readonly Dictionary<Type, GameComponent[]> m_componentQueryCache = [];
     private readonly Dictionary<string, GameObject[]> m_objectQueryCache = new(StringComparer.Ordinal);
+    private Dictionary<string, GameObject>? m_firstObjectByName;
+    private Dictionary<string, GameObject[]>? m_objectsByTag;
     private GameObject[]? m_objectSnapshotCache;
     private int m_executionDepth;
     private bool m_clearRequested;
@@ -189,6 +191,34 @@ internal sealed class SceneStore
             .Select(static record => record.gameObject)
             .ToArray();
         return m_objectSnapshotCache;
+    }
+
+    internal GameObject? FindObject(string name)
+    {
+        EnsureMetadataIndexes();
+        return m_firstObjectByName!.GetValueOrDefault(name);
+    }
+
+    internal GameObject? FindObjectWithTag(string tag)
+    {
+        EnsureMetadataIndexes();
+        return m_objectsByTag!.TryGetValue(tag, out GameObject[]? matches) && matches.Length != 0
+            ? matches[0]
+            : null;
+    }
+
+    internal IReadOnlyList<GameObject> FindObjectsWithTag(string tag)
+    {
+        EnsureMetadataIndexes();
+        return m_objectsByTag!.TryGetValue(tag, out GameObject[]? matches)
+            ? matches
+            : Array.Empty<GameObject>();
+    }
+
+    internal void NotifyObjectMetadataChanged(GameObject gameObject)
+    {
+        _ = GetAliveRecord(gameObject);
+        InvalidateMetadataIndexes();
     }
 
     internal IReadOnlyList<GameObject> GetOwnedObjects()
@@ -461,6 +491,40 @@ internal sealed class SceneStore
         m_objectSnapshotCache = null;
         m_componentQueryCache.Clear();
         m_objectQueryCache.Clear();
+        InvalidateMetadataIndexes();
+    }
+
+    private void EnsureMetadataIndexes()
+    {
+        if (m_firstObjectByName is not null && m_objectsByTag is not null)
+            return;
+
+        var firstByName = new Dictionary<string, GameObject>(StringComparer.Ordinal);
+        var byTag = new Dictionary<string, List<GameObject>>(StringComparer.Ordinal);
+        IReadOnlyList<GameObject> objects = GetObjects();
+        for (int i = 0; i < objects.Count; i++)
+        {
+            GameObject gameObject = objects[i];
+            firstByName.TryAdd(gameObject.name, gameObject);
+            if (!byTag.TryGetValue(gameObject.tag, out List<GameObject>? matches))
+            {
+                matches = [];
+                byTag.Add(gameObject.tag, matches);
+            }
+            matches.Add(gameObject);
+        }
+
+        m_firstObjectByName = firstByName;
+        m_objectsByTag = byTag.ToDictionary(
+            static pair => pair.Key,
+            static pair => pair.Value.ToArray(),
+            StringComparer.Ordinal);
+    }
+
+    private void InvalidateMetadataIndexes()
+    {
+        m_firstObjectByName = null;
+        m_objectsByTag = null;
     }
 
     private void EndExecutionPhase()

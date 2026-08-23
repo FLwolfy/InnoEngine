@@ -13,11 +13,17 @@ namespace Inno.Engine.Scene;
 [RequiresSerializationConverter]
 public sealed class GameObject : EngineObject, ISerializable
 {
+    /// <summary>
+    /// Defines the tag assigned to newly created game objects.
+    /// </summary>
+    public const string defaultTag = "Untagged";
+
     private GameScene? m_scene;
     private Transform? m_transform;
     private PrefabInstanceInfo? m_prefabInstance;
     private PrefabConnectionRecord? m_prefabConnection;
     private string m_name;
+    private string m_tag = defaultTag;
     private bool m_activeSelf = true;
     private bool m_activeInHierarchy = true;
 
@@ -50,8 +56,36 @@ public sealed class GameObject : EngineObject, ISerializable
         }
         set
         {
+            GameScene owner = EnsureAlive();
+            string requestedName = value ?? string.Empty;
+            if (string.Equals(m_name, requestedName, StringComparison.Ordinal))
+                return;
+            m_name = requestedName;
+            owner.NotifyObjectMetadataChanged(this);
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the ordinal tag used to categorize and query this game object.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the assigned tag is empty or contains only white-space characters.
+    /// </exception>
+    public string tag
+    {
+        get
+        {
             EnsureAlive();
-            m_name = value ?? string.Empty;
+            return m_tag;
+        }
+        set
+        {
+            GameScene owner = EnsureAlive();
+            string requestedTag = NormalizeTag(value);
+            if (string.Equals(m_tag, requestedTag, StringComparison.Ordinal))
+                return;
+            m_tag = requestedTag;
+            owner.NotifyObjectMetadataChanged(this);
         }
     }
 
@@ -243,7 +277,23 @@ public sealed class GameObject : EngineObject, ISerializable
         m_transform = transform;
     }
 
-    internal void SetNameDirect(string value) => m_name = value ?? string.Empty;
+    internal void SetNameDirect(string value)
+    {
+        string requestedName = value ?? string.Empty;
+        if (string.Equals(m_name, requestedName, StringComparison.Ordinal))
+            return;
+        m_name = requestedName;
+        m_scene?.NotifyObjectMetadataChanged(this);
+    }
+
+    internal void SetTagDirect(string value)
+    {
+        string requestedTag = NormalizeTag(value);
+        if (string.Equals(m_tag, requestedTag, StringComparison.Ordinal))
+            return;
+        m_tag = requestedTag;
+        m_scene?.NotifyObjectMetadataChanged(this);
+    }
     internal void SetActiveSelfDirect(bool value) => m_activeSelf = value;
     internal void SetActiveInHierarchyDirect(bool value) => m_activeInHierarchy = value;
     internal void SetSceneDirect(GameScene scene)
@@ -266,5 +316,19 @@ public sealed class GameObject : EngineObject, ISerializable
         if (isDestroyed || m_scene is null || !m_scene.Contains(this))
             throw new InvalidOperationException($"GameObject '{m_name}' is destroyed or detached from its scene.");
         return m_scene;
+    }
+
+    /// <summary>
+    /// Validates and normalizes a tag used by runtime storage and serialization.
+    /// </summary>
+    /// <param name="value">The tag value to normalize.</param>
+    /// <returns>The tag without surrounding white space.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="value"/> is empty or contains only white-space characters.
+    /// </exception>
+    internal static string NormalizeTag(string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+        return value.Trim();
     }
 }

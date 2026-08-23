@@ -229,6 +229,24 @@ public sealed class SceneHistoryTests : IDisposable
         Assert.True(m_runtime.interactions.history.Redo().succeeded);
         Assert.Equal("After", gameObject.name);
     }
+
+    [Fact]
+    public void GameObjectTagUndoAndRedoRefreshSceneQueries()
+    {
+        GameScene scene = m_workspace.CreateScene();
+        GameObject gameObject = scene.CreateObject("Tagged");
+
+        m_edits.SetGameObjectTag(gameObject, "Player");
+
+        Assert.Equal("Player", gameObject.tag);
+        Assert.Same(gameObject, scene.FindObjectWithTag("Player"));
+        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        Assert.Equal(GameObject.defaultTag, gameObject.tag);
+        Assert.Null(scene.FindObjectWithTag("Player"));
+        Assert.True(m_runtime.interactions.history.Redo().succeeded);
+        Assert.Equal("Player", gameObject.tag);
+        Assert.Same(gameObject, scene.FindObjectWithTag("Player"));
+    }
 }
 
 [StableTypeId("267e77d8-1112-4cf9-a9f1-01d9a1e59bbc")]
