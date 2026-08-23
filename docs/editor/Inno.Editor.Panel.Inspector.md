@@ -10,7 +10,9 @@ Target Header 右上角提供 lock/unlock 控件，其交互面积、图标居�
 
 Asset target Drawer 由 FileBrowser 项目自身提供，并通过 `IInspectionIconProvider<AssetFileEntry>` 复用 `AssetEditorModule` 的 type/extension icon registry；因此 File Browser Tree/List/Grid 与 Inspector Header 始终一致，EditorScripts 热重载图标声明后两处会同时更新。第二行 source path 使用与 File Browser 底部 breadcrumb 相同的半透明 palette color。
 
-GameObject Header 的第二行包含 Active 与项目 Tag picker。Picker 可以选择已有 Tag，也可以输入新 Tag 后按 Enter 或 Add；自定义 Tag 可以直接删除。删除 Tag 会把当前已加载对象上的对应值统一还原为 `Untagged`，Tag 定义与对象修改组成同一个 Undo/Redo 事务。项目 Tag 由 `SceneInspectionModule` 以 `tags=[...]` 保存到 `editor.ini` 的 `[InnoEditor][Module.scene-inspection]` section。Scene 中已经存在但尚未进入 catalog 的 Tag 会被自动同步。修改 Tag 通过 `SceneEdits.SetGameObjectTag` 进入 Undo/Redo，不是 Inspector 私有状态。
+GameObject Header 的第二行包含 Active、项目 Tag picker 和 Layer picker。Tag picker 可以选择已有 Tag，也可以输入新 Tag 后按 Enter 或 Add；自定义 Tag 可以直接删除。删除 Tag 会把当前已加载对象上的对应值统一还原为 `Untagged`，Tag 定义与对象修改组成同一个 Undo/Redo 事务。项目 Tag 由 `SceneInspectionModule` 以 `tags=[...]` 保存到 `editor.ini` 的 `[InnoEditor][Module.scene-inspection]` section。Scene 中已经存在但尚未进入 catalog 的 Tag 会被自动同步。修改 Tag 通过 `SceneEdits.SetGameObjectTag` 进入 Undo/Redo，不是 Inspector 私有状态。
+
+Layer picker 从 canonical `Assets/Settings/GameLayers.ilayers` 读取已命名 slot。修改对象 Layer 通过 `SceneEdits.SetGameObjectLayer` 记录稳定索引并进入 Undo/Redo，同时刷新 Scene layer query index。单击 File Browser 中的 `GameLayers.ilayers` 时，Inspector 会优先解析该资产的 exact drawer：可以直接定义 1–31 slot 的名称，并逐层编辑对称 interaction matrix；每次提交都通过 `AssetManager.Save` 产生正常 source/meta/artifact 更新。
 
 ## Registry 扩展
 

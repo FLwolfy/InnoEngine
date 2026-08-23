@@ -46,7 +46,8 @@ internal sealed class GameObjectTagSelector
     /// </summary>
     /// <param name="context">The current Inspector drawing context.</param>
     /// <param name="target">The game object whose tag should be displayed.</param>
-    internal void Draw(InspectionDrawContext context, GameObject target)
+    /// <param name="width">The width reserved for the combo control.</param>
+    internal void Draw(InspectionDrawContext context, GameObject target, float width)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(target);
@@ -54,7 +55,7 @@ internal sealed class GameObjectTagSelector
 
         NativeImGui.TextUnformatted("Tag");
         NativeImGui.SameLine(0f, EditorWidget.style.inspectorHeaderControlSpacing);
-        NativeImGui.SetNextItemWidth(MathF.Max(1f, NativeImGui.GetContentRegionAvail().X));
+        NativeImGui.SetNextItemWidth(MathF.Max(1f, width));
         if (!NativeImGui.BeginCombo(
                 $"##game_object_tag_{target.identity.persistentId:N}",
                 target.tag,

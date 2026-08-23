@@ -8,6 +8,7 @@ using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Components;
+using Inno.Engine.Scene.Layers;
 
 namespace Inno.Engine.Scene.Assets;
 
@@ -16,6 +17,7 @@ internal static class SceneGraphSerialization
     internal const string C_SCENE_ID_KEY = "sceneId";
     internal const string C_NAME_KEY = "name";
     internal const string C_TAG_KEY = "tag";
+    internal const string C_LAYER_KEY = "layer";
     internal const string C_OBJECTS_KEY = "objects";
     internal const string C_SYSTEMS_KEY = "systems";
     internal const string C_SYSTEM_ID_KEY = "systemId";
@@ -71,6 +73,7 @@ internal static class SceneGraphSerialization
             objectWriter.Write(C_OBJECT_ID_KEY, GetSourceId(sourceIds, gameObject));
             objectWriter.Write(C_NAME_KEY, gameObject.name);
             objectWriter.Write(C_TAG_KEY, gameObject.tag);
+            objectWriter.Write(C_LAYER_KEY, gameObject.layer.index);
             objectWriter.Write(C_ACTIVE_SELF_KEY, gameObject.activeSelf);
             objectWriter.Write(
                 C_PARENT_ID_KEY,
@@ -166,9 +169,8 @@ internal static class SceneGraphSerialization
                 preservePersistentIds ? sourceTransformId : null,
                 invokeReset: false);
             gameObject.SetTagDirect(
-                objectReader.Contains(C_TAG_KEY)
-                    ? objectReader.Read<string>(C_TAG_KEY)
-                    : GameObject.defaultTag);
+                objectReader.Read<string>(C_TAG_KEY));
+            gameObject.SetLayerDirect(new Layer(objectReader.Read<int>(C_LAYER_KEY)));
             gameObject.SetActiveSelfDirect(objectReader.Read<bool>(C_ACTIVE_SELF_KEY));
             gameObjectBySourceId.Add(sourceObjectId, gameObject);
             componentBySourceId.Add(sourceTransformId, gameObject.transform);

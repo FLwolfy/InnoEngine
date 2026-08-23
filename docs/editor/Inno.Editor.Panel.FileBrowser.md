@@ -4,6 +4,8 @@
 
 该项目完整拥有 File Browser feature：Tree/List/Grid 表现、导航与过滤、Asset selection、AssetEditor 扩展、文件操作 Action、菜单、Asset drag source，以及 `AssetFileEntry` 的 `AssetSelectionInspectionDrawer`。它只引用共享的 `Inno.Editor.Inspection`，不引用 Hierarchy 或 Inspector Panel。
 
+内建 extension icon catalog 将 `.ilayers` 显示为 Layer Group。File Browser 仍只选择 `AssetFileEntry`；Inspector composition root 会在存在 exact asset drawer 时加载 canonical asset 并使用该 drawer，因此项目层设置可以直接编辑，同时 File Browser 的 Rename/Delete/Drag target 语义保持不变。
+
 ## 公共扩展 API
 
 | API | 作用 |

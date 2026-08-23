@@ -4,6 +4,7 @@ using System.Linq;
 
 using Inno.Core.Serialization;
 using Inno.Engine.Scene.Components;
+using Inno.Engine.Scene.Layers;
 
 namespace Inno.Engine.Scene;
 
@@ -24,6 +25,7 @@ public sealed class GameObject : EngineObject, ISerializable
     private PrefabConnectionRecord? m_prefabConnection;
     private string m_name;
     private string m_tag = defaultTag;
+    private Layer m_layer = Layer.defaultLayer;
     private bool m_activeSelf = true;
     private bool m_activeInHierarchy = true;
 
@@ -85,6 +87,30 @@ public sealed class GameObject : EngineObject, ISerializable
             if (string.Equals(m_tag, requestedTag, StringComparison.Ordinal))
                 return;
             m_tag = requestedTag;
+            owner.NotifyObjectMetadataChanged(this);
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the single runtime layer used to filter this game object.
+    /// </summary>
+    /// <remarks>
+    /// Layer names are project configuration stored separately from scene data. Scene and prefab
+    /// serialization persist only the stable numeric layer slot.
+    /// </remarks>
+    public Layer layer
+    {
+        get
+        {
+            EnsureAlive();
+            return m_layer;
+        }
+        set
+        {
+            GameScene owner = EnsureAlive();
+            if (m_layer == value)
+                return;
+            m_layer = value;
             owner.NotifyObjectMetadataChanged(this);
         }
     }
@@ -292,6 +318,14 @@ public sealed class GameObject : EngineObject, ISerializable
         if (string.Equals(m_tag, requestedTag, StringComparison.Ordinal))
             return;
         m_tag = requestedTag;
+        m_scene?.NotifyObjectMetadataChanged(this);
+    }
+
+    internal void SetLayerDirect(Layer value)
+    {
+        if (m_layer == value)
+            return;
+        m_layer = value;
         m_scene?.NotifyObjectMetadataChanged(this);
     }
     internal void SetActiveSelfDirect(bool value) => m_activeSelf = value;

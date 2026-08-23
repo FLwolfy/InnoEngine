@@ -44,7 +44,7 @@ Scene setup 因缺少 Stable Type ID 或反序列化失败而暂时无法恢复�
 | 分类 | 成员 |
 | --- | --- |
 | Scene 文档 | `CreateScene`、`CloseScene`、`SetSceneIndex` |
-| GameObject | `CreateGameObject`、`DeleteGameObject`、`RenameGameObject`、`SetGameObjectActive`、`SetGameObjectTag`、`ChangeHierarchy` |
+| GameObject | `CreateGameObject`、`DeleteGameObject`、`RenameGameObject`、`SetGameObjectActive`、`SetGameObjectTag`、`SetGameObjectLayer`、`ChangeHierarchy` |
 | Component | `AddComponent`、`RemoveComponent`、`ResetComponent`、`SetComponentIndex` |
 | System | `AddSystem`、`RemoveSystem`、`ResetSystem`、`SetSystemIndex` |
 | 属性 | `ChangeProperty` |

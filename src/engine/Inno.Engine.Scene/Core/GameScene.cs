@@ -5,6 +5,7 @@ using System.Linq;
 using Inno.Assets.Core;
 using Inno.Core.Serialization;
 using Inno.Engine.Scene.Components;
+using Inno.Engine.Scene.Layers;
 
 namespace Inno.Engine.Scene;
 
@@ -167,6 +168,39 @@ public sealed class GameScene : EngineObject, ISerializable
     {
         EnsureNotDestroyed();
         return m_store.FindObjectsWithTag(GameObject.NormalizeTag(tag));
+    }
+
+    /// <summary>
+    /// Finds the first game object assigned to a layer in scene storage order.
+    /// </summary>
+    /// <param name="layer">The layer slot to find.</param>
+    /// <returns>The first matching game object, or <see langword="null"/> when no object matches.</returns>
+    public GameObject? FindObjectWithLayer(Layer layer)
+    {
+        EnsureNotDestroyed();
+        return m_store.FindObjectWithLayer(layer);
+    }
+
+    /// <summary>
+    /// Finds every game object assigned to one layer in scene storage order.
+    /// </summary>
+    /// <param name="layer">The layer slot to find.</param>
+    /// <returns>A stable snapshot containing every matching game object.</returns>
+    public IReadOnlyList<GameObject> FindObjectsWithLayer(Layer layer)
+    {
+        EnsureNotDestroyed();
+        return m_store.FindObjectsWithLayer(layer);
+    }
+
+    /// <summary>
+    /// Finds every game object assigned to any layer contained in a mask.
+    /// </summary>
+    /// <param name="layers">The set of accepted layer slots.</param>
+    /// <returns>A stable snapshot in scene storage order.</returns>
+    public IReadOnlyList<GameObject> FindObjectsWithLayers(LayerMask layers)
+    {
+        EnsureNotDestroyed();
+        return m_store.FindObjectsWithLayers(layers);
     }
 
     /// <summary>

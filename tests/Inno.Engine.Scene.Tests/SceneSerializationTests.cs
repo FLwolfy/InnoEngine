@@ -9,6 +9,7 @@ using Inno.Core.Serialization.Converters;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Assets;
 using Inno.Engine.Scene.Components;
+using Inno.Engine.Scene.Layers;
 
 using Xunit;
 
@@ -46,6 +47,8 @@ public sealed class SceneSerializationTests : IDisposable
         GameObject child = source.CreateObject("Child");
         root.tag = "Player";
         child.tag = "Companion";
+        root.layer = new Layer(3);
+        child.layer = new Layer(7);
         child.transform.SetParent(root.transform);
         child.transform.localPosition = new Vector3(1, 2, 3);
         child.SetActive(false);
@@ -78,6 +81,9 @@ public sealed class SceneSerializationTests : IDisposable
         GameObject restoredChild = restored.GetObjects().Single(gameObject => gameObject.identity.persistentId == childId);
         Assert.Equal("Player", restoredRoot.tag);
         Assert.Equal("Companion", restoredChild.tag);
+        Assert.Equal(new Layer(3), restoredRoot.layer);
+        Assert.Equal(new Layer(7), restoredChild.layer);
+        Assert.Same(restoredRoot, restored.FindObjectWithLayer(new Layer(3)));
         Assert.Same(restoredRoot, restored.FindObjectWithTag("Player"));
         Assert.Equal(new[] { typeof(Transform), typeof(ReferenceComponent) },
             restoredRoot.GetComponents().Select(static component => component.GetType()));
@@ -106,6 +112,8 @@ public sealed class SceneSerializationTests : IDisposable
         GameObject sourceChild = sourceScene.CreateObject("Child");
         sourceRoot.tag = "Spawn";
         sourceChild.tag = "Collectible";
+        sourceRoot.layer = new Layer(4);
+        sourceChild.layer = new Layer(5);
         sourceChild.transform.SetParent(sourceRoot.transform);
         ReferenceComponent sourceReference = sourceRoot.AddComponent<ReferenceComponent>();
         ReferenceComponent sourceChildReference = sourceChild.AddComponent<ReferenceComponent>();
@@ -126,8 +134,12 @@ public sealed class SceneSerializationTests : IDisposable
         GameObject secondChild = Assert.Single(second.transform.children).gameObject;
         Assert.Equal("Spawn", first.tag);
         Assert.Equal("Collectible", firstChild.tag);
+        Assert.Equal(new Layer(4), first.layer);
+        Assert.Equal(new Layer(5), firstChild.layer);
         Assert.Equal("Spawn", second.tag);
         Assert.Equal("Collectible", secondChild.tag);
+        Assert.Equal(new Layer(4), second.layer);
+        Assert.Equal(new Layer(5), secondChild.layer);
         ReferenceComponent firstReference = first.GetComponent<ReferenceComponent>();
         ReferenceComponent secondReference = second.GetComponent<ReferenceComponent>();
         Assert.Same(firstChild, firstReference.targetObject);
@@ -163,6 +175,26 @@ public sealed class SceneSerializationTests : IDisposable
         Assert.Equal(
             [typeof(OrderSerializationSystemB), typeof(OrderSerializationSystemA)],
             restored.GetSystems().Select(static system => system.GetType()));
+    }
+
+    [Fact]
+    public void SerializableLayerValues_RoundtripThroughComponentState()
+    {
+        var scene = new GameScene("Layer Values");
+        LayerValueComponent component = scene.CreateObject("Object").AddComponent<LayerValueComponent>();
+        component.layer = new Layer(9);
+        component.mask = LayerMask.FromLayers([new Layer(2), new Layer(9)]);
+
+        byte[] bytes = SerializationManager.Serialize(scene);
+        SceneManager.LoadScene(scene);
+        Assert.True(SceneManager.UnloadScene(scene));
+        GameScene restored = SerializationManager.Deserialize<GameScene>(bytes);
+        LayerValueComponent restoredComponent = Assert.Single(restored.GetObjects())
+            .GetComponent<LayerValueComponent>();
+
+        Assert.Equal(new Layer(9), restoredComponent.layer);
+        Assert.True(restoredComponent.mask.Contains(new Layer(2)));
+        Assert.True(restoredComponent.mask.Contains(new Layer(9)));
     }
 
     [Fact]
@@ -270,3 +302,13 @@ internal sealed class OrderSerializationSystemA : GameSystem;
 
 [StableTypeId("6924359d-798d-4384-bdb2-1b0e34ab3fbb")]
 internal sealed class OrderSerializationSystemB : GameSystem;
+
+[StableTypeId("821c7b92-9aeb-40cb-924e-169004199ef0")]
+internal sealed class LayerValueComponent : GameComponent
+{
+    [SerializableProperty]
+    public Layer layer { get; set; }
+
+    [SerializableProperty]
+    public LayerMask mask { get; set; }
+}

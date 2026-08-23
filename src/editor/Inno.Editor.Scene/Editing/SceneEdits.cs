@@ -8,6 +8,7 @@ using Inno.Editor.Interactions;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Assets;
 using Inno.Engine.Scene.Components;
+using Inno.Engine.Scene.Layers;
 
 namespace Inno.Editor.Scene;
 
@@ -570,6 +571,36 @@ public sealed class SceneEdits : EditorModule
             value => gameObject.tag = value,
             historyName,
             $"game-object-tag:{gameObject.identity.persistentId:N}");
+    }
+
+    /// <summary>
+    /// Changes the layer of a live GameObject and records the two stable numeric layer slots.
+    /// </summary>
+    /// <param name="gameObject">The live GameObject whose layer should change.</param>
+    /// <param name="layer">The requested project layer slot.</param>
+    /// <param name="historyName">The user-facing history entry name.</param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="gameObject"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="historyName"/> is empty.
+    /// </exception>
+    public void SetGameObjectLayer(
+        GameObject gameObject,
+        Layer layer,
+        string historyName = "Set GameObject Layer")
+    {
+        ArgumentNullException.ThrowIfNull(gameObject);
+        ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
+        ChangeScalar(
+            gameObject,
+            SceneScalarKind.GameObjectLayer,
+            gameObject.layer.index.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            layer.index.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            value => gameObject.layer = new Layer(
+                int.Parse(value, System.Globalization.CultureInfo.InvariantCulture)),
+            historyName,
+            $"game-object-layer:{gameObject.identity.persistentId:N}");
     }
 
     /// <summary>

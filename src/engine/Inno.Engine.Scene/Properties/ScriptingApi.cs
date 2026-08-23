@@ -1,6 +1,7 @@
 using Inno.Core.Scripting;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Components;
+using Inno.Engine.Scene.Layers;
 
 [assembly: ScriptingApiNamespace(
     "InnoEngine.Scene",
@@ -9,6 +10,10 @@ using Inno.Engine.Scene.Components;
 [assembly: ScriptingApiNamespace(
     "InnoEngine.Scene",
     "Inno.Engine.Scene.Components",
+    ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiNamespace(
+    "InnoEngine.Scene",
+    "Inno.Engine.Scene.Layers",
     ScriptingApiScope.Runtime)]
 
 [assembly: ScriptingApiExport(typeof(AllowMultipleComponentAttribute), ScriptingApiScope.Runtime)]
@@ -22,3 +27,7 @@ using Inno.Engine.Scene.Components;
 [assembly: ScriptingApiExport(typeof(PrefabInstanceInfo), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(SceneManager), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(Transform), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(Layer), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(LayerDefinition), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(LayerMask), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(LayerStack), ScriptingApiScope.Runtime)]

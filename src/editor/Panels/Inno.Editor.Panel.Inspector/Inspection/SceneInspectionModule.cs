@@ -1,3 +1,5 @@
+using Inno.Assets;
+using Inno.Assets.Core;
 using Inno.Assets.File;
 using Inno.Editor.Core;
 using Inno.Editor.Inspection;
@@ -26,19 +28,27 @@ public sealed class SceneInspectionModule : EditorModule, IEditorWorkspaceState,
     /// <param name="interactions">The active editor interaction entry point supplied to drawers.</param>
     /// <param name="edits">The scene editing service used to record granular property changes.</param>
     /// <param name="assetIcons">The Asset Browser presentation provider used by Asset inspection drawers.</param>
+    /// <param name="layerSettings">The canonical project layer-settings module.</param>
     /// <exception cref="System.ArgumentNullException">
     /// Thrown when <paramref name="interactions"/>, <paramref name="edits"/>,
-    /// or <paramref name="assetIcons"/> is <see langword="null"/>.
+    /// <paramref name="assetIcons"/>, or <paramref name="layerSettings"/> is <see langword="null"/>.
     /// </exception>
     internal SceneInspectionModule(
         EditorInteractions interactions,
         SceneEdits edits,
-        IInspectionIconProvider<AssetFileEntry> assetIcons)
+        IInspectionIconProvider<AssetFileEntry> assetIcons,
+        GameLayerSettingsModule layerSettings)
     {
         System.ArgumentNullException.ThrowIfNull(interactions);
         System.ArgumentNullException.ThrowIfNull(edits);
         System.ArgumentNullException.ThrowIfNull(assetIcons);
-        var activator = new InspectionDrawerActivator(interactions, edits, assetIcons, m_tags);
+        System.ArgumentNullException.ThrowIfNull(layerSettings);
+        var activator = new InspectionDrawerActivator(
+            interactions,
+            edits,
+            assetIcons,
+            m_tags,
+            layerSettings);
         m_inspectors = new InspectionDrawerRegistry(interactions, activator.Create);
         m_properties = new PropertyDrawerRegistry(interactions);
         m_renderer = new SerializedPropertyRenderer(
@@ -60,12 +70,26 @@ public sealed class SceneInspectionModule : EditorModule, IEditorWorkspaceState,
         object target,
         out IInspectionDrawer? drawer,
         out InspectionDrawContext? drawContext)
-        => m_inspectors.TryResolve(
+    {
+        if (target is AssetFileEntry { isDirectory: false } entry &&
+            AssetManager.TryLoad(entry.relativePath, out AssetObject? asset) &&
+            asset is not null &&
+            m_inspectors.TryResolveExact(
+                editorContext,
+                asset,
+                m_renderer,
+                out drawer,
+                out drawContext))
+        {
+            return true;
+        }
+        return m_inspectors.TryResolve(
             editorContext,
             target,
             m_renderer,
             out drawer,
             out drawContext);
+    }
 
     /// <inheritdoc />
     public void Dispose()

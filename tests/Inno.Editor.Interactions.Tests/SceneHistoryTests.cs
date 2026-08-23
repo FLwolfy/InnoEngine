@@ -9,6 +9,7 @@ using Inno.Core.Serialization;
 using Inno.Editor.Scene;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Components;
+using Inno.Engine.Scene.Layers;
 using Xunit;
 
 namespace Inno.Editor.Interactions.Tests;
@@ -246,6 +247,25 @@ public sealed class SceneHistoryTests : IDisposable
         Assert.True(m_runtime.interactions.history.Redo().succeeded);
         Assert.Equal("Player", gameObject.tag);
         Assert.Same(gameObject, scene.FindObjectWithTag("Player"));
+    }
+
+    [Fact]
+    public void GameObjectLayerUndoAndRedoRefreshSceneQueries()
+    {
+        GameScene scene = m_workspace.CreateScene();
+        GameObject gameObject = scene.CreateObject("Layered");
+        var gameplay = new Layer(6);
+
+        m_edits.SetGameObjectLayer(gameObject, gameplay);
+
+        Assert.Equal(gameplay, gameObject.layer);
+        Assert.Same(gameObject, scene.FindObjectWithLayer(gameplay));
+        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        Assert.Equal(Layer.defaultLayer, gameObject.layer);
+        Assert.Null(scene.FindObjectWithLayer(gameplay));
+        Assert.True(m_runtime.interactions.history.Redo().succeeded);
+        Assert.Equal(gameplay, gameObject.layer);
+        Assert.Same(gameObject, scene.FindObjectWithLayer(gameplay));
     }
 }
 

@@ -12,6 +12,7 @@ using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Assets;
+using Inno.Engine.Scene.Layers;
 
 using Xunit;
 
@@ -242,7 +243,41 @@ public sealed class EngineAssetIntegrationTests : IDisposable
 
         Assert.Contains(importerTypes, type => type.Name == "SceneAssetImporter");
         Assert.Contains(importerTypes, type => type.Name == "PrefabAssetImporter");
+        Assert.Contains(importerTypes, type => type.Name == "GameLayerSettingsAssetImporter");
         Assert.Null(typeof(AssetManager).GetMethod("RegisterImporter"));
+    }
+
+    [Fact]
+    public void GameLayerSettingsAsset_SaveLoadAndReimport_PreservesDefinitionsAndInteractions()
+    {
+        GameLayerSettingsAsset created = GameLayerSettingsAsset.CreateDefault();
+        var player = new Layer(1);
+        var enemy = new Layer(2);
+        created.layerStack.Define(player, "Player");
+        created.layerStack.Define(enemy, "Enemy");
+        created.layerStack.SetInteraction(player, enemy, canInteract: false);
+
+        Assert.True(AssetManager.Save(GameLayerSettingsAsset.defaultPath, created));
+        GameLayerSettingsAsset loaded = AssetManager.Load<GameLayerSettingsAsset>(
+            GameLayerSettingsAsset.defaultPath);
+        string sourcePath = Path.Combine(
+            m_root,
+            "Assets",
+            GameLayerSettingsAsset.defaultPath.Replace('/', Path.DirectorySeparatorChar));
+        string source = File.ReadAllText(sourcePath);
+
+        Assert.Same(created, loaded);
+        Assert.Equal("Player", loaded.layerStack.GetName(player));
+        Assert.Equal("Enemy", loaded.layerStack.GetName(enemy));
+        Assert.False(loaded.layerStack.CanInteract(player, enemy));
+        Assert.Contains("\"layers\"", source, StringComparison.Ordinal);
+        Assert.Contains("\"interactionMasks\"", source, StringComparison.Ordinal);
+        Assert.True(File.Exists(sourcePath + ".imeta"));
+        Assert.True(AssetManager.TryGetInfo(
+            GameLayerSettingsAsset.defaultPath,
+            out AssetInfo? info));
+        Assert.NotNull(info);
+        Assert.False(info!.artifactKey.isEmpty);
     }
 
     [Fact]

@@ -16,4 +16,5 @@ namespace Inno.Editor.Panel.FileBrowser;
 [AssetIcon(".cs", ImGuiIcon.FileCode)]
 [AssetIcon(".dll", ImGuiIcon.Plug)]
 [AssetIcon(".iasmdef", ImGuiIcon.Gears)]
+[AssetIcon(".ilayers", ImGuiIcon.LayerGroup)]
 internal static class BuiltInAssetIcons;

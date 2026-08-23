@@ -73,6 +73,41 @@ public sealed class InspectionDrawerRegistry : IDisposable
     }
 
     /// <summary>
+    /// Resolves only a drawer explicitly registered for the target's exact runtime type.
+    /// </summary>
+    /// <param name="editorContext">The shared editor context exposed to the selected drawer.</param>
+    /// <param name="target">The selected object whose exact runtime type determines the drawer.</param>
+    /// <param name="renderer">The serialized property renderer exposed to the selected drawer.</param>
+    /// <param name="drawer">The exact drawer when the method succeeds.</param>
+    /// <param name="context">The target-specific drawing context when the method succeeds.</param>
+    /// <returns>
+    /// <see langword="true"/> when an exact registration exists; inherited and fallback drawers are ignored.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="editorContext"/>, <paramref name="target"/>, or
+    /// <paramref name="renderer"/> is <see langword="null"/>.
+    /// </exception>
+    public bool TryResolveExact(
+        EditorContext editorContext,
+        object target,
+        SerializedPropertyRenderer renderer,
+        out IInspectionDrawer? drawer,
+        out InspectionDrawContext? context)
+    {
+        ArgumentNullException.ThrowIfNull(editorContext);
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(renderer);
+        drawer = m_registry.ResolveExact(target.GetType());
+        if (drawer is null)
+        {
+            context = null;
+            return false;
+        }
+        context = new InspectionDrawContext(editorContext, m_registry.interactions, target, renderer);
+        return true;
+    }
+
+    /// <summary>
     /// Releases every active drawer snapshot and unregisters the registry from type refreshes.
     /// </summary>
     public void Dispose() => m_registry.Dispose();
@@ -112,6 +147,13 @@ public sealed class InspectionDrawerRegistry : IDisposable
             }
             return best?.drawer;
         }
+
+        internal IInspectionDrawer? ResolveExact(Type targetType)
+            => current
+                .Where(registration => registration.targetType == targetType)
+                .OrderByDescending(static registration => registration.priority)
+                .Select(static registration => registration.drawer)
+                .FirstOrDefault();
 
         protected override Registration[] Build(TypeCacheSnapshot types)
         {

@@ -27,6 +27,7 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
     private readonly InspectorCardControls m_cardControls = new();
     private readonly SceneEdits m_edits;
     private readonly GameObjectTagSelector m_tagSelector;
+    private readonly GameObjectLayerSelector m_layerSelector;
     private string m_componentSearch = string.Empty;
 
     /// <summary>
@@ -34,15 +35,22 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
     /// </summary>
     /// <param name="edits">The Scene editing service used for compact Undo/Redo records.</param>
     /// <param name="tags">The project tag catalog displayed in the target header.</param>
+    /// <param name="layerSettings">The project layer catalog displayed in the target header.</param>
     /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="edits"/> or <paramref name="tags"/> is
-    /// <see langword="null"/>.
+    /// Thrown when <paramref name="edits"/>, <paramref name="tags"/>, or
+    /// <paramref name="layerSettings"/> is <see langword="null"/>.
     /// </exception>
-    internal GameObjectInspectionDrawer(SceneEdits edits, GameObjectTagCatalog tags)
+    internal GameObjectInspectionDrawer(
+        SceneEdits edits,
+        GameObjectTagCatalog tags,
+        GameLayerSettingsModule layerSettings)
     {
         m_edits = edits ?? throw new ArgumentNullException(nameof(edits));
         m_tagSelector = new GameObjectTagSelector(
             tags ?? throw new ArgumentNullException(nameof(tags)),
+            edits);
+        m_layerSelector = new GameObjectLayerSelector(
+            layerSettings ?? throw new ArgumentNullException(nameof(layerSettings)),
             edits);
     }
 
@@ -68,7 +76,18 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
         NativeImGui.SameLine();
         NativeImGui.TextUnformatted("Active");
         NativeImGui.SameLine(0f, EditorWidget.style.inspectorHeaderSectionSpacing);
-        m_tagSelector.Draw(context, target);
+        float available = NativeImGui.GetContentRegionAvail().X;
+        float tagLabelWidth = NativeImGui.CalcTextSize("Tag").X +
+                              EditorWidget.style.inspectorHeaderControlSpacing;
+        float layerLabelWidth = NativeImGui.CalcTextSize("Layer").X +
+                                EditorWidget.style.inspectorHeaderControlSpacing;
+        float controlWidth = MathF.Max(
+            1f,
+            (available - tagLabelWidth - layerLabelWidth -
+             EditorWidget.style.inspectorHeaderSectionSpacing) * 0.5f);
+        m_tagSelector.Draw(context, target, controlWidth);
+        NativeImGui.SameLine(0f, EditorWidget.style.inspectorHeaderSectionSpacing);
+        m_layerSelector.Draw(target, controlWidth);
     }
 
     protected override void Draw(InspectionDrawContext context, GameObject gameObject)

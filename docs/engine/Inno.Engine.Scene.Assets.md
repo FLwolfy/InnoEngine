@@ -39,8 +39,25 @@ Prefab root 名称同样跟随 `.iprefab` 文件名；child 名称保持捕获�
 | --- | --- | --- |
 | `.iscene` | `inno.engine.scene` | `SceneAsset` |
 | `.iprefab` | `inno.engine.prefab` | `PrefabAsset` |
+| `.ilayers` | `inno.engine.scene.layers` | `GameLayerSettingsAsset` |
 
 Importer 使用统一 async writer，输出 `runtime`，Loader 自动追加 `asset-state`，并把 Scene graph 中的 `AssetObject` 引用登记为 runtime dependencies。Stable Type ID、扩展名和现有序列化 schema 保持兼容。
+
+## GameLayerSettingsAsset
+
+项目层配置固定使用 `Assets/Settings/GameLayers.ilayers`。它是普通 Source Database 资产，因此自动拥有 `.imeta`、persistent ID、Catalog record 和 content-addressed artifact；源文件是可读 JSON，保存 32 个 layer slot 和 32 行对称 interaction masks，不写 schema version 或 legacy payload。
+
+```csharp
+GameLayerSettingsAsset settings = AssetManager.Load<GameLayerSettingsAsset>(
+    GameLayerSettingsAsset.defaultPath);
+
+settings.layerStack.Define(new Layer(1), "Player");
+settings.layerStack.Define(new Layer(2), "Enemy");
+settings.layerStack.SetInteraction(new Layer(1), new Layer(2), false);
+AssetManager.Save(settings);
+```
+
+Editor 启动时若该路径不存在，会通过 `AssetManager.Save` 创建默认资产，而不是绕过 Asset Database 直接写文件。外部修改源文件后由 watcher/reimport 原位更新 canonical asset。
 
 ## 外部 rename/delete
 

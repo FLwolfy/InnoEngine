@@ -4,6 +4,7 @@ using System.Diagnostics;
 using Inno.Core.Identity;
 using Inno.Editor.Interactions;
 using Inno.Engine.Scene;
+using Inno.Engine.Scene.Layers;
 
 namespace Inno.Editor.Scene;
 
@@ -55,6 +56,10 @@ internal sealed class SceneScalarHistoryHandler : EditorHistoryHandler
                     break;
                 case SceneScalarKind.GameObjectTag:
                     ((GameObject)target).tag = value;
+                    break;
+                case SceneScalarKind.GameObjectLayer:
+                    ((GameObject)target).layer = new Layer(
+                        int.Parse(value, System.Globalization.CultureInfo.InvariantCulture));
                     break;
                 default:
                     throw new InvalidOperationException($"Unsupported scene scalar '{data.scalarKind}'.");
@@ -110,7 +115,8 @@ internal sealed class SceneScalarHistoryHandler : EditorHistoryHandler
                 { isLoaded: true, isDestroyed: false } scene ? scene : null,
             SceneScalarKind.GameObjectName or
                 SceneScalarKind.GameObjectActive or
-                SceneScalarKind.GameObjectTag =>
+                SceneScalarKind.GameObjectTag or
+                SceneScalarKind.GameObjectLayer =>
                 IdentityManager.Get<GameObject>(data.targetId) is { isRuntimeValid: true } gameObject
                     ? gameObject
                     : null,
