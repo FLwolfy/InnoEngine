@@ -39,7 +39,7 @@ internal sealed class GameSceneInspectionDrawer : InspectionDrawer<GameScene>
         m_edits = edits ?? throw new ArgumentNullException(nameof(edits));
     }
 
-    public override string icon => ImGuiIcon.LayerGroup;
+    public override string icon => ImGuiIcon.Cubes;
 
     protected override (string name, Action<string>? setter) BindName(
         InspectionDrawContext context,

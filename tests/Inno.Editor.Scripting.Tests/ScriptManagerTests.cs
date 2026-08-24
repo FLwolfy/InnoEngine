@@ -1111,7 +1111,7 @@ public sealed class ScriptManagerTests : IDisposable
 
     [Theory]
     [InlineData("Assets/Scripts/Player.cs", "FileCode")]
-    [InlineData("Assets/Scenes/Main.iscene", "LayerGroup")]
+    [InlineData("Assets/Scenes/Main.iscene", "Cubes")]
     [InlineData("Assets/Prefabs/Player.iprefab", "Cube")]
     [InlineData("Assets/Plugins/Physics.dll", "Plug")]
     [InlineData("Assets/Scripts/Game.iasmdef", "Gears")]

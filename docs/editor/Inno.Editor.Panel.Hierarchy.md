@@ -45,6 +45,8 @@ Scene、GameObject 的创建、删除、排序、parent 修改、跨 Scene 移�
 
 Hierarchy Panel 关闭根 window padding，正文 child 也不重复添加内边距，因此 Scene/GameObject 行与 Dock body 边缘对齐，不会出现双层外边缘空隙。Tree 行保持原有紧凑内容高度，只使用可缩放的 `hierarchyItemSpacing` 控制行距；guide 按真实行底边、间距和 overlap 连续延伸，不通过增加栏目高度连接线段，并在当前帧即时绘制。Scene 黑底、selection 与 hover 背景也通过 Tree row 的后景 draw-list channel 使用同一帧最终几何绘制，不缓存上一帧矩形；拖拽、窗口移动和主窗口拉伸都不会再因旧几何失效而闪烁。它仍与 FileBrowser Tree 保持相同滚动语义：普通短内容不会产生横向 scroll range，只有真实名称或深层缩进超出 viewport 时才允许必要的最小横向移动，并显示原生水平 scrollbar。Tree 内容、图标与 hit area 共享一个滚动坐标系；Scene、selection 和交替行背景固定覆盖可视宽度，不随 `ScrollX` 移出或在滚动帧变透明。Tree 行的可交互右边界采用 ImGui `WorkRect`，不再把 window padding 误算成内容溢出。行尾 active eye 使用 `drawViewportOverlay` 固定在 work region 右边界并内缩统一的 `windowPadding.X`；它使用方形 compact icon slot、按 glyph 可见边界垂直居中，同时不参与 Tree 内容宽度。Hierarchy 拉宽再缩窄时，旧眼睛位置和整行 hit area 不会形成持久 `ScrollMaxX`。
 
+Scene 在 Hierarchy、`.iscene` Asset 和 Inspector Header 中统一使用 `ImGuiIcon.Cubes`；`GameLayers.ilayers` 仍使用 `ImGuiIcon.LayerGroup`，保持 Scene 与 Layer 设置的视觉分类差异。
+
 内容编辑 Command 必须创建可逆历史项；Scene/GameObject 创建删除、Component/System 增删 Reset、层级与顺序修改、名称/active/enabled 和序列化属性均属于内容编辑。Open Scene、Set Active Scene、Selection 和 Save 是导航或持久化命令，不修改可撤销内容，因此明确不进入 Undo 栈。新的 feature Command 若不支持 Undo，应同样只限于导航、查询、外部构建或不可逆操作，并在其 Wiki 中声明原因。
 
 ## 下次打开项目

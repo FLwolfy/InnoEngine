@@ -70,7 +70,7 @@ internal sealed class HierarchySelection(
     internal void DrawSceneRowContent(EditorContext context, GameScene scene)
     {
         EditorWidget.IconText(
-            ImGuiIcon.LayerGroup,
+            ImGuiIcon.Cubes,
             scene.name,
             ReferenceEquals(scene, SceneManager.activeScene));
         if (!workspace.IsDirty(scene))
