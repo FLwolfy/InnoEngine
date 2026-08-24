@@ -1,3 +1,5 @@
+using System;
+
 using Inno.Assets.File;
 using Inno.Editor.Core;
 using Inno.Editor.Inspection;
@@ -19,12 +21,12 @@ internal sealed class AssetSelectionInspectionDrawer : InspectionDrawer<AssetFil
     /// Creates an Asset source drawer that shares the Asset Browser presentation registry.
     /// </summary>
     /// <param name="icons">The Asset Browser presentation provider used to resolve the source icon.</param>
-    /// <exception cref="System.ArgumentNullException">
+    /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="icons"/> is <see langword="null"/>.
     /// </exception>
     internal AssetSelectionInspectionDrawer(IInspectionIconProvider<AssetFileEntry> icons)
     {
-        m_icons = icons ?? throw new System.ArgumentNullException(nameof(icons));
+        m_icons = icons ?? throw new ArgumentNullException(nameof(icons));
     }
 
     public override string icon => ImGuiIcon.File;
@@ -32,8 +34,10 @@ internal sealed class AssetSelectionInspectionDrawer : InspectionDrawer<AssetFil
     protected override string GetIcon(InspectionDrawContext context, AssetFileEntry target)
         => m_icons.GetIcon(target);
 
-    protected override string GetName(InspectionDrawContext context, AssetFileEntry target)
-        => target.nameWithoutExtension;
+    protected override (string name, Action<string>? setter) BindName(
+        InspectionDrawContext context,
+        AssetFileEntry target)
+        => (target.nameWithoutExtension, null);
 
     protected override void DrawHeader(InspectionDrawContext context, AssetFileEntry target)
         => EditorWidget.ColoredText(EditorPalette.assetBreadcrumbText, target.relativePath);

@@ -15,25 +15,17 @@ public abstract class InspectionDrawer<TTarget> : IInspectionDrawer
     public abstract string icon { get; }
 
     /// <summary>
-    /// Gets the name displayed in the first row of the Inspector target header.
-    /// </summary>
-    /// <param name="context">The active Inspector drawing context.</param>
-    /// <param name="target">The strongly typed target being inspected.</param>
-    /// <returns>The current target name.</returns>
-    protected abstract string GetName(InspectionDrawContext context, TTarget target);
-
-    /// <summary>
-    /// Gets an optional callback that changes the name displayed by the Inspector target header.
+    /// Binds the name displayed in the first row of the Inspector target header.
     /// </summary>
     /// <param name="context">The active Inspector drawing context.</param>
     /// <param name="target">The strongly typed target being inspected.</param>
     /// <returns>
-    /// A callback that accepts the requested name, or <see langword="null"/> when the name is read-only.
+    /// The current target name and a callback that accepts a requested replacement name, or
+    /// <see langword="null"/> for the callback when the name is read-only.
     /// </returns>
-    protected virtual Action<string>? GetNameSetter(
+    protected abstract (string name, Action<string>? setter) BindName(
         InspectionDrawContext context,
-        TTarget target)
-        => null;
+        TTarget target);
 
     /// <summary>
     /// Resolves the icon glyph displayed for the current target.
@@ -69,11 +61,9 @@ public abstract class InspectionDrawer<TTarget> : IInspectionDrawer
     string IInspectionDrawer.GetIcon(InspectionDrawContext context)
         => GetIcon(context, GetTarget(context));
 
-    string IInspectionDrawer.GetName(InspectionDrawContext context)
-        => GetName(context, GetTarget(context));
-
-    Action<string>? IInspectionDrawer.GetNameSetter(InspectionDrawContext context)
-        => GetNameSetter(context, GetTarget(context));
+    (string name, Action<string>? setter) IInspectionDrawer.BindName(
+        InspectionDrawContext context)
+        => BindName(context, GetTarget(context));
 
     void IInspectionDrawer.DrawHeader(InspectionDrawContext context)
         => DrawHeader(context, GetTarget(context));
@@ -103,18 +93,14 @@ public interface IInspectionDrawer
     string GetIcon(InspectionDrawContext context);
 
     /// <summary>
-    /// Gets the target name displayed by the Inspector target header.
+    /// Binds the target name displayed by the Inspector target header.
     /// </summary>
     /// <param name="context">The active Inspector drawing context.</param>
-    /// <returns>The current target name.</returns>
-    string GetName(InspectionDrawContext context);
-
-    /// <summary>
-    /// Gets the optional target-name mutation callback.
-    /// </summary>
-    /// <param name="context">The active Inspector drawing context.</param>
-    /// <returns>A name mutation callback, or <see langword="null"/> for a read-only name.</returns>
-    Action<string>? GetNameSetter(InspectionDrawContext context);
+    /// <returns>
+    /// The current target name and a callback that accepts a requested replacement name, or
+    /// <see langword="null"/> for the callback when the name is read-only.
+    /// </returns>
+    (string name, Action<string>? setter) BindName(InspectionDrawContext context);
 
     /// <summary>
     /// Draws the target-specific second header row.

@@ -41,8 +41,10 @@ internal sealed class GameLayerSettingsInspectionDrawer : InspectionDrawer<GameL
     public override string icon => ImGuiIcon.LayerGroup;
 
     /// <inheritdoc />
-    protected override string GetName(InspectionDrawContext context, GameLayerSettingsAsset target)
-        => "Game Layers";
+    protected override (string name, Action<string>? setter) BindName(
+        InspectionDrawContext context,
+        GameLayerSettingsAsset target)
+        => ("Game Layers", null);
 
     /// <inheritdoc />
     protected override void DrawHeader(InspectionDrawContext context, GameLayerSettingsAsset target)

@@ -48,6 +48,8 @@ Workspace 只使用 `editor.ini` 中当前的具名可读 section。运行时不
 
 `EditorLayer` 只持有 `PlatformImGuiContext` 与 `ImGuiEditorRuntime`。它把 Layer 的 Attach/LateUpdate/Detach 和按键事件转交给 Runtime，不知道 Scene、Asset、Log、菜单或脚本编译状态。
 
+Editor 启动阶段在 Shell 日志系统可用之前产生的诊断写入 `<Project>/Logs/EditorBoot.log`；Shell 初始化后的轮转日志写入同一目录，并使用 `log_<timestamp>.log` 文件名。项目根目录不生成独立日志文件。
+
 每帧安全点顺序为：更新 `EditorFrame` 和 Module → 绘制统一主菜单与自动发现 Panel → flush deferred Action → 绘制统一 Modal。脚本编译弹窗位于 `Inno.Editor.Scripting`，由 `ScriptingModule` 驱动真实编译阶段进度；`EditorModalRenderer` 使用主 viewport work area 中心、固定 style width 和 `0.5/0.5` pivot 定位。Application 不包含 Scene action、Asset 类型判断、context menu 排列或 ScriptManager 状态机。
 
 启动时 `EditorHost` 会检查发现的 Panel 数量；为零会立即抛出明确异常，避免再次出现“窗口正常但内容完全为空”的静默失败。

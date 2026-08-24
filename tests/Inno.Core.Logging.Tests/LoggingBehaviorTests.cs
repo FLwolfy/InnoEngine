@@ -67,11 +67,12 @@ public sealed class LoggingBehaviorTests : IDisposable
         var timeout = DateTime.UtcNow.AddSeconds(5);
         while (DateTime.UtcNow < timeout)
         {
-            var files = Directory.GetFiles(dir, FileLogSink.C_LOG_FILE_PREFIX + "*.txt");
+            var files = Directory.GetFiles(dir, FileLogSink.C_LOG_FILE_PREFIX + "*.log");
             var combined = string.Join(Environment.NewLine, files.Select(File.ReadAllText));
             if (combined.Contains("line-79"))
             {
                 Assert.True(files.Length <= 3);
+                Assert.All(files, static file => Assert.Equal(".log", Path.GetExtension(file)));
                 LogManager.UnregisterSink(sink);
                 return;
             }

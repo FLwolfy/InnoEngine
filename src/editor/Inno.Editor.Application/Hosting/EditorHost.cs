@@ -18,6 +18,9 @@ namespace Inno.Editor.Application;
 /// </summary>
 public sealed class EditorHost : IDisposable
 {
+    private const string C_LOG_DIRECTORY_NAME = "Logs";
+    private const string C_BOOT_LOG_FILE_NAME = "EditorBoot.log";
+
     private readonly PlatformApplication m_platformApplication;
     private readonly PlatformWindow m_window;
     private readonly HashSet<uint> m_focusedWindowIds = [];
@@ -40,7 +43,9 @@ public sealed class EditorHost : IDisposable
     public EditorHost(string projectDirectory)
     {
         this.projectDirectory = PrepareProjectDirectory(projectDirectory);
-        m_bootLogPath = Path.Combine(this.projectDirectory, "EditorBoot.log");
+        string logDirectory = Path.Combine(this.projectDirectory, C_LOG_DIRECTORY_NAME);
+        Directory.CreateDirectory(logDirectory);
+        m_bootLogPath = Path.Combine(logDirectory, C_BOOT_LOG_FILE_NAME);
         BootLog("EditorHost ctor start.");
         m_platformApplication = new PlatformApplication();
         BootLog("PlatformApplication created.");

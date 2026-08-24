@@ -42,7 +42,7 @@ internal sealed class GameObjectLayerSelector
     {
         ArgumentNullException.ThrowIfNull(target);
         GameLayerStack stack = m_settings.settings.layerStack;
-        string preview = stack.GetName(target.layer) ?? $"Layer {target.layer.index} (Undefined)";
+        string preview = FormatLayerPreview(stack.GetName(target.layer));
         ImGuiWidget.LabelChip("Layer", EditorPalette.inspectorLayerLabel);
         NativeImGui.SameLine(0f, 0f);
         NativeImGui.SetNextItemWidth(MathF.Max(1f, width));
@@ -58,7 +58,7 @@ internal sealed class GameObjectLayerSelector
         for (int i = 0; i < definitions.Count; i++)
         {
             GameLayerDefinition definition = definitions[i];
-            string label = $"{definition.name} ({definition.layer.index})";
+            string label = FormatLayerLabel(definition.layer, definition.name);
             if (NativeImGui.Selectable(label, definition.layer == target.layer))
                 m_edits.SetGameObjectLayer(target, definition.layer);
         }
@@ -72,4 +72,10 @@ internal sealed class GameObjectLayerSelector
     /// <returns><see langword="true"/> when the layer can be selected.</returns>
     internal bool IsLayerDefined(GameLayer layer)
         => m_settings.settings.layerStack.IsDefined(layer);
+
+    private static string FormatLayerLabel(GameLayer layer, string name)
+        => $"({layer.index}) {name}";
+
+    private static string FormatLayerPreview(string? name)
+        => name ?? "Undefined";
 }

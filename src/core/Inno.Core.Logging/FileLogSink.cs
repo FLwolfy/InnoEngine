@@ -8,7 +8,7 @@ using System.Threading;
 namespace Inno.Core.Logging;
 
 /// <summary>
-/// Persists log entries to rotating text files on disk.
+/// Persists log entries to rotating log files on disk.
 /// </summary>
 public class FileLogSink : ILogSink, IDisposable
 {
@@ -16,6 +16,8 @@ public class FileLogSink : ILogSink, IDisposable
     /// Prefix used for generated log file names.
     /// </summary>
     public const string C_LOG_FILE_PREFIX = "log_";
+
+    private const string C_LOG_FILE_EXTENSION = ".log";
     
     private readonly string m_logDirectory;
     private readonly long m_maxFileSize;
@@ -130,7 +132,7 @@ public class FileLogSink : ILogSink, IDisposable
         try
         {
             var files = new DirectoryInfo(m_logDirectory)
-                .GetFiles(C_LOG_FILE_PREFIX + "*.txt")
+                .GetFiles(C_LOG_FILE_PREFIX + "*" + C_LOG_FILE_EXTENSION)
                 .OrderBy(f => f.CreationTime)
                 .ToList();
 
@@ -161,7 +163,7 @@ public class FileLogSink : ILogSink, IDisposable
     private string GetNewLogFilePath()
     {
         string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmssfff"); // millisecond precision
-        return Path.Combine(m_logDirectory, $"{C_LOG_FILE_PREFIX}{timestamp}.txt");
+        return Path.Combine(m_logDirectory, $"{C_LOG_FILE_PREFIX}{timestamp}{C_LOG_FILE_EXTENSION}");
     }
 
     /// <summary>

@@ -110,8 +110,7 @@ internal sealed class InspectorTargetHeader
         float nameWidth = MathF.Max(
             1f,
             NativeImGui.GetContentRegionAvail().X - lockSize.X - itemSpacing);
-        string name = drawer.GetName(context);
-        Action<string>? nameSetter = drawer.GetNameSetter(context);
+        (string name, Action<string>? nameSetter) = drawer.BindName(context);
         if (nameSetter is not null)
         {
             NativeImGui.SetNextItemWidth(nameWidth);

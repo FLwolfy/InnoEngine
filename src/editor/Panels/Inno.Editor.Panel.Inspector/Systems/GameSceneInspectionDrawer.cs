@@ -41,13 +41,10 @@ internal sealed class GameSceneInspectionDrawer : InspectionDrawer<GameScene>
 
     public override string icon => ImGuiIcon.LayerGroup;
 
-    protected override string GetName(InspectionDrawContext context, GameScene target)
-        => target.name;
-
-    protected override Action<string>? GetNameSetter(
+    protected override (string name, Action<string>? setter) BindName(
         InspectionDrawContext context,
         GameScene target)
-        => name => m_edits.RenameScene(target, name);
+        => (target.name, name => m_edits.RenameScene(target, name));
 
     protected override void DrawHeader(InspectionDrawContext context, GameScene target)
         => NativeImGui.TextUnformatted(target.isLoaded ? "Loaded Scene" : "Scene");

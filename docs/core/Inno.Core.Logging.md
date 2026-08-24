@@ -89,6 +89,7 @@ using FileLogSink sink = new(
 ```
 
 - `C_LOG_FILE_PREFIX == "log_"`。
+- 生成文件使用 `log_<timestamp>.log` 命名并存放在调用方提供的日志目录中。
 - `Receive` 入自己的异步队列。
 - 达到 `maxFileSizeBytes` 后轮换文件。
 - 只保留最多 `maxFiles` 个匹配日志文件。

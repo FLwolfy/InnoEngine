@@ -9,6 +9,8 @@
 ## InspectionDrawer
 
 ```csharp
+using System;
+
 using Inno.Editor.Inspection;
 using Inno.Platform.ImGui;
 
@@ -18,10 +20,10 @@ internal sealed class AnimationControllerInspectionDrawer
 {
     public override string icon => ImGuiIcon.DiagramProject;
 
-    protected override string GetName(
+    protected override (string name, Action<string>? setter) BindName(
         InspectionDrawContext context,
         AnimationController target)
-        => target.name;
+        => (target.name, null);
 
     protected override void Draw(
         InspectionDrawContext context,
@@ -31,6 +33,8 @@ internal sealed class AnimationControllerInspectionDrawer
     }
 }
 ```
+
+`BindName` 在一次调用中返回当前显示名称和可选 setter。只读名称返回 `(name, null)`；可编辑名称返回 `(name, value => ...)`。Inspector Header 只解析一次该 tuple，避免名称值和编辑能力来自不同快照。
 
 解析顺序是 exact target、继承距离、priority、稳定类型名。Registry 在新的 TypeCache generation 上旁路构建完整 snapshot；构造失败或 registration 冲突不会替换当前可用 snapshot。
 

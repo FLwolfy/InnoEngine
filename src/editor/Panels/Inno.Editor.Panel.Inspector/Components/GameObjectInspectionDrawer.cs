@@ -56,13 +56,10 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
 
     public override string icon => ImGuiIcon.Cube;
 
-    protected override string GetName(InspectionDrawContext context, GameObject target)
-        => target.name;
-
-    protected override Action<string>? GetNameSetter(
+    protected override (string name, Action<string>? setter) BindName(
         InspectionDrawContext context,
         GameObject target)
-        => name => m_edits.RenameGameObject(target, name);
+        => (target.name, name => m_edits.RenameGameObject(target, name));
 
     protected override void DrawHeader(InspectionDrawContext context, GameObject target)
     {
