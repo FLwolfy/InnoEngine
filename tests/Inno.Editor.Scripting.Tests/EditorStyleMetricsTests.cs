@@ -267,6 +267,32 @@ public sealed class EditorStyleMetricsTests
     }
 
     [Fact]
+    public void TreeRowBackgroundsUseCurrentGeometryWhileTheWindowChanges()
+    {
+        var context = NativeImGui.CreateContext();
+        try
+        {
+            ImGuiIOPtr io = NativeImGui.GetIO();
+            io.DisplaySize = new Vector2(640f, 480f);
+            io.DeltaTime = 1f / 60f;
+            io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
+            io.Fonts.RendererHasTextures = true;
+            EditorWidget.SetupStyle();
+
+            DrawCurrentTreeBackgroundFrame(
+                new Vector2(20f, 20f),
+                new Vector2(480f, 320f));
+            DrawCurrentTreeBackgroundFrame(
+                new Vector2(80f, 60f),
+                new Vector2(300f, 220f));
+        }
+        finally
+        {
+            NativeImGui.DestroyContext(context);
+        }
+    }
+
+    [Fact]
     public void TreeRowsRetainTheirCompactContentHeight()
     {
         var context = NativeImGui.CreateContext();
@@ -441,7 +467,9 @@ public sealed class EditorStyleMetricsTests
                 Assert.True(NativeImGui.GetScrollX() > 0f);
                 Assert.True(window.ScrollbarX);
                 Assert.Equal(row.contentMin.X, contentCursor.X, 3);
-                AssertPreviousTreeHighlightSpansViewport(window);
+                AssertCurrentTreeBackgroundSpansViewport(
+                    window,
+                    NativeImGui.ColorConvertFloat4ToU32(EditorPalette.hierarchySceneRow));
             }
         }
         NativeImGui.EndChild();
@@ -499,38 +527,82 @@ public sealed class EditorStyleMetricsTests
     private static void AssertCurrentDrawListContainsTreeGuideColor()
     {
         uint guideColor = NativeImGui.ColorConvertFloat4ToU32(EditorPalette.treeGuide);
+        AssertCurrentDrawListContainsColor(
+            guideColor,
+            "The current drag frame did not submit any tree-guide vertices.");
+    }
+
+    private static void DrawCurrentTreeBackgroundFrame(Vector2 position, Vector2 size)
+    {
+        NativeImGui.NewFrame();
+        NativeImGui.SetNextWindowPos(position, ImGuiCond.Always);
+        NativeImGui.SetNextWindowSize(size, ImGuiCond.Always);
+        _ = NativeImGui.Begin("Current Tree Background Test");
+        EditorWidget.SetNextTreeNodeOpen(true);
+        TreeNodeResult root = EditorWidget.TreeNode(
+            "current_background_root",
+            static () => NativeImGui.TextUnformatted("TestScene"),
+            new TreeNodeOptions
+            {
+                showBackground = true,
+                backgroundColor = EditorPalette.hierarchySceneRow,
+                suppressHoverHighlight = true
+            });
+        if (root.isOpen)
+        {
+            _ = EditorWidget.TreeNode(
+                "current_background_child",
+                static () => NativeImGui.TextUnformatted("GameObject"),
+                new TreeNodeOptions
+                {
+                    isLeaf = true,
+                    selected = true
+                });
+            NativeImGui.TreePop();
+        }
+
+        AssertCurrentDrawListContainsColor(
+            NativeImGui.ColorConvertFloat4ToU32(EditorPalette.hierarchySceneRow),
+            "The current frame did not submit the Scene row background.");
+        AssertCurrentDrawListContainsColor(
+            NativeImGui.GetColorU32(ImGuiCol.Header),
+            "The current frame did not submit the selected row highlight.");
+        NativeImGui.End();
+        NativeImGui.Render();
+    }
+
+    private static void AssertCurrentDrawListContainsColor(uint color, string failureMessage)
+    {
         ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
         for (int i = 0; i < drawList.VtxBuffer.Size; i++)
         {
-            if (drawList.VtxBuffer[i].Col == guideColor)
+            if (drawList.VtxBuffer[i].Col == color)
                 return;
         }
 
-        Assert.Fail("The current drag frame did not submit any tree-guide vertices.");
+        Assert.Fail(failureMessage);
     }
 
-    private static void AssertPreviousTreeHighlightSpansViewport(ImGuiWindowPtr window)
+    private static void AssertCurrentTreeBackgroundSpansViewport(
+        ImGuiWindowPtr window,
+        uint color)
     {
-        FieldInfo statesField = typeof(EditorWidget).GetField(
-            "s_treeStatesByWindow",
-            BindingFlags.NonPublic | BindingFlags.Static)!;
-        var states = (IDictionary)statesField.GetValue(null)!;
-        int windowKey = NativeImGui.GetWindowDrawList().GetHashCode();
-        object state = states[windowKey]!;
-        FieldInfo highlightsField = state.GetType().GetField(
-            "previousHighlightRects",
-            BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var highlights = (IEnumerable)highlightsField.GetValue(state)!;
-        object highlight = Assert.Single(highlights.Cast<object>());
-        Type highlightType = highlight.GetType();
-        Vector2 minimum = (Vector2)highlightType.GetField(
-            "min",
-            BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(highlight)!;
-        Vector2 maximum = (Vector2)highlightType.GetField(
-            "max",
-            BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(highlight)!;
-        Assert.Equal(NativeImGui.GetWindowPos().X, minimum.X, 3);
-        Assert.Equal(window.WorkRect.Max.X, maximum.X, 3);
+        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
+        float minimumX = float.MaxValue;
+        float maximumX = float.MinValue;
+        for (int i = 0; i < drawList.VtxBuffer.Size; i++)
+        {
+            ImDrawVert vertex = drawList.VtxBuffer[i];
+            if (vertex.Col != color)
+                continue;
+
+            minimumX = MathF.Min(minimumX, vertex.Pos.X);
+            maximumX = MathF.Max(maximumX, vertex.Pos.X);
+        }
+
+        Assert.NotEqual(float.MaxValue, minimumX);
+        Assert.Equal(NativeImGui.GetWindowPos().X, minimumX, 3);
+        Assert.Equal(window.WorkRect.Max.X, maximumX, 3);
     }
 
     private static void DrawInspectorCardFrame(bool assertHorizontalRange)

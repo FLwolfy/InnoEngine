@@ -19,8 +19,6 @@ public static partial class ImGuiWidget
     private static List<TreeWidgetNodeState> s_treeNodeStack => GetTreeWindowState().treeNodeStack;
     private static List<string> s_lastNodeIdsByDepth => GetTreeWindowState().lastNodeIdsByDepth;
     private static List<TreeWidgetLineSegment> s_lineSegments => GetTreeWindowState().lineSegments;
-    private static List<TreeWidgetHighlightRect> s_highlightRects => GetTreeWindowState().highlightRects;
-    private static List<TreeWidgetHighlightRect> s_previousHighlightRects => GetTreeWindowState().previousHighlightRects;
     private static Dictionary<string, bool> s_hasNextSiblingById => GetTreeWindowState().hasNextSiblingById;
     private static Dictionary<string, bool> s_openStatesById => GetTreeWindowState().openStatesById;
 
@@ -47,6 +45,26 @@ public static partial class ImGuiWidget
 
         bool isLeaf = options.isLeaf;
         BeginTreeFrameIfNeeded();
+        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
+        drawList.ChannelsSplit(2);
+        drawList.ChannelsSetCurrent(1);
+        try
+        {
+            return DrawTreeNode(id, onDraw, options, isLeaf, drawList);
+        }
+        finally
+        {
+            drawList.ChannelsMerge();
+        }
+    }
+
+    private static TreeNodeResult DrawTreeNode(
+        string id,
+        Action onDraw,
+        in TreeNodeOptions options,
+        bool isLeaf,
+        ImDrawListPtr drawList)
+    {
         bool open = !isLeaf && s_openStatesById.TryGetValue(id, out bool storedOpen) && storedOpen;
         if (!isLeaf && s_hasNextTreeNodeOpen)
         {
@@ -90,9 +108,15 @@ public static partial class ImGuiWidget
                                   !options.suppressHoverHighlight &&
                                   !ImGuiP.IsDragDropActive();
         if (options.selected || showHoverHighlight)
-            AddTreeHighlightRect(contentRect, options.selected);
+            DrawTreeRowBackground(
+                drawList,
+                contentRect,
+                NativeImGui.GetColorU32(options.selected ? ImGuiCol.Header : ImGuiCol.HeaderHovered));
         else if (options.showBackground)
-            AddTreeBackgroundRect(contentRect, options.backgroundColor);
+            DrawTreeRowBackground(
+                drawList,
+                contentRect,
+                NativeImGui.ColorConvertFloat4ToU32(options.backgroundColor));
 
         if (isOpen && !isLeaf)
         {
@@ -211,60 +235,10 @@ public static partial class ImGuiWidget
             return;
 
         TreeWidgetWindowState state = GetTreeWindowState();
-        Vector2 windowPosition = NativeImGui.GetWindowPos();
-        Vector2 windowSize = NativeImGui.GetWindowSize();
-        Vector2 scroll = new(NativeImGui.GetScrollX(), NativeImGui.GetScrollY());
-        bool canReusePreviousGeometry = state.lastFrame >= 0 &&
-                                        NearlyEqual(state.zoom, style.zoom) &&
-                                        NearlyEqual(state.windowPosition, windowPosition) &&
-                                        NearlyEqual(state.windowSize, windowSize);
-        float verticalScrollTranslation = state.scroll.Y - scroll.Y;
-
         state.treeNodeStack.Clear();
         state.lastNodeIdsByDepth.Clear();
         state.lineSegments.Clear();
-        state.previousHighlightRects.Clear();
-        if (canReusePreviousGeometry)
-            CopyTranslatedTreeHighlights(state, verticalScrollTranslation);
-        state.highlightRects.Clear();
-        state.zoom = style.zoom;
-        state.windowPosition = windowPosition;
-        state.windowSize = windowSize;
-        state.scroll = scroll;
-        DrawPreviousTreeHighlightRects();
         s_lastFrame = frame;
-    }
-
-    private static void CopyTranslatedTreeHighlights(
-        TreeWidgetWindowState state,
-        float verticalTranslation)
-    {
-        Vector2 translation = new(0f, verticalTranslation);
-        for (int i = 0; i < state.highlightRects.Count; i++)
-        {
-            TreeWidgetHighlightRect rect = state.highlightRects[i];
-            rect.min += translation;
-            rect.max += translation;
-            state.previousHighlightRects.Add(rect);
-        }
-    }
-
-    private static void DrawPreviousTreeHighlightRects()
-    {
-        if (s_previousHighlightRects.Count == 0)
-            return;
-
-        bool isDragging = ImGuiP.IsDragDropActive();
-        bool popupBlocksInteraction = IsPopupBlockingInteraction();
-        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
-        for (int i = 0; i < s_previousHighlightRects.Count; i++)
-        {
-            TreeWidgetHighlightRect rect = s_previousHighlightRects[i];
-            if (isDragging && rect.isInteractionHighlight ||
-                popupBlocksInteraction && rect.isHoverHighlight)
-                continue;
-            drawList.AddRectFilled(rect.min, rect.max, rect.color);
-        }
     }
 
     private static void PruneTreeNodeStack(int nativeDepth)
@@ -272,12 +246,6 @@ public static partial class ImGuiWidget
         while (s_treeNodeStack.Count > nativeDepth)
             s_treeNodeStack.RemoveAt(s_treeNodeStack.Count - 1);
     }
-
-    private static bool NearlyEqual(float left, float right)
-        => MathF.Abs(left - right) <= 0.01f;
-
-    private static bool NearlyEqual(Vector2 left, Vector2 right)
-        => NearlyEqual(left.X, right.X) && NearlyEqual(left.Y, right.Y);
 
     private static bool TrackSiblingState(string id, int depth)
     {
@@ -359,20 +327,14 @@ public static partial class ImGuiWidget
         return new Vector2(MathF.Floor(point.X) + 0.5f, MathF.Floor(point.Y) + 0.5f);
     }
 
-    private static void AddTreeHighlightRect(TreeWidgetHighlightRect rect, bool selected)
+    private static void DrawTreeRowBackground(
+        ImDrawListPtr drawList,
+        TreeWidgetHighlightRect rect,
+        uint color)
     {
-        rect.color = NativeImGui.GetColorU32(selected ? ImGuiCol.Header : ImGuiCol.HeaderHovered);
-        rect.isInteractionHighlight = true;
-        rect.isHoverHighlight = !selected;
-        s_highlightRects.Add(rect);
-    }
-
-    private static void AddTreeBackgroundRect(TreeWidgetHighlightRect rect, Vector4 color)
-    {
-        rect.color = NativeImGui.ColorConvertFloat4ToU32(color);
-        rect.isInteractionHighlight = false;
-        rect.isHoverHighlight = false;
-        s_highlightRects.Add(rect);
+        drawList.ChannelsSetCurrent(0);
+        drawList.AddRectFilled(rect.min, rect.max, color);
+        drawList.ChannelsSetCurrent(1);
     }
 
 }
@@ -450,15 +412,9 @@ internal sealed class TreeWidgetWindowState
     internal readonly List<TreeWidgetNodeState> treeNodeStack = [];
     internal readonly List<string> lastNodeIdsByDepth = [];
     internal readonly List<TreeWidgetLineSegment> lineSegments = [];
-    internal readonly List<TreeWidgetHighlightRect> highlightRects = [];
-    internal readonly List<TreeWidgetHighlightRect> previousHighlightRects = [];
     internal readonly Dictionary<string, bool> hasNextSiblingById = new(StringComparer.Ordinal);
     internal readonly Dictionary<string, bool> openStatesById = new(StringComparer.Ordinal);
     internal int lastFrame = -1;
-    internal float zoom = float.NaN;
-    internal Vector2 windowPosition;
-    internal Vector2 windowSize;
-    internal Vector2 scroll;
 }
 
 internal struct TreeWidgetNodeState
@@ -479,7 +435,4 @@ internal struct TreeWidgetHighlightRect
 {
     internal Vector2 min;
     internal Vector2 max;
-    internal uint color;
-    internal bool isInteractionHighlight;
-    internal bool isHoverHighlight;
 }

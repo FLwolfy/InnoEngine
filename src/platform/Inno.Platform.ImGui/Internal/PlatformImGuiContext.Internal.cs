@@ -40,6 +40,7 @@ public sealed partial class PlatformImGuiContext
     private Vector2 m_leftMousePressPosition;
     private uint m_leftMousePressWindowId;
     private uint m_liveResizeLockedWindowId;
+    private uint m_mousePendingLeaveWindowId;
     private uint m_mouseWindowId;
     private int m_mouseButtonsDown;
     private int m_mousePendingLeaveFrame;
@@ -415,6 +416,7 @@ public sealed partial class PlatformImGuiContext
             {
                 m_mouseWindowId = eventWindowId;
                 m_mousePendingLeaveFrame = 0;
+                m_mousePendingLeaveWindowId = 0;
                 Vector2 mousePosition = GetEventMousePosition(
                     io,
                     eventWindowId,
@@ -508,13 +510,17 @@ public sealed partial class PlatformImGuiContext
             case SDLEventType.WindowMouseEnter:
                 m_mouseWindowId = eventWindowId;
                 m_mousePendingLeaveFrame = 0;
+                m_mousePendingLeaveWindowId = 0;
                 break;
 
             case SDLEventType.WindowMouseLeave:
                 // SDL may deliver Leave before Enter while crossing viewport windows. Defer the
                 // reset so a matching Enter or Motion event can cancel it without breaking drag.
                 if (m_mouseWindowId == eventWindowId)
+                {
                     m_mousePendingLeaveFrame = ImGuiNative.GetFrameCount() + 1;
+                    m_mousePendingLeaveWindowId = eventWindowId;
+                }
                 break;
 
             case SDLEventType.WindowDisplayScaleChanged:
@@ -615,6 +621,7 @@ public sealed partial class PlatformImGuiContext
         UpdateDisplayMetrics(io);
         io.DeltaTime = deltaTimeSeconds > 0f ? deltaTimeSeconds : (1f / 60f);
         ReconcileMouseButtons(io);
+        ReleaseCompletedLiveResizeHoverLock();
         FlushPendingMouseLeave(io);
         UpdateMouseData(io, m_window.GetSdlWindow());
         UpdateTextInputState(io);
@@ -966,16 +973,50 @@ public sealed partial class PlatformImGuiContext
 
     private void FlushPendingMouseLeave(ImGuiIOPtr io)
     {
-        if (m_mousePendingLeaveFrame == 0 ||
-            m_mouseButtonsDown != 0 ||
-            ImGuiNative.GetFrameCount() < m_mousePendingLeaveFrame)
+        if (!ShouldFlushPendingMouseLeave(
+                m_mousePendingLeaveFrame,
+                ImGuiNative.GetFrameCount(),
+                m_mouseButtonsDown,
+                m_mousePendingLeaveWindowId,
+                m_liveResizeLockedWindowId))
         {
             return;
         }
 
         m_mouseWindowId = 0;
         m_mousePendingLeaveFrame = 0;
+        m_mousePendingLeaveWindowId = 0;
         io.AddMousePosEvent(-float.MaxValue, -float.MaxValue);
+    }
+
+    private void ReleaseCompletedLiveResizeHoverLock()
+    {
+        if (m_liveResizeLockedWindowId == 0 ||
+            (m_frameTimer.Elapsed - m_lastLiveResizeLockTime).TotalSeconds <=
+            LIVE_RESIZE_HOVER_LOCK_TIMEOUT_SECONDS)
+        {
+            return;
+        }
+
+        float mouseX = 0f;
+        float mouseY = 0f;
+        uint mouseButtons = SDL.GetMouseState(ref mouseX, ref mouseY);
+        uint leftMouseMask = 1u << (SDL.SDL_BUTTON_LEFT - 1);
+        if ((mouseButtons & leftMouseMask) == 0)
+            m_liveResizeLockedWindowId = 0;
+    }
+
+    private static bool ShouldFlushPendingMouseLeave(
+        int pendingFrame,
+        int currentFrame,
+        int mouseButtonsDown,
+        uint pendingWindowId,
+        uint liveResizeLockedWindowId)
+    {
+        if (pendingFrame == 0 || mouseButtonsDown != 0 || currentFrame < pendingFrame)
+            return false;
+
+        return liveResizeLockedWindowId == 0 || pendingWindowId != liveResizeLockedWindowId;
     }
 
     private void UpdateMouseCursor(ImGuiIOPtr io)

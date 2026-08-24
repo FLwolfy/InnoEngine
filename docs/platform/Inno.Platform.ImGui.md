@@ -67,5 +67,5 @@ imgui.RegisterFontStyle(
 - `SetIniFile` 必须早于第一次 `RenderFrame`；之后调用会抛出 `InvalidOperationException`。
 - `RegisterFontStyle` 同样必须早于第一次 `RenderFrame`；字体路径不存在或 size 非正数会明确失败。
 - `RenderFrame` 的回调必须同步完成，不得保存当前 `ImDrawData` 供后续帧使用。
-- multi-viewport 与 smooth resize 由 context flags 控制；未开启时不会创建相关后端。
+- multi-viewport 与 smooth resize 由 context flags 控制；未开启时不会创建相关后端。smooth resize 重绘期间，SDL 可能在原生标题栏移动或边框拉伸中发送临时 `WindowMouseLeave`；后端把 pending leave 绑定到来源 window，并在同一 window 的 live-resize lock 释放前保持最后一个有效鼠标位置，避免所有 ImGui hover feedback 在 expose 帧中闪烁。真正离开窗口、进入其他 viewport 或结束 resize 后仍会正常清理 hover。
 - context 与创建它的 `PlatformApplication`/window 同生命周期，销毁顺序应为 ImGui、Shell、window、application。
