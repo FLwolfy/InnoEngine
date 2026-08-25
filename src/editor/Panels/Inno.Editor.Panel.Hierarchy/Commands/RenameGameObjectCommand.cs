@@ -9,9 +9,9 @@ using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 
 namespace Inno.Editor.Panel.Hierarchy;
 
-[EditorAction(HierarchyActions.RenameGameObject, priority: 100)]
-[EditorMenu(HierarchyAreas.Hierarchy, "Rename", order: 200)]
-[EditorShortcut(HierarchyAreas.Hierarchy, KeyCode.F2)]
+[EditorAction("hierarchy/rename-game-object", priority: 100)]
+[EditorMenu("panel/scene.hierarchy", "Rename", order: 200)]
+[EditorShortcut("panel/scene.hierarchy", KeyCode.F2)]
 internal sealed class RenameGameObjectCommand(SceneEdits edits) : EditorAction<GameObject>
 {
     private GameObject? m_gameObject;

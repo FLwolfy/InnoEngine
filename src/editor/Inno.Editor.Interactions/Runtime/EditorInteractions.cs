@@ -15,7 +15,7 @@ public sealed class EditorInteractions
     private EditorActionRouter? m_actions;
     private EditorMenuCatalog? m_menus;
     private EditorDropRouter? m_drops;
-    private string m_focusedArea = EditorAreas.Global;
+    private string m_focusedArea = "editor/global";
     private object? m_focusedTarget;
 
     internal EditorInteractions(EditorContext editor)
@@ -56,6 +56,21 @@ public sealed class EditorInteractions
         return new EditorInteraction(this, area, target);
     }
 
+    /// <summary>
+    /// Replaces the editor selection after closing presentations owned by other targets.
+    /// </summary>
+    /// <param name="target">
+    /// The target to select, or <see langword="null"/> to clear the selection.
+    /// </param>
+    public void SetSelection(object? target)
+    {
+        PrepareSelectionChange(target);
+        if (target is null)
+            selection.Clear();
+        else
+            selection.Select(target);
+    }
+
     /// <summary>Resolves valid managed data for an active drag token.</summary>
     /// <param name="token">The runtime-owned drag token.</param>
     /// <param name="data">The managed drag data when resolution succeeds.</param>
@@ -77,7 +92,7 @@ public sealed class EditorInteractions
     {
         Actions.Clear();
         Drops.Cancel();
-        _ = For(EditorAreas.Global).Select();
+        _ = For("editor/global").Select();
         history.Dispose();
     }
 

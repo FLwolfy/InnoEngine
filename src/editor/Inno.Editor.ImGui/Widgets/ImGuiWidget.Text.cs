@@ -89,6 +89,52 @@ public static partial class ImGuiWidget
         => ClickableText(id, text, GetCompactClickableTextSize(), tooltip);
 
     /// <summary>
+    /// Draws a text link with no button background and highlights it only through text presentation.
+    /// </summary>
+    /// <param name="id">
+    /// Stable identifier used by ImGui to track the interaction.
+    /// </param>
+    /// <param name="text">
+    /// Visible link text.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the link is pressed.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="id"/> is empty.
+    /// </exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="text"/> is <see langword="null"/>.
+    /// </exception>
+    public static bool HoverText(string id, string text)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentNullException.ThrowIfNull(text);
+        Vector2 cursor = NativeImGui.GetCursorScreenPos();
+        Vector2 size = NativeImGui.CalcTextSize(text);
+        bool pressed = NativeImGui.InvisibleButton($"##hover_text_{id}", size);
+        bool hovered = NativeImGui.IsItemHovered();
+        bool active = NativeImGui.IsItemActive();
+        Vector4 color = active
+            ? EditorPalette.accentActive
+            : hovered
+                ? EditorPalette.accentHovered
+                : EditorPalette.accentActive;
+        uint packedColor = NativeImGui.ColorConvertFloat4ToU32(color);
+        NativeImGui.GetWindowDrawList().AddText(cursor, packedColor, text);
+        if (hovered)
+        {
+            NativeImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+            float underlineY = cursor.Y + size.Y;
+            NativeImGui.GetWindowDrawList().AddLine(
+                new Vector2(cursor.X, underlineY),
+                new Vector2(cursor.X + size.X, underlineY),
+                packedColor);
+        }
+        return pressed;
+    }
+
+    /// <summary>
     /// Draws a clickable icon inside the same square interaction slot used by editor close controls.
     /// The icon has no resting background and changes only its glyph color while hovered or active.
     /// </summary>
@@ -324,7 +370,8 @@ public static partial class ImGuiWidget
     }
 
     /// <summary>
-    /// Draws icon and text with the icon centered in a fixed slot.
+    /// Draws icon and text with the icon's visible glyph bounds centered in a slot that expands
+    /// when the glyph is wider than the normal editor icon slot.
     /// </summary>
     /// <param name="icon">Icon text.</param>
     /// <param name="text">Main text.</param>
@@ -338,15 +385,23 @@ public static partial class ImGuiWidget
         {
             Vector2 cursor = NativeImGui.GetCursorScreenPos();
             ImGuiStylePtr style = NativeImGui.GetStyle();
-            float iconSlotWidth = NativeImGui.GetTextLineHeight();
-            Vector2 iconSize = NativeImGui.CalcTextSize(icon);
+            ImFontPtr font = NativeImGui.GetFont();
+            float fontSize = NativeImGui.GetFontSize();
+            float lineHeight = NativeImGui.GetTextLineHeight();
+            Vector4 glyphBounds = GetGlyphVisualBounds(font, fontSize, icon);
+            float iconSlotWidth = MathF.Max(lineHeight, glyphBounds.Z - glyphBounds.X);
             Vector2 textSize = NativeImGui.CalcTextSize(text);
-            Vector2 iconPos = new(cursor.X + (iconSlotWidth - iconSize.X) * 0.5f, cursor.Y);
             Vector2 textPos = new(cursor.X + iconSlotWidth + style.ItemInnerSpacing.X, cursor.Y);
 
             uint color = NativeImGui.GetColorU32(ImGuiCol.Text);
             ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
-            drawList.AddText(iconPos, color, icon);
+            AddGlyphCentered(
+                drawList,
+                font,
+                fontSize,
+                icon,
+                new Vector2(cursor.X + iconSlotWidth * 0.5f, cursor.Y + lineHeight * 0.5f),
+                color);
             drawList.AddText(textPos, color, text);
 
             if (highlight)
@@ -362,7 +417,7 @@ public static partial class ImGuiWidget
 
             NativeImGui.Dummy(new Vector2(
                 iconSlotWidth + style.ItemInnerSpacing.X + textSize.X,
-                NativeImGui.GetTextLineHeight()));
+                lineHeight));
         }
         finally
         {

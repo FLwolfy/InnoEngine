@@ -10,14 +10,14 @@ namespace Inno.Editor.Panel.Stats;
 /// Shows lightweight runtime metrics.
 /// </summary>
 [EditorPanel("diagnostics.stats", "Stats", order: 500)]
-public sealed class StatsPanel : EditorPanel
+internal sealed class StatsPanel : EditorPanel
 {
     private readonly FrameStatisticsSampler m_statistics = new();
 
     /// <summary>
     /// Creates the panel.
     /// </summary>
-    public StatsPanel()
+    internal StatsPanel()
     {
     }
 

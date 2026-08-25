@@ -4,8 +4,8 @@ using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Hierarchy;
 
-[EditorAction(HierarchyActions.CreateScene)]
-[EditorMenu(HierarchyAreas.Hierarchy, "Create Scene", order: 300, separatorBefore: true)]
+[EditorAction("hierarchy/create-scene")]
+[EditorMenu("panel/scene.hierarchy", "Create Scene", order: 300, separatorBefore: true)]
 internal sealed class CreateSceneCommand(SceneEdits edits) : EditorAction
 {
     protected override void Execute(EditorActionContext context)

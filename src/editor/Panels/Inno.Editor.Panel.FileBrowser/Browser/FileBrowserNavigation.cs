@@ -72,8 +72,8 @@ internal sealed class FileBrowserNavigation(AssetEditorModule assets)
             return;
         }
         _ = assets.interactions
-            .For(FileBrowserAreas.Browser, entry)
-            .Execute(EditorActions.Open);
+            .For("panel/asset.file-browser", entry)
+            .Execute("editor/open");
     }
 
     internal void SyncExternalDirectoryChange(string directory)

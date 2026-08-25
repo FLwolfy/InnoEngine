@@ -1,14 +1,16 @@
 namespace Inno.Editor.Core;
 
 /// <summary>
-/// Allows an editor module or panel to persist project-specific semantic state across editor sessions.
+/// Provides the assembly-boundary adapter used by editor modules and panels that opt into
+/// project-specific workspace persistence through their protected base-class hooks.
 /// </summary>
 public interface IEditorWorkspaceState
 {
     /// <summary>
-    /// Gets the stable, globally unique identifier used to store this provider's state.
+    /// Gets the stable, globally unique identifier used to store this provider's state, or
+    /// <see langword="null"/> when persistence is disabled.
     /// </summary>
-    string workspaceStateId { get; }
+    string? workspaceStateId { get; }
 
     /// <summary>
     /// Captures the provider's current project-specific state.

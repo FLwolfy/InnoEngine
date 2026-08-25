@@ -13,8 +13,6 @@ using Inno.Platform.ImGui;
 [assembly: ScriptingApiExport(typeof(AssetOperationValidation), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(AssetBrowserState), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(AssetIconAttribute), ScriptingApiScope.Editor)]
-[assembly: ScriptingApiExport(typeof(FileBrowserAreas), ScriptingApiScope.Editor)]
-[assembly: ScriptingApiExport(typeof(FileBrowserActions), ScriptingApiScope.Editor)]
 
 [assembly: ScriptingApiNamespace(
     "InnoEditor.Assets",

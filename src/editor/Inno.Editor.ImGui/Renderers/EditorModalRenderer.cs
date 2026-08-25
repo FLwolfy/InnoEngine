@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 
+using Inno.Editor.Core;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Native.ImGui;
@@ -12,38 +13,68 @@ namespace Inno.Editor.ImGui;
 public static class EditorModalRenderer
 {
     /// <summary>
-    /// Draws a fixed-width modal centered in the main viewport work area with a caller-provided opacity.
+    /// Draws a modal in the main viewport work area with a caller-provided opacity.
     /// </summary>
     /// <param name="id">The stable popup identity independent of the visible title.</param>
     /// <param name="title">The visible modal title.</param>
     /// <param name="alpha">The opacity applied to the complete modal window.</param>
-    /// <param name="content">The callback that draws the modal body.</param>
+    /// <param name="modal">
+    /// The modal content and window presentation policy.
+    /// </param>
+    /// <param name="context">
+    /// The shared editor context supplied to the modal body.
+    /// </param>
     public static void Draw(
         string id,
         string title,
         float alpha,
-        Action content)
+        EditorModal modal,
+        EditorContext context)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
-        ArgumentNullException.ThrowIfNull(content);
+        ArgumentNullException.ThrowIfNull(modal);
+        ArgumentNullException.ThrowIfNull(context);
 
         string popupId = $"{title}##{id}";
         ImGuiViewportPtr viewport = NativeImGui.GetMainViewport();
         Vector2 center = viewport.WorkPos + viewport.WorkSize * 0.5f;
         NativeImGui.OpenPopup(popupId, ImGuiPopupFlags.NoReopen);
         NativeImGui.SetNextWindowViewport(viewport.ID);
-        NativeImGui.SetNextWindowPos(center, ImGuiCond.Always, new Vector2(0.5f, 0.5f));
-        NativeImGui.SetNextWindowSize(
-            new Vector2(EditorWidget.style.modalWidth, 0f),
-            ImGuiCond.Always);
+        ImGuiCond placementCondition = modal.canMove || modal.canResize
+            ? ImGuiCond.Appearing
+            : ImGuiCond.Always;
+        NativeImGui.SetNextWindowPos(center, placementCondition, new Vector2(0.5f, 0.5f));
+        Vector2 initialSize = modal.initialSize;
+        if (initialSize.X > 0f && initialSize.Y > 0f)
+        {
+            NativeImGui.SetNextWindowSize(
+                initialSize * EditorWidget.style.zoom,
+                placementCondition);
+        }
+        else if (!modal.canResize)
+        {
+            NativeImGui.SetNextWindowSize(
+                new Vector2(EditorWidget.style.modalWidth, 0f),
+                ImGuiCond.Always);
+        }
+        if (modal.canResize)
+        {
+            Vector2 maximumSize = Vector2.Max(Vector2.One, viewport.WorkSize);
+            Vector2 minimumSize = Vector2.Min(
+                modal.minimumSize * EditorWidget.style.zoom,
+                maximumSize);
+            NativeImGui.SetNextWindowSizeConstraints(minimumSize, maximumSize);
+        }
         NativeImGui.PushStyleVar(ImGuiStyleVar.Alpha, alpha);
-        ImGuiWindowFlags flags = ImGuiWindowFlags.AlwaysAutoResize |
-                                 ImGuiWindowFlags.NoMove |
-                                 ImGuiWindowFlags.NoResize;
+        ImGuiWindowFlags flags = ImGuiWindowFlags.NoDocking | ImGuiWindowFlags.NoCollapse;
+        if (!modal.canMove)
+            flags |= ImGuiWindowFlags.NoMove;
+        if (!modal.canResize)
+            flags |= ImGuiWindowFlags.NoResize | ImGuiWindowFlags.AlwaysAutoResize;
         if (NativeImGui.BeginPopupModal(popupId, flags))
         {
-            content();
+            modal.Draw(context);
             NativeImGui.EndPopup();
         }
         NativeImGui.PopStyleVar();

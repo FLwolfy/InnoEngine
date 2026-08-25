@@ -68,8 +68,8 @@ public sealed class AssetHistoryTests : IDisposable
     public void CreateFolderUndoAndRedoUseTheAssetDatabase()
     {
         Assert.True(m_runtime.interactions
-            .For(FileBrowserAreas.Browser, string.Empty)
-            .Execute(FileBrowserActions.CreateFolder));
+            .For("panel/asset.file-browser", string.Empty)
+            .Execute("file-browser/create-folder"));
         Assert.True(AssetManager.TryGetFileSystemEntry("New Folder", out AssetFileEntry created));
         Assert.True(created.isDirectory);
 
@@ -88,8 +88,8 @@ public sealed class AssetHistoryTests : IDisposable
         Assert.True(AssetManager.TryGetFileSystemEntry("Folder", out AssetFileEntry folder));
 
         Assert.True(m_runtime.interactions
-            .For(FileBrowserAreas.Browser, folder)
-            .Execute(FileBrowserActions.Delete));
+            .For("panel/asset.file-browser", folder)
+            .Execute("file-browser/delete"));
         Assert.False(AssetManager.TryGetFileSystemEntry("Folder", out _));
 
         Assert.True(m_runtime.interactions.history.Undo().succeeded);
@@ -108,8 +108,8 @@ public sealed class AssetHistoryTests : IDisposable
         AssetManager.CreateDirectory("ReloadSafe");
         Assert.True(AssetManager.TryGetFileSystemEntry("ReloadSafe", out AssetFileEntry folder));
         Assert.True(m_runtime.interactions
-            .For(FileBrowserAreas.Browser, folder)
-            .Execute(FileBrowserActions.Delete));
+            .For("panel/asset.file-browser", folder)
+            .Execute("file-browser/delete"));
 
         TypeCacheManager.Rebuild();
         _ = m_runtime.panelCount;
@@ -130,9 +130,9 @@ public sealed class AssetHistoryTests : IDisposable
         Assert.NotNull(file);
 
         Guid fileToken = m_runtime.interactions
-            .For(FileBrowserAreas.Browser, file)
+            .For("panel/asset.file-browser", file)
             .BeginDrag(new EditorDragData(file!, "Value.txt"));
-        EditorInteraction destination = m_runtime.interactions.For(FileBrowserAreas.Browser, "To");
+        EditorInteraction destination = m_runtime.interactions.For("panel/asset.file-browser", "To");
         Assert.True(destination.QueryDrop(fileToken, EditorDropPlacement.Into).canDrop);
         Assert.True(destination.Drop(fileToken, EditorDropPlacement.Into).accepted);
         Assert.True(AssetManager.TryGetFileSystemEntry("To/Value.txt", out _));
@@ -145,7 +145,7 @@ public sealed class AssetHistoryTests : IDisposable
 
         Assert.True(AssetManager.TryGetFileSystemEntry("From/Folder", out AssetFileEntry folder));
         Guid folderToken = m_runtime.interactions
-            .For(FileBrowserAreas.Browser, folder)
+            .For("panel/asset.file-browser", folder)
             .BeginDrag(new EditorDragData(folder, "Folder"));
         Assert.True(destination.QueryDrop(folderToken, EditorDropPlacement.Into).canDrop);
         Assert.True(destination.Drop(folderToken, EditorDropPlacement.Into).accepted);
@@ -165,18 +165,18 @@ public sealed class AssetHistoryTests : IDisposable
         Assert.True(AssetManager.TryGetFileSystemEntry("Source", out AssetFileEntry source));
 
         Guid descendantToken = m_runtime.interactions
-            .For(FileBrowserAreas.Browser, source)
+            .For("panel/asset.file-browser", source)
             .BeginDrag(new EditorDragData(source, "Source"));
         Assert.False(m_runtime.interactions
-            .For(FileBrowserAreas.Browser, "Source/Child")
+            .For("panel/asset.file-browser", "Source/Child")
             .QueryDrop(descendantToken, EditorDropPlacement.Into)
             .canDrop);
 
         Guid collisionToken = m_runtime.interactions
-            .For(FileBrowserAreas.Browser, source)
+            .For("panel/asset.file-browser", source)
             .BeginDrag(new EditorDragData(source, "Source"));
         Assert.False(m_runtime.interactions
-            .For(FileBrowserAreas.Browser, "Target")
+            .For("panel/asset.file-browser", "Target")
             .QueryDrop(collisionToken, EditorDropPlacement.Into)
             .canDrop);
     }

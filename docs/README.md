@@ -11,7 +11,7 @@
 | [Core](core/README.md) | 程序集、反射、序列化、框架、事件、协程、任务、数学、存储等基础设施 | 已完成 |
 | [Assets](assets/README.md) | 资产门面、资产模型、文件索引、Importer、序列化桥接与内置资产类型 | 已完成 |
 | [Engine](engine/README.md) | Scene、Rendering 等运行时能力 | 部分完成 |
-| [Editor](editor/README.md) | 编辑器交互契约、领域 feature、ImGui、Scripting 与宿主 | 已完成 |
+| [Editor](editor/README.md) | 编辑器交互契约、[Global/Settings](editor/Inno.Editor.Panel.Global.md)、领域 feature、ImGui、Scripting 与宿主 | 已完成 |
 | [Platform](platform/README.md) / Native | 窗口、图形后端与原生集成 | 部分完成 |
 
 ## 推荐阅读路线

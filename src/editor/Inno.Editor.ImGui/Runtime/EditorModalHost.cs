@@ -44,7 +44,8 @@ internal sealed class EditorModalHost
                 extension.id,
                 extension.title,
                 transition.GetAlpha(now),
-                () => extension.modal.Draw(context));
+                extension.modal,
+                context);
         }
     }
 

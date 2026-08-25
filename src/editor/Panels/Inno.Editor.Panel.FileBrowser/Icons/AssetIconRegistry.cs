@@ -4,17 +4,35 @@ using System.Linq;
 
 using Inno.Assets.Core;
 using Inno.Core.Reflection;
+using Inno.Editor.Settings;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
 internal sealed class AssetIconRegistry : TypeRegistry<AssetIconRegistry.Snapshot>
 {
+    private readonly EditorSettings m_settings;
+
+    internal AssetIconRegistry(EditorSettings settings)
+    {
+        m_settings = settings ?? throw new ArgumentNullException(nameof(settings));
+    }
+
     internal bool TryResolve(Type? assetType, string relativePath, out string icon)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
-        if (TryResolveType(assetType, out icon))
+        if (TryResolveType(assetType, out icon) || TryResolveExtension(relativePath, out icon))
+        {
+            try
+            {
+                icon = m_settings.Get(icon).GetAsString("value", icon) ?? icon;
+            }
+            catch (ArgumentException)
+            {
+                // Extension-defined attributes may still contain a literal glyph.
+            }
             return true;
-        return TryResolveExtension(relativePath, out icon);
+        }
+        return false;
     }
 
     protected override Snapshot Build(TypeCacheSnapshot types)

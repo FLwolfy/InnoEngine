@@ -24,7 +24,7 @@ namespace Inno.Editor.Scene;
 /// Tracks editor scene documents, their source paths, and serialized dirty state.
 /// </summary>
 [EditorModule(order: 200)]
-public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
+public sealed class EditorSceneWorkspace : EditorModule
 {
     private const double C_DIRTY_REFRESH_SECONDS = 0.1;
     private const string C_SCENE_EXTENSION = ".iscene";
@@ -54,7 +54,7 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
     }
 
     /// <inheritdoc />
-    public string workspaceStateId => "scene-workspace";
+    protected override string workspaceStateId => "scene-workspace";
 
     /// <summary>
     /// Gets all scenes currently available to editor features.
@@ -314,7 +314,7 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
     }
 
     /// <inheritdoc />
-    public void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
+    protected override void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
         if (m_pendingScenePaths is not null)
@@ -333,7 +333,7 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
     }
 
     /// <inheritdoc />
-    public void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
+    protected override void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
     {
         ArgumentNullException.ThrowIfNull(reader);
         string[] paths = reader.Get("openScenes", Array.Empty<string>());
@@ -387,8 +387,11 @@ public sealed class EditorSceneWorkspace : EditorModule, IEditorWorkspaceState
         SceneManager.UnloadAllScenes();
         m_isAttached = false;
         Clear();
-        m_diagnostics.Dispose();
     }
+
+    /// <inheritdoc />
+    protected override void OnDispose()
+        => m_diagnostics.Dispose();
 
     private void SaveSceneAtPath(GameScene scene, string relativePath)
     {

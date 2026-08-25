@@ -62,7 +62,7 @@ internal sealed class FileBrowserTree
         bool isLeaf = !isDirectory || sorted.Count == 0;
         bool isCurrentDirectory = isDirectory &&
                                   string.Equals(m_assets.browser.currentDirectory, relativePath, StringComparison.Ordinal);
-        string icon = ImGuiIcon.Folder;
+        string icon = m_assets.folderIcon;
         if (!isDirectory && AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry iconEntry))
             icon = m_assets.GetIcon(iconEntry);
         bool editing = !isRoot && m_rename.IsEditing(

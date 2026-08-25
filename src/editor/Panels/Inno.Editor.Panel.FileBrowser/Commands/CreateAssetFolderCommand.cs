@@ -6,8 +6,8 @@ using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
-[EditorAction(FileBrowserActions.CreateFolder, FileBrowserAreas.Browser)]
-[EditorMenu(FileBrowserAreas.Browser, "Create/Folder", order: 100)]
+[EditorAction("file-browser/create-folder", "panel/asset.file-browser")]
+[EditorMenu("panel/asset.file-browser", "Create/Folder", order: 100)]
 internal sealed class CreateAssetFolderCommand : EditorAction<string>
 {
     protected override EditorActionState Query(EditorActionContext<string> context)
@@ -36,9 +36,9 @@ internal sealed class CreateAssetFolderCommand : EditorAction<string>
                 EditorHistoryPayload.FromBytes(data.Encode())));
         if (!AssetManager.TryGetFileSystemEntry(candidate, out AssetFileEntry target))
             return;
-        EditorInteraction interaction = context.interactions.For(FileBrowserAreas.Browser, target);
+        EditorInteraction interaction = context.interactions.For("panel/asset.file-browser", target);
         _ = interaction.Select();
-        _ = interaction.Execute(FileBrowserActions.Rename);
+        _ = interaction.Execute("file-browser/rename");
     }
 
     private static string Combine(string parent, string name)

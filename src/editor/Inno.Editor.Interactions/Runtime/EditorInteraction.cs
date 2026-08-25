@@ -34,7 +34,7 @@ public readonly struct EditorInteraction
     /// <returns><see langword="true"/> when the built-in selection action executed; otherwise, <see langword="false"/>.</returns>
     public bool Select()
         => m_interactions.Execute(
-            target is null ? EditorActions.ClearSelection : EditorActions.Select,
+            target is null ? "editor/clear-selection" : "editor/select",
             area,
             target,
             null);

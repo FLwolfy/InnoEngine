@@ -10,7 +10,7 @@ namespace Inno.Editor.Panel.Logging;
 /// Connects the editor Console to the independent logging and diagnostics cores.
 /// </summary>
 [EditorModule(order: int.MinValue)]
-public sealed class LoggingModule : EditorModule, IDisposable
+internal sealed class LoggingModule : EditorModule
 {
     private readonly EditorDiagnosticBuffer m_diagnostics = new();
     private bool m_started;
@@ -18,7 +18,7 @@ public sealed class LoggingModule : EditorModule, IDisposable
     /// <summary>
     /// Gets the rolling editor log buffer.
     /// </summary>
-    public EditorLogBuffer logs { get; } = new();
+    internal EditorLogBuffer logs { get; } = new();
 
     internal EditorDiagnosticBuffer diagnostics => m_diagnostics;
 
@@ -43,7 +43,7 @@ public sealed class LoggingModule : EditorModule, IDisposable
     }
 
     /// <inheritdoc />
-    public void Dispose()
+    protected override void OnDispose()
     {
         if (m_started)
         {
@@ -51,6 +51,5 @@ public sealed class LoggingModule : EditorModule, IDisposable
             DiagnosticManager.UnregisterSink(m_diagnostics);
             m_started = false;
         }
-        GC.SuppressFinalize(this);
     }
 }

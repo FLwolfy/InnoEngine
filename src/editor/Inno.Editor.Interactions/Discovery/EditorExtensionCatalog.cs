@@ -143,7 +143,9 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             .Select(static value => value.module)
             .Concat<object>(panels.Select(static value => value.panel))
             .OfType<IEditorWorkspaceState>()
-            .Select(static provider => new WorkspaceRegistration(provider.workspaceStateId, provider))
+            .Select(static provider => (Provider: provider, Id: provider.workspaceStateId))
+            .Where(static value => !string.IsNullOrWhiteSpace(value.Id))
+            .Select(static value => new WorkspaceRegistration(value.Id!, value.Provider))
             .OrderBy(static value => value.id, StringComparer.Ordinal)
             .ToArray();
         ValidateWorkspace(workspace);

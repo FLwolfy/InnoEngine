@@ -6,7 +6,7 @@ using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
-[EditorAction(InspectorActions.AddComponent, InspectorAreas.Component)]
+[EditorAction("inspector/add-component", "panel/scene.inspector/component")]
 internal sealed class AddComponentCommand(SceneEdits edits) : EditorAction<GameObject>
 {
     protected override EditorActionState Query(EditorActionContext<GameObject> context)

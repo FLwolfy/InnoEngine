@@ -12,6 +12,7 @@
     <ProjectReference Include="..\..\Inno.Editor.Inspection\Inno.Editor.Inspection.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\Inno.Editor.Scene\Inno.Editor.Scene.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\Inno.Editor.Settings\Inno.Editor.Settings.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\assets\Inno.Assets.Core\Inno.Assets.Core.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\assets\Inno.Assets.File\Inno.Assets.File.csproj" PrivateAssets="compile" />

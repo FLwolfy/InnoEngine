@@ -8,7 +8,6 @@ using Inno.Editor.Interactions;
 
 [assembly: ScriptingApiExport(typeof(EditorInteractions), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorInteraction), ScriptingApiScope.Editor)]
-[assembly: ScriptingApiExport(typeof(EditorAreas), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorSelectionState), ScriptingApiScope.Editor)]
 
 [assembly: ScriptingApiExport(typeof(EditorAction), ScriptingApiScope.Editor)]
@@ -17,7 +16,6 @@ using Inno.Editor.Interactions;
 [assembly: ScriptingApiExport(typeof(EditorActionContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorActionContext<>), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorActionState), ScriptingApiScope.Editor)]
-[assembly: ScriptingApiExport(typeof(EditorActions), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorShortcutAttribute), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorValidationResult), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(HotKeyGesture), ScriptingApiScope.Editor)]

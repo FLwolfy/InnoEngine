@@ -6,6 +6,7 @@ using Inno.Core.Identity;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 using Inno.Editor.Scene;
+using Inno.Editor.Settings;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
@@ -17,19 +18,20 @@ namespace Inno.Editor.Panel.Hierarchy;
 
 internal sealed class HierarchySelection(
     EditorSceneWorkspace workspace,
-    EditorInteractions interactions)
+    EditorInteractions interactions,
+    EditorSettings settings)
 {
     internal void Prune(EditorContext context)
     {
         if (interactions.selection.TryGet(out GameScene? selectedScene) &&
             (!selectedScene.isLoaded || !ContainsScene(workspace.scenes, selectedScene)))
         {
-            _ = interactions.For(HierarchyAreas.Hierarchy).Select();
+            _ = interactions.For("panel/scene.hierarchy").Select();
             return;
         }
         if (interactions.selection.TryGet(out GameObject? gameObject) &&
             (!gameObject.isRuntimeValid || !ContainsScene(workspace.scenes, gameObject.scene)))
-            _ = interactions.For(HierarchyAreas.Hierarchy).Select();
+            _ = interactions.For("panel/scene.hierarchy").Select();
     }
 
     internal bool DeleteObject(EditorContext context, Guid persistentId)
@@ -40,7 +42,7 @@ internal sealed class HierarchySelection(
 
         _ = gameObject.scene.DestroyObject(gameObject);
         if (interactions.selection.TryGet(out GameObject? selected) && ReferenceEquals(selected, gameObject))
-            _ = interactions.For(HierarchyAreas.Hierarchy).Select();
+            _ = interactions.For("panel/scene.hierarchy").Select();
         return true;
     }
 
@@ -70,7 +72,9 @@ internal sealed class HierarchySelection(
     internal void DrawSceneRowContent(EditorContext context, GameScene scene)
     {
         EditorWidget.IconText(
-            ImGuiIcon.Cubes,
+            settings
+                .Get("Global/Appearance/Icons/Scene")
+                .GetAsString("value", ImGuiIcon.Cubes)!,
             scene.name,
             ReferenceEquals(scene, SceneManager.activeScene));
         if (!workspace.IsDirty(scene))

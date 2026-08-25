@@ -11,6 +11,7 @@ using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Editor.Scene;
+using Inno.Editor.Settings;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Components;
 using Inno.Native.ImGui;
@@ -28,22 +29,33 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
     private readonly SceneEdits m_edits;
     private readonly GameObjectTagSelector m_tagSelector;
     private readonly GameObjectLayerSelector m_layerSelector;
+    private readonly EditorSettings m_settings;
     private string m_componentSearch = string.Empty;
 
     /// <summary>
     /// Creates a GameObject drawer backed by the current project tag catalog.
     /// </summary>
-    /// <param name="edits">The Scene editing service used for compact Undo/Redo records.</param>
-    /// <param name="tags">The project tag catalog displayed in the target header.</param>
-    /// <param name="layerSettings">The project layer catalog displayed in the target header.</param>
+    /// <param name="edits">
+    /// The Scene editing service used for compact Undo/Redo records.
+    /// </param>
+    /// <param name="tags">
+    /// The project tag catalog displayed in the target header.
+    /// </param>
+    /// <param name="layerSettings">
+    /// The project Settings layer catalog displayed in the target header.
+    /// </param>
+    /// <param name="settings">
+    /// The project Settings service that owns semantic icon values.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="edits"/>, <paramref name="tags"/>, or
-    /// <paramref name="layerSettings"/> is <see langword="null"/>.
+    /// <paramref name="layerSettings"/>, or <paramref name="settings"/> is <see langword="null"/>.
     /// </exception>
     internal GameObjectInspectionDrawer(
         SceneEdits edits,
         GameObjectTagCatalog tags,
-        GameLayerSettingsModule layerSettings)
+        GameLayerSettingsModule layerSettings,
+        EditorSettings settings)
     {
         m_edits = edits ?? throw new ArgumentNullException(nameof(edits));
         m_tagSelector = new GameObjectTagSelector(
@@ -52,9 +64,13 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
         m_layerSelector = new GameObjectLayerSelector(
             layerSettings ?? throw new ArgumentNullException(nameof(layerSettings)),
             edits);
+        m_settings = settings ?? throw new ArgumentNullException(nameof(settings));
     }
 
-    public override string icon => ImGuiIcon.Cube;
+    /// <inheritdoc />
+    public override string icon => m_settings
+        .Get("Global/Appearance/Icons/GameObject")
+        .GetAsString("value", ImGuiIcon.Cube)!;
 
     protected override (string name, Action<string>? setter) BindName(
         InspectionDrawContext context,
@@ -154,16 +170,16 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
                         components.Count,
                         () => context.interactions
                             .For(
-                                InspectorAreas.Component,
+                                "panel/scene.inspector/component",
                                 editorTarget)
-                            .Enqueue(InspectorActions.RemoveComponent))),
+                            .Enqueue("inspector/remove-component"))),
                 dimmed: behavior is { enabled: false },
                 trailingControlWidth: componentType == typeof(Transform)
                     ? 0f
                     : m_cardControls.width,
                 drawContextMenu: () => _ = EditorMenuRenderer.ContextMenu(
                     $"##component_menu_{componentId}",
-                    context.interactions.For(InspectorAreas.Component, editorTarget)));
+                    context.interactions.For("panel/scene.inspector/component", editorTarget)));
 
             if (!open)
             {
@@ -214,7 +230,7 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
             return;
         }
 
-        EditorInteraction interaction = context.interactions.For(InspectorAreas.Component, gameObject);
+        EditorInteraction interaction = context.interactions.For("panel/scene.inspector/component", gameObject);
         if (EditorMenuRenderer.DrawSearchItems(
                 interaction,
                 interaction.BuildMenu().items,

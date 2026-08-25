@@ -4,8 +4,8 @@ using Inno.Engine.Scene.Components;
 
 namespace Inno.Editor.Panel.Inspector;
 
-[EditorAction(InspectorActions.RemoveComponent, priority: 100)]
-[EditorMenu(InspectorAreas.Component, "Remove Component", order: 200)]
+[EditorAction("inspector/remove-component", priority: 100)]
+[EditorMenu("panel/scene.inspector/component", "Remove Component", order: 200)]
 internal sealed class RemoveComponentCommand(SceneEdits edits) : EditorAction<ComponentEditorTarget>
 {
     protected override EditorActionState Query(EditorActionContext<ComponentEditorTarget> context)

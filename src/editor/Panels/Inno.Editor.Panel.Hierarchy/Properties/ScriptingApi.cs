@@ -6,7 +6,5 @@ using Inno.Editor.Panel.Hierarchy;
     "Inno.Editor.Panel.Hierarchy",
     ScriptingApiScope.Editor)]
 
-[assembly: ScriptingApiExport(typeof(HierarchyAreas), ScriptingApiScope.Editor)]
-[assembly: ScriptingApiExport(typeof(HierarchyActions), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(HierarchyObjectDropTarget), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(HierarchySceneDropTarget), ScriptingApiScope.Editor)]

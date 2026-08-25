@@ -14,7 +14,7 @@ namespace Inno.Editor.ImGui;
 /// <summary>
 /// Presents the backend-independent editor interaction runtime through ImGui.
 /// </summary>
-public sealed class ImGuiEditorRuntime : Inno.Editor.Core.EditorRuntime
+public sealed class ImGuiEditorRuntime : EditorRuntime
 {
     private readonly Stopwatch m_timer = Stopwatch.StartNew();
     private readonly EditorInteractionRuntime m_runtime;
@@ -95,7 +95,7 @@ public sealed class ImGuiEditorRuntime : Inno.Editor.Core.EditorRuntime
         _ = NativeImGui.DockSpaceOverViewport();
         if (blocksInteraction)
             NativeImGui.BeginDisabled(true);
-        EditorMenuRenderer.MainMenu(interactions.For(EditorAreas.MainMenu));
+        EditorMenuRenderer.MainMenu(interactions.For("editor/main-menu"));
         DrawPanels(m_runtime.panels);
         if (blocksInteraction)
             NativeImGui.EndDisabled();

@@ -4,15 +4,12 @@
 
 该项目完整拥有 File Browser feature：Tree/List/Grid 表现、导航与过滤、Asset selection、AssetEditor 扩展、文件操作 Action、菜单、Asset drag source，以及 `AssetFileEntry` 的 `AssetSelectionInspectionDrawer`。它只引用共享的 `Inno.Editor.Inspection`，不引用 Hierarchy 或 Inspector Panel。
 
-内建 extension icon catalog 将 `.ilayers` 显示为 Layer Group。File Browser 仍只选择 `AssetFileEntry`；Inspector composition root 会在存在 exact asset drawer 时加载对应资产。只有 `Assets/Settings/GameLayers.ilayers` 可以作为项目层设置编辑和消费；把它拖到其他目录后文件与 metadata 会正常移动，但 Inspector 会显示位置错误，运行时立即退回 Default-only layer catalog。拖回 canonical path 后重新识别其原内容。
+Scene、Prefab、Folder 和普通文件 icon declaration 可以直接保存完整 Settings path；`AssetIconRegistry` 用 `EditorSettings.Get(path).GetAsString("value")` 读取 glyph。脚本声明仍可填写 literal glyph。Game Layers 已是项目根 `EditorSettings.json` 数据，不再作为 FileBrowser entry、extension icon 或 Asset inspection target。
 
 ## 公共扩展 API
 
 | API | 作用 |
 | --- | --- |
-| `FileBrowserAreas.Browser` | Panel、entry 和背景右键菜单的稳定 area。 |
-| `FileBrowserAreas.AssetReference` | Asset reference drop target 的共享 area。 |
-| `FileBrowserActions` | CreateFolder、Rename、Delete 的 feature-owned ID。 |
 | `AssetBrowserState` | 按 persistent identity 保存当前目录与选择。 |
 | `AssetEditor` / `AssetEditorAttribute` | 为特定 Asset 类型声明 Open/Rename/Delete/Drag 行为。 |
 | `AssetEditorContext` | 当前 `EditorContext`、interactions、路径、Asset 信息和实例。 |
@@ -49,7 +46,7 @@ Create Folder、Rename、Move 与 Delete 都接入共享中立 Undo/Redo。Renam
 
 ## 文件与目录移动
 
-Tree、List 和 Grid 使用同一个 `AssetFileEntry` 目录目标及 `FileBrowserAreas.Browser` drop handler。文件仍以共享 `AssetInfo` 作为 payload，目录以 `AssetFileEntry` 作为 payload；两者都可以拖到任意视图中的目录、Tree 根节点或当前目录空白区域，因此可以从 Grid 拖到 Tree，也可以从 Tree 拖到 List/Grid。
+Tree、List 和 Grid 使用同一个 `AssetFileEntry` 目录目标及 `panel/asset.file-browser` drop area。文件仍以共享 `AssetInfo` 作为 payload，目录以 `AssetFileEntry` 作为 payload；两者都可以拖到任意视图中的目录、Tree 根节点或当前目录空白区域，因此可以从 Grid 拖到 Tree，也可以从 Tree 拖到 List/Grid。
 
 Tree pane 只在名称或层级缩进真实超出 viewport 时产生横向范围，并显示原生水平 scrollbar；短内容没有 scrollbar。Tree 的 label/icon/hit area 只应用一次 `ScrollX`，不会出现内容比 disclosure 或 guide 多移动一份滚动距离的情况。
 
@@ -60,8 +57,8 @@ Tree pane 只在名称或层级缩进真实超出 viewport 时产生横向范围
 为某类 Asset 添加额外右键菜单只需普通 Action：
 
 ```csharp
-[EditorAction("animation.reimport", FileBrowserAreas.Browser)]
-[EditorMenu(FileBrowserAreas.Browser, "Animation/Reimport", order: 400)]
+[EditorAction("animation/reimport", "panel/asset.file-browser")]
+[EditorMenu("panel/asset.file-browser", "Animation/Reimport", order: 400)]
 public sealed class ReimportAnimationAction : EditorAction<AssetFileEntry>
 {
     protected override EditorActionState Query(
@@ -110,7 +107,7 @@ CLR 层的 icon 常量仍是 ImGui 所需的 `const string` glyph；`AssetIconKi
 
 内建 Text、Binary、Scene、Prefab 和 Scripting 图标全部在 `BuiltInAssetIcons` 上使用 extension overload 声明，没有基于具体 Asset CLR 类型的引用。FileBrowser 项目因此不再引用 `Inno.Assets.Types`、`Inno.Engine.Scene.Assets` 或 `Inno.Editor.Scripting`。内部 `AssetIconRegistry` 扫描当前 TypeCache snapshot 中的声明类型。EditorScripts 热重载时，新增或修改声明会随候选代际原子生效；移除声明或整个容器类型后，Registry 会释放旧映射并恢复优先级较低的内建声明，没有匹配时则使用通用 File icon。
 
-`AssetEditorModule.GetIcon(entry)` 是唯一对外 presentation resolver，同时通过 `IInspectionIconProvider<AssetFileEntry>` 向 Inspection 基础设施提供同一个规则。File Browser 的三种视图与 Asset Inspection Header 都调用该入口，不复制 extension switch，也不各自持有 Registry snapshot。
+`AssetEditorModule.GetIcon(entry)` 是唯一对外 presentation resolver，同时通过 `IInspectionIconProvider<AssetFileEntry>` 向 Inspection 基础设施提供同一个规则。File Browser 的三种视图与 Asset Inspection Header 都调用该入口，不复制 extension switch，也不各自持有 Registry snapshot。Registry 先按类型/extension 选中声明；若 declaration 字符串是已注册 Settings path，就直接读取其中的 `value`，否则把它当作 literal glyph。Settings 基础项目不提供 icon resolver。
 
 ## Rename 与打开
 
@@ -125,8 +122,8 @@ CLR 层的 icon 常量仍是 ImGui 所需的 `const string` glyph；`AssetIconKi
 
 Asset Browser Module 只在 Workspace 中保存当前目录；Asset selection 属于当前 Editor session，不写入 `editor.ini`。运行期间若选中的路径被外部移动，Change Tracker 仍会按本次 session 的路径变化同步 selection；被删除时则清除。Panel 自己保存 List/Grid 模式、搜索过滤、scope/type filter、Tree/Content 分隔比例、grid scale，以及 List 中 Name/Type/Source 两个分隔位置。没有 `[InnoEditor][Panel.asset-browser-panel]` 状态时，Tree 与 Content 在扣除 splitter 后各占一半；拖动后以 `treePaneRatio` 的 `0..1` 归一化值保存，下次打开项目时恢复。列分隔位置同样以 `0..1` 的归一化值写入 `listNameSeparator` 和 `listTypeSeparator`，因此 Panel 宽度变化后仍能恢复相同比例。
 
-List 的三个 column 使用同一个内容 inset，手动 splitter 只占用独立 hit area，不会吞掉 Name、Type 或 Source 的左右留白。Grid 图标和文件名使用 draw-list overlay 绘制，不通过 `SetCursorScreenPos` 移动布局 cursor；图标先从卡片中扣除顶部、水平和 label 间距，再按剩余区域等比缩小。最终位置使用 baked glyph 的 `X0/Y0/X1/Y1` 可见边界计算，所以 Font Awesome 中左右 bearing 不对称的 Cube、Folder 等图标也会把真实轮廓中心放在卡片水平中心线上，并且不会越过卡片上沿。Selectable 仍是唯一负责 cell 尺寸与输入的 ImGui item。Inline Rename 必须临时移动 cursor 时，会在恢复布局位置后提交零尺寸 item，避免扩展 parent boundary 的 ImGui assertion。
+List 的三个 column 使用同一个内容 inset，手动 splitter 只占用从 header 到最后一行的真实 table 高度，因此 header 与每一条内容 row 都能接收 resize 拖动，而下方空白区域不会继续接收 hover 或拖动。row Selectable 明确允许 splitter overlay 重叠，separator 不会吞掉 Name、Type 或 Source 的正常点击区域。Grid 图标和文件名使用 draw-list overlay 绘制，不通过 `SetCursorScreenPos` 移动布局 cursor；图标先从卡片中扣除顶部、水平和 label 间距，再按剩余区域等比缩小。最终位置使用 baked glyph 的 `X0/Y0/X1/Y1` 可见边界计算，所以 Font Awesome 中左右 bearing 不对称的 Cube、Folder 等图标也会把真实轮廓中心放在卡片水平中心线上，并且不会越过卡片上沿。Selectable 仍是唯一负责 cell 尺寸与输入的 ImGui item。Inline Rename 必须临时移动 cursor 时，会在恢复布局位置后提交零尺寸 item，避免扩展 parent boundary 的 ImGui assertion。
 
 ## Scripting API
 
-EditorScripts 使用 `InnoEditor.Assets`，可扩展 AssetEditor、声明 AssetIcon，并使用 FileBrowser area/action 常量。脚本必须显式写 `using InnoEditor.Assets;`。
+EditorScripts 使用 `InnoEditor.Assets` 扩展 AssetEditor、声明 AssetIcon，并在 Action/Menu/Drop Attribute 中直接填写字符串 ID 和 area。脚本必须显式写 `using InnoEditor.Assets;`。

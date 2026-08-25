@@ -1,4 +1,5 @@
 using Inno.Platform.ImGui;
+using Inno.Editor.Settings;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
@@ -11,10 +12,9 @@ namespace Inno.Editor.Panel.FileBrowser;
 [AssetIcon(".bytes", ImGuiIcon.File)]
 [AssetIcon(".bin", ImGuiIcon.File)]
 [AssetIcon(".dat", ImGuiIcon.File)]
-[AssetIcon(".iscene", ImGuiIcon.Cubes)]
-[AssetIcon(".iprefab", ImGuiIcon.Cube)]
+[AssetIcon(".iscene", "Global/Appearance/Icons/Scene")]
+[AssetIcon(".iprefab", "Global/Appearance/Icons/Prefab")]
 [AssetIcon(".cs", ImGuiIcon.FileCode)]
 [AssetIcon(".dll", ImGuiIcon.Plug)]
 [AssetIcon(".iasmdef", ImGuiIcon.Gears)]
-[AssetIcon(".ilayers", ImGuiIcon.LayerGroup)]
 internal static class BuiltInAssetIcons;

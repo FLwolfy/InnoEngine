@@ -6,7 +6,7 @@ namespace Inno.Editor.Panel.FileBrowser;
 /// <summary>
 /// Moves directory drag payloads into File Browser directory targets.
 /// </summary>
-[EditorDrop(FileBrowserAreas.Browser, priority: 200)]
+[EditorDrop("panel/asset.file-browser", priority: 200)]
 internal sealed class MoveAssetEntryDropHandler(AssetEditorModule assets)
     : EditorDrop<AssetFileEntry, string>
 {

@@ -3,8 +3,8 @@ using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Hierarchy;
 
-[EditorAction(HierarchyActions.SetActiveScene)]
-[EditorMenu(HierarchyAreas.Hierarchy, "Set Active Scene", order: 100)]
+[EditorAction("hierarchy/set-active-scene")]
+[EditorMenu("panel/scene.hierarchy", "Set Active Scene", order: 100)]
 internal sealed class SetActiveSceneCommand : EditorAction<GameScene>
 {
     protected override EditorActionState Query(EditorActionContext<GameScene> context)

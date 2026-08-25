@@ -6,7 +6,7 @@ using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
-[EditorAction(InspectorActions.AddSystem, InspectorAreas.System)]
+[EditorAction("inspector/add-system", "panel/scene.inspector/system")]
 internal sealed class AddSystemCommand(SceneEdits edits) : EditorAction<GameScene>
 {
     protected override EditorActionState Query(EditorActionContext<GameScene> context)

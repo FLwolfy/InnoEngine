@@ -8,30 +8,38 @@ using Inno.Core.Logging;
 using Inno.Editor.Core;
 using Inno.Editor.Inspection;
 using Inno.Editor.Interactions;
+using Inno.Editor.Settings;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
 /// <summary>Owns shared Asset Browser state and asset-type extension dispatch.</summary>
 [EditorModule(order: 100)]
-public sealed class AssetEditorModule : EditorModule,
-    IEditorWorkspaceState,
-    IInspectionIconProvider<AssetFileEntry>,
-    IDisposable
+public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<AssetFileEntry>
 {
     private const string C_WORKSPACE_STATE_ID = "asset-browser";
 
     private readonly AssetEditorRegistry m_editors = new();
-    private readonly AssetIconRegistry m_icons = new();
+    private readonly AssetIconRegistry m_icons;
+    private readonly EditorSettings m_settings;
     private readonly EditorInteractions m_interactions;
     private EditorContext? m_context;
-    private bool m_disposed;
 
     /// <summary>Creates the Asset Browser feature module.</summary>
     /// <param name="interactions">The active editor interaction entry point.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="interactions"/> is <see langword="null"/>.</exception>
-    public AssetEditorModule(EditorInteractions interactions)
+    /// <param name="settings">
+    /// The project Settings service that owns semantic icon values.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="interactions"/> or <paramref name="settings"/> is
+    /// <see langword="null"/>.
+    /// </exception>
+    public AssetEditorModule(
+        EditorInteractions interactions,
+        EditorSettings settings)
     {
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
+        m_settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        m_icons = new AssetIconRegistry(m_settings);
         browser = new AssetBrowserState(interactions);
     }
 
@@ -39,17 +47,17 @@ public sealed class AssetEditorModule : EditorModule,
     public AssetBrowserState browser { get; }
 
     /// <inheritdoc />
-    public string workspaceStateId => C_WORKSPACE_STATE_ID;
+    protected override string workspaceStateId => C_WORKSPACE_STATE_ID;
 
     /// <inheritdoc />
-    public void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
+    protected override void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
         writer.Set("currentDirectory", browser.currentDirectory);
     }
 
     /// <inheritdoc />
-    public void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
+    protected override void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
     {
         ArgumentNullException.ThrowIfNull(reader);
         string directory = reader.Get("currentDirectory", string.Empty);
@@ -62,6 +70,10 @@ public sealed class AssetEditorModule : EditorModule,
     }
 
     internal EditorInteractions interactions => m_interactions;
+
+    internal string folderIcon => m_settings
+        .Get("Global/Appearance/Icons/Folder")
+        .GetAsString("value", Inno.Platform.ImGui.ImGuiIcon.Folder)!;
 
     internal bool TryCreateContext(
         EditorContext editor,
@@ -224,7 +236,7 @@ public sealed class AssetEditorModule : EditorModule,
         }
         string path = context.relativePath;
         AssetManager.Delete(path);
-        _ = context.interactions.For(FileBrowserAreas.Browser).Select();
+        _ = context.interactions.For("panel/asset.file-browser").Select();
         try
         {
             editor.OnDeleted(context);
@@ -284,7 +296,7 @@ public sealed class AssetEditorModule : EditorModule,
         object? target = AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry entry)
             ? entry
             : null;
-        _ = m_interactions.For(FileBrowserAreas.Browser, target).Select();
+        _ = m_interactions.For("panel/asset.file-browser", target).Select();
     }
 
     internal bool TryCreateDragData(AssetEditorContext context, out EditorDragData? data)
@@ -314,13 +326,15 @@ public sealed class AssetEditorModule : EditorModule,
     {
         ArgumentNullException.ThrowIfNull(entry);
         if (entry.isDirectory)
-            return Inno.Platform.ImGui.ImGuiIcon.Folder;
+            return folderIcon;
         _ = AssetManager.TryGetAssetType(entry.relativePath, out Type? assetType);
         if (m_icons.TryResolve(assetType, entry.relativePath, out string icon))
         {
             return icon;
         }
-        return FileBrowserUtility.GetDefaultFileIcon();
+        return m_settings
+            .Get("Global/Appearance/Icons/File")
+            .GetAsString("value", Inno.Platform.ImGui.ImGuiIcon.File)!;
     }
 
     /// <inheritdoc />
@@ -335,14 +349,9 @@ public sealed class AssetEditorModule : EditorModule,
         m_context = null;
     }
 
-    /// <summary>
-    /// Releases the current asset-editor and asset-icon registry snapshots.
-    /// </summary>
-    public void Dispose()
+    /// <inheritdoc />
+    protected override void OnDispose()
     {
-        if (m_disposed)
-            return;
-        m_disposed = true;
         m_editors.Dispose();
         m_icons.Dispose();
     }
@@ -434,7 +443,7 @@ public sealed class AssetEditorModule : EditorModule,
         AssetManager.Move(sourcePath, targetPath);
         _ = context.interactions
             .For(
-                FileBrowserAreas.Browser,
+                "panel/asset.file-browser",
                 AssetManager.TryGetFileSystemEntry(targetPath, out AssetFileEntry entry) ? entry : null)
             .Select();
         try

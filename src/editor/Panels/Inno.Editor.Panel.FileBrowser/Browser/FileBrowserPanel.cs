@@ -20,7 +20,7 @@ namespace Inno.Editor.Panel.FileBrowser;
 /// Asset browser panel with a tree pane and filtered table view.
 /// </summary>
 [EditorPanel("asset.file-browser", "File", order: 300)]
-public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
+internal sealed class FileBrowserPanel : EditorPanel
 {
     #region Constants
     private const int C_SEARCH_BUFFER_SIZE = 256;
@@ -57,10 +57,10 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
     #endregion
 
     /// <inheritdoc />
-    public string workspaceStateId => "asset-browser-panel";
+    protected override string workspaceStateId => "asset-browser-panel";
 
     /// <inheritdoc />
-    public void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
+    protected override void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
         writer.Set("viewMode", m_viewMode.ToString());
@@ -74,7 +74,7 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
     }
 
     /// <inheritdoc />
-    public void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
+    protected override void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
     {
         ArgumentNullException.ThrowIfNull(reader);
         if (Enum.TryParse(reader.Get("viewMode", string.Empty), out ViewMode viewMode))
@@ -502,8 +502,6 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
         ImGuiStylePtr style = NativeImGui.GetStyle();
         Vector2 tableOrigin = NativeImGui.GetCursorScreenPos();
         Vector2 tableSize = NativeImGui.GetContentRegionAvail();
-        ListColumnSeparatorState separators = HandleListColumnSeparators(tableOrigin, tableSize);
-        NativeImGui.SetCursorScreenPos(tableOrigin);
         NativeImGui.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(style.WindowPadding.X, style.CellPadding.Y));
         if (!NativeImGui.BeginTable("##FileBrowserEntries", 3, flags, new Vector2(0f, 0f)))
         {
@@ -544,7 +542,12 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
         }
 
         NativeImGui.EndTable();
-        DrawListColumnSeparators(tableOrigin, tableSize.X, separators);
+        Vector2 tableEnd = NativeImGui.GetCursorScreenPos();
+        float tableHeight = MathF.Max(1f, tableEnd.Y - tableOrigin.Y);
+        var interactionSize = new Vector2(tableSize.X, tableHeight);
+        ListColumnSeparatorState separators = HandleListColumnSeparators(tableOrigin, interactionSize);
+        DrawListColumnSeparators(tableOrigin, tableSize.X, tableHeight, separators);
+        NativeImGui.SetCursorScreenPos(tableEnd);
         NativeImGui.PopStyleVar();
     }
 
@@ -560,6 +563,7 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
 
         float nameX = origin.X + width * m_listNameSeparatorPosition;
         NativeImGui.SetCursorScreenPos(new Vector2(nameX - hitWidth * 0.5f, origin.Y));
+        NativeImGui.SetNextItemAllowOverlap();
         _ = NativeImGui.InvisibleButton("##AssetListNameSeparator", new Vector2(hitWidth, height));
         nameHovered = NativeImGui.IsItemHovered();
         nameActive = NativeImGui.IsItemActive();
@@ -574,6 +578,7 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
 
         float typeX = origin.X + width * m_listTypeSeparatorPosition;
         NativeImGui.SetCursorScreenPos(new Vector2(typeX - hitWidth * 0.5f, origin.Y));
+        NativeImGui.SetNextItemAllowOverlap();
         _ = NativeImGui.InvisibleButton("##AssetListTypeSeparator", new Vector2(hitWidth, height));
         typeHovered = NativeImGui.IsItemHovered();
         typeActive = NativeImGui.IsItemActive();
@@ -592,9 +597,10 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
     private void DrawListColumnSeparators(
         Vector2 origin,
         float width,
+        float height,
         ListColumnSeparatorState state)
     {
-        float bottom = MathF.Max(origin.Y, NativeImGui.GetCursorScreenPos().Y);
+        float bottom = origin.Y + MathF.Max(1f, height);
         DrawListColumnSeparator(
             origin.X + width * m_listNameSeparatorPosition,
             origin.Y,
@@ -676,9 +682,8 @@ public sealed class FileBrowserPanel : EditorPanel, IEditorWorkspaceState
         Vector2 iconTextPos = NativeImGui.GetCursorScreenPos();
         ImGuiSelectableFlags selectableFlags =
             ImGuiSelectableFlags.SpanAllColumns |
-            ImGuiSelectableFlags.AllowDoubleClick;
-        if (editing)
-            selectableFlags |= ImGuiSelectableFlags.AllowOverlap;
+            ImGuiSelectableFlags.AllowDoubleClick |
+            ImGuiSelectableFlags.AllowOverlap;
         bool activated = NativeImGui.Selectable(
             $"##entry_{entry.relativePath}",
             selected,

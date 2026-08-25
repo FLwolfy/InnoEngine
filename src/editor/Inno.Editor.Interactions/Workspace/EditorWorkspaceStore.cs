@@ -14,10 +14,9 @@ internal sealed class EditorWorkspaceStore
     private const double C_SAVE_INTERVAL_SECONDS = 2.0;
     private const string C_MODULE_SECTION_PREFIX = "Module.";
     private const string C_PANEL_SECTION_PREFIX = "Panel.";
-    private const string C_STATE_SECTION_PREFIX = "State.";
     private const string C_PANELS_SECTION = "Panels";
 
-    private readonly EditorProjectSettings m_settings;
+    private readonly EditorContext m_context;
     private readonly EditorWorkspaceDiagnosticPublisher m_diagnostics = new();
     private readonly ConditionalWeakTable<object, RestoredProvider> m_restoredProviders = new();
     private double m_nextSaveTime;
@@ -26,13 +25,13 @@ internal sealed class EditorWorkspaceStore
     internal EditorWorkspaceStore(EditorContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        m_settings = context.settings;
+        m_context = context;
     }
 
     internal bool TryGetPanelOpen(string panelId, out bool isOpen)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(panelId);
-        if (m_settings.TryGetSection(C_PANELS_SECTION, out IReadOnlyDictionary<string, string> values) &&
+        if (m_context.TryGetLayoutSection(C_PANELS_SECTION, out IReadOnlyDictionary<string, string> values) &&
             values.TryGetValue(panelId, out string? stored) &&
             bool.TryParse(stored, out isOpen))
         {
@@ -49,25 +48,26 @@ internal sealed class EditorWorkspaceStore
         var failures = new List<(string Message, Exception Exception)>();
         for (int i = 0; i < providers.Count; i++)
         {
-            IEditorWorkspaceState provider = providers[i].provider;
+            EditorExtensionCatalog.WorkspaceRegistration registration = providers[i];
+            IEditorWorkspaceState provider = registration.provider;
             if (!m_restoredProviders.TryGetValue(provider, out RestoredProvider? state) ||
                 !state.isRestored)
             {
                 continue;
             }
-            string sectionName = GetProviderSectionName(provider);
+            string sectionName = GetProviderSectionName(registration);
             try
             {
                 var writer = new EditorWorkspaceStateWriter();
                 provider.CaptureWorkspaceState(writer);
-                m_settings.SetSection(
+                m_context.SetLayoutSection(
                     sectionName,
                     ExportProviderValues(writer.Export()));
             }
             catch (Exception exception)
             {
                 failures.Add((
-                    $"Provider '{provider.workspaceStateId}' failed to capture state: {exception.Message}",
+                    $"Provider '{registration.id}' failed to capture state: {exception.Message}",
                     exception));
             }
         }
@@ -80,7 +80,7 @@ internal sealed class EditorWorkspaceStore
         var panelValues = new Dictionary<string, string>(StringComparer.Ordinal);
         for (int i = 0; i < panels.Count; i++)
             panelValues[panels[i].attribute.id] = panels[i].panel.isOpen ? "true" : "false";
-        m_settings.SetSection(C_PANELS_SECTION, panelValues);
+        m_context.SetLayoutSection(C_PANELS_SECTION, panelValues);
     }
 
     internal void Restore(IReadOnlyList<EditorExtensionCatalog.WorkspaceRegistration> providers)
@@ -88,7 +88,8 @@ internal sealed class EditorWorkspaceStore
         var failures = new List<(string Message, Exception Exception)>();
         for (int i = 0; i < providers.Count; i++)
         {
-            IEditorWorkspaceState provider = providers[i].provider;
+            EditorExtensionCatalog.WorkspaceRegistration registration = providers[i];
+            IEditorWorkspaceState provider = registration.provider;
             RestoredProvider state = m_restoredProviders.GetValue(
                 provider,
                 static _ => new RestoredProvider());
@@ -97,7 +98,7 @@ internal sealed class EditorWorkspaceStore
             state.isRestoring = true;
             try
             {
-                EditorWorkspaceStateReader reader = CreateReader(provider);
+                EditorWorkspaceStateReader reader = CreateReader(registration);
                 provider.RestoreWorkspaceState(reader);
                 state.isRestored = true;
             }
@@ -105,7 +106,7 @@ internal sealed class EditorWorkspaceStore
             {
                 _ = m_restoredProviders.Remove(provider);
                 failures.Add((
-                    $"Provider '{provider.workspaceStateId}' failed to restore state: {exception.Message}",
+                    $"Provider '{registration.id}' failed to restore state: {exception.Message}",
                     exception));
             }
             finally
@@ -166,10 +167,11 @@ internal sealed class EditorWorkspaceStore
         SaveIfChanged();
     }
 
-    private EditorWorkspaceStateReader CreateReader(IEditorWorkspaceState provider)
+    private EditorWorkspaceStateReader CreateReader(
+        EditorExtensionCatalog.WorkspaceRegistration registration)
     {
-        string sectionName = GetProviderSectionName(provider);
-        if (!m_settings.TryGetSection(sectionName, out IReadOnlyDictionary<string, string> values))
+        string sectionName = GetProviderSectionName(registration);
+        if (!m_context.TryGetLayoutSection(sectionName, out IReadOnlyDictionary<string, string> values))
             return new EditorWorkspaceStateReader(null);
         var root = new JsonObject();
         foreach ((string key, string value) in values)
@@ -181,7 +183,7 @@ internal sealed class EditorWorkspaceStore
     {
         try
         {
-            _ = m_settings.SaveIfChanged();
+            _ = m_context.SaveLayoutIfChanged();
             m_diagnostics.ResolveSave();
         }
         catch (Exception exception)
@@ -190,7 +192,7 @@ internal sealed class EditorWorkspaceStore
             {
                 Log.Error(
                     "Editor workspace state could not be saved to '{0}': {1}",
-                    m_settings.path,
+                    m_context.layoutPath,
                     exception);
             }
         }
@@ -206,15 +208,17 @@ internal sealed class EditorWorkspaceStore
         return result;
     }
 
-    private static string GetProviderSectionName(IEditorWorkspaceState provider)
+    private static string GetProviderSectionName(
+        EditorExtensionCatalog.WorkspaceRegistration registration)
     {
-        string prefix = provider switch
+        string prefix = registration.provider switch
         {
             EditorModule => C_MODULE_SECTION_PREFIX,
             EditorPanel => C_PANEL_SECTION_PREFIX,
-            _ => C_STATE_SECTION_PREFIX
+            _ => throw new InvalidOperationException(
+                "Only editor modules and panels can own workspace state.")
         };
-        return prefix + provider.workspaceStateId;
+        return prefix + registration.id;
     }
 
     private sealed class RestoredProvider

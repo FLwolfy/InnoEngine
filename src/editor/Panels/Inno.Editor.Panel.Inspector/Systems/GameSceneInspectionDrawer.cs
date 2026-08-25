@@ -11,6 +11,7 @@ using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Editor.Scene;
+using Inno.Editor.Settings;
 using Inno.Engine.Scene;
 using Inno.Native.ImGui;
 using Inno.Platform.ImGui;
@@ -25,21 +26,31 @@ internal sealed class GameSceneInspectionDrawer : InspectionDrawer<GameScene>
 
     private readonly InspectorCardControls m_cardControls = new();
     private readonly SceneEdits m_edits;
+    private readonly EditorSettings m_settings;
     private string m_systemSearch = string.Empty;
 
     /// <summary>
     /// Creates a Scene drawer backed by the Scene editing service.
     /// </summary>
-    /// <param name="edits">The Scene editing service used for compact Undo/Redo records.</param>
+    /// <param name="edits">
+    /// The Scene editing service used for compact Undo/Redo records.
+    /// </param>
+    /// <param name="settings">
+    /// The project Settings service that owns semantic icon values.
+    /// </param>
     /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="edits"/> is <see langword="null"/>.
+    /// Thrown when <paramref name="edits"/> or <paramref name="settings"/> is <see langword="null"/>.
     /// </exception>
-    internal GameSceneInspectionDrawer(SceneEdits edits)
+    internal GameSceneInspectionDrawer(SceneEdits edits, EditorSettings settings)
     {
         m_edits = edits ?? throw new ArgumentNullException(nameof(edits));
+        m_settings = settings ?? throw new ArgumentNullException(nameof(settings));
     }
 
-    public override string icon => ImGuiIcon.Cubes;
+    /// <inheritdoc />
+    public override string icon => m_settings
+        .Get("Global/Appearance/Icons/Scene")
+        .GetAsString("value", ImGuiIcon.Cubes)!;
 
     protected override (string name, Action<string>? setter) BindName(
         InspectionDrawContext context,
@@ -103,14 +114,14 @@ internal sealed class GameSceneInspectionDrawer : InspectionDrawer<GameScene>
                     systems.Count,
                     () => context.interactions
                         .For(
-                            InspectorAreas.System,
+                            "panel/scene.inspector/system",
                             editorTarget)
-                        .Enqueue(InspectorActions.RemoveSystem)),
+                        .Enqueue("inspector/remove-system")),
                 dimmed: !system.enabled,
                 trailingControlWidth: m_cardControls.width,
                 drawContextMenu: () => _ = EditorMenuRenderer.ContextMenu(
                     $"##system_menu_{systemId}",
-                    context.interactions.For(InspectorAreas.System, editorTarget)));
+                    context.interactions.For("panel/scene.inspector/system", editorTarget)));
             if (!open)
             {
                 NativeImGui.Dummy(new Vector2(0f, EditorWidget.style.inspectorCardSpacing));
@@ -155,7 +166,7 @@ internal sealed class GameSceneInspectionDrawer : InspectionDrawer<GameScene>
                 C_SEARCH_BUFFER_SIZE))
             return;
 
-        EditorInteraction interaction = context.interactions.For(InspectorAreas.System, scene);
+        EditorInteraction interaction = context.interactions.For("panel/scene.inspector/system", scene);
         if (EditorMenuRenderer.DrawSearchItems(
                 interaction,
                 interaction.BuildMenu().items,

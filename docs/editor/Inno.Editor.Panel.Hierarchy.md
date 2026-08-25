@@ -8,8 +8,6 @@
 
 | API | 作用 |
 | --- | --- |
-| `HierarchyAreas.Hierarchy` | Scene 行、GameObject 行和空白区域的统一 area。 |
-| `HierarchyActions` | Create Scene/Object/Child、Set Active、Rename、Delete。 |
 | `HierarchyObjectDropTarget` | 带 before/after/into 几何语义的对象目标。 |
 | `HierarchySceneDropTarget` | Scene 重排或 GameObject root drop 目标。 |
 
@@ -18,8 +16,8 @@
 空白区域、Scene 和 GameObject 使用同一个 area，target 类型区分匹配：
 
 ```csharp
-[EditorAction("scene.export", HierarchyAreas.Hierarchy)]
-[EditorMenu(HierarchyAreas.Hierarchy, "Export/Scene Package", order: 500)]
+[EditorAction("scene/export", "panel/scene.hierarchy")]
+[EditorMenu("panel/scene.hierarchy", "Export/Scene Package", order: 500)]
 public sealed class ExportSceneAction : EditorAction<GameScene>
 {
     protected override void Execute(EditorActionContext<GameScene> context)
@@ -45,7 +43,7 @@ Scene、GameObject 的创建、删除、排序、parent 修改、跨 Scene 移�
 
 Hierarchy Panel 关闭根 window padding，正文 child 也不重复添加内边距，因此 Scene/GameObject 行与 Dock body 边缘对齐，不会出现双层外边缘空隙。Tree 行保持原有紧凑内容高度，只使用可缩放的 `hierarchyItemSpacing` 控制行距；guide 按真实行底边、间距和 overlap 连续延伸，不通过增加栏目高度连接线段，并在当前帧即时绘制。Scene 黑底、selection 与 hover 背景也通过 Tree row 的后景 draw-list channel 使用同一帧最终几何绘制，不缓存上一帧矩形；拖拽、窗口移动和主窗口拉伸都不会再因旧几何失效而闪烁。它仍与 FileBrowser Tree 保持相同滚动语义：普通短内容不会产生横向 scroll range，只有真实名称或深层缩进超出 viewport 时才允许必要的最小横向移动，并显示原生水平 scrollbar。Tree 内容、图标与 hit area 共享一个滚动坐标系；Scene、selection 和交替行背景固定覆盖可视宽度，不随 `ScrollX` 移出或在滚动帧变透明。Tree 行的可交互右边界采用 ImGui `WorkRect`，不再把 window padding 误算成内容溢出。行尾 active eye 使用 `drawViewportOverlay` 固定在 work region 右边界并内缩统一的 `windowPadding.X`；它使用方形 compact icon slot、按 glyph 可见边界垂直居中，同时不参与 Tree 内容宽度。Hierarchy 拉宽再缩窄时，旧眼睛位置和整行 hit area 不会形成持久 `ScrollMaxX`。
 
-Scene 在 Hierarchy、`.iscene` Asset 和 Inspector Header 中统一使用 `ImGuiIcon.Cubes`；`GameLayers.ilayers` 仍使用 `ImGuiIcon.LayerGroup`，保持 Scene 与 Layer 设置的视觉分类差异。
+Scene、GameObject 不再直接绑定 `ImGuiIcon` 常量。Hierarchy、`.iscene` / `.iprefab` Asset 和 Inspector Header 分别用 `EditorSettings.Get("Global/Appearance/Icons/...")` 读取对象的 `value`。默认视觉仍是 Cubes、Cube、Cube；用户可以在 `Edit/Settings... → Global/Appearance/Icons` 一次修改所有消费点。路径就是原始字符串，没有 `EditorIcons` 或 resolver facade。
 
 内容编辑 Command 必须创建可逆历史项；Scene/GameObject 创建删除、Component/System 增删 Reset、层级与顺序修改、名称/active/enabled 和序列化属性均属于内容编辑。Open Scene、Set Active Scene、Selection 和 Save 是导航或持久化命令，不修改可撤销内容，因此明确不进入 Undo 栈。新的 feature Command 若不支持 Undo，应同样只限于导航、查询、外部构建或不可逆操作，并在其 Wiki 中声明原因。
 
@@ -61,8 +59,8 @@ Scene setup 写在 `editor.ini` 的 `[InnoEditor][Module.scene-workspace]` 中�
 
 ## 保存
 
-Command/Ctrl+S 是共享 `EditorActions.Save`，由本 feature 提供实现，并自动出现在主菜单 `File/Save`。已有 source path 的 Scene 保存回原路径；从未保存的 Scene 以 File Browser 当前打开目录作为 fallback，不再固定落到 Assets 根目录。Scene 名称与 `.iscene` 文件名同步；dirty Scene 在 Hierarchy 中显示斜体和 `*`。将 Scene/GameObject 拖到任意 Asset directory 字符串 target 时分别保存 SceneAsset/PrefabAsset。
+Command/Ctrl+S 使用原始 Action ID `editor/save`，由本 feature 提供实现，并自动出现在主菜单 `File/Save`。已有 source path 的 Scene 保存回原路径；从未保存的 Scene 以 File Browser 当前打开目录作为 fallback，不再固定落到 Assets 根目录。Scene 名称与 `.iscene` 文件名同步；dirty Scene 在 Hierarchy 中显示斜体和 `*`。将 Scene/GameObject 拖到任意 Asset directory 字符串 target 时分别保存 SceneAsset/PrefabAsset。
 
 ## Scripting API
 
-EditorScripts 使用 `InnoEditor.Hierarchy` 获取 area/action 常量和公开 drop target；Workspace 与 Scene 编辑门面位于 `InnoEditor.Scene`。没有 global using。
+EditorScripts 使用 `InnoEditor.Hierarchy` 获取公开 drop target；Action/Menu/Drop 的 ID 与 area 直接填写字符串。Workspace 与 Scene 编辑门面位于 `InnoEditor.Scene`。没有 global using。

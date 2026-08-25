@@ -20,7 +20,7 @@ internal sealed class GameObjectLayerSelector
     private readonly SceneEdits m_edits;
 
     /// <summary>
-    /// Creates a layer selector backed by the canonical project settings asset.
+    /// Creates a layer selector backed by the project Settings layer catalog.
     /// </summary>
     /// <param name="settings">The project layer-settings module.</param>
     /// <param name="edits">The Scene editing service used to record GameObject layer changes.</param>
@@ -41,7 +41,7 @@ internal sealed class GameObjectLayerSelector
     internal void Draw(GameObject target, float width)
     {
         ArgumentNullException.ThrowIfNull(target);
-        GameLayerStack stack = m_settings.settings.layerStack;
+        GameLayerStack stack = m_settings.layerStack;
         string preview = FormatLayerPreview(stack.GetName(target.layer));
         ImGuiWidget.LabelChip("Layer", EditorPalette.inspectorLayerLabel);
         NativeImGui.SameLine(0f, 0f);
@@ -71,7 +71,7 @@ internal sealed class GameObjectLayerSelector
     /// <param name="layer">The layer slot to resolve.</param>
     /// <returns><see langword="true"/> when the layer can be selected.</returns>
     internal bool IsLayerDefined(GameLayer layer)
-        => m_settings.settings.layerStack.IsDefined(layer);
+        => m_settings.layerStack.IsDefined(layer);
 
     private static string FormatLayerLabel(GameLayer layer, string name)
         => $"({layer.index}) {name}";

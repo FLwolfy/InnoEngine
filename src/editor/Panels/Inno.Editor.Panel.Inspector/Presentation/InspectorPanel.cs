@@ -17,7 +17,7 @@ namespace Inno.Editor.Panel.Inspector;
 /// Draws the registered inspector for the current editor selection.
 /// </summary>
 [EditorPanel("scene.inspector", "Inspector", order: 200)]
-public sealed class InspectorPanel : EditorPanel
+internal sealed class InspectorPanel : EditorPanel
 {
     private readonly SceneInspectionModule m_inspection;
     private readonly EditorInteractions m_interactions;
@@ -33,7 +33,7 @@ public sealed class InspectorPanel : EditorPanel
     /// <param name="inspection">The scene inspection module that owns drawer registries and property rendering.</param>
     /// <param name="interactions">The active editor interaction entry point.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="inspection"/> or <paramref name="interactions"/> is <see langword="null"/>.</exception>
-    public InspectorPanel(
+    internal InspectorPanel(
         SceneInspectionModule inspection,
         EditorInteractions interactions)
     {

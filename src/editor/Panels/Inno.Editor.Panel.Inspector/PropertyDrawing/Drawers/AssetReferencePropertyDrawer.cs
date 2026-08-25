@@ -60,7 +60,7 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
         Vector2 dropMaximum = NativeImGui.GetItemRectMax();
         EditorDropWidgetResult drop = EditorDragDropRenderer.Target(
             context.interactions.For(
-                InspectorAreas.AssetReference,
+                "panel/scene.inspector/asset-reference",
                 new AssetReferenceDropTarget(
                 assetType,
                 persistentIdToAssign =>

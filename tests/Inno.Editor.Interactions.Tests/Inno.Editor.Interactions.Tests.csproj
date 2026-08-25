@@ -16,7 +16,9 @@
     <ProjectReference Include="..\..\src\editor\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" />
     <ProjectReference Include="..\..\src\editor\Inno.Editor.Core\Inno.Editor.Core.csproj" />
     <ProjectReference Include="..\..\src\editor\Inno.Editor.Scene\Inno.Editor.Scene.csproj" />
+    <ProjectReference Include="..\..\src\editor\Inno.Editor.Settings\Inno.Editor.Settings.csproj" />
     <ProjectReference Include="..\..\src\editor\Panels\Inno.Editor.Panel.FileBrowser\Inno.Editor.Panel.FileBrowser.csproj" />
+    <ProjectReference Include="..\..\src\editor\Panels\Inno.Editor.Panel.Global\Inno.Editor.Panel.Global.csproj" />
     <ProjectReference Include="..\..\src\core\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" />
     <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />
     <ProjectReference Include="..\..\src\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" />

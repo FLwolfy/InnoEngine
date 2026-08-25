@@ -220,13 +220,25 @@ internal static class ScriptApiStubSourceBuilder
         }
         foreach (Type interfaceType in type.GetInterfaces())
         {
-            if ((interfaceType.IsPublic || interfaceType.IsNestedPublic) && IsApiType(interfaceType))
+            if ((interfaceType.IsPublic || interfaceType.IsNestedPublic) &&
+                IsApiType(interfaceType) &&
+                CanExposeInterface(type, interfaceType))
+            {
                 baseTypes.Add(interfaceType);
+            }
         }
         if (baseTypes.Count == 0)
             return;
         builder.Append(" : ")
             .Append(string.Join(", ", baseTypes.Distinct().Select(FormatType)));
+    }
+
+    private static bool CanExposeInterface(Type type, Type interfaceType)
+    {
+        if (type.IsInterface)
+            return true;
+        InterfaceMapping mapping = type.GetInterfaceMap(interfaceType);
+        return mapping.TargetMethods.All(IsVisible);
     }
 
     private static void AppendGenericConstraints(

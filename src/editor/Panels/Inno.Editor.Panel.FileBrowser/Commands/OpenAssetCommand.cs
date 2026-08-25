@@ -5,7 +5,7 @@ using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
-[EditorAction(EditorActions.Open, FileBrowserAreas.Browser, priority: 100)]
+[EditorAction("editor/open", "panel/asset.file-browser", priority: 100)]
 internal sealed class OpenAssetCommand(AssetEditorModule assets) : EditorAction<AssetFileEntry>
 {
     protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
@@ -23,8 +23,8 @@ internal sealed class OpenAssetCommand(AssetEditorModule assets) : EditorAction<
             return;
         if (AssetManager.TryLoad<AssetObject>(assetContext.relativePath, out AssetObject? asset) &&
             asset is not null &&
-            context.interactions.For(FileBrowserAreas.Browser, asset).Execute(
-                EditorActions.Open,
+            context.interactions.For("panel/asset.file-browser", asset).Execute(
+                "editor/open",
                 assetContext.relativePath))
         {
             return;

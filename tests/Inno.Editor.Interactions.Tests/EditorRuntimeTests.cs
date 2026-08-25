@@ -71,6 +71,21 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void ModuleAndPanelBasesHideInfrastructureAdaptersBehindProtectedHooks()
+    {
+        Assert.Null(typeof(EditorModule).GetMethod("Dispose"));
+        Assert.Null(typeof(EditorModule).GetProperty(
+            "workspaceStateId",
+            BindingFlags.Instance | BindingFlags.Public));
+        Assert.Null(typeof(EditorPanel).GetProperty(
+            "workspaceStateId",
+            BindingFlags.Instance | BindingFlags.Public));
+        Assert.True(typeof(IDisposable).IsAssignableFrom(typeof(EditorModule)));
+        Assert.True(typeof(IEditorWorkspaceState).IsAssignableFrom(typeof(EditorModule)));
+        Assert.True(typeof(IEditorWorkspaceState).IsAssignableFrom(typeof(EditorPanel)));
+    }
+
+    [Fact]
     public void RuntimeDiscoversModulesAndPanelsWithoutRegistrationCalls()
     {
         Assert.True(TestModule.startCount > 0);
@@ -100,11 +115,11 @@ public sealed class EditorRuntimeTests : IDisposable
         var target = new DerivedTarget();
 
         EditorActionState exact = m_runtime.interactions
-            .For(TestAreas.Special, target)
-            .Query(TestActionIds.Resolve);
+            .For("tests/special", target)
+            .Query("tests.resolve");
         EditorActionState fallback = m_runtime.interactions
-            .For(TestAreas.Other, target)
-            .Query(TestActionIds.Resolve);
+            .For("tests/other", target)
+            .Query("tests.resolve");
 
         Assert.Equal("area", exact.displayName);
         Assert.Equal("base", fallback.displayName);
@@ -113,7 +128,7 @@ public sealed class EditorRuntimeTests : IDisposable
     [Fact]
     public void QueuedActionExecutesAtRuntimeSafePoint()
     {
-        m_runtime.interactions.For(TestAreas.Other).Enqueue(TestActionIds.Deferred);
+        m_runtime.interactions.For("tests/other").Enqueue("tests.deferred");
         Assert.Equal(0, DeferredAction.executeCount);
 
         m_runtime.Update(new EditorFrame(0.016f, 1f, isFocused: true));
@@ -137,18 +152,18 @@ public sealed class EditorRuntimeTests : IDisposable
                 value = 0;
                 return EditorHistoryResult.Success();
             }).succeeded);
-        EditorInteraction global = m_runtime.interactions.For(EditorAreas.Global);
+        EditorInteraction global = m_runtime.interactions.For("editor/global");
 
-        EditorActionState undo = global.Query(EditorActions.Undo);
+        EditorActionState undo = global.Query("editor/undo");
         Assert.True(undo.isEnabled);
         Assert.Equal("Undo Change Test Value", undo.displayName);
-        Assert.True(global.Execute(EditorActions.Undo));
+        Assert.True(global.Execute("editor/undo"));
         Assert.Equal(0, value);
 
-        EditorActionState redo = global.Query(EditorActions.Redo);
+        EditorActionState redo = global.Query("editor/redo");
         Assert.True(redo.isEnabled);
         Assert.Equal("Redo Change Test Value", redo.displayName);
-        Assert.True(global.Execute(EditorActions.Redo));
+        Assert.True(global.Execute("editor/redo"));
         Assert.Equal(1, value);
     }
 
@@ -232,7 +247,7 @@ public sealed class EditorRuntimeTests : IDisposable
     [Fact]
     public void AttributeMenusSupportArbitraryDepthAndDynamicEntries()
     {
-        EditorMenuModel menu = m_runtime.interactions.For(TestAreas.Menu).BuildMenu();
+        EditorMenuModel menu = m_runtime.interactions.For("tests/menu").BuildMenu();
 
         EditorMenuItem tools = Assert.Single(menu.items);
         Assert.Equal("Tools", tools.label);
@@ -247,7 +262,7 @@ public sealed class EditorRuntimeTests : IDisposable
     public void MainMenuPlacesGeneratedPanelTogglesUnderPanel()
     {
         EditorMenuModel menu = m_runtime.interactions
-            .For(EditorAreas.MainMenu)
+            .For("editor/main-menu")
             .BuildMenu();
 
         EditorMenuItem panel = Assert.Single(menu.items.Where(static item => item.label == "Panel"));
@@ -276,55 +291,55 @@ public sealed class EditorRuntimeTests : IDisposable
     public void ActionOwnsValidatedMultiFrameState()
     {
         var target = new InteractionTarget();
-        EditorInteraction interaction = m_runtime.interactions.For(TestAreas.Other, target);
+        EditorInteraction interaction = m_runtime.interactions.For("tests/other", target);
 
-        Assert.True(interaction.Execute(TestActionIds.Interaction));
-        Assert.True(interaction.IsActive(TestActionIds.Interaction));
+        Assert.True(interaction.Execute("tests.interaction"));
+        Assert.True(interaction.IsActive("tests.interaction"));
 
         Assert.True(interaction.Present(
-            TestActionIds.Interaction,
+            "tests.interaction",
             new InteractionPresentation(string.Empty, submit: true)));
-        Assert.True(interaction.IsActive(TestActionIds.Interaction));
+        Assert.True(interaction.IsActive("tests.interaction"));
         Assert.Equal("A name is required.", target.validationMessage);
         Assert.Null(target.committedValue);
 
         Assert.True(interaction.Present(
-            TestActionIds.Interaction,
+            "tests.interaction",
             new InteractionPresentation("Renamed", submit: true)));
         Assert.Equal("Renamed", target.committedValue);
-        Assert.False(interaction.IsActive(TestActionIds.Interaction));
-        Assert.False(interaction.Present(TestActionIds.Interaction));
+        Assert.False(interaction.IsActive("tests.interaction"));
+        Assert.False(interaction.Present("tests.interaction"));
     }
 
     [Fact]
     public void ChangingSelectionFinishesThePreviousTargetsActivePresentation()
     {
         var target = new InteractionTarget();
-        EditorInteraction interaction = m_runtime.interactions.For(TestAreas.Other, target);
+        EditorInteraction interaction = m_runtime.interactions.For("tests/other", target);
         Assert.True(interaction.Select());
-        Assert.True(interaction.Execute(TestActionIds.CommitOnPresentationLost));
+        Assert.True(interaction.Execute("tests.commit-on-presentation-lost"));
 
-        Assert.True(m_runtime.interactions.For(TestAreas.Other, new DerivedTarget()).Select());
+        Assert.True(m_runtime.interactions.For("tests/other", new DerivedTarget()).Select());
 
         Assert.Equal("Committed on focus loss", target.committedValue);
-        Assert.False(interaction.IsActive(TestActionIds.CommitOnPresentationLost));
+        Assert.False(interaction.IsActive("tests.commit-on-presentation-lost"));
     }
 
     [Fact]
     public void SelectionAndFocusUseTheLightweightAreaHandle()
     {
         var target = new DerivedTarget();
-        EditorInteraction interaction = m_runtime.interactions.For(TestAreas.Other, target);
+        EditorInteraction interaction = m_runtime.interactions.For("tests/other", target);
 
         interaction.Focus();
-        Assert.Equal(TestAreas.Other, m_runtime.interactions.focusedArea);
+        Assert.Equal("tests/other", m_runtime.interactions.focusedArea);
         Assert.Same(target, m_runtime.interactions.focusedTarget);
 
         Assert.True(interaction.Select());
         Assert.Same(target, m_runtime.interactions.selection.selectedTarget);
         Assert.True(interaction.isSelected);
 
-        Assert.True(m_runtime.interactions.For(TestAreas.Other).Select());
+        Assert.True(m_runtime.interactions.For("tests/other").Select());
         Assert.Null(m_runtime.interactions.selection.selectedTarget);
         Assert.Null(typeof(EditorSelectionState).GetMethod(
             "Select",
@@ -340,9 +355,9 @@ public sealed class EditorRuntimeTests : IDisposable
         var source = new DragSource();
         var target = new DropTarget();
         Guid token = m_runtime.interactions
-            .For(TestAreas.Other, source)
+            .For("tests/other", source)
             .BeginDrag(new EditorDragData(source, "source"));
-        EditorInteraction dropTarget = m_runtime.interactions.For(TestAreas.Drop, target);
+        EditorInteraction dropTarget = m_runtime.interactions.For("tests/drop", target);
 
         Assert.True(dropTarget.QueryDrop(token, EditorDropPlacement.Into).canDrop);
         Assert.True(dropTarget.Drop(token, EditorDropPlacement.Into).accepted);
@@ -418,22 +433,22 @@ public sealed class EditorRuntimeTests : IDisposable
     public void UnifiedEditorIniPreservesLayoutAndWorkspaceSectionsTogether()
     {
         const string layout = "[Window][Hierarchy]\nPos=10,20\nSize=300,400";
-        var settings = new EditorProjectSettings(m_projectRoot);
-        settings.SetImGuiLayout(layout);
-        settings.SetSection("Module.tests", new Dictionary<string, string>
+        var context = new EditorContext(m_projectRoot);
+        context.SetImGuiLayout(layout);
+        context.SetLayoutSection("Module.tests", new Dictionary<string, string>
         {
             ["openScenes"] = "[\"Scenes/Test.iscene\"]"
         });
 
-        Assert.True(settings.SaveIfChanged());
-        var restored = new EditorProjectSettings(m_projectRoot);
+        Assert.True(context.SaveLayoutIfChanged());
+        var restored = new EditorContext(m_projectRoot);
 
         Assert.Equal(layout, restored.imguiLayout);
-        Assert.True(restored.TryGetSection(
+        Assert.True(restored.TryGetLayoutSection(
             "Module.tests",
             out IReadOnlyDictionary<string, string> values));
         Assert.Equal("[\"Scenes/Test.iscene\"]", values["openScenes"]);
-        string document = File.ReadAllText(restored.path);
+        string document = File.ReadAllText(restored.layoutPath);
         Assert.Contains("[Window][Hierarchy]", document);
         Assert.Contains("[InnoEditor][Module.tests]", document);
         Assert.Contains("openScenes=[\"Scenes/Test.iscene\"]", document);
@@ -444,12 +459,12 @@ public sealed class EditorRuntimeTests : IDisposable
     public void StartupRegistryRefreshCannotOverwriteWorkspaceBeforeProvidersRestore()
     {
         m_runtime.Dispose();
-        var settings = new EditorProjectSettings(m_projectRoot);
-        settings.SetSection("Module.tests.workspace", new Dictionary<string, string>
+        var context = new EditorContext(m_projectRoot);
+        context.SetLayoutSection("Module.tests.workspace", new Dictionary<string, string>
         {
             ["value"] = "91"
         });
-        settings.Save();
+        context.SaveLayout();
         TestModule.startCount = 0;
         TestModule.restoredWorkspaceValue = 0;
         TestModule.rebuildDuringRestore = true;
@@ -477,23 +492,6 @@ public sealed class EditorRuntimeTests : IDisposable
         public void Clear(DiagnosticSource source)
             => reports.Remove(source.id);
     }
-}
-
-public static class TestAreas
-{
-    public const string Special = "tests/special";
-    public const string Other = "tests/other";
-    public const string Menu = "tests/menu";
-    public const string Drop = "tests/drop";
-}
-
-public static class TestActionIds
-{
-    public const string Resolve = "tests.resolve";
-    public const string Deferred = "tests.deferred";
-    public const string Menu = "tests.menu";
-    public const string Interaction = "tests.interaction";
-    public const string CommitOnPresentationLost = "tests.commit-on-presentation-lost";
 }
 
 public class BaseTarget;
@@ -550,7 +548,7 @@ public sealed class NeutralHistoryHandler : EditorHistoryHandler
 }
 
 [EditorModule]
-public sealed class TestModule : EditorModule, IEditorWorkspaceState
+public sealed class TestModule : EditorModule
 {
     public static int startCount;
     public static int stopCount;
@@ -559,17 +557,16 @@ public sealed class TestModule : EditorModule, IEditorWorkspaceState
     public static bool rebuildDuringRestore;
     public static bool captureFailure;
 
-    public string workspaceStateId => "tests.workspace";
+    protected override string workspaceStateId => "tests.workspace";
 
-
-    public void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
+    protected override void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
     {
         if (captureFailure)
             throw new InvalidOperationException("The test workspace cannot be captured.");
         writer.Set("value", workspaceValue);
     }
 
-    public void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
+    protected override void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
     {
         restoredWorkspaceValue = reader.Get("value", 0);
         if (!rebuildDuringRestore)
@@ -626,7 +623,7 @@ public sealed class TestPanel(TestModule module) : EditorPanel
     }
 }
 
-[EditorAction(TestActionIds.Resolve)]
+[EditorAction("tests.resolve")]
 public sealed class BaseResolveAction : EditorAction<BaseTarget>
 {
     protected override EditorActionState Query(EditorActionContext<BaseTarget> context)
@@ -637,7 +634,7 @@ public sealed class BaseResolveAction : EditorAction<BaseTarget>
     }
 }
 
-[EditorAction(TestActionIds.Resolve, TestAreas.Special, priority: 100)]
+[EditorAction("tests.resolve", "tests/special", priority: 100)]
 public sealed class AreaResolveAction : EditorAction<DerivedTarget>
 {
     protected override EditorActionState Query(EditorActionContext<DerivedTarget> context)
@@ -648,7 +645,7 @@ public sealed class AreaResolveAction : EditorAction<DerivedTarget>
     }
 }
 
-[EditorAction(TestActionIds.Deferred)]
+[EditorAction("tests.deferred")]
 public sealed class DeferredAction : EditorAction
 {
     public static int executeCount;
@@ -656,7 +653,7 @@ public sealed class DeferredAction : EditorAction
     protected override void Execute(EditorActionContext context) => executeCount++;
 }
 
-[EditorAction(TestActionIds.Interaction)]
+[EditorAction("tests.interaction")]
 public sealed class InteractionAction : EditorAction<InteractionTarget>
 {
     private string m_value = string.Empty;
@@ -696,7 +693,7 @@ public sealed class InteractionAction : EditorAction<InteractionTarget>
     protected override void OnCancelled() => m_value = string.Empty;
 }
 
-[EditorAction(TestActionIds.CommitOnPresentationLost)]
+[EditorAction("tests.commit-on-presentation-lost")]
 public sealed class CommitOnPresentationLostAction : EditorAction<InteractionTarget>
 {
     private InteractionTarget? m_target;
@@ -718,8 +715,8 @@ public sealed class CommitOnPresentationLostAction : EditorAction<InteractionTar
     protected override void OnCancelled() => m_target = null;
 }
 
-[EditorAction(TestActionIds.Menu)]
-[EditorMenu(TestAreas.Menu, "Tools/Create/Asset", order: 100)]
+[EditorAction("tests.menu")]
+[EditorMenu("tests/menu", "Tools/Create/Asset", order: 100)]
 public sealed class MenuAction : EditorAction
 {
     protected override void Execute(EditorActionContext context)
@@ -727,14 +724,14 @@ public sealed class MenuAction : EditorAction
     }
 }
 
-[EditorMenuSource(TestAreas.Menu)]
+[EditorMenuSource("tests/menu")]
 public sealed class DynamicMenuSource : EditorMenuSource
 {
     public override void Build(EditorMenuContext context, EditorMenuBuilder builder)
-        => builder.Add("Tools/Create/Generated", TestActionIds.Menu, order: 200);
+        => builder.Add("Tools/Create/Generated", "tests.menu", order: 200);
 }
 
-[EditorDrop(TestAreas.Drop)]
+[EditorDrop("tests/drop")]
 public sealed class TestDrop : EditorDrop<DragSource, DropTarget>
 {
     protected override EditorDropStatus Query(EditorDropContext<DragSource, DropTarget> context)

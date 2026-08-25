@@ -3,8 +3,8 @@ using Inno.Editor.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
-[EditorAction(InspectorActions.RemoveSystem, priority: 100)]
-[EditorMenu(InspectorAreas.System, "Remove System", order: 200)]
+[EditorAction("inspector/remove-system", priority: 100)]
+[EditorMenu("panel/scene.inspector/system", "Remove System", order: 200)]
 internal sealed class RemoveSystemCommand(SceneEdits edits) : EditorAction<SystemEditorTarget>
 {
     protected override EditorActionState Query(EditorActionContext<SystemEditorTarget> context)

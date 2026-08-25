@@ -62,13 +62,13 @@ internal sealed class EditorMenuCatalog(
             }
         }
 
-        if (string.Equals(context.area, EditorAreas.MainMenu, StringComparison.Ordinal))
+        if (string.Equals(context.area, "editor/main-menu", StringComparison.Ordinal))
         {
             foreach (EditorExtensionCatalog.PanelRegistration panel in catalog.extensions.panels)
             {
                 placements.Add(new Placement(
                     $"Panel/{panel.attribute.title}",
-                    EditorActions.TogglePanel,
+                    "editor/toggle-panel",
                     panel.attribute.order,
                     separatorBefore: false,
                     panel.panel));

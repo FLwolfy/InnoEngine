@@ -6,7 +6,6 @@
 
 ```text
 Inno.Editor.ImGui/
-├─ Commands/
 ├─ Styling/
 │  ├─ EditorPalette.cs
 │  └─ EditorStyleMetrics.cs
@@ -43,11 +42,15 @@ Palette 与 Style Metrics 并列位于 `Styling`，但仍使用项目 namespace 
 
 | 操作 | 快捷键 | 结果 |
 | --- | --- | --- |
-| `View/Zoom In` | Command/Ctrl + `+` | 增加 `0.10`。 |
-| `View/Zoom Out` | Command/Ctrl + `-` | 减少 `0.10`。 |
-| `View/Actual Size` | Command/Ctrl + `0` | 恢复 `1.00`。 |
+| `View/Zoom In` | Command/Ctrl + `+` | 在 actual size 基础上增加一个 `0.10` 倍率步长。 |
+| `View/Zoom Out` | Command/Ctrl + `-` | 在 actual size 基础上减少一个 `0.10` 倍率步长。 |
+| `View/Actual Size` | Command/Ctrl + `0` | 恢复 Settings 中配置的 actual size。 |
 
-有效范围固定为 `0.75..1.50`；到达边界后对应菜单项禁用。当前倍率由 `EditorZoomModule` 写入 `[InnoEditor][Module.editor-ui-zoom]`，下次打开项目时恢复。Host 扩展也可以通过 `ImGuiWidget.style.SetZoom`、`ZoomIn`、`ZoomOut` 和 `ResetZoom` 使用相同的 clamp 规则；非有限值会抛出 `ArgumentOutOfRangeException`。
+有效范围固定为 `0.75..1.50`；到达边界后对应菜单项禁用。持久值使用完整路径 `Global/Appearance/Accessibility/Actual Size`，只由 Settings Apply 写入 `<ProjectRoot>/EditorSettings.json`。Zoom In/Out 是 session 内的临时倍率：有效值按 `actualSize × (1 + step × 0.10)` 计算，Actual Size 把 step 恢复为零，不改持久设置，也不制造 History。`EditorZoomModule` 与三个 Action 均属于 `Inno.Editor.Panel.Global`；ImGui 项目只保留 style metric 和表现基础设施，不拥有全局 zoom feature。
+
+## Modal renderer
+
+`EditorModalRenderer` 根据 `EditorModal.canMove/canResize/initialSize/minimumSize` 选择固定 auto-size 或可拉伸窗口策略。可拉伸 Modal 只在首次出现时居中和应用初始尺寸，随后保留用户移动与缩放；最小尺寸和初始尺寸随当前 zoom 变换。所有 Popup Modal 固定 `NoDocking | NoCollapse`，因此可调整尺寸但不能 Dock 或缩成标题栏。`EditorModalHost` 继续统一管理 fade transition、背景阻塞与 popup 关闭。
 
 ## Menu renderer
 
@@ -106,7 +109,7 @@ if (open)
 
 Tree 行高采用紧凑的原生 `TreeNode` 内容高度；Hierarchy 通过可缩放的 `hierarchyItemSpacing` 控制 Scene/GameObject 行距，不以额外 frame padding 增高栏目。`DropTargetHighlight` 绘制到当前 viewport 的 foreground draw list，因此目标框不会被发起它的 Panel clip rect 截断。
 
-`IconText(..., highlight: true)` 保留下划线，并在 scope 内自动切换为 `Bold | Italic`；当前用于 active Scene 与 File Browser 当前目录。字体注册与自定义方式见 [Platform ImGui](../platform/Inno.Platform.ImGui.md#字体样式)。
+`IconText` 使用 baked glyph 的可见边界而不是 advance rectangle，把 icon 的真实轮廓放在 slot 中心；slot 以标准文字行高为最小宽度，并会为 Cubes 等超宽 glyph 自动扩展，避免轮廓挤入后方 label。`IconText(..., highlight: true)` 保留下划线，并在 scope 内自动切换为 `Bold | Italic`；当前用于 active Scene 与 File Browser 当前目录。字体注册与自定义方式见 [Platform ImGui](../platform/Inno.Platform.ImGui.md#字体样式)。
 
 `DragDropTarget(..., drawDefaultHighlight: false)` 可关闭 ImGui 默认目标框，适合需要按鼠标在行内位置绘制互斥反馈的复合目标。
 

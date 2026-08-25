@@ -16,7 +16,7 @@ namespace Inno.Editor.Application;
 /// <summary>
 /// Editor runtime host that wires Platform + Shell + ImGui + Editor layer.
 /// </summary>
-public sealed class EditorHost : IDisposable
+internal sealed class EditorHost : IDisposable
 {
     private const string C_LOG_DIRECTORY_NAME = "Logs";
     private const string C_BOOT_LOG_FILE_NAME = "EditorBoot.log";
@@ -40,7 +40,7 @@ public sealed class EditorHost : IDisposable
     /// <param name="projectDirectory">The project directory to open or initialize.</param>
     /// <exception cref="ArgumentException">Thrown when the project directory is empty.</exception>
     /// <exception cref="IOException">Thrown when the path points to a file.</exception>
-    public EditorHost(string projectDirectory)
+    internal EditorHost(string projectDirectory)
     {
         this.projectDirectory = PrepareProjectDirectory(projectDirectory);
         string logDirectory = Path.Combine(this.projectDirectory, C_LOG_DIRECTORY_NAME);
@@ -79,7 +79,7 @@ public sealed class EditorHost : IDisposable
             | ImGuiContextFlags.EnableSmoothResize);
         var editorContext = new EditorContext(this.projectDirectory);
         m_imgui.SetIniFile(null);
-        m_imgui.LoadIniSettings(editorContext.settings.imguiLayout);
+        m_imgui.LoadIniSettings(editorContext.imguiLayout);
         BootLog("ImGui context created.");
 
         BootLog($"AssetManager initialized={AssetManager.isInitialized} root='{AssetManager.assetRoot}'.");

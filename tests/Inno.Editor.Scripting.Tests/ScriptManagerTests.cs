@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -6,6 +7,7 @@ using System.Threading.Tasks;
 
 using Inno.Assets;
 using Inno.Assets.Core;
+using Inno.Assets.File;
 using Inno.Assets.Loader;
 using Inno.Assets.Types;
 using Inno.Core.Assemblies;
@@ -25,6 +27,7 @@ using Inno.Editor.Panel.FileBrowser;
 using Inno.Editor.Panel.Hierarchy;
 using Inno.Editor.Panel.Inspector;
 using Inno.Editor.Scene;
+using Inno.Editor.Settings;
 using Inno.Editor.Scripting;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Assets;
@@ -53,6 +56,7 @@ public sealed class ScriptManagerTests : IDisposable
         _ = Assembly.Load(typeof(ImGuiWidget).Assembly.GetName());
         _ = Assembly.Load(typeof(AssetEditor).Assembly.GetName());
         _ = Assembly.Load(typeof(IPropertyDrawer).Assembly.GetName());
+        _ = Assembly.Load("Inno.Editor.Panel.Settings");
         IdentityManager.Initialize();
         AssemblyManager.Initialize(new AssemblyManagerOptions
         {
@@ -210,7 +214,7 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void InspectorTagCatalogPersistsThroughReadableWorkspaceStateAndProtectsTheDefaultTag()
     {
-        Type catalogType = typeof(SceneInspectionModule).Assembly.GetType(
+        Type catalogType = typeof(AssetReferenceDropTarget).Assembly.GetType(
             "Inno.Editor.Panel.Inspector.GameObjectTagCatalog",
             throwOnError: true)!;
         object catalog = Activator.CreateInstance(
@@ -286,11 +290,11 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void GlobalSaveCreatesUnsavedScenesInTheOpenAssetDirectory()
     {
-        _ = Assembly.Load(typeof(HierarchyPanel).Assembly.GetName());
+        _ = Assembly.Load(typeof(HierarchyObjectDropTarget).Assembly.GetName());
         TypeCacheManager.Rebuild();
         AssetManager.CreateDirectory("Open Folder");
         var editorContext = new EditorContext(m_projectRoot);
-        editorContext.settings.SetSection(
+        editorContext.SetLayoutSection(
             "Module.asset-browser",
             new System.Collections.Generic.Dictionary<string, string>
             {
@@ -304,8 +308,8 @@ public sealed class ScriptManagerTests : IDisposable
         scene.name = "Current Directory Scene";
 
         Assert.True(runtime.interactions
-            .For(EditorAreas.MainMenu)
-            .Execute(EditorActions.Save));
+            .For("editor/main-menu")
+            .Execute("editor/save"));
         Assert.True(AssetManager.TryGetFileSystemEntry(
             "Open Folder/Current Directory Scene.iscene",
             out _));
@@ -315,15 +319,40 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
+    public void SettingsMainMenuEntryOpensTheSettingsModal()
+    {
+        using var runtime = new EditorInteractionRuntime(new EditorContext(m_projectRoot));
+        runtime.Start();
+        EditorModalExtension modal = Assert.Single(
+            runtime.modals,
+            static extension => extension.id == "editor.settings");
+        Assert.False(modal.modal.isVisible);
+        Assert.True(modal.modal.blocksInteraction);
+        Assert.True(modal.modal.canMove);
+        Assert.True(modal.modal.canResize);
+        Assert.True(modal.modal.initialSize.X > modal.modal.minimumSize.X);
+        Assert.True(modal.modal.initialSize.Y > modal.modal.minimumSize.Y);
+        EditorMenuModel menu = runtime.interactions.For("editor/main-menu").BuildMenu();
+        EditorMenuItem edit = Assert.Single(
+            menu.items,
+            static item => item.label == "Edit");
+        Assert.Contains(edit.children, static item => item.label == "Settings...");
+
+        Assert.True(runtime.interactions
+            .For("editor/main-menu")
+            .Execute("editor.settings.open"));
+
+        Assert.True(modal.modal.isVisible);
+    }
+
+    [Fact]
     public void GlobalZoomRestoresAndRespondsToMenuAndKeyboardCommands()
     {
         var editorContext = new EditorContext(m_projectRoot);
-        editorContext.settings.SetSection(
-            "Module.editor-ui-zoom",
-            new System.Collections.Generic.Dictionary<string, string>
-            {
-                ["zoom"] = "1.2"
-            });
+        string settingsPath = Path.Combine(m_projectRoot, "EditorSettings.json");
+        File.WriteAllText(
+            settingsPath,
+            "{\"Global/Appearance/Accessibility/Actual Size\":{\"value\":1.2}}");
 
         try
         {
@@ -333,7 +362,7 @@ public sealed class ScriptManagerTests : IDisposable
             KeyModifier primary = OperatingSystem.IsMacOS()
                 ? KeyModifier.Super
                 : KeyModifier.Control;
-            EditorInteraction mainMenu = runtime.interactions.For(EditorAreas.MainMenu);
+            EditorInteraction mainMenu = runtime.interactions.For("editor/main-menu");
             Assert.True(mainMenu.TryGetShortcut(
                 "editor.ui.zoom-in",
                 out HotKeyGesture zoomInGesture));
@@ -344,10 +373,10 @@ public sealed class ScriptManagerTests : IDisposable
                 windowId: 0,
                 KeyCode.Plus,
                 primary | KeyModifier.Shift));
-            Assert.Equal(1.3f, EditorWidget.style.zoom, 3);
+            Assert.Equal(1.32f, EditorWidget.style.zoom, 3);
 
             Assert.True(runtime.interactions
-                .For(EditorAreas.MainMenu)
+                .For("editor/main-menu")
                 .Execute("editor.ui.zoom-out"));
             Assert.Equal(1.2f, EditorWidget.style.zoom, 3);
 
@@ -355,13 +384,11 @@ public sealed class ScriptManagerTests : IDisposable
                 windowId: 0,
                 KeyCode.D0,
                 primary));
-            Assert.Equal(1f, EditorWidget.style.zoom, 3);
+            Assert.Equal(1.2f, EditorWidget.style.zoom, 3);
 
-            runtime.SaveWorkspace();
-            Assert.True(editorContext.settings.TryGetSection(
-                "Module.editor-ui-zoom",
-                out System.Collections.Generic.IReadOnlyDictionary<string, string> values));
-            Assert.Equal("1", values["zoom"]);
+            Assert.Contains(
+                "Global/Appearance/Accessibility/Actual Size",
+                File.ReadAllText(settingsPath));
         }
         finally
         {
@@ -379,13 +406,13 @@ public sealed class ScriptManagerTests : IDisposable
             runtime.SaveWorkspace();
         }
 
-        Assert.True(editorContext.settings.TryGetSection(
+        Assert.True(editorContext.TryGetLayoutSection(
             "Panel.asset-browser-panel",
             out System.Collections.Generic.IReadOnlyDictionary<string, string> defaultValues));
         Assert.Equal("0.5", defaultValues["treePaneRatio"]);
         Assert.DoesNotContain("treeWidth", defaultValues.Keys);
 
-        editorContext.settings.SetSection(
+        editorContext.SetLayoutSection(
             "Panel.asset-browser-panel",
             new System.Collections.Generic.Dictionary<string, string>
             {
@@ -397,7 +424,7 @@ public sealed class ScriptManagerTests : IDisposable
             runtime.SaveWorkspace();
         }
 
-        Assert.True(editorContext.settings.TryGetSection(
+        Assert.True(editorContext.TryGetLayoutSection(
             "Panel.asset-browser-panel",
             out System.Collections.Generic.IReadOnlyDictionary<string, string> restoredValues));
         Assert.Equal("0.31", restoredValues["treePaneRatio"]);
@@ -406,16 +433,12 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void MissingLayerSettingsUseDefaultAndReportOnlyUndefinedLoadedAssignments()
     {
-        _ = Assembly.Load(typeof(InspectorPanel).Assembly.GetName());
+        _ = Assembly.Load(typeof(AssetReferenceDropTarget).Assembly.GetName());
         TypeCacheManager.Rebuild();
         var sink = new TestDiagnosticSink();
         DiagnosticManager.RegisterSink(sink);
         try
         {
-            Assert.False(AssetManager.TryGetFileSystemEntry(
-                GameLayerSettingsAsset.defaultPath,
-                out _));
-
             using var runtime = new EditorInteractionRuntime(m_projectRoot);
             runtime.Start();
             var workspace = new EditorSceneWorkspace(runtime.interactions);
@@ -430,9 +453,6 @@ public sealed class ScriptManagerTests : IDisposable
             Assert.True(UpdateUntil(
                 runtime,
                 () => !sink.ContainsCode("GAMEOBJECT-LAYER-UNDEFINED")));
-            Assert.False(AssetManager.TryGetFileSystemEntry(
-                GameLayerSettingsAsset.defaultPath,
-                out _));
         }
         finally
         {
@@ -441,91 +461,39 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public void DeletingLayerSettingsFallsBackToDefaultAndReportsLoadedAssignments()
+    public void GameLayersPersistThroughProjectSettingsWithoutAssetRegistration()
     {
-        _ = Assembly.Load(typeof(InspectorPanel).Assembly.GetName());
+        _ = Assembly.Load(typeof(AssetReferenceDropTarget).Assembly.GetName());
         TypeCacheManager.Rebuild();
-        GameLayerSettingsAsset settings = GameLayerSettingsAsset.CreateDefault();
-        settings.layerStack.Define(new GameLayer(7), "Gameplay");
-        Assert.True(AssetManager.Save(GameLayerSettingsAsset.defaultPath, settings));
-
-        var sink = new TestDiagnosticSink();
-        DiagnosticManager.RegisterSink(sink);
-        try
+        const string path = "Project/Layers/Game Layers";
+        using (EditorInteractionRuntime runtime = CreateSettingsRuntime(out EditorSettings settings))
         {
-            using var runtime = new EditorInteractionRuntime(m_projectRoot);
-            runtime.Start();
-            var workspace = new EditorSceneWorkspace(runtime.interactions);
-            GameObject gameObject = workspace.CreateScene().CreateObject("Removed GameLayer Object");
-            gameObject.layer = new GameLayer(7);
-
-            AssetManager.Delete(GameLayerSettingsAsset.defaultPath);
-
-            Assert.True(UpdateUntil(
-                runtime,
-                () => sink.ContainsCode("GAMEOBJECT-LAYER-UNDEFINED")));
-            Assert.False(AssetManager.TryGetFileSystemEntry(
-                GameLayerSettingsAsset.defaultPath,
-                out _));
+            EditorSettingObject value = settings.Get(path);
+            string?[] names = value.GetAsStringArray("names");
+            uint[] masks = value.GetAsUInt32Array("interactionMasks");
+            names[7] = "Gameplay";
+            masks[7] &= ~(1u << 8);
+            masks[8] &= ~(1u << 7);
+            value.SetAsStringArray("names", names);
+            value.SetAsUInt32Array("interactionMasks", masks);
+            Assert.True(settings.Apply(
+                new Dictionary<string, EditorSettingObject>(StringComparer.Ordinal)
+                {
+                    [path] = value
+                }));
         }
-        finally
-        {
-            DiagnosticManager.UnregisterSink(sink);
-        }
-    }
 
-    [Fact]
-    public void MovingLayerSettingsOutsideSettingsDisablesTheCatalogUntilItReturns()
-    {
-        _ = Assembly.Load(typeof(InspectorPanel).Assembly.GetName());
-        TypeCacheManager.Rebuild();
-        var gameplay = new GameLayer(7);
-        GameLayerSettingsAsset settings = GameLayerSettingsAsset.CreateDefault();
-        settings.layerStack.Define(gameplay, "Gameplay");
-        Assert.True(AssetManager.Save(GameLayerSettingsAsset.defaultPath, settings));
-        Guid settingsId = settings.identity.persistentId;
-        AssetManager.CreateDirectory("Archive");
-
-        var sink = new TestDiagnosticSink();
-        DiagnosticManager.RegisterSink(sink);
-        try
-        {
-            using (var runtime = new EditorInteractionRuntime(m_projectRoot))
-            {
-                runtime.Start();
-                var workspace = new EditorSceneWorkspace(runtime.interactions);
-                GameObject gameObject = workspace.CreateScene().CreateObject("Layered Object");
-                gameObject.layer = gameplay;
-                runtime.Update(new EditorFrame(0.016f, 0.016f, isFocused: true));
-                Assert.False(sink.ContainsCode("GAMEOBJECT-LAYER-UNDEFINED"));
-
-                const string movedPath = "Archive/GameLayers.ilayers";
-                AssetManager.Move(GameLayerSettingsAsset.defaultPath, movedPath);
-                Assert.False(AssetManager.TryGetFileSystemEntry(
-                    GameLayerSettingsAsset.defaultPath,
-                    out _));
-                GameLayerSettingsAsset moved = AssetManager.Load<GameLayerSettingsAsset>(movedPath);
-                Assert.Equal(settingsId, moved.identity.persistentId);
-                Assert.Equal("Gameplay", moved.layerStack.GetName(gameplay));
-
-                Assert.True(UpdateUntil(
-                    runtime,
-                    () => sink.ContainsCode("GAMEOBJECT-LAYER-UNDEFINED")));
-
-                AssetManager.Move(movedPath, GameLayerSettingsAsset.defaultPath);
-                Assert.True(UpdateUntil(
-                    runtime,
-                    () => !sink.ContainsCode("GAMEOBJECT-LAYER-UNDEFINED")));
-                GameLayerSettingsAsset restored = AssetManager.Load<GameLayerSettingsAsset>(
-                    GameLayerSettingsAsset.defaultPath);
-                Assert.Equal(settingsId, restored.identity.persistentId);
-                Assert.Equal("Gameplay", restored.layerStack.GetName(gameplay));
-            }
-        }
-        finally
-        {
-            DiagnosticManager.UnregisterSink(sink);
-        }
+        string documentPath = Path.Combine(m_projectRoot, "EditorSettings.json");
+        Assert.True(File.Exists(documentPath));
+        Assert.Contains(path, File.ReadAllText(documentPath), StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(m_projectRoot, "Assets", "Settings")));
+        using EditorInteractionRuntime restoredRuntime = CreateSettingsRuntime(out EditorSettings restored);
+        EditorSettingObject restoredValue = restored.Get(path);
+        Assert.Equal("Gameplay", restoredValue.GetAsStringArray("names")[7]);
+        Assert.Equal(0u, restoredValue.GetAsUInt32Array("interactionMasks")[7] & (1u << 8));
+        string?[] detachedNames = restoredValue.GetAsStringArray("names");
+        detachedNames[9] = "Detached";
+        Assert.Null(restored.Get(path).GetAsStringArray("names")[9]);
     }
 
     [Fact]
@@ -534,21 +502,21 @@ public sealed class ScriptManagerTests : IDisposable
         using var runtime = new EditorInteractionRuntime(m_projectRoot);
         runtime.Start();
         Assert.True(runtime.interactions
-            .For(HierarchyAreas.Hierarchy)
-            .Execute(HierarchyActions.CreateScene));
+            .For("panel/scene.hierarchy")
+            .Execute("hierarchy/create-scene"));
         GameScene scene = SceneManager.activeScene!;
         GameObject gameObject = scene.CreateObject("History Target");
         Guid sceneId = scene.identity.persistentId;
         Guid gameObjectId = gameObject.identity.persistentId;
 
         Assert.True(runtime.interactions
-            .For(InspectorAreas.Component, gameObject)
-            .Execute(InspectorActions.AddComponent, typeof(HistoryTestComponent)));
+            .For("panel/scene.inspector/component", gameObject)
+            .Execute("inspector/add-component", typeof(HistoryTestComponent)));
         Assert.NotNull(gameObject.GetComponent<HistoryTestComponent>());
 
         Assert.True(runtime.interactions
-            .For(InspectorAreas.System, scene)
-            .Execute(InspectorActions.AddSystem, typeof(HistoryTestSystem)));
+            .For("panel/scene.inspector/system", scene)
+            .Execute("inspector/add-system", typeof(HistoryTestSystem)));
         Assert.Single(scene.GetSystems().OfType<HistoryTestSystem>());
 
         Assert.True(runtime.interactions.history.Undo().succeeded);
@@ -575,9 +543,12 @@ public sealed class ScriptManagerTests : IDisposable
         Guid componentId = currentComponent.identity.persistentId;
         Assert.True(runtime.interactions
             .For(
-                InspectorAreas.Component,
-                new ComponentEditorTarget(currentObject, currentComponent))
-            .Execute(InspectorActions.ResetComponent));
+                "panel/scene.inspector/component",
+                CreateInspectorTarget(
+                    "Inno.Editor.Panel.Inspector.ComponentEditorTarget",
+                    currentObject,
+                    currentComponent))
+            .Execute("inspector/reset-component"));
         Assert.Equal(7, IdentityManager.Get<HistoryTestComponent>(componentId)!.value);
         Assert.True(runtime.interactions.history.Undo().succeeded);
         Assert.Equal(42, IdentityManager.Get<HistoryTestComponent>(componentId)!.value);
@@ -589,9 +560,12 @@ public sealed class ScriptManagerTests : IDisposable
         Guid systemId = currentSystem.identity.persistentId;
         Assert.True(runtime.interactions
             .For(
-                InspectorAreas.System,
-                new SystemEditorTarget(currentScene, currentSystem))
-            .Execute(InspectorActions.RemoveSystem));
+                "panel/scene.inspector/system",
+                CreateInspectorTarget(
+                    "Inno.Editor.Panel.Inspector.SystemEditorTarget",
+                    currentScene,
+                    currentSystem))
+            .Execute("inspector/remove-system"));
         Assert.Null(IdentityManager.Get<HistoryTestSystem>(systemId));
         Assert.True(runtime.interactions.history.Undo().succeeded);
         Assert.Equal(84, IdentityManager.Get<HistoryTestSystem>(systemId)!.value);
@@ -605,8 +579,8 @@ public sealed class ScriptManagerTests : IDisposable
         using var runtime = new EditorInteractionRuntime(m_projectRoot);
         runtime.Start();
         Assert.True(runtime.interactions
-            .For(HierarchyAreas.Hierarchy)
-            .Execute(HierarchyActions.CreateScene));
+            .For("panel/scene.hierarchy")
+            .Execute("hierarchy/create-scene"));
         GameScene scene = SceneManager.activeScene!;
         Guid sceneId = scene.identity.persistentId;
         string originalName = scene.name;
@@ -614,8 +588,8 @@ public sealed class ScriptManagerTests : IDisposable
         edits.RenameScene(scene, "Renamed");
 
         Assert.True(runtime.interactions
-            .For(HierarchyAreas.Hierarchy)
-            .Execute(HierarchyActions.CreateScene));
+            .For("panel/scene.hierarchy")
+            .Execute("hierarchy/create-scene"));
         Assert.Equal(2, SceneManager.loadedScenes.Count);
         Assert.True(runtime.interactions.history.Undo().succeeded);
         Assert.Single(SceneManager.loadedScenes);
@@ -701,7 +675,8 @@ public sealed class ScriptManagerTests : IDisposable
         var context = new EditorContext(m_projectRoot);
         workspace.Start(context);
 
-        workspace.RestoreWorkspaceState(new EditorWorkspaceStateReader(null));
+        ((IEditorWorkspaceState)workspace).RestoreWorkspaceState(
+            new EditorWorkspaceStateReader(null));
         workspace.Update(context);
 
         Assert.Empty(SceneManager.loadedScenes);
@@ -721,13 +696,14 @@ public sealed class ScriptManagerTests : IDisposable
         _ = sourceWorkspace.SaveScene(second, "Scenes");
         SceneManager.SetActiveScene(first);
         var writer = new EditorWorkspaceStateWriter();
-        sourceWorkspace.CaptureWorkspaceState(writer);
+        ((IEditorWorkspaceState)sourceWorkspace).CaptureWorkspaceState(writer);
 
         SceneManager.UnloadAllScenes();
         var restoredWorkspace = new EditorSceneWorkspace();
         var context = new EditorContext(m_projectRoot);
         restoredWorkspace.Start(context);
-        restoredWorkspace.RestoreWorkspaceState(new EditorWorkspaceStateReader(writer.Export()));
+        ((IEditorWorkspaceState)restoredWorkspace).RestoreWorkspaceState(
+            new EditorWorkspaceStateReader(writer.Export()));
         restoredWorkspace.Update(context);
 
         Assert.Equal(["First", "Second"], restoredWorkspace.scenes.Select(static scene => scene.name));
@@ -745,13 +721,14 @@ public sealed class ScriptManagerTests : IDisposable
         _ = sourceWorkspace.SaveScene(scene, "Scenes");
         _ = scene.CreateObject("Unsaved Object");
         var writer = new EditorWorkspaceStateWriter();
-        sourceWorkspace.CaptureWorkspaceState(writer);
+        ((IEditorWorkspaceState)sourceWorkspace).CaptureWorkspaceState(writer);
 
         SceneManager.UnloadAllScenes();
         var restoredWorkspace = new EditorSceneWorkspace();
         var context = new EditorContext(m_projectRoot);
         restoredWorkspace.Start(context);
-        restoredWorkspace.RestoreWorkspaceState(new EditorWorkspaceStateReader(writer.Export()));
+        ((IEditorWorkspaceState)restoredWorkspace).RestoreWorkspaceState(
+            new EditorWorkspaceStateReader(writer.Export()));
         restoredWorkspace.Update(context);
 
         Assert.NotNull(restoredWorkspace.activeScene!.FindObject("Saved Object"));
@@ -768,17 +745,17 @@ public sealed class ScriptManagerTests : IDisposable
             runtime.Update(new EditorFrame(0.016f, 1f, isFocused: true));
             Assert.Empty(SceneManager.loadedScenes);
             Assert.True(runtime.interactions
-                .For(HierarchyAreas.Hierarchy)
-                .Execute(HierarchyActions.CreateScene));
+                .For("panel/scene.hierarchy")
+                .Execute("hierarchy/create-scene"));
             GameScene first = SceneManager.activeScene!;
             first.name = "Workspace First";
             Assert.True(runtime.interactions
-                .For(HierarchyAreas.Hierarchy)
-                .Execute(HierarchyActions.CreateScene));
+                .For("panel/scene.hierarchy")
+                .Execute("hierarchy/create-scene"));
             SceneManager.activeScene!.name = "Workspace Second";
             Assert.True(runtime.interactions
-                .For(HierarchyAreas.Hierarchy)
-                .Execute(EditorActions.Save));
+                .For("panel/scene.hierarchy")
+                .Execute("editor/save"));
 
         }
 
@@ -841,17 +818,17 @@ public sealed class ScriptManagerTests : IDisposable
         using var runtime = new EditorInteractionRuntime(m_projectRoot);
         runtime.Start();
         Assert.True(runtime.interactions
-            .For(HierarchyAreas.Hierarchy)
-            .Execute(HierarchyActions.CreateScene));
+            .For("panel/scene.hierarchy")
+            .Execute("hierarchy/create-scene"));
         GameScene scene = Assert.Single(SceneManager.loadedScenes);
         EditorMenuItem delete = Assert.Single(
-            runtime.interactions.For(HierarchyAreas.Hierarchy, scene).BuildMenu().items,
-            static item => item.actionId == HierarchyActions.DeleteScene);
+            runtime.interactions.For("panel/scene.hierarchy", scene).BuildMenu().items,
+            static item => item.actionId == "hierarchy/delete-scene");
         Assert.True(delete.status.isEnabled);
 
         Assert.True(runtime.interactions
-            .For(HierarchyAreas.Hierarchy, scene)
-            .Execute(HierarchyActions.DeleteScene));
+            .For("panel/scene.hierarchy", scene)
+            .Execute("hierarchy/delete-scene"));
         Assert.Empty(SceneManager.loadedScenes);
         Assert.Null(SceneManager.activeScene);
 
@@ -996,18 +973,18 @@ public sealed class ScriptManagerTests : IDisposable
             }
 
             [EditorPanel("tests.script-panel", "Script Panel", order: 900, defaultOpen: false)]
-            public sealed class ScriptPanel : EditorPanel, IEditorPanelReloadState, IEditorWorkspaceState
+            public sealed class ScriptPanel : EditorPanel, IEditorPanelReloadState
             {
-                public string workspaceStateId => "tests.script-panel";
+                protected override string workspaceStateId => "tests.script-panel";
 
                 public override void Draw(EditorContext context)
                 {
                 }
 
-                public void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
+                protected override void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
                     => writer.Set("open", isOpen);
 
-                public void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
+                protected override void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
                     => isOpen = reader.Get("open", isOpen);
 
                 public System.ReadOnlyMemory<byte> CaptureReloadState()
@@ -1034,6 +1011,62 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.Equal(
             ResolveImGuiIcon("FileAudio"),
             ResolveAssetIcon(iconRegistry, typeof(BinaryAsset), "Assets/Test.binary-icon"));
+    }
+
+    [Fact]
+    public void ScriptSettingPathAppearsAndDisappearsWithItsGeneration()
+    {
+        Write("ProjectSettings.editor.cs", """
+            using InnoEditor.Settings;
+
+            [EditorSettingPath("Tests/Overlay/Show Overlay")]
+            public sealed class ProjectOverlaySetting : EditorSetting
+            {
+                public override EditorSettingObject defaultValue => CreateDefault();
+
+                public override string section => "Overlay";
+                public override string description => "Controls a test overlay.";
+
+                protected override void OnDraw(EditorSettingObject setting)
+                {
+                }
+
+                private static EditorSettingObject CreateDefault()
+                {
+                    var result = new EditorSettingObject();
+                    result.SetAsBoolean("value", true);
+                    return result;
+                }
+            }
+            """);
+
+        ScriptCompilationResult initial = Compile();
+        Assert.True(initial.success, FormatDiagnostics(initial));
+        Assert.True(m_manager.ApplyPendingReload());
+        Type settingType = Assert.Single(
+            TypeCacheManager.current.types,
+            static type => type.Name == "ProjectOverlaySetting");
+        Assert.NotNull(settingType.GetCustomAttribute<EditorSettingPathAttribute>());
+        using EditorInteractionRuntime settingsRuntime = CreateSettingsRuntime(out EditorSettings settings);
+        EditorSetting definition = Assert.Single(settings.definitions, static definition =>
+            definition.path == "Tests/Overlay/Show Overlay");
+        Assert.Equal("Tests/Overlay/Show Overlay", definition.path);
+        EditorSettingObject value = settings.Get(definition.path);
+        value.SetAsBoolean("value", false);
+        Assert.True(settings.Apply(
+            new Dictionary<string, EditorSettingObject>(StringComparer.Ordinal)
+            {
+                [definition.path] = value
+            }));
+
+        Write("ProjectSettings.editor.cs", "public sealed class ProjectOverlaySetting { }");
+
+        ScriptCompilationResult replacement = Compile();
+        Assert.True(replacement.success, FormatDiagnostics(replacement));
+        Assert.True(m_manager.ApplyPendingReload());
+        Assert.DoesNotContain(settings.definitions, static definition =>
+            definition.path == "Tests/Overlay/Show Overlay");
+        Assert.Throws<ArgumentException>(() => settings.Get("Tests/Overlay/Show Overlay"));
     }
 
     [Fact]
@@ -1763,15 +1796,45 @@ public sealed class ScriptManagerTests : IDisposable
             fieldName,
             BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(target, value);
 
-    private static IDisposable CreateAssetIconRegistry()
+    private static object CreateInspectorTarget(string typeName, params object[] arguments)
     {
+        Type type = typeof(AssetReferenceDropTarget).Assembly.GetType(typeName, throwOnError: true)!;
+        return Activator.CreateInstance(
+                   type,
+                   BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                   binder: null,
+                   args: arguments,
+                   culture: null)
+               ?? throw new InvalidOperationException($"Could not create '{typeName}'.");
+    }
+
+    private EditorInteractionRuntime CreateSettingsRuntime(out EditorSettings settings)
+    {
+        SettingsCaptureModule.current = null;
+        var runtime = new EditorInteractionRuntime(m_projectRoot);
+        runtime.Start();
+        settings = SettingsCaptureModule.current
+            ?? throw new InvalidOperationException("The Settings module was not discovered.");
+        return runtime;
+    }
+
+    private IDisposable CreateAssetIconRegistry()
+    {
+        EditorInteractionRuntime runtime = CreateSettingsRuntime(out EditorSettings settings);
         Type? registryType = typeof(AssetIconAttribute).Assembly.GetType(
             "Inno.Editor.Panel.FileBrowser.AssetIconRegistry",
             throwOnError: true);
         Assert.NotNull(registryType);
-        object? registry = Activator.CreateInstance(registryType!, nonPublic: true);
+        object? registry = Activator.CreateInstance(
+            registryType!,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            args: [settings],
+            culture: null);
         Assert.NotNull(registry);
-        return Assert.IsAssignableFrom<IDisposable>(registry);
+        return new AssetIconRegistryScope(
+            Assert.IsAssignableFrom<IDisposable>(registry),
+            runtime);
     }
 
     private static string ResolveAssetIcon(
@@ -1789,12 +1852,13 @@ public sealed class ScriptManagerTests : IDisposable
         string relativePath,
         out string icon)
     {
-        MethodInfo? resolveIcon = registry.GetType().GetMethod(
+        object target = registry is AssetIconRegistryScope scope ? scope.registry : registry;
+        MethodInfo? resolveIcon = target.GetType().GetMethod(
             "TryResolve",
             BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(resolveIcon);
         object?[] arguments = [assetType, relativePath, null];
-        bool resolved = Assert.IsType<bool>(resolveIcon!.Invoke(registry, arguments));
+        bool resolved = Assert.IsType<bool>(resolveIcon!.Invoke(target, arguments));
         icon = Assert.IsType<string>(arguments[2]);
         return resolved;
     }
@@ -1808,6 +1872,28 @@ public sealed class ScriptManagerTests : IDisposable
         => Assert.IsType<string>(GetImGuiIconType().GetField(
             name,
             BindingFlags.Public | BindingFlags.Static)!.GetRawConstantValue());
+
+    [EditorModule(order: int.MaxValue)]
+    private sealed class SettingsCaptureModule(EditorSettings settings) : EditorModule
+    {
+        internal static EditorSettings? current;
+
+        protected override void OnStart(EditorContext context)
+            => current = settings;
+    }
+
+    private sealed class AssetIconRegistryScope(
+        IDisposable registryValue,
+        EditorInteractionRuntime runtime) : IDisposable
+    {
+        internal IDisposable registry { get; } = registryValue;
+
+        public void Dispose()
+        {
+            registry.Dispose();
+            runtime.Dispose();
+        }
+    }
 
     private static string FormatDiagnostics(ScriptCompilationResult result)
         => string.Join(

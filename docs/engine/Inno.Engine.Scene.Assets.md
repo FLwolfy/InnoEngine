@@ -33,31 +33,16 @@ AssetManager.Save("Scenes/Level.iscene", asset);
 
 Prefab root 名称同样跟随 `.iprefab` 文件名；child 名称保持捕获值。普通 connected instance 的 name/property override 不会因为 source path 改名而被误覆盖。
 
-## Importer 与数据兼容
+## Importer
 
 | 扩展名 | importer ID | 资产 |
 | --- | --- | --- |
 | `.iscene` | `inno.engine.scene` | `SceneAsset` |
 | `.iprefab` | `inno.engine.prefab` | `PrefabAsset` |
-| `.ilayers` | `inno.engine.scene.layers` | `GameLayerSettingsAsset` |
 
-Importer 使用统一 async writer，输出 `runtime`，Loader 自动追加 `asset-state`，并把 Scene graph 中的 `AssetObject` 引用登记为 runtime dependencies。Stable Type ID、扩展名和现有序列化 schema 保持兼容。
+Importer 使用统一 async writer，输出 `runtime`，Loader 自动追加 `asset-state`，并把 Scene graph 中的 `AssetObject` 引用登记为 runtime dependencies。
 
-## GameLayerSettingsAsset
-
-`Assets/Settings/GameLayers.ilayers` 是唯一会被运行时和 Editor layer picker 识别的项目层配置路径。文件仍是普通 Source Database 资产，因此自动拥有 `.imeta`、persistent ID、Catalog record 和 content-addressed artifact；源文件是可读 JSON，保存 32 个 layer slot 和 32 行对称 interaction masks，不写 schema version 或 legacy payload。
-
-```csharp
-GameLayerSettingsAsset settings = AssetManager.Load<GameLayerSettingsAsset>(
-    GameLayerSettingsAsset.defaultPath);
-
-settings.layerStack.Define(new GameLayer(1), "Player");
-settings.layerStack.Define(new GameLayer(2), "Enemy");
-settings.layerStack.SetInteraction(new GameLayer(1), new GameLayer(2), false);
-AssetManager.Save(settings);
-```
-
-配置移出 `Settings` 后，源文件及 persistent ID 都会保留，但它不再参与项目 layer 解析；Editor 立即切换为只有 `Default` 的内存配置，已加载 GameObject 引用自定义 slot 时发布错误。把同一文件移回 canonical path 后会重新导入其原内容，有效 slot 随即恢复。项目完全没有配置时不会自动创建 source 文件；用户首次显式保存 layer catalog 时才通过 `AssetManager.Save` 在 canonical path 创建正常资产。外部修改 canonical 源文件后由 watcher/reimport 原位更新；删除配置同样立即回到 Default-only 状态。
+Game Layers 不属于本项目。它由 [Inno.Editor.Settings](../editor/Inno.Editor.Settings.md) 以 `Project/Layers/Game Layers` 路径存入项目根 `EditorSettings.json`，不经过 AssetManager 或 Source Database。
 
 ## 外部 rename/delete
 

@@ -238,7 +238,7 @@ public sealed class AnimationStateNameHistoryHandler : EditorHistoryHandler
 
 `Execute(name, EditorHistoryChange)` 适合 Handler 自己安全执行初次 Redo 的命令；多数 Editor UI 已先应用修改，因此使用 `RecordApplied`。委托式 `Execute`、`RecordValue` 与自定义 `EditorHistoryOperation` 只保留给 Host-only 兼容场景，它们属于 runtime-bound entry，在扩展 catalog generation 改变时自动截断，不能用于 EditorScripts 或长期历史。
 
-相邻中立记录只有在 `kind`、`version`、非空 `mergeKey` 与 Handler 的 `TryMerge` 都匹配时才会合并。单击开关、创建、删除和排序不设置 merge key；拖动数值、连续文字输入等可合并编辑才设置。
+相邻中立记录只有在 `kind`、非空 `mergeKey` 与 Handler 的 `TryMerge` 都匹配时才会合并。单击开关、创建、删除和排序不设置 merge key；拖动数值、连续文字输入等可合并编辑才设置。
 
 ### 事务与资源预算
 
@@ -260,7 +260,7 @@ transaction.Commit();
 
 ## Workspace 存储
 
-Interactions 自动协调 Core 的 `IEditorWorkspaceState` provider，并把项目语义状态写入：
+Interactions 自动协调已通过 `EditorModule` / `EditorPanel` protected hooks 选择加入 Workspace 的 provider；Core 的显式 `IEditorWorkspaceState` adapter 只负责跨程序集转发。项目语义状态写入：
 
 ```text
 <Project>/editor.ini
@@ -287,7 +287,7 @@ scene.hierarchy=true
 
 文件通过临时文件 flush 后原子替换，并在运行期间进行约两秒的内容变化节流。退出时 Application 会在扩展停止前强制捕获所有 provider 和最新 ImGui layout，然后强制写入完整文档。未知 provider section 会保留，因此暂时移除插件不会销毁其设置；损坏的单个值只影响所属 provider。Panel 的 `isOpen` 按稳定 Panel ID 自动保存，不要求 Panel 实现接口。
 
-`EditorProjectSettings` 在内存中分别维护 ImGui layout 和具名 Inno Editor sections，避免 ImGui 覆盖 workspace 或 workspace 覆盖布局。Workspace 只读取当前具名 section，不包含旧 Base64 payload、旧 JSON 文件或 provider schema-version 迁移逻辑。
+Core 的 internal layout document 在内存中分别维护 ImGui layout 和具名 Inno Editor sections，避免 ImGui 覆盖 workspace 或 workspace 覆盖布局。Interactions 只通过 `EditorContext` 的 layout façade 读取和写入当前具名 section，不存在第二套 Workspace 文档。
 
 Workspace provider 的恢复状态按实例弱跟踪。只有成功完成 `RestoreWorkspaceState` 的 provider 才能参与后续 capture；脚本启动、TypeCache 重建或 Registry 事务在恢复回调中触发重入刷新时，同一个 provider 不会被再次调用，也不会用尚未初始化的默认字段覆盖磁盘 section。被新 snapshot 保留的 Module/Panel 仍以实际恢复状态为准，而不是仅因实例相同就跳过首次恢复。
 

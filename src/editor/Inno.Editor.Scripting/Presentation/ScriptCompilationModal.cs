@@ -9,7 +9,7 @@ namespace Inno.Editor.Scripting;
 
 /// <summary>Displays real script compiler progress while blocking editor interaction.</summary>
 [EditorModal("scripting.compilation", "Compiling Scripts", order: 100)]
-public sealed class ScriptCompilationModal(ScriptingModule scripting) : EditorModal
+internal sealed class ScriptCompilationModal(EditorScripting scripting) : EditorModal
 {
     /// <inheritdoc />
     public override bool isVisible => scripting.isCompiling;

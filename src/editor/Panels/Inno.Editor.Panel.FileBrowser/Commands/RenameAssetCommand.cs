@@ -7,9 +7,9 @@ using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
-[EditorAction(FileBrowserActions.Rename, priority: 100)]
-[EditorMenu(FileBrowserAreas.Browser, "Rename", order: 100)]
-[EditorShortcut(FileBrowserAreas.Browser, KeyCode.F2)]
+[EditorAction("file-browser/rename", priority: 100)]
+[EditorMenu("panel/asset.file-browser", "Rename", order: 100)]
+[EditorShortcut("panel/asset.file-browser", KeyCode.F2)]
 internal sealed class RenameAssetCommand(AssetEditorModule assets) : EditorAction<AssetFileEntry>
 {
     private AssetEditorContext? m_asset;

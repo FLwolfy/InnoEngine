@@ -149,6 +149,7 @@ public sealed class PlayerController : GameBehavior
 - IDE facade 真正定义 `InnoEngine.*` / `InnoEditor.*` metadata 类型，并携带重写后的 XML documentation。
 - IDE csproj 不引用真实 `Inno.*` 实现程序集，因此实现 namespace 无法解析。
 - Runtime Roslyn 使用保持真实 CLR identity 的裁剪 reference set，并把逻辑 using 重写为声明的实现 namespace。
+- 裁剪 reference 只保留其实现成员同样可见的接口；只由 private 显式成员实现的基础设施接口不会出现在 facade base list，因此不会泄漏 `EditorModule` 的 internal Dispose adapter，也不会产生缺失接口成员的 reference assembly。
 - 所有脚本文件必须显式声明自己使用的 `InnoEngine.*` / `InnoEditor.*` namespace。
 - 编译范围导入、MSBuild `Using` item、隐式导入和 plugin metadata 注入均不受支持。
 - API/export/comment/MVID 变化会改变 facade/build fingerprint。

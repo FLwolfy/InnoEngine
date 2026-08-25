@@ -85,7 +85,8 @@ public static partial class ImGuiWidget
         int depth = Math.Max(0, ImGuiP.GetCurrentWindow().DC.TreeDepth);
         PruneTreeNodeStack(depth);
         bool hasNextSibling = TrackSiblingState(id, depth);
-        DrawTreeGuideLines(nodeCursor, hasNextSibling, !isLeaf);
+        if (!options.hideGuideLines)
+            DrawTreeGuideLines(nodeCursor, hasNextSibling, !isLeaf);
         PushTransparentTreeNodeHeaderColors();
         bool isOpen = NativeImGui.TreeNodeEx($"##{id}", flags);
         NativeImGui.PopStyleColor(3);
@@ -100,8 +101,7 @@ public static partial class ImGuiWidget
             onDraw,
             options.drawViewportOverlay,
             out Vector2 interactionMin);
-        bool hovered = !IsPopupBlockingInteraction() &&
-                       NativeImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenOverlappedByItem);
+        bool hovered = NativeImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenOverlappedByItem);
         bool clicked = hovered && NativeImGui.IsItemClicked(ImGuiMouseButton.Left);
         bool doubleClicked = hovered && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
         bool showHoverHighlight = hovered &&
@@ -356,6 +356,11 @@ public readonly struct TreeNodeOptions
 
     /// <summary>Gets whether the row keeps its configured background while hovered.</summary>
     public bool suppressHoverHighlight { get; init; }
+
+    /// <summary>
+    /// Gets whether ancestor and branch guide lines are omitted for this row.
+    /// </summary>
+    public bool hideGuideLines { get; init; }
 
     /// <summary>
     /// Gets the callback that draws controls fixed to the current viewport without extending the

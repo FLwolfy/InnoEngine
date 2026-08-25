@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\Inno.Editor.Core\Inno.Editor.Core.csproj" />
     <ProjectReference Include="..\..\Inno.Editor.Inspection\Inno.Editor.Inspection.csproj" />
     <ProjectReference Include="..\..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" />
+    <ProjectReference Include="..\..\Inno.Editor.Settings\Inno.Editor.Settings.csproj" />
     <ProjectReference Include="..\..\..\assets\Inno.Assets.Core\Inno.Assets.Core.csproj" />
     <ProjectReference Include="..\..\..\assets\Inno.Assets.File\Inno.Assets.File.csproj" />
   </ItemGroup>

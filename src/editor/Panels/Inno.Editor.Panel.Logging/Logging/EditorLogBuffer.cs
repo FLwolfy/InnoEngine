@@ -9,7 +9,7 @@ namespace Inno.Editor.Panel.Logging;
 /// <summary>
 /// Thread-safe rolling buffer for log entries.
 /// </summary>
-public sealed class EditorLogBuffer : ILogSink
+internal sealed class EditorLogBuffer : ILogSink
 {
     private readonly Queue<BufferedLogEntry> m_entries = new();
     private readonly object m_sync = new();

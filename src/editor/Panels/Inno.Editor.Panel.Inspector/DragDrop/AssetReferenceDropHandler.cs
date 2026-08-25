@@ -4,7 +4,7 @@ using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Panel.Inspector;
 
-[EditorDrop(InspectorAreas.AssetReference, priority: 100)]
+[EditorDrop("panel/scene.inspector/asset-reference", priority: 100)]
 internal sealed class AssetReferenceDropHandler
     : EditorDrop<AssetInfo, AssetReferenceDropTarget>
 {

@@ -67,7 +67,7 @@ internal sealed class EditorLayer : Layer
             // captured afterwards while the ImGui context and all panels are still alive.
             m_runtime.PrepareShutdown();
             CaptureLayout(force: true);
-            m_context.settings.Save();
+            m_context.SaveLayout();
             m_diagnostics.ResolvePersistence();
             m_isShutdownPrepared = true;
             return true;
@@ -77,7 +77,7 @@ internal sealed class EditorLayer : Layer
             if (m_diagnostics.PublishPersistenceFailure(exception))
             {
                 Log.Error("Project editor state could not be saved to '{0}': {1}",
-                    m_context.settings.path,
+                    m_context.layoutPath,
                     exception);
             }
             return false;
@@ -95,7 +95,7 @@ internal sealed class EditorLayer : Layer
         }
         try
         {
-            _ = m_context.settings.SaveIfChanged();
+            _ = m_context.SaveLayoutIfChanged();
             m_diagnostics.ResolvePersistence();
             m_nextPersistenceRetryTime = 0;
         }
@@ -105,7 +105,7 @@ internal sealed class EditorLayer : Layer
             if (m_diagnostics.PublishPersistenceFailure(exception))
             {
                 Log.Error("Project editor state could not be saved to '{0}': {1}",
-                    m_context.settings.path,
+                    m_context.layoutPath,
                     exception);
             }
         }
@@ -115,7 +115,7 @@ internal sealed class EditorLayer : Layer
     {
         if (!m_imgui.TryCaptureIniSettings(out string layout, force))
             return false;
-        m_context.settings.SetImGuiLayout(layout);
+        m_context.SetImGuiLayout(layout);
         return true;
     }
 }

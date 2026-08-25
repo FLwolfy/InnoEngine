@@ -19,7 +19,7 @@ namespace Inno.Editor.Panel.Logging;
 /// Displays append-only logs and current diagnostics in the unified editor Console.
 /// </summary>
 [EditorPanel("diagnostics.console", "Console", order: 400)]
-public sealed class ConsolePanel : EditorPanel
+internal sealed class ConsolePanel : EditorPanel
 {
     #region State
     private readonly ConsolePanelContent m_content = new();
@@ -45,7 +45,7 @@ public sealed class ConsolePanel : EditorPanel
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="logging"/> or <paramref name="interactions"/> is <see langword="null"/>.
     /// </exception>
-    public ConsolePanel(LoggingModule logging, EditorInteractions interactions)
+    internal ConsolePanel(LoggingModule logging, EditorInteractions interactions)
     {
         m_logging = logging ?? throw new ArgumentNullException(nameof(logging));
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
@@ -449,7 +449,7 @@ public sealed class ConsolePanel : EditorPanel
         _ = EditorMenuRenderer.ContextMenu(
             "##ConsoleEntryContextMenu",
             m_interactions.For(
-                ConsolePanelAreas.Entry,
+                "panel/diagnostics.console/entry",
                 new ConsoleEntryCopyTarget(entry, repeatCount)));
     }
 

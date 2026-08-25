@@ -8,7 +8,7 @@ using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
-[EditorMenuSource(InspectorAreas.Component)]
+[EditorMenuSource("panel/scene.inspector/component")]
 internal sealed class AddComponentMenuProvider : EditorMenuSource
 {
     public override void Build(EditorMenuContext context, EditorMenuBuilder builder)
@@ -19,7 +19,7 @@ internal sealed class AddComponentMenuProvider : EditorMenuSource
         {
             if (!IsAddable(type, gameObject))
                 continue;
-            builder.Add(type.Name, InspectorActions.AddComponent, argument: type);
+            builder.Add(type.Name, "inspector/add-component", argument: type);
         }
     }
 

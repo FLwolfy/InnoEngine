@@ -7,7 +7,7 @@ using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Hierarchy;
 
-[EditorDrop(HierarchyAreas.Hierarchy)]
+[EditorDrop("panel/scene.hierarchy")]
 internal sealed class MoveGameObjectToSceneDropHandler(SceneEdits edits)
     : EditorDrop<GameObject, HierarchySceneDropTarget>
 {
