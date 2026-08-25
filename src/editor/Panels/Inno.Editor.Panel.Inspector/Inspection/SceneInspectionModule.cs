@@ -1,3 +1,5 @@
+using System;
+
 using Inno.Assets;
 using Inno.Assets.Core;
 using Inno.Assets.File;
@@ -12,16 +14,13 @@ namespace Inno.Editor.Panel.Inspector;
 /// <summary>
 /// Composes the Inspector panel with the shared inspection registries and scene-specific dependencies.
 /// </summary>
-[EditorModule(order: 210)]
+[EditorModule("scene-inspection", order: 210)]
 internal sealed class SceneInspectionModule : EditorModule
 {
     private readonly InspectionDrawerRegistry m_inspectors;
     private readonly PropertyDrawerRegistry m_properties;
     private readonly SerializedPropertyRenderer m_renderer;
     private readonly GameObjectTagCatalog m_tags = new();
-
-    /// <inheritdoc />
-    protected override string workspaceStateId => "scene-inspection";
 
     /// <summary>
     /// Creates the scene inspection module and its generation-aware drawer registries.
@@ -74,12 +73,12 @@ internal sealed class SceneInspectionModule : EditorModule
     }
 
     /// <inheritdoc />
-    protected override void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
-        => m_tags.Capture(writer);
+    protected override void Capture(EditorState state)
+        => state.Set("tags", m_tags.GetTags());
 
     /// <inheritdoc />
-    protected override void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
-        => m_tags.Restore(reader);
+    protected override void Restore(EditorState state)
+        => m_tags.Restore(state.Get("tags", Array.Empty<string>()));
 
     internal bool TryResolve(
         EditorContext editorContext,

@@ -6,24 +6,24 @@ using Inno.Core.Diagnose;
 
 namespace Inno.Editor.Interactions;
 
-internal sealed class EditorWorkspaceDiagnosticPublisher : IDisposable
+internal sealed class EditorExtensionStateDiagnosticPublisher : IDisposable
 {
-    private const string C_CAPTURE_GROUP = "Workspace Capture";
-    private const string C_RESTORE_GROUP = "Workspace Restore";
-    private const string C_SAVE_GROUP = "Workspace Save";
+    private const string C_CAPTURE_GROUP = "Editor State Capture";
+    private const string C_RESTORE_GROUP = "Editor State Restore";
+    private const string C_SAVE_GROUP = "Editor State Save";
 
     private readonly Dictionary<string, string> m_states = new(StringComparer.Ordinal);
 
     internal bool PublishCapture(IReadOnlyList<string> messages)
-        => Publish(C_CAPTURE_GROUP, "WORKSPACE-CAPTURE", messages);
+        => Publish(C_CAPTURE_GROUP, "EDITOR-STATE-CAPTURE", messages);
 
     internal bool PublishRestore(IReadOnlyList<string> messages)
-        => Publish(C_RESTORE_GROUP, "WORKSPACE-RESTORE", messages);
+        => Publish(C_RESTORE_GROUP, "EDITOR-STATE-RESTORE", messages);
 
     internal bool PublishSave(Exception exception)
     {
         ArgumentNullException.ThrowIfNull(exception);
-        return Publish(C_SAVE_GROUP, "WORKSPACE-SAVE", [exception.Message]);
+        return Publish(C_SAVE_GROUP, "EDITOR-STATE-SAVE", [exception.Message]);
     }
 
     internal void ResolveSave()

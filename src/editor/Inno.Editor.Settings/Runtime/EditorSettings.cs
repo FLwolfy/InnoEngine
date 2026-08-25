@@ -10,7 +10,7 @@ namespace Inno.Editor.Settings;
 /// <summary>
 /// Owns the discovered Settings catalog and the project-root Settings document.
 /// </summary>
-[EditorModule(order: int.MinValue)]
+[EditorModule("editor-settings", order: int.MinValue)]
 public sealed class EditorSettings : EditorModule
 {
     private readonly EditorSettingsCatalog m_catalog = new();

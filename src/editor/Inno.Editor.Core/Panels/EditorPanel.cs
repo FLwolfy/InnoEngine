@@ -1,10 +1,12 @@
 
+using System;
+
 namespace Inno.Editor.Core;
 
 /// <summary>
 /// Base class for editor panel implementations.
 /// </summary>
-public abstract class EditorPanel : IEditorWorkspaceState
+public abstract class EditorPanel
 {
     /// <summary>
     /// Gets whether the presentation backend should inset this panel body by its standard
@@ -54,39 +56,32 @@ public abstract class EditorPanel : IEditorWorkspaceState
     }
 
     /// <summary>
-    /// Gets the stable project-workspace identifier for this panel, or <see langword="null"/>
-    /// when the panel does not persist workspace state.
+    /// Captures readable project state owned by this panel.
     /// </summary>
-    protected virtual string workspaceStateId => null!;
-
-    /// <summary>
-    /// Captures project-specific workspace state owned by this panel.
-    /// This hook is called only when <see cref="workspaceStateId"/> is non-empty.
-    /// </summary>
-    /// <param name="writer">
-    /// The isolated writer assigned to this panel.
+    /// <remarks>
+    /// Overriding this method opts the panel into project-state IO. Panels that keep the base
+    /// implementation are never registered with the persistence coordinator and therefore perform
+    /// no state reads or writes. Panel visibility is persisted separately for every registered panel.
+    /// </remarks>
+    /// <param name="state">
+    /// The writable parameter that receives the complete readable state for this panel.
     /// </param>
-    protected virtual void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
+    protected virtual void Capture(EditorState state)
     {
     }
 
     /// <summary>
-    /// Restores project-specific workspace state owned by this panel.
-    /// This hook is called only when <see cref="workspaceStateId"/> is non-empty.
+    /// Restores readable project state owned by this panel.
     /// </summary>
-    /// <param name="reader">
-    /// The isolated reader for this panel. Its <see cref="EditorWorkspaceStateReader.hasState"/>
-    /// property is <see langword="false"/> when no state was stored.
+    /// <remarks>
+    /// This method is called only when <see cref="Capture"/> is overridden. It runs once after the
+    /// panel is attached and before the panel is allowed to capture replacement state.
+    /// </remarks>
+    /// <param name="state">
+    /// The read-only state parameter for this panel. Missing or incompatible values return the
+    /// fallback supplied to <see cref="EditorState.Get{T}(string, T)"/>.
     /// </param>
-    protected virtual void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
+    protected virtual void Restore(EditorState state)
     {
     }
-
-    string? IEditorWorkspaceState.workspaceStateId => workspaceStateId;
-
-    void IEditorWorkspaceState.CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
-        => CaptureWorkspaceState(writer);
-
-    void IEditorWorkspaceState.RestoreWorkspaceState(EditorWorkspaceStateReader reader)
-        => RestoreWorkspaceState(reader);
 }

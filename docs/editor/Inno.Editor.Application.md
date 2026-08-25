@@ -24,11 +24,11 @@ Editor 当前不需要额外的 InnoEngine project descriptor。目录本身就�
 
 `EditorHost` 是 Application 内部的启动实现，不属于公开 API。它规范化项目目录、组合 Shell/Scripts/UI、运行主循环，并按逆序释放资源。未传入参数时，当前开发入口暂时使用 `Program` 中的本地默认项目目录；正式启动器应始终传入明确路径。
 
-`editor.ini`、`EditorSettings.json`、Editor boot log、Assets 与脚本产物都以 `projectDirectory` 为根目录。`editor.ini` 只保存标准 ImGui docking/window layout 与各 Module/Panel 的 Workspace section；业务设置由独立的根目录 `EditorSettings.json` 保存。两种文档各有单一所有者，不会互相覆盖。
+`editor.ini`、`EditorSettings.json`、Editor boot log、Assets 与脚本产物都以 `projectDirectory` 为根目录。`editor.ini` 只保存标准 ImGui docking/window layout 与各有状态 Module/Panel 的可读 section；业务设置由独立的根目录 `EditorSettings.json` 保存。两种文档各有单一所有者，不会互相覆盖。
 
-Workspace 只使用 `editor.ini` 中当前的具名可读 section。运行时不会查找 Base64 workspace payload 或 `Library/Editor/Workspace.json`，因此不存在第二份活动 workspace 状态或旧格式迁移路径。
+Module/Panel 状态只使用 `editor.ini` 中由 Attribute ID 确定的具名可读 section，没有独立 Workspace 文档或第二个状态 ID。
 
-主窗口请求关闭后，internal host 会在停止 Module、卸载 Scene 和销毁 ImGui context 之前强制执行一次项目 layout 保存。顺序固定为：捕获全部 Workspace provider → 捕获最新 ImGui layout → flush 并原子替换 `editor.ini`。即使运行期间的两秒节流尚未到期，正常退出也不会丢失最后一次打开的 Scene setup。
+主窗口请求关闭后，internal host 会在停止 Module、卸载 Scene 和销毁 ImGui context 之前强制执行一次项目 layout 保存。顺序固定为：捕获全部有状态 Module/Panel → 捕获最新 ImGui layout → flush 并原子替换 `editor.ini`。即使运行期间的两秒节流尚未到期，正常退出也不会丢失最后一次打开的 Scene setup。
 
 `editor.ini` 写入失败会发布 `Project State Persistence` Diagnostic 并记录一次完整 Log。EditorLayer 以一秒间隔继续尝试，即使 ImGui layout 没有再次变化也不会遗留无法恢复的失败状态；成功保存后只清除 Diagnostic，历史 Log 保留。
 

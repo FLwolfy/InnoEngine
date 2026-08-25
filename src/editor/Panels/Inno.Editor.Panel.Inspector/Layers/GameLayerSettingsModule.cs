@@ -9,7 +9,7 @@ namespace Inno.Editor.Panel.Inspector;
 /// <summary>
 /// Publishes layer diagnostics from the project Settings layer catalog.
 /// </summary>
-[EditorModule(order: 205)]
+[EditorModule("game-layer-settings", order: 205)]
 internal sealed class GameLayerSettingsModule(EditorSettings settings) : EditorModule
 {
     private readonly GameLayerDiagnosticPublisher m_diagnostics = new();

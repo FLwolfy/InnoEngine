@@ -51,7 +51,7 @@ Scene、GameObject 不再直接绑定 `ImGuiIcon` 常量。Hierarchy、`.iscene`
 
 Workspace 自动保存已打开且有 source path 的 Scene 顺序与 active Scene。Scene/GameObject/Component/System selection 不跨启动保存。恢复时 Scene 仍采用 additive load；缺失或无法加载的 Scene 被跳过并记录 warning。没有保存的 Scene、全部 Scene 被关闭或全部恢复失败时，Hierarchy 保持为空，不会隐式创建 Untitled Scene。
 
-Scene setup 写在 `editor.ini` 的 `[InnoEditor][Module.scene-workspace]` 中，可直接阅读和编辑。正常关闭窗口时会在 Scene 被卸载前强制捕获一次；启动时若 Asset Database 或脚本类型尚未准备完成，则保留这些路径并重试，不会用空 Workspace 覆盖已保存 setup。
+Scene setup 写在 `editor.ini` 的 `[InnoEditor][Module.scene-workspace]` 中，可直接阅读和编辑。正常关闭窗口时会在 Scene 被卸载前强制捕获一次；启动时若 Asset Database 或脚本类型尚未准备完成，则保留这些路径并重试，不会用尚未恢复的空 Module 状态覆盖已保存 setup。
 
 恢复会分别等待 Source Index 与脚本 TypeCache：源文件在磁盘存在但 Asset Database 尚未完成首轮对账时，不将它误判为 missing；Scene 中引用的脚本 Component/System 尚未激活时，也不会清空已保存路径。两项依赖都准备好后，候选 Scene 一次性 additive 提交并恢复 active Scene，selection 保持为空。
 

@@ -2,14 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text.Json.Nodes;
 
 using Inno.Core.Logging;
 using Inno.Editor.Core;
 
 namespace Inno.Editor.Interactions;
 
-internal sealed class EditorWorkspaceStore
+internal sealed class EditorExtensionStateStore
 {
     private const double C_SAVE_INTERVAL_SECONDS = 2.0;
     private const string C_MODULE_SECTION_PREFIX = "Module.";
@@ -17,12 +16,12 @@ internal sealed class EditorWorkspaceStore
     private const string C_PANELS_SECTION = "Panels";
 
     private readonly EditorContext m_context;
-    private readonly EditorWorkspaceDiagnosticPublisher m_diagnostics = new();
-    private readonly ConditionalWeakTable<object, RestoredProvider> m_restoredProviders = new();
+    private readonly EditorExtensionStateDiagnosticPublisher m_diagnostics = new();
+    private readonly ConditionalWeakTable<object, RestoredOwner> m_restoredOwners = new();
     private double m_nextSaveTime;
     private bool m_isShutdownPrepared;
 
-    internal EditorWorkspaceStore(EditorContext context)
+    internal EditorExtensionStateStore(EditorContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         m_context = context;
@@ -42,32 +41,30 @@ internal sealed class EditorWorkspaceStore
     }
 
     internal void Capture(
-        IReadOnlyList<EditorExtensionCatalog.WorkspaceRegistration> providers,
+        IReadOnlyList<EditorExtensionCatalog.StateRegistration> registrations,
         IReadOnlyList<EditorExtensionCatalog.PanelRegistration> panels)
     {
         var failures = new List<(string Message, Exception Exception)>();
-        for (int i = 0; i < providers.Count; i++)
+        for (int i = 0; i < registrations.Count; i++)
         {
-            EditorExtensionCatalog.WorkspaceRegistration registration = providers[i];
-            IEditorWorkspaceState provider = registration.provider;
-            if (!m_restoredProviders.TryGetValue(provider, out RestoredProvider? state) ||
-                !state.isRestored)
+            EditorExtensionCatalog.StateRegistration registration = registrations[i];
+            if (!m_restoredOwners.TryGetValue(registration.owner, out RestoredOwner? owner) ||
+                !owner.isRestored)
             {
                 continue;
             }
-            string sectionName = GetProviderSectionName(registration);
             try
             {
-                var writer = new EditorWorkspaceStateWriter();
-                provider.CaptureWorkspaceState(writer);
+                var state = new EditorJsonState();
+                registration.capture(state);
                 m_context.SetLayoutSection(
-                    sectionName,
-                    ExportProviderValues(writer.Export()));
+                    GetSectionName(registration),
+                    state.Export());
             }
             catch (Exception exception)
             {
                 failures.Add((
-                    $"Provider '{registration.id}' failed to capture state: {exception.Message}",
+                    $"Extension '{registration.id}' failed to capture state: {exception.Message}",
                     exception));
             }
         }
@@ -83,35 +80,33 @@ internal sealed class EditorWorkspaceStore
         m_context.SetLayoutSection(C_PANELS_SECTION, panelValues);
     }
 
-    internal void Restore(IReadOnlyList<EditorExtensionCatalog.WorkspaceRegistration> providers)
+    internal void Restore(IReadOnlyList<EditorExtensionCatalog.StateRegistration> registrations)
     {
         var failures = new List<(string Message, Exception Exception)>();
-        for (int i = 0; i < providers.Count; i++)
+        for (int i = 0; i < registrations.Count; i++)
         {
-            EditorExtensionCatalog.WorkspaceRegistration registration = providers[i];
-            IEditorWorkspaceState provider = registration.provider;
-            RestoredProvider state = m_restoredProviders.GetValue(
-                provider,
-                static _ => new RestoredProvider());
-            if (state.isRestored || state.isRestoring)
+            EditorExtensionCatalog.StateRegistration registration = registrations[i];
+            RestoredOwner owner = m_restoredOwners.GetValue(
+                registration.owner,
+                static _ => new RestoredOwner());
+            if (owner.isRestored || owner.isRestoring)
                 continue;
-            state.isRestoring = true;
+            owner.isRestoring = true;
             try
             {
-                EditorWorkspaceStateReader reader = CreateReader(registration);
-                provider.RestoreWorkspaceState(reader);
-                state.isRestored = true;
+                registration.restore(CreateState(registration));
+                owner.isRestored = true;
             }
             catch (Exception exception)
             {
-                _ = m_restoredProviders.Remove(provider);
+                _ = m_restoredOwners.Remove(registration.owner);
                 failures.Add((
-                    $"Provider '{registration.id}' failed to restore state: {exception.Message}",
+                    $"Extension '{registration.id}' failed to restore state: {exception.Message}",
                     exception));
             }
             finally
             {
-                state.isRestoring = false;
+                owner.isRestoring = false;
             }
         }
         if (m_diagnostics.PublishRestore(failures.Select(static failure => failure.Message).ToArray()))
@@ -127,20 +122,18 @@ internal sealed class EditorWorkspaceStore
 
     internal void Update(
         double elapsedSeconds,
-        IReadOnlyList<EditorExtensionCatalog.WorkspaceRegistration> providers,
+        IReadOnlyList<EditorExtensionCatalog.StateRegistration> registrations,
         IReadOnlyList<EditorExtensionCatalog.PanelRegistration> panels)
     {
-        if (m_isShutdownPrepared)
-            return;
-        if (elapsedSeconds < m_nextSaveTime)
+        if (m_isShutdownPrepared || elapsedSeconds < m_nextSaveTime)
             return;
         m_nextSaveTime = elapsedSeconds + C_SAVE_INTERVAL_SECONDS;
-        Capture(providers, panels);
+        Capture(registrations, panels);
         SaveIfChanged();
     }
 
     internal void Save(
-        IReadOnlyList<EditorExtensionCatalog.WorkspaceRegistration> providers,
+        IReadOnlyList<EditorExtensionCatalog.StateRegistration> registrations,
         IReadOnlyList<EditorExtensionCatalog.PanelRegistration> panels)
     {
         if (m_isShutdownPrepared)
@@ -148,35 +141,31 @@ internal sealed class EditorWorkspaceStore
             SaveIfChanged();
             return;
         }
-        Capture(providers, panels);
+        Capture(registrations, panels);
         SaveIfChanged();
     }
 
     internal void PrepareShutdown(
-        IReadOnlyList<EditorExtensionCatalog.WorkspaceRegistration> providers,
+        IReadOnlyList<EditorExtensionCatalog.StateRegistration> registrations,
         IReadOnlyList<EditorExtensionCatalog.PanelRegistration> panels)
     {
         if (m_isShutdownPrepared)
             return;
 
-        // Freeze periodic persistence before capturing the terminal workspace snapshot. Module
+        // Freeze periodic persistence before capturing the terminal extension snapshot. Module
         // shutdown may unload scenes and clear panels, and that transient teardown state must
         // never replace the state the user had immediately before closing the editor.
         m_isShutdownPrepared = true;
-        Capture(providers, panels);
+        Capture(registrations, panels);
         SaveIfChanged();
     }
 
-    private EditorWorkspaceStateReader CreateReader(
-        EditorExtensionCatalog.WorkspaceRegistration registration)
+    private EditorState CreateState(EditorExtensionCatalog.StateRegistration registration)
     {
-        string sectionName = GetProviderSectionName(registration);
+        string sectionName = GetSectionName(registration);
         if (!m_context.TryGetLayoutSection(sectionName, out IReadOnlyDictionary<string, string> values))
-            return new EditorWorkspaceStateReader(null);
-        var root = new JsonObject();
-        foreach ((string key, string value) in values)
-            root[key] = JsonNode.Parse(value);
-        return new EditorWorkspaceStateReader(root.ToJsonString());
+            return new EditorJsonState(values: null);
+        return new EditorJsonState(values);
     }
 
     private void SaveIfChanged()
@@ -191,37 +180,25 @@ internal sealed class EditorWorkspaceStore
             if (m_diagnostics.PublishSave(exception))
             {
                 Log.Error(
-                    "Editor workspace state could not be saved to '{0}': {1}",
+                    "Editor extension state could not be saved to '{0}': {1}",
                     m_context.layoutPath,
                     exception);
             }
         }
     }
 
-    private static Dictionary<string, string> ExportProviderValues(string payload)
+    private static string GetSectionName(EditorExtensionCatalog.StateRegistration registration)
     {
-        var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (JsonNode.Parse(payload) is not JsonObject values)
-            return result;
-        foreach ((string key, JsonNode? value) in values)
-            result[key] = value?.ToJsonString() ?? "null";
-        return result;
-    }
-
-    private static string GetProviderSectionName(
-        EditorExtensionCatalog.WorkspaceRegistration registration)
-    {
-        string prefix = registration.provider switch
+        string prefix = registration.kind switch
         {
-            EditorModule => C_MODULE_SECTION_PREFIX,
-            EditorPanel => C_PANEL_SECTION_PREFIX,
-            _ => throw new InvalidOperationException(
-                "Only editor modules and panels can own workspace state.")
+            EditorExtensionCatalog.StateOwnerKind.Module => C_MODULE_SECTION_PREFIX,
+            EditorExtensionCatalog.StateOwnerKind.Panel => C_PANEL_SECTION_PREFIX,
+            _ => throw new ArgumentOutOfRangeException(nameof(registration))
         };
         return prefix + registration.id;
     }
 
-    private sealed class RestoredProvider
+    private sealed class RestoredOwner
     {
         internal bool isRestoring;
         internal bool isRestored;

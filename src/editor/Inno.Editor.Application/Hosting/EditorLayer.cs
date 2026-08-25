@@ -63,7 +63,7 @@ internal sealed class EditorLayer : Layer
             return true;
         try
         {
-            // Workspace capture freezes its periodic writer before reading module state. Layout is
+            // Extension-state capture freezes its periodic writer before reading module state. Layout is
             // captured afterwards while the ImGui context and all panels are still alive.
             m_runtime.PrepareShutdown();
             CaptureLayout(force: true);

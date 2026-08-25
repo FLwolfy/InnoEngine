@@ -36,7 +36,7 @@ public sealed class EditorContext
     public string layoutPath => layout.path;
 
     /// <summary>
-    /// Gets the Dear ImGui layout text without editor workspace sections.
+    /// Gets the Dear ImGui layout text without editor module or panel state sections.
     /// </summary>
     public string imguiLayout => layout.imguiLayout;
 
@@ -113,7 +113,7 @@ public sealed class EditorContext
         => layout.RemoveSection(sectionName);
 
     /// <summary>
-    /// Replaces the Dear ImGui layout while retaining editor workspace sections.
+    /// Replaces the Dear ImGui layout while retaining editor module and panel state sections.
     /// </summary>
     /// <param name="value">
     /// The complete layout text returned by Dear ImGui.

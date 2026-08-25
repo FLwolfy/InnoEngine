@@ -173,7 +173,7 @@ public sealed class ClipToStateDrop
 
 一个 snapshot 激活时先 Attach 全部 Panel，再按 `EditorModuleAttribute.order` 启动 Module；关闭或替换时反向执行，先 Stop Module，再 Detach Panel。这样 Panel 的订阅与呈现对象在任何会产生启动日志或异步工作的 Module 之前就绪。Logging Module 使用基础设施最高优先级，保证其 sink 先于 Scripting Module 注册，因此首次脚本编译的 warning/error 也会进入 Console Panel。
 
-无法 Attach 的 Panel 会被关闭并进入 `Panel Activation` 当前 Diagnostic；下一次 generation 中成功 Attach、Panel 被移除或 runtime 关闭时自动清除。Detach 是已经发生的 teardown 事件，只写 Log。Workspace provider 的 Capture、Restore 和 `editor.ini` Save 使用三个独立 Diagnostic group：周期重试成功只清除对应 group，完整异常仅在状态变化时进入 Log，避免两秒保存周期反复刷屏。
+无法 Attach 的 Panel 会被关闭并进入 `Panel Activation` 当前 Diagnostic；下一次 generation 中成功 Attach、Panel 被移除或 runtime 关闭时自动清除。Detach 是已经发生的 teardown 事件，只写 Log。Module/Panel 状态的 Capture、Restore 和 `editor.ini` Save 使用三个独立 Diagnostic group：周期重试成功只清除对应 group，完整异常仅在状态变化时进入 Log，避免两秒保存周期反复刷屏。
 
 ## Undo / Redo
 
@@ -258,22 +258,22 @@ transaction.Commit();
 
 内建 `Edit/Undo` 与 `Edit/Redo` 菜单自动显示下一操作名称。快捷键为 Command/Ctrl+Z、Command/Ctrl+Shift+Z，并额外支持 Command/Ctrl+Y。
 
-## Workspace 存储
+## Module/Panel 状态存储
 
-Interactions 自动协调已通过 `EditorModule` / `EditorPanel` protected hooks 选择加入 Workspace 的 provider；Core 的显式 `IEditorWorkspaceState` adapter 只负责跨程序集转发。项目语义状态写入：
+Interactions 从 `EditorModuleAttribute.id` / `EditorPanelAttribute.id` 取得唯一身份，并只为真正 override protected `Capture(EditorState)` 的 Module/Panel 建立内部状态注册。没有 override Capture 的实例不进入状态 IO，也不会创建空 section。项目语义状态写入：
 
 ```text
 <Project>/editor.ini
 ```
 
-每个 provider 使用独立、可读的 INI section。单个复杂值使用一行 JSON 表示数组或字符串，不使用 Base64，也不把全部状态包进 opaque payload：
+每个有状态的 Module/Panel 使用独立、可读的 INI section。单个复杂值使用一行 JSON 表示数组或字符串，不使用 Base64，也不把全部状态包进 opaque payload：
 
 ```ini
 [InnoEditor][Module.scene-workspace]
 activeScene="Scenes/Main.iscene"
 openScenes=["Scenes/Main.iscene","Scenes/UI.iscene"]
 
-[InnoEditor][Panel.asset-browser-panel]
+[InnoEditor][Panel.asset.file-browser]
 filter=""
 viewMode="List"
 treePaneRatio=0.5
@@ -285,11 +285,11 @@ asset.file-browser=true
 scene.hierarchy=true
 ```
 
-文件通过临时文件 flush 后原子替换，并在运行期间进行约两秒的内容变化节流。退出时 Application 会在扩展停止前强制捕获所有 provider 和最新 ImGui layout，然后强制写入完整文档。未知 provider section 会保留，因此暂时移除插件不会销毁其设置；损坏的单个值只影响所属 provider。Panel 的 `isOpen` 按稳定 Panel ID 自动保存，不要求 Panel 实现接口。
+文件通过临时文件 flush 后原子替换，并在运行期间进行约两秒的内容变化节流。`EditorInteractionRuntime.SaveState()` 可显式捕获并 flush；退出时 Application 会在扩展停止前强制捕获所有有状态实例和最新 ImGui layout，然后强制写入完整文档。未知 Module/Panel section 会保留，因此暂时移除插件不会销毁其设置；损坏的单个值由 `EditorState.Get` 回退。Panel 的 `isOpen` 按稳定 Panel ID 自动保存，即使 Panel 没有 override Capture 也不受影响。
 
-Core 的 internal layout document 在内存中分别维护 ImGui layout 和具名 Inno Editor sections，避免 ImGui 覆盖 workspace 或 workspace 覆盖布局。Interactions 只通过 `EditorContext` 的 layout façade 读取和写入当前具名 section，不存在第二套 Workspace 文档。
+Core 的 internal layout document 在内存中分别维护 ImGui layout 和具名 Inno Editor sections，避免两类内容互相覆盖。Interactions 只通过 `EditorContext` 的 layout façade 读取和写入当前具名 section，不存在第二套 Module/Panel 状态文档。
 
-Workspace provider 的恢复状态按实例弱跟踪。只有成功完成 `RestoreWorkspaceState` 的 provider 才能参与后续 capture；脚本启动、TypeCache 重建或 Registry 事务在恢复回调中触发重入刷新时，同一个 provider 不会被再次调用，也不会用尚未初始化的默认字段覆盖磁盘 section。被新 snapshot 保留的 Module/Panel 仍以实际恢复状态为准，而不是仅因实例相同就跳过首次恢复。
+Module/Panel 的恢复状态按实例弱跟踪。只有成功完成 protected `Restore` 的实例才能参与后续 capture；脚本启动、TypeCache 重建或 Registry 事务在恢复回调中触发重入刷新时，同一实例不会被再次调用，也不会用尚未初始化的默认字段覆盖磁盘 section。被新 snapshot 保留的 Module/Panel 仍以实际恢复状态为准，而不是仅因实例相同就跳过首次恢复。
 
 Undo 栈、dirty Scene 内容、runtime 对象和编译中间态不会跨进程保存。它们要么无法安全跨代际恢复，要么本身可以由 Asset Database 和脚本构建图重建。
 

@@ -9,7 +9,7 @@ namespace Inno.Editor.Scripting;
 /// <summary>
 /// Owns script compilation and activation for one editor project.
 /// </summary>
-[EditorModule(order: 100)]
+[EditorModule("editor-scripting", order: 100)]
 internal sealed class EditorScripting : EditorModule
 {
     private ScriptManager? m_manager;

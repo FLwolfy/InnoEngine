@@ -10,7 +10,7 @@ namespace Inno.Editor.Panel.Global;
 /// <summary>
 /// Applies the configured actual UI size and manages transient zoom multiples around it.
 /// </summary>
-[EditorModule(order: 10)]
+[EditorModule("editor-zoom", order: 10)]
 internal sealed class EditorZoomModule(EditorSettings settings) : EditorModule
 {
     private const string C_ACTUAL_SIZE_PATH = "Global/Appearance/Accessibility/Actual Size";

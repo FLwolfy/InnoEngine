@@ -57,44 +57,47 @@ internal sealed class FileBrowserPanel : EditorPanel
     #endregion
 
     /// <inheritdoc />
-    protected override string workspaceStateId => "asset-browser-panel";
-
-    /// <inheritdoc />
-    protected override void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
+    protected override void Capture(EditorState state)
     {
-        ArgumentNullException.ThrowIfNull(writer);
-        writer.Set("viewMode", m_viewMode.ToString());
-        writer.Set("filter", m_filter);
-        writer.Set("entryTypeFilter", m_entryTypeFilter.ToString());
-        writer.Set("entryScopeFilter", m_entryScopeFilter.ToString());
-        writer.Set("treePaneRatio", m_treePaneRatio);
-        writer.Set("gridScale", m_gridScale);
-        writer.Set("listNameSeparator", m_listNameSeparatorPosition);
-        writer.Set("listTypeSeparator", m_listTypeSeparatorPosition);
+        state.Set("viewMode", m_viewMode.ToString());
+        state.Set("filter", m_filter);
+        state.Set("entryTypeFilter", m_entryTypeFilter.ToString());
+        state.Set("entryScopeFilter", m_entryScopeFilter.ToString());
+        state.Set("treePaneRatio", m_treePaneRatio);
+        state.Set("gridScale", m_gridScale);
+        state.Set("listNameSeparator", m_listNameSeparatorPosition);
+        state.Set("listTypeSeparator", m_listTypeSeparatorPosition);
     }
 
     /// <inheritdoc />
-    protected override void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
+    protected override void Restore(EditorState state)
     {
-        ArgumentNullException.ThrowIfNull(reader);
-        if (Enum.TryParse(reader.Get("viewMode", string.Empty), out ViewMode viewMode))
+        if (Enum.TryParse(state.Get("viewMode", string.Empty), out ViewMode viewMode))
             m_viewMode = viewMode;
-        if (Enum.TryParse(reader.Get("entryTypeFilter", string.Empty), out FileBrowserEntryTypeFilter typeFilter))
+        if (Enum.TryParse(
+                state.Get("entryTypeFilter", string.Empty),
+                out FileBrowserEntryTypeFilter typeFilter))
+        {
             m_entryTypeFilter = typeFilter;
-        if (Enum.TryParse(reader.Get("entryScopeFilter", string.Empty), out FileBrowserEntryScopeFilter scopeFilter))
+        }
+        if (Enum.TryParse(
+                state.Get("entryScopeFilter", string.Empty),
+                out FileBrowserEntryScopeFilter scopeFilter))
+        {
             m_entryScopeFilter = scopeFilter;
-        m_filter = reader.Get("filter", string.Empty);
-        float restoredTreePaneRatio = reader.Get("treePaneRatio", 0.5f);
+        }
+        m_filter = state.Get("filter", string.Empty);
+        float restoredTreePaneRatio = state.Get("treePaneRatio", 0.5f);
         m_treePaneRatio = float.IsFinite(restoredTreePaneRatio)
             ? Math.Clamp(restoredTreePaneRatio, 0f, 1f)
             : 0.5f;
         m_gridScale = Math.Clamp(
-            reader.Get("gridScale", EditorWidget.style.assetGridDefaultScale),
+            state.Get("gridScale", EditorWidget.style.assetGridDefaultScale),
             EditorWidget.style.assetGridMinimumScale,
             EditorWidget.style.assetGridMaximumScale);
         SetListColumnSeparators(
-            reader.Get("listNameSeparator", EditorWidget.style.assetListNameSeparatorPosition),
-            reader.Get("listTypeSeparator", EditorWidget.style.assetListTypeSeparatorPosition));
+            state.Get("listNameSeparator", EditorWidget.style.assetListNameSeparatorPosition),
+            state.Get("listTypeSeparator", EditorWidget.style.assetListTypeSeparatorPosition));
     }
 
     #region Lifecycle

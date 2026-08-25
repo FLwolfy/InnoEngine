@@ -6,7 +6,7 @@ namespace Inno.Editor.Core;
 /// Owns optional shared state and lifecycle for one editor feature.
 /// Simple panels and actions do not need a module.
 /// </summary>
-public abstract class EditorModule : IDisposable, IEditorWorkspaceState
+public abstract class EditorModule : IDisposable
 {
     private bool m_disposed;
 
@@ -71,31 +71,32 @@ public abstract class EditorModule : IDisposable, IEditorWorkspaceState
     }
 
     /// <summary>
-    /// Gets the stable project-workspace identifier for this module, or <see langword="null"/>
-    /// when the module does not persist workspace state.
+    /// Captures readable project state owned by this module.
     /// </summary>
-    protected virtual string workspaceStateId => null!;
-
-    /// <summary>
-    /// Captures project-specific workspace state owned by this module.
-    /// This hook is called only when <see cref="workspaceStateId"/> is non-empty.
-    /// </summary>
-    /// <param name="writer">
-    /// The isolated writer assigned to this module.
+    /// <remarks>
+    /// Overriding this method opts the module into project-state IO. Modules that keep the base
+    /// implementation are never registered with the persistence coordinator and therefore perform
+    /// no state reads or writes.
+    /// </remarks>
+    /// <param name="state">
+    /// The writable parameter that receives the complete readable state for this module.
     /// </param>
-    protected virtual void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
+    protected virtual void Capture(EditorState state)
     {
     }
 
     /// <summary>
-    /// Restores project-specific workspace state owned by this module.
-    /// This hook is called only when <see cref="workspaceStateId"/> is non-empty.
+    /// Restores readable project state owned by this module.
     /// </summary>
-    /// <param name="reader">
-    /// The isolated reader for this module. Its <see cref="EditorWorkspaceStateReader.hasState"/>
-    /// property is <see langword="false"/> when no state was stored.
+    /// <remarks>
+    /// This method is called only when <see cref="Capture"/> is overridden. It runs once after the
+    /// module is started and before the module is allowed to capture replacement state.
+    /// </remarks>
+    /// <param name="state">
+    /// The read-only state parameter for this module. Missing or incompatible values return the
+    /// fallback supplied to <see cref="EditorState.Get{T}(string, T)"/>.
     /// </param>
-    protected virtual void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
+    protected virtual void Restore(EditorState state)
     {
     }
 
@@ -106,14 +107,6 @@ public abstract class EditorModule : IDisposable, IEditorWorkspaceState
     protected virtual void OnDispose()
     {
     }
-
-    string? IEditorWorkspaceState.workspaceStateId => workspaceStateId;
-
-    void IEditorWorkspaceState.CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
-        => CaptureWorkspaceState(writer);
-
-    void IEditorWorkspaceState.RestoreWorkspaceState(EditorWorkspaceStateReader reader)
-        => RestoreWorkspaceState(reader);
 
     void IDisposable.Dispose()
     {

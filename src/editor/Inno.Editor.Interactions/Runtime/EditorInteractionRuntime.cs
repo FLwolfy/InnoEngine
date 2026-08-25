@@ -88,17 +88,18 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
     public void Flush() => m_interactions.Update();
 
     /// <summary>
-    /// Captures every active workspace provider and atomically flushes changed project state to disk.
+    /// Captures every stateful active module and panel and atomically flushes changed project state
+    /// to disk.
     /// </summary>
     /// <exception cref="ObjectDisposedException">Thrown after this runtime has been disposed.</exception>
-    public void SaveWorkspace()
+    public void SaveState()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
-        m_catalog.SaveWorkspace();
+        m_catalog.SaveState();
     }
 
     /// <summary>
-    /// Freezes automatic workspace persistence and writes the final state before extension modules
+    /// Freezes automatic extension-state persistence and writes the final state before modules
     /// begin shutting down.
     /// </summary>
     /// <remarks>
@@ -131,7 +132,7 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
         m_catalog.PrepareShutdown();
         m_disposed = true;
         m_interactions.Shutdown();
-        m_catalog.Shutdown(saveWorkspace: false);
+        m_catalog.Shutdown(saveState: false);
         m_catalog.Dispose();
         m_panels = [];
         m_modals = [];

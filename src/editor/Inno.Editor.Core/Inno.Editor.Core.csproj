@@ -11,6 +11,4 @@
   <ItemGroup>
     <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
   </ItemGroup>
-
-  <ItemGroup />
 </Project>

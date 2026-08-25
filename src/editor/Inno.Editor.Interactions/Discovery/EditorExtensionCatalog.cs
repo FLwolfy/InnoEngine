@@ -14,7 +14,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
     private readonly EditorContext m_context;
     private readonly EditorExtensionDiagnosticPublisher m_diagnostics = new();
     private readonly EditorInteractions m_interactions;
-    private readonly EditorWorkspaceStore m_workspace;
+    private readonly EditorExtensionStateStore m_state;
     private readonly Dictionary<string, PanelState> m_panelStates = new(StringComparer.Ordinal);
     private Snapshot? m_active;
 
@@ -22,7 +22,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
     {
         m_context = context ?? throw new ArgumentNullException(nameof(context));
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
-        m_workspace = new EditorWorkspaceStore(context);
+        m_state = new EditorExtensionStateStore(context);
     }
 
     internal Snapshot extensions
@@ -44,34 +44,34 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             if (snapshot.modules[i].module.blocksFollowingUpdates)
                 break;
         }
-        m_workspace.Update(m_context.frame.totalTime, snapshot.workspace, snapshot.panels);
+        m_state.Update(m_context.frame.totalTime, snapshot.state, snapshot.panels);
     }
 
-    internal void SaveWorkspace()
+    internal void SaveState()
     {
         if (m_active is not null)
-            m_workspace.Save(m_active.workspace, m_active.panels);
+            m_state.Save(m_active.state, m_active.panels);
     }
 
     internal void PrepareShutdown()
     {
         if (m_active is not null)
-            m_workspace.PrepareShutdown(m_active.workspace, m_active.panels);
+            m_state.PrepareShutdown(m_active.state, m_active.panels);
     }
 
-    internal void Shutdown(bool saveWorkspace = true)
+    internal void Shutdown(bool saveState = true)
     {
         if (m_active is not null)
         {
-            if (saveWorkspace)
-                m_workspace.PrepareShutdown(m_active.workspace, m_active.panels);
+            if (saveState)
+                m_state.PrepareShutdown(m_active.state, m_active.panels);
             Deactivate(m_active);
         }
         m_active = null;
         if (isInitialized)
             Clear();
         m_diagnostics.Dispose();
-        m_workspace.ClearDiagnostics();
+        m_state.ClearDiagnostics();
     }
 
     protected override Snapshot Build(TypeCacheSnapshot types)
@@ -88,10 +88,10 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
 
         ModuleRegistration[] modules = moduleTypes
             .Select(type => new ModuleRegistration(
-                type.GetCustomAttribute<EditorModuleAttribute>(false)!.order,
+                type.GetCustomAttribute<EditorModuleAttribute>(false)!,
                 type,
                 activator.CreateModule(type)))
-            .OrderBy(static value => value.order)
+            .OrderBy(static value => value.attribute.order)
             .ThenBy(static value => value.type.FullName, StringComparer.Ordinal)
             .ToArray();
 
@@ -121,6 +121,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             .ThenBy(static value => value.type.FullName, StringComparer.Ordinal)
             .ToArray();
         ValidatePanels(panels);
+        ValidateExtensionIds(modules, panels);
 
         ModalRegistration[] modals = types.GetTypesWithAttribute<EditorModalAttribute>()
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
@@ -139,16 +140,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             .ToArray();
         ValidateHistoryHandlers(historyHandlers);
 
-        WorkspaceRegistration[] workspace = modules
-            .Select(static value => value.module)
-            .Concat<object>(panels.Select(static value => value.panel))
-            .OfType<IEditorWorkspaceState>()
-            .Select(static provider => (Provider: provider, Id: provider.workspaceStateId))
-            .Where(static value => !string.IsNullOrWhiteSpace(value.Id))
-            .Select(static value => new WorkspaceRegistration(value.Id!, value.Provider))
-            .OrderBy(static value => value.id, StringComparer.Ordinal)
-            .ToArray();
-        ValidateWorkspace(workspace);
+        StateRegistration[] state = CreateStateRegistrations(modules, panels);
 
         return new Snapshot(
             modules,
@@ -158,7 +150,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             panels,
             modals,
             historyHandlers,
-            workspace,
+            state,
             activator.instances.ToArray());
     }
 
@@ -215,7 +207,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         m_diagnostics.Commit();
         for (int i = 0; i < snapshot.modules.Length; i++)
             snapshot.modules[i].module.Start(m_context);
-        m_workspace.Restore(snapshot.workspace);
+        m_state.Restore(snapshot.state);
     }
 
     private void Deactivate(Snapshot snapshot)
@@ -244,7 +236,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
     private void Transition(Snapshot previous, Snapshot next)
     {
         CapturePanelStates(previous);
-        m_workspace.Save(previous.workspace, previous.panels);
+        m_state.Save(previous.state, previous.panels);
         var retained = new HashSet<object>(next.instances, ReferenceEqualityComparer.Instance);
         for (int i = previous.modules.Length - 1; i >= 0; i--)
         {
@@ -300,7 +292,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             if (!existing.Contains(next.modules[i].module))
                 next.modules[i].module.Start(m_context);
         }
-        m_workspace.Restore(next.workspace);
+        m_state.Restore(next.state);
     }
 
     private void CapturePanelStates()
@@ -371,7 +363,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         }
         else
         {
-            panel.isOpen = m_workspace.TryGetPanelOpen(attribute.id, out bool isOpen)
+            panel.isOpen = m_state.TryGetPanelOpen(attribute.id, out bool isOpen)
                 ? isOpen
                 : attribute.defaultOpen;
         }
@@ -464,22 +456,84 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         return result;
     }
 
-    private static void ValidateWorkspace(WorkspaceRegistration[] providers)
+    private static void ValidateExtensionIds(
+        IReadOnlyList<ModuleRegistration> modules,
+        IReadOnlyList<PanelRegistration> panels)
     {
-        WorkspaceRegistration? duplicate = providers
-            .GroupBy(static value => value.id, StringComparer.Ordinal)
-            .FirstOrDefault(static group => group.Count() > 1)?
-            .FirstOrDefault();
+        string? duplicate = modules
+            .Select(static value => value.attribute.id)
+            .Concat(panels.Select(static value => value.attribute.id))
+            .GroupBy(static id => id, StringComparer.Ordinal)
+            .FirstOrDefault(static group => group.Count() > 1)?.Key;
         if (duplicate is not null)
-        {
             throw new InvalidOperationException(
-                $"Editor workspace state id '{duplicate.id}' is registered more than once.");
-        }
-        for (int i = 0; i < providers.Length; i++)
+                $"Editor extension id '{duplicate}' is registered more than once.");
+    }
+
+    private static StateRegistration[] CreateStateRegistrations(
+        IReadOnlyList<ModuleRegistration> modules,
+        IReadOnlyList<PanelRegistration> panels)
+    {
+        var result = new List<StateRegistration>();
+        for (int i = 0; i < modules.Count; i++)
         {
-            if (string.IsNullOrWhiteSpace(providers[i].id))
-                throw new InvalidOperationException("Editor workspace state ids cannot be empty.");
+            ModuleRegistration module = modules[i];
+            StateRegistration? registration = CreateStateRegistration(
+                module.attribute.id,
+                StateOwnerKind.Module,
+                module.type,
+                module.module,
+                typeof(EditorModule));
+            if (registration is not null)
+                result.Add(registration);
         }
+        for (int i = 0; i < panels.Count; i++)
+        {
+            PanelRegistration panel = panels[i];
+            StateRegistration? registration = CreateStateRegistration(
+                panel.attribute.id,
+                StateOwnerKind.Panel,
+                panel.type,
+                panel.panel,
+                typeof(EditorPanel));
+            if (registration is not null)
+                result.Add(registration);
+        }
+        return result
+            .OrderBy(static value => value.id, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static StateRegistration? CreateStateRegistration(
+        string id,
+        StateOwnerKind kind,
+        Type type,
+        object owner,
+        Type baseType)
+    {
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        MethodInfo capture = type.GetMethod(
+            "Capture",
+            flags,
+            binder: null,
+            [typeof(EditorState)],
+            modifiers: null) ?? throw new InvalidOperationException(
+                $"Editor extension '{type.FullName}' has no state capture hook.");
+        if (capture.DeclaringType == baseType)
+            return null;
+        MethodInfo restore = type.GetMethod(
+            "Restore",
+            flags,
+            binder: null,
+            [typeof(EditorState)],
+            modifiers: null) ?? throw new InvalidOperationException(
+                $"Editor extension '{type.FullName}' has no state restore hook.");
+        return new StateRegistration(
+            id,
+            kind,
+            owner,
+            capture.CreateDelegate<Action<EditorState>>(owner),
+            restore.CreateDelegate<Action<EditorState>>(owner));
     }
 
     internal sealed record Snapshot(
@@ -490,10 +544,13 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         PanelRegistration[] panels,
         ModalRegistration[] modals,
         HistoryHandlerRegistration[] historyHandlers,
-        WorkspaceRegistration[] workspace,
+        StateRegistration[] state,
         object[] instances);
 
-    internal sealed record ModuleRegistration(int order, Type type, EditorModule module);
+    internal sealed record ModuleRegistration(
+        EditorModuleAttribute attribute,
+        Type type,
+        EditorModule module);
 
     internal sealed record ActionRegistration(
         EditorActionAttribute attribute,
@@ -531,9 +588,18 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         Type type,
         EditorHistoryHandler handler);
 
-    internal sealed record WorkspaceRegistration(
+    internal sealed record StateRegistration(
         string id,
-        IEditorWorkspaceState provider);
+        StateOwnerKind kind,
+        object owner,
+        Action<EditorState> capture,
+        Action<EditorState> restore);
+
+    internal enum StateOwnerKind
+    {
+        Module,
+        Panel
+    }
 
     private readonly record struct PanelState(bool isOpen, ReadOnlyMemory<byte> payload);
 }

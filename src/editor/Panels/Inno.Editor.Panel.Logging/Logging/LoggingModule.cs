@@ -9,7 +9,7 @@ namespace Inno.Editor.Panel.Logging;
 /// <summary>
 /// Connects the editor Console to the independent logging and diagnostics cores.
 /// </summary>
-[EditorModule(order: int.MinValue)]
+[EditorModule("diagnostics-logging", order: int.MinValue)]
 internal sealed class LoggingModule : EditorModule
 {
     private readonly EditorDiagnosticBuffer m_diagnostics = new();

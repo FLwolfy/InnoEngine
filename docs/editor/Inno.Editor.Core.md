@@ -21,10 +21,8 @@ Inno.Editor.Core/
 ├─ Modules/
 │  ├─ EditorModule.cs
 │  └─ EditorModuleAttribute.cs
-├─ Workspace/
-│  ├─ IEditorWorkspaceState.cs
-│  ├─ EditorWorkspaceStateReader.cs
-│  └─ EditorWorkspaceStateWriter.cs
+├─ State/
+│  └─ EditorState.cs
 └─ Properties/ScriptingApi.cs
 ```
 
@@ -52,14 +50,14 @@ Console.WriteLine(context.imguiLayout);
 
 构造函数把项目根规范化为绝对路径。Context 通过 `layoutPath`、`imguiLayout`、`GetLayoutSectionNames`、`TryGetLayoutSection`、`SetLayoutSection`、`RemoveLayoutSection`、`SetImGuiLayout`、`SaveLayoutIfChanged` 和 `SaveLayout` 提供明确的 layout 操作；具体文档类保持 internal。
 
-这些 API 只处理 Workspace 与 Dear ImGui 使用的 `editor.ini`。业务设置由 [Inno.Editor.Settings](Inno.Editor.Settings.md) 独立写入项目根 `EditorSettings.json`。业务扩展若需要 Settings、Action/Menu/Selection，仍应在构造函数中接收 `EditorSettings` 或 `EditorInteractions`，而不是向 `EditorContext` 添加新服务属性。
+这些 API 只处理 Module/Panel 项目状态与 Dear ImGui 使用的 `editor.ini`。业务设置由 [Inno.Editor.Settings](Inno.Editor.Settings.md) 独立写入项目根 `EditorSettings.json`。业务扩展若需要 Settings、Action/Menu/Selection，仍应在构造函数中接收 `EditorSettings` 或 `EditorInteractions`，而不是向 `EditorContext` 添加新服务属性。
 
 ## Module
 
 `EditorModule` 表示跨 Panel 共享、随扩展 generation 启停的 feature 状态：
 
 ```csharp
-[EditorModule(order: 100)]
+[EditorModule("animation", order: 100)]
 public sealed class AnimationModule : EditorModule
 {
     private bool m_isBaking;
@@ -81,6 +79,8 @@ public sealed class AnimationModule : EditorModule
 ```
 
 `blocksFollowingUpdates` 是通用的原子启动/切换屏障：当前 Module 返回 `true` 时，排序在它之后的 Module 本帧不更新，但 Panel 和 Modal 仍可绘制。Scripting 用它保证脚本类型激活后 Scene 才恢复；未来 Shader/Pipeline bootstrap 也可以使用同一机制，避免业务模块互相引用。
+
+`EditorModuleAttribute.id` 是必填且全局唯一的 Module identity。它同时用于发现冲突、诊断和可选状态 section；Module 不再声明第二个 workspace ID。
 
 `EditorModule` 由扩展 Catalog 通过 `IDisposable` 统一释放，但 `Dispose` 是显式接口实现，不是派生类型的公开成员。Module 若拥有 Registry、watcher 或其他资源，只重写 `protected virtual OnDispose()`；Catalog 会在 Stop 且 generation 离开活动状态后调用一次。`IDisposable` 在这里仍有明确用途：它是 Catalog 与所有 Module 共用的基础设施 teardown 协议，而不是 feature 自己暴露或手工调用的生命周期 API。
 
@@ -142,34 +142,33 @@ public sealed class AnimationBakeModal(AnimationModule animation) : EditorModal
 
 ## Scripting API
 
-EditorScripts 使用唯一逻辑命名空间 `InnoEditor.Core`。它导出 Context、Frame、Runtime、Module、Panel、Modal、Reload State 接口和 Workspace reader/writer；`IEditorWorkspaceState` 本身不导出，脚本通过 Module/Panel 的 protected hooks 参与持久化。所有脚本必须显式写普通 `using`。
+EditorScripts 使用唯一逻辑命名空间 `InnoEditor.Core`。它导出 Context、Frame、Runtime、Module、Panel、Modal、`EditorState` 和 Reload State 接口；不导出独立 Workspace interface、reader、writer 或 JSON DOM。脚本 Module/Panel 通过 protected `Capture(EditorState)` / `Restore(EditorState)` 选择持久化，所有脚本必须显式写普通 `using`。
 
-## 项目 Workspace 状态契约
+## Module/Panel 项目状态
 
-Workspace 的扩展逻辑已经合并进 `EditorModule` 与 `EditorPanel` 基类。派生类型默认不保存任何状态；只要覆写非空 `workspaceStateId` 以及需要的 protected capture/restore hook，就会被 Interactions 自动发现：
-
-这里的 Workspace 专指 `IEditorWorkspaceState` 持久化能力与 `EditorWorkspaceStore` 协调器，不是某一种 Module。`EditorSceneWorkspace` 名称中的 Workspace 表示“当前打开的 Scene 文档工作集”：它因为需要启动、逐帧同步和停止，所以是 `EditorModule`；它同时 override workspace hooks，只是额外选择把可恢复的 Scene 路径写入 `editor.ini`。继承方向始终是 Module/Panel 实现持久化能力，而不是 Workspace store 继承 Module。
+状态能力直接属于 `EditorModule` 与 `EditorPanel`。派生类型默认不保存任何状态；Catalog 只为真正 override `Capture(EditorState)` 的类型建立内部状态注册。没有 override Capture 的 Module/Panel 不会进入 restore、capture 或 section IO。唯一 ID 直接来自 `EditorModuleAttribute.id` 或 `EditorPanelAttribute.id`：
 
 ```csharp
+[EditorModule("animation")]
 public sealed class AnimationModule : EditorModule
 {
-    protected override string workspaceStateId => "animation.workspace";
-
-    protected override void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
+    protected override void Capture(EditorState state)
     {
-        writer.Set("controller", m_controllerAssetId);
-        writer.Set("zoom", m_zoom);
+        state.Set("controller", m_controllerAssetId);
+        state.Set("zoom", m_zoom);
     }
 
-    protected override void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
+    protected override void Restore(EditorState state)
     {
-        m_controllerAssetId = reader.Get("controller", Guid.Empty);
-        m_zoom = reader.Get("zoom", 1f);
+        m_controllerAssetId = state.Get("controller", Guid.Empty);
+        m_zoom = state.Get("zoom", 1f);
     }
 }
 ```
 
-基础设施 `IEditorWorkspaceState` 适配器仍作为 Core 与 Interactions 的程序集边界协议存在，但由基类显式实现，业务类型不再重复继承或公开它。ID 必须稳定且全局唯一。Reader 在无状态时仍会被调用并令 `hasState == false`，因此 feature 可在同一个入口建立默认状态。状态只应保存项目相关、可重新解析的中立值，不保存 runtime 对象、线程、delegate 或插件实例，也不自行引入 schema 迁移字段。
+`Restore` 只会为已 override Capture 的实例调用；section 不存在时，`state.Get` 直接返回调用者给出的 fallback。`EditorState` 是唯一公开参数契约，只提供 `Get` / `Set`；存储格式、JSON serializer 和 section 转换全部位于 Interactions 的 internal 实现中。Capture 参数可写，Restore 参数只读。状态只应保存项目相关、可重新解析的中立值，不保存 runtime 对象、线程、delegate 或插件实例，也不自行引入 schema 迁移字段。
+
+`EditorSceneWorkspace` 名称中的 Workspace 仍表示“当前打开的 Scene 文档工作集”，不是另一种基础设施类型。它因为需要启动、逐帧同步和停止而是 `EditorModule`，并通过同一组 Capture/Restore hooks 额外保存 Scene 路径。
 
 ## 边界规则
 

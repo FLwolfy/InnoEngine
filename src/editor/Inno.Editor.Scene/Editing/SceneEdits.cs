@@ -15,7 +15,7 @@ namespace Inno.Editor.Scene;
 /// <summary>
 /// Applies scene-document mutations and records compact, reload-safe inverse data in editor history.
 /// </summary>
-[EditorModule(order: 210)]
+[EditorModule("scene-edits", order: 210)]
 public sealed class SceneEdits : EditorModule
 {
     private readonly EditorSceneWorkspace m_workspace;

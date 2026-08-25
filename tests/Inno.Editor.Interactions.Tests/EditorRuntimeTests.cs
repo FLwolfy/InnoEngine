@@ -34,8 +34,8 @@ public sealed class EditorRuntimeTests : IDisposable
 
         TestModule.startCount = 0;
         TestModule.stopCount = 0;
-        TestModule.workspaceValue = 0;
-        TestModule.restoredWorkspaceValue = 0;
+        TestModule.stateValue = 0;
+        TestModule.restoredStateValue = 0;
         TestModule.rebuildDuringRestore = false;
         TestModule.captureFailure = false;
         TestPanel.attachCount = 0;
@@ -60,9 +60,12 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
-    public void HistoryAndWorkspaceContractsDoNotExposeSchemaVersions()
+    public void HistoryAndExtensionStateContractsDoNotExposeStandaloneWorkspaceTypes()
     {
-        Assert.Null(typeof(IEditorWorkspaceState).GetProperty("workspaceStateVersion"));
+        Assembly core = typeof(EditorModule).Assembly;
+        Assert.Null(core.GetType("Inno.Editor.Core.IEditorWorkspaceState"));
+        Assert.Null(core.GetType("Inno.Editor.Core.EditorWorkspaceStateReader"));
+        Assert.Null(core.GetType("Inno.Editor.Core.EditorWorkspaceStateWriter"));
         Assert.Null(typeof(EditorHistoryChange).GetProperty("version"));
         ConstructorInfo constructor = Assert.Single(typeof(EditorHistoryHandlerAttribute).GetConstructors());
         Assert.Collection(
@@ -71,18 +74,38 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
-    public void ModuleAndPanelBasesHideInfrastructureAdaptersBehindProtectedHooks()
+    public void ModuleAndPanelBasesExposeOnlyProtectedStateHooks()
     {
         Assert.Null(typeof(EditorModule).GetMethod("Dispose"));
-        Assert.Null(typeof(EditorModule).GetProperty(
-            "workspaceStateId",
-            BindingFlags.Instance | BindingFlags.Public));
-        Assert.Null(typeof(EditorPanel).GetProperty(
-            "workspaceStateId",
-            BindingFlags.Instance | BindingFlags.Public));
         Assert.True(typeof(IDisposable).IsAssignableFrom(typeof(EditorModule)));
-        Assert.True(typeof(IEditorWorkspaceState).IsAssignableFrom(typeof(EditorModule)));
-        Assert.True(typeof(IEditorWorkspaceState).IsAssignableFrom(typeof(EditorPanel)));
+        MethodInfo? moduleCapture = typeof(EditorModule).GetMethod(
+            "Capture",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        MethodInfo? panelCapture = typeof(EditorPanel).GetMethod(
+            "Capture",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(moduleCapture);
+        Assert.NotNull(panelCapture);
+        Assert.Equal(typeof(EditorState), Assert.Single(moduleCapture.GetParameters()).ParameterType);
+        Assert.Equal(typeof(EditorState), Assert.Single(panelCapture.GetParameters()).ParameterType);
+        Assert.Null(typeof(EditorModule).GetMethod(
+            "ReadState",
+            BindingFlags.Static | BindingFlags.NonPublic));
+        Assert.Null(typeof(EditorPanel).GetMethod(
+            "WriteState",
+            BindingFlags.Static | BindingFlags.NonPublic));
+        Assert.Equal(
+            ["Get", "Set"],
+            typeof(EditorState)
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)
+                .Select(static method => method.Name)
+                .OrderBy(static name => name, StringComparer.Ordinal));
+        ConstructorInfo constructor = Assert.Single(typeof(EditorModuleAttribute).GetConstructors());
+        Assert.Collection(
+            constructor.GetParameters(),
+            static parameter => Assert.Equal(typeof(string), parameter.ParameterType),
+            static parameter => Assert.Equal(typeof(int), parameter.ParameterType));
+        Assert.Throws<ArgumentException>(() => new EditorModuleAttribute(string.Empty));
     }
 
     [Fact]
@@ -379,9 +402,9 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
-    public void WorkspaceStateAndPanelVisibilityRestoreForTheSameProject()
+    public void ModuleStateAndPanelVisibilityRestoreForTheSameProject()
     {
-        TestModule.workspaceValue = 42;
+        TestModule.stateValue = 42;
         EditorPanelExtension panel = Assert.Single(
             m_runtime.panels.Where(static value => value.id == "tests.panel"));
         panel.panel.isOpen = true;
@@ -390,19 +413,38 @@ public sealed class EditorRuntimeTests : IDisposable
 
         string settingsPath = Path.Combine(m_projectRoot, "editor.ini");
         Assert.True(File.Exists(settingsPath));
-        Assert.Contains("[InnoEditor][Module.tests.workspace]", File.ReadAllText(settingsPath));
-        Assert.False(File.Exists(Path.Combine(m_projectRoot, "Library", "Editor", "Workspace.json")));
+        string document = File.ReadAllText(settingsPath);
+        Assert.Contains("[InnoEditor][Module.tests.state]", document);
+        Assert.DoesNotContain("[InnoEditor][Module.tests.update-barrier]", document);
 
         using var restored = new EditorInteractionRuntime(m_projectRoot);
         restored.Start();
 
-        Assert.Equal(42, TestModule.restoredWorkspaceValue);
+        Assert.Equal(42, TestModule.restoredStateValue);
         Assert.True(Assert.Single(
             restored.panels.Where(static value => value.id == "tests.panel")).panel.isOpen);
     }
 
     [Fact]
-    public void WorkspaceCaptureFailure_PublishesCurrentDiagnosticUntilRetrySucceeds()
+    public void MalformedModuleStateValueUsesTheExtensionFallback()
+    {
+        m_runtime.Dispose();
+        var context = new EditorContext(m_projectRoot);
+        context.SetLayoutSection("Module.tests.state", new Dictionary<string, string>
+        {
+            ["value"] = "not-json"
+        });
+        context.SaveLayout();
+        TestModule.restoredStateValue = -1;
+
+        using var restored = new EditorInteractionRuntime(context);
+        restored.Start();
+
+        Assert.Equal(0, TestModule.restoredStateValue);
+    }
+
+    [Fact]
+    public void ExtensionStateCaptureFailure_PublishesCurrentDiagnosticUntilRetrySucceeds()
     {
         var sink = new TestDiagnosticSink();
         DiagnosticManager.RegisterSink(sink);
@@ -412,15 +454,15 @@ public sealed class EditorRuntimeTests : IDisposable
             m_runtime.Update(new EditorFrame(0.016f, 3f, isFocused: true));
 
             DiagnosticReport report = Assert.Single(sink.reports.Values.Where(static value =>
-                value.source.displayName == "Workspace Capture"));
-            Assert.Equal("WORKSPACE-CAPTURE", Assert.Single(report.diagnostics).code);
+                value.source.displayName == "Editor State Capture"));
+            Assert.Equal("EDITOR-STATE-CAPTURE", Assert.Single(report.diagnostics).code);
 
             TestModule.captureFailure = false;
             m_runtime.Update(new EditorFrame(0.016f, 6f, isFocused: true));
 
             Assert.DoesNotContain(
                 sink.reports.Values,
-                static value => value.source.displayName == "Workspace Capture");
+                static value => value.source.displayName == "Editor State Capture");
         }
         finally
         {
@@ -430,7 +472,7 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
-    public void UnifiedEditorIniPreservesLayoutAndWorkspaceSectionsTogether()
+    public void UnifiedEditorIniPreservesLayoutAndExtensionStateSectionsTogether()
     {
         const string layout = "[Window][Hierarchy]\nPos=10,20\nSize=300,400";
         var context = new EditorContext(m_projectRoot);
@@ -456,28 +498,28 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
-    public void StartupRegistryRefreshCannotOverwriteWorkspaceBeforeProvidersRestore()
+    public void StartupRegistryRefreshCannotOverwriteModuleStateBeforeRestore()
     {
         m_runtime.Dispose();
         var context = new EditorContext(m_projectRoot);
-        context.SetLayoutSection("Module.tests.workspace", new Dictionary<string, string>
+        context.SetLayoutSection("Module.tests.state", new Dictionary<string, string>
         {
             ["value"] = "91"
         });
         context.SaveLayout();
         TestModule.startCount = 0;
-        TestModule.restoredWorkspaceValue = 0;
+        TestModule.restoredStateValue = 0;
         TestModule.rebuildDuringRestore = true;
 
         using var restored = new EditorInteractionRuntime(m_projectRoot);
         restored.Start();
-        Assert.Equal(91, TestModule.restoredWorkspaceValue);
-        TestModule.workspaceValue = TestModule.restoredWorkspaceValue;
+        Assert.Equal(91, TestModule.restoredStateValue);
+        TestModule.stateValue = TestModule.restoredStateValue;
         restored.Update(new EditorFrame(0.016f, 0.016f, isFocused: true));
-        restored.SaveWorkspace();
+        restored.SaveState();
 
         string document = File.ReadAllText(Path.Combine(m_projectRoot, "editor.ini"));
-        Assert.Contains("[InnoEditor][Module.tests.workspace]", document);
+        Assert.Contains("[InnoEditor][Module.tests.state]", document);
         Assert.Contains("value=91", document);
         Assert.False(TestModule.rebuildDuringRestore);
     }
@@ -547,28 +589,26 @@ public sealed class NeutralHistoryHandler : EditorHistoryHandler
     }
 }
 
-[EditorModule]
+[EditorModule("tests.state")]
 public sealed class TestModule : EditorModule
 {
     public static int startCount;
     public static int stopCount;
-    public static int workspaceValue;
-    public static int restoredWorkspaceValue;
+    public static int stateValue;
+    public static int restoredStateValue;
     public static bool rebuildDuringRestore;
     public static bool captureFailure;
 
-    protected override string workspaceStateId => "tests.workspace";
-
-    protected override void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
+    protected override void Capture(EditorState state)
     {
         if (captureFailure)
-            throw new InvalidOperationException("The test workspace cannot be captured.");
-        writer.Set("value", workspaceValue);
+            throw new InvalidOperationException("The test module state cannot be captured.");
+        state.Set("value", stateValue);
     }
 
-    protected override void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
+    protected override void Restore(EditorState state)
     {
-        restoredWorkspaceValue = reader.Get("value", 0);
+        restoredStateValue = state.Get("value", 0);
         if (!rebuildDuringRestore)
             return;
         rebuildDuringRestore = false;
@@ -585,7 +625,7 @@ public sealed class TestModule : EditorModule
     protected override void OnStop(EditorContext context) => stopCount++;
 }
 
-[EditorModule(order: -200)]
+[EditorModule("tests.update-barrier", order: -200)]
 public sealed class UpdateBarrierModule : EditorModule
 {
     public static bool block;
@@ -593,7 +633,7 @@ public sealed class UpdateBarrierModule : EditorModule
     public override bool blocksFollowingUpdates => block;
 }
 
-[EditorModule(order: -199)]
+[EditorModule("tests.following-update", order: -199)]
 public sealed class FollowingUpdateModule : EditorModule
 {
     public static int updateCount;

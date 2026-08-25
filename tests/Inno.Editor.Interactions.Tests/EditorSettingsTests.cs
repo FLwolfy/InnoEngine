@@ -239,7 +239,7 @@ public sealed class EditorSettingsTests : IDisposable
         Assert.False(definition.Draw(alreadyCommitted));
     }
 
-    [EditorModule(order: int.MaxValue)]
+    [EditorModule("tests.settings-capture", order: int.MaxValue)]
     private sealed class SettingsCaptureModule(EditorSettings settings) : EditorModule
     {
         internal static EditorSettings? current;

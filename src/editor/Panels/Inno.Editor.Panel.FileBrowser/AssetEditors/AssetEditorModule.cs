@@ -13,11 +13,9 @@ using Inno.Editor.Settings;
 namespace Inno.Editor.Panel.FileBrowser;
 
 /// <summary>Owns shared Asset Browser state and asset-type extension dispatch.</summary>
-[EditorModule(order: 100)]
+[EditorModule("asset-browser", order: 100)]
 public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<AssetFileEntry>
 {
-    private const string C_WORKSPACE_STATE_ID = "asset-browser";
-
     private readonly AssetEditorRegistry m_editors = new();
     private readonly AssetIconRegistry m_icons;
     private readonly EditorSettings m_settings;
@@ -47,20 +45,15 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
     public AssetBrowserState browser { get; }
 
     /// <inheritdoc />
-    protected override string workspaceStateId => C_WORKSPACE_STATE_ID;
-
-    /// <inheritdoc />
-    protected override void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
+    protected override void Capture(EditorState state)
     {
-        ArgumentNullException.ThrowIfNull(writer);
-        writer.Set("currentDirectory", browser.currentDirectory);
+        state.Set("currentDirectory", browser.currentDirectory);
     }
 
     /// <inheritdoc />
-    protected override void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
+    protected override void Restore(EditorState state)
     {
-        ArgumentNullException.ThrowIfNull(reader);
-        string directory = reader.Get("currentDirectory", string.Empty);
+        string directory = state.Get("currentDirectory", string.Empty);
         while (!string.IsNullOrEmpty(directory) &&
                (!AssetManager.TryGetFileSystemEntry(directory, out AssetFileEntry entry) || !entry.isDirectory))
         {

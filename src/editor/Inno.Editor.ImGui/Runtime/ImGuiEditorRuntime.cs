@@ -55,24 +55,24 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
     public override void Update(EditorFrame frame) => m_runtime.Update(frame);
 
     /// <summary>
-    /// Captures all active editor workspace providers and flushes their project state to disk.
+    /// Captures all stateful active modules and panels and flushes their project state to disk.
     /// </summary>
     /// <exception cref="ObjectDisposedException">
     /// Thrown after this runtime has been disposed.
     /// </exception>
-    public void SaveWorkspace()
+    public void SaveState()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
-        m_runtime.SaveWorkspace();
+        m_runtime.SaveState();
     }
 
     /// <summary>
-    /// Freezes automatic workspace persistence and writes the final project state before editor
+    /// Freezes automatic extension-state persistence and writes the final project state before editor
     /// modules begin shutting down.
     /// </summary>
     /// <remarks>
     /// This operation is idempotent and prevents module teardown from overwriting the saved
-    /// workspace with transient empty state.
+    /// module sections with transient empty state.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">
     /// Thrown after this runtime has been disposed.

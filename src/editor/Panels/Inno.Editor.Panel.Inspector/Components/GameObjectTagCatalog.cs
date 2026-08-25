@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using Inno.Editor.Core;
 using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
@@ -72,29 +71,18 @@ internal sealed class GameObjectTagCatalog
     }
 
     /// <summary>
-    /// Captures the catalog into the owning module's readable workspace section.
+    /// Replaces the custom project tags from restored module state.
     /// </summary>
-    /// <param name="writer">The isolated workspace writer assigned to the Inspection module.</param>
-    internal void Capture(EditorWorkspaceStateWriter writer)
+    /// <param name="tags">The restored tag names.</param>
+    internal void Restore(IEnumerable<string> tags)
     {
-        ArgumentNullException.ThrowIfNull(writer);
-        writer.Set("tags", GetTags());
-    }
-
-    /// <summary>
-    /// Restores the catalog from the owning module's readable workspace section.
-    /// </summary>
-    /// <param name="reader">The isolated workspace reader assigned to the Inspection module.</param>
-    internal void Restore(EditorWorkspaceStateReader reader)
-    {
-        ArgumentNullException.ThrowIfNull(reader);
+        ArgumentNullException.ThrowIfNull(tags);
         m_tags.Clear();
         m_tags.Add(GameObject.defaultTag);
-        string[] tags = reader.Get("tags", Array.Empty<string>());
-        for (int i = 0; i < tags.Length; i++)
+        foreach (string tag in tags)
         {
-            if (!string.IsNullOrWhiteSpace(tags[i]))
-                _ = m_tags.Add(Normalize(tags[i]));
+            if (!string.IsNullOrWhiteSpace(tag))
+                _ = m_tags.Add(Normalize(tag));
         }
     }
 

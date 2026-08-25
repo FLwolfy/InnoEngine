@@ -8,7 +8,7 @@ namespace Inno.Editor.Core;
 
 /// <summary>
 /// Owns the unified, human-readable per-project <c>editor.ini</c> document used by Dear ImGui and
-/// editor workspace providers.
+/// stateful editor modules and panels.
 /// </summary>
 internal sealed class EditorLayoutSettings
 {

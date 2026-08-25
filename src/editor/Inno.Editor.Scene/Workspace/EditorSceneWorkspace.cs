@@ -23,7 +23,7 @@ namespace Inno.Editor.Scene;
 /// <summary>
 /// Tracks editor scene documents, their source paths, and serialized dirty state.
 /// </summary>
-[EditorModule(order: 200)]
+[EditorModule("scene-workspace", order: 200)]
 public sealed class EditorSceneWorkspace : EditorModule
 {
     private const double C_DIRTY_REFRESH_SECONDS = 0.1;
@@ -52,9 +52,6 @@ public sealed class EditorSceneWorkspace : EditorModule
     {
         m_interactions = interactions;
     }
-
-    /// <inheritdoc />
-    protected override string workspaceStateId => "scene-workspace";
 
     /// <summary>
     /// Gets all scenes currently available to editor features.
@@ -314,30 +311,28 @@ public sealed class EditorSceneWorkspace : EditorModule
     }
 
     /// <inheritdoc />
-    protected override void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
+    protected override void Capture(EditorState state)
     {
-        ArgumentNullException.ThrowIfNull(writer);
         if (m_pendingScenePaths is not null)
         {
-            writer.Set("openScenes", m_pendingScenePaths);
-            writer.Set("activeScene", m_pendingActivePath);
+            state.Set("openScenes", m_pendingScenePaths);
+            state.Set("activeScene", m_pendingActivePath);
             return;
         }
         string[] scenePaths = SceneManager.loadedScenes
             .Select(scene => TryGetSourcePath(scene, out string path) ? path : string.Empty)
             .Where(static path => !string.IsNullOrEmpty(path))
             .ToArray();
-        writer.Set("openScenes", scenePaths);
+        state.Set("openScenes", scenePaths);
         if (SceneManager.activeScene is GameScene active && TryGetSourcePath(active, out string activePath))
-            writer.Set("activeScene", activePath);
+            state.Set("activeScene", activePath);
     }
 
     /// <inheritdoc />
-    protected override void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
+    protected override void Restore(EditorState state)
     {
-        ArgumentNullException.ThrowIfNull(reader);
-        string[] paths = reader.Get("openScenes", Array.Empty<string>());
-        m_pendingActivePath = reader.Get("activeScene", string.Empty);
+        string[] paths = state.Get("openScenes", Array.Empty<string>());
+        m_pendingActivePath = state.Get("activeScene", string.Empty);
         if (paths.Length == 0)
         {
             m_pendingScenePaths = null;

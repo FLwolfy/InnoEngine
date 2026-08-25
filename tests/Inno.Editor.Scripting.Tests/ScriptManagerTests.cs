@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 using Inno.Assets;
@@ -212,7 +213,7 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public void InspectorTagCatalogPersistsThroughReadableWorkspaceStateAndProtectsTheDefaultTag()
+    public void InspectorTagCatalogRoundTripsThroughReadableModuleStateAndProtectsTheDefaultTag()
     {
         Type catalogType = typeof(AssetReferenceDropTarget).Assembly.GetType(
             "Inno.Editor.Panel.Inspector.GameObjectTagCatalog",
@@ -229,9 +230,6 @@ public sealed class ScriptManagerTests : IDisposable
         MethodInfo remove = catalogType.GetMethod(
             "Remove",
             BindingFlags.Instance | BindingFlags.NonPublic)!;
-        MethodInfo capture = catalogType.GetMethod(
-            "Capture",
-            BindingFlags.Instance | BindingFlags.NonPublic)!;
         MethodInfo restore = catalogType.GetMethod(
             "Restore",
             BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -243,9 +241,10 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.False((bool)add.Invoke(catalog, [" Player "])!);
         Assert.False((bool)remove.Invoke(catalog, [GameObject.defaultTag])!);
 
-        var writer = new EditorWorkspaceStateWriter();
-        _ = capture.Invoke(catalog, [writer]);
-        string payload = writer.Export();
+        string payload = JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["tags"] = getTags.Invoke(catalog, null)
+        });
         Assert.Contains("\"tags\"", payload, StringComparison.Ordinal);
         Assert.Contains(GameObject.defaultTag, payload, StringComparison.Ordinal);
         Assert.Contains("Player", payload, StringComparison.Ordinal);
@@ -256,7 +255,9 @@ public sealed class ScriptManagerTests : IDisposable
             binder: null,
             args: null,
             culture: null)!;
-        _ = restore.Invoke(restored, [new EditorWorkspaceStateReader(payload)]);
+        string[] restoredValues = JsonSerializer
+            .Deserialize<Dictionary<string, string[]>>(payload)!["tags"];
+        _ = restore.Invoke(restored, [restoredValues]);
         var restoredTags = Assert.IsAssignableFrom<System.Collections.Generic.IReadOnlyList<string>>(
             getTags.Invoke(restored, null));
         Assert.Contains(GameObject.defaultTag, restoredTags);
@@ -403,17 +404,17 @@ public sealed class ScriptManagerTests : IDisposable
         using (var runtime = new EditorInteractionRuntime(editorContext))
         {
             runtime.Start();
-            runtime.SaveWorkspace();
+            runtime.SaveState();
         }
 
         Assert.True(editorContext.TryGetLayoutSection(
-            "Panel.asset-browser-panel",
+            "Panel.asset.file-browser",
             out System.Collections.Generic.IReadOnlyDictionary<string, string> defaultValues));
         Assert.Equal("0.5", defaultValues["treePaneRatio"]);
         Assert.DoesNotContain("treeWidth", defaultValues.Keys);
 
         editorContext.SetLayoutSection(
-            "Panel.asset-browser-panel",
+            "Panel.asset.file-browser",
             new System.Collections.Generic.Dictionary<string, string>
             {
                 ["treePaneRatio"] = "0.31"
@@ -421,11 +422,11 @@ public sealed class ScriptManagerTests : IDisposable
         using (var runtime = new EditorInteractionRuntime(editorContext))
         {
             runtime.Start();
-            runtime.SaveWorkspace();
+            runtime.SaveState();
         }
 
         Assert.True(editorContext.TryGetLayoutSection(
-            "Panel.asset-browser-panel",
+            "Panel.asset.file-browser",
             out System.Collections.Generic.IReadOnlyDictionary<string, string> restoredValues));
         Assert.Equal("0.31", restoredValues["treePaneRatio"]);
     }
@@ -675,8 +676,7 @@ public sealed class ScriptManagerTests : IDisposable
         var context = new EditorContext(m_projectRoot);
         workspace.Start(context);
 
-        ((IEditorWorkspaceState)workspace).RestoreWorkspaceState(
-            new EditorWorkspaceStateReader(null));
+        RestoreExtensionState(workspace, new TestEditorState());
         workspace.Update(context);
 
         Assert.Empty(SceneManager.loadedScenes);
@@ -685,7 +685,7 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public void SceneWorkspaceStateRestoresSavedScenesInOrderAndSelectsTheActiveScene()
+    public void SceneModuleStateRestoresSavedScenesInOrderAndSelectsTheActiveScene()
     {
         var sourceWorkspace = new EditorSceneWorkspace();
         GameScene first = sourceWorkspace.CreateScene();
@@ -695,15 +695,13 @@ public sealed class ScriptManagerTests : IDisposable
         second.name = "Second";
         _ = sourceWorkspace.SaveScene(second, "Scenes");
         SceneManager.SetActiveScene(first);
-        var writer = new EditorWorkspaceStateWriter();
-        ((IEditorWorkspaceState)sourceWorkspace).CaptureWorkspaceState(writer);
+        TestEditorState state = CaptureExtensionState(sourceWorkspace);
 
         SceneManager.UnloadAllScenes();
         var restoredWorkspace = new EditorSceneWorkspace();
         var context = new EditorContext(m_projectRoot);
         restoredWorkspace.Start(context);
-        ((IEditorWorkspaceState)restoredWorkspace).RestoreWorkspaceState(
-            new EditorWorkspaceStateReader(writer.Export()));
+        RestoreExtensionState(restoredWorkspace, state);
         restoredWorkspace.Update(context);
 
         Assert.Equal(["First", "Second"], restoredWorkspace.scenes.Select(static scene => scene.name));
@@ -712,7 +710,7 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public void SceneWorkspaceStateReloadsLastSavedDataInsteadOfDirtyMemory()
+    public void SceneModuleStateReloadsLastSavedDataInsteadOfDirtyMemory()
     {
         var sourceWorkspace = new EditorSceneWorkspace();
         GameScene scene = sourceWorkspace.CreateScene();
@@ -720,15 +718,13 @@ public sealed class ScriptManagerTests : IDisposable
         _ = scene.CreateObject("Saved Object");
         _ = sourceWorkspace.SaveScene(scene, "Scenes");
         _ = scene.CreateObject("Unsaved Object");
-        var writer = new EditorWorkspaceStateWriter();
-        ((IEditorWorkspaceState)sourceWorkspace).CaptureWorkspaceState(writer);
+        TestEditorState state = CaptureExtensionState(sourceWorkspace);
 
         SceneManager.UnloadAllScenes();
         var restoredWorkspace = new EditorSceneWorkspace();
         var context = new EditorContext(m_projectRoot);
         restoredWorkspace.Start(context);
-        ((IEditorWorkspaceState)restoredWorkspace).RestoreWorkspaceState(
-            new EditorWorkspaceStateReader(writer.Export()));
+        RestoreExtensionState(restoredWorkspace, state);
         restoredWorkspace.Update(context);
 
         Assert.NotNull(restoredWorkspace.activeScene!.FindObject("Saved Object"));
@@ -975,17 +971,15 @@ public sealed class ScriptManagerTests : IDisposable
             [EditorPanel("tests.script-panel", "Script Panel", order: 900, defaultOpen: false)]
             public sealed class ScriptPanel : EditorPanel, IEditorPanelReloadState
             {
-                protected override string workspaceStateId => "tests.script-panel";
-
                 public override void Draw(EditorContext context)
                 {
                 }
 
-                protected override void CaptureWorkspaceState(EditorWorkspaceStateWriter writer)
-                    => writer.Set("open", isOpen);
+                protected override void Capture(EditorState state)
+                    => state.Set("open", isOpen);
 
-                protected override void RestoreWorkspaceState(EditorWorkspaceStateReader reader)
-                    => isOpen = reader.Get("open", isOpen);
+                protected override void Restore(EditorState state)
+                    => isOpen = state.Get("open", isOpen);
 
                 public System.ReadOnlyMemory<byte> CaptureReloadState()
                     => System.ReadOnlyMemory<byte>.Empty;
@@ -1796,6 +1790,49 @@ public sealed class ScriptManagerTests : IDisposable
             fieldName,
             BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(target, value);
 
+    private static TestEditorState CaptureExtensionState(EditorModule module)
+    {
+        var state = new TestEditorState();
+        MethodInfo capture = module.GetType().GetMethod(
+            "Capture",
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            binder: null,
+            [typeof(EditorState)],
+            modifiers: null)!;
+        _ = capture.Invoke(module, [state]);
+        return state;
+    }
+
+    private static void RestoreExtensionState(EditorModule module, EditorState state)
+    {
+        MethodInfo restore = module.GetType().GetMethod(
+            "Restore",
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            binder: null,
+            [typeof(EditorState)],
+            modifiers: null)!;
+        _ = restore.Invoke(module, [state]);
+    }
+
+    private sealed class TestEditorState : EditorState
+    {
+        private readonly Dictionary<string, object?> m_values = new(StringComparer.Ordinal);
+
+        public override T Get<T>(string key, T fallback)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(key);
+            return m_values.TryGetValue(key, out object? value) && value is T compatible
+                ? compatible
+                : fallback;
+        }
+
+        public override void Set<T>(string key, T value)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(key);
+            m_values[key] = value;
+        }
+    }
+
     private static object CreateInspectorTarget(string typeName, params object[] arguments)
     {
         Type type = typeof(AssetReferenceDropTarget).Assembly.GetType(typeName, throwOnError: true)!;
@@ -1873,7 +1910,7 @@ public sealed class ScriptManagerTests : IDisposable
             name,
             BindingFlags.Public | BindingFlags.Static)!.GetRawConstantValue());
 
-    [EditorModule(order: int.MaxValue)]
+    [EditorModule("tests.settings-capture", order: int.MaxValue)]
     private sealed class SettingsCaptureModule(EditorSettings settings) : EditorModule
     {
         internal static EditorSettings? current;

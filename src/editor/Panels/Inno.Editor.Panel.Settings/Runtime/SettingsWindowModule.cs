@@ -3,7 +3,7 @@ using Inno.Editor.Settings;
 
 namespace Inno.Editor.Panel.Settings;
 
-[EditorModule(order: 20)]
+[EditorModule("settings-window", order: 20)]
 internal sealed class SettingsWindowModule(EditorSettings settings) : EditorModule
 {
     private SettingsEditSession? m_session;
