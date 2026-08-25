@@ -694,6 +694,7 @@ internal sealed class FileBrowserPanel : EditorPanel
             $"##entry_{entry.relativePath}",
             selected,
             selectableFlags);
+        float rowHeight = NativeImGui.GetItemRectSize().Y;
         bool itemHovered = NativeImGui.IsItemHovered();
         bool doubleClicked = itemHovered && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
         if (activated)
@@ -702,13 +703,8 @@ internal sealed class FileBrowserPanel : EditorPanel
                 context,
                 entry,
                 FileBrowserPresentation.List,
-                selected,
                 doubleClicked);
         }
-        m_rename.TryBeginDelayed(
-            context,
-            entry.relativePath,
-            FileBrowserPresentation.List);
 
         bool itemActive = NativeImGui.IsItemActive();
         if (!editing)
@@ -745,7 +741,8 @@ internal sealed class FileBrowserPanel : EditorPanel
                 $"list_{entry.relativePath}",
                 entry.relativePath,
                 FileBrowserPresentation.List,
-                NativeImGui.GetContentRegionAvail().X);
+                NativeImGui.GetContentRegionAvail().X,
+                rowHeight);
         }
         else
         {
@@ -822,13 +819,8 @@ internal sealed class FileBrowserPanel : EditorPanel
                 context,
                 entry,
                 FileBrowserPresentation.Grid,
-                selected,
                 doubleClicked);
         }
-        m_rename.TryBeginDelayed(
-            context,
-            entry.relativePath,
-            FileBrowserPresentation.Grid);
 
         if (!editing)
         {
@@ -866,8 +858,7 @@ internal sealed class FileBrowserPanel : EditorPanel
                                  EditorWidget.style.assetGridLabelBottomPadding -
                                  labelAreaHeight;
             float y = labelAreaTop +
-                      (labelAreaHeight - lineHeight) * 0.5f -
-                      EditorWidget.style.inlineRenameVerticalInset;
+                      (labelAreaHeight - lineHeight) * 0.5f;
             NativeImGui.SetCursorScreenPos(new Vector2(
                 itemMin.X + EditorWidget.style.assetGridLabelHorizontalPadding * 0.5f,
                 y));
@@ -876,7 +867,8 @@ internal sealed class FileBrowserPanel : EditorPanel
                 $"grid_{entry.relativePath}",
                 entry.relativePath,
                 FileBrowserPresentation.Grid,
-                width);
+                width,
+                lineHeight);
             NativeImGui.SetCursorScreenPos(layoutCursor);
             NativeImGui.Dummy(Vector2.Zero);
         }
@@ -888,15 +880,10 @@ internal sealed class FileBrowserPanel : EditorPanel
         EditorContext context,
         AssetFileEntry entry,
         FileBrowserPresentation presentation,
-        bool wasSelected,
         bool doubleClicked)
     {
-        if (m_rename.HandleActivation(
-                context,
-                entry.relativePath,
-                presentation,
-                wasSelected,
-                doubleClicked))
+        m_rename.MarkInteraction(presentation);
+        if (doubleClicked)
         {
             m_navigation.OpenEntry(context, entry, m_tree);
             return;

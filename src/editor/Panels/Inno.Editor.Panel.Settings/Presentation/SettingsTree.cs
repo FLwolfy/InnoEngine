@@ -74,7 +74,7 @@ internal sealed class SettingsTree
 
         TreeNodeResult result = EditorWidget.TreeNode(
             $"settings_tree_{page.path}",
-            () => NativeImGui.TextUnformatted(page.label),
+            _ => NativeImGui.TextUnformatted(page.label),
             new TreeNodeOptions
             {
                 selected = string.Equals(page.path, selectedPath, StringComparison.Ordinal),

@@ -33,12 +33,14 @@ public static partial class ImGuiWidget
     /// double-clicked, while preserving single-click disclosure-arrow behavior.
     /// </summary>
     /// <param name="id">Stable row identifier.</param>
-    /// <param name="onDraw">Content drawing callback.</param>
+    /// <param name="onDraw">
+    /// Content drawing callback that receives the native row geometry established by ImGui.
+    /// </param>
     /// <param name="options">Tree row options.</param>
     /// <returns>Interaction and row geometry for the submitted item.</returns>
     public static TreeNodeResult TreeNode(
         string id,
-        Action onDraw,
+        Action<TreeNodeDrawContext> onDraw,
         in TreeNodeOptions options)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -61,7 +63,7 @@ public static partial class ImGuiWidget
 
     private static TreeNodeResult DrawTreeNode(
         string id,
-        Action onDraw,
+        Action<TreeNodeDrawContext> onDraw,
         in TreeNodeOptions options,
         bool isLeaf,
         ImDrawListPtr drawList)
@@ -168,7 +170,7 @@ public static partial class ImGuiWidget
         string id,
         Vector2 nodeCursor,
         float nativeRowMaxY,
-        Action onDraw,
+        Action<TreeNodeDrawContext> onDraw,
         Action? drawViewportOverlay,
         out Vector2 interactionMin)
     {
@@ -184,7 +186,7 @@ public static partial class ImGuiWidget
         NativeImGui.SameLine(contentOffsetX, 0f);
         NativeImGui.BeginGroup();
         NativeImGui.PushClipRect(new Vector2(contentX, nodeCursor.Y), new Vector2(contentRightX, contentBottomY), true);
-        onDraw();
+        onDraw(new TreeNodeDrawContext(MathF.Max(1f, nativeRowMaxY - nodeCursor.Y)));
         NativeImGui.PopClipRect();
         NativeImGui.EndGroup();
 
@@ -340,6 +342,22 @@ public static partial class ImGuiWidget
         drawList.ChannelsSetCurrent(1);
     }
 
+}
+
+/// <summary>
+/// Provides the native geometry of a tree row while its custom content is being drawn.
+/// </summary>
+public readonly struct TreeNodeDrawContext
+{
+    internal TreeNodeDrawContext(float rowHeight)
+    {
+        this.rowHeight = rowHeight;
+    }
+
+    /// <summary>
+    /// Gets the actual native row height established for the current tree node.
+    /// </summary>
+    public float rowHeight { get; }
 }
 
 /// <summary>Configures an interactive tree row.</summary>

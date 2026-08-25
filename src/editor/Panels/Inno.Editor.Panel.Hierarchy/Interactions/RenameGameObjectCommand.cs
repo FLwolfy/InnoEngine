@@ -46,6 +46,7 @@ internal sealed class RenameGameObjectCommand(SceneEdits edits) : EditorAction<G
             presentation.id,
             ref m_buffer,
             ref m_requestFocus,
+            presentation.rowHeight,
             presentation.bufferSize,
             presentation.width);
         if (result == InlineRenameResult.Cancel)

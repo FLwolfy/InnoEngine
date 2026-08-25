@@ -121,7 +121,7 @@ internal sealed class HierarchyPanel : EditorPanel
             ReferenceEquals(selectedScene, scene);
         TreeNodeResult result = EditorWidget.TreeNode(
             $"scene_{id}",
-            () => m_selection.DrawSceneRowContent(context, scene),
+            _ => m_selection.DrawSceneRowContent(context, scene),
             new TreeNodeOptions
             {
                 isLeaf = false,
@@ -180,7 +180,7 @@ internal sealed class HierarchyPanel : EditorPanel
 
         TreeNodeResult result = EditorWidget.TreeNode(
             $"hierarchy_{id}",
-            () => DrawRowContent(context, gameObject),
+            drawContext => DrawRowContent(context, gameObject, drawContext.rowHeight),
             new TreeNodeOptions
             {
                 selected = selected,
@@ -236,7 +236,10 @@ internal sealed class HierarchyPanel : EditorPanel
         NativeImGui.TreePop();
     }
 
-    private void DrawRowContent(EditorContext context, GameObject gameObject)
+    private void DrawRowContent(
+        EditorContext context,
+        GameObject gameObject,
+        float rowHeight)
     {
         string id = gameObject.identity.persistentId.ToString("N");
         bool dimmed = !gameObject.activeInHierarchy;
@@ -264,7 +267,11 @@ internal sealed class HierarchyPanel : EditorPanel
                 EditorWidget.style.hierarchyRenameTrailingGap);
             _ = interaction.Present(
                 "hierarchy/rename-game-object",
-                new InlineRenamePresentation($"hierarchy_{id}", renameWidth, C_NAME_BUFFER_SIZE));
+                new InlineRenamePresentation(
+                    $"hierarchy_{id}",
+                    renameWidth,
+                    rowHeight,
+                    C_NAME_BUFFER_SIZE));
         }
         else
         {

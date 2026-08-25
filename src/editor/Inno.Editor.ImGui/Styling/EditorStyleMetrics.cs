@@ -93,8 +93,10 @@ public sealed class EditorStyleMetrics
     /// <summary>Gets the compact inner padding of inline rename fields.</summary>
     public Vector2 inlineRenameFramePadding => ScaleVector(new(4f, 0f));
 
-    /// <summary>Gets the vertical inset that centers an inline rename field within its row.</summary>
-    public float inlineRenameVerticalInset => Scale(1f);
+    /// <summary>
+    /// Gets the vertical visual inset retained between an inline rename frame and its row bounds.
+    /// </summary>
+    public float inlineRenameVisualInset => Scale(1f);
 
     /// <summary>Gets toolbar frame padding.</summary>
     public Vector2 toolbarFramePadding => ScaleVector(new(5f, 1f));

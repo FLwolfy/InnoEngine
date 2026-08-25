@@ -112,8 +112,9 @@ CLR 层的 icon 常量仍是 ImGui 所需的 `const string` glyph；`AssetIconKi
 ## Rename 与打开
 
 - 快速双击调用 AssetEditor 的 Open。
-- 已选 entry 的慢速第二次单击启动本项目的 Rename Action。
-- F2 和右键 Rename 调用同一个 Action。
+- Rename 只能从 entry 的右键菜单、F2 快捷键或 Create Folder 的创建完成流程启动；单击、延迟单击和双击都不会进入重命名。
+- F2 会使用当前正在操作的 Tree、List 或 Grid 展示位置绘制输入框。
+- Create Folder 完成后会选中新目录并自动进入重命名。
 - Rename Action 自己持有输入/验证状态；Tree/List/Grid 只调用 `Present` 绘制 inline editor。
 - 输入框失去焦点或 selection 切换到其他 target 时，Rename Action 会提交当前有效名称并结束；无效名称保留原值并结束。
 - Tree/List/Grid 的未占用背景收到左键点击时会清除当前 Asset selection。

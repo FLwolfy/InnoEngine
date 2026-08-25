@@ -42,6 +42,7 @@ internal sealed class RenameAssetCommand(AssetEditorModule assets) : EditorActio
             presentation.id,
             ref m_buffer,
             ref m_requestFocus,
+            presentation.rowHeight,
             presentation.bufferSize,
             presentation.width);
         if (result == InlineRenameResult.Cancel)

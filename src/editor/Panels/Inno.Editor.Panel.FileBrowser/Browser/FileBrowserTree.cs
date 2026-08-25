@@ -75,31 +75,29 @@ internal sealed class FileBrowserTree
 
         TreeNodeResult result = EditorWidget.TreeNode(
             nodeId,
-            () => DrawRowContent(
+            drawContext => DrawRowContent(
                 context,
                 nodeId,
                 relativePath,
                 label,
                 icon,
                 isCurrentDirectory,
-                editing),
+                editing,
+                drawContext.rowHeight),
             new TreeNodeOptions { selected = selected, isLeaf = isLeaf });
 
         AssetFileEntry? treeEntry = null;
         if (!isRoot && AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry resolvedEntry))
             treeEntry = resolvedEntry;
-        if (treeEntry is not null && (result.isClicked || result.isDoubleClicked))
+        if (treeEntry is not null && result.isDoubleClicked)
         {
-            bool shouldOpen = m_rename.HandleActivation(
-                context,
-                treeEntry.relativePath,
-                FileBrowserPresentation.Tree,
-                selected,
-                result.isDoubleClicked);
-            if (shouldOpen)
-                m_navigation.OpenEntry(context, treeEntry, this);
-            else
-                m_assets.browser.Select(context, relativePath);
+            m_rename.MarkInteraction(FileBrowserPresentation.Tree);
+            m_navigation.OpenEntry(context, treeEntry, this);
+        }
+        else if (treeEntry is not null && result.isClicked)
+        {
+            m_rename.MarkInteraction(FileBrowserPresentation.Tree);
+            m_assets.browser.Select(context, relativePath);
         }
         else if (isRoot && result.isDoubleClicked)
         {
@@ -111,10 +109,6 @@ internal sealed class FileBrowserTree
         }
         if (treeEntry is not null)
         {
-            m_rename.TryBeginDelayed(
-                context,
-                treeEntry.relativePath,
-                FileBrowserPresentation.Tree);
             if (!editing)
             {
                 m_contextMenu.DrawEntry(
@@ -154,7 +148,8 @@ internal sealed class FileBrowserTree
         string label,
         string icon,
         bool isCurrentDirectory,
-        bool editing)
+        bool editing,
+        float rowHeight)
     {
         if (!editing)
         {
@@ -169,7 +164,8 @@ internal sealed class FileBrowserTree
             id,
             relativePath,
             FileBrowserPresentation.Tree,
-            NativeImGui.GetContentRegionAvail().X);
+            NativeImGui.GetContentRegionAvail().X,
+            rowHeight);
     }
 
     internal void PrepareOpenRequests(EditorContext context)
