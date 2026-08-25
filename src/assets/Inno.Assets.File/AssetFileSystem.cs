@@ -13,11 +13,11 @@ namespace Inno.Assets.File;
 /// </summary>
 public sealed class AssetFileSystem : IDisposable
 {
-    private readonly ObjectPool<AssetFileEntry> m_entries = new();
-    private readonly PoolKey<string> m_pathKey;
-    private readonly PoolKey<string> m_parentPathKey;
-    private readonly PoolKey<bool> m_isDirectoryKey;
-    private readonly PoolKey<string> m_extensionKey;
+    private readonly IndexedObjectStore<AssetFileEntry> m_entries = new();
+    private readonly IndexedObjectKey<string> m_pathKey;
+    private readonly IndexedObjectKey<string> m_parentPathKey;
+    private readonly IndexedObjectKey<bool> m_isDirectoryKey;
+    private readonly IndexedObjectKey<string> m_extensionKey;
     private readonly Lock m_sync = new();
     private readonly AssetWatcher m_watcher;
     private readonly AssetSourcePolicy m_sourcePolicy;
@@ -47,7 +47,7 @@ public sealed class AssetFileSystem : IDisposable
         Directory.CreateDirectory(this.assetRoot);
         m_sourcePolicy = sourcePolicy ?? AssetSourcePolicy.defaultPolicy;
 
-        m_pathKey = m_entries.DefineKey<string>("filesystem.path", PoolKeyFlags.Unique);
+        m_pathKey = m_entries.DefineKey<string>("filesystem.path", IndexedObjectKeyFlags.Unique);
         m_parentPathKey = m_entries.DefineKey<string>("filesystem.parent");
         m_isDirectoryKey = m_entries.DefineKey<bool>("filesystem.dir");
         m_extensionKey = m_entries.DefineKey<string>("filesystem.ext");

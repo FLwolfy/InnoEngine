@@ -35,6 +35,7 @@ public sealed class GameScene : EngineObject, ISerializable
 
     internal GameScene(string name, Guid? persistentId)
     {
+        SceneTypeCatalog.EnsureRegistered();
         m_name = name ?? string.Empty;
         m_hierarchy = new HierarchyService(this);
         m_systems = new SceneSystemScheduler(this);
@@ -312,7 +313,15 @@ public sealed class GameScene : EngineObject, ISerializable
         if (!typeof(GameComponent).IsAssignableFrom(componentType))
             throw new ArgumentException($"Type '{componentType.FullName}' is not a scene component.", nameof(componentType));
 
-        bool allowsMultiple = componentType.IsDefined(typeof(AllowMultipleComponentAttribute), inherit: true);
+        if (!SceneTypeCatalog.TryGetComponent(componentType, out SceneComponentTypeDescriptor? descriptor) ||
+            !descriptor!.isConcrete)
+        {
+            throw new ArgumentException(
+                $"Type '{componentType.FullName}' is not an active concrete scene component.",
+                nameof(componentType));
+        }
+
+        bool allowsMultiple = descriptor.allowsMultiple;
         GameComponent component = ComponentFactory.Create(componentType);
         component.Attach(owner);
         bool addedToStore = false;
@@ -320,7 +329,7 @@ public sealed class GameScene : EngineObject, ISerializable
         try
         {
             component.RegisterIdentity(persistentId);
-            m_store.AddComponent(owner, component, allowsMultiple);
+            m_store.AddComponent(owner, component, descriptor, allowsMultiple);
             addedToStore = true;
             if (component is Transform transform)
             {
@@ -401,29 +410,67 @@ public sealed class GameScene : EngineObject, ISerializable
         where TComponent : GameComponent
     {
         EnsureOwned(owner);
-        return m_store.GetComponents<TComponent>(owner);
+        return m_store.GetComponents<TComponent>(owner, SceneTypeCatalog.GetComponent(typeof(TComponent)));
     }
 
     internal IReadOnlyList<TComponent> GetComponents<TComponent>() where TComponent : GameComponent
-        => m_store.GetComponents<TComponent>();
+        => m_store.GetComponents<TComponent>(SceneTypeCatalog.GetComponent(typeof(TComponent)));
 
-    internal IReadOnlyList<GameObject> Query(params Type[] componentTypes)
-        => m_store.Query(componentTypes);
+    internal bool TryGetComponent<TComponent>(GameObject owner, out TComponent? component)
+        where TComponent : GameComponent
+    {
+        EnsureOwned(owner);
+        return m_store.TryGetComponent(
+            owner,
+            SceneTypeCatalog.GetComponent(typeof(TComponent)),
+            out component);
+    }
+
+    internal bool TryGetComponent(GameObject owner, Type componentType, out GameComponent? component)
+    {
+        EnsureOwned(owner);
+        ArgumentNullException.ThrowIfNull(componentType);
+        if (!SceneTypeCatalog.TryGetComponent(componentType, out SceneComponentTypeDescriptor? descriptor))
+        {
+            component = null;
+            return false;
+        }
+        return m_store.TryGetComponent(owner, descriptor!, out component);
+    }
+
+    internal IReadOnlyList<GameObject> Query<T1>() where T1 : GameComponent
+        => m_store.Query(SceneTypeCatalog.GetComponent(typeof(T1)));
+
+    internal IReadOnlyList<GameObject> Query<T1, T2>()
+        where T1 : GameComponent
+        where T2 : GameComponent
+        => m_store.Query(
+            SceneTypeCatalog.GetComponent(typeof(T1)),
+            SceneTypeCatalog.GetComponent(typeof(T2)));
+
+    internal IReadOnlyList<GameObject> Query<T1, T2, T3>()
+        where T1 : GameComponent
+        where T2 : GameComponent
+        where T3 : GameComponent
+        => m_store.Query(
+            SceneTypeCatalog.GetComponent(typeof(T1)),
+            SceneTypeCatalog.GetComponent(typeof(T2)),
+            SceneTypeCatalog.GetComponent(typeof(T3)));
 
     internal IDisposable BeginExecutionPhase() => m_store.BeginExecutionPhase();
 
     internal SceneStructureSnapshot CaptureStructure() => m_store.CaptureStructure();
 
     internal GameObject? FindObject(Guid persistentId)
-        => m_store.GetOwnedObjects().FirstOrDefault(
-            gameObject => gameObject.identity.persistentId == persistentId);
+        => m_store.FindObject(persistentId);
 
     internal GameComponent? FindComponent(Guid persistentId)
-        => m_store.GetOwnedObjects()
-            .SelectMany(m_store.GetComponents)
-            .FirstOrDefault(component => component.identity.persistentId == persistentId);
+        => m_store.FindComponent(persistentId);
 
-    internal void ReplaceComponentForReload(GameComponent previous, GameComponent replacement)
+    internal void ReplaceComponentForReload(
+        GameComponent previous,
+        GameComponent replacement,
+        int replacementRuntimeTypeId)
     {
         GameObject owner = previous.ownerOrNull
             ?? throw new InvalidOperationException("The component being replaced is detached.");
@@ -438,7 +485,7 @@ public sealed class GameScene : EngineObject, ISerializable
         try
         {
             replacement.RegisterIdentity(persistentId);
-            m_store.ReplaceComponent(previous, replacement);
+            m_store.ReplaceComponent(previous, replacement, replacementRuntimeTypeId);
         }
         catch
         {
@@ -451,8 +498,11 @@ public sealed class GameScene : EngineObject, ISerializable
         }
     }
 
-    internal void ReplaceSystemForReload(GameSystem previous, GameSystem replacement)
-        => m_systems.ReplaceForReload(previous, replacement);
+    internal void ReplaceSystemForReload(
+        GameSystem previous,
+        GameSystem replacement,
+        int replacementRuntimeTypeId)
+        => m_systems.ReplaceForReload(previous, replacement, replacementRuntimeTypeId);
 
     internal bool canDispatch => m_isLoaded && !m_isUnloading && !isDestroyed;
 
@@ -550,9 +600,11 @@ public sealed class GameScene : EngineObject, ISerializable
                 GameComponent[] attached = components[current];
                 for (int componentIndex = 0; componentIndex < attached.Length; componentIndex++)
                 {
+                    GameComponent component = attached[componentIndex];
                     destination.m_store.AddComponent(
                         current,
-                        attached[componentIndex],
+                        component,
+                        SceneTypeCatalog.GetComponent(component.GetType()),
                         allowsMultiple: true);
                 }
                 current.SetSceneDirect(destination);
@@ -573,7 +625,14 @@ public sealed class GameScene : EngineObject, ISerializable
                 m_store.AddObject(current);
                 GameComponent[] attached = components[current];
                 for (int componentIndex = 0; componentIndex < attached.Length; componentIndex++)
-                    m_store.AddComponent(current, attached[componentIndex], allowsMultiple: true);
+                {
+                    GameComponent component = attached[componentIndex];
+                    m_store.AddComponent(
+                        current,
+                        component,
+                        SceneTypeCatalog.GetComponent(component.GetType()),
+                        allowsMultiple: true);
+                }
                 current.SetSceneDirect(this);
             }
 

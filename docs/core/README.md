@@ -34,7 +34,7 @@ flowchart LR
 | [Inno.Core.Diagnose](Inno.Core.Diagnose.md) | `Inno.Core.Diagnose` | Compiler/Importer/Validator 当前诊断、原子替换与订阅 |
 | [Inno.Core.Logging](Inno.Core.Logging.md) | `Inno.Core.Logging` | 日志门面、日志项、Console/File Sink |
 | [Inno.Core.Mathematics](Inno.Core.Mathematics.md) | `Inno.Core.Mathematics` | 向量、矩阵、四元数、颜色和矩形 |
-| [Inno.Core.Storage](Inno.Core.Storage.md) | `Inno.Core.Storage` | 依赖图与可索引对象池 |
+| [Inno.Core.Storage](Inno.Core.Storage.md) | `Inno.Core.Storage` | 依赖图与可索引对象存储 |
 
 ## 标准初始化顺序
 

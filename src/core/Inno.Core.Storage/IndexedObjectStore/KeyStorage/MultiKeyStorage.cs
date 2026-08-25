@@ -6,13 +6,13 @@ namespace Inno.Core.Storage;
 internal sealed class MultiKeyStorage<TKey, T> : IKeyStorage<TKey, T> where T : class where TKey : notnull
 {
     private readonly Dictionary<TKey, HashSet<T>> m_map = new(EqualityComparer<TKey>.Default);
-    private static readonly HashSet<T> EMPTY_SET = new(ObjectPool<T>.ReferenceEqualityComparer<T>.INSTANCE);
+    private static readonly HashSet<T> EMPTY_SET = new(IndexedObjectStore<T>.ReferenceEqualityComparer<T>.INSTANCE);
 
     public bool Add(TKey key, T item)
     {
         if (!m_map.TryGetValue(key, out var set))
         {
-            set = new HashSet<T>(ObjectPool<T>.ReferenceEqualityComparer<T>.INSTANCE);
+            set = new HashSet<T>(IndexedObjectStore<T>.ReferenceEqualityComparer<T>.INSTANCE);
             m_map[key] = set;
         }
 

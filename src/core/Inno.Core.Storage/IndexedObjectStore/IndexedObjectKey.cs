@@ -4,10 +4,10 @@ using System.Runtime.CompilerServices;
 namespace Inno.Core.Storage;
 
 /// <summary>
-/// Defines indexing and cardinality behavior for an object-pool key.
+/// Defines indexing and cardinality behavior for an object-store key.
 /// </summary>
 [Flags]
-public enum PoolKeyFlags
+public enum IndexedObjectKeyFlags
 {
     /// <summary>Uses hash-based lookup without key ordering.</summary>
     Unordered = 1 << 0,
@@ -21,9 +21,9 @@ public enum PoolKeyFlags
 /// Opaque handle used to query a key without exposing its implementation.
 /// </summary>
 /// <typeparam name="TKey">Key type.</typeparam>
-public readonly struct PoolKey<TKey>
+public readonly struct IndexedObjectKey<TKey>
 {
-    internal readonly WeakReference<IObjectPool>? poolRef;
+    internal readonly WeakReference<IIndexedObjectStore>? storeRef;
     internal readonly int id;
     
     /// <summary>
@@ -32,23 +32,23 @@ public readonly struct PoolKey<TKey>
     public readonly string name;
     
     /// <summary>
-    /// Returns true if the pool key is still valid in its owning pool.
+    /// Returns true if the store key is still valid in its owning store.
     /// </summary>
     public bool isValid
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
-            if (poolRef == null || !poolRef.TryGetTarget(out var pool))
+            if (storeRef == null || !storeRef.TryGetTarget(out var store))
                 return false;
 
-            return pool.IsValidKey(id, typeof(TKey));
+            return store.IsValidKey(id, typeof(TKey));
         }
     }
 
-    internal PoolKey(WeakReference<IObjectPool> poolRef, int id, string name)
+    internal IndexedObjectKey(WeakReference<IIndexedObjectStore> storeRef, int id, string name)
     {
-        this.poolRef = poolRef;
+        this.storeRef = storeRef;
         this.id = id;
         this.name = name;
     }

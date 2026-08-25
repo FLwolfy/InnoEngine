@@ -49,9 +49,9 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
             using (references.Enter())
             {
                 foreach (GameComponent component in structure.objects.SelectMany(static entry => entry.components))
-                    states.Add(CaptureState(component));
+                    states.Add(CaptureState(component, context.previous));
                 foreach (GameSystem system in scene.GetSystems())
-                    states.Add(CaptureState(system));
+                    states.Add(CaptureState(system, context.previous));
             }
 
             foreach (ObjectState state in states.Where(state => context.IsRetiredType(state.target.GetType())))
@@ -100,14 +100,33 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
                 if (!m_context.IsRetiredType(state.target.GetType()))
                     continue;
                 _ = m_context.TryResolveReplacement(state.target.GetType(), out Type? replacementType);
+                if (!m_context.candidate.TryGetRuntimeTypeId(replacementType!, out int replacementRuntimeTypeId))
+                {
+                    throw new InvalidOperationException(
+                        $"Replacement type '{replacementType!.FullName}' has no candidate runtime type identity.");
+                }
                 EngineObject replacement = CreateReplacement(state.target, replacementType!);
                 CopyLifecycle(state.target, replacement);
                 if (state.target is GameComponent previousComponent)
-                    sceneState.scene.ReplaceComponentForReload(previousComponent, (GameComponent)replacement);
+                {
+                    sceneState.scene.ReplaceComponentForReload(
+                        previousComponent,
+                        (GameComponent)replacement,
+                        replacementRuntimeTypeId);
+                }
                 else
-                    sceneState.scene.ReplaceSystemForReload((GameSystem)state.target, (GameSystem)replacement);
+                {
+                    sceneState.scene.ReplaceSystemForReload(
+                        (GameSystem)state.target,
+                        (GameSystem)replacement,
+                        replacementRuntimeTypeId);
+                }
                 state.currentTarget = replacement;
-                m_replacements.Add(new Replacement(sceneState.scene, state.target, replacement));
+                m_replacements.Add(new Replacement(
+                    sceneState.scene,
+                    state.target,
+                    replacement,
+                    state.runtimeTypeId));
             }
             RestoreState(sceneState, useCurrentTargets: true);
         }
@@ -125,13 +144,15 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
             {
                 replacement.scene.ReplaceComponentForReload(
                     (GameComponent)replacement.current,
-                    previousComponent);
+                    previousComponent,
+                    replacement.previousRuntimeTypeId);
             }
             else
             {
                 replacement.scene.ReplaceSystemForReload(
                     (GameSystem)replacement.current,
-                    (GameSystem)replacement.previous);
+                    (GameSystem)replacement.previous,
+                    replacement.previousRuntimeTypeId);
             }
         }
         foreach (SceneState sceneState in m_scenes)
@@ -160,6 +181,8 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
             else if (replacement.previous is GameSystem system && !system.isDestroyed)
                 system.Detach();
         }
+        m_replacements.Clear();
+        m_scenes.Clear();
         m_finished = true;
     }
 
@@ -171,12 +194,17 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
     void ISceneReloadMigration.RestorePreviousState() => RestorePreviousState();
     void ISceneReloadMigration.Complete() => Complete();
 
-    private static ObjectState CaptureState(EngineObject target)
+    private static ObjectState CaptureState(EngineObject target, TypeCacheSnapshot types)
     {
+        if (!types.TryGetRuntimeTypeId(target.GetType(), out int runtimeTypeId))
+        {
+            throw new InvalidOperationException(
+                $"Scene object type '{target.GetType().FullName}' has no runtime identity in the previous TypeCache generation.");
+        }
         var serializable = (ISerializable)target;
         IReadOnlyList<SerializationPropertySnapshot> properties =
             SerializationManager.CaptureProperties(serializable);
-        return new ObjectState(target, properties);
+        return new ObjectState(target, runtimeTypeId, properties);
     }
 
     private static EngineObject CreateReplacement(EngineObject previous, Type replacementType)
@@ -222,44 +250,69 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
     {
         foreach (SceneObjectStructureSnapshot entry in structure.objects)
         {
-            foreach (IGrouping<Type, GameComponent> group in entry.components.GroupBy(
-                         component => ResolveActiveType(component.GetType(), context)))
+            var groups = new Dictionary<int, MultiplicityGroup>();
+            foreach (GameComponent component in entry.components)
             {
-                if (group.Count() <= 1 ||
-                    group.Key.IsDefined(typeof(AllowMultipleComponentAttribute), inherit: true))
-                {
+                ActiveTypeInfo type = ResolveActiveType(component.GetType(), context, isSystem: false);
+                if (!groups.TryGetValue(type.runtimeTypeId, out MultiplicityGroup? group))
+                    groups.Add(type.runtimeTypeId, new MultiplicityGroup(type.displayName, type.allowsMultiple));
+                else
+                    group.count++;
+            }
+            foreach (MultiplicityGroup group in groups.Values)
+            {
+                if (group.count <= 1 || group.allowsMultiple)
                     continue;
-                }
                 throw new InvalidOperationException(
                     $"Script reload would leave GameObject '{entry.gameObject.name}' " +
-                    $"({entry.gameObject.identity.persistentId}) with {group.Count()} instances of unique component " +
-                    $"'{group.Key.FullName}'. Remove duplicate components or restore " +
+                    $"({entry.gameObject.identity.persistentId}) with {group.count} instances of unique component " +
+                    $"'{group.displayName}'. Remove duplicate components or restore " +
                     $"[{nameof(AllowMultipleComponentAttribute)}] before reloading.");
             }
         }
 
-        foreach (IGrouping<Type, GameSystem> group in scene.GetSystems().GroupBy(
-                     system => ResolveActiveType(system.GetType(), context)))
+        var systemGroups = new Dictionary<int, MultiplicityGroup>();
+        foreach (GameSystem system in scene.GetSystems())
         {
-            if (group.Count() <= 1 ||
-                group.Key.IsDefined(typeof(AllowMultipleSystemAttribute), inherit: false))
-            {
+            ActiveTypeInfo type = ResolveActiveType(system.GetType(), context, isSystem: true);
+            if (!systemGroups.TryGetValue(type.runtimeTypeId, out MultiplicityGroup? group))
+                systemGroups.Add(type.runtimeTypeId, new MultiplicityGroup(type.displayName, type.allowsMultiple));
+            else
+                group.count++;
+        }
+        foreach (MultiplicityGroup group in systemGroups.Values)
+        {
+            if (group.count <= 1 || group.allowsMultiple)
                 continue;
-            }
             throw new InvalidOperationException(
                 $"Script reload would leave scene '{scene.name}' ({scene.identity.persistentId}) with " +
-                $"{group.Count()} instances of unique system '{group.Key.FullName}'. Remove duplicate systems or restore " +
+                $"{group.count} instances of unique system '{group.displayName}'. Remove duplicate systems or restore " +
                 $"[{nameof(AllowMultipleSystemAttribute)}] before reloading.");
         }
     }
 
-    private static Type ResolveActiveType(Type type, TypeCacheReloadContext context)
+    private static ActiveTypeInfo ResolveActiveType(
+        Type type,
+        TypeCacheReloadContext context,
+        bool isSystem)
     {
-        if (!context.IsRetiredType(type))
-            return type;
-        return context.TryResolveReplacement(type, out Type? replacement) && replacement is not null
+        Type activeType = context.IsRetiredType(type) &&
+                          context.TryResolveReplacement(type, out Type? replacement) &&
+                          replacement is not null
             ? replacement
             : type;
+        if (!context.candidate.TryGetRuntimeTypeId(activeType, out int runtimeTypeId))
+        {
+            throw new InvalidOperationException(
+                $"Active scene type '{activeType.FullName}' has no candidate runtime type identity.");
+        }
+        bool allowsMultiple = activeType.IsDefined(
+            isSystem ? typeof(AllowMultipleSystemAttribute) : typeof(AllowMultipleComponentAttribute),
+            inherit: !isSystem);
+        return new ActiveTypeInfo(
+            runtimeTypeId,
+            activeType.FullName ?? activeType.Name,
+            allowsMultiple);
     }
 
     private void RestoreState(SceneState sceneState, bool useCurrentTargets)
@@ -328,12 +381,30 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
 
     private sealed class ObjectState(
         EngineObject target,
+        int runtimeTypeId,
         IReadOnlyList<SerializationPropertySnapshot> properties)
     {
         internal EngineObject target { get; } = target;
+        internal int runtimeTypeId { get; } = runtimeTypeId;
         internal IReadOnlyList<SerializationPropertySnapshot> properties { get; } = properties;
         internal EngineObject currentTarget { get; set; } = target;
     }
 
-    private sealed record Replacement(GameScene scene, EngineObject previous, EngineObject current);
+    private sealed record Replacement(
+        GameScene scene,
+        EngineObject previous,
+        EngineObject current,
+        int previousRuntimeTypeId);
+
+    private sealed class MultiplicityGroup(string displayName, bool allowsMultiple)
+    {
+        internal string displayName { get; } = displayName;
+        internal bool allowsMultiple { get; } = allowsMultiple;
+        internal int count { get; set; } = 1;
+    }
+
+    private readonly record struct ActiveTypeInfo(
+        int runtimeTypeId,
+        string displayName,
+        bool allowsMultiple);
 }

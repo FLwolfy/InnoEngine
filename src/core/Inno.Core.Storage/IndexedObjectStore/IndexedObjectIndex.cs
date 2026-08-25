@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 
 namespace Inno.Core.Storage;
 
-internal interface IPoolIndex<T> where T : class
+internal interface IIndexedObjectIndex<T> where T : class
 {
     string name { get; }
     Type keyType { get; }
@@ -17,7 +17,7 @@ internal interface IPoolIndex<T> where T : class
     HashSet<T>? GetSet(object key);
 }
 
-internal sealed class PoolIndex<T, TKey> : IPoolIndex<T> where T : class where TKey : notnull
+internal sealed class IndexedObjectIndex<T, TKey> : IIndexedObjectIndex<T> where T : class where TKey : notnull
 {
     private readonly IKeyStorage<TKey, T> m_storage;
     private readonly IKeyOrdering<TKey> m_ordering;
@@ -25,46 +25,46 @@ internal sealed class PoolIndex<T, TKey> : IPoolIndex<T> where T : class where T
 
     public string name { get; }
     public Type keyType => typeof(TKey);
-    public PoolKeyFlags flags { get; }
+    public IndexedObjectKeyFlags flags { get; }
 
-    internal PoolIndex(
+    internal IndexedObjectIndex(
         string name,
-        PoolKeyFlags flags,
+        IndexedObjectKeyFlags flags,
         IComparer<TKey>? orderComparer)
     {
         this.name = name;
         this.flags = flags;
 
-        m_storage = (flags & PoolKeyFlags.Unique) != 0
+        m_storage = (flags & IndexedObjectKeyFlags.Unique) != 0
             ? new UniqueKeyStorage<TKey, T>()
             : new MultiKeyStorage<TKey, T>();
 
-        m_ordering = (flags & PoolKeyFlags.Ordered) != 0
+        m_ordering = (flags & IndexedObjectKeyFlags.Ordered) != 0
             ? new SortedKeyOrdering<TKey>(orderComparer ?? Comparer<TKey>.Default)
             : new NullKeyOrdering<TKey>();
 
-        m_keyByItem = new Dictionary<T, TKey>(ObjectPool<T>.ReferenceEqualityComparer<T>.INSTANCE);
+        m_keyByItem = new Dictionary<T, TKey>(IndexedObjectStore<T>.ReferenceEqualityComparer<T>.INSTANCE);
     }
 
-    void IPoolIndex<T>.AddOrUpdate(T item, object key)
+    void IIndexedObjectIndex<T>.AddOrUpdate(T item, object key)
         => AddOrUpdate(item, (TKey)key);
 
-    void IPoolIndex<T>.Remove(T item)
+    void IIndexedObjectIndex<T>.Remove(T item)
         => Remove(item);
 
-    void IPoolIndex<T>.Clear()
+    void IIndexedObjectIndex<T>.Clear()
         => Clear();
 
-    int IPoolIndex<T>.GetCount(object key)
+    int IIndexedObjectIndex<T>.GetCount(object key)
         => GetCount((TKey)key);
 
-    bool IPoolIndex<T>.TryGetSingle(object key, out T? item)
+    bool IIndexedObjectIndex<T>.TryGetSingle(object key, out T? item)
         => TryGetSingle((TKey)key, out item);
 
-    bool IPoolIndex<T>.Contains(object key, T item)
+    bool IIndexedObjectIndex<T>.Contains(object key, T item)
         => Contains((TKey)key, item);
 
-    HashSet<T>? IPoolIndex<T>.GetSet(object key)
+    HashSet<T>? IIndexedObjectIndex<T>.GetSet(object key)
         => FindUnsafe((TKey)key);
 
     public void AddOrUpdate(T item, TKey key)
@@ -74,14 +74,20 @@ internal sealed class PoolIndex<T, TKey> : IPoolIndex<T> where T : class where T
             if (EqualityComparer<TKey>.Default.Equals(oldKey, key))
                 return;
 
+            // Add first so a rejected unique key leaves the previous mapping intact.
+            bool addedKey = m_storage.Add(key, item);
             m_storage.Remove(oldKey, item);
             if (m_storage.IsKeyEmpty(oldKey))
                 m_ordering.RemoveKey(oldKey);
+            if (addedKey)
+                m_ordering.AddKey(key);
+            m_keyByItem[item] = key;
+            return;
         }
 
-        m_keyByItem[item] = key;
         if (m_storage.Add(key, item))
             m_ordering.AddKey(key);
+        m_keyByItem[item] = key;
     }
 
     public void Remove(T item)

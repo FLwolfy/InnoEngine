@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 
 namespace Inno.Engine.Scene;
 
@@ -10,6 +11,8 @@ public static class SceneManager
 {
     private static readonly List<GameScene> s_loadedScenes = [];
     private static GameScene? s_activeScene;
+    private static GameScene[]? s_loadedSceneSnapshot;
+    private static ReadOnlyCollection<GameScene>? s_loadedSceneView;
 
     /// <summary>
     /// Gets the currently loaded scene.
@@ -24,7 +27,14 @@ public static class SceneManager
     /// <summary>
     /// Gets loaded scenes in hierarchy display order.
     /// </summary>
-    public static IReadOnlyList<GameScene> loadedScenes => s_loadedScenes.ToArray();
+    public static IReadOnlyList<GameScene> loadedScenes
+    {
+        get
+        {
+            GameScene[] snapshot = GetLoadedSceneSnapshot();
+            return s_loadedSceneView ??= Array.AsReadOnly(snapshot);
+        }
+    }
 
     /// <summary>
     /// Gets the hierarchy index of a loaded scene.
@@ -58,6 +68,7 @@ public static class SceneManager
             return;
         s_loadedScenes.RemoveAt(currentIndex);
         s_loadedScenes.Insert(targetIndex, scene);
+        InvalidateLoadedSceneSnapshot();
     }
 
     /// <summary>
@@ -75,6 +86,7 @@ public static class SceneManager
 
         UnloadAllScenes();
         s_loadedScenes.Add(scene);
+        InvalidateLoadedSceneSnapshot();
         s_activeScene = scene;
         scene.Load();
     }
@@ -90,6 +102,7 @@ public static class SceneManager
         if (!s_loadedScenes.Contains(scene))
         {
             s_loadedScenes.Add(scene);
+            InvalidateLoadedSceneSnapshot();
             scene.Load();
         }
 
@@ -190,6 +203,7 @@ public static class SceneManager
         {
             return false;
         }
+        InvalidateLoadedSceneSnapshot();
 
         try
         {
@@ -223,6 +237,7 @@ public static class SceneManager
         }
 
         s_loadedScenes.Clear();
+        InvalidateLoadedSceneSnapshot();
         s_activeScene = null;
         if (firstException is not null)
             throw new InvalidOperationException("One or more scenes failed while unloading.", firstException);
@@ -234,7 +249,7 @@ public static class SceneManager
     /// <param name="fixedDeltaTime">Fixed timestep in seconds.</param>
     public static void FixedUpdate(float fixedDeltaTime)
     {
-        GameScene[] scenes = [.. s_loadedScenes];
+        GameScene[] scenes = GetLoadedSceneSnapshot();
         for (int i = 0; i < scenes.Length; i++)
         {
             scenes[i].FixedUpdate(fixedDeltaTime);
@@ -247,7 +262,7 @@ public static class SceneManager
     /// <param name="deltaTime">Frame delta time in seconds.</param>
     public static void Update(float deltaTime)
     {
-        GameScene[] scenes = [.. s_loadedScenes];
+        GameScene[] scenes = GetLoadedSceneSnapshot();
         for (int i = 0; i < scenes.Length; i++)
         {
             scenes[i].Update(deltaTime);
@@ -260,10 +275,19 @@ public static class SceneManager
     /// <param name="deltaTime">Frame delta time in seconds.</param>
     public static void LateUpdate(float deltaTime)
     {
-        GameScene[] scenes = [.. s_loadedScenes];
+        GameScene[] scenes = GetLoadedSceneSnapshot();
         for (int i = 0; i < scenes.Length; i++)
         {
             scenes[i].LateUpdate(deltaTime);
         }
+    }
+
+    private static GameScene[] GetLoadedSceneSnapshot()
+        => s_loadedSceneSnapshot ??= [.. s_loadedScenes];
+
+    private static void InvalidateLoadedSceneSnapshot()
+    {
+        s_loadedSceneSnapshot = null;
+        s_loadedSceneView = null;
     }
 }

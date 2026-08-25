@@ -6,38 +6,39 @@ using System.Threading;
 namespace Inno.Core.Storage;
 
 /// <summary>
-/// Internal pool validation surface for PoolKey.
+/// Internal store validation surface for IndexedObjectKey.
 /// </summary>
-internal interface IObjectPool
+internal interface IIndexedObjectStore
 {
     bool IsValidKey(int id, Type keyType);
 }
 
 /// <summary>
-/// Thread-safe object pool with optional query keys over stored items.
+/// Thread-safe object store with optional query keys over stored items.
 /// </summary>
-public sealed class ObjectPool<T> : IObjectPool where T : class
+/// <typeparam name="T">The stored reference type.</typeparam>
+public sealed class IndexedObjectStore<T> : IIndexedObjectStore where T : class
 {
-    private readonly WeakReference<IObjectPool> m_poolRef;
+    private readonly WeakReference<IIndexedObjectStore> m_storeRef;
     private readonly List<T> m_activeList = new();
     private readonly Dictionary<T, int> m_activeIndex = new(ReferenceEqualityComparer<T>.INSTANCE);
-    private readonly Dictionary<T, PoolRuntimeHandle> m_handleByItem = new(ReferenceEqualityComparer<T>.INSTANCE);
+    private readonly Dictionary<T, IndexedObjectRuntimeHandle> m_handleByItem = new(ReferenceEqualityComparer<T>.INSTANCE);
     private readonly List<int> m_sparseToDense = new();
     private readonly List<uint> m_generations = new();
     private readonly List<int> m_denseToSlot = new();
     private Stack<int> m_freeSlots = new();
-    private readonly Dictionary<int, IPoolIndex<T>> m_indexes = new();
+    private readonly Dictionary<int, IIndexedObjectIndex<T>> m_indexes = new();
     private readonly Dictionary<string, int> m_indexByName = new(StringComparer.Ordinal);
     private readonly ReaderWriterLockSlim m_lock = new(LockRecursionPolicy.NoRecursion);
     private int m_nextIndexId = 1;
     private int m_version;
 
     /// <summary>
-    /// Creates an empty object pool.
+    /// Creates an empty object store.
     /// </summary>
-    public ObjectPool()
+    public IndexedObjectStore()
     {
-        m_poolRef = new WeakReference<IObjectPool>(this);
+        m_storeRef = new WeakReference<IIndexedObjectStore>(this);
     }
 
     /// <summary>
@@ -127,11 +128,11 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     /// <typeparam name="TKey">Key type.</typeparam>
     /// <param name="name">Unique key name.</param>
     /// <param name="flags">Key behavior flags.</param>
-    /// <param name="orderComparer">Optional order comparer. Required when <see cref="PoolKeyFlags.Ordered"/> is set.</param>
+    /// <param name="orderComparer">Optional order comparer. Required when <see cref="IndexedObjectKeyFlags.Ordered"/> is set.</param>
     /// <returns>The created key handle.</returns>
-    public PoolKey<TKey> DefineKey<TKey>(
+    public IndexedObjectKey<TKey> DefineKey<TKey>(
         string name,
-        PoolKeyFlags flags = PoolKeyFlags.Unordered,
+        IndexedObjectKeyFlags flags = IndexedObjectKeyFlags.Unordered,
         IComparer<TKey>? orderComparer = null) where TKey : notnull
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -143,16 +144,16 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
             if (m_indexByName.TryGetValue(name, out _))
                 throw new InvalidOperationException($"Key '{name}' already exists.");
 
-            if ((flags & PoolKeyFlags.Ordered) != 0 && orderComparer == null)
-                throw new ArgumentNullException(nameof(orderComparer), $"{nameof(orderComparer)} cannot be null when {nameof(flags)} is set to {nameof(PoolKeyFlags.Ordered)}.)");
+            if ((flags & IndexedObjectKeyFlags.Ordered) != 0 && orderComparer == null)
+                throw new ArgumentNullException(nameof(orderComparer), $"{nameof(orderComparer)} cannot be null when {nameof(flags)} is set to {nameof(IndexedObjectKeyFlags.Ordered)}.)");
 
-            var index = new PoolIndex<T, TKey>(name, flags, orderComparer);
+            var index = new IndexedObjectIndex<T, TKey>(name, flags, orderComparer);
             var id = m_nextIndexId++;
             m_indexes[id] = index;
             m_indexByName[name] = id;
             BumpVersion();
 
-            return new PoolKey<TKey>(m_poolRef, id, name);
+            return new IndexedObjectKey<TKey>(m_storeRef, id, name);
         }
         finally
         {
@@ -161,12 +162,12 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     }
 
     /// <summary>
-    /// Removes a key previously defined on the pool.
+    /// Removes a key previously defined on the store.
     /// </summary>
     /// <typeparam name="TKey">Key type.</typeparam>
     /// <param name="key">The key handle to remove.</param>
     /// <returns>True if removed.</returns>
-    public bool RemoveKey<TKey>(PoolKey<TKey> key)
+    public bool RemoveKey<TKey>(IndexedObjectKey<TKey> key)
     {
         m_lock.EnterWriteLock();
         try
@@ -191,7 +192,7 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     /// <param name="name">Key name.</param>
     /// <param name="key">The resolved key handle.</param>
     /// <returns>True if found and type matches.</returns>
-    public bool TryGetKey<TKey>(string name, out PoolKey<TKey> key) where TKey : notnull
+    public bool TryGetKey<TKey>(string name, out IndexedObjectKey<TKey> key) where TKey : notnull
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Key name is required.", nameof(name));
@@ -211,7 +212,7 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
                 return false;
             }
 
-            key = new PoolKey<TKey>(m_poolRef, id, name);
+            key = new IndexedObjectKey<TKey>(m_storeRef, id, name);
             return true;
         }
         finally
@@ -220,7 +221,7 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
         }
     }
 
-    bool IObjectPool.IsValidKey(int id, Type keyType)
+    bool IIndexedObjectStore.IsValidKey(int id, Type keyType)
     {
         m_lock.EnterReadLock();
         try
@@ -237,7 +238,7 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     /// Gets all defined key names as a lazy enumerable.
     /// </summary>
     /// <remarks>
-    /// Enumeration is fail-fast and throws if the pool is modified during iteration.
+    /// Enumeration is fail-fast and throws if the store is modified during iteration.
     /// </remarks>
     /// <returns>Lazy enumerable of key names.</returns>
     public IEnumerable<string> GetAllKeys()
@@ -254,10 +255,10 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     }
 
     /// <summary>
-    /// Adds an item to the pool without indexing.
+    /// Adds an item to the store without indexing.
     /// </summary>
     /// <param name="item">The item to add.</param>
-    public PoolEntry<T> Add(T item)
+    public IndexedObjectEntry<T> Add(T item)
     {
         if (item == null) throw new ArgumentNullException(nameof(item));
 
@@ -266,7 +267,7 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
         {
             if (!m_activeIndex.ContainsKey(item))
             {
-                PoolRuntimeHandle handle = AllocateHandle();
+                IndexedObjectRuntimeHandle handle = AllocateHandle();
                 int denseIndex = m_activeList.Count;
                 m_activeIndex[item] = denseIndex;
                 m_handleByItem[item] = handle;
@@ -281,11 +282,11 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
             m_lock.ExitWriteLock();
         }
 
-        return new PoolEntry<T>(this, item);
+        return new IndexedObjectEntry<T>(this, item);
     }
 
     /// <summary>
-    /// Removes an item from the pool and all keys.
+    /// Removes an item from the store and all keys.
     /// </summary>
     /// <param name="item">The item to remove.</param>
     /// <returns>True if removed.</returns>
@@ -299,8 +300,8 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
             if (!m_activeIndex.TryGetValue(item, out var index))
                 return false;
 
-            foreach (var poolIndex in m_indexes.Values)
-                poolIndex.Remove(item);
+            foreach (var objectIndex in m_indexes.Values)
+                objectIndex.Remove(item);
 
             var lastIndex = m_activeList.Count - 1;
             var lastItem = m_activeList[lastIndex];
@@ -346,12 +347,12 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     }
 
     /// <summary>
-    /// Tries to get the runtime handle for an item currently stored in the pool.
+    /// Tries to get the runtime handle for an item currently stored in the store.
     /// </summary>
     /// <param name="item">Item to resolve.</param>
     /// <param name="handle">Resolved runtime handle when successful.</param>
-    /// <returns>True when the item is currently stored in this pool.</returns>
-    internal bool TryGetHandle(T item, out PoolRuntimeHandle handle)
+    /// <returns>True when the item is currently stored in this store.</returns>
+    internal bool TryGetHandle(T item, out IndexedObjectRuntimeHandle handle)
     {
         if (item == null)
         {
@@ -371,9 +372,9 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     }
 
     /// <summary>
-    /// Returns true when the provided runtime handle still points to a live item in this pool.
+    /// Returns true when the provided runtime handle still points to a live item in this store.
     /// </summary>
-    internal bool IsHandleValid(PoolRuntimeHandle handle)
+    internal bool IsHandleValid(IndexedObjectRuntimeHandle handle)
     {
         m_lock.EnterReadLock();
         try
@@ -389,7 +390,7 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     /// <summary>
     /// Tries to resolve an item by runtime handle.
     /// </summary>
-    internal bool TryGetByHandle(PoolRuntimeHandle handle, out T? item)
+    internal bool TryGetByHandle(IndexedObjectRuntimeHandle handle, out T? item)
     {
         m_lock.EnterReadLock();
         try
@@ -414,13 +415,13 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     /// Finds items by key and returns a lazy fail-fast enumerable.
     /// </summary>
     /// <remarks>
-    /// Enumeration throws if the pool is modified during iteration.
+    /// Enumeration throws if the store is modified during iteration.
     /// </remarks>
     /// <typeparam name="TKey">Key type.</typeparam>
     /// <param name="key">The key handle to query.</param>
     /// <param name="value">The key value to look up.</param>
     /// <returns>Lazy fail-fast enumerable of matching items.</returns>
-    public IEnumerable<T> FindFast<TKey>(PoolKey<TKey> key, TKey value) where TKey : notnull
+    public IEnumerable<T> FindFast<TKey>(IndexedObjectKey<TKey> key, TKey value) where TKey : notnull
     {
         var index = GetIndex(key);
         return EnumerateFind(index, value);
@@ -430,13 +431,13 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     /// Finds items by key and returns a stable snapshot.
     /// </summary>
     /// <remarks>
-    /// The returned list is detached from subsequent pool mutations.
+    /// The returned list is detached from subsequent store mutations.
     /// </remarks>
     /// <typeparam name="TKey">Key type.</typeparam>
     /// <param name="key">The key handle to query.</param>
     /// <param name="value">The key value to look up.</param>
     /// <returns>A stable snapshot list of matching items.</returns>
-    public IReadOnlyList<T> Find<TKey>(PoolKey<TKey> key, TKey value) where TKey : notnull
+    public IReadOnlyList<T> Find<TKey>(IndexedObjectKey<TKey> key, TKey value) where TKey : notnull
     {
         m_lock.EnterReadLock();
         try
@@ -450,10 +451,10 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
         }
     }
 
-    private IEnumerable<T> EnumerateFind<TKey>(PoolIndex<T, TKey> index, TKey value) where TKey : notnull
+    private IEnumerable<T> EnumerateFind<TKey>(IndexedObjectIndex<T, TKey> index, TKey value) where TKey : notnull
     {
         var version = Volatile.Read(ref m_version);
-        if ((index.flags & PoolKeyFlags.Unique) != 0 && index.TryGetSingle(value, out var single) && single != null)
+        if ((index.flags & IndexedObjectKeyFlags.Unique) != 0 && index.TryGetSingle(value, out var single) && single != null)
         {
             EnsureVersion(version);
             yield return single;
@@ -471,10 +472,10 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
         }
     }
 
-    private List<T> BuildFindSnapshot<TKey>(PoolIndex<T, TKey> index, TKey value) where TKey : notnull
+    private List<T> BuildFindSnapshot<TKey>(IndexedObjectIndex<T, TKey> index, TKey value) where TKey : notnull
     {
         var result = new List<T>();
-        if ((index.flags & PoolKeyFlags.Unique) != 0 && index.TryGetSingle(value, out var single) && single != null)
+        if ((index.flags & IndexedObjectKeyFlags.Unique) != 0 && index.TryGetSingle(value, out var single) && single != null)
         {
             result.Add(single);
             return result;
@@ -501,7 +502,7 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     /// <param name="key">The key handle to query.</param>
     /// <param name="value">The key value to look up.</param>
     /// <returns>The first matching item or null.</returns>
-    public T? First<TKey>(PoolKey<TKey> key, TKey value) where TKey : notnull
+    public T? First<TKey>(IndexedObjectKey<TKey> key, TKey value) where TKey : notnull
     {
         m_lock.EnterReadLock();
         try
@@ -516,11 +517,100 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
         }
     }
 
+    internal T? FirstInStorageOrder<TKey>(
+        IndexedObjectKey<TKey> key,
+        TKey value,
+        Predicate<T>? predicate = null) where TKey : notnull
+    {
+        m_lock.EnterReadLock();
+        try
+        {
+            IndexedObjectIndex<T, TKey> index = GetIndex(key);
+            if ((index.flags & IndexedObjectKeyFlags.Unique) != 0)
+            {
+                return index.TryGetSingle(value, out T? single) &&
+                       single is not null &&
+                       (predicate is null || predicate(single))
+                    ? single
+                    : null;
+            }
+
+            HashSet<T>? candidates = index.FindUnsafe(value);
+            if (candidates is null || candidates.Count == 0)
+                return null;
+
+            T? first = null;
+            int firstDenseIndex = int.MaxValue;
+            foreach (T candidate in candidates)
+            {
+                if ((predicate is not null && !predicate(candidate)) ||
+                    !m_activeIndex.TryGetValue(candidate, out int denseIndex) ||
+                    denseIndex >= firstDenseIndex)
+                {
+                    continue;
+                }
+
+                first = candidate;
+                firstDenseIndex = denseIndex;
+            }
+            return first;
+        }
+        finally
+        {
+            m_lock.ExitReadLock();
+        }
+    }
+
+    internal IReadOnlyList<T> FindInStorageOrder<TKey>(
+        IndexedObjectKey<TKey> key,
+        TKey value,
+        Predicate<T>? predicate = null) where TKey : notnull
+    {
+        m_lock.EnterReadLock();
+        try
+        {
+            IndexedObjectIndex<T, TKey> index = GetIndex(key);
+            if ((index.flags & IndexedObjectKeyFlags.Unique) != 0)
+            {
+                return index.TryGetSingle(value, out T? single) &&
+                       single is not null &&
+                       (predicate is null || predicate(single))
+                    ? new T[] { single }
+                    : Array.Empty<T>();
+            }
+
+            HashSet<T>? candidates = index.FindUnsafe(value);
+            if (candidates is null || candidates.Count == 0)
+                return Array.Empty<T>();
+
+            var ordered = new List<(int DenseIndex, T Item)>(candidates.Count);
+            foreach (T candidate in candidates)
+            {
+                if ((predicate is not null && !predicate(candidate)) ||
+                    !m_activeIndex.TryGetValue(candidate, out int denseIndex))
+                {
+                    continue;
+                }
+                ordered.Add((denseIndex, candidate));
+            }
+            ordered.Sort(static (left, right) => left.DenseIndex.CompareTo(right.DenseIndex));
+
+            var result = new T[ordered.Count];
+            for (int i = 0; i < ordered.Count; i++)
+                result[i] = ordered[i].Item;
+            return result;
+        }
+        finally
+        {
+            m_lock.ExitReadLock();
+        }
+    }
+
     /// <summary>
     /// Returns all stored items as a stable snapshot.
     /// </summary>
     /// <remarks>
-    /// The returned list is detached from subsequent pool mutations.
+    /// The returned list is detached from subsequent store mutations.
     /// </remarks>
     /// <returns>A snapshot list of all stored items.</returns>
     public IReadOnlyList<T> All()
@@ -542,7 +632,7 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     /// Returns all stored items as a lazy fail-fast enumerable.
     /// </summary>
     /// <remarks>
-    /// Enumeration throws if the pool is modified during iteration.
+    /// Enumeration throws if the store is modified during iteration.
     /// </remarks>
     /// <returns>Lazy fail-fast enumerable of all stored items.</returns>
     public IEnumerable<T> AllFast()
@@ -559,17 +649,17 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     /// Starts a query over stored items.
     /// </summary>
     /// <returns>A query builder.</returns>
-    public PoolQuery<T> Query()
+    public IndexedObjectQuery<T> Query()
         => new(this);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal bool IsOrderedKey<TKey>(PoolKey<TKey> key) where TKey : notnull
-        => (GetIndex(key).flags & PoolKeyFlags.Ordered) != 0;
+    internal bool IsOrderedKey<TKey>(IndexedObjectKey<TKey> key) where TKey : notnull
+        => (GetIndex(key).flags & IndexedObjectKeyFlags.Ordered) != 0;
 
-    private PoolIndex<T, TKey> GetIndex<TKey>(PoolKey<TKey> handle) where TKey : notnull
+    private IndexedObjectIndex<T, TKey> GetIndex<TKey>(IndexedObjectKey<TKey> handle) where TKey : notnull
     {
-        if (handle.poolRef == null || !handle.poolRef.TryGetTarget(out var owner) || !ReferenceEquals(owner, this))
-            throw new InvalidOperationException($"Key '{handle.name}' does not belong to this pool.");
+        if (handle.storeRef == null || !handle.storeRef.TryGetTarget(out var owner) || !ReferenceEquals(owner, this))
+            throw new InvalidOperationException($"Key '{handle.name}' does not belong to this store.");
 
         if (!m_indexes.TryGetValue(handle.id, out var index))
             throw new InvalidOperationException($"Key '{handle.name}' not found.");
@@ -577,16 +667,16 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
         if (index.keyType != typeof(TKey))
             throw new InvalidOperationException($"Key '{handle.name}' type mismatch.");
 
-        return (PoolIndex<T, TKey>)index;
+        return (IndexedObjectIndex<T, TKey>)index;
     }
 
-    internal void SetKey<TKey>(T item, PoolKey<TKey> key, TKey value) where TKey : notnull
+    internal void SetKey<TKey>(T item, IndexedObjectKey<TKey> key, TKey value) where TKey : notnull
     {
         m_lock.EnterWriteLock();
         try
         {
             if (!m_activeIndex.ContainsKey(item))
-                throw new InvalidOperationException("Item is not in the pool.");
+                throw new InvalidOperationException("Item is not in the store.");
 
             GetIndex(key).AddOrUpdate(item, value);
             BumpVersion();
@@ -598,19 +688,19 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal int GetCountUnsafe<TKey>(PoolKey<TKey> key, TKey value) where TKey : notnull => GetIndex(key).GetCount(value);
+    internal int GetCountUnsafe<TKey>(IndexedObjectKey<TKey> key, TKey value) where TKey : notnull => GetIndex(key).GetCount(value);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal bool TryGetSingleUnsafe<TKey>(PoolKey<TKey> key, TKey value, out T? item) where TKey : notnull => GetIndex(key).TryGetSingle(value, out item);
+    internal bool TryGetSingleUnsafe<TKey>(IndexedObjectKey<TKey> key, TKey value, out T? item) where TKey : notnull => GetIndex(key).TryGetSingle(value, out item);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal HashSet<T>? GetSetUnsafe<TKey>(PoolKey<TKey> key, TKey value) where TKey : notnull => GetIndex(key).FindUnsafe(value);
+    internal HashSet<T>? GetSetUnsafe<TKey>(IndexedObjectKey<TKey> key, TKey value) where TKey : notnull => GetIndex(key).FindUnsafe(value);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal bool ContainsInSet<TKey>(PoolKey<TKey> key, TKey value, T item) where TKey : notnull => GetIndex(key).Contains(value, item);
+    internal bool ContainsInSet<TKey>(IndexedObjectKey<TKey> key, TKey value, T item) where TKey : notnull => GetIndex(key).Contains(value, item);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private PoolRuntimeHandle AllocateHandle()
+    private IndexedObjectRuntimeHandle AllocateHandle()
     {
         int slot;
         if (m_freeSlots.Count > 0)
@@ -624,7 +714,7 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
             m_sparseToDense.Add(-1);
         }
 
-        return new PoolRuntimeHandle(slot, m_generations[slot]);
+        return new IndexedObjectRuntimeHandle(slot, m_generations[slot]);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -636,7 +726,7 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private bool IsHandleValidNoLock(PoolRuntimeHandle handle)
+    private bool IsHandleValidNoLock(IndexedObjectRuntimeHandle handle)
     {
         int slot = handle.slot;
         if ((uint)slot >= (uint)m_generations.Count)
@@ -649,10 +739,10 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
         return denseIndex >= 0 && denseIndex < m_activeList.Count;
     }
 
-    internal IEnumerable<T> ExecuteQueryFast(List<IQueryCondition<T>> conditions)
+    internal IEnumerable<T> ExecuteQueryFast(List<IIndexedObjectQueryCondition<T>> conditions)
         => EnumerateQuery(conditions);
 
-    internal IReadOnlyList<T> ExecuteQuerySnapshot(List<IQueryCondition<T>> conditions)
+    internal IReadOnlyList<T> ExecuteQuerySnapshot(List<IIndexedObjectQueryCondition<T>> conditions)
     {
         m_lock.EnterReadLock();
         try
@@ -751,7 +841,7 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
         }
     }
 
-    private IEnumerable<T> EnumerateQuery(List<IQueryCondition<T>> conditions)
+    private IEnumerable<T> EnumerateQuery(List<IIndexedObjectQueryCondition<T>> conditions)
     {
         var version = Volatile.Read(ref m_version);
         if (conditions.Count == 0)
@@ -846,7 +936,7 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
         }
     }
 
-    internal T? ExecuteFirst(List<IQueryCondition<T>> conditions)
+    internal T? ExecuteFirst(List<IIndexedObjectQueryCondition<T>> conditions)
     {
         m_lock.EnterReadLock();
         try
@@ -931,19 +1021,19 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     }
 
     internal IEnumerable<T> ExecuteOrderedQueryFast<TKey>(
-        PoolKey<TKey> orderKey,
-        List<IQueryCondition<T>> conditions) where TKey : notnull
+        IndexedObjectKey<TKey> orderKey,
+        List<IIndexedObjectQueryCondition<T>> conditions) where TKey : notnull
         => EnumerateOrderedQuery(orderKey, conditions);
 
     internal IReadOnlyList<T> ExecuteOrderedQuerySnapshot<TKey>(
-        PoolKey<TKey> orderKey,
-        List<IQueryCondition<T>> conditions) where TKey : notnull
+        IndexedObjectKey<TKey> orderKey,
+        List<IIndexedObjectQueryCondition<T>> conditions) where TKey : notnull
     {
         m_lock.EnterReadLock();
         try
         {
             var index = GetIndex(orderKey);
-            if ((index.flags & PoolKeyFlags.Ordered) == 0)
+            if ((index.flags & IndexedObjectKeyFlags.Ordered) == 0)
             {
                 throw new InvalidOperationException($"Key '{orderKey.name}' is not ordered.");
             }
@@ -1005,12 +1095,12 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     }
 
     private IEnumerable<T> EnumerateOrderedQuery<TKey>(
-        PoolKey<TKey> orderKey,
-        List<IQueryCondition<T>> conditions) where TKey : notnull
+        IndexedObjectKey<TKey> orderKey,
+        List<IIndexedObjectQueryCondition<T>> conditions) where TKey : notnull
     {
         var version = Volatile.Read(ref m_version);
         var index = GetIndex(orderKey);
-        if ((index.flags & PoolKeyFlags.Ordered) == 0)
+        if ((index.flags & IndexedObjectKeyFlags.Ordered) == 0)
             throw new InvalidOperationException($"Key '{orderKey.name}' is not ordered.");
 
         foreach (var key in index.EnumerateOrderedKeys())
@@ -1071,14 +1161,14 @@ public sealed class ObjectPool<T> : IObjectPool where T : class
     }
 
     internal T? ExecuteOrderedFirst<TKey>(
-        PoolKey<TKey> orderKey,
-        List<IQueryCondition<T>> conditions) where TKey : notnull
+        IndexedObjectKey<TKey> orderKey,
+        List<IIndexedObjectQueryCondition<T>> conditions) where TKey : notnull
     {
         m_lock.EnterReadLock();
         try
         {
             var index = GetIndex(orderKey);
-            if ((index.flags & PoolKeyFlags.Ordered) == 0)
+            if ((index.flags & IndexedObjectKeyFlags.Ordered) == 0)
                 throw new InvalidOperationException($"Key '{orderKey.name}' is not ordered.");
 
             foreach (var key in index.EnumerateOrderedKeys())

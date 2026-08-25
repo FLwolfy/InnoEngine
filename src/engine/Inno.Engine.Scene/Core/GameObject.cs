@@ -204,8 +204,9 @@ public sealed class GameObject : EngineObject, ISerializable
     public GameComponent GetComponent(Type componentType)
     {
         ArgumentNullException.ThrowIfNull(componentType);
-        GameComponent? component = GetComponents().FirstOrDefault(componentType.IsInstanceOfType);
-        return component ?? throw new InvalidOperationException($"GameObject '{m_name}' does not contain component '{componentType.FullName}'. Add it explicitly before calling GetComponent.");
+        if (EnsureAlive().TryGetComponent(this, componentType, out GameComponent? component) && component is not null)
+            return component;
+        throw new InvalidOperationException($"GameObject '{m_name}' does not contain component '{componentType.FullName}'. Add it explicitly before calling GetComponent.");
     }
 
     /// <summary>
@@ -222,8 +223,7 @@ public sealed class GameObject : EngineObject, ISerializable
             return false;
         }
 
-        component = EnsureAlive().GetComponents<TComponent>(this).FirstOrDefault();
-        return component is not null;
+        return EnsureAlive().TryGetComponent(this, out component);
     }
 
     /// <summary>
@@ -296,6 +296,11 @@ public sealed class GameObject : EngineObject, ISerializable
         return EnsureAlive().RemoveComponent(this, component);
     }
 
+    internal string storedName => m_name;
+    internal string storedTag => m_tag;
+    internal GameLayer storedLayer => m_layer;
+    internal PrefabConnectionRecord? prefabConnection => m_prefabConnection;
+
     internal void BindTransform(Transform transform)
     {
         if (m_transform is not null)
@@ -334,7 +339,6 @@ public sealed class GameObject : EngineObject, ISerializable
         => m_scene = scene ?? throw new ArgumentNullException(nameof(scene));
     internal void SetPrefabInstanceDirect(PrefabInstanceInfo? value) => m_prefabInstance = value;
     internal void SetPrefabConnectionDirect(PrefabConnectionRecord? value) => m_prefabConnection = value;
-    internal PrefabConnectionRecord? prefabConnection => m_prefabConnection;
 
     internal void DestroyDirect()
     {

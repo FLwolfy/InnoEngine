@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 
@@ -20,22 +21,60 @@ internal readonly record struct SceneStoreRemovedComponent(GameComponent compone
 
 internal sealed class SceneStore
 {
-    private readonly ObjectPool<SceneObjectRecord> m_committedObjects = new();
-    private readonly Dictionary<GameObject, SceneObjectRecord> m_records = new(ReferenceEqualityComparer.Instance);
-    private readonly Dictionary<GameComponent, ComponentEntry> m_components = new(ReferenceEqualityComparer.Instance);
-    private readonly ComponentBucketRegistry m_buckets = new();
+    private static readonly Predicate<SceneObjectRecord> C_VISIBLE_OBJECT =
+        static record => record.isAlive && record.isCommitted;
+    private static readonly Lock S_TYPE_CACHE_SYNC = new();
+    private static readonly List<WeakReference<SceneStore>> S_STORES = [];
+
+    private readonly IndexedObjectStore<SceneObjectRecord> m_objects = new();
+    private readonly IndexedObjectKey<GameObject> m_objectKey;
+    private readonly IndexedObjectKey<Guid> m_objectPersistentIdKey;
+    private readonly IndexedObjectKey<string> m_objectNameKey;
+    private readonly IndexedObjectKey<string> m_objectTagKey;
+    private readonly IndexedObjectKey<GameLayer> m_objectLayerKey;
+    private readonly IndexedObjectKey<bool> m_objectCommittedKey;
+
+    private readonly IndexedObjectStore<ComponentEntry> m_components = new();
+    private readonly IndexedObjectKey<GameComponent> m_componentKey;
+    private readonly IndexedObjectKey<Guid> m_componentPersistentIdKey;
+    private readonly IndexedObjectKey<SceneObjectRecord> m_componentOwnerKey;
+    private readonly IndexedObjectKey<int> m_componentRuntimeTypeKey;
+    private readonly IndexedObjectKey<bool> m_componentCommittedKey;
+
     private readonly List<PendingObjectAddition> m_pendingObjectAdditions = [];
     private readonly List<PendingObjectRemoval> m_pendingObjectRemovals = [];
     private readonly List<PendingComponentAddition> m_pendingComponentAdditions = [];
     private readonly List<PendingComponentRemoval> m_pendingComponentRemovals = [];
-    private readonly Dictionary<Type, GameComponent[]> m_componentQueryCache = [];
-    private readonly Dictionary<string, GameObject[]> m_objectQueryCache = new(StringComparer.Ordinal);
-    private Dictionary<string, GameObject>? m_firstObjectByName;
-    private Dictionary<string, GameObject[]>? m_objectsByTag;
-    private Dictionary<GameLayer, GameObject[]>? m_objectsByLayer;
+    private readonly Dictionary<int, GameComponent[]> m_componentQueryCache = [];
+    private readonly Dictionary<int, object> m_typedComponentQueryCache = [];
+    private readonly Dictionary<ComponentQueryKey, ReadOnlyCollection<GameObject>> m_objectQueryCache = [];
     private GameObject[]? m_objectSnapshotCache;
     private int m_executionDepth;
     private bool m_clearRequested;
+
+    internal SceneStore()
+    {
+        lock (S_TYPE_CACHE_SYNC)
+        {
+            S_STORES.RemoveAll(static reference => !reference.TryGetTarget(out _));
+            S_STORES.Add(new WeakReference<SceneStore>(this));
+        }
+
+        m_objectKey = m_objects.DefineKey<GameObject>("scene.object", IndexedObjectKeyFlags.Unique);
+        m_objectPersistentIdKey = m_objects.DefineKey<Guid>("scene.object.persistent-id", IndexedObjectKeyFlags.Unique);
+        m_objectNameKey = m_objects.DefineKey<string>("scene.object.name");
+        m_objectTagKey = m_objects.DefineKey<string>("scene.object.tag");
+        m_objectLayerKey = m_objects.DefineKey<GameLayer>("scene.object.layer");
+        m_objectCommittedKey = m_objects.DefineKey<bool>("scene.object.committed");
+
+        m_componentKey = m_components.DefineKey<GameComponent>("scene.component", IndexedObjectKeyFlags.Unique);
+        m_componentPersistentIdKey = m_components.DefineKey<Guid>(
+            "scene.component.persistent-id",
+            IndexedObjectKeyFlags.Unique);
+        m_componentOwnerKey = m_components.DefineKey<SceneObjectRecord>("scene.component.owner");
+        m_componentRuntimeTypeKey = m_components.DefineKey<int>("scene.component.runtime-type");
+        m_componentCommittedKey = m_components.DefineKey<bool>("scene.component.committed");
+    }
 
     internal bool isExecuting => m_executionDepth != 0;
     internal bool hasPendingChanges =>
@@ -48,52 +87,97 @@ internal sealed class SceneStore
     internal void AddObject(GameObject gameObject)
     {
         ArgumentNullException.ThrowIfNull(gameObject);
-        if (m_records.ContainsKey(gameObject))
-            throw new InvalidOperationException($"GameObject '{gameObject.identity.persistentId}' is already owned by this scene store.");
+        if (TryGetRecord(gameObject, out _))
+        {
+            throw new InvalidOperationException(
+                $"GameObject '{gameObject.identity.persistentId}' is already owned by this scene store.");
+        }
 
         var record = new SceneObjectRecord(gameObject);
-        m_records.Add(gameObject, record);
+        try
+        {
+            m_objects.Add(record)
+                .Set(m_objectKey, gameObject)
+                .Set(m_objectPersistentIdKey, gameObject.identity.persistentId)
+                .Set(m_objectNameKey, gameObject.storedName)
+                .Set(m_objectTagKey, gameObject.storedTag)
+                .Set(m_objectLayerKey, gameObject.storedLayer)
+                .Set(m_objectCommittedKey, false);
+        }
+        catch
+        {
+            m_objects.Remove(record);
+            throw;
+        }
+
         if (isExecuting)
         {
             m_pendingObjectAdditions.Add(new PendingObjectAddition(record));
             return;
         }
-
         CommitObjectAddition(record);
     }
 
-    internal void AddComponent(GameObject owner, GameComponent component, bool allowsMultiple)
+    internal void AddComponent(
+        GameObject owner,
+        GameComponent component,
+        SceneComponentTypeDescriptor descriptor,
+        bool allowsMultiple)
     {
         ArgumentNullException.ThrowIfNull(component);
+        ArgumentNullException.ThrowIfNull(descriptor);
         SceneObjectRecord record = GetAliveRecord(owner);
-        Type concreteType = component.GetType();
-        if (m_components.ContainsKey(component))
-            throw new InvalidOperationException($"GameComponent '{concreteType.FullName}' is already owned by this scene store.");
-        if (!allowsMultiple && record.components.Any(existing => existing.GetType() == concreteType))
+        if (TryGetEntry(component, out _))
         {
             throw new InvalidOperationException(
-                $"GameObject '{owner.identity.persistentId}' already owns unique component '{concreteType.FullName}'.");
+                $"GameComponent '{descriptor.displayName}' is already owned by this scene store.");
         }
 
-        IComponentBucket bucket = m_buckets.GetOrCreate(concreteType);
-        var entry = new ComponentEntry(record, component, bucket);
-        record.components.Add(component);
-        m_components.Add(component, entry);
+        if (!allowsMultiple)
+        {
+            ComponentEntry? duplicate = m_components.Query()
+                .Find(m_componentOwnerKey, record)
+                .Find(m_componentRuntimeTypeKey, descriptor.runtimeTypeId)
+                .First();
+            if (duplicate is { isAlive: true })
+            {
+                throw new InvalidOperationException(
+                    $"GameObject '{owner.identity.persistentId}' already owns unique component " +
+                    $"'{descriptor.displayName}'.");
+            }
+        }
+
+        var entry = new ComponentEntry(record, component, descriptor.runtimeTypeId);
+        try
+        {
+            m_components.Add(entry)
+                .Set(m_componentKey, component)
+                .Set(m_componentPersistentIdKey, component.identity.persistentId)
+                .Set(m_componentOwnerKey, record)
+                .Set(m_componentRuntimeTypeKey, descriptor.runtimeTypeId)
+                .Set(m_componentCommittedKey, false);
+            record.components.Add(component);
+        }
+        catch
+        {
+            m_components.Remove(entry);
+            throw;
+        }
+
         if (isExecuting || !record.isCommitted)
         {
             m_pendingComponentAdditions.Add(new PendingComponentAddition(entry));
             return;
         }
-
         CommitComponentAddition(entry);
     }
 
     internal SceneStoreRemovalKind RemoveComponent(GameObject owner, GameComponent component)
     {
-        if (!m_records.TryGetValue(owner, out SceneObjectRecord? record) ||
-            !record.isAlive ||
-            !m_components.TryGetValue(component, out ComponentEntry? entry) ||
-            !entry.isAlive ||
+        if (!TryGetRecord(owner, out SceneObjectRecord? record) ||
+            !record!.isAlive ||
+            !TryGetEntry(component, out ComponentEntry? entry) ||
+            !entry!.isAlive ||
             !ReferenceEquals(entry.owner, record))
         {
             return SceneStoreRemovalKind.None;
@@ -101,11 +185,10 @@ internal sealed class SceneStore
 
         entry.isAlive = false;
         record.components.Remove(component);
-        InvalidateQueryCaches();
+        InvalidateStructureCaches();
         if (!entry.isCommitted)
         {
-            m_components.Remove(component);
-            m_buckets.RemoveIfEmpty(entry.bucket);
+            m_components.Remove(entry);
             return SceneStoreRemovalKind.CanceledPendingAddition;
         }
 
@@ -116,43 +199,36 @@ internal sealed class SceneStore
         return SceneStoreRemovalKind.RemovedCommitted;
     }
 
-    internal void ReplaceComponent(GameComponent previous, GameComponent replacement)
+    internal void ReplaceComponent(
+        GameComponent previous,
+        GameComponent replacement,
+        int replacementRuntimeTypeId)
     {
         ArgumentNullException.ThrowIfNull(previous);
         ArgumentNullException.ThrowIfNull(replacement);
         if (isExecuting || hasPendingChanges)
             throw new InvalidOperationException("Components cannot be replaced during a scene execution phase.");
-        if (!m_components.TryGetValue(previous, out ComponentEntry? previousEntry) || !previousEntry.isAlive)
+        if (!TryGetEntry(previous, out ComponentEntry? entry) || !entry!.isAlive)
             throw new InvalidOperationException("The component being replaced is not attached to this scene.");
-        if (m_components.ContainsKey(replacement))
+        if (TryGetEntry(replacement, out _))
             throw new InvalidOperationException("The replacement component is already attached to this scene.");
 
-        SceneObjectRecord owner = previousEntry.owner;
-        int index = owner.components.IndexOf(previous);
+        int index = entry.owner.components.IndexOf(previous);
         if (index < 0)
             throw new InvalidOperationException("The component attachment order is inconsistent.");
-        IComponentBucket replacementBucket = m_buckets.GetOrCreate(replacement.GetType());
-        var replacementEntry = new ComponentEntry(owner, replacement, replacementBucket)
-        {
-            isCommitted = previousEntry.isCommitted
-        };
-        if (previousEntry.isCommitted)
-        {
-            previousEntry.bucket.Remove(previous);
-            m_buckets.RemoveIfEmpty(previousEntry.bucket);
-            replacementBucket.Add(replacement);
-        }
-        previousEntry.isAlive = false;
-        previousEntry.isCommitted = false;
-        owner.components[index] = replacement;
-        m_components.Remove(previous);
-        m_components.Add(replacement, replacementEntry);
-        InvalidateQueryCaches();
+
+        m_components.Add(entry)
+            .Set(m_componentKey, replacement)
+            .Set(m_componentRuntimeTypeKey, replacementRuntimeTypeId);
+        entry.component = replacement;
+        entry.runtimeTypeId = replacementRuntimeTypeId;
+        entry.owner.components[index] = replacement;
+        InvalidateStructureCaches();
     }
 
     internal IReadOnlyList<SceneStoreRemovedComponent> RemoveObject(GameObject gameObject)
     {
-        if (!m_records.TryGetValue(gameObject, out SceneObjectRecord? record) || !record.isAlive)
+        if (!TryGetRecord(gameObject, out SceneObjectRecord? record) || !record!.isAlive)
             return Array.Empty<SceneStoreRemovedComponent>();
 
         record.isAlive = false;
@@ -160,16 +236,16 @@ internal sealed class SceneStore
         var removed = new SceneStoreRemovedComponent[attached.Length];
         for (int i = 0; i < attached.Length; i++)
         {
-            bool wasCommitted = m_components.TryGetValue(attached[i], out ComponentEntry? entry) && entry.isCommitted;
+            bool wasCommitted = TryGetEntry(attached[i], out ComponentEntry? entry) && entry!.isCommitted;
             removed[i] = new SceneStoreRemovedComponent(attached[i], wasCommitted);
             RemoveComponentEntry(record, attached[i]);
         }
         record.components.Clear();
-        InvalidateQueryCaches();
+        InvalidateStructureCaches();
 
         if (!record.isCommitted)
         {
-            m_records.Remove(gameObject);
+            m_objects.Remove(record);
             return removed;
         }
 
@@ -181,57 +257,44 @@ internal sealed class SceneStore
     }
 
     internal bool Contains(GameObject gameObject)
-        => m_records.TryGetValue(gameObject, out SceneObjectRecord? record) && record.isAlive;
+        => TryGetRecord(gameObject, out SceneObjectRecord? record) && record!.isAlive;
 
     internal IReadOnlyList<GameObject> GetObjects()
     {
         if (m_objectSnapshotCache is not null)
             return m_objectSnapshotCache;
 
-        m_objectSnapshotCache = m_committedObjects.All()
-            .Where(static record => record.isAlive && record.isCommitted)
-            .Select(static record => record.gameObject)
-            .ToArray();
-        return m_objectSnapshotCache;
+        IReadOnlyList<SceneObjectRecord> records = m_objects.FindInStorageOrder(
+            m_objectCommittedKey,
+            true,
+            C_VISIBLE_OBJECT);
+        var result = new GameObject[records.Count];
+        for (int i = 0; i < records.Count; i++)
+            result[i] = records[i].gameObject;
+        m_objectSnapshotCache = result;
+        return result;
+    }
+
+    internal GameObject? FindObject(Guid persistentId)
+    {
+        SceneObjectRecord? record = m_objects.First(m_objectPersistentIdKey, persistentId);
+        return record is { isAlive: true } ? record.gameObject : null;
     }
 
     internal GameObject? FindObject(string name)
-    {
-        EnsureMetadataIndexes();
-        return m_firstObjectByName!.GetValueOrDefault(name);
-    }
+        => m_objects.FirstInStorageOrder(m_objectNameKey, name, C_VISIBLE_OBJECT)?.gameObject;
 
     internal GameObject? FindObjectWithTag(string tag)
-    {
-        EnsureMetadataIndexes();
-        return m_objectsByTag!.TryGetValue(tag, out GameObject[]? matches) && matches.Length != 0
-            ? matches[0]
-            : null;
-    }
+        => m_objects.FirstInStorageOrder(m_objectTagKey, tag, C_VISIBLE_OBJECT)?.gameObject;
 
     internal IReadOnlyList<GameObject> FindObjectsWithTag(string tag)
-    {
-        EnsureMetadataIndexes();
-        return m_objectsByTag!.TryGetValue(tag, out GameObject[]? matches)
-            ? matches
-            : Array.Empty<GameObject>();
-    }
+        => SelectObjects(m_objects.FindInStorageOrder(m_objectTagKey, tag, C_VISIBLE_OBJECT));
 
     internal GameObject? FindObjectWithLayer(GameLayer layer)
-    {
-        EnsureMetadataIndexes();
-        return m_objectsByLayer!.TryGetValue(layer, out GameObject[]? matches) && matches.Length != 0
-            ? matches[0]
-            : null;
-    }
+        => m_objects.FirstInStorageOrder(m_objectLayerKey, layer, C_VISIBLE_OBJECT)?.gameObject;
 
     internal IReadOnlyList<GameObject> FindObjectsWithLayer(GameLayer layer)
-    {
-        EnsureMetadataIndexes();
-        return m_objectsByLayer!.TryGetValue(layer, out GameObject[]? matches)
-            ? matches
-            : Array.Empty<GameObject>();
-    }
+        => SelectObjects(m_objects.FindInStorageOrder(m_objectLayerKey, layer, C_VISIBLE_OBJECT));
 
     internal IReadOnlyList<GameObject> FindObjectsWithLayers(GameLayerMask layers)
     {
@@ -242,15 +305,69 @@ internal sealed class SceneStore
 
     internal void NotifyObjectMetadataChanged(GameObject gameObject)
     {
-        _ = GetAliveRecord(gameObject);
-        InvalidateMetadataIndexes();
+        SceneObjectRecord record = GetAliveRecord(gameObject);
+        m_objects.Add(record)
+            .Set(m_objectNameKey, gameObject.storedName)
+            .Set(m_objectTagKey, gameObject.storedTag)
+            .Set(m_objectLayerKey, gameObject.storedLayer);
     }
 
     internal IReadOnlyList<GameObject> GetOwnedObjects()
-        => m_records.Values.Where(static record => record.isAlive).Select(static record => record.gameObject).ToArray();
+        => m_objects.AllFast()
+            .Where(static record => record.isAlive)
+            .Select(static record => record.gameObject)
+            .ToArray();
+
+    internal GameComponent? FindComponent(Guid persistentId)
+    {
+        ComponentEntry? entry = m_components.First(m_componentPersistentIdKey, persistentId);
+        return entry is { isAlive: true } && entry.owner.isAlive ? entry.component : null;
+    }
 
     internal IReadOnlyList<GameComponent> GetComponents(GameObject owner)
         => GetAliveRecord(owner).components.Where(IsLocallyVisible).ToArray();
+
+    internal bool TryGetComponent<TComponent>(
+        GameObject owner,
+        SceneComponentTypeDescriptor requestedType,
+        out TComponent? component) where TComponent : GameComponent
+    {
+        SceneObjectRecord record = GetAliveRecord(owner);
+        for (int i = 0; i < record.components.Count; i++)
+        {
+            GameComponent candidate = record.components[i];
+            if (TryGetEntry(candidate, out ComponentEntry? entry) &&
+                entry!.isAlive &&
+                requestedType.IsAssignableFrom(entry.runtimeTypeId))
+            {
+                component = (TComponent)candidate;
+                return true;
+            }
+        }
+        component = null;
+        return false;
+    }
+
+    internal bool TryGetComponent(
+        GameObject owner,
+        SceneComponentTypeDescriptor requestedType,
+        out GameComponent? component)
+    {
+        SceneObjectRecord record = GetAliveRecord(owner);
+        for (int i = 0; i < record.components.Count; i++)
+        {
+            GameComponent candidate = record.components[i];
+            if (TryGetEntry(candidate, out ComponentEntry? entry) &&
+                entry!.isAlive &&
+                requestedType.IsAssignableFrom(entry.runtimeTypeId))
+            {
+                component = candidate;
+                return true;
+            }
+        }
+        component = null;
+        return false;
+    }
 
     internal int GetComponentIndex(GameObject owner, GameComponent component)
     {
@@ -282,75 +399,105 @@ internal sealed class SceneStore
         record.components.Insert(targetIndex, component);
     }
 
-    internal IReadOnlyList<TComponent> GetComponents<TComponent>(GameObject owner)
-        where TComponent : GameComponent
-        => GetAliveRecord(owner).components.Where(IsLocallyVisible).OfType<TComponent>().ToArray();
-
-    internal IReadOnlyList<TComponent> GetComponents<TComponent>() where TComponent : GameComponent
+    internal IReadOnlyList<TComponent> GetComponents<TComponent>(
+        GameObject owner,
+        SceneComponentTypeDescriptor requestedType) where TComponent : GameComponent
     {
-        Type requestedType = typeof(TComponent);
-        if (!m_componentQueryCache.TryGetValue(requestedType, out GameComponent[]? cached))
+        SceneObjectRecord record = GetAliveRecord(owner);
+        var result = new List<TComponent>(record.components.Count);
+        for (int i = 0; i < record.components.Count; i++)
         {
-            cached = m_buckets.GetAssignableTo(requestedType)
-                .SelectMany(static bucket => bucket.GetSnapshot())
-                .Where(IsVisible)
-                .ToArray();
-            m_componentQueryCache.Add(requestedType, cached);
+            GameComponent candidate = record.components[i];
+            if (TryGetEntry(candidate, out ComponentEntry? entry) &&
+                entry!.isAlive &&
+                requestedType.IsAssignableFrom(entry.runtimeTypeId))
+            {
+                result.Add((TComponent)candidate);
+            }
         }
-
-        return cached.Cast<TComponent>().ToArray();
+        return result;
     }
 
-    internal IReadOnlyList<GameObject> Query(params Type[] componentTypes)
+    internal IReadOnlyList<TComponent> GetComponents<TComponent>(
+        SceneComponentTypeDescriptor requestedType) where TComponent : GameComponent
     {
-        ArgumentNullException.ThrowIfNull(componentTypes);
-        if (componentTypes.Length == 0)
-            return GetObjects();
-        for (int i = 0; i < componentTypes.Length; i++)
-        {
-            Type requestedType = componentTypes[i];
-            if (!typeof(GameComponent).IsAssignableFrom(requestedType))
-                throw new ArgumentException($"Query type '{requestedType.FullName}' is not a GameComponent.", nameof(componentTypes));
-        }
+        if (m_typedComponentQueryCache.TryGetValue(requestedType.runtimeTypeId, out object? cached))
+            return (ReadOnlyCollection<TComponent>)cached;
 
-        Type[] normalized = componentTypes.Distinct().OrderBy(static type => type.AssemblyQualifiedName, StringComparer.Ordinal).ToArray();
-        string cacheKey = string.Join('|', normalized.Select(static type => type.AssemblyQualifiedName));
-        if (m_objectQueryCache.TryGetValue(cacheKey, out GameObject[]? cached))
+        GameComponent[] untyped = GetCommittedComponents(requestedType);
+        var typed = new TComponent[untyped.Length];
+        for (int i = 0; i < untyped.Length; i++)
+            typed[i] = (TComponent)untyped[i];
+        ReadOnlyCollection<TComponent> view = Array.AsReadOnly(typed);
+        m_typedComponentQueryCache.Add(requestedType.runtimeTypeId, view);
+        return view;
+    }
+
+    internal IReadOnlyList<GameObject> Query(SceneComponentTypeDescriptor requestedType)
+        => Query(ComponentQueryKey.Create(requestedType.runtimeTypeId));
+
+    internal IReadOnlyList<GameObject> Query(
+        SceneComponentTypeDescriptor first,
+        SceneComponentTypeDescriptor second)
+        => Query(ComponentQueryKey.Create(first.runtimeTypeId, second.runtimeTypeId));
+
+    internal IReadOnlyList<GameObject> Query(
+        SceneComponentTypeDescriptor first,
+        SceneComponentTypeDescriptor second,
+        SceneComponentTypeDescriptor third)
+        => Query(ComponentQueryKey.Create(
+            first.runtimeTypeId,
+            second.runtimeTypeId,
+            third.runtimeTypeId));
+
+    private IReadOnlyList<GameObject> Query(ComponentQueryKey query)
+    {
+        if (m_objectQueryCache.TryGetValue(query, out ReadOnlyCollection<GameObject>? cached))
             return cached;
 
-        IReadOnlyList<GameComponent> candidates = normalized
-            .Select(GetCommittedComponents)
-            .OrderBy(static components => components.Count)
-            .First();
+        SceneComponentTypeDescriptor first = SceneTypeCatalog.GetComponent(query.first);
+        SceneComponentTypeDescriptor? second = query.count >= 2
+            ? SceneTypeCatalog.GetComponent(query.second)
+            : null;
+        SceneComponentTypeDescriptor? third = query.count >= 3
+            ? SceneTypeCatalog.GetComponent(query.third)
+            : null;
+        GameComponent[] candidates = GetCommittedComponents(first);
+        if (second is not null)
+        {
+            GameComponent[] secondCandidates = GetCommittedComponents(second);
+            if (secondCandidates.Length < candidates.Length)
+                candidates = secondCandidates;
+        }
+        if (third is not null)
+        {
+            GameComponent[] thirdCandidates = GetCommittedComponents(third);
+            if (thirdCandidates.Length < candidates.Length)
+                candidates = thirdCandidates;
+        }
+
         var seen = new HashSet<GameObject>(ReferenceEqualityComparer.Instance);
         var result = new List<GameObject>();
-        for (int i = 0; i < candidates.Count; i++)
+        for (int i = 0; i < candidates.Length; i++)
         {
             GameComponent candidate = candidates[i];
-            if (!m_components.TryGetValue(candidate, out ComponentEntry? entry) ||
-                !IsVisible(candidate) ||
-                !seen.Add(entry.owner.gameObject))
+            if (!TryGetEntry(candidate, out ComponentEntry? entry) ||
+                !IsVisible(entry!) ||
+                !seen.Add(entry!.owner.gameObject))
             {
                 continue;
             }
 
-            bool matches = true;
-            for (int typeIndex = 0; typeIndex < normalized.Length; typeIndex++)
+            if (HasVisibleComponent(entry.owner, first) &&
+                (second is null || HasVisibleComponent(entry.owner, second)) &&
+                (third is null || HasVisibleComponent(entry.owner, third)))
             {
-                Type requiredType = normalized[typeIndex];
-                if (!entry.owner.components.Any(component => IsVisible(component) && requiredType.IsInstanceOfType(component)))
-                {
-                    matches = false;
-                    break;
-                }
-            }
-
-            if (matches)
                 result.Add(entry.owner.gameObject);
+            }
         }
 
-        cached = result.ToArray();
-        m_objectQueryCache.Add(cacheKey, cached);
+        cached = Array.AsReadOnly(result.ToArray());
+        m_objectQueryCache.Add(query, cached);
         return cached;
     }
 
@@ -376,47 +523,87 @@ internal sealed class SceneStore
         return new SceneStructureSnapshot(objects);
     }
 
+    internal void InvalidateTypeCaches()
+    {
+        m_componentQueryCache.Clear();
+        m_typedComponentQueryCache.Clear();
+        m_objectQueryCache.Clear();
+    }
+
+    internal static void InvalidateAllTypeCaches()
+    {
+        lock (S_TYPE_CACHE_SYNC)
+        {
+            for (int i = S_STORES.Count - 1; i >= 0; i--)
+            {
+                if (S_STORES[i].TryGetTarget(out SceneStore? store))
+                    store.InvalidateTypeCaches();
+                else
+                    S_STORES.RemoveAt(i);
+            }
+        }
+    }
+
     internal void Clear()
     {
-        InvalidateQueryCaches();
+        InvalidateStructureCaches();
         if (isExecuting)
         {
             m_clearRequested = true;
             return;
         }
-
         ClearImmediately();
     }
 
-    private IReadOnlyList<GameComponent> GetCommittedComponents(Type requestedType)
+    private GameComponent[] GetCommittedComponents(SceneComponentTypeDescriptor requestedType)
     {
-        if (!m_componentQueryCache.TryGetValue(requestedType, out GameComponent[]? cached))
+        if (m_componentQueryCache.TryGetValue(requestedType.runtimeTypeId, out GameComponent[]? cached))
+            return cached;
+
+        var result = new List<GameComponent>();
+        int[] concreteTypeIds = requestedType.assignableConcreteTypeIds;
+        for (int i = 0; i < concreteTypeIds.Length; i++)
         {
-            cached = m_buckets.GetAssignableTo(requestedType)
-                .SelectMany(static bucket => bucket.GetSnapshot())
-                .Where(IsVisible)
-                .ToArray();
-            m_componentQueryCache.Add(requestedType, cached);
+            foreach (ComponentEntry entry in m_components.FindFast(
+                         m_componentRuntimeTypeKey,
+                         concreteTypeIds[i]))
+            {
+                if (IsVisible(entry))
+                    result.Add(entry.component);
+            }
         }
+
+        cached = result.ToArray();
+        m_componentQueryCache.Add(requestedType.runtimeTypeId, cached);
         return cached;
     }
 
-    private bool IsVisible(GameComponent component)
-        => m_components.TryGetValue(component, out ComponentEntry? entry) &&
-           entry.isAlive &&
-           entry.isCommitted &&
-           entry.owner.isAlive &&
-           entry.owner.isCommitted;
+    private bool HasVisibleComponent(
+        SceneObjectRecord owner,
+        SceneComponentTypeDescriptor requestedType)
+    {
+        for (int i = 0; i < owner.components.Count; i++)
+        {
+            if (TryGetEntry(owner.components[i], out ComponentEntry? entry) &&
+                IsVisible(entry!) &&
+                requestedType.IsAssignableFrom(entry!.runtimeTypeId))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private bool IsVisible(ComponentEntry entry)
+        => entry.isAlive && entry.isCommitted && entry.owner.isAlive && entry.owner.isCommitted;
 
     private bool IsLocallyVisible(GameComponent component)
-        => m_components.TryGetValue(component, out ComponentEntry? entry) &&
-           entry.isAlive &&
-           entry.owner.isAlive;
+        => TryGetEntry(component, out ComponentEntry? entry) && entry!.isAlive && entry.owner.isAlive;
 
     private SceneObjectRecord GetAliveRecord(GameObject owner)
     {
         ArgumentNullException.ThrowIfNull(owner);
-        if (!m_records.TryGetValue(owner, out SceneObjectRecord? record) || !record.isAlive)
+        if (!TryGetRecord(owner, out SceneObjectRecord? record) || !record!.isAlive)
         {
             throw new InvalidOperationException(
                 $"GameObject '{owner.identity.persistentId}' does not belong to this scene store.");
@@ -424,17 +611,28 @@ internal sealed class SceneStore
         return record;
     }
 
+    private bool TryGetRecord(GameObject gameObject, out SceneObjectRecord? record)
+    {
+        record = m_objects.First(m_objectKey, gameObject);
+        return record is not null;
+    }
+
+    private bool TryGetEntry(GameComponent component, out ComponentEntry? entry)
+    {
+        entry = m_components.First(m_componentKey, component);
+        return entry is not null;
+    }
+
     private void RemoveComponentEntry(SceneObjectRecord record, GameComponent component)
     {
-        if (!m_components.TryGetValue(component, out ComponentEntry? entry) || !entry.isAlive)
+        if (!TryGetEntry(component, out ComponentEntry? entry) || !entry!.isAlive)
             return;
 
         entry.isAlive = false;
         record.components.Remove(component);
         if (!entry.isCommitted)
         {
-            m_components.Remove(component);
-            m_buckets.RemoveIfEmpty(entry.bucket);
+            m_components.Remove(entry);
             return;
         }
 
@@ -452,21 +650,18 @@ internal sealed class SceneStore
             if (record.isAlive && !record.isCommitted)
                 CommitObjectAddition(record);
         }
-
         for (int i = 0; i < m_pendingComponentAdditions.Count; i++)
         {
             ComponentEntry entry = m_pendingComponentAdditions[i].entry;
             if (entry.isAlive && entry.owner.isAlive && !entry.isCommitted)
                 CommitComponentAddition(entry);
         }
-
         for (int i = 0; i < m_pendingComponentRemovals.Count; i++)
         {
             ComponentEntry entry = m_pendingComponentRemovals[i].entry;
             if (entry.isCommitted)
                 CommitComponentRemoval(entry);
         }
-
         for (int i = 0; i < m_pendingObjectRemovals.Count; i++)
         {
             SceneObjectRecord record = m_pendingObjectRemovals[i].record;
@@ -483,84 +678,35 @@ internal sealed class SceneStore
     private void CommitObjectAddition(SceneObjectRecord record)
     {
         record.isCommitted = true;
-        m_committedObjects.Add(record);
-        InvalidateQueryCaches();
+        m_objects.Add(record).Set(m_objectCommittedKey, true);
+        InvalidateStructureCaches();
     }
 
     private void CommitObjectRemoval(SceneObjectRecord record)
     {
         record.isCommitted = false;
-        m_committedObjects.Remove(record);
-        m_records.Remove(record.gameObject);
-        InvalidateQueryCaches();
+        m_objects.Remove(record);
+        InvalidateStructureCaches();
     }
 
     private void CommitComponentAddition(ComponentEntry entry)
     {
-        entry.bucket.Add(entry.component);
         entry.isCommitted = true;
-        InvalidateQueryCaches();
+        m_components.Add(entry).Set(m_componentCommittedKey, true);
+        InvalidateStructureCaches();
     }
 
     private void CommitComponentRemoval(ComponentEntry entry)
     {
-        entry.bucket.Remove(entry.component);
-        m_buckets.RemoveIfEmpty(entry.bucket);
         entry.isCommitted = false;
-        m_components.Remove(entry.component);
-        InvalidateQueryCaches();
+        m_components.Remove(entry);
+        InvalidateStructureCaches();
     }
 
-    private void InvalidateQueryCaches()
+    private void InvalidateStructureCaches()
     {
         m_objectSnapshotCache = null;
-        m_componentQueryCache.Clear();
-        m_objectQueryCache.Clear();
-        InvalidateMetadataIndexes();
-    }
-
-    private void EnsureMetadataIndexes()
-    {
-        if (m_firstObjectByName is not null && m_objectsByTag is not null && m_objectsByLayer is not null)
-            return;
-
-        var firstByName = new Dictionary<string, GameObject>(StringComparer.Ordinal);
-        var byTag = new Dictionary<string, List<GameObject>>(StringComparer.Ordinal);
-        var byLayer = new Dictionary<GameLayer, List<GameObject>>();
-        IReadOnlyList<GameObject> objects = GetObjects();
-        for (int i = 0; i < objects.Count; i++)
-        {
-            GameObject gameObject = objects[i];
-            firstByName.TryAdd(gameObject.name, gameObject);
-            if (!byTag.TryGetValue(gameObject.tag, out List<GameObject>? matches))
-            {
-                matches = [];
-                byTag.Add(gameObject.tag, matches);
-            }
-            matches.Add(gameObject);
-            if (!byLayer.TryGetValue(gameObject.layer, out List<GameObject>? layerMatches))
-            {
-                layerMatches = [];
-                byLayer.Add(gameObject.layer, layerMatches);
-            }
-            layerMatches.Add(gameObject);
-        }
-
-        m_firstObjectByName = firstByName;
-        m_objectsByTag = byTag.ToDictionary(
-            static pair => pair.Key,
-            static pair => pair.Value.ToArray(),
-            StringComparer.Ordinal);
-        m_objectsByLayer = byLayer.ToDictionary(
-            static pair => pair.Key,
-            static pair => pair.Value.ToArray());
-    }
-
-    private void InvalidateMetadataIndexes()
-    {
-        m_firstObjectByName = null;
-        m_objectsByTag = null;
-        m_objectsByLayer = null;
+        InvalidateTypeCaches();
     }
 
     private void EndExecutionPhase()
@@ -583,26 +729,32 @@ internal sealed class SceneStore
         m_pendingObjectRemovals.Clear();
         m_pendingComponentAdditions.Clear();
         m_pendingComponentRemovals.Clear();
-        m_components.Clear();
-        m_records.Clear();
-        m_buckets.Clear();
-        m_committedObjects.RemoveAll();
+        m_components.RemoveAll();
+        m_objects.RemoveAll();
         m_clearRequested = false;
-        InvalidateQueryCaches();
+        InvalidateStructureCaches();
+    }
+
+    private static IReadOnlyList<GameObject> SelectObjects(IReadOnlyList<SceneObjectRecord> records)
+    {
+        var result = new GameObject[records.Count];
+        for (int i = 0; i < records.Count; i++)
+            result[i] = records[i].gameObject;
+        return result;
     }
 
     private sealed class ComponentEntry
     {
-        internal ComponentEntry(SceneObjectRecord owner, GameComponent component, IComponentBucket bucket)
+        internal ComponentEntry(SceneObjectRecord owner, GameComponent component, int runtimeTypeId)
         {
             this.owner = owner;
             this.component = component;
-            this.bucket = bucket;
+            this.runtimeTypeId = runtimeTypeId;
         }
 
         internal SceneObjectRecord owner { get; }
-        internal GameComponent component { get; }
-        internal IComponentBucket bucket { get; }
+        internal GameComponent component { get; set; }
+        internal int runtimeTypeId { get; set; }
         internal bool isAlive { get; set; } = true;
         internal bool isCommitted { get; set; }
     }
@@ -611,6 +763,36 @@ internal sealed class SceneStore
     private readonly record struct PendingObjectRemoval(SceneObjectRecord record);
     private readonly record struct PendingComponentAddition(ComponentEntry entry);
     private readonly record struct PendingComponentRemoval(ComponentEntry entry);
+
+    private readonly record struct ComponentQueryKey(int first, int second, int third, int count)
+    {
+        internal static ComponentQueryKey Create(int first)
+            => new(first, 0, 0, 1);
+
+        internal static ComponentQueryKey Create(int first, int second)
+            => first == second
+                ? Create(first)
+                : first < second
+                    ? new ComponentQueryKey(first, second, 0, 2)
+                    : new ComponentQueryKey(second, first, 0, 2);
+
+        internal static ComponentQueryKey Create(int first, int second, int third)
+        {
+            if (first > second)
+                (first, second) = (second, first);
+            if (second > third)
+                (second, third) = (third, second);
+            if (first > second)
+                (first, second) = (second, first);
+            if (first == third)
+                return Create(first);
+            if (first == second)
+                return Create(first, third);
+            if (second == third)
+                return Create(first, second);
+            return new ComponentQueryKey(first, second, third, 3);
+        }
+    }
 
     private sealed class ExecutionScope : IDisposable
     {

@@ -92,20 +92,20 @@ public abstract class GameSystem : EngineObject, ISerializable, ISceneLifecycleO
 
     /// <summary>Queries game objects containing one required component type.</summary>
     protected IReadOnlyList<GameObject> Query<T1>() where T1 : GameComponent
-        => scene.Query(typeof(T1));
+        => scene.Query<T1>();
 
     /// <summary>Queries game objects containing two required component types.</summary>
     protected IReadOnlyList<GameObject> Query<T1, T2>()
         where T1 : GameComponent
         where T2 : GameComponent
-        => scene.Query(typeof(T1), typeof(T2));
+        => scene.Query<T1, T2>();
 
     /// <summary>Queries game objects containing three required component types.</summary>
     protected IReadOnlyList<GameObject> Query<T1, T2, T3>()
         where T1 : GameComponent
         where T2 : GameComponent
         where T3 : GameComponent
-        => scene.Query(typeof(T1), typeof(T2), typeof(T3));
+        => scene.Query<T1, T2, T3>();
 
     internal bool lifecycleAwakeCalled { get; set; }
     internal bool lifecycleStartCalled { get; set; }

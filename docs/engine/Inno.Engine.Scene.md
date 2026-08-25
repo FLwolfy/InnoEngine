@@ -34,7 +34,7 @@ GameObject? firstPlayer = scene.FindObjectWithTag("Player");
 IReadOnlyList<GameObject> players = scene.FindObjectsWithTag("Player");
 ```
 
-Name 与 Tag 都按 `StringComparison.Ordinal` 匹配，复数查询保持 Scene storage order。`SceneStore` 对两类查询建立惰性字典索引；Scene 结构或对象 `name/tag` 变化时索引失效，下一次查询重建一次，之后不再线性扫描完整 Scene。Tag 会随 Scene、Prefab 和 prefab override 一起序列化。
+Name 与 Tag 都按 `StringComparison.Ordinal` 匹配，复数查询保持 Scene storage order。内部 `SceneStore` 通过 `IndexedObjectKey<string>` 持续维护 Name 与 Tag 索引；对象元数据变化时只更新对应 entry，不需要在下一次查询时重扫完整 Scene。Tag 会随 Scene、Prefab 和 prefab override 一起序列化。
 
 ## GameLayer、GameLayerMask 与 GameLayerStack
 
@@ -99,6 +99,32 @@ public sealed class PhysicsSystem : GameSystem
 ```
 
 Inspector header 提供 Move Up、Move Down 和 Remove，但不允许拖拽。移动按钮只改变显示与序列化顺序，不会修改代码声明的 `order`；相同 `order` 时显示顺序作为稳定 tie-breaker。
+
+生命周期调度缓存 loaded Scene、GameBehavior 与 GameSystem 的稳定数组，只在 Scene 结构、System 显示顺序或类型 generation 变化时重建。`GameSystem.order` 仍会在每个阶段开始前读取；值变化时复用现有数组原地排序。`GameSystem.Query<T...>()` 内部使用最多三个 runtime ID 组成的值类型 key，缓存命中时也不再创建 `Type[]`、规范化数组或字符串 key。因此正常 FixedUpdate、Update 与 LateUpdate 不再为这些 traversal 分配新数组。
+
+## 内部索引与类型身份
+
+以下是当前内部实现细节，不属于额外公开 API：
+
+- GameObject、GameComponent 与 GameSystem 都以 `IndexedObjectStore<T>` 保存；引用身份、persistent Guid、元数据、owner、commit 状态和 runtime type ID 分别使用 typed `IndexedObjectKey<TKey>`。
+- GameObject 与 GameComponent 的 persistent Guid 使用 Unique key，因此 `FindObject(Guid)` 与 `FindComponent(Guid)` 为平均 O(1) 查找，不再递归或线性扫描 Scene。
+- Component 的具体类型索引只保存 generation-local `int runtimeTypeId`。可赋值关系由类型目录预计算为 runtime ID 集合，查询期间不调用 `Type.IsAssignableFrom`，也不在 Scene 中建立 `Type` key。
+- 每个对象的 Component list 仅维护公开契约要求的 attachment order；它不承担对象身份、Guid 或类型索引职责。System 的 display list 同理只维护显示与序列化顺序。
+
+Scene/Prefab 序列化继续写入 Stable Type ID（Guid），绝不写入 runtime type ID。`Type` 参数只存在于 Add/Query、实例创建和序列化反射等调用边界的短生命周期局部变量中；Component 构造器与 Scene property metadata 不建立静态 `Type` 缓存。Scene 的长期索引、查询缓存和类型目录快照只保存 runtime ID、Stable Type ID、字符串与标志。
+
+## 热重载同步
+
+Scene 使用一个随 `TypeRegistry<TSnapshot>` 事务刷新的中立类型目录。候选目录构建时可以读取 candidate `TypeCacheSnapshot`，但发布后的目录不保留任何 `Type`：Component descriptor 保存 runtime ID、Stable Type ID、可赋值 runtime ID 集合与 multiplicity 标志；System descriptor 保存对应的中立数据。
+
+Reload 的同步顺序如下：
+
+1. Capture 阶段记录旧实例的 previous runtime type ID，并按 Stable Type ID 验证 candidate replacement。
+2. TypeCache 与中立 Scene 类型目录原子激活 candidate，同时清除所有存活 SceneStore 的类型派生数组缓存。
+3. Migration 替换实例，并用 candidate runtime type ID 原地更新 Component/System typed key。
+4. 成功时立即释放旧实例图和序列化迁移快照；失败时先用捕获的 previous runtime type ID 恢复索引，再回滚 TypeCache 和类型目录。
+
+这样旧 Scene 索引或引擎内部数组不会因为持有 collectible ALC 的 `Type` 而阻止卸载。调用方如果自行长期保留旧 `TypeCacheSnapshot`、旧 Component/System 实例或先前返回的强引用快照，仍会按 .NET 规则延长旧 ALC 生命周期，调用方应在 reload safe point 释放它们。
 
 ## Editor Scene 名称与资产路径
 
