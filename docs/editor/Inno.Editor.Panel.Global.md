@@ -11,15 +11,17 @@ Inno.Editor.Panel.Global/
 ├─ Actions/
 │  ├─ HistoryActions.cs
 │  ├─ SelectionActions.cs
-│  ├─ TogglePanelAction.cs
-│  └─ ZoomActions.cs
-├─ Runtime/
-│  └─ EditorZoomModule.cs
-└─ Settings/
-   ├─ GlobalSettingsPages.cs
-   ├─ IconSettings.cs
+│  └─ TogglePanelAction.cs
+├─ Settings/
+│  ├─ GlobalSettingsPages.cs
+│  └─ IconSettings.cs
+└─ Zoom/
+   ├─ EditorZoomModule.cs
+   ├─ ZoomActions.cs
    └─ ActualSizeSetting.cs
 ```
+
+Zoom 的持久设置、session 倍率 Module 与三个 Action 作为一个 feature 放在 `Zoom`；其他全局历史、选择和 Panel Action 继续位于 `Actions`。目录表达业务归属，不再按 Runtime/Action/Setting 类型机械拆散同一功能。
 
 - `Inno.Editor.Settings` 只保留机制；本项目拥有 Global、Appearance、Icons 页面和实际字段。
 - `Inno.Editor.Interactions` 只保留路由与 History 机制；本项目拥有宿主默认的 Undo、Redo、Selection 和 Toggle Panel action。

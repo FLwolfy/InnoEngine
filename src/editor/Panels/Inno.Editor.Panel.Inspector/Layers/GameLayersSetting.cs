@@ -25,7 +25,7 @@ internal sealed class GameLayersSetting : EditorSetting
     public override EditorSettingObject defaultValue => CreateDefault();
 
     /// <inheritdoc />
-    public override string section => "Layer Definitions";
+    public override string section => "Definitions";
 
     /// <inheritdoc />
     public override string description

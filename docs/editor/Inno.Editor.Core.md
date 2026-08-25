@@ -11,22 +11,21 @@ Inno.Editor.Core/
 ├─ Runtime/
 │  ├─ EditorContext.cs
 │  ├─ EditorFrame.cs
-│  └─ EditorRuntime.cs
-├─ Layout/
+│  ├─ EditorRuntime.cs
+│  ├─ EditorState.cs
 │  └─ EditorLayoutSettings.cs
-├─ Panels/
-│  ├─ EditorPanel.cs
-│  ├─ EditorModal.cs
-│  └─ IEditorPanelReloadState.cs
-├─ Modules/
+├─ Extensions/
 │  ├─ EditorModule.cs
-│  └─ EditorModuleAttribute.cs
-├─ State/
-│  └─ EditorState.cs
+│  ├─ EditorModuleAttribute.cs
+│  ├─ EditorPanel.cs
+│  ├─ EditorPanelAttribute.cs
+│  ├─ EditorModal.cs
+│  ├─ EditorModalAttribute.cs
+│  └─ IEditorPanelReloadState.cs
 └─ Properties/ScriptingApi.cs
 ```
 
-所有目录中的类型都使用物理 namespace `Inno.Editor.Core`；目录只表达职责，不扩展 namespace。
+所有目录中的类型都使用物理 namespace `Inno.Editor.Core`；目录只表达职责，不扩展 namespace。Runtime 聚合项目上下文、帧、状态参数与 layout 实现，Extensions 聚合 Module/Panel/Modal 的发现契约，不再为每一种基类建立单独目录。
 
 旧的 Commands、Menus、DragDrop、Selection 和 Rename 状态均不属于 Core，现已迁入 `Inno.Editor.Interactions` 或对应 Panel。
 

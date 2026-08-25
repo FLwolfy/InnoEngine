@@ -9,8 +9,12 @@ Inno.Editor.ImGui/
 ├─ Styling/
 │  ├─ EditorPalette.cs
 │  └─ EditorStyleMetrics.cs
-├─ Renderers/
 ├─ Runtime/
+│  ├─ ImGuiEditorRuntime.cs
+│  ├─ EditorModalHost.cs
+│  ├─ EditorModalRenderer.cs
+│  ├─ EditorMenuRenderer.cs
+│  └─ EditorDragDropRenderer.cs
 └─ Widgets/
    ├─ ImGuiWidget.Style.cs
    ├─ ImGuiWidget.Search.cs
@@ -22,7 +26,7 @@ Inno.Editor.ImGui/
    └─ ...
 ```
 
-Palette 与 Style Metrics 并列位于 `Styling`，但仍使用项目 namespace `Inno.Editor.ImGui`。所有 `ImGuiWidget.*.cs` 位于 `Widgets`，namespace 统一为 `Inno.Editor.ImGui.ImGuiWidget`；实现统一组成 `static partial ImGuiWidget`，可复用入口全部是 static 方法。Options、Result、presentation 与私有状态收口在对应的 `ImGuiWidget.<Feature>.cs` 中，不创建独立 Widget helper 文件。
+Palette 与 Style Metrics 并列位于 `Styling`，runtime host 与三个表现桥统一位于 `Runtime`，不再人为拆分只有三个文件的 Renderers 层。它们仍使用项目 namespace `Inno.Editor.ImGui`。所有 `ImGuiWidget.*.cs` 位于 `Widgets`，namespace 统一为 `Inno.Editor.ImGui.ImGuiWidget`；实现统一组成 `static partial ImGuiWidget`，可复用入口全部是 static 方法。Options、Result、presentation 与私有状态收口在对应的 `ImGuiWidget.<Feature>.cs` 中，不创建独立 Widget helper 文件。
 
 ## Palette 与 Style
 
