@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.Loader;
 
@@ -19,7 +20,7 @@ public sealed class EditorInteractions
     private EditorExtensionCatalog? m_catalog;
     private EditorMenuCatalog? m_menus;
     private EditorDropRouter? m_drops;
-    private EditorAreaId m_focusedArea = EditorBuiltInInteractionIds.globalArea;
+    private string m_focusedArea = EditorBuiltInInteractionIds.C_GLOBAL_AREA;
     private object? m_focusedTarget;
     private object? m_previousGenerationSelection;
     private object? m_previousGenerationFocus;
@@ -49,7 +50,7 @@ public sealed class EditorInteractions
     internal EditorHistory historyHost => m_history;
 
     /// <summary>Gets the area that most recently received keyboard focus.</summary>
-    public EditorAreaId focusedArea => m_focusedArea;
+    public string focusedArea => m_focusedArea;
 
     /// <summary>Gets the target associated with the focused area.</summary>
     public object? focusedTarget => m_focusedTarget;
@@ -59,13 +60,8 @@ public sealed class EditorInteractions
     /// <param name="target">The optional object represented by the area.</param>
     /// <returns>A lightweight interaction handle.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="area"/> is empty.</exception>
-    public EditorInteraction For(EditorAreaId area, object? target = null)
+    public EditorInteraction For(string area, object? target = null)
         => new(this, area, target);
-
-    internal EditorInteraction For(string area, object? target = null)
-    {
-        return new EditorInteraction(this, new EditorAreaId(area), target);
-    }
 
     /// <summary>
     /// Replaces the editor selection after closing presentations owned by other targets.
@@ -92,8 +88,12 @@ public sealed class EditorInteractions
     /// <summary>Toggles one panel in the currently active extension generation.</summary>
     /// <param name="panelId">The stable panel identifier to resolve.</param>
     /// <returns><see langword="true"/> when an available panel was found and toggled.</returns>
-    public bool TogglePanel(EditorPanelId panelId)
-        => m_catalog?.TryTogglePanel(panelId) == true;
+    /// <exception cref="ArgumentException">Thrown when <paramref name="panelId"/> is empty.</exception>
+    public bool TogglePanel(string panelId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(panelId);
+        return m_catalog?.TryTogglePanel(panelId) == true;
+    }
 
     internal void Attach(EditorExtensionCatalog catalog)
     {
@@ -148,12 +148,15 @@ public sealed class EditorInteractions
         m_previousGenerationFocus = null;
     }
 
-    internal void Shutdown()
+    internal void Shutdown(
+        IReadOnlyList<EditorExtensionCatalog.ActionRegistration> actions)
     {
-        Actions.Clear();
+        Actions.Clear(actions);
         Drops.Cancel();
         m_catalog = null;
-        _ = For(EditorBuiltInInteractionIds.globalArea).Select();
+        selection.Clear();
+        m_focusedArea = EditorBuiltInInteractionIds.C_GLOBAL_AREA;
+        m_focusedTarget = null;
         m_pendingSelectionId = null;
         m_pendingFocusId = null;
         m_previousGenerationSelection = null;
@@ -164,10 +167,10 @@ public sealed class EditorInteractions
     internal bool DispatchShortcut(KeyPressedEvent keyEvent)
         => Actions.DispatchShortcut(
             keyEvent,
-            m_focusedArea.value,
+            m_focusedArea,
             m_focusedTarget ?? selection.selectedTarget);
 
-    internal void Focus(EditorAreaId area, object? target)
+    internal void Focus(string area, object? target)
     {
         m_focusedArea = area;
         m_focusedTarget = target;
@@ -204,7 +207,7 @@ public sealed class EditorInteractions
         => Actions.IsActive(action, CreateActionContext(area, target, null));
 
     internal EditorMenuModel BuildMenu(string area, object? target)
-        => Menus.Build(new EditorMenuContext(m_editor, this, new EditorAreaId(area), target));
+        => Menus.Build(new EditorMenuContext(m_editor, this, area, target));
 
     internal bool TryGetShortcut(
         string action,
@@ -214,7 +217,12 @@ public sealed class EditorInteractions
         => Actions.TryGetShortcut(action, area, target, out gesture);
 
     internal Guid BeginDrag(string area, EditorDragData data)
-        => Drops.Begin(new EditorDragContext(m_editor, this, new EditorAreaId(area), data));
+    {
+        if (m_catalog is null)
+            throw new InvalidOperationException("Editor interactions are not attached to a runtime.");
+        _ = m_catalog.extensions;
+        return Drops.Begin(new EditorDragContext(m_editor, this, area, data));
+    }
 
     internal EditorDropStatus QueryDrop(
         Guid token,
@@ -229,7 +237,7 @@ public sealed class EditorInteractions
         return Drops.Query(token, new EditorDropContext(
             m_editor,
             this,
-            new EditorAreaId(area),
+            area,
             data,
             target,
             placement));
@@ -248,7 +256,7 @@ public sealed class EditorInteractions
         return Drops.Drop(token, new EditorDropContext(
             m_editor,
             this,
-            new EditorAreaId(area),
+            area,
             data,
             target,
             placement));
@@ -267,7 +275,7 @@ public sealed class EditorInteractions
         string area,
         object? target,
         object? argument)
-        => new(m_editor, this, new EditorAreaId(area), target, argument);
+        => new(m_editor, this, area, target, argument);
 
     private void ResolveGenerationTargets()
     {

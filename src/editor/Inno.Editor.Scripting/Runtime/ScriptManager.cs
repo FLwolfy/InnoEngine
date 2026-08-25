@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -21,6 +22,9 @@ public sealed class ScriptManager : IDisposable
     private readonly ScriptManagerOptions m_options;
     private readonly SemaphoreSlim m_compileGate = new(1, 1);
     private readonly CancellationTokenSource m_lifetimeCancellation = new();
+    private readonly TaskCompletionSource<Exception?> m_disposalCompleted = new(
+        TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly CancellationToken m_lifetimeToken;
     private readonly ScriptArtifactCache m_artifactCache;
     private readonly Func<CancellationToken, ValueTask>? m_compileGateProbe;
 
@@ -33,8 +37,9 @@ public sealed class ScriptManager : IDisposable
     private float m_compilationProgress;
     private bool m_compileRequested;
     private bool m_initialCompileRequested;
+    private int m_disposeStarted;
     private int m_isCompiling;
-    private bool m_disposed;
+    private volatile bool m_disposed;
 
     /// <summary>
     /// Creates a script manager for one project.
@@ -65,6 +70,7 @@ public sealed class ScriptManager : IDisposable
         };
         m_artifactCache = new ScriptArtifactCache(m_options.outputDirectory);
         m_compileGateProbe = compileGateProbe;
+        m_lifetimeToken = m_lifetimeCancellation.Token;
     }
 
     /// <summary>Gets whether a compilation currently owns the compiler gate.</summary>
@@ -179,7 +185,7 @@ public sealed class ScriptManager : IDisposable
         ObjectDisposedException.ThrowIf(m_disposed, this);
         using CancellationTokenSource linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
-            m_lifetimeCancellation.Token);
+            m_lifetimeToken);
         CancellationToken effectiveCancellation = linkedCancellation.Token;
         await m_compileGate.WaitAsync(effectiveCancellation).ConfigureAwait(false);
         try
@@ -219,13 +225,19 @@ public sealed class ScriptManager : IDisposable
             }
             lock (m_sync)
             {
-                m_lastCompilation = result;
-                if (result.success)
-                    m_pendingCompilation = result;
+                if (!m_disposed)
+                {
+                    m_lastCompilation = result;
+                    if (result.success)
+                        m_pendingCompilation = result;
+                }
             }
-            SetCompilationProgress(
-                1f,
-                result.success ? "Script compilation completed." : "Script compilation failed.");
+            if (!m_disposed)
+            {
+                SetCompilationProgress(
+                    1f,
+                    result.success ? "Script compilation completed." : "Script compilation failed.");
+            }
             return result;
         }
         finally
@@ -305,27 +317,56 @@ public sealed class ScriptManager : IDisposable
     }
 
     /// <summary>
-    /// Stops Asset Database observation and unloads the active script module.
+    /// Cancels and waits for active compilation work, stops Asset Database observation, and unloads
+    /// the active script module.
     /// </summary>
     public void Dispose()
     {
-        if (m_disposed)
-            return;
-        m_disposed = true;
-        m_lifetimeCancellation.Cancel();
-        if (AssetManager.isInitialized)
-            AssetManager.Changed -= OnAssetDatabaseChanged;
-        lock (m_sync)
+        if (Interlocked.Exchange(ref m_disposeStarted, 1) != 0)
         {
-            m_compileRequested = false;
-            m_initialCompileRequested = false;
-            m_pendingCompilation = null;
+            Exception? previousFailure = m_disposalCompleted.Task.GetAwaiter().GetResult();
+            if (previousFailure is not null)
+                ExceptionDispatchInfo.Capture(previousFailure).Throw();
+            return;
         }
-        if (m_scriptModule is AssemblyModuleHandle handle && AssemblyManager.isInitialized)
-            _ = AssemblyManager.Unload(handle);
-        ScriptDiagnosticPublisher.ClearAll();
-        m_lifetimeCancellation.Dispose();
-        GC.SuppressFinalize(this);
+        Exception? disposalFailure = null;
+        try
+        {
+            m_disposed = true;
+            m_lifetimeCancellation.Cancel();
+            m_compileGate.Wait();
+            try
+            {
+                if (AssetManager.isInitialized)
+                    AssetManager.Changed -= OnAssetDatabaseChanged;
+                lock (m_sync)
+                {
+                    m_compileRequested = false;
+                    m_initialCompileRequested = false;
+                    m_pendingCompilation = null;
+                }
+                if (m_scriptModule is AssemblyModuleHandle handle && AssemblyManager.isInitialized)
+                    _ = AssemblyManager.Unload(handle);
+                m_scriptModule = null;
+                m_activeCompilationDirectory = null;
+                ScriptDiagnosticPublisher.ClearAll();
+            }
+            finally
+            {
+                m_compileGate.Release();
+                m_lifetimeCancellation.Dispose();
+            }
+            GC.SuppressFinalize(this);
+        }
+        catch (Exception exception)
+        {
+            disposalFailure = exception;
+            throw;
+        }
+        finally
+        {
+            m_disposalCompleted.TrySetResult(disposalFailure);
+        }
     }
 
     private void OnAssetDatabaseChanged(AssetChangeSet changeSet)

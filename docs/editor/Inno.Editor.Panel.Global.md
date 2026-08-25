@@ -26,7 +26,7 @@ Zoom 的持久设置、session 倍率 Module 与三个 Action 作为一个 featu
 - `Inno.Editor.Settings` 只保留机制；本项目拥有 Global、Appearance、Icons 页面和实际字段。
 - `Inno.Editor.Interactions` 只保留路由与 History 机制；本项目拥有宿主默认的 Undo、Redo、Selection 和 Toggle Panel action。
 - 所有类型都是 internal，并由 TypeCache 根据 Attribute 发现。Application 通过项目引用确保程序集被加载。
-- Attribute 使用 feature-owned `const string` ID；运行时调用集中使用 `EditorActionId`、`EditorAreaId` 与 `EditorCommand<TArgument>`，不散落字符串 literal。Settings path 仍按当前契约使用原始完整字符串。
+- Attribute 与运行时调用都集中使用项目根目录 `GlobalInteractionIds` 中的 `const string`，不散落字符串 literal。Settings path 仍按当前契约使用原始完整字符串。
 
 ## 全局 Settings
 
@@ -54,12 +54,12 @@ Actual Size field 同样直接绘制选择器，并通过 Settings Modal 的 App
 | `editor/redo` | `editor/main-menu` → `Edit/Redo` | 查询并重做共享 `EditorHistory` 顶部记录。 |
 | `editor/select` | 无固定 area | 把 action target 交给 `EditorInteractions.SetSelection`。 |
 | `editor/clear-selection` | 无固定 area | 清空 session selection。 |
-| `editor/toggle-panel` | `editor/main-menu` | 接收稳定 `EditorPanelId`，在当前 snapshot 解析 descriptor 后切换受控 `isOpen`。 |
+| `editor/toggle-panel` | `editor/main-menu` | 接收稳定 panel ID `string`，在当前 snapshot 解析 descriptor 后切换受控 `isOpen`。 |
 | `editor.ui.zoom-in` | `editor/main-menu` → `View/Zoom In` | 增加一个 actual-size 倍率步长。 |
 | `editor.ui.zoom-out` | `editor/main-menu` → `View/Zoom Out` | 减少一个 actual-size 倍率步长。 |
 | `editor.ui.zoom-reset` | `editor/main-menu` → `View/Actual Size` | 恢复配置的 actual size。 |
 
-这些 action 是宿主默认行为，不是 Interactions 稳定公开契约。Feature action 仍放在各自项目中；Attribute 使用常量，执行、排队和呈现使用 typed command。
+这些 action 是宿主默认行为，不是 Interactions 稳定公开契约。Feature action 仍放在各自项目中；Attribute、执行、排队和呈现共用同一 `const string` action ID。
 
 ## 依赖与初始化
 

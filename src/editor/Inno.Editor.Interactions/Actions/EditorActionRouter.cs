@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 using Inno.Core.Events;
 using Inno.Core.Logging;
@@ -18,6 +19,8 @@ internal sealed class EditorActionRouter(
 
     internal EditorActionState Query(string action, EditorActionContext context)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(action);
+        ArgumentNullException.ThrowIfNull(context);
         EditorExtensionCatalog.ActionRegistration? registration = Resolve(action, context);
         if (registration is null)
             return EditorActionState.hidden;
@@ -37,6 +40,8 @@ internal sealed class EditorActionRouter(
 
     internal bool Execute(string action, EditorActionContext context)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(action);
+        ArgumentNullException.ThrowIfNull(context);
         EditorExtensionCatalog.ActionRegistration? registration = Resolve(action, context);
         if (registration is null)
             return false;
@@ -50,6 +55,7 @@ internal sealed class EditorActionRouter(
         }
         catch (Exception exception)
         {
+            TryCancel(registration.action, action, "execution cleanup");
             Log.Error("Editor action '{0}' failed: {1}", action, exception);
             return false;
         }
@@ -57,6 +63,8 @@ internal sealed class EditorActionRouter(
 
     internal bool Present(string action, EditorActionContext context)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(action);
+        ArgumentNullException.ThrowIfNull(context);
         EditorExtensionCatalog.ActionRegistration? registration = Resolve(action, context);
         if (registration is null)
             return false;
@@ -68,7 +76,7 @@ internal sealed class EditorActionRouter(
         }
         catch (Exception exception)
         {
-            registration.action.CancelInternal();
+            TryCancel(registration.action, action, "presentation cleanup");
             if (m_presentationFailures.Add(action))
                 Log.Error("Editor action '{0}' presentation failed: {1}", action, exception);
             return false;
@@ -77,6 +85,8 @@ internal sealed class EditorActionRouter(
 
     internal bool IsActive(string action, EditorActionContext context)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(action);
+        ArgumentNullException.ThrowIfNull(context);
         EditorExtensionCatalog.ActionRegistration? registration = Resolve(action, context);
         return registration is not null && registration.action.IsActiveFor(context.target);
     }
@@ -94,13 +104,17 @@ internal sealed class EditorActionRouter(
             _ = Execute(request.Action, request.Context);
     }
 
-    internal void Clear()
+    internal void Clear(IReadOnlyList<EditorExtensionCatalog.ActionRegistration> registrations)
     {
+        ArgumentNullException.ThrowIfNull(registrations);
         m_pending.Clear();
         m_presentationFailures.Clear();
         m_queryFailures.Clear();
-        foreach (EditorExtensionCatalog.ActionRegistration registration in catalog.extensions.actions)
-            registration.action.CancelInternal();
+        for (int i = 0; i < registrations.Count; i++)
+        {
+            EditorExtensionCatalog.ActionRegistration registration = registrations[i];
+            TryCancel(registration.action, registration.id, "runtime shutdown");
+        }
     }
 
     internal void ResetTransientState()
@@ -138,7 +152,9 @@ internal sealed class EditorActionRouter(
         object? target,
         out HotKeyGesture gesture)
     {
-        var context = new EditorActionContext(editor, interactions, new EditorAreaId(area), target);
+        ArgumentException.ThrowIfNullOrWhiteSpace(action);
+        ArgumentException.ThrowIfNullOrWhiteSpace(area);
+        var context = new EditorActionContext(editor, interactions, area, target);
         EditorExtensionCatalog.ActionRegistration? registration = Resolve(action, context);
         return TryResolveShortcut(registration, area, out gesture);
     }
@@ -147,19 +163,26 @@ internal sealed class EditorActionRouter(
     {
         var actionIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (EditorExtensionCatalog.ActionRegistration registration in catalog.extensions.actions)
-            _ = actionIds.Add(registration.id.value);
-        var context = new EditorActionContext(editor, interactions, new EditorAreaId(area), target);
+            _ = actionIds.Add(registration.id);
+        var context = new EditorActionContext(editor, interactions, area, target);
         var candidates = new List<ShortcutCandidate>();
         foreach (string action in actionIds)
         {
             ResolvedAction? resolved = ResolveWithSpecificity(action, context);
-            if (resolved is null ||
-                !TryResolveShortcut(resolved.Value.registration, area, out HotKeyGesture gesture) ||
-                !gesture.Matches(keyEvent))
+            if (resolved is null)
             {
                 continue;
             }
-            candidates.Add(new ShortcutCandidate(action, resolved.Value, gesture));
+            foreach (EditorShortcutAttribute shortcut in GetApplicableShortcuts(
+                         resolved.Value.registration,
+                         area))
+            {
+                HotKeyGesture gesture = CreateGesture(shortcut);
+                if (!gesture.Matches(keyEvent))
+                    continue;
+                candidates.Add(new ShortcutCandidate(action, resolved.Value, gesture));
+                break;
+            }
         }
         candidates.Sort(static (left, right) =>
         {
@@ -189,20 +212,9 @@ internal sealed class EditorActionRouter(
         string area,
         out HotKeyGesture gesture)
     {
-        EditorShortcutAttribute? best = null;
-        if (registration is not null)
-        {
-            foreach (EditorShortcutAttribute shortcut in registration.shortcuts)
-            {
-                if (!string.IsNullOrEmpty(shortcut.area) &&
-                    !string.Equals(shortcut.area, area, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-                if (best is null || string.IsNullOrEmpty(best.area) && !string.IsNullOrEmpty(shortcut.area))
-                    best = shortcut;
-            }
-        }
+        EditorShortcutAttribute? best = registration is null
+            ? null
+            : GetApplicableShortcuts(registration, area).FirstOrDefault();
         if (best is null)
         {
             gesture = default;
@@ -225,11 +237,11 @@ internal sealed class EditorActionRouter(
         int bestDistance = int.MaxValue;
         foreach (EditorExtensionCatalog.ActionRegistration registration in catalog.extensions.actions)
         {
-            if (!string.Equals(registration.id.value, action, StringComparison.Ordinal))
+            if (!string.Equals(registration.id, action, StringComparison.Ordinal))
                 continue;
             bool exactArea = registration.area is not null;
             if (exactArea &&
-                registration.area != context.area)
+                !string.Equals(registration.area, context.area, StringComparison.Ordinal))
             {
                 continue;
             }
@@ -273,6 +285,30 @@ internal sealed class EditorActionRouter(
         => shortcut.primary
             ? HotKeyGesture.Primary(shortcut.key, shortcut.modifiers)
             : new HotKeyGesture(shortcut.key, shortcut.modifiers);
+
+    private static IEnumerable<EditorShortcutAttribute> GetApplicableShortcuts(
+        EditorExtensionCatalog.ActionRegistration registration,
+        string area)
+    {
+        bool hasExact = registration.shortcuts.Any(shortcut =>
+            !string.IsNullOrEmpty(shortcut.area) &&
+            string.Equals(shortcut.area, area, StringComparison.Ordinal));
+        return registration.shortcuts.Where(shortcut => hasExact
+            ? string.Equals(shortcut.area, area, StringComparison.Ordinal)
+            : string.IsNullOrEmpty(shortcut.area));
+    }
+
+    private static void TryCancel(EditorAction action, string actionId, string phase)
+    {
+        try
+        {
+            action.CancelInternal();
+        }
+        catch (Exception exception)
+        {
+            Log.Error("Editor action '{0}' failed during {1}: {2}", actionId, phase, exception);
+        }
+    }
 
     private readonly record struct ResolvedAction(
         EditorExtensionCatalog.ActionRegistration registration,

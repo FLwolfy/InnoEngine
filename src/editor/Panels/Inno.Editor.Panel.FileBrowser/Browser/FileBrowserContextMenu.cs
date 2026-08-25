@@ -23,7 +23,7 @@ internal sealed class FileBrowserContextMenu(
         bool isOpen = EditorMenuRenderer.ContextMenu(
             id,
             assets.interactions.For(
-                FileBrowserInteractionIds.area,
+                FileBrowserInteractionIds.C_AREA,
                 AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry entry) ? entry : null));
         if (isOpen)
             rename.MarkInteraction(presentation);
@@ -56,6 +56,6 @@ internal sealed class FileBrowserContextMenu(
 
     private Inno.Editor.Interactions.EditorInteraction CreateDirectoryInteraction(string relativePath)
         => assets.interactions.For(
-            FileBrowserInteractionIds.area,
+            FileBrowserInteractionIds.C_AREA,
             NormalizePath(relativePath));
 }

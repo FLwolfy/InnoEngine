@@ -89,7 +89,26 @@ internal sealed class SceneElementHistoryHandler : EditorHistoryHandler
             if (shouldExist)
             {
                 bool restored = current is null;
-                current ??= Restore(data, scene, index, state);
+                if (current is null)
+                {
+                    try
+                    {
+                        current = Restore(data, scene, index, state);
+                    }
+                    catch (Exception exception)
+                    {
+                        EngineObject? partial = IdentityManager.Get<EngineObject>(data.elementId);
+                        if (partial is null || partial.isDestroyed)
+                            return EditorHistoryResult.Failure(exception.Message);
+                        SceneHistoryCompensationResult cleanup = SceneHistoryCompensation.Remove(
+                            partial,
+                            () => Remove(data, scene, partial),
+                            $"Partially restored scene element '{data.elementId}'");
+                        return cleanup.statePreserved
+                            ? EditorHistoryResult.Failure(JoinFailures(exception.Message, cleanup.message))
+                            : StateIntegrityFailure(JoinFailures(exception.Message, cleanup.message));
+                    }
+                }
                 if (current.isDestroyed)
                     return EditorHistoryResult.Failure($"Scene element '{data.elementId}' is destroyed.");
                 if (restored)
@@ -98,12 +117,14 @@ internal sealed class SceneElementHistoryHandler : EditorHistoryHandler
                         SceneReferenceIndex.RestoreIncoming(data.incomingReferences);
                     if (!referenceResult.succeeded)
                     {
-                        bool removed = Remove(data, scene, current);
-                        if (referenceResult.statePreserved && removed)
-                            return EditorHistoryResult.Failure(referenceResult.message);
-                        return StateIntegrityFailure(
-                            $"Scene element reference restore failed: {referenceResult.message} " +
-                            (removed ? string.Empty : "The restored element could not be removed."));
+                        SceneHistoryCompensationResult cleanup = SceneHistoryCompensation.Remove(
+                            current,
+                            () => Remove(data, scene, current),
+                            $"Restored scene element '{data.elementId}'");
+                        string failure = JoinFailures(referenceResult.message, cleanup.message);
+                        return referenceResult.statePreserved && cleanup.statePreserved
+                            ? EditorHistoryResult.Failure(failure)
+                            : StateIntegrityFailure(failure);
                     }
                 }
                 else
@@ -287,5 +308,8 @@ internal sealed class SceneElementHistoryHandler : EditorHistoryHandler
     }
 
     private static bool IsComplete(SerializationPropertyRestoreResult result)
-        => result.success && result.ignoredCount == 0 && result.restoredCount > 0;
+        => result.success && result.ignoredCount == 0;
+
+    private static string JoinFailures(string failure, string cleanup)
+        => string.IsNullOrWhiteSpace(cleanup) ? failure : $"{failure} {cleanup}";
 }

@@ -93,7 +93,7 @@ AssemblyManager 自己的 runtime generation 仍存在于 assembly shadow cache�
 | `CompileAsync` | 在 compiler gate 内从稳定 Asset snapshot 编译完整 assembly graph；没有 worker-thread completion event。 |
 | `ApplyPendingReload` | 主线程安全点首次 Load 或事务 Reload。 |
 | `GenerateProjectFiles` | 从 Asset Catalog/asmdef 图生成显式 Compile items。 |
-| `Dispose` | 取消任务、取消 Asset observer、卸载活动 Script Module。 |
+| `Dispose` | 取消 manager lifetime token，等待已进入 compiler gate 的编译完全退出，再取消 Asset observer 并卸载活动 Script Module。 |
 
 ```csharp
 using var scripts = new ScriptManager(new ScriptManagerOptions
@@ -112,7 +112,7 @@ if (window.isFocused && scripts.TryCompilePending(out Task<ScriptCompilationResu
 }
 ```
 
-Asset Update/Rescan 只在主线程 `TryCompilePending` 启动点发生，后台编译不调用全局 AssetManager。完成通知只来自返回的 Task；`EditorScripting` 在主线程发布 diagnostics 并执行 reload。成功编译不写 Info log；Warning/Error 与源位置保留。失败编译不会清除上一个尚未应用的成功 candidate。
+Asset Update/Rescan 只在主线程 `TryCompilePending` 启动点发生，后台编译不调用全局 AssetManager。完成通知只来自返回的 Task；`EditorScripting` 在主线程发布 diagnostics 并执行 reload。成功编译不写 Info log；Warning/Error 与源位置保留。失败编译不会清除上一个尚未应用的成功 candidate。`Dispose` 返回后不会再有进行中的编译写入 `lastCompilation`、pending candidate 或进度状态；并发调用 `Dispose` 的线程也会等待首个释放流程完成。
 
 ## 编译进度 modal
 

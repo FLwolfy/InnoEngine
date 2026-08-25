@@ -19,13 +19,14 @@ public sealed class EditorDropContext
     public EditorDropContext(
         EditorContext editor,
         EditorInteractions interactions,
-        EditorAreaId area,
+        string area,
         EditorDragData data,
         object target,
         EditorDropPlacement placement = EditorDropPlacement.None)
     {
         this.editor = editor ?? throw new ArgumentNullException(nameof(editor));
         this.interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
+        ArgumentException.ThrowIfNullOrWhiteSpace(area);
         this.area = area;
         this.data = data ?? throw new ArgumentNullException(nameof(data));
         this.target = target ?? throw new ArgumentNullException(nameof(target));
@@ -39,7 +40,7 @@ public sealed class EditorDropContext
     public EditorInteractions interactions { get; }
 
     /// <summary>Gets the target interaction area.</summary>
-    public EditorAreaId area { get; }
+    public string area { get; }
 
     /// <summary>Gets the active managed drag data.</summary>
     public EditorDragData data { get; }

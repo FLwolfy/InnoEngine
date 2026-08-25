@@ -449,7 +449,7 @@ internal sealed class ConsolePanel : EditorPanel
         _ = EditorMenuRenderer.ContextMenu(
             "##ConsoleEntryContextMenu",
             m_interactions.For(
-                LoggingInteractionIds.entryArea,
+                LoggingInteractionIds.C_ENTRY_AREA,
                 new ConsoleEntryCopyTarget(entry, repeatCount)));
     }
 

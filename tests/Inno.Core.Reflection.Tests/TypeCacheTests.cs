@@ -203,6 +203,46 @@ public sealed class TypeCacheTests : IDisposable
         Assert.Contains(previous, registry.disposedSnapshotIds);
     }
 
+    [Fact]
+    public void QueuedRebuildFailureRollsBackOnlyItsOwnRegistryTransaction()
+    {
+        using var registry = new TransactionalTestRegistry();
+        registry.Initialize();
+        int previous = registry.publishedSnapshotId;
+        registry.rebuildDuringActivation = true;
+
+        Assert.Throws<InvalidOperationException>(TypeCacheManager.Rebuild);
+
+        Assert.Equal(previous + 1, registry.publishedSnapshotId);
+        Assert.Equal(1, registry.rollbackCount);
+        Assert.Equal(0, registry.cleanupFailureCount);
+        Assert.DoesNotContain("deferred refresh", registry.cleanupFailurePhases);
+
+        registry.failActivation = false;
+        TypeCacheManager.Rebuild();
+        Assert.True(registry.publishedSnapshotId > previous + 1);
+    }
+
+    [Fact]
+    public void StandaloneRefreshReconcilesAReentrantTypeChangeAsASeparateTransaction()
+    {
+        using var registry = new TransactionalTestRegistry
+        {
+            rebuildDuringActivation = true
+        };
+
+        Assert.Throws<InvalidOperationException>(registry.Initialize);
+
+        Assert.Equal(1, registry.publishedSnapshotId);
+        Assert.Equal(1, registry.rollbackCount);
+        Assert.Equal(0, registry.cleanupFailureCount);
+
+        registry.failActivation = false;
+        registry.Initialize();
+
+        Assert.True(registry.publishedSnapshotId > 1);
+    }
+
     private static IReadOnlyList<Type> GetTypesWithAttribute(Type attributeType)
     {
         MethodInfo method = typeof(TypeCacheManager)
@@ -220,10 +260,12 @@ internal sealed class TransactionalTestRegistry : TypeRegistry<TransactionalTest
 
     internal bool failActivation;
     internal bool failSnapshotCleanup;
+    internal bool rebuildDuringActivation;
     internal int rollbackCount;
     internal int cleanupFailureCount;
     internal int publishedSnapshotId;
     internal List<int> disposedSnapshotIds { get; } = [];
+    internal List<string> cleanupFailurePhases { get; } = [];
 
     internal void Initialize() => _ = current;
 
@@ -232,6 +274,13 @@ internal sealed class TransactionalTestRegistry : TypeRegistry<TransactionalTest
     protected override void OnActivating(Snapshot? previous, Snapshot candidate)
     {
         publishedSnapshotId = candidate.id;
+        if (rebuildDuringActivation)
+        {
+            rebuildDuringActivation = false;
+            TypeCacheManager.Rebuild();
+            failActivation = true;
+            return;
+        }
         if (failActivation)
             throw new InvalidOperationException("Injected registry activation failure.");
     }
@@ -250,7 +299,10 @@ internal sealed class TransactionalTestRegistry : TypeRegistry<TransactionalTest
     }
 
     protected override void OnCleanupFailed(string phase, Exception exception)
-        => cleanupFailureCount++;
+    {
+        cleanupFailureCount++;
+        cleanupFailurePhases.Add(phase);
+    }
 
     internal sealed record Snapshot(int id);
 }

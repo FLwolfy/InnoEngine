@@ -72,8 +72,8 @@ internal sealed class FileBrowserNavigation(AssetEditorModule assets)
             return;
         }
         _ = assets.interactions
-            .For(FileBrowserInteractionIds.area, entry)
-            .Execute(OpenAssetCommand.command);
+            .For(FileBrowserInteractionIds.C_AREA, entry)
+            .Execute(FileBrowserInteractionIds.C_OPEN);
     }
 
     internal void SyncExternalDirectoryChange(string directory)

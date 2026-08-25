@@ -8,9 +8,6 @@ namespace Inno.Editor.Panel.FileBrowser;
 [EditorAction(FileBrowserInteractionIds.C_OPEN, FileBrowserInteractionIds.C_AREA, priority: 100)]
 internal sealed class OpenAssetCommand(AssetEditorModule assets) : EditorAction<AssetFileEntry>
 {
-    internal static EditorCommand command { get; } = new(FileBrowserInteractionIds.open);
-    private static EditorCommand<string> openByPathCommand { get; } = new(FileBrowserInteractionIds.open);
-
     protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
     {
         if (!TryGetAssetContext(context, out AssetEditorContext? assetContext) || assetContext is null)
@@ -26,8 +23,8 @@ internal sealed class OpenAssetCommand(AssetEditorModule assets) : EditorAction<
             return;
         if (AssetManager.TryLoad<AssetObject>(assetContext.relativePath, out AssetObject? asset) &&
             asset is not null &&
-            context.interactions.For(FileBrowserInteractionIds.area, asset).Execute(
-                openByPathCommand,
+            context.interactions.For(FileBrowserInteractionIds.C_AREA, asset).Execute(
+                FileBrowserInteractionIds.C_OPEN,
                 assetContext.relativePath))
         {
             return;

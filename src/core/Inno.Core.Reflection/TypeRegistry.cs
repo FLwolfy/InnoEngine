@@ -19,7 +19,6 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
     private TSnapshot? m_current;
     private long m_typeCacheVersion = -1;
     private bool m_activationInProgress;
-    private bool m_refreshPending;
     private bool m_disposed;
 
     /// <summary>
@@ -46,12 +45,31 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
     /// <summary>
     /// Refreshes this registry from the currently active type snapshot.
     /// </summary>
+    /// <remarks>
+    /// Each refresh iteration is a complete transaction. If the active type snapshot changes during
+    /// activation, convergence runs as a separate transaction after the completed transaction returns.
+    /// </remarks>
     public void Refresh()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
-        ITypeRegistryTransaction transaction = Prepare(TypeCacheManager.current, allowDisposed: false);
-        transaction.Activate();
-        transaction.Complete();
+        while (true)
+        {
+            ITypeRegistryTransaction transaction = Prepare(
+                TypeCacheManager.current,
+                allowDisposed: false);
+            transaction.Activate();
+            transaction.Complete();
+
+            TypeCacheSnapshot latest = TypeCacheManager.current;
+            lock (m_sync)
+            {
+                if (m_activationInProgress ||
+                    m_current is not null && m_typeCacheVersion == latest.version)
+                {
+                    return;
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -171,9 +189,10 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
     }
 
     /// <summary>
-    /// Reports an exception raised while rolling back activation or releasing a snapshot.
+    /// Reports an exception raised while rolling back activation, completing activation, or
+    /// releasing a snapshot.
     /// </summary>
-    /// <param name="phase">The cleanup phase that raised the exception.</param>
+    /// <param name="phase">The non-transactional phase that raised the exception.</param>
     /// <param name="exception">The cleanup exception.</param>
     /// <remarks>
     /// This callback is diagnostic only. Exceptions raised by an override are ignored so cleanup can continue.
@@ -224,11 +243,7 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
                 throw new ObjectDisposedException(GetType().FullName);
             }
             if (m_activationInProgress)
-            {
-                if (m_typeCacheVersion != types.version)
-                    m_refreshPending = true;
                 return TypeRegistryNoopTransaction.instance;
-            }
             if (m_current is not null && m_typeCacheVersion == types.version)
                 return TypeRegistryNoopTransaction.instance;
 
@@ -328,7 +343,6 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
         public void Complete()
         {
             TSnapshot? snapshotToRelease;
-            bool refreshPending;
             lock (owner.m_sync)
             {
                 EnsureNotFinished();
@@ -342,13 +356,7 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
             if (snapshotToRelease is not null)
                 owner.ReleaseSnapshot(snapshotToRelease);
             lock (owner.m_sync)
-            {
                 owner.m_activationInProgress = false;
-                refreshPending = owner.m_refreshPending;
-                owner.m_refreshPending = false;
-            }
-            if (refreshPending && !owner.m_disposed && TypeCacheManager.isInitialized)
-                owner.Refresh();
         }
 
         public void Rollback()

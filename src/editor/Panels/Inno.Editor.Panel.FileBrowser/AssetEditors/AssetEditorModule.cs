@@ -319,7 +319,7 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
         object? target = AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry entry)
             ? entry
             : null;
-        _ = m_interactions.For(FileBrowserInteractionIds.area, target).Select();
+        _ = m_interactions.For(FileBrowserInteractionIds.C_AREA, target).Select();
     }
 
     internal bool TryCreateDragData(AssetEditorContext context, out EditorDragData? data)

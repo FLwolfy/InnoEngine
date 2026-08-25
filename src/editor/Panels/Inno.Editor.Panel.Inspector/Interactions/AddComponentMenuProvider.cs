@@ -19,7 +19,7 @@ internal sealed class AddComponentMenuProvider : EditorMenuSource
         {
             if (!IsAddable(type, gameObject))
                 continue;
-            builder.Add(type.Name, AddComponentCommand.command, type);
+            builder.Add(type.Name, InspectorInteractionIds.C_ADD_COMPONENT, argument: type);
         }
     }
 

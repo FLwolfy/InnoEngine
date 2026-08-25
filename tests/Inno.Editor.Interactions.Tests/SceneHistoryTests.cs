@@ -8,6 +8,7 @@ using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 using Inno.Editor.Scene;
 using Inno.Engine.Scene;
+using Inno.Engine.Scene.Assets;
 using Inno.Engine.Scene.Components;
 using Inno.Engine.Scene.Layers;
 using Xunit;
@@ -150,6 +151,174 @@ public sealed class SceneHistoryTests : IDisposable
 
         Assert.True(m_runtime.interactions.history.Redo().succeeded);
         Assert.Null(IdentityManager.Get<GameObject>(rootId));
+    }
+
+    [Fact]
+    public void SceneHistoryCompensationUsesTheObservedPostconditionAfterRemovalThrows()
+    {
+        GameScene scene = m_workspace.CreateScene();
+        GameObject retained = scene.CreateObject("Retained");
+
+        SceneHistoryCompensationResult lost = SceneHistoryCompensation.Remove(
+            retained,
+            static () => throw new InvalidOperationException("before removal"),
+            "Retained object");
+
+        Assert.False(lost.statePreserved);
+        Assert.True(retained.isRuntimeValid);
+
+        GameObject unregisteredOnly = scene.CreateObject("Unregistered only");
+        SceneHistoryCompensationResult incomplete = SceneHistoryCompensation.Remove(
+            unregisteredOnly,
+            () => IdentityManager.Unregister(unregisteredOnly),
+            "Unregistered-only object");
+
+        Assert.False(incomplete.statePreserved);
+        Assert.False(unregisteredOnly.isDestroyed);
+        Assert.True(scene.DestroyObject(unregisteredOnly));
+
+        GameObject removed = scene.CreateObject("Removed");
+        SceneHistoryCompensationResult preserved = SceneHistoryCompensation.Remove(
+            removed,
+            () =>
+            {
+                _ = scene.DestroyObject(removed);
+                throw new InvalidOperationException("after removal");
+            },
+            "Removed object");
+
+        Assert.True(preserved.statePreserved);
+        Assert.False(removed.isRuntimeValid);
+        Assert.Null(IdentityManager.Get<GameObject>(removed.identity.persistentId));
+    }
+
+    [Fact]
+    public void ElementRestoreRejectsIgnoredPropertiesAndRemovesPartialElements()
+    {
+        GameScene scene = m_workspace.CreateScene();
+        GameObject sourceObject = scene.CreateObject("Source");
+        var source = sourceObject.AddComponent<HistoryReferenceComponent>();
+        byte[] incompatibleState = ScenePropertySerialization.CaptureProperties(source);
+        GameObject owner = scene.CreateObject("Owner");
+        Assert.True(TypeCacheManager.TryGetStableTypeId(typeof(HistoryComponent), out Guid componentTypeId));
+        Assert.True(TypeCacheManager.TryGetStableTypeId(typeof(HistorySystem), out Guid systemTypeId));
+        Guid componentId = Guid.NewGuid();
+        Guid systemId = Guid.NewGuid();
+
+        InvalidOperationException componentFailure = Assert.Throws<InvalidOperationException>(() =>
+            SceneElementSerialization.RestoreComponent(
+                owner,
+                componentTypeId,
+                componentId,
+                componentIndex: owner.GetComponents().Count,
+                incompatibleState));
+        InvalidOperationException systemFailure = Assert.Throws<InvalidOperationException>(() =>
+            SceneElementSerialization.RestoreSystem(
+                scene,
+                systemTypeId,
+                systemId,
+                systemIndex: scene.GetSystems().Count,
+                incompatibleState));
+
+        Assert.Contains("incomplete", componentFailure.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("incomplete", systemFailure.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(IdentityManager.Get<GameComponent>(componentId));
+        Assert.Null(IdentityManager.Get<GameSystem>(systemId));
+    }
+
+    [Fact]
+    public void ElementRestoreRemovesPartialElementWhenRestoreCallbackFails()
+    {
+        GameScene scene = m_workspace.CreateScene();
+        GameObject sourceOwner = scene.CreateObject("Source");
+        var source = sourceOwner.AddComponent<RestoreCleanupFailureComponent>();
+        byte[] state = ScenePropertySerialization.CaptureProperties(source);
+        GameObject targetOwner = scene.CreateObject("Target");
+        Assert.True(TypeCacheManager.TryGetStableTypeId(
+            typeof(RestoreCleanupFailureComponent),
+            out Guid stableTypeId));
+        Guid persistentId = Guid.NewGuid();
+
+        _ = Assert.ThrowsAny<Exception>(() =>
+            SceneElementSerialization.RestoreComponent(
+                targetOwner,
+                stableTypeId,
+                persistentId,
+                componentIndex: targetOwner.GetComponents().Count,
+                state));
+
+        Assert.Null(IdentityManager.Get<GameComponent>(persistentId));
+    }
+
+    [Fact]
+    public void ElementRestoreReportsCleanupFailureAfterThePartialElementWasRemoved()
+    {
+        GameScene scene = m_workspace.CreateScene();
+        GameObject partialElement = scene.CreateObject("Partial");
+        Guid persistentId = partialElement.identity.persistentId;
+        var restoreFailure = new InvalidOperationException("Injected restore failure.");
+
+        InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() =>
+            SceneElementSerialization.RethrowAfterCleanup(
+                restoreFailure,
+                partialElement,
+                () =>
+                {
+                    Assert.True(scene.DestroyObject(partialElement));
+                    throw new InvalidOperationException("Injected cleanup callback failure.");
+                },
+                "element"));
+
+        Assert.Contains("cleanup", failure.Message, StringComparison.OrdinalIgnoreCase);
+        AggregateException aggregate = Assert.IsType<AggregateException>(failure.InnerException);
+        Assert.Contains(restoreFailure, aggregate.InnerExceptions);
+        Assert.Null(IdentityManager.Get<GameObject>(persistentId));
+    }
+
+    [Fact]
+    public void ElementRestoreUsesTheObservedCleanupPostconditionWhenRemovalReportsFalse()
+    {
+        GameScene scene = m_workspace.CreateScene();
+        GameObject partialElement = scene.CreateObject("Partial");
+        Guid persistentId = partialElement.identity.persistentId;
+        var restoreFailure = new InvalidOperationException("Injected restore failure.");
+
+        Exception failure = Assert.Throws<InvalidOperationException>(() =>
+            SceneElementSerialization.RethrowAfterCleanup(
+                restoreFailure,
+                partialElement,
+                () =>
+                {
+                    Assert.True(scene.DestroyObject(partialElement));
+                    return false;
+                },
+                "element"));
+
+        Assert.Same(restoreFailure, failure);
+        Assert.Null(IdentityManager.Get<GameObject>(persistentId));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ElementRestoreRejectsAnyCleanupResultThatLeavesThePartialElementActive(
+        bool reportedRemoved)
+    {
+        GameScene scene = m_workspace.CreateScene();
+        GameObject partialElement = scene.CreateObject("Partial");
+        Guid persistentId = partialElement.identity.persistentId;
+
+        InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() =>
+            SceneElementSerialization.RethrowAfterCleanup(
+                new InvalidOperationException("Injected restore failure."),
+                partialElement,
+                () => reportedRemoved,
+                "element"));
+
+        Assert.Contains("cleanup", failure.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.IsType<AggregateException>(failure.InnerException);
+        Assert.Same(partialElement, IdentityManager.Get<GameObject>(persistentId));
+        Assert.True(scene.DestroyObject(partialElement));
     }
 
     [Fact]
@@ -325,4 +494,16 @@ internal sealed class HistorySystem : GameSystem
     {
         value = 11;
     }
+}
+
+[StableTypeId("71cc27da-2c47-47f2-a037-c9bc29615358")]
+[AllowMultipleComponent]
+internal sealed class RestoreCleanupFailureComponent : GameBehavior
+{
+    [SerializableProperty]
+    public int value { get; set; } = 5;
+
+    [OnSerializableRestored]
+    private void OnRestored()
+        => throw new InvalidOperationException("Injected restore callback failure.");
 }

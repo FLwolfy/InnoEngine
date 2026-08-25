@@ -22,12 +22,20 @@ internal sealed class EditorDropRouter(EditorExtensionCatalog catalog)
     internal bool TryGetData(Guid token, out EditorDragData? data)
     {
         data = token != Guid.Empty && token == m_token ? m_data : null;
-        if (data is not null && !data.isValid)
+        if (data is null)
+            return false;
+        try
         {
-            Cancel();
-            data = null;
+            if (data.isValid)
+                return true;
         }
-        return data is not null;
+        catch (Exception exception)
+        {
+            Log.Error("Editor drag validation failed: {0}", exception);
+        }
+        Cancel();
+        data = null;
+        return false;
     }
 
     internal EditorDropStatus Query(Guid token, EditorDropContext context)
@@ -99,7 +107,7 @@ internal sealed class EditorDropRouter(EditorExtensionCatalog catalog)
         foreach (EditorExtensionCatalog.DropRegistration registration in catalog.extensions.drops)
         {
             bool exactArea = !string.IsNullOrEmpty(registration.area);
-            if (exactArea && !string.Equals(registration.area, context.area.value, StringComparison.Ordinal))
+            if (exactArea && !string.Equals(registration.area, context.area, StringComparison.Ordinal))
                 continue;
             if (!EditorTypeDistance.TryGet(sourceType, registration.sourceType, out int sourceDistance) ||
                 !EditorTypeDistance.TryGet(targetType, registration.targetType, out int targetDistance))

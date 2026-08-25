@@ -46,7 +46,17 @@ public sealed class EditorRuntimeTests : IDisposable
         DeferredAction.executeCount = 0;
         NeutralHistoryHandler.value = 0;
         UpdateBarrierModule.block = false;
+        UpdateBarrierModule.throwWhenRead = false;
+        UpdateBarrierModule.barrierReadCount = 0;
         FollowingUpdateModule.updateCount = 0;
+        TestPanel.throwFromWindowPadding = false;
+        MultiShortcutAction.executeCount = 0;
+        ThrowAfterActivateAction.cancelCount = 0;
+        ADisposeObserverModule.historyAvailableDuringStop = false;
+        ADisposeObserverModule.historyDisposedDuringDispose = false;
+        ADisposeObserverModule.disposeCount = 0;
+        ZThrowingDisposeModule.disposeCount = 0;
+        ZThrowingDisposeModule.throwOnDispose = false;
 
         m_runtime = new EditorInteractionRuntime(m_projectRoot);
         m_runtime.Start();
@@ -111,6 +121,25 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void InteractionIdentifiersArePlainValidatedStringsWithoutWrapperTypes()
+    {
+        Assembly assembly = typeof(EditorInteractions).Assembly;
+        Assert.Null(assembly.GetType("Inno.Editor.Interactions.EditorActionId"));
+        Assert.Null(assembly.GetType("Inno.Editor.Interactions.EditorAreaId"));
+        Assert.Null(assembly.GetType("Inno.Editor.Interactions.EditorPanelId"));
+        Assert.Null(assembly.GetType("Inno.Editor.Interactions.EditorCommand"));
+        Assert.Null(assembly.GetType("Inno.Editor.Interactions.EditorCommand`1"));
+        Assert.Equal(typeof(string), typeof(EditorInteractions).GetProperty("focusedArea")!.PropertyType);
+        Assert.Equal(typeof(string), typeof(EditorInteraction).GetProperty("area")!.PropertyType);
+        Assert.Equal(typeof(string), typeof(EditorPanelExtension).GetProperty("id")!.PropertyType);
+        MethodInfo forMethod = Assert.Single(typeof(EditorInteractions).GetMethods()
+            .Where(static method => method.Name == "For"));
+        Assert.Equal(typeof(string), forMethod.GetParameters()[0].ParameterType);
+        Assert.Throws<ArgumentException>(() => m_runtime.interactions.For(string.Empty));
+        Assert.Throws<ArgumentException>(() => m_runtime.interactions.TogglePanel(" "));
+    }
+
+    [Fact]
     public void RuntimeDiscoversModulesAndPanelsWithoutRegistrationCalls()
     {
         Assert.True(TestModule.startCount > 0);
@@ -132,6 +161,18 @@ public sealed class EditorRuntimeTests : IDisposable
         m_runtime.Update(new EditorFrame(0.016f, 0.032f, isFocused: true));
 
         Assert.Equal(1, FollowingUpdateModule.updateCount);
+    }
+
+    [Fact]
+    public void ThrowingModuleBarrierIsQuarantinedWithoutStoppingFollowingModules()
+    {
+        UpdateBarrierModule.throwWhenRead = true;
+
+        m_runtime.Update(new EditorFrame(0.016f, 0.016f, isFocused: true));
+        m_runtime.Update(new EditorFrame(0.016f, 0.032f, isFocused: true));
+
+        Assert.Equal(1, UpdateBarrierModule.barrierReadCount);
+        Assert.Equal(2, FollowingUpdateModule.updateCount);
     }
 
     [Fact]
@@ -339,6 +380,28 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void EveryShortcutDeclaredByTheSameActionCanDispatch()
+    {
+        m_runtime.interactions.For("tests/multiple-shortcuts").Focus();
+
+        m_runtime.HandleKeyPressed(new KeyPressedEvent(0, KeyCode.F3, KeyModifier.None));
+        m_runtime.HandleKeyPressed(new KeyPressedEvent(0, KeyCode.F4, KeyModifier.None));
+
+        Assert.Equal(2, MultiShortcutAction.executeCount);
+    }
+
+    [Fact]
+    public void ActionExecutionFailureCancelsStateActivatedBeforeTheException()
+    {
+        EditorInteraction interaction = m_runtime.interactions.For("tests/throw-after-activate");
+
+        Assert.False(interaction.Execute("tests.throw-after-activate"));
+
+        Assert.False(interaction.IsActive("tests.throw-after-activate"));
+        Assert.Equal(1, ThrowAfterActivateAction.cancelCount);
+    }
+
+    [Fact]
     public void ActionOwnsValidatedMultiFrameState()
     {
         var target = new InteractionTarget();
@@ -383,7 +446,7 @@ public sealed class EditorRuntimeTests : IDisposable
         EditorInteraction interaction = m_runtime.interactions.For("tests/other", target);
 
         interaction.Focus();
-        Assert.Equal("tests/other", m_runtime.interactions.focusedArea.value);
+        Assert.Equal("tests/other", m_runtime.interactions.focusedArea);
         Assert.Same(target, m_runtime.interactions.focusedTarget);
 
         Assert.True(interaction.Select());
@@ -453,9 +516,49 @@ public sealed class EditorRuntimeTests : IDisposable
         Assert.NotEqual(supersededToken, token);
         Assert.False(m_runtime.interactions.TryGetDragData(supersededToken, out _));
         Assert.True(dropTarget.QueryDrop(token, EditorDropPlacement.Into).canDrop);
-        Assert.True(dropTarget.Drop(token, EditorDropPlacement.Into).accepted);
+        Assert.True(m_runtime.interactions.TryGetDragData(token, out _));
+        EditorDropResult result = dropTarget.Drop(token, EditorDropPlacement.Into);
+        Assert.True(result.accepted, $"Drop target invoked: {target.wasDropped}.");
         Assert.True(target.wasDropped);
         Assert.False(m_runtime.interactions.TryGetDragData(token, out _));
+    }
+
+    [Fact]
+    public void ThrowingDragValidityPredicateCancelsTheManagedSession()
+    {
+        var source = new DragSource();
+        Guid token = m_runtime.interactions.For("tests/drag", source).BeginDrag(
+            new EditorDragData(
+                source,
+                "source",
+                static () => throw new InvalidOperationException("Injected drag validation failure.")));
+
+        Assert.False(m_runtime.interactions.TryGetDragData(token, out _));
+        Assert.False(m_runtime.interactions.TryGetDragData(token, out _));
+    }
+
+    [Fact]
+    public void ThrowingPanelPresentationPropertyQuarantinesOnlyThatPanel()
+    {
+        TestPanel.throwFromWindowPadding = true;
+        EditorPanelExtension panel = Assert.Single(
+            m_runtime.panels.Where(static value => value.id == "tests.panel"));
+
+        Assert.False(panel.TryGetWindowPadding(out _));
+        Assert.False(panel.isOpen);
+    }
+
+    [Fact]
+    public void ShutdownStopsExtensionsBeforeInteractionsAndContinuesAfterDisposeFailure()
+    {
+        ZThrowingDisposeModule.throwOnDispose = true;
+
+        m_runtime.Dispose();
+
+        Assert.True(ADisposeObserverModule.historyAvailableDuringStop);
+        Assert.True(ADisposeObserverModule.historyDisposedDuringDispose);
+        Assert.Equal(1, ADisposeObserverModule.disposeCount);
+        Assert.Equal(1, ZThrowingDisposeModule.disposeCount);
     }
 
     [Fact]
@@ -476,7 +579,7 @@ public sealed class EditorRuntimeTests : IDisposable
     {
         TestModule.stateValue = 42;
         EditorPanelExtension panel = Assert.Single(
-            m_runtime.panels.Where(static value => value.id == new EditorPanelId("tests.panel")));
+            m_runtime.panels.Where(static value => value.id == "tests.panel"));
         panel.isOpen = true;
         m_runtime.Update(new EditorFrame(0.016f, 3f, isFocused: true));
         m_runtime.Dispose();
@@ -492,7 +595,7 @@ public sealed class EditorRuntimeTests : IDisposable
 
         Assert.Equal(42, TestModule.restoredStateValue);
         Assert.True(Assert.Single(
-            restored.panels.Where(static value => value.id == new EditorPanelId("tests.panel"))).isOpen);
+            restored.panels.Where(static value => value.id == "tests.panel")).isOpen);
     }
 
     [Fact]
@@ -713,8 +816,19 @@ public sealed class TestModule : EditorModule
 public sealed class UpdateBarrierModule : EditorModule
 {
     public static bool block;
+    public static bool throwWhenRead;
+    public static int barrierReadCount;
 
-    public override bool blocksFollowingUpdates => block;
+    public override bool blocksFollowingUpdates
+    {
+        get
+        {
+            barrierReadCount++;
+            return throwWhenRead
+                ? throw new InvalidOperationException("Injected module barrier failure.")
+                : block;
+        }
+    }
 }
 
 [EditorModule("tests.following-update", order: -199)]
@@ -731,6 +845,11 @@ public sealed class TestPanel(TestModule module) : EditorPanel
     public static int attachCount;
     public static int detachCount;
     public static bool firstAttachPrecededModuleStart;
+    public static bool throwFromWindowPadding;
+
+    public override bool useWindowPadding => throwFromWindowPadding
+        ? throw new InvalidOperationException("Injected panel presentation failure.")
+        : true;
 
     protected override void OnAttach(EditorContext context)
     {
@@ -775,6 +894,71 @@ public sealed class DeferredAction : EditorAction
     public static int executeCount;
 
     protected override void Execute(EditorActionContext context) => executeCount++;
+}
+
+[EditorAction("tests.multiple-shortcuts", "tests/multiple-shortcuts")]
+[EditorShortcut("tests/multiple-shortcuts", KeyCode.F3)]
+[EditorShortcut("tests/multiple-shortcuts", KeyCode.F4)]
+public sealed class MultiShortcutAction : EditorAction
+{
+    public static int executeCount;
+
+    protected override void Execute(EditorActionContext context) => executeCount++;
+}
+
+[EditorAction("tests.throw-after-activate", "tests/throw-after-activate")]
+public sealed class ThrowAfterActivateAction : EditorAction
+{
+    public static int cancelCount;
+
+    protected override void Execute(EditorActionContext context)
+    {
+        Activate(context);
+        throw new InvalidOperationException("Injected action execution failure.");
+    }
+
+    protected override void OnCancelled() => cancelCount++;
+}
+
+[EditorModule("tests.dispose-observer", order: 900)]
+public sealed class ADisposeObserverModule(EditorInteractions interactions) : EditorModule
+{
+    public static bool historyAvailableDuringStop;
+    public static bool historyDisposedDuringDispose;
+    public static int disposeCount;
+
+    protected override void OnStop(EditorContext context)
+    {
+        using EditorHistoryTransaction transaction = interactions.history.BeginTransaction("Shutdown probe");
+        historyAvailableDuringStop = transaction.Rollback().succeeded;
+    }
+
+    protected override void OnDispose()
+    {
+        disposeCount++;
+        try
+        {
+            using EditorHistoryTransaction transaction = interactions.history.BeginTransaction("Disposed probe");
+        }
+        catch (ObjectDisposedException)
+        {
+            historyDisposedDuringDispose = true;
+        }
+    }
+}
+
+[EditorModule("tests.throwing-dispose", order: 901)]
+public sealed class ZThrowingDisposeModule : EditorModule
+{
+    public static bool throwOnDispose;
+    public static int disposeCount;
+
+    protected override void OnDispose()
+    {
+        disposeCount++;
+        if (throwOnDispose)
+            throw new InvalidOperationException("Injected extension disposal failure.");
+    }
 }
 
 [EditorAction("tests.interaction")]

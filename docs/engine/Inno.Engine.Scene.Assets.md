@@ -83,7 +83,7 @@ ISceneReloadMigration migration =
 | `SceneElementSerialization.RestoreComponent` | 根据 Stable Type ID 与 persistent ID 重建一个 Component，不调用 Reset。 |
 | `SceneElementSerialization.RestoreSystem` | 根据 Stable Type ID 与 persistent ID 重建一个 GameSystem，不调用 Reset。 |
 
-这些 API 不保存 Editor selection、Undo 栈或 workspace；该编排属于 [Inno.Editor.Scene](../editor/Inno.Editor.Scene.md)。Element restore 会先解析当前 TypeCache generation 的类型，验证具体基类与 multiplicity，然后在 property restore 失败时删除新实例，避免泄漏半恢复对象。
+这些 API 不保存 Editor selection、Undo 栈或 workspace；该编排属于 [Inno.Editor.Scene](../editor/Inno.Editor.Scene.md)。Element restore 会先解析当前 TypeCache generation 的类型，验证具体基类与 multiplicity。Property restore 只有在 `success=true` 且 `ignoredCount=0` 时才视为完整；失败或忽略属性都会删除新实例。清理返回 `false` 而对象仍存活、返回 `true` 但 postcondition 仍显示对象存活，或清理回调抛异常时，API 会把恢复失败与清理失败一并报告，不再忽略清理结果。
 
 ## 多实例约束
 

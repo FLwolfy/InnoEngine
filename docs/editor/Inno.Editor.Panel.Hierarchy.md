@@ -18,14 +18,12 @@
 ```csharp
 internal static class SceneExportInteractionIds
 {
-    internal const string Export = "scene/export";
-    internal const string HierarchyArea = "panel/scene.hierarchy";
-    internal static readonly EditorCommand ExportCommand =
-        new(new EditorActionId(Export));
+    internal const string C_EXPORT = "scene/export";
+    internal const string C_HIERARCHY_AREA = "panel/scene.hierarchy";
 }
 
-[EditorAction(SceneExportInteractionIds.Export, SceneExportInteractionIds.HierarchyArea)]
-[EditorMenu(SceneExportInteractionIds.HierarchyArea, "Export/Scene Package", order: 500)]
+[EditorAction(SceneExportInteractionIds.C_EXPORT, SceneExportInteractionIds.C_HIERARCHY_AREA)]
+[EditorMenu(SceneExportInteractionIds.C_HIERARCHY_AREA, "Export/Scene Package", order: 500)]
 public sealed class ExportSceneAction : EditorAction<GameScene>
 {
     protected override void Execute(EditorActionContext<GameScene> context)
@@ -74,4 +72,4 @@ Command/Ctrl+S 使用原始 Action ID `editor/save`，由本 feature 提供实�
 
 ## Scripting API
 
-EditorScripts 使用 `InnoEditor.Hierarchy` 获取公开 drop target；Attribute 使用 feature-owned `const string` ID/area，运行时通过 typed command 调用。Workspace 查询与工作流接口 `IEditorSceneWorkspace`、可逆编辑门面 `SceneEdits` 位于 `InnoEditor.Scene`。没有 global using。
+EditorScripts 使用 `InnoEditor.Hierarchy` 获取公开 drop target；Attribute 与运行时 API 共用 feature-owned `const string` ID/area。Workspace 查询与工作流接口 `IEditorSceneWorkspace`、可逆编辑门面 `SceneEdits` 位于 `InnoEditor.Scene`。没有 global using。

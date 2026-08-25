@@ -17,11 +17,12 @@ public sealed class EditorMenuContext
     public EditorMenuContext(
         EditorContext editor,
         EditorInteractions interactions,
-        EditorAreaId area,
+        string area,
         object? target = null)
     {
         this.editor = editor ?? throw new ArgumentNullException(nameof(editor));
         this.interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
+        ArgumentException.ThrowIfNullOrWhiteSpace(area);
         this.area = area;
         this.target = target;
     }
@@ -33,7 +34,7 @@ public sealed class EditorMenuContext
     public EditorInteractions interactions { get; }
 
     /// <summary>Gets the requested menu area.</summary>
-    public EditorAreaId area { get; }
+    public string area { get; }
 
     /// <summary>Gets the contextual menu target.</summary>
     public object? target { get; }

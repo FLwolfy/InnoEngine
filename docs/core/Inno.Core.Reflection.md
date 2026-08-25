@@ -105,7 +105,7 @@ Runtime Type ID 是只适用于当前活动 `Type` 实例的整数。新 ALC 里
 | --- | --- | --- |
 | 构造函数 | `protected` | 自动弱注册到 TypeRegistry 协调器。 |
 | `isInitialized` | `public` | 是否已有活动快照。 |
-| `Refresh()` | `public` | 从当前 TypeCache 主动刷新；相同版本不会重复构建。 |
+| `Refresh()` | `public` | 从当前 TypeCache 主动刷新；相同版本不会重复构建。若 TypeCache 在激活回调期间变化，完成当前 transaction 后再以独立 transaction 追平。 |
 | `Clear()` | `public` | 释放快照但保留 Registry，可在下次访问重建。 |
 | `Dispose()` | `public` | 注销并释放，之后不能再用。 |
 | `current` | `protected` | 懒取得当前快照；版本过期时自动刷新。 |
@@ -144,7 +144,7 @@ internal sealed class RenderPipelineRegistry
 }
 ```
 
-新增这种 Registry 不需要修改 `AssemblyManager` 或添加全局 Hook。协调器执行 Build candidate → reversible Activate → global Complete；后一个 Registry 激活失败时，已激活项按逆序恢复 `m_current` 与 TypeCache version，candidate 被释放，previous snapshot 保留。Complete 只做 previous release 等清理，异常会逐项报告并继续，不会制造“已发布后伪回滚”。候选构造/冲突验证失败同样保留当前 Registry。
+新增这种 Registry 不需要修改 `AssemblyManager` 或添加全局 Hook。协调器执行 Build candidate → reversible Activate → global Complete；后一个 Registry 激活失败时，已激活项按逆序恢复 `m_current` 与 TypeCache version，candidate 被释放，previous snapshot 保留。Complete 只做 previous release 等清理，异常会逐项报告并继续，不会制造“已发布后伪回滚”。完成后不会再执行 pending Registry refresh；重入排队的 rebuild 必须在外层全局 transaction 完成后作为独立 transaction 运行，失败只回滚自己的 candidate。候选构造/冲突验证失败同样保留当前 Registry。
 
 ## 错误模型
 

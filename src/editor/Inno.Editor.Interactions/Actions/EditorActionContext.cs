@@ -18,12 +18,13 @@ public class EditorActionContext
     internal EditorActionContext(
         EditorContext editor,
         EditorInteractions interactions,
-        EditorAreaId area,
+        string area,
         object? target = null,
         object? argument = null)
     {
         this.editor = editor ?? throw new ArgumentNullException(nameof(editor));
         this.interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
+        ArgumentException.ThrowIfNullOrWhiteSpace(area);
         this.area = area;
         this.target = target;
         this.argument = argument;
@@ -41,7 +42,7 @@ public class EditorActionContext
     public IEditorHistory history => interactions.history;
 
     /// <summary>Gets the stable interaction area.</summary>
-    public EditorAreaId area { get; }
+    public string area { get; }
 
     /// <summary>Gets the contextual action target.</summary>
     public object? target { get; }
@@ -65,9 +66,9 @@ public sealed class EditorActionContext<TTarget> : EditorActionContext
     public new TTarget target { get; }
 }
 
-/// <summary>Provides a strongly typed target and command argument to an editor action.</summary>
+/// <summary>Provides a strongly typed target and action argument to an editor action.</summary>
 /// <typeparam name="TTarget">The target type required by the action.</typeparam>
-/// <typeparam name="TArgument">The command argument type required by the action.</typeparam>
+/// <typeparam name="TArgument">The action argument type required by the action.</typeparam>
 public sealed class EditorActionContext<TTarget, TArgument> : EditorActionContext
     where TTarget : class
 {
@@ -81,12 +82,12 @@ public sealed class EditorActionContext<TTarget, TArgument> : EditorActionContex
     /// <summary>Gets the strongly typed action target.</summary>
     public new TTarget target { get; }
 
-    /// <summary>Gets the strongly typed command argument.</summary>
+    /// <summary>Gets the strongly typed action argument.</summary>
     public new TArgument argument { get; }
 }
 
-/// <summary>Provides a strongly typed command argument to a targetless editor action.</summary>
-/// <typeparam name="TArgument">The command argument type required by the action.</typeparam>
+/// <summary>Provides a strongly typed action argument to a targetless editor action.</summary>
+/// <typeparam name="TArgument">The action argument type required by the action.</typeparam>
 public sealed class EditorActionArgumentContext<TArgument> : EditorActionContext
 {
     internal EditorActionArgumentContext(EditorActionContext context, TArgument argument)
@@ -95,6 +96,6 @@ public sealed class EditorActionArgumentContext<TArgument> : EditorActionContext
         this.argument = argument;
     }
 
-    /// <summary>Gets the strongly typed command argument.</summary>
+    /// <summary>Gets the strongly typed action argument.</summary>
     public new TArgument argument { get; }
 }

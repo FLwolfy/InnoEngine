@@ -13,10 +13,6 @@ namespace Inno.Editor.Panel.FileBrowser;
 internal sealed class RenameAssetCommand(AssetEditorModule assets) :
     EditorPresentationAction<AssetFileEntry, InlineRenamePresentation>
 {
-    internal static EditorCommand command { get; } = new(FileBrowserInteractionIds.rename);
-    internal static EditorCommand<InlineRenamePresentation> presentationCommand { get; } =
-        new(FileBrowserInteractionIds.rename);
-
     private AssetEditorContext? m_asset;
     private string m_buffer = string.Empty;
     private bool m_requestFocus;

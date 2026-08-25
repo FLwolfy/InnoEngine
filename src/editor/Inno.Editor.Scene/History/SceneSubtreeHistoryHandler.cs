@@ -79,21 +79,28 @@ internal sealed class SceneSubtreeHistoryHandler : EditorHistoryHandler
                 catch (Exception exception)
                 {
                     GameObject? partial = IdentityManager.Get<GameObject>(data.rootId);
-                    if (partial is not { isRuntimeValid: true } || scene.DestroyObject(partial))
+                    if (partial is not { isRuntimeValid: true })
                         return EditorHistoryResult.Failure(exception.Message);
-                    return StateIntegrityFailure(
-                        $"Scene subtree restore failed and the partial subtree could not be removed: {exception.Message}");
+                    SceneHistoryCompensationResult cleanup = SceneHistoryCompensation.Remove(
+                        partial,
+                        () => scene.DestroyObject(partial),
+                        $"Partial scene subtree '{data.rootId}'");
+                    return cleanup.statePreserved
+                        ? EditorHistoryResult.Failure(JoinFailures(exception.Message, cleanup.message))
+                        : StateIntegrityFailure(JoinFailures(exception.Message, cleanup.message));
                 }
                 SceneReferenceRestoreResult referenceResult =
                     SceneReferenceIndex.RestoreIncoming(data.incomingReferences);
                 if (!referenceResult.succeeded)
                 {
-                    bool removed = root.isRuntimeValid && scene.DestroyObject(root);
-                    if (referenceResult.statePreserved && removed)
-                        return EditorHistoryResult.Failure(referenceResult.message);
-                    return StateIntegrityFailure(
-                        $"Scene subtree incoming references failed: {referenceResult.message} " +
-                        (removed ? string.Empty : "The restored subtree could not be removed."));
+                    SceneHistoryCompensationResult cleanup = SceneHistoryCompensation.Remove(
+                        root,
+                        () => scene.DestroyObject(root),
+                        $"Restored scene subtree '{data.rootId}'");
+                    string failure = JoinFailures(referenceResult.message, cleanup.message);
+                    return referenceResult.statePreserved && cleanup.statePreserved
+                        ? EditorHistoryResult.Failure(failure)
+                        : StateIntegrityFailure(failure);
                 }
             }
             else if (!shouldExist && root is { isRuntimeValid: true })
@@ -146,4 +153,7 @@ internal sealed class SceneSubtreeHistoryHandler : EditorHistoryHandler
             return EditorHistoryResult.Failure(exception.Message);
         }
     }
+
+    private static string JoinFailures(string failure, string cleanup)
+        => string.IsNullOrWhiteSpace(cleanup) ? failure : $"{failure} {cleanup}";
 }

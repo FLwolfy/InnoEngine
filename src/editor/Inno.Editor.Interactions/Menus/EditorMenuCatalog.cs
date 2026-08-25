@@ -11,9 +11,6 @@ internal sealed class EditorMenuCatalog(
     EditorExtensionCatalog catalog,
     EditorActionRouter actions)
 {
-    private static readonly EditorAreaId S_MAIN_MENU_AREA = new("editor/main-menu");
-    private static readonly EditorActionId S_TOGGLE_PANEL_ACTION = new("editor/toggle-panel");
-
     private readonly HashSet<string> m_sourceFailures = new(StringComparer.Ordinal);
 
     internal EditorMenuModel Build(EditorMenuContext context)
@@ -24,7 +21,7 @@ internal sealed class EditorMenuCatalog(
         {
             foreach (EditorMenuAttribute menu in registration.menus)
             {
-                if (!string.Equals(menu.area, context.area.value, StringComparison.Ordinal))
+                if (!string.Equals(menu.area, context.area, StringComparison.Ordinal))
                     continue;
                 placements.Add(new Placement(
                     NormalizePath(menu.path),
@@ -37,7 +34,7 @@ internal sealed class EditorMenuCatalog(
 
         foreach (EditorExtensionCatalog.MenuSourceRegistration registration in catalog.extensions.menuSources)
         {
-            if (!string.Equals(registration.area, context.area.value, StringComparison.Ordinal))
+            if (!string.Equals(registration.area, context.area, StringComparison.Ordinal))
                 continue;
             try
             {
@@ -65,16 +62,19 @@ internal sealed class EditorMenuCatalog(
             }
         }
 
-        if (context.area == S_MAIN_MENU_AREA)
+        if (string.Equals(
+                context.area,
+                EditorBuiltInInteractionIds.C_MAIN_MENU_AREA,
+                StringComparison.Ordinal))
         {
             foreach (EditorExtensionCatalog.PanelRegistration panel in catalog.extensions.panels)
             {
                 placements.Add(new Placement(
                     $"Panel/{panel.attribute.title}",
-                    S_TOGGLE_PANEL_ACTION,
+                    EditorBuiltInInteractionIds.C_TOGGLE_PANEL,
                     panel.attribute.order,
                     separatorBefore: false,
-                    new EditorPanelId(panel.attribute.id)));
+                    panel.attribute.id));
             }
         }
 
@@ -91,7 +91,7 @@ internal sealed class EditorMenuCatalog(
     private void AddPlacement(MutableNode root, Placement placement, EditorMenuContext context)
     {
         EditorActionContext actionContext = context.CreateActionContext(placement.argument);
-        EditorActionState state = actions.Query(placement.actionId.value, actionContext);
+        EditorActionState state = actions.Query(placement.actionId, actionContext);
         if (!state.isVisible)
             return;
 
@@ -135,7 +135,7 @@ internal sealed class EditorMenuCatalog(
                 continue;
             result.Add(new EditorMenuItem(
                 node.label,
-                node.actionId?.value ?? string.Empty,
+                node.actionId ?? string.Empty,
                 node.order,
                 node.separatorBefore,
                 state,
@@ -157,7 +157,7 @@ internal sealed class EditorMenuCatalog(
 
     private sealed record Placement(
         string path,
-        EditorActionId actionId,
+        string actionId,
         int order,
         bool separatorBefore,
         object? argument);
@@ -168,7 +168,7 @@ internal sealed class EditorMenuCatalog(
         internal int order = order;
         internal bool separatorBefore = separatorBefore;
         internal readonly Dictionary<string, MutableNode> children = new(StringComparer.Ordinal);
-        internal EditorActionId? actionId;
+        internal string? actionId;
         internal object? argument;
         internal EditorActionState state = EditorActionState.hidden;
     }

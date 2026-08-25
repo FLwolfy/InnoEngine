@@ -154,6 +154,50 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task DisposeWaitsUntilTheActiveCompilationHasObservedCancellationAndExited()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancellationObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowExit = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var manager = new ScriptManager(
+            new ScriptManagerOptions
+            {
+                projectRootDirectory = m_projectRoot,
+                autoCompile = false,
+                debounceMilliseconds = 0
+            },
+            async cancellationToken =>
+            {
+                entered.SetResult();
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    cancellationObserved.SetResult();
+                    await allowExit.Task;
+                    throw;
+                }
+            });
+
+        Task<ScriptCompilationResult> compilation = manager.CompileAsync().AsTask();
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Task disposal = Task.Run(manager.Dispose);
+        await cancellationObserved.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Task concurrentDisposal = Task.Run(manager.Dispose);
+
+        Assert.False(disposal.IsCompleted);
+        Assert.False(concurrentDisposal.IsCompleted);
+        allowExit.SetResult();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => compilation);
+        await Task.WhenAll(disposal, concurrentDisposal).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.False(manager.isCompiling);
+        Assert.Null(manager.lastCompilation);
+    }
+
+    [Fact]
     public void RuntimeAndEditorScriptsCompileWithExplicitFacadeUsings()
     {
         Write("ProjectBehavior.CS", """
@@ -1029,7 +1073,7 @@ public sealed class ScriptManagerTests : IDisposable
                 public override void Build(EditorMenuContext context, EditorMenuBuilder builder)
                     => builder.Add(
                         "Dynamic",
-                        new EditorCommand(new EditorActionId("tests.interactions.execute")));
+                        "tests.interactions.execute");
             }
 
             [AssetEditor(typeof(TextAsset))]

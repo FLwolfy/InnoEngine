@@ -60,7 +60,7 @@ public sealed class AssetBrowserState
                 target = entry;
             }
         }
-        _ = m_interactions.For(FileBrowserInteractionIds.area, target).Select();
+        _ = m_interactions.For(FileBrowserInteractionIds.C_AREA, target).Select();
     }
 
     private static string Normalize(string? relativePath)

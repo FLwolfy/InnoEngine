@@ -59,14 +59,12 @@ Tree pane 只在名称或层级缩进真实超出 viewport 时产生横向范围
 ```csharp
 internal static class AnimationInteractionIds
 {
-    internal const string Reimport = "animation/reimport";
-    internal const string FileBrowserArea = "panel/asset.file-browser";
-    internal static readonly EditorCommand ReimportCommand =
-        new(new EditorActionId(Reimport));
+    internal const string C_REIMPORT = "animation/reimport";
+    internal const string C_FILE_BROWSER_AREA = "panel/asset.file-browser";
 }
 
-[EditorAction(AnimationInteractionIds.Reimport, AnimationInteractionIds.FileBrowserArea)]
-[EditorMenu(AnimationInteractionIds.FileBrowserArea, "Animation/Reimport", order: 400)]
+[EditorAction(AnimationInteractionIds.C_REIMPORT, AnimationInteractionIds.C_FILE_BROWSER_AREA)]
+[EditorMenu(AnimationInteractionIds.C_FILE_BROWSER_AREA, "Animation/Reimport", order: 400)]
 public sealed class ReimportAnimationAction : EditorAction<AssetFileEntry>
 {
     protected override EditorActionState Query(
@@ -136,4 +134,4 @@ List 的三个 column 使用同一个内容 inset，手动 splitter 只占用从
 
 ## Scripting API
 
-EditorScripts 使用 `InnoEditor.Assets` 扩展 AssetEditor、声明 AssetIcon。Action/Menu/Drop Attribute 因 C# metadata 限制使用 feature-owned `const string`，运行时调用使用对应的 `EditorActionId`、`EditorAreaId` 和 `EditorCommand<TArgument>`；脚本必须显式写 `using InnoEditor.Assets;`。
+EditorScripts 使用 `InnoEditor.Assets` 扩展 AssetEditor、声明 AssetIcon。Action/Menu/Drop Attribute 与运行时 API 共用 feature-owned `const string` ID；脚本必须显式写 `using InnoEditor.Assets;`。

@@ -11,8 +11,8 @@ internal sealed class CreateSceneCommand(SceneEdits edits) : EditorAction
     protected override void Execute(EditorActionContext context)
     {
         GameScene scene = edits.CreateScene();
-        EditorInteraction interaction = context.interactions.For(HierarchyInteractionIds.area, scene);
+        EditorInteraction interaction = context.interactions.For(HierarchyInteractionIds.C_AREA, scene);
         _ = interaction.Select();
-        _ = interaction.Execute(RenameHierarchyTargetCommand.command);
+        _ = interaction.Execute(HierarchyInteractionIds.C_RENAME);
     }
 }

@@ -54,9 +54,9 @@ internal sealed class CreateAssetFolderCommand : EditorAction<string>
         }
         if (!AssetManager.TryGetFileSystemEntry(candidate, out AssetFileEntry target))
             return;
-        EditorInteraction interaction = context.interactions.For(FileBrowserInteractionIds.area, target);
+        EditorInteraction interaction = context.interactions.For(FileBrowserInteractionIds.C_AREA, target);
         _ = interaction.Select();
-        _ = interaction.Execute(RenameAssetCommand.command);
+        _ = interaction.Execute(FileBrowserInteractionIds.C_RENAME);
     }
 
     private static string Combine(string parent, string name)

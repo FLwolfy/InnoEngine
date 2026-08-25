@@ -6,7 +6,7 @@
 
 ## 窗口与生命周期
 
-- 主菜单 `Edit/Settings...` 的 Attribute 使用 feature-owned `const string` ID `editor.settings.open`，运行时执行对应的 `EditorCommand`。
+- 主菜单 `Edit/Settings...` 的 Attribute 和运行时调用共用项目根目录 `SettingsInteractionIds` 中的 `const string` ID `editor.settings.open`。
 - 初始逻辑尺寸 `1050 × 700`，最小尺寸 `760 × 520`，随全局 zoom 缩放。
 - Window flags 包含 `NoDocking | NoCollapse`；淡入、显示和淡出期间阻止其他 Editor 区域交互。
 - 左右 pane 默认按 `1:3` 分配；splitter 使用 `0..1` 比例并只为两侧各保留一个很小的可见宽度，因此可以像 File Browser 一样几乎拖到边缘。交互区域保持易拖动宽度，视觉只绘制居中的细线。

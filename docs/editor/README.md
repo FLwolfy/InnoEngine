@@ -65,11 +65,11 @@ flowchart TD
 ## 扩展入口
 
 - 新 Panel：继承 `EditorPanel` 并添加 `[EditorPanel]`。
-- 新操作：继承 `EditorAction`、`EditorAction<TTarget>` 或 `EditorAction<TTarget,TArgument>` 并添加 `[EditorAction]`；Attribute 使用 feature 常量，调用方使用 `EditorActionId` / `EditorCommand<TArgument>`。
+- 新操作：继承 `EditorAction`、`EditorAction<TTarget>` 或 `EditorAction<TTarget,TArgument>` 并添加 `[EditorAction]`；Attribute 与运行时调用都使用项目根目录 `*InteractionIds` 中的 `const string`。
 - 右键或主菜单：在 Action 上添加任意层级的 `[EditorMenu(area, "A/B/C")]`。
 - 动态菜单：继承 `EditorMenuSource` 并添加 `[EditorMenuSource(area)]`。
 - 拖放：继承 `EditorDrop<TSource,TTarget>` 并添加 `[EditorDrop(area)]`。
-- 选择、焦点和打开等交互：通过 `interactions.For(EditorAreaId, target)` 获取轻量 `EditorInteraction`。
+- 选择、焦点和打开等交互：通过 `interactions.For(areaId, target)` 获取轻量 `EditorInteraction`，其中 `areaId` 是非空 `string`。
 - 可撤销操作：领域 Module 先完成修改，再用中立 `EditorHistoryChange` 与 `[EditorHistoryHandler]` 记录；连续值可设置稳定 `mergeKey`，复合修改使用 transaction。
 - 项目语义状态：Module/Panel 使用 Attribute 的唯一 ID，并 override protected `Capture(EditorState)` / `Restore(EditorState)`；扩展只使用 `state.Get` / `state.Set`，未 override Capture 的类型完全不进入状态 IO。
 - 用户可配置项：声明 `[EditorSettingPath("A/B/Field")]` 并继承非泛型 `EditorSetting`；page 保留默认 `OnDraw`，field 用 `EditorSettingObject` 默认值并 override `OnDraw(EditorSettingObject)`。业务读取只调用 `EditorSettings.Get(path)`。

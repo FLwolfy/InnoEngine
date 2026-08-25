@@ -7,8 +7,6 @@ namespace Inno.Editor.Panel.Inspector;
 [EditorMenu(InspectorInteractionIds.C_SYSTEM_AREA, "Remove System", order: 200)]
 internal sealed class RemoveSystemCommand(SceneEdits edits) : EditorAction<SystemEditorTarget>
 {
-    internal static EditorCommand command { get; } = new(InspectorInteractionIds.removeSystem);
-
     protected override EditorActionState Query(EditorActionContext<SystemEditorTarget> context)
         => !context.target.system.isDestroyed
             ? EditorActionState.enabled

@@ -16,8 +16,8 @@ internal sealed class CreateChildGameObjectCommand(SceneEdits edits) : EditorAct
     protected override void Execute(EditorActionContext<GameObject> context)
     {
         GameObject child = edits.CreateGameObject(context.target.scene, context.target.transform);
-        EditorInteraction interaction = context.interactions.For(HierarchyInteractionIds.area, child);
+        EditorInteraction interaction = context.interactions.For(HierarchyInteractionIds.C_AREA, child);
         _ = interaction.Select();
-        _ = interaction.Execute(RenameHierarchyTargetCommand.command);
+        _ = interaction.Execute(HierarchyInteractionIds.C_RENAME);
     }
 }

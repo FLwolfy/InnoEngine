@@ -26,6 +26,6 @@ Console card header 只显示等级，例如 `[Info]` 或 `[Error]`。展开后�
 
 菜单复用全局 `EditorMenuRenderer` 与 Context Menu 样式，因此会正确捕获 hover/input，不把右键事件传递给后方 Panel 内容。
 
-两个复制操作的 Attribute ID 保存在本 feature 的稳定 `const string` 清单中，运行时菜单模型解析为 typed command。Console 的 `OnDraw` 只能由宿主生命周期 bridge 调用；Draw 异常会关闭并 quarantine 当前 generation 的 Panel，同时由 runtime 保证 window/menu ImGui 栈平衡，不影响后续 Panel。
+两个复制操作的 area/action ID 保存在项目根目录 `LoggingInteractionIds` 的稳定 `const string` 清单中，运行时菜单模型直接使用这些字符串。Console 的 `OnDraw` 只能由宿主生命周期 bridge 调用；Draw 异常会关闭并 quarantine 当前 generation 的 Panel，同时由 runtime 保证 window/menu ImGui 栈平衡，不影响后续 Panel。
 
 该 Panel 当前没有单独的 EditorScripts facade；日志写入 API 由 Core Logging 的 Runtime scripting profile 导出。

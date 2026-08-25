@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\src\core\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" />
     <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />
     <ProjectReference Include="..\..\src\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" />
+    <ProjectReference Include="..\..\src\engine\Inno.Engine.Scene.Assets\Inno.Engine.Scene.Assets.csproj" />
     <ProjectReference Include="..\..\src\assets\Inno.Assets.Types\Inno.Assets.Types.csproj" />
   </ItemGroup>
   <ItemGroup>

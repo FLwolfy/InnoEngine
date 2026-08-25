@@ -8,8 +8,6 @@ namespace Inno.Editor.Panel.Inspector;
 [EditorMenu(InspectorInteractionIds.C_COMPONENT_AREA, "Remove Component", order: 200)]
 internal sealed class RemoveComponentCommand(SceneEdits edits) : EditorAction<ComponentEditorTarget>
 {
-    internal static EditorCommand command { get; } = new(InspectorInteractionIds.removeComponent);
-
     protected override EditorActionState Query(EditorActionContext<ComponentEditorTarget> context)
         => context.target.component is not Transform
             ? EditorActionState.enabled

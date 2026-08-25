@@ -26,12 +26,12 @@ internal sealed class HierarchySelection(
         if (interactions.selection.TryGet(out GameScene? selectedScene) &&
             (!selectedScene.isLoaded || !ContainsScene(workspace.scenes, selectedScene)))
         {
-            _ = interactions.For(HierarchyInteractionIds.area).Select();
+            _ = interactions.For(HierarchyInteractionIds.C_AREA).Select();
             return;
         }
         if (interactions.selection.TryGet(out GameObject? gameObject) &&
             (!gameObject.isRuntimeValid || !ContainsScene(workspace.scenes, gameObject.scene)))
-            _ = interactions.For(HierarchyInteractionIds.area).Select();
+            _ = interactions.For(HierarchyInteractionIds.C_AREA).Select();
     }
 
     internal bool DeleteObject(EditorContext context, Guid persistentId)
@@ -42,7 +42,7 @@ internal sealed class HierarchySelection(
 
         _ = gameObject.scene.DestroyObject(gameObject);
         if (interactions.selection.TryGet(out GameObject? selected) && ReferenceEquals(selected, gameObject))
-            _ = interactions.For(HierarchyInteractionIds.area).Select();
+            _ = interactions.For(HierarchyInteractionIds.C_AREA).Select();
         return true;
     }
 

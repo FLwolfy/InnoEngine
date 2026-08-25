@@ -80,4 +80,4 @@ Asset reference handler 接受共享 `AssetInfo`；EngineObject handler 接受�
 
 ## Scripting API
 
-EditorScripts 使用 `InnoEditor.Inspection`，可声明 InspectionDrawer、PropertyDrawer 并使用 draw context。Facade 由 `Inno.Editor.Inspection` 提供；本项目只补充引用 drop target，Attribute 使用 feature-owned 字符串常量，运行时使用 typed area/command。具体内建 Panel、Registry snapshot 和内部 metadata cache 不导出。
+EditorScripts 使用 `InnoEditor.Inspection`，可声明 InspectionDrawer、PropertyDrawer 并使用 draw context。Facade 由 `Inno.Editor.Inspection` 提供；本项目只补充引用 drop target，Attribute 与运行时 API 共用项目根目录 `InspectorInteractionIds` 中的 `const string`。具体内建 Panel、Registry snapshot 和内部 metadata cache 不导出。

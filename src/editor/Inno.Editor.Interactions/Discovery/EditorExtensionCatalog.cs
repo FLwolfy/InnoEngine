@@ -49,6 +49,8 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             try
             {
                 registration.module.Update(m_context);
+                if (registration.module.blocksFollowingUpdates)
+                    break;
             }
             catch (Exception exception)
             {
@@ -58,8 +60,6 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
                     exception);
                 continue;
             }
-            if (registration.module.blocksFollowingUpdates)
-                break;
         }
         m_state.Update(m_context.frame.totalTime, GetAvailableState(snapshot), GetAvailablePanels(snapshot));
     }
@@ -70,13 +70,14 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             m_state.Save(GetAvailableState(m_active), GetAvailablePanels(m_active));
     }
 
-    internal bool TryTogglePanel(EditorPanelId panelId)
+    internal bool TryTogglePanel(string panelId)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(panelId);
         Snapshot snapshot = extensions;
         for (int i = 0; i < snapshot.panels.Length; i++)
         {
             PanelRegistration registration = snapshot.panels[i];
-            if (!string.Equals(registration.attribute.id, panelId.value, StringComparison.Ordinal) ||
+            if (!string.Equals(registration.attribute.id, panelId, StringComparison.Ordinal) ||
                 snapshot.quarantinedPanels.Contains(registration.panel))
             {
                 continue;
@@ -92,6 +93,9 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         if (m_active is not null)
             m_state.PrepareShutdown(GetAvailableState(m_active), GetAvailablePanels(m_active));
     }
+
+    internal ActionRegistration[] GetActionsForShutdown()
+        => m_active?.actions ?? [];
 
     internal void QuarantinePanel(Snapshot snapshot, PanelRegistration registration, Exception exception)
     {
@@ -122,13 +126,18 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
     {
         if (m_active is not null)
         {
-            if (saveState)
-                m_state.PrepareShutdown(GetAvailableState(m_active), GetAvailablePanels(m_active));
-            Deactivate(m_active);
+            Snapshot active = m_active;
+            try
+            {
+                if (saveState)
+                    m_state.PrepareShutdown(GetAvailableState(active), GetAvailablePanels(active));
+            }
+            finally
+            {
+                Deactivate(active, captureReloadState: false);
+            }
         }
         m_active = null;
-        if (isInitialized)
-            Clear();
         m_diagnostics.Dispose();
         m_state.ClearDiagnostics();
     }
@@ -340,13 +349,26 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             if (retained?.Contains(instance) == true)
                 continue;
             if (instance is IDisposable disposable)
-                disposable.Dispose();
+            {
+                try
+                {
+                    disposable.Dispose();
+                }
+                catch (Exception exception)
+                {
+                    Log.Error(
+                        "Editor extension '{0}' failed while being disposed: {1}",
+                        instance.GetType().FullName ?? instance.GetType().Name,
+                        exception);
+                }
+            }
         }
     }
 
-    private void Deactivate(Snapshot snapshot)
+    private void Deactivate(Snapshot snapshot, bool captureReloadState = true)
     {
-        CapturePanelStates(snapshot);
+        if (captureReloadState)
+            CapturePanelStates(snapshot);
         for (int i = snapshot.modules.Length - 1; i >= 0; i--)
         {
             if (snapshot.startedModules.Contains(snapshot.modules[i].module))
@@ -540,7 +562,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
                     !string.Equals(registration.attribute.area, shortcut.area, StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException(
-                        $"Editor shortcut on '{registration.id.value}' targets area '{shortcut.area}', " +
+                        $"Editor shortcut on '{registration.id}' targets area '{shortcut.area}', " +
                         $"outside its action area '{registration.attribute.area}'.");
                 }
                 string effectiveArea = string.IsNullOrEmpty(shortcut.area)
@@ -559,8 +581,11 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             for (int rightIndex = leftIndex + 1; rightIndex < shortcuts.Count; rightIndex++)
             {
                 ShortcutValidationEntry right = shortcuts[rightIndex];
-                if (left.registration.id == right.registration.id ||
-                    left.gesture != right.gesture ||
+                bool sameAction = string.Equals(
+                    left.registration.id,
+                    right.registration.id,
+                    StringComparison.Ordinal);
+                if (left.gesture != right.gesture ||
                     left.registration.attribute.priority != right.registration.attribute.priority ||
                     !string.Equals(left.area, right.area, StringComparison.Ordinal) ||
                     !MayHaveEqualTargetSpecificity(
@@ -570,9 +595,16 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
                     continue;
                 }
 
+                if (sameAction)
+                {
+                    throw new InvalidOperationException(
+                        $"Editor action '{left.registration.id}' declares duplicate shortcut " +
+                        $"'{left.gesture}' for area '{(string.IsNullOrEmpty(left.area) ? "*" : left.area)}'.");
+                }
+
                 throw new InvalidOperationException(
                     $"Editor shortcut '{left.gesture}' is ambiguous between actions " +
-                    $"'{left.registration.id.value}' and '{right.registration.id.value}' for area " +
+                    $"'{left.registration.id}' and '{right.registration.id}' for area " +
                     $"'{(string.IsNullOrEmpty(left.area) ? "*" : left.area)}'.");
             }
         }
@@ -764,11 +796,11 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         EditorMenuAttribute[] menus,
         EditorShortcutAttribute[] shortcuts)
     {
-        internal EditorActionId id { get; } = new(attribute.action);
+        internal string id { get; } = attribute.action;
 
-        internal EditorAreaId? area { get; } = string.IsNullOrEmpty(attribute.area)
+        internal string? area { get; } = string.IsNullOrEmpty(attribute.area)
             ? null
-            : new EditorAreaId(attribute.area);
+            : attribute.area;
     }
 
     internal sealed record MenuSourceRegistration(

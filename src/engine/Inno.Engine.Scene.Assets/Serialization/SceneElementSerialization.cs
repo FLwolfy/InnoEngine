@@ -1,7 +1,10 @@
 using System;
 using System.IO;
+using System.Runtime.ExceptionServices;
 
+using Inno.Core.Identity;
 using Inno.Core.Reflection;
+using Inno.Core.Serialization;
 using Inno.Engine.Scene;
 
 namespace Inno.Engine.Scene.Assets;
@@ -22,7 +25,10 @@ public static class SceneElementSerialization
     /// <returns>The recreated component.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="owner"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException">Thrown when the stable type is missing or is not a concrete component.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the identity or component multiplicity conflicts.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the identity or component multiplicity conflicts, property restoration is incomplete,
+    /// or a failed restoration cannot remove its partially created component.
+    /// </exception>
     public static GameComponent RestoreComponent(
         GameObject owner,
         Guid stableTypeId,
@@ -40,13 +46,18 @@ public static class SceneElementSerialization
         try
         {
             owner.SetComponentIndex(component, componentIndex);
-            _ = ScenePropertySerialization.RestoreProperties(component, propertyData);
+            RequireComplete(
+                ScenePropertySerialization.RestoreProperties(component, propertyData),
+                "component");
             return component;
         }
-        catch
+        catch (Exception exception)
         {
-            if (!component.isDestroyed)
-                _ = owner.RemoveComponent(component);
+            RethrowAfterCleanup(
+                exception,
+                component,
+                () => owner.RemoveComponent(component),
+                "component");
             throw;
         }
     }
@@ -62,7 +73,10 @@ public static class SceneElementSerialization
     /// <returns>The recreated system.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scene"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException">Thrown when the stable type is missing or is not a concrete system.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the identity or system multiplicity conflicts.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the identity or system multiplicity conflicts, property restoration is incomplete,
+    /// or a failed restoration cannot remove its partially created system.
+    /// </exception>
     public static GameSystem RestoreSystem(
         GameScene scene,
         Guid stableTypeId,
@@ -76,15 +90,68 @@ public static class SceneElementSerialization
         try
         {
             scene.SetSystemIndex(system, systemIndex);
-            _ = ScenePropertySerialization.RestoreProperties(system, propertyData);
+            RequireComplete(
+                ScenePropertySerialization.RestoreProperties(system, propertyData),
+                "system");
             return system;
         }
-        catch
+        catch (Exception exception)
         {
-            if (!system.isDestroyed)
-                _ = scene.RemoveSystem(system);
+            RethrowAfterCleanup(
+                exception,
+                system,
+                () => scene.RemoveSystem(system),
+                "system");
             throw;
         }
+    }
+
+    private static void RequireComplete(SerializationPropertyRestoreResult result, string kind)
+    {
+        if (result.success && result.ignoredCount == 0)
+            return;
+        throw new InvalidOperationException(
+            $"Scene {kind} property restoration was incomplete: " +
+            $"{result.restoredCount} restored, {result.ignoredCount} ignored, " +
+            $"{result.failures.Count} failed.");
+    }
+
+    internal static void RethrowAfterCleanup(
+        Exception restoreFailure,
+        EngineObject element,
+        Func<bool> remove,
+        string kind)
+    {
+        Guid persistentId = element.identity.persistentId;
+        Exception? cleanupFailure = null;
+        bool reportedRemoved = false;
+        if (!element.isDestroyed)
+        {
+            try
+            {
+                reportedRemoved = remove();
+            }
+            catch (Exception exception)
+            {
+                cleanupFailure = exception;
+            }
+        }
+        bool remainsRegistered = ReferenceEquals(
+            IdentityManager.Get<EngineObject>(persistentId),
+            element);
+        if ((!element.isDestroyed || remainsRegistered) && cleanupFailure is null)
+        {
+            cleanupFailure = new InvalidOperationException(
+                reportedRemoved
+                    ? $"The partially restored scene {kind} reported successful removal but did not reach the destroyed and unregistered postcondition."
+                    : $"The partially restored scene {kind} could not be fully destroyed and unregistered.");
+        }
+
+        if (cleanupFailure is null)
+            ExceptionDispatchInfo.Capture(restoreFailure).Throw();
+        throw new InvalidOperationException(
+            $"Scene {kind} restoration failed and its cleanup did not complete successfully.",
+            new AggregateException(restoreFailure, cleanupFailure));
     }
 
     private static Type ResolveType<TElement>(Guid stableTypeId, string kind)

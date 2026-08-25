@@ -8,11 +8,9 @@ namespace Inno.Editor.Panel.Hierarchy;
 [EditorAction(HierarchyInteractionIds.C_OPEN, priority: 200)]
 internal sealed class OpenSceneAssetAction(IEditorSceneWorkspace workspace) : EditorAction<SceneAsset, string>
 {
-    internal static EditorCommand<string> command { get; } = new(HierarchyInteractionIds.open);
-
     protected override void Execute(EditorActionContext<SceneAsset, string> context)
     {
         GameScene scene = workspace.Open(context.argument);
-        _ = context.interactions.For(HierarchyInteractionIds.area, scene).Select();
+        _ = context.interactions.For(HierarchyInteractionIds.C_AREA, scene).Select();
     }
 }

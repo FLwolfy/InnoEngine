@@ -19,7 +19,7 @@ internal sealed class AddSystemMenuProvider : EditorMenuSource
         {
             if (!IsAddable(type, scene))
                 continue;
-            builder.Add(type.Name, AddSystemCommand.command, type);
+            builder.Add(type.Name, InspectorInteractionIds.C_ADD_SYSTEM, argument: type);
         }
     }
 

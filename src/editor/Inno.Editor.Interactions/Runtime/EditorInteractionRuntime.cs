@@ -125,19 +125,31 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
     }
 
     /// <inheritdoc />
+    /// <exception cref="AggregateException">
+    /// Thrown after all shutdown stages have been attempted when one or more stages failed.
+    /// </exception>
     public override void Dispose()
     {
         if (m_disposed)
             return;
-        m_catalog.PrepareShutdown();
         m_disposed = true;
-        m_interactions.Shutdown();
-        m_catalog.Shutdown(saveState: false);
-        m_catalog.Dispose();
+        var failures = new List<Exception>();
+        EditorExtensionCatalog.ActionRegistration[] shutdownActions =
+            m_catalog.GetActionsForShutdown();
+        TryShutdownStage(m_catalog.PrepareShutdown, failures);
+        TryShutdownStage(() => m_catalog.Shutdown(saveState: false), failures);
+        TryShutdownStage(() => m_interactions.Shutdown(shutdownActions), failures);
+        TryShutdownStage(m_catalog.Dispose, failures);
         m_panels = [];
         m_modals = [];
         m_describedSnapshot = null;
         GC.SuppressFinalize(this);
+        if (failures.Count != 0)
+        {
+            throw new AggregateException(
+                "One or more editor interaction shutdown stages failed.",
+                failures);
+        }
     }
 
     private void RefreshDescriptions()
@@ -153,7 +165,7 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
             if (snapshot.quarantinedPanels.Contains(registration.panel))
                 continue;
             panels.Add(new EditorPanelExtension(
-                new EditorPanelId(registration.attribute.id),
+                registration.attribute.id,
                 registration.attribute.title,
                 registration.attribute.order,
                 registration.panel,
@@ -176,5 +188,17 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
         }
         m_modals = modals.ToArray();
         m_describedSnapshot = snapshot;
+    }
+
+    private static void TryShutdownStage(Action stage, ICollection<Exception> failures)
+    {
+        try
+        {
+            stage();
+        }
+        catch (Exception exception)
+        {
+            failures.Add(exception);
+        }
     }
 }

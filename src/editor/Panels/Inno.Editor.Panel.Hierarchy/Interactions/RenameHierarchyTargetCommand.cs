@@ -15,10 +15,6 @@ namespace Inno.Editor.Panel.Hierarchy;
 internal sealed class RenameHierarchyTargetCommand(SceneEdits edits) :
     EditorPresentationAction<EngineObject, InlineRenamePresentation>
 {
-    internal static EditorCommand command { get; } = new(HierarchyInteractionIds.rename);
-    internal static EditorCommand<InlineRenamePresentation> presentationCommand { get; } =
-        new(HierarchyInteractionIds.rename);
-
     private EngineObject? m_target;
     private string m_buffer = string.Empty;
     private bool m_requestFocus;

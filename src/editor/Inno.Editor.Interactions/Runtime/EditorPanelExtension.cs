@@ -11,12 +11,13 @@ public sealed class EditorPanelExtension
     private readonly EditorPanel m_panel;
 
     internal EditorPanelExtension(
-        EditorPanelId id,
+        string id,
         string title,
         int order,
         EditorPanel panel,
         Action<Exception> quarantine)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
         this.id = id;
         this.title = title;
         this.order = order;
@@ -25,7 +26,7 @@ public sealed class EditorPanelExtension
     }
 
     /// <summary>Gets the stable panel identifier.</summary>
-    public EditorPanelId id { get; }
+    public string id { get; }
 
     /// <summary>Gets the visible panel title.</summary>
     public string title { get; }
@@ -40,7 +41,21 @@ public sealed class EditorPanelExtension
         set => m_panel.isOpen = value;
     }
 
-    internal bool useWindowPadding => m_panel.useWindowPadding;
+    internal bool TryGetWindowPadding(out bool useWindowPadding)
+    {
+        try
+        {
+            useWindowPadding = m_panel.useWindowPadding;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            useWindowPadding = true;
+            m_panel.isOpen = false;
+            m_quarantine(exception);
+            return false;
+        }
+    }
 
     internal bool Draw(EditorContext context)
     {

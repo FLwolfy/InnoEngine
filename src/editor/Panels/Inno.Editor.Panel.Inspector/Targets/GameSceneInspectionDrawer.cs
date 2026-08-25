@@ -114,14 +114,14 @@ internal sealed class GameSceneInspectionDrawer : InspectionDrawer<GameScene>
                     systems.Count,
                     () => context.interactions
                         .For(
-                            InspectorInteractionIds.systemArea,
+                            InspectorInteractionIds.C_SYSTEM_AREA,
                             editorTarget)
-                        .Enqueue(RemoveSystemCommand.command)),
+                        .Enqueue(InspectorInteractionIds.C_REMOVE_SYSTEM)),
                 dimmed: !system.enabled,
                 trailingControlWidth: m_cardControls.width,
                 drawContextMenu: () => _ = EditorMenuRenderer.ContextMenu(
                     $"##system_menu_{systemId}",
-                    context.interactions.For(InspectorInteractionIds.systemArea, editorTarget)));
+                    context.interactions.For(InspectorInteractionIds.C_SYSTEM_AREA, editorTarget)));
             if (!open)
             {
                 NativeImGui.Dummy(new Vector2(0f, EditorWidget.style.inspectorCardSpacing));
@@ -168,7 +168,7 @@ internal sealed class GameSceneInspectionDrawer : InspectionDrawer<GameScene>
 
         try
         {
-            EditorInteraction interaction = context.interactions.For(InspectorInteractionIds.systemArea, scene);
+            EditorInteraction interaction = context.interactions.For(InspectorInteractionIds.C_SYSTEM_AREA, scene);
             if (EditorMenuRenderer.DrawSearchItems(
                     interaction,
                     interaction.BuildMenu().items,

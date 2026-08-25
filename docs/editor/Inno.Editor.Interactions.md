@@ -2,61 +2,52 @@
 
 [Editor 索引](README.md) · [Core](Inno.Editor.Core.md) · [ImGui](Inno.Editor.ImGui.md)
 
-`Inno.Editor.Interactions` 提供表现后端无关的交互语言：强类型 `EditorAreaId`、可选 `target`、轻量 `EditorInteraction`、强类型 command，以及 Attribute 自动发现的 Action、Menu、Shortcut 和 Drop。它不引用 ImGui、Assets、Scene 或任何 Panel project。
+`Inno.Editor.Interactions` 提供表现后端无关的交互语言：稳定的 `string` area/action/panel ID、可选 `target`、轻量 `EditorInteraction`，以及 Attribute 自动发现的 Action、Menu、Shortcut 和 Drop。它不引用 ImGui、Assets、Scene 或任何 Panel project。
 
 ## 最小心智模型
 
 ```csharp
 EditorInteraction interaction = interactions.For(
-    AnimationAreas.GraphId,
+    AnimationInteractionIds.C_GRAPH_AREA,
     selectedState);
 
 interaction.Focus();
 interaction.Select();
-interaction.Execute(AnimationActions.RenameStateCommand);
+interaction.Execute(AnimationInteractionIds.C_RENAME_STATE);
 EditorMenuModel menu = interaction.BuildMenu();
 ```
 
-- Attribute 因 metadata 限制继续使用 feature 自己维护的稳定 `const string`；运行时立即转换为 `EditorAreaId` / `EditorActionId`。
+- Attribute 和运行时 API 都直接使用 feature 自己维护的稳定 `const string`。
 - `target` 是当前实际对象，决定 typed Action/Drop 是否匹配。
 - Action ID 表示语义操作，例如 `asset.rename`；它与 area 是两个正交维度。
-- 不再需要 `Surface` marker type，也不需要创建 Context/Menu/Command service。
+- 旧的强类型 ID/command wrapper 已删除，不存在兼容 wrapper 或转发 overload。
+- 不需要 `Surface` marker type，也不需要创建 Context/Menu/Command service。
 
 ## 定义 area
 
-每个 feature 在自己的项目中保留一个常量类：
+每个 feature 在自己的项目根目录保留一个常量类：
 
 ```csharp
-public static class AnimationAreas
+internal static class AnimationInteractionIds
 {
-    public const string Graph = "panel/animation.graph";
-    public const string State = "panel/animation.graph/state";
-    public static readonly EditorAreaId GraphId = new(Graph);
-    public static readonly EditorAreaId StateId = new(State);
+    internal const string C_GRAPH_AREA = "panel/animation.graph";
+    internal const string C_STATE_AREA = "panel/animation.graph/state";
+    internal const string C_DELETE_STATE = "animation.state.delete";
+    internal const string C_RENAME_STATE = "animation.state.rename";
+    internal const string C_CREATE_TEMPLATE = "animation.template.create";
 }
 ```
 
-命名建议使用小写、以 `/` 分层。area 不需要注册；第一次传给 `For` 或 Attribute 时即可使用。
+命名建议使用小写、以 `/` 分层。area 不需要注册；第一次传给 `For` 或 Attribute 时即可使用。所有公开入口对空白 ID 抛出 `ArgumentException`，匹配使用 ordinal string comparison。
 
 ## Action
 
 立即完成的操作：
 
 ```csharp
-public static class AnimationActions
-{
-    public const string DeleteState = "animation.state.delete";
-    public const string RenameState = "animation.state.rename";
-    public const string CreateTemplate = "animation.template.create";
-    public static readonly EditorCommand DeleteStateCommand =
-        new(new EditorActionId(DeleteState));
-    public static readonly EditorCommand RenameStateCommand =
-        new(new EditorActionId(RenameState));
-    public static readonly EditorCommand<string> CreateTemplateCommand =
-        new(new EditorActionId(CreateTemplate));
-}
-
-[EditorAction(AnimationActions.DeleteState, AnimationAreas.State)]
+[EditorAction(
+    AnimationInteractionIds.C_DELETE_STATE,
+    AnimationInteractionIds.C_STATE_AREA)]
 public sealed class DeleteAnimationStateAction : EditorAction<AnimationState>
 {
     protected override EditorActionState Query(
@@ -73,7 +64,7 @@ public sealed class DeleteAnimationStateAction : EditorAction<AnimationState>
 }
 ```
 
-解析优先级为精确 area、target 类型距离和 Attribute priority。找不到或禁用时 `Execute` 返回 `false`；需要参数的实现继承 `EditorAction<TTarget,TArgument>` 或 `EditorArgumentAction<TArgument>`，dispatch 前会严格校验 command 参数类型，不向扩展暴露 `object argument` 或 `TryGetArgument`。
+解析优先级为精确 area、target 类型距离和 Attribute priority。找不到或禁用时 `Execute` 返回 `false`；需要参数的实现继承 `EditorAction<TTarget,TArgument>` 或 `EditorArgumentAction<TArgument>`，调用方使用 `Execute(actionId, argument)`，dispatch 前严格校验 action argument 类型。扩展仍只看到强类型 context，不暴露原始 `object argument` 或 `TryGetArgument`。
 
 ### 多帧 Action
 
@@ -99,7 +90,7 @@ protected override bool Present(
 }
 ```
 
-上述 Rename 以 `EditorPresentationAction<AnimationState,RenamePresentation>` 实现，并分别用同一 action id 的 `EditorCommand` 启动、`EditorCommand<RenamePresentation>` 呈现；presentation 数据始终是编译期强类型。
+上述 Rename 以 `EditorPresentationAction<AnimationState,RenamePresentation>` 实现。调用方用同一 action ID 的 `Execute(id)` 启动、`Present(id, presentation)` 呈现；presentation 数据在 Action 实现中始终是编译期强类型。Action 执行或呈现抛异常时，运行时会尝试取消其活动状态；取消回调本身失败也会被独立记录，不会破坏后续 Action。
 
 没有单独的 `EditorActionInteraction<TState>` 或全局 Rename service。FileBrowser 和 Hierarchy 各自拥有 Rename Action，因为验证、提交和呈现目标属于各自 feature。
 
@@ -110,9 +101,9 @@ Selection 切换 target 时，Interactions 会通知旧 target 上仍活跃的�
 Action 可声明任意层级菜单路径：
 
 ```csharp
-[EditorAction("animation.state.create", AnimationAreas.Graph)]
+[EditorAction("animation.state.create", AnimationInteractionIds.C_GRAPH_AREA)]
 [EditorMenu(
-    AnimationAreas.Graph,
+    AnimationInteractionIds.C_GRAPH_AREA,
     "Create/Animation/State",
     order: 200,
     separatorBefore: true)]
@@ -129,27 +120,27 @@ public sealed class CreateAnimationStateAction : EditorAction<AnimationGraph>
 动态列表使用 `EditorMenuSource`：
 
 ```csharp
-[EditorMenuSource(AnimationAreas.Graph)]
+[EditorMenuSource(AnimationInteractionIds.C_GRAPH_AREA)]
 public sealed class AnimationTemplateMenu : EditorMenuSource
 {
     public override void Build(EditorMenuContext context, EditorMenuBuilder builder)
     {
         builder.Add(
             "Create/From Template/Humanoid",
-            AnimationActions.CreateTemplateCommand,
-            "Humanoid");
+            AnimationInteractionIds.C_CREATE_TEMPLATE,
+            argument: "Humanoid");
     }
 }
 ```
 
 Action 的 `Query` 决定条目是否可见、可用、勾选和动态标题；快捷键标签从 `[EditorShortcut]` 自动生成。
 
-快捷键显示与键盘 dispatch 共用同一个 resolver：先按 action id、area、target specificity 与 priority 解析实际 registration，再读取它的 gesture。相同优先级、相同 specificity 且 gesture 冲突会在 catalog Build 阶段作为歧义拒绝，不再用 `handledActions` 或类型名排序掩盖 contextual registration。
+快捷键显示与键盘 dispatch 共用同一个 resolver：先按 action ID、area、target specificity 与 priority 解析实际 registration，再读取它的 gesture。同一 Action 可声明多个不同 gesture，每个都可 dispatch；菜单只显示当前 area 的第一个可用 gesture。精确 area shortcut 存在时会覆盖该 registration 的 global shortcuts。同一 Action 在同一有效 area 重复同一 gesture，或不同 Action 形成同 specificity 歧义，都会在 catalog Build 阶段被拒绝。
 
 ## Selection 与 Focus
 
 ```csharp
-EditorInteraction row = interactions.For(AnimationAreas.State, state);
+EditorInteraction row = interactions.For(AnimationInteractionIds.C_STATE_AREA, state);
 if (clicked)
     row.Select();
 if (panelFocused)
@@ -161,7 +152,7 @@ if (panelFocused)
 ## Drag and Drop
 
 ```csharp
-[EditorDrop(AnimationAreas.Graph)]
+[EditorDrop(AnimationInteractionIds.C_GRAPH_AREA)]
 public sealed class ClipToStateDrop
     : EditorDrop<AnimationClipAsset, AnimationGraph>
 {
@@ -178,7 +169,7 @@ public sealed class ClipToStateDrop
 }
 ```
 
-视图通过 `BeginDrag` 获得 token，再在目标 interaction 上调用 `QueryDrop`/`Drop`。每次真实 Begin 都生成新 token 并替换完整 session，即使 source 或 data reference 与上次相同也不会复用；token 只对当前 session 的同一 data reference 有效。managed payload 不进入 native 字节常量；generation 更新、source 失效或 drop 完成都会取消 token。
+视图通过 `BeginDrag` 获得 token，再在目标 interaction 上调用 `QueryDrop`/`Drop`。`BeginDrag` 先同步当前 extension generation，再创建属于该 generation 的 token，避免首次 drop resolver 刷新时立即取消刚创建的 session。每次真实 Begin 都生成新 token 并替换完整 session，即使 source 或 data reference 与上次相同也不会复用；token 只对当前 session 的同一 data reference 有效。managed payload 不进入 native 字节常量；generation 更新、source 失效、validity predicate 返回 `false` 或抛异常、drop 完成都会取消 token。predicate 异常只拒绝本次 drag session。
 
 ## Runtime 与热重载
 
@@ -186,9 +177,11 @@ public sealed class ClipToStateDrop
 
 candidate 激活前会取消 drag、清空 pending action/presentation/menu model。Selection 与 Focus 指向 retiring collectible 类型时先清除；若对象实现 `IIdentityObject`，则暂存 persistent ID 并在下一次 Update 尝试绑定当前 generation 对象，解析失败才保持清空。
 
-候选 snapshot 作为 staging catalog 对生命周期回调可见，但重入刷新只记录为 deferred transition。激活时先按 `EditorModuleAttribute.order` Start Module，再 Attach 依赖它们的 Panel，最后对成功附加的扩展执行可容错 Restore；全部强制 Module 成功后才发布 active snapshot。Module Start 失败会逆序清理 candidate 并恢复旧 snapshot 与旧 History handler map；Panel Attach 失败只隔离该 Panel。全局 Complete 后才逆序 Stop/Detach retiring generation。被新旧 snapshot 共同保留的 Host instance 不重复 Start/Attach，也不会随旧 snapshot 被 Dispose。
+候选 snapshot 作为 staging catalog 对生命周期回调可见。重入请求的新 rebuild 只能在当前全局 Complete 之后作为独立 transaction 运行；已完成的 Registry transaction 不再执行可失败的 pending refresh。激活时先按 `EditorModuleAttribute.order` Start Module，再 Attach 依赖它们的 Panel，最后对成功附加的扩展执行可容错 Restore；全部强制 Module 成功后才发布 active snapshot。Module Start 失败会逆序清理 candidate 并恢复旧 snapshot 与旧 History handler map；Panel Attach 失败只隔离该 Panel。全局 Complete 后才逆序 Stop/Detach retiring generation。被新旧 snapshot 共同保留的 Host instance 不重复 Start/Attach，也不会随旧 snapshot 被 Dispose。
 
-无法 Attach 或 Draw 的 Panel 会被关闭并进入当前 generation quarantine；Module Update 失败会隔离当前 Module但继续后续更新；Modal 状态读取/Draw 失败会跳过当前 Modal。Stop/Detach/Dispose 异常只记清理诊断并继续。quarantine 只属于当前 snapshot，新 generation 会重新尝试，诊断按 extension id 去重并在恢复后清除。失败 Panel 不参与 Restore、Capture 或 Draw。
+无法 Attach 或 Draw 的 Panel 会被关闭并进入当前 generation quarantine；Panel `useWindowPadding` 和 Module `blocksFollowingUpdates` 这类扩展虚属性也在单实例边界内读取，getter 抛异常只隔离所属扩展。Module Update 失败会隔离当前 Module 但继续后续更新；Modal 状态读取/Draw 失败会跳过当前 Modal。Stop/Detach 异常只记清理诊断并继续；snapshot 释放时每个 `IDisposable` 实例单独 `try/catch`，前一个失败不会跻过后续实例。quarantine 只属于当前 snapshot，新 generation 会重新尝试，诊断按 extension ID 去重并在恢复后清除。失败 Panel 不参与 Restore、Capture 或 Draw。
+
+Editor 正常关闭先捕获和原子写入最终状态，再 Stop Module、Detach Panel，然后才清空 Action/drag 并 Dispose History，最后逐实例 Dispose extension snapshot。任一阶段失败不会跳过后续阶段；全部退场尝试完成后再聚合报告宿主级失败。
 
 ## Undo / Redo
 

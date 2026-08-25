@@ -170,16 +170,16 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
                         components.Count,
                         () => context.interactions
                             .For(
-                                InspectorInteractionIds.componentArea,
+                                InspectorInteractionIds.C_COMPONENT_AREA,
                                 editorTarget)
-                            .Enqueue(RemoveComponentCommand.command))),
+                            .Enqueue(InspectorInteractionIds.C_REMOVE_COMPONENT))),
                 dimmed: behavior is { enabled: false },
                 trailingControlWidth: componentType == typeof(Transform)
                     ? 0f
                     : m_cardControls.width,
                 drawContextMenu: () => _ = EditorMenuRenderer.ContextMenu(
                     $"##component_menu_{componentId}",
-                    context.interactions.For(InspectorInteractionIds.componentArea, editorTarget)));
+                    context.interactions.For(InspectorInteractionIds.C_COMPONENT_AREA, editorTarget)));
 
             if (!open)
             {
@@ -232,7 +232,7 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
 
         try
         {
-            EditorInteraction interaction = context.interactions.For(InspectorInteractionIds.componentArea, gameObject);
+            EditorInteraction interaction = context.interactions.For(InspectorInteractionIds.C_COMPONENT_AREA, gameObject);
             if (EditorMenuRenderer.DrawSearchItems(
                     interaction,
                     interaction.BuildMenu().items,

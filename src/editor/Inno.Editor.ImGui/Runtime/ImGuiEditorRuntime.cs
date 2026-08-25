@@ -16,8 +16,6 @@ namespace Inno.Editor.ImGui;
 /// </summary>
 public sealed class ImGuiEditorRuntime : EditorRuntime
 {
-    private static readonly EditorAreaId S_MAIN_MENU_AREA = new("editor/main-menu");
-
     private readonly Stopwatch m_timer = Stopwatch.StartNew();
     private readonly EditorInteractionRuntime m_runtime;
     private readonly EditorModalHost m_modals = new();
@@ -91,7 +89,7 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
             NativeImGui.BeginDisabled(true);
         try
         {
-            EditorMenuRenderer.MainMenu(interactions.For(S_MAIN_MENU_AREA));
+            EditorMenuRenderer.MainMenu(interactions.For(ImGuiInteractionIds.C_MAIN_MENU_AREA));
             DrawPanels(m_runtime.panels);
         }
         finally
@@ -130,7 +128,7 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
         for (int i = 0; i < panels.Count; i++)
         {
             EditorPanelExtension extension = panels[i];
-            if (!extension.isOpen)
+            if (!extension.isOpen || !extension.TryGetWindowPadding(out bool useWindowPadding))
                 continue;
             bool isOpen = extension.isOpen;
             EditorWidget.PanelWindow(extension.title, ref isOpen, () =>
@@ -139,10 +137,10 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
                     NativeImGui.IsWindowFocused(Inno.Native.ImGui.ImGuiFocusedFlags.RootAndChildWindows))
                 {
                     interactions.For(
-                        new EditorAreaId($"panel/{extension.id.value}"),
+                        $"panel/{extension.id}",
                         interactions.selection.selectedTarget).Focus();
                 }
-            }, useWindowPadding: extension.useWindowPadding);
+            }, useWindowPadding: useWindowPadding);
             extension.isOpen = isOpen;
         }
     }
