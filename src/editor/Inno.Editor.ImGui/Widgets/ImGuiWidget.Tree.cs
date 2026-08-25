@@ -29,7 +29,8 @@ public static partial class ImGuiWidget
     }
 
     /// <summary>
-    /// Draws a full-width interactive tree row.
+    /// Draws a full-width interactive tree row whose non-leaf content toggles expansion when
+    /// double-clicked, while preserving single-click disclosure-arrow behavior.
     /// </summary>
     /// <param name="id">Stable row identifier.</param>
     /// <param name="onDraw">Content drawing callback.</param>
@@ -104,6 +105,8 @@ public static partial class ImGuiWidget
         bool hovered = NativeImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenOverlappedByItem);
         bool clicked = hovered && NativeImGui.IsItemClicked(ImGuiMouseButton.Left);
         bool doubleClicked = hovered && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
+        if (!isLeaf && doubleClicked)
+            s_openStatesById[id] = !isOpen;
         bool showHoverHighlight = hovered &&
                                   !options.suppressHoverHighlight &&
                                   !ImGuiP.IsDragDropActive();
@@ -396,7 +399,10 @@ public readonly struct TreeNodeResult
     /// <summary>Gets whether the content row was clicked.</summary>
     public bool isClicked { get; }
 
-    /// <summary>Gets whether the content row was double-clicked.</summary>
+    /// <summary>
+    /// Gets whether the content row was double-clicked. Double-clicking a non-leaf content row
+    /// also toggles its retained expansion state for the next frame.
+    /// </summary>
     public bool isDoubleClicked { get; }
 
     /// <summary>Gets whether the full row is hovered.</summary>

@@ -114,19 +114,26 @@ internal sealed class GameLayersSetting : EditorSetting
 
         ImGuiTableFlags flags = ImGuiTableFlags.RowBg |
                                 ImGuiTableFlags.BordersInnerH |
+                                ImGuiTableFlags.BordersInnerV |
                                 ImGuiTableFlags.SizingStretchProp |
                                 ImGuiTableFlags.NoPadOuterX |
                                 ImGuiTableFlags.NoSavedSettings;
+        NativeImGui.PushStyleVar(ImGuiStyleVar.CellPadding, ImGuiWidget.style.cellPadding);
         if (!NativeImGui.BeginTable("##game_layer_definitions", 3, flags))
+        {
+            NativeImGui.PopStyleVar();
             return;
+        }
         NativeImGui.TableSetupColumn(
             "Slot",
-            ImGuiTableColumnFlags.WidthFixed,
+            ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize,
             48f * ImGuiWidget.style.zoom);
-        NativeImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthStretch);
+        NativeImGui.TableSetupColumn(
+            "Name",
+            ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoResize);
         NativeImGui.TableSetupColumn(
             "Action",
-            ImGuiTableColumnFlags.WidthFixed,
+            ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize,
             72f * ImGuiWidget.style.zoom);
         DrawLayerTableHeader();
         for (int index = 0; index < GameLayer.C_MAX_COUNT; index++)
@@ -182,6 +189,7 @@ internal sealed class GameLayersSetting : EditorSetting
             NativeImGui.PopID();
         }
         NativeImGui.EndTable();
+        NativeImGui.PopStyleVar();
     }
 
     private void DrawLayerToolbar(

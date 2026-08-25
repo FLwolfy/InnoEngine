@@ -30,6 +30,7 @@ public sealed class EditorStyleMetricsTests
         Assert.Equal(1.875f, metrics.fontScale, 3);
         Assert.Equal(0.4f, metrics.propertyLabelRatio, 3);
         Assert.Equal(3f, metrics.assetGridDefaultScale, 3);
+        Assert.Equal(new Vector2(4.5f, 3f), metrics.cellPadding);
     }
 
     [Fact]
@@ -324,6 +325,42 @@ public sealed class EditorStyleMetricsTests
     }
 
     [Fact]
+    public void DoubleClickingTreeContentTogglesNonLeafExpansion()
+    {
+        var context = NativeImGui.CreateContext();
+        try
+        {
+            ImGuiIOPtr io = NativeImGui.GetIO();
+            io.DisplaySize = new Vector2(640f, 480f);
+            io.DeltaTime = 1f / 60f;
+            io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
+            io.Fonts.RendererHasTextures = true;
+            EditorWidget.SetupStyle();
+
+            TreeNodeResult initial = DrawDoubleClickTreeFrame();
+            Vector2 contentCenter = new(
+                initial.contentMin.X + 20f,
+                (initial.min.Y + initial.max.Y) * 0.5f);
+            io.AddMousePosEvent(contentCenter.X, contentCenter.Y);
+            io.AddMouseButtonEvent(0, true);
+            _ = DrawDoubleClickTreeFrame();
+            io.AddMouseButtonEvent(0, false);
+            _ = DrawDoubleClickTreeFrame();
+            io.AddMouseButtonEvent(0, true);
+            TreeNodeResult doubleClicked = DrawDoubleClickTreeFrame();
+            io.AddMouseButtonEvent(0, false);
+            TreeNodeResult expanded = DrawDoubleClickTreeFrame();
+
+            Assert.True(doubleClicked.isDoubleClicked);
+            Assert.True(expanded.isOpen);
+        }
+        finally
+        {
+            NativeImGui.DestroyContext(context);
+        }
+    }
+
+    [Fact]
     public void InspectorContentPreservesStandardPaddingWithoutArtificialHorizontalOverflow()
     {
         var context = NativeImGui.CreateContext();
@@ -381,6 +418,29 @@ public sealed class EditorStyleMetricsTests
             AssertCurrentTreeGuideSegmentsAreContinuous();
         NativeImGui.End();
         NativeImGui.Render();
+    }
+
+    private static TreeNodeResult DrawDoubleClickTreeFrame()
+    {
+        NativeImGui.NewFrame();
+        NativeImGui.SetNextWindowPos(new Vector2(20f, 20f), ImGuiCond.Always);
+        NativeImGui.SetNextWindowSize(new Vector2(320f, 240f), ImGuiCond.Always);
+        _ = NativeImGui.Begin("Double Click Tree Test");
+        TreeNodeResult result = EditorWidget.TreeNode(
+            "double_click_parent",
+            static () => NativeImGui.TextUnformatted("Parent"),
+            new TreeNodeOptions());
+        if (result.isOpen)
+        {
+            _ = EditorWidget.TreeNode(
+                "double_click_child",
+                static () => NativeImGui.TextUnformatted("Child"),
+                new TreeNodeOptions { isLeaf = true });
+            NativeImGui.TreePop();
+        }
+        NativeImGui.End();
+        NativeImGui.Render();
+        return result;
     }
 
     private static void DrawTreeOverflowFrame(bool assertRanges)
