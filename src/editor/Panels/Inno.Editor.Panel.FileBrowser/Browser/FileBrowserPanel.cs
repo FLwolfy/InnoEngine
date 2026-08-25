@@ -551,6 +551,9 @@ internal sealed class FileBrowserPanel : EditorPanel
         ListColumnSeparatorState separators = HandleListColumnSeparators(tableOrigin, interactionSize);
         DrawListColumnSeparators(tableOrigin, tableSize.X, tableHeight, separators);
         NativeImGui.SetCursorScreenPos(tableEnd);
+        // Commit the restored layout cursor so overlay separator hit targets cannot implicitly
+        // extend the scrolling child when UI scaling changes their physical bounds.
+        NativeImGui.Dummy(Vector2.Zero);
         NativeImGui.PopStyleVar();
     }
 
