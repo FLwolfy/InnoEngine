@@ -8,12 +8,12 @@ using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Hierarchy;
 
-[EditorDrop("panel/asset.file-browser")]
+[EditorDrop(HierarchyInteractionIds.C_FILE_BROWSER_AREA)]
 internal sealed class SavePrefabAssetDropHandler
     : EditorDrop<GameObject, string>
 {
-    private readonly EditorSceneWorkspace m_workspace;
-    internal SavePrefabAssetDropHandler(EditorSceneWorkspace workspace)
+    private readonly IEditorSceneWorkspace m_workspace;
+    internal SavePrefabAssetDropHandler(IEditorSceneWorkspace workspace)
     {
         m_workspace = workspace;
     }

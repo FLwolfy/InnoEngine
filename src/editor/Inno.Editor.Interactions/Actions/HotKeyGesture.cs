@@ -62,7 +62,7 @@ public readonly record struct HotKeyGesture
     /// </summary>
     /// <param name="keyEvent">The keyboard event to compare.</param>
     /// <returns><see langword="true"/> when the key and normalized modifiers match; otherwise, <see langword="false"/>.</returns>
-    public bool Matches(KeyPressedEvent keyEvent)
+    internal bool Matches(KeyPressedEvent keyEvent)
         => !keyEvent.repeat &&
            keyEvent.key == key &&
            Normalize(key, keyEvent.modifiers) == Normalize(key, modifiers);

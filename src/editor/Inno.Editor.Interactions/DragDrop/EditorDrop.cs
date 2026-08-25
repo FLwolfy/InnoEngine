@@ -106,7 +106,7 @@ public sealed class EditorDropContext<TSource, TTarget>
     public EditorInteractions interactions => untyped.interactions;
 
     /// <summary>Gets the interaction area.</summary>
-    public string area => untyped.area;
+    public EditorAreaId area => untyped.area;
 
     /// <summary>Gets the typed drag source.</summary>
     public TSource source { get; }

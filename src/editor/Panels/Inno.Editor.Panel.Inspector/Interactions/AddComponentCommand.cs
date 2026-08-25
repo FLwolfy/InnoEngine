@@ -6,17 +6,16 @@ using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
-[EditorAction("inspector/add-component", "panel/scene.inspector/component")]
-internal sealed class AddComponentCommand(SceneEdits edits) : EditorAction<GameObject>
+[EditorAction(InspectorInteractionIds.C_ADD_COMPONENT, InspectorInteractionIds.C_COMPONENT_AREA)]
+internal sealed class AddComponentCommand(SceneEdits edits) : EditorAction<GameObject, Type>
 {
-    protected override EditorActionState Query(EditorActionContext<GameObject> context)
-        => context.target.isRuntimeValid && context.argument is Type
+    internal static EditorCommand<Type> command { get; } = new(InspectorInteractionIds.addComponent);
+
+    protected override EditorActionState Query(EditorActionContext<GameObject, Type> context)
+        => context.target.isRuntimeValid
             ? EditorActionState.enabled
             : EditorActionState.hidden;
 
-    protected override void Execute(EditorActionContext<GameObject> context)
-    {
-        if (context.argument is Type componentType)
-            _ = edits.AddComponent(context.target, componentType);
-    }
+    protected override void Execute(EditorActionContext<GameObject, Type> context)
+        => _ = edits.AddComponent(context.target, context.argument);
 }

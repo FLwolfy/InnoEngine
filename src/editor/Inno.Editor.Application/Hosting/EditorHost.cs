@@ -27,6 +27,7 @@ internal sealed class EditorHost : IDisposable
     private readonly Shell m_shell;
     private readonly PlatformImGuiContext m_imgui;
     private readonly EditorLayer m_editorLayer;
+    private readonly EditorHostResourceStack m_resources;
     private readonly string m_bootLogPath;
     private bool m_running;
     private bool m_disposed;
@@ -34,66 +35,112 @@ internal sealed class EditorHost : IDisposable
     private bool m_shutdownStateSaved;
     private int m_frameCount;
 
-    /// <summary>
-    /// Creates the editor host for an existing or empty project directory.
-    /// </summary>
-    /// <param name="projectDirectory">The project directory to open or initialize.</param>
-    /// <exception cref="ArgumentException">Thrown when the project directory is empty.</exception>
-    /// <exception cref="IOException">Thrown when the path points to a file.</exception>
-    internal EditorHost(string projectDirectory)
+    private EditorHost(
+        string projectDirectory,
+        string bootLogPath,
+        PlatformApplication platformApplication,
+        PlatformWindow window,
+        Shell shell,
+        PlatformImGuiContext imgui,
+        EditorLayer editorLayer,
+        EditorHostResourceStack resources)
     {
-        this.projectDirectory = PrepareProjectDirectory(projectDirectory);
-        string logDirectory = Path.Combine(this.projectDirectory, C_LOG_DIRECTORY_NAME);
-        Directory.CreateDirectory(logDirectory);
-        m_bootLogPath = Path.Combine(logDirectory, C_BOOT_LOG_FILE_NAME);
-        BootLog("EditorHost ctor start.");
-        m_platformApplication = new PlatformApplication();
-        BootLog("PlatformApplication created.");
-        m_window = m_platformApplication.CreateWindow(new PlatformWindowOptions
-        {
-            title = "Inno Editor",
-            width = 1600,
-            height = 900,
-            resizable = true,
-            highPixelDensity = true
-        });
+        this.projectDirectory = projectDirectory;
+        m_bootLogPath = bootLogPath;
+        m_platformApplication = platformApplication;
+        m_window = window;
+        m_shell = shell;
+        m_imgui = imgui;
+        m_editorLayer = editorLayer;
+        m_resources = resources;
         if (m_window.isFocused)
             m_focusedWindowIds.Add(m_window.windowId);
-        BootLog($"Window created. id={m_window.windowId}, size={m_window.width}x{m_window.height}.");
-
-        m_shell = Shell.Initialize(new ShellSettings
-        {
-            fixedDeltaTime = 1f / 60f,
-            maxFrameDeltaTime = 0.25f,
-            maxUpdateStepsPerTick = 8,
-            useSingleThreadJobSystem = false,
-            jobWorkerCount = 0,
-            projectRootDirectory = this.projectDirectory
-        });
-        BootLog("Shell created.");
-
-        m_imgui = m_platformApplication.CreateImGuiContext(
-            m_window,
-            ImGuiContextFlags.EnableViewports
-            | ImGuiContextFlags.EnableDocking
-            | ImGuiContextFlags.EnableSmoothResize);
-        var editorContext = new EditorContext(this.projectDirectory);
-        m_imgui.SetIniFile(null);
-        m_imgui.LoadIniSettings(editorContext.imguiLayout);
-        BootLog("ImGui context created.");
-
-        BootLog($"AssetManager initialized={AssetManager.isInitialized} root='{AssetManager.assetRoot}'.");
-
-        m_editorLayer = new EditorLayer(m_imgui, editorContext)
-        {
-            isFocused = HasEditorFocus()
-        };
-        m_shell.layerStack.PushOverlay(m_editorLayer);
-        BootLog($"Editor layer attached with {m_editorLayer.panelCount} panel(s).");
-        if (m_editorLayer.panelCount == 0)
-            throw new InvalidOperationException("No editor panels were discovered from the active host assemblies.");
         m_running = true;
-        BootLog("EditorHost ctor done.");
+    }
+
+    internal static EditorHost Create(string projectDirectory)
+    {
+        string normalizedProject = PrepareProjectDirectory(projectDirectory);
+        string logDirectory = Path.Combine(normalizedProject, C_LOG_DIRECTORY_NAME);
+        Directory.CreateDirectory(logDirectory);
+        string bootLogPath = Path.Combine(logDirectory, C_BOOT_LOG_FILE_NAME);
+        var resources = new EditorHostResourceStack(
+            exception => AppendBootLog(bootLogPath, $"Teardown failure: {exception}"));
+        bool overlayPushed = false;
+        try
+        {
+            AppendBootLog(bootLogPath, "EditorHost creation start.");
+            PlatformApplication platform = resources.Acquire(
+                static () => new PlatformApplication(),
+                static application => application.Dispose());
+            PlatformWindow window = resources.Acquire(
+                () => platform.CreateWindow(new PlatformWindowOptions
+                {
+                    title = "Inno Editor",
+                    width = 1600,
+                    height = 900,
+                    resizable = true,
+                    highPixelDensity = true
+                }),
+                static createdWindow => createdWindow.Dispose());
+            Shell shell = resources.Acquire(
+                () => Shell.Initialize(new ShellSettings
+                {
+                    fixedDeltaTime = 1f / 60f,
+                    maxFrameDeltaTime = 0.25f,
+                    maxUpdateStepsPerTick = 8,
+                    useSingleThreadJobSystem = false,
+                    jobWorkerCount = 0,
+                    projectRootDirectory = normalizedProject
+                }),
+                static _ =>
+                {
+                    if (Shell.isInitialized)
+                        Shell.Shutdown();
+                });
+            PlatformImGuiContext imgui = resources.Acquire(
+                () => platform.CreateImGuiContext(
+                    window,
+                    ImGuiContextFlags.EnableViewports |
+                    ImGuiContextFlags.EnableDocking |
+                    ImGuiContextFlags.EnableSmoothResize),
+                _ => platform.DestroyImGuiContext(window));
+            var editorContext = new EditorContext(normalizedProject);
+            imgui.SetIniFile(null);
+            imgui.LoadIniSettings(editorContext.imguiLayout);
+            EditorLayer layer = new EditorLayer(imgui, editorContext)
+            {
+                isFocused = window.isFocused
+            };
+            resources.Register(() =>
+            {
+                if (overlayPushed)
+                    shell.layerStack.PopOverlay(layer);
+                else
+                    layer.DisposeUnattached();
+            });
+            shell.layerStack.PushOverlay(layer);
+            overlayPushed = true;
+            if (layer.panelCount == 0)
+                throw new InvalidOperationException("No editor panels were discovered from the active host assemblies.");
+            var host = new EditorHost(
+                normalizedProject,
+                bootLogPath,
+                platform,
+                window,
+                shell,
+                imgui,
+                layer,
+                resources);
+            host.BootLog($"Editor layer attached with {layer.panelCount} panel(s).");
+            host.BootLog($"AssetManager initialized={AssetManager.isInitialized} root='{AssetManager.assetRoot}'.");
+            return host;
+        }
+        catch
+        {
+            resources.Dispose();
+            throw;
+        }
     }
 
     /// <summary>Gets the normalized project directory owned by this host.</summary>
@@ -167,11 +214,7 @@ internal sealed class EditorHost : IDisposable
         m_disposed = true;
         BootLog("Dispose start.");
 
-        m_shell.layerStack.PopOverlay(m_editorLayer);
-        m_platformApplication.DestroyImGuiContext(m_window);
-        Shell.Shutdown();
-        m_window.Dispose();
-        m_platformApplication.Dispose();
+        m_resources.Dispose();
         BootLog("Dispose end.");
     }
 
@@ -232,9 +275,13 @@ internal sealed class EditorHost : IDisposable
     }
 
     private void BootLog(string message)
+        => AppendBootLog(m_bootLogPath, message);
+
+    private static void AppendBootLog(string bootLogPath, string message)
     {
         string line = $"[{DateTime.Now:O}] {message}{Environment.NewLine}";
         Console.Write(line);
-        File.AppendAllText(m_bootLogPath, line);
+        File.AppendAllText(bootLogPath, line);
     }
+
 }

@@ -50,25 +50,37 @@ internal sealed class SettingsPageView(SettingsEditSession session)
                                 ImGuiTableFlags.NoPadOuterX;
         if (!NativeImGui.BeginTable("##settings_page_header", 2, flags))
             return;
-        NativeImGui.TableSetupColumn(
-            "##settings_page_title",
-            ImGuiTableColumnFlags.WidthStretch,
-            1f);
-        NativeImGui.TableSetupColumn(
-            "##settings_page_reset",
-            ImGuiTableColumnFlags.WidthFixed,
-            GetResetColumnWidth());
-        NativeImGui.TableNextRow();
-        _ = NativeImGui.TableSetColumnIndex(0);
-        NativeImGui.AlignTextToFramePadding();
-        NativeImGui.TextUnformatted(page.label);
-        _ = NativeImGui.TableSetColumnIndex(1);
-        NativeImGui.PushID(page.path);
-        bool canReset = session.CanReset(page);
-        if (DrawResetButton(canReset))
-            session.Reset(page);
-        NativeImGui.PopID();
-        NativeImGui.EndTable();
+        try
+        {
+            NativeImGui.TableSetupColumn(
+                "##settings_page_title",
+                ImGuiTableColumnFlags.WidthStretch,
+                1f);
+            NativeImGui.TableSetupColumn(
+                "##settings_page_reset",
+                ImGuiTableColumnFlags.WidthFixed,
+                GetResetColumnWidth());
+            NativeImGui.TableNextRow();
+            _ = NativeImGui.TableSetColumnIndex(0);
+            NativeImGui.AlignTextToFramePadding();
+            NativeImGui.TextUnformatted(page.label);
+            _ = NativeImGui.TableSetColumnIndex(1);
+            NativeImGui.PushID(page.path);
+            try
+            {
+                bool canReset = session.CanReset(page);
+                if (DrawResetButton(canReset))
+                    session.Reset(page);
+            }
+            finally
+            {
+                NativeImGui.PopID();
+            }
+        }
+        finally
+        {
+            NativeImGui.EndTable();
+        }
     }
 
     private static void DrawOverview(
@@ -104,44 +116,61 @@ internal sealed class SettingsPageView(SettingsEditSession session)
                                 ImGuiTableFlags.NoPadOuterX;
         if (!NativeImGui.BeginTable("##settings_section", 3, flags))
             return;
-        float available = MathF.Max(1f, NativeImGui.GetContentRegionAvail().X);
-        float labelWidth = Math.Clamp(
-            available * 0.22f,
-            120f * EditorWidget.style.zoom,
-            240f * EditorWidget.style.zoom);
-        NativeImGui.TableSetupColumn(
-            "##settings_label",
-            ImGuiTableColumnFlags.WidthFixed,
-            labelWidth);
-        NativeImGui.TableSetupColumn(
-            "##settings_content",
-            ImGuiTableColumnFlags.WidthStretch,
-            1f);
-        NativeImGui.TableSetupColumn(
-            "##settings_reset",
-            ImGuiTableColumnFlags.WidthFixed,
-            GetResetColumnWidth());
-        foreach (EditorSetting setting in settings)
+        try
         {
-            NativeImGui.TableNextRow();
-            _ = NativeImGui.TableSetColumnIndex(0);
-            NativeImGui.AlignTextToFramePadding();
-            NativeImGui.TextUnformatted(setting.label);
-            DrawDescriptionTooltip(setting.description);
+            float available = MathF.Max(1f, NativeImGui.GetContentRegionAvail().X);
+            float labelWidth = Math.Clamp(
+                available * 0.22f,
+                120f * EditorWidget.style.zoom,
+                240f * EditorWidget.style.zoom);
+            NativeImGui.TableSetupColumn(
+                "##settings_label",
+                ImGuiTableColumnFlags.WidthFixed,
+                labelWidth);
+            NativeImGui.TableSetupColumn(
+                "##settings_content",
+                ImGuiTableColumnFlags.WidthStretch,
+                1f);
+            NativeImGui.TableSetupColumn(
+                "##settings_reset",
+                ImGuiTableColumnFlags.WidthFixed,
+                GetResetColumnWidth());
+            foreach (EditorSetting setting in settings)
+            {
+                NativeImGui.TableNextRow();
+                _ = NativeImGui.TableSetColumnIndex(0);
+                NativeImGui.AlignTextToFramePadding();
+                NativeImGui.TextUnformatted(setting.label);
+                DrawDescriptionTooltip(setting.description);
 
-            _ = NativeImGui.TableSetColumnIndex(1);
-            NativeImGui.PushID(setting.path);
-            NativeImGui.BeginGroup();
-            session.UpdateDirty(setting, setting.Draw(session.Get(setting)));
-            NativeImGui.EndGroup();
+                _ = NativeImGui.TableSetColumnIndex(1);
+                NativeImGui.PushID(setting.path);
+                bool groupStarted = false;
+                try
+                {
+                    NativeImGui.BeginGroup();
+                    groupStarted = true;
+                    session.UpdateDirty(setting, setting.Draw(session.Get(setting)));
+                    NativeImGui.EndGroup();
+                    groupStarted = false;
 
-            _ = NativeImGui.TableSetColumnIndex(2);
-            bool canReset = session.CanReset(setting);
-            if (DrawResetButton(canReset))
-                session.Reset(setting);
-            NativeImGui.PopID();
+                    _ = NativeImGui.TableSetColumnIndex(2);
+                    bool canReset = session.CanReset(setting);
+                    if (DrawResetButton(canReset))
+                        session.Reset(setting);
+                }
+                finally
+                {
+                    if (groupStarted)
+                        NativeImGui.EndGroup();
+                    NativeImGui.PopID();
+                }
+            }
         }
-        NativeImGui.EndTable();
+        finally
+        {
+            NativeImGui.EndTable();
+        }
     }
 
     private static float GetResetColumnWidth()
@@ -157,9 +186,14 @@ internal sealed class SettingsPageView(SettingsEditSession session)
         ImGuiStylePtr style = NativeImGui.GetStyle();
         NativeImGui.SetCursorPosX(NativeImGui.GetCursorPosX() + style.ItemSpacing.X);
         NativeImGui.BeginDisabled(!enabled);
-        bool clicked = NativeImGui.SmallButton("Reset");
-        NativeImGui.EndDisabled();
-        return clicked;
+        try
+        {
+            return NativeImGui.SmallButton("Reset");
+        }
+        finally
+        {
+            NativeImGui.EndDisabled();
+        }
     }
 
     private static void PushDisabledText()
@@ -179,9 +213,18 @@ internal sealed class SettingsPageView(SettingsEditSession session)
             new System.Numerics.Vector2(wrapWidth, float.MaxValue));
         if (!NativeImGui.BeginTooltip())
             return;
-        NativeImGui.PushTextWrapPos(NativeImGui.GetCursorPosX() + wrapWidth);
-        NativeImGui.TextUnformatted(description);
-        NativeImGui.PopTextWrapPos();
-        NativeImGui.EndTooltip();
+        bool wrapPushed = false;
+        try
+        {
+            NativeImGui.PushTextWrapPos(NativeImGui.GetCursorPosX() + wrapWidth);
+            wrapPushed = true;
+            NativeImGui.TextUnformatted(description);
+        }
+        finally
+        {
+            if (wrapPushed)
+                NativeImGui.PopTextWrapPos();
+            NativeImGui.EndTooltip();
+        }
     }
 }

@@ -4,10 +4,12 @@ using Inno.Engine.Scene.Components;
 
 namespace Inno.Editor.Panel.Inspector;
 
-[EditorAction("inspector/remove-component", priority: 100)]
-[EditorMenu("panel/scene.inspector/component", "Remove Component", order: 200)]
+[EditorAction(InspectorInteractionIds.C_REMOVE_COMPONENT, priority: 100)]
+[EditorMenu(InspectorInteractionIds.C_COMPONENT_AREA, "Remove Component", order: 200)]
 internal sealed class RemoveComponentCommand(SceneEdits edits) : EditorAction<ComponentEditorTarget>
 {
+    internal static EditorCommand command { get; } = new(InspectorInteractionIds.removeComponent);
+
     protected override EditorActionState Query(EditorActionContext<ComponentEditorTarget> context)
         => context.target.component is not Transform
             ? EditorActionState.enabled

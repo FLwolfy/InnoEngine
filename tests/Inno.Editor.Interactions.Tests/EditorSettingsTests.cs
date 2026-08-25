@@ -76,6 +76,29 @@ public sealed class EditorSettingsTests : IDisposable
     }
 
     [Fact]
+    public void ChangedSubscriberFailureDoesNotChangeHistoryResultOrSkipLaterSubscribers()
+    {
+        int delivered = 0;
+        m_settings.changed += _ => throw new InvalidOperationException("subscriber");
+        m_settings.changed += _ => delivered++;
+        var value = new EditorSettingObject();
+        value.SetAsInt32("value", 11);
+
+        Assert.True(m_settings.Apply(
+            new Dictionary<string, EditorSettingObject>(StringComparer.Ordinal)
+            {
+                ["Tests/Values/Project Count"] = value
+            }));
+        Assert.Equal(1, delivered);
+        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        Assert.Equal(2, delivered);
+        Assert.Equal(3, m_settings.Get("Tests/Values/Project Count").GetAsInt32("value"));
+        Assert.True(m_runtime.interactions.history.Redo().succeeded);
+        Assert.Equal(3, delivered);
+        Assert.Equal(11, m_settings.Get("Tests/Values/Project Count").GetAsInt32("value"));
+    }
+
+    [Fact]
     public void GetReturnsIsolatedObjectsAndRejectsPagesOrMissingPaths()
     {
         EditorSettingObject first = m_settings.Get("Tests/Values/Project Count");

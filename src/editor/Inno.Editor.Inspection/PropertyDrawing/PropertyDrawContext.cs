@@ -170,10 +170,8 @@ public sealed class PropertyDrawContext
         PropertyVisibility childVisibility = readOnly || isReadOnly
             ? PropertyVisibility.Readonly
             : PropertyVisibility.Show;
-        var childContext = new PropertyDrawContext(
+        m_renderer.DrawInline(
             editorContext,
-            interactions,
-            m_edits,
             m_owner,
             m_rootPropertyName,
             $"{path}.{childName}",
@@ -181,9 +179,6 @@ public sealed class PropertyDrawContext
             childType,
             childVisibility,
             getter,
-            setter,
-            m_renderer);
-        IPropertyDrawer drawer = m_renderer.Resolve(childType);
-        drawer.Draw(childContext);
+            setter);
     }
 }

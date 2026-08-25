@@ -22,7 +22,7 @@ internal sealed class StatsPanel : EditorPanel
     }
 
     /// <inheritdoc />
-    public override void Draw(EditorContext context)
+    protected override void OnDraw(EditorContext context)
     {
         m_statistics.Update(context.frame.totalTime, context.frame.deltaTime);
 

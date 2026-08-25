@@ -53,74 +53,115 @@ public static partial class ImGuiWidget
         NativeImGui.PushStyleColor(ImGuiCol.HeaderActive, EditorPalette.inspectorCardHeader);
         NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.transparent);
         NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, style.inspectorCardHeaderPadding);
-        Vector2 headerCursor = NativeImGui.GetCursorScreenPos();
-        (float cardLeft, float cardRight) = GetFullWidthCardBounds(headerCursor);
-        Vector2 persistentHeaderMin = new(cardLeft, headerCursor.Y);
-        Vector2 persistentHeaderMax = new(cardRight, headerCursor.Y + NativeImGui.GetFrameHeight());
-        NativeImGui.GetWindowDrawList().AddRectFilled(
-            persistentHeaderMin,
-            persistentHeaderMax,
-            NativeImGui.ColorConvertFloat4ToU32(EditorPalette.inspectorCardHeader),
-            1f);
-        bool open = NativeImGui.TreeNodeEx($"##card_{id}", flags);
-        Vector2 itemHeaderMin = NativeImGui.GetItemRectMin();
-        Vector2 headerMin = new(cardLeft, persistentHeaderMin.Y);
-        Vector2 headerMax = new(cardRight, persistentHeaderMax.Y);
-        Vector2 contentCursor = NativeImGui.GetCursorScreenPos();
-        NativeImGui.PopStyleVar();
-        NativeImGui.PopStyleColor(4);
-        drawContextMenu?.Invoke();
-
-        float contentX = itemHeaderMin.X + NativeImGui.GetTreeNodeToLabelSpacing();
-        DrawDisclosureIndicator(
-            new Vector2(itemHeaderMin.X, headerMin.Y),
-            new Vector2(contentX, headerMax.Y),
-            open,
-            dimmed);
-        float contentY = headerMin.Y + MathF.Max(
-            0f,
-            (headerMax.Y - headerMin.Y - NativeImGui.GetFrameHeight()) * 0.5f);
-        float trailingWidth = drawTrailingControl is null
-            ? 0f
-            : trailingControlWidth > 0f
-                ? trailingControlWidth
-                : NativeImGui.GetFrameHeight();
-        float titleRight = headerMax.X - trailingWidth;
-        if (drawTrailingControl is not null)
-            titleRight -= style.inspectorHeaderControlSpacing;
-        NativeImGui.SetCursorScreenPos(new Vector2(contentX, contentY));
-        if (dimmed)
-            NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.inspectorCardDisabledText);
-        NativeImGui.BeginGroup();
-        if (drawLeadingControl is not null)
+        Vector2 itemHeaderMin;
+        Vector2 headerMin;
+        Vector2 headerMax;
+        Vector2 contentCursor;
+        bool open;
+        try
         {
-            drawLeadingControl();
-            NativeImGui.SameLine(0f, style.inspectorHeaderControlSpacing);
+            Vector2 headerCursor = NativeImGui.GetCursorScreenPos();
+            (float cardLeft, float cardRight) = GetFullWidthCardBounds(headerCursor);
+            Vector2 persistentHeaderMin = new(cardLeft, headerCursor.Y);
+            Vector2 persistentHeaderMax = new(cardRight, headerCursor.Y + NativeImGui.GetFrameHeight());
+            NativeImGui.GetWindowDrawList().AddRectFilled(
+                persistentHeaderMin,
+                persistentHeaderMax,
+                NativeImGui.ColorConvertFloat4ToU32(EditorPalette.inspectorCardHeader),
+                1f);
+            open = NativeImGui.TreeNodeEx($"##card_{id}", flags);
+            itemHeaderMin = NativeImGui.GetItemRectMin();
+            headerMin = new Vector2(cardLeft, persistentHeaderMin.Y);
+            headerMax = new Vector2(cardRight, persistentHeaderMax.Y);
+            contentCursor = NativeImGui.GetCursorScreenPos();
         }
-        NativeImGui.AlignTextToFramePadding();
-        Vector2 titleCursor = NativeImGui.GetCursorScreenPos();
-        float titleWidth = MathF.Max(1f, titleRight - titleCursor.X);
-        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
-        drawList.PushClipRect(
-            titleCursor,
-            new Vector2(titleCursor.X + titleWidth, headerMax.Y),
-            true);
-        drawList.AddText(titleCursor, NativeImGui.GetColorU32(ImGuiCol.Text), title);
-        drawList.PopClipRect();
-        NativeImGui.Dummy(new Vector2(titleWidth, NativeImGui.GetFrameHeight()));
-        NativeImGui.EndGroup();
-
-        if (drawTrailingControl is not null)
+        finally
         {
-            NativeImGui.SetCursorScreenPos(new Vector2(
-                MathF.Max(contentX, headerMax.X - trailingWidth),
-                contentY));
-            drawTrailingControl();
+            NativeImGui.PopStyleVar();
+            NativeImGui.PopStyleColor(4);
         }
-        if (dimmed)
-            NativeImGui.PopStyleColor();
-        NativeImGui.SetCursorScreenPos(contentCursor);
-        return open;
+        try
+        {
+            drawContextMenu?.Invoke();
+
+            float contentX = itemHeaderMin.X + NativeImGui.GetTreeNodeToLabelSpacing();
+            DrawDisclosureIndicator(
+                new Vector2(itemHeaderMin.X, headerMin.Y),
+                new Vector2(contentX, headerMax.Y),
+                open,
+                dimmed);
+            float contentY = headerMin.Y + MathF.Max(
+                0f,
+                (headerMax.Y - headerMin.Y - NativeImGui.GetFrameHeight()) * 0.5f);
+            float trailingWidth = drawTrailingControl is null
+                ? 0f
+                : trailingControlWidth > 0f
+                    ? trailingControlWidth
+                    : NativeImGui.GetFrameHeight();
+            float titleRight = headerMax.X - trailingWidth;
+            if (drawTrailingControl is not null)
+                titleRight -= style.inspectorHeaderControlSpacing;
+            NativeImGui.SetCursorScreenPos(new Vector2(contentX, contentY));
+            bool dimmedColorPushed = false;
+            bool groupStarted = false;
+            try
+            {
+                if (dimmed)
+                {
+                    NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.inspectorCardDisabledText);
+                    dimmedColorPushed = true;
+                }
+                NativeImGui.BeginGroup();
+                groupStarted = true;
+                if (drawLeadingControl is not null)
+                {
+                    drawLeadingControl();
+                    NativeImGui.SameLine(0f, style.inspectorHeaderControlSpacing);
+                }
+                NativeImGui.AlignTextToFramePadding();
+                Vector2 titleCursor = NativeImGui.GetCursorScreenPos();
+                float titleWidth = MathF.Max(1f, titleRight - titleCursor.X);
+                ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
+                drawList.PushClipRect(
+                    titleCursor,
+                    new Vector2(titleCursor.X + titleWidth, headerMax.Y),
+                    true);
+                try
+                {
+                    drawList.AddText(titleCursor, NativeImGui.GetColorU32(ImGuiCol.Text), title);
+                }
+                finally
+                {
+                    drawList.PopClipRect();
+                }
+                NativeImGui.Dummy(new Vector2(titleWidth, NativeImGui.GetFrameHeight()));
+                NativeImGui.EndGroup();
+                groupStarted = false;
+
+                if (drawTrailingControl is not null)
+                {
+                    NativeImGui.SetCursorScreenPos(new Vector2(
+                        MathF.Max(contentX, headerMax.X - trailingWidth),
+                        contentY));
+                    drawTrailingControl();
+                }
+            }
+            finally
+            {
+                if (groupStarted)
+                    NativeImGui.EndGroup();
+                if (dimmedColorPushed)
+                    NativeImGui.PopStyleColor();
+                NativeImGui.SetCursorScreenPos(contentCursor);
+            }
+            return open;
+        }
+        catch
+        {
+            if (open)
+                NativeImGui.TreePop();
+            throw;
+        }
     }
 
     /// <summary>
@@ -186,23 +227,32 @@ public static partial class ImGuiWidget
         ImGuiWindowFlags windowFlags = ImGuiWindowFlags.NoScrollbar |
                                        ImGuiWindowFlags.NoScrollWithMouse |
                                        ImGuiWindowFlags.NoSavedSettings;
-        if (NativeImGui.BeginChild(
-                $"##card_body_{id}",
-                new Vector2(MathF.Max(1f, cardRight - cardLeft), 0f),
-                childFlags,
-                windowFlags))
+        bool visible = NativeImGui.BeginChild(
+            $"##card_body_{id}",
+            new Vector2(MathF.Max(1f, cardRight - cardLeft), 0f),
+            childFlags,
+            windowFlags);
+        bool disabled = false;
+        try
         {
-            if (dimmed)
+            if (visible && dimmed)
+            {
                 NativeImGui.BeginDisabled(true);
-            drawContent();
-            if (dimmed)
-                NativeImGui.EndDisabled();
+                disabled = true;
+            }
+            if (visible)
+                drawContent();
         }
-        NativeImGui.EndChild();
-        float nextY = NativeImGui.GetCursorScreenPos().Y;
-        NativeImGui.PopStyleVar(3);
-        NativeImGui.PopStyleColor(2);
-        NativeImGui.SetCursorScreenPos(new Vector2(originalCursor.X, nextY));
+        finally
+        {
+            if (disabled)
+                NativeImGui.EndDisabled();
+            NativeImGui.EndChild();
+            float nextY = NativeImGui.GetCursorScreenPos().Y;
+            NativeImGui.PopStyleVar(3);
+            NativeImGui.PopStyleColor(2);
+            NativeImGui.SetCursorScreenPos(new Vector2(originalCursor.X, nextY));
+        }
     }
 
     private static (float left, float right) GetFullWidthCardBounds(Vector2 cursor)

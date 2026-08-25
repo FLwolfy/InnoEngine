@@ -17,6 +17,8 @@ public abstract class EditorAction : IDisposable
     /// <summary>Gets the required target type, or <see langword="null"/> for a targetless action.</summary>
     public virtual Type? targetType => null;
 
+    internal virtual Type? argumentType => null;
+
     internal EditorActionState QueryInternal(EditorActionContext context)
     {
         ObjectDisposedException.ThrowIf(m_isDisposed, this);
@@ -132,6 +134,119 @@ public abstract class EditorAction : IDisposable
         m_isDisposed = true;
         GC.SuppressFinalize(this);
     }
+}
+
+/// <summary>Defines a target action that requires one strongly typed command argument.</summary>
+/// <typeparam name="TTarget">The target type accepted by the action.</typeparam>
+/// <typeparam name="TArgument">The command argument type accepted by the action.</typeparam>
+public abstract class EditorAction<TTarget, TArgument> : EditorAction
+    where TTarget : class
+{
+    /// <inheritdoc />
+    public sealed override Type targetType => typeof(TTarget);
+
+    internal sealed override Type argumentType => typeof(TArgument);
+
+    /// <inheritdoc />
+    protected sealed override EditorActionState Query(EditorActionContext context)
+        => TryCreate(context, out EditorActionContext<TTarget, TArgument> typed)
+            ? Query(typed)
+            : EditorActionState.hidden;
+
+    /// <inheritdoc />
+    protected sealed override void Execute(EditorActionContext context)
+    {
+        if (!TryCreate(context, out EditorActionContext<TTarget, TArgument> typed))
+        {
+            throw new InvalidOperationException(
+                $"Editor action '{GetType().FullName}' requires target '{typeof(TTarget).FullName}' " +
+                $"and argument '{typeof(TArgument).FullName}'.");
+        }
+        Execute(typed);
+    }
+
+    /// <inheritdoc />
+    protected sealed override bool Present(EditorActionContext context)
+        => TryCreate(context, out EditorActionContext<TTarget, TArgument> typed) && Present(typed);
+
+    /// <summary>Evaluates the action for a typed target and argument.</summary>
+    /// <param name="context">The typed contextual request.</param>
+    /// <returns>The current presentation and availability state.</returns>
+    protected virtual EditorActionState Query(EditorActionContext<TTarget, TArgument> context)
+        => EditorActionState.enabled;
+
+    /// <summary>Executes the action for a typed target and argument.</summary>
+    /// <param name="context">The typed contextual request.</param>
+    protected abstract void Execute(EditorActionContext<TTarget, TArgument> context);
+
+    /// <summary>Presents an active action for a typed target and argument.</summary>
+    /// <param name="context">The typed presentation request.</param>
+    /// <returns><see langword="true"/> when content was presented.</returns>
+    protected virtual bool Present(EditorActionContext<TTarget, TArgument> context) => false;
+
+    private static bool TryCreate(
+        EditorActionContext context,
+        out EditorActionContext<TTarget, TArgument> typed)
+    {
+        if (context.target is TTarget target && context.argument is TArgument argument)
+        {
+            typed = new EditorActionContext<TTarget, TArgument>(context, target, argument);
+            return true;
+        }
+        typed = null!;
+        return false;
+    }
+}
+
+/// <summary>Defines a targetless editor action that requires one strongly typed command argument.</summary>
+/// <typeparam name="TArgument">The command argument type accepted by the action.</typeparam>
+public abstract class EditorArgumentAction<TArgument> : EditorAction
+{
+    internal sealed override Type argumentType => typeof(TArgument);
+
+    /// <inheritdoc />
+    protected sealed override EditorActionState Query(EditorActionContext context)
+        => context.target is null && context.argument is TArgument argument
+            ? Query(new EditorActionArgumentContext<TArgument>(context, argument))
+            : EditorActionState.hidden;
+
+    /// <inheritdoc />
+    protected sealed override void Execute(EditorActionContext context)
+    {
+        if (context.target is not null || context.argument is not TArgument argument)
+        {
+            throw new InvalidOperationException(
+                $"Editor action '{GetType().FullName}' requires argument '{typeof(TArgument).FullName}'.");
+        }
+        Execute(new EditorActionArgumentContext<TArgument>(context, argument));
+    }
+
+    /// <summary>Evaluates the action for a typed argument.</summary>
+    /// <param name="context">The typed contextual request.</param>
+    /// <returns>The current presentation and availability state.</returns>
+    protected virtual EditorActionState Query(EditorActionArgumentContext<TArgument> context)
+        => EditorActionState.enabled;
+
+    /// <summary>Executes the action for a typed argument.</summary>
+    /// <param name="context">The typed contextual request.</param>
+    protected abstract void Execute(EditorActionArgumentContext<TArgument> context);
+}
+
+/// <summary>Defines a target action with a typed presentation-only argument.</summary>
+/// <typeparam name="TTarget">The target type accepted by the action.</typeparam>
+/// <typeparam name="TPresentation">The presentation data type.</typeparam>
+public abstract class EditorPresentationAction<TTarget, TPresentation> : EditorAction<TTarget>
+    where TTarget : class
+{
+    /// <inheritdoc />
+    protected sealed override bool Present(EditorActionContext<TTarget> context)
+        => context.argument is TPresentation presentation && Present(
+            new EditorActionContext<TTarget, TPresentation>(context, context.target, presentation));
+
+    /// <summary>Presents active content using strongly typed presentation data.</summary>
+    /// <param name="context">The typed presentation request.</param>
+    /// <returns><see langword="true"/> when content was presented.</returns>
+    protected abstract bool Present(EditorActionContext<TTarget, TPresentation> context);
 }
 
 /// <summary>

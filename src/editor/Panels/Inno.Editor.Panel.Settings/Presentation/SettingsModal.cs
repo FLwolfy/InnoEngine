@@ -39,7 +39,7 @@ internal sealed class SettingsModal(
     public override Vector2 minimumSize => new(760f, 520f);
 
     /// <inheritdoc />
-    public override void Draw(EditorContext context)
+    protected override void OnDraw(EditorContext context)
     {
         SettingsEditSession? session = window.session;
         if (session is null)
@@ -83,62 +83,82 @@ internal sealed class SettingsModal(
             NativeImGui.GetStyle().DockingSeparatorSize);
         float treeWidth = ResolveTreeWidth(size.X, splitterWidth);
         NativeImGui.PushStyleVar(ImGuiStyleVar.CellPadding, Vector2.Zero);
-        if (NativeImGui.BeginTable("##settings_split", 3, flags, size))
+        bool tableStarted = false;
+        try
         {
-            NativeImGui.TableSetupColumn(
-                "##settings_tree",
-                ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize,
-                treeWidth);
-            NativeImGui.TableSetupColumn(
-                "##settings_splitter",
-                ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize,
-                splitterWidth);
-            NativeImGui.TableSetupColumn(
-                "##settings_page",
-                ImGuiTableColumnFlags.WidthStretch);
-            NativeImGui.TableNextRow();
-            _ = NativeImGui.TableSetColumnIndex(0);
-            DrawTreePane(pages, size.Y);
-            _ = NativeImGui.TableSetColumnIndex(1);
-            DrawSplitter(splitterWidth, size.X, treeWidth, size.Y);
-            _ = NativeImGui.TableSetColumnIndex(2);
-            DrawPagePane(session, pages, size.Y);
-            NativeImGui.EndTable();
+            tableStarted = NativeImGui.BeginTable("##settings_split", 3, flags, size);
+            if (tableStarted)
+            {
+                NativeImGui.TableSetupColumn(
+                    "##settings_tree",
+                    ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize,
+                    treeWidth);
+                NativeImGui.TableSetupColumn(
+                    "##settings_splitter",
+                    ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize,
+                    splitterWidth);
+                NativeImGui.TableSetupColumn(
+                    "##settings_page",
+                    ImGuiTableColumnFlags.WidthStretch);
+                NativeImGui.TableNextRow();
+                _ = NativeImGui.TableSetColumnIndex(0);
+                DrawTreePane(pages, size.Y);
+                _ = NativeImGui.TableSetColumnIndex(1);
+                DrawSplitter(splitterWidth, size.X, treeWidth, size.Y);
+                _ = NativeImGui.TableSetColumnIndex(2);
+                DrawPagePane(session, pages, size.Y);
+            }
         }
-        NativeImGui.PopStyleVar();
+        finally
+        {
+            if (tableStarted)
+                NativeImGui.EndTable();
+            NativeImGui.PopStyleVar();
+        }
     }
 
     private void DrawTreePane(IReadOnlyList<SettingsPage> pages, float height)
     {
-        if (!NativeImGui.BeginChild(
-                "##settings_tree_pane",
-                new Vector2(0f, height),
-                ImGuiChildFlags.Borders | ImGuiChildFlags.AlwaysUseWindowPadding))
+        bool visible = NativeImGui.BeginChild(
+            "##settings_tree_pane",
+            new Vector2(0f, height),
+            ImGuiChildFlags.Borders | ImGuiChildFlags.AlwaysUseWindowPadding);
+        try
+        {
+            if (!visible)
+                return;
+            bool queryChanged = EditorWidget.SearchInput(
+                "settings",
+                "Search settings",
+                ref m_query,
+                width: -1f);
+            if (queryChanged)
+            {
+                SettingsPage? first = SettingsTree.FindFirstMatch(pages, m_query);
+                m_selectedPath = first?.path ?? string.Empty;
+            }
+            NativeImGui.Separator();
+            bool scrollVisible = NativeImGui.BeginChild("##settings_tree_scroll", Vector2.Zero);
+            try
+            {
+                if (scrollVisible)
+                {
+                    m_tree.Draw(
+                        pages,
+                        m_query,
+                        m_selectedPath,
+                        page => m_selectedPath = page.path);
+                }
+            }
+            finally
+            {
+                NativeImGui.EndChild();
+            }
+        }
+        finally
         {
             NativeImGui.EndChild();
-            return;
         }
-        bool queryChanged = EditorWidget.SearchInput(
-            "settings",
-            "Search settings",
-            ref m_query,
-            width: -1f);
-        if (queryChanged)
-        {
-            SettingsPage? first = SettingsTree.FindFirstMatch(pages, m_query);
-            m_selectedPath = first?.path ?? string.Empty;
-        }
-        NativeImGui.Separator();
-        if (NativeImGui.BeginChild("##settings_tree_scroll", Vector2.Zero))
-        {
-            m_tree.Draw(
-                pages,
-                m_query,
-                m_selectedPath,
-                page => m_selectedPath = page.path);
-        }
-        NativeImGui.EndChild();
-        NativeImGui.EndChild();
     }
 
     private void DrawPagePane(
@@ -146,25 +166,29 @@ internal sealed class SettingsModal(
         IReadOnlyList<SettingsPage> pages,
         float height)
     {
-        if (!NativeImGui.BeginChild(
-                "##settings_page_pane",
-                new Vector2(0f, height),
-                ImGuiChildFlags.Borders | ImGuiChildFlags.AlwaysUseWindowPadding))
+        bool visible = NativeImGui.BeginChild(
+            "##settings_page_pane",
+            new Vector2(0f, height),
+            ImGuiChildFlags.Borders | ImGuiChildFlags.AlwaysUseWindowPadding);
+        try
+        {
+            if (!visible)
+                return;
+            SettingsPage? page = SettingsTree.FindPage(pages, m_selectedPath);
+            if (page is not null)
+            {
+                var view = new SettingsPageView(session);
+                view.Draw(page, child => m_selectedPath = child.path);
+            }
+            else
+            {
+                NativeImGui.TextUnformatted("No matching settings");
+            }
+        }
+        finally
         {
             NativeImGui.EndChild();
-            return;
         }
-        SettingsPage? page = SettingsTree.FindPage(pages, m_selectedPath);
-        if (page is not null)
-        {
-            var view = new SettingsPageView(session);
-            view.Draw(page, child => m_selectedPath = child.path);
-        }
-        else
-        {
-            NativeImGui.TextUnformatted("No matching settings");
-        }
-        NativeImGui.EndChild();
     }
 
     private void DrawSplitter(float width, float availableWidth, float treeWidth, float height)
@@ -223,9 +247,15 @@ internal sealed class SettingsModal(
     private void DrawButtons(SettingsEditSession session)
     {
         NativeImGui.BeginDisabled(!session.isDirty);
-        if (NativeImGui.Button("Apply"))
-            _ = session.Apply();
-        NativeImGui.EndDisabled();
+        try
+        {
+            if (NativeImGui.Button("Apply"))
+                _ = session.Apply();
+        }
+        finally
+        {
+            NativeImGui.EndDisabled();
+        }
 
         NativeImGui.SameLine();
         if (NativeImGui.Button("Cancel"))

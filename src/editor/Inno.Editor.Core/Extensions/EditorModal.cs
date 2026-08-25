@@ -37,5 +37,11 @@ public abstract class EditorModal
     /// Draws the modal body inside the runtime-managed centered window.
     /// </summary>
     /// <param name="context">The shared editor context containing current project and frame state.</param>
-    public abstract void Draw(EditorContext context);
+    internal void Draw(EditorContext context) => OnDraw(context);
+
+    /// <summary>
+    /// Draws the modal body inside the runtime-managed centered window.
+    /// </summary>
+    /// <param name="context">The shared editor context containing current project and frame state.</param>
+    protected abstract void OnDraw(EditorContext context);
 }

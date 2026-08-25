@@ -54,15 +54,21 @@ internal sealed class GameObjectLayerSelector
             return;
         }
 
-        IReadOnlyList<GameLayerDefinition> definitions = stack.GetDefinitions();
-        for (int i = 0; i < definitions.Count; i++)
+        try
         {
-            GameLayerDefinition definition = definitions[i];
-            string label = FormatLayerLabel(definition.layer, definition.name);
-            if (NativeImGui.Selectable(label, definition.layer == target.layer))
-                m_edits.SetGameObjectLayer(target, definition.layer);
+            IReadOnlyList<GameLayerDefinition> definitions = stack.GetDefinitions();
+            for (int i = 0; i < definitions.Count; i++)
+            {
+                GameLayerDefinition definition = definitions[i];
+                string label = FormatLayerLabel(definition.layer, definition.name);
+                if (NativeImGui.Selectable(label, definition.layer == target.layer))
+                    m_edits.SetGameObjectLayer(target, definition.layer);
+            }
         }
-        NativeImGui.EndCombo();
+        finally
+        {
+            NativeImGui.EndCombo();
+        }
     }
 
     /// <summary>

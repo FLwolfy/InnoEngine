@@ -23,6 +23,8 @@ public static class AssemblyManager
     private static AssemblyCatalogSnapshot s_currentCatalog = new(0, []);
     private static long s_catalogVersion;
     private static volatile bool s_hostCatalogDirty;
+    private static bool s_catalogTransitionInProgress;
+    private static bool s_rebuildPending;
     private static bool s_reloadInProgress;
     private static bool s_assemblyLoadSubscribed;
 
@@ -360,6 +362,31 @@ public static class AssemblyManager
     }
 
     private static void RebuildLocked()
+    {
+        if (s_catalogTransitionInProgress)
+        {
+            s_hostCatalogDirty = true;
+            s_rebuildPending = true;
+            return;
+        }
+
+        do
+        {
+            s_rebuildPending = false;
+            s_catalogTransitionInProgress = true;
+            try
+            {
+                RebuildOnceLocked();
+            }
+            finally
+            {
+                s_catalogTransitionInProgress = false;
+            }
+        }
+        while (s_rebuildPending);
+    }
+
+    private static void RebuildOnceLocked()
     {
         AssemblyCatalogSnapshot previous = s_currentCatalog;
         s_hostCatalogDirty = false;
@@ -726,6 +753,8 @@ public static class AssemblyManager
         S_MODULES.Clear();
         isInitialized = false;
         s_hostCatalogDirty = false;
+        s_catalogTransitionInProgress = false;
+        s_rebuildPending = false;
         s_reloadInProgress = false;
         s_catalogVersion = 0;
         s_currentCatalog = new AssemblyCatalogSnapshot(0, []);

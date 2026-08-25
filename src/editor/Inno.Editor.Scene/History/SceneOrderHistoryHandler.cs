@@ -1,6 +1,7 @@
 using System;
 
 using Inno.Core.Identity;
+using Inno.Core.Logging;
 using Inno.Editor.Interactions;
 using Inno.Engine.Scene;
 
@@ -38,10 +39,34 @@ internal sealed class SceneOrderHistoryHandler : EditorHistoryHandler
             GameScene? scene = IdentityManager.Get<GameScene>(data.sceneId);
             if (scene is not { isLoaded: true, isDestroyed: false })
                 return EditorHistoryResult.Failure($"Scene '{data.sceneId}' is no longer loaded.");
-            SceneManager.SetSceneIndex(
-                scene,
-                direction == EditorHistoryDirection.Undo ? data.beforeIndex : data.afterIndex);
-            _ = context.interactions.For(context.interactions.focusedArea, scene).Select();
+            int rollbackIndex = SceneManager.GetSceneIndex(scene);
+            try
+            {
+                SceneManager.SetSceneIndex(
+                    scene,
+                    direction == EditorHistoryDirection.Undo ? data.beforeIndex : data.afterIndex);
+            }
+            catch (Exception exception)
+            {
+                try
+                {
+                    SceneManager.SetSceneIndex(scene, rollbackIndex);
+                }
+                catch (Exception rollbackException)
+                {
+                    return StateIntegrityFailure(
+                        $"Scene reorder failed: {exception.Message} Rollback failed: {rollbackException.Message}");
+                }
+                return EditorHistoryResult.Failure(exception.Message);
+            }
+            try
+            {
+                _ = context.interactions.For(context.interactions.focusedArea, scene).Select();
+            }
+            catch (Exception exception)
+            {
+                Log.Error("Scene order selection notification failed: {0}", exception);
+            }
             return EditorHistoryResult.Success();
         }
         catch (Exception exception)

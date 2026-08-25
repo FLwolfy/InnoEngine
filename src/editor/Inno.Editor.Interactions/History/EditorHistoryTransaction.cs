@@ -46,6 +46,8 @@ public sealed class EditorHistoryTransaction : IDisposable
         EditorHistoryResult result = owner.RollbackTransaction(this);
         if (result.succeeded)
             Complete();
+        else if (!result.statePreserved)
+            Complete();
         return result;
     }
 
@@ -57,10 +59,33 @@ public sealed class EditorHistoryTransaction : IDisposable
         if (m_completed)
             return;
         EditorHistory? owner = m_owner;
-        if (owner is not null)
-            _ = owner.RollbackTransaction(this);
+        if (owner is null)
+        {
+            Complete();
+            return;
+        }
+
+        EditorHistoryResult result = owner.RollbackTransaction(this);
+        if (result.succeeded)
+        {
+            Complete();
+            GC.SuppressFinalize(this);
+            return;
+        }
+
+        if (result.statePreserved)
+        {
+            owner.CommitTransaction(this);
+            Complete();
+            GC.SuppressFinalize(this);
+            throw new InvalidOperationException(
+                $"Transaction '{name}' could not roll back and was committed to Undo instead: {result.message}");
+        }
+
         Complete();
         GC.SuppressFinalize(this);
+        throw new InvalidOperationException(
+            $"Transaction '{name}' lost state integrity while rolling back. The history is faulted: {result.message}");
     }
 
     private EditorHistory GetOwner()

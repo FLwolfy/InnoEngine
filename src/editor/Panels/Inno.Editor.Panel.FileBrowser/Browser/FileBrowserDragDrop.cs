@@ -30,7 +30,7 @@ internal sealed class FileBrowserDragDrop(AssetEditorModule assets)
             data is null)
             return;
         _ = EditorDragDropRenderer.Source(
-            assets.interactions.For("panel/asset.file-browser", data.source),
+            assets.interactions.For(FileBrowserInteractionIds.area, data.source),
             data,
             () => NativeImGui.TextUnformatted(data.label));
     }
@@ -48,7 +48,7 @@ internal sealed class FileBrowserDragDrop(AssetEditorModule assets)
         System.Numerics.Vector2 maximum = NativeImGui.GetItemRectMax();
         EditorDropWidgetResult result = EditorDragDropRenderer.Target(
             assets.interactions.For(
-                "panel/asset.file-browser",
+                FileBrowserInteractionIds.area,
                 relativePath ?? assets.browser.currentDirectory));
         if (!result.isPreviewing || !result.status.canDrop)
             return;

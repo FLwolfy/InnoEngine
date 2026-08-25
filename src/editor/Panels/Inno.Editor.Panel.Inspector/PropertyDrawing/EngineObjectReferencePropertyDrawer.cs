@@ -36,7 +36,7 @@ internal sealed class EngineObjectReferencePropertyDrawer : IPropertyDrawer
         bool open = NativeImGui.BeginCombo($"##{context.path}", preview);
         _ = EditorDragDropRenderer.Target(
             context.interactions.For(
-                "panel/scene.inspector/engine-object-reference",
+                InspectorInteractionIds.engineObjectReferenceArea,
                 new EngineObjectReferenceDropTarget(targetType, context.SetValue)));
 
         if (!open)

@@ -5,14 +5,14 @@ using Inno.Engine.Scene.Assets;
 
 namespace Inno.Editor.Panel.Hierarchy;
 
-[EditorAction("editor/open", priority: 200)]
-internal sealed class OpenSceneAssetAction(EditorSceneWorkspace workspace) : EditorAction<SceneAsset>
+[EditorAction(HierarchyInteractionIds.C_OPEN, priority: 200)]
+internal sealed class OpenSceneAssetAction(IEditorSceneWorkspace workspace) : EditorAction<SceneAsset, string>
 {
-    protected override void Execute(EditorActionContext<SceneAsset> context)
+    internal static EditorCommand<string> command { get; } = new(HierarchyInteractionIds.open);
+
+    protected override void Execute(EditorActionContext<SceneAsset, string> context)
     {
-        if (context.argument is not string relativePath)
-            return;
-        GameScene scene = workspace.OpenScene(relativePath);
-        _ = context.interactions.For("panel/scene.hierarchy", scene).Select();
+        GameScene scene = workspace.Open(context.argument);
+        _ = context.interactions.For(HierarchyInteractionIds.area, scene).Select();
     }
 }

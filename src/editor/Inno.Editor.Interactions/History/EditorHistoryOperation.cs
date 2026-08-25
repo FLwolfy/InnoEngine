@@ -5,7 +5,7 @@ namespace Inno.Editor.Interactions;
 /// <summary>
 /// Represents one reversible editor mutation with independently validated undo and redo transitions.
 /// </summary>
-public abstract class EditorHistoryOperation : IDisposable
+internal abstract class EditorHistoryOperation : IDisposable
 {
     private bool m_isDisposed;
 

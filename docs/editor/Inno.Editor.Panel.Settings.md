@@ -6,7 +6,7 @@
 
 ## 窗口与生命周期
 
-- 主菜单 `Edit/Settings...` 执行原始字符串 Action ID `editor.settings.open`。
+- 主菜单 `Edit/Settings...` 的 Attribute 使用 feature-owned `const string` ID `editor.settings.open`，运行时执行对应的 `EditorCommand`。
 - 初始逻辑尺寸 `1050 × 700`，最小尺寸 `760 × 520`，随全局 zoom 缩放。
 - Window flags 包含 `NoDocking | NoCollapse`；淡入、显示和淡出期间阻止其他 Editor 区域交互。
 - 左右 pane 默认按 `1:3` 分配；splitter 使用 `0..1` 比例并只为两侧各保留一个很小的可见宽度，因此可以像 File Browser 一样几乎拖到边缘。交互区域保持易拖动宽度，视觉只绘制居中的细线。
@@ -87,6 +87,8 @@ Settings frontend 不提供 DrawBoolean、DrawIcon、DrawChoice 或其他内建�
 内部 `SettingsEditSession` 从 definitions 与 `EditorSettings.Get(path)` 创建每个字段的独立对象。`EditorSetting.Draw` 为每个 staged object 保留弱引用 baseline，并返回当前对象是否偏离首次绘制值；因此手工改回原值后 Apply 会重新禁用。编辑只改 staged 对象；Apply 才调用一次 `EditorSettings.Apply`，将全部值和 Reset 路径作为一个原子提交写入 `<ProjectRoot>/EditorSettings.json`。
 
 每次产生实际变化的提交只形成一条共享 `Apply Settings` History entry。撤销或重做会恢复整个设置文档并发布一次 `EditorSettings.changed(settings)`。Game Layers、Icons 和 Actual Size 没有自己的 Settings Undo/Redo action。
+
+Modal、左右 pane、Tree child、field table、disabled scope 与 tooltip 的 ImGui Begin/End 均由 `try/finally` 配对。某个 Settings 扩展的 `OnDraw` 抛异常时，不会污染 Modal 或下一帧的 ImGui stack。
 
 ## 项目边界
 

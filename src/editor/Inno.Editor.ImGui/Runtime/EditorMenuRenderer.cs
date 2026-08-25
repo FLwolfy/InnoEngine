@@ -27,8 +27,14 @@ public static class EditorMenuRenderer
             return false;
         if (!EditorWidget.BeginContextMenu(id))
             return false;
-        DrawItems(interaction, menu.items);
-        EditorWidget.EndContextMenu();
+        try
+        {
+            DrawItems(interaction, menu.items);
+        }
+        finally
+        {
+            EditorWidget.EndContextMenu();
+        }
         return true;
     }
 
@@ -48,8 +54,14 @@ public static class EditorMenuRenderer
             return false;
         if (!EditorWidget.BeginWindowContextMenu(id))
             return false;
-        DrawItems(interaction, menu.items);
-        EditorWidget.EndContextMenu();
+        try
+        {
+            DrawItems(interaction, menu.items);
+        }
+        finally
+        {
+            EditorWidget.EndContextMenu();
+        }
         return true;
     }
 
@@ -71,8 +83,14 @@ public static class EditorMenuRenderer
     {
         if (!NativeImGui.BeginMainMenuBar())
             return;
-        DrawItems(interaction, interaction.BuildMenu().items);
-        NativeImGui.EndMainMenuBar();
+        try
+        {
+            DrawItems(interaction, interaction.BuildMenu().items);
+        }
+        finally
+        {
+            NativeImGui.EndMainMenuBar();
+        }
     }
 
     /// <summary>
@@ -92,8 +110,14 @@ public static class EditorMenuRenderer
             {
                 if (!NativeImGui.BeginMenu(item.label, item.status.isEnabled))
                     continue;
-                DrawItems(interaction, item.children);
-                NativeImGui.EndMenu();
+                try
+                {
+                    DrawItems(interaction, item.children);
+                }
+                finally
+                {
+                    NativeImGui.EndMenu();
+                }
                 continue;
             }
 

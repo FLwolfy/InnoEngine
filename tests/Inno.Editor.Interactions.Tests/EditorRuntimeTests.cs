@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
 
 using Inno.Core.Assemblies;
 using Inno.Core.Diagnose;
 using Inno.Core.Events;
+using Inno.Core.Identity;
 using Inno.Core.Input;
 using Inno.Core.Reflection;
 using Inno.Editor.Core;
@@ -113,7 +115,7 @@ public sealed class EditorRuntimeTests : IDisposable
     {
         Assert.True(TestModule.startCount > 0);
         Assert.True(TestPanel.attachCount > 0);
-        Assert.True(TestPanel.firstAttachPrecededModuleStart);
+        Assert.False(TestPanel.firstAttachPrecededModuleStart);
         Assert.True(m_runtime.panelCount >= 1);
     }
 
@@ -163,7 +165,7 @@ public sealed class EditorRuntimeTests : IDisposable
     public void BuiltInUndoAndRedoActionsExposeHistoryThroughMenusAndShortcuts()
     {
         int value = 0;
-        Assert.True(m_runtime.interactions.history.Execute(
+        Assert.True(m_runtime.interactions.historyHost.Execute(
             "Change Test Value",
             () =>
             {
@@ -212,7 +214,7 @@ public sealed class EditorRuntimeTests : IDisposable
     public void RuntimeBoundHistoryIsDiscardedWhenExtensionsRefresh()
     {
         int value = 0;
-        Assert.True(m_runtime.interactions.history.Execute(
+        Assert.True(m_runtime.interactions.historyHost.Execute(
             "Runtime-bound Change",
             () =>
             {
@@ -311,6 +313,32 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void EqualSpecificityShortcutConflictsAreRejectedDuringCatalogBuild()
+    {
+        var left = new EditorExtensionCatalog.ActionRegistration(
+            new EditorActionAttribute("tests.shortcut-left", "tests/shortcut", priority: 20),
+            typeof(DeferredAction),
+            new DeferredAction(),
+            [],
+            [new EditorShortcutAttribute(KeyCode.F1)]);
+        var right = new EditorExtensionCatalog.ActionRegistration(
+            new EditorActionAttribute("tests.shortcut-right", "tests/shortcut", priority: 20),
+            typeof(DeferredAction),
+            new DeferredAction(),
+            [],
+            [new EditorShortcutAttribute(KeyCode.F1)]);
+        MethodInfo validate = typeof(EditorExtensionCatalog).GetMethod(
+            "ValidateShortcuts",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+
+        TargetInvocationException exception = Assert.Throws<TargetInvocationException>(
+            () => validate.Invoke(null, [new[] { left, right }]));
+
+        InvalidOperationException conflict = Assert.IsType<InvalidOperationException>(exception.InnerException);
+        Assert.Contains("ambiguous", conflict.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ActionOwnsValidatedMultiFrameState()
     {
         var target = new InteractionTarget();
@@ -355,7 +383,7 @@ public sealed class EditorRuntimeTests : IDisposable
         EditorInteraction interaction = m_runtime.interactions.For("tests/other", target);
 
         interaction.Focus();
-        Assert.Equal("tests/other", m_runtime.interactions.focusedArea);
+        Assert.Equal("tests/other", m_runtime.interactions.focusedArea.value);
         Assert.Same(target, m_runtime.interactions.focusedTarget);
 
         Assert.True(interaction.Select());
@@ -373,15 +401,57 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void GenerationTransitionRebindsCollectibleIdentitySelectionAndFocus()
+    {
+        IdentityManager.Initialize();
+        try
+        {
+            Type collectibleType = CreateCollectibleIdentityType();
+            var previous = Assert.IsAssignableFrom<IIdentityObject>(Activator.CreateInstance(collectibleType));
+            Assert.True(IdentityManager.Register(previous));
+            Guid persistentId = previous.GetIdentity().persistentId;
+            EditorInteraction interaction = m_runtime.interactions.For("tests/collectible", previous);
+            Assert.True(interaction.Select());
+            interaction.Focus();
+
+            m_runtime.interactions.PrepareGenerationTransition();
+
+            Assert.Null(m_runtime.interactions.selection.selectedTarget);
+            Assert.Null(m_runtime.interactions.focusedTarget);
+            Assert.True(IdentityManager.Unregister(previous));
+            var replacement = Assert.IsAssignableFrom<IIdentityObject>(Activator.CreateInstance(collectibleType));
+            Assert.True(IdentityManager.Register(replacement, persistentId));
+            m_runtime.interactions.CompleteGenerationTransition();
+
+            m_runtime.Update(new EditorFrame(0.016f, 1f, isFocused: true));
+
+            Assert.Same(replacement, m_runtime.interactions.selection.selectedTarget);
+            Assert.Same(replacement, m_runtime.interactions.focusedTarget);
+            Assert.True(m_runtime.interactions.For("tests/collectible").Select());
+            Assert.True(IdentityManager.Unregister(replacement));
+        }
+        finally
+        {
+            IdentityManager.Shutdown();
+        }
+    }
+
+    [Fact]
     public void TypedDropRoutesAndCancelsItsManagedSession()
     {
         var source = new DragSource();
         var target = new DropTarget();
+        var data = new EditorDragData(source, "source");
+        Guid supersededToken = m_runtime.interactions
+            .For("tests/other", source)
+            .BeginDrag(data);
         Guid token = m_runtime.interactions
             .For("tests/other", source)
-            .BeginDrag(new EditorDragData(source, "source"));
+            .BeginDrag(data);
         EditorInteraction dropTarget = m_runtime.interactions.For("tests/drop", target);
 
+        Assert.NotEqual(supersededToken, token);
+        Assert.False(m_runtime.interactions.TryGetDragData(supersededToken, out _));
         Assert.True(dropTarget.QueryDrop(token, EditorDropPlacement.Into).canDrop);
         Assert.True(dropTarget.Drop(token, EditorDropPlacement.Into).accepted);
         Assert.True(target.wasDropped);
@@ -406,8 +476,8 @@ public sealed class EditorRuntimeTests : IDisposable
     {
         TestModule.stateValue = 42;
         EditorPanelExtension panel = Assert.Single(
-            m_runtime.panels.Where(static value => value.id == "tests.panel"));
-        panel.panel.isOpen = true;
+            m_runtime.panels.Where(static value => value.id == new EditorPanelId("tests.panel")));
+        panel.isOpen = true;
         m_runtime.Update(new EditorFrame(0.016f, 3f, isFocused: true));
         m_runtime.Dispose();
 
@@ -422,7 +492,7 @@ public sealed class EditorRuntimeTests : IDisposable
 
         Assert.Equal(42, TestModule.restoredStateValue);
         Assert.True(Assert.Single(
-            restored.panels.Where(static value => value.id == "tests.panel")).panel.isOpen);
+            restored.panels.Where(static value => value.id == new EditorPanelId("tests.panel"))).isOpen);
     }
 
     [Fact]
@@ -533,6 +603,20 @@ public sealed class EditorRuntimeTests : IDisposable
 
         public void Clear(DiagnosticSource source)
             => reports.Remove(source.id);
+    }
+
+    private static Type CreateCollectibleIdentityType()
+    {
+        AssemblyBuilder assembly = AssemblyBuilder.DefineDynamicAssembly(
+            new AssemblyName("Inno.Editor.Interactions.Tests.CollectibleIdentity." + Guid.NewGuid().ToString("N")),
+            AssemblyBuilderAccess.RunAndCollect);
+        ModuleBuilder module = assembly.DefineDynamicModule("Main");
+        TypeBuilder type = module.DefineType(
+            "CollectibleIdentity",
+            TypeAttributes.Public | TypeAttributes.Sealed | TypeAttributes.Class);
+        type.AddInterfaceImplementation(typeof(IIdentityObject));
+        _ = type.DefineDefaultConstructor(MethodAttributes.Public);
+        return type.CreateType()!;
     }
 }
 
@@ -658,7 +742,7 @@ public sealed class TestPanel(TestModule module) : EditorPanel
 
     protected override void OnDetach(EditorContext context) => detachCount++;
 
-    public override void Draw(EditorContext context)
+    protected override void OnDraw(EditorContext context)
     {
     }
 }

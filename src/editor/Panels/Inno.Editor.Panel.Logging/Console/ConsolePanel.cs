@@ -52,7 +52,7 @@ internal sealed class ConsolePanel : EditorPanel
     }
 
     /// <inheritdoc />
-    public override void Draw(EditorContext context)
+    protected override void OnDraw(EditorContext context)
     {
         NativeImGui.BeginChild("ConsoleChild", Vector2.Zero);
         DrawToolbar();
@@ -449,7 +449,7 @@ internal sealed class ConsolePanel : EditorPanel
         _ = EditorMenuRenderer.ContextMenu(
             "##ConsoleEntryContextMenu",
             m_interactions.For(
-                "panel/diagnostics.console/entry",
+                LoggingInteractionIds.entryArea,
                 new ConsoleEntryCopyTarget(entry, repeatCount)));
     }
 

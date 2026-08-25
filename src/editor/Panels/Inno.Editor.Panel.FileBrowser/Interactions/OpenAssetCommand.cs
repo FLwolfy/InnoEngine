@@ -5,9 +5,12 @@ using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
-[EditorAction("editor/open", "panel/asset.file-browser", priority: 100)]
+[EditorAction(FileBrowserInteractionIds.C_OPEN, FileBrowserInteractionIds.C_AREA, priority: 100)]
 internal sealed class OpenAssetCommand(AssetEditorModule assets) : EditorAction<AssetFileEntry>
 {
+    internal static EditorCommand command { get; } = new(FileBrowserInteractionIds.open);
+    private static EditorCommand<string> openByPathCommand { get; } = new(FileBrowserInteractionIds.open);
+
     protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
     {
         if (!TryGetAssetContext(context, out AssetEditorContext? assetContext) || assetContext is null)
@@ -23,8 +26,8 @@ internal sealed class OpenAssetCommand(AssetEditorModule assets) : EditorAction<
             return;
         if (AssetManager.TryLoad<AssetObject>(assetContext.relativePath, out AssetObject? asset) &&
             asset is not null &&
-            context.interactions.For("panel/asset.file-browser", asset).Execute(
-                "editor/open",
+            context.interactions.For(FileBrowserInteractionIds.area, asset).Execute(
+                openByPathCommand,
                 assetContext.relativePath))
         {
             return;

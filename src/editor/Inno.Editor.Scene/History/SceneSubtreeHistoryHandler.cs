@@ -1,6 +1,7 @@
 using System;
 
 using Inno.Core.Identity;
+using Inno.Core.Logging;
 using Inno.Editor.Interactions;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Assets;
@@ -71,18 +72,73 @@ internal sealed class SceneSubtreeHistoryHandler : EditorHistoryHandler
                 Transform? parent = data.parentId is Guid parentId
                     ? IdentityManager.Get<GameObject>(parentId)?.transform
                     : null;
-                root = SceneSubtreeSerialization.Restore(scene, data.subtree, parent, data.siblingIndex);
-                SceneReferenceIndex.RestoreIncoming(data.incomingReferences);
+                try
+                {
+                    root = SceneSubtreeSerialization.Restore(scene, data.subtree, parent, data.siblingIndex);
+                }
+                catch (Exception exception)
+                {
+                    GameObject? partial = IdentityManager.Get<GameObject>(data.rootId);
+                    if (partial is not { isRuntimeValid: true } || scene.DestroyObject(partial))
+                        return EditorHistoryResult.Failure(exception.Message);
+                    return StateIntegrityFailure(
+                        $"Scene subtree restore failed and the partial subtree could not be removed: {exception.Message}");
+                }
+                SceneReferenceRestoreResult referenceResult =
+                    SceneReferenceIndex.RestoreIncoming(data.incomingReferences);
+                if (!referenceResult.succeeded)
+                {
+                    bool removed = root.isRuntimeValid && scene.DestroyObject(root);
+                    if (referenceResult.statePreserved && removed)
+                        return EditorHistoryResult.Failure(referenceResult.message);
+                    return StateIntegrityFailure(
+                        $"Scene subtree incoming references failed: {referenceResult.message} " +
+                        (removed ? string.Empty : "The restored subtree could not be removed."));
+                }
             }
             else if (!shouldExist && root is { isRuntimeValid: true })
             {
-                _ = scene.DestroyObject(root);
+                try
+                {
+                    if (!scene.DestroyObject(root))
+                        return EditorHistoryResult.Failure($"GameObject '{data.rootId}' could not be removed.");
+                }
+                catch (Exception exception)
+                {
+                    if (root.isRuntimeValid)
+                        return EditorHistoryResult.Failure(exception.Message);
+                    try
+                    {
+                        Transform? parent = data.parentId is Guid parentId
+                            ? IdentityManager.Get<GameObject>(parentId)?.transform
+                            : null;
+                        _ = SceneSubtreeSerialization.Restore(scene, data.subtree, parent, data.siblingIndex);
+                        SceneReferenceRestoreResult referenceRollback =
+                            SceneReferenceIndex.RestoreIncoming(data.incomingReferences);
+                        if (!referenceRollback.succeeded)
+                            throw new InvalidOperationException(referenceRollback.message);
+                    }
+                    catch (Exception rollbackException)
+                    {
+                        return StateIntegrityFailure(
+                            $"Scene subtree removal failed: {exception.Message} " +
+                            $"Rollback failed: {rollbackException.Message}");
+                    }
+                    return EditorHistoryResult.Failure(exception.Message);
+                }
                 root = null;
             }
             object? selection = selected is Guid selectionId
                 ? IdentityManager.Get<EngineObject>(selectionId)
                 : null;
-            _ = context.interactions.For(context.interactions.focusedArea, selection).Select();
+            try
+            {
+                _ = context.interactions.For(context.interactions.focusedArea, selection).Select();
+            }
+            catch (Exception exception)
+            {
+                Log.Error("Scene subtree selection notification failed: {0}", exception);
+            }
             return EditorHistoryResult.Success();
         }
         catch (Exception exception)

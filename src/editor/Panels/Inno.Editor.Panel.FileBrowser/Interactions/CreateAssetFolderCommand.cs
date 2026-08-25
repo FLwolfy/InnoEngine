@@ -6,8 +6,8 @@ using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
-[EditorAction("file-browser/create-folder", "panel/asset.file-browser")]
-[EditorMenu("panel/asset.file-browser", "Create/Folder", order: 100)]
+[EditorAction(FileBrowserInteractionIds.C_CREATE_FOLDER, FileBrowserInteractionIds.C_AREA)]
+[EditorMenu(FileBrowserInteractionIds.C_AREA, "Create/Folder", order: 100)]
 internal sealed class CreateAssetFolderCommand : EditorAction<string>
 {
     protected override EditorActionState Query(EditorActionContext<string> context)
@@ -29,16 +29,34 @@ internal sealed class CreateAssetFolderCommand : EditorAction<string>
             string.Empty,
             isDirectory: true,
             archive: []);
-        context.history.RecordApplied(
-            "Create Folder",
-            new EditorHistoryChange(
-                AssetHistoryKinds.SourceOperation,
-                EditorHistoryPayload.FromBytes(data.Encode())));
+        try
+        {
+            context.history.RecordApplied(
+                "Create Folder",
+                new EditorHistoryChange(
+                    AssetHistoryKinds.SourceOperation,
+                    EditorHistoryPayload.FromBytes(data.Encode())));
+        }
+        catch (Exception failure)
+        {
+            try
+            {
+                AssetManager.Delete(candidate);
+            }
+            catch (Exception rollbackException)
+            {
+                throw new AggregateException(
+                    "The folder could not be recorded and its compensation also failed.",
+                    failure,
+                    rollbackException);
+            }
+            throw;
+        }
         if (!AssetManager.TryGetFileSystemEntry(candidate, out AssetFileEntry target))
             return;
-        EditorInteraction interaction = context.interactions.For("panel/asset.file-browser", target);
+        EditorInteraction interaction = context.interactions.For(FileBrowserInteractionIds.area, target);
         _ = interaction.Select();
-        _ = interaction.Execute("file-browser/rename");
+        _ = interaction.Execute(RenameAssetCommand.command);
     }
 
     private static string Combine(string parent, string name)

@@ -61,16 +61,27 @@ internal sealed class EditorSettingsHistoryHandler(EditorSettings settings) : Ed
         EditorHistoryChange change,
         EditorHistoryDirection direction)
     {
+        byte[] original = settings.CaptureDocument();
         try
         {
             (ReadOnlyMemory<byte> before, ReadOnlyMemory<byte> after) = EditorSettingsHistory.Read(change);
             settings.RestoreFromHistory(
                 direction == EditorHistoryDirection.Undo ? before.Span : after.Span);
+            settings.NotifyChanged();
             return EditorHistoryResult.Success();
         }
         catch (Exception exception) when (
             exception is InvalidDataException or IOException or UnauthorizedAccessException)
         {
+            try
+            {
+                settings.RestoreFromHistory(original);
+            }
+            catch (Exception rollbackException)
+            {
+                return StateIntegrityFailure(
+                    $"Settings transition failed: {exception.Message} Rollback failed: {rollbackException.Message}");
+            }
             return EditorHistoryResult.Failure(exception.Message);
         }
     }

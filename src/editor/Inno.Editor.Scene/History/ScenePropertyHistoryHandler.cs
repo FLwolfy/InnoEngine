@@ -49,31 +49,59 @@ internal sealed class ScenePropertyHistoryHandler : EditorHistoryHandler
         EditorHistoryChange change,
         EditorHistoryDirection direction)
     {
+        ScenePropertyHistoryData data;
+        EngineObject? target;
         try
         {
-            ScenePropertyHistoryData data = ScenePropertyHistoryData.Decode(change.payload.ReadBytes());
-            EngineObject? target = IdentityManager.Get<EngineObject>(data.targetId);
+            data = ScenePropertyHistoryData.Decode(change.payload.ReadBytes());
+            target = IdentityManager.Get<EngineObject>(data.targetId);
             if (target is null || target.isDestroyed)
                 return EditorHistoryResult.Failure($"Scene object '{data.targetId}' is no longer available.");
-            byte[] rollback = ScenePropertySerialization.CaptureProperty(target, data.propertyName);
-            try
-            {
-                ScenePropertySerialization.RestoreProperties(
-                    target,
-                    direction == EditorHistoryDirection.Undo ? data.before : data.after);
-            }
-            catch
-            {
-                ScenePropertySerialization.RestoreProperties(target, rollback);
-                throw;
-            }
-            return EditorHistoryResult.Success();
         }
         catch (Exception exception)
         {
             return EditorHistoryResult.Failure(exception.Message);
         }
+
+        byte[] rollback;
+        try
+        {
+            rollback = ScenePropertySerialization.CaptureProperty(target, data.propertyName);
+        }
+        catch (Exception exception)
+        {
+            return EditorHistoryResult.Failure(exception.Message);
+        }
+
+        try
+        {
+            SerializationPropertyRestoreResult result = ScenePropertySerialization.RestoreProperties(
+                target,
+                direction == EditorHistoryDirection.Undo ? data.before : data.after);
+            if (!IsComplete(result))
+                throw new InvalidOperationException("The scene property restore was incomplete.");
+            return EditorHistoryResult.Success();
+        }
+        catch (Exception exception)
+        {
+            try
+            {
+                SerializationPropertyRestoreResult rollbackResult =
+                    ScenePropertySerialization.RestoreProperties(target, rollback);
+                if (!IsComplete(rollbackResult))
+                    throw new InvalidOperationException("The scene property rollback was incomplete.");
+            }
+            catch (Exception rollbackException)
+            {
+                return StateIntegrityFailure(
+                    $"Scene property restore failed: {exception.Message} Rollback failed: {rollbackException.Message}");
+            }
+            return EditorHistoryResult.Failure(exception.Message);
+        }
     }
+
+    private static bool IsComplete(SerializationPropertyRestoreResult result)
+        => result.success && result.ignoredCount == 0 && result.restoredCount > 0;
 
     protected override bool TryMerge(
         EditorHistoryChange older,

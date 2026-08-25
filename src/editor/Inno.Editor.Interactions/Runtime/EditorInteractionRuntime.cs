@@ -146,27 +146,35 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
         if (ReferenceEquals(snapshot, m_describedSnapshot))
             return;
 
-        m_panels = new EditorPanelExtension[snapshot.panels.Length];
+        var panels = new List<EditorPanelExtension>(snapshot.panels.Length);
         for (int i = 0; i < snapshot.panels.Length; i++)
         {
             EditorExtensionCatalog.PanelRegistration registration = snapshot.panels[i];
-            m_panels[i] = new EditorPanelExtension(
-                registration.attribute.id,
+            if (snapshot.quarantinedPanels.Contains(registration.panel))
+                continue;
+            panels.Add(new EditorPanelExtension(
+                new EditorPanelId(registration.attribute.id),
                 registration.attribute.title,
                 registration.attribute.order,
-                registration.panel);
+                registration.panel,
+                exception => m_catalog.QuarantinePanel(snapshot, registration, exception)));
         }
+        m_panels = panels.ToArray();
 
-        m_modals = new EditorModalExtension[snapshot.modals.Length];
+        var modals = new List<EditorModalExtension>(snapshot.modals.Length);
         for (int i = 0; i < snapshot.modals.Length; i++)
         {
             EditorExtensionCatalog.ModalRegistration registration = snapshot.modals[i];
-            m_modals[i] = new EditorModalExtension(
+            if (snapshot.quarantinedModals.Contains(registration.modal))
+                continue;
+            modals.Add(new EditorModalExtension(
                 registration.attribute.id,
                 registration.attribute.title,
                 registration.attribute.order,
-                registration.modal);
+                registration.modal,
+                exception => m_catalog.QuarantineModal(snapshot, registration, exception)));
         }
+        m_modals = modals.ToArray();
         m_describedSnapshot = snapshot;
     }
 }

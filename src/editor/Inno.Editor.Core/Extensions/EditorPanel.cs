@@ -8,6 +8,8 @@ namespace Inno.Editor.Core;
 /// </summary>
 public abstract class EditorPanel
 {
+    private bool m_attached;
+
     /// <summary>
     /// Gets whether the presentation backend should inset this panel body by its standard
     /// window padding.
@@ -23,13 +25,27 @@ public abstract class EditorPanel
     /// Attaches the panel after its extension generation becomes active.
     /// </summary>
     /// <param name="context">The shared editor context for the active runtime.</param>
-    public void Attach(EditorContext context) => OnAttach(context);
+    internal void Attach(EditorContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (m_attached)
+            throw new InvalidOperationException($"Editor panel '{GetType().FullName}' is already attached.");
+        OnAttach(context);
+        m_attached = true;
+    }
 
     /// <summary>
     /// Detaches the panel before its extension generation is released.
     /// </summary>
     /// <param name="context">The shared editor context for the runtime being detached.</param>
-    public void Detach(EditorContext context) => OnDetach(context);
+    internal void Detach(EditorContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (!m_attached)
+            throw new InvalidOperationException($"Editor panel '{GetType().FullName}' is not attached.");
+        OnDetach(context);
+        m_attached = false;
+    }
 
     /// <summary>
     /// Draws the complete dockable contents of the panel for the current frame.
@@ -37,7 +53,19 @@ public abstract class EditorPanel
     /// <param name="context">
     /// The shared editor context containing current selection, focus, and frame state.
     /// </param>
-    public abstract void Draw(EditorContext context);
+    internal void Draw(EditorContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (!m_attached)
+            throw new InvalidOperationException($"Editor panel '{GetType().FullName}' is not attached.");
+        OnDraw(context);
+    }
+
+    /// <summary>
+    /// Draws the complete dockable contents of this panel for the current frame.
+    /// </summary>
+    /// <param name="context">The shared editor context containing current selection, focus, and frame state.</param>
+    protected abstract void OnDraw(EditorContext context);
 
     /// <summary>
     /// Runs after the panel is attached to an active extension generation.

@@ -56,15 +56,20 @@ internal sealed class InspectorTargetHeader
             ImGuiWindowFlags windowFlags = ImGuiWindowFlags.NoScrollbar |
                                            ImGuiWindowFlags.NoScrollWithMouse |
                                            ImGuiWindowFlags.NoSavedSettings;
-            if (NativeImGui.BeginChild(
-                    "##inspector_target_header",
-                    new Vector2(width, 0f),
-                    childFlags,
-                    windowFlags))
+            bool visible = NativeImGui.BeginChild(
+                "##inspector_target_header",
+                new Vector2(width, 0f),
+                childFlags,
+                windowFlags);
+            try
             {
-                DrawContent(drawer, context);
+                if (visible)
+                    DrawContent(drawer, context);
             }
-            NativeImGui.EndChild();
+            finally
+            {
+                NativeImGui.EndChild();
+            }
         }
         finally
         {
@@ -89,10 +94,16 @@ internal sealed class InspectorTargetHeader
             NativeImGui.SameLine();
 
             NativeImGui.BeginGroup();
-            DrawNameRow(drawer, context, rowHeight);
-            NativeImGui.SetCursorPosY(NativeImGui.GetCursorPosY() + rowSpacing);
-            DrawCustomRow(drawer, context, rowHeight);
-            NativeImGui.EndGroup();
+            try
+            {
+                DrawNameRow(drawer, context, rowHeight);
+                NativeImGui.SetCursorPosY(NativeImGui.GetCursorPosY() + rowSpacing);
+                DrawCustomRow(drawer, context, rowHeight);
+            }
+            finally
+            {
+                NativeImGui.EndGroup();
+            }
         }
         finally
         {
@@ -133,8 +144,14 @@ internal sealed class InspectorTargetHeader
                 textOrigin,
                 textOrigin + new Vector2(nameWidth, rowHeight),
                 true);
-            drawList.AddText(textOrigin, NativeImGui.GetColorU32(ImGuiCol.Text), name);
-            drawList.PopClipRect();
+            try
+            {
+                drawList.AddText(textOrigin, NativeImGui.GetColorU32(ImGuiCol.Text), name);
+            }
+            finally
+            {
+                drawList.PopClipRect();
+            }
             NativeImGui.Dummy(new Vector2(nameWidth, rowHeight));
             NativeImGui.SameLine(0f, itemSpacing);
         }
@@ -166,15 +183,20 @@ internal sealed class InspectorTargetHeader
         ImGuiWindowFlags flags = ImGuiWindowFlags.NoScrollbar |
                                  ImGuiWindowFlags.NoScrollWithMouse |
                                  ImGuiWindowFlags.NoSavedSettings;
-        if (NativeImGui.BeginChild(
-                $"##inspector_target_custom_{GetTargetId(context.target)}",
-                new Vector2(0f, rowHeight),
-                ImGuiChildFlags.None,
-                flags))
+        bool visible = NativeImGui.BeginChild(
+            $"##inspector_target_custom_{GetTargetId(context.target)}",
+            new Vector2(0f, rowHeight),
+            ImGuiChildFlags.None,
+            flags);
+        try
         {
-            drawer.DrawHeader(context);
+            if (visible)
+                drawer.DrawHeader(context);
         }
-        NativeImGui.EndChild();
+        finally
+        {
+            NativeImGui.EndChild();
+        }
     }
 
     private static string GetTargetId(object target)

@@ -36,27 +36,33 @@ public static partial class ImGuiWidget
             return;
         }
 
-        float availableWidth = MathF.Max(1f, NativeImGui.GetContentRegionAvail().X);
-        float desiredLabelWidth = labelWidth > 0f
-            ? labelWidth
-            : Math.Clamp(availableWidth * style.propertyLabelRatio,
-                style.propertyLabelMinimumWidth,
-                style.propertyLabelMaximumWidth);
-        float tablePadding = NativeImGui.GetStyle().CellPadding.X * 2f;
-        float maximumLabelWidth = MathF.Max(
-            1f,
-            availableWidth - style.axisValueMinimumWidth - tablePadding);
-        float resolvedLabelWidth = MathF.Min(desiredLabelWidth, maximumLabelWidth);
-        NativeImGui.TableSetupColumn("##label", ImGuiTableColumnFlags.WidthFixed, resolvedLabelWidth);
-        NativeImGui.TableSetupColumn("##value", ImGuiTableColumnFlags.WidthStretch, 1f);
-        NativeImGui.TableNextRow();
-        NativeImGui.TableSetColumnIndex(0);
-        NativeImGui.AlignTextToFramePadding();
-        NativeImGui.TextUnformatted(label);
-        NativeImGui.TableSetColumnIndex(1);
-        NativeImGui.SetNextItemWidth(-1f);
-        drawValue();
-        NativeImGui.EndTable();
+        try
+        {
+            float availableWidth = MathF.Max(1f, NativeImGui.GetContentRegionAvail().X);
+            float desiredLabelWidth = labelWidth > 0f
+                ? labelWidth
+                : Math.Clamp(availableWidth * style.propertyLabelRatio,
+                    style.propertyLabelMinimumWidth,
+                    style.propertyLabelMaximumWidth);
+            float tablePadding = NativeImGui.GetStyle().CellPadding.X * 2f;
+            float maximumLabelWidth = MathF.Max(
+                1f,
+                availableWidth - style.axisValueMinimumWidth - tablePadding);
+            float resolvedLabelWidth = MathF.Min(desiredLabelWidth, maximumLabelWidth);
+            NativeImGui.TableSetupColumn("##label", ImGuiTableColumnFlags.WidthFixed, resolvedLabelWidth);
+            NativeImGui.TableSetupColumn("##value", ImGuiTableColumnFlags.WidthStretch, 1f);
+            NativeImGui.TableNextRow();
+            NativeImGui.TableSetColumnIndex(0);
+            NativeImGui.AlignTextToFramePadding();
+            NativeImGui.TextUnformatted(label);
+            NativeImGui.TableSetColumnIndex(1);
+            NativeImGui.SetNextItemWidth(-1f);
+            drawValue();
+        }
+        finally
+        {
+            NativeImGui.EndTable();
+        }
     }
 
     /// <summary>
@@ -121,7 +127,7 @@ public static partial class ImGuiWidget
             new Vector2(fromX, y),
             new Vector2(toX, y),
             color,
-            style.dragMarkerThickness);
+            style.interactionOverlayThickness);
     }
 
     /// <summary>
@@ -138,7 +144,7 @@ public static partial class ImGuiWidget
             NativeImGui.GetColorU32(ImGuiCol.DragDropTarget),
             style.frameRounding,
             ImDrawFlags.None,
-            style.dragMarkerThickness);
+            style.interactionOverlayThickness);
     }
 
     /// <summary>

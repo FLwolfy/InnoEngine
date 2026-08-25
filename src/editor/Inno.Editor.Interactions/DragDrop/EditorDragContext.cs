@@ -17,13 +17,11 @@ public sealed class EditorDragContext
     public EditorDragContext(
         EditorContext editor,
         EditorInteractions interactions,
-        string area,
+        EditorAreaId area,
         EditorDragData data)
     {
         this.editor = editor ?? throw new ArgumentNullException(nameof(editor));
         this.interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
-        if (string.IsNullOrWhiteSpace(area))
-            throw new ArgumentException("An editor interaction area is required.", nameof(area));
         this.area = area;
         this.data = data ?? throw new ArgumentNullException(nameof(data));
     }
@@ -35,7 +33,7 @@ public sealed class EditorDragContext
     public EditorInteractions interactions { get; }
 
     /// <summary>Gets the source interaction area.</summary>
-    public string area { get; }
+    public EditorAreaId area { get; }
 
     /// <summary>Gets the managed drag data.</summary>
     public EditorDragData data { get; }

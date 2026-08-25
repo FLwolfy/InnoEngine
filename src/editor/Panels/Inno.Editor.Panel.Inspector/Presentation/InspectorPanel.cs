@@ -43,19 +43,26 @@ internal sealed class InspectorPanel : EditorPanel
     }
 
     /// <inheritdoc />
-    public override void Draw(EditorContext context)
+    protected override void OnDraw(EditorContext context)
     {
-        if (NativeImGui.BeginChild(
-                "##InspectorScrollRegion",
-                Vector2.Zero,
-                ImGuiChildFlags.None,
-                ImGuiWindowFlags.NoSavedSettings))
+        bool visible = NativeImGui.BeginChild(
+            "##InspectorScrollRegion",
+            Vector2.Zero,
+            ImGuiChildFlags.None,
+            ImGuiWindowFlags.NoSavedSettings);
+        try
         {
-            EditorWidget.ConstrainedContent(
-                "##InspectorContent",
-                () => DrawContent(context));
+            if (visible)
+            {
+                EditorWidget.ConstrainedContent(
+                    "##InspectorContent",
+                    () => DrawContent(context));
+            }
         }
-        NativeImGui.EndChild();
+        finally
+        {
+            NativeImGui.EndChild();
+        }
     }
 
     private void DrawContent(EditorContext context)

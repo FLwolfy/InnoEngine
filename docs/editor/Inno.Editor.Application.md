@@ -6,7 +6,7 @@
 
 ## 启动参数
 
-`Program` 不再提供 `--generate-project` 等命令分支。第一个位置参数是要打开的 project directory；未提供时使用当前工作目录。
+`Program` 只接受且必须接受一个位置参数：要打开的 project directory。缺少参数或存在多余参数时打印 usage 并返回 exit code `2`；产品代码不读取当前工作目录、机器专属路径或隐式的 InnoProject 默认值。
 
 ```text
 Inno.Editor.Application /path/to/InnoProject
@@ -22,7 +22,7 @@ Editor 当前不需要额外的 InnoEngine project descriptor。目录本身就�
 
 ## internal EditorHost
 
-`EditorHost` 是 Application 内部的启动实现，不属于公开 API。它规范化项目目录、组合 Shell/Scripts/UI、运行主循环，并按逆序释放资源。未传入参数时，当前开发入口暂时使用 `Program` 中的本地默认项目目录；正式启动器应始终传入明确路径。
+`EditorHost` 是 Application 内部的启动实现，不属于公开 API。`EditorHost.Create(projectDirectory)` 依次构造 Platform、Window、Shell、ImGui context、EditorContext 与 EditorLayer；每个成功阶段立即登记清理动作，全部验证通过后才返回 host。启动失败与正常 `Dispose` 共用同一个幂等资源栈，严格按 Layer/overlay → ImGui → Shell → Window → Platform 的逆序释放；单项清理异常会记录到 boot log，但不会遮蔽原始启动异常或阻止后续清理。
 
 `editor.ini`、`EditorSettings.json`、Editor boot log、Assets 与脚本产物都以 `projectDirectory` 为根目录。`editor.ini` 只保存标准 ImGui docking/window layout 与各有状态 Module/Panel 的可读 section；业务设置由独立的根目录 `EditorSettings.json` 保存。两种文档各有单一所有者，不会互相覆盖。
 

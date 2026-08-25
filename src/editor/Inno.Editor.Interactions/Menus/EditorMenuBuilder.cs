@@ -12,43 +12,61 @@ public sealed class EditorMenuBuilder
     /// Adds a dynamic action placement to the menu currently being constructed.
     /// </summary>
     /// <param name="path">The slash-delimited path used to create parent menus and the leaf label.</param>
-    /// <param name="actionId">The stable identifier of the action invoked by the leaf.</param>
+    /// <param name="command">The command invoked by the leaf.</param>
     /// <param name="order">The stable ordering value among sibling placements.</param>
     /// <param name="separatorBefore">Whether a visual separator should precede the leaf placement.</param>
-    /// <param name="argument">An optional placement-specific value forwarded to the action context.</param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="path"/> or <paramref name="actionId"/> is empty.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="path"/> is empty.</exception>
     public void Add(
+        string path,
+        EditorCommand command,
+        int order = 0,
+        bool separatorBefore = false)
+        => AddCore(path, command.id, order, separatorBefore, argument: null);
+
+    /// <summary>Adds a typed dynamic command placement to the current menu.</summary>
+    /// <typeparam name="TArgument">The command argument type.</typeparam>
+    /// <param name="path">The slash-delimited path used to create parent menus and the leaf label.</param>
+    /// <param name="command">The typed command invoked by the leaf.</param>
+    /// <param name="argument">The typed argument captured for this menu generation.</param>
+    /// <param name="order">The stable ordering value among sibling placements.</param>
+    /// <param name="separatorBefore">Whether a visual separator should precede the leaf placement.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="path"/> is empty.</exception>
+    public void Add<TArgument>(
+        string path,
+        EditorCommand<TArgument> command,
+        TArgument argument,
+        int order = 0,
+        bool separatorBefore = false)
+        => AddCore(path, command.id, order, separatorBefore, argument);
+
+    internal void Add(
         string path,
         string actionId,
         int order = 0,
         bool separatorBefore = false,
         object? argument = null)
+        => AddCore(path, new EditorActionId(actionId), order, separatorBefore, argument);
+
+    private void AddCore(
+        string path,
+        EditorActionId actionId,
+        int order,
+        bool separatorBefore,
+        object? argument)
     {
         if (string.IsNullOrWhiteSpace(path))
             throw new ArgumentException("A menu path is required.", nameof(path));
-        if (string.IsNullOrWhiteSpace(actionId))
-            throw new ArgumentException("An action id is required.", nameof(actionId));
         m_items.Add(new EditorMenuPlacement(path, actionId, order, separatorBefore, argument));
     }
 
-    /// <summary>Gets the placements collected by this builder.</summary>
-    public IReadOnlyList<EditorMenuPlacement> items => m_items;
+    internal IReadOnlyList<EditorMenuPlacement> items => m_items;
 }
 
-/// <summary>Describes one dynamically contributed menu placement.</summary>
-public sealed class EditorMenuPlacement
+internal sealed class EditorMenuPlacement
 {
-    /// <summary>
-    /// Creates an immutable dynamic menu placement.
-    /// </summary>
-    /// <param name="path">The slash-delimited path used to create parent menus and the leaf label.</param>
-    /// <param name="actionId">The stable identifier of the action invoked by the leaf.</param>
-    /// <param name="order">The stable ordering value among sibling placements.</param>
-    /// <param name="separatorBefore">Whether a visual separator should precede the leaf placement.</param>
-    /// <param name="argument">An optional placement-specific value forwarded to the action context.</param>
-    public EditorMenuPlacement(
+    internal EditorMenuPlacement(
         string path,
-        string actionId,
+        EditorActionId actionId,
         int order,
         bool separatorBefore,
         object? argument)
@@ -60,18 +78,17 @@ public sealed class EditorMenuPlacement
         this.argument = argument;
     }
 
-    /// <summary>Gets the slash-separated menu path.</summary>
-    public string path { get; }
+    internal string path { get; }
 
     /// <summary>Gets the command identifier.</summary>
-    public string actionId { get; }
+    internal EditorActionId actionId { get; }
 
     /// <summary>Gets the stable menu order.</summary>
-    public int order { get; }
+    internal int order { get; }
 
     /// <summary>Gets whether a separator precedes this placement.</summary>
-    public bool separatorBefore { get; }
+    internal bool separatorBefore { get; }
 
     /// <summary>Gets the optional command argument.</summary>
-    public object? argument { get; }
+    internal object? argument { get; }
 }

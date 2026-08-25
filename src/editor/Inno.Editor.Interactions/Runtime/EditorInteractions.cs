@@ -1,7 +1,9 @@
 using System;
 using System.IO;
+using System.Runtime.Loader;
 
 using Inno.Core.Events;
+using Inno.Core.Identity;
 using Inno.Editor.Core;
 
 namespace Inno.Editor.Interactions;
@@ -12,20 +14,26 @@ namespace Inno.Editor.Interactions;
 public sealed class EditorInteractions
 {
     private readonly EditorContext m_editor;
+    private readonly EditorHistory m_history;
     private EditorActionRouter? m_actions;
+    private EditorExtensionCatalog? m_catalog;
     private EditorMenuCatalog? m_menus;
     private EditorDropRouter? m_drops;
-    private string m_focusedArea = "editor/global";
+    private EditorAreaId m_focusedArea = EditorBuiltInInteractionIds.globalArea;
     private object? m_focusedTarget;
+    private object? m_previousGenerationSelection;
+    private object? m_previousGenerationFocus;
+    private Guid? m_pendingSelectionId;
+    private Guid? m_pendingFocusId;
 
     internal EditorInteractions(EditorContext editor)
     {
         m_editor = editor ?? throw new ArgumentNullException(nameof(editor));
-        history = new EditorHistory(new EditorHistoryOptions
+        m_history = new EditorHistory(new EditorHistoryOptions
         {
             cacheDirectory = Path.Combine(editor.projectDirectory, "Library", "Editor", "History")
         });
-        history.Attach(editor, this);
+        m_history.Attach(editor, this);
     }
 
     /// <summary>
@@ -36,10 +44,12 @@ public sealed class EditorInteractions
     /// <summary>
     /// Gets the transactional Undo and Redo history owned by this editor runtime.
     /// </summary>
-    public EditorHistory history { get; }
+    public IEditorHistory history => m_history;
+
+    internal EditorHistory historyHost => m_history;
 
     /// <summary>Gets the area that most recently received keyboard focus.</summary>
-    public string focusedArea => m_focusedArea;
+    public EditorAreaId focusedArea => m_focusedArea;
 
     /// <summary>Gets the target associated with the focused area.</summary>
     public object? focusedTarget => m_focusedTarget;
@@ -49,11 +59,12 @@ public sealed class EditorInteractions
     /// <param name="target">The optional object represented by the area.</param>
     /// <returns>A lightweight interaction handle.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="area"/> is empty.</exception>
-    public EditorInteraction For(string area, object? target = null)
+    public EditorInteraction For(EditorAreaId area, object? target = null)
+        => new(this, area, target);
+
+    internal EditorInteraction For(string area, object? target = null)
     {
-        if (string.IsNullOrWhiteSpace(area))
-            throw new ArgumentException("An editor interaction area is required.", nameof(area));
-        return new EditorInteraction(this, area, target);
+        return new EditorInteraction(this, new EditorAreaId(area), target);
     }
 
     /// <summary>
@@ -78,31 +89,85 @@ public sealed class EditorInteractions
     public bool TryGetDragData(Guid token, out EditorDragData? data)
         => Drops.TryGetData(token, out data);
 
+    /// <summary>Toggles one panel in the currently active extension generation.</summary>
+    /// <param name="panelId">The stable panel identifier to resolve.</param>
+    /// <returns><see langword="true"/> when an available panel was found and toggled.</returns>
+    public bool TogglePanel(EditorPanelId panelId)
+        => m_catalog?.TryTogglePanel(panelId) == true;
+
     internal void Attach(EditorExtensionCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
+        m_catalog = catalog;
         m_actions = new EditorActionRouter(catalog, m_editor, this);
         m_menus = new EditorMenuCatalog(catalog, m_actions);
         m_drops = new EditorDropRouter(catalog);
     }
 
-    internal void Update() => Actions.Flush();
+    internal void Update()
+    {
+        ResolveGenerationTargets();
+        Actions.Flush();
+    }
+
+    internal void PrepareGenerationTransition()
+    {
+        if (m_previousGenerationSelection is not null || m_previousGenerationFocus is not null)
+            throw new InvalidOperationException("An interaction generation transition is already active.");
+
+        m_previousGenerationSelection = selection.selectedTarget;
+        m_previousGenerationFocus = m_focusedTarget;
+        PrepareRetiringTarget(
+            selection.selectedTarget,
+            persistentId => m_pendingSelectionId = persistentId,
+            selection.Clear);
+        PrepareRetiringTarget(
+            m_focusedTarget,
+            persistentId => m_pendingFocusId = persistentId,
+            () => m_focusedTarget = null);
+        Actions.ResetTransientState();
+        Drops.Cancel();
+    }
+
+    internal void RollbackGenerationTransition()
+    {
+        m_pendingSelectionId = null;
+        m_pendingFocusId = null;
+        if (m_previousGenerationSelection is object previousSelection)
+            selection.Select(previousSelection);
+        else
+            selection.Clear();
+        m_focusedTarget = m_previousGenerationFocus;
+        m_previousGenerationSelection = null;
+        m_previousGenerationFocus = null;
+    }
+
+    internal void CompleteGenerationTransition()
+    {
+        m_previousGenerationSelection = null;
+        m_previousGenerationFocus = null;
+    }
 
     internal void Shutdown()
     {
         Actions.Clear();
         Drops.Cancel();
-        _ = For("editor/global").Select();
-        history.Dispose();
+        m_catalog = null;
+        _ = For(EditorBuiltInInteractionIds.globalArea).Select();
+        m_pendingSelectionId = null;
+        m_pendingFocusId = null;
+        m_previousGenerationSelection = null;
+        m_previousGenerationFocus = null;
+        m_history.Dispose();
     }
 
     internal bool DispatchShortcut(KeyPressedEvent keyEvent)
         => Actions.DispatchShortcut(
             keyEvent,
-            m_focusedArea,
+            m_focusedArea.value,
             m_focusedTarget ?? selection.selectedTarget);
 
-    internal void Focus(string area, object? target)
+    internal void Focus(EditorAreaId area, object? target)
     {
         m_focusedArea = area;
         m_focusedTarget = target;
@@ -139,13 +204,17 @@ public sealed class EditorInteractions
         => Actions.IsActive(action, CreateActionContext(area, target, null));
 
     internal EditorMenuModel BuildMenu(string area, object? target)
-        => Menus.Build(new EditorMenuContext(m_editor, this, area, target));
+        => Menus.Build(new EditorMenuContext(m_editor, this, new EditorAreaId(area), target));
 
-    internal bool TryGetShortcut(string action, string area, out HotKeyGesture gesture)
-        => Actions.TryGetShortcut(action, area, out gesture);
+    internal bool TryGetShortcut(
+        string action,
+        string area,
+        object? target,
+        out HotKeyGesture gesture)
+        => Actions.TryGetShortcut(action, area, target, out gesture);
 
     internal Guid BeginDrag(string area, EditorDragData data)
-        => Drops.Begin(new EditorDragContext(m_editor, this, area, data));
+        => Drops.Begin(new EditorDragContext(m_editor, this, new EditorAreaId(area), data));
 
     internal EditorDropStatus QueryDrop(
         Guid token,
@@ -160,7 +229,7 @@ public sealed class EditorInteractions
         return Drops.Query(token, new EditorDropContext(
             m_editor,
             this,
-            area,
+            new EditorAreaId(area),
             data,
             target,
             placement));
@@ -179,7 +248,7 @@ public sealed class EditorInteractions
         return Drops.Drop(token, new EditorDropContext(
             m_editor,
             this,
-            area,
+            new EditorAreaId(area),
             data,
             target,
             placement));
@@ -198,5 +267,43 @@ public sealed class EditorInteractions
         string area,
         object? target,
         object? argument)
-        => new(m_editor, this, area, target, argument);
+        => new(m_editor, this, new EditorAreaId(area), target, argument);
+
+    private void ResolveGenerationTargets()
+    {
+        if (m_pendingSelectionId is Guid selectionId)
+        {
+            m_pendingSelectionId = null;
+            IIdentityObject? replacement = IdentityManager.isInitialized
+                ? IdentityManager.Get<IIdentityObject>(selectionId)
+                : null;
+            if (replacement is not null)
+                selection.Select(replacement);
+            else
+                selection.Clear();
+        }
+        if (m_pendingFocusId is Guid focusId)
+        {
+            m_pendingFocusId = null;
+            m_focusedTarget = IdentityManager.isInitialized
+                ? IdentityManager.Get<IIdentityObject>(focusId)
+                : null;
+        }
+    }
+
+    private static void PrepareRetiringTarget(
+        object? target,
+        Action<Guid> retainIdentity,
+        Action clear)
+    {
+        if (target is null ||
+            !target.GetType().Assembly.IsCollectible &&
+            AssemblyLoadContext.GetLoadContext(target.GetType().Assembly)?.IsCollectible != true)
+        {
+            return;
+        }
+        if (target is IIdentityObject identityObject)
+            retainIdentity(identityObject.GetIdentity().persistentId);
+        clear();
+    }
 }

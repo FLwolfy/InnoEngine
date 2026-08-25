@@ -5,9 +5,9 @@ using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Hierarchy;
 
-[EditorAction("hierarchy/delete-game-object", priority: 100)]
-[EditorMenu("panel/scene.hierarchy", "Delete", order: 300)]
-[EditorShortcut("panel/scene.hierarchy", KeyCode.Delete)]
+[EditorAction(HierarchyInteractionIds.C_DELETE_GAME_OBJECT, priority: 100)]
+[EditorMenu(HierarchyInteractionIds.C_AREA, "Delete", order: 300)]
+[EditorShortcut(HierarchyInteractionIds.C_AREA, KeyCode.Delete)]
 internal sealed class DeleteGameObjectCommand(SceneEdits edits) : EditorAction<GameObject>
 {
     protected override EditorActionState Query(EditorActionContext<GameObject> context)

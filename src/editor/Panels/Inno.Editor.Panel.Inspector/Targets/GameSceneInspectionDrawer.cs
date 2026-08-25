@@ -114,14 +114,14 @@ internal sealed class GameSceneInspectionDrawer : InspectionDrawer<GameScene>
                     systems.Count,
                     () => context.interactions
                         .For(
-                            "panel/scene.inspector/system",
+                            InspectorInteractionIds.systemArea,
                             editorTarget)
-                        .Enqueue("inspector/remove-system")),
+                        .Enqueue(RemoveSystemCommand.command)),
                 dimmed: !system.enabled,
                 trailingControlWidth: m_cardControls.width,
                 drawContextMenu: () => _ = EditorMenuRenderer.ContextMenu(
                     $"##system_menu_{systemId}",
-                    context.interactions.For("panel/scene.inspector/system", editorTarget)));
+                    context.interactions.For(InspectorInteractionIds.systemArea, editorTarget)));
             if (!open)
             {
                 NativeImGui.Dummy(new Vector2(0f, EditorWidget.style.inspectorCardSpacing));
@@ -166,13 +166,19 @@ internal sealed class GameSceneInspectionDrawer : InspectionDrawer<GameScene>
                 C_SEARCH_BUFFER_SIZE))
             return;
 
-        EditorInteraction interaction = context.interactions.For("panel/scene.inspector/system", scene);
-        if (EditorMenuRenderer.DrawSearchItems(
-                interaction,
-                interaction.BuildMenu().items,
-                m_systemSearch))
-            NativeImGui.CloseCurrentPopup();
-        EditorWidget.EndSearchPopup();
+        try
+        {
+            EditorInteraction interaction = context.interactions.For(InspectorInteractionIds.systemArea, scene);
+            if (EditorMenuRenderer.DrawSearchItems(
+                    interaction,
+                    interaction.BuildMenu().items,
+                    m_systemSearch))
+                NativeImGui.CloseCurrentPopup();
+        }
+        finally
+        {
+            EditorWidget.EndSearchPopup();
+        }
     }
 
 }

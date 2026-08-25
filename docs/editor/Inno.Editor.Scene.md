@@ -12,32 +12,33 @@ flowchart LR
     Edits --> History["EditorHistoryChange"]
     History --> Handlers["Current-generation handlers"]
     Handlers --> Scene["GameScene graph"]
-    Workspace["EditorSceneWorkspace"] --> Assets["SceneAsset / AssetManager"]
+    Workspace["IEditorSceneWorkspace"] --> Assets["SceneAsset / AssetManager"]
 ```
 
-- `EditorSceneWorkspace` 管理已打开 Scene、asset source path、dirty baseline、Save/Save As 与 `editor.ini` workspace 状态。
+- `IEditorSceneWorkspace` 是只读查询与 Open/Save 工作流契约；internal `EditorSceneWorkspace` Module 管理文档、source path、dirty baseline 与 `editor.ini` 状态。
 - `SceneEdits` 是 Scene 内容修改的唯一高层入口，负责“修改成功后记录最小可逆数据”。
 - History Handler 根据 persistent ID 和 Stable Type ID 在当前 generation 重新解析对象，不保留旧实例。
 - `Inno.Engine.Scene.Assets` 提供通用 property/subtree/element 序列化能力，但不知道 Editor History。
 
 ## 公共 API
 
-### EditorSceneWorkspace
+### IEditorSceneWorkspace
 
 | 成员 | 作用 |
 | --- | --- |
 | `scenes` / `activeScene` | 查询当前 Editor scene setup。 |
-| `CreateScene()` / `OpenScene(path)` / `CloseScene(scene)` | additive document 生命周期；关闭不删除 Asset。 |
-| `SaveScene(scene, directory)` | 保存到已有 source；未保存 Scene 在调用方提供的 fallback directory 创建 Asset。全局 Save 传入 File Browser 当前目录。 |
-| `SaveSceneToDirectory(scene, directory)` | 显式保存到目标 Asset directory。 |
+| `Open(path)` | additive 打开 Scene asset。 |
+| `Save(scene, directory)` | 保存到已有 source；未保存 Scene 在调用方提供的 fallback directory 创建 Asset。 |
+| `SaveToDirectory(scene, directory)` | 显式保存到目标 Asset directory。 |
 | `SavePrefab(gameObject, directory)` | 从 GameObject 子树保存 PrefabAsset。 |
 | `IsDirty(scene)` | 比较当前序列化 hash、source path 与文件名。 |
 | `TryGetSourcePath(scene, out path)` | 查询保存后的 source-relative path。 |
-| `Refresh()` | 在 owner thread 消费 Asset rename/missing 变化。 |
 
-`EditorSceneWorkspace` 是 ID 为 `scene-workspace` 的 `EditorModule`，通过标准 protected Capture/Restore hooks 只把已保存 Scene 的顺序与 active Scene 写入 `[InnoEditor][Module.scene-workspace]`。Selection 属于当前 Editor session，不写入项目设置。未保存 Scene 内容和 dirty 内存同样不会写入 `editor.ini`；它们必须保存为 `.iscene`。
+具体 `EditorSceneWorkspace`、构造函数、Create/Close/Clear/Refresh 和 history/document helpers 均为 internal；可逆的 Scene 文档修改必须经 `SceneEdits`。该 Module 通过标准 protected Capture/Restore hooks 只把已保存 Scene 的顺序与 active Scene 写入 `[InnoEditor][Module.scene-workspace]`。Selection 属于当前 Editor session，不写入项目设置。未保存 Scene 内容和 dirty 内存同样不会写入 `editor.ini`；它们必须保存为 `.iscene`。
 
 Scene setup 因缺少 Stable Type ID 或反序列化失败而暂时无法恢复时，Workspace 保留 pending setup 并发布 `Scene Workspace Restore` Diagnostic。TypeCache generation 或 Asset Database 变化后会重新尝试，成功才清除。每帧可重试的 document synchronization 使用 Scene persistent ID 维护独立 Diagnostic；相同异常只在首次出现时写入 Log，恢复、关闭 Scene 或停止 Workspace 都会清理对应状态。Missing Scene 被明确跳过属于历史事件，因此只写 Log warning。
+
+Asset Browser 重命名已加载 Scene 的 source 时，Workspace 会同步 document path 与 Scene 显示名，并以同步前的实际序列化内容重新判断 dirty 状态。单纯的 source 重命名会重建保存基线，不产生未保存标记；已有 Scene 内容修改仍保持 dirty。
 
 ### SceneEdits
 
@@ -82,10 +83,11 @@ public sealed class AddAnimationControllerAction(SceneEdits edits)
 
 ## 原子性与热重载
 
-- Property restore 在应用前捕获该 property 的 rollback bytes；失败时恢复原值。
-- Component/System 恢复失败会删除候选元素；对既有元素 Reset/排序失败会恢复原 state 与 index。
-- Subtree restore 在创建或 placement 失败时销毁候选 subtree。
-- Hierarchy Handler 先捕获当前 placements；发生 cycle 或设置失败时反向恢复。
+- Property/Scalar restore 在应用前捕获实际 rollback bytes/value，并检查严格恢复结果。
+- Component/System 与 Subtree 同时捕获 element/subtree、index、parent、state 和受影响 incoming references；恢复任一步失败都会逆序删除候选并还原原引用。
+- Hierarchy 与 Scene order 先捕获真实 placement/index；正向和反向 placement 都检查结构化结果。
+- Scene document 把 loaded document、source path、active scene、dirty baseline 作为一个领域事务；Selection/焦点只在成功后 best-effort 通知，不决定 History 成败。
+- `SceneEdits` 对 after capture、payload/blob 创建或 `RecordApplied` 失败执行严格 before rollback；补偿也失败时抛出包含两侧原因的聚合异常，禁止留下未记录修改。
 - 类型由 Stable Type ID 在当前 TypeCache generation 解析。缺失类型、目标缺失或 schema 不兼容会形成 History barrier，原栈保持不变。
 - 脚本 reload 后中立 payload 保留，Handler Registry 切换到新 generation；History 不固定旧 ALC。
 
@@ -95,4 +97,4 @@ public sealed class AddAnimationControllerAction(SceneEdits edits)
 
 ## Scripting API
 
-EditorScripts 显式 `using InnoEditor.Scene;` 后可以使用 `EditorSceneWorkspace` 与 `SceneEdits`。内部 History payload 类型、引用扫描器和 Handler 不导出；一般扩展只调用领域门面，不自行复制 Scene 协议。
+EditorScripts 显式 `using InnoEditor.Scene;` 后只看到 `IEditorSceneWorkspace` 与 `SceneEdits`。concrete Workspace、构造/关闭/清空/刷新 helper、History payload、引用扫描器和 Handler 不导出；工作流通过接口，所有可逆 Scene 数据修改通过 `SceneEdits`。

@@ -164,6 +164,45 @@ public sealed class TypeCacheTests : IDisposable
         Assert.Throws<ArgumentNullException>(() => TypeCacheManager.TryGetStableTypeId(null!, out _));
     }
 
+    [Fact]
+    public void LaterRegistryActivationFailureRestoresEveryEarlierRegistry()
+    {
+        using var first = new TransactionalTestRegistry();
+        using var second = new TransactionalTestRegistry();
+        first.Initialize();
+        second.Initialize();
+        int firstPrevious = first.publishedSnapshotId;
+        int secondPrevious = second.publishedSnapshotId;
+        second.failActivation = true;
+
+        Assert.Throws<InvalidOperationException>(TypeCacheManager.Rebuild);
+
+        Assert.Equal(firstPrevious, first.publishedSnapshotId);
+        Assert.Equal(secondPrevious, second.publishedSnapshotId);
+        Assert.Equal(1, first.rollbackCount);
+        Assert.Equal(1, second.rollbackCount);
+        Assert.Contains(firstPrevious + 1, first.disposedSnapshotIds);
+        Assert.Contains(secondPrevious + 1, second.disposedSnapshotIds);
+        Assert.DoesNotContain(firstPrevious, first.disposedSnapshotIds);
+        Assert.DoesNotContain(secondPrevious, second.disposedSnapshotIds);
+    }
+
+    [Fact]
+    public void SnapshotCleanupFailureDoesNotRollBackCommittedCandidate()
+    {
+        using var registry = new TransactionalTestRegistry();
+        registry.Initialize();
+        int previous = registry.publishedSnapshotId;
+        registry.failSnapshotCleanup = true;
+
+        TypeCacheManager.Rebuild();
+
+        Assert.Equal(previous + 1, registry.publishedSnapshotId);
+        Assert.Equal(0, registry.rollbackCount);
+        Assert.Equal(1, registry.cleanupFailureCount);
+        Assert.Contains(previous, registry.disposedSnapshotIds);
+    }
+
     private static IReadOnlyList<Type> GetTypesWithAttribute(Type attributeType)
     {
         MethodInfo method = typeof(TypeCacheManager)
@@ -173,6 +212,47 @@ public sealed class TypeCacheTests : IDisposable
                 candidate.IsGenericMethodDefinition);
         return (IReadOnlyList<Type>)method.MakeGenericMethod(attributeType).Invoke(null, null)!;
     }
+}
+
+internal sealed class TransactionalTestRegistry : TypeRegistry<TransactionalTestRegistry.Snapshot>
+{
+    private int m_nextSnapshotId;
+
+    internal bool failActivation;
+    internal bool failSnapshotCleanup;
+    internal int rollbackCount;
+    internal int cleanupFailureCount;
+    internal int publishedSnapshotId;
+    internal List<int> disposedSnapshotIds { get; } = [];
+
+    internal void Initialize() => _ = current;
+
+    protected override Snapshot Build(TypeCacheSnapshot types) => new(++m_nextSnapshotId);
+
+    protected override void OnActivating(Snapshot? previous, Snapshot candidate)
+    {
+        publishedSnapshotId = candidate.id;
+        if (failActivation)
+            throw new InvalidOperationException("Injected registry activation failure.");
+    }
+
+    protected override void OnActivationRolledBack(Snapshot? previous, Snapshot candidate)
+    {
+        publishedSnapshotId = previous?.id ?? 0;
+        rollbackCount++;
+    }
+
+    protected override void DisposeSnapshot(Snapshot snapshot)
+    {
+        disposedSnapshotIds.Add(snapshot.id);
+        if (failSnapshotCleanup)
+            throw new InvalidOperationException("Injected snapshot cleanup failure.");
+    }
+
+    protected override void OnCleanupFailed(string phase, Exception exception)
+        => cleanupFailureCount++;
+
+    internal sealed record Snapshot(int id);
 }
 
 public class TestBase;

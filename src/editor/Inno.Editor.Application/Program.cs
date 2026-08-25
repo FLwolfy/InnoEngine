@@ -1,18 +1,20 @@
 using System;
-using System.IO;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Inno.Editor.Application;
 
 internal static class Program
 {
-    private const string TEMPORARY_PROJECT_DIRECTORY = "/Users/aaronliao/Dev/GameEngineDev/InnoProject";
-
     private static int Main(string[] args)
     {
+        if (!TryGetProjectDirectory(args, out string? projectDirectory))
+        {
+            Console.Error.WriteLine("Usage: Inno.Editor.Application <project-directory>");
+            return 2;
+        }
         try
         {
-            string projectDirectory = args.Length > 0 ? args[0] : Path.GetFullPath(TEMPORARY_PROJECT_DIRECTORY);
-            using EditorHost host = new(projectDirectory);
+            using EditorHost host = EditorHost.Create(projectDirectory);
             int exitCode = host.Run();
             return exitCode;
         }
@@ -22,5 +24,14 @@ internal static class Program
             Console.Error.WriteLine(msg);
             return 1;
         }
+    }
+
+    internal static bool TryGetProjectDirectory(
+        string[] args,
+        [NotNullWhen(true)] out string? projectDirectory)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        projectDirectory = args.Length == 1 ? args[0] : null;
+        return projectDirectory is not null;
     }
 }

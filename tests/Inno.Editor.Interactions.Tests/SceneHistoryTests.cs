@@ -134,7 +134,8 @@ public sealed class SceneHistoryTests : IDisposable
         Guid childId = targetChild.identity.persistentId;
 
         Assert.True(m_edits.RemoveComponent(targetComponent));
-        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        EditorHistoryResult restoreComponentResult = m_runtime.interactions.history.Undo();
+        Assert.True(restoreComponentResult.succeeded, restoreComponentResult.message);
         var restoredComponent = Assert.IsType<HistoryComponent>(IdentityManager.Get<GameComponent>(componentId));
         Assert.Same(restoredComponent, references.targetComponent);
         Assert.Equal(41, restoredComponent.value);
@@ -229,6 +230,27 @@ public sealed class SceneHistoryTests : IDisposable
         Assert.Equal("Before", gameObject.name);
         Assert.True(m_runtime.interactions.history.Redo().succeeded);
         Assert.Equal("After", gameObject.name);
+    }
+
+    [Fact]
+    public void SceneRenameUsesTheSameScalarHistoryContractAsGameObjectRename()
+    {
+        GameScene scene = m_workspace.CreateScene();
+        GameObject gameObject = scene.CreateObject("Object Before");
+
+        m_edits.RenameScene(scene, "Scene After");
+        m_edits.RenameGameObject(gameObject, "Object After");
+
+        Assert.Equal("Scene After", scene.name);
+        Assert.Equal("Object After", gameObject.name);
+        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        Assert.Equal("Object Before", gameObject.name);
+        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        Assert.StartsWith("Untitled", scene.name, StringComparison.Ordinal);
+        Assert.True(m_runtime.interactions.history.Redo().succeeded);
+        Assert.Equal("Scene After", scene.name);
+        Assert.True(m_runtime.interactions.history.Redo().succeeded);
+        Assert.Equal("Object After", gameObject.name);
     }
 
     [Fact]

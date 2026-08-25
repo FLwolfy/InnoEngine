@@ -8,7 +8,7 @@ using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
-[EditorMenuSource("panel/scene.inspector/system")]
+[EditorMenuSource(InspectorInteractionIds.C_SYSTEM_AREA)]
 internal sealed class AddSystemMenuProvider : EditorMenuSource
 {
     public override void Build(EditorMenuContext context, EditorMenuBuilder builder)
@@ -19,7 +19,7 @@ internal sealed class AddSystemMenuProvider : EditorMenuSource
         {
             if (!IsAddable(type, scene))
                 continue;
-            builder.Add(type.Name, "inspector/add-system", argument: type);
+            builder.Add(type.Name, AddSystemCommand.command, type);
         }
     }
 

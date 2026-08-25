@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Inno.Core.Logging;
+using Inno.Core.Scripting;
 using Inno.Core.Serialization;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
@@ -31,6 +32,7 @@ public sealed class SerializedPropertyRenderer
     /// Thrown when <paramref name="drawers"/>, <paramref name="interactions"/>, or
     /// <paramref name="edits"/> is <see langword="null"/>.
     /// </exception>
+    [ScriptingApiIgnore]
     public SerializedPropertyRenderer(
         PropertyDrawerRegistry drawers,
         EditorInteractions interactions,
@@ -95,28 +97,54 @@ public sealed class SerializedPropertyRenderer
             this);
 
         EditorWidget.PropertyRow(path, context.label, () =>
-        {
-            try
-            {
-                IPropertyDrawer drawer = m_drawers.Resolve(propertyType);
-                EditorWidget.Disabled(context.isReadOnly, () => drawer.Draw(context));
-                m_failureStates.Remove(path);
-            }
-            catch (Exception exception)
-            {
-                EditorWidget.ColoredText(
-                    EditorPalette.error,
-                    $"Error: {exception.Message}");
-                string failureState = $"{exception.GetType().FullName}|{exception.Message}";
-                if (!m_failureStates.TryGetValue(path, out string? previous) ||
-                    !string.Equals(previous, failureState, StringComparison.Ordinal))
-                {
-                    Log.Error("Inspector failed to draw property '{0}': {1}", path, exception);
-                    m_failureStates[path] = failureState;
-                }
-            }
-        });
+            DrawContent(context));
     }
 
-    internal IPropertyDrawer Resolve(Type propertyType) => m_drawers.Resolve(propertyType);
+    internal void DrawInline(
+        EditorContext editorContext,
+        object owner,
+        string rootPropertyName,
+        string path,
+        string label,
+        Type propertyType,
+        PropertyVisibility visibility,
+        Func<object?> getter,
+        Action<object?> setter)
+    {
+        var context = new PropertyDrawContext(
+            editorContext,
+            m_interactions,
+            m_edits,
+            owner,
+            rootPropertyName,
+            path,
+            EditorWidget.NicifyName(label),
+            propertyType,
+            visibility,
+            getter,
+            setter,
+            this);
+        DrawContent(context);
+    }
+
+    private void DrawContent(PropertyDrawContext context)
+    {
+        try
+        {
+            IPropertyDrawer drawer = m_drawers.Resolve(context.propertyType);
+            EditorWidget.Disabled(context.isReadOnly, () => drawer.Draw(context));
+            m_failureStates.Remove(context.path);
+        }
+        catch (Exception exception)
+        {
+            EditorWidget.ColoredText(EditorPalette.error, $"Error: {exception.Message}");
+            string failureState = $"{exception.GetType().FullName}|{exception.Message}";
+            if (!m_failureStates.TryGetValue(context.path, out string? previous) ||
+                !string.Equals(previous, failureState, StringComparison.Ordinal))
+            {
+                Log.Error("Inspector failed to draw property '{0}': {1}", context.path, exception);
+                m_failureStates[context.path] = failureState;
+            }
+        }
+    }
 }

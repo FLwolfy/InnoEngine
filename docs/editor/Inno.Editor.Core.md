@@ -33,21 +33,19 @@ Inno.Editor.Core/
 
 | API | 说明 |
 | --- | --- |
-| `EditorContext` | 只读项目根目录、最新 `EditorFrame`，以及 `editor.ini` 的最小 layout façade；不提供 service locator。 |
+| `EditorContext` | 对扩展只公开只读项目根目录、最新 `EditorFrame` 与焦点等被动状态；不提供 service locator 或持久化写入口。 |
 | `EditorLayoutSettings` | internal 实现；协调 `editor.ini` 中互不覆盖的 ImGui layout 与可读具名 section。它不会成为跨项目公开依赖。 |
 | `EditorFrame` | 一帧的 `deltaTime`、`totalTime`、`isFocused` 不可变快照。 |
 | `EditorRuntime` | 表现无关的 `Start`、`Update(EditorFrame)`、`Dispose` 抽象。 |
 
-`EditorContext` 是扩展共享的中立数据，不承担路由：
+`EditorContext` 是由 Application host 创建并注入扩展的中立数据，不承担路由：
 
 ```csharp
-var context = new EditorContext(projectDirectory);
 Console.WriteLine(context.projectDirectory);
-Console.WriteLine(context.layoutPath);
-Console.WriteLine(context.imguiLayout);
+Console.WriteLine(context.frame.totalTime);
 ```
 
-构造函数把项目根规范化为绝对路径。Context 通过 `layoutPath`、`imguiLayout`、`GetLayoutSectionNames`、`TryGetLayoutSection`、`SetLayoutSection`、`RemoveLayoutSection`、`SetImGuiLayout`、`SaveLayoutIfChanged` 和 `SaveLayout` 提供明确的 layout 操作；具体文档类保持 internal。
+构造函数、`layoutPath`、`imguiLayout`、section 读写、ImGui layout 更新和 Save 均为 internal host API，只通过精确的 `InternalsVisibleTo` 提供给 Application、Interactions 与必要测试程序集。EditorScripts 不能创建第二个 Context、读取原始 section、覆盖其他扩展状态或主动写入 `editor.ini`。
 
 这些 API 只处理 Module/Panel 项目状态与 Dear ImGui 使用的 `editor.ini`。业务设置由 [Inno.Editor.Settings](Inno.Editor.Settings.md) 独立写入项目根 `EditorSettings.json`。业务扩展若需要 Settings、Action/Menu/Selection，仍应在构造函数中接收 `EditorSettings` 或 `EditorInteractions`，而不是向 `EditorContext` 添加新服务属性。
 
@@ -91,7 +89,7 @@ Module、Panel、Action、Menu source 和 Drop handler 可以在唯一构造函�
 [EditorPanel("animation.graph", "Animator", order: 500, defaultOpen: true)]
 public sealed class AnimatorPanel(AnimationModule animation) : EditorPanel
 {
-    public override void Draw(EditorContext context)
+    protected override void OnDraw(EditorContext context)
     {
         // Render the panel body.
     }
@@ -130,7 +128,7 @@ public sealed class AnimationBakeModal(AnimationModule animation) : EditorModal
     public override Vector2 initialSize => new(900f, 600f);
     public override Vector2 minimumSize => new(640f, 420f);
 
-    public override void Draw(EditorContext context)
+    protected override void OnDraw(EditorContext context)
     {
         // Draw body only; do not position the popup here.
     }
@@ -141,7 +139,7 @@ public sealed class AnimationBakeModal(AnimationModule animation) : EditorModal
 
 ## Scripting API
 
-EditorScripts 使用唯一逻辑命名空间 `InnoEditor.Core`。它导出 Context、Frame、Runtime、Module、Panel、Modal、`EditorState` 和 Reload State 接口；不导出独立 Workspace interface、reader、writer 或 JSON DOM。脚本 Module/Panel 通过 protected `Capture(EditorState)` / `Restore(EditorState)` 选择持久化，所有脚本必须显式写普通 `using`。
+EditorScripts 使用唯一逻辑命名空间 `InnoEditor.Core`。它导出 Context、Frame、Runtime、Module、Panel、Modal、`EditorState` 和 Reload State 接口；不导出 layout reader/writer 或 JSON DOM。脚本 Module/Panel 只能实现 protected `OnStart/OnUpdate/OnStop`、`OnAttach/OnDetach/OnDraw` 与 `Capture/Restore` hooks，不能直接调用 Start、Update、Stop、Attach、Detach 或 Draw；所有脚本必须显式写普通 `using`。
 
 ## Module/Panel 项目状态
 
@@ -167,7 +165,7 @@ public sealed class AnimationModule : EditorModule
 
 `Restore` 只会为已 override Capture 的实例调用；section 不存在时，`state.Get` 直接返回调用者给出的 fallback。`EditorState` 是唯一公开参数契约，只提供 `Get` / `Set`；存储格式、JSON serializer 和 section 转换全部位于 Interactions 的 internal 实现中。Capture 参数可写，Restore 参数只读。状态只应保存项目相关、可重新解析的中立值，不保存 runtime 对象、线程、delegate 或插件实例，也不自行引入 schema 迁移字段。
 
-`EditorSceneWorkspace` 名称中的 Workspace 仍表示“当前打开的 Scene 文档工作集”，不是另一种基础设施类型。它因为需要启动、逐帧同步和停止而是 `EditorModule`，并通过同一组 Capture/Restore hooks 额外保存 Scene 路径。
+Scene document 的公开查询/工作流面位于 `Inno.Editor.Scene.IEditorSceneWorkspace`；其 internal Module 实现通过同一组 Capture/Restore hooks 保存 Scene 路径，不向扩展暴露生命周期或文档修改入口。
 
 ## 边界规则
 

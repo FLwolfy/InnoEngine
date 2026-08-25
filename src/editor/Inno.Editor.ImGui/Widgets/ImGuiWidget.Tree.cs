@@ -91,57 +91,73 @@ public static partial class ImGuiWidget
         if (!options.hideGuideLines)
             DrawTreeGuideLines(nodeCursor, hasNextSibling, !isLeaf);
         PushTransparentTreeNodeHeaderColors();
-        bool isOpen = NativeImGui.TreeNodeEx($"##{id}", flags);
-        NativeImGui.PopStyleColor(3);
-        float nativeRowMaxY = NativeImGui.GetItemRectMax().Y;
-        if (!isLeaf && NativeImGui.IsItemToggledOpen())
-            s_openStatesById[id] = isOpen;
-
-        TreeWidgetHighlightRect contentRect = DrawTreeNodeContentContainer(
-            id,
-            nodeCursor,
-            nativeRowMaxY,
-            onDraw,
-            options.drawViewportOverlay,
-            out Vector2 interactionMin);
-        bool hovered = NativeImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenOverlappedByItem);
-        bool clicked = hovered && NativeImGui.IsItemClicked(ImGuiMouseButton.Left);
-        bool doubleClicked = hovered && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
-        if (!isLeaf && doubleClicked)
-            s_openStatesById[id] = !isOpen;
-        bool showHoverHighlight = hovered &&
-                                  !options.suppressHoverHighlight &&
-                                  !ImGuiP.IsDragDropActive();
-        if (options.selected || showHoverHighlight)
-            DrawTreeRowBackground(
-                drawList,
-                contentRect,
-                NativeImGui.GetColorU32(options.selected ? ImGuiCol.Header : ImGuiCol.HeaderHovered));
-        else if (options.showBackground)
-            DrawTreeRowBackground(
-                drawList,
-                contentRect,
-                NativeImGui.ColorConvertFloat4ToU32(options.backgroundColor));
-
-        if (isOpen && !isLeaf)
+        bool isOpen;
+        try
         {
-            s_treeNodeStack.Add(new TreeWidgetNodeState
-            {
-                id = id,
-                cursor = nodeCursor,
-                rowMaxY = contentRect.max.Y,
-                hasNextSibling = hasNextSibling
-            });
+            isOpen = NativeImGui.TreeNodeEx($"##{id}", flags);
         }
+        finally
+        {
+            NativeImGui.PopStyleColor(3);
+        }
+        float nativeRowMaxY = NativeImGui.GetItemRectMax().Y;
+        try
+        {
+            if (!isLeaf && NativeImGui.IsItemToggledOpen())
+                s_openStatesById[id] = isOpen;
 
-        return new TreeNodeResult(
-            isOpen && !isLeaf,
-            clicked,
-            doubleClicked,
-            hovered,
-            contentRect.min,
-            contentRect.max,
-            interactionMin);
+            TreeWidgetHighlightRect contentRect = DrawTreeNodeContentContainer(
+                id,
+                nodeCursor,
+                nativeRowMaxY,
+                onDraw,
+                options.drawViewportOverlay,
+                out Vector2 interactionMin);
+            bool hovered = NativeImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenOverlappedByItem);
+            bool clicked = hovered && NativeImGui.IsItemClicked(ImGuiMouseButton.Left);
+            bool doubleClicked = hovered && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
+            if (!isLeaf && doubleClicked)
+                s_openStatesById[id] = !isOpen;
+            bool showHoverHighlight = hovered &&
+                                      !options.suppressHoverHighlight &&
+                                      !ImGuiP.IsDragDropActive();
+            if (options.selected || showHoverHighlight)
+                DrawTreeRowBackground(
+                    drawList,
+                    contentRect,
+                    NativeImGui.GetColorU32(options.selected ? ImGuiCol.Header : ImGuiCol.HeaderHovered));
+            else if (options.showBackground)
+                DrawTreeRowBackground(
+                    drawList,
+                    contentRect,
+                    NativeImGui.ColorConvertFloat4ToU32(options.backgroundColor));
+
+            if (isOpen && !isLeaf)
+            {
+                s_treeNodeStack.Add(new TreeWidgetNodeState
+                {
+                    id = id,
+                    cursor = nodeCursor,
+                    rowMaxY = contentRect.max.Y,
+                    hasNextSibling = hasNextSibling
+                });
+            }
+
+            return new TreeNodeResult(
+                isOpen && !isLeaf,
+                clicked,
+                doubleClicked,
+                hovered,
+                contentRect.min,
+                contentRect.max,
+                interactionMin);
+        }
+        catch
+        {
+            if (isOpen && !isLeaf)
+                NativeImGui.TreePop();
+            throw;
+        }
     }
 
     /// <summary>
@@ -186,9 +202,15 @@ public static partial class ImGuiWidget
         NativeImGui.SameLine(contentOffsetX, 0f);
         NativeImGui.BeginGroup();
         NativeImGui.PushClipRect(new Vector2(contentX, nodeCursor.Y), new Vector2(contentRightX, contentBottomY), true);
-        onDraw(new TreeNodeDrawContext(MathF.Max(1f, nativeRowMaxY - nodeCursor.Y)));
-        NativeImGui.PopClipRect();
-        NativeImGui.EndGroup();
+        try
+        {
+            onDraw(new TreeNodeDrawContext(MathF.Max(1f, nativeRowMaxY - nodeCursor.Y)));
+        }
+        finally
+        {
+            NativeImGui.PopClipRect();
+            NativeImGui.EndGroup();
+        }
 
         Vector2 contentMin = NativeImGui.GetItemRectMin();
         Vector2 contentMax = NativeImGui.GetItemRectMax();
@@ -221,9 +243,15 @@ public static partial class ImGuiWidget
 
         float contentBoundaryX = window.DC.CursorMaxPos.X;
         float idealBoundaryX = window.DC.IdealMaxPos.X;
-        drawViewportOverlay();
-        window.DC.CursorMaxPos.X = contentBoundaryX;
-        window.DC.IdealMaxPos.X = idealBoundaryX;
+        try
+        {
+            drawViewportOverlay();
+        }
+        finally
+        {
+            window.DC.CursorMaxPos.X = contentBoundaryX;
+            window.DC.IdealMaxPos.X = idealBoundaryX;
+        }
     }
 
     private static void PushTransparentTreeNodeHeaderColors()

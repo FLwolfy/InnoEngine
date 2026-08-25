@@ -110,8 +110,11 @@ Runtime Type ID 是只适用于当前活动 `Type` 实例的整数。新 ALC 里
 | `Dispose()` | `public` | 注销并释放，之后不能再用。 |
 | `current` | `protected` | 懒取得当前快照；版本过期时自动刷新。 |
 | `Build(TypeCacheSnapshot)` | `protected abstract` | 旁路验证并构建完整候选快照。 |
-| `OnCommitted(previous, current)` | `protected virtual` | 新状态提交后、旧状态释放前执行。 |
+| `OnActivating(previous, candidate)` | `protected virtual` | candidate 已临时发布后的可失败激活；实现必须准备对应回滚。 |
+| `OnActivationRolledBack(previous, candidate)` | `protected virtual` | 激活失败后逆转已完成的生命周期工作。 |
+| `OnActivationCompleted(previous, current)` | `protected virtual` | 全部 Registry 激活成功后的不可失败清理阶段。 |
 | `DisposeSnapshot(snapshot)` | `protected virtual` | 默认对实现 `IDisposable` 的 snapshot 调用 `Dispose()`。 |
+| `OnCleanupFailed(phase, exception)` | `protected virtual` | 报告 rollback/complete/snapshot release 清理异常；不会重新进入回滚。 |
 | `CreateExtension<TExtension>(Type)` | `protected static` | 验证具体类型并通过无参构造函数实例化。 |
 
 ### 自定义 Registry 示例
@@ -141,7 +144,7 @@ internal sealed class RenderPipelineRegistry
 }
 ```
 
-新增这种 Registry 不需要修改 `AssemblyManager` 或添加全局 Hook。候选构造/冲突验证失败会使整个程序集候选失效，当前 Registry 继续可用。
+新增这种 Registry 不需要修改 `AssemblyManager` 或添加全局 Hook。协调器执行 Build candidate → reversible Activate → global Complete；后一个 Registry 激活失败时，已激活项按逆序恢复 `m_current` 与 TypeCache version，candidate 被释放，previous snapshot 保留。Complete 只做 previous release 等清理，异常会逐项报告并继续，不会制造“已发布后伪回滚”。候选构造/冲突验证失败同样保留当前 Registry。
 
 ## 错误模型
 

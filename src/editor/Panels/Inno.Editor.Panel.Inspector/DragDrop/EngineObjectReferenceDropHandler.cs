@@ -8,7 +8,7 @@ using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
-[EditorDrop("panel/scene.inspector/engine-object-reference", priority: 100)]
+[EditorDrop(InspectorInteractionIds.C_ENGINE_OBJECT_REFERENCE_AREA, priority: 100)]
 internal sealed class EngineObjectReferenceDropHandler
     : EditorDrop<EngineObject, EngineObjectReferenceDropTarget>
 {

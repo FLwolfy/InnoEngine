@@ -60,37 +60,49 @@ internal abstract class IconSetting : EditorSetting
             iconSlotWidth);
         if (isOpen)
         {
-            for (int i = 0; i < C_ICONS.Count; i++)
+            try
             {
-                (string name, string candidate) = C_ICONS[i];
-                NativeImGui.PushID(name);
-                bool selected = string.Equals(candidate, value, StringComparison.Ordinal);
-                if (NativeImGui.Selectable(
-                        "##icon_option",
-                        selected,
-                        ImGuiSelectableFlags.None,
-                        new Vector2(0f, NativeImGui.GetFrameHeight())))
+                for (int i = 0; i < C_ICONS.Count; i++)
                 {
-                    value = candidate;
-                    setting.SetAsString("value", candidate);
+                    (string name, string candidate) = C_ICONS[i];
+                    NativeImGui.PushID(name);
+                    try
+                    {
+                        bool selected = string.Equals(candidate, value, StringComparison.Ordinal);
+                        if (NativeImGui.Selectable(
+                                "##icon_option",
+                                selected,
+                                ImGuiSelectableFlags.None,
+                                new Vector2(0f, NativeImGui.GetFrameHeight())))
+                        {
+                            value = candidate;
+                            setting.SetAsString("value", candidate);
+                        }
+                        Vector2 minimum = NativeImGui.GetItemRectMin();
+                        Vector2 maximum = NativeImGui.GetItemRectMax();
+                        ImGuiStylePtr style = NativeImGui.GetStyle();
+                        float lineHeight = NativeImGui.GetTextLineHeight();
+                        DrawIconTextAt(
+                            NativeImGui.GetWindowDrawList(),
+                            new Vector2(
+                                minimum.X + style.FramePadding.X,
+                                minimum.Y + MathF.Max(0f, (maximum.Y - minimum.Y - lineHeight) * 0.5f)),
+                            candidate,
+                            name,
+                            iconSlotWidth);
+                        if (selected)
+                            NativeImGui.SetItemDefaultFocus();
+                    }
+                    finally
+                    {
+                        NativeImGui.PopID();
+                    }
                 }
-                Vector2 minimum = NativeImGui.GetItemRectMin();
-                Vector2 maximum = NativeImGui.GetItemRectMax();
-                ImGuiStylePtr style = NativeImGui.GetStyle();
-                float lineHeight = NativeImGui.GetTextLineHeight();
-                DrawIconTextAt(
-                    NativeImGui.GetWindowDrawList(),
-                    new Vector2(
-                        minimum.X + style.FramePadding.X,
-                        minimum.Y + MathF.Max(0f, (maximum.Y - minimum.Y - lineHeight) * 0.5f)),
-                    candidate,
-                    name,
-                    iconSlotWidth);
-                if (selected)
-                    NativeImGui.SetItemDefaultFocus();
-                NativeImGui.PopID();
             }
-            NativeImGui.EndCombo();
+            finally
+            {
+                NativeImGui.EndCombo();
+            }
         }
     }
 

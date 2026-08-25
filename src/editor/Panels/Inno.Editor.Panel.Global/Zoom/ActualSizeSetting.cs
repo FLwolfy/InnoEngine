@@ -38,13 +38,19 @@ internal sealed class ActualSizeSetting : EditorSetting
         NativeImGui.SetNextItemWidth(-1f);
         if (!NativeImGui.BeginCombo("##actual_size", preview))
             return;
-        for (int i = 0; i < C_CHOICES.Length; i++)
+        try
         {
-            (float candidate, string label) = C_CHOICES[i];
-            if (NativeImGui.Selectable(label, MathF.Abs(candidate - value) < 0.0001f))
-                setting.SetAsSingle("value", candidate);
+            for (int i = 0; i < C_CHOICES.Length; i++)
+            {
+                (float candidate, string label) = C_CHOICES[i];
+                if (NativeImGui.Selectable(label, MathF.Abs(candidate - value) < 0.0001f))
+                    setting.SetAsSingle("value", candidate);
+            }
         }
-        NativeImGui.EndCombo();
+        finally
+        {
+            NativeImGui.EndCombo();
+        }
     }
 
     private static EditorSettingObject CreateDefault()

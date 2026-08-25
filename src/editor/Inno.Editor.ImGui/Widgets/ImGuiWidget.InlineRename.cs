@@ -11,12 +11,17 @@ namespace Inno.Editor.ImGui.ImGuiWidget;
 /// </summary>
 public static partial class ImGuiWidget
 {
+    private const float C_INLINE_RENAME_FOCUS_OFFSET = 1f;
+
     /// <summary>
     /// Draws a compact single-line rename editor inside an existing row.
     /// </summary>
     /// <param name="id">The stable control identifier.</param>
     /// <param name="text">The mutable text buffer.</param>
-    /// <param name="requestFocus">Whether keyboard focus should be requested during this frame.</param>
+    /// <param name="requestFocus">
+    /// Whether keyboard focus and complete-value selection should be requested. The value remains
+    /// <see langword="true"/> until the input becomes active and its current contents are selected.
+    /// </param>
     /// <param name="rowHeight">The height of the row area in which the field is centered.</param>
     /// <param name="capacity">The maximum UTF-8 buffer capacity.</param>
     /// <param name="width">The control width, or a negative value to fill the available space.</param>
@@ -43,52 +48,29 @@ public static partial class ImGuiWidget
                 rowHeight,
                 "Inline rename row height must be finite and positive.");
         }
-        if (requestFocus)
-        {
-            NativeImGui.SetKeyboardFocusHere();
-            requestFocus = false;
-        }
-
-        Vector2 cursor = NativeImGui.GetCursorScreenPos();
+        float fieldWidth = MathF.Max(
+            1f,
+            width < 0f ? NativeImGui.GetContentRegionAvail().X : width);
+        string controlId = $"##rename_{id}";
+        bool selectAll = requestFocus;
         NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, style.inlineRenameFramePadding);
-        NativeImGui.SetNextItemWidth(width);
-        bool submitted;
+        NativeImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, style.frameRounding);
+        NativeImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, style.borderSize);
         try
         {
             float fieldHeight = NativeImGui.GetFrameHeight();
-            Vector2 fieldCursor = new(
+            Vector2 cursor = NativeImGui.GetCursorScreenPos();
+            NativeImGui.SetCursorScreenPos(new Vector2(
                 cursor.X,
-                cursor.Y + (rowHeight - fieldHeight) * 0.5f);
-            NativeImGui.SetCursorScreenPos(fieldCursor);
-            float fieldWidth = MathF.Max(1f, width < 0f ? NativeImGui.CalcItemWidth() : width);
-            float visualHeight = MathF.Max(
-                1f,
-                MathF.Min(
-                    fieldHeight,
-                    rowHeight - style.inlineRenameVisualInset * 2f));
-            Vector2 visualMinimum = new(
-                fieldCursor.X,
-                cursor.Y + (rowHeight - visualHeight) * 0.5f);
-            Vector2 visualMaximum = visualMinimum + new Vector2(fieldWidth, visualHeight);
-            string controlId = $"##rename_{id}";
-            uint itemId = NativeImGui.GetID(controlId);
-            bool active = ImGuiP.GetActiveID() == itemId;
-            bool hovered = NativeImGui.IsMouseHoveringRect(
-                fieldCursor,
-                fieldCursor + new Vector2(fieldWidth, fieldHeight));
-            ImGuiCol backgroundColor = active
-                ? ImGuiCol.FrameBgActive
-                : hovered
-                    ? ImGuiCol.FrameBgHovered
-                    : ImGuiCol.FrameBg;
-            NativeImGui.GetWindowDrawList().AddRectFilled(
-                visualMinimum,
-                visualMaximum,
-                NativeImGui.GetColorU32(backgroundColor),
-                NativeImGui.GetStyle().FrameRounding);
-            NativeImGui.PushStyleColor(ImGuiCol.FrameBg, EditorPalette.transparent);
-            NativeImGui.PushStyleColor(ImGuiCol.FrameBgHovered, EditorPalette.transparent);
-            NativeImGui.PushStyleColor(ImGuiCol.FrameBgActive, EditorPalette.transparent);
+                cursor.Y + MathF.Max(0f, (rowHeight - fieldHeight) * 0.5f)));
+            NativeImGui.SetNextItemWidth(fieldWidth);
+            if (selectAll)
+            {
+                NativeImGui.SetKeyboardFocusHere();
+            }
+
+            bool submitted;
+            NativeImGui.PushStyleColor(ImGuiCol.NavCursor, Vector4.Zero);
             try
             {
                 submitted = NativeImGui.InputText(
@@ -99,20 +81,45 @@ public static partial class ImGuiWidget
             }
             finally
             {
-                NativeImGui.PopStyleColor(3);
+                NativeImGui.PopStyleColor();
             }
+            bool deactivated = NativeImGui.IsItemDeactivated();
+            bool escapePressed = NativeImGui.IsKeyPressed(ImGuiKey.Escape);
+            bool active = NativeImGui.IsItemActive();
+            if (selectAll && active)
+            {
+                uint inputId = NativeImGui.GetItemID();
+                ImGuiInputTextStatePtr inputState = ImGuiP.GetInputTextState(inputId);
+                if (!inputState.IsNull)
+                {
+                    ImGuiP.SelectAll(inputState);
+                    requestFocus = false;
+                }
+            }
+            if (active)
+            {
+                Vector2 focusOffset = new(C_INLINE_RENAME_FOCUS_OFFSET);
+                NativeImGui.GetForegroundDrawList().AddRect(
+                    NativeImGui.GetItemRectMin() - focusOffset,
+                    NativeImGui.GetItemRectMax() + focusOffset,
+                    NativeImGui.GetColorU32(ImGuiCol.NavCursor),
+                    style.frameRounding + C_INLINE_RENAME_FOCUS_OFFSET,
+                    ImDrawFlags.RoundCornersAll,
+                    style.interactionOverlayThickness);
+            }
+
+            if (escapePressed)
+                return InlineRenameResult.Cancel;
+            if (submitted)
+                return InlineRenameResult.Commit;
+            return deactivated
+                ? InlineRenameResult.FocusLost
+                : InlineRenameResult.None;
         }
         finally
         {
-            NativeImGui.PopStyleVar();
+            NativeImGui.PopStyleVar(3);
         }
-        if (NativeImGui.IsKeyPressed(ImGuiKey.Escape))
-            return InlineRenameResult.Cancel;
-        if (submitted)
-            return InlineRenameResult.Commit;
-        return NativeImGui.IsItemDeactivated()
-            ? InlineRenameResult.FocusLost
-            : InlineRenameResult.None;
     }
 }
 

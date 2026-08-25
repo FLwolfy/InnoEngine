@@ -87,11 +87,10 @@ AssemblyManager 自己的 runtime generation 仍存在于 assembly shadow cache�
 | `compilationProgress` | 真实已完成工作项比例。 |
 | `compilationStatus` | 当前 stage。 |
 | `lastCompilation` | 最近完整结果。 |
-| `CompilationCompleted` | compile attempt 完成事件。 |
 | `Start` | 建立 IDE 文件、订阅 `AssetManager.Changed`、请求初始 build。 |
 | `RequestCompile` | 标记 dirty，不直接编译。 |
 | `TryCompilePending` | quiet period 后消费请求。 |
-| `CompileAsync` | 从 Asset snapshot 编译完整 assembly graph。 |
+| `CompileAsync` | 在 compiler gate 内从稳定 Asset snapshot 编译完整 assembly graph；没有 worker-thread completion event。 |
 | `ApplyPendingReload` | 主线程安全点首次 Load 或事务 Reload。 |
 | `GenerateProjectFiles` | 从 Asset Catalog/asmdef 图生成显式 Compile items。 |
 | `Dispose` | 取消任务、取消 Asset observer、卸载活动 Script Module。 |
@@ -113,7 +112,7 @@ if (window.isFocused && scripts.TryCompilePending(out Task<ScriptCompilationResu
 }
 ```
 
-成功编译不写 Info log；Warning/Error 与源位置保留。失败 candidate 不替换活动 generation。
+Asset Update/Rescan 只在主线程 `TryCompilePending` 启动点发生，后台编译不调用全局 AssetManager。完成通知只来自返回的 Task；`EditorScripting` 在主线程发布 diagnostics 并执行 reload。成功编译不写 Info log；Warning/Error 与源位置保留。失败编译不会清除上一个尚未应用的成功 candidate。
 
 ## 编译进度 modal
 
@@ -149,6 +148,7 @@ public sealed class PlayerController : GameBehavior
 - IDE facade 真正定义 `InnoEngine.*` / `InnoEditor.*` metadata 类型，并携带重写后的 XML documentation。
 - IDE csproj 不引用真实 `Inno.*` 实现程序集，因此实现 namespace 无法解析。
 - Runtime Roslyn 使用保持真实 CLR identity 的裁剪 reference set，并把逻辑 using 重写为声明的实现 namespace。
+- Stub builder 会枚举每个 exported type 的全部 public/protected member；签名依赖未导出类型时构建直接失败，并报告完整 member 与缺失类型。只有明确的 host/native API 可以用 member 级 `[ScriptingApiIgnore]` 忽略；Runtime 与 IDE reference assemblies 共用同一闭包校验结果。
 - 裁剪 reference 只保留其实现成员同样可见的接口；只由 private 显式成员实现的基础设施接口不会出现在 facade base list，因此不会泄漏 `EditorModule` 的 internal Dispose adapter，也不会产生缺失接口成员的 reference assembly。Module/Panel 项目状态直接由 protected `EditorState` hooks 提供，facade 不导出 Workspace interface、reader/writer 或 JSON DOM。
 - 所有脚本文件必须显式声明自己使用的 `InnoEngine.*` / `InnoEditor.*` namespace。
 - 编译范围导入、MSBuild `Using` item、隐式导入和 plugin metadata 注入均不受支持。
@@ -162,7 +162,7 @@ Editor facade 按 feature 分布：
 | `InnoEditor.Core` | `Inno.Editor.Core` lifecycle contracts |
 | `InnoEditor.Interactions` | `Inno.Editor.Interactions` Action、Menu、Selection 与 Drag/Drop contracts |
 | `InnoEditor.Assets` | `Inno.Editor.Panel.FileBrowser` AssetEditor contracts |
-| `InnoEditor.Scene` | `Inno.Editor.Scene` document workspace 与 `SceneEdits` 编辑门面 |
+| `InnoEditor.Scene` | `IEditorSceneWorkspace` 查询/工作流接口与 `SceneEdits` 编辑门面 |
 | `InnoEditor.Hierarchy` | `Inno.Editor.Panel.Hierarchy` area/action/drop contracts |
 | `InnoEditor.Inspection` | `Inno.Editor.Inspection` drawer contracts，以及 `Inno.Editor.Panel.Inspector` 的 area/action/drop contracts |
 | `InnoEditor.ImGui` | `EditorPalette`、`EditorStyleMetrics` 与 widgets |
@@ -218,6 +218,8 @@ Plugin 类型只能通过脚本文件中的普通 `using` 显式导入。Assembl
 ## Reload 与 Scene 状态
 
 成功 build 通过 `AssemblyManager.BeginReload` 准备候选 TypeCache/Registry。`SceneReloadService` 捕获脚本 Component/System 的 Stable Type ID、serialized state、identity、顺序、引用和 lifecycle flags；Activate 后创建新实例并原位替换，全部成功才 Complete。
+
+`ApplyPendingReload` 在成功前只读取 candidate，不提前消费。Assembly load/reload、Scene migration、registry activation 或 Complete 任一步失败时保留同一 pending candidate 及诊断，等待显式再次应用；Editor 不会每帧自动重试。后续成功编译可以原子替换 pending candidate，Dispose 会释放未应用请求。
 
 Serialized state 使用逐成员兼容迁移：成员类型保持兼容时恢复旧值；新增成员保留新默认值；删除成员忽略旧数据；同名成员改成不兼容类型时保留新默认值并输出 `INNOHR0001` warning，不会仅因单个字段变化回滚整个程序集。普通 Serialization API 仍保持严格模式。
 

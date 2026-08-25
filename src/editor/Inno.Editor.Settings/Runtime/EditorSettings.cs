@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
+using Inno.Core.Logging;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 
@@ -14,7 +15,7 @@ namespace Inno.Editor.Settings;
 public sealed class EditorSettings : EditorModule
 {
     private readonly EditorSettingsCatalog m_catalog = new();
-    private readonly EditorHistory m_history;
+    private readonly IEditorHistory m_history;
     private readonly object m_sync = new();
     private readonly EditorSettingsStore m_store;
 
@@ -168,7 +169,7 @@ public sealed class EditorSettings : EditorModule
             throw;
         }
 
-        changed?.Invoke(this);
+        NotifyChanged();
         return true;
     }
 
@@ -180,7 +181,30 @@ public sealed class EditorSettings : EditorModule
     {
         lock (m_sync)
             m_store.ReplaceDocument(document);
-        changed?.Invoke(this);
+    }
+
+    internal byte[] CaptureDocument()
+    {
+        lock (m_sync)
+            return m_store.GetDocument();
+    }
+
+    internal void NotifyChanged()
+    {
+        Action<EditorSettings>? handlers = changed;
+        if (handlers is null)
+            return;
+        foreach (Delegate subscription in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((Action<EditorSettings>)subscription)(this);
+            }
+            catch (Exception exception)
+            {
+                Log.Error("Editor Settings changed subscriber failed: {0}", exception);
+            }
+        }
     }
 
     private EditorSetting ResolveField(string path)

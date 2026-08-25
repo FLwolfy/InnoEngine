@@ -8,6 +8,7 @@ namespace Inno.Editor.Core;
 /// </summary>
 public abstract class EditorModule : IDisposable
 {
+    private bool m_started;
     private bool m_disposed;
 
     /// <summary>
@@ -23,17 +24,26 @@ public abstract class EditorModule : IDisposable
     /// Starts the module after the containing extension generation becomes active.
     /// </summary>
     /// <param name="context">The shared editor context for the active runtime.</param>
-    public void Start(EditorContext context)
+    internal void Start(EditorContext context)
     {
+        ArgumentNullException.ThrowIfNull(context);
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (m_started)
+            throw new InvalidOperationException($"Editor module '{GetType().FullName}' is already started.");
         OnStart(context);
+        m_started = true;
     }
 
     /// <summary>
     /// Updates the module once per editor frame before panels and modals are drawn.
     /// </summary>
     /// <param name="context">The shared editor context containing the current frame state.</param>
-    public void Update(EditorContext context)
+    internal void Update(EditorContext context)
     {
+        ArgumentNullException.ThrowIfNull(context);
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (!m_started)
+            throw new InvalidOperationException($"Editor module '{GetType().FullName}' is not started.");
         OnUpdate(context);
     }
 
@@ -41,9 +51,14 @@ public abstract class EditorModule : IDisposable
     /// Stops the module before the containing extension generation is released.
     /// </summary>
     /// <param name="context">The shared editor context for the runtime being stopped.</param>
-    public void Stop(EditorContext context)
+    internal void Stop(EditorContext context)
     {
+        ArgumentNullException.ThrowIfNull(context);
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (!m_started)
+            throw new InvalidOperationException($"Editor module '{GetType().FullName}' is not started.");
         OnStop(context);
+        m_started = false;
     }
 
     /// <summary>

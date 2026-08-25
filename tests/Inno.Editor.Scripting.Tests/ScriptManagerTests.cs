@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 using Inno.Assets;
@@ -74,7 +75,8 @@ public sealed class ScriptManagerTests : IDisposable
         m_manager = new ScriptManager(new ScriptManagerOptions
         {
             projectRootDirectory = m_projectRoot,
-            autoCompile = false
+            autoCompile = false,
+            debounceMilliseconds = 0
         });
     }
 
@@ -108,6 +110,47 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.NotNull(compilation);
         ScriptCompilationResult result = await compilation!;
         Assert.True(result.success, FormatDiagnostics(result));
+    }
+
+    [Fact]
+    public async Task ConcurrentCompilationAllowsOnlyOneCompilerGateOwner()
+    {
+        Write("ConcurrentProbe.cs", "public sealed class ConcurrentProbe { }");
+        AssetManager.Update();
+        AssetManager.Rescan();
+        var firstEntered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        int entryCount = 0;
+        using var manager = new ScriptManager(
+            new ScriptManagerOptions
+            {
+                projectRootDirectory = m_projectRoot,
+                autoCompile = false,
+                debounceMilliseconds = 0
+            },
+            async cancellationToken =>
+            {
+                int entry = Interlocked.Increment(ref entryCount);
+                if (entry != 1)
+                    return;
+                firstEntered.SetResult();
+                await releaseFirst.Task.WaitAsync(cancellationToken);
+            });
+
+        Task<ScriptCompilationResult> first = manager.CompileAsync().AsTask();
+        await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Task<ScriptCompilationResult> second = manager.CompileAsync().AsTask();
+        await Task.Delay(50);
+
+        Assert.True(manager.isCompiling);
+        Assert.Equal(1, Volatile.Read(ref entryCount));
+        releaseFirst.SetResult();
+        ScriptCompilationResult[] results = await Task.WhenAll(first, second);
+        Assert.Equal(2, Volatile.Read(ref entryCount));
+        Assert.All(results, result => Assert.True(result.success, FormatDiagnostics(result)));
+        Assert.False(manager.isCompiling);
     }
 
     [Fact]
@@ -274,18 +317,50 @@ public sealed class ScriptManagerTests : IDisposable
         var workspace = new EditorSceneWorkspace();
         GameScene scene = workspace.CreateScene();
         scene.name = "Original";
-        string originalPath = workspace.SaveScene(scene, "Scenes");
+        string originalPath = workspace.Save(scene, "Scenes");
         Assert.True(AssetManager.TryGetPersistentId(originalPath, out Guid persistentId));
 
         scene.name = "Renamed";
         Assert.True(workspace.IsDirty(scene));
-        string renamedPath = workspace.SaveScene(scene, "Scenes");
+        string renamedPath = workspace.Save(scene, "Scenes");
 
         Assert.Equal("Scenes/Renamed.iscene", renamedPath);
         Assert.False(AssetManager.TryGetFileSystemEntry(originalPath, out _));
         Assert.True(AssetManager.TryGetPersistentId(renamedPath, out Guid renamedId));
         Assert.Equal(persistentId, renamedId);
         Assert.False(workspace.IsDirty(scene));
+    }
+
+    [Fact]
+    public void SceneAssetRenameUpdatesTheLoadedDocumentWithoutMarkingItDirty()
+    {
+        var workspace = new EditorSceneWorkspace();
+        var context = new EditorContext(m_projectRoot);
+        workspace.Start(context);
+        try
+        {
+            GameScene scene = workspace.CreateScene();
+            scene.name = "TestScene";
+            string sourcePath = workspace.Save(scene, "Scenes");
+            Assert.False(workspace.IsDirty(scene));
+
+            scene.name = "Temporary Name";
+            Assert.True(workspace.IsDirty(scene));
+            scene.name = "TestScene";
+
+            const string renamedPath = "Scenes/TestScene1.iscene";
+            AssetManager.Move(sourcePath, renamedPath);
+            workspace.Update(context);
+
+            Assert.Equal("TestScene1", scene.name);
+            Assert.True(workspace.TryGetSourcePath(scene, out string synchronizedPath));
+            Assert.Equal(renamedPath, synchronizedPath);
+            Assert.False(workspace.IsDirty(scene));
+        }
+        finally
+        {
+            workspace.Stop(context);
+        }
     }
 
     [Fact]
@@ -327,12 +402,13 @@ public sealed class ScriptManagerTests : IDisposable
         EditorModalExtension modal = Assert.Single(
             runtime.modals,
             static extension => extension.id == "editor.settings");
-        Assert.False(modal.modal.isVisible);
-        Assert.True(modal.modal.blocksInteraction);
-        Assert.True(modal.modal.canMove);
-        Assert.True(modal.modal.canResize);
-        Assert.True(modal.modal.initialSize.X > modal.modal.minimumSize.X);
-        Assert.True(modal.modal.initialSize.Y > modal.modal.minimumSize.Y);
+        Assert.True(modal.TryGetPresentation(out EditorModalExtension.Presentation initialPresentation));
+        Assert.False(initialPresentation.isVisible);
+        Assert.True(initialPresentation.blocksInteraction);
+        Assert.True(initialPresentation.canMove);
+        Assert.True(initialPresentation.canResize);
+        Assert.True(initialPresentation.initialSize.X > initialPresentation.minimumSize.X);
+        Assert.True(initialPresentation.initialSize.Y > initialPresentation.minimumSize.Y);
         EditorMenuModel menu = runtime.interactions.For("editor/main-menu").BuildMenu();
         EditorMenuItem edit = Assert.Single(
             menu.items,
@@ -343,7 +419,8 @@ public sealed class ScriptManagerTests : IDisposable
             .For("editor/main-menu")
             .Execute("editor.settings.open"));
 
-        Assert.True(modal.modal.isVisible);
+        Assert.True(modal.TryGetPresentation(out EditorModalExtension.Presentation openPresentation));
+        Assert.True(openPresentation.isVisible);
     }
 
     [Fact]
@@ -639,11 +716,11 @@ public sealed class ScriptManagerTests : IDisposable
         var workspace = new EditorSceneWorkspace();
         GameScene source = workspace.CreateScene();
         source.name = "Additive";
-        string sourcePath = workspace.SaveScene(source, "Scenes");
+        string sourcePath = workspace.Save(source, "Scenes");
         Assert.True(SceneManager.UnloadScene(source));
         GameScene existing = workspace.CreateScene();
 
-        GameScene opened = workspace.OpenScene(sourcePath);
+        GameScene opened = workspace.Open(sourcePath);
 
         Assert.Equal([existing, opened], SceneManager.loadedScenes);
         Assert.Same(opened, SceneManager.activeScene);
@@ -690,10 +767,10 @@ public sealed class ScriptManagerTests : IDisposable
         var sourceWorkspace = new EditorSceneWorkspace();
         GameScene first = sourceWorkspace.CreateScene();
         first.name = "First";
-        _ = sourceWorkspace.SaveScene(first, "Scenes");
+        _ = sourceWorkspace.Save(first, "Scenes");
         GameScene second = sourceWorkspace.CreateScene();
         second.name = "Second";
-        _ = sourceWorkspace.SaveScene(second, "Scenes");
+        _ = sourceWorkspace.Save(second, "Scenes");
         SceneManager.SetActiveScene(first);
         TestEditorState state = CaptureExtensionState(sourceWorkspace);
 
@@ -716,7 +793,7 @@ public sealed class ScriptManagerTests : IDisposable
         GameScene scene = sourceWorkspace.CreateScene();
         scene.name = "Saved";
         _ = scene.CreateObject("Saved Object");
-        _ = sourceWorkspace.SaveScene(scene, "Scenes");
+        _ = sourceWorkspace.Save(scene, "Scenes");
         _ = scene.CreateObject("Unsaved Object");
         TestEditorState state = CaptureExtensionState(sourceWorkspace);
 
@@ -865,7 +942,7 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public void FailedCompilationDiscardsAnUnappliedSuccessfulCandidate()
+    public void FailedCompilationPreservesAnUnappliedSuccessfulCandidate()
     {
         WriteVersionedBehavior(1);
         ScriptCompilationResult successful = Compile();
@@ -875,8 +952,9 @@ public sealed class ScriptManagerTests : IDisposable
         ScriptCompilationResult failed = Compile();
 
         Assert.False(failed.success);
-        Assert.False(m_manager.ApplyPendingReload());
-        Assert.DoesNotContain(TypeCacheManager.current.types, type => type.Name == "VersionedBehavior");
+        Assert.True(m_manager.ApplyPendingReload());
+        Type applied = ResolveVersionedBehavior();
+        Assert.Equal(1, ReadVersion(applied));
     }
 
     [Fact]
@@ -949,7 +1027,9 @@ public sealed class ScriptManagerTests : IDisposable
             public sealed class ScriptMenuSource : EditorMenuSource
             {
                 public override void Build(EditorMenuContext context, EditorMenuBuilder builder)
-                    => builder.Add("Dynamic", "tests.interactions.execute");
+                    => builder.Add(
+                        "Dynamic",
+                        new EditorCommand(new EditorActionId("tests.interactions.execute")));
             }
 
             [AssetEditor(typeof(TextAsset))]
@@ -971,7 +1051,7 @@ public sealed class ScriptManagerTests : IDisposable
             [EditorPanel("tests.script-panel", "Script Panel", order: 900, defaultOpen: false)]
             public sealed class ScriptPanel : EditorPanel, IEditorPanelReloadState
             {
-                public override void Draw(EditorContext context)
+                protected override void OnDraw(EditorContext context)
                 {
                 }
 
@@ -1399,6 +1479,12 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.Contains(previousStableTypeId, exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("IdentityProbe", exception.Message, StringComparison.Ordinal);
         Assert.Same(previous, gameObject.GetComponents().Single(component => component.GetType() == previousType));
+
+        InvalidOperationException retryException = Assert.Throws<InvalidOperationException>(
+            () => m_manager.ApplyPendingReload());
+
+        Assert.Contains(previousStableTypeId, retryException.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Same(previous, gameObject.GetComponents().Single(component => component.GetType() == previousType));
     }
 
     [Fact]
@@ -1611,7 +1697,12 @@ public sealed class ScriptManagerTests : IDisposable
             """);
 
     private ScriptCompilationResult Compile()
-        => m_manager.CompileAsync().AsTask().GetAwaiter().GetResult();
+    {
+        m_manager.RequestCompile();
+        Assert.True(m_manager.TryCompilePending(out Task<ScriptCompilationResult>? compilation));
+        Assert.NotNull(compilation);
+        return compilation.GetAwaiter().GetResult();
+    }
 
     private static bool UpdateUntil(EditorInteractionRuntime runtime, Func<bool> predicate)
     {

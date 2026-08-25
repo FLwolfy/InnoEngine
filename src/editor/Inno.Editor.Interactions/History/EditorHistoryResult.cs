@@ -7,9 +7,10 @@ namespace Inno.Editor.Interactions;
 /// </summary>
 public readonly record struct EditorHistoryResult
 {
-    private EditorHistoryResult(bool succeeded, string message)
+    private EditorHistoryResult(bool succeeded, bool statePreserved, string message)
     {
         this.succeeded = succeeded;
+        this.statePreserved = statePreserved;
         this.message = message;
     }
 
@@ -17,6 +18,15 @@ public readonly record struct EditorHistoryResult
     /// Gets whether the requested history transition completed successfully.
     /// </summary>
     public bool succeeded { get; }
+
+    /// <summary>
+    /// Gets whether a failed transition restored the domain state that existed before the attempt.
+    /// </summary>
+    /// <remarks>
+    /// Successful results always preserve a valid state. A failed result with this value set to
+    /// <see langword="false"/> faults the owning history because the transition can no longer be retried safely.
+    /// </remarks>
+    public bool statePreserved { get; }
 
     /// <summary>
     /// Gets the diagnostic message associated with a failed transition, or an empty string after success.
@@ -27,7 +37,7 @@ public readonly record struct EditorHistoryResult
     /// Creates a successful history result.
     /// </summary>
     /// <returns>A result representing a completed transition.</returns>
-    public static EditorHistoryResult Success() => new(true, string.Empty);
+    public static EditorHistoryResult Success() => new(true, true, string.Empty);
 
     /// <summary>
     /// Creates a failed history result without changing the owning history stack.
@@ -38,6 +48,12 @@ public readonly record struct EditorHistoryResult
     public static EditorHistoryResult Failure(string message)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
-        return new EditorHistoryResult(false, message);
+        return new EditorHistoryResult(false, true, message);
+    }
+
+    internal static EditorHistoryResult StateIntegrityLost(string message)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+        return new EditorHistoryResult(false, false, message);
     }
 }

@@ -42,7 +42,7 @@ public sealed class AnimationClipEditor : AssetEditor
 
 Asset Rename/Delete 的物理事务始终由 `AssetManager` 执行。AssetEditor 只能验证以及接收提交后的通知，不能自行移动 source/meta/artifact，因此外部文件变化与 Editor 操作拥有同一身份规则。
 
-Create Folder、Rename、Move 与 Delete 都接入共享中立 Undo/Redo。Rename/Move 只记录 source/target path；Delete 把 source、目录结构和 `.imeta` 编码进 History payload。大 payload 自动落到 `<Project>/Library/Editor/History`，Undo 先在临时目录完整验证 archive，再提交回 Asset root 并 `Rescan`，因此恢复失败不会留下半个目录。原 `.imeta` 会恢复相同 persistent ID；Redo 再走 `AssetManager.Delete`。目标发生外部冲突时操作失败并留在原栈，绝不覆盖新文件。
+Create Folder、Rename、Move 与 Delete 都接入共享中立 Undo/Redo。Rename/Move 只记录 source/target path；Delete 把 source、目录结构和 `.imeta` 编码进 History payload。大 payload 自动落到 `<Project>/Library/Editor/History`，Undo 先在临时目录完整验证 archive，再提交回 Asset root 并 `Rescan`，因此恢复失败不会留下半个目录。原 `.imeta` 会恢复相同 persistent ID；Redo 再走 `AssetManager.Delete`。目标发生外部冲突时操作失败并留在原栈，绝不覆盖新文件。Asset Browser selection 仅在文件系统事务成功后 best-effort 更新，通知异常不改变 History 结果。
 
 ## 文件与目录移动
 
@@ -57,8 +57,16 @@ Tree pane 只在名称或层级缩进真实超出 viewport 时产生横向范围
 为某类 Asset 添加额外右键菜单只需普通 Action：
 
 ```csharp
-[EditorAction("animation/reimport", "panel/asset.file-browser")]
-[EditorMenu("panel/asset.file-browser", "Animation/Reimport", order: 400)]
+internal static class AnimationInteractionIds
+{
+    internal const string Reimport = "animation/reimport";
+    internal const string FileBrowserArea = "panel/asset.file-browser";
+    internal static readonly EditorCommand ReimportCommand =
+        new(new EditorActionId(Reimport));
+}
+
+[EditorAction(AnimationInteractionIds.Reimport, AnimationInteractionIds.FileBrowserArea)]
+[EditorMenu(AnimationInteractionIds.FileBrowserArea, "Animation/Reimport", order: 400)]
 public sealed class ReimportAnimationAction : EditorAction<AssetFileEntry>
 {
     protected override EditorActionState Query(
@@ -116,6 +124,7 @@ CLR 层的 icon 常量仍是 ImGui 所需的 `const string` glyph；`AssetIconKi
 - F2 会使用当前正在操作的 Tree、List 或 Grid 展示位置绘制输入框。
 - Create Folder 完成后会选中新目录并自动进入重命名。
 - Rename Action 自己持有输入/验证状态；Tree/List/Grid 只调用 `Present` 绘制 inline editor。
+- Tree/List/Grid 与 Hierarchy 共用 `ImGuiWidget.InlineRename` 的紧凑输入框；输入框采用相同 frame metrics，在 row 内垂直居中，首次获得焦点时全选内容，并绘制在 selection/hover highlight 之上。蓝色焦点线框以实际输入框为基准只向外扩展 1px，使用与 DropTarget 相同的统一 overlay 粗细并绘制到 foreground。List 不读取隐藏标签 Selectable 的临时 item 高度，而是以 Table `RowPosY1/RowPosY2` 的实际屏幕边界为居中基准。
 - 输入框失去焦点或 selection 切换到其他 target 时，Rename Action 会提交当前有效名称并结束；无效名称保留原值并结束。
 - Tree/List/Grid 的未占用背景收到左键点击时会清除当前 Asset selection。
 - SceneAsset 打开 Action 由 Hierarchy feature 实现，但使用全局 Open 语义和共享路径参数，不形成 Panel project 引用。
@@ -127,4 +136,4 @@ List 的三个 column 使用同一个内容 inset，手动 splitter 只占用从
 
 ## Scripting API
 
-EditorScripts 使用 `InnoEditor.Assets` 扩展 AssetEditor、声明 AssetIcon，并在 Action/Menu/Drop Attribute 中直接填写字符串 ID 和 area。脚本必须显式写 `using InnoEditor.Assets;`。
+EditorScripts 使用 `InnoEditor.Assets` 扩展 AssetEditor、声明 AssetIcon。Action/Menu/Drop Attribute 因 C# metadata 限制使用 feature-owned `const string`，运行时调用使用对应的 `EditorActionId`、`EditorAreaId` 和 `EditorCommand<TArgument>`；脚本必须显式写 `using InnoEditor.Assets;`。

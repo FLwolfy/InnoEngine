@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 
+using Inno.Core.Scripting;
 using Inno.Native.ImGui;
 using Inno.Platform.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
@@ -20,6 +21,7 @@ public static partial class ImGuiWidget
     /// <param name="drawBody">Panel body callback.</param>
     /// <param name="flags">Window flags.</param>
     /// <param name="useWindowPadding">Whether the panel body should use the current standard window padding.</param>
+    [ScriptingApiIgnore]
     public static void PanelWindow(
         string title,
         ref bool isOpen,
@@ -30,21 +32,38 @@ public static partial class ImGuiWidget
         if (!isOpen)
             return;
 
-        if (!useWindowPadding)
-            NativeImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
-        bool visible = NativeImGui.Begin(title, flags);
-        if (!useWindowPadding)
-            NativeImGui.PopStyleVar();
-        if (visible)
+        bool pushedPadding = false;
+        bool beganWindow = false;
+        try
         {
-            if (DrawPanelCloseButton(title))
-                isOpen = false;
+            if (!useWindowPadding)
+            {
+                NativeImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
+                pushedPadding = true;
+            }
+            bool visible = NativeImGui.Begin(title, flags);
+            beganWindow = true;
+            if (pushedPadding)
+            {
+                NativeImGui.PopStyleVar();
+                pushedPadding = false;
+            }
+            if (visible)
+            {
+                if (DrawPanelCloseButton(title))
+                    isOpen = false;
 
-            if (isOpen)
-                drawBody();
+                if (isOpen)
+                    drawBody();
+            }
         }
-
-        NativeImGui.End();
+        finally
+        {
+            if (pushedPadding)
+                NativeImGui.PopStyleVar();
+            if (beganWindow)
+                NativeImGui.End();
+        }
     }
 
     /// <summary>
@@ -83,9 +102,16 @@ public static partial class ImGuiWidget
                                        ImGuiWindowFlags.NoScrollWithMouse |
                                        ImGuiWindowFlags.NoSavedSettings;
         NativeImGui.SetNextWindowContentSize(new Vector2(contentWidth, 0f));
-        if (NativeImGui.BeginChild(id, new Vector2(width, 0f), childFlags, windowFlags))
-            drawContent();
-        NativeImGui.EndChild();
+        bool visible = NativeImGui.BeginChild(id, new Vector2(width, 0f), childFlags, windowFlags);
+        try
+        {
+            if (visible)
+                drawContent();
+        }
+        finally
+        {
+            NativeImGui.EndChild();
+        }
     }
 
     private static bool DrawPanelCloseButton(string title)
@@ -156,7 +182,13 @@ public static partial class ImGuiWidget
     public static void Hint(string text)
     {
         NativeImGui.BeginDisabled(true);
-        NativeImGui.TextUnformatted(text);
-        NativeImGui.EndDisabled();
+        try
+        {
+            NativeImGui.TextUnformatted(text);
+        }
+        finally
+        {
+            NativeImGui.EndDisabled();
+        }
     }
 }

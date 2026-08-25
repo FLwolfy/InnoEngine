@@ -72,6 +72,8 @@ internal sealed class SceneInspectionModule : EditorModule
             new SceneInspectionPropertyEditService(edits));
     }
 
+    internal GameObjectTagCatalog tags => m_tags;
+
     /// <inheritdoc />
     protected override void Capture(EditorState state)
         => state.Set("tags", m_tags.GetTags());

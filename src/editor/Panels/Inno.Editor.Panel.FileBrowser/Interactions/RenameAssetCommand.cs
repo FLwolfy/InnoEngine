@@ -7,11 +7,16 @@ using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
-[EditorAction("file-browser/rename", priority: 100)]
-[EditorMenu("panel/asset.file-browser", "Rename", order: 100)]
-[EditorShortcut("panel/asset.file-browser", KeyCode.F2)]
-internal sealed class RenameAssetCommand(AssetEditorModule assets) : EditorAction<AssetFileEntry>
+[EditorAction(FileBrowserInteractionIds.C_RENAME, priority: 100)]
+[EditorMenu(FileBrowserInteractionIds.C_AREA, "Rename", order: 100)]
+[EditorShortcut(FileBrowserInteractionIds.C_AREA, KeyCode.F2)]
+internal sealed class RenameAssetCommand(AssetEditorModule assets) :
+    EditorPresentationAction<AssetFileEntry, InlineRenamePresentation>
 {
+    internal static EditorCommand command { get; } = new(FileBrowserInteractionIds.rename);
+    internal static EditorCommand<InlineRenamePresentation> presentationCommand { get; } =
+        new(FileBrowserInteractionIds.rename);
+
     private AssetEditorContext? m_asset;
     private string m_buffer = string.Empty;
     private bool m_requestFocus;
@@ -23,20 +28,17 @@ internal sealed class RenameAssetCommand(AssetEditorModule assets) : EditorActio
     {
         if (!TryGetAssetContext(context, out AssetEditorContext? assetContext) || assetContext is null)
             return;
+        Activate(context);
         m_asset = assetContext;
         m_buffer = assetContext.name;
         m_requestFocus = true;
-        Activate(context);
     }
 
-    protected override bool Present(EditorActionContext<AssetFileEntry> context)
+    protected override bool Present(EditorActionContext<AssetFileEntry, InlineRenamePresentation> context)
     {
-        if (m_asset is null ||
-            !context.TryGetArgument(out InlineRenamePresentation? presentation) ||
-            presentation is null)
-        {
+        if (m_asset is null)
             return false;
-        }
+        InlineRenamePresentation presentation = context.argument;
 
         InlineRenameResult result = EditorWidget.InlineRename(
             presentation.id,

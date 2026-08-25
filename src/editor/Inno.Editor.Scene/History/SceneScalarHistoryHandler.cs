@@ -42,27 +42,24 @@ internal sealed class SceneScalarHistoryHandler : EditorHistoryHandler
             SceneScalarHistoryData data = SceneScalarHistoryData.Decode(change.payload.ReadBytes());
             EngineObject target = Resolve(data)
                 ?? throw new InvalidOperationException($"Scene target '{data.targetId}' is no longer available.");
+            string rollback = GetValue(target, data.scalarKind);
             string value = direction == EditorHistoryDirection.Undo ? data.before : data.after;
-            switch (data.scalarKind)
+            try
             {
-                case SceneScalarKind.SceneName:
-                    ((GameScene)target).name = value;
-                    break;
-                case SceneScalarKind.GameObjectName:
-                    ((GameObject)target).name = value;
-                    break;
-                case SceneScalarKind.GameObjectActive:
-                    ((GameObject)target).SetActive(string.Equals(value, "1", StringComparison.Ordinal));
-                    break;
-                case SceneScalarKind.GameObjectTag:
-                    ((GameObject)target).tag = value;
-                    break;
-                case SceneScalarKind.GameObjectLayer:
-                    ((GameObject)target).layer = new GameLayer(
-                        int.Parse(value, System.Globalization.CultureInfo.InvariantCulture));
-                    break;
-                default:
-                    throw new InvalidOperationException($"Unsupported scene scalar '{data.scalarKind}'.");
+                SetValue(target, data.scalarKind, value);
+            }
+            catch (Exception exception)
+            {
+                try
+                {
+                    SetValue(target, data.scalarKind, rollback);
+                }
+                catch (Exception rollbackException)
+                {
+                    return StateIntegrityFailure(
+                        $"Scene scalar update failed: {exception.Message} Rollback failed: {rollbackException.Message}");
+                }
+                return EditorHistoryResult.Failure(exception.Message);
             }
             return EditorHistoryResult.Success();
         }
@@ -122,4 +119,41 @@ internal sealed class SceneScalarHistoryHandler : EditorHistoryHandler
                     : null,
             _ => null
         };
+
+    private static string GetValue(EngineObject target, SceneScalarKind kind)
+        => kind switch
+        {
+            SceneScalarKind.SceneName => ((GameScene)target).name,
+            SceneScalarKind.GameObjectName => ((GameObject)target).name,
+            SceneScalarKind.GameObjectActive => ((GameObject)target).activeSelf ? "1" : "0",
+            SceneScalarKind.GameObjectTag => ((GameObject)target).tag,
+            SceneScalarKind.GameObjectLayer => ((GameObject)target).layer.index.ToString(
+                System.Globalization.CultureInfo.InvariantCulture),
+            _ => throw new InvalidOperationException($"Unsupported scene scalar '{kind}'.")
+        };
+
+    private static void SetValue(EngineObject target, SceneScalarKind kind, string value)
+    {
+        switch (kind)
+        {
+            case SceneScalarKind.SceneName:
+                ((GameScene)target).name = value;
+                break;
+            case SceneScalarKind.GameObjectName:
+                ((GameObject)target).name = value;
+                break;
+            case SceneScalarKind.GameObjectActive:
+                ((GameObject)target).SetActive(string.Equals(value, "1", StringComparison.Ordinal));
+                break;
+            case SceneScalarKind.GameObjectTag:
+                ((GameObject)target).tag = value;
+                break;
+            case SceneScalarKind.GameObjectLayer:
+                ((GameObject)target).layer = new GameLayer(
+                    int.Parse(value, System.Globalization.CultureInfo.InvariantCulture));
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported scene scalar '{kind}'.");
+        }
+    }
 }

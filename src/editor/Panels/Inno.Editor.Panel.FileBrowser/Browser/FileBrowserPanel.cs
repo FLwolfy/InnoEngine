@@ -135,7 +135,7 @@ internal sealed class FileBrowserPanel : EditorPanel
     }
 
     /// <inheritdoc />
-    public override void Draw(EditorContext context)
+    protected override void OnDraw(EditorContext context)
     {
         m_rename.Update(context);
         PushBrowserStyle();
@@ -529,12 +529,13 @@ internal sealed class FileBrowserPanel : EditorPanel
 
         uint rowBg = NativeImGui.ColorConvertFloat4ToU32(EditorPalette.collectionRow);
         uint rowAltBg = NativeImGui.ColorConvertFloat4ToU32(EditorPalette.collectionRowAlternate);
+        float entryRowHeight = NativeImGui.GetTextLineHeight() + style.CellPadding.Y * 2f;
         for (int i = 0; i < entries.Count; i++)
         {
             AssetFileEntry entry = entries[i];
             if (i > 0)
                 NativeImGui.TableNextRow(ImGuiTableRowFlags.None, EditorWidget.style.assetListRowSpacing);
-            NativeImGui.TableNextRow();
+            NativeImGui.TableNextRow(ImGuiTableRowFlags.None, entryRowHeight);
             NativeImGui.TableSetBgColor(
                 ImGuiTableBgTarget.RowBg0,
                 i % 2 == 0 ? rowBg : rowAltBg);
@@ -680,6 +681,9 @@ internal sealed class FileBrowserPanel : EditorPanel
         string name = entry.nameWithoutExtension;
         bool selected = string.Equals(m_assets.browser.GetSelectedPath(context), entry.relativePath, StringComparison.Ordinal);
         bool editing = m_rename.IsEditing(context, entry.relativePath, FileBrowserPresentation.List);
+        ImGuiTablePtr table = ImGuiP.GetCurrentTable();
+        float rowMinimumY = table.RowPosY1;
+        float rowMaximumY = table.RowPosY2;
 
         InsetListCellContent();
         NativeImGui.PushStyleColor(ImGuiCol.Header, EditorPalette.transparent);
@@ -694,7 +698,6 @@ internal sealed class FileBrowserPanel : EditorPanel
             $"##entry_{entry.relativePath}",
             selected,
             selectableFlags);
-        float rowHeight = NativeImGui.GetItemRectSize().Y;
         bool itemHovered = NativeImGui.IsItemHovered();
         bool doubleClicked = itemHovered && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
         if (activated)
@@ -736,13 +739,15 @@ internal sealed class FileBrowserPanel : EditorPanel
         {
             EditorWidget.IconText(icon, string.Empty, false);
             NativeImGui.SameLine(0f, 0f);
+            Vector2 renameCursor = NativeImGui.GetCursorScreenPos();
+            NativeImGui.SetCursorScreenPos(new Vector2(renameCursor.X, rowMinimumY));
             m_rename.Draw(
                 context,
                 $"list_{entry.relativePath}",
                 entry.relativePath,
                 FileBrowserPresentation.List,
                 NativeImGui.GetContentRegionAvail().X,
-                rowHeight);
+                MathF.Max(1f, rowMaximumY - rowMinimumY));
         }
         else
         {

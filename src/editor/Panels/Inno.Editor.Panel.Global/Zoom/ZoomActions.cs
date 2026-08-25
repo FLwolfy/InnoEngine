@@ -6,8 +6,8 @@ namespace Inno.Editor.Panel.Global;
 /// <summary>
 /// Increases UI zoom by one multiple of the configured actual size.
 /// </summary>
-[EditorAction("editor.ui.zoom-in")]
-[EditorMenu("editor/main-menu", "View/Zoom In", order: 100)]
+[EditorAction(GlobalInteractionIds.C_ZOOM_IN)]
+[EditorMenu(GlobalInteractionIds.C_MAIN_MENU_AREA, "View/Zoom In", order: 100)]
 [EditorShortcut(KeyCode.Plus, primary: true)]
 internal sealed class ZoomInEditorAction(EditorZoomModule zoom) : EditorAction
 {
@@ -25,8 +25,8 @@ internal sealed class ZoomInEditorAction(EditorZoomModule zoom) : EditorAction
 /// <summary>
 /// Decreases UI zoom by one multiple of the configured actual size.
 /// </summary>
-[EditorAction("editor.ui.zoom-out")]
-[EditorMenu("editor/main-menu", "View/Zoom Out", order: 110)]
+[EditorAction(GlobalInteractionIds.C_ZOOM_OUT)]
+[EditorMenu(GlobalInteractionIds.C_MAIN_MENU_AREA, "View/Zoom Out", order: 110)]
 [EditorShortcut(KeyCode.Minus, primary: true)]
 internal sealed class ZoomOutEditorAction(EditorZoomModule zoom) : EditorAction
 {
@@ -44,8 +44,8 @@ internal sealed class ZoomOutEditorAction(EditorZoomModule zoom) : EditorAction
 /// <summary>
 /// Restores UI zoom to the configured actual size.
 /// </summary>
-[EditorAction("editor.ui.zoom-reset")]
-[EditorMenu("editor/main-menu", "View/Actual Size", order: 120)]
+[EditorAction(GlobalInteractionIds.C_ZOOM_RESET)]
+[EditorMenu(GlobalInteractionIds.C_MAIN_MENU_AREA, "View/Actual Size", order: 120)]
 [EditorShortcut(KeyCode.D0, primary: true)]
 internal sealed class ActualSizeEditorAction(EditorZoomModule zoom) : EditorAction
 {

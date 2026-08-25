@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 
 using Inno.Core.Identity;
 using Inno.Core.Reflection;
+using Inno.Core.Serialization;
 using Inno.Editor.Interactions;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Assets;
@@ -92,38 +94,94 @@ internal sealed class SceneElementHistoryHandler : EditorHistoryHandler
                     return EditorHistoryResult.Failure($"Scene element '{data.elementId}' is destroyed.");
                 if (restored)
                 {
-                    try
-                    {
+                    SceneReferenceRestoreResult referenceResult =
                         SceneReferenceIndex.RestoreIncoming(data.incomingReferences);
-                    }
-                    catch
+                    if (!referenceResult.succeeded)
                     {
-                        _ = Remove(data, scene, current);
-                        throw;
+                        bool removed = Remove(data, scene, current);
+                        if (referenceResult.statePreserved && removed)
+                            return EditorHistoryResult.Failure(referenceResult.message);
+                        return StateIntegrityFailure(
+                            $"Scene element reference restore failed: {referenceResult.message} " +
+                            (removed ? string.Empty : "The restored element could not be removed."));
                     }
                 }
                 else
                 {
                     byte[] rollbackState = ScenePropertySerialization.CaptureProperties(current);
                     int rollbackIndex = GetIndex(data, scene, current);
+                    SceneReferenceRollbackState[] rollbackReferences =
+                        SceneReferenceIndex.CaptureCurrent(data.incomingReferences);
                     try
                     {
                         if (state.Length > 0)
-                            _ = ScenePropertySerialization.RestoreProperties(current, state);
+                        {
+                            SerializationPropertyRestoreResult propertyResult =
+                                ScenePropertySerialization.RestoreProperties(current, state);
+                            if (!IsComplete(propertyResult))
+                                throw new InvalidOperationException("Scene element property restore was incomplete.");
+                        }
                         SetIndex(data, scene, current, index);
-                        SceneReferenceIndex.RestoreIncoming(data.incomingReferences);
+                        SceneReferenceRestoreResult referenceResult =
+                            SceneReferenceIndex.RestoreIncoming(data.incomingReferences);
+                        if (!referenceResult.succeeded)
+                        {
+                            return RollbackExisting(
+                                data,
+                                scene,
+                                current,
+                                rollbackState,
+                                rollbackIndex,
+                                rollbackReferences,
+                                referenceResult.message);
+                        }
                     }
-                    catch
+                    catch (Exception exception)
                     {
-                        _ = ScenePropertySerialization.RestoreProperties(current, rollbackState);
-                        SetIndex(data, scene, current, rollbackIndex);
-                        throw;
+                        return RollbackExisting(
+                            data,
+                            scene,
+                            current,
+                            rollbackState,
+                            rollbackIndex,
+                            rollbackReferences,
+                            exception.Message);
                     }
                 }
             }
-            else if (current is not null && !Remove(data, scene, current))
+            else if (current is not null)
             {
-                return EditorHistoryResult.Failure($"Scene element '{data.elementId}' could not be removed.");
+                byte[] rollbackState = ScenePropertySerialization.CaptureProperties(current);
+                int rollbackIndex = GetIndex(data, scene, current);
+                SceneReferenceRollbackState[] rollbackReferences =
+                    SceneReferenceIndex.CaptureCurrent(data.incomingReferences);
+                try
+                {
+                    if (!Remove(data, scene, current))
+                        return EditorHistoryResult.Failure($"Scene element '{data.elementId}' could not be removed.");
+                }
+                catch (Exception exception)
+                {
+                    EngineObject? remaining = IdentityManager.Get<EngineObject>(data.elementId);
+                    if (remaining is { isDestroyed: false })
+                        return EditorHistoryResult.Failure(exception.Message);
+                    try
+                    {
+                        EngineObject restored = Restore(data, scene, rollbackIndex, rollbackState);
+                            SceneReferenceRestoreResult references =
+                            SceneReferenceIndex.RestoreCurrent(rollbackReferences);
+                        if (!references.succeeded)
+                            throw new InvalidOperationException(references.message);
+                        _ = restored;
+                    }
+                    catch (Exception rollbackException)
+                    {
+                        return StateIntegrityFailure(
+                            $"Scene element removal failed: {exception.Message} " +
+                            $"Rollback failed: {rollbackException.Message}");
+                    }
+                    return EditorHistoryResult.Failure(exception.Message);
+                }
             }
             return EditorHistoryResult.Success();
         }
@@ -189,4 +247,45 @@ internal sealed class SceneElementHistoryHandler : EditorHistoryHandler
             _ => throw new InvalidOperationException(
                 $"Scene element '{data.elementId}' does not match history kind '{data.elementKind}'.")
         };
+
+    private static EditorHistoryResult RollbackExisting(
+        SceneElementHistoryData data,
+        GameScene scene,
+        EngineObject current,
+        byte[] rollbackState,
+        int rollbackIndex,
+        IReadOnlyList<SceneReferenceRollbackState> rollbackReferences,
+        string failure)
+    {
+        var failures = new System.Collections.Generic.List<string>();
+        try
+        {
+            SerializationPropertyRestoreResult propertyResult =
+                ScenePropertySerialization.RestoreProperties(current, rollbackState);
+            if (!IsComplete(propertyResult))
+                failures.Add("property rollback was incomplete");
+        }
+        catch (Exception exception)
+        {
+            failures.Add($"property rollback: {exception.Message}");
+        }
+        try
+        {
+            SetIndex(data, scene, current, rollbackIndex);
+        }
+        catch (Exception exception)
+        {
+            failures.Add($"index rollback: {exception.Message}");
+        }
+        SceneReferenceRestoreResult referenceResult = SceneReferenceIndex.RestoreCurrent(rollbackReferences);
+        if (!referenceResult.succeeded)
+            failures.Add($"reference rollback: {referenceResult.message}");
+        return failures.Count == 0
+            ? EditorHistoryResult.Failure(failure)
+            : StateIntegrityFailure(
+                $"Scene element transition failed: {failure} Rollback failed: {string.Join("; ", failures)}");
+    }
+
+    private static bool IsComplete(SerializationPropertyRestoreResult result)
+        => result.success && result.ignoredCount == 0 && result.restoredCount > 0;
 }

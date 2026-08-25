@@ -17,7 +17,7 @@ using NativeImGui = Inno.Native.ImGui.ImGui;
 namespace Inno.Editor.Panel.Hierarchy;
 
 internal sealed class HierarchySelection(
-    EditorSceneWorkspace workspace,
+    IEditorSceneWorkspace workspace,
     EditorInteractions interactions,
     EditorSettings settings)
 {
@@ -26,12 +26,12 @@ internal sealed class HierarchySelection(
         if (interactions.selection.TryGet(out GameScene? selectedScene) &&
             (!selectedScene.isLoaded || !ContainsScene(workspace.scenes, selectedScene)))
         {
-            _ = interactions.For("panel/scene.hierarchy").Select();
+            _ = interactions.For(HierarchyInteractionIds.area).Select();
             return;
         }
         if (interactions.selection.TryGet(out GameObject? gameObject) &&
             (!gameObject.isRuntimeValid || !ContainsScene(workspace.scenes, gameObject.scene)))
-            _ = interactions.For("panel/scene.hierarchy").Select();
+            _ = interactions.For(HierarchyInteractionIds.area).Select();
     }
 
     internal bool DeleteObject(EditorContext context, Guid persistentId)
@@ -42,7 +42,7 @@ internal sealed class HierarchySelection(
 
         _ = gameObject.scene.DestroyObject(gameObject);
         if (interactions.selection.TryGet(out GameObject? selected) && ReferenceEquals(selected, gameObject))
-            _ = interactions.For("panel/scene.hierarchy").Select();
+            _ = interactions.For(HierarchyInteractionIds.area).Select();
         return true;
     }
 

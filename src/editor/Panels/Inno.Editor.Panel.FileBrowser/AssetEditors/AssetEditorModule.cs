@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.ExceptionServices;
 
 using Inno.Assets;
 using Inno.Assets.Core;
@@ -144,11 +145,20 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
             targetPath,
             isDirectory: context.isDirectory,
             archive: []);
-        m_interactions.history.RecordApplied(
-            "Rename Asset",
-            new EditorHistoryChange(
-                AssetHistoryKinds.SourceOperation,
-                EditorHistoryPayload.FromBytes(data.Encode())));
+        try
+        {
+            m_interactions.history.RecordApplied(
+                "Rename Asset",
+                new EditorHistoryChange(
+                    AssetHistoryKinds.SourceOperation,
+                    EditorHistoryPayload.FromBytes(data.Encode())));
+        }
+        catch (Exception exception)
+        {
+            RollbackAndRethrow(
+                exception,
+                () => RequireMove(editor, context, targetPath, sourcePath));
+        }
     }
 
     /// <summary>
@@ -178,7 +188,7 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
     internal AssetFileEntry MoveToDirectoryWithHistory(
         string sourcePath,
         string targetDirectory,
-        EditorHistory history)
+        IEditorHistory history)
     {
         ArgumentNullException.ThrowIfNull(history);
         if (!TryPrepareMove(
@@ -206,11 +216,20 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
             targetPath,
             context.isDirectory,
             archive: []);
-        history.RecordApplied(
-            "Move Asset",
-            new EditorHistoryChange(
-                AssetHistoryKinds.SourceOperation,
-                EditorHistoryPayload.FromBytes(data.Encode())));
+        try
+        {
+            history.RecordApplied(
+                "Move Asset",
+                new EditorHistoryChange(
+                    AssetHistoryKinds.SourceOperation,
+                    EditorHistoryPayload.FromBytes(data.Encode())));
+        }
+        catch (Exception exception)
+        {
+            RollbackAndRethrow(
+                exception,
+                () => RequireMove(editor, context, targetPath, normalizedSource));
+        }
 
         return AssetManager.TryGetFileSystemEntry(targetPath, out AssetFileEntry moved)
             ? moved
@@ -229,7 +248,6 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
         }
         string path = context.relativePath;
         AssetManager.Delete(path);
-        _ = context.interactions.For("panel/asset.file-browser").Select();
         try
         {
             editor.OnDeleted(context);
@@ -254,11 +272,23 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
             string.Empty,
             isDirectory,
             archive);
-        context.history.RecordApplied(
-            "Delete Asset",
-            new EditorHistoryChange(
-                AssetHistoryKinds.SourceOperation,
-                EditorHistoryPayload.FromBytes(data.Encode())));
+        try
+        {
+            context.history.RecordApplied(
+                "Delete Asset",
+                new EditorHistoryChange(
+                    AssetHistoryKinds.SourceOperation,
+                    EditorHistoryPayload.FromBytes(data.Encode())));
+        }
+        catch (Exception exception)
+        {
+            RollbackAndRethrow(
+                exception,
+                () => AssetSourceArchive.Restore(
+                    Normalize(asset.relativePath),
+                    isDirectory,
+                    archive));
+        }
         return true;
     }
 
@@ -289,7 +319,7 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
         object? target = AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry entry)
             ? entry
             : null;
-        _ = m_interactions.For("panel/asset.file-browser", target).Select();
+        _ = m_interactions.For(FileBrowserInteractionIds.area, target).Select();
     }
 
     internal bool TryCreateDragData(AssetEditorContext context, out EditorDragData? data)
@@ -434,11 +464,6 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
         string targetPath)
     {
         AssetManager.Move(sourcePath, targetPath);
-        _ = context.interactions
-            .For(
-                "panel/asset.file-browser",
-                AssetManager.TryGetFileSystemEntry(targetPath, out AssetFileEntry entry) ? entry : null)
-            .Select();
         try
         {
             editor.OnRenamed(context, sourcePath, targetPath);
@@ -448,6 +473,33 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
             Log.Error("Asset editor rename hook failed for '{0}': {1}", targetPath, exception);
         }
         return EditorHistoryResult.Success();
+    }
+
+    private static void RequireMove(
+        AssetEditor editor,
+        AssetEditorContext context,
+        string sourcePath,
+        string targetPath)
+    {
+        EditorHistoryResult result = MoveAsset(editor, context, sourcePath, targetPath);
+        if (!result.succeeded)
+            throw new InvalidOperationException(result.message);
+    }
+
+    private static void RollbackAndRethrow(Exception failure, Action rollback)
+    {
+        try
+        {
+            rollback();
+        }
+        catch (Exception rollbackException)
+        {
+            throw new AggregateException(
+                "An Asset mutation could not be recorded and its compensation also failed.",
+                failure,
+                rollbackException);
+        }
+        ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
     private static EditorValidationResult ToEditorValidation(AssetOperationValidation validation)

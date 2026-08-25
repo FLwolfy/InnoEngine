@@ -15,7 +15,7 @@ internal sealed class ScriptCompilationModal(EditorScripting scripting) : Editor
     public override bool isVisible => scripting.isCompiling;
 
     /// <inheritdoc />
-    public override void Draw(EditorContext context)
+    protected override void OnDraw(EditorContext context)
     {
         float progress = scripting.progress;
         NativeImGui.TextUnformatted(scripting.status);

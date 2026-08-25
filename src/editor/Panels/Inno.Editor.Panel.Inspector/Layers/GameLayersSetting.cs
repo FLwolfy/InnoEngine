@@ -124,72 +124,91 @@ internal sealed class GameLayersSetting : EditorSetting
             NativeImGui.PopStyleVar();
             return;
         }
-        NativeImGui.TableSetupColumn(
-            "Slot",
-            ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize,
-            48f * ImGuiWidget.style.zoom);
-        NativeImGui.TableSetupColumn(
-            "Name",
-            ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoResize);
-        NativeImGui.TableSetupColumn(
-            "Action",
-            ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize,
-            72f * ImGuiWidget.style.zoom);
-        DrawLayerTableHeader();
-        for (int index = 0; index < GameLayer.C_MAX_COUNT; index++)
+        try
         {
-            if (string.IsNullOrWhiteSpace(names[index]))
-                continue;
-            var layer = new GameLayer(index);
-            NativeImGui.TableNextRow();
-            _ = NativeImGui.TableSetColumnIndex(0);
-            NativeImGui.AlignTextToFramePadding();
-            InsetPlainCell();
-            NativeImGui.TextUnformatted(index.ToString("00", CultureInfo.InvariantCulture));
-            _ = NativeImGui.TableSetColumnIndex(1);
-            if (layer == GameLayer.defaultLayer)
+            NativeImGui.TableSetupColumn(
+                "Slot",
+                ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize,
+                48f * ImGuiWidget.style.zoom);
+            NativeImGui.TableSetupColumn(
+                "Name",
+                ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoResize);
+            NativeImGui.TableSetupColumn(
+                "Action",
+                ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize,
+                72f * ImGuiWidget.style.zoom);
+            DrawLayerTableHeader();
+            for (int index = 0; index < GameLayer.C_MAX_COUNT; index++)
             {
+                if (string.IsNullOrWhiteSpace(names[index]))
+                    continue;
+                var layer = new GameLayer(index);
+                NativeImGui.TableNextRow();
+                _ = NativeImGui.TableSetColumnIndex(0);
+                NativeImGui.AlignTextToFramePadding();
                 InsetPlainCell();
-                NativeImGui.TextUnformatted(names[index] ?? "Default");
-                _ = NativeImGui.TableSetColumnIndex(2);
-                InsetPlainCell();
-                ImGuiWidget.ColoredText(EditorPalette.textDisabled, "Fixed");
-                continue;
-            }
+                NativeImGui.TextUnformatted(index.ToString("00", CultureInfo.InvariantCulture));
+                _ = NativeImGui.TableSetColumnIndex(1);
+                if (layer == GameLayer.defaultLayer)
+                {
+                    InsetPlainCell();
+                    NativeImGui.TextUnformatted(names[index] ?? "Default");
+                    _ = NativeImGui.TableSetColumnIndex(2);
+                    InsetPlainCell();
+                    ImGuiWidget.ColoredText(EditorPalette.textDisabled, "Fixed");
+                    continue;
+                }
 
-            NativeImGui.PushID(index);
-            NativeImGui.SetNextItemWidth(-1f);
-            string value = m_nameBuffers[index];
-            NativeImGui.PushStyleColor(ImGuiCol.FrameBg, EditorPalette.transparent);
-            NativeImGui.PushStyleColor(ImGuiCol.FrameBgHovered, EditorPalette.transparent);
-            NativeImGui.PushStyleColor(ImGuiCol.FrameBgActive, EditorPalette.transparent);
-            bool submitted = NativeImGui.InputTextWithHint(
-                "##layer_name",
-                "Layer name",
-                ref value,
-                C_LAYER_NAME_BUFFER_SIZE,
-                ImGuiInputTextFlags.EnterReturnsTrue);
-            NativeImGui.PopStyleColor(3);
-            m_nameBuffers[index] = value;
-            if (submitted || NativeImGui.IsItemDeactivatedAfterEdit())
-                CommitLayerName(setting, names, masks, layer, value);
-            _ = NativeImGui.TableSetColumnIndex(2);
-            InsetPlainCell();
-            Vector2 removeSize = new(
-                NativeImGui.CalcTextSize("Remove").X,
-                NativeImGui.GetFrameHeight());
-            if (ImGuiWidget.ClickableText(
-                    $"remove_layer_{index}",
-                    "Remove",
-                    removeSize,
-                    "Remove this layer definition."))
-            {
-                CommitLayerName(setting, names, masks, layer, string.Empty);
+                NativeImGui.PushID(index);
+                try
+                {
+                    NativeImGui.SetNextItemWidth(-1f);
+                    string value = m_nameBuffers[index];
+                    NativeImGui.PushStyleColor(ImGuiCol.FrameBg, EditorPalette.transparent);
+                    NativeImGui.PushStyleColor(ImGuiCol.FrameBgHovered, EditorPalette.transparent);
+                    NativeImGui.PushStyleColor(ImGuiCol.FrameBgActive, EditorPalette.transparent);
+                    bool submitted;
+                    try
+                    {
+                        submitted = NativeImGui.InputTextWithHint(
+                            "##layer_name",
+                            "Layer name",
+                            ref value,
+                            C_LAYER_NAME_BUFFER_SIZE,
+                            ImGuiInputTextFlags.EnterReturnsTrue);
+                    }
+                    finally
+                    {
+                        NativeImGui.PopStyleColor(3);
+                    }
+                    m_nameBuffers[index] = value;
+                    if (submitted || NativeImGui.IsItemDeactivatedAfterEdit())
+                        CommitLayerName(setting, names, masks, layer, value);
+                    _ = NativeImGui.TableSetColumnIndex(2);
+                    InsetPlainCell();
+                    Vector2 removeSize = new(
+                        NativeImGui.CalcTextSize("Remove").X,
+                        NativeImGui.GetFrameHeight());
+                    if (ImGuiWidget.ClickableText(
+                            $"remove_layer_{index}",
+                            "Remove",
+                            removeSize,
+                            "Remove this layer definition."))
+                    {
+                        CommitLayerName(setting, names, masks, layer, string.Empty);
+                    }
+                }
+                finally
+                {
+                    NativeImGui.PopID();
+                }
             }
-            NativeImGui.PopID();
         }
-        NativeImGui.EndTable();
-        NativeImGui.PopStyleVar();
+        finally
+        {
+            NativeImGui.EndTable();
+            NativeImGui.PopStyleVar();
+        }
     }
 
     private void DrawLayerToolbar(
@@ -265,27 +284,39 @@ internal sealed class GameLayersSetting : EditorSetting
         int definedCount)
     {
         NativeImGui.BeginDisabled(definedCount >= GameLayer.C_MAX_COUNT);
-        NativeImGui.SetNextItemWidth(-1f);
-        if (NativeImGui.BeginCombo("##add_game_layer", "Add layer..."))
+        try
         {
-            for (int index = 1; index < GameLayer.C_MAX_COUNT; index++)
+            NativeImGui.SetNextItemWidth(-1f);
+            if (NativeImGui.BeginCombo("##add_game_layer", "Add layer..."))
             {
-                if (!string.IsNullOrWhiteSpace(names[index]))
-                    continue;
-                string slot = index.ToString("00", CultureInfo.InvariantCulture);
-                if (NativeImGui.Selectable($"{slot}  Layer {index}"))
+                try
                 {
-                    CommitLayerName(
-                        setting,
-                        names,
-                        masks,
-                        new GameLayer(index),
-                        $"Layer {index}");
+                    for (int index = 1; index < GameLayer.C_MAX_COUNT; index++)
+                    {
+                        if (!string.IsNullOrWhiteSpace(names[index]))
+                            continue;
+                        string slot = index.ToString("00", CultureInfo.InvariantCulture);
+                        if (NativeImGui.Selectable($"{slot}  Layer {index}"))
+                        {
+                            CommitLayerName(
+                                setting,
+                                names,
+                                masks,
+                                new GameLayer(index),
+                                $"Layer {index}");
+                        }
+                    }
+                }
+                finally
+                {
+                    NativeImGui.EndCombo();
                 }
             }
-            NativeImGui.EndCombo();
         }
-        NativeImGui.EndDisabled();
+        finally
+        {
+            NativeImGui.EndDisabled();
+        }
     }
 
     private void CommitLayerName(

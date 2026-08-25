@@ -8,12 +8,12 @@ using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Hierarchy;
 
-[EditorDrop("panel/asset.file-browser")]
+[EditorDrop(HierarchyInteractionIds.C_FILE_BROWSER_AREA)]
 internal sealed class SaveSceneAssetDropHandler
     : EditorDrop<GameScene, string>
 {
-    private readonly EditorSceneWorkspace m_workspace;
-    internal SaveSceneAssetDropHandler(EditorSceneWorkspace workspace)
+    private readonly IEditorSceneWorkspace m_workspace;
+    internal SaveSceneAssetDropHandler(IEditorSceneWorkspace workspace)
     {
         m_workspace = workspace;
     }
@@ -27,7 +27,7 @@ internal sealed class SaveSceneAssetDropHandler
     protected override EditorDropResult Drop(
         EditorDropContext<GameScene, string> context)
     {
-        string path = m_workspace.SaveSceneToDirectory(context.source, context.target);
+        string path = m_workspace.SaveToDirectory(context.source, context.target);
         if (!AssetManager.TryGetFileSystemEntry(path, out AssetFileEntry selection))
             return EditorDropResult.rejected;
         _ = context.interactions.For(context.area, selection).Select();

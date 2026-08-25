@@ -11,6 +11,9 @@ internal sealed class EditorMenuCatalog(
     EditorExtensionCatalog catalog,
     EditorActionRouter actions)
 {
+    private static readonly EditorAreaId S_MAIN_MENU_AREA = new("editor/main-menu");
+    private static readonly EditorActionId S_TOGGLE_PANEL_ACTION = new("editor/toggle-panel");
+
     private readonly HashSet<string> m_sourceFailures = new(StringComparer.Ordinal);
 
     internal EditorMenuModel Build(EditorMenuContext context)
@@ -21,11 +24,11 @@ internal sealed class EditorMenuCatalog(
         {
             foreach (EditorMenuAttribute menu in registration.menus)
             {
-                if (!string.Equals(menu.area, context.area, StringComparison.Ordinal))
+                if (!string.Equals(menu.area, context.area.value, StringComparison.Ordinal))
                     continue;
                 placements.Add(new Placement(
                     NormalizePath(menu.path),
-                    registration.attribute.action,
+                    registration.id,
                     menu.order,
                     menu.separatorBefore,
                     argument: null));
@@ -34,7 +37,7 @@ internal sealed class EditorMenuCatalog(
 
         foreach (EditorExtensionCatalog.MenuSourceRegistration registration in catalog.extensions.menuSources)
         {
-            if (!string.Equals(registration.area, context.area, StringComparison.Ordinal))
+            if (!string.Equals(registration.area, context.area.value, StringComparison.Ordinal))
                 continue;
             try
             {
@@ -62,16 +65,16 @@ internal sealed class EditorMenuCatalog(
             }
         }
 
-        if (string.Equals(context.area, "editor/main-menu", StringComparison.Ordinal))
+        if (context.area == S_MAIN_MENU_AREA)
         {
             foreach (EditorExtensionCatalog.PanelRegistration panel in catalog.extensions.panels)
             {
                 placements.Add(new Placement(
                     $"Panel/{panel.attribute.title}",
-                    "editor/toggle-panel",
+                    S_TOGGLE_PANEL_ACTION,
                     panel.attribute.order,
                     separatorBefore: false,
-                    panel.panel));
+                    new EditorPanelId(panel.attribute.id)));
             }
         }
 
@@ -88,7 +91,7 @@ internal sealed class EditorMenuCatalog(
     private void AddPlacement(MutableNode root, Placement placement, EditorMenuContext context)
     {
         EditorActionContext actionContext = context.CreateActionContext(placement.argument);
-        EditorActionState state = actions.Query(placement.actionId, actionContext);
+        EditorActionState state = actions.Query(placement.actionId.value, actionContext);
         if (!state.isVisible)
             return;
 
@@ -125,14 +128,14 @@ internal sealed class EditorMenuCatalog(
                      .ThenBy(static value => value.label, StringComparer.Ordinal))
         {
             IReadOnlyList<EditorMenuItem> children = Freeze(node.children.Values);
-            EditorActionState state = string.IsNullOrEmpty(node.actionId)
+            EditorActionState state = node.actionId is null
                 ? new EditorActionState(children.Count > 0, children.Count > 0)
                 : node.state;
             if (!state.isVisible && children.Count == 0)
                 continue;
             result.Add(new EditorMenuItem(
                 node.label,
-                node.actionId,
+                node.actionId?.value ?? string.Empty,
                 node.order,
                 node.separatorBefore,
                 state,
@@ -154,7 +157,7 @@ internal sealed class EditorMenuCatalog(
 
     private sealed record Placement(
         string path,
-        string actionId,
+        EditorActionId actionId,
         int order,
         bool separatorBefore,
         object? argument);
@@ -165,7 +168,7 @@ internal sealed class EditorMenuCatalog(
         internal int order = order;
         internal bool separatorBefore = separatorBefore;
         internal readonly Dictionary<string, MutableNode> children = new(StringComparer.Ordinal);
-        internal string actionId = string.Empty;
+        internal EditorActionId? actionId;
         internal object? argument;
         internal EditorActionState state = EditorActionState.hidden;
     }

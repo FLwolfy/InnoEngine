@@ -3,8 +3,8 @@ using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Logging;
 
-[EditorAction("console/copy-message", "panel/diagnostics.console/entry")]
-[EditorMenu("panel/diagnostics.console/entry", "Copy Message", order: 100)]
+[EditorAction(LoggingInteractionIds.C_COPY_MESSAGE, LoggingInteractionIds.C_ENTRY_AREA)]
+[EditorMenu(LoggingInteractionIds.C_ENTRY_AREA, "Copy Message", order: 100)]
 internal sealed class CopyConsoleMessageCommand : EditorAction<ConsoleEntryCopyTarget>
 {
     protected override void Execute(EditorActionContext<ConsoleEntryCopyTarget> context)

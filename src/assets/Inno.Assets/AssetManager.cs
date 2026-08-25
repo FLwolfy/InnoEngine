@@ -12,6 +12,7 @@ using Inno.Assets.Serialization;
 using Inno.Core.Identity;
 using Inno.Core.Logging;
 using Inno.Core.Reflection;
+using Inno.Core.Scripting;
 using Inno.Core.Serialization;
 
 namespace Inno.Assets;
@@ -54,6 +55,7 @@ public static class AssetManager
     /// <exception cref="InvalidOperationException">
     /// Thrown when identity, type cache or serialization services are not initialized.
     /// </exception>
+    [ScriptingApiIgnore]
     public static void Initialize(AssetManagerOptions options)
     {
         if (!IdentityManager.isInitialized)

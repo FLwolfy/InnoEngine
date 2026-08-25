@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 
 using Inno.Core.Reflection.Internal;
 
@@ -17,6 +18,8 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
 
     private TSnapshot? m_current;
     private long m_typeCacheVersion = -1;
+    private bool m_activationInProgress;
+    private bool m_refreshPending;
     private bool m_disposed;
 
     /// <summary>
@@ -66,7 +69,7 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
         }
 
         if (snapshot is not null)
-            DisposeSnapshot(snapshot);
+            ReleaseSnapshot(snapshot);
     }
 
     /// <summary>
@@ -87,7 +90,7 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
 
         m_registration.Dispose();
         if (snapshot is not null)
-            DisposeSnapshot(snapshot);
+            ReleaseSnapshot(snapshot);
         GC.SuppressFinalize(this);
     }
 
@@ -119,11 +122,41 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
     protected abstract TSnapshot Build(TypeCacheSnapshot types);
 
     /// <summary>
-    /// Runs after a new snapshot is committed and before the previous snapshot is released.
+    /// Reversibly activates a complete candidate while the previous snapshot remains available.
     /// </summary>
-    /// <param name="previous">The previous active snapshot.</param>
-    /// <param name="current">The newly committed snapshot.</param>
-    protected virtual void OnCommitted(TSnapshot previous, TSnapshot current)
+    /// <param name="previous">The previous active snapshot, or <see langword="null"/> during initial activation.</param>
+    /// <param name="candidate">The candidate exposed through <see cref="current"/> during this callback.</param>
+    /// <remarks>
+    /// Implementations may perform fallible lifecycle work here. They must keep enough local state for
+    /// <see cref="OnActivationRolledBack"/> to reverse every completed step.
+    /// </remarks>
+    protected virtual void OnActivating(TSnapshot? previous, TSnapshot candidate)
+    {
+    }
+
+    /// <summary>
+    /// Reverses lifecycle work performed while activating a candidate snapshot.
+    /// </summary>
+    /// <param name="previous">The restored active snapshot, or <see langword="null"/> when none existed.</param>
+    /// <param name="candidate">The rejected candidate snapshot.</param>
+    /// <remarks>
+    /// Exceptions are reported through <see cref="OnCleanupFailed"/> and do not prevent other registries
+    /// from rolling back.
+    /// </remarks>
+    protected virtual void OnActivationRolledBack(TSnapshot? previous, TSnapshot candidate)
+    {
+    }
+
+    /// <summary>
+    /// Finalizes a successfully activated candidate after every coordinated registry has activated.
+    /// </summary>
+    /// <param name="previous">The previous snapshot that is about to be released, or <see langword="null"/>.</param>
+    /// <param name="currentSnapshot">The committed active snapshot.</param>
+    /// <remarks>
+    /// This is a cleanup-only phase and must not perform fallible publication work. Exceptions are reported
+    /// through <see cref="OnCleanupFailed"/> and cannot cause the completed activation to roll back.
+    /// </remarks>
+    protected virtual void OnActivationCompleted(TSnapshot? previous, TSnapshot currentSnapshot)
     {
     }
 
@@ -136,6 +169,21 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
         if (snapshot is IDisposable disposable)
             disposable.Dispose();
     }
+
+    /// <summary>
+    /// Reports an exception raised while rolling back activation or releasing a snapshot.
+    /// </summary>
+    /// <param name="phase">The cleanup phase that raised the exception.</param>
+    /// <param name="exception">The cleanup exception.</param>
+    /// <remarks>
+    /// This callback is diagnostic only. Exceptions raised by an override are ignored so cleanup can continue.
+    /// </remarks>
+    protected virtual void OnCleanupFailed(string phase, Exception exception)
+        => Trace.TraceError(
+            "Type registry '{0}' failed during {1}: {2}",
+            GetType().FullName,
+            phase,
+            exception);
 
     /// <summary>
     /// Creates a validated extension instance using a parameterless constructor.
@@ -175,11 +223,64 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
                     return TypeRegistryNoopTransaction.instance;
                 throw new ObjectDisposedException(GetType().FullName);
             }
+            if (m_activationInProgress)
+            {
+                if (m_typeCacheVersion != types.version)
+                    m_refreshPending = true;
+                return TypeRegistryNoopTransaction.instance;
+            }
             if (m_current is not null && m_typeCacheVersion == types.version)
                 return TypeRegistryNoopTransaction.instance;
 
             TSnapshot candidate = Build(types);
             return new RegistryTransaction(this, candidate, types.version, m_current, m_typeCacheVersion);
+        }
+    }
+
+    private void RollbackActivation(TSnapshot? previous, TSnapshot candidate)
+    {
+        try
+        {
+            OnActivationRolledBack(previous, candidate);
+        }
+        catch (Exception exception)
+        {
+            ReportCleanupFailure("activation rollback", exception);
+        }
+    }
+
+    private void ReleaseSnapshot(TSnapshot snapshot)
+    {
+        try
+        {
+            DisposeSnapshot(snapshot);
+        }
+        catch (Exception exception)
+        {
+            ReportCleanupFailure("snapshot release", exception);
+        }
+    }
+
+    private void CompleteActivation(TSnapshot? previous, TSnapshot candidate)
+    {
+        try
+        {
+            OnActivationCompleted(previous, candidate);
+        }
+        catch (Exception exception)
+        {
+            ReportCleanupFailure("activation completion", exception);
+        }
+    }
+
+    private void ReportCleanupFailure(string phase, Exception exception)
+    {
+        try
+        {
+            OnCleanupFailed(phase, exception);
+        }
+        catch
+        {
         }
     }
 
@@ -197,6 +298,7 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
         long previousVersion) : ITypeRegistryTransaction
     {
         private bool m_activated;
+        private bool m_activationStarted;
         private bool m_finished;
 
         public void Activate()
@@ -207,28 +309,46 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
                 ObjectDisposedException.ThrowIf(owner.m_disposed, owner);
                 owner.m_current = candidate;
                 owner.m_typeCacheVersion = candidateVersion;
+                owner.m_activationInProgress = true;
                 m_activated = true;
+                m_activationStarted = true;
+            }
+
+            try
+            {
+                owner.OnActivating(previous, candidate);
+            }
+            catch
+            {
+                Rollback();
+                throw;
             }
         }
 
         public void Complete()
         {
-            bool ownerWasDisposed;
+            TSnapshot? snapshotToRelease;
+            bool refreshPending;
             lock (owner.m_sync)
             {
                 EnsureNotFinished();
                 if (!m_activated)
                     throw new InvalidOperationException("Registry transaction has not been activated.");
-                ownerWasDisposed = owner.m_disposed;
                 m_finished = true;
+                snapshotToRelease = previous;
             }
 
-            if (previous is not null)
+            owner.CompleteActivation(previous, candidate);
+            if (snapshotToRelease is not null)
+                owner.ReleaseSnapshot(snapshotToRelease);
+            lock (owner.m_sync)
             {
-                if (!ownerWasDisposed)
-                    owner.OnCommitted(previous, candidate);
-                owner.DisposeSnapshot(previous);
+                owner.m_activationInProgress = false;
+                refreshPending = owner.m_refreshPending;
+                owner.m_refreshPending = false;
             }
+            if (refreshPending && !owner.m_disposed && TypeCacheManager.isInitialized)
+                owner.Refresh();
         }
 
         public void Rollback()
@@ -244,17 +364,20 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
                     owner.m_current = previous;
                     owner.m_typeCacheVersion = previousVersion;
                 }
+                owner.m_activationInProgress = false;
                 m_finished = true;
             }
 
             if (ownerWasDisposed && m_activated)
             {
                 if (previous is not null)
-                    owner.DisposeSnapshot(previous);
+                    owner.ReleaseSnapshot(previous);
             }
             else
             {
-                owner.DisposeSnapshot(candidate);
+                if (m_activationStarted)
+                    owner.RollbackActivation(previous, candidate);
+                owner.ReleaseSnapshot(candidate);
             }
         }
 

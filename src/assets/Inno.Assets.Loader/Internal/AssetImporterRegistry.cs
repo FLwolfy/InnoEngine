@@ -13,6 +13,7 @@ internal sealed class AssetImporterRegistry
 {
     private readonly object m_generationSync = new();
     private readonly Dictionary<string, long> m_generations = new(StringComparer.Ordinal);
+    private Dictionary<string, long>? m_generationRollback;
 
     internal AssetImporter? FindByPath(string relativePath)
     {
@@ -77,16 +78,40 @@ internal sealed class AssetImporterRegistry
             typesById.ToFrozenDictionary(StringComparer.Ordinal));
     }
 
-    protected override void OnCommitted(Snapshot previous, Snapshot currentSnapshot)
+    protected override void OnActivating(Snapshot? previous, Snapshot candidate)
     {
         lock (m_generationSync)
         {
-            foreach ((string importerId, Type importerType) in currentSnapshot.typesById)
+            m_generationRollback = new Dictionary<string, long>(m_generations, StringComparer.Ordinal);
+            foreach ((string importerId, Type importerType) in candidate.typesById)
             {
-                if (!previous.typesById.TryGetValue(importerId, out Type? previousType) || previousType != importerType)
+                if (previous is null ||
+                    !previous.typesById.TryGetValue(importerId, out Type? previousType) ||
+                    previousType != importerType)
+                {
                     m_generations[importerId] = m_generations.GetValueOrDefault(importerId) + 1;
+                }
             }
         }
+    }
+
+    protected override void OnActivationRolledBack(Snapshot? previous, Snapshot candidate)
+    {
+        lock (m_generationSync)
+        {
+            if (m_generationRollback is null)
+                return;
+            m_generations.Clear();
+            foreach ((string importerId, long generation) in m_generationRollback)
+                m_generations.Add(importerId, generation);
+            m_generationRollback = null;
+        }
+    }
+
+    protected override void OnActivationCompleted(Snapshot? previous, Snapshot currentSnapshot)
+    {
+        lock (m_generationSync)
+            m_generationRollback = null;
     }
 
     protected override void DisposeSnapshot(Snapshot snapshot)

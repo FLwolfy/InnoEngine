@@ -17,6 +17,8 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
     private readonly EditorExtensionStateStore m_state;
     private readonly Dictionary<string, PanelState> m_panelStates = new(StringComparer.Ordinal);
     private Snapshot? m_active;
+    private ActivationState? m_activation;
+    private Snapshot? m_staging;
 
     internal EditorExtensionCatalog(EditorContext context, EditorInteractions interactions)
     {
@@ -30,7 +32,8 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         get
         {
             Snapshot snapshot = current;
-            EnsureActive(snapshot);
+            if (!ReferenceEquals(snapshot, m_active) && !ReferenceEquals(snapshot, m_staging))
+                throw new InvalidOperationException("The extension registry returned an unpublished snapshot.");
             return snapshot;
         }
     }
@@ -40,23 +43,79 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         Snapshot snapshot = extensions;
         for (int i = 0; i < snapshot.modules.Length; i++)
         {
-            snapshot.modules[i].module.Update(m_context);
-            if (snapshot.modules[i].module.blocksFollowingUpdates)
+            ModuleRegistration registration = snapshot.modules[i];
+            if (snapshot.quarantinedModules.Contains(registration.module))
+                continue;
+            try
+            {
+                registration.module.Update(m_context);
+            }
+            catch (Exception exception)
+            {
+                snapshot.quarantinedModules.Add(registration.module);
+                Log.Error("Editor module '{0}' failed to update and was quarantined: {1}",
+                    registration.attribute.id,
+                    exception);
+                continue;
+            }
+            if (registration.module.blocksFollowingUpdates)
                 break;
         }
-        m_state.Update(m_context.frame.totalTime, snapshot.state, snapshot.panels);
+        m_state.Update(m_context.frame.totalTime, GetAvailableState(snapshot), GetAvailablePanels(snapshot));
     }
 
     internal void SaveState()
     {
         if (m_active is not null)
-            m_state.Save(m_active.state, m_active.panels);
+            m_state.Save(GetAvailableState(m_active), GetAvailablePanels(m_active));
+    }
+
+    internal bool TryTogglePanel(EditorPanelId panelId)
+    {
+        Snapshot snapshot = extensions;
+        for (int i = 0; i < snapshot.panels.Length; i++)
+        {
+            PanelRegistration registration = snapshot.panels[i];
+            if (!string.Equals(registration.attribute.id, panelId.value, StringComparison.Ordinal) ||
+                snapshot.quarantinedPanels.Contains(registration.panel))
+            {
+                continue;
+            }
+            registration.panel.isOpen = !registration.panel.isOpen;
+            return true;
+        }
+        return false;
     }
 
     internal void PrepareShutdown()
     {
         if (m_active is not null)
-            m_state.PrepareShutdown(m_active.state, m_active.panels);
+            m_state.PrepareShutdown(GetAvailableState(m_active), GetAvailablePanels(m_active));
+    }
+
+    internal void QuarantinePanel(Snapshot snapshot, PanelRegistration registration, Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(exception);
+        if (!ReferenceEquals(snapshot, m_active) || !snapshot.quarantinedPanels.Add(registration.panel))
+            return;
+        registration.panel.isOpen = false;
+        m_diagnostics.ReportPanelFailure(registration.attribute.id, exception);
+        m_diagnostics.Commit();
+        Log.Error("Editor panel '{0}' failed to draw and was quarantined: {1}",
+            registration.attribute.id,
+            exception);
+    }
+
+    internal void QuarantineModal(Snapshot snapshot, ModalRegistration registration, Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(registration);
+        ArgumentNullException.ThrowIfNull(exception);
+        if (!ReferenceEquals(snapshot, m_active) || !snapshot.quarantinedModals.Add(registration.modal))
+            return;
+        Log.Error("Editor modal '{0}' failed and was quarantined: {1}", registration.attribute.id, exception);
     }
 
     internal void Shutdown(bool saveState = true)
@@ -64,7 +123,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         if (m_active is not null)
         {
             if (saveState)
-                m_state.PrepareShutdown(m_active.state, m_active.panels);
+                m_state.PrepareShutdown(GetAvailableState(m_active), GetAvailablePanels(m_active));
             Deactivate(m_active);
         }
         m_active = null;
@@ -100,6 +159,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             .Select(type => CreateActionRegistration(type, activator))
             .ToArray();
         ValidateActions(actions);
+        ValidateShortcuts(actions);
 
         MenuSourceRegistration[] menuSources = types.GetTypesWithAttribute<EditorMenuSourceAttribute>()
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
@@ -154,9 +214,120 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             activator.instances.ToArray());
     }
 
-    protected override void OnCommitted(Snapshot previous, Snapshot currentSnapshot)
+    protected override void OnActivating(Snapshot? previous, Snapshot candidate)
     {
-        Transition(previous, currentSnapshot);
+        if (m_activation is not null)
+            throw new InvalidOperationException("An extension generation transition is already active.");
+
+        if (previous is not null)
+            CapturePanelStates(previous);
+        if (previous is not null)
+            m_state.Save(GetAvailableState(previous), GetAvailablePanels(previous));
+
+        var existing = previous is null
+            ? new HashSet<object>(ReferenceEqualityComparer.Instance)
+            : new HashSet<object>(previous.instances, ReferenceEqualityComparer.Instance);
+        EditorHistory.HandlerUpdate handlers = m_interactions.historyHost.PrepareHandlerUpdate(
+            CreateHistoryHandlerMap(candidate.historyHandlers));
+        var activation = new ActivationState(previous, candidate, existing, handlers);
+        m_activation = activation;
+        m_staging = candidate;
+        m_interactions.PrepareGenerationTransition();
+        handlers.Activate();
+
+        if (previous is not null)
+        {
+            foreach (ModuleRegistration registration in candidate.modules)
+            {
+                if (existing.Contains(registration.module) && previous.startedModules.Contains(registration.module))
+                    candidate.startedModules.Add(registration.module);
+            }
+            foreach (PanelRegistration registration in candidate.panels)
+            {
+                if (existing.Contains(registration.panel) && previous.attachedPanels.Contains(registration.panel))
+                    candidate.attachedPanels.Add(registration.panel);
+            }
+        }
+
+        for (int i = 0; i < candidate.modules.Length; i++)
+        {
+            ModuleRegistration registration = candidate.modules[i];
+            if (existing.Contains(registration.module))
+                continue;
+            activation.startedModules.Add(registration);
+            registration.module.Start(m_context);
+            candidate.startedModules.Add(registration.module);
+        }
+
+        var retainedPanelIds = new HashSet<string>(
+            candidate.panels
+                .Where(registration => existing.Contains(registration.panel))
+                .Select(static registration => registration.attribute.id),
+            StringComparer.Ordinal);
+        m_diagnostics.RetainPanels(retainedPanelIds);
+        for (int i = 0; i < candidate.panels.Length; i++)
+        {
+            PanelRegistration registration = candidate.panels[i];
+            if (existing.Contains(registration.panel))
+                continue;
+            try
+            {
+                registration.panel.Attach(m_context);
+                activation.attachedPanels.Add(registration);
+                candidate.attachedPanels.Add(registration.panel);
+                m_diagnostics.ResolvePanel(registration.attribute.id);
+            }
+            catch (Exception exception)
+            {
+                candidate.quarantinedPanels.Add(registration.panel);
+                registration.panel.isOpen = false;
+                TryDetach(registration, "failed activation cleanup");
+                m_diagnostics.ReportPanelFailure(registration.attribute.id, exception);
+                Log.Error("Editor panel '{0}' failed to attach: {1}", registration.attribute.id, exception);
+            }
+        }
+        m_diagnostics.Commit();
+        m_state.Restore(GetAvailableState(candidate));
+        m_active = candidate;
+    }
+
+    protected override void OnActivationRolledBack(Snapshot? previous, Snapshot candidate)
+    {
+        ActivationState? activation = m_activation;
+        m_active = previous;
+        m_staging = null;
+        if (activation is null || !ReferenceEquals(activation.candidate, candidate))
+            return;
+
+        activation.handlers.Rollback();
+        m_interactions.RollbackGenerationTransition();
+        for (int i = activation.attachedPanels.Count - 1; i >= 0; i--)
+            TryDetach(activation.attachedPanels[i], "activation rollback");
+        for (int i = activation.startedModules.Count - 1; i >= 0; i--)
+            TryStop(activation.startedModules[i], "activation rollback");
+        m_activation = null;
+
+        var previousPanelIds = previous is null
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : new HashSet<string>(
+                GetAvailablePanels(previous).Select(static registration => registration.attribute.id),
+                StringComparer.Ordinal);
+        m_diagnostics.RetainPanels(previousPanelIds);
+        m_diagnostics.Commit();
+    }
+
+    protected override void OnActivationCompleted(Snapshot? previous, Snapshot currentSnapshot)
+    {
+        ActivationState? activation = m_activation;
+        if (activation is null || !ReferenceEquals(activation.candidate, currentSnapshot))
+            return;
+
+        activation.handlers.Complete();
+        m_interactions.CompleteGenerationTransition();
+        if (previous is not null)
+            RetirePrevious(previous, currentSnapshot);
+        m_staging = null;
+        m_activation = null;
     }
 
     protected override void DisposeSnapshot(Snapshot snapshot)
@@ -173,59 +344,18 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         }
     }
 
-    private void EnsureActive(Snapshot snapshot)
-    {
-        if (ReferenceEquals(m_active, snapshot))
-            return;
-        if (m_active is not null)
-            Deactivate(m_active);
-        Activate(snapshot);
-    }
-
-    private void Activate(Snapshot snapshot)
-    {
-        // Publish before attaching extensions so a TypeCache query performed during startup can
-        // retain these host instances instead of treating them as an abandoned candidate.
-        m_active = snapshot;
-        m_interactions.history.UpdateHandlers(CreateHistoryHandlerMap(snapshot.historyHandlers));
-        m_diagnostics.RetainPanels(new HashSet<string>(StringComparer.Ordinal));
-        for (int i = 0; i < snapshot.panels.Length; i++)
-        {
-            PanelRegistration registration = snapshot.panels[i];
-            try
-            {
-                registration.panel.Attach(m_context);
-                m_diagnostics.ResolvePanel(registration.attribute.id);
-            }
-            catch (Exception exception)
-            {
-                registration.panel.isOpen = false;
-                m_diagnostics.ReportPanelFailure(registration.attribute.id, exception);
-                Log.Error("Editor panel '{0}' failed to attach: {1}", registration.attribute.id, exception);
-            }
-        }
-        m_diagnostics.Commit();
-        for (int i = 0; i < snapshot.modules.Length; i++)
-            snapshot.modules[i].module.Start(m_context);
-        m_state.Restore(snapshot.state);
-    }
-
     private void Deactivate(Snapshot snapshot)
     {
         CapturePanelStates(snapshot);
         for (int i = snapshot.modules.Length - 1; i >= 0; i--)
-            snapshot.modules[i].module.Stop(m_context);
+        {
+            if (snapshot.startedModules.Contains(snapshot.modules[i].module))
+                TryStop(snapshot.modules[i], "shutdown");
+        }
         for (int i = snapshot.panels.Length - 1; i >= 0; i--)
         {
-            PanelRegistration registration = snapshot.panels[i];
-            try
-            {
-                registration.panel.Detach(m_context);
-            }
-            catch (Exception exception)
-            {
-                Log.Error("Editor panel '{0}' failed to detach: {1}", registration.attribute.id, exception);
-            }
+            if (snapshot.attachedPanels.Contains(snapshot.panels[i].panel))
+                TryDetach(snapshot.panels[i], "shutdown");
         }
         if (ReferenceEquals(m_active, snapshot))
             m_active = null;
@@ -233,66 +363,22 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         m_diagnostics.Commit();
     }
 
-    private void Transition(Snapshot previous, Snapshot next)
+    private void RetirePrevious(Snapshot previous, Snapshot next)
     {
-        CapturePanelStates(previous);
-        m_state.Save(previous.state, previous.panels);
         var retained = new HashSet<object>(next.instances, ReferenceEqualityComparer.Instance);
         for (int i = previous.modules.Length - 1; i >= 0; i--)
         {
-            if (!retained.Contains(previous.modules[i].module))
-                previous.modules[i].module.Stop(m_context);
+            if (!retained.Contains(previous.modules[i].module) &&
+                previous.startedModules.Contains(previous.modules[i].module))
+                TryStop(previous.modules[i], "generation retirement");
         }
         for (int i = previous.panels.Length - 1; i >= 0; i--)
         {
             PanelRegistration registration = previous.panels[i];
-            if (retained.Contains(registration.panel))
+            if (retained.Contains(registration.panel) || !previous.attachedPanels.Contains(registration.panel))
                 continue;
-            try
-            {
-                registration.panel.Detach(m_context);
-            }
-            catch (Exception exception)
-            {
-                Log.Error("Editor panel '{0}' failed to detach: {1}", registration.attribute.id, exception);
-            }
+            TryDetach(registration, "generation retirement");
         }
-
-        var existing = new HashSet<object>(previous.instances, ReferenceEqualityComparer.Instance);
-        // Publish the candidate before attaching new extensions so refreshes triggered by startup
-        // retain the newly active generation instead of reactivating the stopped snapshot.
-        m_active = next;
-        m_interactions.history.UpdateHandlers(CreateHistoryHandlerMap(next.historyHandlers));
-        var retainedPanelIds = new HashSet<string>(
-            next.panels
-                .Where(registration => existing.Contains(registration.panel))
-                .Select(static registration => registration.attribute.id),
-            StringComparer.Ordinal);
-        m_diagnostics.RetainPanels(retainedPanelIds);
-        for (int i = 0; i < next.panels.Length; i++)
-        {
-            PanelRegistration registration = next.panels[i];
-            if (existing.Contains(registration.panel))
-                continue;
-            try
-            {
-                registration.panel.Attach(m_context);
-                m_diagnostics.ResolvePanel(registration.attribute.id);
-            }
-            catch (Exception exception)
-            {
-                registration.panel.isOpen = false;
-                m_diagnostics.ReportPanelFailure(registration.attribute.id, exception);
-                Log.Error("Editor panel '{0}' failed to attach: {1}", registration.attribute.id, exception);
-            }
-        }
-        m_diagnostics.Commit();
-        for (int i = 0; i < next.modules.Length; i++)
-        {
-            if (!existing.Contains(next.modules[i].module))
-                next.modules[i].module.Start(m_context);
-        }
-        m_state.Restore(next.state);
     }
 
     private void CapturePanelStates()
@@ -311,6 +397,43 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             m_panelStates[registration.attribute.id] = new PanelState(
                 registration.panel.isOpen,
                 payload);
+        }
+    }
+
+    private static StateRegistration[] GetAvailableState(Snapshot snapshot)
+        => snapshot.state
+            .Where(registration => registration.kind != StateOwnerKind.Panel ||
+                                   !snapshot.quarantinedPanels.Contains((EditorPanel)registration.owner))
+            .Where(registration => registration.kind != StateOwnerKind.Module ||
+                                   !snapshot.quarantinedModules.Contains((EditorModule)registration.owner))
+            .ToArray();
+
+    private static PanelRegistration[] GetAvailablePanels(Snapshot snapshot)
+        => snapshot.panels
+            .Where(registration => !snapshot.quarantinedPanels.Contains(registration.panel))
+            .ToArray();
+
+    private void TryStop(ModuleRegistration registration, string phase)
+    {
+        try
+        {
+            registration.module.Stop(m_context);
+        }
+        catch (Exception exception)
+        {
+            Log.Error("Editor module '{0}' failed during {1}: {2}", registration.attribute.id, phase, exception);
+        }
+    }
+
+    private void TryDetach(PanelRegistration registration, string phase)
+    {
+        try
+        {
+            registration.panel.Detach(m_context);
+        }
+        catch (Exception exception)
+        {
+            Log.Error("Editor panel '{0}' failed during {1}: {2}", registration.attribute.id, phase, exception);
         }
     }
 
@@ -402,6 +525,72 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             }
         }
     }
+
+    private static void ValidateShortcuts(ActionRegistration[] actions)
+    {
+        var shortcuts = new List<ShortcutValidationEntry>();
+        for (int actionIndex = 0; actionIndex < actions.Length; actionIndex++)
+        {
+            ActionRegistration registration = actions[actionIndex];
+            for (int shortcutIndex = 0; shortcutIndex < registration.shortcuts.Length; shortcutIndex++)
+            {
+                EditorShortcutAttribute shortcut = registration.shortcuts[shortcutIndex];
+                if (!string.IsNullOrEmpty(registration.attribute.area) &&
+                    !string.IsNullOrEmpty(shortcut.area) &&
+                    !string.Equals(registration.attribute.area, shortcut.area, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Editor shortcut on '{registration.id.value}' targets area '{shortcut.area}', " +
+                        $"outside its action area '{registration.attribute.area}'.");
+                }
+                string effectiveArea = string.IsNullOrEmpty(shortcut.area)
+                    ? registration.attribute.area
+                    : shortcut.area;
+                shortcuts.Add(new ShortcutValidationEntry(
+                    registration,
+                    effectiveArea,
+                    CreateShortcutGesture(shortcut)));
+            }
+        }
+
+        for (int leftIndex = 0; leftIndex < shortcuts.Count; leftIndex++)
+        {
+            ShortcutValidationEntry left = shortcuts[leftIndex];
+            for (int rightIndex = leftIndex + 1; rightIndex < shortcuts.Count; rightIndex++)
+            {
+                ShortcutValidationEntry right = shortcuts[rightIndex];
+                if (left.registration.id == right.registration.id ||
+                    left.gesture != right.gesture ||
+                    left.registration.attribute.priority != right.registration.attribute.priority ||
+                    !string.Equals(left.area, right.area, StringComparison.Ordinal) ||
+                    !MayHaveEqualTargetSpecificity(
+                        left.registration.action.targetType,
+                        right.registration.action.targetType))
+                {
+                    continue;
+                }
+
+                throw new InvalidOperationException(
+                    $"Editor shortcut '{left.gesture}' is ambiguous between actions " +
+                    $"'{left.registration.id.value}' and '{right.registration.id.value}' for area " +
+                    $"'{(string.IsNullOrEmpty(left.area) ? "*" : left.area)}'.");
+            }
+        }
+    }
+
+    private static bool MayHaveEqualTargetSpecificity(Type? left, Type? right)
+    {
+        if (left == right)
+            return true;
+        if (left is null || right is null)
+            return false;
+        return left.IsInterface || right.IsInterface;
+    }
+
+    private static HotKeyGesture CreateShortcutGesture(EditorShortcutAttribute shortcut)
+        => shortcut.primary
+            ? HotKeyGesture.Primary(shortcut.key, shortcut.modifiers)
+            : new HotKeyGesture(shortcut.key, shortcut.modifiers);
 
     private static void ValidateDrops(DropRegistration[] drops)
     {
@@ -545,7 +734,23 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         ModalRegistration[] modals,
         HistoryHandlerRegistration[] historyHandlers,
         StateRegistration[] state,
-        object[] instances);
+        object[] instances)
+    {
+        internal HashSet<EditorModule> quarantinedModules { get; } =
+            new(ReferenceEqualityComparer.Instance);
+
+        internal HashSet<EditorPanel> quarantinedPanels { get; } =
+            new(ReferenceEqualityComparer.Instance);
+
+        internal HashSet<EditorModal> quarantinedModals { get; } =
+            new(ReferenceEqualityComparer.Instance);
+
+        internal HashSet<EditorModule> startedModules { get; } =
+            new(ReferenceEqualityComparer.Instance);
+
+        internal HashSet<EditorPanel> attachedPanels { get; } =
+            new(ReferenceEqualityComparer.Instance);
+    }
 
     internal sealed record ModuleRegistration(
         EditorModuleAttribute attribute,
@@ -557,7 +762,14 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         Type type,
         EditorAction action,
         EditorMenuAttribute[] menus,
-        EditorShortcutAttribute[] shortcuts);
+        EditorShortcutAttribute[] shortcuts)
+    {
+        internal EditorActionId id { get; } = new(attribute.action);
+
+        internal EditorAreaId? area { get; } = string.IsNullOrEmpty(attribute.area)
+            ? null
+            : new EditorAreaId(attribute.area);
+    }
 
     internal sealed record MenuSourceRegistration(
         string area,
@@ -602,4 +814,23 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
     }
 
     private readonly record struct PanelState(bool isOpen, ReadOnlyMemory<byte> payload);
+
+    private readonly record struct ShortcutValidationEntry(
+        ActionRegistration registration,
+        string area,
+        HotKeyGesture gesture);
+
+    private sealed class ActivationState(
+        Snapshot? previous,
+        Snapshot candidate,
+        HashSet<object> existing,
+        EditorHistory.HandlerUpdate handlers)
+    {
+        internal Snapshot? previous { get; } = previous;
+        internal Snapshot candidate { get; } = candidate;
+        internal HashSet<object> existing { get; } = existing;
+        internal EditorHistory.HandlerUpdate handlers { get; } = handlers;
+        internal List<ModuleRegistration> startedModules { get; } = [];
+        internal List<PanelRegistration> attachedPanels { get; } = [];
+    }
 }

@@ -24,7 +24,7 @@ namespace Inno.Editor.Scene;
 /// Tracks editor scene documents, their source paths, and serialized dirty state.
 /// </summary>
 [EditorModule("scene-workspace", order: 200)]
-public sealed class EditorSceneWorkspace : EditorModule
+internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
 {
     private const double C_DIRTY_REFRESH_SECONDS = 0.1;
     private const string C_SCENE_EXTENSION = ".iscene";
@@ -48,7 +48,7 @@ public sealed class EditorSceneWorkspace : EditorModule
     /// The active editor interaction entry point. The extension runtime supplies this dependency automatically;
     /// direct tooling callers may omit it when selection coordination is unnecessary.
     /// </param>
-    public EditorSceneWorkspace(EditorInteractions? interactions = null)
+    internal EditorSceneWorkspace(EditorInteractions? interactions = null)
     {
         m_interactions = interactions;
     }
@@ -67,7 +67,7 @@ public sealed class EditorSceneWorkspace : EditorModule
     /// Creates and loads a uniquely named unsaved scene alongside the currently loaded scenes.
     /// </summary>
     /// <returns>The newly created active scene.</returns>
-    public GameScene CreateScene()
+    internal GameScene CreateScene()
     {
         string name = CreateUniqueSceneName(SceneManager.loadedScenes);
         GameScene scene = SceneManager.LoadNewSceneAdditive(name);
@@ -81,7 +81,7 @@ public sealed class EditorSceneWorkspace : EditorModule
     /// Applies queued asset path changes to loaded scene documents and prefab instances.
     /// This method must be called from the editor main thread.
     /// </summary>
-    public void Refresh()
+    internal void Refresh()
     {
         SynchronizeReplacedScenes();
         while (m_sourceChanges.TryDequeue(out AssetChange change))
@@ -151,8 +151,7 @@ public sealed class EditorSceneWorkspace : EditorModule
         document.nextRefreshTimestamp = now + (long)(Stopwatch.Frequency * C_DIRTY_REFRESH_SECONDS);
         try
         {
-            byte[] currentHash = ComputeSceneHash(scene);
-            document.isDirty = !currentHash.AsSpan().SequenceEqual(document.savedHash);
+            document.isDirty = HasSerializedChanges(scene, document);
         }
         catch
         {
@@ -167,7 +166,7 @@ public sealed class EditorSceneWorkspace : EditorModule
     /// <param name="scene">Scene to save.</param>
     /// <param name="currentDirectory">Fallback asset directory for a new scene.</param>
     /// <returns>The saved source-relative path.</returns>
-    public string SaveScene(GameScene scene, string currentDirectory)
+    public string Save(GameScene scene, string currentDirectory)
     {
         ArgumentNullException.ThrowIfNull(scene);
         SceneDocument document = GetOrCreateDocument(scene);
@@ -190,7 +189,7 @@ public sealed class EditorSceneWorkspace : EditorModule
     /// <param name="scene">Scene to save.</param>
     /// <param name="currentDirectory">Target asset directory.</param>
     /// <returns>The saved source-relative path.</returns>
-    public string SaveSceneToDirectory(GameScene scene, string currentDirectory)
+    public string SaveToDirectory(GameScene scene, string currentDirectory)
     {
         ArgumentNullException.ThrowIfNull(scene);
         SceneDocument document = GetOrCreateDocument(scene);
@@ -231,7 +230,7 @@ public sealed class EditorSceneWorkspace : EditorModule
     /// </summary>
     /// <param name="relativePath">Scene asset source-relative path.</param>
     /// <returns>The existing loaded instance or the newly loaded scene.</returns>
-    public GameScene OpenScene(string relativePath)
+    public GameScene Open(string relativePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
         string normalizedPath = NormalizePath(relativePath);
@@ -261,7 +260,7 @@ public sealed class EditorSceneWorkspace : EditorModule
     /// </summary>
     /// <param name="scene">Loaded scene to close.</param>
     /// <returns><see langword="true"/> when the scene was loaded and closed.</returns>
-    public bool CloseScene(GameScene scene)
+    internal bool CloseScene(GameScene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
         if (scene.isDestroyed)
@@ -301,7 +300,7 @@ public sealed class EditorSceneWorkspace : EditorModule
     /// <summary>
     /// Removes all tracked document state.
     /// </summary>
-    public void Clear()
+    internal void Clear()
     {
         m_documents.Clear();
         m_diagnostics.RetainSynchronizationTargets(new HashSet<Guid>());
@@ -443,8 +442,7 @@ public sealed class EditorSceneWorkspace : EditorModule
         if (!pathChanged)
             return;
 
-        bool wasDirty = document.isDirty ||
-                        !ComputeSceneHash(scene).AsSpan().SequenceEqual(document.savedHash);
+        bool wasDirty = HasSerializedChanges(scene, document);
         document.sourcePath = sourcePath;
         scene.name = sourceName;
         if (!wasDirty)
@@ -478,8 +476,7 @@ public sealed class EditorSceneWorkspace : EditorModule
                 continue;
             }
 
-            bool wasDirty = document.isDirty ||
-                            !ComputeSceneHash(document.scene).AsSpan().SequenceEqual(document.savedHash);
+            bool wasDirty = HasSerializedChanges(document.scene, document);
             document.sourcePath = newPath;
             document.scene.name = GetAssetName(newPath);
             if (AssetManager.TryGetPersistentId(newPath, out Guid sourceAssetId))
@@ -487,6 +484,8 @@ public sealed class EditorSceneWorkspace : EditorModule
             if (!wasDirty)
                 document.savedHash = ComputeSceneHash(document.scene);
             document.isDirty = wasDirty;
+            document.nextRefreshTimestamp = Stopwatch.GetTimestamp() +
+                                            (long)(Stopwatch.Frequency * C_DIRTY_REFRESH_SECONDS);
         }
     }
 
@@ -704,13 +703,16 @@ public sealed class EditorSceneWorkspace : EditorModule
         return closed;
     }
 
-    internal void RestoreEditorState(Guid? activeSceneId, Guid? selectedId)
+    internal void RestoreActiveScene(Guid? activeSceneId)
     {
         if (activeSceneId is Guid sceneId && FindEngineObject(sceneId) is GameScene { isLoaded: true } active)
             SceneManager.SetActiveScene(active);
         else if (SceneManager.loadedScenes.Count > 0 && SceneManager.activeScene is null)
             SceneManager.SetActiveScene(SceneManager.loadedScenes[0]);
+    }
 
+    internal void RestoreSelection(Guid? selectedId)
+    {
         if (m_interactions is null)
             return;
         object? target = selectedId is Guid id ? FindEngineObject(id) : null;
@@ -748,6 +750,9 @@ public sealed class EditorSceneWorkspace : EditorModule
         byte[] payload = SerializationManager.Serialize(scene, context);
         return SHA256.HashData(payload);
     }
+
+    private static bool HasSerializedChanges(GameScene scene, SceneDocument document)
+        => !ComputeSceneHash(scene).AsSpan().SequenceEqual(document.savedHash);
 
     private static string CreateUniquePath(string directory, string name, string extension)
     {

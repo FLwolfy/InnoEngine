@@ -14,11 +14,8 @@ internal sealed class EditorDropRouter(EditorExtensionCatalog catalog)
     internal Guid Begin(EditorDragContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (m_data is null || !Equals(m_data.source, context.data.source))
-        {
-            m_token = Guid.NewGuid();
-            m_data = context.data;
-        }
+        m_token = Guid.NewGuid();
+        m_data = context.data;
         return m_token;
     }
 
@@ -102,7 +99,7 @@ internal sealed class EditorDropRouter(EditorExtensionCatalog catalog)
         foreach (EditorExtensionCatalog.DropRegistration registration in catalog.extensions.drops)
         {
             bool exactArea = !string.IsNullOrEmpty(registration.area);
-            if (exactArea && !string.Equals(registration.area, context.area, StringComparison.Ordinal))
+            if (exactArea && !string.Equals(registration.area, context.area.value, StringComparison.Ordinal))
                 continue;
             if (!EditorTypeDistance.TryGet(sourceType, registration.sourceType, out int sourceDistance) ||
                 !EditorTypeDistance.TryGet(targetType, registration.targetType, out int targetDistance))

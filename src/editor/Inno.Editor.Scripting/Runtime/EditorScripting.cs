@@ -43,7 +43,6 @@ internal sealed class EditorScripting : EditorModule
         {
             projectRootDirectory = context.projectDirectory
         });
-        m_manager.CompilationCompleted += OnCompilationCompleted;
         m_manager.Start();
         if (m_manager.TryCompilePending(out Task<ScriptCompilationResult>? compilation))
         {
@@ -86,6 +85,7 @@ internal sealed class EditorScripting : EditorModule
         try
         {
             ScriptCompilationResult result = compilation.GetAwaiter().GetResult();
+            ScriptDiagnosticPublisher.PublishCompilation(result);
             if (result.success)
                 _ = m_manager.ApplyPendingReload();
         }
@@ -108,7 +108,6 @@ internal sealed class EditorScripting : EditorModule
             ScriptDiagnosticPublisher.ClearAll();
             return;
         }
-        m_manager.CompilationCompleted -= OnCompilationCompleted;
         m_manager.Dispose();
         m_manager = null;
         m_compilation = null;
@@ -116,7 +115,4 @@ internal sealed class EditorScripting : EditorModule
         m_showCompilation = false;
         ScriptDiagnosticPublisher.ClearAll();
     }
-
-    private static void OnCompilationCompleted(ScriptCompilationResult result)
-        => ScriptDiagnosticPublisher.PublishCompilation(result);
 }

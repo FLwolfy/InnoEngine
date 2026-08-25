@@ -34,6 +34,12 @@ internal sealed class EditorLayer : Layer
 
     internal bool isFocused { get; set; }
 
+    internal void DisposeUnattached()
+    {
+        m_runtime.Dispose();
+        m_diagnostics.Dispose();
+    }
+
     /// <inheritdoc />
     public override void OnAttach()
     {

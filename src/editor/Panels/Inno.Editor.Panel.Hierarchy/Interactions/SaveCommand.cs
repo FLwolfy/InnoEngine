@@ -10,11 +10,11 @@ using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Hierarchy;
 
-[EditorAction("editor/save")]
-[EditorMenu("editor/main-menu", "File/Save", order: 100)]
+[EditorAction(HierarchyInteractionIds.C_SAVE)]
+[EditorMenu(HierarchyInteractionIds.C_MAIN_MENU_AREA, "File/Save", order: 100)]
 [EditorShortcut(KeyCode.S, primary: true)]
 internal sealed class SaveCommand(
-    EditorSceneWorkspace workspace,
+    IEditorSceneWorkspace workspace,
     AssetEditorModule assets) : EditorAction
 {
     protected override EditorActionState Query(EditorActionContext context)
@@ -27,7 +27,7 @@ internal sealed class SaveCommand(
             IReadOnlyList<GameScene> scenes = SceneManager.loadedScenes;
             for (int i = 0; i < scenes.Count; i++)
             {
-                _ = workspace.SaveScene(
+                _ = workspace.Save(
                     scenes[i],
                     assets.browser.currentDirectory);
             }

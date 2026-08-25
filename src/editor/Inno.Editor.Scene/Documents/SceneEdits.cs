@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.ExceptionServices;
 using System.Linq;
 
 using Inno.Core.Reflection;
+using Inno.Core.Serialization;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 using Inno.Engine.Scene;
@@ -26,7 +28,7 @@ public sealed class SceneEdits : EditorModule
     /// </summary>
     /// <param name="workspace">The current scene document workspace.</param>
     /// <param name="interactions">The current editor interaction runtime.</param>
-    public SceneEdits(EditorSceneWorkspace workspace, EditorInteractions interactions)
+    internal SceneEdits(EditorSceneWorkspace workspace, EditorInteractions interactions)
     {
         m_workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
@@ -43,16 +45,27 @@ public sealed class SceneEdits : EditorModule
         Guid? activeBefore = GetActiveSceneId();
         Guid? selectedBefore = GetSelectionId();
         GameScene scene = m_workspace.CreateScene();
-        EditorSceneWorkspace.SceneDocumentSnapshot snapshot = m_workspace.CaptureDocumentSnapshot(scene);
-        RecordDocument(
-            historyName,
-            existsBefore: false,
-            existsAfter: true,
-            snapshot,
-            activeBefore,
-            GetActiveSceneId(),
-            selectedBefore,
-            scene.identity.persistentId);
+        RecordWithRollback(
+            () =>
+            {
+                EditorSceneWorkspace.SceneDocumentSnapshot snapshot =
+                    m_workspace.CaptureDocumentSnapshot(scene);
+                RecordDocument(
+                    historyName,
+                    existsBefore: false,
+                    existsAfter: true,
+                    snapshot,
+                    activeBefore,
+                    GetActiveSceneId(),
+                    selectedBefore,
+                    scene.identity.persistentId);
+            },
+            () =>
+            {
+                if (!m_workspace.CloseScene(scene))
+                    throw new InvalidOperationException("The unrecorded scene could not be removed.");
+                m_workspace.RestoreActiveScene(activeBefore);
+            });
         return scene;
     }
 
@@ -74,18 +87,27 @@ public sealed class SceneEdits : EditorModule
             throw new ArgumentException("The parent belongs to another scene.", nameof(parent));
         Guid? selectedBefore = GetSelectionId();
         GameObject gameObject = scene.CreateObject();
-        if (parent is not null)
-            gameObject.transform.SetParent(parent);
-        byte[] subtree = SceneSubtreeSerialization.Capture(gameObject);
-        RecordSubtree(
-            historyName,
-            gameObject,
-            existsBefore: false,
-            existsAfter: true,
-            subtree,
-            [],
-            selectedBefore,
-            gameObject.identity.persistentId);
+        RecordWithRollback(
+            () =>
+            {
+                if (parent is not null)
+                    gameObject.transform.SetParent(parent);
+                byte[] subtree = SceneSubtreeSerialization.Capture(gameObject);
+                RecordSubtree(
+                    historyName,
+                    gameObject,
+                    existsBefore: false,
+                    existsAfter: true,
+                    subtree,
+                    [],
+                    selectedBefore,
+                    gameObject.identity.persistentId);
+            },
+            () =>
+            {
+                if (gameObject.isRuntimeValid && !scene.DestroyObject(gameObject))
+                    throw new InvalidOperationException("The unrecorded GameObject could not be removed.");
+            });
         return gameObject;
     }
 
@@ -108,20 +130,38 @@ public sealed class SceneEdits : EditorModule
         int siblingIndex = gameObject.transform.siblingIndex;
         Guid rootId = gameObject.identity.persistentId;
         Guid? selectedBefore = GetSelectionId();
-        if (!scene.DestroyObject(gameObject))
-            return false;
-        var data = new SceneSubtreeHistoryData(
-            scene.identity.persistentId,
-            rootId,
-            parentId,
-            siblingIndex,
-            existsBefore: true,
-            existsAfter: false,
-            subtree,
-            incoming,
-            selectedBefore,
-            selectedAfter: null);
-        Record(historyName, SceneHistoryKinds.Subtree, data.Encode());
+        try
+        {
+            if (!scene.DestroyObject(gameObject))
+                return false;
+            var data = new SceneSubtreeHistoryData(
+                scene.identity.persistentId,
+                rootId,
+                parentId,
+                siblingIndex,
+                existsBefore: true,
+                existsAfter: false,
+                subtree,
+                incoming,
+                selectedBefore,
+                selectedAfter: null);
+            Record(historyName, SceneHistoryKinds.Subtree, data.Encode());
+        }
+        catch (Exception exception)
+        {
+            if (Inno.Core.Identity.IdentityManager.Get<GameObject>(rootId) is not null)
+            {
+                ExceptionDispatchInfo.Capture(exception).Throw();
+            }
+            RollbackAndRethrow(exception, () =>
+            {
+                Transform? parent = parentId is Guid id
+                    ? Inno.Core.Identity.IdentityManager.Get<GameObject>(id)?.transform
+                    : null;
+                _ = SceneSubtreeSerialization.Restore(scene, subtree, parent, siblingIndex);
+                RequireReferenceRestore(SceneReferenceIndex.RestoreIncoming(incoming));
+            });
+        }
         return true;
     }
 
@@ -161,10 +201,13 @@ public sealed class SceneEdits : EditorModule
                     incomingReferences: []));
             return component;
         }
-        catch
+        catch (Exception exception)
         {
-            if (!component.isDestroyed)
-                _ = owner.RemoveComponent(component);
+            RollbackAndRethrow(exception, () =>
+            {
+                if (!component.isDestroyed && !owner.RemoveComponent(component))
+                    throw new InvalidOperationException("The unrecorded component could not be removed.");
+            });
             throw;
         }
     }
@@ -188,23 +231,44 @@ public sealed class SceneEdits : EditorModule
         int index = owner.GetComponentIndex(component);
         Guid componentId = component.identity.persistentId;
         Type componentType = component.GetType();
-        if (!owner.RemoveComponent(component))
-            return false;
-        RecordElement(
-            historyName ?? $"Remove {componentType.Name}",
-            new SceneElementHistoryData(
-                SceneElementKind.Component,
-                scene.identity.persistentId,
-                owner.identity.persistentId,
-                componentId,
-                stableTypeId,
-                beforeIndex: index,
-                afterIndex: -1,
-                existsBefore: true,
-                existsAfter: false,
-                beforeState: state,
-                afterState: [],
-                incoming));
+        try
+        {
+            if (!owner.RemoveComponent(component))
+                return false;
+            RecordElement(
+                historyName ?? $"Remove {componentType.Name}",
+                new SceneElementHistoryData(
+                    SceneElementKind.Component,
+                    scene.identity.persistentId,
+                    owner.identity.persistentId,
+                    componentId,
+                    stableTypeId,
+                    beforeIndex: index,
+                    afterIndex: -1,
+                    existsBefore: true,
+                    existsAfter: false,
+                    beforeState: state,
+                    afterState: [],
+                    incoming));
+        }
+        catch (Exception exception)
+        {
+            if (Inno.Core.Identity.IdentityManager.Get<GameComponent>(componentId) is not null)
+            {
+                ExceptionDispatchInfo.Capture(exception).Throw();
+            }
+            RollbackAndRethrow(exception, () =>
+            {
+                GameComponent restored = SceneElementSerialization.RestoreComponent(
+                    owner,
+                    stableTypeId,
+                    componentId,
+                    index,
+                    state);
+                RequirePropertyRestore(restored, state);
+                RequireReferenceRestore(SceneReferenceIndex.RestoreIncoming(incoming));
+            });
+        }
         return true;
     }
 
@@ -218,14 +282,24 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(component);
         GameObject owner = component.gameObject;
         byte[] before = ScenePropertySerialization.CaptureProperties(component);
-        owner.ResetComponent(component);
-        byte[] after = ScenePropertySerialization.CaptureProperties(component);
+        byte[] after;
+        try
+        {
+            owner.ResetComponent(component);
+            after = ScenePropertySerialization.CaptureProperties(component);
+        }
+        catch (Exception exception)
+        {
+            RollbackAndRethrow(exception, () => RequirePropertyRestore(component, before));
+            throw;
+        }
         if (before.AsSpan().SequenceEqual(after))
             return;
         int index = owner.GetComponentIndex(component);
-        RecordElement(
-            historyName ?? $"Reset {component.GetType().Name}",
-            new SceneElementHistoryData(
+        RecordWithRollback(
+            () => RecordElement(
+                historyName ?? $"Reset {component.GetType().Name}",
+                new SceneElementHistoryData(
                 SceneElementKind.Component,
                 owner.scene.identity.persistentId,
                 owner.identity.persistentId,
@@ -237,7 +311,8 @@ public sealed class SceneEdits : EditorModule
                 existsAfter: true,
                 before,
                 after,
-                incomingReferences: []));
+                incomingReferences: [])),
+            () => RequirePropertyRestore(component, before));
     }
 
     /// <summary>
@@ -255,13 +330,23 @@ public sealed class SceneEdits : EditorModule
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
         GameObject owner = component.gameObject;
         int beforeIndex = owner.GetComponentIndex(component);
-        owner.SetComponentIndex(component, componentIndex);
-        int afterIndex = owner.GetComponentIndex(component);
+        int afterIndex;
+        try
+        {
+            owner.SetComponentIndex(component, componentIndex);
+            afterIndex = owner.GetComponentIndex(component);
+        }
+        catch (Exception exception)
+        {
+            RollbackAndRethrow(exception, () => owner.SetComponentIndex(component, beforeIndex));
+            throw;
+        }
         if (beforeIndex == afterIndex)
             return;
-        RecordElement(
-            historyName,
-            new SceneElementHistoryData(
+        RecordWithRollback(
+            () => RecordElement(
+                historyName,
+                new SceneElementHistoryData(
                 SceneElementKind.Component,
                 owner.scene.identity.persistentId,
                 owner.identity.persistentId,
@@ -273,7 +358,8 @@ public sealed class SceneEdits : EditorModule
                 existsAfter: true,
                 beforeState: [],
                 afterState: [],
-                incomingReferences: []));
+                incomingReferences: [])),
+            () => owner.SetComponentIndex(component, beforeIndex));
     }
 
     /// <summary>
@@ -307,10 +393,13 @@ public sealed class SceneEdits : EditorModule
                     incomingReferences: []));
             return system;
         }
-        catch
+        catch (Exception exception)
         {
-            if (!system.isDestroyed)
-                _ = scene.RemoveSystem(system);
+            RollbackAndRethrow(exception, () =>
+            {
+                if (!system.isDestroyed && !scene.RemoveSystem(system))
+                    throw new InvalidOperationException("The unrecorded system could not be removed.");
+            });
             throw;
         }
     }
@@ -334,11 +423,13 @@ public sealed class SceneEdits : EditorModule
         Guid systemId = system.identity.persistentId;
         Guid stableTypeId = GetStableTypeId(system.GetType());
         Type systemType = system.GetType();
-        if (!scene.RemoveSystem(system))
-            return false;
-        RecordElement(
-            historyName ?? $"Remove {systemType.Name}",
-            new SceneElementHistoryData(
+        try
+        {
+            if (!scene.RemoveSystem(system))
+                return false;
+            RecordElement(
+                historyName ?? $"Remove {systemType.Name}",
+                new SceneElementHistoryData(
                 SceneElementKind.System,
                 scene.identity.persistentId,
                 Guid.Empty,
@@ -349,8 +440,27 @@ public sealed class SceneEdits : EditorModule
                 existsBefore: true,
                 existsAfter: false,
                 beforeState: state,
-                afterState: [],
-                incoming));
+                    afterState: [],
+                    incoming));
+        }
+        catch (Exception exception)
+        {
+            if (Inno.Core.Identity.IdentityManager.Get<GameSystem>(systemId) is not null)
+            {
+                ExceptionDispatchInfo.Capture(exception).Throw();
+            }
+            RollbackAndRethrow(exception, () =>
+            {
+                GameSystem restored = SceneElementSerialization.RestoreSystem(
+                    scene,
+                    stableTypeId,
+                    systemId,
+                    index,
+                    state);
+                RequirePropertyRestore(restored, state);
+                RequireReferenceRestore(SceneReferenceIndex.RestoreIncoming(incoming));
+            });
+        }
         return true;
     }
 
@@ -365,14 +475,24 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(system);
         byte[] before = ScenePropertySerialization.CaptureProperties(system);
-        scene.ResetSystem(system);
-        byte[] after = ScenePropertySerialization.CaptureProperties(system);
+        byte[] after;
+        try
+        {
+            scene.ResetSystem(system);
+            after = ScenePropertySerialization.CaptureProperties(system);
+        }
+        catch (Exception exception)
+        {
+            RollbackAndRethrow(exception, () => RequirePropertyRestore(system, before));
+            throw;
+        }
         if (before.AsSpan().SequenceEqual(after))
             return;
         int index = scene.GetSystemIndex(system);
-        RecordElement(
-            historyName ?? $"Reset {system.GetType().Name}",
-            new SceneElementHistoryData(
+        RecordWithRollback(
+            () => RecordElement(
+                historyName ?? $"Reset {system.GetType().Name}",
+                new SceneElementHistoryData(
                 SceneElementKind.System,
                 scene.identity.persistentId,
                 Guid.Empty,
@@ -384,7 +504,8 @@ public sealed class SceneEdits : EditorModule
                 existsAfter: true,
                 before,
                 after,
-                incomingReferences: []));
+                incomingReferences: [])),
+            () => RequirePropertyRestore(system, before));
     }
 
     /// <summary>
@@ -404,13 +525,23 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(system);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
         int beforeIndex = scene.GetSystemIndex(system);
-        scene.SetSystemIndex(system, systemIndex);
-        int afterIndex = scene.GetSystemIndex(system);
+        int afterIndex;
+        try
+        {
+            scene.SetSystemIndex(system, systemIndex);
+            afterIndex = scene.GetSystemIndex(system);
+        }
+        catch (Exception exception)
+        {
+            RollbackAndRethrow(exception, () => scene.SetSystemIndex(system, beforeIndex));
+            throw;
+        }
         if (beforeIndex == afterIndex)
             return;
-        RecordElement(
-            historyName,
-            new SceneElementHistoryData(
+        RecordWithRollback(
+            () => RecordElement(
+                historyName,
+                new SceneElementHistoryData(
                 SceneElementKind.System,
                 scene.identity.persistentId,
                 Guid.Empty,
@@ -422,7 +553,8 @@ public sealed class SceneEdits : EditorModule
                 existsAfter: true,
                 beforeState: [],
                 afterState: [],
-                incomingReferences: []));
+                incomingReferences: [])),
+            () => scene.SetSystemIndex(system, beforeIndex));
     }
 
     /// <summary>
@@ -440,15 +572,21 @@ public sealed class SceneEdits : EditorModule
         Guid? selectedBefore = GetSelectionId();
         if (!m_workspace.CloseScene(scene))
             return false;
-        RecordDocument(
-            historyName,
-            existsBefore: true,
-            existsAfter: false,
-            snapshot,
-            activeBefore,
-            GetActiveSceneId(),
-            selectedBefore,
-            GetSelectionId());
+        RecordWithRollback(
+            () => RecordDocument(
+                historyName,
+                existsBefore: true,
+                existsAfter: false,
+                snapshot,
+                activeBefore,
+                GetActiveSceneId(),
+                selectedBefore,
+                GetSelectionId()),
+            () =>
+            {
+                _ = m_workspace.RestoreDocumentSnapshot(snapshot);
+                m_workspace.RestoreActiveScene(activeBefore);
+            });
         return true;
     }
 
@@ -463,16 +601,27 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
         int beforeIndex = SceneManager.GetSceneIndex(scene);
-        SceneManager.SetSceneIndex(scene, sceneIndex);
-        int afterIndex = SceneManager.GetSceneIndex(scene);
+        int afterIndex;
+        try
+        {
+            SceneManager.SetSceneIndex(scene, sceneIndex);
+            afterIndex = SceneManager.GetSceneIndex(scene);
+        }
+        catch (Exception exception)
+        {
+            RollbackAndRethrow(exception, () => SceneManager.SetSceneIndex(scene, beforeIndex));
+            throw;
+        }
         if (beforeIndex == afterIndex)
             return;
         var data = new SceneOrderHistoryData(scene.identity.persistentId, beforeIndex, afterIndex);
-        m_interactions.history.RecordApplied(
-            historyName,
-            new EditorHistoryChange(
-                SceneHistoryKinds.Order,
-                EditorHistoryPayload.FromBytes(data.Encode())));
+        RecordWithRollback(
+            () => m_interactions.history.RecordApplied(
+                historyName,
+                new EditorHistoryChange(
+                    SceneHistoryKinds.Order,
+                    EditorHistoryPayload.FromBytes(data.Encode()))),
+            () => SceneManager.SetSceneIndex(scene, beforeIndex));
     }
 
     /// <summary>
@@ -624,8 +773,17 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(mutation);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
         byte[] before = ScenePropertySerialization.CaptureProperty(target, propertyName);
-        mutation();
-        byte[] after = ScenePropertySerialization.CaptureProperty(target, propertyName);
+        byte[] after;
+        try
+        {
+            mutation();
+            after = ScenePropertySerialization.CaptureProperty(target, propertyName);
+        }
+        catch (Exception exception)
+        {
+            RollbackAndRethrow(exception, () => RequirePropertyRestore(target, before));
+            throw;
+        }
         if (before.AsSpan().SequenceEqual(after))
             return false;
         ScenePropertyHistoryData data = ScenePropertyHistoryData.Create(
@@ -633,12 +791,14 @@ public sealed class SceneEdits : EditorModule
             propertyName,
             before,
             after);
-        m_interactions.history.RecordApplied(
-            historyName,
-            new EditorHistoryChange(
-                SceneHistoryKinds.Property,
-                EditorHistoryPayload.FromBytes(data.Encode()),
-                mergeKey));
+        RecordWithRollback(
+            () => m_interactions.history.RecordApplied(
+                historyName,
+                new EditorHistoryChange(
+                    SceneHistoryKinds.Property,
+                    EditorHistoryPayload.FromBytes(data.Encode()),
+                    mergeKey)),
+            () => RequirePropertyRestore(target, before));
         return true;
     }
 
@@ -666,15 +826,26 @@ public sealed class SceneEdits : EditorModule
             .DistinctBy(static candidate => candidate.identity.persistentId)
             .ToArray();
         SceneObjectPlacement[] before = CapturePlacements(affected);
-        mutation();
-        SceneObjectPlacement[] after = CapturePlacements(affected);
+        SceneObjectPlacement[] after;
+        try
+        {
+            mutation();
+            after = CapturePlacements(affected);
+        }
+        catch (Exception exception)
+        {
+            RollbackAndRethrow(exception, () => RestorePlacements(before));
+            throw;
+        }
         if (before.SequenceEqual(after))
             return false;
         var data = new SceneHierarchyHistoryData(
             before,
             after,
             gameObject.identity.persistentId);
-        Record(historyName, SceneHistoryKinds.Hierarchy, data.Encode());
+        RecordWithRollback(
+            () => Record(historyName, SceneHistoryKinds.Hierarchy, data.Encode()),
+            () => RestorePlacements(before));
         return true;
     }
 
@@ -749,13 +920,18 @@ public sealed class SceneEdits : EditorModule
     {
         if (string.Equals(before, after, StringComparison.Ordinal))
             return;
-        setter(after);
-        SceneScalarHistoryData data = SceneScalarHistoryData.Create(
-            target.identity.persistentId,
-            scalarKind,
-            before,
-            after);
-        Record(historyName, SceneHistoryKinds.Scalar, data.Encode(), mergeKey);
+        RecordWithRollback(
+            () =>
+            {
+                setter(after);
+                SceneScalarHistoryData data = SceneScalarHistoryData.Create(
+                    target.identity.persistentId,
+                    scalarKind,
+                    before,
+                    after);
+                Record(historyName, SceneHistoryKinds.Scalar, data.Encode(), mergeKey);
+            },
+            () => setter(before));
     }
 
     private Guid? GetActiveSceneId()
@@ -781,6 +957,75 @@ public sealed class SceneEdits : EditorModule
                 gameObject.transform.siblingIndex);
         }
         return placements;
+    }
+
+    private static void RestorePlacements(IReadOnlyList<SceneObjectPlacement> placements)
+    {
+        for (int i = 0; i < placements.Count; i++)
+        {
+            SceneObjectPlacement placement = placements[i];
+            GameObject gameObject = Inno.Core.Identity.IdentityManager.Get<GameObject>(placement.objectId)
+                ?? throw new InvalidOperationException($"GameObject '{placement.objectId}' is unavailable.");
+            GameScene destination = Inno.Core.Identity.IdentityManager.Get<GameScene>(placement.sceneId)
+                ?? throw new InvalidOperationException($"Scene '{placement.sceneId}' is unavailable.");
+            if (!ReferenceEquals(gameObject.scene, destination))
+                SceneManager.MoveGameObjectToScene(gameObject, destination);
+        }
+        for (int i = 0; i < placements.Count; i++)
+        {
+            SceneObjectPlacement placement = placements[i];
+            GameObject gameObject = Inno.Core.Identity.IdentityManager.Get<GameObject>(placement.objectId)!;
+            Transform? parent = placement.parentId is Guid parentId
+                ? Inno.Core.Identity.IdentityManager.Get<GameObject>(parentId)?.transform
+                : null;
+            gameObject.transform.SetParent(parent);
+        }
+        foreach (SceneObjectPlacement placement in placements.OrderBy(static value => value.siblingIndex))
+        {
+            Inno.Core.Identity.IdentityManager.Get<GameObject>(placement.objectId)!
+                .transform.SetSiblingIndex(placement.siblingIndex);
+        }
+    }
+
+    private static void RequirePropertyRestore(EngineObject target, ReadOnlySpan<byte> data)
+    {
+        SerializationPropertyRestoreResult result = ScenePropertySerialization.RestoreProperties(target, data);
+        if (!result.success || result.ignoredCount != 0 || result.restoredCount == 0)
+            throw new InvalidOperationException("Scene property compensation was incomplete.");
+    }
+
+    private static void RequireReferenceRestore(SceneReferenceRestoreResult result)
+    {
+        if (!result.succeeded)
+            throw new InvalidOperationException(result.message);
+    }
+
+    private static void RecordWithRollback(Action record, Action rollback)
+    {
+        try
+        {
+            record();
+        }
+        catch (Exception exception)
+        {
+            RollbackAndRethrow(exception, rollback);
+        }
+    }
+
+    private static void RollbackAndRethrow(Exception failure, Action rollback)
+    {
+        try
+        {
+            rollback();
+        }
+        catch (Exception rollbackException)
+        {
+            throw new AggregateException(
+                "An editor mutation could not be recorded and its compensation also failed.",
+                failure,
+                rollbackException);
+        }
+        ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
     private static Guid GetStableTypeId(Type type)

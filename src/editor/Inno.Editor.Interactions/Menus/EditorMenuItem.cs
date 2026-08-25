@@ -17,7 +17,7 @@ public sealed class EditorMenuItem
     /// <param name="status">The resolved contextual presentation state.</param>
     /// <param name="children">The immutable child nodes for a submenu.</param>
     /// <param name="argument">The optional value forwarded when the leaf action executes.</param>
-    public EditorMenuItem(
+    internal EditorMenuItem(
         string label,
         string actionId,
         int order,
@@ -38,8 +38,7 @@ public sealed class EditorMenuItem
     /// <summary>Gets the visible node label.</summary>
     public string label { get; }
 
-    /// <summary>Gets the command id, or an empty string for a submenu.</summary>
-    public string actionId { get; }
+    internal string actionId { get; }
 
     /// <summary>Gets the stable ordering value.</summary>
     public int order { get; }
@@ -53,6 +52,5 @@ public sealed class EditorMenuItem
     /// <summary>Gets child menu nodes.</summary>
     public IReadOnlyList<EditorMenuItem> children { get; }
 
-    /// <summary>Gets the optional command argument.</summary>
-    public object? argument { get; }
+    internal object? argument { get; }
 }

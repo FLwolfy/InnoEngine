@@ -3,10 +3,12 @@ using Inno.Editor.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
-[EditorAction("inspector/remove-system", priority: 100)]
-[EditorMenu("panel/scene.inspector/system", "Remove System", order: 200)]
+[EditorAction(InspectorInteractionIds.C_REMOVE_SYSTEM, priority: 100)]
+[EditorMenu(InspectorInteractionIds.C_SYSTEM_AREA, "Remove System", order: 200)]
 internal sealed class RemoveSystemCommand(SceneEdits edits) : EditorAction<SystemEditorTarget>
 {
+    internal static EditorCommand command { get; } = new(InspectorInteractionIds.removeSystem);
+
     protected override EditorActionState Query(EditorActionContext<SystemEditorTarget> context)
         => !context.target.system.isDestroyed
             ? EditorActionState.enabled

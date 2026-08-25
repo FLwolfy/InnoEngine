@@ -16,5 +16,6 @@ using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 [assembly: ScriptingApiExport(typeof(EditorStyleMetrics), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorWidget), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(InlineRenameResult), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(TreeNodeDrawContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(TreeNodeOptions), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(TreeNodeResult), ScriptingApiScope.Editor)]

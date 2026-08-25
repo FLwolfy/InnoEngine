@@ -8,4 +8,6 @@
 
 Panel 通过 `[EditorPanel]` 自动发现；Application 不需要注册。布局、分割线与禁用文本色统一读取 `EditorStyleMetrics` 和 `EditorPalette`。
 
+宿主通过 internal lifecycle bridge 调用 Panel 的 protected `OnAttach`、`OnDraw` 与 `OnDetach`；扩展和脚本不能手工驱动生命周期。当前 generation 的 Draw 失败只 quarantine Stats Panel，不会中断其他 Editor 内容绘制。
+
 该项目没有 Scripting API：脚本不应依赖 Editor 诊断表现。未来新增 profiler timeline 时应创建新的独立 Panel feature，而不是把采样、菜单和渲染塞回 Application。

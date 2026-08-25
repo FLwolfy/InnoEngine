@@ -116,7 +116,7 @@ Undo/Redo 使用同一个严格 writer 恢复完整文档。磁盘写入或 Hist
 editorSettings.changed += settings => RefreshFrom(settings);
 ```
 
-事件参数就是已提交的 `EditorSettings` 服务，没有 change-event args 或路径 diff 类型。
+事件参数就是已提交的 `EditorSettings` 服务，没有 change-event args 或路径 diff 类型。通知按订阅者逐个隔离；单个订阅者抛异常只记录日志，后续订阅者仍会收到通知，也不会把已经成功的 Apply/Undo/Redo 改写为失败。
 
 Reset 通过 `resets` 集合删除指定完整路径的 override，随后 `Get` 返回该定义的默认对象。字段必须 override `defaultValue` 并在每次访问时返回新对象；page 保留基类的内部空实现。`IsDefault` 使用注册时绑定的隔离副本比较暂存值。它与普通值修改处于同一 Apply、同一原子写入和同一 History entry 中。
 

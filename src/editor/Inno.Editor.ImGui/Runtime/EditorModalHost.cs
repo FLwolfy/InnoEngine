@@ -18,9 +18,11 @@ internal sealed class EditorModalHost
         for (int i = 0; i < modals.Count; i++)
         {
             EditorModalExtension extension = modals[i];
+            if (!extension.TryGetPresentation(out EditorModalExtension.Presentation presentation))
+                continue;
             Transition transition = GetTransition(extension.id);
-            transition.Update(extension.modal.isVisible, now);
-            if (extension.modal.blocksInteraction && transition.isVisible)
+            transition.Update(presentation.isVisible, now);
+            if (presentation.blocksInteraction && transition.isVisible)
                 blocksInteraction = true;
         }
         return blocksInteraction;
@@ -34,6 +36,11 @@ internal sealed class EditorModalHost
         for (int i = 0; i < modals.Count; i++)
         {
             EditorModalExtension extension = modals[i];
+            if (!extension.TryGetPresentation(out EditorModalExtension.Presentation presentation))
+            {
+                EditorModalRenderer.Close(extension.id, extension.title);
+                continue;
+            }
             Transition transition = GetTransition(extension.id);
             if (!transition.isVisible)
             {
@@ -44,7 +51,8 @@ internal sealed class EditorModalHost
                 extension.id,
                 extension.title,
                 transition.GetAlpha(now),
-                extension.modal,
+                extension,
+                presentation,
                 context);
         }
     }

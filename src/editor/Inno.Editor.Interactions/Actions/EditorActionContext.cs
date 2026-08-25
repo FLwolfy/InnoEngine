@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics.CodeAnalysis;
 
 using Inno.Editor.Core;
 
@@ -16,17 +15,15 @@ public class EditorActionContext
     /// <param name="argument">An optional placement-specific argument.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="editor"/> or <paramref name="interactions"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="area"/> is empty.</exception>
-    public EditorActionContext(
+    internal EditorActionContext(
         EditorContext editor,
         EditorInteractions interactions,
-        string area,
+        EditorAreaId area,
         object? target = null,
         object? argument = null)
     {
         this.editor = editor ?? throw new ArgumentNullException(nameof(editor));
         this.interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
-        if (string.IsNullOrWhiteSpace(area))
-            throw new ArgumentException("An editor interaction area is required.", nameof(area));
         this.area = area;
         this.target = target;
         this.argument = argument;
@@ -41,27 +38,16 @@ public class EditorActionContext
     /// <summary>
     /// Gets the transactional history used to record reversible mutations performed by this action.
     /// </summary>
-    public EditorHistory history => interactions.history;
+    public IEditorHistory history => interactions.history;
 
     /// <summary>Gets the stable interaction area.</summary>
-    public string area { get; }
+    public EditorAreaId area { get; }
 
     /// <summary>Gets the contextual action target.</summary>
     public object? target { get; }
 
     /// <summary>Gets the optional action argument.</summary>
-    public object? argument { get; }
-
-    /// <summary>Tries to read the optional argument as the requested reference type.</summary>
-    /// <typeparam name="T">The reference type expected by the action.</typeparam>
-    /// <param name="value">The typed argument when successful.</param>
-    /// <returns><see langword="true"/> when the argument is assignable to <typeparamref name="T"/>; otherwise, <see langword="false"/>.</returns>
-    public bool TryGetArgument<T>([NotNullWhen(true)] out T? value)
-        where T : class
-    {
-        value = argument as T;
-        return value is not null;
-    }
+    internal object? argument { get; }
 }
 
 /// <summary>Provides a strongly typed target to an editor action implementation.</summary>
@@ -77,4 +63,38 @@ public sealed class EditorActionContext<TTarget> : EditorActionContext
 
     /// <summary>Gets the strongly typed action target.</summary>
     public new TTarget target { get; }
+}
+
+/// <summary>Provides a strongly typed target and command argument to an editor action.</summary>
+/// <typeparam name="TTarget">The target type required by the action.</typeparam>
+/// <typeparam name="TArgument">The command argument type required by the action.</typeparam>
+public sealed class EditorActionContext<TTarget, TArgument> : EditorActionContext
+    where TTarget : class
+{
+    internal EditorActionContext(EditorActionContext context, TTarget target, TArgument argument)
+        : base(context.editor, context.interactions, context.area, target, argument)
+    {
+        this.target = target;
+        this.argument = argument;
+    }
+
+    /// <summary>Gets the strongly typed action target.</summary>
+    public new TTarget target { get; }
+
+    /// <summary>Gets the strongly typed command argument.</summary>
+    public new TArgument argument { get; }
+}
+
+/// <summary>Provides a strongly typed command argument to a targetless editor action.</summary>
+/// <typeparam name="TArgument">The command argument type required by the action.</typeparam>
+public sealed class EditorActionArgumentContext<TArgument> : EditorActionContext
+{
+    internal EditorActionArgumentContext(EditorActionContext context, TArgument argument)
+        : base(context.editor, context.interactions, context.area, target: null, argument: argument)
+    {
+        this.argument = argument;
+    }
+
+    /// <summary>Gets the strongly typed command argument.</summary>
+    public new TArgument argument { get; }
 }

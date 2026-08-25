@@ -170,16 +170,16 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
                         components.Count,
                         () => context.interactions
                             .For(
-                                "panel/scene.inspector/component",
+                                InspectorInteractionIds.componentArea,
                                 editorTarget)
-                            .Enqueue("inspector/remove-component"))),
+                            .Enqueue(RemoveComponentCommand.command))),
                 dimmed: behavior is { enabled: false },
                 trailingControlWidth: componentType == typeof(Transform)
                     ? 0f
                     : m_cardControls.width,
                 drawContextMenu: () => _ = EditorMenuRenderer.ContextMenu(
                     $"##component_menu_{componentId}",
-                    context.interactions.For("panel/scene.inspector/component", editorTarget)));
+                    context.interactions.For(InspectorInteractionIds.componentArea, editorTarget)));
 
             if (!open)
             {
@@ -230,14 +230,19 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
             return;
         }
 
-        EditorInteraction interaction = context.interactions.For("panel/scene.inspector/component", gameObject);
-        if (EditorMenuRenderer.DrawSearchItems(
-                interaction,
-                interaction.BuildMenu().items,
-                m_componentSearch))
-            NativeImGui.CloseCurrentPopup();
-
-        EditorWidget.EndSearchPopup();
+        try
+        {
+            EditorInteraction interaction = context.interactions.For(InspectorInteractionIds.componentArea, gameObject);
+            if (EditorMenuRenderer.DrawSearchItems(
+                    interaction,
+                    interaction.BuildMenu().items,
+                    m_componentSearch))
+                NativeImGui.CloseCurrentPopup();
+        }
+        finally
+        {
+            EditorWidget.EndSearchPopup();
+        }
     }
 
 }

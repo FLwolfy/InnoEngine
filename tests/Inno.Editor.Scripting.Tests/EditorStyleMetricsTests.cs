@@ -83,6 +83,130 @@ public sealed class EditorStyleMetricsTests
     }
 
     [Fact]
+    public void InlineRenameIsCenteredAndSelectsTheCompleteValueWhenFocused()
+    {
+        var context = NativeImGui.CreateContext();
+        try
+        {
+            Inno.Native.ImGui.ImGuiIOPtr io = NativeImGui.GetIO();
+            io.DisplaySize = new Vector2(640f, 480f);
+            io.DeltaTime = 1f / 60f;
+            io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
+            io.Fonts.RendererHasTextures = true;
+            string value = "Scene";
+            bool requestFocus = true;
+
+            NativeImGui.NewFrame();
+            _ = NativeImGui.Begin("Inline Rename Test");
+            Vector2 rowMin = NativeImGui.GetCursorScreenPos();
+            float rowHeight = NativeImGui.GetFrameHeight() + 8f;
+            _ = EditorWidget.InlineRename(
+                "scene",
+                ref value,
+                ref requestFocus,
+                rowHeight,
+                width: 180f);
+            Vector2 fieldMin = NativeImGui.GetItemRectMin();
+            Vector2 fieldMax = NativeImGui.GetItemRectMax();
+            Assert.True(fieldMin.Y >= rowMin.Y);
+            Assert.True(fieldMax.Y <= rowMin.Y + rowHeight);
+            Assert.True(fieldMax.Y - fieldMin.Y < rowHeight);
+            Assert.Equal(rowMin.Y + rowHeight * 0.5f, (fieldMin.Y + fieldMax.Y) * 0.5f, 3);
+            NativeImGui.TextUnformatted("Content after inline rename.");
+            Assert.NotEqual(0u, ImGuiP.GetCurrentWindow().ID);
+            NativeImGui.End();
+            NativeImGui.Render();
+
+            NativeImGui.NewFrame();
+            _ = NativeImGui.Begin("Inline Rename Test");
+            _ = EditorWidget.InlineRename(
+                "scene",
+                ref value,
+                ref requestFocus,
+                rowHeight,
+                width: 180f);
+            Vector2 focusedFieldMin = NativeImGui.GetItemRectMin();
+            Vector2 focusedFieldMax = NativeImGui.GetItemRectMax();
+            uint inputId = NativeImGui.GetItemID();
+            ImGuiInputTextStatePtr inputState = ImGuiP.GetInputTextState(inputId);
+
+            Assert.False(requestFocus);
+            Assert.False(inputState.IsNull);
+            Assert.Equal(0, ImGuiP.GetSelectionStart(inputState));
+            Assert.Equal(value.Length, ImGuiP.GetSelectionEnd(inputState));
+            uint navCursorColor = NativeImGui.GetColorU32(ImGuiCol.NavCursor);
+            AssertDrawListDoesNotContainColor(
+                NativeImGui.GetWindowDrawList(),
+                navCursorColor,
+                "The inline rename focus outline was submitted to the window draw list.");
+            AssertColorBoundsStayCloseToItem(
+                NativeImGui.GetForegroundDrawList(),
+                navCursorColor,
+                focusedFieldMin,
+                focusedFieldMax,
+                1f + EditorWidget.style.interactionOverlayThickness);
+            NativeImGui.End();
+            NativeImGui.Render();
+        }
+        finally
+        {
+            NativeImGui.DestroyContext(context);
+        }
+    }
+
+    [Fact]
+    public void InlineRenameCentersWithinTheNativeTableRowBounds()
+    {
+        var context = NativeImGui.CreateContext();
+        try
+        {
+            ImGuiIOPtr io = NativeImGui.GetIO();
+            io.DisplaySize = new Vector2(640f, 480f);
+            io.DeltaTime = 1f / 60f;
+            io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
+            io.Fonts.RendererHasTextures = true;
+            string value = "Scene";
+            bool requestFocus = false;
+
+            NativeImGui.NewFrame();
+            _ = NativeImGui.Begin("Inline Rename Table Test");
+            NativeImGui.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(6f, 3f));
+            Assert.True(NativeImGui.BeginTable("##rename_table", 1));
+            float rowHeight = NativeImGui.GetTextLineHeight() +
+                              NativeImGui.GetStyle().CellPadding.Y * 2f;
+            NativeImGui.TableNextRow(ImGuiTableRowFlags.None, rowHeight);
+            _ = NativeImGui.TableSetColumnIndex(0);
+            ImGuiTablePtr table = ImGuiP.GetCurrentTable();
+            Vector2 cursor = NativeImGui.GetCursorScreenPos();
+            NativeImGui.SetCursorScreenPos(new Vector2(cursor.X, table.RowPosY1));
+
+            _ = EditorWidget.InlineRename(
+                "table_scene",
+                ref value,
+                ref requestFocus,
+                table.RowPosY2 - table.RowPosY1,
+                width: 180f);
+            Vector2 fieldMin = NativeImGui.GetItemRectMin();
+            Vector2 fieldMax = NativeImGui.GetItemRectMax();
+
+            Assert.True(fieldMin.Y >= table.RowPosY1);
+            Assert.True(fieldMax.Y <= table.RowPosY2);
+            Assert.Equal(
+                (table.RowPosY1 + table.RowPosY2) * 0.5f,
+                (fieldMin.Y + fieldMax.Y) * 0.5f,
+                3);
+            NativeImGui.EndTable();
+            NativeImGui.PopStyleVar();
+            NativeImGui.End();
+            NativeImGui.Render();
+        }
+        finally
+        {
+            NativeImGui.DestroyContext(context);
+        }
+    }
+
+    [Fact]
     public void TreeGuideDepthRemainsBalancedAcrossSupportedZoomLevels()
     {
         var context = NativeImGui.CreateContext();
@@ -246,13 +370,13 @@ public sealed class EditorStyleMetricsTests
             EditorWidget.SetNextTreeNodeOpen(true);
             TreeNodeResult root = EditorWidget.TreeNode(
                 "drag_root",
-                static () => NativeImGui.TextUnformatted("Assets"),
+                static _ => NativeImGui.TextUnformatted("Assets"),
                 new TreeNodeOptions());
             if (root.isOpen)
             {
                 _ = EditorWidget.TreeNode(
                     "drag_child",
-                    static () => NativeImGui.TextUnformatted("Scene"),
+                    static _ => NativeImGui.TextUnformatted("Scene"),
                     new TreeNodeOptions { isLeaf = true });
                 NativeImGui.TreePop();
             }
@@ -312,7 +436,7 @@ public sealed class EditorStyleMetricsTests
             float expectedHeight = NativeImGui.GetTextLineHeight();
             TreeNodeResult row = EditorWidget.TreeNode(
                 "compact_row",
-                static () => NativeImGui.TextUnformatted("GameObject"),
+                static _ => NativeImGui.TextUnformatted("GameObject"),
                 new TreeNodeOptions { isLeaf = true });
             Assert.Equal(expectedHeight, row.max.Y - row.min.Y, 3);
             NativeImGui.End();
@@ -390,27 +514,27 @@ public sealed class EditorStyleMetricsTests
         EditorWidget.SetNextTreeNodeOpen(true);
         TreeNodeResult root = EditorWidget.TreeNode(
             "root",
-            static () => NativeImGui.TextUnformatted("Assets"),
+            static _ => NativeImGui.TextUnformatted("Assets"),
             new TreeNodeOptions());
         if (root.isOpen)
         {
             EditorWidget.SetNextTreeNodeOpen(true);
             TreeNodeResult folder = EditorWidget.TreeNode(
                 "folder",
-                static () => NativeImGui.TextUnformatted("Scene"),
+                static _ => NativeImGui.TextUnformatted("Scene"),
                 new TreeNodeOptions());
             if (folder.isOpen)
             {
                 _ = EditorWidget.TreeNode(
                     "nested-file",
-                    static () => NativeImGui.TextUnformatted("TestScene1.iscene"),
+                    static _ => NativeImGui.TextUnformatted("TestScene1.iscene"),
                     new TreeNodeOptions { isLeaf = true });
                 NativeImGui.TreePop();
             }
 
             _ = EditorWidget.TreeNode(
                 "sibling-folder",
-                static () => NativeImGui.TextUnformatted("Settings"),
+                static _ => NativeImGui.TextUnformatted("Settings"),
                 new TreeNodeOptions { isLeaf = true });
             NativeImGui.TreePop();
         }
@@ -428,13 +552,13 @@ public sealed class EditorStyleMetricsTests
         _ = NativeImGui.Begin("Double Click Tree Test");
         TreeNodeResult result = EditorWidget.TreeNode(
             "double_click_parent",
-            static () => NativeImGui.TextUnformatted("Parent"),
+            static _ => NativeImGui.TextUnformatted("Parent"),
             new TreeNodeOptions());
         if (result.isOpen)
         {
             _ = EditorWidget.TreeNode(
                 "double_click_child",
-                static () => NativeImGui.TextUnformatted("Child"),
+                static _ => NativeImGui.TextUnformatted("Child"),
                 new TreeNodeOptions { isLeaf = true });
             NativeImGui.TreePop();
         }
@@ -456,7 +580,7 @@ public sealed class EditorStyleMetricsTests
         {
             _ = EditorWidget.TreeNode(
                 "short",
-                static () => NativeImGui.TextUnformatted("Object"),
+                static _ => NativeImGui.TextUnformatted("Object"),
                 new TreeNodeOptions { isLeaf = true });
             if (assertRanges)
             {
@@ -476,7 +600,7 @@ public sealed class EditorStyleMetricsTests
         {
             _ = EditorWidget.TreeNode(
                 "long",
-                static () => NativeImGui.TextUnformatted(
+                static _ => NativeImGui.TextUnformatted(
                     "Object_With_A_Name_That_Is_Intentionally_Wider_Than_The_Tree_Viewport"),
                 new TreeNodeOptions { isLeaf = true });
             if (assertRanges)
@@ -509,7 +633,7 @@ public sealed class EditorStyleMetricsTests
             Vector2 contentCursor = default;
             TreeNodeResult row = EditorWidget.TreeNode(
                 "scrolled",
-                () =>
+                _ =>
                 {
                     contentCursor = NativeImGui.GetCursorScreenPos();
                     NativeImGui.TextUnformatted(
@@ -554,7 +678,7 @@ public sealed class EditorStyleMetricsTests
         {
             _ = EditorWidget.TreeNode(
                 "resizable_row",
-                static () => NativeImGui.TextUnformatted("GameObject"),
+                static _ => NativeImGui.TextUnformatted("GameObject"),
                 new TreeNodeOptions
                 {
                     isLeaf = true,
@@ -601,7 +725,7 @@ public sealed class EditorStyleMetricsTests
         EditorWidget.SetNextTreeNodeOpen(true);
         TreeNodeResult root = EditorWidget.TreeNode(
             "current_background_root",
-            static () => NativeImGui.TextUnformatted("TestScene"),
+            static _ => NativeImGui.TextUnformatted("TestScene"),
             new TreeNodeOptions
             {
                 showBackground = true,
@@ -612,7 +736,7 @@ public sealed class EditorStyleMetricsTests
         {
             _ = EditorWidget.TreeNode(
                 "current_background_child",
-                static () => NativeImGui.TextUnformatted("GameObject"),
+                static _ => NativeImGui.TextUnformatted("GameObject"),
                 new TreeNodeOptions
                 {
                     isLeaf = true,
@@ -641,6 +765,48 @@ public sealed class EditorStyleMetricsTests
         }
 
         Assert.Fail(failureMessage);
+    }
+
+    private static void AssertDrawListDoesNotContainColor(
+        ImDrawListPtr drawList,
+        uint color,
+        string failureMessage)
+    {
+        for (int i = 0; i < drawList.VtxBuffer.Size; i++)
+        {
+            if (drawList.VtxBuffer[i].Col == color)
+                Assert.Fail(failureMessage);
+        }
+    }
+
+    private static void AssertColorBoundsStayCloseToItem(
+        ImDrawListPtr drawList,
+        uint color,
+        Vector2 itemMin,
+        Vector2 itemMax,
+        float maximumExpansion)
+    {
+        Vector2 colorMin = new(float.MaxValue);
+        Vector2 colorMax = new(float.MinValue);
+        for (int i = 0; i < drawList.VtxBuffer.Size; i++)
+        {
+            ImDrawVert vertex = drawList.VtxBuffer[i];
+            if (vertex.Col != color)
+                continue;
+
+            colorMin = Vector2.Min(colorMin, vertex.Pos);
+            colorMax = Vector2.Max(colorMax, vertex.Pos);
+        }
+
+        Assert.NotEqual(float.MaxValue, colorMin.X);
+        Assert.True(colorMin.X < itemMin.X);
+        Assert.True(colorMin.Y < itemMin.Y);
+        Assert.True(colorMax.X > itemMax.X);
+        Assert.True(colorMax.Y > itemMax.Y);
+        Assert.True(colorMin.X >= itemMin.X - maximumExpansion);
+        Assert.True(colorMin.Y >= itemMin.Y - maximumExpansion);
+        Assert.True(colorMax.X <= itemMax.X + maximumExpansion);
+        Assert.True(colorMax.Y <= itemMax.Y + maximumExpansion);
     }
 
     private static void AssertCurrentTreeBackgroundSpansViewport(

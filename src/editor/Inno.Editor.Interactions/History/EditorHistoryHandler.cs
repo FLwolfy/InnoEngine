@@ -47,6 +47,14 @@ public abstract class EditorHistoryHandler
         return false;
     }
 
+    /// <summary>
+    /// Creates a failed result for a transition whose compensation also failed.
+    /// </summary>
+    /// <param name="message">The diagnostic containing both the transition and compensation failures.</param>
+    /// <returns>A failure that faults the owning history.</returns>
+    protected static EditorHistoryResult StateIntegrityFailure(string message)
+        => EditorHistoryResult.StateIntegrityLost(message);
+
     internal EditorHistoryAvailability QueryInternal(
         EditorHistoryContext context,
         EditorHistoryChange change,

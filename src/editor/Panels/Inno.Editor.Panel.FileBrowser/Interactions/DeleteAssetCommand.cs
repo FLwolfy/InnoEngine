@@ -4,9 +4,9 @@ using Inno.Core.Input;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
-[EditorAction("file-browser/delete", priority: 100)]
-[EditorMenu("panel/asset.file-browser", "Delete", order: 200)]
-[EditorShortcut("panel/asset.file-browser", KeyCode.Delete)]
+[EditorAction(FileBrowserInteractionIds.C_DELETE, priority: 100)]
+[EditorMenu(FileBrowserInteractionIds.C_AREA, "Delete", order: 200)]
+[EditorShortcut(FileBrowserInteractionIds.C_AREA, KeyCode.Delete)]
 internal sealed class DeleteAssetCommand(AssetEditorModule assets) : EditorAction<AssetFileEntry>
 {
     protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)

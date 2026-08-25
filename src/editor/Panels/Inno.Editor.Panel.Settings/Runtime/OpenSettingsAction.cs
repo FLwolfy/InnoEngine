@@ -2,8 +2,8 @@ using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Panel.Settings;
 
-[EditorAction("editor.settings.open")]
-[EditorMenu("editor/main-menu", "Edit/Settings...", order: 1000)]
+[EditorAction(SettingsInteractionIds.C_OPEN)]
+[EditorMenu(SettingsInteractionIds.C_MAIN_MENU_AREA, "Edit/Settings...", order: 1000)]
 internal sealed class OpenSettingsAction(SettingsWindowModule window) : EditorAction
 {
     /// <inheritdoc />

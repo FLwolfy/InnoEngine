@@ -16,18 +16,12 @@ namespace Inno.Editor.ImGui;
 /// </summary>
 public sealed class ImGuiEditorRuntime : EditorRuntime
 {
+    private static readonly EditorAreaId S_MAIN_MENU_AREA = new("editor/main-menu");
+
     private readonly Stopwatch m_timer = Stopwatch.StartNew();
     private readonly EditorInteractionRuntime m_runtime;
     private readonly EditorModalHost m_modals = new();
     private bool m_disposed;
-
-    /// <summary>Creates an ImGui editor runtime for one project.</summary>
-    /// <param name="projectDirectory">The project root containing Assets and Library.</param>
-    public ImGuiEditorRuntime(string projectDirectory)
-        : base(new EditorContext(projectDirectory))
-    {
-        m_runtime = new EditorInteractionRuntime(context);
-    }
 
     /// <summary>
     /// Creates an ImGui editor runtime over an existing project context.
@@ -95,10 +89,16 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
         _ = NativeImGui.DockSpaceOverViewport();
         if (blocksInteraction)
             NativeImGui.BeginDisabled(true);
-        EditorMenuRenderer.MainMenu(interactions.For("editor/main-menu"));
-        DrawPanels(m_runtime.panels);
-        if (blocksInteraction)
-            NativeImGui.EndDisabled();
+        try
+        {
+            EditorMenuRenderer.MainMenu(interactions.For(S_MAIN_MENU_AREA));
+            DrawPanels(m_runtime.panels);
+        }
+        finally
+        {
+            if (blocksInteraction)
+                NativeImGui.EndDisabled();
+        }
 
         m_runtime.Flush();
         m_modals.Draw(context, modals, now);
@@ -130,20 +130,20 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
         for (int i = 0; i < panels.Count; i++)
         {
             EditorPanelExtension extension = panels[i];
-            if (!extension.panel.isOpen)
+            if (!extension.isOpen)
                 continue;
-            bool isOpen = extension.panel.isOpen;
+            bool isOpen = extension.isOpen;
             EditorWidget.PanelWindow(extension.title, ref isOpen, () =>
             {
-                extension.panel.Draw(context);
-                if (NativeImGui.IsWindowFocused(Inno.Native.ImGui.ImGuiFocusedFlags.RootAndChildWindows))
+                if (extension.Draw(context) &&
+                    NativeImGui.IsWindowFocused(Inno.Native.ImGui.ImGuiFocusedFlags.RootAndChildWindows))
                 {
                     interactions.For(
-                        $"panel/{extension.id}",
+                        new EditorAreaId($"panel/{extension.id.value}"),
                         interactions.selection.selectedTarget).Focus();
                 }
-            }, useWindowPadding: extension.panel.useWindowPadding);
-            extension.panel.isOpen = isOpen;
+            }, useWindowPadding: extension.useWindowPadding);
+            extension.isOpen = isOpen;
         }
     }
 }

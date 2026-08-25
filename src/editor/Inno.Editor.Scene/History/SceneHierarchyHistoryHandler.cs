@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 using Inno.Core.Identity;
+using Inno.Core.Logging;
 using Inno.Editor.Interactions;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Components;
@@ -82,13 +83,29 @@ internal sealed class SceneHierarchyHistoryHandler : EditorHistoryHandler
             {
                 ApplyPlacements(destination);
             }
-            catch
+            catch (Exception exception)
             {
-                ApplyPlacements(rollback);
-                throw;
+                try
+                {
+                    ApplyPlacements(rollback);
+                }
+                catch (Exception rollbackException)
+                {
+                    return StateIntegrityFailure(
+                        $"Scene hierarchy update failed: {exception.Message} " +
+                        $"Placement rollback failed: {rollbackException.Message}");
+                }
+                return EditorHistoryResult.Failure(exception.Message);
             }
             GameObject? selected = IdentityManager.Get<GameObject>(data.selectedId);
-            _ = context.interactions.For(context.interactions.focusedArea, selected).Select();
+            try
+            {
+                _ = context.interactions.For(context.interactions.focusedArea, selected).Select();
+            }
+            catch (Exception exception)
+            {
+                Log.Error("Scene hierarchy selection notification failed: {0}", exception);
+            }
             return EditorHistoryResult.Success();
         }
         catch (Exception exception)

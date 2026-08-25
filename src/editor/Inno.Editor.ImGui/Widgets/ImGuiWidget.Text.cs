@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 
+using Inno.Core.Scripting;
 using Inno.Native.ImGui;
 using Inno.Platform.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
@@ -25,6 +26,7 @@ public static partial class ImGuiWidget
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="text"/> is empty.
     /// </exception>
+    [ScriptingApiIgnore]
     public static Vector4 GetGlyphVisualBounds(ImFontPtr font, float fontSize, string text)
     {
         if (string.IsNullOrEmpty(text))
@@ -51,6 +53,7 @@ public static partial class ImGuiWidget
     /// <param name="text">Text containing the glyph to draw.</param>
     /// <param name="center">Target center in screen coordinates.</param>
     /// <param name="color">Packed ImGui text color.</param>
+    [ScriptingApiIgnore]
     public static void AddGlyphCentered(
         ImDrawListPtr drawList,
         ImFontPtr font,

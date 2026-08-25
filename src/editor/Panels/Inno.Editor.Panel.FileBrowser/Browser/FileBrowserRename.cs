@@ -24,8 +24,8 @@ internal sealed class FileBrowserRename(AssetEditorModule assets)
     {
         AssetFileEntry? target = assets.interactions.selection.selectedTarget as AssetFileEntry;
         bool isActive = target is not null &&
-                        assets.interactions.For("panel/asset.file-browser", target)
-                            .IsActive("file-browser/rename");
+                        assets.interactions.For(FileBrowserInteractionIds.area, target)
+                            .IsActive(RenameAssetCommand.command);
         if (isActive && Equals(target, m_activeTarget))
             return;
         m_activeTarget = isActive ? target : null;
@@ -59,9 +59,9 @@ internal sealed class FileBrowserRename(AssetEditorModule assets)
         if (!IsEditing(context, relativePath, presentation) || m_activeTarget is null)
             return;
         _ = assets.interactions
-            .For("panel/asset.file-browser", m_activeTarget)
+            .For(FileBrowserInteractionIds.area, m_activeTarget)
             .Present(
-                "file-browser/rename",
+                RenameAssetCommand.presentationCommand,
                 new InlineRenamePresentation(
                     id,
                     MathF.Max(1f, width),

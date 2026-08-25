@@ -103,6 +103,13 @@ internal sealed class EditorActionRouter(
             registration.action.CancelInternal();
     }
 
+    internal void ResetTransientState()
+    {
+        m_pending.Clear();
+        m_presentationFailures.Clear();
+        m_queryFailures.Clear();
+    }
+
     internal void LosePresentationExcept(object? target)
     {
         var visited = new HashSet<EditorAction>(ReferenceEqualityComparer.Instance);
@@ -125,13 +132,66 @@ internal sealed class EditorActionRouter(
         }
     }
 
-    internal bool TryGetShortcut(string action, string area, out HotKeyGesture gesture)
+    internal bool TryGetShortcut(
+        string action,
+        string area,
+        object? target,
+        out HotKeyGesture gesture)
+    {
+        var context = new EditorActionContext(editor, interactions, new EditorAreaId(area), target);
+        EditorExtensionCatalog.ActionRegistration? registration = Resolve(action, context);
+        return TryResolveShortcut(registration, area, out gesture);
+    }
+
+    internal bool DispatchShortcut(KeyPressedEvent keyEvent, string area, object? target)
+    {
+        var actionIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (EditorExtensionCatalog.ActionRegistration registration in catalog.extensions.actions)
+            _ = actionIds.Add(registration.id.value);
+        var context = new EditorActionContext(editor, interactions, new EditorAreaId(area), target);
+        var candidates = new List<ShortcutCandidate>();
+        foreach (string action in actionIds)
+        {
+            ResolvedAction? resolved = ResolveWithSpecificity(action, context);
+            if (resolved is null ||
+                !TryResolveShortcut(resolved.Value.registration, area, out HotKeyGesture gesture) ||
+                !gesture.Matches(keyEvent))
+            {
+                continue;
+            }
+            candidates.Add(new ShortcutCandidate(action, resolved.Value, gesture));
+        }
+        candidates.Sort(static (left, right) =>
+        {
+            int areaComparison = right.resolved.exactArea.CompareTo(left.resolved.exactArea);
+            if (areaComparison != 0)
+                return areaComparison;
+            int distanceComparison = left.resolved.targetDistance.CompareTo(right.resolved.targetDistance);
+            if (distanceComparison != 0)
+                return distanceComparison;
+            int priorityComparison = right.resolved.registration.attribute.priority.CompareTo(
+                left.resolved.registration.attribute.priority);
+            if (priorityComparison != 0)
+                return priorityComparison;
+            return string.Compare(left.action, right.action, StringComparison.Ordinal);
+        });
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            ShortcutCandidate candidate = candidates[i];
+            if (Execute(candidate.action, context))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool TryResolveShortcut(
+        EditorExtensionCatalog.ActionRegistration? registration,
+        string area,
+        out HotKeyGesture gesture)
     {
         EditorShortcutAttribute? best = null;
-        foreach (EditorExtensionCatalog.ActionRegistration registration in catalog.extensions.actions)
+        if (registration is not null)
         {
-            if (!string.Equals(registration.attribute.action, action, StringComparison.Ordinal))
-                continue;
             foreach (EditorShortcutAttribute shortcut in registration.shortcuts)
             {
                 if (!string.IsNullOrEmpty(shortcut.area) &&
@@ -152,32 +212,12 @@ internal sealed class EditorActionRouter(
         return true;
     }
 
-    internal bool DispatchShortcut(KeyPressedEvent keyEvent, string area, object? target)
-    {
-        var handledActions = new HashSet<string>(StringComparer.Ordinal);
-        foreach (EditorExtensionCatalog.ActionRegistration registration in catalog.extensions.actions)
-        {
-            string action = registration.attribute.action;
-            if (!handledActions.Add(action))
-                continue;
-            foreach (EditorShortcutAttribute shortcut in registration.shortcuts)
-            {
-                if (!string.IsNullOrEmpty(shortcut.area) &&
-                    !string.Equals(shortcut.area, area, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-                if (!CreateGesture(shortcut).Matches(keyEvent))
-                    continue;
-                var context = new EditorActionContext(editor, interactions, area, target);
-                if (Execute(action, context))
-                    return true;
-            }
-        }
-        return false;
-    }
-
     private EditorExtensionCatalog.ActionRegistration? Resolve(
+        string action,
+        EditorActionContext context)
+        => ResolveWithSpecificity(action, context)?.registration;
+
+    private ResolvedAction? ResolveWithSpecificity(
         string action,
         EditorActionContext context)
     {
@@ -185,11 +225,11 @@ internal sealed class EditorActionRouter(
         int bestDistance = int.MaxValue;
         foreach (EditorExtensionCatalog.ActionRegistration registration in catalog.extensions.actions)
         {
-            if (!string.Equals(registration.attribute.action, action, StringComparison.Ordinal))
+            if (!string.Equals(registration.id.value, action, StringComparison.Ordinal))
                 continue;
-            bool exactArea = !string.IsNullOrEmpty(registration.attribute.area);
+            bool exactArea = registration.area is not null;
             if (exactArea &&
-                !string.Equals(registration.attribute.area, context.area, StringComparison.Ordinal))
+                registration.area != context.area)
             {
                 continue;
             }
@@ -204,8 +244,14 @@ internal sealed class EditorActionRouter(
                     continue;
                 }
             }
+            Type? argumentType = registration.action.argumentType;
+            if (argumentType is not null &&
+                (context.argument is null || !argumentType.IsInstanceOfType(context.argument)))
+            {
+                continue;
+            }
 
-            bool bestExactArea = best is not null && !string.IsNullOrEmpty(best.attribute.area);
+            bool bestExactArea = best?.area is not null;
             if (best is null ||
                 exactArea && !bestExactArea ||
                 exactArea == bestExactArea &&
@@ -218,11 +264,23 @@ internal sealed class EditorActionRouter(
                 bestDistance = distance;
             }
         }
-        return best;
+        return best is null
+            ? null
+            : new ResolvedAction(best, bestDistance, best.area is not null);
     }
 
     private static HotKeyGesture CreateGesture(EditorShortcutAttribute shortcut)
         => shortcut.primary
             ? HotKeyGesture.Primary(shortcut.key, shortcut.modifiers)
             : new HotKeyGesture(shortcut.key, shortcut.modifiers);
+
+    private readonly record struct ResolvedAction(
+        EditorExtensionCatalog.ActionRegistration registration,
+        int targetDistance,
+        bool exactArea);
+
+    private readonly record struct ShortcutCandidate(
+        string action,
+        ResolvedAction resolved,
+        HotKeyGesture gesture);
 }

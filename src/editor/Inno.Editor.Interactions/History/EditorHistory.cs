@@ -10,7 +10,7 @@ namespace Inno.Editor.Interactions;
 /// <summary>
 /// Owns the bounded, transactional Undo and Redo history for one editor runtime.
 /// </summary>
-public sealed class EditorHistory : IDisposable
+internal sealed class EditorHistory : IEditorHistory, IDisposable
 {
     private const int C_DEFAULT_CAPACITY = 256;
 
@@ -24,6 +24,8 @@ public sealed class EditorHistory : IDisposable
         new Dictionary<string, EditorHistoryHandler>(StringComparer.Ordinal);
     private EditorHistoryContext? m_context;
     private bool m_isTransitioning;
+    private bool m_isFaulted;
+    private string? m_faultReason;
     private bool m_isDisposed;
 
     /// <summary>
@@ -31,7 +33,7 @@ public sealed class EditorHistory : IDisposable
     /// </summary>
     /// <param name="capacity">The maximum number of committed top-level operations retained for Undo.</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="capacity"/> is not positive.</exception>
-    public EditorHistory(int capacity = C_DEFAULT_CAPACITY)
+    internal EditorHistory(int capacity = C_DEFAULT_CAPACITY)
         : this(new EditorHistoryOptions { maxEntries = capacity })
     {
     }
@@ -42,7 +44,7 @@ public sealed class EditorHistory : IDisposable
     /// <param name="options">The validated retention and payload storage options.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when an option contains an invalid capacity.</exception>
-    public EditorHistory(EditorHistoryOptions options)
+    internal EditorHistory(EditorHistoryOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
@@ -59,14 +61,24 @@ public sealed class EditorHistory : IDisposable
     /// <summary>
     /// Gets whether a previous operation is currently available and permits Undo.
     /// </summary>
-    public bool canUndo => !m_isTransitioning && m_transactions.Count == 0 &&
+    public bool canUndo => !m_isFaulted && !m_isTransitioning && m_transactions.Count == 0 &&
                            m_undo.Count > 0 && m_undo[^1].canUndo;
 
     /// <summary>
     /// Gets whether a reverted operation is currently available and permits Redo.
     /// </summary>
-    public bool canRedo => !m_isTransitioning && m_transactions.Count == 0 &&
+    public bool canRedo => !m_isFaulted && !m_isTransitioning && m_transactions.Count == 0 &&
                            m_redo.Count > 0 && m_redo[^1].canRedo;
+
+    /// <summary>
+    /// Gets whether a failed compensation left the domain state indeterminate.
+    /// </summary>
+    public bool isFaulted => m_isFaulted;
+
+    /// <summary>
+    /// Gets the diagnostic that faulted this history, or <see langword="null"/> while the history is healthy.
+    /// </summary>
+    public string? faultReason => m_faultReason;
 
     /// <summary>
     /// Gets the next operation name displayed by the Undo command, or <see langword="null"/> when unavailable.
@@ -125,7 +137,7 @@ public sealed class EditorHistory : IDisposable
     /// <param name="undo">The callback that restores the previous state.</param>
     /// <param name="mergeKey">An optional stable key used to coalesce adjacent value-like edits.</param>
     /// <returns>The result produced by the initial mutation.</returns>
-    public EditorHistoryResult Execute(
+    internal EditorHistoryResult Execute(
         string name,
         Func<EditorHistoryResult> execute,
         Func<EditorHistoryResult> undo,
@@ -140,7 +152,10 @@ public sealed class EditorHistory : IDisposable
         if (result.succeeded)
             Record(operation);
         else
+        {
+            ObserveFailure(result);
             operation.Dispose();
+        }
         return result;
     }
 
@@ -170,7 +185,10 @@ public sealed class EditorHistory : IDisposable
         if (result.succeeded)
             Record(operation);
         else
+        {
+            ObserveFailure(result);
             operation.Dispose();
+        }
         return result;
     }
 
@@ -179,7 +197,7 @@ public sealed class EditorHistory : IDisposable
     /// </summary>
     /// <param name="operation">The complete reversible operation representing the applied state.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="operation"/> is <see langword="null"/>.</exception>
-    public void RecordApplied(EditorHistoryOperation operation)
+    internal void RecordApplied(EditorHistoryOperation operation)
     {
         EnsureMutable();
         ArgumentNullException.ThrowIfNull(operation);
@@ -217,7 +235,7 @@ public sealed class EditorHistory : IDisposable
     /// <param name="after">The value produced by the edit.</param>
     /// <param name="apply">The callback that assigns either captured value.</param>
     /// <param name="mergeKey">A stable key identifying edits to the same logical value.</param>
-    public void RecordValue<T>(
+    internal void RecordValue<T>(
         string name,
         T before,
         T after,
@@ -246,7 +264,7 @@ public sealed class EditorHistory : IDisposable
     /// <summary>
     /// Removes and disposes every Undo and Redo operation.
     /// </summary>
-    public void Clear()
+    internal void Clear()
     {
         if (m_isDisposed)
             return;
@@ -256,6 +274,8 @@ public sealed class EditorHistory : IDisposable
         DisposeAll(m_redo);
         while (m_transactions.TryPop(out TransactionOperation? transaction))
             transaction.Dispose();
+        m_isFaulted = false;
+        m_faultReason = null;
     }
 
     /// <summary>
@@ -288,9 +308,17 @@ public sealed class EditorHistory : IDisposable
     {
         ArgumentNullException.ThrowIfNull(transaction);
         EnsureMutable();
-        TransactionOperation operation = PopTransaction(transaction.id);
+        TransactionOperation operation = PeekTransaction(transaction.id);
         EditorHistoryResult result = Invoke(operation.UndoInternal, operation.name, "rollback");
-        operation.Dispose();
+        if (result.succeeded)
+        {
+            _ = PopTransaction(transaction.id);
+            operation.Dispose();
+        }
+        else
+        {
+            ObserveFailure(result);
+        }
         return result;
     }
 
@@ -337,7 +365,10 @@ public sealed class EditorHistory : IDisposable
                 operation.name,
                 undo ? "undo" : "redo");
             if (!result.succeeded)
+            {
+                ObserveFailure(result);
                 return result;
+            }
             source.RemoveAt(source.Count - 1);
             destination.Add(operation);
             return result;
@@ -358,11 +389,32 @@ public sealed class EditorHistory : IDisposable
         return operation;
     }
 
+    private TransactionOperation PeekTransaction(Guid id)
+    {
+        if (!m_transactions.TryPeek(out TransactionOperation? operation) || operation.id != id)
+            throw new InvalidOperationException("Editor history transactions must complete in stack order.");
+        return operation;
+    }
+
     private void EnsureMutable()
     {
         ObjectDisposedException.ThrowIf(m_isDisposed, this);
+        if (m_isFaulted)
+        {
+            throw new InvalidOperationException(
+                $"Editor history is faulted and must be cleared before further use. {m_faultReason}");
+        }
         if (m_isTransitioning)
             throw new InvalidOperationException("History cannot be modified while Undo or Redo is executing.");
+    }
+
+    private void ObserveFailure(EditorHistoryResult result)
+    {
+        if (result.succeeded || result.statePreserved)
+            return;
+        m_isFaulted = true;
+        m_faultReason = result.message;
+        Log.Error("Editor history was faulted because state integrity was lost: {0}", result.message);
     }
 
     internal void Attach(EditorContext editor, EditorInteractions interactions)
@@ -372,11 +424,10 @@ public sealed class EditorHistory : IDisposable
         m_context = new EditorHistoryContext(editor, interactions);
     }
 
-    internal void UpdateHandlers(IReadOnlyDictionary<string, EditorHistoryHandler> handlers)
+    internal HandlerUpdate PrepareHandlerUpdate(IReadOnlyDictionary<string, EditorHistoryHandler> handlers)
     {
         ArgumentNullException.ThrowIfNull(handlers);
-        m_handlers = handlers;
-        DiscardRuntimeBoundEntries();
+        return new HandlerUpdate(this, m_handlers, handlers);
     }
 
     private EditorHistoryChange RetainChange(EditorHistoryChange change)
@@ -509,7 +560,8 @@ public sealed class EditorHistory : IDisposable
         catch (Exception exception)
         {
             Log.Error("Editor history operation '{0}' failed to {1}: {2}", name, transition, exception);
-            return EditorHistoryResult.Failure(exception.Message);
+            return EditorHistoryResult.StateIntegrityLost(
+                $"The {transition} callback for '{name}' threw before it could prove rollback: {exception.Message}");
         }
     }
 
@@ -518,6 +570,51 @@ public sealed class EditorHistory : IDisposable
         for (int i = operations.Count - 1; i >= 0; i--)
             operations[i].Dispose();
         operations.Clear();
+    }
+
+    internal sealed class HandlerUpdate(
+        EditorHistory owner,
+        IReadOnlyDictionary<string, EditorHistoryHandler> previous,
+        IReadOnlyDictionary<string, EditorHistoryHandler> candidate)
+    {
+        private bool m_activated;
+        private bool m_finished;
+
+        internal void Activate()
+        {
+            if (m_finished)
+                throw new InvalidOperationException("History handler update is already finished.");
+            if (m_activated)
+                return;
+            owner.m_handlers = candidate;
+            m_activated = true;
+        }
+
+        internal void Rollback()
+        {
+            if (m_finished)
+                return;
+            if (m_activated)
+                owner.m_handlers = previous;
+            m_finished = true;
+        }
+
+        internal void Complete()
+        {
+            if (m_finished)
+                return;
+            if (!m_activated)
+                throw new InvalidOperationException("History handler update has not been activated.");
+            m_finished = true;
+            try
+            {
+                owner.DiscardRuntimeBoundEntries();
+            }
+            catch (Exception exception)
+            {
+                Log.Error("Editor history could not release reload-unsafe entries: {0}", exception);
+            }
+        }
     }
 
     private sealed class DelegateOperation : EditorHistoryOperation
@@ -696,38 +793,76 @@ public sealed class EditorHistory : IDisposable
 
         protected override EditorHistoryResult Undo()
         {
-            int undone = 0;
+            var compensationFailures = new List<string>();
             for (int i = m_children.Count - 1; i >= 0; i--)
             {
-                EditorHistoryResult result = m_children[i].UndoInternal();
+                EditorHistoryResult result = InvokeChild(m_children[i].UndoInternal, m_children[i].name, "undo");
                 if (result.succeeded)
-                {
-                    undone++;
                     continue;
+                for (int rollback = i + 1; rollback < m_children.Count; rollback++)
+                {
+                    EditorHistoryResult compensation = InvokeChild(
+                        m_children[rollback].RedoInternal,
+                        m_children[rollback].name,
+                        "redo compensation");
+                    if (!compensation.succeeded)
+                        compensationFailures.Add($"'{m_children[rollback].name}': {compensation.message}");
                 }
-                for (int rollback = i + 1; rollback < i + 1 + undone; rollback++)
-                    _ = m_children[rollback].RedoInternal();
-                return result;
+                return CombineFailure(result, compensationFailures, "undo");
             }
             return EditorHistoryResult.Success();
         }
 
         protected override EditorHistoryResult Redo()
         {
-            int redone = 0;
+            var compensationFailures = new List<string>();
             for (int i = 0; i < m_children.Count; i++)
             {
-                EditorHistoryResult result = m_children[i].RedoInternal();
+                EditorHistoryResult result = InvokeChild(m_children[i].RedoInternal, m_children[i].name, "redo");
                 if (result.succeeded)
-                {
-                    redone++;
                     continue;
+                for (int rollback = i - 1; rollback >= 0; rollback--)
+                {
+                    EditorHistoryResult compensation = InvokeChild(
+                        m_children[rollback].UndoInternal,
+                        m_children[rollback].name,
+                        "undo compensation");
+                    if (!compensation.succeeded)
+                        compensationFailures.Add($"'{m_children[rollback].name}': {compensation.message}");
                 }
-                for (int rollback = redone - 1; rollback >= 0; rollback--)
-                    _ = m_children[rollback].UndoInternal();
-                return result;
+                return CombineFailure(result, compensationFailures, "redo");
             }
             return EditorHistoryResult.Success();
+        }
+
+        private static EditorHistoryResult InvokeChild(
+            Func<EditorHistoryResult> callback,
+            string childName,
+            string transition)
+        {
+            try
+            {
+                return callback();
+            }
+            catch (Exception exception)
+            {
+                return EditorHistoryResult.StateIntegrityLost(
+                    $"Child '{childName}' threw during {transition}: {exception.Message}");
+            }
+        }
+
+        private static EditorHistoryResult CombineFailure(
+            EditorHistoryResult original,
+            IReadOnlyList<string> compensationFailures,
+            string transition)
+        {
+            if (original.statePreserved && compensationFailures.Count == 0)
+                return original;
+            string compensation = compensationFailures.Count == 0
+                ? "The failing child could not prove that it preserved its input state."
+                : $"Compensation failures: {string.Join("; ", compensationFailures)}";
+            return EditorHistoryResult.StateIntegrityLost(
+                $"Transaction {transition} failed: {original.message} {compensation}");
         }
 
         protected override void Dispose(bool disposing)

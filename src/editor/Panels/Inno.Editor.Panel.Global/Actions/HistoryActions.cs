@@ -3,8 +3,8 @@ using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Panel.Global;
 
-[EditorAction("editor/undo", priority: 1000)]
-[EditorMenu("editor/main-menu", "Edit/Undo", order: 100)]
+[EditorAction(GlobalInteractionIds.C_UNDO, priority: 1000)]
+[EditorMenu(GlobalInteractionIds.C_MAIN_MENU_AREA, "Edit/Undo", order: 100)]
 [EditorShortcut(KeyCode.Z, primary: true)]
 internal sealed class UndoEditorAction : EditorAction
 {
@@ -22,8 +22,8 @@ internal sealed class UndoEditorAction : EditorAction
         => _ = context.history.Undo();
 }
 
-[EditorAction("editor/redo", priority: 1000)]
-[EditorMenu("editor/main-menu", "Edit/Redo", order: 110)]
+[EditorAction(GlobalInteractionIds.C_REDO, priority: 1000)]
+[EditorMenu(GlobalInteractionIds.C_MAIN_MENU_AREA, "Edit/Redo", order: 110)]
 [EditorShortcut(KeyCode.Z, KeyModifier.Shift, primary: true)]
 [EditorShortcut(KeyCode.Y, primary: true)]
 internal sealed class RedoEditorAction : EditorAction

@@ -93,11 +93,6 @@ public sealed class EditorStyleMetrics
     /// <summary>Gets the compact inner padding of inline rename fields.</summary>
     public Vector2 inlineRenameFramePadding => ScaleVector(new(4f, 0f));
 
-    /// <summary>
-    /// Gets the vertical visual inset retained between an inline rename frame and its row bounds.
-    /// </summary>
-    public float inlineRenameVisualInset => Scale(1f);
-
     /// <summary>Gets toolbar frame padding.</summary>
     public Vector2 toolbarFramePadding => ScaleVector(new(5f, 1f));
 
@@ -312,8 +307,8 @@ public sealed class EditorStyleMetrics
     /// <summary>Gets the axis prefix share of the complete control.</summary>
     public float axisPrefixWidthRatio => 0.36f;
 
-    /// <summary>Gets the standard drag marker thickness.</summary>
-    public float dragMarkerThickness => Scale(2f);
+    /// <summary>Gets the standard foreground interaction-overlay thickness.</summary>
+    public float interactionOverlayThickness => Scale(2f);
 
     /// <summary>Gets script compilation modal width.</summary>
     public float scriptCompilationWidth => Scale(460f);

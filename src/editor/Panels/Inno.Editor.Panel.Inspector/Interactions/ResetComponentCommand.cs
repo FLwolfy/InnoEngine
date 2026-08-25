@@ -3,8 +3,8 @@ using Inno.Editor.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
-[EditorAction("inspector/reset-component", priority: 100)]
-[EditorMenu("panel/scene.inspector/component", "Reset Component", order: 100)]
+[EditorAction(InspectorInteractionIds.C_RESET_COMPONENT, priority: 100)]
+[EditorMenu(InspectorInteractionIds.C_COMPONENT_AREA, "Reset Component", order: 100)]
 internal sealed class ResetComponentCommand(SceneEdits edits) : EditorAction<ComponentEditorTarget>
 {
     protected override EditorActionState Query(EditorActionContext<ComponentEditorTarget> context)

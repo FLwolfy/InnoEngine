@@ -17,7 +17,7 @@ public sealed class EditorContext
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="projectDirectory"/> is empty.
     /// </exception>
-    public EditorContext(string projectDirectory)
+    internal EditorContext(string projectDirectory)
     {
         if (string.IsNullOrWhiteSpace(projectDirectory))
             throw new ArgumentException("A project directory is required.", nameof(projectDirectory));
@@ -33,12 +33,12 @@ public sealed class EditorContext
     /// <summary>
     /// Gets the absolute path of the project editor layout document.
     /// </summary>
-    public string layoutPath => layout.path;
+    internal string layoutPath => layout.path;
 
     /// <summary>
     /// Gets the Dear ImGui layout text without editor module or panel state sections.
     /// </summary>
-    public string imguiLayout => layout.imguiLayout;
+    internal string imguiLayout => layout.imguiLayout;
 
     internal EditorLayoutSettings layout { get; }
 
@@ -54,7 +54,7 @@ public sealed class EditorContext
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="prefix"/> is <see langword="null"/>.
     /// </exception>
-    public IReadOnlyList<string> GetLayoutSectionNames(string prefix = "")
+    internal IReadOnlyList<string> GetLayoutSectionNames(string prefix = "")
         => layout.GetSectionNames(prefix);
 
     /// <summary>
@@ -72,7 +72,7 @@ public sealed class EditorContext
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="sectionName"/> is empty or cannot be represented in the layout.
     /// </exception>
-    public bool TryGetLayoutSection(
+    internal bool TryGetLayoutSection(
         string sectionName,
         out IReadOnlyDictionary<string, string> values)
         => layout.TryGetSection(sectionName, out values);
@@ -92,7 +92,7 @@ public sealed class EditorContext
     /// <exception cref="ArgumentException">
     /// Thrown when a section name, key, or value cannot be represented in the layout.
     /// </exception>
-    public void SetLayoutSection(
+    internal void SetLayoutSection(
         string sectionName,
         IEnumerable<KeyValuePair<string, string>> values)
         => layout.SetSection(sectionName, values);
@@ -109,7 +109,7 @@ public sealed class EditorContext
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="sectionName"/> is empty or cannot be represented in the layout.
     /// </exception>
-    public bool RemoveLayoutSection(string sectionName)
+    internal bool RemoveLayoutSection(string sectionName)
         => layout.RemoveSection(sectionName);
 
     /// <summary>
@@ -118,7 +118,7 @@ public sealed class EditorContext
     /// <param name="value">
     /// The complete layout text returned by Dear ImGui.
     /// </param>
-    public void SetImGuiLayout(string? value)
+    internal void SetImGuiLayout(string? value)
         => layout.SetImGuiLayout(value);
 
     /// <summary>
@@ -133,7 +133,7 @@ public sealed class EditorContext
     /// <exception cref="UnauthorizedAccessException">
     /// Thrown when the layout document is inaccessible.
     /// </exception>
-    public bool SaveLayoutIfChanged()
+    internal bool SaveLayoutIfChanged()
         => layout.SaveIfChanged();
 
     /// <summary>
@@ -145,7 +145,7 @@ public sealed class EditorContext
     /// <exception cref="UnauthorizedAccessException">
     /// Thrown when the layout document is inaccessible.
     /// </exception>
-    public void SaveLayout()
+    internal void SaveLayout()
         => layout.Save();
 
     /// <summary>

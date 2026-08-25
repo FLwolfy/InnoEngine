@@ -22,8 +22,10 @@ public sealed class ScriptManager : IDisposable
     private readonly SemaphoreSlim m_compileGate = new(1, 1);
     private readonly CancellationTokenSource m_lifetimeCancellation = new();
     private readonly ScriptArtifactCache m_artifactCache;
+    private readonly Func<CancellationToken, ValueTask>? m_compileGateProbe;
 
     private ScriptCompilationResult? m_pendingCompilation;
+    private ScriptCompilationResult? m_lastCompilation;
     private AssemblyModuleHandle? m_scriptModule;
     private string? m_activeCompilationDirectory;
     private string m_compilationStatus = "Waiting for script changes.";
@@ -31,6 +33,7 @@ public sealed class ScriptManager : IDisposable
     private float m_compilationProgress;
     private bool m_compileRequested;
     private bool m_initialCompileRequested;
+    private int m_isCompiling;
     private bool m_disposed;
 
     /// <summary>
@@ -41,6 +44,13 @@ public sealed class ScriptManager : IDisposable
     /// <exception cref="ArgumentException">Thrown when the configured project root is empty.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the configured debounce duration is negative.</exception>
     public ScriptManager(ScriptManagerOptions options)
+        : this(options, compileGateProbe: null)
+    {
+    }
+
+    internal ScriptManager(
+        ScriptManagerOptions options,
+        Func<CancellationToken, ValueTask>? compileGateProbe)
     {
         ArgumentNullException.ThrowIfNull(options);
         if (string.IsNullOrWhiteSpace(options.projectRootDirectory))
@@ -54,10 +64,11 @@ public sealed class ScriptManager : IDisposable
             debounceMilliseconds = options.debounceMilliseconds
         };
         m_artifactCache = new ScriptArtifactCache(m_options.outputDirectory);
+        m_compileGateProbe = compileGateProbe;
     }
 
     /// <summary>Gets whether a compilation currently owns the compiler gate.</summary>
-    public bool isCompiling { get; private set; }
+    public bool isCompiling => Volatile.Read(ref m_isCompiling) != 0;
 
     /// <summary>Gets whether source or plugin changes are waiting to be compiled.</summary>
     public bool isCompilationPending
@@ -76,10 +87,14 @@ public sealed class ScriptManager : IDisposable
     public string compilationStatus => Volatile.Read(ref m_compilationStatus);
 
     /// <summary>Gets the most recently completed compilation.</summary>
-    public ScriptCompilationResult? lastCompilation { get; private set; }
-
-    /// <summary>Occurs after a complete game/editor compilation attempt.</summary>
-    public event Action<ScriptCompilationResult>? CompilationCompleted;
+    public ScriptCompilationResult? lastCompilation
+    {
+        get
+        {
+            lock (m_sync)
+                return m_lastCompilation;
+        }
+    }
 
     /// <summary>
     /// Generates IDE files, subscribes to the Asset Database, and requests the initial compilation.
@@ -142,6 +157,11 @@ public sealed class ScriptManager : IDisposable
             m_compileRequested = false;
             m_initialCompileRequested = false;
         }
+        if (AssetManager.isInitialized)
+        {
+            AssetManager.Update();
+            AssetManager.Rescan();
+        }
         compilation = CompileAsync().AsTask();
         return true;
     }
@@ -157,11 +177,6 @@ public sealed class ScriptManager : IDisposable
         CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
-        if (AssetManager.isInitialized)
-        {
-            AssetManager.Update();
-            AssetManager.Rescan();
-        }
         using CancellationTokenSource linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
             m_lifetimeCancellation.Token);
@@ -169,7 +184,9 @@ public sealed class ScriptManager : IDisposable
         await m_compileGate.WaitAsync(effectiveCancellation).ConfigureAwait(false);
         try
         {
-            isCompiling = true;
+            Volatile.Write(ref m_isCompiling, 1);
+            if (m_compileGateProbe is not null)
+                await m_compileGateProbe(effectiveCancellation).ConfigureAwait(false);
             SetCompilationProgress(0f, "Generating IDE project files...");
             ScriptCompilationResult result;
             try
@@ -202,18 +219,18 @@ public sealed class ScriptManager : IDisposable
             }
             lock (m_sync)
             {
-                lastCompilation = result;
-                m_pendingCompilation = result.success ? result : null;
+                m_lastCompilation = result;
+                if (result.success)
+                    m_pendingCompilation = result;
             }
             SetCompilationProgress(
                 1f,
                 result.success ? "Script compilation completed." : "Script compilation failed.");
-            CompilationCompleted?.Invoke(result);
             return result;
         }
         finally
         {
-            isCompiling = false;
+            Volatile.Write(ref m_isCompiling, 0);
             m_compileGate.Release();
         }
     }
@@ -228,10 +245,7 @@ public sealed class ScriptManager : IDisposable
         ObjectDisposedException.ThrowIf(m_disposed, this);
         ScriptCompilationResult? pending;
         lock (m_sync)
-        {
             pending = m_pendingCompilation;
-            m_pendingCompilation = null;
-        }
         if (pending?.loadRequest is not AssemblyLoadRequest request)
             return false;
 
@@ -241,6 +255,7 @@ public sealed class ScriptManager : IDisposable
             m_activeCompilationDirectory = pending.outputDirectory;
             _ = m_artifactCache.Collect([m_activeCompilationDirectory]);
             ScriptDiagnosticPublisher.ClearReload();
+            CompletePendingReload(pending);
             return true;
         }
 
@@ -270,6 +285,7 @@ public sealed class ScriptManager : IDisposable
             throw;
         }
         ScriptDiagnosticPublisher.PublishReload(migration.diagnostics);
+        CompletePendingReload(pending);
         return true;
     }
 
@@ -330,6 +346,15 @@ public sealed class ScriptManager : IDisposable
     {
         Volatile.Write(ref m_compilationProgress, Math.Clamp(progress, 0f, 1f));
         Volatile.Write(ref m_compilationStatus, status);
+    }
+
+    private void CompletePendingReload(ScriptCompilationResult applied)
+    {
+        lock (m_sync)
+        {
+            if (ReferenceEquals(m_pendingCompilation, applied))
+                m_pendingCompilation = null;
+        }
     }
 
     private static bool IsScriptInput(string path)

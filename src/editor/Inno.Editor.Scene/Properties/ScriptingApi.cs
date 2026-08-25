@@ -6,5 +6,5 @@ using Inno.Editor.Scene;
     "Inno.Editor.Scene",
     ScriptingApiScope.Editor)]
 
-[assembly: ScriptingApiExport(typeof(EditorSceneWorkspace), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(IEditorSceneWorkspace), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(SceneEdits), ScriptingApiScope.Editor)]

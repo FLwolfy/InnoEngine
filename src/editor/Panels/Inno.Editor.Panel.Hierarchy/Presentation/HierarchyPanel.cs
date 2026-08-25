@@ -28,7 +28,7 @@ internal sealed class HierarchyPanel : EditorPanel
 {
     private const nuint C_NAME_BUFFER_SIZE = 512;
 
-    private readonly EditorSceneWorkspace m_workspace;
+    private readonly IEditorSceneWorkspace m_workspace;
     private readonly EditorInteractions m_interactions;
     private readonly SceneEdits m_edits;
     private readonly HierarchySelection m_selection;
@@ -38,6 +38,7 @@ internal sealed class HierarchyPanel : EditorPanel
     private readonly HashSet<Guid> m_forceOpenSceneIds = [];
     private readonly HashSet<Guid> m_drawnIds = [];
     private readonly HashSet<Guid> m_initializedSceneIds = [];
+    private ulong m_lastRevealedSelectionVersion = ulong.MaxValue;
     private int m_visibleRowIndex;
 
     /// <inheritdoc />
@@ -47,7 +48,7 @@ internal sealed class HierarchyPanel : EditorPanel
     /// Creates the hierarchy panel.
     /// </summary>
     internal HierarchyPanel(
-        EditorSceneWorkspace workspace,
+        IEditorSceneWorkspace workspace,
         EditorInteractions interactions,
         SceneEdits edits,
         EditorSettings settings)
@@ -60,18 +61,23 @@ internal sealed class HierarchyPanel : EditorPanel
     }
 
     /// <inheritdoc />
-    public override void Draw(EditorContext context)
+    protected override void OnDraw(EditorContext context)
     {
-        if (NativeImGui.BeginChild(
-                "##HierarchyContent",
-                Vector2.Zero,
-                ImGuiChildFlags.None,
-                ImGuiWindowFlags.NoSavedSettings |
-                ImGuiWindowFlags.HorizontalScrollbar))
+        bool visible = NativeImGui.BeginChild(
+            "##HierarchyContent",
+            Vector2.Zero,
+            ImGuiChildFlags.None,
+            ImGuiWindowFlags.NoSavedSettings |
+            ImGuiWindowFlags.HorizontalScrollbar);
+        try
         {
-            DrawContent(context);
+            if (visible)
+                DrawContent(context);
         }
-        NativeImGui.EndChild();
+        finally
+        {
+            NativeImGui.EndChild();
+        }
     }
 
     private void DrawContent(EditorContext context)
@@ -79,7 +85,7 @@ internal sealed class HierarchyPanel : EditorPanel
         m_drawnIds.Clear();
         m_visibleRowIndex = 0;
         m_selection.Prune(context);
-        RevealSelection(context);
+        RevealSelection();
 
         NativeImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, EditorWidget.style.hierarchyItemSpacing);
         NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, EditorWidget.style.compactFramePadding);
@@ -121,7 +127,7 @@ internal sealed class HierarchyPanel : EditorPanel
             ReferenceEquals(selectedScene, scene);
         TreeNodeResult result = EditorWidget.TreeNode(
             $"scene_{id}",
-            _ => m_selection.DrawSceneRowContent(context, scene),
+            drawContext => DrawSceneRowContent(context, scene, id, drawContext.rowHeight),
             new TreeNodeOptions
             {
                 isLeaf = false,
@@ -130,18 +136,26 @@ internal sealed class HierarchyPanel : EditorPanel
                 backgroundColor = EditorPalette.hierarchySceneRow,
                 suppressHoverHighlight = false
             });
+        try
+        {
 
         if (result.isClicked || result.isDoubleClicked)
-            _ = m_interactions.For("panel/scene.hierarchy", scene).Select();
+            _ = m_interactions.For(HierarchyInteractionIds.area, scene).Select();
+
+        if (result.isDoubleClicked)
+        {
+            _ = m_interactions.For(HierarchyInteractionIds.area, scene)
+                .Execute(RenameHierarchyTargetCommand.command);
+        }
 
         _ = EditorDragDropRenderer.Source(
-            m_interactions.For("panel/scene.hierarchy", scene),
+            m_interactions.For(HierarchyInteractionIds.area, scene),
             new EditorDragData(scene, scene.name, () => scene.isLoaded),
             () => NativeImGui.TextUnformatted(scene.name));
 
         EditorDropPlacement scenePlacement = m_dropVisual.GetScenePlacement(result, NativeImGui.GetMousePos().Y);
         EditorDropWidgetResult sceneDrop = EditorDragDropRenderer.Target(
-            m_interactions.For("panel/scene.hierarchy", new HierarchySceneDropTarget(scene)),
+            m_interactions.For(HierarchyInteractionIds.area, new HierarchySceneDropTarget(scene)),
             scenePlacement);
         if (sceneDrop.isPreviewing && sceneDrop.status.canDrop)
             m_dropVisual.Draw(result, sceneDrop.status.visual);
@@ -159,7 +173,12 @@ internal sealed class HierarchyPanel : EditorPanel
             DrawObject(context, scene, roots[i]);
         }
 
-        NativeImGui.TreePop();
+        }
+        finally
+        {
+            if (result.isOpen)
+                NativeImGui.TreePop();
+        }
     }
 
     private void DrawObject(EditorContext context, GameScene scene, GameObject gameObject)
@@ -192,25 +211,27 @@ internal sealed class HierarchyPanel : EditorPanel
                 drawViewportOverlay = () => DrawVisibilityButton(gameObject, id)
             });
         m_visibleRowIndex++;
+        try
+        {
 
         if (result.isClicked || result.isDoubleClicked)
         {
-            _ = m_interactions.For("panel/scene.hierarchy", gameObject).Select();
+            _ = m_interactions.For(HierarchyInteractionIds.area, gameObject).Select();
         }
 
         if (result.isDoubleClicked)
         {
-            _ = m_interactions.For("panel/scene.hierarchy", gameObject)
-                .Execute("hierarchy/rename-game-object");
+            _ = m_interactions.For(HierarchyInteractionIds.area, gameObject)
+                .Execute(RenameHierarchyTargetCommand.command);
         }
 
         _ = EditorDragDropRenderer.Source(
-            m_interactions.For("panel/scene.hierarchy", gameObject),
+            m_interactions.For(HierarchyInteractionIds.area, gameObject),
             new EditorDragData(gameObject, gameObject.name, () => gameObject.isRuntimeValid),
             () => NativeImGui.TextUnformatted(gameObject.name));
         EditorDropPlacement placement = m_dropVisual.GetObjectPlacement(result, NativeImGui.GetMousePos().Y);
         EditorDropWidgetResult objectDrop = EditorDragDropRenderer.Target(
-            m_interactions.For("panel/scene.hierarchy", new HierarchyObjectDropTarget(gameObject)),
+            m_interactions.For(HierarchyInteractionIds.area, new HierarchyObjectDropTarget(gameObject)),
             placement);
         if (objectDrop.isPreviewing && objectDrop.status.canDrop)
             m_dropVisual.Draw(result, objectDrop.status.visual);
@@ -233,7 +254,12 @@ internal sealed class HierarchyPanel : EditorPanel
             }
         }
 
-        NativeImGui.TreePop();
+        }
+        finally
+        {
+            if (result.isOpen)
+                NativeImGui.TreePop();
+        }
     }
 
     private void DrawRowContent(
@@ -247,47 +273,82 @@ internal sealed class HierarchyPanel : EditorPanel
         {
             NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.hierarchyInactiveText);
         }
-
-        EditorInteraction interaction = m_interactions.For("panel/scene.hierarchy", gameObject);
-        bool isRenaming = interaction.IsActive("hierarchy/rename-game-object");
-        if (isRenaming)
+        try
         {
-            EditorWidget.IconText(
-                m_settings
-                    .Get("Global/Appearance/Icons/GameObject")
-                    .GetAsString("value", ImGuiIcon.Cube)!,
-                string.Empty,
-                false);
-            NativeImGui.SameLine(0f, 0f);
-            float visibilityWidth = GetVisibilityButtonWidth();
-            float renameWidth = MathF.Max(
-                EditorWidget.style.hierarchyRenameMinimumWidth,
-                NativeImGui.GetContentRegionAvail().X -
-                visibilityWidth -
-                EditorWidget.style.hierarchyRenameTrailingGap);
-            _ = interaction.Present(
-                "hierarchy/rename-game-object",
-                new InlineRenamePresentation(
-                    $"hierarchy_{id}",
-                    renameWidth,
-                    rowHeight,
-                    C_NAME_BUFFER_SIZE));
+            EditorInteraction interaction = m_interactions.For(HierarchyInteractionIds.area, gameObject);
+            bool isRenaming = interaction.IsActive(RenameHierarchyTargetCommand.command);
+            if (isRenaming)
+            {
+                EditorWidget.IconText(
+                    m_settings
+                        .Get("Global/Appearance/Icons/GameObject")
+                        .GetAsString("value", ImGuiIcon.Cube)!,
+                    string.Empty,
+                    false);
+                NativeImGui.SameLine(0f, 0f);
+                float visibilityWidth = GetVisibilityButtonWidth();
+                float renameWidth = MathF.Max(
+                    EditorWidget.style.hierarchyRenameMinimumWidth,
+                    NativeImGui.GetContentRegionAvail().X -
+                    visibilityWidth -
+                    EditorWidget.style.hierarchyRenameTrailingGap);
+                _ = interaction.Present(
+                    RenameHierarchyTargetCommand.presentationCommand,
+                    new InlineRenamePresentation(
+                        $"hierarchy_{id}",
+                        renameWidth,
+                        rowHeight,
+                        C_NAME_BUFFER_SIZE));
+            }
+            else
+            {
+                EditorWidget.IconText(
+                    m_settings
+                        .Get("Global/Appearance/Icons/GameObject")
+                        .GetAsString("value", ImGuiIcon.Cube)!,
+                    gameObject.name,
+                    false);
+            }
         }
-        else
+        finally
         {
-            EditorWidget.IconText(
-                m_settings
-                    .Get("Global/Appearance/Icons/GameObject")
-                    .GetAsString("value", ImGuiIcon.Cube)!,
-                gameObject.name,
-                false);
+            if (dimmed)
+                NativeImGui.PopStyleColor();
         }
 
-        if (dimmed)
+    }
+
+    private void DrawSceneRowContent(
+        EditorContext context,
+        GameScene scene,
+        string id,
+        float rowHeight)
+    {
+        EditorInteraction interaction = m_interactions.For(HierarchyInteractionIds.area, scene);
+        if (!interaction.IsActive(RenameHierarchyTargetCommand.command))
         {
-            NativeImGui.PopStyleColor();
+            m_selection.DrawSceneRowContent(context, scene);
+            return;
         }
 
+        EditorWidget.IconText(
+            m_settings
+                .Get("Global/Appearance/Icons/Scene")
+                .GetAsString("value", ImGuiIcon.Cubes)!,
+            string.Empty,
+            ReferenceEquals(scene, SceneManager.activeScene));
+        NativeImGui.SameLine(0f, 0f);
+        float renameWidth = MathF.Max(
+            EditorWidget.style.hierarchyRenameMinimumWidth,
+            NativeImGui.GetContentRegionAvail().X -
+            EditorWidget.style.hierarchyRenameTrailingGap);
+        _ = interaction.Present(
+            RenameHierarchyTargetCommand.presentationCommand,
+            new InlineRenamePresentation(
+                $"scene_{id}",
+                renameWidth,
+                rowHeight,
+                C_NAME_BUFFER_SIZE));
     }
 
     private void DrawVisibilityButton(GameObject gameObject, string id)
@@ -312,19 +373,19 @@ internal sealed class HierarchyPanel : EditorPanel
     private void DrawSceneContextMenu(EditorContext context, GameScene scene, string id)
     {
         if (NativeImGui.IsItemClicked(ImGuiMouseButton.Right))
-            _ = m_interactions.For("panel/scene.hierarchy", scene).Select();
+            _ = m_interactions.For(HierarchyInteractionIds.area, scene).Select();
         _ = EditorMenuRenderer.ContextMenu(
             $"##scene_context_{id}",
-            m_interactions.For("panel/scene.hierarchy", scene));
+            m_interactions.For(HierarchyInteractionIds.area, scene));
     }
 
     private void DrawObjectContextMenu(EditorContext context, GameObject gameObject, string id)
     {
         if (NativeImGui.IsItemClicked(ImGuiMouseButton.Right))
-            _ = m_interactions.For("panel/scene.hierarchy", gameObject).Select();
+            _ = m_interactions.For(HierarchyInteractionIds.area, gameObject).Select();
         _ = EditorMenuRenderer.ContextMenu(
             $"##hierarchy_context_{id}",
-            m_interactions.For("panel/scene.hierarchy", gameObject));
+            m_interactions.For(HierarchyInteractionIds.area, gameObject));
     }
 
     private void DrawBlankArea(EditorContext context)
@@ -336,7 +397,7 @@ internal sealed class HierarchyPanel : EditorPanel
         _ = NativeImGui.InvisibleButton("##hierarchy_blank", size);
         if (NativeImGui.IsItemClicked(ImGuiMouseButton.Left))
         {
-            _ = m_interactions.For("panel/scene.hierarchy").Select();
+            _ = m_interactions.For(HierarchyInteractionIds.area).Select();
         }
 
         GameScene? activeScene = m_workspace.activeScene;
@@ -344,7 +405,7 @@ internal sealed class HierarchyPanel : EditorPanel
         {
             EditorDropWidgetResult drop = EditorDragDropRenderer.Target(
                 m_interactions.For(
-                    "panel/scene.hierarchy",
+                    HierarchyInteractionIds.area,
                     new HierarchySceneDropTarget(activeScene)),
                 EditorDropPlacement.Into);
             ApplyDropResult(drop.result);
@@ -353,17 +414,17 @@ internal sealed class HierarchyPanel : EditorPanel
         _ = EditorMenuRenderer.ContextMenu(
             "##hierarchy_blank_context",
             activeScene is null
-                ? m_interactions.For("panel/scene.hierarchy")
-                : m_interactions.For("panel/scene.hierarchy", activeScene));
+                ? m_interactions.For(HierarchyInteractionIds.area)
+                : m_interactions.For(HierarchyInteractionIds.area, activeScene));
     }
 
-    private void RevealSelection(EditorContext context)
+    private void RevealSelection()
     {
-        if (m_interactions.selection.TryGet(out GameScene? scene))
-        {
-            m_forceOpenSceneIds.Add(scene.identity.persistentId);
+        ulong selectionVersion = m_interactions.selection.version;
+        if (m_lastRevealedSelectionVersion == selectionVersion)
             return;
-        }
+        m_lastRevealedSelectionVersion = selectionVersion;
+
         if (!m_interactions.selection.TryGet(out GameObject? gameObject) || !gameObject.isRuntimeValid)
             return;
         m_forceOpenSceneIds.Add(gameObject.scene.identity.persistentId);

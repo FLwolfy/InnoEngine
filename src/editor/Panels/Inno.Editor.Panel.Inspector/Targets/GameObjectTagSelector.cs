@@ -68,11 +68,17 @@ internal sealed class GameObjectTagSelector
             return;
         }
 
-        DrawCreateRow(context, target);
-        NativeImGui.Separator();
-        for (int i = 0; i < tags.Count; i++)
-            DrawTagRow(context, target, tags[i]);
-        EditorWidget.EndMenuSelector();
+        try
+        {
+            DrawCreateRow(context, target);
+            NativeImGui.Separator();
+            for (int i = 0; i < tags.Count; i++)
+                DrawTagRow(context, target, tags[i]);
+        }
+        finally
+        {
+            EditorWidget.EndMenuSelector();
+        }
     }
 
     private void DrawCreateRow(InspectionDrawContext context, GameObject target)
@@ -175,18 +181,10 @@ internal sealed class GameObjectTagSelector
             .ToArray();
         using EditorHistoryTransaction transaction = context.interactions.history.BeginTransaction(
             $"Delete Tag '{tag}'");
+        using EditorHistoryChange change = GameObjectTagHistoryHandler.CreateChange(tag);
         EditorHistoryResult catalogResult = context.interactions.history.Execute(
             $"Delete Tag Definition '{tag}'",
-            () =>
-            {
-                _ = m_catalog.Remove(tag);
-                return EditorHistoryResult.Success();
-            },
-            () =>
-            {
-                _ = m_catalog.Add(tag);
-                return EditorHistoryResult.Success();
-            });
+            change);
         if (!catalogResult.succeeded)
         {
             _ = transaction.Rollback();

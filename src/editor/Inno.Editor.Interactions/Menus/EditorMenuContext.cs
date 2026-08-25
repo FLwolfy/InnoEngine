@@ -17,13 +17,11 @@ public sealed class EditorMenuContext
     public EditorMenuContext(
         EditorContext editor,
         EditorInteractions interactions,
-        string area,
+        EditorAreaId area,
         object? target = null)
     {
         this.editor = editor ?? throw new ArgumentNullException(nameof(editor));
         this.interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
-        if (string.IsNullOrWhiteSpace(area))
-            throw new ArgumentException("An editor menu area is required.", nameof(area));
         this.area = area;
         this.target = target;
     }
@@ -35,14 +33,11 @@ public sealed class EditorMenuContext
     public EditorInteractions interactions { get; }
 
     /// <summary>Gets the requested menu area.</summary>
-    public string area { get; }
+    public EditorAreaId area { get; }
 
     /// <summary>Gets the contextual menu target.</summary>
     public object? target { get; }
 
-    /// <summary>Creates an action context preserving this menu's area and target.</summary>
-    /// <param name="argument">An optional placement-specific action argument.</param>
-    /// <returns>A contextual action request for this menu.</returns>
-    public EditorActionContext CreateActionContext(object? argument = null)
+    internal EditorActionContext CreateActionContext(object? argument = null)
         => new(editor, interactions, area, target, argument);
 }

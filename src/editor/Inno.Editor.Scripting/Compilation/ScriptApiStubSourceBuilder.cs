@@ -5,6 +5,8 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 
+using Inno.Core.Scripting;
+
 namespace Inno.Editor.Scripting;
 
 internal static class ScriptApiStubSourceBuilder
@@ -274,8 +276,13 @@ internal static class ScriptApiStubSourceBuilder
     {
         foreach (FieldInfo field in type.GetFields(C_DECLARED_MEMBERS))
         {
-            if (!IsVisible(field) || field.IsSpecialName || !IsApiType(field.FieldType))
+            if (!IsVisible(field) || field.IsSpecialName)
                 continue;
+            if (!IsApiType(field.FieldType))
+            {
+                RejectUnclosedMember(field, field.FieldType);
+                continue;
+            }
             builder.Append("    ")
                 .Append(GetAccessibility(field))
                 .Append(' ');
@@ -303,10 +310,13 @@ internal static class ScriptApiStubSourceBuilder
             return;
         foreach (ConstructorInfo constructor in type.GetConstructors(C_DECLARED_MEMBERS))
         {
-            if (!IsVisible(constructor) ||
-                type.IsValueType && constructor.GetParameters().Length == 0 ||
-                !AreApiParameters(constructor.GetParameters()))
+            if (!IsVisible(constructor) || type.IsValueType && constructor.GetParameters().Length == 0)
                 continue;
+            if (!AreApiParameters(constructor.GetParameters()))
+            {
+                RejectUnclosedMember(constructor, constructor.GetParameters().Select(static value => value.ParameterType));
+                continue;
+            }
             builder.Append("    ")
                 .Append(GetAccessibility(constructor))
                 .Append(' ')
@@ -324,10 +334,16 @@ internal static class ScriptApiStubSourceBuilder
             MethodInfo? getter = IsVisible(property.GetMethod) ? property.GetMethod : null;
             MethodInfo? setter = IsVisible(property.SetMethod) ? property.SetMethod : null;
             MethodInfo? representative = MoreVisible(getter, setter);
-            if (representative is null ||
-                !IsApiType(property.PropertyType) ||
-                !AreApiParameters(property.GetIndexParameters()))
+            if (representative is null)
                 continue;
+            if (!IsApiType(property.PropertyType) || !AreApiParameters(property.GetIndexParameters()))
+            {
+                RejectUnclosedMember(
+                    property,
+                    new[] { property.PropertyType }.Concat(
+                        property.GetIndexParameters().Select(static value => value.ParameterType)));
+                continue;
+            }
             string accessibility = GetAccessibility(representative);
             builder.Append("    ")
                 .Append(accessibility)
@@ -376,8 +392,13 @@ internal static class ScriptApiStubSourceBuilder
         foreach (EventInfo eventInfo in type.GetEvents(C_DECLARED_MEMBERS))
         {
             MethodInfo? accessor = MoreVisible(eventInfo.AddMethod, eventInfo.RemoveMethod);
-            if (!IsVisible(accessor) || !IsApiType(eventInfo.EventHandlerType!))
+            if (!IsVisible(accessor))
                 continue;
+            if (!IsApiType(eventInfo.EventHandlerType!))
+            {
+                RejectUnclosedMember(eventInfo, eventInfo.EventHandlerType!);
+                continue;
+            }
             builder.Append("    ")
                 .Append(GetAccessibility(accessor!))
                 .Append(' ');
@@ -396,10 +417,25 @@ internal static class ScriptApiStubSourceBuilder
         foreach (MethodInfo method in type.GetMethods(C_DECLARED_MEMBERS))
         {
             if (!IsVisible(method) ||
-                !IsApiMethod(method) ||
                 method.Name == "Finalize" && method.GetParameters().Length == 0 ||
                 method.Name.Contains('<', StringComparison.Ordinal))
                 continue;
+            if (method.IsSpecialName &&
+                method.Name is not "op_Implicit" and not "op_Explicit" &&
+                !TryGetOperator(method.Name, out _))
+            {
+                continue;
+            }
+            if (!IsApiMethod(method))
+            {
+                RejectUnclosedMember(
+                    method,
+                    new[] { method.ReturnType }
+                        .Concat(method.GetParameters().Select(static value => value.ParameterType))
+                        .Concat(method.GetGenericArguments()
+                            .SelectMany(static argument => argument.GetGenericParameterConstraints())));
+                continue;
+            }
             if (method.IsSpecialName)
             {
                 if (method.Name is "op_Implicit" or "op_Explicit")
@@ -623,6 +659,56 @@ internal static class ScriptApiStubSourceBuilder
                    type.GetGenericArguments().All(IsApiType);
         }
         return IsApiNamedType(type);
+    }
+
+    private static void RejectUnclosedMember(MemberInfo member, Type dependency)
+        => RejectUnclosedMember(member, new[] { dependency });
+
+    private static void RejectUnclosedMember(MemberInfo member, IEnumerable<Type> dependencies)
+    {
+        if (member.IsDefined(typeof(ScriptingApiIgnoreAttribute), inherit: false))
+            return;
+        string missing = string.Join(
+            ", ",
+            dependencies
+                .SelectMany(GetUnexportedTypes)
+                .Select(static type => type.FullName ?? type.Name)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(static name => name, StringComparer.Ordinal));
+        throw new InvalidOperationException(
+            $"Scripting API member '{member.DeclaringType?.FullName}.{member.Name}' depends on " +
+            $"unexported type(s): {missing}. Export the dependency or mark the member with " +
+            $"{nameof(ScriptingApiIgnoreAttribute)}.");
+    }
+
+    private static IEnumerable<Type> GetUnexportedTypes(Type type)
+    {
+        if (type.IsByRef || type.IsPointer || type.IsArray)
+        {
+            foreach (Type missing in GetUnexportedTypes(type.GetElementType()!))
+                yield return missing;
+            yield break;
+        }
+        if (type.IsGenericParameter)
+        {
+            foreach (Type constraint in type.GetGenericParameterConstraints())
+            foreach (Type missing in GetUnexportedTypes(constraint))
+                yield return missing;
+            yield break;
+        }
+        if (C_TYPE_ALIASES.ContainsKey(type) || type == typeof(void))
+            yield break;
+        if (type.IsGenericType)
+        {
+            if (!IsApiNamedType(type.GetGenericTypeDefinition()))
+                yield return type.GetGenericTypeDefinition();
+            foreach (Type argument in type.GetGenericArguments())
+            foreach (Type missing in GetUnexportedTypes(argument))
+                yield return missing;
+            yield break;
+        }
+        if (!IsApiNamedType(type))
+            yield return type;
     }
 
     private static bool IsApiNamedType(Type type)
