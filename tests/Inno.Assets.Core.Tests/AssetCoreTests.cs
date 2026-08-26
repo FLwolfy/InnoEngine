@@ -5,6 +5,7 @@ using System.Collections.Generic;
 
 using Inno.Assets.Core;
 using Inno.Assets.Types;
+using Inno.Core.Reflection;
 
 using Xunit;
 
@@ -16,8 +17,8 @@ public sealed class AssetCoreTests
     public void AssetDependency_UsesPersistentIdentityForEquality()
     {
         Guid persistentId = Guid.NewGuid();
-        var first = new AssetDependency(persistentId, Guid.NewGuid(), "A/first.txt");
-        var second = new AssetDependency(persistentId, Guid.NewGuid(), "B/second.txt");
+        var first = new AssetDependency(persistentId, new TypeRef(Guid.NewGuid()), "A/first.txt");
+        var second = new AssetDependency(persistentId, new TypeRef(Guid.NewGuid()), "B/second.txt");
 
         Assert.Equal(first, second);
         Assert.Equal(first.GetHashCode(), second.GetHashCode());

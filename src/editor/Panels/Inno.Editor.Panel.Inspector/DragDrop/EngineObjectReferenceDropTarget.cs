@@ -1,6 +1,7 @@
 
 using System;
 
+using Inno.Core.Reflection;
 using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
@@ -9,6 +10,7 @@ namespace Inno.Editor.Panel.Inspector;
 public sealed class EngineObjectReferenceDropTarget
 {
     private readonly Action<EngineObject> m_assign;
+    private readonly TypeRef m_expectedType;
 
     /// <summary>
     /// Creates a drop target that validates and assigns an engine object to a serialized property.
@@ -16,14 +18,16 @@ public sealed class EngineObjectReferenceDropTarget
     /// <param name="expectedType">The engine object type accepted by the property.</param>
     /// <param name="assign">The callback that writes an accepted object to the property.</param>
     /// <exception cref="ArgumentNullException">Thrown when either argument is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the type does not belong to the active type catalog.</exception>
     public EngineObjectReferenceDropTarget(Type expectedType, Action<EngineObject> assign)
     {
-        this.expectedType = expectedType ?? throw new ArgumentNullException(nameof(expectedType));
+        ArgumentNullException.ThrowIfNull(expectedType);
+        m_expectedType = TypeCacheManager.GetTypeRef(expectedType);
         m_assign = assign ?? throw new ArgumentNullException(nameof(assign));
     }
 
     /// <summary>Gets the required engine object type.</summary>
-    public Type expectedType { get; }
+    public Type expectedType => m_expectedType.Resolve();
 
     /// <summary>
     /// Assigns an accepted engine object to the represented property.

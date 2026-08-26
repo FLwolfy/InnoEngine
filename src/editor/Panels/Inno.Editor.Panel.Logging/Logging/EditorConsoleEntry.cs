@@ -58,7 +58,7 @@ internal readonly struct EditorConsoleEntry
             diagnosticSourceId: string.Empty,
             code: string.Empty,
             entry.level,
-            entry.source.ToString(),
+            $"{entry.domain}/{entry.scope}",
             entry.category,
             entry.message,
             entry.time,

@@ -86,8 +86,8 @@ internal sealed record ScriptSourceSet(
             {
                 continue;
             }
-            bool editor = entry.relativePath.EndsWith(".editor.dll", StringComparison.OrdinalIgnoreCase);
-            (editor ? editorPlugins : runtimePlugins).Add(CreatePluginInput(entry));
+            ScriptPluginInput plugin = CreatePluginInput(entry);
+            (plugin.scope == ScriptAssemblyScope.Editor ? editorPlugins : runtimePlugins).Add(plugin);
         }
 
         ScriptAssemblyInput[] assemblies = ValidateAndOrderAssemblies(assemblyBuilders);
@@ -138,6 +138,7 @@ internal sealed record ScriptSourceSet(
 
     private static ScriptPluginInput CreatePluginInput(AssetFileEntry entry)
     {
+        ManagedPluginAsset descriptor = AssetManager.Load<ManagedPluginAsset>(entry.relativePath);
         if (!AssetManager.TryGetInfo(entry.relativePath, out AssetInfo? info) ||
             info is null ||
             info.persistentId == Guid.Empty ||
@@ -154,6 +155,7 @@ internal sealed record ScriptSourceSet(
             assembly.absolutePath,
             symbols?.absolutePath,
             dependencies?.absolutePath,
+            descriptor.scope,
             info.artifactKey.value);
     }
 
@@ -270,4 +272,5 @@ internal sealed record ScriptPluginInput(
     string assemblyArtifactPath,
     string? symbolsArtifactPath,
     string? dependenciesArtifactPath,
+    ScriptAssemblyScope scope,
     string artifactKey);

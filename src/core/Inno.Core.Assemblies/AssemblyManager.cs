@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -18,6 +19,7 @@ public static class AssemblyManager
     private static readonly object S_SYNC = new();
     private static readonly Dictionary<AssemblyModuleHandle, AssemblyModuleEntry> S_MODULES = [];
     private static readonly List<AssemblyUnloadMonitor> S_PENDING_UNLOADS = [];
+    private static readonly HashSet<string> S_TRUSTED_PLATFORM_ASSEMBLIES = GetTrustedPlatformAssemblyNames();
 
     private static AssemblyManagerOptions s_options = new();
     private static AssemblyCatalogSnapshot s_currentCatalog = new(0, []);
@@ -110,12 +112,32 @@ public static class AssemblyManager
             {
                 transaction = participant.Prepare(s_currentCatalog);
                 transaction.Activate();
-                transaction.Complete();
+                try
+                {
+                    transaction.Complete();
+                }
+                catch (Exception exception)
+                {
+                    Trace.TraceError(
+                        "Assembly catalog participant '{0}' failed during initial cleanup: {1}",
+                        participant.GetType().FullName,
+                        exception);
+                }
                 return registration;
             }
             catch
             {
-                transaction?.Rollback();
+                try
+                {
+                    transaction?.Rollback();
+                }
+                catch (Exception exception)
+                {
+                    Trace.TraceError(
+                        "Assembly catalog participant '{0}' failed during initial rollback: {1}",
+                        participant.GetType().FullName,
+                        exception);
+                }
                 registration.Dispose();
                 throw;
             }
@@ -133,9 +155,17 @@ public static class AssemblyManager
             EnsureInitialized();
             EnsureNoReloadInProgress();
             ValidateUniqueModuleName(request.moduleName);
+            ValidateUniqueReloadBoundary(request.domain, request.scope);
 
             AssemblyModuleHandle handle = new(Guid.NewGuid());
-            AssemblyModuleEntry module = StageModule(handle, request, generation: 1);
+            IReadOnlyDictionary<string, PlannedAssembly> plannedAssemblies =
+                BuildPlannedAssemblyMap([request]);
+            AssemblyModuleEntry module = StageModule(
+                handle,
+                request,
+                generation: 1,
+                upstreamModules: [],
+                plannedAssemblies);
             S_MODULES.Add(handle, module);
             try
             {
@@ -170,6 +200,21 @@ public static class AssemblyManager
             EnsureNoReloadInProgress();
             ValidateUniqueModuleName(moduleName);
 
+            if (!assemblies[0].TryGetInnoAssemblyClassification(
+                    out AssemblyDomain domain,
+                    out AssemblyScope scope) ||
+                assemblies.Any(assembly =>
+                    !assembly.TryGetInnoAssemblyClassification(
+                        out AssemblyDomain candidateDomain,
+                        out AssemblyScope candidateScope) ||
+                    candidateDomain != domain ||
+                    candidateScope != scope))
+            {
+                throw new ArgumentException(
+                    "Every externally owned module assembly must declare the same valid domain and scope metadata.",
+                    nameof(assemblies));
+            }
+
             AssemblyModuleHandle handle = new(Guid.NewGuid());
             var module = new AssemblyModuleEntry
             {
@@ -178,7 +223,12 @@ public static class AssemblyManager
                 generation = 1,
                 externallyOwned = true,
                 collectible = false,
-                assemblies = assemblies.Distinct().ToArray()
+                domain = domain,
+                scope = scope,
+                assemblies = assemblies.Distinct().ToArray(),
+                assemblyScopes = assemblies
+                    .Distinct()
+                    .ToDictionary(static assembly => assembly, _ => scope)
             };
             S_MODULES.Add(handle, module);
             try
@@ -215,27 +265,27 @@ public static class AssemblyManager
                     nameof(request));
             }
 
-            AssemblyModuleEntry candidate = StageModule(module, request, previous.generation + 1);
-            try
-            {
-                AssemblyCatalogSnapshot previousCatalog = s_currentCatalog;
-                AssemblyCatalogSnapshot candidateCatalog = BuildCatalog(previous, candidate);
-                AssemblyCatalogRefreshSet refresh = AssemblyCatalogCoordinator.Prepare(candidateCatalog);
-                s_reloadInProgress = true;
-                return new AssemblyReloadSession(new ReloadState
-                {
-                    previousModule = previous,
-                    candidateModule = candidate,
-                    previousCatalog = previousCatalog,
-                    candidateCatalog = candidateCatalog,
-                    refresh = refresh
-                });
-            }
-            catch
-            {
-                BeginUnload(candidate);
-                throw;
-            }
+            return BeginReloadLocked([request], new Dictionary<string, AssemblyModuleHandle>(
+                StringComparer.Ordinal) { [request.moduleName] = module });
+        }
+    }
+
+    /// <summary>
+    /// Stages a dependency-ordered set of module additions or replacements as one atomic transaction.
+    /// Existing modules are matched by their stable module names; an unknown name creates a new module.
+    /// </summary>
+    /// <param name="requests">The complete reverse-dependency reload closure.</param>
+    /// <returns>A session that publishes or rolls back every candidate together.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="requests"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">Thrown when the request set is empty or contains duplicate module names.</exception>
+    public static AssemblyReloadSession BeginReload(IReadOnlyList<AssemblyLoadRequest> requests)
+    {
+        ArgumentNullException.ThrowIfNull(requests);
+        lock (S_SYNC)
+        {
+            EnsureInitialized();
+            EnsureNoReloadInProgress();
+            return BeginReloadLocked(requests, forcedHandles: null);
         }
     }
 
@@ -248,6 +298,7 @@ public static class AssemblyManager
         {
             EnsureInitialized();
             EnsureNoReloadInProgress();
+            ValidateUnloadClosure([module]);
             if (!S_MODULES.Remove(module, out AssemblyModuleEntry? removed))
                 throw new ArgumentException("The assembly module is not active.", nameof(module));
             try
@@ -261,6 +312,55 @@ public static class AssemblyManager
             }
 
             return BeginUnload(removed);
+        }
+    }
+
+    /// <summary>
+    /// Removes several active modules in one catalog transaction, then requests unload in reverse dependency order.
+    /// </summary>
+    /// <param name="modules">The distinct active module handles to remove.</param>
+    /// <returns>A monitor that completes after every collectible context becomes unreachable.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="modules"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">Thrown when a handle is duplicated or is not active.</exception>
+    public static AssemblyUnloadMonitor Unload(IReadOnlyList<AssemblyModuleHandle> modules)
+    {
+        ArgumentNullException.ThrowIfNull(modules);
+        lock (S_SYNC)
+        {
+            EnsureInitialized();
+            EnsureNoReloadInProgress();
+            if (modules.Distinct().Count() != modules.Count)
+                throw new ArgumentException("Module handles must be distinct.", nameof(modules));
+            ValidateUnloadClosure(modules);
+            var removed = new List<AssemblyModuleEntry>(modules.Count);
+            foreach (AssemblyModuleHandle handle in modules)
+            {
+                if (!S_MODULES.TryGetValue(handle, out AssemblyModuleEntry? module))
+                    throw new ArgumentException("An assembly module is not active.", nameof(modules));
+                removed.Add(module);
+            }
+            foreach (AssemblyModuleEntry module in removed)
+                S_MODULES.Remove(module.handle);
+            try
+            {
+                RebuildLocked();
+            }
+            catch
+            {
+                foreach (AssemblyModuleEntry module in removed)
+                    S_MODULES.Add(module.handle, module);
+                throw;
+            }
+
+            AssemblyModuleEntry[] unloadOrder = removed
+                .OrderByDescending(static module => module.domain == AssemblyDomain.InnoPlugin
+                    ? 0
+                    : module.scope == AssemblyScope.Runtime ? 1 : 2)
+                .ToArray();
+            var monitors = unloadOrder.Select(BeginUnload).ToArray();
+            return monitors.Length == 1
+                ? monitors[0]
+                : new AssemblyUnloadMonitor(monitors);
         }
     }
 
@@ -307,7 +407,8 @@ public static class AssemblyManager
             if (state.activated)
                 return;
 
-            S_MODULES[state.previousModule.handle] = state.candidateModule;
+            for (int i = 0; i < state.candidateModules.Length; i++)
+                S_MODULES[state.candidateModules[i].handle] = state.candidateModules[i];
             s_currentCatalog = state.candidateCatalog;
             try
             {
@@ -316,12 +417,12 @@ public static class AssemblyManager
             }
             catch
             {
-                S_MODULES[state.previousModule.handle] = state.previousModule;
+                RestorePreviousModules(state);
                 s_currentCatalog = state.previousCatalog;
                 state.refresh.Rollback();
                 state.finished = true;
                 s_reloadInProgress = false;
-                BeginUnload(state.candidateModule);
+                BeginUnloadReverse(state.candidateModules);
                 throw;
             }
         }
@@ -338,7 +439,9 @@ public static class AssemblyManager
             state.refresh.Complete();
             state.finished = true;
             s_reloadInProgress = false;
-            return BeginUnload(state.previousModule);
+            AssemblyUnloadMonitor monitor = BeginUnloadReverse(
+                state.previousModules.OfType<AssemblyModuleEntry>().ToArray());
+            return monitor;
         }
     }
 
@@ -350,15 +453,128 @@ public static class AssemblyManager
                 return;
             if (state.activated)
             {
-                S_MODULES[state.previousModule.handle] = state.previousModule;
+                RestorePreviousModules(state);
                 s_currentCatalog = state.previousCatalog;
             }
 
             state.refresh.Rollback();
             state.finished = true;
             s_reloadInProgress = false;
-            BeginUnload(state.candidateModule);
+            BeginUnloadReverse(state.candidateModules);
         }
+    }
+
+    private static AssemblyReloadSession BeginReloadLocked(
+        IReadOnlyList<AssemblyLoadRequest> requests,
+        IReadOnlyDictionary<string, AssemblyModuleHandle>? forcedHandles)
+    {
+        if (requests.Count == 0)
+            throw new ArgumentException("At least one module reload request is required.", nameof(requests));
+        if (requests.Any(static request => request is null))
+            throw new ArgumentException("Module reload requests cannot contain null entries.", nameof(requests));
+        AssemblyLoadRequest[] orderedRequests = requests
+            .OrderBy(GetReloadOrder)
+            .ThenBy(static request => request.moduleName, StringComparer.Ordinal)
+            .ToArray();
+        if (orderedRequests.Select(static request => request.moduleName).Distinct(StringComparer.Ordinal).Count() !=
+            orderedRequests.Length)
+        {
+            throw new ArgumentException("A reload plan cannot contain duplicate module names.", nameof(requests));
+        }
+        ValidateReloadClosure(orderedRequests);
+        IReadOnlyDictionary<string, PlannedAssembly> plannedAssemblies =
+            BuildPlannedAssemblyMap(orderedRequests);
+
+        var previousModules = new AssemblyModuleEntry?[orderedRequests.Length];
+        var candidates = new List<AssemblyModuleEntry>(orderedRequests.Length);
+        try
+        {
+            for (int i = 0; i < orderedRequests.Length; i++)
+            {
+                AssemblyLoadRequest request = orderedRequests[i];
+                AssemblyModuleEntry? previous = FindPreviousModule(request, forcedHandles);
+                previousModules[i] = previous;
+                AssemblyModuleHandle handle = previous?.handle ?? new AssemblyModuleHandle(Guid.NewGuid());
+                int generation = (previous?.generation ?? 0) + 1;
+                IReadOnlyList<AssemblyModuleEntry> upstream = GetUpstreamModules(request, candidates);
+                candidates.Add(StageModule(handle, request, generation, upstream, plannedAssemblies));
+            }
+
+            var replacements = candidates.ToDictionary(static module => module.handle);
+            AssemblyCatalogSnapshot previousCatalog = s_currentCatalog;
+            AssemblyCatalogSnapshot candidateCatalog = BuildCatalog(replacements);
+            AssemblyCatalogRefreshSet refresh = AssemblyCatalogCoordinator.Prepare(candidateCatalog);
+            s_reloadInProgress = true;
+            return new AssemblyReloadSession(new ReloadState
+            {
+                previousModules = previousModules,
+                candidateModules = candidates.ToArray(),
+                previousCatalog = previousCatalog,
+                candidateCatalog = candidateCatalog,
+                refresh = refresh
+            });
+        }
+        catch
+        {
+            BeginUnloadReverse(candidates);
+            throw;
+        }
+    }
+
+    private static AssemblyModuleEntry? FindPreviousModule(
+        AssemblyLoadRequest request,
+        IReadOnlyDictionary<string, AssemblyModuleHandle>? forcedHandles)
+    {
+        if (forcedHandles is not null && forcedHandles.TryGetValue(request.moduleName, out AssemblyModuleHandle handle))
+            return S_MODULES[handle];
+        AssemblyModuleEntry? previous = S_MODULES.Values.SingleOrDefault(module =>
+            string.Equals(module.moduleName, request.moduleName, StringComparison.Ordinal));
+        if (previous is null)
+            ValidateUniqueReloadBoundary(request.domain, request.scope);
+        else if (previous.domain != request.domain || previous.scope != request.scope)
+            throw new InvalidOperationException(
+                $"Module '{request.moduleName}' cannot change its domain or scope across generations.");
+        return previous;
+    }
+
+    private static IReadOnlyList<AssemblyModuleEntry> GetUpstreamModules(
+        AssemblyLoadRequest request,
+        IReadOnlyList<AssemblyModuleEntry> stagedCandidates)
+    {
+        if (request.domain == AssemblyDomain.InnoPlugin)
+            return [];
+        IEnumerable<AssemblyModuleEntry> effectiveModules = S_MODULES.Values
+            .Where(active => stagedCandidates.All(candidate => candidate.handle != active.handle))
+            .Concat(stagedCandidates);
+        return request.scope == AssemblyScope.Runtime
+            ? effectiveModules.Where(static module => module.domain == AssemblyDomain.InnoPlugin).ToArray()
+            : effectiveModules.Where(static module =>
+                    module.domain == AssemblyDomain.InnoPlugin ||
+                    module.domain == AssemblyDomain.InnoScripting && module.scope == AssemblyScope.Runtime)
+                .ToArray();
+    }
+
+    private static int GetReloadOrder(AssemblyLoadRequest request)
+        => request.domain switch
+        {
+            AssemblyDomain.InnoPlugin => 0,
+            AssemblyDomain.InnoScripting when request.scope == AssemblyScope.Runtime => 1,
+            AssemblyDomain.InnoScripting => 2,
+            _ => throw new ArgumentException("InnoInternal assemblies cannot be loaded into a collectible module.")
+        };
+
+    private static void RestorePreviousModules(ReloadState state)
+    {
+        for (int i = 0; i < state.candidateModules.Length; i++)
+        {
+            AssemblyModuleEntry candidate = state.candidateModules[i];
+            AssemblyModuleEntry? previous = state.previousModules[i];
+            if (previous is null)
+                S_MODULES.Remove(candidate.handle);
+            else
+                S_MODULES[candidate.handle] = previous;
+        }
+        s_currentCatalog = state.previousCatalog;
     }
 
     private static void RebuildLocked()
@@ -392,7 +608,8 @@ public static class AssemblyManager
         s_hostCatalogDirty = false;
         try
         {
-            AssemblyCatalogSnapshot candidate = BuildCatalog(replaced: null, replacement: null);
+            AssemblyCatalogSnapshot candidate = BuildCatalog(
+                new Dictionary<AssemblyModuleHandle, AssemblyModuleEntry>());
             AssemblyCatalogRefreshSet refresh = AssemblyCatalogCoordinator.Prepare(candidate);
             s_currentCatalog = candidate;
             try
@@ -415,33 +632,32 @@ public static class AssemblyManager
     }
 
     private static AssemblyCatalogSnapshot BuildCatalog(
-        AssemblyModuleEntry? replaced,
-        AssemblyModuleEntry? replacement)
+        IReadOnlyDictionary<AssemblyModuleHandle, AssemblyModuleEntry> replacements)
     {
-        Assembly[] assemblies = GetActiveAssemblies(replaced, replacement);
+        Assembly[] assemblies = GetActiveAssemblies(replacements);
         return new AssemblyCatalogSnapshot(++s_catalogVersion, assemblies);
     }
 
     private static Assembly[] GetActiveAssemblies(
-        AssemblyModuleEntry? replaced,
-        AssemblyModuleEntry? replacement)
+        IReadOnlyDictionary<AssemblyModuleHandle, AssemblyModuleEntry> replacements)
     {
         IEnumerable<Assembly> host = AppDomain.CurrentDomain.GetAssemblies()
             .Where(static assembly => !assembly.IsDynamic)
             .Where(static assembly => AssemblyLoadContext.GetLoadContext(assembly) == AssemblyLoadContext.Default)
             .Where(IsDiscoverableHostAssembly);
-        IEnumerable<AssemblyModuleEntry> modules = S_MODULES.Values;
-        IEnumerable<Assembly> moduleAssemblies = modules.SelectMany(module =>
-            ReferenceEquals(module, replaced) && replacement is not null
-                ? replacement.assemblies
-                : module.assemblies);
+        IEnumerable<AssemblyModuleEntry> modules = S_MODULES.Values
+            .Select(module => replacements.GetValueOrDefault(module.handle, module))
+            .Concat(replacements.Values.Where(candidate => !S_MODULES.ContainsKey(candidate.handle)));
+        IEnumerable<Assembly> moduleAssemblies = modules.SelectMany(static module => module.assemblies);
         return host.Concat(moduleAssemblies).Distinct().ToArray();
     }
 
     private static AssemblyModuleEntry StageModule(
         AssemblyModuleHandle handle,
         AssemblyLoadRequest request,
-        int generation)
+        int generation,
+        IReadOnlyList<AssemblyModuleEntry> upstreamModules,
+        IReadOnlyDictionary<string, PlannedAssembly> plannedAssemblies)
     {
         CleanupRetiredShadowDirectories();
         ValidateRequest(request);
@@ -469,42 +685,14 @@ public static class AssemblyManager
             explicitShadowPaths.Add(shadowPath);
         }
 
-        foreach (string directory in sourcePaths
-                     .Select(static path => Path.GetDirectoryName(path)!)
-                     .Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            foreach (string dependencyPath in Directory
-                         .EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
-                         .Where(static path => path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
-            {
-                try
-                {
-                    string dependencyName = AssemblyName.GetAssemblyName(dependencyPath).Name
-                        ?? throw new InvalidOperationException($"Assembly '{dependencyPath}' has no simple name.");
-                    if (!shadowPathsByName.ContainsKey(dependencyName))
-                    {
-                        shadowPathsByName.Add(
-                            dependencyName,
-                            CopyAssemblyArtifacts(dependencyPath, generationDirectory, dependencyName));
-                    }
-                }
-                catch (BadImageFormatException)
-                {
-                    // Native libraries are not part of the managed dependency catalog.
-                }
-            }
-        }
-
         string mainSourcePath = Path.GetFullPath(request.mainAssemblyPath);
         string mainShadowPath = explicitShadowPaths[sourcePaths
             .Select((path, index) => (path, index))
             .First(pair => string.Equals(pair.path, mainSourcePath, StringComparison.OrdinalIgnoreCase)).index];
-        IReadOnlyDictionary<string, Assembly> sharedAssemblies = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(static assembly => !assembly.IsDynamic)
-            .Where(static assembly => AssemblyLoadContext.GetLoadContext(assembly) == AssemblyLoadContext.Default)
-            .Where(static assembly => (assembly.GetName().Name ?? string.Empty).StartsWith("Inno.", StringComparison.Ordinal))
-            .GroupBy(static assembly => assembly.GetName().Name!, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
+        IReadOnlyDictionary<string, Assembly> sharedAssemblies = BuildSharedAssemblies(
+            request,
+            upstreamModules,
+            shadowPathsByName.Keys);
         var loadContext = new ModuleLoadContext(
             $"{request.moduleName}#{generation}",
             mainShadowPath,
@@ -529,6 +717,33 @@ public static class AssemblyManager
                 assemblies.Add(loadContext.LoadFromAssemblyPath(shadowPath));
             }
 
+            Assembly[] loadedAssemblies = assemblies.Distinct().ToArray();
+            var loadedScopes = new Dictionary<Assembly, AssemblyScope>(ReferenceEqualityComparer.Instance);
+            foreach (Assembly assembly in loadedAssemblies)
+            {
+                string simpleName = assembly.GetName().Name ?? string.Empty;
+                AssemblyScope assemblyScope = request.assemblyScopes.GetValueOrDefault(simpleName, request.scope);
+                if (request.domain == AssemblyDomain.InnoScripting &&
+                    (!assembly.TryGetInnoAssemblyClassification(
+                         out AssemblyDomain declaredDomain,
+                         out AssemblyScope declaredScope) ||
+                     declaredDomain != AssemblyDomain.InnoScripting ||
+                     declaredScope != assemblyScope))
+                {
+                    throw new InvalidDataException(
+                        $"Script assembly '{simpleName}' does not declare its requested domain and scope metadata.");
+                }
+                assembly.RegisterInnoAssemblyClassification(request.domain, assemblyScope);
+                loadedScopes.Add(assembly, assemblyScope);
+            }
+            ValidateLoadedModule(
+                request,
+                loadedAssemblies,
+                loadedScopes,
+                sharedAssemblies,
+                upstreamModules,
+                plannedAssemblies);
+
             return new AssemblyModuleEntry
             {
                 handle = handle,
@@ -536,7 +751,10 @@ public static class AssemblyManager
                 generation = generation,
                 externallyOwned = false,
                 collectible = request.collectible,
-                assemblies = loadContext.Assemblies.ToArray(),
+                domain = request.domain,
+                scope = request.scope,
+                assemblies = loadedAssemblies,
+                assemblyScopes = loadedScopes,
                 loadContext = loadContext,
                 shadowDirectory = generationDirectory
             };
@@ -551,6 +769,165 @@ public static class AssemblyManager
                 CleanupRetiredShadowDirectories();
             }
             throw;
+        }
+    }
+
+    private static IReadOnlyDictionary<string, Assembly> BuildSharedAssemblies(
+        AssemblyLoadRequest request,
+        IReadOnlyList<AssemblyModuleEntry> upstreamModules,
+        IEnumerable<string> ownedNames)
+    {
+        var result = AppDomain.CurrentDomain.GetAssemblies()
+            .Where(static assembly => !assembly.IsDynamic)
+            .Where(static assembly => AssemblyLoadContext.GetLoadContext(assembly) == AssemblyLoadContext.Default)
+            .GroupBy(static assembly => assembly.GetName().Name!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var owned = new HashSet<string>(ownedNames, StringComparer.OrdinalIgnoreCase);
+        foreach (string ownedName in owned)
+        {
+            if (result.ContainsKey(ownedName))
+            {
+                throw new InvalidDataException(
+                    $"Module assembly '{ownedName}' duplicates an assembly already loaded in the default context.");
+            }
+        }
+
+        foreach (AssemblyModuleEntry upstream in upstreamModules)
+        {
+            foreach (Assembly assembly in upstream.assemblies)
+            {
+                if (request.scope == AssemblyScope.Runtime &&
+                    upstream.assemblyScopes[assembly] == AssemblyScope.Editor)
+                {
+                    continue;
+                }
+                string name = assembly.GetName().Name ?? string.Empty;
+                if (owned.Contains(name) || !result.TryAdd(name, assembly))
+                    throw new InvalidDataException($"Reload graph contains duplicate managed assembly name '{name}'.");
+            }
+        }
+        return result;
+    }
+
+    private static void ValidateLoadedModule(
+        AssemblyLoadRequest request,
+        IReadOnlyList<Assembly> assemblies,
+        IReadOnlyDictionary<Assembly, AssemblyScope> assemblyScopes,
+        IReadOnlyDictionary<string, Assembly> sharedAssemblies,
+        IReadOnlyList<AssemblyModuleEntry> upstreamModules,
+        IReadOnlyDictionary<string, PlannedAssembly> plannedAssemblies)
+    {
+        var ownByName = assemblies.ToDictionary(
+            static assembly => assembly.GetName().Name ?? string.Empty,
+            StringComparer.OrdinalIgnoreCase);
+        ValidateOwnedDependencyGraph(ownByName);
+        var forbiddenDownstreamNames = S_MODULES.Values
+            .Where(module => request.domain == AssemblyDomain.InnoPlugin
+                ? module.domain == AssemblyDomain.InnoScripting
+                : request.scope == AssemblyScope.Runtime && module.scope == AssemblyScope.Editor)
+            .SelectMany(static module => module.assemblies)
+            .Select(static assembly => assembly.GetName().Name ?? string.Empty)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var upstreamByName = upstreamModules
+            .SelectMany(module => module.assemblies.Select(assembly => (module, assembly)))
+            .ToDictionary(
+                static pair => pair.assembly.GetName().Name ?? string.Empty,
+                static pair => pair,
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (Assembly assembly in assemblies)
+        {
+            AssemblyScope sourceScope = assemblyScopes[assembly];
+            foreach (AssemblyName reference in assembly.GetReferencedAssemblies())
+            {
+                string name = reference.Name ?? string.Empty;
+                if (ownByName.TryGetValue(name, out Assembly? ownedDependency))
+                {
+                    if (sourceScope == AssemblyScope.Runtime &&
+                        assemblyScopes[ownedDependency] == AssemblyScope.Editor)
+                    {
+                        throw new InvalidDataException(
+                            $"Runtime assembly '{assembly.GetName().Name}' cannot reference editor assembly '{name}'.");
+                    }
+                    continue;
+                }
+                if (forbiddenDownstreamNames.Contains(name))
+                {
+                    throw new InvalidDataException(
+                        $"Assembly '{assembly.GetName().Name}' has a forbidden downstream reference to '{name}'.");
+                }
+                if (upstreamByName.TryGetValue(name, out var upstream))
+                {
+                    if (sourceScope == AssemblyScope.Runtime &&
+                        upstream.module.assemblyScopes[upstream.assembly] == AssemblyScope.Editor)
+                    {
+                        throw new InvalidDataException(
+                            $"Runtime assembly '{assembly.GetName().Name}' cannot reference editor assembly '{name}'.");
+                    }
+                    continue;
+                }
+                if (plannedAssemblies.TryGetValue(name, out PlannedAssembly planned))
+                {
+                    if (request.domain == AssemblyDomain.InnoPlugin &&
+                        planned.domain == AssemblyDomain.InnoScripting)
+                    {
+                        throw new InvalidDataException(
+                            $"Plugin assembly '{assembly.GetName().Name}' cannot reference project script assembly '{name}'.");
+                    }
+                    if (sourceScope == AssemblyScope.Runtime && planned.scope == AssemblyScope.Editor)
+                    {
+                        throw new InvalidDataException(
+                            $"Runtime assembly '{assembly.GetName().Name}' cannot reference editor assembly '{name}'.");
+                    }
+                    throw new InvalidDataException(
+                        $"Assembly '{assembly.GetName().Name}' has an unavailable downstream reference to '{name}'.");
+                }
+                if (S_TRUSTED_PLATFORM_ASSEMBLIES.Contains(name))
+                    continue;
+                if (sharedAssemblies.TryGetValue(name, out Assembly? sharedAssembly))
+                {
+                    if (!sharedAssembly.TryGetInnoAssemblyClassification(
+                            out AssemblyDomain sharedDomain,
+                            out AssemblyScope sharedScope) ||
+                        sharedDomain != AssemblyDomain.InnoInternal)
+                    {
+                        throw new InvalidDataException(
+                            $"Assembly '{assembly.GetName().Name}' can only share BCL or InnoInternal contracts, not '{name}'.");
+                    }
+                    if (sourceScope == AssemblyScope.Runtime && sharedScope == AssemblyScope.Editor)
+                    {
+                        throw new InvalidDataException(
+                            $"Runtime assembly '{assembly.GetName().Name}' cannot reference editor contract '{name}'.");
+                    }
+                    continue;
+                }
+                throw new InvalidDataException(
+                    $"Assembly '{assembly.GetName().Name}' references unavailable assembly '{name}'. " +
+                    "Include the dependency in its module or load an InnoInternal contract in the host.");
+            }
+        }
+    }
+
+    private static void ValidateOwnedDependencyGraph(IReadOnlyDictionary<string, Assembly> assemblies)
+    {
+        var states = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (string name in assemblies.Keys.OrderBy(static value => value, StringComparer.Ordinal))
+            Visit(name);
+
+        void Visit(string name)
+        {
+            int state = states.GetValueOrDefault(name);
+            if (state == 2)
+                return;
+            if (state == 1)
+                throw new InvalidDataException($"Module assembly reference cycle contains '{name}'.");
+            states[name] = 1;
+            foreach (AssemblyName reference in assemblies[name].GetReferencedAssemblies())
+            {
+                if (reference.Name is string dependency && assemblies.ContainsKey(dependency))
+                    Visit(dependency);
+            }
+            states[name] = 2;
         }
     }
 
@@ -581,6 +958,16 @@ public static class AssemblyManager
         S_PENDING_UNLOADS.Add(monitor);
         CleanupRetiredShadowDirectories();
         return monitor;
+    }
+
+    private static AssemblyUnloadMonitor BeginUnloadReverse(IReadOnlyList<AssemblyModuleEntry> modules)
+    {
+        var monitors = new List<AssemblyUnloadMonitor>(modules.Count);
+        for (int i = modules.Count - 1; i >= 0; i--)
+            monitors.Add(BeginUnload(modules[i]));
+        return monitors.Count == 1
+            ? monitors[0]
+            : new AssemblyUnloadMonitor(monitors);
     }
 
     private static void CleanupRetiredShadowDirectories()
@@ -617,6 +1004,12 @@ public static class AssemblyManager
             throw new ArgumentException("Module name is required.", nameof(request));
         if (string.IsNullOrWhiteSpace(request.mainAssemblyPath))
             throw new ArgumentException("Main assembly path is required.", nameof(request));
+        if (!request.collectible)
+            throw new ArgumentException("Plugin and scripting modules must use a collectible load context.", nameof(request));
+        if (!Enum.IsDefined(request.domain) || request.domain == AssemblyDomain.InnoInternal)
+            throw new ArgumentException("A reloadable module must belong to InnoPlugin or InnoScripting.", nameof(request));
+        if (!Enum.IsDefined(request.scope) || request.assemblyScopes.Values.Any(static scope => !Enum.IsDefined(scope)))
+            throw new ArgumentException("A reloadable module contains an invalid assembly scope.", nameof(request));
 
         foreach (string path in new[] { request.mainAssemblyPath }.Concat(request.preloadAssemblyPaths))
         {
@@ -633,12 +1026,111 @@ public static class AssemblyManager
         }
     }
 
+    private static IReadOnlyDictionary<string, PlannedAssembly> BuildPlannedAssemblyMap(
+        IReadOnlyList<AssemblyLoadRequest> requests)
+    {
+        var result = new Dictionary<string, PlannedAssembly>(StringComparer.OrdinalIgnoreCase);
+        foreach (AssemblyLoadRequest request in requests)
+        {
+            ValidateRequest(request);
+            var ownedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string path in new[] { request.mainAssemblyPath }
+                         .Concat(request.preloadAssemblyPaths)
+                         .Select(Path.GetFullPath)
+                         .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                string name = AssemblyName.GetAssemblyName(path).Name
+                    ?? throw new InvalidOperationException($"Assembly '{path}' has no simple name.");
+                ownedNames.Add(name);
+                AssemblyScope scope = request.assemblyScopes.GetValueOrDefault(name, request.scope);
+                if (!result.TryAdd(name, new PlannedAssembly(request.domain, scope)))
+                    throw new InvalidDataException($"Reload plan contains duplicate managed assembly name '{name}'.");
+            }
+            string? unknownScope = request.assemblyScopes.Keys.FirstOrDefault(name => !ownedNames.Contains(name));
+            if (unknownScope is not null)
+            {
+                throw new InvalidDataException(
+                    $"Module '{request.moduleName}' declares a scope for unknown assembly '{unknownScope}'.");
+            }
+        }
+        return result;
+    }
+
+    private static HashSet<string> GetTrustedPlatformAssemblyNames()
+    {
+        string paths = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string ?? string.Empty;
+        return paths.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Select(Path.GetFileNameWithoutExtension)
+            .OfType<string>()
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
     private static void ValidateUniqueModuleName(string moduleName)
     {
         if (string.IsNullOrWhiteSpace(moduleName))
             throw new ArgumentException("Module name is required.", nameof(moduleName));
         if (S_MODULES.Values.Any(module => string.Equals(module.moduleName, moduleName, StringComparison.Ordinal)))
             throw new InvalidOperationException($"Assembly module '{moduleName}' is already active.");
+    }
+
+    private static void ValidateUniqueReloadBoundary(AssemblyDomain domain, AssemblyScope scope)
+    {
+        if (S_MODULES.Values.Any(module => module.domain == domain &&
+                                           (domain == AssemblyDomain.InnoPlugin || module.scope == scope)))
+        {
+            throw new InvalidOperationException(
+                domain == AssemblyDomain.InnoPlugin
+                    ? "Only one unified plugin module can be active."
+                    : $"Only one {scope} scripting module can be active.");
+        }
+    }
+
+    private static void ValidateReloadClosure(IReadOnlyList<AssemblyLoadRequest> requests)
+    {
+        bool reloadsPlugins = requests.Any(static request => request.domain == AssemblyDomain.InnoPlugin);
+        bool reloadsRuntime = requests.Any(static request =>
+            request.domain == AssemblyDomain.InnoScripting && request.scope == AssemblyScope.Runtime);
+        bool reloadsEditor = requests.Any(static request =>
+            request.domain == AssemblyDomain.InnoScripting && request.scope == AssemblyScope.Editor);
+        if (reloadsPlugins && S_MODULES.Values.Any(static module => module.domain == AssemblyDomain.InnoScripting) &&
+            (!reloadsRuntime || !reloadsEditor))
+        {
+            throw new InvalidOperationException(
+                "Reloading plugins requires both dependent scripting modules in the same transaction.");
+        }
+        if (reloadsRuntime && S_MODULES.Values.Any(static module =>
+                module.domain == AssemblyDomain.InnoScripting && module.scope == AssemblyScope.Editor) &&
+            !reloadsEditor)
+        {
+            throw new InvalidOperationException(
+                "Reloading runtime scripts requires the editor scripting module in the same transaction.");
+        }
+    }
+
+    private static void ValidateUnloadClosure(IReadOnlyList<AssemblyModuleHandle> handles)
+    {
+        var removed = handles.ToHashSet();
+        bool removesPlugin = S_MODULES.Values.Any(module =>
+            removed.Contains(module.handle) && module.domain == AssemblyDomain.InnoPlugin);
+        bool removesRuntime = S_MODULES.Values.Any(module =>
+            removed.Contains(module.handle) &&
+            module.domain == AssemblyDomain.InnoScripting &&
+            module.scope == AssemblyScope.Runtime);
+        if (removesPlugin && S_MODULES.Values.Any(module =>
+                !removed.Contains(module.handle) && module.domain == AssemblyDomain.InnoScripting))
+        {
+            throw new InvalidOperationException(
+                "Plugin unload requires all dependent scripting modules in the same transaction.");
+        }
+        if (removesRuntime && S_MODULES.Values.Any(module =>
+                !removed.Contains(module.handle) &&
+                module.domain == AssemblyDomain.InnoScripting &&
+                module.scope == AssemblyScope.Editor))
+        {
+            throw new InvalidOperationException(
+                "Runtime scripting unload requires the editor scripting module in the same transaction.");
+        }
     }
 
     private static void EnsureInitialized()
@@ -657,16 +1149,24 @@ public static class AssemblyManager
     {
         if (state.finished)
             throw new InvalidOperationException("The reload session is already finished.");
-        if (!s_reloadInProgress ||
-            !S_MODULES.TryGetValue(state.previousModule.handle, out AssemblyModuleEntry? current) ||
-            !ReferenceEquals(current, state.activated ? state.candidateModule : state.previousModule))
+        if (!s_reloadInProgress)
             throw new InvalidOperationException("The reload session is no longer current.");
+        for (int i = 0; i < state.candidateModules.Length; i++)
+        {
+            AssemblyModuleEntry candidate = state.candidateModules[i];
+            AssemblyModuleEntry? expected = state.activated ? candidate : state.previousModules[i];
+            bool exists = S_MODULES.TryGetValue(candidate.handle, out AssemblyModuleEntry? current);
+            if (expected is null ? exists : !exists || !ReferenceEquals(current, expected))
+                throw new InvalidOperationException("The reload session is no longer current.");
+        }
     }
 
     private static bool IsDiscoverableHostAssembly(Assembly assembly)
     {
-        AssemblyGroup group = assembly.GetInnoAssemblyGroup();
-        return group is AssemblyGroup.Core or AssemblyGroup.Game or AssemblyGroup.Plugin or AssemblyGroup.Editor;
+        return assembly.TryGetInnoAssemblyClassification(
+                   out AssemblyDomain domain,
+                   out _) &&
+               domain == AssemblyDomain.InnoInternal;
     }
 
     private static void PreloadInnoHostDependencies()
@@ -728,6 +1228,8 @@ public static class AssemblyManager
         return new string(value.Select(character => invalid.Contains(character) ? '_' : character).ToArray());
     }
 
+    private readonly record struct PlannedAssembly(AssemblyDomain domain, AssemblyScope scope);
+
     private static void OnAssemblyLoaded(object? sender, AssemblyLoadEventArgs args)
     {
         if (AssemblyLoadContext.GetLoadContext(args.LoadedAssembly) == AssemblyLoadContext.Default)
@@ -748,8 +1250,13 @@ public static class AssemblyManager
         refresh.Activate();
         refresh.Complete();
 
-        foreach (AssemblyModuleEntry module in S_MODULES.Values)
+        foreach (AssemblyModuleEntry module in S_MODULES.Values
+                     .OrderByDescending(static value => value.domain == AssemblyDomain.InnoPlugin
+                         ? 0
+                         : value.scope == AssemblyScope.Runtime ? 1 : 2))
+        {
             BeginUnload(module);
+        }
         S_MODULES.Clear();
         isInitialized = false;
         s_hostCatalogDirty = false;

@@ -2,7 +2,7 @@
 
 [上一页：Diagnose](Inno.Core.Diagnose.md) · [Core 索引](README.md) · [下一页：Mathematics](Inno.Core.Mathematics.md)
 
-Logging 是基础、追加式日志系统。`Log` 自动从调用栈解析 category、源码位置和 AssemblyGroup，`LogManager` 只负责异步分发不可撤回的日志事件。Compiler、Importer 和 Validator 的可替换当前问题属于独立的 [Inno.Core.Diagnose](Inno.Core.Diagnose.md)。
+Logging 是基础、追加式日志系统。`Log` 自动从调用栈解析 category、源码位置、AssemblyDomain 与 AssemblyScope，`LogManager` 只负责异步分发不可撤回的日志事件。Compiler、Importer 和 Validator 的可替换当前问题属于独立的 [Inno.Core.Diagnose](Inno.Core.Diagnose.md)。
 
 ## 初始化
 
@@ -29,7 +29,7 @@ Shutdown 会停止 worker、排空队列，并 Dispose 所有实现 `IDisposable
 - `Error`
 - `Fatal`
 
-格式化采用 `string.Format`。调用方类型名作为 `category`；调用程序集的 `Inno.AssemblyGroup` metadata 解析为 `source`。类型/程序集 metadata 使用弱缓存，不固定热重载 ALC。
+格式化采用 `string.Format`。调用方类型名作为 `category`；调用程序集的当前分类解析为 `domain` 与 `scope`。分类使用弱缓存，不固定热重载 ALC；日志 entry 只复制 enum、字符串、时间与行号，不保存调用方 `Type`/`Assembly`。
 
 `Log` 已作为 Runtime Scripting API 导出到逻辑 namespace `InnoEngine.Logging`。Project 脚本不引用真实的 `Inno.Core.Logging` namespace：
 
@@ -64,7 +64,8 @@ Log.Warn("Health is low: {0}", health);
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `level` | `LogLevel` | 严重程度。 |
-| `source` | `AssemblyGroup` | Native/Game/Core/Plugin/Editor 等来源。 |
+| `domain` | `AssemblyDomain` | InnoInternal/InnoScripting/InnoPlugin 所有权。 |
+| `scope` | `AssemblyScope` | Runtime/Editor 依赖范围。 |
 | `category` | `string` | 通常是调用类型名。 |
 | `message` | `string` | 已渲染文本。 |
 | `time` | `DateTime` | 构造时本地时间。 |
@@ -77,7 +78,7 @@ Log.Warn("Health is low: {0}", health);
 
 ### ConsoleLogSink
 
-`Receive` 根据等级设置 console color，并输出时间、source、category 与消息。
+`Receive` 根据等级设置 console color，并输出时间、domain/scope、category 与消息。
 
 ### FileLogSink
 

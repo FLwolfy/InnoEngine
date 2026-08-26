@@ -21,14 +21,14 @@ internal sealed class AssetObjectConverter : SerializationConverter<AssetObject>
         Guid persistentId = value.identity.persistentId;
         if (persistentId == Guid.Empty)
             throw new InvalidOperationException($"Asset '{value.GetType().FullName}' has no persistent identity at '{writer.path}'.");
-        if (!TypeCacheManager.TryGetStableTypeId(value.GetType(), out Guid stableTypeId))
+        if (!TypeCacheManager.TryGetTypeRef(value.GetType(), out TypeRef typeRef))
         {
             throw new InvalidOperationException(
                 $"Asset type '{value.GetType().FullName}' requires a StableTypeId at '{writer.path}'.");
         }
 
         writer.Write(C_PERSISTENT_ID, persistentId);
-        writer.Write(C_STABLE_TYPE_ID, stableTypeId);
+        writer.Write(C_STABLE_TYPE_ID, typeRef.stableId);
         writer.Write(C_LAST_KNOWN_PATH, value.sourcePath);
         if (writer.context.TryGet(out AssetDependencyCollection? dependencies) && dependencies is not null)
             dependencies.Add(value);

@@ -533,10 +533,10 @@ public sealed class AssetLoader : IDisposable
         record.meta.importerId = importer.importerId;
         record.meta.importerImplementationFingerprint = GetImporterImplementationFingerprint(importer);
         if (record.meta.stableAssetTypeId == Guid.Empty &&
-            TypeCacheManager.TryGetStableTypeId(importer.targetAssetType, out Guid stableTypeId))
+            TypeCacheManager.TryGetTypeRef(importer.targetAssetType, out TypeRef importerTypeRef))
         {
-            record.meta.stableAssetTypeId = stableTypeId;
-            record.stableTypeId = stableTypeId;
+            record.meta.stableAssetTypeId = importerTypeRef.stableId;
+            record.stableTypeId = importerTypeRef.stableId;
         }
         record.meta.importStatus = (int)AssetImportStatus.Failed;
         record.meta.diagnostics = [$"{exception.GetType().Name}: {exception.Message}"];
@@ -571,7 +571,7 @@ public sealed class AssetLoader : IDisposable
                 $"Importer '{importer.GetType().FullName}' returned '{product.asset.GetType().FullName}' " +
                 $"instead of '{importer.targetAssetType.FullName}'.");
         }
-        if (!TypeCacheManager.TryGetStableTypeId(product.asset.GetType(), out Guid stableTypeId))
+        if (!TypeCacheManager.TryGetTypeRef(product.asset.GetType(), out TypeRef assetTypeRef))
         {
             throw new InvalidOperationException(
                 $"Imported asset type '{product.asset.GetType().FullName}' requires a StableTypeId.");
@@ -590,7 +590,7 @@ public sealed class AssetLoader : IDisposable
             relativePath = relativePath,
             sourceHash = sourceHash,
             importerId = importer.importerId,
-            stableAssetTypeId = stableTypeId,
+            stableAssetTypeId = assetTypeRef.stableId,
             assetStateBytes = state,
             runtimeDependencies = runtimeDependencies.Select(ToData).ToArray(),
             importDependencies = context.importDependencies
@@ -928,7 +928,7 @@ public sealed class AssetLoader : IDisposable
             AssetObject dependencyAsset = dependencyRecord?.asset
                 ?? ResolveReferenceLocked(
                     dependency.persistentId,
-                    dependency.stableTypeId,
+                    dependency.type.stableId,
                     dependency.lastKnownPath,
                     ResolveDependencyExpectedType(dependency));
             dependencies.Add(dependencyAsset);
@@ -954,7 +954,8 @@ public sealed class AssetLoader : IDisposable
         {
             return existing;
         }
-        Type type = ResolveDependencyExpectedType(new AssetDependency(persistentId, stableTypeId, lastKnownPath));
+        Type type = ResolveDependencyExpectedType(
+            new AssetDependency(persistentId, new TypeRef(stableTypeId), lastKnownPath));
         if (type == typeof(MissingAsset) &&
             !expectedType.IsAbstract &&
             !expectedType.IsInterface &&
@@ -985,11 +986,11 @@ public sealed class AssetLoader : IDisposable
             {
                 Guid pendingId = m_pendingImportIds[normalized];
                 AssetImporter? pendingImporter = m_importers.FindByPath(normalized);
-                Guid stableType = pendingImporter is not null &&
-                    TypeCacheManager.TryGetStableTypeId(pendingImporter.targetAssetType, out Guid typeId)
-                    ? typeId
-                    : Guid.Empty;
-                result[pendingId] = new AssetDependency(pendingId, stableType, normalized);
+                TypeRef typeRef = pendingImporter is not null &&
+                    TypeCacheManager.TryGetTypeRef(pendingImporter.targetAssetType, out TypeRef pendingTypeRef)
+                    ? pendingTypeRef
+                    : default;
+                result[pendingId] = new AssetDependency(pendingId, typeRef, normalized);
                 continue;
             }
             AssetRecord? dependencyRecord = FindRecordLocked(normalized);
@@ -1004,7 +1005,7 @@ public sealed class AssetLoader : IDisposable
                 ?? throw new InvalidOperationException($"Runtime dependency '{normalized}' has no metadata.");
             result[dependencyRecord.persistentId] = new AssetDependency(
                 dependencyRecord.persistentId,
-                dependencyRecord.stableTypeId,
+                new TypeRef(dependencyRecord.stableTypeId),
                 dependencyRecord.relativePath);
         }
         return result.Values.OrderBy(static value => value.persistentId).ToArray();
@@ -1101,11 +1102,11 @@ public sealed class AssetLoader : IDisposable
             AssetObject? asset = record.asset;
             if (asset is null)
                 continue;
-            bool isCurrent = TypeCacheManager.TryGetRuntimeTypeId(asset.GetType(), out _);
+            bool isCurrent = TypeCacheManager.TryGetTypeRef(asset.GetType(), out _);
             if (isCurrent &&
                 (record.stableTypeId == Guid.Empty ||
-                 !TypeCacheManager.TryResolveType(record.stableTypeId, out Type? currentType) ||
-                 currentType == asset.GetType()))
+                 !new TypeRef(record.stableTypeId).isValid ||
+                 new TypeRef(record.stableTypeId).Resolve() == asset.GetType()))
             {
                 continue;
             }
@@ -1382,7 +1383,7 @@ public sealed class AssetLoader : IDisposable
             ? m_runtimeGraph.GetDependencies(persistentId, recursive: true)
             : m_runtimeGraph.GetDependencies(persistentId);
         return ids.Select(id => m_recordsById.TryGetValue(id, out AssetRecord? dependency)
-                ? new AssetDependency(id, dependency.stableTypeId, dependency.relativePath)
+                ? new AssetDependency(id, new TypeRef(dependency.stableTypeId), dependency.relativePath)
                 : FindDescriptor(record.meta, id))
             .Where(static descriptor => descriptor.persistentId != Guid.Empty)
             .ToArray();
@@ -1594,19 +1595,18 @@ public sealed class AssetLoader : IDisposable
             return null;
         if (record.asset is not null)
             return record.asset.GetType();
-        return TypeCacheManager.TryResolveType(record.stableTypeId, out Type? type) &&
-            type is not null && typeof(AssetObject).IsAssignableFrom(type)
-            ? type
+        TypeRef typeRef = new(record.stableTypeId);
+        return typeRef.isValid && typeof(AssetObject).IsAssignableFrom(typeRef.Resolve())
+            ? typeRef.Resolve()
             : m_importers.FindById(record.meta.importerId)?.targetAssetType;
     }
 
     private Type ResolveDependencyExpectedType(AssetDependency dependency)
     {
-        if (dependency.stableTypeId != Guid.Empty &&
-            TypeCacheManager.TryResolveType(dependency.stableTypeId, out Type? type) &&
-            type is not null && typeof(AssetObject).IsAssignableFrom(type))
+        TypeRef typeRef = dependency.type;
+        if (typeRef.isValid && typeof(AssetObject).IsAssignableFrom(typeRef.Resolve()))
         {
-            return type;
+            return typeRef.Resolve();
         }
         return typeof(MissingAsset);
     }
@@ -2243,7 +2243,7 @@ public sealed class AssetLoader : IDisposable
     private static AssetDependencyData ToData(AssetDependency dependency) => new()
     {
         persistentId = dependency.persistentId,
-        stableTypeId = dependency.stableTypeId,
+        stableTypeId = dependency.type.stableId,
         lastKnownPath = dependency.lastKnownPath
     };
 
@@ -2293,7 +2293,7 @@ public sealed class AssetLoader : IDisposable
     private static AssetDependency[] GetDirectDependencies(AssetMeta meta)
         => meta.runtimeDependencies.Select(static value => new AssetDependency(
             value.persistentId,
-            value.stableTypeId,
+            new TypeRef(value.stableTypeId),
             value.lastKnownPath)).ToArray();
 
     private static AssetDependency FindDescriptor(AssetMeta meta, Guid persistentId)
@@ -2301,7 +2301,7 @@ public sealed class AssetLoader : IDisposable
         AssetDependencyData data = meta.runtimeDependencies.FirstOrDefault(value => value.persistentId == persistentId);
         return data.persistentId == Guid.Empty
             ? default
-            : new AssetDependency(data.persistentId, data.stableTypeId, data.lastKnownPath);
+            : new AssetDependency(data.persistentId, new TypeRef(data.stableTypeId), data.lastKnownPath);
     }
 
     private sealed class AssetRecord

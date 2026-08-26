@@ -37,8 +37,8 @@ internal sealed class SceneElementHistoryHandler : EditorHistoryHandler
             }
             if (current is { isDestroyed: false })
             {
-                bool typeMatches = TypeCacheManager.TryResolveType(data.stableTypeId, out Type? currentType) &&
-                                   currentType is not null && current.GetType() == currentType;
+                TypeRef typeRef = data.type;
+                bool typeMatches = typeRef.isValid && current.GetType() == typeRef.Resolve();
                 bool kindMatches = data.elementKind switch
                 {
                     SceneElementKind.Component => current is GameComponent,
@@ -48,12 +48,12 @@ internal sealed class SceneElementHistoryHandler : EditorHistoryHandler
                 return typeMatches && kindMatches
                     ? EditorHistoryAvailability.Available()
                     : EditorHistoryAvailability.Unavailable(
-                        $"Scene element '{data.elementId}' no longer matches stable type '{data.stableTypeId}'.");
+                        $"Scene element '{data.elementId}' no longer matches stable type '{data.type.stableId}'.");
             }
-            if (!TypeCacheManager.TryResolveType(data.stableTypeId, out Type? type) || type is null)
+            if (!data.type.isValid)
             {
                 return EditorHistoryAvailability.Unavailable(
-                    $"Scene element type '{data.stableTypeId}' is not loaded in the current generation.");
+                    $"Scene element type '{data.type.stableId}' is not loaded in the current generation.");
             }
             if (data.elementKind == SceneElementKind.Component &&
                 IdentityManager.Get<GameObject>(data.ownerId) is not { isRuntimeValid: true })
@@ -222,13 +222,13 @@ internal sealed class SceneElementHistoryHandler : EditorHistoryHandler
             SceneElementKind.Component => SceneElementSerialization.RestoreComponent(
                 IdentityManager.Get<GameObject>(data.ownerId)
                 ?? throw new InvalidOperationException($"Component owner '{data.ownerId}' is unavailable."),
-                data.stableTypeId,
+                data.type,
                 data.elementId,
                 index,
                 state),
             SceneElementKind.System => SceneElementSerialization.RestoreSystem(
                 scene,
-                data.stableTypeId,
+                data.type,
                 data.elementId,
                 index,
                 state),

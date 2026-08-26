@@ -5,7 +5,6 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <InnoAssemblyGroup>Core</InnoAssemblyGroup>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\core\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" />

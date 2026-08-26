@@ -24,16 +24,16 @@ public sealed class MissingGameSystem : GameSystem
         new Dictionary<Guid, Guid>();
 
     internal MissingGameSystem(
-        Guid missingTypeId,
+        TypeRef missingType,
         string missingTypeName,
         ReadOnlySpan<byte> serializedState,
         IReadOnlyList<AssetDependency>? dependencies = null)
     {
-        if (missingTypeId == Guid.Empty)
-            throw new ArgumentException("The missing system type identity cannot be empty.", nameof(missingTypeId));
-        this.missingTypeId = missingTypeId;
+        if (missingType.stableId == Guid.Empty)
+            throw new ArgumentException("The missing system type identity cannot be empty.", nameof(missingType));
+        this.missingType = missingType;
         this.missingTypeName = string.IsNullOrWhiteSpace(missingTypeName)
-            ? missingTypeId.ToString("D")
+            ? missingType.stableId.ToString("D")
             : missingTypeName;
         m_serializedState = serializedState.ToArray();
         m_dependencies = dependencies?.ToArray() ?? [];
@@ -41,9 +41,9 @@ public sealed class MissingGameSystem : GameSystem
     }
 
     /// <summary>
-    /// Gets the stable identity of the unavailable system type.
+    /// Gets the logical identity of the unavailable system type.
     /// </summary>
-    public Guid missingTypeId { get; }
+    public TypeRef missingType { get; }
 
     /// <summary>
     /// Gets the last known managed type name for diagnostics and editor presentation.

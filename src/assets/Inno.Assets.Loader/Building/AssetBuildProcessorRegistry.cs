@@ -25,6 +25,7 @@ internal sealed class AssetBuildProcessorRegistry
     protected override Snapshot Build(TypeCacheSnapshot types)
     {
         Type[] discovered = types.GetTypesWithAttribute<AssetBuildProcessorExtensionAttribute>()
+            .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static value => value.FullName, StringComparer.Ordinal)
             .ToArray();
         var processors = new Dictionary<Type, AssetBuildProcessor>();
@@ -45,7 +46,18 @@ internal sealed class AssetBuildProcessorRegistry
         foreach (AssetBuildProcessor processor in snapshot.byDefinitionType.Values)
         {
             if (processor is IDisposable disposable)
-                disposable.Dispose();
+            {
+                try
+                {
+                    disposable.Dispose();
+                }
+                catch (Exception exception)
+                {
+                    OnCleanupFailed(
+                        $"disposing asset build processor '{processor.GetType().FullName}'",
+                        exception);
+                }
+            }
         }
     }
 

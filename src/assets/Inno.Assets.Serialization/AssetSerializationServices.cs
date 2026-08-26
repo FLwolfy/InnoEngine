@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.Loader;
 using System.Threading;
 
 using Inno.Assets.Core;
@@ -16,9 +17,27 @@ public static class AssetSerializationServices
     /// Sets the resolver used to restore serialized asset references.
     /// </summary>
     /// <param name="referenceResolver">The resolver, or <see langword="null"/> to clear it.</param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the resolver method or target belongs to a collectible assembly load context.
+    /// </exception>
     public static void SetReferenceResolver(
         Func<Guid, Guid, string, Type, string, AssetObject>? referenceResolver)
-        => Volatile.Write(ref s_referenceResolver, referenceResolver);
+    {
+        if (referenceResolver is not null)
+        {
+            foreach (Delegate handler in referenceResolver.GetInvocationList())
+            {
+                if (IsCollectible(handler.Method.DeclaringType) ||
+                    IsCollectible(handler.Target?.GetType()))
+                {
+                    throw new ArgumentException(
+                        "The process-wide asset reference resolver cannot retain a collectible target or method.",
+                        nameof(referenceResolver));
+                }
+            }
+        }
+        Volatile.Write(ref s_referenceResolver, referenceResolver);
+    }
 
     internal static AssetObject ResolveReference(
         Guid persistentId,
@@ -42,4 +61,8 @@ public static class AssetSerializationServices
             expectedType,
             propertyPath);
     }
+
+    private static bool IsCollectible(Type? type)
+        => type is not null &&
+           AssemblyLoadContext.GetLoadContext(type.Assembly) is { IsCollectible: true };
 }

@@ -15,11 +15,12 @@ internal sealed class AddSystemMenuProvider : EditorMenuSource
     {
         if (context.target is not GameScene scene)
             return;
-        foreach (Type type in TypeCacheManager.GetSubTypesOf<GameSystem>())
+        foreach (TypeRef typeRef in TypeCacheManager.GetSubTypesOf<GameSystem>())
         {
+            Type type = typeRef.Resolve();
             if (!IsAddable(type, scene))
                 continue;
-            builder.Add(type.Name, InspectorInteractionIds.C_ADD_SYSTEM, argument: type);
+            builder.Add(type.Name, InspectorInteractionIds.C_ADD_SYSTEM, argument: typeRef);
         }
     }
 

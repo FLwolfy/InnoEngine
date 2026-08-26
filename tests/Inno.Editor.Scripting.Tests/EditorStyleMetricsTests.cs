@@ -62,8 +62,13 @@ public sealed class EditorStyleMetricsTests
             io.Fonts.RendererHasTextures = true;
 
             NativeImGui.NewFrame();
+            NativeImGui.SetNextWindowSize(new Vector2(260f, 180f), ImGuiCond.Always);
             _ = NativeImGui.Begin("Wrapped Text Test");
-            EditorWidget.WrappedText("Literal %s text remains safe and wraps.");
+            float lineHeight = NativeImGui.GetTextLineHeight();
+            EditorWidget.WrappedText(
+                "Literal %s text remains safe and wraps. This deliberately long compilation status " +
+                "must stay inside the modal content width instead of extending beyond its right edge.");
+            Assert.True(NativeImGui.GetItemRectSize().Y > lineHeight);
             Inno.Native.ImGui.ImDrawListPtr windowDrawList = NativeImGui.GetWindowDrawList();
             Inno.Native.ImGui.ImDrawListPtr foregroundDrawList = NativeImGui.GetForegroundDrawList();
             int windowVertexCount = windowDrawList.VtxBuffer.Size;

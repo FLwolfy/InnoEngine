@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
-    <InnoAssemblyGroup>Editor</InnoAssemblyGroup>
+    <InnoAssemblyScope>Editor</InnoAssemblyScope>
     <NoWarn>$(NoWarn);RS1036</NoWarn>
   </PropertyGroup>
 

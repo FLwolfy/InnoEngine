@@ -13,6 +13,7 @@ internal sealed class EditorSettingsCatalog : TypeRegistry<EditorSettingsCatalog
     protected override Snapshot Build(TypeCacheSnapshot types)
     {
         EditorSetting[] definitions = types.GetTypesWithAttribute<EditorSettingPathAttribute>()
+            .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
             .Select(type => CreateDefinition(type))
             .OrderBy(static setting => setting.path, StringComparer.Ordinal)
@@ -40,7 +41,18 @@ internal sealed class EditorSettingsCatalog : TypeRegistry<EditorSettingsCatalog
         for (int i = snapshot.definitions.Length - 1; i >= 0; i--)
         {
             if (snapshot.definitions[i] is IDisposable disposable)
-                disposable.Dispose();
+            {
+                try
+                {
+                    disposable.Dispose();
+                }
+                catch (Exception exception)
+                {
+                    OnCleanupFailed(
+                        $"disposing editor setting '{snapshot.definitions[i].GetType().FullName}'",
+                        exception);
+                }
+            }
         }
     }
 

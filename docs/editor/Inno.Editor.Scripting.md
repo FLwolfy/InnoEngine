@@ -68,7 +68,7 @@ Compiler 读取已提交 artifact snapshot，不直接读取正在被外部编�
 
 `ScriptAssemblies` 不再出现 `1/2/3...` 数字 generation。每个 asmdef/builtin assembly 的 key 分别覆盖自己的 definition、source artifact、scope/options、适用 API、plugin 及直接 dependency key；依赖 key 变化会自然传播到反向依赖，而无关 assembly 直接复用 `.assemblies` 中的 DLL/PDB/XML/type manifest/diagnostics。完整 generation key 只组合有序 assembly key 与 plugin key，并在成功后一次性形成 load staging。Editor 启动和成功 reload 后会对两级 immutable cache 共用 7 天 grace period 与 4 GiB 上限；目录存在只占磁盘，不等于 ALC 常驻内存。
 
-增量发生在编译与 artifact 层，激活仍与 Unity 的默认脚本域 reload 一致：任何成功变化都会创建一个新的 ProjectScripts collectible ALC，并原子切换完整脚本程序集图。这样未重编译 assembly 可以复用字节产物，但不会与新依赖混装在旧 ALC 中，也不会让跨 assembly static/delegate 状态形成半新半旧代际。
+增量同时作用于 artifact 与 ALC closure。物理上下文固定为统一 Plugin ALC、Runtime Scripts ALC、Editor Scripts ALC：Editor-only 变化只替换 Editor；Runtime 变化替换 Runtime + Editor；Plugin 变化替换三者。未重编译 assembly 可以复用不可变字节产物，但每个被纳入 closure 的目标 ALC 都是新 generation，下游绑定同一事务中的精确上游 Assembly 实例，不会出现同名 Plugin/Runtime 类型转换失败。
 
 AssemblyManager 自己的 runtime generation 仍存在于 assembly shadow cache，用于区分 collectible ALC；它不写入 `.imeta`、Scene、Prefab 或 artifact identity。
 
@@ -92,12 +92,11 @@ AssemblyManager 自己的 runtime generation 仍存在于 assembly shadow cache�
 | `compilationStatus` | 当前 stage。 |
 | `lastCompilation` | 最近完整结果。 |
 | `Start` | 建立 IDE 文件、订阅 `AssetManager.Changed`、请求初始 build。 |
-| `RequestCompile` | 标记 dirty，不直接编译。 |
-| `TryCompilePending` | quiet period 后消费请求。 |
-| `CompileAsync` | 在 compiler gate 内从稳定 Asset snapshot 编译完整 assembly graph；没有 worker-thread completion event。 |
-| `ApplyPendingReload` | 主线程安全点首次 Load 或事务 Reload。 |
+| `RecompileScripting()` | 扫描变化、增量编译并只排队必要的反向依赖 ALC closure；无变化不创建 generation。 |
+| `ReloadScripting()` | 保留 Plugin generation，强制重建 Runtime + Editor Scripting ALC；有效 artifact 复用。 |
+| `ReloadPlugins()` | 强制重建统一 Plugin 及两个 Scripting ALC；仅在引用 fingerprint 失效时重编脚本 artifact。 |
 | `GenerateProjectFiles` | 从 Asset Catalog/asmdef 图生成显式 Compile items。 |
-| `Dispose` | 取消 manager lifetime token，等待已进入 compiler gate 的编译完全退出，再取消 Asset observer 并卸载活动 Script Module。 |
+| `Dispose` | 取消 manager lifetime token，等待活动和排队 compiler gate 工作退出，再取消 Asset observer并按 Editor → Runtime → Plugin 卸载活动模块。 |
 
 ```csharp
 using var scripts = new ScriptManager(new ScriptManagerOptions
@@ -106,23 +105,22 @@ using var scripts = new ScriptManager(new ScriptManagerOptions
 });
 
 scripts.Start();
-
-// The initial request is immediately ready. Later requests wait for a focused frame boundary.
-if (window.isFocused && scripts.TryCompilePending(out Task<ScriptCompilationResult>? task))
-{
-    ScriptCompilationResult result = await task;
-    if (result.success)
-        scripts.ApplyPendingReload();
-}
+scripts.RecompileScripting();
+scripts.ReloadScripting();
+scripts.ReloadPlugins();
 ```
 
-Asset Update/Rescan 只在主线程 `TryCompilePending` 启动点和 generation 切换安全点发生，后台编译不调用全局 AssetManager。重载激活后会先对账 Asset Database：释放旧脚本 Asset 的 canonical 实例、修复仍存活 host Asset 的引用，并移除已退休脚本代际留在 AssetManager 静态事件上的 observer。场景替换任一步失败时会逐项尝试结构、assembly generation、Asset 和旧属性/生命周期补偿；identity observer 在转移期间失败也必须恢复旧对象的注册与附着状态。完成通知只来自返回的 Task；`EditorScripting` 在主线程发布 diagnostics 并执行 reload。成功编译不写 Info log；Warning/Error 与源位置保留。失败编译不会清除上一个尚未应用的成功 candidate。`Dispose` 返回后不会再有进行中或排队等待 compiler gate 的编译写入 `lastCompilation`、pending candidate 或进度状态；并发调用 `Dispose` 的线程也会等待首个释放流程完成。卸载活动脚本 module 后还会执行一次 Asset 对账，避免 Asset cache 延迟 collectible ALC 回收。
+三个 public 操作只排队；内部 scheduler 在 Editor 主线程 focus safe point 消费请求、后台编译并在安全点激活。请求强度为 Recompile < ReloadScripting < ReloadPlugins，并发请求合并为最强项，同时只允许一个 compiler/reload transaction。若新请求在编译期间到达，本次结果会被标记为 superseded 而不发布中间 generation，随后以合并后的最强请求重新取得 source/plugin snapshot。Asset Update/Rescan 只在主线程内部启动点和 generation 切换安全点发生，后台编译不调用全局 AssetManager。
+
+重载激活后会对账 Asset Database：释放旧脚本 Asset 的 canonical 实例、修复仍存活 host Asset 的引用，并移除已退休脚本代际留在静态事件上的 observer。场景替换任一步失败时会逐项尝试结构、assembly generation、Asset 和旧属性/生命周期补偿；identity observer 在转移期间失败也必须恢复旧对象的注册与附着状态。失败编译不会清除上一个尚未应用的成功 candidate。`Dispose` 返回后不会再有活动或排队编译写入状态。
+
+`compilationStatus` 只描述当前 queued、compiling、staged、migrating、completed 或 failed 阶段，因此进度 modal 不会被历史 generation 的卸载详情撑大。每次退休 generation 仍由 `WeakReference` monitor 在后台观察；普通 reload 不强制 Full GC。等待超过诊断宽限期的 context 会作为独立的 `Script Unload` 信息诊断，逐项列出 module、domain/scope 与 generation；GC 验证完成后对应诊断会自动清除。Host 外部保存旧 Type/object/delegate/thread 时，新 generation 仍正常运行，诊断会明确协作式卸载的可能保留源，绝不声称强制卸载完成。
 
 ## 编译进度 modal
 
-Editor 在 focus safe point 开始编译后锁定交互。Modal 使用固定宽度，并始终完成淡入、最短停留和淡出，即使实际编译少于 120 ms。
+用户从菜单排队请求或文件观察器产生请求时，Editor 立即以 0% 打开 modal；focus safe point 随后消费请求并锁定交互。Modal 使用固定宽度，状态文字按可用 content width 自动换行，并始终完成淡入、最短停留和淡出，即使实际编译很快完成。
 
-进度由 project generation、source parse、API analysis、diagnostics、emit 和 reload preparation 等真实工作项推进。Roslyn 单次 Emit 没有内部百分比 callback，因此执行某个工作项时进度会停留，完成后跳到下一个比例；不会用计时器伪造连续进度。百分比文字固定绘制在完整进度条的几何中心，不随已填充区域移动。
+进度由 project generation、source parse、API analysis、diagnostics、emit 和 reload preparation 等真实工作项推进。编译阶段占 0–80%，candidate staging 推进到 86%，Scene/extension 原子迁移推进到 94%，只有事务提交或确定无需 reload 时才显示 100%。Roslyn 单次 Emit 没有内部百分比 callback，因此执行某个工作项时进度会停留，完成后跳到下一个比例；不会用计时器伪造连续进度。百分比文字固定绘制在完整进度条的几何中心，不随已填充区域移动。
 
 成功 assembly artifact 同时保存完整的 `diagnostics.json`。启动命中内容缓存时会重新发布同一组 warning，而不是只复用 DLL/PDB 后返回空 diagnostics；因此缓存命中与实际 Roslyn emit 对 Console Panel 具有一致的可观察结果。
 
@@ -215,20 +213,20 @@ IDE 工程是补全和诊断模型；Editor 实际热编译仍使用进程内 Ro
 
 ## Plugin
 
-`Assets/**/Plugins/*.dll` 必须是 managed .NET assembly。`.editor.dll` 只提供给 Editor scope；其他 DLL 可供 Runtime 和 Editor。PDB/deps 是 DLL source unit 的 companion dependency，不单独变成 `BinaryAsset`。
+`Assets/**/Plugins/*.dll` 必须是 managed .NET assembly。`.editor.dll` 由 Plugin asset descriptor 归类为 Editor scope；其他 DLL 为 Runtime scope。所有 Plugin DLL 加入一个统一 collectible generation，原 DLL 不要求写 Inno metadata。PDB/deps 是 DLL source unit 的 companion dependency，不单独变成 `BinaryAsset`。
 
-Plugin 类型只能通过脚本文件中的普通 `using` 显式导入。Assembly simple-name 冲突、坏 PE 或缺失依赖会使 candidate build 失败，旧脚本保持活动。
+Plugin 只能引用 InnoInternal 稳定契约，不能引用项目脚本；Runtime Scripts 只能看到 runtime-scope Plugin/Internal，Editor Scripts 可看到 Runtime Scripts、所有 Plugin 和 Internal Editor API。Plugin 类型只能通过脚本文件中的普通 `using` 显式导入。错误方向、scope 泄漏、Assembly simple-name 冲突、坏 PE、缺失依赖或 cycle 会在 stage/publish 前失败，旧三层 generation 保持活动。ALC 是卸载隔离，不是安全沙箱。
 
 ## Reload 与 Scene 状态
 
-成功 build 通过 `AssemblyManager.BeginReload` 准备候选 TypeCache/Registry。`SceneReloadService` 捕获脚本 Component/System 的 Stable Type ID、serialized state、identity、顺序、引用和 lifecycle flags；Activate 后创建新实例并原位替换，全部成功才 Complete。
+成功 build 通过一个多模块 `AssemblyManager.BeginReload` 准备完整候选 Assembly catalog、TypeCache 与 Registry。`SceneReloadService` 使用 `TypeRef` 捕获脚本 Component/System 的逻辑类型、serialized state、identity、顺序、引用和 lifecycle flags；长期 payload 只编码 Stable ID。旧 extension 的 Stop/Detach、交互瞬态清理、候选 Start/Attach 与状态恢复都在发布回调返回前完成；全部迁移成功才进入 cleanup-only Complete。
 
-`ApplyPendingReload` 在成功前只读取 candidate，不提前消费。Assembly load/reload、Scene migration、registry activation 或 Complete 任一步失败时保留同一 pending candidate 及诊断，等待显式再次应用；Editor 不会每帧自动重试。后续成功编译可以原子替换 pending candidate，Dispose 会释放未应用请求。
+内部 safe-point apply 在成功前只读取 candidate，不提前消费。Plugin/Runtime/Editor 任一 stage、Registry、Asset rescan、Scene restore 或 extension activation 失败都逆序恢复 Scene、extensions、TypeCache、Registry 与全部 previous modules，不发布部分 generation；同一 pending candidate 保留以便显式重试，后续成功编译可原子替换它。
 
 Serialized state 使用逐成员兼容迁移：成员类型保持兼容时恢复旧值；新增成员保留新默认值；删除成员忽略旧数据；同名成员改成不兼容类型时保留新默认值并输出 `INNOHR0001` warning，不会仅因单个字段变化回滚整个程序集。普通 Serialization API 仍保持严格模式。
 
 失败时 Scene 结构和 Assembly transaction 一起 rollback。Edit Mode 不触发生命周期；Runtime reload 会对旧 active instance 调用 `OnDisable`，新 instance 在下一次正常 update 调用 `OnEnable`，不会重复 `Awake`/`Start`，也不会调用 `Reset`/`OnDestroy`。
 
-如果候选 generation 缺少 live Component/System，reload 不再失败：对象会成为 host-owned missing placeholder，并继续保存 Stable Type ID、原类型名、property bytes、asset dependencies、persistent ID、顺序和图引用。类型删除、插件移除、Scene/Prefab round-trip 都不会持有旧 ALC；相同 Stable Type ID 返回时自动原位恢复。恢复构造、identity 转移或 property restore 失败仍回滚到原占位对象，pending candidate 可修复后重试。
+如果候选 generation 缺少 live Component/System，reload 不再失败：对象会成为 host-owned missing placeholder，并继续保存 `TypeRef`（落盘仅 Stable ID）、原类型名、property bytes、asset dependencies、persistent ID、顺序和图引用。类型删除、插件移除、Scene/Prefab round-trip 都不会持有旧 ALC；相同 Stable ID 返回时 `isValid` 自动恢复并原位重建。恢复构造、identity 转移、property restore 或失败清理不完整时仍精确回滚到原占位对象。
 
 无法自动迁移 static 字段、后台 Thread/Task、第三方事件订阅或外部裸 CLR 引用。用户代码需要在 `OnDisable` 释放这些资源。

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.ExceptionServices;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -18,6 +20,11 @@ namespace Inno.Editor.Scripting;
 /// </summary>
 public sealed class ScriptManager : IDisposable
 {
+    private const float C_COMPILATION_PROGRESS_SHARE = 0.8f;
+    private const float C_STAGING_PROGRESS = 0.86f;
+    private const float C_MIGRATION_PROGRESS = 0.94f;
+    private const long C_UNLOAD_DIAGNOSTIC_DELAY_MILLISECONDS = 5_000;
+
     private readonly object m_sync = new();
     private readonly ScriptManagerOptions m_options;
     private readonly SemaphoreSlim m_compileGate = new(1, 1);
@@ -27,15 +34,23 @@ public sealed class ScriptManager : IDisposable
     private readonly CancellationToken m_lifetimeToken;
     private readonly ScriptArtifactCache m_artifactCache;
     private readonly Func<CancellationToken, ValueTask>? m_compileGateProbe;
+    private readonly Func<long> m_timestampProvider;
+    private readonly List<UnloadObservation> m_unloadObservations = [];
 
-    private ScriptCompilationResult? m_pendingCompilation;
+    private PendingReload? m_pendingCompilation;
     private ScriptCompilationResult? m_lastCompilation;
-    private AssemblyModuleHandle? m_scriptModule;
+    private AssemblyModuleHandle? m_pluginModule;
+    private AssemblyModuleHandle? m_runtimeScriptModule;
+    private AssemblyModuleHandle? m_editorScriptModule;
     private string? m_activeCompilationDirectory;
+    private string? m_activePluginFingerprint;
+    private string? m_activeRuntimeFingerprint;
+    private string? m_activeEditorFingerprint;
     private string m_compilationStatus = "Waiting for script changes.";
+    private string m_publishedUnloadDiagnosticSignature = string.Empty;
     private long m_lastCompileRequestTimestamp;
     private float m_compilationProgress;
-    private bool m_compileRequested;
+    private ScriptReloadRequest m_requestedReload;
     private bool m_initialCompileRequested;
     private int m_disposeStarted;
     private int m_isCompiling;
@@ -49,13 +64,14 @@ public sealed class ScriptManager : IDisposable
     /// <exception cref="ArgumentException">Thrown when the configured project root is empty.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the configured debounce duration is negative.</exception>
     public ScriptManager(ScriptManagerOptions options)
-        : this(options, compileGateProbe: null)
+        : this(options, compileGateProbe: null, timestampProvider: null)
     {
     }
 
     internal ScriptManager(
         ScriptManagerOptions options,
-        Func<CancellationToken, ValueTask>? compileGateProbe)
+        Func<CancellationToken, ValueTask>? compileGateProbe,
+        Func<long>? timestampProvider = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         if (string.IsNullOrWhiteSpace(options.projectRootDirectory))
@@ -70,6 +86,7 @@ public sealed class ScriptManager : IDisposable
         };
         m_artifactCache = new ScriptArtifactCache(m_options.outputDirectory);
         m_compileGateProbe = compileGateProbe;
+        m_timestampProvider = timestampProvider ?? (static () => Environment.TickCount64);
         m_lifetimeToken = m_lifetimeCancellation.Token;
     }
 
@@ -82,7 +99,7 @@ public sealed class ScriptManager : IDisposable
         get
         {
             lock (m_sync)
-                return m_compileRequested;
+                return m_requestedReload != ScriptReloadRequest.None;
         }
     }
 
@@ -121,7 +138,7 @@ public sealed class ScriptManager : IDisposable
         {
             lock (m_sync)
             {
-                m_compileRequested = true;
+                m_requestedReload = ScriptReloadRequest.Recompile;
                 m_initialCompileRequested = true;
                 m_lastCompileRequestTimestamp = Environment.TickCount64;
             }
@@ -129,17 +146,27 @@ public sealed class ScriptManager : IDisposable
     }
 
     /// <summary>
-    /// Marks scripts as changed without compiling on the file-watcher thread.
+    /// Queues incremental recompilation of changed script assemblies.
     /// </summary>
-    public void RequestCompile()
+    /// <exception cref="ObjectDisposedException">Thrown after the manager has been disposed.</exception>
+    public void RecompileScripting()
     {
-        ObjectDisposedException.ThrowIf(m_disposed, this);
-        lock (m_sync)
-        {
-            m_compileRequested = true;
-            m_lastCompileRequestTimestamp = Environment.TickCount64;
-        }
+        QueueReload(ScriptReloadRequest.Recompile);
     }
+
+    /// <summary>
+    /// Queues a complete rebuild of both scripting load contexts while retaining the plugin generation.
+    /// Valid cached artifacts are reused.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">Thrown after the manager has been disposed.</exception>
+    public void ReloadScripting() => QueueReload(ScriptReloadRequest.ReloadScripting);
+
+    /// <summary>
+    /// Queues replacement of the unified plugin generation and both dependent scripting generations.
+    /// Valid script artifacts are reused when plugin reference fingerprints are unchanged.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">Thrown after the manager has been disposed.</exception>
+    public void ReloadPlugins() => QueueReload(ScriptReloadRequest.ReloadPlugins);
 
     /// <summary>
     /// Starts a pending compilation after the configured quiet period has elapsed.
@@ -147,20 +174,22 @@ public sealed class ScriptManager : IDisposable
     /// <remarks>The initial automatic request is immediately ready and does not observe the debounce duration.</remarks>
     /// <param name="compilation">The started compilation task, or <see langword="null"/> when none was ready.</param>
     /// <returns><see langword="true"/> when a pending compilation was started.</returns>
-    public bool TryCompilePending(out Task<ScriptCompilationResult>? compilation)
+    internal bool TryCompilePending(out Task<ScriptCompilationResult>? compilation)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
+        ScriptReloadRequest request;
         lock (m_sync)
         {
             long elapsed = Environment.TickCount64 - m_lastCompileRequestTimestamp;
-            if (!m_compileRequested ||
+            if (m_requestedReload == ScriptReloadRequest.None ||
                 isCompiling ||
                 !m_initialCompileRequested && elapsed < m_options.debounceMilliseconds)
             {
                 compilation = null;
                 return false;
             }
-            m_compileRequested = false;
+            request = m_requestedReload;
+            m_requestedReload = ScriptReloadRequest.None;
             m_initialCompileRequested = false;
         }
         if (AssetManager.isInitialized)
@@ -168,7 +197,7 @@ public sealed class ScriptManager : IDisposable
             AssetManager.Update();
             AssetManager.Rescan();
         }
-        compilation = CompileAsync().AsTask();
+        compilation = CompileAsync(request).AsTask();
         return true;
     }
 
@@ -179,7 +208,11 @@ public sealed class ScriptManager : IDisposable
     /// <returns>The complete diagnostics, output path, and activation request produced by the compilation attempt.</returns>
     /// <exception cref="ObjectDisposedException">Thrown after the manager has been disposed.</exception>
     /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken"/> or the manager lifetime token is canceled.</exception>
-    public async ValueTask<ScriptCompilationResult> CompileAsync(
+    internal ValueTask<ScriptCompilationResult> CompileAsync(CancellationToken cancellationToken = default)
+        => CompileAsync(ScriptReloadRequest.Recompile, cancellationToken);
+
+    private async ValueTask<ScriptCompilationResult> CompileAsync(
+        ScriptReloadRequest request,
         CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -203,7 +236,9 @@ public sealed class ScriptManager : IDisposable
                 result = await ScriptCompiler
                     .CompileAsync(
                         m_options,
-                        SetCompilationProgress,
+                        (progress, status) => SetCompilationProgress(
+                            progress * C_COMPILATION_PROGRESS_SHARE,
+                            status),
                         effectiveCancellation)
                     .ConfigureAwait(false);
             }
@@ -223,22 +258,31 @@ public sealed class ScriptManager : IDisposable
                         line: 0,
                         column: 0)],
                     outputDirectory: null,
-                    loadRequest: null);
+                    reloadRequests: null);
             }
             lock (m_sync)
             {
                 if (!m_disposed)
                 {
                     m_lastCompilation = result;
-                    if (result.success)
-                        m_pendingCompilation = result;
+                    if (m_requestedReload != ScriptReloadRequest.None)
+                    {
+                        if (request > m_requestedReload)
+                            m_requestedReload = request;
+                        m_pendingCompilation = null;
+                    }
+                    else if (result.success)
+                    {
+                        m_pendingCompilation = new PendingReload(result, request);
+                    }
+                    SetCompilationProgress(
+                        result.success ? C_COMPILATION_PROGRESS_SHARE : 1f,
+                        m_requestedReload != ScriptReloadRequest.None
+                            ? "Compilation superseded by a queued reload request."
+                            : result.success
+                                ? "Script compilation completed."
+                                : "Script compilation failed.");
                 }
-            }
-            if (!m_disposed)
-            {
-                SetCompilationProgress(
-                    1f,
-                    result.success ? "Script compilation completed." : "Script compilation failed.");
             }
             return result;
         }
@@ -254,30 +298,45 @@ public sealed class ScriptManager : IDisposable
     /// </summary>
     /// <returns><see langword="true"/> when a pending generation was loaded or reloaded successfully; otherwise, <see langword="false"/>.</returns>
     /// <exception cref="ObjectDisposedException">Thrown after the manager has been disposed.</exception>
-    public bool ApplyPendingReload()
+    internal bool ApplyPendingReload()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
-        ScriptCompilationResult? pending;
+        PendingReload? pending;
         lock (m_sync)
+        {
             pending = m_pendingCompilation;
-        if (pending?.loadRequest is not AssemblyLoadRequest request)
+            if (pending is not null && m_requestedReload != ScriptReloadRequest.None)
+            {
+                if (pending.request > m_requestedReload)
+                    m_requestedReload = pending.request;
+                m_pendingCompilation = null;
+                pending = null;
+            }
+        }
+        if (pending is null)
             return false;
 
-        if (m_scriptModule is not AssemblyModuleHandle handle)
+        IReadOnlyList<AssemblyLoadRequest> requests = SelectReloadRequests(pending);
+        if (requests.Count == 0)
         {
-            m_scriptModule = AssemblyManager.Load(request);
-            m_activeCompilationDirectory = pending.outputDirectory;
-            _ = m_artifactCache.Collect([m_activeCompilationDirectory]);
-            ScriptDiagnosticPublisher.ClearReload();
             CompletePendingReload(pending);
-            return true;
+            SetCompilationProgress(1f, "No scripting changes detected.");
+            return false;
         }
 
-        using AssemblyReloadSession reload = AssemblyManager.BeginReload(handle, request);
+        SetCompilationProgress(C_STAGING_PROGRESS, "Staging script reload candidates...");
+        AssemblyModuleInfo[] retiringModules = AssemblyManager.modules
+            .Where(module => requests.Any(request => string.Equals(
+                request.moduleName,
+                module.moduleName,
+                StringComparison.Ordinal)))
+            .ToArray();
+        using AssemblyReloadSession reload = AssemblyManager.BeginReload(requests);
         TypeCacheReloadContext typeReload = reload.context.GetContext<TypeCacheReloadContext>();
         ISceneReloadMigration migration = SceneReloadService.Capture(typeReload);
         try
         {
+            SetCompilationProgress(C_MIGRATION_PROGRESS, "Migrating active script state...");
             migration.PrepareForActivation();
             if (Shell.isInitialized)
             {
@@ -289,9 +348,22 @@ public sealed class ScriptManager : IDisposable
                 AssetManager.Rescan();
             migration.Apply();
             migration.Complete();
-            _ = reload.Complete();
-            m_activeCompilationDirectory = pending.outputDirectory;
+            AssemblyUnloadMonitor unload = reload.Complete();
+            if (retiringModules.Length > 0)
+            {
+                lock (m_sync)
+                {
+                    m_unloadObservations.Add(new UnloadObservation(
+                        unload,
+                        retiringModules,
+                        m_timestampProvider()));
+                }
+            }
+            m_activeCompilationDirectory = pending.compilation.outputDirectory;
             _ = m_artifactCache.Collect([m_activeCompilationDirectory]);
+            RefreshModuleHandles();
+            UpdateActiveFingerprints(requests);
+            SetCompilationProgress(1f, "Script reload completed.");
         }
         catch (Exception exception)
         {
@@ -352,18 +424,26 @@ public sealed class ScriptManager : IDisposable
                     AssetManager.Changed -= OnAssetDatabaseChanged;
                 lock (m_sync)
                 {
-                    m_compileRequested = false;
+                    m_requestedReload = ScriptReloadRequest.None;
                     m_initialCompileRequested = false;
                     m_pendingCompilation = null;
+                    m_unloadObservations.Clear();
                 }
-                if (m_scriptModule is AssemblyModuleHandle handle && AssemblyManager.isInitialized)
+                if (AssemblyManager.isInitialized)
                 {
-                    _ = AssemblyManager.Unload(handle);
-                    m_scriptModule = null;
-                    if (AssetManager.isInitialized)
+                    AssemblyModuleHandle[] modules =
+                    [
+                        .. new[] { m_editorScriptModule, m_runtimeScriptModule, m_pluginModule }
+                            .OfType<AssemblyModuleHandle>()
+                    ];
+                    if (modules.Length > 0)
+                        _ = AssemblyManager.Unload(modules);
+                    m_pluginModule = null;
+                    m_runtimeScriptModule = null;
+                    m_editorScriptModule = null;
+                    if (modules.Length > 0 && AssetManager.isInitialized)
                         AssetManager.Rescan();
                 }
-                m_scriptModule = null;
                 m_activeCompilationDirectory = null;
                 ScriptDiagnosticPublisher.ClearAll();
             }
@@ -385,6 +465,54 @@ public sealed class ScriptManager : IDisposable
         }
     }
 
+    internal void RefreshUnloadDiagnostics()
+    {
+        AssemblyModuleInfo[]? pendingModules = null;
+        bool clearDiagnostics = false;
+        lock (m_sync)
+        {
+            if (m_disposed)
+                return;
+            for (int i = m_unloadObservations.Count - 1; i >= 0; i--)
+            {
+                UnloadObservation observation = m_unloadObservations[i];
+                if (!observation.monitor.isCompleted)
+                    continue;
+                m_unloadObservations.RemoveAt(i);
+            }
+
+            long currentTimestamp = m_timestampProvider();
+            AssemblyModuleInfo[] reportableModules = m_unloadObservations
+                .Where(observation =>
+                    currentTimestamp - observation.observedAtTimestamp >= C_UNLOAD_DIAGNOSTIC_DELAY_MILLISECONDS)
+                .SelectMany(static observation => observation.modules)
+                .GroupBy(
+                    static module => (module.moduleName, module.domain, module.scope, module.generation))
+                .Select(static group => group.First())
+                .OrderBy(static module => module.domain)
+                .ThenBy(static module => module.scope)
+                .ThenBy(static module => module.moduleName, StringComparer.Ordinal)
+                .ThenBy(static module => module.generation)
+                .ToArray();
+            string signature = string.Join(
+                "\n",
+                reportableModules.Select(static module =>
+                    $"{module.domain}/{module.scope}/{module.moduleName}/{module.generation}"));
+            if (string.Equals(signature, m_publishedUnloadDiagnosticSignature, StringComparison.Ordinal))
+                return;
+            m_publishedUnloadDiagnosticSignature = signature;
+            if (reportableModules.Length == 0)
+                clearDiagnostics = true;
+            else
+                pendingModules = reportableModules;
+        }
+
+        if (clearDiagnostics)
+            ScriptDiagnosticPublisher.ClearUnload();
+        else if (pendingModules is not null)
+            ScriptDiagnosticPublisher.PublishPendingUnloads(pendingModules);
+    }
+
     private void OnAssetDatabaseChanged(AssetChangeSet changeSet)
     {
         if (m_disposed || !m_options.autoCompile)
@@ -394,7 +522,9 @@ public sealed class ScriptManager : IDisposable
             AssetChange change = changeSet.changes[i];
             if (!IsScriptInput(change.relativePath) && !IsScriptInput(change.oldRelativePath))
                 continue;
-            RequestCompile();
+            QueueReload(IsPluginInput(change.relativePath) || IsPluginInput(change.oldRelativePath)
+                ? ScriptReloadRequest.ReloadPlugins
+                : ScriptReloadRequest.Recompile);
             return;
         }
     }
@@ -405,7 +535,110 @@ public sealed class ScriptManager : IDisposable
         Volatile.Write(ref m_compilationStatus, status);
     }
 
-    private void CompletePendingReload(ScriptCompilationResult applied)
+    private void QueueReload(ScriptReloadRequest request)
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        lock (m_sync)
+        {
+            if (request > m_requestedReload)
+                m_requestedReload = request;
+            m_lastCompileRequestTimestamp = Environment.TickCount64;
+        }
+        SetCompilationProgress(0f, request switch
+        {
+            ScriptReloadRequest.ReloadPlugins => "Plugin and scripting reload queued.",
+            ScriptReloadRequest.ReloadScripting => "Full scripting reload queued.",
+            _ => "Scripting recompile queued."
+        });
+    }
+
+    private IReadOnlyList<AssemblyLoadRequest> SelectReloadRequests(PendingReload pending)
+    {
+        IReadOnlyList<AssemblyLoadRequest> requests = pending.compilation.reloadRequests;
+        if (requests.Count == 0)
+            return [];
+        if (m_pluginModule is null || m_runtimeScriptModule is null || m_editorScriptModule is null)
+            return requests;
+        if (pending.request == ScriptReloadRequest.ReloadPlugins)
+            return requests;
+        if (pending.request == ScriptReloadRequest.ReloadScripting)
+            return requests.Where(static request => request.domain == AssemblyDomain.InnoScripting).ToArray();
+        if (string.Equals(
+                pending.compilation.outputDirectory,
+                m_activeCompilationDirectory,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return [];
+        }
+
+        var compiled = pending.compilation.compiledAssemblies.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        AssemblyLoadRequest? runtime = requests.SingleOrDefault(static request =>
+            request.domain == AssemblyDomain.InnoScripting && request.scope == AssemblyScope.Runtime);
+        AssemblyLoadRequest? editor = requests.SingleOrDefault(static request =>
+            request.domain == AssemblyDomain.InnoScripting && request.scope == AssemblyScope.Editor);
+        if (runtime is not null &&
+            (GetOwnedAssemblyNames(runtime).Any(compiled.Contains) ||
+             !string.Equals(
+                 ComputeRequestFingerprint(runtime),
+                 m_activeRuntimeFingerprint,
+                 StringComparison.Ordinal)))
+        {
+            return requests.Where(static request => request.domain == AssemblyDomain.InnoScripting).ToArray();
+        }
+        if (editor is not null &&
+            (GetOwnedAssemblyNames(editor).Any(compiled.Contains) ||
+             !string.Equals(
+                 ComputeRequestFingerprint(editor),
+                 m_activeEditorFingerprint,
+                 StringComparison.Ordinal)))
+        {
+            return [editor];
+        }
+        return [];
+    }
+
+    private void RefreshModuleHandles()
+    {
+        IReadOnlyList<AssemblyModuleInfo> modules = AssemblyManager.modules;
+        m_pluginModule = modules.Single(static module => module.moduleName == "ProjectPlugins").handle;
+        m_runtimeScriptModule = modules.Single(static module => module.moduleName == "RuntimeScripts").handle;
+        m_editorScriptModule = modules.Single(static module => module.moduleName == "EditorScripts").handle;
+    }
+
+    private void UpdateActiveFingerprints(IReadOnlyList<AssemblyLoadRequest> requests)
+    {
+        foreach (AssemblyLoadRequest request in requests)
+        {
+            string fingerprint = ComputeRequestFingerprint(request);
+            if (request.domain == AssemblyDomain.InnoPlugin)
+                m_activePluginFingerprint = fingerprint;
+            else if (request.scope == AssemblyScope.Runtime)
+                m_activeRuntimeFingerprint = fingerprint;
+            else
+                m_activeEditorFingerprint = fingerprint;
+        }
+    }
+
+    private static IEnumerable<string> GetOwnedAssemblyNames(AssemblyLoadRequest request)
+        => new[] { request.mainAssemblyPath }
+            .Concat(request.preloadAssemblyPaths)
+            .Select(static path => System.Reflection.AssemblyName.GetAssemblyName(path).Name ?? string.Empty);
+
+    private static string ComputeRequestFingerprint(AssemblyLoadRequest request)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        foreach (string path in new[] { request.mainAssemblyPath }
+                     .Concat(request.preloadAssemblyPaths)
+                     .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase))
+        {
+            byte[] name = System.Text.Encoding.UTF8.GetBytes(System.IO.Path.GetFileName(path));
+            hash.AppendData(name);
+            hash.AppendData(System.IO.File.ReadAllBytes(path));
+        }
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
+
+    private void CompletePendingReload(PendingReload applied)
     {
         lock (m_sync)
         {
@@ -421,6 +654,14 @@ public sealed class ScriptManager : IDisposable
            path.EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase) ||
            path.EndsWith(".iasmdef", StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsPluginInput(string path)
+        => !string.IsNullOrWhiteSpace(path) &&
+           (path.StartsWith("Plugins/", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("/Plugins/", StringComparison.OrdinalIgnoreCase)) &&
+           (path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
+            path.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase) ||
+            path.EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase));
+
     private static void TryRollbackStage(Action rollback, ICollection<Exception> failures)
     {
         try
@@ -431,5 +672,22 @@ public sealed class ScriptManager : IDisposable
         {
             failures.Add(exception);
         }
+    }
+
+    private sealed record PendingReload(
+        ScriptCompilationResult compilation,
+        ScriptReloadRequest request);
+
+    private sealed record UnloadObservation(
+        AssemblyUnloadMonitor monitor,
+        IReadOnlyList<AssemblyModuleInfo> modules,
+        long observedAtTimestamp);
+
+    private enum ScriptReloadRequest
+    {
+        None,
+        Recompile,
+        ReloadScripting,
+        ReloadPlugins
     }
 }

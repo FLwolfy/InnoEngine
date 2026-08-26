@@ -16,13 +16,13 @@ internal sealed class TypeIdentityRegistry
     // RFC 4122 DNS namespace UUID, used to build deterministic UUIDv5 for auto stable ids.
     private static readonly Guid C_STABLE_NAMESPACE_GUID = Guid.Parse("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
     private const string C_GENERATED_STABLE_TYPE_METADATA_KEY = "Inno.StableTypeId";
+    private static int S_NEXT_RUNTIME_TYPE_ID;
 
     private readonly Lock m_sync = new();
     private Dictionary<Type, Guid> m_stableByType = [];
     private Dictionary<Guid, Type> m_typeByStable = [];
     private Dictionary<Type, int> m_runtimeByType = [];
     private Dictionary<int, Type> m_typeByRuntime = [];
-    private int m_nextRuntimeTypeId = 1;
     private int m_version;
 
     public int version
@@ -104,14 +104,10 @@ internal sealed class TypeIdentityRegistry
             .ToArray();
 
         Dictionary<Type, int> previousRuntimeByType = [];
-        int nextRuntimeTypeId = 1;
         if (previous is not null)
         {
             lock (previous.m_sync)
-            {
                 previousRuntimeByType = new Dictionary<Type, int>(previous.m_runtimeByType);
-                nextRuntimeTypeId = previous.m_nextRuntimeTypeId;
-            }
         }
 
         var runtimeByType = new Dictionary<Type, int>(orderedTypes.Length);
@@ -121,9 +117,7 @@ internal sealed class TypeIdentityRegistry
             Type type = orderedTypes[i];
             int runtimeId;
             if (!previousRuntimeByType.TryGetValue(type, out runtimeId))
-            {
-                runtimeId = nextRuntimeTypeId++;
-            }
+                runtimeId = AllocateRuntimeTypeId();
 
             runtimeByType[type] = runtimeId;
             typeByRuntime[runtimeId] = type;
@@ -135,7 +129,6 @@ internal sealed class TypeIdentityRegistry
             m_typeByStable = typeByStable;
             m_runtimeByType = runtimeByType;
             m_typeByRuntime = typeByRuntime;
-            m_nextRuntimeTypeId = nextRuntimeTypeId;
             m_version = previous?.version + 1 ?? 1;
         }
     }
@@ -148,6 +141,31 @@ internal sealed class TypeIdentityRegistry
         {
             return m_stableByType.TryGetValue(type, out stableTypeId);
         }
+    }
+
+    public bool TryGetTypeRef(Type type, out TypeRef typeRef)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+
+        lock (m_sync)
+        {
+            if (m_stableByType.TryGetValue(type, out Guid stableId) &&
+                m_runtimeByType.TryGetValue(type, out int runtimeId))
+            {
+                typeRef = new TypeRef(stableId, runtimeId);
+                return true;
+            }
+        }
+
+        typeRef = default;
+        return false;
+    }
+
+    public TypeRef GetTypeRef(Type type)
+    {
+        if (TryGetTypeRef(type, out TypeRef typeRef))
+            return typeRef;
+        throw new InvalidOperationException($"Type '{type.FullName}' does not belong to this type-cache snapshot.");
     }
 
     public bool TryResolveType(Guid stableTypeId, out Type? type)
@@ -186,7 +204,7 @@ internal sealed class TypeIdentityRegistry
                 return existing;
             }
 
-            int runtimeId = m_nextRuntimeTypeId++;
+            int runtimeId = AllocateRuntimeTypeId();
             m_runtimeByType[type] = runtimeId;
             m_typeByRuntime[runtimeId] = type;
             return runtimeId;
@@ -206,6 +224,42 @@ internal sealed class TypeIdentityRegistry
 
         type = null;
         return false;
+    }
+
+    public bool TryResolveType(TypeRef typeRef, out Type? type)
+    {
+        lock (m_sync)
+        {
+            if (typeRef.stableId == Guid.Empty)
+            {
+                type = null;
+                return false;
+            }
+            if (typeRef.runtimeId > 0 &&
+                m_typeByRuntime.TryGetValue(typeRef.runtimeId, out Type? runtimeType) &&
+                m_stableByType.TryGetValue(runtimeType, out Guid runtimeStableId) &&
+                runtimeStableId == typeRef.stableId)
+            {
+                type = runtimeType;
+                return true;
+            }
+            if (m_typeByStable.TryGetValue(typeRef.stableId, out Type? stableType))
+            {
+                type = stableType;
+                return true;
+            }
+        }
+
+        type = null;
+        return false;
+    }
+
+    private static int AllocateRuntimeTypeId()
+    {
+        int runtimeId = Interlocked.Increment(ref S_NEXT_RUNTIME_TYPE_ID);
+        if (runtimeId <= 0)
+            throw new InvalidOperationException("The process-wide runtime type identity space is exhausted.");
+        return runtimeId;
     }
 
     public IReadOnlyDictionary<string, Guid> GetStableTypeMapSnapshot()

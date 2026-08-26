@@ -43,6 +43,7 @@ internal sealed class AssetImporterRegistry
     protected override Snapshot Build(TypeCacheSnapshot types)
     {
         Type[] discovered = types.GetTypesWithAttribute<AssetImporterExtensionAttribute>()
+            .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static value => value.FullName, StringComparer.Ordinal)
             .ToArray();
         var byExtension = new Dictionary<string, AssetImporter>(StringComparer.OrdinalIgnoreCase);
@@ -120,7 +121,18 @@ internal sealed class AssetImporterRegistry
         foreach (AssetImporter importer in snapshot.byId.Values)
         {
             if (disposed.Add(importer) && importer is IDisposable disposable)
-                disposable.Dispose();
+            {
+                try
+                {
+                    disposable.Dispose();
+                }
+                catch (Exception exception)
+                {
+                    OnCleanupFailed(
+                        $"disposing asset importer '{importer.GetType().FullName}'",
+                        exception);
+                }
+            }
         }
     }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace Inno.Core.Reflection.Internal;
 
@@ -73,7 +74,7 @@ internal static class TypeRegistryCoordinator
         catch
         {
             for (int i = transactions.Count - 1; i >= 0; i--)
-                transactions[i].Rollback();
+                TryCleanup(transactions[i].Rollback, "prepared registry rollback");
             throw;
         }
     }
@@ -86,6 +87,18 @@ internal static class TypeRegistryCoordinator
 
     private static void RemoveCollectedRegistries()
         => S_REGISTRIES.RemoveAll(static registration => !registration.registry.TryGetTarget(out _));
+
+    private static void TryCleanup(Action cleanup, string phase)
+    {
+        try
+        {
+            cleanup();
+        }
+        catch (Exception exception)
+        {
+            Trace.TraceError("Type registry {0} failed: {1}", phase, exception);
+        }
+    }
 
     private readonly record struct RegistryReference(
         Guid id,
@@ -133,7 +146,7 @@ internal sealed class TypeRegistryRefreshSet(IReadOnlyList<ITypeRegistryTransact
         if (m_finished)
             return;
         for (int i = 0; i < transactions.Count; i++)
-            transactions[i].Complete();
+            TryCleanup(transactions[i].Complete, "transaction completion");
         m_finished = true;
     }
 
@@ -142,7 +155,19 @@ internal sealed class TypeRegistryRefreshSet(IReadOnlyList<ITypeRegistryTransact
         if (m_finished)
             return;
         for (int i = transactions.Count - 1; i >= 0; i--)
-            transactions[i].Rollback();
+            TryCleanup(transactions[i].Rollback, "transaction rollback");
         m_finished = true;
+    }
+
+    private static void TryCleanup(Action cleanup, string phase)
+    {
+        try
+        {
+            cleanup();
+        }
+        catch (Exception exception)
+        {
+            Trace.TraceError("Type registry {0} failed: {1}", phase, exception);
+        }
     }
 }

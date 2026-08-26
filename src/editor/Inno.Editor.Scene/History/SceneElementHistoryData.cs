@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using System.Text;
 
+using Inno.Core.Reflection;
+
 namespace Inno.Editor.Scene;
 
 internal sealed record SceneElementHistoryData(
@@ -9,7 +11,7 @@ internal sealed record SceneElementHistoryData(
     Guid sceneId,
     Guid ownerId,
     Guid elementId,
-    Guid stableTypeId,
+    TypeRef type,
     int beforeIndex,
     int afterIndex,
     bool existsBefore,
@@ -26,7 +28,7 @@ internal sealed record SceneElementHistoryData(
         writer.Write(sceneId.ToByteArray());
         writer.Write(ownerId.ToByteArray());
         writer.Write(elementId.ToByteArray());
-        writer.Write(stableTypeId.ToByteArray());
+        writer.Write(type.stableId.ToByteArray());
         writer.Write(beforeIndex);
         writer.Write(afterIndex);
         writer.Write(existsBefore);
@@ -55,7 +57,7 @@ internal sealed record SceneElementHistoryData(
         Guid sceneId = new(reader.ReadBytes(16));
         Guid ownerId = new(reader.ReadBytes(16));
         Guid elementId = new(reader.ReadBytes(16));
-        Guid stableTypeId = new(reader.ReadBytes(16));
+        TypeRef type = new(new Guid(reader.ReadBytes(16)));
         int beforeIndex = reader.ReadInt32();
         int afterIndex = reader.ReadInt32();
         bool existsBefore = reader.ReadBoolean();
@@ -80,7 +82,7 @@ internal sealed record SceneElementHistoryData(
             sceneId,
             ownerId,
             elementId,
-            stableTypeId,
+            type,
             beforeIndex,
             afterIndex,
             existsBefore,

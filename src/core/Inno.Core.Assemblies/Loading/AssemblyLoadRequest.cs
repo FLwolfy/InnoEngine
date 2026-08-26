@@ -27,4 +27,24 @@ public sealed class AssemblyLoadRequest
     /// Gets or sets whether the module load context supports cooperative unloading.
     /// </summary>
     public bool collectible { get; init; } = true;
+
+    /// <summary>
+    /// Gets or sets the ownership domain for every assembly in this module.
+    /// </summary>
+    public AssemblyDomain domain { get; init; } = AssemblyDomain.InnoPlugin;
+
+    /// <summary>
+    /// Gets or sets the dependency scope for assemblies without a more specific internal descriptor.
+    /// </summary>
+    public AssemblyScope scope { get; init; } = AssemblyScope.Runtime;
+
+    /// <summary>
+    /// Gets per-assembly scope overrides keyed by managed assembly simple name.
+    /// </summary>
+    /// <remarks>
+    /// This is used when one plugin generation contains both runtime and editor-only assemblies.
+    /// Names not present in the map use <see cref="scope"/>.
+    /// </remarks>
+    public IReadOnlyDictionary<string, AssemblyScope> assemblyScopes { get; init; } =
+        new Dictionary<string, AssemblyScope>(StringComparer.OrdinalIgnoreCase);
 }

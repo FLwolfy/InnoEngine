@@ -419,7 +419,7 @@ internal sealed class ConsolePanel : EditorPanel
     private static void DrawDetail(EditorConsoleEntry entry)
     {
         string timeText = entry.time.ToString("HH:mm:ss");
-        string sourceText = entry.source.ToString();
+        string sourceText = entry.source;
         if (string.IsNullOrWhiteSpace(sourceText))
         {
             sourceText = "-";

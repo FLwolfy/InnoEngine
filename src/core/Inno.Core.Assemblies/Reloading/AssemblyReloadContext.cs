@@ -15,13 +15,13 @@ public sealed class AssemblyReloadContext
     internal AssemblyReloadContext(
         AssemblyCatalogSnapshot previousCatalog,
         AssemblyCatalogSnapshot candidateCatalog,
-        AssemblyModuleHandle module,
+        IReadOnlyList<AssemblyModuleHandle> modules,
         IReadOnlyList<object> participantContexts)
     {
         m_previousCatalog = previousCatalog;
         m_candidateCatalog = candidateCatalog;
         m_participantContexts = participantContexts;
-        this.module = module;
+        this.modules = modules;
     }
 
     /// <summary>
@@ -37,9 +37,14 @@ public sealed class AssemblyReloadContext
         => m_candidateCatalog ?? throw CreateCompletedException();
 
     /// <summary>
-    /// Gets the logical module being reloaded.
+    /// Gets the first logical module in dependency staging order.
     /// </summary>
-    public AssemblyModuleHandle module { get; }
+    public AssemblyModuleHandle module => modules[0];
+
+    /// <summary>
+    /// Gets every logical module staged by this atomic reload transaction.
+    /// </summary>
+    public IReadOnlyList<AssemblyModuleHandle> modules { get; }
 
     /// <summary>
     /// Gets a context contributed by a registered catalog participant.

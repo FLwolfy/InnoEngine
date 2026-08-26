@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace Inno.Core.Assemblies.Internal;
 
@@ -44,7 +45,7 @@ internal static class AssemblyCatalogCoordinator
         catch
         {
             for (int i = transactions.Count - 1; i >= 0; i--)
-                transactions[i].Rollback();
+                TryCleanup(transactions[i].Rollback, "prepared transaction rollback");
             throw;
         }
     }
@@ -57,6 +58,18 @@ internal static class AssemblyCatalogCoordinator
 
     private static void RemoveCollectedParticipants()
         => S_PARTICIPANTS.RemoveAll(static registration => !registration.participant.TryGetTarget(out _));
+
+    private static void TryCleanup(Action cleanup, string phase)
+    {
+        try
+        {
+            cleanup();
+        }
+        catch (Exception exception)
+        {
+            Trace.TraceError("Assembly catalog {0} failed: {1}", phase, exception);
+        }
+    }
 
     private readonly record struct ParticipantReference(
         Guid id,
@@ -118,7 +131,7 @@ internal sealed class AssemblyCatalogRefreshSet(IReadOnlyList<IAssemblyCatalogTr
         if (m_finished)
             return;
         for (int i = 0; i < transactions.Count; i++)
-            transactions[i].Complete();
+            TryCleanup(transactions[i].Complete, "transaction completion");
         m_finished = true;
     }
 
@@ -127,7 +140,19 @@ internal sealed class AssemblyCatalogRefreshSet(IReadOnlyList<IAssemblyCatalogTr
         if (m_finished)
             return;
         for (int i = transactions.Count - 1; i >= 0; i--)
-            transactions[i].Rollback();
+            TryCleanup(transactions[i].Rollback, "transaction rollback");
         m_finished = true;
+    }
+
+    private static void TryCleanup(Action cleanup, string phase)
+    {
+        try
+        {
+            cleanup();
+        }
+        catch (Exception exception)
+        {
+            Trace.TraceError("Assembly catalog {0} failed: {1}", phase, exception);
+        }
     }
 }

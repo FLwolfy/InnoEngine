@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <InnoAssemblyGroup>Editor</InnoAssemblyGroup>
+    <InnoAssemblyScope>Editor</InnoAssemblyScope>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\assets\Inno.Assets\Inno.Assets.csproj" />

@@ -23,6 +23,10 @@ internal static class ScriptCompiler
 {
     private const string C_GAME_ASSEMBLY_NAME = "Inno.GameScripts";
     private const string C_EDITOR_ASSEMBLY_NAME = "Inno.EditorScripts";
+    private const string C_PLUGIN_MARKER_ASSEMBLY_NAME = "Inno.ProjectPlugins";
+    private const string C_PLUGIN_MODULE_NAME = "ProjectPlugins";
+    private const string C_RUNTIME_MODULE_NAME = "RuntimeScripts";
+    private const string C_EDITOR_MODULE_NAME = "EditorScripts";
     private static readonly object S_CACHE_SYNC = new();
 
     internal static async ValueTask<ScriptCompilationResult> CompileAsync(
@@ -76,7 +80,7 @@ internal static class ScriptCompiler
                 true,
                 cachedResult!.diagnostics,
                 cachedResult.outputDirectory,
-                cachedResult.loadRequest,
+                cachedResult.reloadRequests,
                 compiledAssemblies: [],
                 reusedAssemblies: sources.assemblies.Select(static assembly => assembly.name).ToArray());
         }
@@ -91,9 +95,14 @@ internal static class ScriptCompiler
         if (!TryCopyPlugins(sources, stagingDirectory, diagnostics, out string[] runtimePlugins, out string[] editorPlugins))
         {
             DeleteStagingDirectory(stagingDirectory);
-            return new ScriptCompilationResult(false, diagnostics, outputDirectory: null, loadRequest: null);
+            return new ScriptCompilationResult(false, diagnostics, outputDirectory: null, reloadRequests: null);
         }
         progress.Complete("Script plugins copied.");
+        if (!TryEmitPluginMarker(stagingDirectory, platformReferences, diagnostics))
+        {
+            DeleteStagingDirectory(stagingDirectory);
+            return new ScriptCompilationResult(false, diagnostics, outputDirectory: null, reloadRequests: null);
+        }
 
         var compiledPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (ScriptAssemblyInput assembly in sources.assemblies)
@@ -148,7 +157,7 @@ internal static class ScriptCompiler
             {
                 DeleteStagingDirectory(assemblyStagingDirectory);
                 DeleteStagingDirectory(stagingDirectory);
-                return new ScriptCompilationResult(false, diagnostics, outputDirectory: null, loadRequest: null);
+                return new ScriptCompilationResult(false, diagnostics, outputDirectory: null, reloadRequests: null);
             }
             File.WriteAllText(
                 GetDiagnosticsPath(assemblyStagingDirectory),
@@ -175,33 +184,21 @@ internal static class ScriptCompiler
             JsonSerializer.Serialize(diagnostics));
         CommitGenerationCache(stagingDirectory, outputDirectory, sources);
 
-        string gameAssemblyPath = Path.Combine(outputDirectory, C_GAME_ASSEMBLY_NAME + ".dll");
         runtimePlugins = ResolveCommittedPluginPaths(outputDirectory, runtimePlugins);
         editorPlugins = ResolveCommittedPluginPaths(outputDirectory, editorPlugins);
 
         progress.Begin("Preparing the script reload...");
-        var preloadPaths = sources.assemblies
-            .Where(static assembly => !string.Equals(
-                assembly.name,
-                C_GAME_ASSEMBLY_NAME,
-                StringComparison.Ordinal))
-            .Select(assembly => Path.Combine(outputDirectory, assembly.name + ".dll"))
-            .ToList();
-        preloadPaths.AddRange(runtimePlugins);
-        preloadPaths.AddRange(editorPlugins);
-        var request = new AssemblyLoadRequest
-        {
-            moduleName = "ProjectScripts",
-            mainAssemblyPath = gameAssemblyPath,
-            preloadAssemblyPaths = preloadPaths,
-            collectible = true
-        };
+        IReadOnlyList<AssemblyLoadRequest> requests = CreateReloadRequests(
+            outputDirectory,
+            sources,
+            runtimePlugins,
+            editorPlugins);
         progress.Complete("Script reload prepared.");
         return new ScriptCompilationResult(
             true,
             diagnostics,
             outputDirectory,
-            request,
+            requests,
             compiledAssemblies,
             reusedAssemblies);
     }
@@ -719,6 +716,8 @@ internal static class ScriptCompiler
             if (!IsCachedAssemblyComplete(outputDirectory, assembly.name))
                 return false;
         }
+        if (!File.Exists(Path.Combine(outputDirectory, C_PLUGIN_MARKER_ASSEMBLY_NAME + ".dll")))
+            return false;
 
         string[] runtimePlugins = ResolveCachedPluginPaths(
             outputDirectory,
@@ -731,27 +730,15 @@ internal static class ScriptCompiler
         {
             return false;
         }
-        string gameAssemblyPath = Path.Combine(outputDirectory, C_GAME_ASSEMBLY_NAME + ".dll");
-        var preloadPaths = sources.assemblies
-            .Where(static assembly => !string.Equals(
-                assembly.name,
-                C_GAME_ASSEMBLY_NAME,
-                StringComparison.Ordinal))
-            .Select(assembly => Path.Combine(outputDirectory, assembly.name + ".dll"))
-            .ToList();
-        preloadPaths.AddRange(runtimePlugins);
-        preloadPaths.AddRange(editorPlugins);
         result = new ScriptCompilationResult(
             success: true,
             diagnostics: diagnostics,
             outputDirectory: outputDirectory,
-            loadRequest: new AssemblyLoadRequest
-            {
-                moduleName = "ProjectScripts",
-                mainAssemblyPath = gameAssemblyPath,
-                preloadAssemblyPaths = preloadPaths,
-                collectible = true
-            });
+            reloadRequests: CreateReloadRequests(
+                outputDirectory,
+                sources,
+                runtimePlugins,
+                editorPlugins));
         TryTouchCacheDirectory(outputDirectory);
         return true;
     }
@@ -864,12 +851,100 @@ internal static class ScriptCompiler
         string assemblyName,
         bool isEditorAssembly)
     {
-        string assemblyGroup = isEditorAssembly ? "Editor" : "Game";
+        string assemblyScope = isEditorAssembly ? "Editor" : "Runtime";
         return $"""
             #nullable enable
-            [assembly: System.Reflection.AssemblyMetadata("Inno.AssemblyGroup", "{assemblyGroup}")]
+            [assembly: System.Reflection.AssemblyMetadata("Inno.AssemblyDomain", "InnoScripting")]
+            [assembly: System.Reflection.AssemblyMetadata("Inno.AssemblyScope", "{assemblyScope}")]
             [assembly: System.Reflection.AssemblyMetadata("Inno.ScriptAssembly", "{assemblyName}")]
             """;
+    }
+
+    private static IReadOnlyList<AssemblyLoadRequest> CreateReloadRequests(
+        string outputDirectory,
+        ScriptSourceSet sources,
+        IReadOnlyList<string> runtimePlugins,
+        IReadOnlyList<string> editorPlugins)
+    {
+        var pluginScopes = new Dictionary<string, AssemblyScope>(StringComparer.OrdinalIgnoreCase)
+        {
+            [C_PLUGIN_MARKER_ASSEMBLY_NAME] = AssemblyScope.Runtime
+        };
+        foreach (string plugin in runtimePlugins)
+            pluginScopes[AssemblyName.GetAssemblyName(plugin).Name!] = AssemblyScope.Runtime;
+        foreach (string plugin in editorPlugins)
+            pluginScopes[AssemblyName.GetAssemblyName(plugin).Name!] = AssemblyScope.Editor;
+
+        string AssemblyPath(string name) => Path.Combine(outputDirectory, name + ".dll");
+        ScriptAssemblyInput[] runtimeAssemblies = sources.assemblies
+            .Where(static assembly => assembly.scope == ScriptAssemblyScope.Runtime)
+            .ToArray();
+        ScriptAssemblyInput[] editorAssemblies = sources.assemblies
+            .Where(static assembly => assembly.scope == ScriptAssemblyScope.Editor)
+            .ToArray();
+        return
+        [
+            new AssemblyLoadRequest
+            {
+                moduleName = C_PLUGIN_MODULE_NAME,
+                mainAssemblyPath = AssemblyPath(C_PLUGIN_MARKER_ASSEMBLY_NAME),
+                preloadAssemblyPaths = runtimePlugins.Concat(editorPlugins).ToArray(),
+                collectible = true,
+                domain = AssemblyDomain.InnoPlugin,
+                scope = AssemblyScope.Runtime,
+                assemblyScopes = pluginScopes
+            },
+            new AssemblyLoadRequest
+            {
+                moduleName = C_RUNTIME_MODULE_NAME,
+                mainAssemblyPath = AssemblyPath(C_GAME_ASSEMBLY_NAME),
+                preloadAssemblyPaths = runtimeAssemblies
+                    .Where(static assembly => assembly.name != C_GAME_ASSEMBLY_NAME)
+                    .Select(assembly => AssemblyPath(assembly.name))
+                    .ToArray(),
+                collectible = true,
+                domain = AssemblyDomain.InnoScripting,
+                scope = AssemblyScope.Runtime
+            },
+            new AssemblyLoadRequest
+            {
+                moduleName = C_EDITOR_MODULE_NAME,
+                mainAssemblyPath = AssemblyPath(C_EDITOR_ASSEMBLY_NAME),
+                preloadAssemblyPaths = editorAssemblies
+                    .Where(static assembly => assembly.name != C_EDITOR_ASSEMBLY_NAME)
+                    .Select(assembly => AssemblyPath(assembly.name))
+                    .ToArray(),
+                collectible = true,
+                domain = AssemblyDomain.InnoScripting,
+                scope = AssemblyScope.Editor,
+                assemblyScopes = editorAssemblies.ToDictionary(
+                    static assembly => assembly.name,
+                    static _ => AssemblyScope.Editor,
+                    StringComparer.OrdinalIgnoreCase)
+            }
+        ];
+    }
+
+    private static bool TryEmitPluginMarker(
+        string outputDirectory,
+        IReadOnlyList<MetadataReference> references,
+        ICollection<ScriptDiagnostic> diagnostics)
+    {
+        SyntaxTree source = CSharpSyntaxTree.ParseText(
+            """
+            [assembly: System.Reflection.AssemblyMetadata("Inno.AssemblyDomain", "InnoPlugin")]
+            [assembly: System.Reflection.AssemblyMetadata("Inno.AssemblyScope", "Runtime")]
+            """);
+        CSharpCompilation compilation = CSharpCompilation.Create(
+            C_PLUGIN_MARKER_ASSEMBLY_NAME,
+            [source],
+            references,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        string path = Path.Combine(outputDirectory, C_PLUGIN_MARKER_ASSEMBLY_NAME + ".dll");
+        EmitResult result = compilation.Emit(path);
+        foreach (Diagnostic diagnostic in result.Diagnostics)
+            diagnostics.Add(ToDiagnostic(diagnostic));
+        return result.Success;
     }
 
     private static ScriptDiagnostic ToDiagnostic(Diagnostic diagnostic)

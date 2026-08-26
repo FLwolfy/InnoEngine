@@ -197,7 +197,7 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
                     {
                         NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.error);
                         ImGuiWidget.WrappedText(
-                            $"Missing component script ({missing.missingTypeId:D}). " +
+                            $"Missing component script ({missing.missingType.stableId:D}). " +
                             "Its serialized state is preserved and will recover automatically when the type returns.");
                         NativeImGui.PopStyleColor();
                         return;

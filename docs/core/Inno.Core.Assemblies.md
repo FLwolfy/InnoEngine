@@ -12,7 +12,7 @@ Inno.Core.Assemblies/
 ├─ AssemblyManagerOptions.cs
 ├─ Catalog/              # 不可变程序集快照与 participant 事务契约
 ├─ Loading/              # 加载请求与 AssemblyLoadContext 实现
-├─ Metadata/             # AssemblyGroup 与程序集 metadata 扩展
+├─ Metadata/             # AssemblyDomain/AssemblyScope 与 metadata 扩展
 ├─ Modules/              # 模块 handle、诊断信息与卸载监视
 ├─ Reloading/            # Reload session 与迁移上下文
 └─ Internal/
@@ -60,7 +60,9 @@ Shadow generation 是可再生缓存，不是序列化状态。collectible ALC �
 | `Load(AssemblyLoadRequest)` | shadow copy 并激活一个新 managed module，返回稳定 handle。 |
 | `Register(string, IReadOnlyList<Assembly>)` | 注册调用者已经加载的 assembly；Manager 不拥有也不卸载它们。 |
 | `BeginReload(handle, request)` | 加载并验证候选代际，但尚不发布；返回 reload session。 |
+| `BeginReload(requests)` | 按依赖顺序 stage 一个完整 reload closure，并用一个 session 原子切换。 |
 | `Unload(handle)` | 从活动 catalog 移除模块，并对 owned collectible ALC 发起卸载。 |
+| `Unload(handles)` | 用一个 catalog transaction 移除闭包，并按 Editor → Runtime → Plugin 请求卸载。 |
 | `Refresh()` | 仅在 Host AssemblyLoad 令 catalog dirty 时刷新；无变化时不重建。 |
 | `Rebuild()` | 强制重建当前 catalog，并事务刷新全部参与者；不会重新读取 DLL。 |
 | `Shutdown()` | 发布空 catalog、注销事件并发起 owned module 卸载。 |
@@ -84,11 +86,14 @@ Shadow generation 是可再生缓存，不是序列化状态。collectible ALC �
 | `required mainAssemblyPath` | 主 DLL 路径。 |
 | `preloadAssemblyPaths` | 在同一 ALC 中预加载的 DLL 列表。 |
 | `collectible` | 是否允许协作式 unload，默认 `true`。 |
+| `domain` | `InnoPlugin` 或 `InnoScripting`；`InnoInternal` 不能进入 collectible module。 |
+| `scope` | 模块的 `Runtime`/`Editor` 依赖边界。 |
+| `assemblyScopes` | 统一 Plugin ALC 内按 simple name 声明每个 DLL scope；未列出项使用 `scope`。 |
 
 ### 诊断类型
 
 - `AssemblyModuleHandle(Guid id)`：不持有 Assembly/ALC 的稳定句柄。
-- `AssemblyModuleInfo`：record，公开 `handle`、`moduleName`、`generation`、`collectible`、`externallyOwned`、`status`、`assemblyNames`。
+- `AssemblyModuleInfo`：record，公开 `handle`、`moduleName`、`generation`、`collectible`、`externallyOwned`、`domain`、`scope`、`status`、`assemblyNames`。
 - `AssemblyModuleStatus.Active`：当前公开状态。
 - `AssemblyUnloadMonitor.status` / `isCompleted`：通过弱引用观察旧 ALC 是否已经不可达。
 - `AssemblyUnloadStatus.Pending` / `Completed`：卸载仍被引用或已经完成。
@@ -98,9 +103,10 @@ Shadow generation 是可再生缓存，不是序列化状态。collectible ALC �
 ```csharp
 using AssemblyReloadSession reload = AssemblyManager.BeginReload(handle, new AssemblyLoadRequest
 {
-    moduleName = "GameScripts",
+    moduleName = "RuntimeScripts",
     mainAssemblyPath = nextDll,
-    preloadAssemblyPaths = pluginDlls,
+    domain = AssemblyDomain.InnoScripting,
+    scope = AssemblyScope.Runtime,
     collectible = true
 });
 
@@ -141,12 +147,17 @@ sequenceDiagram
 
 `AssemblyReloadSession.Dispose()` 会对未完成 session 自动 rollback。`Complete()` 后 `AssemblyReloadContext` 会释放强引用，不能继续访问。
 
+多模块 session 固定按 Plugin → Runtime Scripts → Editor Scripts stage；下游 `ModuleLoadContext` 显式复用同一事务上游 candidate 中的精确 `Assembly` 实例，不复制并二次加载 Plugin/Runtime DLL。发布时一次切换 module map、Assembly catalog、TypeCache 与全部 Registry candidate；任一 stage、participant、Scene 或 extension 激活失败都恢复完整 previous 集合并逆序卸载 candidate。`Complete` 仅释放 previous snapshot 并按 Editor → Runtime → Plugin 请求协作式卸载，不执行可失败的发现或刷新。
+
+依赖闭包是强制约束：Runtime Scripts reload 必须包含 Editor Scripts；Plugin reload/unload 必须包含两个 Scripting scope。只允许一个统一 Plugin module、一个 Runtime Scripting module 和一个 Editor Scripting module。每个事务会在加载前建立完整 simple-name/domain/scope 图，并在加载后校验实际 AssemblyRef；重复 simple name、Runtime → Editor、Plugin → Scripting、模块内 cycle、未随模块提供的自定义依赖以及非 `InnoInternal` 的 Default ALC 共享依赖都会在发布前拒绝。只有受信任的平台程序集与具有当前 `InnoInternal` metadata 的 Host contract 可以从 Default ALC 共享。
+
 ### AssemblyReloadContext
 
 | 成员 | 说明 |
 | --- | --- |
 | `previousCatalog` / `candidateCatalog` | 激活前后的 `AssemblyCatalogSnapshot`。事务结束后不可访问。 |
-| `module` | 正在重载的逻辑模块句柄。 |
+| `module` | staging 顺序中的第一个逻辑模块句柄。 |
+| `modules` | 该原子事务涉及的全部逻辑模块句柄。 |
 | `GetContext<TContext>()` | 取得某个 participant 提供的迁移上下文；不存在或重复时抛异常。 |
 | `TryGetContext<TContext>(out ...)` | 尝试取得唯一的指定上下文。 |
 
@@ -154,7 +165,8 @@ sequenceDiagram
 
 ```csharp
 TypeCacheReloadContext types = reload.context.GetContext<TypeCacheReloadContext>();
-types.TryResolveReplacement(oldInstance.GetType(), out Type? replacementType);
+TypeRef previous = types.previous.GetTypeRef(oldInstance.GetType());
+types.TryResolveReplacement(previous, out TypeRef replacement);
 ```
 
 ## 自定义 Catalog Participant
@@ -165,24 +177,28 @@ types.TryResolveReplacement(oldInstance.GetType(), out Type? replacementType);
 | --- | --- |
 | `object? context` | 可选的短生命周期迁移上下文。 |
 | `Activate()` | 原子发布候选状态。 |
-| `Complete()` | 释放旧状态。 |
-| `Rollback()` | 恢复旧状态并释放候选状态；应可安全重复调用。 |
+| `Complete()` | 仅释放旧状态，不得再执行发布；异常会被协调器逐 participant 报告并隔离，已发布 generation 不会伪回滚。 |
+| `Rollback()` | 恢复旧状态并释放候选状态；应可安全重复调用，单个 participant 的清理异常不会跳过其余 participant。 |
 
 参与者不要保留过期的 `AssemblyCatalogSnapshot`，因为其中的 `assemblies` 会强引用 collectible ALC。
 
-## Assembly metadata
+## Assembly domain 与 scope
 
-`AssemblyGroup` 值为 `None`、`Native`、`Game`、`Core`、`Plugin`、`Editor`。项目通过 `InnoAssemblyGroup` 生成 `Inno.AssemblyGroup` metadata，运行时可查询：
+程序集分类使用两个正交维度：`AssemblyDomain.InnoInternal/InnoScripting/InnoPlugin` 与 `AssemblyScope.Runtime/Editor`。Host csproj 通过 `InnoAssemblyDomain` / `InnoAssemblyScope` 生成当前 `Inno.AssemblyDomain` / `Inno.AssemblyScope` metadata；脚本编译器写入 Scripting 分类。外部 Plugin DLL 不必修改 metadata，Plugin asset/加载请求提供 domain 与逐程序集 scope，加载后只在弱分类表中登记当前 `Assembly`。
 
 ```csharp
-AssemblyGroup group = typeof(MyType).Assembly.GetInnoAssemblyGroup();
+AssemblyDomain domain = typeof(MyType).Assembly.GetInnoAssemblyDomain();
+AssemblyScope scope = typeof(MyType).Assembly.GetInnoAssemblyScope();
 ```
 
-`AssemblyExtensions.GetInnoAssemblyGroup(Assembly)` 使用弱缓存，不会固定可卸载程序集。
+两个查询使用 `ConditionalWeakTable<Assembly, ...>`，不会因分类缓存固定可卸载程序集。旧 `AssemblyGroup`、旧 metadata key 和兼容 reader 已删除。
+
+物理 ALC 拓扑固定为 Default/Internal、统一 Plugin、Runtime Scripts、Editor Scripts。依赖只能沿 Internal ← Plugin ← Runtime Scripts ← Editor Scripts 方向；Editor Scripts 还可访问 editor-scope Plugin/Internal API。ALC 只提供卸载隔离，不是安全沙箱。
 
 ## 常见误区
 
 - `Rebuild()` 只对当前活动 assembly 重做 catalog/participant 状态，不会从磁盘重新加载同名 DLL；文件内容变化必须走 `BeginReload()`。
 - `Unload()` 是协作式的。旧线程、静态事件、缓存的 `Type`/delegate/instance 都可能让 monitor 长期 `Pending`。
+- 普通 reload 不强制 Full GC；测试/诊断可以有界触发 GC。Monitor 为 `Pending` 不影响新 generation 继续运行，也不能被误报为已卸载。
 - 不要从该层访问 TypeCache；依赖方向是 [Reflection](Inno.Core.Reflection.md) → Assemblies，而不是反过来。
 - 一个时刻只允许一个 reload session；新 Load/Register/Unload/Rebuild 不能穿插在未完成事务中。

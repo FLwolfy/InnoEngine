@@ -24,25 +24,25 @@ public sealed class MissingGameComponent : GameComponent
         new Dictionary<Guid, Guid>();
 
     internal MissingGameComponent(
-        Guid missingTypeId,
+        TypeRef missingType,
         string missingTypeName,
         ReadOnlySpan<byte> serializedState,
         IReadOnlyList<AssetDependency>? dependencies = null)
     {
-        if (missingTypeId == Guid.Empty)
-            throw new ArgumentException("The missing component type identity cannot be empty.", nameof(missingTypeId));
-        this.missingTypeId = missingTypeId;
+        if (missingType.stableId == Guid.Empty)
+            throw new ArgumentException("The missing component type identity cannot be empty.", nameof(missingType));
+        this.missingType = missingType;
         this.missingTypeName = string.IsNullOrWhiteSpace(missingTypeName)
-            ? missingTypeId.ToString("D")
+            ? missingType.stableId.ToString("D")
             : missingTypeName;
         m_serializedState = serializedState.ToArray();
         m_dependencies = dependencies?.ToArray() ?? [];
     }
 
     /// <summary>
-    /// Gets the stable identity of the unavailable component type.
+    /// Gets the logical identity of the unavailable component type.
     /// </summary>
-    public Guid missingTypeId { get; }
+    public TypeRef missingType { get; }
 
     /// <summary>
     /// Gets the last known managed type name for diagnostics and editor presentation.

@@ -18,6 +18,7 @@ public sealed class TypeCacheSnapshot
     internal static TypeCacheSnapshot empty { get; } = CreateEmpty();
 
     private readonly Type[] m_types;
+    private readonly IReadOnlyList<TypeRef> m_typeRefs;
     private readonly Dictionary<Assembly, Type[]> m_typesByAssembly;
     private readonly TypeIdentityRegistry m_identityRegistry;
     private readonly TypeQueryRegistry m_queryRegistry;
@@ -31,6 +32,7 @@ public sealed class TypeCacheSnapshot
     {
         this.version = version;
         m_types = types;
+        m_typeRefs = Array.AsReadOnly(types.Select(identityRegistry.GetTypeRef).ToArray());
         m_typesByAssembly = typesByAssembly;
         m_identityRegistry = identityRegistry;
         m_queryRegistry = queryRegistry;
@@ -44,49 +46,48 @@ public sealed class TypeCacheSnapshot
     /// <summary>
     /// Gets every type included in this snapshot.
     /// </summary>
-    public IReadOnlyList<Type> types => m_types;
+    public IReadOnlyList<TypeRef> types => m_typeRefs;
 
     /// <summary>
     /// Gets all concrete discovered types assignable to <typeparamref name="T"/>.
     /// </summary>
-    public IReadOnlyList<Type> GetSubTypesOf<T>()
+    public IReadOnlyList<TypeRef> GetSubTypesOf<T>()
         => m_queryRegistry.GetSubTypesOf<T>(m_identityRegistry);
 
     /// <summary>
     /// Gets all concrete discovered types implementing <typeparamref name="TInterface"/>.
     /// </summary>
-    public IReadOnlyList<Type> GetTypesImplementing<TInterface>()
+    public IReadOnlyList<TypeRef> GetTypesImplementing<TInterface>()
         => m_queryRegistry.GetTypesImplementing<TInterface>(m_identityRegistry);
 
     /// <summary>
     /// Gets all concrete discovered types marked with <typeparamref name="TAttribute"/>.
     /// </summary>
-    public IReadOnlyList<Type> GetTypesWithAttribute<TAttribute>() where TAttribute : Attribute
+    public IReadOnlyList<TypeRef> GetTypesWithAttribute<TAttribute>() where TAttribute : Attribute
         => m_queryRegistry.GetTypesWithAttribute<TAttribute>(m_identityRegistry);
 
     /// <summary>
-    /// Tries to resolve the stable identity of a type in this snapshot.
+    /// Gets the reference for a CLR type in this snapshot.
     /// </summary>
-    public bool TryGetStableTypeId(Type type, out Guid stableTypeId)
-        => m_identityRegistry.TryGetStableTypeId(type, out stableTypeId);
+    /// <param name="type">The CLR type to identify.</param>
+    /// <returns>The logical and generation-local identity of <paramref name="type"/>.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="type"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the type does not belong to this snapshot.</exception>
+    public TypeRef GetTypeRef(Type type) => m_identityRegistry.GetTypeRef(type);
 
     /// <summary>
-    /// Tries to resolve the runtime identity of a type in this snapshot.
+    /// Tries to get the reference for a CLR type in this snapshot.
     /// </summary>
-    public bool TryGetRuntimeTypeId(Type type, out int runtimeTypeId)
-        => m_identityRegistry.TryGetRuntimeTypeId(type, out runtimeTypeId);
+    /// <param name="type">The CLR type to identify.</param>
+    /// <param name="typeRef">Receives its logical and generation-local identity.</param>
+    /// <returns><see langword="true"/> when the type belongs to this snapshot.</returns>
+    public bool TryGetTypeRef(Type type, out TypeRef typeRef)
+        => m_identityRegistry.TryGetTypeRef(type, out typeRef);
 
-    /// <summary>
-    /// Tries to resolve a current type by stable identity.
-    /// </summary>
-    public bool TryResolveType(Guid stableTypeId, out Type? type)
-        => m_identityRegistry.TryResolveType(stableTypeId, out type);
+    internal IReadOnlyList<Type> runtimeTypes => m_types;
 
-    /// <summary>
-    /// Tries to resolve a current type by runtime identity.
-    /// </summary>
-    public bool TryResolveType(int runtimeTypeId, out Type? type)
-        => m_identityRegistry.TryResolveRuntimeType(runtimeTypeId, out type);
+    internal bool TryResolve(TypeRef typeRef, out Type? type)
+        => m_identityRegistry.TryResolveType(typeRef, out type);
 
     internal static TypeCacheSnapshot Build(
         IEnumerable<Assembly> assemblies,

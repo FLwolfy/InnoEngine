@@ -38,6 +38,7 @@ internal sealed class AssetEditorRegistry : TypeRegistry<AssetEditorRegistry.Sna
         var instances = new Dictionary<Type, AssetEditor>();
         var registrations = new List<Registration>();
         foreach (Type type in types.GetTypesWithAttribute<AssetEditorAttribute>()
+                     .Select(typeRef => typeRef.Resolve(types))
                      .OrderBy(static value => value.FullName, StringComparer.Ordinal))
         {
             AssetEditor editor = instances.TryGetValue(type, out AssetEditor? existing)
@@ -73,7 +74,18 @@ internal sealed class AssetEditorRegistry : TypeRegistry<AssetEditorRegistry.Sna
                      .Distinct<AssetEditor>(ReferenceEqualityComparer.Instance))
         {
             if (editor is IDisposable disposable)
-                disposable.Dispose();
+            {
+                try
+                {
+                    disposable.Dispose();
+                }
+                catch (Exception exception)
+                {
+                    OnCleanupFailed(
+                        $"disposing asset editor '{editor.GetType().FullName}'",
+                        exception);
+                }
+            }
         }
     }
 

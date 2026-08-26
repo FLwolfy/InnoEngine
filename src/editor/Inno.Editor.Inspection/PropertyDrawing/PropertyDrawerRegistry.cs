@@ -84,6 +84,7 @@ public sealed class PropertyDrawerRegistry : IDisposable
             var drawers = new Dictionary<Type, IPropertyDrawer>();
             var registrations = new List<Registration>();
             foreach (Type drawerType in types.GetTypesWithAttribute<PropertyDrawerAttribute>()
+                         .Select(typeRef => typeRef.Resolve(types))
                          .OrderBy(static type => type.FullName, StringComparer.Ordinal))
             {
                 IPropertyDrawer drawer = drawers.TryGetValue(drawerType, out IPropertyDrawer? existing)
@@ -112,7 +113,18 @@ public sealed class PropertyDrawerRegistry : IDisposable
             foreach (IPropertyDrawer drawer in snapshot.Select(static registration => registration.drawer))
             {
                 if (disposed.Add(drawer) && drawer is IDisposable disposable)
-                    disposable.Dispose();
+                {
+                    try
+                    {
+                        disposable.Dispose();
+                    }
+                    catch (Exception exception)
+                    {
+                        OnCleanupFailed(
+                            $"disposing property drawer '{drawer.GetType().FullName}'",
+                            exception);
+                    }
+                }
             }
         }
     }

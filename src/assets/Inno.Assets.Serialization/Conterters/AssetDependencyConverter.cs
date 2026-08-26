@@ -1,6 +1,7 @@
 using System;
 
 using Inno.Assets.Core;
+using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 using Inno.Core.Serialization.Converters;
 
@@ -13,7 +14,7 @@ internal sealed class AssetDependencyConverter : SerializationConverter<AssetDep
     {
         ArgumentNullException.ThrowIfNull(writer);
         writer.Write("persistentId", value.persistentId);
-        writer.Write("stableTypeId", value.stableTypeId);
+        writer.Write("stableTypeId", value.type.stableId);
         writer.Write("lastKnownPath", value.lastKnownPath);
     }
 
@@ -22,7 +23,7 @@ internal sealed class AssetDependencyConverter : SerializationConverter<AssetDep
         ArgumentNullException.ThrowIfNull(reader);
         return new AssetDependency(
             reader.Read<Guid>("persistentId"),
-            reader.Read<Guid>("stableTypeId"),
+            new TypeRef(reader.Read<Guid>("stableTypeId")),
             reader.Read<string>("lastKnownPath"));
     }
 }

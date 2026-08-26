@@ -13,6 +13,7 @@ using Inno.Assets;
 using Inno.Assets.Core;
 using Inno.Assets.File;
 using Inno.Assets.Loader;
+using Inno.Assets.Serialization;
 using Inno.Assets.Types;
 using Inno.Core.Assemblies;
 using Inno.Core.Diagnose;
@@ -48,6 +49,7 @@ public sealed class ScriptManagerTests : IDisposable
         "InnoScriptManagerTests",
         Guid.NewGuid().ToString("N"));
     private readonly ScriptManager m_manager;
+    private long m_timestamp;
 
     public ScriptManagerTests()
     {
@@ -74,12 +76,15 @@ public sealed class ScriptManagerTests : IDisposable
         {
             enableFileSystemWatcher = false
         });
-        m_manager = new ScriptManager(new ScriptManagerOptions
-        {
-            projectRootDirectory = m_projectRoot,
-            autoCompile = false,
-            debounceMilliseconds = 0
-        });
+        m_manager = new ScriptManager(
+            new ScriptManagerOptions
+            {
+                projectRootDirectory = m_projectRoot,
+                autoCompile = false,
+                debounceMilliseconds = 0
+            },
+            compileGateProbe: null,
+            timestampProvider: () => Volatile.Read(ref m_timestamp));
     }
 
     public void Dispose()
@@ -112,6 +117,42 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.NotNull(compilation);
         ScriptCompilationResult result = await compilation!;
         Assert.True(result.success, FormatDiagnostics(result));
+    }
+
+    [Fact]
+    public void QueuedMenuReloadIsVisibleAtZeroProgressBeforeCompilationStarts()
+    {
+        var scripting = new EditorScripting();
+        FieldInfo managerField = typeof(EditorScripting).GetField(
+            "m_manager",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        managerField.SetValue(scripting, m_manager);
+        try
+        {
+            scripting.ReloadPlugins();
+
+            Assert.True(scripting.isCompiling);
+            Assert.Equal(0f, scripting.progress);
+            Assert.Contains("queued", scripting.status, StringComparison.OrdinalIgnoreCase);
+            Assert.True(m_manager.isCompilationPending);
+        }
+        finally
+        {
+            managerField.SetValue(scripting, null);
+        }
+    }
+
+    [Fact]
+    public void SuccessfulCompilationReservesProgressForAtomicActivation()
+    {
+        Write("ProgressProbe.cs", "public sealed class ProgressProbe { }");
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.True(result.success, FormatDiagnostics(result));
+        Assert.Equal(0.8f, m_manager.compilationProgress, 3);
+        Assert.True(m_manager.ApplyPendingReload());
+        Assert.Equal(1f, m_manager.compilationProgress);
     }
 
     [Fact]
@@ -154,6 +195,50 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.All(results, result => Assert.True(result.success, FormatDiagnostics(result)));
         Assert.False(manager.isCompiling);
     }
+
+    // AssetManager deliberately enforces one owner thread, so this test must not resume on a pool thread.
+#pragma warning disable xUnit1031
+    [Fact]
+    public void StrongerRequestDuringCompilationSupersedesTheIntermediateGeneration()
+    {
+        int entryCount = 0;
+        var firstEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var manager = new ScriptManager(
+            new ScriptManagerOptions
+            {
+                projectRootDirectory = m_projectRoot,
+                autoCompile = false,
+                debounceMilliseconds = 0
+            },
+            async cancellationToken =>
+            {
+                if (Interlocked.Increment(ref entryCount) != 1)
+                    return;
+                firstEntered.SetResult();
+                await releaseFirst.Task.WaitAsync(cancellationToken);
+            });
+        manager.RecompileScripting();
+        Assert.True(manager.TryCompilePending(out Task<ScriptCompilationResult>? first));
+        Assert.True(firstEntered.Task.Wait(TimeSpan.FromSeconds(5)));
+
+        manager.ReloadScripting();
+        manager.ReloadPlugins();
+        releaseFirst.SetResult();
+        Assert.True(first!.GetAwaiter().GetResult().success);
+
+        Assert.False(manager.ApplyPendingReload());
+        Assert.Empty(AssemblyManager.modules);
+        Assert.True(manager.isCompilationPending);
+        Assert.True(manager.TryCompilePending(out Task<ScriptCompilationResult>? replacement));
+        Assert.True(replacement!.GetAwaiter().GetResult().success);
+        Assert.True(manager.ApplyPendingReload());
+        Assert.Equal(3, AssemblyManager.modules.Count);
+        Assert.Single(AssemblyManager.modules, static module => module.domain == AssemblyDomain.InnoPlugin);
+        Assert.Equal(2, AssemblyManager.modules.Count(static module =>
+            module.domain == AssemblyDomain.InnoScripting));
+    }
+#pragma warning restore xUnit1031
 
     [Fact]
     public async Task DisposeWaitsUntilTheActiveCompilationHasObservedCancellationAndExited()
@@ -305,10 +390,12 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(File.Exists(Path.Combine(result.outputDirectory!, "Inno.GameScripts.pdb")));
         Assert.True(File.Exists(Path.Combine(result.outputDirectory!, "Inno.EditorScripts.dll")));
         Assert.True(m_manager.ApplyPendingReload());
-        Type behavior = TypeCacheManager.current.types.Single(type => type.Name == "ProjectBehavior");
-        Type drawer = TypeCacheManager.current.types.Single(type => type.Name == "ProjectBehaviorDrawer");
-        Assert.Equal(AssemblyGroup.Game, behavior.Assembly.GetInnoAssemblyGroup());
-        Assert.Equal(AssemblyGroup.Editor, drawer.Assembly.GetInnoAssemblyGroup());
+        Type behavior = ResolveTypeByName("ProjectBehavior");
+        Type drawer = ResolveTypeByName("ProjectBehaviorDrawer");
+        Assert.Equal(AssemblyDomain.InnoScripting, behavior.Assembly.GetInnoAssemblyDomain());
+        Assert.Equal(AssemblyScope.Runtime, behavior.Assembly.GetInnoAssemblyScope());
+        Assert.Equal(AssemblyDomain.InnoScripting, drawer.Assembly.GetInnoAssemblyDomain());
+        Assert.Equal(AssemblyScope.Editor, drawer.Assembly.GetInnoAssemblyScope());
     }
 
     [Fact]
@@ -740,12 +827,16 @@ public sealed class ScriptManagerTests : IDisposable
 
         Assert.True(runtime.interactions
             .For("panel/scene.inspector/component", gameObject)
-            .Execute("inspector/add-component", typeof(HistoryTestComponent)));
+            .Execute(
+                "inspector/add-component",
+                TypeCacheManager.GetTypeRef(typeof(HistoryTestComponent))));
         Assert.NotNull(gameObject.GetComponent<HistoryTestComponent>());
 
         Assert.True(runtime.interactions
             .For("panel/scene.inspector/system", scene)
-            .Execute("inspector/add-system", typeof(HistoryTestSystem)));
+            .Execute(
+                "inspector/add-system",
+                TypeCacheManager.GetTypeRef(typeof(HistoryTestSystem))));
         Assert.Single(scene.GetSystems().OfType<HistoryTestSystem>());
 
         Assert.True(runtime.interactions.history.Undo().succeeded);
@@ -1069,7 +1160,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(m_manager.ApplyPendingReload());
         Type first = ResolveVersionedBehavior();
         Assert.Equal(1, ReadVersion(first));
-        Assert.True(TypeCacheManager.TryGetRuntimeTypeId(first, out int firstRuntimeId));
+        int firstRuntimeId = TypeCacheManager.GetTypeRef(first).runtimeId;
 
         WriteVersionedBehavior(2);
         ScriptCompilationResult secondCompilation = Compile();
@@ -1078,7 +1169,7 @@ public sealed class ScriptManagerTests : IDisposable
         Type second = ResolveVersionedBehavior();
         Assert.NotSame(first, second);
         Assert.Equal(2, ReadVersion(second));
-        Assert.True(TypeCacheManager.TryGetRuntimeTypeId(second, out int secondRuntimeId));
+        int secondRuntimeId = TypeCacheManager.GetTypeRef(second).runtimeId;
         Assert.NotEqual(firstRuntimeId, secondRuntimeId);
 
         Write("VersionedBehavior.cs", "public sealed class VersionedBehavior : GameBehavior {");
@@ -1225,11 +1316,11 @@ public sealed class ScriptManagerTests : IDisposable
 
         Assert.True(result.success, FormatDiagnostics(result));
         Assert.True(m_manager.ApplyPendingReload());
-        Assert.Contains(TypeCacheManager.current.types, static type => type.Name == "ScriptAction");
-        Assert.Contains(TypeCacheManager.current.types, static type => type.Name == "ScriptAssetEditor");
-        Assert.Contains(TypeCacheManager.current.types, static type => type.Name == "ScriptDrop");
-        Assert.Contains(TypeCacheManager.current.types, static type => type.Name == "ScriptPanel");
-        Assert.Contains(TypeCacheManager.current.types, static type => type.Name == "ScriptValueHistoryHandler");
+        Assert.True(ContainsType("ScriptAction"));
+        Assert.True(ContainsType("ScriptAssetEditor"));
+        Assert.True(ContainsType("ScriptDrop"));
+        Assert.True(ContainsType("ScriptPanel"));
+        Assert.True(ContainsType("ScriptValueHistoryHandler"));
 
         using IDisposable iconRegistry = CreateAssetIconRegistry();
         Assert.Equal(ResolveImGuiIcon("FileImage"), ResolveAssetIcon(iconRegistry, typeof(TextAsset)));
@@ -1268,9 +1359,7 @@ public sealed class ScriptManagerTests : IDisposable
         ScriptCompilationResult initial = Compile();
         Assert.True(initial.success, FormatDiagnostics(initial));
         Assert.True(m_manager.ApplyPendingReload());
-        Type settingType = Assert.Single(
-            TypeCacheManager.current.types,
-            static type => type.Name == "ProjectOverlaySetting");
+        Type settingType = ResolveTypeByName("ProjectOverlaySetting");
         Assert.NotNull(settingType.GetCustomAttribute<EditorSettingPathAttribute>());
         using EditorInteractionRuntime settingsRuntime = CreateSettingsRuntime(out EditorSettings settings);
         EditorSetting definition = Assert.Single(settings.definitions, static definition =>
@@ -1401,8 +1490,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(initial.success, FormatDiagnostics(initial));
         Assert.True(m_manager.ApplyPendingReload());
         using IDisposable iconRegistry = CreateAssetIconRegistry();
-        Type initialAssetType = TypeCacheManager.current.types.Single(
-            static type => type.Name == "CustomIconAsset");
+        Type initialAssetType = ResolveTypeByName("CustomIconAsset");
         Assert.Equal(ResolveImGuiIcon("FileImage"), ResolveAssetIcon(iconRegistry, initialAssetType));
 
         Write("CustomIconAsset.editor.cs", """
@@ -1417,8 +1505,7 @@ public sealed class ScriptManagerTests : IDisposable
 
         Assert.True(updated.success, FormatDiagnostics(updated));
         Assert.True(m_manager.ApplyPendingReload());
-        Type updatedAssetType = TypeCacheManager.current.types.Single(
-            static type => type.Name == "CustomIconAsset");
+        Type updatedAssetType = ResolveTypeByName("CustomIconAsset");
         Assert.False(TryResolveAssetIcon(
             iconRegistry,
             updatedAssetType,
@@ -1466,9 +1553,364 @@ public sealed class ScriptManagerTests : IDisposable
 
         Assert.True(result.success, FormatDiagnostics(result));
         Assert.True(m_manager.ApplyPendingReload());
-        Type consumerType = TypeCacheManager.current.types.Single(type => type.Name == "PluginConsumer");
+        Type consumerType = ResolveTypeByName("PluginConsumer");
         object consumer = Activator.CreateInstance(consumerType)!;
         Assert.Equal(42, consumerType.GetProperty("value")!.GetValue(consumer));
+    }
+
+    [Fact]
+    public void EditorPluginDescriptorIsVisibleOnlyToEditorScripts()
+    {
+        string pluginDirectory = Path.Combine(m_projectRoot, "Assets", "Plugins");
+        Directory.CreateDirectory(pluginDirectory);
+        File.Copy(
+            Path.Combine(AppContext.BaseDirectory, "Plugins", "Inno.Editor.Scripting.TestPlugin.dll"),
+            Path.Combine(pluginDirectory, "ProjectPlugin.editor.dll"));
+        Write("RuntimePluginConsumer.cs", """
+            using ProjectPluginApi;
+            public sealed class RuntimePluginConsumer
+            {
+                public PluginObject value = new();
+            }
+            """);
+
+        ScriptCompilationResult rejected = Compile();
+        Assert.False(rejected.success);
+        Assert.Contains(rejected.diagnostics, static diagnostic => diagnostic.id == "CS0246");
+
+        File.Delete(Path.Combine(m_projectRoot, "Assets", "RuntimePluginConsumer.cs"));
+        Write("EditorPluginConsumer.editor.cs", """
+            using ProjectPluginApi;
+            public sealed class EditorPluginConsumer
+            {
+                public PluginObject value = new();
+            }
+            """);
+        ScriptCompilationResult accepted = Compile();
+        Assert.True(accepted.success, FormatDiagnostics(accepted));
+        Assert.True(m_manager.ApplyPendingReload());
+        Assert.Equal("PluginObject", ResolveTypeByName("EditorPluginConsumer")
+            .GetField("value")!.FieldType.Name);
+    }
+
+    [Fact]
+    public void ProcessWideAssetResolverRejectsACollectiblePluginTarget()
+    {
+        string pluginDirectory = Path.Combine(m_projectRoot, "Assets", "Plugins");
+        Directory.CreateDirectory(pluginDirectory);
+        File.Copy(
+            Path.Combine(AppContext.BaseDirectory, "Plugins", "Inno.Editor.Scripting.TestPlugin.dll"),
+            Path.Combine(pluginDirectory, "ProjectPlugin.dll"));
+        ScriptCompilationResult initial = Compile();
+        Assert.True(initial.success, FormatDiagnostics(initial));
+        Assert.True(m_manager.ApplyPendingReload());
+        object pluginTarget = Activator.CreateInstance(ResolveTypeByName("PluginObject"))!;
+        MethodInfo method = typeof(ScriptManagerTests).GetMethod(
+            nameof(ResolveAssetReferenceFromTarget),
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+        var resolver = (Func<Guid, Guid, string, Type, string, AssetObject>)method.CreateDelegate(
+            typeof(Func<Guid, Guid, string, Type, string, AssetObject>),
+            pluginTarget);
+
+        Assert.Throws<ArgumentException>(() => AssetSerializationServices.SetReferenceResolver(resolver));
+    }
+
+    [Fact]
+    public void ReloadOperationsUseTheRequiredDependencyClosureAndExactUpstreamAssemblies()
+    {
+        string pluginDirectory = Path.Combine(m_projectRoot, "Assets", "Plugins");
+        Directory.CreateDirectory(pluginDirectory);
+        File.Copy(
+            Path.Combine(AppContext.BaseDirectory, "Plugins", "Inno.Editor.Scripting.TestPlugin.dll"),
+            Path.Combine(pluginDirectory, "ProjectPlugin.dll"));
+        Write("RuntimeReloadProbe.cs", """
+            using ProjectPluginApi;
+
+            public sealed class RuntimeReloadProbe
+            {
+                public int generation => 1;
+                public PluginObject CreatePlugin() => new PluginObject();
+            }
+            """);
+        Write("EditorReloadProbe.editor.cs", """
+            public sealed class EditorReloadProbe
+            {
+                public int generation => 1;
+                public RuntimeReloadProbe CreateRuntime() => new RuntimeReloadProbe();
+            }
+            """);
+
+        ScriptCompilationResult initial = Compile();
+        Assert.True(initial.success, FormatDiagnostics(initial));
+        Assert.True(m_manager.ApplyPendingReload());
+        IReadOnlyDictionary<string, int> generations = GetReloadModuleGenerations();
+        Type pluginType = ResolveTypeByName("PluginObject");
+        Type runtimeType = ResolveTypeByName("RuntimeReloadProbe");
+        Type editorType = ResolveTypeByName("EditorReloadProbe");
+        Assert.Same(pluginType, runtimeType.GetMethod("CreatePlugin")!.ReturnType);
+        Assert.Same(runtimeType, editorType.GetMethod("CreateRuntime")!.ReturnType);
+        Assert.NotSame(
+            AssemblyLoadContext.GetLoadContext(pluginType.Assembly),
+            AssemblyLoadContext.GetLoadContext(runtimeType.Assembly));
+        Assert.NotSame(
+            AssemblyLoadContext.GetLoadContext(runtimeType.Assembly),
+            AssemblyLoadContext.GetLoadContext(editorType.Assembly));
+
+        ScriptCompilationResult unchanged = Compile();
+        Assert.True(unchanged.success, FormatDiagnostics(unchanged));
+        Assert.False(m_manager.ApplyPendingReload());
+        Assert.Equal(generations, GetReloadModuleGenerations());
+
+        Write("EditorReloadProbe.editor.cs", """
+            public sealed class EditorReloadProbe
+            {
+                public int generation => 2;
+                public RuntimeReloadProbe CreateRuntime() => new RuntimeReloadProbe();
+            }
+            """);
+        ScriptCompilationResult editorChange = Compile();
+        Assert.True(editorChange.success, FormatDiagnostics(editorChange));
+        Assert.True(m_manager.ApplyPendingReload());
+        IReadOnlyDictionary<string, int> afterEditor = GetReloadModuleGenerations();
+        Assert.Equal(generations["ProjectPlugins"], afterEditor["ProjectPlugins"]);
+        Assert.Equal(generations["RuntimeScripts"], afterEditor["RuntimeScripts"]);
+        Assert.Equal(generations["EditorScripts"] + 1, afterEditor["EditorScripts"]);
+
+        Write("RuntimeReloadProbe.cs", """
+            using ProjectPluginApi;
+
+            public sealed class RuntimeReloadProbe
+            {
+                public int generation => 2;
+                public PluginObject CreatePlugin() => new PluginObject();
+            }
+            """);
+        ScriptCompilationResult runtimeChange = Compile();
+        Assert.True(runtimeChange.success, FormatDiagnostics(runtimeChange));
+        Assert.True(m_manager.ApplyPendingReload());
+        IReadOnlyDictionary<string, int> afterRuntime = GetReloadModuleGenerations();
+        Assert.Equal(afterEditor["ProjectPlugins"], afterRuntime["ProjectPlugins"]);
+        Assert.Equal(afterEditor["RuntimeScripts"] + 1, afterRuntime["RuntimeScripts"]);
+        Assert.Equal(afterEditor["EditorScripts"] + 1, afterRuntime["EditorScripts"]);
+
+        m_manager.ReloadScripting();
+        ScriptCompilationResult fullScripting = Compile();
+        Assert.True(fullScripting.success, FormatDiagnostics(fullScripting));
+        Assert.True(m_manager.ApplyPendingReload());
+        IReadOnlyDictionary<string, int> afterScripting = GetReloadModuleGenerations();
+        Assert.Equal(afterRuntime["ProjectPlugins"], afterScripting["ProjectPlugins"]);
+        Assert.Equal(afterRuntime["RuntimeScripts"] + 1, afterScripting["RuntimeScripts"]);
+        Assert.Equal(afterRuntime["EditorScripts"] + 1, afterScripting["EditorScripts"]);
+        Assert.Equal("Script reload completed.", m_manager.compilationStatus);
+
+        m_manager.RecompileScripting();
+        m_manager.ReloadPlugins();
+        m_manager.ReloadScripting();
+        Assert.True(m_manager.isCompilationPending);
+        ScriptCompilationResult fullPlugin = Compile();
+        Assert.True(fullPlugin.success, FormatDiagnostics(fullPlugin));
+        Assert.True(m_manager.ApplyPendingReload());
+        IReadOnlyDictionary<string, int> afterPlugins = GetReloadModuleGenerations();
+        Assert.Equal(afterScripting["ProjectPlugins"] + 1, afterPlugins["ProjectPlugins"]);
+        Assert.Equal(afterScripting["RuntimeScripts"] + 1, afterPlugins["RuntimeScripts"]);
+        Assert.Equal(afterScripting["EditorScripts"] + 1, afterPlugins["EditorScripts"]);
+        Assert.Equal("Script reload completed.", m_manager.compilationStatus);
+        Assert.DoesNotContain("generation", m_manager.compilationStatus, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RetainedExternalTypeIsReportedAsPendingInsteadOfForcedUnload()
+    {
+        var sink = new TestDiagnosticSink();
+        DiagnosticManager.RegisterSink(sink);
+        try
+        {
+            Write("UnloadProbe.editor.cs", "public sealed class UnloadProbe { public int generation => 1; }");
+            ScriptCompilationResult initial = Compile();
+            Assert.True(initial.success, FormatDiagnostics(initial));
+            Assert.True(m_manager.ApplyPendingReload());
+            StrongTypeHolder holder = CreateStrongTypeHolder("UnloadProbe");
+
+            Write("UnloadProbe.editor.cs", "public sealed class UnloadProbe { public int generation => 2; }");
+            ScriptCompilationResult replacement = Compile();
+            Assert.True(replacement.success, FormatDiagnostics(replacement));
+            Assert.True(m_manager.ApplyPendingReload());
+            ForceCollection();
+
+            m_timestamp = 4_999;
+            m_manager.RefreshUnloadDiagnostics();
+            Assert.False(sink.ContainsCode("INNO-ALC-PENDING"));
+
+            m_timestamp = 5_000;
+            m_manager.RefreshUnloadDiagnostics();
+            Assert.Equal("Script reload completed.", m_manager.compilationStatus);
+            Assert.True(sink.ContainsCode("INNO-ALC-PENDING"));
+            Assert.Contains(
+                sink.GetMessages("INNO-ALC-PENDING"),
+                static message =>
+                    message.Contains("EditorScripts", StringComparison.Ordinal) &&
+                    message.Contains("InnoScripting/Editor", StringComparison.Ordinal) &&
+                    message.Contains("generation", StringComparison.Ordinal));
+            ClearStrongTypeHolder(holder);
+            ForceCollection();
+            m_manager.RefreshUnloadDiagnostics();
+            Assert.False(sink.ContainsCode("INNO-ALC-PENDING"));
+            GC.KeepAlive(holder);
+        }
+        finally
+        {
+            DiagnosticManager.UnregisterSink(sink);
+        }
+    }
+
+    [Fact]
+    public void CandidateFailureAtEveryDomainNeverPublishesAPartialGeneration()
+    {
+        Write("AtomicRuntime.cs", "public sealed class AtomicRuntime { }");
+        Write("AtomicEditor.editor.cs", "public sealed class AtomicEditor { public AtomicRuntime value = new(); }");
+        ScriptCompilationResult initial = Compile();
+        Assert.True(initial.success, FormatDiagnostics(initial));
+        Assert.True(m_manager.ApplyPendingReload());
+        IReadOnlyDictionary<string, int> previous = GetReloadModuleGenerations();
+
+        m_manager.ReloadPlugins();
+        ScriptCompilationResult candidate = Compile();
+        Assert.True(candidate.success, FormatDiagnostics(candidate));
+        foreach (string failedModule in new[] { "ProjectPlugins", "RuntimeScripts", "EditorScripts" })
+        {
+            IReadOnlyList<AssemblyLoadRequest> invalid = candidate.reloadRequests
+                .Select(request => string.Equals(request.moduleName, failedModule, StringComparison.Ordinal)
+                    ? new AssemblyLoadRequest
+                    {
+                        moduleName = request.moduleName,
+                        mainAssemblyPath = Path.Combine(m_projectRoot, "Missing", failedModule + ".dll"),
+                        preloadAssemblyPaths = request.preloadAssemblyPaths,
+                        collectible = request.collectible,
+                        domain = request.domain,
+                        scope = request.scope,
+                        assemblyScopes = request.assemblyScopes
+                    }
+                    : request)
+                .ToArray();
+
+            Assert.ThrowsAny<Exception>(() => AssemblyManager.BeginReload(invalid));
+            Assert.Equal(previous, GetReloadModuleGenerations());
+        }
+
+        AssemblyLoadRequest plugin = candidate.reloadRequests.Single(static request =>
+            request.domain == AssemblyDomain.InnoPlugin);
+        AssemblyLoadRequest runtime = candidate.reloadRequests.Single(static request =>
+            request.domain == AssemblyDomain.InnoScripting && request.scope == AssemblyScope.Runtime);
+        Assert.Throws<InvalidOperationException>(() => AssemblyManager.BeginReload([plugin]));
+        Assert.Throws<InvalidOperationException>(() => AssemblyManager.BeginReload([runtime]));
+        Assert.Equal(previous, GetReloadModuleGenerations());
+
+        Assert.True(m_manager.ApplyPendingReload());
+        IReadOnlyDictionary<string, int> current = GetReloadModuleGenerations();
+        Assert.All(current, pair => Assert.Equal(previous[pair.Key] + 1, pair.Value));
+        ForceCollection();
+    }
+
+    [Fact]
+    public void PreviousExtensionsStopAndDetachBeforeCandidateStartAndAttach()
+    {
+        string moduleStopped = Path.Combine(m_projectRoot, "module-stopped.txt");
+        string panelDetached = Path.Combine(m_projectRoot, "panel-detached.txt");
+        WriteExtensionLifecycleProbe(1, moduleStopped, panelDetached, logPath: null, failStart: false);
+        ScriptCompilationResult initial = Compile();
+        Assert.True(initial.success, FormatDiagnostics(initial));
+        Assert.True(m_manager.ApplyPendingReload());
+        using var runtime = new EditorInteractionRuntime(m_projectRoot);
+        runtime.Start();
+
+        WriteExtensionLifecycleProbe(2, moduleStopped, panelDetached, logPath: null, failStart: false);
+        ScriptCompilationResult replacement = Compile();
+        Assert.True(replacement.success, FormatDiagnostics(replacement));
+        Assert.True(m_manager.ApplyPendingReload());
+
+        Assert.True(File.Exists(moduleStopped));
+        Assert.True(File.Exists(panelDetached));
+        Assert.Contains(runtime.panels, static panel => panel.id == "tests.lifecycle-order");
+    }
+
+    [Fact]
+    public void CandidateExtensionFailureRestartsAndReattachesPreviousGeneration()
+    {
+        string moduleStopped = Path.Combine(m_projectRoot, "rollback-module-stopped.txt");
+        string panelDetached = Path.Combine(m_projectRoot, "rollback-panel-detached.txt");
+        string logPath = Path.Combine(m_projectRoot, "extension-lifecycle.log");
+        WriteExtensionLifecycleProbe(1, moduleStopped, panelDetached, logPath, failStart: false);
+        ScriptCompilationResult initial = Compile();
+        Assert.True(initial.success, FormatDiagnostics(initial));
+        Assert.True(m_manager.ApplyPendingReload());
+        using var runtime = new EditorInteractionRuntime(m_projectRoot);
+        runtime.Start();
+
+        WriteExtensionLifecycleProbe(2, moduleStopped, panelDetached, logPath, failStart: true);
+        ScriptCompilationResult replacement = Compile();
+        Assert.True(replacement.success, FormatDiagnostics(replacement));
+        Assert.ThrowsAny<Exception>(() => m_manager.ApplyPendingReload());
+
+        string[] events = File.ReadAllText(logPath).Split(';', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(2, events.Count(static value => value == "module-start-1"));
+        Assert.Equal(2, events.Count(static value => value == "panel-attach-1"));
+        Assert.Contains("module-stop-1", events);
+        Assert.Contains("panel-detach-1", events);
+        Assert.Contains(runtime.panels, static panel => panel.id == "tests.lifecycle-order");
+    }
+
+    [Fact]
+    public void PublicReloadSurfaceAndMenusExposeExactlyTheThreeUserOperations()
+    {
+        MethodInfo[] publicMethods = typeof(ScriptManager)
+            .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly);
+        string[] reloadMethods = publicMethods
+            .Where(static method => method.Name.Contains("Scripting", StringComparison.Ordinal) ||
+                                    method.Name.Contains("Plugins", StringComparison.Ordinal))
+            .Select(static method => method.Name)
+            .OrderBy(static name => name, StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(
+            new[] { "RecompileScripting", "ReloadPlugins", "ReloadScripting" },
+            reloadMethods);
+        Assert.DoesNotContain(publicMethods, static method =>
+            method.Name is "TryCompilePending" or "CompileAsync" or "ApplyPendingReload" or "RequestCompile");
+
+        string[] menus = typeof(ScriptManager).Assembly.GetTypes()
+            .SelectMany(static type => type.GetCustomAttributes<EditorMenuAttribute>(inherit: false))
+            .Where(static menu => menu.path.StartsWith("Scripting/", StringComparison.Ordinal))
+            .Select(static menu => menu.path)
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(
+            new[]
+            {
+                "Scripting/Recompile Scripting",
+                "Scripting/Reload Plugins",
+                "Scripting/Reload Scripting"
+            },
+            menus);
+    }
+
+    [Fact]
+    public void InspectorActionAndDropProtocolsDoNotStoreGenerationBoundTypes()
+    {
+        Assembly inspector = typeof(AssetReferenceDropTarget).Assembly;
+        Type addComponent = inspector.GetType(
+            "Inno.Editor.Panel.Inspector.AddComponentCommand",
+            throwOnError: true)!;
+        Type addSystem = inspector.GetType(
+            "Inno.Editor.Panel.Inspector.AddSystemCommand",
+            throwOnError: true)!;
+
+        Assert.Equal(typeof(TypeRef), addComponent.BaseType!.GetGenericArguments()[1]);
+        Assert.Equal(typeof(TypeRef), addSystem.BaseType!.GetGenericArguments()[1]);
+        Assert.DoesNotContain(
+            typeof(AssetReferenceDropTarget).GetFields(BindingFlags.Instance | BindingFlags.NonPublic),
+            static field => field.FieldType == typeof(Type));
+        Assert.DoesNotContain(
+            typeof(EngineObjectReferenceDropTarget).GetFields(BindingFlags.Instance | BindingFlags.NonPublic),
+            static field => field.FieldType == typeof(Type));
     }
 
     [Fact]
@@ -1520,12 +1962,12 @@ public sealed class ScriptManagerTests : IDisposable
         ScriptCompilationResult firstCompilation = Compile();
         Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
         Assert.True(m_manager.ApplyPendingReload());
-        Type previousType = TypeCacheManager.current.types.Single(type => type.Name == "MigratingBehavior");
+        Type previousType = ResolveTypeByName("MigratingBehavior");
         var scene = new GameScene("Hot Reload");
         GameObject gameObject = scene.CreateObject("Actor");
         GameObject referencedObject = scene.CreateObject("Referenced");
         GameComponent previous = gameObject.AddComponent(previousType);
-        Type previousSystemType = TypeCacheManager.current.types.Single(type => type.Name == "MigratingSystem");
+        Type previousSystemType = ResolveTypeByName("MigratingSystem");
         GameSystem previousSystem = scene.AddSystem(previousSystemType);
         SetProperty(previous, "value", 37);
         previousType.GetProperty("target")!.SetValue(previous, referencedObject);
@@ -1586,7 +2028,7 @@ public sealed class ScriptManagerTests : IDisposable
         ScriptCompilationResult firstCompilation = Compile();
         Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
         Assert.True(m_manager.ApplyPendingReload());
-        Type previousType = TypeCacheManager.current.types.Single(type => type.Name == "MigratingBehavior");
+        Type previousType = ResolveTypeByName("MigratingBehavior");
         var scene = new GameScene("Identity Rollback");
         GameObject gameObject = scene.CreateObject("Actor");
         GameComponent previous = gameObject.AddComponent(previousType);
@@ -1614,7 +2056,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.Same(previous, IdentityManager.Get<GameComponent>(persistentId));
         Assert.Same(previous, Assert.Single(gameObject.GetComponents(), component => component.GetType() == previousType));
         Assert.False(previous.isDestroyed);
-        Assert.Same(previousType, TypeCacheManager.current.types.Single(type => type.Name == "MigratingBehavior"));
+        Assert.Same(previousType, ResolveTypeByName("MigratingBehavior"));
 
         Assert.True(m_manager.ApplyPendingReload());
         GameComponent current = Assert.Single(
@@ -1632,7 +2074,7 @@ public sealed class ScriptManagerTests : IDisposable
         ScriptCompilationResult firstCompilation = Compile();
         Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
         Assert.True(m_manager.ApplyPendingReload());
-        Type previousType = TypeCacheManager.current.types.Single(type => type.Name == "MigratingBehavior");
+        Type previousType = ResolveTypeByName("MigratingBehavior");
         var scene = new GameScene("Lifecycle Rollback");
         GameObject gameObject = scene.CreateObject("Actor");
         GameComponent previous = gameObject.AddComponent(previousType);
@@ -1657,7 +2099,7 @@ public sealed class ScriptManagerTests : IDisposable
         }
 
         Assert.Same(previous, Assert.Single(gameObject.GetComponents(), component => component.GetType() == previousType));
-        Assert.Same(previousType, TypeCacheManager.current.types.Single(type => type.Name == "MigratingBehavior"));
+        Assert.Same(previousType, ResolveTypeByName("MigratingBehavior"));
         Assert.Equal(0, GetProperty(previous, "disableCount"));
         Assert.Equal(2, GetProperty(previous, "enableCount"));
 
@@ -1673,7 +2115,7 @@ public sealed class ScriptManagerTests : IDisposable
         ScriptCompilationResult firstCompilation = Compile();
         Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
         Assert.True(m_manager.ApplyPendingReload());
-        Type previousType = TypeCacheManager.current.types.Single(type => type.Name == "ChangingPropertyBehavior");
+        Type previousType = ResolveTypeByName("ChangingPropertyBehavior");
         var scene = new GameScene("Changing Property");
         GameObject gameObject = scene.CreateObject("Actor");
         GameComponent previous = gameObject.AddComponent(previousType);
@@ -1705,8 +2147,8 @@ public sealed class ScriptManagerTests : IDisposable
         ScriptCompilationResult firstCompilation = Compile();
         Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
         Assert.True(m_manager.ApplyPendingReload());
-        Type previousType = TypeCacheManager.current.types.Single(type => type.Name == "IdentityProbe");
-        Type previousSystemType = TypeCacheManager.current.types.Single(type => type.Name == "IdentityProbeSystem");
+        Type previousType = ResolveTypeByName("IdentityProbe");
+        Type previousSystemType = ResolveTypeByName("IdentityProbeSystem");
         var scene = new GameScene("Identity Probe");
         GameObject gameObject = scene.CreateObject("Actor");
         GameObject target = scene.CreateObject("Target");
@@ -1741,8 +2183,8 @@ public sealed class ScriptManagerTests : IDisposable
             gameObject.GetComponents().Single(component => component.identity.persistentId == componentId));
         MissingGameSystem missingSystem = Assert.IsType<MissingGameSystem>(
             scene.GetSystems().Single(system => system.identity.persistentId == systemId));
-        Assert.Equal(Guid.Parse(componentTypeId), missingComponent.missingTypeId);
-        Assert.Equal(Guid.Parse(systemTypeId), missingSystem.missingTypeId);
+        Assert.Equal(Guid.Parse(componentTypeId), missingComponent.missingType.stableId);
+        Assert.Equal(Guid.Parse(systemTypeId), missingSystem.missingType.stableId);
         Assert.False(missingSystem.enabled);
         missingSystem.enabled = true;
         Assert.False(missingSystem.enabled);
@@ -1805,7 +2247,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
         Assert.True(m_manager.ApplyPendingReload());
 
-        Type componentType = TypeCacheManager.current.types.Single(type => type.Name == "IdentityProbe");
+        Type componentType = ResolveTypeByName("IdentityProbe");
         var sourceScene = new GameScene("Missing Prefab Source");
         GameObject sourceRoot = sourceScene.CreateObject("Root");
         GameObject sourceTarget = sourceScene.CreateObject("Target");
@@ -1852,7 +2294,7 @@ public sealed class ScriptManagerTests : IDisposable
         WriteIdentityProbe(componentTypeId, systemTypeId);
         Assert.True(Compile().success);
         Assert.True(m_manager.ApplyPendingReload());
-        Type originalType = TypeCacheManager.current.types.Single(type => type.Name == "IdentityProbe");
+        Type originalType = ResolveTypeByName("IdentityProbe");
         var scene = new GameScene("Missing Recovery Rollback");
         GameObject gameObject = scene.CreateObject("Actor");
         GameComponent original = gameObject.AddComponent(originalType);
@@ -1876,7 +2318,7 @@ public sealed class ScriptManagerTests : IDisposable
             placeholder,
             gameObject.GetComponents().Single(component => component.identity.persistentId == componentId));
         Assert.False(placeholder.isDestroyed);
-        Assert.False(TypeCacheManager.TryResolveType(Guid.Parse(componentTypeId), out _));
+        Assert.False(new TypeRef(Guid.Parse(componentTypeId)).isValid);
         ForceCollection();
         Assert.False(
             failedCandidateContext.IsAlive,
@@ -1947,8 +2389,8 @@ public sealed class ScriptManagerTests : IDisposable
         ScriptCompilationResult firstCompilation = Compile();
         Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
         Assert.True(m_manager.ApplyPendingReload());
-        Type previous = TypeCacheManager.current.types.Single(type => type.Name == "RenameProbe");
-        Assert.True(TypeCacheManager.TryGetStableTypeId(previous, out Guid previousStableTypeId));
+        Type previous = ResolveTypeByName("RenameProbe");
+        Guid previousStableTypeId = TypeCacheManager.GetTypeRef(previous).stableId;
         Assert.True(AssetManager.TryGetInfo("RenameProbe.cs", out AssetInfo? previousInfo));
         Assert.NotNull(previousInfo);
         var scene = new GameScene("Rename Probe");
@@ -1965,11 +2407,10 @@ public sealed class ScriptManagerTests : IDisposable
 
         Assert.True(secondCompilation.success, FormatDiagnostics(secondCompilation));
         Assert.True(m_manager.ApplyPendingReload());
-        Type current = TypeCacheManager.current.types.Single(type => type.Name == "RenamedProbe");
-        Assert.True(TypeCacheManager.TryGetStableTypeId(current, out Guid currentStableTypeId));
+        Type current = ResolveTypeByName("RenamedProbe");
+        Guid currentStableTypeId = TypeCacheManager.GetTypeRef(current).stableId;
         Assert.Equal(previousStableTypeId, currentStableTypeId);
-        Assert.True(TypeCacheManager.TryResolveType(previousStableTypeId, out Type? resolved));
-        Assert.Equal(current, resolved);
+        Assert.Equal(current, new TypeRef(previousStableTypeId).Resolve());
         GameComponent currentComponent = gameObject.GetComponents()
             .Single(component => component.GetType() == current);
         Assert.NotSame(previousComponent, currentComponent);
@@ -1999,13 +2440,12 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.DoesNotContain(result.diagnostics, static diagnostic =>
             diagnostic.id is "INNO2001" or "INNO2003" or "INNO2004");
         Assert.True(m_manager.ApplyPendingReload());
-        Type type = TypeCacheManager.current.types.Single(value => value.Name == "PartialProbe");
-        Assert.True(TypeCacheManager.TryGetStableTypeId(type, out Guid stableTypeId));
+        Type type = ResolveTypeByName("PartialProbe");
+        Guid stableTypeId = TypeCacheManager.GetTypeRef(type).stableId;
         Assert.True(AssetManager.TryGetInfo("PartialProbe.cs", out AssetInfo? canonicalInfo));
         Assert.NotNull(canonicalInfo);
         Assert.NotEqual(Guid.Empty, stableTypeId);
-        Assert.True(TypeCacheManager.TryResolveType(stableTypeId, out Type? resolved));
-        Assert.Equal(type, resolved);
+        Assert.Equal(type, new TypeRef(stableTypeId).Resolve());
     }
 
     [Fact]
@@ -2225,11 +2665,24 @@ public sealed class ScriptManagerTests : IDisposable
 
     private ScriptCompilationResult Compile()
     {
-        m_manager.RequestCompile();
+        m_manager.RecompileScripting();
         Assert.True(m_manager.TryCompilePending(out Task<ScriptCompilationResult>? compilation));
         Assert.NotNull(compilation);
         return compilation.GetAwaiter().GetResult();
     }
+
+    private static IReadOnlyDictionary<string, int> GetReloadModuleGenerations()
+        => AssemblyManager.modules
+            .Where(static module => module.moduleName is "ProjectPlugins" or "RuntimeScripts" or "EditorScripts")
+            .ToDictionary(static module => module.moduleName, static module => module.generation, StringComparer.Ordinal);
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static StrongTypeHolder CreateStrongTypeHolder(string typeName)
+        => new(ResolveTypeByName(typeName));
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ClearStrongTypeHolder(StrongTypeHolder holder)
+        => holder.type = null;
 
     private static bool UpdateUntil(EditorInteractionRuntime runtime, Func<bool> predicate)
     {
@@ -2364,8 +2817,8 @@ public sealed class ScriptManagerTests : IDisposable
             "49a0bc84-aac0-4918-b2e1-813fe3a0761e");
         Assert.True(Compile().success);
         Assert.True(m_manager.ApplyPendingReload());
-        Type componentType = TypeCacheManager.current.types.Single(type => type.Name == "IdentityProbe");
-        Type systemType = TypeCacheManager.current.types.Single(type => type.Name == "IdentityProbeSystem");
+        Type componentType = ResolveTypeByName("IdentityProbe");
+        Type systemType = ResolveTypeByName("IdentityProbeSystem");
         AssemblyLoadContext context = AssemblyLoadContext.GetLoadContext(componentType.Assembly)!;
         var scene = new GameScene("Missing ALC");
         GameObject gameObject = scene.CreateObject("Actor");
@@ -2460,6 +2913,58 @@ public sealed class ScriptManagerTests : IDisposable
             }
             """);
 
+    private void WriteExtensionLifecycleProbe(
+        int generation,
+        string moduleStoppedPath,
+        string panelDetachedPath,
+        string? logPath,
+        bool failStart)
+    {
+        string moduleStopped = JsonSerializer.Serialize(moduleStoppedPath);
+        string panelDetached = JsonSerializer.Serialize(panelDetachedPath);
+        string log = JsonSerializer.Serialize(logPath ?? Path.Combine(m_projectRoot, "unused-lifecycle.log"));
+        Write("ExtensionLifecycle.editor.cs", $$"""
+            using InnoEditor.Core;
+
+            [EditorModule("tests.lifecycle-order-module")]
+            public sealed class LifecycleOrderModule : EditorModule
+            {
+                protected override void OnStart(EditorContext context)
+                {
+                    System.IO.File.AppendAllText({{log}}, "module-start-{{generation}};");
+                    {{(generation > 1 ? $"if (!System.IO.File.Exists({moduleStopped}) || !System.IO.File.Exists({panelDetached})) throw new System.InvalidOperationException(\"Previous extensions were not retired before candidate start.\");" : string.Empty)}}
+                    {{(failStart ? "throw new System.InvalidOperationException(\"Injected candidate module start failure.\");" : string.Empty)}}
+                }
+
+                protected override void OnStop(EditorContext context)
+                {
+                    System.IO.File.WriteAllText({{moduleStopped}}, "stopped");
+                    System.IO.File.AppendAllText({{log}}, "module-stop-{{generation}};");
+                }
+            }
+
+            [EditorPanel("tests.lifecycle-order", "Lifecycle Order", defaultOpen: false)]
+            public sealed class LifecycleOrderPanel : EditorPanel
+            {
+                protected override void OnAttach(EditorContext context)
+                {
+                    System.IO.File.AppendAllText({{log}}, "panel-attach-{{generation}};");
+                    {{(generation > 1 ? $"if (!System.IO.File.Exists({moduleStopped}) || !System.IO.File.Exists({panelDetached})) throw new System.InvalidOperationException(\"Previous extensions were not retired before candidate attach.\");" : string.Empty)}}
+                }
+
+                protected override void OnDetach(EditorContext context)
+                {
+                    System.IO.File.WriteAllText({{panelDetached}}, "detached");
+                    System.IO.File.AppendAllText({{log}}, "panel-detach-{{generation}};");
+                }
+
+                protected override void OnDraw(EditorContext context)
+                {
+                }
+            }
+            """);
+    }
+
     private void WriteReloadRetentionScripts(int generation)
     {
         Write("ReloadRetention.cs", $$"""
@@ -2538,7 +3043,7 @@ public sealed class ScriptManagerTests : IDisposable
         EditorInteractionRuntime runtime,
         int generation)
     {
-        Type observer = TypeCacheManager.current.types.Single(type => type.Name == "ReloadObserver");
+        Type observer = ResolveTypeByName("ReloadObserver");
         observer.GetMethod("Install", BindingFlags.Public | BindingFlags.Static)!.Invoke(null, null);
         AssetObject asset = AssetManager.Load<AssetObject>("Data/Reload.rasset");
         Assert.Equal("ReloadAsset", asset.GetType().Name);
@@ -2556,6 +3061,15 @@ public sealed class ScriptManagerTests : IDisposable
             new WeakReference(panel),
             new WeakReference(observer));
     }
+
+    private static AssetObject ResolveAssetReferenceFromTarget(
+        object target,
+        Guid persistentId,
+        Guid stableTypeId,
+        string lastKnownPath,
+        Type expectedType,
+        string propertyPath)
+        => throw new NotSupportedException(target.GetType().FullName);
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void ForceCollection()
@@ -2597,10 +3111,21 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     private static Type ResolveVersionedBehavior()
-        => TypeCacheManager.current.types.Single(type => type.Name == "VersionedBehavior");
+        => ResolveTypeByName("VersionedBehavior");
+
+    private static Type ResolveTypeByName(string name)
+        => TypeCacheManager.current.types.Single(type => type.Resolve().Name == name).Resolve();
+
+    private static bool ContainsType(string name)
+        => TypeCacheManager.current.types.Any(type => type.Resolve().Name == name);
 
     private static int ReadVersion(Type type)
         => (int)type.GetProperty("version")!.GetValue(Activator.CreateInstance(type))!;
+
+    private sealed class StrongTypeHolder(Type type)
+    {
+        internal Type? type = type;
+    }
 
     private static int GetProperty(object target, string propertyName)
         => (int)target.GetType().GetProperty(propertyName)!.GetValue(target)!;
@@ -2782,6 +3307,18 @@ public sealed class ScriptManagerTests : IDisposable
                 return m_reports.Values.Any(
                     report => report.diagnostics.Any(
                         diagnostic => string.Equals(diagnostic.code, code, StringComparison.Ordinal)));
+            }
+        }
+
+        internal IReadOnlyList<string> GetMessages(string code)
+        {
+            lock (m_sync)
+            {
+                return m_reports.Values
+                    .SelectMany(static report => report.diagnostics)
+                    .Where(diagnostic => string.Equals(diagnostic.code, code, StringComparison.Ordinal))
+                    .Select(static diagnostic => diagnostic.message)
+                    .ToArray();
             }
         }
 

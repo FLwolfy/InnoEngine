@@ -160,6 +160,7 @@ public sealed class InspectionDrawerRegistry : IDisposable
             var drawers = new Dictionary<Type, IInspectionDrawer>();
             var registrations = new List<Registration>();
             foreach (Type drawerType in types.GetTypesWithAttribute<InspectionDrawerAttribute>()
+                         .Select(typeRef => typeRef.Resolve(types))
                          .OrderBy(static type => type.FullName, StringComparer.Ordinal))
             {
                 IInspectionDrawer drawer = drawers.TryGetValue(drawerType, out IInspectionDrawer? existing)
@@ -194,7 +195,18 @@ public sealed class InspectionDrawerRegistry : IDisposable
             foreach (IInspectionDrawer drawer in snapshot.Select(static registration => registration.drawer))
             {
                 if (disposed.Add(drawer) && drawer is IDisposable disposable)
-                    disposable.Dispose();
+                {
+                    try
+                    {
+                        disposable.Dispose();
+                    }
+                    catch (Exception exception)
+                    {
+                        OnCleanupFailed(
+                            $"disposing inspection drawer '{drawer.GetType().FullName}'",
+                            exception);
+                    }
+                }
             }
         }
     }

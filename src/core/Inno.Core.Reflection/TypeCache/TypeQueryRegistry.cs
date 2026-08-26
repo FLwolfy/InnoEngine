@@ -9,9 +9,9 @@ namespace Inno.Core.Reflection;
 /// </summary>
 internal sealed class TypeQueryRegistry
 {
-    private Dictionary<int, Type[]> m_subclassCache = [];
-    private Dictionary<int, Type[]> m_interfaceCache = [];
-    private Dictionary<int, Type[]> m_attributeCache = [];
+    private Dictionary<int, IReadOnlyList<TypeRef>> m_subclassCache = [];
+    private Dictionary<int, IReadOnlyList<TypeRef>> m_interfaceCache = [];
+    private Dictionary<int, IReadOnlyList<TypeRef>> m_attributeCache = [];
 
     public void Rebuild(IEnumerable<Type> concreteTypes, TypeIdentityRegistry typeIdentityRegistry)
     {
@@ -47,32 +47,32 @@ internal sealed class TypeQueryRegistry
             }
         }
 
-        m_subclassCache = FreezeIndex(subclassSets);
-        m_interfaceCache = FreezeIndex(interfaceSets);
-        m_attributeCache = FreezeIndex(attributeSets);
+        m_subclassCache = FreezeIndex(subclassSets, typeIdentityRegistry);
+        m_interfaceCache = FreezeIndex(interfaceSets, typeIdentityRegistry);
+        m_attributeCache = FreezeIndex(attributeSets, typeIdentityRegistry);
     }
 
-    public IReadOnlyList<Type> GetSubTypesOf<T>(TypeIdentityRegistry typeIdentityRegistry)
+    public IReadOnlyList<TypeRef> GetSubTypesOf<T>(TypeIdentityRegistry typeIdentityRegistry)
     {
         return typeIdentityRegistry.TryGetRuntimeTypeId(typeof(T), out int keyId) &&
-               m_subclassCache.TryGetValue(keyId, out Type[]? set)
+               m_subclassCache.TryGetValue(keyId, out IReadOnlyList<TypeRef>? set)
             ? set
             : [];
     }
 
-    public IReadOnlyList<Type> GetTypesImplementing<TInterface>(TypeIdentityRegistry typeIdentityRegistry)
+    public IReadOnlyList<TypeRef> GetTypesImplementing<TInterface>(TypeIdentityRegistry typeIdentityRegistry)
     {
         return typeIdentityRegistry.TryGetRuntimeTypeId(typeof(TInterface), out int keyId) &&
-               m_interfaceCache.TryGetValue(keyId, out Type[]? set)
+               m_interfaceCache.TryGetValue(keyId, out IReadOnlyList<TypeRef>? set)
             ? set
             : [];
     }
 
-    public IReadOnlyList<Type> GetTypesWithAttribute<TAttr>(TypeIdentityRegistry typeIdentityRegistry)
+    public IReadOnlyList<TypeRef> GetTypesWithAttribute<TAttr>(TypeIdentityRegistry typeIdentityRegistry)
         where TAttr : Attribute
     {
         return typeIdentityRegistry.TryGetRuntimeTypeId(typeof(TAttr), out int keyId) &&
-               m_attributeCache.TryGetValue(keyId, out Type[]? set)
+               m_attributeCache.TryGetValue(keyId, out IReadOnlyList<TypeRef>? set)
             ? set
             : [];
     }
@@ -93,12 +93,16 @@ internal sealed class TypeQueryRegistry
         set.Add(valueType);
     }
 
-    private static Dictionary<int, Type[]> FreezeIndex(Dictionary<int, HashSet<Type>> index)
+    private static Dictionary<int, IReadOnlyList<TypeRef>> FreezeIndex(
+        Dictionary<int, HashSet<Type>> index,
+        TypeIdentityRegistry typeIdentityRegistry)
     {
-        var frozen = new Dictionary<int, Type[]>(index.Count);
+        var frozen = new Dictionary<int, IReadOnlyList<TypeRef>>(index.Count);
         foreach ((int key, HashSet<Type> value) in index)
         {
-            frozen[key] = [.. value];
+            frozen[key] = Array.AsReadOnly(value
+                .Select(typeIdentityRegistry.GetTypeRef)
+                .ToArray());
         }
 
         return frozen;

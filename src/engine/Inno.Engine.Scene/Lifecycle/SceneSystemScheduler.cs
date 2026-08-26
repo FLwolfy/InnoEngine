@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Reflection;
 
 using Inno.Assets.Core;
+using Inno.Core.Reflection;
 using Inno.Core.Storage;
 
 namespace Inno.Engine.Scene;
@@ -16,7 +17,7 @@ internal sealed class SceneSystemScheduler
     private readonly IndexedObjectStore<SystemEntry> m_systems = new();
     private readonly IndexedObjectKey<GameSystem> m_systemKey;
     private readonly IndexedObjectKey<Guid> m_persistentIdKey;
-    private readonly IndexedObjectKey<int> m_runtimeTypeKey;
+    private readonly IndexedObjectKey<TypeRef> m_typeKey;
     private readonly List<SystemEntry> m_displayOrder = [];
     private ReadOnlyCollection<GameSystem>? m_displayView;
     private SystemEntry[]? m_executionSnapshot;
@@ -29,7 +30,7 @@ internal sealed class SceneSystemScheduler
         m_persistentIdKey = m_systems.DefineKey<Guid>(
             "scene.system.persistent-id",
             IndexedObjectKeyFlags.Unique);
-        m_runtimeTypeKey = m_systems.DefineKey<int>("scene.system.runtime-type");
+        m_typeKey = m_systems.DefineKey<TypeRef>("scene.system.type");
     }
 
     internal TSystem Add<TSystem>() where TSystem : GameSystem, new()
@@ -60,14 +61,14 @@ internal sealed class SceneSystemScheduler
     }
 
     internal MissingGameSystem AddMissing(
-        Guid missingTypeId,
+        TypeRef missingType,
         string missingTypeName,
         ReadOnlySpan<byte> serializedState,
         Guid? persistentId,
         IReadOnlyList<AssetDependency>? dependencies = null)
     {
         var system = new MissingGameSystem(
-            missingTypeId,
+            missingType,
             missingTypeName,
             serializedState,
             dependencies);
@@ -148,7 +149,7 @@ internal sealed class SceneSystemScheduler
     internal void ReplaceForReload(
         GameSystem previous,
         GameSystem replacement,
-        int replacementRuntimeTypeId)
+        TypeRef replacementType)
     {
         if (!TryGetEntry(previous, out SystemEntry? entry))
             throw new InvalidOperationException("The GameSystem being replaced is not registered.");
@@ -167,9 +168,9 @@ internal sealed class SceneSystemScheduler
             replacement.RegisterIdentity(persistentId);
             m_systems.Add(entry!)
                 .Set(m_systemKey, replacement)
-                .Set(m_runtimeTypeKey, replacementRuntimeTypeId);
+                .Set(m_typeKey, replacementType);
             entry!.system = replacement;
-            entry.runtimeTypeId = replacementRuntimeTypeId;
+            entry.typeRef = replacementType;
             InvalidateSnapshots();
         }
         catch (Exception exception)
@@ -310,7 +311,7 @@ internal sealed class SceneSystemScheduler
             throw new InvalidOperationException(
                 $"System '{descriptor.displayName}' is already registered with scene '{m_scene.name}'.");
         }
-        if (!descriptor.allowsMultiple && m_systems.First(m_runtimeTypeKey, descriptor.runtimeTypeId) is not null)
+        if (!descriptor.allowsMultiple && m_systems.First(m_typeKey, descriptor.typeRef) is not null)
         {
             throw new InvalidOperationException(
                 $"Scene '{m_scene.name}' already contains GameSystem '{descriptor.displayName}'.");
@@ -321,11 +322,11 @@ internal sealed class SceneSystemScheduler
         try
         {
             system.RegisterIdentity(persistentId);
-            entry = new SystemEntry(system, descriptor.runtimeTypeId, m_displayOrder.Count);
+            entry = new SystemEntry(system, descriptor.typeRef, m_displayOrder.Count);
             m_systems.Add(entry)
                 .Set(m_systemKey, system)
                 .Set(m_persistentIdKey, system.identity.persistentId)
-                .Set(m_runtimeTypeKey, descriptor.runtimeTypeId);
+                .Set(m_typeKey, descriptor.typeRef);
             m_displayOrder.Add(entry);
             InvalidateSnapshots();
             if (invokeReset)
@@ -396,11 +397,11 @@ internal sealed class SceneSystemScheduler
 
     private sealed class SystemEntry(
         GameSystem system,
-        int runtimeTypeId,
+        TypeRef typeRef,
         int displayIndex)
     {
         internal GameSystem system { get; set; } = system;
-        internal int runtimeTypeId { get; set; } = runtimeTypeId;
+        internal TypeRef typeRef { get; set; } = typeRef;
         internal int displayIndex { get; set; } = displayIndex;
         internal int executionOrder { get; set; } = system.order;
     }

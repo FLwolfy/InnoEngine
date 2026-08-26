@@ -108,7 +108,7 @@ internal sealed class ConsolePanelContent
 
     internal bool IsSameEntryIgnoreTime(in EditorConsoleEntry a, in EditorConsoleEntry b)
         => a.level == b.level &&
-           a.source.Equals(b.source) &&
+           string.Equals(a.source, b.source, StringComparison.Ordinal) &&
            a.kind == b.kind &&
            string.Equals(a.diagnosticSourceId, b.diagnosticSourceId, StringComparison.Ordinal) &&
            string.Equals(a.code, b.code, StringComparison.Ordinal) &&

@@ -200,22 +200,22 @@ public sealed class SceneHistoryTests : IDisposable
         var source = sourceObject.AddComponent<HistoryReferenceComponent>();
         byte[] incompatibleState = ScenePropertySerialization.CaptureProperties(source);
         GameObject owner = scene.CreateObject("Owner");
-        Assert.True(TypeCacheManager.TryGetStableTypeId(typeof(HistoryComponent), out Guid componentTypeId));
-        Assert.True(TypeCacheManager.TryGetStableTypeId(typeof(HistorySystem), out Guid systemTypeId));
+        TypeRef componentType = TypeCacheManager.GetTypeRef(typeof(HistoryComponent));
+        TypeRef systemType = TypeCacheManager.GetTypeRef(typeof(HistorySystem));
         Guid componentId = Guid.NewGuid();
         Guid systemId = Guid.NewGuid();
 
         InvalidOperationException componentFailure = Assert.Throws<InvalidOperationException>(() =>
             SceneElementSerialization.RestoreComponent(
                 owner,
-                componentTypeId,
+                componentType,
                 componentId,
                 componentIndex: owner.GetComponents().Count,
                 incompatibleState));
         InvalidOperationException systemFailure = Assert.Throws<InvalidOperationException>(() =>
             SceneElementSerialization.RestoreSystem(
                 scene,
-                systemTypeId,
+                systemType,
                 systemId,
                 systemIndex: scene.GetSystems().Count,
                 incompatibleState));
@@ -234,15 +234,13 @@ public sealed class SceneHistoryTests : IDisposable
         var source = sourceOwner.AddComponent<RestoreCleanupFailureComponent>();
         byte[] state = ScenePropertySerialization.CaptureProperties(source);
         GameObject targetOwner = scene.CreateObject("Target");
-        Assert.True(TypeCacheManager.TryGetStableTypeId(
-            typeof(RestoreCleanupFailureComponent),
-            out Guid stableTypeId));
+        TypeRef typeRef = TypeCacheManager.GetTypeRef(typeof(RestoreCleanupFailureComponent));
         Guid persistentId = Guid.NewGuid();
 
         _ = Assert.ThrowsAny<Exception>(() =>
             SceneElementSerialization.RestoreComponent(
                 targetOwner,
-                stableTypeId,
+                typeRef,
                 persistentId,
                 componentIndex: targetOwner.GetComponents().Count,
                 state));

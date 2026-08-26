@@ -16,12 +16,19 @@ public interface IAssemblyCatalogTransaction
     void Activate();
 
     /// <summary>
-    /// Finalizes an activated state and releases the previous state.
+    /// Finalizes an activated state and releases the previous state without performing further publication work.
     /// </summary>
+    /// <remarks>
+    /// Implementations should isolate cleanup failures internally. The coordinator reports and ignores an
+    /// exception from this method because the candidate has already been published and cannot be rolled back safely.
+    /// </remarks>
     void Complete();
 
     /// <summary>
     /// Restores the previous state and releases the candidate state.
     /// </summary>
+    /// <remarks>
+    /// Implementations should isolate individual cleanup failures so every candidate resource can be released.
+    /// </remarks>
     void Rollback();
 }

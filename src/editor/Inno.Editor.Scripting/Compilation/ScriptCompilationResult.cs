@@ -14,14 +14,14 @@ public sealed class ScriptCompilationResult
         bool success,
         IReadOnlyList<ScriptDiagnostic> diagnostics,
         string? outputDirectory,
-        AssemblyLoadRequest? loadRequest,
+        IReadOnlyList<AssemblyLoadRequest>? reloadRequests,
         IReadOnlyList<string>? compiledAssemblies = null,
         IReadOnlyList<string>? reusedAssemblies = null)
     {
         this.success = success;
         this.diagnostics = diagnostics;
         this.outputDirectory = outputDirectory;
-        this.loadRequest = loadRequest;
+        this.reloadRequests = reloadRequests ?? [];
         this.compiledAssemblies = compiledAssemblies ?? [];
         this.reusedAssemblies = reusedAssemblies ?? [];
     }
@@ -35,7 +35,7 @@ public sealed class ScriptCompilationResult
     /// <summary>Gets the generation output directory when one was created.</summary>
     public string? outputDirectory { get; }
 
-    internal AssemblyLoadRequest? loadRequest { get; }
+    internal IReadOnlyList<AssemblyLoadRequest> reloadRequests { get; }
 
     internal IReadOnlyList<string> compiledAssemblies { get; }
 

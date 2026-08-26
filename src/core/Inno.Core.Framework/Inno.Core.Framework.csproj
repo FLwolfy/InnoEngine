@@ -6,7 +6,6 @@
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1573;CS1591</NoWarn>
-    <InnoAssemblyGroup>Core</InnoAssemblyGroup>
   </PropertyGroup>
 
   <ItemGroup>

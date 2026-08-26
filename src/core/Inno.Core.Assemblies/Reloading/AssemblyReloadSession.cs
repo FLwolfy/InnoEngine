@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 
 using Inno.Core.Assemblies.Internal;
 
@@ -18,7 +19,7 @@ public sealed class AssemblyReloadSession : IDisposable
         context = new AssemblyReloadContext(
             state.previousCatalog,
             state.candidateCatalog,
-            state.previousModule.handle,
+            state.candidateModules.Select(static module => module.handle).ToArray(),
             state.refresh.contexts);
     }
 
@@ -74,8 +75,8 @@ public sealed class AssemblyReloadSession : IDisposable
 
 internal sealed class ReloadState
 {
-    internal required AssemblyModuleEntry previousModule { get; init; }
-    internal required AssemblyModuleEntry candidateModule { get; init; }
+    internal required AssemblyModuleEntry?[] previousModules { get; init; }
+    internal required AssemblyModuleEntry[] candidateModules { get; init; }
     internal required AssemblyCatalogSnapshot previousCatalog { get; init; }
     internal required AssemblyCatalogSnapshot candidateCatalog { get; init; }
     internal required AssemblyCatalogRefreshSet refresh { get; init; }

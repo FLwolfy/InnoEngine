@@ -24,7 +24,7 @@ public class ConsoleLogSink : ILogSink
             LogLevel.Fatal => ConsoleColor.Magenta,
             _ => ConsoleColor.White
         };
-        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] <{entry.source}> [{entry.category}]: {entry.message}");
+        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] <{entry.domain}/{entry.scope}> [{entry.category}]: {entry.message}");
 
         Console.ForegroundColor = originalColor;
     }

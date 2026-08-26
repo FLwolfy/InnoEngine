@@ -152,13 +152,14 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
     {
         CapturePanelStates();
         Type[] moduleTypes = types.GetTypesWithAttribute<EditorModuleAttribute>()
+            .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
             .ToArray();
         var activator = new EditorExtensionActivator(
             m_context,
             m_interactions,
             moduleTypes,
-            types.types,
+            types.types.Select(typeRef => typeRef.Resolve(types)).ToArray(),
             m_active?.instances);
 
         ModuleRegistration[] modules = moduleTypes
@@ -171,6 +172,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             .ToArray();
 
         ActionRegistration[] actions = types.GetTypesWithAttribute<EditorActionAttribute>()
+            .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
             .Select(type => CreateActionRegistration(type, activator))
             .ToArray();
@@ -178,6 +180,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         ValidateShortcuts(actions);
 
         MenuSourceRegistration[] menuSources = types.GetTypesWithAttribute<EditorMenuSourceAttribute>()
+            .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
             .SelectMany(type => CreateMenuSourceRegistrations(type, activator))
             .OrderByDescending(static value => value.priority)
@@ -185,12 +188,14 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             .ToArray();
 
         DropRegistration[] drops = types.GetTypesWithAttribute<EditorDropAttribute>()
+            .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
             .SelectMany(type => CreateDropRegistrations(type, activator))
             .ToArray();
         ValidateDrops(drops);
 
         PanelRegistration[] panels = types.GetTypesWithAttribute<EditorPanelAttribute>()
+            .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
             .Select(type => CreatePanelRegistration(type, activator))
             .OrderBy(static value => value.attribute.order)
@@ -200,6 +205,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         ValidateExtensionIds(modules, panels);
 
         ModalRegistration[] modals = types.GetTypesWithAttribute<EditorModalAttribute>()
+            .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
             .Select(type => CreateModalRegistration(type, activator))
             .OrderBy(static value => value.attribute.order)
@@ -209,6 +215,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
 
         HistoryHandlerRegistration[] historyHandlers = types
             .GetTypesWithAttribute<EditorHistoryHandlerAttribute>()
+            .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
             .Select(type => CreateHistoryHandlerRegistration(type, activator))
             .OrderBy(static value => value.attribute.kind, StringComparer.Ordinal)
@@ -264,6 +271,9 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
                     candidate.attachedPanels.Add(registration.panel);
             }
         }
+
+        if (previous is not null)
+            RetirePrevious(previous, candidate, activation);
 
         for (int i = 0; i < candidate.modules.Length; i++)
         {
@@ -321,6 +331,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             TryDetach(activation.attachedPanels[i], "activation rollback");
         for (int i = activation.startedModules.Count - 1; i >= 0; i--)
             TryStop(activation.startedModules[i], "activation rollback");
+        RestorePrevious(activation);
         m_activation = null;
 
         var previousPanelIds = previous is null
@@ -341,8 +352,6 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         activation.handlers.Complete();
         m_interactions.CompleteGenerationTransition();
         NotifyExtensionsChanged();
-        if (previous is not null)
-            RetirePrevious(previous, currentSnapshot);
         m_staging = null;
         m_activation = null;
     }
@@ -393,7 +402,10 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         m_diagnostics.Commit();
     }
 
-    private void RetirePrevious(Snapshot previous, Snapshot next)
+    private void RetirePrevious(
+        Snapshot previous,
+        Snapshot next,
+        ActivationState activation)
     {
         var retained = new HashSet<object>(next.instances, ReferenceEqualityComparer.Instance);
         for (int i = previous.panels.Length - 1; i >= 0; i--)
@@ -401,13 +413,58 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             PanelRegistration registration = previous.panels[i];
             if (retained.Contains(registration.panel) || !previous.attachedPanels.Contains(registration.panel))
                 continue;
-            TryDetach(registration, "generation retirement");
+            if (TryDetach(registration, "generation retirement"))
+                activation.detachedPreviousPanels.Add(registration);
         }
         for (int i = previous.modules.Length - 1; i >= 0; i--)
         {
             if (!retained.Contains(previous.modules[i].module) &&
                 previous.startedModules.Contains(previous.modules[i].module))
-                TryStop(previous.modules[i], "generation retirement");
+            {
+                if (TryStop(previous.modules[i], "generation retirement"))
+                    activation.stoppedPreviousModules.Add(previous.modules[i]);
+            }
+        }
+    }
+
+    private void RestorePrevious(ActivationState activation)
+    {
+        Snapshot? previous = activation.previous;
+        if (previous is null)
+            return;
+        for (int i = activation.stoppedPreviousModules.Count - 1; i >= 0; i--)
+        {
+            ModuleRegistration registration = activation.stoppedPreviousModules[i];
+            try
+            {
+                registration.module.Start(m_context);
+            }
+            catch (Exception exception)
+            {
+                previous.quarantinedModules.Add(registration.module);
+                Log.Error(
+                    "Editor module '{0}' failed while restoring the previous generation: {1}",
+                    registration.attribute.id,
+                    exception);
+            }
+        }
+        for (int i = activation.detachedPreviousPanels.Count - 1; i >= 0; i--)
+        {
+            PanelRegistration registration = activation.detachedPreviousPanels[i];
+            try
+            {
+                registration.panel.Attach(m_context);
+            }
+            catch (Exception exception)
+            {
+                previous.quarantinedPanels.Add(registration.panel);
+                registration.panel.isOpen = false;
+                m_diagnostics.ReportPanelFailure(registration.attribute.id, exception);
+                Log.Error(
+                    "Editor panel '{0}' failed while restoring the previous generation: {1}",
+                    registration.attribute.id,
+                    exception);
+            }
         }
     }
 
@@ -443,27 +500,31 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             .Where(registration => !snapshot.quarantinedPanels.Contains(registration.panel))
             .ToArray();
 
-    private void TryStop(ModuleRegistration registration, string phase)
+    private bool TryStop(ModuleRegistration registration, string phase)
     {
         try
         {
             registration.module.Stop(m_context);
+            return true;
         }
         catch (Exception exception)
         {
             Log.Error("Editor module '{0}' failed during {1}: {2}", registration.attribute.id, phase, exception);
+            return false;
         }
     }
 
-    private void TryDetach(PanelRegistration registration, string phase)
+    private bool TryDetach(PanelRegistration registration, string phase)
     {
         try
         {
             registration.panel.Detach(m_context);
+            return true;
         }
         catch (Exception exception)
         {
             Log.Error("Editor panel '{0}' failed during {1}: {2}", registration.attribute.id, phase, exception);
+            return false;
         }
     }
 
@@ -895,5 +956,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         internal EditorHistory.HandlerUpdate handlers { get; } = handlers;
         internal List<ModuleRegistration> startedModules { get; } = [];
         internal List<PanelRegistration> attachedPanels { get; } = [];
+        internal List<ModuleRegistration> stoppedPreviousModules { get; } = [];
+        internal List<PanelRegistration> detachedPreviousPanels { get; } = [];
     }
 }

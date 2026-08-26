@@ -51,10 +51,10 @@ internal sealed class SerializableObjectPropertyDrawer : IPropertyDrawer
             context.SetValue(null);
         }
 
-        IReadOnlyList<Type> candidates = TypeCacheManager.GetTypesImplementing<ISerializable>();
+        IReadOnlyList<TypeRef> candidates = TypeCacheManager.GetTypesImplementing<ISerializable>();
         for (int i = 0; i < candidates.Count; i++)
         {
-            Type candidate = candidates[i];
+            Type candidate = candidates[i].Resolve();
             if (!context.propertyType.IsAssignableFrom(candidate))
             {
                 continue;

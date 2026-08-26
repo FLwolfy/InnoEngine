@@ -108,6 +108,26 @@ public sealed class SerializationBehaviorTests : IDisposable
     }
 
     [Fact]
+    public void TypeRefSerializationPersistsOnlyStableIdentity()
+    {
+        TypeRef active = TypeCacheManager.GetTypeRef(typeof(DefaultSample));
+
+        byte[] bytes = SerializationManager.Encode(writer => writer.Write("type", active));
+        TypeRef restored = SerializationManager.Decode(bytes, reader =>
+        {
+            SerializationReader type = reader.ReadObject("type");
+            Assert.True(type.Contains("stableId"));
+            Assert.False(type.Contains("runtimeId"));
+            Assert.False(type.Contains("isValid"));
+            return reader.Read<TypeRef>("type");
+        });
+
+        Assert.Equal(active, restored);
+        Assert.Equal(0, restored.runtimeId);
+        Assert.Equal(active.Resolve(), restored.Resolve());
+    }
+
+    [Fact]
     public void Restore_UpdatesExistingInstance()
     {
         var source = new DefaultSample { count = 77, name = "Restored" };

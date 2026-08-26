@@ -157,7 +157,7 @@ public class FileLogSink : ILogSink, IDisposable
 
     private string FormatEntry(LogEntry entry)
     {
-        return $"[{entry.time:yyyy-MM-dd HH:mm:ss.fff}] [{entry.source}] [{entry.level}]: {entry.message} ({entry.file}:{entry.line})";
+        return $"[{entry.time:yyyy-MM-dd HH:mm:ss.fff}] [{entry.domain}/{entry.scope}] [{entry.level}]: {entry.message} ({entry.file}:{entry.line})";
     }
 
     private string GetNewLogFilePath()

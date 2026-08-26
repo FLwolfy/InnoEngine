@@ -1,5 +1,8 @@
 using System;
 
+using Inno.Core.Reflection;
+using Inno.Core.Scripting;
+
 namespace Inno.Assets.Core;
 
 /// <summary>
@@ -11,23 +14,25 @@ public readonly struct AssetDependency : IEquatable<AssetDependency>
     /// Creates an asset dependency descriptor.
     /// </summary>
     /// <param name="persistentId">The persistent identity of the referenced asset.</param>
-    /// <param name="stableTypeId">The stable identity of the expected asset type.</param>
+    /// <param name="type">The reload-safe identity of the expected asset type.</param>
     /// <param name="lastKnownPath">The last known source-relative path.</param>
     /// <exception cref="ArgumentException">Thrown when <paramref name="persistentId"/> is empty.</exception>
-    public AssetDependency(Guid persistentId, Guid stableTypeId, string lastKnownPath)
+    [ScriptingApiIgnore]
+    public AssetDependency(Guid persistentId, TypeRef type, string lastKnownPath)
     {
         if (persistentId == Guid.Empty)
             throw new ArgumentException("An asset dependency requires a persistent identity.", nameof(persistentId));
         this.persistentId = persistentId;
-        this.stableTypeId = stableTypeId;
+        this.type = type;
         this.lastKnownPath = lastKnownPath ?? string.Empty;
     }
 
     /// <summary>Gets the persistent identity of the referenced asset.</summary>
     public Guid persistentId { get; }
 
-    /// <summary>Gets the stable identity of the expected asset type.</summary>
-    public Guid stableTypeId { get; }
+    /// <summary>Gets the reload-safe identity of the expected asset type.</summary>
+    [ScriptingApiIgnore]
+    public TypeRef type { get; }
 
     /// <summary>Gets the last known source-relative path.</summary>
     public string lastKnownPath { get; }

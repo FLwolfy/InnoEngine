@@ -30,12 +30,12 @@ public sealed class AssetDependencyCollection
         Guid persistentId = asset.identity.persistentId;
         if (persistentId == Guid.Empty)
             throw new InvalidOperationException($"Asset '{asset.GetType().FullName}' has no persistent identity.");
-        if (!TypeCacheManager.TryGetStableTypeId(asset.GetType(), out Guid stableTypeId))
+        if (!TypeCacheManager.TryGetTypeRef(asset.GetType(), out TypeRef typeRef))
         {
             throw new InvalidOperationException(
                 $"Asset type '{asset.GetType().FullName}' requires a StableTypeId before it can be referenced persistently.");
         }
 
-        m_dependencies[persistentId] = new AssetDependency(persistentId, stableTypeId, asset.sourcePath);
+        m_dependencies[persistentId] = new AssetDependency(persistentId, typeRef, asset.sourcePath);
     }
 }

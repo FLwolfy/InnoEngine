@@ -18,13 +18,15 @@ public static class Log
 
     private sealed class TypeInfo
     {
-        public required AssemblyGroup source { get; init; }
+        public required AssemblyDomain domain { get; init; }
+        public required AssemblyScope scope { get; init; }
         public required string category { get; init; }
     }
 
     private sealed class AssemblySource
     {
-        public required AssemblyGroup source { get; init; }
+        public required AssemblyDomain domain { get; init; }
+        public required AssemblyScope scope { get; init; }
     }
 
     private static readonly ConditionalWeakTable<Type, TypeInfo> TYPE_INFO_CACHE = new();
@@ -126,7 +128,8 @@ public static class Log
         var method = sf.GetMethod();
         var callerType = method?.DeclaringType;
 
-        AssemblyGroup source = AssemblyGroup.None;
+        AssemblyDomain domain = AssemblyDomain.InnoInternal;
+        AssemblyScope scope = AssemblyScope.Runtime;
         string category = C_DEFAULT_CATEGORY;
 
         if (callerType != null)
@@ -134,15 +137,21 @@ public static class Log
             TypeInfo info = TYPE_INFO_CACHE.GetValue(callerType, static type =>
             {
                 var src = ASSEMBLY_SOURCE_CACHE.GetValue(type.Assembly, static assembly =>
-                    new AssemblySource { source = assembly.GetInnoAssemblyGroup() });
+                    new AssemblySource
+                    {
+                        domain = assembly.GetInnoAssemblyDomain(),
+                        scope = assembly.GetInnoAssemblyScope()
+                    });
                 return new TypeInfo
                 {
-                    source = src.source,
+                    domain = src.domain,
+                    scope = src.scope,
                     category = type.Name
                 };
             });
 
-            source = info.source;
+            domain = info.domain;
+            scope = info.scope;
             category = info.category;
         }
 
@@ -154,7 +163,7 @@ public static class Log
         file = string.IsNullOrWhiteSpace(filePath) ? C_DEFAULT_CATEGORY : filePath;
         line = sf.GetFileLineNumber();
         
-        LogManager.Dispatch(new LogEntry(level, source, category, msg, file, line));
+        LogManager.Dispatch(new LogEntry(level, domain, scope, category, msg, file, line));
     }
 
 }

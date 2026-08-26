@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 using Inno.Assets.Core;
+using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 using Inno.Engine.Scene.Components;
 using Inno.Engine.Scene.Layers;
@@ -301,13 +302,13 @@ public sealed class GameScene : EngineObject, ISerializable
         => m_systems.Add(systemType, persistentId, invokeReset);
 
     internal MissingGameSystem AddMissingSystem(
-        Guid missingTypeId,
+        TypeRef missingType,
         string missingTypeName,
         ReadOnlySpan<byte> serializedState,
         Guid? persistentId,
         IReadOnlyList<AssetDependency>? dependencies = null)
         => m_systems.AddMissing(
-            missingTypeId,
+            missingType,
             missingTypeName,
             serializedState,
             persistentId,
@@ -406,7 +407,7 @@ public sealed class GameScene : EngineObject, ISerializable
 
     internal MissingGameComponent AddMissingComponent(
         GameObject owner,
-        Guid missingTypeId,
+        TypeRef missingType,
         string missingTypeName,
         ReadOnlySpan<byte> serializedState,
         Guid? persistentId,
@@ -414,7 +415,7 @@ public sealed class GameScene : EngineObject, ISerializable
     {
         EnsureOwned(owner);
         var component = new MissingGameComponent(
-            missingTypeId,
+            missingType,
             missingTypeName,
             serializedState,
             dependencies);
@@ -529,7 +530,7 @@ public sealed class GameScene : EngineObject, ISerializable
     internal void ReplaceComponentForReload(
         GameComponent previous,
         GameComponent replacement,
-        int replacementRuntimeTypeId)
+        TypeRef replacementType)
     {
         GameObject owner = previous.ownerOrNull
             ?? throw new InvalidOperationException("The component being replaced is detached.");
@@ -545,7 +546,7 @@ public sealed class GameScene : EngineObject, ISerializable
         {
             _ = previous.ReleaseIdentityForReplacement();
             replacement.RegisterIdentity(persistentId);
-            m_store.ReplaceComponent(previous, replacement, replacementRuntimeTypeId);
+            m_store.ReplaceComponent(previous, replacement, replacementType);
         }
         catch (Exception exception)
         {
@@ -597,8 +598,8 @@ public sealed class GameScene : EngineObject, ISerializable
     internal void ReplaceSystemForReload(
         GameSystem previous,
         GameSystem replacement,
-        int replacementRuntimeTypeId)
-        => m_systems.ReplaceForReload(previous, replacement, replacementRuntimeTypeId);
+        TypeRef replacementType)
+        => m_systems.ReplaceForReload(previous, replacement, replacementType);
 
     internal bool canDispatch => m_isLoaded && !m_isUnloading && !isDestroyed;
 

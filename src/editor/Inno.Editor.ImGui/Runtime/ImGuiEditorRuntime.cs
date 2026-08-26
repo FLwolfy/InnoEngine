@@ -99,6 +99,9 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
         }
 
         m_runtime.Flush();
+        // Menu actions can change modal visibility after the pre-draw transition update.
+        modals = m_runtime.modals;
+        _ = m_modals.Update(modals, now);
         m_modals.Draw(context, modals, now);
     }
 

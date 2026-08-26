@@ -12,29 +12,35 @@ namespace Inno.Core.Reflection.Tests;
 public sealed class AssemblyExtensionsTests
 {
     [Fact]
-    public void GetInnoAssemblyGroup_ReadsMetadata()
+    public void AssemblyClassificationReadsBothMetadataDimensions()
     {
-        var asm = BuildDynamicAssembly("Core");
-        Assert.Equal(AssemblyGroup.Core, asm.GetInnoAssemblyGroup());
+        var asm = BuildDynamicAssembly("InnoPlugin", "Editor");
+        Assert.Equal(AssemblyDomain.InnoPlugin, asm.GetInnoAssemblyDomain());
+        Assert.Equal(AssemblyScope.Editor, asm.GetInnoAssemblyScope());
     }
 
     [Fact]
-    public void GetInnoAssemblyGroup_DefaultsToNone()
+    public void MissingClassificationIsRejected()
     {
-        var asm = BuildDynamicAssembly(null);
-        Assert.Equal(AssemblyGroup.None, asm.GetInnoAssemblyGroup());
+        var asm = BuildDynamicAssembly(null, null);
+        Assert.Throws<InvalidOperationException>(() => asm.GetInnoAssemblyDomain());
+        Assert.Throws<InvalidOperationException>(() => asm.GetInnoAssemblyScope());
     }
 
-    private static Assembly BuildDynamicAssembly(string? groupName)
+    private static Assembly BuildDynamicAssembly(string? domainName, string? scopeName)
     {
         var asmName = new AssemblyName("Inno.Dynamic." + Guid.NewGuid().ToString("N"));
         var asmBuilder = AssemblyBuilder.DefineDynamicAssembly(asmName, AssemblyBuilderAccess.Run);
 
-        if (groupName != null)
+        if (domainName is not null && scopeName is not null)
         {
             var ctor = typeof(AssemblyMetadataAttribute).GetConstructor(new[] { typeof(string), typeof(string) })!;
-            var attr = new CustomAttributeBuilder(ctor, new object[] { "Inno.AssemblyGroup", groupName });
-            asmBuilder.SetCustomAttribute(attr);
+            asmBuilder.SetCustomAttribute(new CustomAttributeBuilder(
+                ctor,
+                new object[] { "Inno.AssemblyDomain", domainName }));
+            asmBuilder.SetCustomAttribute(new CustomAttributeBuilder(
+                ctor,
+                new object[] { "Inno.AssemblyScope", scopeName }));
         }
 
         var module = asmBuilder.DefineDynamicModule("main");

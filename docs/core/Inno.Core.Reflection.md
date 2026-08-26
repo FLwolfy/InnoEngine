@@ -30,24 +30,27 @@ Reflection 引用 Assemblies 并注册一个 catalog participant。Assemblies �
 | `GetSubTypesOf<T>()` | 返回所有具体派生类型。 |
 | `GetTypesImplementing<TInterface>()` | 返回所有具体接口实现。 |
 | `GetTypesWithAttribute<TAttribute>()` | 返回所有带指定 attribute 的具体类型。 |
-| `TryGetStableTypeId(Type, out Guid)` | 获取可跨 generation/进程持久化的 ID。 |
-| `TryGetRuntimeTypeId(Type, out int)` | 获取当前运行代际内的快速 ID。 |
-| `TryResolveType(Guid, out Type?)` | 由 Stable ID 找当前活动 Type。 |
-| `TryResolveType(int, out Type?)` | 由当前 generation 的 Runtime ID 找 Type。 |
+| `GetTypeRef(Type)` | 把当前 CLR Type 转换为不持有 ALC 的 `TypeRef`。 |
+| `TryGetTypeRef(Type, out TypeRef)` | 安全尝试同一转换。 |
 
 查询结果只包含非抽象、非接口的匹配实现，并按照 catalog 的稳定顺序输出。
 
 ```csharp
-IReadOnlyList<Type> behaviors = TypeCacheManager.GetSubTypesOf<GameBehavior>();
-IReadOnlyList<Type> converters =
+IReadOnlyList<TypeRef> behaviors = TypeCacheManager.GetSubTypesOf<GameBehavior>();
+IReadOnlyList<TypeRef> converters =
     TypeCacheManager.GetTypesWithAttribute<SerializationExtensionAttribute>();
 
-if (TypeCacheManager.TryGetStableTypeId(typeof(PlayerController), out Guid id) &&
-    TypeCacheManager.TryResolveType(id, out Type? activeType))
-{
-    Console.WriteLine(activeType.FullName);
-}
+TypeRef player = TypeCacheManager.GetTypeRef(typeof(PlayerController));
+Console.WriteLine(player.Resolve().FullName);
 ```
+
+## TypeRef
+
+`TypeRef` 是公开 readonly value type，只含 `Guid stableId` 与 `int runtimeId`。公开构造器只接收 Stable ID；TypeCache 生成的值才带 runtime hint。`isValid` 始终针对当前快照，`Resolve()` 无法解析时抛 `InvalidOperationException`，`Resolve(snapshot)` 可在事务中分别解析 previous/candidate。
+
+相等性和 HashCode 只看 `stableId`，所以同一逻辑类型跨 generation 仍相等；`runtimeId` 只是进程内不复用的快速查找 hint。解析会验证 runtime 命中的 Stable ID，hint 过期或命中不符时回退到 Stable ID。`default(TypeRef)` 与空 Guid 无效。统一 Serialization converter 只写 `stableId`，绝不持久化 `runtimeId`/`isValid`。
+
+`TypeRef` 不保存 `Type`、`Assembly`、delegate 或 ALC，也没有进入 Scripting API export。长期集合可以安全保存它；外部保存 `Resolve()` 返回的 CLR `Type`/对象/委托仍会按 .NET 规则延迟旧 ALC 卸载。
 
 ## TypeCacheSnapshot
 
@@ -56,16 +59,15 @@ if (TypeCacheManager.TryGetStableTypeId(typeof(PlayerController), out Guid id) &
 | 成员 | 说明 |
 | --- | --- |
 | `long version` | 单调递增版本号。 |
-| `IReadOnlyList<Type> types` | 本 generation 的全部已发现类型。 |
+| `IReadOnlyList<TypeRef> types` | 本 generation 的全部已发现类型身份。 |
 | `GetSubTypesOf<T>()` | 快照内的具体派生类。 |
 | `GetTypesImplementing<TInterface>()` | 快照内的具体接口实现。 |
 | `GetTypesWithAttribute<TAttribute>()` | 快照内带 attribute 的类型。 |
-| `TryGetStableTypeId` / `TryGetRuntimeTypeId` | 查询类型身份。 |
-| `TryResolveType(Guid/int, ...)` | 从 ID 解析快照中的类型。 |
+| `GetTypeRef(Type)` / `TryGetTypeRef` | 把属于该快照的 CLR Type 转成 `TypeRef`。 |
 
-不要长期缓存旧 snapshot 或由其返回的 Type 列表：其中的 `Type` 会强引用对应 collectible ALC。Registry 在 `Complete/Rollback` 中及时释放旧快照；引擎内建缓存只保留活动 generation，外部调用方若自行保留旧 snapshot/Type，则 ALC 延迟卸载属于该引用的预期结果。
+不要长期缓存旧 snapshot：其内部为了 generation 一致性强持有 `Type` 和反射发现 slice，即使公开查询只返回 `TypeRef`。Registry 在 `Complete/Rollback` 中及时释放旧快照；外部调用方若自行保留旧 snapshot 或 `Resolve` 的结果，则 ALC 延迟卸载属于该引用的预期结果。
 
-Snapshot 构建会按 `Assembly` 引用身份复用上一代的内部 Type slice：未变化的 host/default assembly 不再重复调用 `GetTypes()`，新加载或新 ALC 中的 assembly 才重新发现。该优化不会跨 ALC 复用脚本 `Type`；即使程序集字节来自增量缓存，新 ProjectScripts ALC 中的 `Assembly` 引用也不同，因此旧 slice 会随 previous snapshot 一起释放。Snapshot 本身必须保持强引用才能提供 generation 内一致性；把其中的 `Type` 改成弱引用会让一次查询中类型集合随 GC 变化，不能解决外部强引用，反而破坏事务语义。
+Snapshot 构建会按 `Assembly` 引用身份复用上一代的内部 Type slice：未变化的 host/default/upstream assembly 不再重复调用 `GetTypes()`，新加载或新 ALC 中的 assembly 才重新发现。该优化不会跨 ALC 复用脚本 `Type`；即使程序集字节来自增量缓存，被替换的 Plugin/Runtime/Editor ALC 中 `Assembly` 引用也不同，因此旧 slice 会随 previous snapshot 一起释放。Snapshot 本身必须保持强引用才能提供 generation 内一致性；把其中的 `Type` 改成弱引用会让一次查询中类型集合随 GC 变化，不能解决外部强引用，反而破坏事务语义。
 
 ## Stable Type ID 与 Runtime Type ID
 
@@ -82,9 +84,9 @@ public sealed class PlayerController : GameBehavior
 
 `StableTypeIdAttribute.id` 是 Guid 字符串。无效字符串或重复 ID 会让候选快照验证失败，从而保留旧 generation。
 
-`TryGetStableTypeId` 返回唯一 canonical ID；`TryResolveType` 只接受当前明确注册的 ID，不维护 former alias 或旧持久数据兼容表。
+`GetTypeRef` 返回唯一 canonical ID；`TypeRef.Resolve` 只接受当前明确注册的 ID，不维护 former alias 或旧持久数据兼容表。
 
-Runtime Type ID 是只适用于当前活动 `Type` 实例的整数。新 ALC 里的替代 Type 会获得新的 runtime ID，不能写入持久化数据。
+Runtime Type ID 是只适用于某个 CLR `Type` 实例的整数。新 ALC 里的替代 Type 会获得新的 runtime ID；失败/回滚候选已分配的 ID 也不会复用。它只在 `TypeIdentityRegistry` 和 TypeCache query index 内部用于快速验证/定位当前 CLR Type，并作为 `TypeRef.Resolve` 的可选 hint；Scene、Asset、History、Workspace、Editor action 等领域存储和索引都直接保存 `TypeRef`，不消费裸 runtime ID。
 
 ## TypeCacheReloadContext
 
@@ -94,8 +96,8 @@ Runtime Type ID 是只适用于当前活动 `Type` 实例的整数。新 ALC 里
 | --- | --- |
 | `previous` | 旧类型快照。 |
 | `candidate` | 已验证的候选类型快照。 |
-| `IsRetiredType(Type)` | 类型是否在候选中被替换或移除。 |
-| `TryResolveReplacement(Type, out Type?)` | 按 Stable ID 查找不同的候选 Type。 |
+| `IsRetired(TypeRef)` | 逻辑类型是否在候选中被替换或移除。 |
+| `TryResolveReplacement(TypeRef, out TypeRef)` | 按 Stable ID 查找不同的候选 generation identity。 |
 
 上下文只在 reload transaction 存活；`Complete()` 或 `Rollback()` 后访问会抛 `InvalidOperationException`。
 
@@ -134,8 +136,9 @@ internal sealed class RenderPipelineRegistry
     protected override RenderPipelineSnapshot Build(TypeCacheSnapshot types)
     {
         Dictionary<string, RenderPipeline> result = new(StringComparer.Ordinal);
-        foreach (Type type in types.GetSubTypesOf<RenderPipeline>())
+        foreach (TypeRef typeRef in types.GetSubTypesOf<RenderPipeline>())
         {
+            Type type = typeRef.Resolve(types);
             RenderPipeline instance = CreateExtension<RenderPipeline>(type);
             if (!result.TryAdd(instance.id, instance))
                 throw new InvalidOperationException($"Duplicate pipeline id '{instance.id}'.");

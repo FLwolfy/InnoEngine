@@ -24,7 +24,12 @@ internal sealed class EditorScripting : EditorModule
     /// Gets whether script compilation is currently active.
     /// </summary>
     internal bool isCompiling
-        => m_showCompilation || m_compilation is not null || m_manager?.isCompiling == true;
+        => m_showCompilation ||
+           m_compilation is not null ||
+           m_manager?.isCompiling == true ||
+           m_manager?.isCompilationPending == true;
+
+    internal bool isAvailable => m_manager is not null;
 
     /// <summary>
     /// Gets the current compiler progress.
@@ -35,6 +40,15 @@ internal sealed class EditorScripting : EditorModule
     /// Gets the current compiler stage.
     /// </summary>
     internal string status => m_manager?.compilationStatus ?? "Waiting for script changes.";
+
+    internal void RecompileScripting()
+        => QueueReload(static manager => manager.RecompileScripting());
+
+    internal void ReloadScripting()
+        => QueueReload(static manager => manager.ReloadScripting());
+
+    internal void ReloadPlugins()
+        => QueueReload(static manager => manager.ReloadPlugins());
 
     /// <inheritdoc />
     protected override void OnStart(EditorContext context)
@@ -54,6 +68,7 @@ internal sealed class EditorScripting : EditorModule
     /// <inheritdoc />
     protected override void OnUpdate(EditorContext context)
     {
+        m_manager?.RefreshUnloadDiagnostics();
         if (m_hideCompilationOnNextUpdate)
         {
             m_hideCompilationOnNextUpdate = false;
@@ -99,6 +114,16 @@ internal sealed class EditorScripting : EditorModule
             m_compilation = null;
             m_hideCompilationOnNextUpdate = true;
         }
+    }
+
+    private void QueueReload(Action<ScriptManager> request)
+    {
+        ScriptManager? manager = m_manager;
+        if (manager is null)
+            return;
+        request(manager);
+        m_hideCompilationOnNextUpdate = false;
+        m_showCompilation = true;
     }
 
     private void DisposeManager()

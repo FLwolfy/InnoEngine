@@ -131,7 +131,7 @@ internal static class SceneGraphSerialization
                 componentWriter.Write(C_COMPONENT_ID_KEY, GetSourceId(sourceIds, component));
                 if (component is MissingGameComponent missing)
                 {
-                    componentWriter.Write(C_STABLE_TYPE_ID_KEY, missing.missingTypeId);
+                    componentWriter.Write(C_STABLE_TYPE_ID_KEY, missing.missingType.stableId);
                     componentWriter.Write(C_TYPE_NAME_KEY, missing.missingTypeName);
                     componentWriter.Write(C_STATE_KEY, missing.CaptureSerializedState());
                     WriteStateDependencies(componentWriter, missing.dependencies);
@@ -218,7 +218,7 @@ internal static class SceneGraphSerialization
                 {
                     component = scene.AddMissingComponent(
                         gameObject,
-                        stableTypeId,
+                        new TypeRef(stableTypeId),
                         componentReader.Read<string>(C_TYPE_NAME_KEY),
                         state,
                         preservePersistentIds ? sourceComponentId : null,
@@ -389,7 +389,7 @@ internal static class SceneGraphSerialization
             systemWriter.Write(C_SYSTEM_ID_KEY, GetSourceId(sourceIds, system));
             if (system is MissingGameSystem missing)
             {
-                systemWriter.Write(C_STABLE_TYPE_ID_KEY, missing.missingTypeId);
+                systemWriter.Write(C_STABLE_TYPE_ID_KEY, missing.missingType.stableId);
                 systemWriter.Write(C_TYPE_NAME_KEY, missing.missingTypeName);
                 systemWriter.Write(C_STATE_KEY, missing.CaptureSerializedState());
                 WriteStateDependencies(systemWriter, missing.dependencies);
@@ -421,8 +421,8 @@ internal static class SceneGraphSerialization
             GameSystem system;
             if (!TryResolveSystemType(stableTypeId, out Type? systemType) || systemType is null)
             {
-                system = scene.AddMissingSystem(
-                    stableTypeId,
+                    system = scene.AddMissingSystem(
+                        new TypeRef(stableTypeId),
                     systemReader.Read<string>(C_TYPE_NAME_KEY),
                     state,
                     preservePersistentIds ? sourceId : null,
@@ -747,40 +747,49 @@ internal static class SceneGraphSerialization
 
     private static Guid GetStableComponentTypeId(Type componentType)
     {
-        if (!TypeCacheManager.TryGetStableTypeId(componentType, out Guid stableTypeId))
-        {
-            throw new InvalidOperationException(
-                $"GameComponent type '{componentType.FullName}' requires a loaded StableTypeId before persistence.");
-        }
-        return stableTypeId;
+        return TypeCacheManager.GetTypeRef(componentType).stableId;
     }
 
     private static bool TryResolveComponentType(Guid stableTypeId, out Type? componentType)
     {
-        if (!TypeCacheManager.TryResolveType(stableTypeId, out componentType) || componentType is null)
+        if (!TryResolve(new TypeRef(stableTypeId), out componentType))
             return false;
-        if (!typeof(GameComponent).IsAssignableFrom(componentType) || componentType.IsAbstract)
+        Type resolved = componentType!;
+        if (!typeof(GameComponent).IsAssignableFrom(resolved) || resolved.IsAbstract)
         {
             throw new InvalidDataException(
-                $"Stable type id '{stableTypeId}' resolves to invalid component type '{componentType.FullName}'.");
+                $"Stable type id '{stableTypeId}' resolves to invalid component type '{resolved.FullName}'.");
         }
         return true;
     }
 
     private static Guid GetStableSystemTypeId(Type systemType)
     {
-        if (!TypeCacheManager.TryGetStableTypeId(systemType, out Guid stableTypeId))
-            throw new InvalidOperationException($"GameSystem type '{systemType.FullName}' requires a loaded StableTypeId.");
-        return stableTypeId;
+        return TypeCacheManager.GetTypeRef(systemType).stableId;
     }
 
     private static bool TryResolveSystemType(Guid stableTypeId, out Type? systemType)
     {
-        if (!TypeCacheManager.TryResolveType(stableTypeId, out systemType) || systemType is null)
+        if (!TryResolve(new TypeRef(stableTypeId), out systemType))
             return false;
-        if (!typeof(GameSystem).IsAssignableFrom(systemType) || systemType.IsAbstract)
-            throw new InvalidDataException($"Stable type id '{stableTypeId}' resolves to invalid system '{systemType.FullName}'.");
+        Type resolved = systemType!;
+        if (!typeof(GameSystem).IsAssignableFrom(resolved) || resolved.IsAbstract)
+            throw new InvalidDataException($"Stable type id '{stableTypeId}' resolves to invalid system '{resolved.FullName}'.");
         return true;
+    }
+
+    private static bool TryResolve(TypeRef typeRef, out Type? type)
+    {
+        try
+        {
+            type = typeRef.Resolve();
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            type = null;
+            return false;
+        }
     }
 
     private static CapturedSceneState CaptureState(

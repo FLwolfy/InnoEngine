@@ -38,38 +38,36 @@ public sealed class TypeCacheTests : IDisposable
     [Fact]
     public void QueriesReturnOnlyConcreteMatchingTypes()
     {
-        Assert.Contains(typeof(TestDerived), TypeCacheManager.GetSubTypesOf<TestBase>());
-        Assert.DoesNotContain(typeof(TestAbstractDerived), TypeCacheManager.GetSubTypesOf<TestBase>());
-        Assert.Contains(typeof(TestContractImpl), TypeCacheManager.GetTypesImplementing<ITestContract>());
-        Assert.DoesNotContain(typeof(TestAbstractContractImpl), TypeCacheManager.GetTypesImplementing<ITestContract>());
-        Assert.Contains(typeof(AttributedType), TypeCacheManager.GetTypesWithAttribute<TestMarkerAttribute>());
-        Assert.DoesNotContain(typeof(AbstractAttributedType), TypeCacheManager.GetTypesWithAttribute<TestMarkerAttribute>());
+        Assert.Contains(TypeCacheManager.GetTypeRef(typeof(TestDerived)), TypeCacheManager.GetSubTypesOf<TestBase>());
+        Assert.DoesNotContain(TypeCacheManager.GetTypeRef(typeof(TestAbstractDerived)), TypeCacheManager.GetSubTypesOf<TestBase>());
+        Assert.Contains(TypeCacheManager.GetTypeRef(typeof(TestContractImpl)), TypeCacheManager.GetTypesImplementing<ITestContract>());
+        Assert.DoesNotContain(TypeCacheManager.GetTypeRef(typeof(TestAbstractContractImpl)), TypeCacheManager.GetTypesImplementing<ITestContract>());
+        Assert.Contains(TypeCacheManager.GetTypeRef(typeof(AttributedType)), TypeCacheManager.GetTypesWithAttribute<TestMarkerAttribute>());
+        Assert.DoesNotContain(TypeCacheManager.GetTypeRef(typeof(AbstractAttributedType)), TypeCacheManager.GetTypesWithAttribute<TestMarkerAttribute>());
     }
 
     [Fact]
     public void RuntimeIdentityRoundTripsAndSurvivesOrdinaryRebuild()
     {
-        Assert.True(TypeCacheManager.TryGetRuntimeTypeId(typeof(TestDerived), out int first));
-        Assert.True(TypeCacheManager.TryResolveType(first, out Type? resolved));
-        Assert.Equal(typeof(TestDerived), resolved);
+        TypeRef first = TypeCacheManager.GetTypeRef(typeof(TestDerived));
+        Assert.Equal(typeof(TestDerived), first.Resolve());
 
         TypeCacheManager.Rebuild();
 
-        Assert.True(TypeCacheManager.TryGetRuntimeTypeId(typeof(TestDerived), out int second));
-        Assert.Equal(first, second);
+        TypeRef second = TypeCacheManager.GetTypeRef(typeof(TestDerived));
+        Assert.Equal(first.runtimeId, second.runtimeId);
     }
 
     [Fact]
     public void StableIdentityUsesExplicitAttributeAndFallbackIsDeterministic()
     {
-        Assert.True(TypeCacheManager.TryGetStableTypeId(typeof(StableAnnotatedTypeA), out Guid explicitId));
-        Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), explicitId);
-        Assert.True(TypeCacheManager.TryResolveType(explicitId, out Type? resolved));
-        Assert.Equal(typeof(StableAnnotatedTypeA), resolved);
+        TypeRef explicitType = TypeCacheManager.GetTypeRef(typeof(StableAnnotatedTypeA));
+        Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), explicitType.stableId);
+        Assert.Equal(typeof(StableAnnotatedTypeA), explicitType.Resolve());
 
-        Assert.True(TypeCacheManager.TryGetStableTypeId(typeof(DeterministicStableType), out Guid first));
+        Guid first = TypeCacheManager.GetTypeRef(typeof(DeterministicStableType)).stableId;
         TypeCacheManager.Rebuild();
-        Assert.True(TypeCacheManager.TryGetStableTypeId(typeof(DeterministicStableType), out Guid second));
+        Guid second = TypeCacheManager.GetTypeRef(typeof(DeterministicStableType)).stableId;
         Assert.Equal(first, second);
     }
 
@@ -78,24 +76,22 @@ public sealed class TypeCacheTests : IDisposable
     {
         Guid generatedId = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
-        Assert.True(TypeCacheManager.TryGetStableTypeId(typeof(GeneratedMappedType), out Guid stableId));
-        Assert.Equal(generatedId, stableId);
-        Assert.True(TypeCacheManager.TryResolveType(generatedId, out Type? generatedResolved));
-        Assert.Equal(typeof(GeneratedMappedType), generatedResolved);
+        TypeRef generated = TypeCacheManager.GetTypeRef(typeof(GeneratedMappedType));
+        Assert.Equal(generatedId, generated.stableId);
+        Assert.Equal(typeof(GeneratedMappedType), generated.Resolve());
 
-        Assert.True(TypeCacheManager.TryGetStableTypeId(typeof(StableAnnotatedTypeA), out Guid explicitId));
-        Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), explicitId);
-        Assert.False(TypeCacheManager.TryResolveType(
-            Guid.Parse("66666666-6666-6666-6666-666666666666"),
-            out _));
+        TypeRef explicitType = TypeCacheManager.GetTypeRef(typeof(StableAnnotatedTypeA));
+        Assert.Equal(Guid.Parse("11111111-1111-1111-1111-111111111111"), explicitType.stableId);
+        Assert.False(new TypeRef(Guid.Parse("66666666-6666-6666-6666-666666666666")).isValid);
     }
 
     [Fact]
-    public void AssemblyGroupIncludesTypesOutsideInnoNamespace()
+    public void AssemblyMetadataIncludesTypesOutsideInnoNamespace()
     {
-        Assert.True(TypeCacheManager.TryGetRuntimeTypeId(typeof(OutsideNamespaceType), out _));
-        Assert.True(TypeCacheManager.TryGetStableTypeId(typeof(OutsideStableAnnotatedType), out Guid stableId));
-        Assert.Equal(Guid.Parse("33333333-3333-3333-3333-333333333333"), stableId);
+        Assert.True(TypeCacheManager.GetTypeRef(typeof(OutsideNamespaceType)).runtimeId > 0);
+        Assert.Equal(
+            Guid.Parse("33333333-3333-3333-3333-333333333333"),
+            TypeCacheManager.GetTypeRef(typeof(OutsideStableAnnotatedType)).stableId);
     }
 
     [Fact]
@@ -109,8 +105,8 @@ public sealed class TypeCacheTests : IDisposable
         Assert.NotSame(previous, current);
         Assert.True(current.version > previous.version);
         Assert.Equal(
-            previous.GetSubTypesOf<TestBase>().OrderBy(static type => type.FullName),
-            current.GetSubTypesOf<TestBase>().OrderBy(static type => type.FullName));
+            previous.GetSubTypesOf<TestBase>().OrderBy(static type => type.stableId),
+            current.GetSubTypesOf<TestBase>().OrderBy(static type => type.stableId));
     }
 
     [Fact]
@@ -139,9 +135,9 @@ public sealed class TypeCacheTests : IDisposable
             "Inno.Core.Reflection.TestAssets.A.AssemblyAMarkedType",
             throwOnError: true)!;
 
-        IReadOnlyList<Type> discovered = GetTypesWithAttribute(marker);
+        IReadOnlyList<TypeRef> discovered = GetTypesWithAttribute(marker);
 
-        Assert.Contains(marked, discovered);
+        Assert.Contains(discovered, type => type.Resolve() == marked);
         Assert.DoesNotContain(
             typeof(TypeCacheManager).GetMethods(BindingFlags.Public | BindingFlags.Static),
             static method => method.Name == "LoadAssembly");
@@ -174,10 +170,63 @@ public sealed class TypeCacheTests : IDisposable
     [Fact]
     public void UnknownIdentityAndNullArgumentsFailSafely()
     {
-        Assert.False(TypeCacheManager.TryResolveType(int.MaxValue, out _));
-        Assert.False(TypeCacheManager.TryResolveType(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), out _));
-        Assert.Throws<ArgumentNullException>(() => TypeCacheManager.TryGetRuntimeTypeId(null!, out _));
-        Assert.Throws<ArgumentNullException>(() => TypeCacheManager.TryGetStableTypeId(null!, out _));
+        TypeRef empty = default;
+        TypeRef explicitEmpty = new(Guid.Empty);
+        TypeRef unknown = new(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"));
+        Assert.False(empty.isValid);
+        Assert.False(explicitEmpty.isValid);
+        Assert.False(unknown.isValid);
+        Assert.Throws<InvalidOperationException>(empty.Resolve);
+        Assert.Throws<InvalidOperationException>(explicitEmpty.Resolve);
+        Assert.Throws<InvalidOperationException>(unknown.Resolve);
+        Assert.Throws<ArgumentNullException>(() => TypeCacheManager.TryGetTypeRef(null!, out _));
+    }
+
+    [Fact]
+    public void PublicTypeCacheQueriesExposeOnlyTypeRefs()
+    {
+        string[] queryNames =
+        [
+            nameof(TypeCacheManager.GetSubTypesOf),
+            nameof(TypeCacheManager.GetTypesImplementing),
+            nameof(TypeCacheManager.GetTypesWithAttribute)
+        ];
+        MethodInfo[] managerQueries = typeof(TypeCacheManager)
+            .GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Where(method => queryNames.Contains(method.Name, StringComparer.Ordinal))
+            .ToArray();
+        MethodInfo[] snapshotQueries = typeof(TypeCacheSnapshot)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Where(method => queryNames.Contains(method.Name, StringComparer.Ordinal))
+            .ToArray();
+
+        Assert.NotEmpty(managerQueries);
+        Assert.NotEmpty(snapshotQueries);
+        Assert.All(managerQueries.Concat(snapshotQueries), static method =>
+            Assert.Equal(typeof(IReadOnlyList<TypeRef>), method.ReturnType));
+        Assert.Equal(typeof(IReadOnlyList<TypeRef>), typeof(TypeCacheSnapshot)
+            .GetProperty(nameof(TypeCacheSnapshot.types))!.PropertyType);
+        Assert.DoesNotContain(
+            typeof(TypeCacheManager).GetMethods(BindingFlags.Public | BindingFlags.Static),
+            static method => method.Name.Contains("ResolveType", StringComparison.Ordinal) ||
+                             method.ReturnType == typeof(Type) ||
+                             method.ReturnType == typeof(Type[]));
+        Assert.IsNotType<TypeRef[]>(TypeCacheManager.current.types);
+        Assert.IsNotType<TypeRef[]>(TypeCacheManager.GetSubTypesOf<TestBase>());
+    }
+
+    [Fact]
+    public void TypeRefContainsOnlyStableAndRuntimeValueIdentity()
+    {
+        FieldInfo[] fields = typeof(TypeRef).GetFields(BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.Equal(2, fields.Length);
+        Assert.Contains(fields, static field => field.FieldType == typeof(Guid));
+        Assert.Contains(fields, static field => field.FieldType == typeof(int));
+        Assert.DoesNotContain(fields, static field =>
+            field.FieldType == typeof(Type) ||
+            field.FieldType == typeof(Assembly) ||
+            typeof(Delegate).IsAssignableFrom(field.FieldType));
     }
 
     [Fact]
@@ -300,14 +349,14 @@ public sealed class TypeCacheTests : IDisposable
         Assert.Equal([1], registry.disposedSnapshotIds);
     }
 
-    private static IReadOnlyList<Type> GetTypesWithAttribute(Type attributeType)
+    private static IReadOnlyList<TypeRef> GetTypesWithAttribute(Type attributeType)
     {
         MethodInfo method = typeof(TypeCacheManager)
             .GetMethods(BindingFlags.Public | BindingFlags.Static)
             .Single(static candidate =>
                 candidate.Name == nameof(TypeCacheManager.GetTypesWithAttribute) &&
                 candidate.IsGenericMethodDefinition);
-        return (IReadOnlyList<Type>)method.MakeGenericMethod(attributeType).Invoke(null, null)!;
+        return (IReadOnlyList<TypeRef>)method.MakeGenericMethod(attributeType).Invoke(null, null)!;
     }
 
     private static IReadOnlyDictionary<Assembly, Type[]> GetAssemblySlices(TypeCacheSnapshot snapshot)

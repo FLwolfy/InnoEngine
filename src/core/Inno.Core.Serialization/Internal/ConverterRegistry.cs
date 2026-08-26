@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 
@@ -247,6 +248,7 @@ internal static class ConverterRegistry
         {
             IReadOnlyList<Type> registrations = types
                 .GetTypesWithAttribute<SerializationExtensionAttribute>()
+                .Select(typeRef => typeRef.Resolve(types))
                 .OrderBy(static type => type.FullName, StringComparer.Ordinal)
                 .ToArray();
             for (int i = 0; i < registrations.Count; i++)
@@ -276,7 +278,19 @@ internal static class ConverterRegistry
                 foreach (object converter in converterInstances.Values.Distinct(ReferenceEqualityComparer.Instance))
                 {
                     if (converter is IDisposable disposable)
-                        disposable.Dispose();
+                    {
+                        try
+                        {
+                            disposable.Dispose();
+                        }
+                        catch (Exception exception)
+                        {
+                            Trace.TraceError(
+                                "Serialization converter '{0}' failed while being disposed: {1}",
+                                converter.GetType().FullName,
+                                exception);
+                        }
+                    }
                 }
                 cache.Clear();
                 converterInstances.Clear();

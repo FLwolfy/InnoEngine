@@ -26,7 +26,7 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
 
     internal IReadOnlyList<object> retiredObjects => m_scenes
         .SelectMany(static scene => scene.states)
-        .Where(state => m_context.IsRetiredType(state.target.GetType()))
+        .Where(state => m_context.IsRetired(state.activeType))
         .Select(static state => (object)state.target)
         .ToArray();
 
@@ -82,7 +82,7 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
             foreach (ObjectState state in sceneState.states)
             {
                 Type? replacementType = ResolveCandidateType(state, m_context);
-                bool retired = m_context.IsRetiredType(state.target.GetType());
+                bool retired = m_context.IsRetired(state.activeType);
                 bool recovering = state.target is MissingGameComponent or MissingGameSystem &&
                                   replacementType is not null;
                 if (!retired && !recovering)
@@ -91,11 +91,7 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
                 Type effectiveType = replacementType ?? (state.target is GameSystem
                     ? typeof(MissingGameSystem)
                     : typeof(MissingGameComponent));
-                if (!m_context.candidate.TryGetRuntimeTypeId(effectiveType, out int replacementRuntimeTypeId))
-                {
-                    throw new InvalidOperationException(
-                        $"Replacement type '{effectiveType.FullName}' has no candidate runtime type identity.");
-                }
+                TypeRef replacementTypeRef = m_context.candidate.GetTypeRef(effectiveType);
                 EngineObject replacement = CreateReplacement(state, effectiveType);
                 if (replacement is not MissingGameComponent and not MissingGameSystem)
                     CopyLifecycle(state.target, replacement);
@@ -104,21 +100,21 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
                     sceneState.scene.ReplaceComponentForReload(
                         previousComponent,
                         (GameComponent)replacement,
-                        replacementRuntimeTypeId);
+                        replacementTypeRef);
                 }
                 else
                 {
                     sceneState.scene.ReplaceSystemForReload(
                         (GameSystem)state.target,
                         (GameSystem)replacement,
-                        replacementRuntimeTypeId);
+                        replacementTypeRef);
                 }
                 state.currentTarget = replacement;
                 m_replacements.Add(new Replacement(
                     sceneState.scene,
                     state.target,
                     replacement,
-                    state.runtimeTypeId));
+                    state.activeType));
                 if (replacementType is null || recovering)
                 {
                     m_diagnostics.Add(new SceneReloadDiagnostic(
@@ -151,14 +147,14 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
                 replacement.scene.ReplaceComponentForReload(
                     (GameComponent)replacement.current,
                     previousComponent,
-                    replacement.previousRuntimeTypeId);
+                    replacement.previousType);
             }
             else
             {
                 replacement.scene.ReplaceSystemForReload(
                     (GameSystem)replacement.current,
                     (GameSystem)replacement.previous,
-                    replacement.previousRuntimeTypeId);
+                    replacement.previousType);
             }
         }
         foreach (SceneState sceneState in m_scenes)
@@ -196,10 +192,25 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
         EnsureActive();
         foreach (Replacement replacement in m_replacements)
         {
-            if (replacement.previous is GameComponent component && !component.isDestroyed)
-                component.Detach();
-            else if (replacement.previous is GameSystem system && !system.isDestroyed)
-                system.Detach();
+            try
+            {
+                if (replacement.previous is GameComponent component && !component.isDestroyed)
+                    component.Detach();
+                else if (replacement.previous is GameSystem system && !system.isDestroyed)
+                    system.Detach();
+            }
+            catch (Exception exception)
+            {
+                m_diagnostics.Add(new SceneReloadDiagnostic(
+                    "INNOHR0004",
+                    SceneReloadDiagnosticSeverity.Warning,
+                    $"Retired scene element '{replacement.previous.GetType().FullName}' failed during cleanup: {exception.Message}",
+                    replacement.scene.identity.persistentId,
+                    replacement.previous.identity.persistentId,
+                    string.Empty,
+                    replacement.previous.GetType().FullName ?? replacement.previous.GetType().Name,
+                    string.Empty));
+            }
         }
         m_replacements.Clear();
         m_scenes.Clear();
@@ -216,17 +227,13 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
 
     private static ObjectState CaptureState(EngineObject target, TypeCacheSnapshot types)
     {
-        if (!types.TryGetRuntimeTypeId(target.GetType(), out int runtimeTypeId))
-        {
-            throw new InvalidOperationException(
-                $"Scene object type '{target.GetType().FullName}' has no runtime identity in the previous TypeCache generation.");
-        }
+        TypeRef activeType = types.GetTypeRef(target.GetType());
         if (target is MissingGameComponent missingComponent)
         {
             return new ObjectState(
                 target,
-                runtimeTypeId,
-                missingComponent.missingTypeId,
+                activeType,
+                missingComponent.missingType,
                 missingComponent.missingTypeName,
                 missingComponent.CaptureSerializedState(),
                 missingComponent.dependencies.ToArray());
@@ -235,16 +242,11 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
         {
             return new ObjectState(
                 target,
-                runtimeTypeId,
-                missingSystem.missingTypeId,
+                activeType,
+                missingSystem.missingType,
                 missingSystem.missingTypeName,
                 missingSystem.CaptureSerializedState(),
                 missingSystem.dependencies.ToArray());
-        }
-        if (!types.TryGetStableTypeId(target.GetType(), out Guid stableTypeId))
-        {
-            throw new InvalidOperationException(
-                $"Scene object type '{target.GetType().FullName}' has no stable identity in the previous TypeCache generation.");
         }
         var dependencies = new AssetDependencyCollection();
         byte[] data = SerializationManager.CapturePropertiesData(
@@ -252,8 +254,8 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
             SerializationContext.empty.With(dependencies));
         return new ObjectState(
             target,
-            runtimeTypeId,
-            stableTypeId,
+            activeType,
+            activeType,
             target.GetType().FullName ?? target.GetType().Name,
             data,
             dependencies.dependencies.ToArray());
@@ -293,13 +295,13 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
     {
         if (replacementType == typeof(MissingGameComponent))
             return new MissingGameComponent(
-                state.stableTypeId,
+                state.logicalType,
                 state.typeName,
                 state.data,
                 state.dependencies);
         if (replacementType == typeof(MissingGameSystem))
             return new MissingGameSystem(
-                state.stableTypeId,
+                state.logicalType,
                 state.typeName,
                 state.data,
                 state.dependencies);
@@ -344,12 +346,12 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
     {
         foreach (SceneObjectStructureSnapshot entry in structure.objects)
         {
-            var groups = new Dictionary<int, MultiplicityGroup>();
+            var groups = new Dictionary<TypeRef, MultiplicityGroup>();
             foreach (GameComponent component in entry.components)
             {
                 ActiveTypeInfo type = ResolveActiveType(component, context);
-                if (!groups.TryGetValue(type.runtimeTypeId, out MultiplicityGroup? group))
-                    groups.Add(type.runtimeTypeId, new MultiplicityGroup(type.displayName, type.allowsMultiple));
+                if (!groups.TryGetValue(type.typeRef, out MultiplicityGroup? group))
+                    groups.Add(type.typeRef, new MultiplicityGroup(type.displayName, type.allowsMultiple));
                 else
                     group.count++;
             }
@@ -365,12 +367,12 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
             }
         }
 
-        var systemGroups = new Dictionary<int, MultiplicityGroup>();
+        var systemGroups = new Dictionary<TypeRef, MultiplicityGroup>();
         foreach (GameSystem system in scene.GetSystems())
         {
             ActiveTypeInfo type = ResolveActiveType(system, context);
-            if (!systemGroups.TryGetValue(type.runtimeTypeId, out MultiplicityGroup? group))
-                systemGroups.Add(type.runtimeTypeId, new MultiplicityGroup(type.displayName, type.allowsMultiple));
+            if (!systemGroups.TryGetValue(type.typeRef, out MultiplicityGroup? group))
+                systemGroups.Add(type.typeRef, new MultiplicityGroup(type.displayName, type.allowsMultiple));
             else
                 group.count++;
         }
@@ -394,34 +396,32 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
         Type activeType = type;
         if (target is MissingGameComponent missingComponent)
         {
-            activeType = context.candidate.TryResolveType(missingComponent.missingTypeId, out Type? recovered) &&
-                         recovered is not null
-                ? recovered
+            activeType = TryResolve(missingComponent.missingType, context.candidate, out Type? recovered)
+                ? recovered!
                 : typeof(MissingGameComponent);
         }
         else if (target is MissingGameSystem missingSystem)
         {
-            activeType = context.candidate.TryResolveType(missingSystem.missingTypeId, out Type? recovered) &&
-                         recovered is not null
-                ? recovered
+            activeType = TryResolve(missingSystem.missingType, context.candidate, out Type? recovered)
+                ? recovered!
                 : typeof(MissingGameSystem);
         }
-        else if (context.IsRetiredType(type))
+        else
         {
-            activeType = context.TryResolveReplacement(type, out Type? replacement) && replacement is not null
-                ? replacement
-                : isSystem ? typeof(MissingGameSystem) : typeof(MissingGameComponent);
+            TypeRef previousType = context.previous.GetTypeRef(type);
+            if (context.IsRetired(previousType))
+            {
+                activeType = context.TryResolveReplacement(previousType, out TypeRef replacement)
+                    ? replacement.Resolve(context.candidate)
+                    : isSystem ? typeof(MissingGameSystem) : typeof(MissingGameComponent);
+            }
         }
-        if (!context.candidate.TryGetRuntimeTypeId(activeType, out int runtimeTypeId))
-        {
-            throw new InvalidOperationException(
-                $"Active scene type '{activeType.FullName}' has no candidate runtime type identity.");
-        }
+        TypeRef activeTypeRef = context.candidate.GetTypeRef(activeType);
         bool allowsMultiple = activeType.IsDefined(
             isSystem ? typeof(AllowMultipleSystemAttribute) : typeof(AllowMultipleComponentAttribute),
             inherit: !isSystem);
         return new ActiveTypeInfo(
-            runtimeTypeId,
+            activeTypeRef,
             activeType.FullName ?? activeType.Name,
             allowsMultiple);
     }
@@ -517,7 +517,7 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
 
     private IEnumerable<ObjectState> RetiredStates()
         => m_scenes.SelectMany(static scene => scene.states)
-            .Where(state => m_context.IsRetiredType(state.target.GetType()));
+            .Where(state => m_context.IsRetired(state.activeType));
 
     private void EnsureActive()
     {
@@ -533,15 +533,15 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
 
     private sealed class ObjectState(
         EngineObject target,
-        int runtimeTypeId,
-        Guid stableTypeId,
+        TypeRef activeType,
+        TypeRef logicalType,
         string typeName,
         byte[] data,
         AssetDependency[] dependencies)
     {
         internal EngineObject target { get; } = target;
-        internal int runtimeTypeId { get; } = runtimeTypeId;
-        internal Guid stableTypeId { get; } = stableTypeId;
+        internal TypeRef activeType { get; } = activeType;
+        internal TypeRef logicalType { get; } = logicalType;
         internal string typeName { get; } = typeName;
         internal byte[] data { get; } = data;
         internal AssetDependency[] dependencies { get; } = dependencies;
@@ -554,7 +554,7 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
         GameScene scene,
         EngineObject previous,
         EngineObject current,
-        int previousRuntimeTypeId);
+        TypeRef previousType);
 
     private sealed class MultiplicityGroup(string displayName, bool allowsMultiple)
     {
@@ -564,7 +564,7 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
     }
 
     private readonly record struct ActiveTypeInfo(
-        int runtimeTypeId,
+        TypeRef typeRef,
         string displayName,
         bool allowsMultiple);
 
@@ -573,17 +573,32 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
         Type requiredBase = state.target is GameSystem ? typeof(GameSystem) : typeof(GameComponent);
         Type? candidate = null;
         if (state.target is MissingGameComponent or MissingGameSystem)
-            _ = context.candidate.TryResolveType(state.stableTypeId, out candidate);
-        else if (context.IsRetiredType(state.target.GetType()))
-            _ = context.TryResolveReplacement(state.target.GetType(), out candidate);
+            _ = TryResolve(state.logicalType, context.candidate, out candidate);
+        else if (context.IsRetired(state.activeType) &&
+                 context.TryResolveReplacement(state.activeType, out TypeRef replacement))
+            candidate = replacement.Resolve(context.candidate);
         if (candidate is null)
             return null;
         if (!requiredBase.IsAssignableFrom(candidate) || candidate.IsAbstract ||
             candidate == typeof(MissingGameComponent) || candidate == typeof(MissingGameSystem))
         {
             throw new InvalidOperationException(
-                $"Stable type id '{state.stableTypeId:D}' resolves to invalid replacement '{candidate.FullName}'.");
+                $"Stable type id '{state.logicalType.stableId:D}' resolves to invalid replacement '{candidate.FullName}'.");
         }
         return candidate;
+    }
+
+    private static bool TryResolve(TypeRef typeRef, TypeCacheSnapshot snapshot, out Type? type)
+    {
+        try
+        {
+            type = typeRef.Resolve(snapshot);
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            type = null;
+            return false;
+        }
     }
 }

@@ -23,5 +23,7 @@ public sealed record AssemblyModuleInfo(
     int generation,
     bool collectible,
     bool externallyOwned,
+    AssemblyDomain domain,
+    AssemblyScope scope,
     AssemblyModuleStatus status,
     IReadOnlyList<string> assemblyNames);

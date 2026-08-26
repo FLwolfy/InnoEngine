@@ -100,7 +100,7 @@ public sealed class PhysicsSystem : GameSystem
 
 Inspector header 提供 Move Up、Move Down 和 Remove，但不允许拖拽。移动按钮只改变显示与序列化顺序，不会修改代码声明的 `order`；相同 `order` 时显示顺序作为稳定 tie-breaker。
 
-生命周期调度缓存 loaded Scene、GameBehavior 与 GameSystem 的稳定数组，只在 Scene 结构、System 显示顺序或类型 generation 变化时重建。`GameSystem.order` 仍会在每个阶段开始前读取；值变化时复用现有数组原地排序。`GameSystem.Query<T...>()` 内部使用最多三个 runtime ID 组成的值类型 key，缓存命中时也不再创建 `Type[]`、规范化数组或字符串 key。因此正常 FixedUpdate、Update 与 LateUpdate 不再为这些 traversal 分配新数组。
+生命周期调度缓存 loaded Scene、GameBehavior 与 GameSystem 的稳定数组，只在 Scene 结构、System 显示顺序或类型 generation 变化时重建。`GameSystem.order` 仍会在每个阶段开始前读取；值变化时复用现有数组原地排序。`GameSystem.Query<T...>()` 内部使用最多三个按 Stable ID 规范排序的 `TypeRef` 组成值类型 key，缓存命中时也不再创建 `Type[]`、规范化数组或字符串 key。因此正常 FixedUpdate、Update 与 LateUpdate 不再为这些 traversal 分配新数组。
 
 ## 内部索引与类型身份
 
@@ -108,23 +108,23 @@ Inspector header 提供 Move Up、Move Down 和 Remove，但不允许拖拽。�
 
 - GameObject、GameComponent 与 GameSystem 都以 `IndexedObjectStore<T>` 保存；引用身份、persistent Guid、元数据、owner、commit 状态和 runtime type ID 分别使用 typed `IndexedObjectKey<TKey>`。
 - GameObject 与 GameComponent 的 persistent Guid 使用 Unique key，因此 `FindObject(Guid)` 与 `FindComponent(Guid)` 为平均 O(1) 查找，不再递归或线性扫描 Scene。
-- Component 的具体类型索引只保存 generation-local `int runtimeTypeId`。可赋值关系由类型目录预计算为 runtime ID 集合，查询期间不调用 `Type.IsAssignableFrom`，也不在 Scene 中建立 `Type` key。
+- Component/System 的具体类型索引、查询缓存和组合查询 key 全部保存 `TypeRef`。可赋值关系由类型目录预计算为 `TypeRef` 集合，查询期间不调用 `Type.IsAssignableFrom`，也不在 Scene 中建立 `Type` 或裸 runtime ID key。
 - 每个对象的 Component list 仅维护公开契约要求的 attachment order；它不承担对象身份、Guid 或类型索引职责。System 的 display list 同理只维护显示与序列化顺序。
 
-Scene/Prefab 序列化继续写入 Stable Type ID（Guid），绝不写入 runtime type ID。`Type` 参数只存在于 Add/Query、实例创建和序列化反射等调用边界的短生命周期局部变量中；Component 构造器与 Scene property metadata 不建立静态 `Type` 缓存。Scene 的长期索引、查询缓存和类型目录快照只保存 runtime ID、Stable Type ID、字符串与标志。
+Scene/Prefab 的内存索引、描述、History、Missing 与序列化边界统一使用 `TypeRef`，序列化只写其 Stable ID（Guid），绝不写入 runtime ID。`Type` 参数只存在于 Add/Query、实例创建和序列化反射等调用边界的短生命周期局部变量中；Component 构造器与 Scene property metadata 不建立静态 `Type` 缓存。旧 generation 创建的 `TypeRef` 仍可凭 Stable ID 与候选目录匹配，不需要在 Scene 切换或重建整数索引。
 
 ## Missing 脚本元素
 
 | 公开类型 | 说明 |
 | --- | --- |
-| `MissingGameComponent` | 原 Component 类型暂时不可用时，占据相同 attachment index 和 persistent ID。公开 `missingTypeId`、`missingTypeName` 供 Inspector/工具识别。 |
+| `MissingGameComponent` | 原 Component 类型暂时不可用时，占据相同 attachment index 和 persistent ID。公开 `TypeRef missingType`、`missingTypeName` 供 Inspector/工具识别。 |
 | `MissingGameSystem` | 原 System 类型暂时不可用时，占据相同 display index 和 persistent ID，并保持禁用。公开同样的 missing 类型信息。 |
 
-这两个类型只能由 Scene restore 或脚本 reload 管线创建，不能通过普通 `AddComponent` / `AddSystem` 添加，也不进入 Scripting API facade。占位对象只保存 Stable Type ID、类型名、中立 property bytes、资产依赖 token 和引用别名；不保存旧 `Type`、反射 metadata、委托或旧脚本实例，所以本身不会阻止 collectible ALC 卸载。原 Stable Type ID 再次可解析时，reload 会原位创建真实类型、恢复兼容属性和当前图引用；构造或恢复失败则连同 identity/index 一起回滚到完全相同的占位对象。
+这两个类型只能由 Scene restore 或脚本 reload 管线创建，不能通过普通 `AddComponent` / `AddSystem` 添加，也不进入 Scripting API facade。占位对象只保存 `TypeRef`、类型名、中立 property bytes、资产依赖 token 和引用别名；`TypeRef` 不保存旧 `Type`、反射 metadata、委托或旧脚本实例，所以本身不会阻止 collectible ALC 卸载。原 Stable ID 再次可解析时，`missingType.isValid` 自动变回 true，reload 原位创建真实类型、恢复兼容属性和当前图引用；构造、属性或清理失败则连同 identity/index 一起回滚到完全相同的占位对象。
 
 ## 热重载同步
 
-Scene 使用一个随 `TypeRegistry<TSnapshot>` 事务刷新的中立类型目录。候选目录构建时可以读取 candidate `TypeCacheSnapshot`，但发布后的目录不保留任何 `Type`：Component descriptor 保存 runtime ID、Stable Type ID、可赋值 runtime ID 集合与 multiplicity 标志；System descriptor 保存对应的中立数据。
+Scene 使用一个随 `TypeRegistry<TSnapshot>` 事务刷新的中立类型目录。候选目录构建时可以读取 candidate `TypeCacheSnapshot`，但发布后的目录不保留任何 `Type`：Component/System descriptor 保存 `TypeRef`、可赋值 `TypeRef` 集合与 multiplicity 标志；Store、Scheduler 与查询缓存直接以 `TypeRef` 为 key。
 
 Reload 的同步顺序如下：
 

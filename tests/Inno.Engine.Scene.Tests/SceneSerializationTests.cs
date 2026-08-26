@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 
 using Inno.Core.Mathematics;
@@ -40,6 +41,30 @@ public sealed class SceneSerializationTests : IDisposable
     }
 
     [Fact]
+    public void SceneTypeIndexesAndCachesUseTypeRefKeys()
+    {
+        Type[] sceneStorageTypes = typeof(GameScene).Assembly.GetTypes()
+            .Where(static type =>
+                type.FullName?.StartsWith("Inno.Engine.Scene.SceneStore", StringComparison.Ordinal) == true ||
+                type.FullName?.StartsWith("Inno.Engine.Scene.SceneSystemScheduler", StringComparison.Ordinal) == true ||
+                type.FullName?.StartsWith("Inno.Engine.Scene.SceneType", StringComparison.Ordinal) == true)
+            .ToArray();
+        MemberInfo[] typeIdentityMembers = sceneStorageTypes
+            .SelectMany(static type => type
+                .GetMembers(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
+                .Where(static member => member.Name.Contains("type", StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+
+        Assert.Contains(typeIdentityMembers, static member =>
+            UsesGenericArgument(GetMemberType(member), typeof(TypeRef)));
+        Assert.DoesNotContain(typeIdentityMembers, static member =>
+            GetMemberType(member) is Type memberType &&
+            (memberType == typeof(int) || UsesGenericArgument(memberType, typeof(int))));
+        Assert.DoesNotContain(typeIdentityMembers, static member =>
+            member.Name.Contains("runtimeType", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void SceneRoundtrip_PreservesHierarchyOrderStateAndDirectReferences()
     {
         var source = new GameScene("Roundtrip");
@@ -67,7 +92,7 @@ public sealed class SceneSerializationTests : IDisposable
         byte[] bytes = SerializationManager.Serialize(source);
         Assert.Contains(
             TypeCacheManager.GetTypesWithAttribute<SerializationExtensionAttribute>(),
-            static type => type.Name == "GameSceneConverter");
+            static type => type.Resolve().Name == "GameSceneConverter");
         SceneManager.LoadScene(source);
         Assert.True(SceneManager.UnloadScene(source));
 
@@ -256,6 +281,17 @@ public sealed class SceneSerializationTests : IDisposable
         Assert.False(gameObject.TryGetTarget(out _));
         Assert.False(component.TryGetTarget(out _));
     }
+
+    private static Type? GetMemberType(MemberInfo member)
+        => member switch
+        {
+            FieldInfo field => field.FieldType,
+            PropertyInfo property => property.PropertyType,
+            _ => null
+        };
+
+    private static bool UsesGenericArgument(Type? type, Type argument)
+        => type?.IsGenericType == true && type.GetGenericArguments().Contains(argument);
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static (

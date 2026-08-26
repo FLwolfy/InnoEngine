@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -28,12 +29,19 @@ public sealed class AssemblyUnloadMonitor
     private readonly object m_sync = new();
     private readonly WeakReference? m_loadContext;
     private readonly string? m_shadowDirectory;
+    private readonly AssemblyUnloadMonitor[]? m_children;
     private bool m_isShadowDirectoryCleaned;
 
     internal AssemblyUnloadMonitor(WeakReference? loadContext, string? shadowDirectory = null)
     {
         m_loadContext = loadContext;
         m_shadowDirectory = shadowDirectory;
+    }
+
+    internal AssemblyUnloadMonitor(IReadOnlyList<AssemblyUnloadMonitor> children)
+    {
+        ArgumentNullException.ThrowIfNull(children);
+        m_children = children.ToArray();
     }
 
     /// <summary>
@@ -48,6 +56,10 @@ public sealed class AssemblyUnloadMonitor
     {
         get
         {
+            if (m_children is not null)
+                return m_children.All(static child => child.isCompleted)
+                    ? AssemblyUnloadStatus.Completed
+                    : AssemblyUnloadStatus.Pending;
             if (m_loadContext is not null && m_loadContext.IsAlive)
                 return AssemblyUnloadStatus.Pending;
             _ = TryCleanupShadowDirectory();
@@ -57,6 +69,8 @@ public sealed class AssemblyUnloadMonitor
 
     internal bool TryCleanupShadowDirectory()
     {
+        if (m_children is not null)
+            return m_children.All(static child => child.TryCleanupShadowDirectory());
         if (m_loadContext is not null && m_loadContext.IsAlive)
             return false;
         lock (m_sync)

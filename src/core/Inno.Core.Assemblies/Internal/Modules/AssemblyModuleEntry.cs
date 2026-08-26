@@ -13,7 +13,10 @@ internal sealed class AssemblyModuleEntry
     internal required int generation { get; init; }
     internal required bool externallyOwned { get; init; }
     internal required bool collectible { get; init; }
+    internal required AssemblyDomain domain { get; init; }
+    internal required AssemblyScope scope { get; init; }
     internal required Assembly[] assemblies { get; init; }
+    internal required IReadOnlyDictionary<Assembly, AssemblyScope> assemblyScopes { get; init; }
     internal AssemblyLoadContext? loadContext { get; init; }
     internal string? shadowDirectory { get; init; }
 
@@ -24,6 +27,8 @@ internal sealed class AssemblyModuleEntry
             generation,
             collectible,
             externallyOwned,
+            domain,
+            scope,
             AssemblyModuleStatus.Active,
             assemblies
                 .Select(static assembly => assembly.GetName().Name ?? assembly.FullName ?? "Unknown")

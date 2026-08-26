@@ -23,7 +23,7 @@ foreach (AssetDependency dependency in dependencies.dependencies)
 
 公开 `SetReferenceResolver(Func<Guid, Guid, string, Type, string, AssetObject>?)`：
 
-参数依次为 persistent ID、Stable Type ID、last-known path、expected CLR type 和 property path。传 null 清除 resolver。
+参数依次为 persistent ID、Stable Type ID、last-known path、expected CLR type 和 property path。传 null 清除 resolver。该进程级插槽拒绝 method 或 target 来自 collectible ALC 的 delegate，避免 Default ALC 静态字段固定 Plugin/Scripting generation。
 
 `AssetManager.Initialize` 会自动安装 resolver，Shutdown 自动清除。只有在独立工具宿主中绕过 AssetManager 时才需要手动设置：
 
@@ -50,5 +50,5 @@ Converter 标注 `[SerializationExtension]`，随 TypeCache/Converter Registry �
 ## 生命周期与安全
 
 - Resolver 是进程级静态服务，Host 必须在关闭 Loader 前清除。
-- Resolver delegate 会强引用 target；插件提供自定义 resolver 时必须在 unload 前移除。
+- Resolver 只允许 Host/Default ALC 实现；collectible Plugin/Scripting delegate 会在设置时被拒绝。
 - last-known path 用于诊断/fallback，不是引用主键；移动文件后 persistent ID 仍是权威身份。

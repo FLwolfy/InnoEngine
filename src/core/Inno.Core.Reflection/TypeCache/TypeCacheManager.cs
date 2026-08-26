@@ -101,14 +101,14 @@ public static class TypeCacheManager
     /// </summary>
     /// <typeparam name="T">The required base type.</typeparam>
     /// <returns>The matching concrete types in stable catalog order.</returns>
-    public static IReadOnlyList<Type> GetSubTypesOf<T>() => current.GetSubTypesOf<T>();
+    public static IReadOnlyList<TypeRef> GetSubTypesOf<T>() => current.GetSubTypesOf<T>();
 
     /// <summary>
     /// Gets all non-abstract discovered types implementing <typeparamref name="TInterface"/>.
     /// </summary>
     /// <typeparam name="TInterface">The required interface.</typeparam>
     /// <returns>The matching concrete types in stable catalog order.</returns>
-    public static IReadOnlyList<Type> GetTypesImplementing<TInterface>()
+    public static IReadOnlyList<TypeRef> GetTypesImplementing<TInterface>()
         => current.GetTypesImplementing<TInterface>();
 
     /// <summary>
@@ -116,44 +116,46 @@ public static class TypeCacheManager
     /// </summary>
     /// <typeparam name="TAttribute">The required attribute type.</typeparam>
     /// <returns>The matching concrete types in stable catalog order.</returns>
-    public static IReadOnlyList<Type> GetTypesWithAttribute<TAttribute>() where TAttribute : Attribute
+    public static IReadOnlyList<TypeRef> GetTypesWithAttribute<TAttribute>() where TAttribute : Attribute
         => current.GetTypesWithAttribute<TAttribute>();
 
     /// <summary>
-    /// Tries to get a stable identity for an active type.
+    /// Gets the reference for an active CLR type.
     /// </summary>
-    /// <param name="type">The active runtime type.</param>
-    /// <param name="stableTypeId">Receives the stable identity when found.</param>
+    /// <param name="type">The active CLR type.</param>
+    /// <returns>Its logical and generation-local identity.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="type"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the type does not belong to the active catalog.</exception>
+    public static TypeRef GetTypeRef(Type type) => current.GetTypeRef(type);
+
+    /// <summary>
+    /// Tries to get the reference for an active CLR type.
+    /// </summary>
+    /// <param name="type">The active CLR type.</param>
+    /// <param name="typeRef">Receives its logical and generation-local identity.</param>
     /// <returns><see langword="true"/> when the type belongs to the active catalog.</returns>
-    public static bool TryGetStableTypeId(Type type, out Guid stableTypeId)
-        => current.TryGetStableTypeId(type, out stableTypeId);
+    public static bool TryGetTypeRef(Type type, out TypeRef typeRef)
+        => current.TryGetTypeRef(type, out typeRef);
 
-    /// <summary>
-    /// Tries to get the generation-local runtime identity of an active type.
-    /// </summary>
-    /// <param name="type">The active runtime type.</param>
-    /// <param name="runtimeTypeId">Receives the runtime identity when found.</param>
-    /// <returns><see langword="true"/> when the type belongs to the active catalog.</returns>
-    public static bool TryGetRuntimeTypeId(Type type, out int runtimeTypeId)
-        => current.TryGetRuntimeTypeId(type, out runtimeTypeId);
+    internal static bool TryResolveCurrent(TypeRef typeRef, out Type? type)
+    {
+        if (!isInitialized)
+        {
+            type = null;
+            return false;
+        }
+        return current.TryResolve(typeRef, out type);
+    }
 
-    /// <summary>
-    /// Tries to resolve an active type by stable identity.
-    /// </summary>
-    /// <param name="stableTypeId">The persistent type identity.</param>
-    /// <param name="type">Receives the active runtime type when found.</param>
-    /// <returns><see langword="true"/> when a matching active type exists.</returns>
-    public static bool TryResolveType(Guid stableTypeId, out Type? type)
-        => current.TryResolveType(stableTypeId, out type);
-
-    /// <summary>
-    /// Tries to resolve an active type by generation-local runtime identity.
-    /// </summary>
-    /// <param name="runtimeTypeId">The runtime identity.</param>
-    /// <param name="type">Receives the active runtime type when found.</param>
-    /// <returns><see langword="true"/> when a matching active type exists.</returns>
-    public static bool TryResolveType(int runtimeTypeId, out Type? type)
-        => current.TryResolveType(runtimeTypeId, out type);
+    internal static Type ResolveCurrent(TypeRef typeRef)
+    {
+        if (typeRef.stableId != Guid.Empty && TryResolveCurrent(typeRef, out Type? type))
+            return type!;
+        throw new InvalidOperationException(
+            typeRef.stableId == Guid.Empty
+                ? "An empty type reference cannot be resolved."
+                : $"Type reference '{typeRef.stableId:D}' is not available in the active type cache.");
+    }
 
     private static void EnsureInitialized()
     {

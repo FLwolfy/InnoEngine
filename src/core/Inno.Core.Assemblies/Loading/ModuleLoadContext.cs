@@ -41,8 +41,7 @@ internal sealed class ModuleLoadContext : AssemblyLoadContext
         if (m_moduleAssemblyPaths.TryGetValue(simpleName, out string? modulePath))
             return LoadFromAssemblyPath(modulePath);
 
-        string? dependencyPath = m_resolver.ResolveAssemblyToPath(assemblyName);
-        return dependencyPath is null ? null : LoadFromAssemblyPath(dependencyPath);
+        return null;
     }
 
     private static void ValidateSharedIdentity(AssemblyName requested, AssemblyName shared)

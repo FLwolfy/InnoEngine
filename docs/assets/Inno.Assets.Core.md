@@ -86,7 +86,7 @@ AssetManager.Changed += changeSet =>
 
 ## AssetDependency 与引用诊断
 
-`AssetDependency` 的 equality 只使用 `persistentId`；`stableTypeId` 和 `lastKnownPath` 用于类型验证、恢复和诊断。路径改变不改变依赖身份。
+`AssetDependency` 的 equality 只使用 `persistentId`；`TypeRef type` 和 `lastKnownPath` 用于类型验证、恢复和诊断。内存协议不再保存裸 runtime ID/Stable Guid，序列化 converter 只把 `type.stableId` 写为 `stableTypeId`，不会写 runtime hint。含 `TypeRef` 的构造器与属性从 Scripting API facade 精确排除，因此 `TypeRef` 本身不向脚本导出。路径改变不改变依赖身份。
 
 `AssetReferenceInfo`/`AssetReferenceLocation` 描述引擎已知引用位置，不等价于 CLR GC 引用计数。`AssetReferenceKind` 包含资产依赖、序列化属性、Scene、Prefab、Editor 与 runtime subsystem 等来源。
 

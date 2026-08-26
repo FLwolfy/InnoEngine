@@ -27,34 +27,34 @@ public sealed class TypeCacheReloadContext
     public TypeCacheSnapshot candidate => m_candidate ?? throw CreateCompletedException();
 
     /// <summary>
-    /// Determines whether a runtime type belongs to the retiring generation.
+    /// Determines whether a logical type belongs to the retiring generation.
     /// </summary>
-    /// <param name="type">The runtime type to inspect.</param>
+    /// <param name="typeRef">The logical type to inspect.</param>
     /// <returns><see langword="true"/> when the candidate replaces or removes the type.</returns>
-    public bool IsRetiredType(Type type)
+    public bool IsRetired(TypeRef typeRef)
     {
-        ArgumentNullException.ThrowIfNull(type);
-        return previous.TryGetStableTypeId(type, out Guid stableTypeId) &&
-               (!candidate.TryGetStableTypeId(type, out _) ||
-                candidate.TryResolveType(stableTypeId, out Type? replacement) && replacement != type);
+        if (!previous.TryResolve(typeRef, out Type? previousType))
+            return false;
+        return !candidate.TryResolve(typeRef, out Type? replacement) || replacement != previousType;
     }
 
     /// <summary>
     /// Tries to find the candidate type that preserves a retiring type's stable identity.
     /// </summary>
-    /// <param name="previousType">A type from the previous generation.</param>
+    /// <param name="previousType">A type reference from the previous generation.</param>
     /// <param name="replacement">Receives its candidate replacement when found.</param>
     /// <returns><see langword="true"/> when a distinct replacement exists.</returns>
-    public bool TryResolveReplacement(Type previousType, out Type? replacement)
+    public bool TryResolveReplacement(TypeRef previousType, out TypeRef replacement)
     {
-        ArgumentNullException.ThrowIfNull(previousType);
-        if (!previous.TryGetStableTypeId(previousType, out Guid stableTypeId))
+        if (!previous.TryResolve(previousType, out Type? previousRuntimeType) ||
+            !candidate.TryResolve(previousType, out Type? replacementType) ||
+            replacementType == previousRuntimeType)
         {
-            replacement = null;
+            replacement = default;
             return false;
         }
-
-        return candidate.TryResolveType(stableTypeId, out replacement) && replacement != previousType;
+        replacement = candidate.GetTypeRef(replacementType!);
+        return true;
     }
 
     internal void Release()

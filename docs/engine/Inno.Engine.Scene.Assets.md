@@ -80,8 +80,8 @@ ISceneReloadMigration migration =
 | `ScenePropertySerialization.RestoreProperties` | 使用 Scene reference context 恢复 property-data bytes，支持 Strict/Compatible。 |
 | `SceneSubtreeSerialization.Capture` | 捕获一个 GameObject 与全部 descendants，保留对象/组件 persistent ID。 |
 | `SceneSubtreeSerialization.Restore` | 把 subtree 恢复到指定 Scene、parent 与 sibling index；失败时清理候选 subtree。 |
-| `SceneElementSerialization.RestoreComponent` | 根据 Stable Type ID 与 persistent ID 重建一个 Component，不调用 Reset。 |
-| `SceneElementSerialization.RestoreSystem` | 根据 Stable Type ID 与 persistent ID 重建一个 GameSystem，不调用 Reset。 |
+| `SceneElementSerialization.RestoreComponent` | 根据 `TypeRef` 与 persistent ID 重建一个 Component，不调用 Reset。 |
+| `SceneElementSerialization.RestoreSystem` | 根据 `TypeRef` 与 persistent ID 重建一个 GameSystem，不调用 Reset。 |
 
 这些 API 不保存 Editor selection、Undo 栈或 workspace；该编排属于 [Inno.Editor.Scene](../editor/Inno.Editor.Scene.md)。Element restore 会先解析当前 TypeCache generation 的类型，验证具体基类与 multiplicity。Property restore 只有在 `success=true` 且 `ignoredCount=0` 时才视为完整；失败或忽略属性都会删除新实例。清理返回 `false` 而对象仍存活、返回 `true` 但 postcondition 仍显示对象存活，或清理回调抛异常时，API 会把恢复失败与清理失败一并报告，不再忽略清理结果。
 
@@ -98,9 +98,9 @@ Reload 会使用候选类型重新验证数量：
 
 Scene migration 按成员独立捕获状态。候选类型中名称相同且可解码的成员正常恢复；新增成员保留新默认值；删除成员忽略旧数据；同名成员类型不兼容时只跳过该成员，保留新实例的字段初始化值。
 
-跳过项以 `INNOHR0001` warning 写入 `diagnostics`，包含 Scene/Object persistent ID、成员名、旧类型和新声明类型。`INNOHR0002` 表示元素已安全转为 missing，`INNOHR0003` 表示 missing 元素已经恢复。Editor 只在程序集事务成功提交后输出这些 warning。实例创建、Stable Type ID 冲突、数量约束、Scene 结构或对象级 restore hook 错误仍回滚整个 reload。
+跳过项以 `INNOHR0001` warning 写入 `diagnostics`，包含 Scene/Object persistent ID、成员名、旧类型和新声明类型。`INNOHR0002` 表示元素已安全转为 missing，`INNOHR0003` 表示 missing 元素已经恢复，`INNOHR0004` 表示已提交后的旧实例 Detach 清理异常；该清理按实例隔离且不会伪回滚已发布 generation。Editor 只在程序集事务成功提交后输出这些 warning。实例创建、Stable Type ID 冲突、数量约束、Scene 结构或对象级 restore hook 错误仍回滚整个 reload。
 
-候选 generation 缺少 live Component/System 时不再拒绝 reload。Migration 原位换成 `MissingGameComponent` / `MissingGameSystem`，保留 persistent ID、显示顺序、中立属性 bytes、Asset dependencies 和引用别名；旧脚本实例在 commit 后 Detach。Scene 和 Prefab 都使用同一 current-format schema，因此 missing 状态可继续保存、实例化和再次保存。Prefab source-local ID、Scene runtime persistent ID 发生转换时，引用别名表会把 payload 中的旧 token 重绑到当前图，避免恢复后指向源 Prefab 或丢失引用。
+候选 generation 缺少 live Component/System 时不再拒绝 reload。Migration 原位换成 `MissingGameComponent` / `MissingGameSystem`，保留 `TypeRef`、persistent ID、显示顺序、中立属性 bytes、Asset dependencies 和引用别名；落盘仍只写 Stable ID。Scene 和 Prefab 都使用同一 current-format schema，因此 missing 状态可继续保存、实例化和再次保存。Prefab source-local ID、Scene runtime persistent ID 发生转换时，引用别名表会把 payload 中的旧 token 重绑到当前图，避免恢复后指向源 Prefab 或丢失引用。
 
 ## 生命周期迁移
 

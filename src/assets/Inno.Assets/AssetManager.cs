@@ -692,7 +692,7 @@ public static class AssetManager
         {
             return false;
         }
-        return !TypeCacheManager.TryGetRuntimeTypeId(type, out _);
+        return !TypeCacheManager.TryGetTypeRef(type, out _);
     }
 
     private static AssetLoader GetLoader()

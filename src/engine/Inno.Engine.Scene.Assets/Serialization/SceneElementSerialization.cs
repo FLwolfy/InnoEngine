@@ -18,7 +18,7 @@ public static class SceneElementSerialization
     /// Recreates one component without invoking Reset and restores its persistent properties.
     /// </summary>
     /// <param name="owner">The live GameObject that will own the component.</param>
-    /// <param name="stableTypeId">The stable identity of the current component implementation.</param>
+    /// <param name="type">The reload-safe identity of the current component implementation.</param>
     /// <param name="persistentId">The component instance identity to preserve.</param>
     /// <param name="componentIndex">The requested attachment index.</param>
     /// <param name="propertyData">Neutral property bytes captured from the previous instance.</param>
@@ -31,13 +31,13 @@ public static class SceneElementSerialization
     /// </exception>
     public static GameComponent RestoreComponent(
         GameObject owner,
-        Guid stableTypeId,
+        TypeRef type,
         Guid persistentId,
         int componentIndex,
         ReadOnlySpan<byte> propertyData)
     {
         ArgumentNullException.ThrowIfNull(owner);
-        Type componentType = ResolveType<GameComponent>(stableTypeId, "component");
+        Type componentType = ResolveType<GameComponent>(type, "component");
         GameComponent component = owner.scene.AddComponent(
             owner,
             componentType,
@@ -66,7 +66,7 @@ public static class SceneElementSerialization
     /// Recreates one scene system without invoking Reset and restores its persistent properties.
     /// </summary>
     /// <param name="scene">The live loaded scene that will own the system.</param>
-    /// <param name="stableTypeId">The stable identity of the current system implementation.</param>
+    /// <param name="type">The reload-safe identity of the current system implementation.</param>
     /// <param name="persistentId">The system instance identity to preserve.</param>
     /// <param name="systemIndex">The requested display and serialization index.</param>
     /// <param name="propertyData">Neutral property bytes captured from the previous instance.</param>
@@ -79,13 +79,13 @@ public static class SceneElementSerialization
     /// </exception>
     public static GameSystem RestoreSystem(
         GameScene scene,
-        Guid stableTypeId,
+        TypeRef type,
         Guid persistentId,
         int systemIndex,
         ReadOnlySpan<byte> propertyData)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        Type systemType = ResolveType<GameSystem>(stableTypeId, "system");
+        Type systemType = ResolveType<GameSystem>(type, "system");
         GameSystem system = scene.AddSystem(systemType, persistentId, invokeReset: false);
         try
         {
@@ -154,15 +154,22 @@ public static class SceneElementSerialization
             new AggregateException(restoreFailure, cleanupFailure));
     }
 
-    private static Type ResolveType<TElement>(Guid stableTypeId, string kind)
+    private static Type ResolveType<TElement>(TypeRef typeRef, string kind)
         where TElement : EngineObject
     {
-        if (!TypeCacheManager.TryResolveType(stableTypeId, out Type? type) || type is null)
-            throw new SceneTypeResolutionException(stableTypeId, kind);
+        Type type;
+        try
+        {
+            type = typeRef.Resolve();
+        }
+        catch (InvalidOperationException)
+        {
+            throw new SceneTypeResolutionException(typeRef.stableId, kind);
+        }
         if (!typeof(TElement).IsAssignableFrom(type) || type.IsAbstract)
         {
             throw new InvalidDataException(
-                $"Stable type id '{stableTypeId}' resolves to invalid scene {kind} '{type.FullName}'.");
+                $"Stable type id '{typeRef.stableId}' resolves to invalid scene {kind} '{type.FullName}'.");
         }
         return type;
     }

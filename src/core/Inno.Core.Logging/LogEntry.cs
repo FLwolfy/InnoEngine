@@ -8,14 +8,16 @@ namespace Inno.Core.Logging;
 /// Represents an immutable log message dispatched by <see cref="LogManager"/>.
 /// </summary>
 /// <param name="level">The severity of the log message.</param>
-/// <param name="source">The resolved assembly group source.</param>
+/// <param name="domain">The resolved assembly ownership domain.</param>
+/// <param name="scope">The resolved runtime or editor scope.</param>
 /// <param name="category">The log category, typically the declaring type name.</param>
 /// <param name="message">The rendered log message text.</param>
 /// <param name="file">The source file name when available.</param>
 /// <param name="line">The source line number when available.</param>
 public readonly struct LogEntry(
     LogLevel level,
-    AssemblyGroup source,
+    AssemblyDomain domain,
+    AssemblyScope scope,
     string category,
     string message,
     string file,
@@ -27,9 +29,14 @@ public readonly struct LogEntry(
     public readonly LogLevel level = level;
 
     /// <summary>
-    /// Gets the assembly group source for this entry.
+    /// Gets the assembly ownership domain for this entry.
     /// </summary>
-    public readonly AssemblyGroup source = source;
+    public readonly AssemblyDomain domain = domain;
+
+    /// <summary>
+    /// Gets the runtime or editor scope for this entry.
+    /// </summary>
+    public readonly AssemblyScope scope = scope;
 
     /// <summary>
     /// Gets the category name for this entry.

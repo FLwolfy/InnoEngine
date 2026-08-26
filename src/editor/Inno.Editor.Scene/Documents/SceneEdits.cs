@@ -182,7 +182,7 @@ public sealed class SceneEdits : EditorModule
         GameComponent component = owner.AddComponent(componentType);
         try
         {
-            Guid stableTypeId = GetStableTypeId(componentType);
+            TypeRef typeRef = GetTypeRef(componentType);
             byte[] state = ScenePropertySerialization.CaptureProperties(component);
             RecordElement(
                 historyName ?? $"Add {componentType.Name}",
@@ -191,7 +191,7 @@ public sealed class SceneEdits : EditorModule
                     owner.scene.identity.persistentId,
                     owner.identity.persistentId,
                     component.identity.persistentId,
-                    stableTypeId,
+                    typeRef,
                     beforeIndex: -1,
                     afterIndex: owner.GetComponentIndex(component),
                     existsBefore: false,
@@ -225,7 +225,7 @@ public sealed class SceneEdits : EditorModule
             return false;
         GameObject owner = component.gameObject;
         GameScene scene = owner.scene;
-        Guid stableTypeId = GetStableTypeId(component.GetType());
+        TypeRef typeRef = GetTypeRef(component.GetType());
         byte[] state = ScenePropertySerialization.CaptureProperties(component);
         SceneIncomingReferenceState[] incoming = SceneReferenceIndex.CaptureIncoming(component, scene);
         int index = owner.GetComponentIndex(component);
@@ -242,7 +242,7 @@ public sealed class SceneEdits : EditorModule
                     scene.identity.persistentId,
                     owner.identity.persistentId,
                     componentId,
-                    stableTypeId,
+                    typeRef,
                     beforeIndex: index,
                     afterIndex: -1,
                     existsBefore: true,
@@ -261,7 +261,7 @@ public sealed class SceneEdits : EditorModule
             {
                 GameComponent restored = SceneElementSerialization.RestoreComponent(
                     owner,
-                    stableTypeId,
+                    typeRef,
                     componentId,
                     index,
                     state);
@@ -304,7 +304,7 @@ public sealed class SceneEdits : EditorModule
                 owner.scene.identity.persistentId,
                 owner.identity.persistentId,
                 component.identity.persistentId,
-                GetStableTypeId(component.GetType()),
+                GetTypeRef(component.GetType()),
                 index,
                 index,
                 existsBefore: true,
@@ -351,7 +351,7 @@ public sealed class SceneEdits : EditorModule
                 owner.scene.identity.persistentId,
                 owner.identity.persistentId,
                 component.identity.persistentId,
-                GetStableTypeId(component.GetType()),
+                GetTypeRef(component.GetType()),
                 beforeIndex,
                 afterIndex,
                 existsBefore: true,
@@ -383,7 +383,7 @@ public sealed class SceneEdits : EditorModule
                     scene.identity.persistentId,
                     Guid.Empty,
                     system.identity.persistentId,
-                    GetStableTypeId(systemType),
+                    GetTypeRef(systemType),
                     beforeIndex: -1,
                     afterIndex: scene.GetSystemIndex(system),
                     existsBefore: false,
@@ -421,7 +421,7 @@ public sealed class SceneEdits : EditorModule
         SceneIncomingReferenceState[] incoming = SceneReferenceIndex.CaptureIncoming(system, scene);
         int index = scene.GetSystemIndex(system);
         Guid systemId = system.identity.persistentId;
-        Guid stableTypeId = GetStableTypeId(system.GetType());
+        TypeRef typeRef = GetTypeRef(system.GetType());
         Type systemType = system.GetType();
         try
         {
@@ -434,7 +434,7 @@ public sealed class SceneEdits : EditorModule
                 scene.identity.persistentId,
                 Guid.Empty,
                 systemId,
-                stableTypeId,
+                typeRef,
                 beforeIndex: index,
                 afterIndex: -1,
                 existsBefore: true,
@@ -453,7 +453,7 @@ public sealed class SceneEdits : EditorModule
             {
                 GameSystem restored = SceneElementSerialization.RestoreSystem(
                     scene,
-                    stableTypeId,
+                    typeRef,
                     systemId,
                     index,
                     state);
@@ -497,7 +497,7 @@ public sealed class SceneEdits : EditorModule
                 scene.identity.persistentId,
                 Guid.Empty,
                 system.identity.persistentId,
-                GetStableTypeId(system.GetType()),
+                GetTypeRef(system.GetType()),
                 index,
                 index,
                 existsBefore: true,
@@ -546,7 +546,7 @@ public sealed class SceneEdits : EditorModule
                 scene.identity.persistentId,
                 Guid.Empty,
                 system.identity.persistentId,
-                GetStableTypeId(system.GetType()),
+                GetTypeRef(system.GetType()),
                 beforeIndex,
                 afterIndex,
                 existsBefore: true,
@@ -1028,9 +1028,9 @@ public sealed class SceneEdits : EditorModule
         ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
-    private static Guid GetStableTypeId(Type type)
-        => TypeCacheManager.TryGetStableTypeId(type, out Guid stableTypeId)
-            ? stableTypeId
+    private static TypeRef GetTypeRef(Type type)
+        => TypeCacheManager.TryGetTypeRef(type, out TypeRef typeRef)
+            ? typeRef
             : throw new InvalidOperationException(
                 $"Scene element type '{type.FullName}' does not have an active StableTypeId.");
 }

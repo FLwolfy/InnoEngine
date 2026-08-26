@@ -241,8 +241,8 @@ public sealed class EngineAssetIntegrationTests : IDisposable
     {
         var importerTypes = TypeCacheManager.GetTypesWithAttribute<AssetImporterExtensionAttribute>();
 
-        Assert.Contains(importerTypes, type => type.Name == "SceneAssetImporter");
-        Assert.Contains(importerTypes, type => type.Name == "PrefabAssetImporter");
+        Assert.Contains(importerTypes, type => type.Resolve().Name == "SceneAssetImporter");
+        Assert.Contains(importerTypes, type => type.Resolve().Name == "PrefabAssetImporter");
         Assert.Null(typeof(AssetManager).GetMethod("RegisterImporter"));
     }
 

@@ -15,11 +15,12 @@ internal sealed class AddComponentMenuProvider : EditorMenuSource
     {
         if (context.target is not GameObject gameObject)
             return;
-        foreach (Type type in TypeCacheManager.GetSubTypesOf<GameComponent>())
+        foreach (TypeRef typeRef in TypeCacheManager.GetSubTypesOf<GameComponent>())
         {
+            Type type = typeRef.Resolve();
             if (!IsAddable(type, gameObject))
                 continue;
-            builder.Add(type.Name, InspectorInteractionIds.C_ADD_COMPONENT, argument: type);
+            builder.Add(type.Name, InspectorInteractionIds.C_ADD_COMPONENT, argument: typeRef);
         }
     }
 

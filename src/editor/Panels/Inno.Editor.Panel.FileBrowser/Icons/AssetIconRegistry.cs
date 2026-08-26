@@ -40,6 +40,7 @@ internal sealed class AssetIconRegistry : TypeRegistry<AssetIconRegistry.Snapsho
         var typeRegistrations = new List<TypeRegistration>();
         var extensionRegistrations = new List<ExtensionRegistration>();
         foreach (Type declarationType in types.types
+                     .Select(typeRef => typeRef.Resolve(types))
                      .OrderBy(static type => type.Assembly.GetName().Name, StringComparer.Ordinal)
                      .ThenBy(static type => type.FullName, StringComparer.Ordinal))
         {
