@@ -92,7 +92,9 @@ internal sealed class GameObjectConverter : SerializationConverter<GameObject>
                 scene,
                 reader.ReadObjectArray(SceneGraphSerialization.C_OBJECTS_KEY),
                 preservePersistentIds: false,
-                references);
+                references,
+                SceneGraphSerialization.ReadMissingReferenceAliases(reader),
+                reader.context);
             Guid sourceRootId = reader.Read<Guid>(C_SOURCE_ROOT_ID_KEY);
             if (!restored.objects.TryGetValue(sourceRootId, out GameObject? root))
                 throw new InvalidDataException($"Prefab root '{sourceRootId}' is missing at '{reader.path}'.");
@@ -199,6 +201,7 @@ internal sealed class GameObjectConverter : SerializationConverter<GameObject>
 
     private static void ValidatePrefab(SerializationReader reader)
     {
+        SceneGraphSerialization.ValidateMissingReferenceAliases(reader);
         Guid rootId = reader.Read<Guid>(C_SOURCE_ROOT_ID_KEY);
         if (rootId == Guid.Empty)
             throw new InvalidDataException($"Prefab source root identity at '{reader.path}' cannot be empty.");

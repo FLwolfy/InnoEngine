@@ -50,12 +50,14 @@ Compiler 读取已提交 artifact snapshot，不直接读取正在被外部编�
 │  ├─ AssetDatabase/
 │  ├─ Artifacts/
 │  │  ├─ ab/cd/<asset-key>/...
-│  │  └─ ScriptAssemblies/<build-key>/
-│  │     ├─ *.dll
-│  │     ├─ *.pdb
-│  │     ├─ *.xml
-│  │     ├─ *.types.json
-│  │     └─ diagnostics.json
+│  │  └─ ScriptAssemblies/
+│  │     ├─ .assemblies/<assembly-key>/...
+│  │     └─ <generation-key>/
+│  │        ├─ *.dll
+│  │        ├─ *.pdb
+│  │        ├─ *.xml
+│  │        ├─ *.types.json
+│  │        └─ diagnostics.json
 │  ├─ ScriptApi/
 │  └─ IDE/
 ├─ Inno.GameScripts.csproj
@@ -64,7 +66,9 @@ Compiler 读取已提交 artifact snapshot，不直接读取正在被外部编�
 └─ InnoProject.sln
 ```
 
-`ScriptAssemblies` 不再出现 `1/2/3...` 数字 generation。目录名是内容 build key：相同输入直接复用，不同输入得到不同 immutable candidate。Editor 启动和成功 reload 后会按 active path、7 天 grace period 与 4 GiB 上限清理不可达 build cache；目录存在只占磁盘，不等于 ALC 常驻内存。
+`ScriptAssemblies` 不再出现 `1/2/3...` 数字 generation。每个 asmdef/builtin assembly 的 key 分别覆盖自己的 definition、source artifact、scope/options、适用 API、plugin 及直接 dependency key；依赖 key 变化会自然传播到反向依赖，而无关 assembly 直接复用 `.assemblies` 中的 DLL/PDB/XML/type manifest/diagnostics。完整 generation key 只组合有序 assembly key 与 plugin key，并在成功后一次性形成 load staging。Editor 启动和成功 reload 后会对两级 immutable cache 共用 7 天 grace period 与 4 GiB 上限；目录存在只占磁盘，不等于 ALC 常驻内存。
+
+增量发生在编译与 artifact 层，激活仍与 Unity 的默认脚本域 reload 一致：任何成功变化都会创建一个新的 ProjectScripts collectible ALC，并原子切换完整脚本程序集图。这样未重编译 assembly 可以复用字节产物，但不会与新依赖混装在旧 ALC 中，也不会让跨 assembly static/delegate 状态形成半新半旧代际。
 
 AssemblyManager 自己的 runtime generation 仍存在于 assembly shadow cache，用于区分 collectible ALC；它不写入 `.imeta`、Scene、Prefab 或 artifact identity。
 
@@ -225,6 +229,6 @@ Serialized state 使用逐成员兼容迁移：成员类型保持兼容时恢复
 
 失败时 Scene 结构和 Assembly transaction 一起 rollback。Edit Mode 不触发生命周期；Runtime reload 会对旧 active instance 调用 `OnDisable`，新 instance 在下一次正常 update 调用 `OnEnable`，不会重复 `Awake`/`Start`，也不会调用 `Reset`/`OnDestroy`。
 
-如果候选 generation 缺少 live Component/System 的 replacement，reload diagnostic 会同时包含 retiring CLR type name 与 Stable Type ID，便于将重命名后的类型重新绑定到原身份。
+如果候选 generation 缺少 live Component/System，reload 不再失败：对象会成为 host-owned missing placeholder，并继续保存 Stable Type ID、原类型名、property bytes、asset dependencies、persistent ID、顺序和图引用。类型删除、插件移除、Scene/Prefab round-trip 都不会持有旧 ALC；相同 Stable Type ID 返回时自动原位恢复。恢复构造、identity 转移或 property restore 失败仍回滚到原占位对象，pending candidate 可修复后重试。
 
 无法自动迁移 static 字段、后台 Thread/Task、第三方事件订阅或外部裸 CLR 引用。用户代码需要在 `OnDisable` 释放这些资源。

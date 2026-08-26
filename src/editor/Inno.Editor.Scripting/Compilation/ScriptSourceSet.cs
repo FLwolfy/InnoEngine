@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 
 using Inno.Assets;
 using Inno.Assets.Core;
@@ -17,8 +15,7 @@ internal sealed record ScriptSourceSet(
     IReadOnlyList<ScriptPluginInput> runtimePlugins,
     IReadOnlyList<ScriptPluginInput> editorPlugins,
     IReadOnlyList<ScriptAssemblyDefinition> definitions,
-    IReadOnlyList<ScriptAssemblyInput> assemblies,
-    string fingerprint)
+    IReadOnlyList<ScriptAssemblyInput> assemblies)
 {
     internal static ScriptSourceSet Discover()
     {
@@ -54,7 +51,8 @@ internal sealed record ScriptSourceSet(
             [],
             ["DEBUG", "TRACE"],
             nullable: true,
-            allowUnsafe: false));
+            allowUnsafe: false,
+            artifactKey: "builtin-runtime"));
         var editorBuilder = new AssemblyBuilder(new ScriptAssemblyDefinition(
             "Inno.EditorScripts",
             string.Empty,
@@ -62,7 +60,8 @@ internal sealed record ScriptSourceSet(
             ["Inno.GameScripts"],
             ["DEBUG", "TRACE"],
             nullable: true,
-            allowUnsafe: false));
+            allowUnsafe: false,
+            artifactKey: "builtin-editor"));
         assemblyBuilders.Add(gameBuilder.definition.name, gameBuilder);
         assemblyBuilders.Add(editorBuilder.definition.name, editorBuilder);
         var runtimePlugins = new List<ScriptPluginInput>();
@@ -98,14 +97,15 @@ internal sealed record ScriptSourceSet(
             runtimePlugins,
             editorPlugins,
             definitions,
-            assemblies,
-            ComputeFingerprint(entries));
+            assemblies);
     }
 
     private static ScriptAssemblyDefinition ParseDefinition(AssetFileEntry entry)
     {
         ScriptAssemblyDefinitionAsset asset = AssetManager.Load<ScriptAssemblyDefinitionAsset>(
             entry.relativePath);
+        if (!AssetManager.TryGetInfo(entry.relativePath, out AssetInfo? info) || info is null)
+            throw new InvalidDataException($"Script assembly definition '{entry.relativePath}' has no metadata.");
         return new ScriptAssemblyDefinition(
             asset.assemblyName,
             Path.GetDirectoryName(entry.relativePath)?.Replace('\\', '/') ?? string.Empty,
@@ -113,7 +113,8 @@ internal sealed record ScriptSourceSet(
             asset.references,
             asset.defines,
             asset.nullable,
-            asset.allowUnsafe);
+            asset.allowUnsafe,
+            info.artifactKey.value);
     }
 
     private static ScriptSourceInput CreateSourceInput(AssetFileEntry entry)
@@ -131,7 +132,8 @@ internal sealed record ScriptSourceSet(
             entry.relativePath,
             GetAbsolutePath(entry.relativePath),
             source.absolutePath,
-            info.persistentId);
+            info.persistentId,
+            info.artifactKey.value);
     }
 
     private static ScriptPluginInput CreatePluginInput(AssetFileEntry entry)
@@ -151,7 +153,8 @@ internal sealed record ScriptSourceSet(
             GetAbsolutePath(entry.relativePath),
             assembly.absolutePath,
             symbols?.absolutePath,
-            dependencies?.absolutePath);
+            dependencies?.absolutePath,
+            info.artifactKey.value);
     }
 
     private static ScriptAssemblyDefinition? FindNearestDefinition(
@@ -176,25 +179,6 @@ internal sealed record ScriptSourceSet(
 
     private static string GetAbsolutePath(string relativePath)
         => Path.Combine(AssetManager.assetRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
-
-    private static string ComputeFingerprint(IReadOnlyList<AssetFileEntry> entries)
-    {
-        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        foreach (AssetFileEntry entry in entries.Where(static entry =>
-                     string.Equals(entry.extension, ".cs", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(entry.extension, ".dll", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(entry.extension, ".iasmdef", StringComparison.OrdinalIgnoreCase)))
-        {
-            Append(hash, entry.relativePath);
-            if (AssetManager.TryGetInfo(entry.relativePath, out AssetInfo? info) && info is not null)
-            {
-                Append(hash, info.persistentId.ToString("D"));
-                Append(hash, info.artifactKey.value);
-            }
-        }
-        Append(hash, typeof(ScriptCompiler).Assembly.ManifestModule.ModuleVersionId.ToString("D"));
-        return Convert.ToHexString(hash.GetHashAndReset());
-    }
 
     private static ScriptAssemblyInput[] ValidateAndOrderAssemblies(
         IReadOnlyDictionary<string, AssemblyBuilder> builders)
@@ -242,15 +226,9 @@ internal sealed record ScriptSourceSet(
                 builder.definition.references,
                 builder.definition.defines,
                 builder.definition.nullable,
-                builder.definition.allowUnsafe));
+                builder.definition.allowUnsafe,
+                builder.definition.artifactKey));
         }
-    }
-
-    private static void Append(IncrementalHash hash, string value)
-    {
-        byte[] bytes = Encoding.UTF8.GetBytes(value ?? string.Empty);
-        hash.AppendData(BitConverter.GetBytes(bytes.Length));
-        hash.AppendData(bytes);
     }
 
     private sealed class AssemblyBuilder(ScriptAssemblyDefinition definition)
@@ -267,7 +245,8 @@ internal sealed record ScriptAssemblyDefinition(
     IReadOnlyList<string> references,
     IReadOnlyList<string> defines,
     bool nullable,
-    bool allowUnsafe);
+    bool allowUnsafe,
+    string artifactKey);
 
 internal sealed record ScriptAssemblyInput(
     string name,
@@ -276,16 +255,19 @@ internal sealed record ScriptAssemblyInput(
     IReadOnlyList<string> references,
     IReadOnlyList<string> defines,
     bool nullable,
-    bool allowUnsafe);
+    bool allowUnsafe,
+    string definitionArtifactKey);
 
 internal sealed record ScriptSourceInput(
     string relativePath,
     string sourcePath,
     string snapshotPath,
-    Guid persistentId);
+    Guid persistentId,
+    string artifactKey);
 
 internal sealed record ScriptPluginInput(
     string sourcePath,
     string assemblyArtifactPath,
     string? symbolsArtifactPath,
-    string? dependenciesArtifactPath);
+    string? dependenciesArtifactPath,
+    string artifactKey);

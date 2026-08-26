@@ -20,7 +20,7 @@ public abstract class GameSystem : EngineObject, ISerializable, ISceneLifecycleO
     public bool enabled
     {
         get => m_enabled;
-        set => m_enabled = value;
+        set => m_enabled = value && this is not MissingGameSystem;
     }
 
     /// <summary>

@@ -114,6 +114,21 @@ public sealed class TypeCacheTests : IDisposable
     }
 
     [Fact]
+    public void OrdinaryRebuildReusesTheExactPerAssemblyDiscoverySlice()
+    {
+        TypeCacheSnapshot previous = TypeCacheManager.current;
+        IReadOnlyDictionary<Assembly, Type[]> previousSlices = GetAssemblySlices(previous);
+        Assembly testAssembly = typeof(TypeCacheTests).Assembly;
+
+        TypeCacheManager.Rebuild();
+
+        IReadOnlyDictionary<Assembly, Type[]> currentSlices = GetAssemblySlices(TypeCacheManager.current);
+        Assert.True(previousSlices.TryGetValue(testAssembly, out Type[]? previousTypes));
+        Assert.True(currentSlices.TryGetValue(testAssembly, out Type[]? currentTypes));
+        Assert.Same(previousTypes, currentTypes);
+    }
+
+    [Fact]
     public void NewlyLoadedHostAssemblyIsVisibleWithoutLoadingApiOnTypeCache()
     {
         Assembly assembly = Assembly.Load("Inno.Core.Reflection.TestAssemblyA");
@@ -293,6 +308,14 @@ public sealed class TypeCacheTests : IDisposable
                 candidate.Name == nameof(TypeCacheManager.GetTypesWithAttribute) &&
                 candidate.IsGenericMethodDefinition);
         return (IReadOnlyList<Type>)method.MakeGenericMethod(attributeType).Invoke(null, null)!;
+    }
+
+    private static IReadOnlyDictionary<Assembly, Type[]> GetAssemblySlices(TypeCacheSnapshot snapshot)
+    {
+        FieldInfo field = typeof(TypeCacheSnapshot).GetField(
+            "m_typesByAssembly",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        return (IReadOnlyDictionary<Assembly, Type[]>)field.GetValue(snapshot)!;
     }
 }
 

@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+using Inno.Assets.Core;
+using Inno.Assets.Serialization;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
 
@@ -54,24 +56,6 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
                     states.Add(CaptureState(system, context.previous));
             }
 
-            foreach (ObjectState state in states.Where(state => context.IsRetiredType(state.target.GetType())))
-            {
-                if (!context.TryResolveReplacement(state.target.GetType(), out Type? replacementType) || replacementType is null)
-                {
-                    _ = context.previous.TryGetStableTypeId(
-                        state.target.GetType(),
-                        out Guid stableTypeId);
-                    throw new InvalidOperationException(
-                        $"Live type '{state.target.GetType().FullName}' with StableTypeId " +
-                        $"'{stableTypeId:D}' has no replacement in the candidate assembly generation.");
-                }
-                Type requiredBase = state.target is GameSystem ? typeof(GameSystem) : typeof(GameComponent);
-                if (!requiredBase.IsAssignableFrom(replacementType) || replacementType.IsAbstract)
-                {
-                    throw new InvalidOperationException(
-                        $"Replacement '{replacementType.FullName}' is not a concrete {requiredBase.Name}.");
-                }
-            }
             ValidateMultiplicity(scene, structure, context);
             scenes.Add(new SceneState(scene, engineObjects, sourceIds, states));
         }
@@ -97,16 +81,24 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
         {
             foreach (ObjectState state in sceneState.states)
             {
-                if (!m_context.IsRetiredType(state.target.GetType()))
+                Type? replacementType = ResolveCandidateType(state, m_context);
+                bool retired = m_context.IsRetiredType(state.target.GetType());
+                bool recovering = state.target is MissingGameComponent or MissingGameSystem &&
+                                  replacementType is not null;
+                if (!retired && !recovering)
                     continue;
-                _ = m_context.TryResolveReplacement(state.target.GetType(), out Type? replacementType);
-                if (!m_context.candidate.TryGetRuntimeTypeId(replacementType!, out int replacementRuntimeTypeId))
+
+                Type effectiveType = replacementType ?? (state.target is GameSystem
+                    ? typeof(MissingGameSystem)
+                    : typeof(MissingGameComponent));
+                if (!m_context.candidate.TryGetRuntimeTypeId(effectiveType, out int replacementRuntimeTypeId))
                 {
                     throw new InvalidOperationException(
-                        $"Replacement type '{replacementType!.FullName}' has no candidate runtime type identity.");
+                        $"Replacement type '{effectiveType.FullName}' has no candidate runtime type identity.");
                 }
-                EngineObject replacement = CreateReplacement(state.target, replacementType!);
-                CopyLifecycle(state.target, replacement);
+                EngineObject replacement = CreateReplacement(state, effectiveType);
+                if (replacement is not MissingGameComponent and not MissingGameSystem)
+                    CopyLifecycle(state.target, replacement);
                 if (state.target is GameComponent previousComponent)
                 {
                     sceneState.scene.ReplaceComponentForReload(
@@ -127,6 +119,20 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
                     state.target,
                     replacement,
                     state.runtimeTypeId));
+                if (replacementType is null || recovering)
+                {
+                    m_diagnostics.Add(new SceneReloadDiagnostic(
+                        replacementType is null ? "INNOHR0002" : "INNOHR0003",
+                        SceneReloadDiagnosticSeverity.Warning,
+                        replacementType is null
+                            ? $"'{state.typeName}' is unavailable. Its identity and serialized state are preserved as a missing scene element."
+                            : $"Missing scene element '{state.typeName}' recovered as '{replacementType.FullName}'.",
+                        sceneState.scene.identity.persistentId,
+                        replacement.identity.persistentId,
+                        string.Empty,
+                        state.typeName,
+                        replacementType?.FullName ?? string.Empty));
+                }
             }
             RestoreState(sceneState, useCurrentTargets: true);
         }
@@ -215,10 +221,42 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
             throw new InvalidOperationException(
                 $"Scene object type '{target.GetType().FullName}' has no runtime identity in the previous TypeCache generation.");
         }
-        var serializable = (ISerializable)target;
-        IReadOnlyList<SerializationPropertySnapshot> properties =
-            SerializationManager.CaptureProperties(serializable);
-        return new ObjectState(target, runtimeTypeId, properties);
+        if (target is MissingGameComponent missingComponent)
+        {
+            return new ObjectState(
+                target,
+                runtimeTypeId,
+                missingComponent.missingTypeId,
+                missingComponent.missingTypeName,
+                missingComponent.CaptureSerializedState(),
+                missingComponent.dependencies.ToArray());
+        }
+        if (target is MissingGameSystem missingSystem)
+        {
+            return new ObjectState(
+                target,
+                runtimeTypeId,
+                missingSystem.missingTypeId,
+                missingSystem.missingTypeName,
+                missingSystem.CaptureSerializedState(),
+                missingSystem.dependencies.ToArray());
+        }
+        if (!types.TryGetStableTypeId(target.GetType(), out Guid stableTypeId))
+        {
+            throw new InvalidOperationException(
+                $"Scene object type '{target.GetType().FullName}' has no stable identity in the previous TypeCache generation.");
+        }
+        var dependencies = new AssetDependencyCollection();
+        byte[] data = SerializationManager.CapturePropertiesData(
+            (ISerializable)target,
+            SerializationContext.empty.With(dependencies));
+        return new ObjectState(
+            target,
+            runtimeTypeId,
+            stableTypeId,
+            target.GetType().FullName ?? target.GetType().Name,
+            data,
+            dependencies.dependencies.ToArray());
     }
 
     private static void RestorePreviousLifecycleState(
@@ -251,11 +289,23 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
         }
     }
 
-    private static EngineObject CreateReplacement(EngineObject previous, Type replacementType)
+    private static EngineObject CreateReplacement(ObjectState state, Type replacementType)
     {
+        if (replacementType == typeof(MissingGameComponent))
+            return new MissingGameComponent(
+                state.stableTypeId,
+                state.typeName,
+                state.data,
+                state.dependencies);
+        if (replacementType == typeof(MissingGameSystem))
+            return new MissingGameSystem(
+                state.stableTypeId,
+                state.typeName,
+                state.data,
+                state.dependencies);
         try
         {
-            return previous is GameComponent
+            return state.target is GameComponent
                 ? ComponentFactory.Create(replacementType)
                 : (EngineObject)(Activator.CreateInstance(replacementType, nonPublic: true)
                     ?? throw new InvalidOperationException("Activator returned null."));
@@ -297,7 +347,7 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
             var groups = new Dictionary<int, MultiplicityGroup>();
             foreach (GameComponent component in entry.components)
             {
-                ActiveTypeInfo type = ResolveActiveType(component.GetType(), context, isSystem: false);
+                ActiveTypeInfo type = ResolveActiveType(component, context);
                 if (!groups.TryGetValue(type.runtimeTypeId, out MultiplicityGroup? group))
                     groups.Add(type.runtimeTypeId, new MultiplicityGroup(type.displayName, type.allowsMultiple));
                 else
@@ -318,7 +368,7 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
         var systemGroups = new Dictionary<int, MultiplicityGroup>();
         foreach (GameSystem system in scene.GetSystems())
         {
-            ActiveTypeInfo type = ResolveActiveType(system.GetType(), context, isSystem: true);
+            ActiveTypeInfo type = ResolveActiveType(system, context);
             if (!systemGroups.TryGetValue(type.runtimeTypeId, out MultiplicityGroup? group))
                 systemGroups.Add(type.runtimeTypeId, new MultiplicityGroup(type.displayName, type.allowsMultiple));
             else
@@ -336,15 +386,32 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
     }
 
     private static ActiveTypeInfo ResolveActiveType(
-        Type type,
-        TypeCacheReloadContext context,
-        bool isSystem)
+        EngineObject target,
+        TypeCacheReloadContext context)
     {
-        Type activeType = context.IsRetiredType(type) &&
-                          context.TryResolveReplacement(type, out Type? replacement) &&
-                          replacement is not null
-            ? replacement
-            : type;
+        bool isSystem = target is GameSystem;
+        Type type = target.GetType();
+        Type activeType = type;
+        if (target is MissingGameComponent missingComponent)
+        {
+            activeType = context.candidate.TryResolveType(missingComponent.missingTypeId, out Type? recovered) &&
+                         recovered is not null
+                ? recovered
+                : typeof(MissingGameComponent);
+        }
+        else if (target is MissingGameSystem missingSystem)
+        {
+            activeType = context.candidate.TryResolveType(missingSystem.missingTypeId, out Type? recovered) &&
+                         recovered is not null
+                ? recovered
+                : typeof(MissingGameSystem);
+        }
+        else if (context.IsRetiredType(type))
+        {
+            activeType = context.TryResolveReplacement(type, out Type? replacement) && replacement is not null
+                ? replacement
+                : isSystem ? typeof(MissingGameSystem) : typeof(MissingGameComponent);
+        }
         if (!context.candidate.TryGetRuntimeTypeId(activeType, out int runtimeTypeId))
         {
             throw new InvalidOperationException(
@@ -368,20 +435,46 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
                     : engineObject)
             .ToArray();
         var references = new SceneGraphReferenceMap(sceneState.scene);
+        var currentByPersistentId = new Dictionary<Guid, EngineObject>();
         for (int i = 0; i < currentObjects.Length; i++)
+        {
             references.Register(sceneState.engineObjects[i].identity.persistentId, currentObjects[i]);
+            currentByPersistentId[currentObjects[i].identity.persistentId] = currentObjects[i];
+        }
+        foreach (ObjectState state in sceneState.states)
+        {
+            IReadOnlyDictionary<Guid, Guid>? aliases = state.target switch
+            {
+                MissingGameComponent component => component.referenceAliases,
+                MissingGameSystem system => system.referenceAliases,
+                _ => null
+            };
+            if (aliases is null)
+                continue;
+            foreach ((Guid alias, Guid targetPersistentId) in aliases)
+            {
+                if (!currentByPersistentId.TryGetValue(targetPersistentId, out EngineObject? target))
+                {
+                    throw new InvalidOperationException(
+                        $"Missing scene state reference alias '{alias}' targets unavailable identity '{targetPersistentId}'.");
+                }
+                references.Register(alias, target);
+            }
+        }
         List<Exception>? restoreFailures = null;
         using (references.Enter())
         {
             foreach (ObjectState state in sceneState.states)
             {
                 ISerializable target = (ISerializable)(useCurrentTargets ? state.currentTarget : state.target);
+                if (target is MissingGameComponent or MissingGameSystem)
+                    continue;
                 SerializationPropertyRestoreResult result;
                 try
                 {
-                    result = SerializationManager.RestoreProperties(
+                    result = SerializationManager.RestorePropertiesData(
                         target,
-                        state.properties,
+                        state.data,
                         useCurrentTargets
                             ? SerializationPropertyRestoreMode.Compatible
                             : SerializationPropertyRestoreMode.Strict);
@@ -441,11 +534,17 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
     private sealed class ObjectState(
         EngineObject target,
         int runtimeTypeId,
-        IReadOnlyList<SerializationPropertySnapshot> properties)
+        Guid stableTypeId,
+        string typeName,
+        byte[] data,
+        AssetDependency[] dependencies)
     {
         internal EngineObject target { get; } = target;
         internal int runtimeTypeId { get; } = runtimeTypeId;
-        internal IReadOnlyList<SerializationPropertySnapshot> properties { get; } = properties;
+        internal Guid stableTypeId { get; } = stableTypeId;
+        internal string typeName { get; } = typeName;
+        internal byte[] data { get; } = data;
+        internal AssetDependency[] dependencies { get; } = dependencies;
         internal bool lifecycleWasEnabled { get; } =
             target is ISceneLifecycleObject lifecycle && lifecycle.lifecycleWasEnabled;
         internal EngineObject currentTarget { get; set; } = target;
@@ -468,4 +567,23 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
         int runtimeTypeId,
         string displayName,
         bool allowsMultiple);
+
+    private static Type? ResolveCandidateType(ObjectState state, TypeCacheReloadContext context)
+    {
+        Type requiredBase = state.target is GameSystem ? typeof(GameSystem) : typeof(GameComponent);
+        Type? candidate = null;
+        if (state.target is MissingGameComponent or MissingGameSystem)
+            _ = context.candidate.TryResolveType(state.stableTypeId, out candidate);
+        else if (context.IsRetiredType(state.target.GetType()))
+            _ = context.TryResolveReplacement(state.target.GetType(), out candidate);
+        if (candidate is null)
+            return null;
+        if (!requiredBase.IsAssignableFrom(candidate) || candidate.IsAbstract ||
+            candidate == typeof(MissingGameComponent) || candidate == typeof(MissingGameSystem))
+        {
+            throw new InvalidOperationException(
+                $"Stable type id '{state.stableTypeId:D}' resolves to invalid replacement '{candidate.FullName}'.");
+        }
+        return candidate;
+    }
 }

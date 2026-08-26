@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Reflection;
 
+using Inno.Assets.Core;
 using Inno.Core.Storage;
 
 namespace Inno.Engine.Scene;
@@ -55,6 +56,26 @@ internal sealed class SceneSystemScheduler
         var system = (GameSystem)(constructor.Invoke(null)
             ?? throw new InvalidOperationException($"Could not create GameSystem '{descriptor.displayName}'."));
         Add(system, descriptor, persistentId, invokeReset);
+        return system;
+    }
+
+    internal MissingGameSystem AddMissing(
+        Guid missingTypeId,
+        string missingTypeName,
+        ReadOnlySpan<byte> serializedState,
+        Guid? persistentId,
+        IReadOnlyList<AssetDependency>? dependencies = null)
+    {
+        var system = new MissingGameSystem(
+            missingTypeId,
+            missingTypeName,
+            serializedState,
+            dependencies);
+        Add(
+            system,
+            SceneTypeCatalog.GetSystem(typeof(MissingGameSystem)),
+            persistentId,
+            invokeReset: false);
         return system;
     }
 

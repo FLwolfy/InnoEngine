@@ -221,6 +221,12 @@ public sealed class GameScene : EngineObject, ISerializable
     public GameSystem AddSystem(Type systemType)
     {
         EnsureNotDestroyed();
+        if (systemType == typeof(MissingGameSystem))
+        {
+            throw new ArgumentException(
+                $"{nameof(MissingGameSystem)} instances are created only by scene restoration.",
+                nameof(systemType));
+        }
         return m_systems.Add(systemType, persistentId: null, invokeReset: true);
     }
 
@@ -294,6 +300,19 @@ public sealed class GameScene : EngineObject, ISerializable
     internal GameSystem AddSystem(Type systemType, Guid? persistentId, bool invokeReset)
         => m_systems.Add(systemType, persistentId, invokeReset);
 
+    internal MissingGameSystem AddMissingSystem(
+        Guid missingTypeId,
+        string missingTypeName,
+        ReadOnlySpan<byte> serializedState,
+        Guid? persistentId,
+        IReadOnlyList<AssetDependency>? dependencies = null)
+        => m_systems.AddMissing(
+            missingTypeId,
+            missingTypeName,
+            serializedState,
+            persistentId,
+            dependencies);
+
     internal bool Contains(GameObject gameObject) => !isDestroyed && m_store.Contains(gameObject);
 
     internal void NotifyObjectMetadataChanged(GameObject gameObject)
@@ -310,6 +329,12 @@ public sealed class GameScene : EngineObject, ISerializable
     {
         EnsureOwned(owner);
         ArgumentNullException.ThrowIfNull(componentType);
+        if (componentType == typeof(MissingGameComponent))
+        {
+            throw new ArgumentException(
+                $"{nameof(MissingGameComponent)} instances are created only by scene restoration.",
+                nameof(componentType));
+        }
         if (!typeof(GameComponent).IsAssignableFrom(componentType))
             throw new ArgumentException($"Type '{componentType.FullName}' is not a scene component.", nameof(componentType));
 
@@ -377,6 +402,40 @@ public sealed class GameScene : EngineObject, ISerializable
                 component.Detach();
         }
         return true;
+    }
+
+    internal MissingGameComponent AddMissingComponent(
+        GameObject owner,
+        Guid missingTypeId,
+        string missingTypeName,
+        ReadOnlySpan<byte> serializedState,
+        Guid? persistentId,
+        IReadOnlyList<AssetDependency>? dependencies = null)
+    {
+        EnsureOwned(owner);
+        var component = new MissingGameComponent(
+            missingTypeId,
+            missingTypeName,
+            serializedState,
+            dependencies);
+        component.Attach(owner);
+        bool addedToStore = false;
+        try
+        {
+            component.RegisterIdentity(persistentId);
+            SceneComponentTypeDescriptor descriptor = SceneTypeCatalog.GetComponent(typeof(MissingGameComponent));
+            m_store.AddComponent(owner, component, descriptor, allowsMultiple: true);
+            addedToStore = true;
+            return component;
+        }
+        catch
+        {
+            if (addedToStore)
+                m_store.RemoveComponent(owner, component);
+            if (!component.isDestroyed)
+                component.Detach();
+            throw;
+        }
     }
 
     internal void ResetComponent(GameObject owner, GameComponent component)

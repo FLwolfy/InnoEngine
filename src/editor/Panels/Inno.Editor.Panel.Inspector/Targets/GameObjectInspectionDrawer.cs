@@ -140,12 +140,13 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
         {
             GameComponent component = components[i];
             Type componentType = component.GetType();
+            MissingGameComponent? missing = component as MissingGameComponent;
             string componentId = component.identity.persistentId.ToString("N");
             GameBehavior? behavior = component as GameBehavior;
             var editorTarget = new ComponentEditorTarget(gameObject, component);
             bool open = EditorWidget.CollapsingCard(
                 componentId,
-                componentType.Name,
+                missing?.missingTypeName ?? componentType.Name,
                 behavior is not null
                     ? () =>
                     {
@@ -192,6 +193,15 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
                 componentId,
                 () =>
                 {
+                    if (missing is not null)
+                    {
+                        NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.error);
+                        ImGuiWidget.WrappedText(
+                            $"Missing component script ({missing.missingTypeId:D}). " +
+                            "Its serialized state is preserved and will recover automatically when the type returns.");
+                        NativeImGui.PopStyleColor();
+                        return;
+                    }
                     IReadOnlyList<SerializedProperty> properties = SerializationManager.GetProperties(component);
                     for (int propertyIndex = 0; propertyIndex < properties.Count; propertyIndex++)
                     {

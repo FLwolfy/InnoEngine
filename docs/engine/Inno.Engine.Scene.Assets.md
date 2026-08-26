@@ -98,7 +98,9 @@ Reload 会使用候选类型重新验证数量：
 
 Scene migration 按成员独立捕获状态。候选类型中名称相同且可解码的成员正常恢复；新增成员保留新默认值；删除成员忽略旧数据；同名成员类型不兼容时只跳过该成员，保留新实例的字段初始化值。
 
-跳过项以 `INNOHR0001` warning 写入 `diagnostics`，包含 Scene/Object persistent ID、成员名、旧声明类型和新声明类型。Editor 只在程序集事务成功提交后输出这些 warning。实例创建、Stable Type ID、数量约束、Scene 结构或对象级 restore hook 错误仍回滚整个 reload。
+跳过项以 `INNOHR0001` warning 写入 `diagnostics`，包含 Scene/Object persistent ID、成员名、旧类型和新声明类型。`INNOHR0002` 表示元素已安全转为 missing，`INNOHR0003` 表示 missing 元素已经恢复。Editor 只在程序集事务成功提交后输出这些 warning。实例创建、Stable Type ID 冲突、数量约束、Scene 结构或对象级 restore hook 错误仍回滚整个 reload。
+
+候选 generation 缺少 live Component/System 时不再拒绝 reload。Migration 原位换成 `MissingGameComponent` / `MissingGameSystem`，保留 persistent ID、显示顺序、中立属性 bytes、Asset dependencies 和引用别名；旧脚本实例在 commit 后 Detach。Scene 和 Prefab 都使用同一 current-format schema，因此 missing 状态可继续保存、实例化和再次保存。Prefab source-local ID、Scene runtime persistent ID 发生转换时，引用别名表会把 payload 中的旧 token 重绑到当前图，避免恢复后指向源 Prefab 或丢失引用。
 
 ## 生命周期迁移
 

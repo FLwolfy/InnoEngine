@@ -1694,35 +1694,216 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public void MissingLiveReplacement_ReportsTheRetiringStableTypeId()
+    public void MissingLiveTypes_PreserveSceneStateAcrossSerializationAndRecoverInPlace()
     {
-        const string previousStableTypeId = "1b11fc01-68f7-48c5-a228-ad2dd311ee6a";
-        WriteIdentityProbe(previousStableTypeId);
+        const string componentTypeId = "1b11fc01-68f7-48c5-a228-ad2dd311ee6a";
+        const string systemTypeId = "0164a502-aea6-427d-998e-026dd4098836";
+        Write("Data/MissingDependency.txt", "dependency");
+        AssetManager.Rescan();
+        TextAsset dependency = AssetManager.Load<TextAsset>("Data/MissingDependency.txt");
+        WriteIdentityProbe(componentTypeId, systemTypeId);
         ScriptCompilationResult firstCompilation = Compile();
         Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
         Assert.True(m_manager.ApplyPendingReload());
         Type previousType = TypeCacheManager.current.types.Single(type => type.Name == "IdentityProbe");
+        Type previousSystemType = TypeCacheManager.current.types.Single(type => type.Name == "IdentityProbeSystem");
         var scene = new GameScene("Identity Probe");
         GameObject gameObject = scene.CreateObject("Actor");
+        GameObject target = scene.CreateObject("Target");
         GameComponent previous = gameObject.AddComponent(previousType);
+        GameSystem previousSystem = scene.AddSystem(previousSystemType);
+        SetProperty(previous, "value", 41);
+        previousType.GetProperty("target")!.SetValue(previous, target);
+        previousType.GetProperty("asset")!.SetValue(previous, dependency);
+        SetProperty(previousSystem, "value", 73);
+        Guid componentId = previous.identity.persistentId;
+        Guid systemId = previousSystem.identity.persistentId;
         SceneManager.LoadScene(scene);
 
-        WriteIdentityProbe("69df8ec0-e28d-4769-9e8a-0a83ef18d62c");
+        WriteIdentityProbe(
+            "69df8ec0-e28d-4769-9e8a-0a83ef18d62c",
+            "8245b26f-9325-4de8-ae09-93abc53f5aaa");
         ScriptCompilationResult secondCompilation = Compile();
         Assert.True(secondCompilation.success, FormatDiagnostics(secondCompilation));
+        var missingSink = new TestDiagnosticSink();
+        DiagnosticManager.RegisterSink(missingSink);
+        try
+        {
+            Assert.True(m_manager.ApplyPendingReload());
+            Assert.True(missingSink.ContainsCode("INNOHR0002"));
+        }
+        finally
+        {
+            DiagnosticManager.UnregisterSink(missingSink);
+        }
 
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => m_manager.ApplyPendingReload());
+        MissingGameComponent missingComponent = Assert.IsType<MissingGameComponent>(
+            gameObject.GetComponents().Single(component => component.identity.persistentId == componentId));
+        MissingGameSystem missingSystem = Assert.IsType<MissingGameSystem>(
+            scene.GetSystems().Single(system => system.identity.persistentId == systemId));
+        Assert.Equal(Guid.Parse(componentTypeId), missingComponent.missingTypeId);
+        Assert.Equal(Guid.Parse(systemTypeId), missingSystem.missingTypeId);
+        Assert.False(missingSystem.enabled);
+        missingSystem.enabled = true;
+        Assert.False(missingSystem.enabled);
+        Assert.False(missingSystem.isActiveAndEnabled);
+        Assert.True(previous.isDestroyed);
+        Assert.True(previousSystem.isDestroyed);
 
-        Assert.Contains(previousStableTypeId, exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("IdentityProbe", exception.Message, StringComparison.Ordinal);
-        Assert.Same(previous, gameObject.GetComponents().Single(component => component.GetType() == previousType));
+        SceneAsset capturedMissingScene = SceneAsset.Capture(scene);
+        Assert.True(AssetManager.Save("Scenes/Missing.iscene", capturedMissingScene));
+        SceneAsset savedMissingScene = AssetManager.Load<SceneAsset>("Scenes/Missing.iscene");
+        Assert.Contains(
+            AssetManager.GetDependencies(savedMissingScene),
+            item => item.persistentId == dependency.identity.persistentId);
 
-        InvalidOperationException retryException = Assert.Throws<InvalidOperationException>(
-            () => m_manager.ApplyPendingReload());
+        byte[] missingSceneData = SerializationManager.Serialize(scene);
+        Assert.True(SceneManager.UnloadScene(scene));
+        GameScene restoredScene = SerializationManager.Deserialize<GameScene>(missingSceneData);
+        SceneManager.LoadScene(restoredScene);
+        GameObject restoredActor = restoredScene.GetObjects().Single(value => value.name == "Actor");
+        GameObject restoredTarget = restoredScene.GetObjects().Single(value => value.name == "Target");
+        Assert.IsType<MissingGameComponent>(restoredActor.GetComponents()
+            .Single(component => component.identity.persistentId == componentId));
+        Assert.IsType<MissingGameSystem>(restoredScene.GetSystems()
+            .Single(system => system.identity.persistentId == systemId));
 
-        Assert.Contains(previousStableTypeId, retryException.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Same(previous, gameObject.GetComponents().Single(component => component.GetType() == previousType));
+        WriteIdentityProbe(componentTypeId, systemTypeId);
+        ScriptCompilationResult recoveryCompilation = Compile();
+        Assert.True(recoveryCompilation.success, FormatDiagnostics(recoveryCompilation));
+        var recoverySink = new TestDiagnosticSink();
+        DiagnosticManager.RegisterSink(recoverySink);
+        try
+        {
+            Assert.True(m_manager.ApplyPendingReload());
+            Assert.True(recoverySink.ContainsCode("INNOHR0003"));
+        }
+        finally
+        {
+            DiagnosticManager.UnregisterSink(recoverySink);
+        }
+
+        GameComponent recovered = restoredActor.GetComponents()
+            .Single(component => component.identity.persistentId == componentId);
+        GameSystem recoveredSystem = restoredScene.GetSystems()
+            .Single(system => system.identity.persistentId == systemId);
+        Assert.Equal("IdentityProbe", recovered.GetType().Name);
+        Assert.Equal("IdentityProbeSystem", recoveredSystem.GetType().Name);
+        Assert.Equal(41, GetProperty(recovered, "value"));
+        Assert.Same(restoredTarget, recovered.GetType().GetProperty("target")!.GetValue(recovered));
+        Assert.Same(dependency, recovered.GetType().GetProperty("asset")!.GetValue(recovered));
+        Assert.Equal(73, GetProperty(recoveredSystem, "value"));
+    }
+
+    [Fact]
+    public void MissingPrefabState_RemapsReferenceAliasesAndRecoversAgainstTheInstantiatedGraph()
+    {
+        const string componentTypeId = "4cf986c5-9ab2-449b-bb72-16611bc7a1dc";
+        const string systemTypeId = "e72c99dd-da6d-471e-a396-60a5fc12f1c2";
+        WriteIdentityProbe(componentTypeId, systemTypeId);
+        ScriptCompilationResult firstCompilation = Compile();
+        Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
+        Assert.True(m_manager.ApplyPendingReload());
+
+        Type componentType = TypeCacheManager.current.types.Single(type => type.Name == "IdentityProbe");
+        var sourceScene = new GameScene("Missing Prefab Source");
+        GameObject sourceRoot = sourceScene.CreateObject("Root");
+        GameObject sourceTarget = sourceScene.CreateObject("Target");
+        sourceTarget.transform.SetParent(sourceRoot.transform);
+        GameComponent sourceComponent = sourceRoot.AddComponent(componentType);
+        SetProperty(sourceComponent, "value", 29);
+        componentType.GetProperty("target")!.SetValue(sourceComponent, sourceTarget);
+        SceneManager.LoadScene(sourceScene);
+
+        WriteIdentityProbe(
+            "2ff3c70d-4aca-4f46-b6fa-084582d96364",
+            "ed01e4f6-fac2-4e13-b4a0-d12d35450aec");
+        ScriptCompilationResult missingCompilation = Compile();
+        Assert.True(missingCompilation.success, FormatDiagnostics(missingCompilation));
+        Assert.True(m_manager.ApplyPendingReload());
+        Assert.Contains(sourceRoot.GetComponents(), static component => component is MissingGameComponent);
+
+        byte[] prefabData = SerializationManager.Serialize(sourceRoot);
+        var targetScene = new GameScene("Missing Prefab Instance");
+        GameObject instanceRoot = SerializationManager.Deserialize<GameObject>(
+            prefabData,
+            SerializationContext.empty.With(targetScene));
+        SceneManager.LoadSceneAdditive(targetScene);
+        Assert.Contains(instanceRoot.GetComponents(), static component => component is MissingGameComponent);
+
+        WriteIdentityProbe(componentTypeId, systemTypeId);
+        ScriptCompilationResult recoveryCompilation = Compile();
+        Assert.True(recoveryCompilation.success, FormatDiagnostics(recoveryCompilation));
+        Assert.True(m_manager.ApplyPendingReload());
+
+        GameComponent recovered = instanceRoot.GetComponents()
+            .Single(component => component.GetType().Name == "IdentityProbe");
+        GameObject instanceTarget = Assert.Single(instanceRoot.transform.children).gameObject;
+        Assert.Equal(29, GetProperty(recovered, "value"));
+        Assert.Same(instanceTarget, recovered.GetType().GetProperty("target")!.GetValue(recovered));
+        Assert.NotSame(sourceTarget, instanceTarget);
+    }
+
+    [Fact]
+    public void MissingTypeRecoveryFailure_RollsBackToTheExactPlaceholderAndCanRetry()
+    {
+        const string componentTypeId = "c1329ee9-79c3-4414-99be-24ea95fc5c8e";
+        const string systemTypeId = "c0ac7f51-89d1-48ea-9b73-2830684c6b3e";
+        WriteIdentityProbe(componentTypeId, systemTypeId);
+        Assert.True(Compile().success);
+        Assert.True(m_manager.ApplyPendingReload());
+        Type originalType = TypeCacheManager.current.types.Single(type => type.Name == "IdentityProbe");
+        var scene = new GameScene("Missing Recovery Rollback");
+        GameObject gameObject = scene.CreateObject("Actor");
+        GameComponent original = gameObject.AddComponent(originalType);
+        SetProperty(original, "value", 67);
+        Guid componentId = original.identity.persistentId;
+        SceneManager.LoadScene(scene);
+
+        WriteIdentityProbe(
+            "a5c14c91-5501-47d1-b90a-94a314423c99",
+            "1a754422-e81b-4617-81ce-a4e180b7b4b6");
+        Assert.True(Compile().success);
+        Assert.True(m_manager.ApplyPendingReload());
+        MissingGameComponent placeholder = Assert.IsType<MissingGameComponent>(
+            gameObject.GetComponents().Single(component => component.identity.persistentId == componentId));
+
+        WriteIdentityProbe(componentTypeId, systemTypeId, throwOnConstruction: true);
+        Assert.True(Compile().success);
+        WeakReference failedCandidateContext = ApplyFailedRecoveryAndCaptureCandidateContext();
+
+        Assert.Same(
+            placeholder,
+            gameObject.GetComponents().Single(component => component.identity.persistentId == componentId));
+        Assert.False(placeholder.isDestroyed);
+        Assert.False(TypeCacheManager.TryResolveType(Guid.Parse(componentTypeId), out _));
+        ForceCollection();
+        Assert.False(
+            failedCandidateContext.IsAlive,
+            "A rolled-back missing-script recovery retained its candidate ALC.");
+
+        WriteIdentityProbe(componentTypeId, systemTypeId);
+        Assert.True(Compile().success);
+        Assert.True(m_manager.ApplyPendingReload());
+        GameComponent recovered = gameObject.GetComponents()
+            .Single(component => component.identity.persistentId == componentId);
+        Assert.Equal("IdentityProbe", recovered.GetType().Name);
+        Assert.Equal(67, GetProperty(recovered, "value"));
+        Assert.True(placeholder.isDestroyed);
+    }
+
+    [Fact]
+    public void MissingPlaceholders_DoNotRetainTheRetiredCollectibleLoadContext()
+    {
+        MissingGenerationReferences generation = CreateMissingGenerationAndRetireIt();
+
+        ForceCollection();
+
+        Assert.False(generation.context.IsAlive, "A missing placeholder retained its retired script ALC.");
+        Assert.IsType<MissingGameComponent>(generation.gameObject.GetComponents()
+            .Single(component => component.identity.persistentId == generation.componentId));
+        Assert.IsType<MissingGameSystem>(generation.scene.GetSystems()
+            .Single(system => system.identity.persistentId == generation.systemId));
     }
 
     [Fact]
@@ -1885,6 +2066,114 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
+    public void IncrementalCompilation_RebuildsOnlyChangedAssemblyAndTransitiveDependents()
+    {
+        Write("Core/Core.iasmdef", """
+            { "name": "Project.Core", "scope": "Runtime", "references": [] }
+            """);
+        Write("Core/CoreValue.cs", "public static class CoreValue { public const int value = 1; }");
+        Write("Gameplay/Gameplay.iasmdef", """
+            { "name": "Project.Gameplay", "scope": "Runtime", "references": ["Project.Core"] }
+            """);
+        Write("Gameplay/GameplayValue.cs", "public static class GameplayValue { public const int value = CoreValue.value; }");
+        Write("Independent/Independent.iasmdef", """
+            { "name": "Project.Independent", "scope": "Runtime", "references": [] }
+            """);
+        Write("Independent/IndependentValue.cs", "public static class IndependentValue { public const int value = 9; }");
+
+        ScriptCompilationResult first = Compile();
+        Assert.True(first.success, FormatDiagnostics(first));
+        Assert.Contains("Project.Core", first.compiledAssemblies);
+        Assert.Contains("Project.Gameplay", first.compiledAssemblies);
+        Assert.Contains("Project.Independent", first.compiledAssemblies);
+
+        Write("Core/CoreValue.cs", "public static class CoreValue { public const int value = 2; }");
+        ScriptCompilationResult second = Compile();
+
+        Assert.True(second.success, FormatDiagnostics(second));
+        Assert.Contains("Project.Core", second.compiledAssemblies);
+        Assert.Contains("Project.Gameplay", second.compiledAssemblies);
+        Assert.DoesNotContain("Project.Independent", second.compiledAssemblies);
+        Assert.Contains("Project.Independent", second.reusedAssemblies);
+        Assert.Contains("Inno.GameScripts", second.reusedAssemblies);
+        Assert.Contains("Inno.EditorScripts", second.reusedAssemblies);
+
+        ScriptCompilationResult third = Compile();
+        Assert.True(third.success, FormatDiagnostics(third));
+        Assert.Empty(third.compiledAssemblies);
+        Assert.Equal(
+            first.compiledAssemblies.Count,
+            third.reusedAssemblies.Count);
+    }
+
+    [Fact]
+    public void ArtifactCacheCollectsExpiredAssemblyAndInterruptedStagingEntries()
+    {
+        string root = Path.Combine(m_projectRoot, "Library", "Artifacts", "ScriptAssemblies");
+        string protectedGeneration = Path.Combine(root, new string('A', 64));
+        string staleAssembly = Path.Combine(root, ".assemblies", new string('B', 64));
+        string recentAssembly = Path.Combine(root, ".assemblies", new string('C', 64));
+        string staleGenerationStaging = Path.Combine(root, ".staging", "generation");
+        string staleAssemblyStaging = Path.Combine(root, ".assembly-staging", "assembly");
+        string[] directories =
+        [
+            protectedGeneration,
+            staleAssembly,
+            recentAssembly,
+            staleGenerationStaging,
+            staleAssemblyStaging
+        ];
+        foreach (string directory in directories)
+            Directory.CreateDirectory(directory);
+        DateTime stale = DateTime.UtcNow - TimeSpan.FromDays(8);
+        Directory.SetLastWriteTimeUtc(protectedGeneration, stale);
+        Directory.SetLastWriteTimeUtc(staleAssembly, stale);
+        Directory.SetLastWriteTimeUtc(staleGenerationStaging, stale);
+        Directory.SetLastWriteTimeUtc(staleAssemblyStaging, stale);
+
+        var cache = new ScriptArtifactCache(root);
+        int removed = cache.Collect([protectedGeneration]);
+
+        Assert.Equal(3, removed);
+        Assert.True(Directory.Exists(protectedGeneration));
+        Assert.False(Directory.Exists(staleAssembly));
+        Assert.True(Directory.Exists(recentAssembly));
+        Assert.False(Directory.Exists(staleGenerationStaging));
+        Assert.False(Directory.Exists(staleAssemblyStaging));
+    }
+
+    [Fact]
+    public void CorruptedGenerationCacheIsReconstructedFromValidatedAssemblyArtifacts()
+    {
+        Write("CacheProbe.cs", "public sealed class CacheProbe { }");
+        ScriptCompilationResult first = Compile();
+        Assert.True(first.success, FormatDiagnostics(first));
+        string gameAssembly = Path.Combine(first.outputDirectory!, "Inno.GameScripts.dll");
+        File.WriteAllBytes(gameAssembly, [0, 1, 2, 3]);
+
+        ScriptCompilationResult repaired = Compile();
+
+        Assert.True(repaired.success, FormatDiagnostics(repaired));
+        Assert.Equal("Inno.GameScripts", AssemblyName.GetAssemblyName(
+            Path.Combine(repaired.outputDirectory!, "Inno.GameScripts.dll")).Name);
+        Assert.Empty(repaired.compiledAssemblies);
+        Assert.Contains("Inno.GameScripts", repaired.reusedAssemblies);
+    }
+
+    [Fact]
+    public void FailedCompilationImmediatelyReleasesItsStagingDirectories()
+    {
+        Write("Broken.cs", "public sealed class Broken {");
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.False(result.success);
+        string root = Path.Combine(m_projectRoot, "Library", "Artifacts", "ScriptAssemblies");
+        Assert.Empty(EnumerateDirectories(Path.Combine(root, ".staging")));
+        Assert.Empty(EnumerateDirectories(Path.Combine(root, ".assembly-staging")));
+    }
+
+    [Fact]
     public void RuntimeAssemblyDefinitionCannotReferenceEditorAssembly()
     {
         Write("Editor/Editor.iasmdef", """
@@ -2034,16 +2323,99 @@ public sealed class ScriptManagerTests : IDisposable
             }
             """);
 
-    private void WriteIdentityProbe(string stableTypeId)
+    private void WriteIdentityProbe(
+        string stableTypeId,
+        string systemStableTypeId,
+        bool throwOnConstruction = false)
         => Write("IdentityProbe.cs", $$"""
+            using InnoEngine.Assets;
             using InnoEngine.Reflection;
             using InnoEngine.Scene;
+            using InnoEngine.Serialization;
 
             [StableTypeId("{{stableTypeId}}")]
             public sealed class IdentityProbe : GameBehavior
             {
+                {{(throwOnConstruction ? "public IdentityProbe() => throw new System.InvalidOperationException(\"Injected constructor failure.\");" : string.Empty)}}
+
+                [SerializableProperty]
+                public int value { get; set; }
+
+                [SerializableProperty]
+                public GameObject? target { get; set; }
+
+                [SerializableProperty]
+                public AssetObject? asset { get; set; }
+            }
+
+            [StableTypeId("{{systemStableTypeId}}")]
+            public sealed class IdentityProbeSystem : GameSystem
+            {
+                [SerializableProperty]
+                public int value { get; set; }
             }
             """);
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private MissingGenerationReferences CreateMissingGenerationAndRetireIt()
+    {
+        WriteIdentityProbe(
+            "e9c4c719-ad2c-453c-a35a-a91e2af506ba",
+            "49a0bc84-aac0-4918-b2e1-813fe3a0761e");
+        Assert.True(Compile().success);
+        Assert.True(m_manager.ApplyPendingReload());
+        Type componentType = TypeCacheManager.current.types.Single(type => type.Name == "IdentityProbe");
+        Type systemType = TypeCacheManager.current.types.Single(type => type.Name == "IdentityProbeSystem");
+        AssemblyLoadContext context = AssemblyLoadContext.GetLoadContext(componentType.Assembly)!;
+        var scene = new GameScene("Missing ALC");
+        GameObject gameObject = scene.CreateObject("Actor");
+        GameComponent component = gameObject.AddComponent(componentType);
+        GameSystem system = scene.AddSystem(systemType);
+        Guid componentId = component.identity.persistentId;
+        Guid systemId = system.identity.persistentId;
+        SceneManager.LoadScene(scene);
+
+        WriteIdentityProbe(
+            "de6a22ca-6669-4837-8aca-9a8ef332f028",
+            "302432de-c60d-46fa-9e22-379802de8fe8");
+        Assert.True(Compile().success);
+        Assert.True(m_manager.ApplyPendingReload());
+        return new MissingGenerationReferences(
+            new WeakReference(context),
+            scene,
+            gameObject,
+            componentId,
+            systemId);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private WeakReference ApplyFailedRecoveryAndCaptureCandidateContext()
+    {
+        AssemblyLoadContext? candidateContext = null;
+        AssemblyLoadEventHandler handler = (_, args) =>
+        {
+            if (!string.Equals(
+                    args.LoadedAssembly.GetName().Name,
+                    "Inno.GameScripts",
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+            AssemblyLoadContext? context = AssemblyLoadContext.GetLoadContext(args.LoadedAssembly);
+            if (context?.IsCollectible == true)
+                candidateContext = context;
+        };
+        AppDomain.CurrentDomain.AssemblyLoad += handler;
+        try
+        {
+            _ = Assert.ThrowsAny<Exception>(() => m_manager.ApplyPendingReload());
+        }
+        finally
+        {
+            AppDomain.CurrentDomain.AssemblyLoad -= handler;
+        }
+        return new WeakReference(Assert.IsAssignableFrom<AssemblyLoadContext>(candidateContext));
+    }
 
     private void WriteChangingPropertyBehavior(bool useString)
         => Write("ChangingPropertyBehavior.cs", $$"""
@@ -2200,6 +2572,13 @@ public sealed class ScriptManagerTests : IDisposable
         WeakReference asset,
         WeakReference panel,
         WeakReference observerType);
+
+    private sealed record MissingGenerationReferences(
+        WeakReference context,
+        GameScene scene,
+        GameObject gameObject,
+        Guid componentId,
+        Guid systemId);
 
     private void Write(string relativePath, string content)
     {
@@ -2386,6 +2765,9 @@ public sealed class ScriptManagerTests : IDisposable
             Environment.NewLine,
             result.diagnostics.Select(diagnostic =>
                 $"{diagnostic.id}: {diagnostic.filePath}({diagnostic.line},{diagnostic.column}) {diagnostic.message}"));
+
+    private static IReadOnlyList<string> EnumerateDirectories(string path)
+        => Directory.Exists(path) ? Directory.EnumerateDirectories(path).ToArray() : [];
 
     private sealed class TestDiagnosticSink : IDiagnosticSink
     {

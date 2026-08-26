@@ -88,12 +88,13 @@ internal sealed class GameSceneInspectionDrawer : InspectionDrawer<GameScene>
         for (int i = 0; i < systems.Count; i++)
         {
             GameSystem system = systems[i];
+            MissingGameSystem? missing = system as MissingGameSystem;
             string systemId = system.identity.persistentId.ToString("N");
             var editorTarget = new SystemEditorTarget(scene, system);
             bool open = EditorWidget.CollapsingCard(
                 systemId,
-                system.GetType().Name,
-                () =>
+                missing?.missingTypeName ?? system.GetType().Name,
+                missing is null ? () =>
                 {
                     bool enabled = system.enabled;
                     if (EditorWidget.CompactCheckbox($"enabled_{systemId}", ref enabled))
@@ -105,7 +106,7 @@ internal sealed class GameSceneInspectionDrawer : InspectionDrawer<GameScene>
                             enabled ? "Enable System" : "Disable System",
                             mergeKey: null);
                     }
-                },
+                } : null,
                 () => m_cardControls.DrawSystem(
                     m_edits,
                     scene,
@@ -133,6 +134,15 @@ internal sealed class GameSceneInspectionDrawer : InspectionDrawer<GameScene>
                 systemId,
                 () =>
                 {
+                    if (missing is not null)
+                    {
+                        NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.error);
+                        ImGuiWidget.WrappedText(
+                            $"Missing system script ({missing.missingTypeId:D}). " +
+                            "Its serialized state is preserved and will recover automatically when the type returns.");
+                        NativeImGui.PopStyleColor();
+                        return;
+                    }
                     foreach (SerializedProperty property in SerializationManager.GetProperties(system))
                     {
                         context.properties.Draw(

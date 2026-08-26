@@ -113,15 +113,24 @@ Inspector header 提供 Move Up、Move Down 和 Remove，但不允许拖拽。�
 
 Scene/Prefab 序列化继续写入 Stable Type ID（Guid），绝不写入 runtime type ID。`Type` 参数只存在于 Add/Query、实例创建和序列化反射等调用边界的短生命周期局部变量中；Component 构造器与 Scene property metadata 不建立静态 `Type` 缓存。Scene 的长期索引、查询缓存和类型目录快照只保存 runtime ID、Stable Type ID、字符串与标志。
 
+## Missing 脚本元素
+
+| 公开类型 | 说明 |
+| --- | --- |
+| `MissingGameComponent` | 原 Component 类型暂时不可用时，占据相同 attachment index 和 persistent ID。公开 `missingTypeId`、`missingTypeName` 供 Inspector/工具识别。 |
+| `MissingGameSystem` | 原 System 类型暂时不可用时，占据相同 display index 和 persistent ID，并保持禁用。公开同样的 missing 类型信息。 |
+
+这两个类型只能由 Scene restore 或脚本 reload 管线创建，不能通过普通 `AddComponent` / `AddSystem` 添加，也不进入 Scripting API facade。占位对象只保存 Stable Type ID、类型名、中立 property bytes、资产依赖 token 和引用别名；不保存旧 `Type`、反射 metadata、委托或旧脚本实例，所以本身不会阻止 collectible ALC 卸载。原 Stable Type ID 再次可解析时，reload 会原位创建真实类型、恢复兼容属性和当前图引用；构造或恢复失败则连同 identity/index 一起回滚到完全相同的占位对象。
+
 ## 热重载同步
 
 Scene 使用一个随 `TypeRegistry<TSnapshot>` 事务刷新的中立类型目录。候选目录构建时可以读取 candidate `TypeCacheSnapshot`，但发布后的目录不保留任何 `Type`：Component descriptor 保存 runtime ID、Stable Type ID、可赋值 runtime ID 集合与 multiplicity 标志；System descriptor 保存对应的中立数据。
 
 Reload 的同步顺序如下：
 
-1. Capture 阶段记录旧实例的 previous runtime type ID，并按 Stable Type ID 验证 candidate replacement。
+1. Capture 阶段把旧实例属性编码为不含 `Type` 的中立 bytes，并记录 previous runtime type ID、Stable Type ID、资产依赖和图引用命名空间。
 2. TypeCache 与中立 Scene 类型目录原子激活 candidate，同时清除所有存活 SceneStore 的类型派生数组缓存。
-3. Migration 替换实例，并用 candidate runtime type ID 原地更新 Component/System typed key。
+3. Migration 有 replacement 时创建新实例；没有 replacement 时创建 host-owned missing 占位；已存在的占位在 Stable Type ID 恢复时创建真实实例。三种路径都以 candidate runtime type ID 原地更新 Component/System typed key。
 4. 成功时立即释放旧实例图和序列化迁移快照；失败时先用捕获的 previous runtime type ID 恢复索引，再回滚 TypeCache 和类型目录。
 
 这样旧 Scene 索引或引擎内部数组不会因为持有 collectible ALC 的 `Type` 而阻止卸载。调用方如果自行长期保留旧 `TypeCacheSnapshot`、旧 Component/System 实例或先前返回的强引用快照，仍会按 .NET 规则延长旧 ALC 生命周期，调用方应在 reload safe point 释放它们。

@@ -124,6 +124,12 @@ internal sealed class SceneGraphReferenceMap
         }
     }
 
+    internal EngineObject GetRegistered(Guid sourceId)
+        => m_objectBySourceId.TryGetValue(sourceId, out EngineObject? engineObject)
+            ? engineObject
+            : throw new InvalidOperationException(
+                $"Scene graph reference alias target '{sourceId}' could not be resolved.");
+
     private sealed class Scope(SceneGraphReferenceMap? previous) : IDisposable
     {
         private SceneGraphReferenceMap? m_previous = previous;

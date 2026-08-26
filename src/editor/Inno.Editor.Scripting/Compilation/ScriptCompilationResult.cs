@@ -14,15 +14,19 @@ public sealed class ScriptCompilationResult
         bool success,
         IReadOnlyList<ScriptDiagnostic> diagnostics,
         string? outputDirectory,
-        AssemblyLoadRequest? loadRequest)
+        AssemblyLoadRequest? loadRequest,
+        IReadOnlyList<string>? compiledAssemblies = null,
+        IReadOnlyList<string>? reusedAssemblies = null)
     {
         this.success = success;
         this.diagnostics = diagnostics;
         this.outputDirectory = outputDirectory;
         this.loadRequest = loadRequest;
+        this.compiledAssemblies = compiledAssemblies ?? [];
+        this.reusedAssemblies = reusedAssemblies ?? [];
     }
 
-    /// <summary>Gets whether both script assemblies compiled successfully.</summary>
+    /// <summary>Gets whether every discovered script assembly compiled or reused successfully.</summary>
     public bool success { get; }
 
     /// <summary>Gets all diagnostics produced by the compilation.</summary>
@@ -32,4 +36,8 @@ public sealed class ScriptCompilationResult
     public string? outputDirectory { get; }
 
     internal AssemblyLoadRequest? loadRequest { get; }
+
+    internal IReadOnlyList<string> compiledAssemblies { get; }
+
+    internal IReadOnlyList<string> reusedAssemblies { get; }
 }

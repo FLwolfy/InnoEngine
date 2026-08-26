@@ -23,6 +23,7 @@ internal static class ScriptCompiler
 {
     private const string C_GAME_ASSEMBLY_NAME = "Inno.GameScripts";
     private const string C_EDITOR_ASSEMBLY_NAME = "Inno.EditorScripts";
+    private static readonly object S_CACHE_SYNC = new();
 
     internal static async ValueTask<ScriptCompilationResult> CompileAsync(
         ScriptManagerOptions options,
@@ -52,7 +53,18 @@ internal static class ScriptCompiler
             runtimeApiReferences);
         IReadOnlyList<MetadataReference> platformReferences = FrameworkReferenceResolver.CreateRuntimeReferences();
         progress.Complete("Script references resolved.");
-        string buildKey = ComputeBuildKey(sources, runtimeApi, editorApi);
+        var assemblyKeys = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (ScriptAssemblyInput assembly in sources.assemblies)
+        {
+            ScriptApiProfile api = assembly.scope == ScriptAssemblyScope.Editor ? editorApi : runtimeApi;
+            IReadOnlyList<ScriptPluginInput> plugins = assembly.scope == ScriptAssemblyScope.Editor
+                ? sources.runtimePlugins.Concat(sources.editorPlugins).ToArray()
+                : sources.runtimePlugins;
+            assemblyKeys.Add(
+                assembly.name,
+                ComputeAssemblyBuildKey(assembly, api, plugins, assemblyKeys));
+        }
+        string buildKey = ComputeGenerationBuildKey(sources, assemblyKeys);
         string outputDirectory = Path.Combine(options.outputDirectory, buildKey);
         if (TryCreateCachedResult(
                 outputDirectory,
@@ -60,13 +72,21 @@ internal static class ScriptCompiler
                 out ScriptCompilationResult? cachedResult))
         {
             progress.Complete("Reused cached script assembly artifact.");
-            return cachedResult!;
+            return new ScriptCompilationResult(
+                true,
+                cachedResult!.diagnostics,
+                cachedResult.outputDirectory,
+                cachedResult.loadRequest,
+                compiledAssemblies: [],
+                reusedAssemblies: sources.assemblies.Select(static assembly => assembly.name).ToArray());
         }
 
         string stagingRoot = Path.Combine(options.outputDirectory, ".staging");
-        string stagingDirectory = Path.Combine(stagingRoot, Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(stagingDirectory);
+        using var generationStaging = new TemporaryDirectory(stagingRoot);
+        string stagingDirectory = generationStaging.path;
         var diagnostics = new List<ScriptDiagnostic>();
+        var compiledAssemblies = new List<string>();
+        var reusedAssemblies = new List<string>();
         progress.Begin("Copying script plugins...");
         if (!TryCopyPlugins(sources, stagingDirectory, diagnostics, out string[] runtimePlugins, out string[] editorPlugins))
         {
@@ -84,10 +104,31 @@ internal static class ScriptCompiler
             IReadOnlyList<string> plugins = editor
                 ? runtimePlugins.Concat(editorPlugins).ToArray()
                 : runtimePlugins;
+            string assemblyPath = Path.Combine(stagingDirectory, assembly.name + ".dll");
+            string assemblyCacheDirectory = Path.Combine(
+                options.outputDirectory,
+                ".assemblies",
+                assemblyKeys[assembly.name]);
+            if (TryCopyCachedAssembly(
+                    assemblyCacheDirectory,
+                    assembly.name,
+                    stagingDirectory,
+                    out ScriptDiagnostic[] cachedDiagnostics))
+            {
+                diagnostics.AddRange(cachedDiagnostics);
+                compiledPaths.Add(assembly.name, assemblyPath);
+                reusedAssemblies.Add(assembly.name);
+                progress.Complete($"Reused cached {assembly.name} assembly artifact.");
+                continue;
+            }
+
             MetadataReference[] dependencyReferences = assembly.references
                 .Select(reference => MetadataReference.CreateFromFile(compiledPaths[reference]))
                 .ToArray();
-            string assemblyPath = Path.Combine(stagingDirectory, assembly.name + ".dll");
+            string assemblyStagingRoot = Path.Combine(options.outputDirectory, ".assembly-staging");
+            using var assemblyStaging = new TemporaryDirectory(assemblyStagingRoot);
+            string assemblyStagingDirectory = assemblyStaging.path;
+            string assemblyStagingPath = Path.Combine(assemblyStagingDirectory, assembly.name + ".dll");
             CompilationResult result = await CompileAssemblyAsync(
                 assembly.name,
                 assembly.sources,
@@ -95,7 +136,7 @@ internal static class ScriptCompiler
                 apiReferences,
                 platformReferences.Concat(dependencyReferences).ToArray(),
                 plugins,
-                assemblyPath,
+                assemblyStagingPath,
                 assembly.scope,
                 assembly.defines,
                 assembly.nullable,
@@ -105,20 +146,34 @@ internal static class ScriptCompiler
             diagnostics.AddRange(result.diagnostics);
             if (!result.success)
             {
+                DeleteStagingDirectory(assemblyStagingDirectory);
                 DeleteStagingDirectory(stagingDirectory);
                 return new ScriptCompilationResult(false, diagnostics, outputDirectory: null, loadRequest: null);
             }
+            File.WriteAllText(
+                GetDiagnosticsPath(assemblyStagingDirectory),
+                JsonSerializer.Serialize(result.diagnostics));
+            CommitAssemblyCache(
+                assemblyStagingDirectory,
+                assemblyCacheDirectory,
+                assembly.name);
+            if (!TryCopyCachedAssembly(
+                    assemblyCacheDirectory,
+                    assembly.name,
+                    stagingDirectory,
+                    out _))
+            {
+                DeleteStagingDirectory(stagingDirectory);
+                throw new IOException($"Committed script assembly cache '{assembly.name}' is incomplete.");
+            }
             compiledPaths.Add(assembly.name, assemblyPath);
+            compiledAssemblies.Add(assembly.name);
         }
 
         File.WriteAllText(
             GetDiagnosticsPath(stagingDirectory),
             JsonSerializer.Serialize(diagnostics));
-        Directory.CreateDirectory(Path.GetDirectoryName(outputDirectory)!);
-        if (Directory.Exists(outputDirectory))
-            DeleteStagingDirectory(stagingDirectory);
-        else
-            Directory.Move(stagingDirectory, outputDirectory);
+        CommitGenerationCache(stagingDirectory, outputDirectory, sources);
 
         string gameAssemblyPath = Path.Combine(outputDirectory, C_GAME_ASSEMBLY_NAME + ".dll");
         runtimePlugins = ResolveCommittedPluginPaths(outputDirectory, runtimePlugins);
@@ -142,7 +197,13 @@ internal static class ScriptCompiler
             collectible = true
         };
         progress.Complete("Script reload prepared.");
-        return new ScriptCompilationResult(true, diagnostics, outputDirectory, request);
+        return new ScriptCompilationResult(
+            true,
+            diagnostics,
+            outputDirectory,
+            request,
+            compiledAssemblies,
+            reusedAssemblies);
     }
 
     private static async ValueTask<CompilationResult> CompileAssemblyAsync(
@@ -203,7 +264,12 @@ internal static class ScriptCompiler
         foreach (string referencePath in apiReferences.runtimeReferencePaths)
             references[referencePath] = MetadataReference.CreateFromFile(referencePath);
         foreach (string pluginPath in pluginPaths)
-            references[pluginPath] = MetadataReference.CreateFromFile(pluginPath);
+        {
+            // Pin one immutable metadata image so an asset refresh cannot replace the plugin beneath Roslyn.
+            references[pluginPath] = MetadataReference.CreateFromImage(
+                ImmutableArray.CreateRange(File.ReadAllBytes(pluginPath)),
+                filePath: pluginPath);
+        }
 
         var validationCompilation = CSharpCompilation.Create(
             assemblyName,
@@ -418,17 +484,41 @@ internal static class ScriptCompiler
             File.Copy(sourcePath, destinationPath, overwrite: true);
     }
 
-    private static string ComputeBuildKey(
-        ScriptSourceSet sources,
-        ScriptApiProfile runtimeApi,
-        ScriptApiProfile editorApi)
+    private static string ComputeAssemblyBuildKey(
+        ScriptAssemblyInput assembly,
+        ScriptApiProfile api,
+        IReadOnlyList<ScriptPluginInput> plugins,
+        IReadOnlyDictionary<string, string> dependencyKeys)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        AppendHash(hash, "Inno.ScriptAssemblyArtifact");
+        AppendHash(hash, "Inno.ScriptAssemblyArtifact.Incremental");
         AppendHash(hash, typeof(ScriptCompiler).Assembly.ManifestModule.ModuleVersionId.ToString("D"));
-        AppendHash(hash, sources.fingerprint);
-        AppendProfile(runtimeApi);
-        AppendProfile(editorApi);
+        AppendHash(hash, System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription);
+        AppendHash(hash, Environment.Version.ToString());
+        AppendHash(hash, assembly.name);
+        AppendHash(hash, assembly.scope.ToString());
+        AppendHash(hash, assembly.definitionArtifactKey);
+        AppendHash(hash, assembly.nullable.ToString());
+        AppendHash(hash, assembly.allowUnsafe.ToString());
+        foreach (string define in assembly.defines.OrderBy(static value => value, StringComparer.Ordinal))
+            AppendHash(hash, define);
+        foreach (ScriptSourceInput source in assembly.sources.OrderBy(static value => value.relativePath, StringComparer.Ordinal))
+        {
+            AppendHash(hash, source.relativePath);
+            AppendHash(hash, source.persistentId.ToString("D"));
+            AppendHash(hash, source.artifactKey);
+        }
+        foreach (string reference in assembly.references.OrderBy(static value => value, StringComparer.Ordinal))
+        {
+            AppendHash(hash, reference);
+            AppendHash(hash, dependencyKeys[reference]);
+        }
+        foreach (ScriptPluginInput plugin in plugins.OrderBy(static value => value.sourcePath, StringComparer.Ordinal))
+        {
+            AppendHash(hash, plugin.sourcePath);
+            AppendHash(hash, plugin.artifactKey);
+        }
+        AppendProfile(api);
         return Convert.ToHexString(hash.GetHashAndReset());
 
         void AppendProfile(ScriptApiProfile profile)
@@ -450,6 +540,154 @@ internal static class ScriptCompiler
                 AppendHash(hash, mapping.apiNamespace);
                 AppendHash(hash, mapping.implementationNamespace);
             }
+        }
+    }
+
+    private static string ComputeGenerationBuildKey(
+        ScriptSourceSet sources,
+        IReadOnlyDictionary<string, string> assemblyKeys)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        AppendHash(hash, "Inno.ScriptGenerationArtifact.Incremental");
+        foreach (ScriptAssemblyInput assembly in sources.assemblies)
+        {
+            AppendHash(hash, assembly.name);
+            AppendHash(hash, assemblyKeys[assembly.name]);
+        }
+        foreach (ScriptPluginInput plugin in sources.runtimePlugins.Concat(sources.editorPlugins)
+                     .OrderBy(static value => value.sourcePath, StringComparer.Ordinal))
+        {
+            AppendHash(hash, plugin.sourcePath);
+            AppendHash(hash, plugin.artifactKey);
+        }
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
+
+    private static bool TryCopyCachedAssembly(
+        string cacheDirectory,
+        string assemblyName,
+        string destinationDirectory,
+        out ScriptDiagnostic[] diagnostics)
+    {
+        diagnostics = [];
+        string sourceAssemblyPath = Path.Combine(cacheDirectory, assemblyName + ".dll");
+        string[] sourcePaths =
+        [
+            sourceAssemblyPath,
+            Path.ChangeExtension(sourceAssemblyPath, ".pdb"),
+            Path.ChangeExtension(sourceAssemblyPath, ".xml"),
+            GetTypeManifestPath(sourceAssemblyPath)
+        ];
+        string diagnosticsPath = GetDiagnosticsPath(cacheDirectory);
+        if (!IsCachedAssemblyComplete(cacheDirectory, assemblyName))
+            return false;
+        try
+        {
+            diagnostics = JsonSerializer.Deserialize<ScriptDiagnostic[]>(
+                File.ReadAllText(diagnosticsPath)) ?? [];
+            Directory.CreateDirectory(destinationDirectory);
+            for (int i = 0; i < sourcePaths.Length; i++)
+            {
+                File.Copy(
+                    sourcePaths[i],
+                    Path.Combine(destinationDirectory, Path.GetFileName(sourcePaths[i])),
+                    overwrite: true);
+            }
+            TryTouchCacheDirectory(cacheDirectory);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (BadImageFormatException)
+        {
+            return false;
+        }
+    }
+
+    private static void CommitAssemblyCache(
+        string stagingDirectory,
+        string cacheDirectory,
+        string assemblyName)
+    {
+        lock (S_CACHE_SYNC)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(cacheDirectory)!);
+            if (Directory.Exists(cacheDirectory))
+            {
+                if (IsCachedAssemblyComplete(cacheDirectory, assemblyName))
+                {
+                    DeleteStagingDirectory(stagingDirectory);
+                    TryTouchCacheDirectory(cacheDirectory);
+                    return;
+                }
+                DeleteStagingDirectory(cacheDirectory);
+            }
+            Directory.Move(stagingDirectory, cacheDirectory);
+        }
+    }
+
+    private static bool IsCachedAssemblyComplete(string cacheDirectory, string assemblyName)
+    {
+        string assemblyPath = Path.Combine(cacheDirectory, assemblyName + ".dll");
+        if (!File.Exists(assemblyPath) ||
+            !File.Exists(Path.ChangeExtension(assemblyPath, ".pdb")) ||
+            !File.Exists(Path.ChangeExtension(assemblyPath, ".xml")) ||
+            !File.Exists(GetTypeManifestPath(assemblyPath)) ||
+            !File.Exists(GetDiagnosticsPath(cacheDirectory)))
+        {
+            return false;
+        }
+        try
+        {
+            if (!HasExpectedAssemblyIdentity(assemblyPath, assemblyName))
+                return false;
+            _ = JsonSerializer.Deserialize<ScriptDiagnostic[]>(
+                File.ReadAllText(GetDiagnosticsPath(cacheDirectory)));
+            ScriptTypeManifest? manifest = JsonSerializer.Deserialize<ScriptTypeManifest>(
+                File.ReadAllText(GetTypeManifestPath(assemblyPath)));
+            if (manifest is null || !string.Equals(
+                    manifest.assemblyName,
+                    assemblyName,
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+            return true;
+        }
+        catch (Exception exception) when (exception is
+            JsonException or
+            IOException or
+            BadImageFormatException)
+        {
+            return false;
+        }
+    }
+
+    private static void CommitGenerationCache(
+        string stagingDirectory,
+        string outputDirectory,
+        ScriptSourceSet sources)
+    {
+        lock (S_CACHE_SYNC)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(outputDirectory)!);
+            if (Directory.Exists(outputDirectory))
+            {
+                if (TryCreateCachedResult(outputDirectory, sources, out _))
+                {
+                    DeleteStagingDirectory(stagingDirectory);
+                    TryTouchCacheDirectory(outputDirectory);
+                    return;
+                }
+                DeleteStagingDirectory(outputDirectory);
+            }
+            Directory.Move(stagingDirectory, outputDirectory);
         }
     }
 
@@ -478,14 +716,8 @@ internal static class ScriptCompiler
         }
         foreach (ScriptAssemblyInput assembly in sources.assemblies)
         {
-            string path = Path.Combine(outputDirectory, assembly.name + ".dll");
-            if (!File.Exists(path) ||
-                !File.Exists(Path.ChangeExtension(path, ".pdb")) ||
-                !File.Exists(Path.ChangeExtension(path, ".xml")) ||
-                !File.Exists(GetTypeManifestPath(path)))
-            {
+            if (!IsCachedAssemblyComplete(outputDirectory, assembly.name))
                 return false;
-            }
         }
 
         string[] runtimePlugins = ResolveCachedPluginPaths(
@@ -520,6 +752,7 @@ internal static class ScriptCompiler
                 preloadAssemblyPaths = preloadPaths,
                 collectible = true
             });
+        TryTouchCacheDirectory(outputDirectory);
         return true;
     }
 
@@ -569,6 +802,49 @@ internal static class ScriptCompiler
         {
             // Staging data is unreachable and can be collected on the next editor idle pass.
         }
+    }
+
+    private static void TryTouchCacheDirectory(string path)
+    {
+        try
+        {
+            Directory.SetLastWriteTimeUtc(path, DateTime.UtcNow);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Reuse remains valid; cache collection can rebuild this immutable entry later.
+        }
+        catch (IOException)
+        {
+            // Reuse remains valid; cache collection can rebuild this immutable entry later.
+        }
+    }
+
+    private static bool HasExpectedAssemblyIdentity(string assemblyPath, string assemblyName)
+    {
+        try
+        {
+            AssemblyName actualName = AssemblyName.GetAssemblyName(assemblyPath);
+            return string.Equals(actualName.Name, assemblyName, StringComparison.Ordinal);
+        }
+        catch (Exception exception) when (exception is IOException or BadImageFormatException)
+        {
+            return false;
+        }
+    }
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        internal TemporaryDirectory(string root)
+        {
+            Directory.CreateDirectory(root);
+            path = Path.Combine(root, Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(path);
+        }
+
+        internal string path { get; }
+
+        public void Dispose() => DeleteStagingDirectory(path);
     }
 
     private static string GetDiagnosticsPath(string outputDirectory)

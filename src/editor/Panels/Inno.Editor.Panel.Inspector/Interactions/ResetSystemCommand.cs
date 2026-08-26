@@ -1,5 +1,6 @@
 using Inno.Editor.Interactions;
 using Inno.Editor.Scene;
+using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
@@ -8,7 +9,7 @@ namespace Inno.Editor.Panel.Inspector;
 internal sealed class ResetSystemCommand(SceneEdits edits) : EditorAction<SystemEditorTarget>
 {
     protected override EditorActionState Query(EditorActionContext<SystemEditorTarget> context)
-        => !context.target.system.isDestroyed
+        => !context.target.system.isDestroyed && context.target.system is not MissingGameSystem
             ? EditorActionState.enabled
             : EditorActionState.disabled;
 

@@ -65,6 +65,8 @@ if (TypeCacheManager.TryGetStableTypeId(typeof(PlayerController), out Guid id) &
 
 不要长期缓存旧 snapshot 或由其返回的 Type 列表：其中的 `Type` 会强引用对应 collectible ALC。Registry 在 `Complete/Rollback` 中及时释放旧快照；引擎内建缓存只保留活动 generation，外部调用方若自行保留旧 snapshot/Type，则 ALC 延迟卸载属于该引用的预期结果。
 
+Snapshot 构建会按 `Assembly` 引用身份复用上一代的内部 Type slice：未变化的 host/default assembly 不再重复调用 `GetTypes()`，新加载或新 ALC 中的 assembly 才重新发现。该优化不会跨 ALC 复用脚本 `Type`；即使程序集字节来自增量缓存，新 ProjectScripts ALC 中的 `Assembly` 引用也不同，因此旧 slice 会随 previous snapshot 一起释放。Snapshot 本身必须保持强引用才能提供 generation 内一致性；把其中的 `Type` 改成弱引用会让一次查询中类型集合随 GC 变化，不能解决外部强引用，反而破坏事务语义。
+
 ## Stable Type ID 与 Runtime Type ID
 
 普通 Host/Plugin 类型在没有 attribute 时，Stable ID 由 `程序集简单名 + 完整类型名` 生成确定性 UUIDv5。脚本编译器可以通过 assembly metadata 提供 source-based canonical ID；TypeCache 只验证并消费当前映射，不依赖 Asset/Scripting 项目。类型级 `[StableTypeId]` 始终优先于编译器映射。

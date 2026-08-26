@@ -1,5 +1,6 @@
 using Inno.Editor.Interactions;
 using Inno.Editor.Scene;
+using Inno.Engine.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
@@ -8,7 +9,7 @@ namespace Inno.Editor.Panel.Inspector;
 internal sealed class ResetComponentCommand(SceneEdits edits) : EditorAction<ComponentEditorTarget>
 {
     protected override EditorActionState Query(EditorActionContext<ComponentEditorTarget> context)
-        => !context.target.component.isDestroyed
+        => !context.target.component.isDestroyed && context.target.component is not MissingGameComponent
             ? EditorActionState.enabled
             : EditorActionState.disabled;
 

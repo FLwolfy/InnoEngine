@@ -26,14 +26,17 @@ internal sealed class ScriptArtifactCache
             .Select(static value => Path.GetFullPath(value!))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         DateTime cutoff = DateTime.UtcNow - S_DEFAULT_GRACE_PERIOD;
-        Entry[] entries = Directory.EnumerateDirectories(m_root)
-            .Where(static path =>
-            {
-                string name = Path.GetFileName(path);
-                return name.Length == C_BUILD_KEY_LENGTH &&
-                       name.All(static character => char.IsAsciiHexDigit(character));
-            })
-            .Select(CreateEntry)
+        string assemblyRoot = Path.Combine(m_root, ".assemblies");
+        IEnumerable<string> candidates = Directory.EnumerateDirectories(m_root);
+        if (Directory.Exists(assemblyRoot))
+            candidates = candidates.Concat(Directory.EnumerateDirectories(assemblyRoot));
+        var discoveredEntries = new List<Entry>();
+        foreach (string path in candidates.Where(IsArtifactDirectory))
+        {
+            if (TryCreateEntry(path, out Entry entry))
+                discoveredEntries.Add(entry);
+        }
+        Entry[] entries = discoveredEntries
             .OrderBy(static entry => entry.lastWriteUtc)
             .ToArray();
         long totalSize = entries.Sum(static entry => entry.size);
@@ -59,18 +62,68 @@ internal sealed class ScriptArtifactCache
                 // Read-only cache entries are retried during a later editor idle cycle.
             }
         }
+        removed += CollectStaleStaging(Path.Combine(m_root, ".staging"), cutoff);
+        removed += CollectStaleStaging(Path.Combine(m_root, ".assembly-staging"), cutoff);
         return removed;
     }
 
-    private static Entry CreateEntry(string path)
+    private static int CollectStaleStaging(string root, DateTime cutoff)
     {
-        long size = new DirectoryInfo(path)
-            .EnumerateFiles("*", SearchOption.AllDirectories)
-            .Sum(static file => file.Length);
-        return new Entry(
-            Path.GetFullPath(path),
-            Directory.GetLastWriteTimeUtc(path),
-            size);
+        if (!Directory.Exists(root))
+            return 0;
+
+        int removed = 0;
+        foreach (string path in Directory.EnumerateDirectories(root))
+        {
+            try
+            {
+                if (Directory.GetLastWriteTimeUtc(path) > cutoff)
+                    continue;
+                Directory.Delete(path, recursive: true);
+                removed++;
+            }
+            catch (IOException)
+            {
+                // A live or recently interrupted compiler can temporarily retain a platform handle.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Read-only staging directories are retried during a later editor idle cycle.
+            }
+        }
+        return removed;
+    }
+
+    private static bool IsArtifactDirectory(string path)
+    {
+        string name = Path.GetFileName(path);
+        return name.Length == C_BUILD_KEY_LENGTH &&
+               name.All(static character => char.IsAsciiHexDigit(character));
+    }
+
+    private static bool TryCreateEntry(string path, out Entry entry)
+    {
+        try
+        {
+            long size = new DirectoryInfo(path)
+                .EnumerateFiles("*", SearchOption.AllDirectories)
+                .Sum(static file => file.Length);
+            entry = new Entry(
+                Path.GetFullPath(path),
+                Directory.GetLastWriteTimeUtc(path),
+                size);
+            return true;
+        }
+        catch (IOException)
+        {
+            entry = default;
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            entry = default;
+            return false;
+        }
     }
 
     private readonly record struct Entry(string path, DateTime lastWriteUtc, long size);

@@ -25,10 +25,11 @@ internal static class ScriptDiagnosticPublisher
         ArgumentNullException.ThrowIfNull(diagnostics);
         Diagnostics.Set(
             C_RELOAD_DIAGNOSTICS,
-            diagnostics.Select(static diagnostic =>
-                diagnostic.severity == SceneReloadDiagnosticSeverity.Warning
-                    ? Diagnostic.Warning(diagnostic.code, diagnostic.message)
-                    : Diagnostic.Error(diagnostic.code, diagnostic.message)));
+            diagnostics.Select(static diagnostic => diagnostic.severity switch
+            {
+                SceneReloadDiagnosticSeverity.Warning => Diagnostic.Warning(diagnostic.code, diagnostic.message),
+                _ => Diagnostic.Error(diagnostic.code, diagnostic.message)
+            }));
     }
 
     internal static void PublishReloadFailure(Exception exception)

@@ -18,17 +18,20 @@ public sealed class TypeCacheSnapshot
     internal static TypeCacheSnapshot empty { get; } = CreateEmpty();
 
     private readonly Type[] m_types;
+    private readonly Dictionary<Assembly, Type[]> m_typesByAssembly;
     private readonly TypeIdentityRegistry m_identityRegistry;
     private readonly TypeQueryRegistry m_queryRegistry;
 
     private TypeCacheSnapshot(
         long version,
         Type[] types,
+        Dictionary<Assembly, Type[]> typesByAssembly,
         TypeIdentityRegistry identityRegistry,
         TypeQueryRegistry queryRegistry)
     {
         this.version = version;
         m_types = types;
+        m_typesByAssembly = typesByAssembly;
         m_identityRegistry = identityRegistry;
         m_queryRegistry = queryRegistry;
     }
@@ -93,16 +96,30 @@ public sealed class TypeCacheSnapshot
         ArgumentNullException.ThrowIfNull(assemblies);
 
         var discoveredTypes = new List<Type>();
+        var typesByAssembly = new Dictionary<Assembly, Type[]>(ReferenceEqualityComparer.Instance);
         var loaderExceptions = new List<Exception>();
-        foreach (Assembly assembly in assemblies.Where(static value => !value.IsDynamic).Distinct())
+        foreach (Assembly assembly in assemblies.Where(static value => !value.IsDynamic))
         {
+            if (typesByAssembly.ContainsKey(assembly))
+                continue;
+            if (previous is not null && previous.m_typesByAssembly.TryGetValue(assembly, out Type[]? cachedTypes))
+            {
+                typesByAssembly.Add(assembly, cachedTypes);
+                discoveredTypes.AddRange(cachedTypes);
+                continue;
+            }
+
             try
             {
-                discoveredTypes.AddRange(assembly.GetTypes());
+                Type[] assemblyTypes = assembly.GetTypes();
+                typesByAssembly.Add(assembly, assemblyTypes);
+                discoveredTypes.AddRange(assemblyTypes);
             }
             catch (ReflectionTypeLoadException exception)
             {
-                discoveredTypes.AddRange(exception.Types.OfType<Type>());
+                Type[] assemblyTypes = exception.Types.OfType<Type>().ToArray();
+                typesByAssembly.Add(assembly, assemblyTypes);
+                discoveredTypes.AddRange(assemblyTypes);
                 loaderExceptions.AddRange(exception.LoaderExceptions.OfType<Exception>());
             }
             catch (Exception exception)
@@ -127,7 +144,7 @@ public sealed class TypeCacheSnapshot
         identities.Rebuild(types, previous?.m_identityRegistry);
         var queries = new TypeQueryRegistry();
         queries.Rebuild(types, identities);
-        return new TypeCacheSnapshot(version, types, identities, queries);
+        return new TypeCacheSnapshot(version, types, typesByAssembly, identities, queries);
     }
 
     private static TypeCacheSnapshot CreateEmpty()
@@ -136,6 +153,6 @@ public sealed class TypeCacheSnapshot
         identities.Rebuild([], previous: null);
         var queries = new TypeQueryRegistry();
         queries.Rebuild([], identities);
-        return new TypeCacheSnapshot(0, [], identities, queries);
+        return new TypeCacheSnapshot(0, [], new Dictionary<Assembly, Type[]>(), identities, queries);
     }
 }
