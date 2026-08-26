@@ -190,6 +190,8 @@ public sealed class ScriptManager : IDisposable
         await m_compileGate.WaitAsync(effectiveCancellation).ConfigureAwait(false);
         try
         {
+            effectiveCancellation.ThrowIfCancellationRequested();
+            ObjectDisposedException.ThrowIf(m_disposed, this);
             Volatile.Write(ref m_isCompiling, 1);
             if (m_compileGateProbe is not null)
                 await m_compileGateProbe(effectiveCancellation).ConfigureAwait(false);
@@ -274,27 +276,36 @@ public sealed class ScriptManager : IDisposable
         using AssemblyReloadSession reload = AssemblyManager.BeginReload(handle, request);
         TypeCacheReloadContext typeReload = reload.context.GetContext<TypeCacheReloadContext>();
         ISceneReloadMigration migration = SceneReloadService.Capture(typeReload);
-        migration.PrepareForActivation();
-        if (Shell.isInitialized)
-        {
-            foreach (object retiredObject in migration.retiredObjects)
-                Shell.instance.coroutineScheduler.StopAllCoroutines(retiredObject);
-        }
         try
         {
+            migration.PrepareForActivation();
+            if (Shell.isInitialized)
+            {
+                foreach (object retiredObject in migration.retiredObjects)
+                    Shell.instance.coroutineScheduler.StopAllCoroutines(retiredObject);
+            }
             reload.Activate();
+            if (AssetManager.isInitialized)
+                AssetManager.Rescan();
             migration.Apply();
             migration.Complete();
             _ = reload.Complete();
             m_activeCompilationDirectory = pending.outputDirectory;
             _ = m_artifactCache.Collect([m_activeCompilationDirectory]);
         }
-        catch
+        catch (Exception exception)
         {
-            migration.RollbackStructure();
-            reload.Rollback();
-            migration.RestorePreviousState();
-            throw;
+            var rollbackFailures = new List<Exception>();
+            TryRollbackStage(migration.RollbackStructure, rollbackFailures);
+            TryRollbackStage(reload.Rollback, rollbackFailures);
+            if (AssetManager.isInitialized)
+                TryRollbackStage(AssetManager.Rescan, rollbackFailures);
+            TryRollbackStage(migration.RestorePreviousState, rollbackFailures);
+            if (rollbackFailures.Count == 0)
+                ExceptionDispatchInfo.Capture(exception).Throw();
+            throw new AggregateException(
+                "Script reload failed and one or more rollback stages also failed.",
+                [exception, .. rollbackFailures]);
         }
         ScriptDiagnosticPublisher.PublishReload(migration.diagnostics);
         CompletePendingReload(pending);
@@ -346,7 +357,12 @@ public sealed class ScriptManager : IDisposable
                     m_pendingCompilation = null;
                 }
                 if (m_scriptModule is AssemblyModuleHandle handle && AssemblyManager.isInitialized)
+                {
                     _ = AssemblyManager.Unload(handle);
+                    m_scriptModule = null;
+                    if (AssetManager.isInitialized)
+                        AssetManager.Rescan();
+                }
                 m_scriptModule = null;
                 m_activeCompilationDirectory = null;
                 ScriptDiagnosticPublisher.ClearAll();
@@ -404,4 +420,16 @@ public sealed class ScriptManager : IDisposable
            path.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase) ||
            path.EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase) ||
            path.EndsWith(".iasmdef", StringComparison.OrdinalIgnoreCase);
+
+    private static void TryRollbackStage(Action rollback, ICollection<Exception> failures)
+    {
+        try
+        {
+            rollback();
+        }
+        catch (Exception exception)
+        {
+            failures.Add(exception);
+        }
+    }
 }

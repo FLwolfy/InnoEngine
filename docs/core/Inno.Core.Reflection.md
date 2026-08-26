@@ -63,7 +63,7 @@ if (TypeCacheManager.TryGetStableTypeId(typeof(PlayerController), out Guid id) &
 | `TryGetStableTypeId` / `TryGetRuntimeTypeId` | 查询类型身份。 |
 | `TryResolveType(Guid/int, ...)` | 从 ID 解析快照中的类型。 |
 
-不要长期缓存旧 snapshot：其 `Type` 会保留对应 collectible ALC。Registry 应在 `Complete/Rollback` 中及时释放旧快照。
+不要长期缓存旧 snapshot 或由其返回的 Type 列表：其中的 `Type` 会强引用对应 collectible ALC。Registry 在 `Complete/Rollback` 中及时释放旧快照；引擎内建缓存只保留活动 generation，外部调用方若自行保留旧 snapshot/Type，则 ALC 延迟卸载属于该引用的预期结果。
 
 ## Stable Type ID 与 Runtime Type ID
 

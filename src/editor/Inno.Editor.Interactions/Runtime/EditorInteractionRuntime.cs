@@ -33,7 +33,7 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
         : base(context)
     {
         m_interactions = new EditorInteractions(context);
-        m_catalog = new EditorExtensionCatalog(context, m_interactions);
+        m_catalog = new EditorExtensionCatalog(context, m_interactions, InvalidateDescriptions);
         m_interactions.Attach(m_catalog);
     }
 
@@ -188,6 +188,13 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
         }
         m_modals = modals.ToArray();
         m_describedSnapshot = snapshot;
+    }
+
+    private void InvalidateDescriptions()
+    {
+        m_panels = [];
+        m_modals = [];
+        m_describedSnapshot = null;
     }
 
     private static void TryShutdownStage(Action stage, ICollection<Exception> failures)

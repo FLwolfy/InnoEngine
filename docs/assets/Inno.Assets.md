@@ -67,6 +67,7 @@ while (running)
 | `AssetReloaded` | loaded canonical asset 已原位更新。 |
 
 Observer 按订阅顺序在 owner thread 调用。某个 observer 抛异常会被隔离，不能回滚已经提交的 transaction，也不会阻止后续 observer。
+脚本 generation 切换后的第一次 `Update`/`Rescan` 会移除 `Changed` 与 `AssetReloaded` 中声明类型或 target 类型已经退休的 collectible observer，防止静态事件反向保留旧 ALC。Host observer 和当前活动 generation 的 observer 不受影响。
 
 ## 加载与保存
 
@@ -84,6 +85,8 @@ Observer 按订阅顺序在 owner thread 调用。某个 observer 抛异常会�
 | `Rescan()` | 对账全部 source/meta/catalog/artifact。 |
 
 初始化会自动 `Rescan`，无需为已有文件逐个调用 `Import`。
+
+`Rescan` 同时是 TypeCache generation 的资源收敛安全点。若已加载 canonical asset 的运行时类型已退休，Loader 会从内部 record、identity 和 dependency retention 中释放它；仍存活的 host asset 会用当前 generation 重新恢复其序列化引用。调用方自己仍强持有旧 canonical instance 时，旧 collectible ALC 会按普通 CLR 引用规则延迟卸载，这不影响 Loader 返回当前 generation 的新实例。
 
 ## Catalog 与 artifact 查询
 

@@ -76,14 +76,19 @@ public sealed class CoroutineScheduler : IDisposable
     }
 
     /// <summary>
-    /// Requests stopping all coroutines owned by the specified owner token.
+    /// Stops all coroutines owned by the specified owner token before this method returns.
     /// </summary>
     /// <param name="owner">Owner key used when starting coroutines.</param>
     public void StopAllCoroutines(object owner)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref m_disposed) != 0, this);
         ArgumentNullException.ThrowIfNull(owner);
-        m_commands.Enqueue(Command.StopByOwner(owner));
+        lock (m_tickGate)
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref m_disposed) != 0, this);
+            m_commands.Enqueue(Command.StopByOwner(owner));
+            ApplyPendingCommands();
+        }
     }
 
     /// <summary>

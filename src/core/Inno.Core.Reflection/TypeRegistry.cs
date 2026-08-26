@@ -57,8 +57,16 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
             ITypeRegistryTransaction transaction = Prepare(
                 TypeCacheManager.current,
                 allowDisposed: false);
-            transaction.Activate();
-            transaction.Complete();
+            try
+            {
+                transaction.Activate();
+                transaction.Complete();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
 
             TypeCacheSnapshot latest = TypeCacheManager.current;
             lock (m_sync)
@@ -81,6 +89,11 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
         TSnapshot? snapshot;
         lock (m_sync)
         {
+            if (m_activationInProgress)
+            {
+                throw new InvalidOperationException(
+                    "A registry snapshot cannot be cleared while a refresh transaction is active.");
+            }
             snapshot = m_current;
             m_current = null;
             m_typeCacheVersion = -1;
@@ -101,7 +114,7 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
             if (m_disposed)
                 return;
             m_disposed = true;
-            snapshot = m_current;
+            snapshot = m_activationInProgress ? null : m_current;
             m_current = null;
             m_typeCacheVersion = -1;
         }
@@ -247,8 +260,22 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
             if (m_current is not null && m_typeCacheVersion == types.version)
                 return TypeRegistryNoopTransaction.instance;
 
-            TSnapshot candidate = Build(types);
-            return new RegistryTransaction(this, candidate, types.version, m_current, m_typeCacheVersion);
+            m_activationInProgress = true;
+            try
+            {
+                TSnapshot candidate = Build(types);
+                return new RegistryTransaction(
+                    this,
+                    candidate,
+                    types.version,
+                    m_current,
+                    m_typeCacheVersion);
+            }
+            catch
+            {
+                m_activationInProgress = false;
+                throw;
+            }
         }
     }
 
@@ -324,7 +351,6 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
                 ObjectDisposedException.ThrowIf(owner.m_disposed, owner);
                 owner.m_current = candidate;
                 owner.m_typeCacheVersion = candidateVersion;
-                owner.m_activationInProgress = true;
                 m_activated = true;
                 m_activationStarted = true;
             }
@@ -332,6 +358,8 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
             try
             {
                 owner.OnActivating(previous, candidate);
+                lock (owner.m_sync)
+                    ObjectDisposedException.ThrowIf(owner.m_disposed, owner);
             }
             catch
             {
@@ -355,8 +383,14 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
             owner.CompleteActivation(previous, candidate);
             if (snapshotToRelease is not null)
                 owner.ReleaseSnapshot(snapshotToRelease);
+            bool releaseCandidate;
             lock (owner.m_sync)
+            {
+                releaseCandidate = owner.m_disposed;
                 owner.m_activationInProgress = false;
+            }
+            if (releaseCandidate)
+                owner.ReleaseSnapshot(candidate);
         }
 
         public void Rollback()
@@ -372,21 +406,20 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
                     owner.m_current = previous;
                     owner.m_typeCacheVersion = previousVersion;
                 }
+                else if (ownerWasDisposed)
+                {
+                    owner.m_current = null;
+                    owner.m_typeCacheVersion = -1;
+                }
                 owner.m_activationInProgress = false;
                 m_finished = true;
             }
 
-            if (ownerWasDisposed && m_activated)
-            {
-                if (previous is not null)
-                    owner.ReleaseSnapshot(previous);
-            }
-            else
-            {
-                if (m_activationStarted)
-                    owner.RollbackActivation(previous, candidate);
-                owner.ReleaseSnapshot(candidate);
-            }
+            if (m_activationStarted)
+                owner.RollbackActivation(previous, candidate);
+            owner.ReleaseSnapshot(candidate);
+            if (ownerWasDisposed && previous is not null)
+                owner.ReleaseSnapshot(previous);
         }
 
         private void EnsureNotFinished()

@@ -2,7 +2,7 @@
 
 [上一页：Events](Inno.Core.Events.md) · [Core 索引](README.md) · [下一页：Job](Inno.Core.Job.md)
 
-`CoroutineScheduler` 执行 `IEnumerator` 协程，支持嵌套 enumerator、帧/时间/Task/条件等待以及 owner 级批量停止。Start/Stop 请求通过线程安全命令队列进入 Scheduler，实际状态变化在 `Tick` 安全点应用。
+`CoroutineScheduler` 执行 `IEnumerator` 协程，支持嵌套 enumerator、帧/时间/Task/条件等待以及 owner 级批量停止。普通 Start/Stop 请求通过线程安全命令队列进入 Scheduler，实际状态变化在 `Tick` 安全点应用；owner 级停止会取得 Tick gate，并在返回前立即移除匹配状态。
 
 ## CoroutineScheduler
 
@@ -11,7 +11,7 @@
 | `StartCoroutine(IEnumerator)` | 启动无 owner 协程，返回 handle。 |
 | `StartCoroutine(object? owner, IEnumerator)` | 用引用身份保存 owner，便于批量停止。 |
 | `StopCoroutine(CoroutineHandle)` | 请求停止；handle 不属于当前 scheduler 或已失效时返回 `false`。 |
-| `StopAllCoroutines(object owner)` | 停止与该 owner `ReferenceEquals` 的协程。 |
+| `StopAllCoroutines(object owner)` | 同步停止与该 owner `ReferenceEquals` 的全部协程；返回时 handle 已失效，Scheduler 不再持有 owner/enumerator。 |
 | `StopAllCoroutines()` | 请求停止全部协程。 |
 | `Tick(float deltaTime)` | 推进一帧；负 delta 当作 0。 |
 | `Dispose()` | 清空全部 active/pending 状态并永久关闭。 |
@@ -48,7 +48,7 @@ scheduler.Tick(deltaTime);
 
 ## Owner 与热重载
 
-Owner 和 IEnumerator 都会强引用脚本实例及其程序集。脚本代际退出时，应在迁移前调用 `StopAllCoroutines(oldInstance)`；否则旧 collectible ALC 可能保持 Pending。不要用值相等但引用不同的对象去停止 owner 协程。
+Owner 和 IEnumerator 都会强引用脚本实例及其程序集。脚本代际退出时，应在迁移前调用 `StopAllCoroutines(oldInstance)`；该调用返回时 Scheduler 已释放匹配的 owner/enumerator，因此不依赖下一帧 Tick 才允许旧 collectible ALC 回收。不要用值相等但引用不同的对象去停止 owner 协程。
 
 ## 线程与异常
 

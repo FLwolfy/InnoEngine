@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.Loader;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -416,6 +417,7 @@ public static class AssetManager
     public static void Rescan()
     {
         EnsureOwnerThread();
+        PruneRetiredObservers();
         GetLoader().Rescan();
         GetFileSystem().Refresh();
     }
@@ -424,6 +426,7 @@ public static class AssetManager
     public static void Update()
     {
         EnsureOwnerThread();
+        PruneRetiredObservers();
         AssetFileSystem fileSystem = GetFileSystem();
         IReadOnlyList<AssetChangedEvent> changes = fileSystem.PollChanges(out bool requiresFullRescan);
         bool registriesChanged = GetLoader().RefreshRegistries();
@@ -652,6 +655,44 @@ public static class AssetManager
                 // Observer failures cannot roll back committed manager state.
             }
         }
+    }
+
+    private static void PruneRetiredObservers()
+    {
+        RemoveRetiredObservers(Changed, observer => Changed -= observer);
+        RemoveRetiredObservers(AssetReloaded, observer => AssetReloaded -= observer);
+    }
+
+    private static void RemoveRetiredObservers<T>(
+        Action<T>? handlers,
+        Action<Action<T>> remove)
+    {
+        if (handlers is null)
+            return;
+        foreach (Delegate observer in handlers.GetInvocationList())
+        {
+            if (!IsRetiredCollectibleObserver(observer))
+                continue;
+            remove((Action<T>)observer);
+        }
+    }
+
+    private static bool IsRetiredCollectibleObserver(Delegate observer)
+    {
+        Type? declaringType = observer.Method.DeclaringType;
+        Type? targetType = observer.Target?.GetType();
+        return IsRetiredCollectibleType(declaringType) ||
+               IsRetiredCollectibleType(targetType);
+    }
+
+    private static bool IsRetiredCollectibleType(Type? type)
+    {
+        if (type is null ||
+            AssemblyLoadContext.GetLoadContext(type.Assembly) is not { IsCollectible: true })
+        {
+            return false;
+        }
+        return !TypeCacheManager.TryGetRuntimeTypeId(type, out _);
     }
 
     private static AssetLoader GetLoader()

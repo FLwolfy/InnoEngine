@@ -247,7 +247,7 @@ internal sealed class EditorActionRouter(
             }
 
             int distance = int.MaxValue;
-            Type? targetType = registration.action.targetType;
+            Type? targetType = registration.targetType;
             if (targetType is not null)
             {
                 if (context.target is null ||
@@ -256,7 +256,7 @@ internal sealed class EditorActionRouter(
                     continue;
                 }
             }
-            Type? argumentType = registration.action.argumentType;
+            Type? argumentType = registration.argumentType;
             if (argumentType is not null &&
                 (context.argument is null || !argumentType.IsInstanceOfType(context.argument)))
             {

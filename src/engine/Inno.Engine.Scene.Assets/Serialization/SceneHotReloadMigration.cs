@@ -167,8 +167,22 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
     internal void RestorePreviousState()
     {
         EnsureActive();
+        List<Exception>? failures = null;
         foreach (SceneState sceneState in m_scenes)
-            RestoreState(sceneState, useCurrentTargets: false);
+        {
+            try
+            {
+                RestoreState(sceneState, useCurrentTargets: false);
+            }
+            catch (Exception exception)
+            {
+                failures ??= [];
+                failures.Add(exception);
+            }
+            RestorePreviousLifecycleState(sceneState, ref failures);
+        }
+        if (failures is not null)
+            throw new AggregateException("Previous scene state restoration was incomplete.", failures);
     }
 
     internal void Complete()
@@ -205,6 +219,36 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
         IReadOnlyList<SerializationPropertySnapshot> properties =
             SerializationManager.CaptureProperties(serializable);
         return new ObjectState(target, runtimeTypeId, properties);
+    }
+
+    private static void RestorePreviousLifecycleState(
+        SceneState sceneState,
+        ref List<Exception>? failures)
+    {
+        foreach (ObjectState state in sceneState.states)
+        {
+            if (state.target is not ISceneLifecycleObject lifecycle ||
+                lifecycle.lifecycleWasEnabled == state.lifecycleWasEnabled)
+            {
+                continue;
+            }
+
+            lifecycle.lifecycleWasEnabled = state.lifecycleWasEnabled;
+            try
+            {
+                if (state.lifecycleWasEnabled)
+                    lifecycle.DispatchEnable();
+                else
+                    lifecycle.DispatchDisable();
+            }
+            catch (Exception exception)
+            {
+                failures ??= [];
+                failures.Add(new InvalidOperationException(
+                    $"Lifecycle compensation failed for '{state.target.GetType().FullName}'.",
+                    exception));
+            }
+        }
     }
 
     private static EngineObject CreateReplacement(EngineObject previous, Type replacementType)
@@ -326,17 +370,30 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
         var references = new SceneGraphReferenceMap(sceneState.scene);
         for (int i = 0; i < currentObjects.Length; i++)
             references.Register(sceneState.engineObjects[i].identity.persistentId, currentObjects[i]);
+        List<Exception>? restoreFailures = null;
         using (references.Enter())
         {
             foreach (ObjectState state in sceneState.states)
             {
                 ISerializable target = (ISerializable)(useCurrentTargets ? state.currentTarget : state.target);
-                SerializationPropertyRestoreResult result = SerializationManager.RestoreProperties(
-                    target,
-                    state.properties,
-                    useCurrentTargets
-                        ? SerializationPropertyRestoreMode.Compatible
-                        : SerializationPropertyRestoreMode.Strict);
+                SerializationPropertyRestoreResult result;
+                try
+                {
+                    result = SerializationManager.RestoreProperties(
+                        target,
+                        state.properties,
+                        useCurrentTargets
+                            ? SerializationPropertyRestoreMode.Compatible
+                            : SerializationPropertyRestoreMode.Strict);
+                }
+                catch (Exception exception) when (!useCurrentTargets)
+                {
+                    restoreFailures ??= [];
+                    restoreFailures.Add(new InvalidOperationException(
+                        $"Previous state restoration failed for '{target.GetType().FullName}'.",
+                        exception));
+                    continue;
+                }
                 if (!useCurrentTargets)
                     continue;
                 for (int i = 0; i < result.failures.Count; i++)
@@ -358,6 +415,8 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
                 }
             }
         }
+        if (restoreFailures is not null)
+            throw new AggregateException("One or more previous scene objects could not be restored.", restoreFailures);
     }
 
     private static string GetTypeDisplayName(Type type)
@@ -387,6 +446,8 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
         internal EngineObject target { get; } = target;
         internal int runtimeTypeId { get; } = runtimeTypeId;
         internal IReadOnlyList<SerializationPropertySnapshot> properties { get; } = properties;
+        internal bool lifecycleWasEnabled { get; } =
+            target is ISceneLifecycleObject lifecycle && lifecycle.lifecycleWasEnabled;
         internal EngineObject currentTarget { get; set; } = target;
     }
 

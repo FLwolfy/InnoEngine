@@ -8,6 +8,11 @@ namespace Inno.Core.Reflection;
 /// <summary>
 /// Represents an immutable, internally consistent view of discoverable runtime types.
 /// </summary>
+/// <remarks>
+/// A snapshot strongly retains its discovered <see cref="Type"/> instances. Callers must not cache an
+/// obsolete snapshot or one of its type lists beyond the operation that needs generation consistency,
+/// because doing so delays unloading the corresponding collectible assembly load context.
+/// </remarks>
 public sealed class TypeCacheSnapshot
 {
     internal static TypeCacheSnapshot empty { get; } = CreateEmpty();

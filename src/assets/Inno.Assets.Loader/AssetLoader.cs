@@ -1049,6 +1049,7 @@ public sealed class AssetLoader : IDisposable
     private void RescanLocked()
     {
         LoadCatalogLocked();
+        bool releasedRetiredAssets = ReleaseRetiredCanonicalAssetsLocked();
         EnsureDirectoryMetadataLocked();
         string[] sourceFiles = Directory.GetFiles(assetRoot, "*", SearchOption.AllDirectories)
             .Where(path => !IsSourceIgnored(
@@ -1085,9 +1086,85 @@ public sealed class AssetLoader : IDisposable
                 continue;
             HandleDeletedLocked(record.relativePath);
         }
+        if (releasedRetiredAssets)
+            RefreshLoadedAssetReferencesLocked();
         CommitCatalogLocked();
         m_importerRegistryVersion = m_importers.snapshotVersion;
         m_buildProcessorRegistryVersion = m_buildProcessors.snapshotVersion;
+    }
+
+    private bool ReleaseRetiredCanonicalAssetsLocked()
+    {
+        bool releasedAny = false;
+        foreach (AssetRecord record in m_recordsByPath.Values.ToArray())
+        {
+            AssetObject? asset = record.asset;
+            if (asset is null)
+                continue;
+            bool isCurrent = TypeCacheManager.TryGetRuntimeTypeId(asset.GetType(), out _);
+            if (isCurrent &&
+                (record.stableTypeId == Guid.Empty ||
+                 !TypeCacheManager.TryResolveType(record.stableTypeId, out Type? currentType) ||
+                 currentType == asset.GetType()))
+            {
+                continue;
+            }
+
+            m_dependencyRetention.Remove(asset);
+            AssetRuntimeHost.Release(asset);
+            releasedAny = true;
+            try
+            {
+                _ = IdentityManager.Unregister(asset);
+            }
+            catch (Exception exception)
+            {
+                Log.Error(
+                    "Retired asset '{0}' was released, but an identity observer failed: {1}",
+                    record.relativePath,
+                    exception);
+            }
+            finally
+            {
+                record.asset = null;
+                PublishReloaded(asset);
+            }
+        }
+        return releasedAny;
+    }
+
+    private void RefreshLoadedAssetReferencesLocked()
+    {
+        AssetRecord[] loaded = m_recordsByPath.Values
+            .Where(static record => record.asset is not null)
+            .ToArray();
+        for (int i = 0; i < loaded.Length; i++)
+        {
+            AssetRecord record = loaded[i];
+            AssetObject asset = record.asset!;
+            if (record.meta.assetStateBytes.Length == 0)
+                continue;
+            byte[] rollback = SerializationManager.Encode(writer => writer.WriteProperties(asset));
+            try
+            {
+                SerializationManager.Decode(record.meta.assetStateBytes, reader =>
+                {
+                    reader.RestoreProperties(asset);
+                    return 0;
+                });
+            }
+            catch
+            {
+                SerializationManager.Decode(rollback, reader =>
+                {
+                    reader.RestoreProperties(asset);
+                    return 0;
+                });
+                throw;
+            }
+        }
+        for (int i = 0; i < loaded.Length; i++)
+            AttachDependenciesLocked(loaded[i]);
     }
 
     private void LoadCatalogLocked()

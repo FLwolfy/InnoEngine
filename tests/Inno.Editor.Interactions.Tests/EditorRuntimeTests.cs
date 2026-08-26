@@ -51,12 +51,15 @@ public sealed class EditorRuntimeTests : IDisposable
         FollowingUpdateModule.updateCount = 0;
         TestPanel.throwFromWindowPadding = false;
         MultiShortcutAction.executeCount = 0;
+        MetadataAction.targetTypeReadCount = 0;
+        MetadataAction.throwWhenRead = false;
         ThrowAfterActivateAction.cancelCount = 0;
         ADisposeObserverModule.historyAvailableDuringStop = false;
         ADisposeObserverModule.historyDisposedDuringDispose = false;
         ADisposeObserverModule.disposeCount = 0;
         ZThrowingDisposeModule.disposeCount = 0;
         ZThrowingDisposeModule.throwOnDispose = false;
+        ShutdownOrder.events.Clear();
 
         m_runtime = new EditorInteractionRuntime(m_projectRoot);
         m_runtime.Start();
@@ -189,6 +192,29 @@ public sealed class EditorRuntimeTests : IDisposable
 
         Assert.Equal("area", exact.displayName);
         Assert.Equal("base", fallback.displayName);
+    }
+
+    [Fact]
+    public void ActionTypeMetadataIsCapturedOnceAndNeverReadOnTheRoutingPath()
+    {
+        int readsAfterCatalogBuild = MetadataAction.targetTypeReadCount;
+        MetadataAction.throwWhenRead = true;
+        try
+        {
+            EditorInteraction interaction = m_runtime.interactions.For(
+                "tests/action-metadata",
+                new BaseTarget());
+
+            Assert.True(interaction.Query("tests.action-metadata").isEnabled);
+            Assert.True(interaction.Execute("tests.action-metadata"));
+            Assert.True(interaction.Query("tests.action-metadata").isEnabled);
+        }
+        finally
+        {
+            MetadataAction.throwWhenRead = false;
+        }
+
+        Assert.Equal(readsAfterCatalogBuild, MetadataAction.targetTypeReadCount);
     }
 
     [Fact]
@@ -360,12 +386,16 @@ public sealed class EditorRuntimeTests : IDisposable
             new EditorActionAttribute("tests.shortcut-left", "tests/shortcut", priority: 20),
             typeof(DeferredAction),
             new DeferredAction(),
+            targetType: null,
+            argumentType: null,
             [],
             [new EditorShortcutAttribute(KeyCode.F1)]);
         var right = new EditorExtensionCatalog.ActionRegistration(
             new EditorActionAttribute("tests.shortcut-right", "tests/shortcut", priority: 20),
             typeof(DeferredAction),
             new DeferredAction(),
+            targetType: null,
+            argumentType: null,
             [],
             [new EditorShortcutAttribute(KeyCode.F1)]);
         MethodInfo validate = typeof(EditorExtensionCatalog).GetMethod(
@@ -549,7 +579,7 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
-    public void ShutdownStopsExtensionsBeforeInteractionsAndContinuesAfterDisposeFailure()
+    public void ShutdownDetachesPanelsBeforeStoppingModulesThenDisposesInteractionsAndExtensions()
     {
         ZThrowingDisposeModule.throwOnDispose = true;
 
@@ -557,6 +587,9 @@ public sealed class EditorRuntimeTests : IDisposable
 
         Assert.True(ADisposeObserverModule.historyAvailableDuringStop);
         Assert.True(ADisposeObserverModule.historyDisposedDuringDispose);
+        Assert.True(
+            ShutdownOrder.events.IndexOf("panel.detach") <
+            ShutdownOrder.events.IndexOf("module.stop"));
         Assert.Equal(1, ADisposeObserverModule.disposeCount);
         Assert.Equal(1, ZThrowingDisposeModule.disposeCount);
     }
@@ -809,7 +842,11 @@ public sealed class TestModule : EditorModule
             TypeCacheManager.Rebuild();
     }
 
-    protected override void OnStop(EditorContext context) => stopCount++;
+    protected override void OnStop(EditorContext context)
+    {
+        stopCount++;
+        ShutdownOrder.events.Add("module.stop");
+    }
 }
 
 [EditorModule("tests.update-barrier", order: -200)]
@@ -859,7 +896,11 @@ public sealed class TestPanel(TestModule module) : EditorPanel
         attachCount++;
     }
 
-    protected override void OnDetach(EditorContext context) => detachCount++;
+    protected override void OnDetach(EditorContext context)
+    {
+        detachCount++;
+        ShutdownOrder.events.Add("panel.detach");
+    }
 
     protected override void OnDraw(EditorContext context)
     {
@@ -894,6 +935,28 @@ public sealed class DeferredAction : EditorAction
     public static int executeCount;
 
     protected override void Execute(EditorActionContext context) => executeCount++;
+}
+
+[EditorAction("tests.action-metadata", "tests/action-metadata")]
+public sealed class MetadataAction : EditorAction
+{
+    public static int targetTypeReadCount;
+    public static bool throwWhenRead;
+
+    public override Type? targetType
+    {
+        get
+        {
+            targetTypeReadCount++;
+            return throwWhenRead
+                ? throw new InvalidOperationException("Action metadata was read at runtime.")
+                : typeof(BaseTarget);
+        }
+    }
+
+    protected override void Execute(EditorActionContext context)
+    {
+    }
 }
 
 [EditorAction("tests.multiple-shortcuts", "tests/multiple-shortcuts")]
@@ -959,6 +1022,11 @@ public sealed class ZThrowingDisposeModule : EditorModule
         if (throwOnDispose)
             throw new InvalidOperationException("Injected extension disposal failure.");
     }
+}
+
+internal static class ShutdownOrder
+{
+    internal static List<string> events { get; } = [];
 }
 
 [EditorAction("tests.interaction")]

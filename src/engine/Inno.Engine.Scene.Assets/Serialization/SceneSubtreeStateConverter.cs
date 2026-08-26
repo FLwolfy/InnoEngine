@@ -69,16 +69,13 @@ internal sealed class SceneSubtreeStateConverter : SerializationConverter<SceneS
             SceneGraphSerialization.ReconcilePrefabConnections(scene, reader.context, root);
             return new SceneSubtreeState(root);
         }
-        catch
+        catch (Exception exception)
         {
-            GameObject[] created = scene.GetObjects()
-                .Where(gameObject => !existing.Contains(gameObject))
-                .ToArray();
-            for (int i = 0; i < created.Length; i++)
-            {
-                if (created[i].isRuntimeValid)
-                    scene.DestroyObject(created[i]);
-            }
+            SceneRestoreCompensation.RethrowAfterRemovingCreatedObjects(
+                exception,
+                scene,
+                existing,
+                "Scene subtree deserialization");
             throw;
         }
     }

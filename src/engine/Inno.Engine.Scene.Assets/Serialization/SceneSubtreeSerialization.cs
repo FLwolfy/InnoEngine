@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using Inno.Core.Serialization;
 using Inno.Engine.Scene;
@@ -47,18 +48,24 @@ public static class SceneSubtreeSerialization
             throw new InvalidOperationException("A scene subtree can only be restored into a live loaded scene.");
         if (parent is not null && !ReferenceEquals(parent.gameObject.scene, scene))
             throw new ArgumentException("The requested parent belongs to another scene.", nameof(parent));
-        SerializationContext context = SerializationContext.empty.With(scene);
-        SceneSubtreeState state = SerializationManager.Deserialize<SceneSubtreeState>(data, context);
+        var existing = new HashSet<GameObject>(
+            scene.GetObjects(),
+            ReferenceEqualityComparer.Instance);
         try
         {
+            SerializationContext context = SerializationContext.empty.With(scene);
+            SceneSubtreeState state = SerializationManager.Deserialize<SceneSubtreeState>(data, context);
             state.root.transform.SetParent(parent);
             state.root.transform.SetSiblingIndex(siblingIndex);
             return state.root;
         }
-        catch
+        catch (Exception exception)
         {
-            if (state.root.isRuntimeValid)
-                _ = scene.DestroyObject(state.root);
+            SceneRestoreCompensation.RethrowAfterRemovingCreatedObjects(
+                exception,
+                scene,
+                existing,
+                "Scene subtree restoration");
             throw;
         }
     }

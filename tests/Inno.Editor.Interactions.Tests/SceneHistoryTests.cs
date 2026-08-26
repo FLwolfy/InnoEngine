@@ -322,6 +322,68 @@ public sealed class SceneHistoryTests : IDisposable
     }
 
     [Fact]
+    public void FailedSubtreeRestoreRemovesEveryCreatedObjectDespiteDestructionCallbackFailures()
+    {
+        GameScene scene = m_workspace.CreateScene();
+        GameObject retained = scene.CreateObject("Retained");
+        GameObject root = scene.CreateObject("Root");
+        GameObject child = scene.CreateObject("Child");
+        child.transform.SetParent(root.transform);
+        _ = child.AddComponent<SubtreeRestoreFailureComponent>();
+        byte[] state = SceneSubtreeSerialization.Capture(root);
+        Guid rootId = root.identity.persistentId;
+        Guid childId = child.identity.persistentId;
+
+        Assert.True(scene.DestroyObject(root));
+        SubtreeRestoreFailureComponent.throwOnDestroy = true;
+        try
+        {
+            _ = Assert.ThrowsAny<Exception>(() =>
+                SceneSubtreeSerialization.Restore(scene, state, parent: null, siblingIndex: 0));
+        }
+        finally
+        {
+            SubtreeRestoreFailureComponent.throwOnDestroy = false;
+        }
+
+        Assert.Equal([retained], scene.GetObjects());
+        Assert.Null(IdentityManager.Get<GameObject>(rootId));
+        Assert.Null(IdentityManager.Get<GameObject>(childId));
+    }
+
+    [Fact]
+    public void FailedSubtreeHistoryRestoreReportsPreservedOnlyAfterExactSceneRecovery()
+    {
+        GameScene scene = m_workspace.CreateScene();
+        GameObject retained = scene.CreateObject("Retained");
+        GameObject root = scene.CreateObject("Root");
+        GameObject child = scene.CreateObject("Child");
+        child.transform.SetParent(root.transform);
+        _ = child.AddComponent<SubtreeRestoreFailureComponent>();
+        Guid rootId = root.identity.persistentId;
+        Guid childId = child.identity.persistentId;
+
+        Assert.True(m_edits.DeleteGameObject(root));
+        SubtreeRestoreFailureComponent.throwOnDestroy = true;
+        EditorHistoryResult result;
+        try
+        {
+            result = m_runtime.interactions.history.Undo();
+        }
+        finally
+        {
+            SubtreeRestoreFailureComponent.throwOnDestroy = false;
+        }
+
+        Assert.False(result.succeeded);
+        Assert.True(result.statePreserved, result.message);
+        Assert.True(m_runtime.interactions.history.canUndo);
+        Assert.Equal([retained], scene.GetObjects());
+        Assert.Null(IdentityManager.Get<GameObject>(rootId));
+        Assert.Null(IdentityManager.Get<GameObject>(childId));
+    }
+
+    [Fact]
     public void HierarchyUndoRestoresOnlyAffectedPlacements()
     {
         GameScene scene = m_workspace.CreateScene();
@@ -506,4 +568,24 @@ internal sealed class RestoreCleanupFailureComponent : GameBehavior
     [OnSerializableRestored]
     private void OnRestored()
         => throw new InvalidOperationException("Injected restore callback failure.");
+}
+
+[StableTypeId("8503e97b-1845-4ab2-a116-1ece04934a4b")]
+[AllowMultipleComponent]
+internal sealed class SubtreeRestoreFailureComponent : GameBehavior
+{
+    internal static bool throwOnDestroy;
+
+    [SerializableProperty]
+    public int value { get; set; } = 5;
+
+    [OnSerializableRestored]
+    private void OnRestored()
+        => throw new InvalidOperationException("Injected subtree restore callback failure.");
+
+    protected override void OnDestroy()
+    {
+        if (throwOnDestroy)
+            throw new InvalidOperationException("Injected subtree destruction callback failure.");
+    }
 }

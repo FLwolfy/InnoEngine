@@ -139,9 +139,10 @@ internal sealed class SceneSystemScheduler
             replacement.Attach(m_scene);
         else if (!ReferenceEquals(replacement.ownerScene, m_scene))
             throw new InvalidOperationException("The replacement GameSystem belongs to another scene.");
-        Guid persistentId = previous.ReleaseIdentityForReplacement();
+        Guid persistentId = previous.identity.persistentId;
         try
         {
+            _ = previous.ReleaseIdentityForReplacement();
             replacement.RegisterIdentity(persistentId);
             m_systems.Add(entry!)
                 .Set(m_systemKey, replacement)
@@ -150,14 +151,50 @@ internal sealed class SceneSystemScheduler
             entry.runtimeTypeId = replacementRuntimeTypeId;
             InvalidateSnapshots();
         }
-        catch
+        catch (Exception exception)
         {
+            List<Exception>? rollbackFailures = null;
             if (replacement.identity.runtimeId is not null)
-                _ = replacement.ReleaseIdentityForReplacement();
-            previous.RegisterIdentity(persistentId);
+            {
+                try
+                {
+                    _ = replacement.ReleaseIdentityForReplacement();
+                }
+                catch (Exception rollbackFailure)
+                {
+                    rollbackFailures ??= [];
+                    rollbackFailures.Add(rollbackFailure);
+                }
+            }
+            if (previous.identity.runtimeId is null)
+            {
+                try
+                {
+                    previous.RegisterIdentity(persistentId);
+                }
+                catch (Exception rollbackFailure)
+                {
+                    rollbackFailures ??= [];
+                    rollbackFailures.Add(rollbackFailure);
+                }
+            }
             if (attachedHere && !replacement.isDestroyed)
-                replacement.Detach();
-            throw;
+            {
+                try
+                {
+                    replacement.Detach();
+                }
+                catch (Exception rollbackFailure)
+                {
+                    rollbackFailures ??= [];
+                    rollbackFailures.Add(rollbackFailure);
+                }
+            }
+            if (rollbackFailures is null)
+                throw;
+            throw new InvalidOperationException(
+                "GameSystem hot-reload replacement failed and its identity rollback was incomplete.",
+                new AggregateException([exception, .. rollbackFailures]));
         }
     }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -116,16 +117,29 @@ public sealed class CoroutineSchedulerTests
         var a = 0;
         var b = 0;
 
-        scheduler.StartCoroutine(ownerA, Loop(() => a++));
+        CoroutineHandle handleA = scheduler.StartCoroutine(ownerA, Loop(() => a++));
         scheduler.StartCoroutine(ownerB, Loop(() => b++));
         scheduler.Tick(0.016f);
         Assert.Equal(1, a);
         Assert.Equal(1, b);
 
         scheduler.StopAllCoroutines(ownerA);
+        Assert.False(handleA.isValid);
         scheduler.Tick(0.016f);
         Assert.Equal(1, a);
         Assert.Equal(2, b);
+    }
+
+    [Fact]
+    public void StopAllCoroutinesByOwnerReleasesOwnerAndEnumeratorBeforeReturning()
+    {
+        using var scheduler = new CoroutineScheduler();
+
+        (WeakReference owner, WeakReference routine) references = StopOwnedCoroutine(scheduler);
+        ForceCollection();
+
+        Assert.False(references.owner.IsAlive);
+        Assert.False(references.routine.IsAlive);
     }
 
     [Fact]
@@ -323,6 +337,31 @@ public sealed class CoroutineSchedulerTests
         {
             onTick.Invoke();
             yield return null;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (WeakReference owner, WeakReference routine) StopOwnedCoroutine(
+        CoroutineScheduler scheduler)
+    {
+        var owner = new object();
+        IEnumerator routine = Loop(static () => { });
+        CoroutineHandle handle = scheduler.StartCoroutine(owner, routine);
+        scheduler.Tick(0.016f);
+
+        scheduler.StopAllCoroutines(owner);
+
+        Assert.False(handle.isValid);
+        return (new WeakReference(owner), new WeakReference(routine));
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ForceCollection()
+    {
+        for (int i = 0; i < 5; i++)
+        {
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
         }
     }
 }

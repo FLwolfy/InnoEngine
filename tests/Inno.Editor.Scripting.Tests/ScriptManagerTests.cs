@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.Loader;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -198,6 +200,40 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task DisposeCancelsQueuedCompilationWithoutAllowingItToEnterTheCompilerGate()
+    {
+        int entryCount = 0;
+        var firstEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var manager = new ScriptManager(
+            new ScriptManagerOptions
+            {
+                projectRootDirectory = m_projectRoot,
+                autoCompile = false,
+                debounceMilliseconds = 0
+            },
+            async cancellationToken =>
+            {
+                Interlocked.Increment(ref entryCount);
+                firstEntered.SetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            });
+
+        Task<ScriptCompilationResult> first = manager.CompileAsync().AsTask();
+        await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Task<ScriptCompilationResult> queued = manager.CompileAsync().AsTask();
+        await Task.Delay(50);
+
+        Task disposal = Task.Run(manager.Dispose);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => queued);
+        await disposal.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, Volatile.Read(ref entryCount));
+        Assert.False(manager.isCompiling);
+        Assert.Null(manager.lastCompilation);
+    }
+
+    [Fact]
     public void RuntimeAndEditorScriptsCompileWithExplicitFacadeUsings()
     {
         Write("ProjectBehavior.CS", """
@@ -273,6 +309,77 @@ public sealed class ScriptManagerTests : IDisposable
         Type drawer = TypeCacheManager.current.types.Single(type => type.Name == "ProjectBehaviorDrawer");
         Assert.Equal(AssemblyGroup.Game, behavior.Assembly.GetInnoAssemblyGroup());
         Assert.Equal(AssemblyGroup.Editor, drawer.Assembly.GetInnoAssemblyGroup());
+    }
+
+    [Fact]
+    public void RepeatedReloadReleasesTypeCachesObserversLoadedAssetsAndPanelReloadMemory()
+    {
+        Write("Data/Reload.rasset", "payload");
+        WriteReloadRetentionScripts(generation: 1);
+        ScriptCompilationResult initial = Compile();
+        Assert.True(initial.success, FormatDiagnostics(initial));
+        Assert.True(m_manager.ApplyPendingReload());
+        using var runtime = new EditorInteractionRuntime(m_projectRoot);
+        runtime.Start();
+        AssetManager.Rescan();
+        ReloadGenerationReferences firstGeneration = CaptureReloadGeneration(runtime, generation: 1);
+
+        WriteReloadRetentionScripts(generation: 2);
+        ScriptCompilationResult second = Compile();
+        Assert.True(second.success, FormatDiagnostics(second));
+        Action<IIdentityObject> failingIdentityObserver = value =>
+        {
+            if (value.GetType().Name == "ReloadAsset")
+                throw new InvalidOperationException("Injected retired asset identity observer failure.");
+        };
+        IdentityManager.ObjectUnregistered += failingIdentityObserver;
+        try
+        {
+            Assert.True(m_manager.ApplyPendingReload());
+        }
+        finally
+        {
+            IdentityManager.ObjectUnregistered -= failingIdentityObserver;
+        }
+        ForceCollection();
+        Assert.False(firstGeneration.asset.IsAlive, "The retired canonical asset is still strongly reachable.");
+        Assert.False(firstGeneration.panel.IsAlive, "The retired editor panel is still strongly reachable.");
+        Assert.False(firstGeneration.observerType.IsAlive, "The retired static event observer type is still strongly reachable.");
+        Assert.False(firstGeneration.context.IsAlive, "The first collectible load context is still strongly reachable.");
+
+        AssetManager.Rescan();
+        ReloadGenerationReferences secondGeneration = CaptureReloadGeneration(runtime, generation: 2);
+        WriteReloadRetentionScripts(generation: 3);
+        ScriptCompilationResult third = Compile();
+        Assert.True(third.success, FormatDiagnostics(third));
+        Assert.True(m_manager.ApplyPendingReload());
+        ForceCollection();
+        Assert.False(secondGeneration.asset.IsAlive, "The second retired canonical asset is still strongly reachable.");
+        Assert.False(secondGeneration.panel.IsAlive, "The second retired editor panel is still strongly reachable.");
+        Assert.False(secondGeneration.observerType.IsAlive, "The second retired observer type is still strongly reachable.");
+        Assert.False(secondGeneration.context.IsAlive, "The second collectible load context is still strongly reachable.");
+    }
+
+    [Fact]
+    public void DisposeReleasesTheActiveScriptGenerationAndItsEngineOwnedReferences()
+    {
+        Write("Data/Reload.rasset", "payload");
+        WriteReloadRetentionScripts(generation: 1);
+        ScriptCompilationResult initial = Compile();
+        Assert.True(initial.success, FormatDiagnostics(initial));
+        Assert.True(m_manager.ApplyPendingReload());
+        using var runtime = new EditorInteractionRuntime(m_projectRoot);
+        runtime.Start();
+        AssetManager.Rescan();
+        ReloadGenerationReferences generation = CaptureReloadGeneration(runtime, generation: 1);
+
+        m_manager.Dispose();
+        ForceCollection();
+
+        Assert.False(generation.asset.IsAlive);
+        Assert.False(generation.panel.IsAlive);
+        Assert.False(generation.observerType.IsAlive);
+        Assert.False(generation.context.IsAlive);
     }
 
     [Fact]
@@ -1473,6 +1580,93 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
+    public void IdentityObserverFailureDuringReplacementRestoresTheExactPreviousGeneration()
+    {
+        WriteMigratingBehavior(1);
+        ScriptCompilationResult firstCompilation = Compile();
+        Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
+        Assert.True(m_manager.ApplyPendingReload());
+        Type previousType = TypeCacheManager.current.types.Single(type => type.Name == "MigratingBehavior");
+        var scene = new GameScene("Identity Rollback");
+        GameObject gameObject = scene.CreateObject("Actor");
+        GameComponent previous = gameObject.AddComponent(previousType);
+        Guid persistentId = previous.identity.persistentId;
+        SceneManager.LoadScene(scene);
+
+        WriteMigratingBehavior(2);
+        ScriptCompilationResult secondCompilation = Compile();
+        Assert.True(secondCompilation.success, FormatDiagnostics(secondCompilation));
+        Action<IIdentityObject> observer = value =>
+        {
+            if (ReferenceEquals(value, previous))
+                throw new InvalidOperationException("Injected identity observer failure.");
+        };
+        IdentityManager.ObjectUnregistered += observer;
+        try
+        {
+            _ = Assert.ThrowsAny<Exception>(() => m_manager.ApplyPendingReload());
+        }
+        finally
+        {
+            IdentityManager.ObjectUnregistered -= observer;
+        }
+
+        Assert.Same(previous, IdentityManager.Get<GameComponent>(persistentId));
+        Assert.Same(previous, Assert.Single(gameObject.GetComponents(), component => component.GetType() == previousType));
+        Assert.False(previous.isDestroyed);
+        Assert.Same(previousType, TypeCacheManager.current.types.Single(type => type.Name == "MigratingBehavior"));
+
+        Assert.True(m_manager.ApplyPendingReload());
+        GameComponent current = Assert.Single(
+            gameObject.GetComponents(),
+            component => component.GetType().Name == "MigratingBehavior");
+        Assert.NotSame(previous, current);
+        Assert.Equal(persistentId, current.identity.persistentId);
+        Assert.Equal(2, GetProperty(current, "generation"));
+    }
+
+    [Fact]
+    public void LifecycleFailureBeforeActivationRestoresThePreviousEnabledStateImmediately()
+    {
+        WriteMigratingBehavior(1);
+        ScriptCompilationResult firstCompilation = Compile();
+        Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
+        Assert.True(m_manager.ApplyPendingReload());
+        Type previousType = TypeCacheManager.current.types.Single(type => type.Name == "MigratingBehavior");
+        var scene = new GameScene("Lifecycle Rollback");
+        GameObject gameObject = scene.CreateObject("Actor");
+        GameComponent previous = gameObject.AddComponent(previousType);
+        SceneManager.LoadScene(scene);
+        SceneManager.Update(0.016f);
+        Assert.Equal(1, GetProperty(previous, "enableCount"));
+
+        WriteMigratingBehavior(2);
+        ScriptCompilationResult secondCompilation = Compile();
+        Assert.True(secondCompilation.success, FormatDiagnostics(secondCompilation));
+        FieldInfo throwOnDisable = previousType.GetField(
+            "throwOnDisable",
+            BindingFlags.Public | BindingFlags.Static)!;
+        throwOnDisable.SetValue(null, true);
+        try
+        {
+            _ = Assert.ThrowsAny<Exception>(() => m_manager.ApplyPendingReload());
+        }
+        finally
+        {
+            throwOnDisable.SetValue(null, false);
+        }
+
+        Assert.Same(previous, Assert.Single(gameObject.GetComponents(), component => component.GetType() == previousType));
+        Assert.Same(previousType, TypeCacheManager.current.types.Single(type => type.Name == "MigratingBehavior"));
+        Assert.Equal(0, GetProperty(previous, "disableCount"));
+        Assert.Equal(2, GetProperty(previous, "enableCount"));
+
+        SceneManager.Update(0.016f);
+        Assert.Equal(2, GetProperty(previous, "enableCount"));
+        Assert.True(m_manager.ApplyPendingReload());
+    }
+
+    [Fact]
     public void RuntimeReload_SkipsAnIncompatiblePropertyAndPreservesTheNewDefault()
     {
         WriteChangingPropertyBehavior(useString: false);
@@ -1772,6 +1966,8 @@ public sealed class ScriptManagerTests : IDisposable
             [StableTypeId("c14f7138-0c5c-4e69-8376-cec8edc3056c")]
             public sealed class MigratingBehavior : GameBehavior
             {
+                public static bool throwOnDisable;
+
                 [SerializableProperty]
                 public int value { get; set; }
 
@@ -1798,7 +1994,12 @@ public sealed class ScriptManagerTests : IDisposable
                 protected override void Awake() => awakeCount++;
                 protected override void Start() => startCount++;
                 protected override void OnEnable() => enableCount++;
-                protected override void OnDisable() => disableCount++;
+                protected override void OnDisable()
+                {
+                    disableCount++;
+                    if (throwOnDisable)
+                        throw new System.InvalidOperationException("Injected disable failure.");
+                }
                 protected override void Update() => updateCount++;
             }
 
@@ -1886,6 +2087,119 @@ public sealed class ScriptManagerTests : IDisposable
                 }
             }
             """);
+
+    private void WriteReloadRetentionScripts(int generation)
+    {
+        Write("ReloadRetention.cs", $$"""
+            using InnoEngine.Assets;
+            using InnoEngine.Reflection;
+            using InnoEngine.Serialization;
+
+            [StableTypeId("3ba01d16-c29e-48bc-a5c9-7a4f3b4d8150")]
+            public sealed class ReloadAsset : AssetObject
+            {
+                [SerializableProperty]
+                public int generation { get; set; } = {{generation}};
+            }
+
+            [AssetImporterExtension]
+            public sealed class ReloadAssetImporter : AssetImporter<ReloadAsset>
+            {
+                public override string importerId => "tests.reload-retention";
+                public override string[] supportedExtensions => [".rasset"];
+
+                protected override async System.Threading.Tasks.ValueTask ImportAsync(
+                    AssetImportContext context,
+                    AssetImportWriter<ReloadAsset> output,
+                    System.Threading.CancellationToken cancellationToken)
+                {
+                    output.SetAsset(new ReloadAsset());
+                    await output.WriteArtifactAsync("runtime", context.sourceBytes, cancellationToken);
+                }
+            }
+
+            public static class ReloadObserver
+            {
+                public static void Install() => AssetManager.Changed += OnChanged;
+                private static void OnChanged(AssetChangeSet changes)
+                {
+                }
+            }
+            """);
+        Write("ReloadRetention.editor.cs", """
+            using InnoEditor.Core;
+
+            [EditorPanel("tests.reload-memory", "Reload Memory", defaultOpen: false)]
+            public sealed class ReloadMemoryPanel : EditorPanel, IEditorPanelReloadState
+            {
+                protected override void OnDraw(EditorContext context)
+                {
+                }
+
+                public System.ReadOnlyMemory<byte> CaptureReloadState()
+                    => new ReloadMemoryManager().Memory;
+
+                public void RestoreReloadState(System.ReadOnlyMemory<byte> state)
+                {
+                }
+            }
+
+            internal sealed class ReloadMemoryManager : System.Buffers.MemoryManager<byte>
+            {
+                private readonly byte[] m_bytes = [1, 2, 3];
+
+                public override System.Span<byte> GetSpan() => m_bytes;
+                public override System.Buffers.MemoryHandle Pin(int elementIndex = 0)
+                    => throw new System.NotSupportedException();
+                public override void Unpin()
+                {
+                }
+                protected override void Dispose(bool disposing)
+                {
+                }
+            }
+            """);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static ReloadGenerationReferences CaptureReloadGeneration(
+        EditorInteractionRuntime runtime,
+        int generation)
+    {
+        Type observer = TypeCacheManager.current.types.Single(type => type.Name == "ReloadObserver");
+        observer.GetMethod("Install", BindingFlags.Public | BindingFlags.Static)!.Invoke(null, null);
+        AssetObject asset = AssetManager.Load<AssetObject>("Data/Reload.rasset");
+        Assert.Equal("ReloadAsset", asset.GetType().Name);
+        Assert.Equal(generation, asset.GetType().GetProperty("generation")!.GetValue(asset));
+        AssemblyLoadContext context = AssemblyLoadContext.GetLoadContext(asset.GetType().Assembly)!;
+        Assert.True(context.IsCollectible);
+        EditorPanelExtension extension = Assert.Single(
+            runtime.panels.Where(static panel => panel.id == "tests.reload-memory"));
+        object panel = typeof(EditorPanelExtension)
+            .GetField("m_panel", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(extension)!;
+        return new ReloadGenerationReferences(
+            new WeakReference(context),
+            new WeakReference(asset),
+            new WeakReference(panel),
+            new WeakReference(observer));
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ForceCollection()
+    {
+        for (int i = 0; i < 10; i++)
+        {
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+        }
+    }
+
+    private sealed record ReloadGenerationReferences(
+        WeakReference context,
+        WeakReference asset,
+        WeakReference panel,
+        WeakReference observerType);
 
     private void Write(string relativePath, string content)
     {

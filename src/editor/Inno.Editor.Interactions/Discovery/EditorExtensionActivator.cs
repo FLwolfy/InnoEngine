@@ -19,6 +19,7 @@ internal sealed class EditorExtensionActivator
         EditorContext context,
         EditorInteractions interactions,
         IEnumerable<Type> moduleTypes,
+        IEnumerable<Type> activeTypes,
         IEnumerable<object>? retainedInstances = null)
     {
         m_context = context ?? throw new ArgumentNullException(nameof(context));
@@ -26,10 +27,16 @@ internal sealed class EditorExtensionActivator
         m_moduleTypes = moduleTypes
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
             .ToArray();
+        var activeTypeSet = new HashSet<Type>(
+            activeTypes ?? throw new ArgumentNullException(nameof(activeTypes)));
         if (retainedInstances is null)
             return;
         foreach (object instance in retainedInstances)
-            m_instances.TryAdd(instance.GetType(), instance);
+        {
+            Type instanceType = instance.GetType();
+            if (activeTypeSet.Contains(instanceType))
+                m_instances.TryAdd(instanceType, instance);
+        }
     }
 
     internal IReadOnlyCollection<object> instances => m_instances.Values;

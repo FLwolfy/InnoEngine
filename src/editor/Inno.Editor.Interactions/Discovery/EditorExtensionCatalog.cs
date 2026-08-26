@@ -12,6 +12,7 @@ namespace Inno.Editor.Interactions;
 internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatalog.Snapshot>
 {
     private readonly EditorContext m_context;
+    private readonly Action m_extensionsChanged;
     private readonly EditorExtensionDiagnosticPublisher m_diagnostics = new();
     private readonly EditorInteractions m_interactions;
     private readonly EditorExtensionStateStore m_state;
@@ -20,10 +21,14 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
     private ActivationState? m_activation;
     private Snapshot? m_staging;
 
-    internal EditorExtensionCatalog(EditorContext context, EditorInteractions interactions)
+    internal EditorExtensionCatalog(
+        EditorContext context,
+        EditorInteractions interactions,
+        Action extensionsChanged)
     {
         m_context = context ?? throw new ArgumentNullException(nameof(context));
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
+        m_extensionsChanged = extensionsChanged ?? throw new ArgumentNullException(nameof(extensionsChanged));
         m_state = new EditorExtensionStateStore(context);
     }
 
@@ -138,6 +143,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             }
         }
         m_active = null;
+        NotifyExtensionsChanged();
         m_diagnostics.Dispose();
         m_state.ClearDiagnostics();
     }
@@ -152,6 +158,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             m_context,
             m_interactions,
             moduleTypes,
+            types.types,
             m_active?.instances);
 
         ModuleRegistration[] modules = moduleTypes
@@ -333,6 +340,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
 
         activation.handlers.Complete();
         m_interactions.CompleteGenerationTransition();
+        NotifyExtensionsChanged();
         if (previous is not null)
             RetirePrevious(previous, currentSnapshot);
         m_staging = null;
@@ -369,15 +377,15 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
     {
         if (captureReloadState)
             CapturePanelStates(snapshot);
-        for (int i = snapshot.modules.Length - 1; i >= 0; i--)
-        {
-            if (snapshot.startedModules.Contains(snapshot.modules[i].module))
-                TryStop(snapshot.modules[i], "shutdown");
-        }
         for (int i = snapshot.panels.Length - 1; i >= 0; i--)
         {
             if (snapshot.attachedPanels.Contains(snapshot.panels[i].panel))
                 TryDetach(snapshot.panels[i], "shutdown");
+        }
+        for (int i = snapshot.modules.Length - 1; i >= 0; i--)
+        {
+            if (snapshot.startedModules.Contains(snapshot.modules[i].module))
+                TryStop(snapshot.modules[i], "shutdown");
         }
         if (ReferenceEquals(m_active, snapshot))
             m_active = null;
@@ -388,18 +396,18 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
     private void RetirePrevious(Snapshot previous, Snapshot next)
     {
         var retained = new HashSet<object>(next.instances, ReferenceEqualityComparer.Instance);
-        for (int i = previous.modules.Length - 1; i >= 0; i--)
-        {
-            if (!retained.Contains(previous.modules[i].module) &&
-                previous.startedModules.Contains(previous.modules[i].module))
-                TryStop(previous.modules[i], "generation retirement");
-        }
         for (int i = previous.panels.Length - 1; i >= 0; i--)
         {
             PanelRegistration registration = previous.panels[i];
             if (retained.Contains(registration.panel) || !previous.attachedPanels.Contains(registration.panel))
                 continue;
             TryDetach(registration, "generation retirement");
+        }
+        for (int i = previous.modules.Length - 1; i >= 0; i--)
+        {
+            if (!retained.Contains(previous.modules[i].module) &&
+                previous.startedModules.Contains(previous.modules[i].module))
+                TryStop(previous.modules[i], "generation retirement");
         }
     }
 
@@ -414,7 +422,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         foreach (PanelRegistration registration in snapshot.panels)
         {
             ReadOnlyMemory<byte> payload = registration.panel is IEditorPanelReloadState reloadable
-                ? reloadable.CaptureReloadState()
+                ? reloadable.CaptureReloadState().ToArray()
                 : ReadOnlyMemory<byte>.Empty;
             m_panelStates[registration.attribute.id] = new PanelState(
                 registration.panel.isOpen,
@@ -459,13 +467,32 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         }
     }
 
+    private void NotifyExtensionsChanged()
+    {
+        try
+        {
+            m_extensionsChanged();
+        }
+        catch (Exception exception)
+        {
+            Log.Error("Editor extension description invalidation failed: {0}", exception);
+        }
+    }
+
     private ActionRegistration CreateActionRegistration(Type type, EditorExtensionActivator activator)
     {
         EditorAction action = activator.CreateExtension<EditorAction>(type);
         EditorActionAttribute attribute = type.GetCustomAttribute<EditorActionAttribute>(false)!;
         EditorMenuAttribute[] menus = type.GetCustomAttributes<EditorMenuAttribute>(false).ToArray();
         EditorShortcutAttribute[] shortcuts = type.GetCustomAttributes<EditorShortcutAttribute>(false).ToArray();
-        return new ActionRegistration(attribute, type, action, menus, shortcuts);
+        return new ActionRegistration(
+            attribute,
+            type,
+            action,
+            action.targetType,
+            action.argumentType,
+            menus,
+            shortcuts);
     }
 
     private static IEnumerable<MenuSourceRegistration> CreateMenuSourceRegistrations(
@@ -486,10 +513,12 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         EditorExtensionActivator activator)
     {
         EditorDrop drop = activator.CreateExtension<EditorDrop>(type);
+        Type sourceType = drop.sourceType;
+        Type targetType = drop.targetType;
         return type.GetCustomAttributes<EditorDropAttribute>(false)
             .Select(attribute => new DropRegistration(
-                drop.sourceType,
-                drop.targetType,
+                sourceType,
+                targetType,
                 attribute.area,
                 attribute.priority,
                 type,
@@ -535,7 +564,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
                  actions.GroupBy(static value => (
                      value.attribute.action,
                      value.attribute.area,
-                     value.action.targetType,
+                     value.targetType,
                      value.attribute.priority)))
         {
             if (group.Count() > 1)
@@ -589,8 +618,8 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
                     left.registration.attribute.priority != right.registration.attribute.priority ||
                     !string.Equals(left.area, right.area, StringComparison.Ordinal) ||
                     !MayHaveEqualTargetSpecificity(
-                        left.registration.action.targetType,
-                        right.registration.action.targetType))
+                        left.registration.targetType,
+                        right.registration.targetType))
                 {
                     continue;
                 }
@@ -793,6 +822,8 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         EditorActionAttribute attribute,
         Type type,
         EditorAction action,
+        Type? targetType,
+        Type? argumentType,
         EditorMenuAttribute[] menus,
         EditorShortcutAttribute[] shortcuts)
     {

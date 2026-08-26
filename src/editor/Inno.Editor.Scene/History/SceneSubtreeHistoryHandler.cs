@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using Inno.Core.Identity;
 using Inno.Core.Logging;
@@ -69,6 +70,9 @@ internal sealed class SceneSubtreeHistoryHandler : EditorHistoryHandler
             GameObject? root = IdentityManager.Get<GameObject>(data.rootId);
             if (shouldExist && root is null)
             {
+                var existing = new HashSet<GameObject>(
+                    scene.GetObjects(),
+                    ReferenceEqualityComparer.Instance);
                 Transform? parent = data.parentId is Guid parentId
                     ? IdentityManager.Get<GameObject>(parentId)?.transform
                     : null;
@@ -78,13 +82,11 @@ internal sealed class SceneSubtreeHistoryHandler : EditorHistoryHandler
                 }
                 catch (Exception exception)
                 {
-                    GameObject? partial = IdentityManager.Get<GameObject>(data.rootId);
-                    if (partial is not { isRuntimeValid: true })
-                        return EditorHistoryResult.Failure(exception.Message);
-                    SceneHistoryCompensationResult cleanup = SceneHistoryCompensation.Remove(
-                        partial,
-                        () => scene.DestroyObject(partial),
-                        $"Partial scene subtree '{data.rootId}'");
+                    SceneHistoryCompensationResult cleanup =
+                        SceneHistoryCompensation.RemoveCreatedObjects(
+                            scene,
+                            existing,
+                            $"Partial scene subtree '{data.rootId}'");
                     return cleanup.statePreserved
                         ? EditorHistoryResult.Failure(JoinFailures(exception.Message, cleanup.message))
                         : StateIntegrityFailure(JoinFailures(exception.Message, cleanup.message));

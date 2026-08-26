@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 
 using ExternalNamespace;
 using Inno.Core.Assemblies;
@@ -243,6 +244,47 @@ public sealed class TypeCacheTests : IDisposable
         Assert.True(registry.publishedSnapshotId > 1);
     }
 
+    [Fact]
+    public async Task PreparedRegistryTransactionReservesTheRegistryUntilCompletion()
+    {
+        using var registry = new ReservationTestRegistry();
+        MethodInfo prepare = typeof(TypeRegistry<ReservationTestRegistry.Snapshot>)
+            .GetMethod("Prepare", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        object first = prepare.Invoke(
+            registry,
+            [TypeCacheManager.current, false])!;
+
+        Task[] overlappingRefreshes = Enumerable.Range(0, 8)
+            .Select(_ => Task.Run(registry.Refresh))
+            .ToArray();
+        await Task.WhenAll(overlappingRefreshes);
+
+        Assert.Equal(1, registry.buildCount);
+        first.GetType().GetMethod("Activate")!.Invoke(first, null);
+        first.GetType().GetMethod("Complete")!.Invoke(first, null);
+        Assert.Equal(1, registry.buildCount);
+        Assert.True(registry.isInitialized);
+    }
+
+    [Fact]
+    public void DisposingAnActivatedRegistryDoesNotMakeGlobalCompletionFallible()
+    {
+        var registry = new TransactionalTestRegistry();
+        MethodInfo prepare = typeof(TypeRegistry<TransactionalTestRegistry.Snapshot>)
+            .GetMethod("Prepare", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        object transaction = prepare.Invoke(
+            registry,
+            [TypeCacheManager.current, false])!;
+
+        transaction.GetType().GetMethod("Activate")!.Invoke(transaction, null);
+        registry.Dispose();
+        transaction.GetType().GetMethod("Complete")!.Invoke(transaction, null);
+
+        Assert.False(registry.isInitialized);
+        Assert.Equal(0, registry.rollbackCount);
+        Assert.Equal([1], registry.disposedSnapshotIds);
+    }
+
     private static IReadOnlyList<Type> GetTypesWithAttribute(Type attributeType)
     {
         MethodInfo method = typeof(TypeCacheManager)
@@ -303,6 +345,16 @@ internal sealed class TransactionalTestRegistry : TypeRegistry<TransactionalTest
         cleanupFailureCount++;
         cleanupFailurePhases.Add(phase);
     }
+
+    internal sealed record Snapshot(int id);
+}
+
+internal sealed class ReservationTestRegistry : TypeRegistry<ReservationTestRegistry.Snapshot>
+{
+    internal int buildCount;
+
+    protected override Snapshot Build(TypeCacheSnapshot types)
+        => new(++buildCount);
 
     internal sealed record Snapshot(int id);
 }

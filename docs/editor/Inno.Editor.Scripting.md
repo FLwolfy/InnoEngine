@@ -112,7 +112,7 @@ if (window.isFocused && scripts.TryCompilePending(out Task<ScriptCompilationResu
 }
 ```
 
-Asset Update/Rescan 只在主线程 `TryCompilePending` 启动点发生，后台编译不调用全局 AssetManager。完成通知只来自返回的 Task；`EditorScripting` 在主线程发布 diagnostics 并执行 reload。成功编译不写 Info log；Warning/Error 与源位置保留。失败编译不会清除上一个尚未应用的成功 candidate。`Dispose` 返回后不会再有进行中的编译写入 `lastCompilation`、pending candidate 或进度状态；并发调用 `Dispose` 的线程也会等待首个释放流程完成。
+Asset Update/Rescan 只在主线程 `TryCompilePending` 启动点和 generation 切换安全点发生，后台编译不调用全局 AssetManager。重载激活后会先对账 Asset Database：释放旧脚本 Asset 的 canonical 实例、修复仍存活 host Asset 的引用，并移除已退休脚本代际留在 AssetManager 静态事件上的 observer。场景替换任一步失败时会逐项尝试结构、assembly generation、Asset 和旧属性/生命周期补偿；identity observer 在转移期间失败也必须恢复旧对象的注册与附着状态。完成通知只来自返回的 Task；`EditorScripting` 在主线程发布 diagnostics 并执行 reload。成功编译不写 Info log；Warning/Error 与源位置保留。失败编译不会清除上一个尚未应用的成功 candidate。`Dispose` 返回后不会再有进行中或排队等待 compiler gate 的编译写入 `lastCompilation`、pending candidate 或进度状态；并发调用 `Dispose` 的线程也会等待首个释放流程完成。卸载活动脚本 module 后还会执行一次 Asset 对账，避免 Asset cache 延迟 collectible ALC 回收。
 
 ## 编译进度 modal
 
