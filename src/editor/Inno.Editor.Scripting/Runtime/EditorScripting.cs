@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 using Inno.Core.Logging;
+using Inno.Core.Reflection;
 using Inno.Editor.Core;
+using Inno.Engine.Scene;
 
 namespace Inno.Editor.Scripting;
 
@@ -14,6 +17,8 @@ internal sealed class EditorScripting : EditorModule
 {
     private ScriptManager? m_manager;
     private Task<ScriptCompilationResult>? m_compilation;
+    private WeakReference<GameScene>[] m_diagnosticScenes = [];
+    private long m_diagnosticTypeCacheVersion = -1;
     private bool m_hideCompilationOnNextUpdate;
     private bool m_showCompilation;
 
@@ -27,6 +32,7 @@ internal sealed class EditorScripting : EditorModule
         => m_showCompilation ||
            m_compilation is not null ||
            m_manager?.isCompiling == true ||
+           m_manager?.isUnloadVerificationPending == true ||
            m_manager?.isCompilationPending == true;
 
     internal bool isAvailable => m_manager is not null;
@@ -50,6 +56,37 @@ internal sealed class EditorScripting : EditorModule
     internal void ReloadPlugins()
         => QueueReload(static manager => manager.ReloadPlugins());
 
+    internal void ReconcileSceneDiagnostics(bool force = false)
+    {
+        IReadOnlyList<GameScene> scenes = SceneManager.loadedScenes;
+        long typeCacheVersion = TypeCacheManager.isInitialized
+            ? TypeCacheManager.current.version
+            : -1;
+        bool scenesChanged = scenes.Count != m_diagnosticScenes.Length;
+        if (!scenesChanged)
+        {
+            for (int i = 0; i < scenes.Count; i++)
+            {
+                if (m_diagnosticScenes[i].TryGetTarget(out GameScene? trackedScene) &&
+                    ReferenceEquals(scenes[i], trackedScene))
+                {
+                    continue;
+                }
+                scenesChanged = true;
+                break;
+            }
+        }
+        if (!force && !scenesChanged && typeCacheVersion == m_diagnosticTypeCacheVersion)
+            return;
+
+        ScriptDiagnosticPublisher.PublishMissingSceneElements();
+        var sceneReferences = new WeakReference<GameScene>[scenes.Count];
+        for (int i = 0; i < scenes.Count; i++)
+            sceneReferences[i] = new WeakReference<GameScene>(scenes[i]);
+        m_diagnosticScenes = sceneReferences;
+        m_diagnosticTypeCacheVersion = typeCacheVersion;
+    }
+
     /// <inheritdoc />
     protected override void OnStart(EditorContext context)
     {
@@ -68,14 +105,21 @@ internal sealed class EditorScripting : EditorModule
     /// <inheritdoc />
     protected override void OnUpdate(EditorContext context)
     {
-        m_manager?.RefreshUnloadDiagnostics();
         if (m_hideCompilationOnNextUpdate)
         {
             m_hideCompilationOnNextUpdate = false;
             m_showCompilation = false;
         }
         CompleteCompilation();
-        if (m_manager is null || m_compilation is not null || !context.isFocused)
+        ReconcileSceneDiagnostics();
+        if (m_manager is null || m_compilation is not null)
+            return;
+        if (m_manager.isUnloadVerificationPending)
+        {
+            AdvanceUnloadVerification();
+            return;
+        }
+        if (!context.isFocused)
             return;
         if (m_manager.TryCompilePending(out Task<ScriptCompilationResult>? compilation))
         {
@@ -111,9 +155,24 @@ internal sealed class EditorScripting : EditorModule
         }
         finally
         {
+            ReconcileSceneDiagnostics(force: true);
             m_compilation = null;
-            m_hideCompilationOnNextUpdate = true;
+            m_hideCompilationOnNextUpdate = m_manager?.isUnloadVerificationPending != true;
         }
+    }
+
+    private void AdvanceUnloadVerification()
+    {
+        ScriptManager? manager = m_manager;
+        if (manager is null || !manager.AdvanceUnloadVerification(out Exception? failure))
+            return;
+        if (failure is not null)
+        {
+            Log.Error(
+                "Script reload committed, but retired assembly unload verification failed: {0}",
+                failure);
+        }
+        m_hideCompilationOnNextUpdate = true;
     }
 
     private void QueueReload(Action<ScriptManager> request)
@@ -136,6 +195,8 @@ internal sealed class EditorScripting : EditorModule
         m_manager.Dispose();
         m_manager = null;
         m_compilation = null;
+        m_diagnosticScenes = [];
+        m_diagnosticTypeCacheVersion = -1;
         m_hideCompilationOnNextUpdate = false;
         m_showCompilation = false;
         ScriptDiagnosticPublisher.ClearAll();

@@ -109,7 +109,7 @@ Entity? found = store.First(byId, entity.id);
 | `Get()` | 稳定快照。 |
 | `First()` | 首个匹配或 null。 |
 
-执行器会优先从估计候选数较小的 indexed condition 开始，再验证其他 condition。
+普通与 Ordered executor 都会优先选择估计候选数最小的 indexed condition，再验证其他 condition。Ordered 查询在存在可索引条件时只读取候选对象已经维护的 order key，并按 comparer 排序；`First()` 只在候选中寻找最小 order key，不构造完整结果。只有全部条件都是无法提供候选集的 predicate 时才遍历完整有序索引。相同 order key 使用当前 dense storage position 作为确定性 tie-breaker；需要跨删除稳定顺序的调用方应自行维护 Unique + Ordered 顺序键。
 
 ## 自定义查询条件
 
@@ -128,3 +128,4 @@ Entity? found = store.First(byId, entity.id);
 - `GetFast` / `FindFast` / `AllFast` 避免复制，但枚举期间 Store version 改变会抛异常。
 - Unique key 的重复值会抛 `InvalidOperationException`，不会静默覆盖另一个对象。
 - 更新已有对象的 Unique key 时会先验证新值；若新值冲突，旧索引仍保持有效。
+- Storage-order 查询是通用公开语义，Scene 等使用方不需要 friend assembly 或访问 Store 内部句柄；实现仍由 Store 在读锁内结合索引与 dense insertion index 完成。

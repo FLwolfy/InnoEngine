@@ -21,7 +21,7 @@ internal static class SceneTypeCatalog
         ArgumentNullException.ThrowIfNull(type);
         descriptor = null;
         return TypeCacheManager.TryGetTypeRef(type, out TypeRef typeRef) &&
-               S_REGISTRY.snapshot.components.TryGetValue(typeRef, out descriptor);
+               S_REGISTRY.snapshot.componentsByRuntimeId.TryGetValue(typeRef.runtimeId, out descriptor);
     }
 
     internal static SceneComponentTypeDescriptor GetComponent(Type type)
@@ -32,15 +32,16 @@ internal static class SceneTypeCatalog
             $"GameComponent type '{type.FullName}' is not part of the active TypeCache generation.");
     }
 
-    internal static bool TryGetComponent(TypeRef typeRef, out SceneComponentTypeDescriptor? descriptor)
-        => S_REGISTRY.snapshot.components.TryGetValue(typeRef, out descriptor);
-
-    internal static SceneComponentTypeDescriptor GetComponent(TypeRef typeRef)
+    internal static SceneComponentTypeDescriptor GetComponent(int runtimeTypeId)
     {
-        if (TryGetComponent(typeRef, out SceneComponentTypeDescriptor? descriptor))
-            return descriptor!;
+        if (S_REGISTRY.snapshot.componentsByRuntimeId.TryGetValue(
+                runtimeTypeId,
+                out SceneComponentTypeDescriptor? descriptor))
+        {
+            return descriptor;
+        }
         throw new InvalidOperationException(
-            $"Component type reference '{typeRef}' is not part of the active TypeCache generation.");
+            $"Component runtime type ID '{runtimeTypeId}' is not part of the active TypeCache generation.");
     }
 
     internal static bool TryGetSystem(Type type, out SceneSystemTypeDescriptor? descriptor)
@@ -48,7 +49,7 @@ internal static class SceneTypeCatalog
         ArgumentNullException.ThrowIfNull(type);
         descriptor = null;
         return TypeCacheManager.TryGetTypeRef(type, out TypeRef typeRef) &&
-               S_REGISTRY.snapshot.systems.TryGetValue(typeRef, out descriptor);
+               S_REGISTRY.snapshot.systemsByRuntimeId.TryGetValue(typeRef.runtimeId, out descriptor);
     }
 
     internal static SceneSystemTypeDescriptor GetSystem(Type type)
@@ -73,43 +74,46 @@ internal static class SceneTypeCatalog
                 .Where(static type => type.IsClass && !type.IsAbstract)
                 .ToArray();
 
-            var components = new Dictionary<TypeRef, SceneComponentTypeDescriptor>(componentTypes.Length);
+            var componentsByRuntimeId = new Dictionary<int, SceneComponentTypeDescriptor>(componentTypes.Length);
             foreach (Type componentType in componentTypes)
             {
                 TypeRef componentTypeRef = types.GetTypeRef(componentType);
-                TypeRef[] assignableConcreteTypes = concreteComponentTypes
+                int[] assignableConcreteRuntimeTypeIds = concreteComponentTypes
                     .Where(componentType.IsAssignableFrom)
                     .OrderBy(static type => type.FullName, StringComparer.Ordinal)
                     .Select(types.GetTypeRef)
+                    .Select(static typeRef => typeRef.runtimeId)
                     .ToArray();
-                components.Add(componentTypeRef, new SceneComponentTypeDescriptor(
-                    componentTypeRef,
+                var descriptor = new SceneComponentTypeDescriptor(
+                    componentTypeRef.runtimeId,
                     componentType.FullName ?? componentType.Name,
                     componentType.IsClass && !componentType.IsAbstract,
                     componentType.IsDefined(typeof(AllowMultipleComponentAttribute), inherit: true),
-                    assignableConcreteTypes,
-                    assignableConcreteTypes.ToFrozenSet()));
+                    assignableConcreteRuntimeTypeIds,
+                    assignableConcreteRuntimeTypeIds.ToFrozenSet());
+                componentsByRuntimeId.Add(descriptor.runtimeTypeId, descriptor);
             }
 
             Type[] systemTypes = types.types
                 .Select(typeRef => typeRef.Resolve(types))
                 .Where(static type => typeof(GameSystem).IsAssignableFrom(type))
                 .ToArray();
-            var systems = new Dictionary<TypeRef, SceneSystemTypeDescriptor>(systemTypes.Length);
+            var systemsByRuntimeId = new Dictionary<int, SceneSystemTypeDescriptor>(systemTypes.Length);
             foreach (Type systemType in systemTypes)
             {
                 TypeRef systemTypeRef = types.GetTypeRef(systemType);
-                systems.Add(systemTypeRef, new SceneSystemTypeDescriptor(
-                    systemTypeRef,
+                var descriptor = new SceneSystemTypeDescriptor(
+                    systemTypeRef.runtimeId,
                     systemType.FullName ?? systemType.Name,
                     systemType.IsClass && !systemType.IsAbstract,
-                    systemType.IsDefined(typeof(AllowMultipleSystemAttribute), inherit: false)));
+                    systemType.IsDefined(typeof(AllowMultipleSystemAttribute), inherit: false));
+                systemsByRuntimeId.Add(descriptor.runtimeTypeId, descriptor);
             }
 
             return new SceneTypeSnapshot(
                 types.version,
-                components.ToFrozenDictionary(),
-                systems.ToFrozenDictionary());
+                componentsByRuntimeId.ToFrozenDictionary(),
+                systemsByRuntimeId.ToFrozenDictionary());
         }
 
         protected override void OnActivating(SceneTypeSnapshot? previous, SceneTypeSnapshot candidate)
@@ -123,23 +127,23 @@ internal static class SceneTypeCatalog
 
 internal sealed record SceneTypeSnapshot(
     long generation,
-    FrozenDictionary<TypeRef, SceneComponentTypeDescriptor> components,
-    FrozenDictionary<TypeRef, SceneSystemTypeDescriptor> systems);
+    FrozenDictionary<int, SceneComponentTypeDescriptor> componentsByRuntimeId,
+    FrozenDictionary<int, SceneSystemTypeDescriptor> systemsByRuntimeId);
 
 internal sealed record SceneComponentTypeDescriptor(
-    TypeRef typeRef,
+    int runtimeTypeId,
     string displayName,
     bool isConcrete,
     bool allowsMultiple,
-    TypeRef[] assignableConcreteTypes,
-    FrozenSet<TypeRef> assignableConcreteTypeSet)
+    int[] assignableConcreteRuntimeTypeIds,
+    FrozenSet<int> assignableConcreteRuntimeTypeIdSet)
 {
-    internal bool IsAssignableFrom(TypeRef concreteType)
-        => assignableConcreteTypeSet.Contains(concreteType);
+    internal bool IsAssignableFrom(int concreteRuntimeTypeId)
+        => assignableConcreteRuntimeTypeIdSet.Contains(concreteRuntimeTypeId);
 }
 
 internal sealed record SceneSystemTypeDescriptor(
-    TypeRef typeRef,
+    int runtimeTypeId,
     string displayName,
     bool isConcrete,
     bool allowsMultiple);

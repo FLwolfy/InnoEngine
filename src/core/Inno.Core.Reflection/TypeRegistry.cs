@@ -1,8 +1,6 @@
 using System;
 using System.Diagnostics;
 
-using Inno.Core.Reflection.Internal;
-
 namespace Inno.Core.Reflection;
 
 /// <summary>

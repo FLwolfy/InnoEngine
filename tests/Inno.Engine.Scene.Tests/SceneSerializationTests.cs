@@ -41,7 +41,7 @@ public sealed class SceneSerializationTests : IDisposable
     }
 
     [Fact]
-    public void SceneTypeIndexesAndCachesUseTypeRefKeys()
+    public void SceneGenerationOwnedTypeIndexesAndCachesUseRuntimeTypeIds()
     {
         Type[] sceneStorageTypes = typeof(GameScene).Assembly.GetTypes()
             .Where(static type =>
@@ -56,12 +56,9 @@ public sealed class SceneSerializationTests : IDisposable
             .ToArray();
 
         Assert.Contains(typeIdentityMembers, static member =>
-            UsesGenericArgument(GetMemberType(member), typeof(TypeRef)));
+            ContainsTypeIdentity(GetMemberType(member), typeof(int)));
         Assert.DoesNotContain(typeIdentityMembers, static member =>
-            GetMemberType(member) is Type memberType &&
-            (memberType == typeof(int) || UsesGenericArgument(memberType, typeof(int))));
-        Assert.DoesNotContain(typeIdentityMembers, static member =>
-            member.Name.Contains("runtimeType", StringComparison.OrdinalIgnoreCase));
+            ContainsTypeIdentity(GetMemberType(member), typeof(TypeRef)));
     }
 
     [Fact]
@@ -290,8 +287,15 @@ public sealed class SceneSerializationTests : IDisposable
             _ => null
         };
 
-    private static bool UsesGenericArgument(Type? type, Type argument)
-        => type?.IsGenericType == true && type.GetGenericArguments().Contains(argument);
+    private static bool ContainsTypeIdentity(Type? type, Type identityType)
+    {
+        if (type == identityType)
+            return true;
+        if (type?.HasElementType == true)
+            return ContainsTypeIdentity(type.GetElementType(), identityType);
+        return type?.IsGenericType == true &&
+               type.GetGenericArguments().Any(argument => ContainsTypeIdentity(argument, identityType));
+    }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static (

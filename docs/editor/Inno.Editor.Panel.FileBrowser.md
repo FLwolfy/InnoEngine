@@ -46,11 +46,11 @@ Create Folder、Rename、Move 与 Delete 都接入共享中立 Undo/Redo。Renam
 
 ## 文件与目录移动
 
-Tree、List 和 Grid 使用同一个 `AssetFileEntry` 目录目标及 `panel/asset.file-browser` drop area。文件仍以共享 `AssetInfo` 作为 payload，目录以 `AssetFileEntry` 作为 payload；两者都可以拖到任意视图中的目录、Tree 根节点或当前目录空白区域，因此可以从 Grid 拖到 Tree，也可以从 Tree 拖到 List/Grid。
+Tree、List 和 Grid 使用同一个 `AssetFileEntry` 目录目标及 `panel/asset.file-browser` drop area。文件仍以共享 `AssetInfo` 作为 payload，目录以 `AssetFileEntry` 作为 payload；两者都可以拖到任意视图中的目录，因此可以从 Grid 拖到 Tree，也可以从 Tree 拖到 List/Grid。Tree 的 `Assets` 根节点和 Tree pane 未占用背景都明确以 Assets 根目录为目标；List/Grid 的未占用背景才以当前打开目录为目标。目标路径必须由每个 drop site 显式提供，不会隐式回退到当前目录。
 
 Tree pane 只在名称或层级缩进真实超出 viewport 时产生横向范围，并显示原生水平 scrollbar；短内容没有 scrollbar。Tree 的 label/icon/hit area 只应用一次 `ScrollX`，不会出现内容比 disclosure 或 guide 多移动一份滚动距离的情况。
 
-提交前统一检查目标目录存在、同名冲突、目录拖入自身或 descendant，以及 AssetEditor 对 move 的验证。拖到当前 parent 属于 no-op，不产生 History；成功移动后保留 source/meta identity、选择新路径，并以单个 `Move Asset` 操作进入 Undo/Redo。目录移动由 `AssetManager.Move` 原子处理，目录内子项不单独复制或逐项重建。
+提交前统一检查目标目录存在、同名冲突、目录拖入自身或 descendant，以及 AssetEditor 对 move 的验证。拖到当前 parent 属于 no-op，不产生 History；成功移动后保留 source/meta identity、选择新路径，并以单个 `Move Asset` 操作进入 Undo/Redo。目录移动由 `AssetManager.Move` 原子处理，目录内子项不单独复制或逐项重建。SceneAsset 的 Rename、Move、拖放及其 Undo/Redo 只改变 Asset source metadata；已加载的 clean Scene 会在同一 UI frame 更新 document 路径和显示名，不产生 Hierarchy `*`。
 
 所有 Tree/List/Grid 目录目标统一调用 `ImGuiWidget.DropTargetHighlight`。目标框使用全局 `DragDropTarget` 黄色、统一 rounding/thickness，并绘制在 viewport foreground draw list，因此不会被 Table column、Grid cell 或 child window 的 clip rect 截断。
 

@@ -60,6 +60,26 @@ public sealed class SceneFacadeTests : IDisposable
     }
 
     [Fact]
+    public void OrderedSceneQueriesPreserveCreationOrderAfterDenseStorageRemoval()
+    {
+        var scene = new GameScene("Stable Order");
+        GameObject removed = scene.CreateObject("Removed");
+        GameObject second = scene.CreateObject("Second");
+        GameObject third = scene.CreateObject("Third");
+        removed.tag = "Ordered";
+        second.tag = "Ordered";
+        third.tag = "Ordered";
+
+        Assert.True(scene.DestroyObject(removed));
+        GameObject fourth = scene.CreateObject("Fourth");
+        fourth.tag = "Ordered";
+
+        Assert.Equal([second, third, fourth], scene.GetObjects());
+        Assert.Same(second, scene.FindObjectWithTag("Ordered"));
+        Assert.Equal([second, third, fourth], scene.FindObjectsWithTag("Ordered"));
+    }
+
+    [Fact]
     public void TagRejectsEmptyValuesAndTrimsSurroundingWhitespace()
     {
         var scene = new GameScene("Tags");

@@ -98,9 +98,9 @@ Reload 会使用候选类型重新验证数量：
 
 Scene migration 按成员独立捕获状态。候选类型中名称相同且可解码的成员正常恢复；新增成员保留新默认值；删除成员忽略旧数据；同名成员类型不兼容时只跳过该成员，保留新实例的字段初始化值。
 
-跳过项以 `INNOHR0001` warning 写入 `diagnostics`，包含 Scene/Object persistent ID、成员名、旧类型和新声明类型。`INNOHR0002` 表示元素已安全转为 missing，`INNOHR0003` 表示 missing 元素已经恢复，`INNOHR0004` 表示已提交后的旧实例 Detach 清理异常；该清理按实例隔离且不会伪回滚已发布 generation。Editor 只在程序集事务成功提交后输出这些 warning。实例创建、Stable Type ID 冲突、数量约束、Scene 结构或对象级 restore hook 错误仍回滚整个 reload。
+跳过项以 `INNOHR0001` warning 写入 `diagnostics`，包含 Scene/Object persistent ID、成员名、旧类型和新声明类型。`INNOHR0002` 不再属于 Migration 的历史事件列表，而由 Editor 在 loaded Scene 实例集合、TypeCache generation 或 Recompile/Reload 安全点变化时，按当前 Missing 状态完整对账；因此新加载 Scene 自带 Missing 时会在下一次 Editor 主线程安全更新发布，无变化 Recompile 也会重新推送当前诊断，类型恢复后立即从 Console report 中解除。`INNOHR0004` 表示已提交后的旧实例 Detach 清理异常；该清理按实例隔离且不会伪回滚已发布 generation。实例创建、Stable Type ID 冲突、数量约束、Scene 结构或对象级 restore hook 错误仍回滚整个 reload。
 
-候选 generation 缺少 live Component/System 时不再拒绝 reload。Migration 原位换成 `MissingGameComponent` / `MissingGameSystem`，保留 `TypeRef`、persistent ID、显示顺序、中立属性 bytes、Asset dependencies 和引用别名；落盘仍只写 Stable ID。Scene 和 Prefab 都使用同一 current-format schema，因此 missing 状态可继续保存、实例化和再次保存。Prefab source-local ID、Scene runtime persistent ID 发生转换时，引用别名表会把 payload 中的旧 token 重绑到当前图，避免恢复后指向源 Prefab 或丢失引用。
+候选 generation 缺少 live Component/System 时不再拒绝 reload。Migration 原位换成 `MissingGameComponent` / `MissingGameSystem`，保留 `TypeRef`、persistent ID、显示顺序、中立属性 bytes、Asset dependencies 和引用别名；落盘仍只写原逻辑 Stable ID，不写 placeholder 类型 ID 或 missing 标志。普通 Scene 中 persistent/source token 相同的恒等 alias 会被省略，因此 live → missing → recovered 的规范化序列化保持一致，不会制造 Editor dirty。Scene 和 Prefab 都使用同一 current-format schema，因此 missing 状态可继续保存、实例化和再次保存；只有 Prefab source-local ID 与 Scene runtime persistent ID 确实不同时，引用别名表才写入必要映射，把 payload 中的旧 token 重绑到当前图。
 
 ## 生命周期迁移
 

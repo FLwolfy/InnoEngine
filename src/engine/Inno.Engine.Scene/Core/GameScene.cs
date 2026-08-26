@@ -530,7 +530,7 @@ public sealed class GameScene : EngineObject, ISerializable
     internal void ReplaceComponentForReload(
         GameComponent previous,
         GameComponent replacement,
-        TypeRef replacementType)
+        int replacementRuntimeTypeId)
     {
         GameObject owner = previous.ownerOrNull
             ?? throw new InvalidOperationException("The component being replaced is detached.");
@@ -546,7 +546,7 @@ public sealed class GameScene : EngineObject, ISerializable
         {
             _ = previous.ReleaseIdentityForReplacement();
             replacement.RegisterIdentity(persistentId);
-            m_store.ReplaceComponent(previous, replacement, replacementType);
+            m_store.ReplaceComponent(previous, replacement, replacementRuntimeTypeId);
         }
         catch (Exception exception)
         {
@@ -598,8 +598,8 @@ public sealed class GameScene : EngineObject, ISerializable
     internal void ReplaceSystemForReload(
         GameSystem previous,
         GameSystem replacement,
-        TypeRef replacementType)
-        => m_systems.ReplaceForReload(previous, replacement, replacementType);
+        int replacementRuntimeTypeId)
+        => m_systems.ReplaceForReload(previous, replacement, replacementRuntimeTypeId);
 
     internal bool canDispatch => m_isLoaded && !m_isUnloading && !isDestroyed;
 

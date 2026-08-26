@@ -119,6 +119,68 @@ public sealed class IndexedObjectStoreTests
     }
 
     [Fact]
+    public void OrderedQueryUsesSmallestIndexedCandidateSetAndReturnsAnIsolatedSnapshot()
+    {
+        var store = new IndexedObjectStore<Item>();
+        IndexedObjectKey<int> categoryKey = store.DefineKey<int>("category");
+        IndexedObjectKey<int> orderKey = store.DefineKey<int>(
+            "order",
+            IndexedObjectKeyFlags.Ordered | IndexedObjectKeyFlags.Unique,
+            Comparer<int>.Default);
+        var unrelated = new Item("Unrelated", 2);
+        var last = new Item("Last", 1);
+        var excluded = new Item("Excluded", 1);
+        var first = new Item("First", 1);
+        store.Add(unrelated).Set(categoryKey, 2).Set(orderKey, 0);
+        store.Add(last).Set(categoryKey, 1).Set(orderKey, 30);
+        store.Add(excluded).Set(categoryKey, 1).Set(orderKey, 20);
+        store.Add(first).Set(categoryKey, 1).Set(orderKey, 10);
+
+        int predicateCalls = 0;
+        IReadOnlyList<Item> snapshot = store.Query()
+            .Where(item =>
+            {
+                predicateCalls++;
+                return item.name != "Excluded";
+            })
+            .Find(categoryKey, 1)
+            .OrderBy(orderKey)
+            .Get();
+
+        Assert.Equal(new[] { first, last }, snapshot);
+        Assert.Equal(3, predicateCalls);
+        Assert.True(store.Remove(first));
+        Assert.Equal(new[] { first, last }, snapshot);
+
+        predicateCalls = 0;
+        Item? earliest = store.Query()
+            .Where(item =>
+            {
+                predicateCalls++;
+                return true;
+            })
+            .Find(categoryKey, 1)
+            .OrderBy(orderKey)
+            .First();
+        Assert.Same(excluded, earliest);
+        Assert.Equal(2, predicateCalls);
+
+        predicateCalls = 0;
+        Item[] fast = store.Query()
+            .Where(item =>
+            {
+                predicateCalls++;
+                return true;
+            })
+            .Find(categoryKey, 1)
+            .OrderBy(orderKey)
+            .GetFast()
+            .ToArray();
+        Assert.Equal(new[] { excluded, last }, fast);
+        Assert.Equal(2, predicateCalls);
+    }
+
+    [Fact]
     public void OrderBy_UsesSortedKey()
     {
         var store = new IndexedObjectStore<Item>();

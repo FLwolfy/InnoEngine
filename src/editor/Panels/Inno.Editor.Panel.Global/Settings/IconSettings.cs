@@ -184,7 +184,7 @@ internal sealed class GameObjectIconSetting() : IconSetting(ImGuiIcon.Cube)
 }
 
 [EditorSettingPath("Global/Appearance/Icons/Prefab")]
-internal sealed class PrefabIconSetting() : IconSetting(ImGuiIcon.Cube)
+internal sealed class PrefabIconSetting() : IconSetting(ImGuiIcon.DiceD6)
 {
     public override string description
         => "Selects the icon used wherever the editor presents a reusable prefab object.";

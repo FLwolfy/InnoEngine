@@ -22,8 +22,6 @@ internal readonly record struct SceneStoreRemovedComponent(GameComponent compone
 
 internal sealed class SceneStore
 {
-    private static readonly Predicate<SceneObjectRecord> C_VISIBLE_OBJECT =
-        static record => record.isAlive && record.isCommitted;
     private static readonly Lock S_TYPE_CACHE_SYNC = new();
     private static readonly List<WeakReference<SceneStore>> S_STORES = [];
 
@@ -34,22 +32,24 @@ internal sealed class SceneStore
     private readonly IndexedObjectKey<string> m_objectTagKey;
     private readonly IndexedObjectKey<GameLayer> m_objectLayerKey;
     private readonly IndexedObjectKey<bool> m_objectCommittedKey;
+    private readonly IndexedObjectKey<long> m_objectOrderKey;
 
     private readonly IndexedObjectStore<ComponentEntry> m_components = new();
     private readonly IndexedObjectKey<GameComponent> m_componentKey;
     private readonly IndexedObjectKey<Guid> m_componentPersistentIdKey;
     private readonly IndexedObjectKey<SceneObjectRecord> m_componentOwnerKey;
-    private readonly IndexedObjectKey<TypeRef> m_componentTypeKey;
+    private readonly IndexedObjectKey<int> m_componentTypeKey;
     private readonly IndexedObjectKey<bool> m_componentCommittedKey;
 
     private readonly List<PendingObjectAddition> m_pendingObjectAdditions = [];
     private readonly List<PendingObjectRemoval> m_pendingObjectRemovals = [];
     private readonly List<PendingComponentAddition> m_pendingComponentAdditions = [];
     private readonly List<PendingComponentRemoval> m_pendingComponentRemovals = [];
-    private readonly Dictionary<TypeRef, GameComponent[]> m_componentQueryCache = [];
-    private readonly Dictionary<TypeRef, object> m_typedComponentQueryCache = [];
+    private readonly Dictionary<int, GameComponent[]> m_componentQueryCache = [];
+    private readonly Dictionary<int, object> m_typedComponentQueryCache = [];
     private readonly Dictionary<ComponentQueryKey, ReadOnlyCollection<GameObject>> m_objectQueryCache = [];
     private GameObject[]? m_objectSnapshotCache;
+    private long m_nextObjectOrder;
     private int m_executionDepth;
     private bool m_clearRequested;
 
@@ -67,13 +67,17 @@ internal sealed class SceneStore
         m_objectTagKey = m_objects.DefineKey<string>("scene.object.tag");
         m_objectLayerKey = m_objects.DefineKey<GameLayer>("scene.object.layer");
         m_objectCommittedKey = m_objects.DefineKey<bool>("scene.object.committed");
+        m_objectOrderKey = m_objects.DefineKey<long>(
+            "scene.object.order",
+            IndexedObjectKeyFlags.Ordered | IndexedObjectKeyFlags.Unique,
+            Comparer<long>.Default);
 
         m_componentKey = m_components.DefineKey<GameComponent>("scene.component", IndexedObjectKeyFlags.Unique);
         m_componentPersistentIdKey = m_components.DefineKey<Guid>(
             "scene.component.persistent-id",
             IndexedObjectKeyFlags.Unique);
         m_componentOwnerKey = m_components.DefineKey<SceneObjectRecord>("scene.component.owner");
-        m_componentTypeKey = m_components.DefineKey<TypeRef>("scene.component.type");
+        m_componentTypeKey = m_components.DefineKey<int>("scene.component.type");
         m_componentCommittedKey = m_components.DefineKey<bool>("scene.component.committed");
     }
 
@@ -95,6 +99,8 @@ internal sealed class SceneStore
         }
 
         var record = new SceneObjectRecord(gameObject);
+        long order = m_nextObjectOrder;
+        m_nextObjectOrder = checked(m_nextObjectOrder + 1);
         try
         {
             m_objects.Add(record)
@@ -103,7 +109,8 @@ internal sealed class SceneStore
                 .Set(m_objectNameKey, gameObject.storedName)
                 .Set(m_objectTagKey, gameObject.storedTag)
                 .Set(m_objectLayerKey, gameObject.storedLayer)
-                .Set(m_objectCommittedKey, false);
+                .Set(m_objectCommittedKey, false)
+                .Set(m_objectOrderKey, order);
         }
         catch
         {
@@ -138,7 +145,7 @@ internal sealed class SceneStore
         {
             ComponentEntry? duplicate = m_components.Query()
                 .Find(m_componentOwnerKey, record)
-                .Find(m_componentTypeKey, descriptor.typeRef)
+                .Find(m_componentTypeKey, descriptor.runtimeTypeId)
                 .First();
             if (duplicate is { isAlive: true })
             {
@@ -148,14 +155,14 @@ internal sealed class SceneStore
             }
         }
 
-        var entry = new ComponentEntry(record, component, descriptor.typeRef);
+        var entry = new ComponentEntry(record, component, descriptor.runtimeTypeId);
         try
         {
             m_components.Add(entry)
                 .Set(m_componentKey, component)
                 .Set(m_componentPersistentIdKey, component.identity.persistentId)
                 .Set(m_componentOwnerKey, record)
-                .Set(m_componentTypeKey, descriptor.typeRef)
+                .Set(m_componentTypeKey, descriptor.runtimeTypeId)
                 .Set(m_componentCommittedKey, false);
             record.components.Add(component);
         }
@@ -203,7 +210,7 @@ internal sealed class SceneStore
     internal void ReplaceComponent(
         GameComponent previous,
         GameComponent replacement,
-        TypeRef replacementType)
+        int replacementRuntimeTypeId)
     {
         ArgumentNullException.ThrowIfNull(previous);
         ArgumentNullException.ThrowIfNull(replacement);
@@ -220,9 +227,9 @@ internal sealed class SceneStore
 
         m_components.Add(entry)
             .Set(m_componentKey, replacement)
-            .Set(m_componentTypeKey, replacementType);
+            .Set(m_componentTypeKey, replacementRuntimeTypeId);
         entry.component = replacement;
-        entry.typeRef = replacementType;
+        entry.runtimeTypeId = replacementRuntimeTypeId;
         entry.owner.components[index] = replacement;
         InvalidateStructureCaches();
     }
@@ -265,10 +272,11 @@ internal sealed class SceneStore
         if (m_objectSnapshotCache is not null)
             return m_objectSnapshotCache;
 
-        IReadOnlyList<SceneObjectRecord> records = m_objects.FindInStorageOrder(
-            m_objectCommittedKey,
-            true,
-            C_VISIBLE_OBJECT);
+        IReadOnlyList<SceneObjectRecord> records = m_objects.Query()
+            .Find(m_objectCommittedKey, true)
+            .Where(static record => record.isAlive)
+            .OrderBy(m_objectOrderKey)
+            .Get();
         var result = new GameObject[records.Count];
         for (int i = 0; i < records.Count; i++)
             result[i] = records[i].gameObject;
@@ -283,19 +291,44 @@ internal sealed class SceneStore
     }
 
     internal GameObject? FindObject(string name)
-        => m_objects.FirstInStorageOrder(m_objectNameKey, name, C_VISIBLE_OBJECT)?.gameObject;
+        => m_objects.Query()
+            .Find(m_objectNameKey, name)
+            .Find(m_objectCommittedKey, true)
+            .Where(static record => record.isAlive)
+            .OrderBy(m_objectOrderKey)
+            .First()?.gameObject;
 
     internal GameObject? FindObjectWithTag(string tag)
-        => m_objects.FirstInStorageOrder(m_objectTagKey, tag, C_VISIBLE_OBJECT)?.gameObject;
+        => m_objects.Query()
+            .Find(m_objectTagKey, tag)
+            .Find(m_objectCommittedKey, true)
+            .Where(static record => record.isAlive)
+            .OrderBy(m_objectOrderKey)
+            .First()?.gameObject;
 
     internal IReadOnlyList<GameObject> FindObjectsWithTag(string tag)
-        => SelectObjects(m_objects.FindInStorageOrder(m_objectTagKey, tag, C_VISIBLE_OBJECT));
+        => SelectObjects(m_objects.Query()
+            .Find(m_objectTagKey, tag)
+            .Find(m_objectCommittedKey, true)
+            .Where(static record => record.isAlive)
+            .OrderBy(m_objectOrderKey)
+            .Get());
 
     internal GameObject? FindObjectWithLayer(GameLayer layer)
-        => m_objects.FirstInStorageOrder(m_objectLayerKey, layer, C_VISIBLE_OBJECT)?.gameObject;
+        => m_objects.Query()
+            .Find(m_objectLayerKey, layer)
+            .Find(m_objectCommittedKey, true)
+            .Where(static record => record.isAlive)
+            .OrderBy(m_objectOrderKey)
+            .First()?.gameObject;
 
     internal IReadOnlyList<GameObject> FindObjectsWithLayer(GameLayer layer)
-        => SelectObjects(m_objects.FindInStorageOrder(m_objectLayerKey, layer, C_VISIBLE_OBJECT));
+        => SelectObjects(m_objects.Query()
+            .Find(m_objectLayerKey, layer)
+            .Find(m_objectCommittedKey, true)
+            .Where(static record => record.isAlive)
+            .OrderBy(m_objectOrderKey)
+            .Get());
 
     internal IReadOnlyList<GameObject> FindObjectsWithLayers(GameLayerMask layers)
     {
@@ -339,7 +372,7 @@ internal sealed class SceneStore
             GameComponent candidate = record.components[i];
             if (TryGetEntry(candidate, out ComponentEntry? entry) &&
                 entry!.isAlive &&
-                requestedType.IsAssignableFrom(entry.typeRef))
+                requestedType.IsAssignableFrom(entry.runtimeTypeId))
             {
                 component = (TComponent)candidate;
                 return true;
@@ -360,7 +393,7 @@ internal sealed class SceneStore
             GameComponent candidate = record.components[i];
             if (TryGetEntry(candidate, out ComponentEntry? entry) &&
                 entry!.isAlive &&
-                requestedType.IsAssignableFrom(entry.typeRef))
+                requestedType.IsAssignableFrom(entry.runtimeTypeId))
             {
                 component = candidate;
                 return true;
@@ -411,7 +444,7 @@ internal sealed class SceneStore
             GameComponent candidate = record.components[i];
             if (TryGetEntry(candidate, out ComponentEntry? entry) &&
                 entry!.isAlive &&
-                requestedType.IsAssignableFrom(entry.typeRef))
+                requestedType.IsAssignableFrom(entry.runtimeTypeId))
             {
                 result.Add((TComponent)candidate);
             }
@@ -422,7 +455,7 @@ internal sealed class SceneStore
     internal IReadOnlyList<TComponent> GetComponents<TComponent>(
         SceneComponentTypeDescriptor requestedType) where TComponent : GameComponent
     {
-        if (m_typedComponentQueryCache.TryGetValue(requestedType.typeRef, out object? cached))
+        if (m_typedComponentQueryCache.TryGetValue(requestedType.runtimeTypeId, out object? cached))
             return (ReadOnlyCollection<TComponent>)cached;
 
         GameComponent[] untyped = GetCommittedComponents(requestedType);
@@ -430,26 +463,26 @@ internal sealed class SceneStore
         for (int i = 0; i < untyped.Length; i++)
             typed[i] = (TComponent)untyped[i];
         ReadOnlyCollection<TComponent> view = Array.AsReadOnly(typed);
-        m_typedComponentQueryCache.Add(requestedType.typeRef, view);
+        m_typedComponentQueryCache.Add(requestedType.runtimeTypeId, view);
         return view;
     }
 
     internal IReadOnlyList<GameObject> Query(SceneComponentTypeDescriptor requestedType)
-        => Query(ComponentQueryKey.Create(requestedType.typeRef));
+        => Query(ComponentQueryKey.Create(requestedType.runtimeTypeId));
 
     internal IReadOnlyList<GameObject> Query(
         SceneComponentTypeDescriptor first,
         SceneComponentTypeDescriptor second)
-        => Query(ComponentQueryKey.Create(first.typeRef, second.typeRef));
+        => Query(ComponentQueryKey.Create(first.runtimeTypeId, second.runtimeTypeId));
 
     internal IReadOnlyList<GameObject> Query(
         SceneComponentTypeDescriptor first,
         SceneComponentTypeDescriptor second,
         SceneComponentTypeDescriptor third)
         => Query(ComponentQueryKey.Create(
-            first.typeRef,
-            second.typeRef,
-            third.typeRef));
+            first.runtimeTypeId,
+            second.runtimeTypeId,
+            third.runtimeTypeId));
 
     private IReadOnlyList<GameObject> Query(ComponentQueryKey query)
     {
@@ -558,11 +591,11 @@ internal sealed class SceneStore
 
     private GameComponent[] GetCommittedComponents(SceneComponentTypeDescriptor requestedType)
     {
-        if (m_componentQueryCache.TryGetValue(requestedType.typeRef, out GameComponent[]? cached))
+        if (m_componentQueryCache.TryGetValue(requestedType.runtimeTypeId, out GameComponent[]? cached))
             return cached;
 
         var result = new List<GameComponent>();
-        TypeRef[] concreteTypes = requestedType.assignableConcreteTypes;
+        int[] concreteTypes = requestedType.assignableConcreteRuntimeTypeIds;
         for (int i = 0; i < concreteTypes.Length; i++)
         {
             foreach (ComponentEntry entry in m_components.FindFast(
@@ -575,7 +608,7 @@ internal sealed class SceneStore
         }
 
         cached = result.ToArray();
-        m_componentQueryCache.Add(requestedType.typeRef, cached);
+        m_componentQueryCache.Add(requestedType.runtimeTypeId, cached);
         return cached;
     }
 
@@ -587,7 +620,7 @@ internal sealed class SceneStore
         {
             if (TryGetEntry(owner.components[i], out ComponentEntry? entry) &&
                 IsVisible(entry!) &&
-                requestedType.IsAssignableFrom(entry!.typeRef))
+                requestedType.IsAssignableFrom(entry!.runtimeTypeId))
             {
                 return true;
             }
@@ -732,6 +765,7 @@ internal sealed class SceneStore
         m_pendingComponentRemovals.Clear();
         m_components.RemoveAll();
         m_objects.RemoveAll();
+        m_nextObjectOrder = 0;
         m_clearRequested = false;
         InvalidateStructureCaches();
     }
@@ -746,16 +780,16 @@ internal sealed class SceneStore
 
     private sealed class ComponentEntry
     {
-        internal ComponentEntry(SceneObjectRecord owner, GameComponent component, TypeRef typeRef)
+        internal ComponentEntry(SceneObjectRecord owner, GameComponent component, int runtimeTypeId)
         {
             this.owner = owner;
             this.component = component;
-            this.typeRef = typeRef;
+            this.runtimeTypeId = runtimeTypeId;
         }
 
         internal SceneObjectRecord owner { get; }
         internal GameComponent component { get; set; }
-        internal TypeRef typeRef { get; set; }
+        internal int runtimeTypeId { get; set; }
         internal bool isAlive { get; set; } = true;
         internal bool isCommitted { get; set; }
     }
@@ -765,19 +799,19 @@ internal sealed class SceneStore
     private readonly record struct PendingComponentAddition(ComponentEntry entry);
     private readonly record struct PendingComponentRemoval(ComponentEntry entry);
 
-    private readonly record struct ComponentQueryKey(TypeRef first, TypeRef second, TypeRef third, int count)
+    private readonly record struct ComponentQueryKey(int first, int second, int third, int count)
     {
-        internal static ComponentQueryKey Create(TypeRef first)
+        internal static ComponentQueryKey Create(int first)
             => new(first, default, default, 1);
 
-        internal static ComponentQueryKey Create(TypeRef first, TypeRef second)
+        internal static ComponentQueryKey Create(int first, int second)
             => first == second
                 ? Create(first)
                 : Compare(first, second) < 0
                     ? new ComponentQueryKey(first, second, default, 2)
                     : new ComponentQueryKey(second, first, default, 2);
 
-        internal static ComponentQueryKey Create(TypeRef first, TypeRef second, TypeRef third)
+        internal static ComponentQueryKey Create(int first, int second, int third)
         {
             if (Compare(first, second) > 0)
                 (first, second) = (second, first);
@@ -794,8 +828,8 @@ internal sealed class SceneStore
             return new ComponentQueryKey(first, second, third, 3);
         }
 
-        private static int Compare(TypeRef left, TypeRef right)
-            => left.stableId.CompareTo(right.stableId);
+        private static int Compare(int left, int right)
+            => left.CompareTo(right);
     }
 
     private sealed class ExecutionScope : IDisposable

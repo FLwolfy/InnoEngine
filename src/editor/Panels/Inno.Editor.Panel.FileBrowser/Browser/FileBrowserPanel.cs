@@ -289,7 +289,7 @@ internal sealed class FileBrowserPanel : EditorPanel
         }
 
         NativeImGui.EndChild();
-        m_dragDrop.DrawDirectoryTarget(context);
+        m_dragDrop.DrawDirectoryTarget(context, string.Empty);
         NativeImGui.PopStyleColor();
     }
 
@@ -305,7 +305,7 @@ internal sealed class FileBrowserPanel : EditorPanel
         }
 
         NativeImGui.EndChild();
-        m_dragDrop.DrawDirectoryTarget(context);
+        m_dragDrop.DrawDirectoryTarget(context, m_assets.browser.currentDirectory);
         NativeImGui.PopStyleColor();
     }
     #endregion

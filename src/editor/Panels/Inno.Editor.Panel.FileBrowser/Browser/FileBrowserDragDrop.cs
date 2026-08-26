@@ -39,17 +39,17 @@ internal sealed class FileBrowserDragDrop(AssetEditorModule assets)
     /// Accepts compatible File Browser payloads into a directory bound to the last native item.
     /// </summary>
     /// <param name="context">The current Editor context.</param>
-    /// <param name="relativePath">The target directory, or <see langword="null"/> for the current directory.</param>
+    /// <param name="relativePath">The explicit target directory, or an empty string for the Assets root.</param>
     internal void DrawDirectoryTarget(
         EditorContext context,
-        string? relativePath = null)
+        string relativePath)
     {
         System.Numerics.Vector2 minimum = NativeImGui.GetItemRectMin();
         System.Numerics.Vector2 maximum = NativeImGui.GetItemRectMax();
         EditorDropWidgetResult result = EditorDragDropRenderer.Target(
             assets.interactions.For(
                 FileBrowserInteractionIds.C_AREA,
-                relativePath ?? assets.browser.currentDirectory));
+                relativePath));
         if (!result.isPreviewing || !result.status.canDrop)
             return;
 

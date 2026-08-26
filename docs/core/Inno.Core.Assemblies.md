@@ -199,6 +199,6 @@ AssemblyScope scope = typeof(MyType).Assembly.GetInnoAssemblyScope();
 
 - `Rebuild()` 只对当前活动 assembly 重做 catalog/participant 状态，不会从磁盘重新加载同名 DLL；文件内容变化必须走 `BeginReload()`。
 - `Unload()` 是协作式的。旧线程、静态事件、缓存的 `Type`/delegate/instance 都可能让 monitor 长期 `Pending`。
-- 普通 reload 不强制 Full GC；测试/诊断可以有界触发 GC。Monitor 为 `Pending` 不影响新 generation 继续运行，也不能被误报为已卸载。
+- Assemblies 层的普通 reload 不强制 Full GC；测试/诊断和上层 Scripting reload safe point 可以有界触发 GC。Monitor 为 `Pending` 不影响新 generation 继续运行，也不能被误报为已卸载。Editor Scripting 选择在提交后阻塞自己的 modal 并强制验证，但不会把这一延迟策略施加给所有 `AssemblyManager` 调用方。
 - 不要从该层访问 TypeCache；依赖方向是 [Reflection](Inno.Core.Reflection.md) → Assemblies，而不是反过来。
 - 一个时刻只允许一个 reload session；新 Load/Register/Unload/Rebuild 不能穿插在未完成事务中。

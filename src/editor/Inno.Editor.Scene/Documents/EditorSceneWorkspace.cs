@@ -84,18 +84,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     internal void Refresh()
     {
         SynchronizeReplacedScenes();
-        while (m_sourceChanges.TryDequeue(out AssetChange change))
-        {
-            try
-            {
-                if (change.kind == AssetChangeKind.Moved)
-                    ApplyRename(change.oldRelativePath, change.relativePath);
-            }
-            catch (Exception exception)
-            {
-                Log.Error("Editor asset rename synchronization failed: {0}", exception);
-            }
-        }
+        ApplyPendingSourceChanges();
 
         var synchronizedScenes = new HashSet<Guid>();
         foreach (SceneDocument document in m_documents.Values)
@@ -127,6 +116,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     public bool IsDirty(GameScene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
+        ApplyPendingSourceChanges();
         SceneDocument document = GetOrCreateDocument(scene);
         try
         {
@@ -456,6 +446,12 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     {
         string oldPath = NormalizePath(oldRelativePath);
         string newPath = NormalizePath(newRelativePath);
+        if (AssetManager.TryGetFileSystemEntry(newPath, out Inno.Assets.File.AssetFileEntry entry) &&
+            entry.isDirectory)
+        {
+            ApplyDirectoryRename(oldPath, newPath);
+            return;
+        }
         string extension = Path.GetExtension(newPath);
         if (string.Equals(extension, C_SCENE_EXTENSION, StringComparison.OrdinalIgnoreCase))
         {
@@ -476,17 +472,38 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
                 continue;
             }
 
-            bool wasDirty = HasSerializedChanges(document.scene, document);
-            document.sourcePath = newPath;
-            document.scene.name = GetAssetName(newPath);
-            if (AssetManager.TryGetPersistentId(newPath, out Guid sourceAssetId))
-                document.sourceAssetId = sourceAssetId;
-            if (!wasDirty)
-                document.savedHash = ComputeSceneHash(document.scene);
-            document.isDirty = wasDirty;
-            document.nextRefreshTimestamp = Stopwatch.GetTimestamp() +
-                                            (long)(Stopwatch.Frequency * C_DIRTY_REFRESH_SECONDS);
+            RelocateSceneDocument(document, newPath);
         }
+    }
+
+    private void ApplyDirectoryRename(string oldPath, string newPath)
+    {
+        string oldPrefix = oldPath + "/";
+        foreach (SceneDocument document in m_documents.Values)
+        {
+            if (document.scene.isDestroyed ||
+                !document.sourcePath.StartsWith(oldPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string suffix = document.sourcePath[oldPrefix.Length..];
+            RelocateSceneDocument(document, Combine(newPath, suffix));
+        }
+    }
+
+    private static void RelocateSceneDocument(SceneDocument document, string newPath)
+    {
+        bool wasDirty = HasSerializedChanges(document.scene, document);
+        document.sourcePath = newPath;
+        document.scene.name = GetAssetName(newPath);
+        if (AssetManager.TryGetPersistentId(newPath, out Guid sourceAssetId))
+            document.sourceAssetId = sourceAssetId;
+        if (!wasDirty)
+            document.savedHash = ComputeSceneHash(document.scene);
+        document.isDirty = wasDirty;
+        document.nextRefreshTimestamp = Stopwatch.GetTimestamp() +
+                                        (long)(Stopwatch.Frequency * C_DIRTY_REFRESH_SECONDS);
     }
 
     private static string RenameSceneSourceIfNeeded(GameScene scene, SceneDocument document)
@@ -536,6 +553,22 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
         m_waitingTypeCatalogVersion = -1;
         for (int i = 0; i < changeSet.changes.Count; i++)
             m_sourceChanges.Enqueue(changeSet.changes[i]);
+    }
+
+    private void ApplyPendingSourceChanges()
+    {
+        while (m_sourceChanges.TryDequeue(out AssetChange change))
+        {
+            try
+            {
+                if (change.kind == AssetChangeKind.Moved)
+                    ApplyRename(change.oldRelativePath, change.relativePath);
+            }
+            catch (Exception exception)
+            {
+                Log.Error("Editor asset rename synchronization failed: {0}", exception);
+            }
+        }
     }
 
     private void TryRestorePendingScenes()
@@ -745,7 +778,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
 
     private static byte[] ComputeSceneHash(GameScene scene)
     {
-        var dependencies = new AssetDependencyCollection();
+        var dependencies = new AssetDependencyCollection(includeLastKnownPaths: false);
         SerializationContext context = SerializationContext.empty.With(dependencies);
         byte[] payload = SerializationManager.Serialize(scene, context);
         return SHA256.HashData(payload);

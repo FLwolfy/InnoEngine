@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Threading;
 
 using Inno.Core.Assemblies;
-using Inno.Core.Reflection.Internal;
 
 namespace Inno.Core.Reflection;
 

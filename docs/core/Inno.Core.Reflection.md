@@ -86,7 +86,7 @@ public sealed class PlayerController : GameBehavior
 
 `GetTypeRef` 返回唯一 canonical ID；`TypeRef.Resolve` 只接受当前明确注册的 ID，不维护 former alias 或旧持久数据兼容表。
 
-Runtime Type ID 是只适用于某个 CLR `Type` 实例的整数。新 ALC 里的替代 Type 会获得新的 runtime ID；失败/回滚候选已分配的 ID 也不会复用。它只在 `TypeIdentityRegistry` 和 TypeCache query index 内部用于快速验证/定位当前 CLR Type，并作为 `TypeRef.Resolve` 的可选 hint；Scene、Asset、History、Workspace、Editor action 等领域存储和索引都直接保存 `TypeRef`，不消费裸 runtime ID。
+Runtime Type ID 是只适用于某个 CLR `Type` 实例的整数。新 ALC 里的替代 Type 会获得新的 runtime ID；失败/回滚候选已分配的 ID 也不会复用。它在 `TypeIdentityRegistry`、TypeCache query index，以及明确绑定当前 TypeCache generation 的 Scene Component/System 内存索引与查询缓存中使用。`TypeRef.Resolve` 也把它作为可选快速 hint。Asset、History、Workspace、Editor action、Missing、序列化和 reload 边界继续保存 `TypeRef`，不得让裸 runtime ID 跨 generation 或持久化。
 
 ## TypeCacheReloadContext
 

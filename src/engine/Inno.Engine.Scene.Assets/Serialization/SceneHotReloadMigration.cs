@@ -100,14 +100,14 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
                     sceneState.scene.ReplaceComponentForReload(
                         previousComponent,
                         (GameComponent)replacement,
-                        replacementTypeRef);
+                        replacementTypeRef.runtimeId);
                 }
                 else
                 {
                     sceneState.scene.ReplaceSystemForReload(
                         (GameSystem)state.target,
                         (GameSystem)replacement,
-                        replacementTypeRef);
+                        replacementTypeRef.runtimeId);
                 }
                 state.currentTarget = replacement;
                 m_replacements.Add(new Replacement(
@@ -115,20 +115,6 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
                     state.target,
                     replacement,
                     state.activeType));
-                if (replacementType is null || recovering)
-                {
-                    m_diagnostics.Add(new SceneReloadDiagnostic(
-                        replacementType is null ? "INNOHR0002" : "INNOHR0003",
-                        SceneReloadDiagnosticSeverity.Warning,
-                        replacementType is null
-                            ? $"'{state.typeName}' is unavailable. Its identity and serialized state are preserved as a missing scene element."
-                            : $"Missing scene element '{state.typeName}' recovered as '{replacementType.FullName}'.",
-                        sceneState.scene.identity.persistentId,
-                        replacement.identity.persistentId,
-                        string.Empty,
-                        state.typeName,
-                        replacementType?.FullName ?? string.Empty));
-                }
             }
             RestoreState(sceneState, useCurrentTargets: true);
         }
@@ -147,14 +133,14 @@ internal sealed class SceneHotReloadMigration : ISceneReloadMigration
                 replacement.scene.ReplaceComponentForReload(
                     (GameComponent)replacement.current,
                     previousComponent,
-                    replacement.previousType);
+                    replacement.previousType.runtimeId);
             }
             else
             {
                 replacement.scene.ReplaceSystemForReload(
                     (GameSystem)replacement.current,
                     (GameSystem)replacement.previous,
-                    replacement.previousType);
+                    replacement.previousType.runtimeId);
             }
         }
         foreach (SceneState sceneState in m_scenes)

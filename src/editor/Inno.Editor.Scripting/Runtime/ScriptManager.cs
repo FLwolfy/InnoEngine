@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Threading;
@@ -23,7 +24,8 @@ public sealed class ScriptManager : IDisposable
     private const float C_COMPILATION_PROGRESS_SHARE = 0.8f;
     private const float C_STAGING_PROGRESS = 0.86f;
     private const float C_MIGRATION_PROGRESS = 0.94f;
-    private const long C_UNLOAD_DIAGNOSTIC_DELAY_MILLISECONDS = 5_000;
+    private const float C_UNLOAD_VERIFICATION_PROGRESS = 0.97f;
+    private const int C_MAX_UNLOAD_VERIFICATION_ATTEMPTS = 10;
 
     private readonly object m_sync = new();
     private readonly ScriptManagerOptions m_options;
@@ -34,7 +36,6 @@ public sealed class ScriptManager : IDisposable
     private readonly CancellationToken m_lifetimeToken;
     private readonly ScriptArtifactCache m_artifactCache;
     private readonly Func<CancellationToken, ValueTask>? m_compileGateProbe;
-    private readonly Func<long> m_timestampProvider;
     private readonly List<UnloadObservation> m_unloadObservations = [];
 
     private PendingReload? m_pendingCompilation;
@@ -47,9 +48,9 @@ public sealed class ScriptManager : IDisposable
     private string? m_activeRuntimeFingerprint;
     private string? m_activeEditorFingerprint;
     private string m_compilationStatus = "Waiting for script changes.";
-    private string m_publishedUnloadDiagnosticSignature = string.Empty;
     private long m_lastCompileRequestTimestamp;
     private float m_compilationProgress;
+    private int m_unloadVerificationAttempt;
     private ScriptReloadRequest m_requestedReload;
     private bool m_initialCompileRequested;
     private int m_disposeStarted;
@@ -64,14 +65,13 @@ public sealed class ScriptManager : IDisposable
     /// <exception cref="ArgumentException">Thrown when the configured project root is empty.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the configured debounce duration is negative.</exception>
     public ScriptManager(ScriptManagerOptions options)
-        : this(options, compileGateProbe: null, timestampProvider: null)
+        : this(options, compileGateProbe: null)
     {
     }
 
     internal ScriptManager(
         ScriptManagerOptions options,
-        Func<CancellationToken, ValueTask>? compileGateProbe,
-        Func<long>? timestampProvider = null)
+        Func<CancellationToken, ValueTask>? compileGateProbe)
     {
         ArgumentNullException.ThrowIfNull(options);
         if (string.IsNullOrWhiteSpace(options.projectRootDirectory))
@@ -86,7 +86,6 @@ public sealed class ScriptManager : IDisposable
         };
         m_artifactCache = new ScriptArtifactCache(m_options.outputDirectory);
         m_compileGateProbe = compileGateProbe;
-        m_timestampProvider = timestampProvider ?? (static () => Environment.TickCount64);
         m_lifetimeToken = m_lifetimeCancellation.Token;
     }
 
@@ -119,6 +118,15 @@ public sealed class ScriptManager : IDisposable
         }
     }
 
+    internal bool isUnloadVerificationPending
+    {
+        get
+        {
+            lock (m_sync)
+                return m_unloadObservations.Count != 0;
+        }
+    }
+
     /// <summary>
     /// Generates IDE files, subscribes to the Asset Database, and requests the initial compilation.
     /// </summary>
@@ -138,10 +146,11 @@ public sealed class ScriptManager : IDisposable
         {
             lock (m_sync)
             {
-                m_requestedReload = ScriptReloadRequest.Recompile;
+                m_requestedReload = ScriptReloadRequest.ReloadPlugins;
                 m_initialCompileRequested = true;
                 m_lastCompileRequestTimestamp = Environment.TickCount64;
             }
+            SetCompilationProgress(0f, "Initial plugin and scripting reload queued.");
         }
     }
 
@@ -320,6 +329,7 @@ public sealed class ScriptManager : IDisposable
         if (requests.Count == 0)
         {
             CompletePendingReload(pending);
+            ScriptDiagnosticPublisher.PublishMissingSceneElements();
             SetCompilationProgress(1f, "No scripting changes detected.");
             return false;
         }
@@ -355,15 +365,19 @@ public sealed class ScriptManager : IDisposable
                 {
                     m_unloadObservations.Add(new UnloadObservation(
                         unload,
-                        retiringModules,
-                        m_timestampProvider()));
+                        retiringModules));
+                    m_unloadVerificationAttempt = 0;
                 }
             }
             m_activeCompilationDirectory = pending.compilation.outputDirectory;
             _ = m_artifactCache.Collect([m_activeCompilationDirectory]);
             RefreshModuleHandles();
             UpdateActiveFingerprints(requests);
-            SetCompilationProgress(1f, "Script reload completed.");
+            SetCompilationProgress(
+                retiringModules.Length == 0 ? 1f : C_UNLOAD_VERIFICATION_PROGRESS,
+                retiringModules.Length == 0
+                    ? "Script reload completed."
+                    : "Script reload committed. Verifying retired assembly unload...");
         }
         catch (Exception exception)
         {
@@ -380,6 +394,7 @@ public sealed class ScriptManager : IDisposable
                 [exception, .. rollbackFailures]);
         }
         ScriptDiagnosticPublisher.PublishReload(migration.diagnostics);
+        ScriptDiagnosticPublisher.PublishMissingSceneElements();
         CompletePendingReload(pending);
         return true;
     }
@@ -465,52 +480,72 @@ public sealed class ScriptManager : IDisposable
         }
     }
 
-    internal void RefreshUnloadDiagnostics()
+    internal bool AdvanceUnloadVerification(out Exception? failure)
     {
-        AssemblyModuleInfo[]? pendingModules = null;
-        bool clearDiagnostics = false;
+        failure = null;
+        int attempt;
         lock (m_sync)
         {
             if (m_disposed)
-                return;
-            for (int i = m_unloadObservations.Count - 1; i >= 0; i--)
-            {
-                UnloadObservation observation = m_unloadObservations[i];
-                if (!observation.monitor.isCompleted)
-                    continue;
-                m_unloadObservations.RemoveAt(i);
-            }
-
-            long currentTimestamp = m_timestampProvider();
-            AssemblyModuleInfo[] reportableModules = m_unloadObservations
-                .Where(observation =>
-                    currentTimestamp - observation.observedAtTimestamp >= C_UNLOAD_DIAGNOSTIC_DELAY_MILLISECONDS)
-                .SelectMany(static observation => observation.modules)
-                .GroupBy(
-                    static module => (module.moduleName, module.domain, module.scope, module.generation))
-                .Select(static group => group.First())
-                .OrderBy(static module => module.domain)
-                .ThenBy(static module => module.scope)
-                .ThenBy(static module => module.moduleName, StringComparer.Ordinal)
-                .ThenBy(static module => module.generation)
-                .ToArray();
-            string signature = string.Join(
-                "\n",
-                reportableModules.Select(static module =>
-                    $"{module.domain}/{module.scope}/{module.moduleName}/{module.generation}"));
-            if (string.Equals(signature, m_publishedUnloadDiagnosticSignature, StringComparison.Ordinal))
-                return;
-            m_publishedUnloadDiagnosticSignature = signature;
-            if (reportableModules.Length == 0)
-                clearDiagnostics = true;
-            else
-                pendingModules = reportableModules;
+                return true;
+            if (m_unloadObservations.Count == 0)
+                return true;
+            attempt = ++m_unloadVerificationAttempt;
         }
 
-        if (clearDiagnostics)
+        SetCompilationProgress(
+            C_UNLOAD_VERIFICATION_PROGRESS,
+            $"Script reload committed. Forcing garbage collection to verify retired assemblies " +
+            $"({attempt}/{C_MAX_UNLOAD_VERIFICATION_ATTEMPTS})...");
+        ForceUnloadCollection();
+
+        AssemblyModuleInfo[]? retainedModules = null;
+        lock (m_sync)
+        {
+            for (int i = m_unloadObservations.Count - 1; i >= 0; i--)
+            {
+                if (m_unloadObservations[i].monitor.isCompleted)
+                    m_unloadObservations.RemoveAt(i);
+            }
+
+            if (m_unloadObservations.Count == 0)
+            {
+                m_unloadVerificationAttempt = 0;
+                SetCompilationProgress(1f, "Script reload and retired assembly unload completed.");
+            }
+            else if (attempt >= C_MAX_UNLOAD_VERIFICATION_ATTEMPTS)
+            {
+                retainedModules = m_unloadObservations
+                    .SelectMany(static observation => observation.modules)
+                    .GroupBy(static module =>
+                        (module.moduleName, module.domain, module.scope, module.generation))
+                    .Select(static group => group.First())
+                    .OrderBy(static module => module.domain)
+                    .ThenBy(static module => module.scope)
+                    .ThenBy(static module => module.moduleName, StringComparer.Ordinal)
+                    .ThenBy(static module => module.generation)
+                    .ToArray();
+                m_unloadObservations.Clear();
+                m_unloadVerificationAttempt = 0;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        if (retainedModules is null)
+        {
             ScriptDiagnosticPublisher.ClearUnload();
-        else if (pendingModules is not null)
-            ScriptDiagnosticPublisher.PublishPendingUnloads(pendingModules);
+            return true;
+        }
+
+        failure = CreateUnloadVerificationFailure(retainedModules);
+        SetCompilationProgress(
+            1f,
+            "Script reload committed, but retired assembly unload verification failed.");
+        ScriptDiagnosticPublisher.PublishUnloadFailure(failure);
+        return true;
     }
 
     private void OnAssetDatabaseChanged(AssetChangeSet changeSet)
@@ -550,6 +585,7 @@ public sealed class ScriptManager : IDisposable
             ScriptReloadRequest.ReloadScripting => "Full scripting reload queued.",
             _ => "Scripting recompile queued."
         });
+        ScriptDiagnosticPublisher.ClearUnload();
     }
 
     private IReadOnlyList<AssemblyLoadRequest> SelectReloadRequests(PendingReload pending)
@@ -674,14 +710,35 @@ public sealed class ScriptManager : IDisposable
         }
     }
 
+    private static InvalidOperationException CreateUnloadVerificationFailure(
+        IReadOnlyList<AssemblyModuleInfo> modules)
+    {
+        string retained = string.Join(
+            ", ",
+            modules.Select(static module =>
+                $"{module.moduleName} ({module.domain}/{module.scope}, generation {module.generation})"));
+        return new InvalidOperationException(
+            $"Script reload was committed, but the following retired assembly contexts remained reachable " +
+            $"after {C_MAX_UNLOAD_VERIFICATION_ATTEMPTS} forced garbage-collection attempts: {retained}. " +
+            "A retained Type, object, delegate, extension, task, subscription, or thread is preventing " +
+            "collectible AssemblyLoadContext unload. The active generation remains committed.");
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ForceUnloadCollection()
+    {
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+    }
+
     private sealed record PendingReload(
         ScriptCompilationResult compilation,
         ScriptReloadRequest request);
 
     private sealed record UnloadObservation(
         AssemblyUnloadMonitor monitor,
-        IReadOnlyList<AssemblyModuleInfo> modules,
-        long observedAtTimestamp);
+        IReadOnlyList<AssemblyModuleInfo> modules);
 
     private enum ScriptReloadRequest
     {

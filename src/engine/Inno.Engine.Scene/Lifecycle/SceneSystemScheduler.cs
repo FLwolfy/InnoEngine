@@ -17,7 +17,7 @@ internal sealed class SceneSystemScheduler
     private readonly IndexedObjectStore<SystemEntry> m_systems = new();
     private readonly IndexedObjectKey<GameSystem> m_systemKey;
     private readonly IndexedObjectKey<Guid> m_persistentIdKey;
-    private readonly IndexedObjectKey<TypeRef> m_typeKey;
+    private readonly IndexedObjectKey<int> m_typeKey;
     private readonly List<SystemEntry> m_displayOrder = [];
     private ReadOnlyCollection<GameSystem>? m_displayView;
     private SystemEntry[]? m_executionSnapshot;
@@ -30,7 +30,7 @@ internal sealed class SceneSystemScheduler
         m_persistentIdKey = m_systems.DefineKey<Guid>(
             "scene.system.persistent-id",
             IndexedObjectKeyFlags.Unique);
-        m_typeKey = m_systems.DefineKey<TypeRef>("scene.system.type");
+        m_typeKey = m_systems.DefineKey<int>("scene.system.type");
     }
 
     internal TSystem Add<TSystem>() where TSystem : GameSystem, new()
@@ -149,7 +149,7 @@ internal sealed class SceneSystemScheduler
     internal void ReplaceForReload(
         GameSystem previous,
         GameSystem replacement,
-        TypeRef replacementType)
+        int replacementRuntimeTypeId)
     {
         if (!TryGetEntry(previous, out SystemEntry? entry))
             throw new InvalidOperationException("The GameSystem being replaced is not registered.");
@@ -168,9 +168,9 @@ internal sealed class SceneSystemScheduler
             replacement.RegisterIdentity(persistentId);
             m_systems.Add(entry!)
                 .Set(m_systemKey, replacement)
-                .Set(m_typeKey, replacementType);
+                .Set(m_typeKey, replacementRuntimeTypeId);
             entry!.system = replacement;
-            entry.typeRef = replacementType;
+            entry.runtimeTypeId = replacementRuntimeTypeId;
             InvalidateSnapshots();
         }
         catch (Exception exception)
@@ -311,7 +311,7 @@ internal sealed class SceneSystemScheduler
             throw new InvalidOperationException(
                 $"System '{descriptor.displayName}' is already registered with scene '{m_scene.name}'.");
         }
-        if (!descriptor.allowsMultiple && m_systems.First(m_typeKey, descriptor.typeRef) is not null)
+        if (!descriptor.allowsMultiple && m_systems.First(m_typeKey, descriptor.runtimeTypeId) is not null)
         {
             throw new InvalidOperationException(
                 $"Scene '{m_scene.name}' already contains GameSystem '{descriptor.displayName}'.");
@@ -322,11 +322,11 @@ internal sealed class SceneSystemScheduler
         try
         {
             system.RegisterIdentity(persistentId);
-            entry = new SystemEntry(system, descriptor.typeRef, m_displayOrder.Count);
+            entry = new SystemEntry(system, descriptor.runtimeTypeId, m_displayOrder.Count);
             m_systems.Add(entry)
                 .Set(m_systemKey, system)
                 .Set(m_persistentIdKey, system.identity.persistentId)
-                .Set(m_typeKey, descriptor.typeRef);
+                .Set(m_typeKey, descriptor.runtimeTypeId);
             m_displayOrder.Add(entry);
             InvalidateSnapshots();
             if (invokeReset)
@@ -397,11 +397,11 @@ internal sealed class SceneSystemScheduler
 
     private sealed class SystemEntry(
         GameSystem system,
-        TypeRef typeRef,
+        int runtimeTypeId,
         int displayIndex)
     {
         internal GameSystem system { get; set; } = system;
-        internal TypeRef typeRef { get; set; } = typeRef;
+        internal int runtimeTypeId { get; set; } = runtimeTypeId;
         internal int displayIndex { get; set; } = displayIndex;
         internal int executionOrder { get; set; } = system.order;
     }

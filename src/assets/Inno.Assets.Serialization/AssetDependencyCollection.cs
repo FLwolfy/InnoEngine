@@ -19,6 +19,31 @@ public sealed class AssetDependencyCollection
     private readonly Dictionary<Guid, AssetDependency> m_dependencies = [];
 
     /// <summary>
+    /// Creates a dependency collector that preserves last-known source paths in serialized references.
+    /// </summary>
+    public AssetDependencyCollection()
+        : this(includeLastKnownPaths: true)
+    {
+    }
+
+    /// <summary>
+    /// Creates a dependency collector with an explicit location-hint policy.
+    /// </summary>
+    /// <param name="includeLastKnownPaths">
+    /// Whether serialized asset references and collected dependency descriptors retain source path hints.
+    /// Disable this only for semantic content comparison; persistent identity and stable type identity remain encoded.
+    /// </param>
+    public AssetDependencyCollection(bool includeLastKnownPaths)
+    {
+        this.includeLastKnownPaths = includeLastKnownPaths;
+    }
+
+    /// <summary>
+    /// Gets whether serialized asset references and collected dependencies retain source path hints.
+    /// </summary>
+    public bool includeLastKnownPaths { get; }
+
+    /// <summary>
     /// Gets the collected dependencies in deterministic persistent-identity order.
     /// </summary>
     public IReadOnlyList<AssetDependency> dependencies
@@ -36,6 +61,9 @@ public sealed class AssetDependencyCollection
                 $"Asset type '{asset.GetType().FullName}' requires a StableTypeId before it can be referenced persistently.");
         }
 
-        m_dependencies[persistentId] = new AssetDependency(persistentId, typeRef, asset.sourcePath);
+        m_dependencies[persistentId] = new AssetDependency(
+            persistentId,
+            typeRef,
+            includeLastKnownPaths ? asset.sourcePath : string.Empty);
     }
 }

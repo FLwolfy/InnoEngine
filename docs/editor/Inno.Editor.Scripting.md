@@ -77,7 +77,7 @@ AssemblyManager 自己的 runtime generation 仍存在于 assembly shadow cache�
 | 属性 | 默认 | 说明 |
 | --- | --- | --- |
 | `projectRootDirectory` | required | 包含 Assets/Library 的 Project root。 |
-| `autoCompile` | `true` | 启动与后续 Asset change 是否产生自动编译请求。首次请求立即执行；后续请求等待 focus safe point。 |
+| `autoCompile` | `true` | 启动与后续 Asset change 是否产生自动编译请求。首次请求固定为 `ReloadPlugins` 并立即执行，确保 Plugin、Runtime Scripts 与 Editor Scripts 从统一新 generation 启动；后续请求等待 focus safe point。 |
 | `debounceMilliseconds` | `250` | 后续 change request 可消费前的 quiet period；首次编译不受影响。 |
 
 已移除 `retainedCompilationGenerations`。
@@ -114,13 +114,15 @@ scripts.ReloadPlugins();
 
 重载激活后会对账 Asset Database：释放旧脚本 Asset 的 canonical 实例、修复仍存活 host Asset 的引用，并移除已退休脚本代际留在静态事件上的 observer。场景替换任一步失败时会逐项尝试结构、assembly generation、Asset 和旧属性/生命周期补偿；identity observer 在转移期间失败也必须恢复旧对象的注册与附着状态。失败编译不会清除上一个尚未应用的成功 candidate。`Dispose` 返回后不会再有活动或排队编译写入状态。
 
-`compilationStatus` 只描述当前 queued、compiling、staged、migrating、completed 或 failed 阶段，因此进度 modal 不会被历史 generation 的卸载详情撑大。每次退休 generation 仍由 `WeakReference` monitor 在后台观察；普通 reload 不强制 Full GC。等待超过诊断宽限期的 context 会作为独立的 `Script Unload` 信息诊断，逐项列出 module、domain/scope 与 generation；GC 验证完成后对应诊断会自动清除。Host 外部保存旧 Type/object/delegate/thread 时，新 generation 仍正常运行，诊断会明确协作式卸载的可能保留源，绝不声称强制卸载完成。
+`compilationStatus` 描述 queued、compiling、staged、migrating、committed、unload-verifying、completed 或 failed 阶段。Scripting reload 提交后不会在旧 ALC 仍为 `Pending` 时关闭 modal：Editor 在独立后续帧执行有界的 Full GC、finalizer 和第二次 Full GC，并通过只持有弱引用的 monitor 验证退休 context。验证期间进度保持 97%，后续 Module 更新和新编译请求消费继续被阻塞。全部 context 不可达后才显示 100% 并关闭 modal。
+
+验证达到十次仍有 context 存活时，modal 显示“reload 已提交但卸载验证失败”，并向 Console 的 `Script Unload` 来源发布 `INNO-ALC-UNLOAD` Error，逐项列出 module、domain/scope 与 generation。这个错误是 post-commit 资源回收失败：新 generation 已经可用且不会伪回滚；外部保存的旧 `Type`、object、delegate、extension、task、subscription 或 thread 仍必须由持有方释放，GC 不能强行破坏可达引用。
 
 ## 编译进度 modal
 
 用户从菜单排队请求或文件观察器产生请求时，Editor 立即以 0% 打开 modal；focus safe point 随后消费请求并锁定交互。Modal 使用固定宽度，状态文字按可用 content width 自动换行，并始终完成淡入、最短停留和淡出，即使实际编译很快完成。
 
-进度由 project generation、source parse、API analysis、diagnostics、emit 和 reload preparation 等真实工作项推进。编译阶段占 0–80%，candidate staging 推进到 86%，Scene/extension 原子迁移推进到 94%，只有事务提交或确定无需 reload 时才显示 100%。Roslyn 单次 Emit 没有内部百分比 callback，因此执行某个工作项时进度会停留，完成后跳到下一个比例；不会用计时器伪造连续进度。百分比文字固定绘制在完整进度条的几何中心，不随已填充区域移动。
+进度由 project generation、source parse、API analysis、diagnostics、emit 和 reload preparation 等真实工作项推进。编译阶段占 0–80%，candidate staging 推进到 86%，Scene/extension 原子迁移推进到 94%，事务提交后进入 97% 的强制卸载验证，只有验证成功、验证确定失败或无需 reload 时才显示 100%。Roslyn 单次 Emit 没有内部百分比 callback，因此执行某个工作项时进度会停留，完成后跳到下一个比例；不会用计时器伪造连续进度。百分比文字固定绘制在完整进度条的几何中心，不随已填充区域移动。
 
 成功 assembly artifact 同时保存完整的 `diagnostics.json`。启动命中内容缓存时会重新发布同一组 warning，而不是只复用 DLL/PDB 后返回空 diagnostics；因此缓存命中与实际 Roslyn emit 对 Console Panel 具有一致的可观察结果。
 
@@ -227,6 +229,6 @@ Serialized state 使用逐成员兼容迁移：成员类型保持兼容时恢复
 
 失败时 Scene 结构和 Assembly transaction 一起 rollback。Edit Mode 不触发生命周期；Runtime reload 会对旧 active instance 调用 `OnDisable`，新 instance 在下一次正常 update 调用 `OnEnable`，不会重复 `Awake`/`Start`，也不会调用 `Reset`/`OnDestroy`。
 
-如果候选 generation 缺少 live Component/System，reload 不再失败：对象会成为 host-owned missing placeholder，并继续保存 `TypeRef`（落盘仅 Stable ID）、原类型名、property bytes、asset dependencies、persistent ID、顺序和图引用。类型删除、插件移除、Scene/Prefab round-trip 都不会持有旧 ALC；相同 Stable ID 返回时 `isValid` 自动恢复并原位重建。恢复构造、identity 转移、property restore 或失败清理不完整时仍精确回滚到原占位对象。
+如果候选 generation 缺少 live Component/System，reload 不再失败：对象会成为 host-owned missing placeholder，并继续保存 `TypeRef`（落盘仅原逻辑 Stable ID）、原类型名、property bytes、asset dependencies、persistent ID、顺序和图引用。placeholder 身份和 missing 标志不进入 Scene schema，类型消失/恢复本身不改变 clean Scene 的 dirty 状态。类型删除、插件移除、Scene/Prefab round-trip 都不会持有旧 ALC；相同 Stable ID 返回时 `isValid` 自动恢复并原位重建。`INNOHR0002` 是独立于 reload event 的当前状态诊断：Editor 主线程协调器在 loaded Scene 实例集合或 TypeCache generation 变化后的下一次安全更新完整替换该诊断组，所以打开一个带 Missing 的 `.iscene` 不需要等待 Recompile/Reload 就会出现在 Console；它只弱跟踪 Scene 实例，不增加 SceneManager 公共事件，也不通过订阅固定旧 ALC。每次 Recompile/Reload 完成还会强制对账，因此无变化 Recompile 不创建 generation，却仍会在 Console 被用户 Clear 后重新发布仍存在的 Missing；类型恢复后该组立即解除。恢复构造、identity 转移、property restore 或失败清理不完整时仍精确回滚到原占位对象。
 
 无法自动迁移 static 字段、后台 Thread/Task、第三方事件订阅或外部裸 CLR 引用。用户代码需要在 `OnDisable` 释放这些资源。

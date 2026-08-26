@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 
-namespace Inno.Core.Reflection.Internal;
+namespace Inno.Core.Reflection;
 
 internal interface ITypeRegistry
 {

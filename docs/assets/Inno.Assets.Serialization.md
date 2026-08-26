@@ -17,7 +17,7 @@ foreach (AssetDependency dependency in dependencies.dependencies)
     Console.WriteLine(dependency.persistentId);
 ```
 
-唯一公开属性 `dependencies` 返回按 persistent ID 稳定排序的快照。同一 persistent ID 只保留一个描述。
+默认构造会保留 `lastKnownPath`。`new AssetDependencyCollection(includeLastKnownPaths: false)` 只用于语义内容比较：引用及 dependency descriptor 仍编码 persistent ID 和 Stable Type ID，但把可变的位置提示规范化为空字符串。`includeLastKnownPaths` 可查询当前策略；`dependencies` 返回按 persistent ID 稳定排序的快照，同一 persistent ID 只保留一个描述。
 
 ## AssetSerializationServices
 
@@ -42,6 +42,7 @@ AssetSerializationServices.SetReferenceResolver(
 - `AssetDependency`：`persistentId`、`stableTypeId`、`lastKnownPath`。
 - `AssetObject` 引用：相同三字段。
 - 写 AssetObject 时若 context 中有 `AssetDependencyCollection`，自动收集引用。
+- Converter 遵循 collection 的 `includeLastKnownPaths` 策略；正常资产写盘始终使用默认策略，保留路径诊断/fallback 信息。
 - 空 persistent ID 或无法从 TypeCache 取得 Stable ID 会拒绝序列化。
 - 读取时 property path 会进入错误诊断。
 

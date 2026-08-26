@@ -21,6 +21,7 @@ internal sealed class IndexedObjectIndex<T, TKey> : IIndexedObjectIndex<T> where
 {
     private readonly IKeyStorage<TKey, T> m_storage;
     private readonly IKeyOrdering<TKey> m_ordering;
+    private readonly IComparer<TKey> m_orderComparer;
     private readonly Dictionary<T, TKey> m_keyByItem;
 
     public string name { get; }
@@ -39,8 +40,9 @@ internal sealed class IndexedObjectIndex<T, TKey> : IIndexedObjectIndex<T> where
             ? new UniqueKeyStorage<TKey, T>()
             : new MultiKeyStorage<TKey, T>();
 
+        m_orderComparer = orderComparer ?? Comparer<TKey>.Default;
         m_ordering = (flags & IndexedObjectKeyFlags.Ordered) != 0
-            ? new SortedKeyOrdering<TKey>(orderComparer ?? Comparer<TKey>.Default)
+            ? new SortedKeyOrdering<TKey>(m_orderComparer)
             : new NullKeyOrdering<TKey>();
 
         m_keyByItem = new Dictionary<T, TKey>(IndexedObjectStore<T>.ReferenceEqualityComparer<T>.INSTANCE);
@@ -123,6 +125,14 @@ internal sealed class IndexedObjectIndex<T, TKey> : IIndexedObjectIndex<T> where
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal bool Contains(TKey key, T item)
         => m_storage.Contains(key, item);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal bool TryGetKey(T item, out TKey key)
+        => m_keyByItem.TryGetValue(item, out key!);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal int CompareKeys(TKey left, TKey right)
+        => m_orderComparer.Compare(left, right);
 
     internal IEnumerable<TKey> EnumerateOrderedKeys()
         => m_ordering.Enumerate();

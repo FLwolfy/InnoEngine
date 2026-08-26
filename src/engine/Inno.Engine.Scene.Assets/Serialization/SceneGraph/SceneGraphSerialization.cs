@@ -600,7 +600,10 @@ internal static class SceneGraphSerialization
             engineObject => sourceIds[engineObject]);
         var aliases = new Dictionary<Guid, Guid>();
         foreach ((Guid persistentId, Guid sourceId) in targetByPersistentId)
-            aliases[persistentId] = sourceId;
+        {
+            if (persistentId != sourceId)
+                aliases[persistentId] = sourceId;
+        }
         for (int i = 0; i < missing.Length; i++)
         {
             IReadOnlyDictionary<Guid, Guid> retained = missing[i] switch
@@ -611,8 +614,11 @@ internal static class SceneGraphSerialization
             };
             foreach ((Guid alias, Guid runtimePersistentId) in retained)
             {
-                if (targetByPersistentId.TryGetValue(runtimePersistentId, out Guid targetSourceId))
+                if (targetByPersistentId.TryGetValue(runtimePersistentId, out Guid targetSourceId) &&
+                    alias != targetSourceId)
+                {
                     aliases[alias] = targetSourceId;
+                }
             }
         }
         KeyValuePair<Guid, Guid>[] ordered = aliases
@@ -796,7 +802,10 @@ internal static class SceneGraphSerialization
         ISerializable value,
         SerializationContext outerContext)
     {
-        var dependencies = new AssetDependencyCollection();
+        bool includeLastKnownPaths = !outerContext.TryGet(out AssetDependencyCollection? outerDependencies) ||
+                                     outerDependencies is null ||
+                                     outerDependencies.includeLastKnownPaths;
+        var dependencies = new AssetDependencyCollection(includeLastKnownPaths);
         byte[] data = SerializationManager.CapturePropertiesData(
             value,
             outerContext.With(dependencies));

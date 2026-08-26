@@ -49,7 +49,6 @@ public sealed class ScriptManagerTests : IDisposable
         "InnoScriptManagerTests",
         Guid.NewGuid().ToString("N"));
     private readonly ScriptManager m_manager;
-    private long m_timestamp;
 
     public ScriptManagerTests()
     {
@@ -83,8 +82,7 @@ public sealed class ScriptManagerTests : IDisposable
                 autoCompile = false,
                 debounceMilliseconds = 0
             },
-            compileGateProbe: null,
-            timestampProvider: () => Volatile.Read(ref m_timestamp));
+            compileGateProbe: null);
     }
 
     public void Dispose()
@@ -113,6 +111,7 @@ public sealed class ScriptManagerTests : IDisposable
 
         automaticManager.Start();
 
+        Assert.Contains("plugin", automaticManager.compilationStatus, StringComparison.OrdinalIgnoreCase);
         Assert.True(automaticManager.TryCompilePending(out Task<ScriptCompilationResult>? compilation));
         Assert.NotNull(compilation);
         ScriptCompilationResult result = await compilation!;
@@ -588,12 +587,156 @@ public sealed class ScriptManagerTests : IDisposable
 
             const string renamedPath = "Scenes/TestScene1.iscene";
             AssetManager.Move(sourcePath, renamedPath);
+            Assert.False(workspace.IsDirty(scene));
             workspace.Update(context);
 
             Assert.Equal("TestScene1", scene.name);
             Assert.True(workspace.TryGetSourcePath(scene, out string synchronizedPath));
             Assert.Equal(renamedPath, synchronizedPath);
             Assert.False(workspace.IsDirty(scene));
+        }
+        finally
+        {
+            workspace.Stop(context);
+        }
+    }
+
+    [Fact]
+    public void MovingALoadedSceneDirectoryDoesNotMarkTheSceneDirty()
+    {
+        var workspace = new EditorSceneWorkspace();
+        var context = new EditorContext(m_projectRoot);
+        workspace.Start(context);
+        try
+        {
+            GameScene scene = workspace.CreateScene();
+            scene.name = "MovedScene";
+            _ = workspace.Save(scene, "Scenes/Nested");
+            Assert.False(workspace.IsDirty(scene));
+
+            AssetManager.Move("Scenes", "ArchivedScenes");
+            Assert.False(workspace.IsDirty(scene));
+            workspace.Update(context);
+
+            Assert.True(workspace.TryGetSourcePath(scene, out string synchronizedPath));
+            Assert.Equal("ArchivedScenes/Nested/MovedScene.iscene", synchronizedPath);
+            Assert.Equal("MovedScene", scene.name);
+            Assert.False(workspace.IsDirty(scene));
+        }
+        finally
+        {
+            workspace.Stop(context);
+        }
+    }
+
+    [Fact]
+    public void MovingALoadedSceneDirectoryPreservesAnExistingDirtyState()
+    {
+        var workspace = new EditorSceneWorkspace();
+        var context = new EditorContext(m_projectRoot);
+        workspace.Start(context);
+        try
+        {
+            GameScene scene = workspace.CreateScene();
+            scene.name = "DirtyMovedScene";
+            _ = workspace.Save(scene, "Scenes/Nested");
+            _ = scene.CreateObject("UnsavedObject");
+            Thread.Sleep(150);
+            Assert.True(workspace.IsDirty(scene));
+
+            AssetManager.Move("Scenes", "ArchivedScenes");
+            workspace.Update(context);
+
+            Assert.True(workspace.TryGetSourcePath(scene, out string synchronizedPath));
+            Assert.Equal("ArchivedScenes/Nested/DirtyMovedScene.iscene", synchronizedPath);
+            Assert.True(workspace.IsDirty(scene));
+        }
+        finally
+        {
+            workspace.Stop(context);
+        }
+    }
+
+    [Fact]
+    public void FileBrowserDropOfALoadedSceneDoesNotMarkTheSceneDirty()
+    {
+        using var runtime = new EditorInteractionRuntime(m_projectRoot);
+        runtime.Start();
+        var workspace = new EditorSceneWorkspace(runtime.interactions);
+        var context = new EditorContext(m_projectRoot);
+        workspace.Start(context);
+        try
+        {
+            AssetManager.CreateDirectory("Destination");
+            GameScene scene = workspace.CreateScene();
+            scene.name = "DraggedScene";
+            string sourcePath = workspace.Save(scene, "Source");
+            Assert.False(workspace.IsDirty(scene));
+            Assert.True(AssetManager.TryGetInfo(sourcePath, out AssetInfo? sceneInfo));
+            Assert.NotNull(sceneInfo);
+
+            Guid token = runtime.interactions
+                .For("panel/asset.file-browser", sceneInfo)
+                .BeginDrag(new EditorDragData(sceneInfo!, "DraggedScene.iscene"));
+            EditorDropResult drop = runtime.interactions
+                .For("panel/asset.file-browser", "Destination")
+                .Drop(token, EditorDropPlacement.Into);
+            Assert.True(drop.accepted);
+            Assert.False(workspace.IsDirty(scene));
+            workspace.Update(context);
+
+            Assert.True(workspace.TryGetSourcePath(scene, out string synchronizedPath));
+            Assert.Equal("Destination/DraggedScene.iscene", synchronizedPath);
+            Assert.False(workspace.IsDirty(scene));
+        }
+        finally
+        {
+            workspace.Stop(context);
+        }
+    }
+
+    [Fact]
+    public void FileBrowserSceneAssetRelocationDoesNotDirtyLoadedScenesThatReferenceIt()
+    {
+        using var runtime = new EditorInteractionRuntime(m_projectRoot);
+        runtime.Start();
+        var workspace = new EditorSceneWorkspace(runtime.interactions);
+        var context = new EditorContext(m_projectRoot);
+        workspace.Start(context);
+        try
+        {
+            AssetManager.CreateDirectory("Destination");
+            GameScene referencedScene = workspace.CreateScene();
+            referencedScene.name = "Referenced";
+            string referencedPath = workspace.Save(referencedScene, "References");
+            Assert.True(workspace.CloseScene(referencedScene));
+            SceneAsset referencedAsset = AssetManager.Load<SceneAsset>(referencedPath);
+
+            GameScene hostScene = workspace.CreateScene();
+            hostScene.name = "Host";
+            hostScene.CreateObject("Reference")
+                .AddComponent<SceneAssetDirtyProbe>()
+                .sceneAsset = referencedAsset;
+            _ = workspace.Save(hostScene, "Scenes");
+            Assert.False(workspace.IsDirty(hostScene));
+            Assert.True(AssetManager.TryGetInfo(referencedPath, out AssetInfo? sceneInfo));
+            Assert.NotNull(sceneInfo);
+
+            Guid token = runtime.interactions
+                .For("panel/asset.file-browser", sceneInfo)
+                .BeginDrag(new EditorDragData(sceneInfo!, "Referenced.iscene"));
+            EditorDropResult drop = runtime.interactions
+                .For("panel/asset.file-browser", "Destination")
+                .Drop(token, EditorDropPlacement.Into);
+
+            Assert.True(drop.accepted);
+            Assert.Equal("Destination/Referenced.iscene", referencedAsset.sourcePath);
+            Assert.False(workspace.IsDirty(hostScene));
+
+            AssetManager.Move("Destination/Referenced.iscene", "Destination/Renamed.iscene");
+
+            Assert.Equal("Destination/Renamed.iscene", referencedAsset.sourcePath);
+            Assert.False(workspace.IsDirty(hostScene));
         }
         finally
         {
@@ -1701,7 +1844,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.Equal(afterRuntime["ProjectPlugins"], afterScripting["ProjectPlugins"]);
         Assert.Equal(afterRuntime["RuntimeScripts"] + 1, afterScripting["RuntimeScripts"]);
         Assert.Equal(afterRuntime["EditorScripts"] + 1, afterScripting["EditorScripts"]);
-        Assert.Equal("Script reload completed.", m_manager.compilationStatus);
+        Assert.Contains("Verifying", m_manager.compilationStatus, StringComparison.OrdinalIgnoreCase);
 
         m_manager.RecompileScripting();
         m_manager.ReloadPlugins();
@@ -1714,12 +1857,45 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.Equal(afterScripting["ProjectPlugins"] + 1, afterPlugins["ProjectPlugins"]);
         Assert.Equal(afterScripting["RuntimeScripts"] + 1, afterPlugins["RuntimeScripts"]);
         Assert.Equal(afterScripting["EditorScripts"] + 1, afterPlugins["EditorScripts"]);
-        Assert.Equal("Script reload completed.", m_manager.compilationStatus);
+        Assert.Contains("Verifying", m_manager.compilationStatus, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("generation", m_manager.compilationStatus, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void RetainedExternalTypeIsReportedAsPendingInsteadOfForcedUnload()
+    public void ForcedUnloadVerificationCompletesWhenTheRetiredContextIsUnreachable()
+    {
+        Write("UnloadProbe.editor.cs", "public sealed class UnloadProbe { public int generation => 1; }");
+        Assert.True(Compile().success);
+        Assert.True(m_manager.ApplyPendingReload());
+        WeakReference retiredContext = CaptureLoadContext("UnloadProbe");
+
+        Write("UnloadProbe.editor.cs", "public sealed class UnloadProbe { public int generation => 2; }");
+        Assert.True(Compile().success);
+        Assert.True(m_manager.ApplyPendingReload());
+        Assert.True(m_manager.isUnloadVerificationPending);
+        Assert.Equal(0.97f, m_manager.compilationProgress, 3);
+        var scripting = new EditorScripting();
+        FieldInfo managerField = typeof(EditorScripting).GetField(
+            "m_manager",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        managerField.SetValue(scripting, m_manager);
+        var modal = new ScriptCompilationModal(scripting);
+        Assert.True(modal.isVisible);
+
+        Exception? failure = CompleteUnloadVerification();
+
+        Assert.Null(failure);
+        Assert.False(m_manager.isUnloadVerificationPending);
+        Assert.False(modal.isVisible);
+        Assert.False(retiredContext.IsAlive);
+        Assert.Equal(
+            "Script reload and retired assembly unload completed.",
+            m_manager.compilationStatus);
+        managerField.SetValue(scripting, null);
+    }
+
+    [Fact]
+    public void RetainedExternalTypeFailsBoundedForcedUnloadVerificationAfterCommit()
     {
         var sink = new TestDiagnosticSink();
         DiagnosticManager.RegisterSink(sink);
@@ -1735,26 +1911,24 @@ public sealed class ScriptManagerTests : IDisposable
             ScriptCompilationResult replacement = Compile();
             Assert.True(replacement.success, FormatDiagnostics(replacement));
             Assert.True(m_manager.ApplyPendingReload());
-            ForceCollection();
+            Exception? failure = CompleteUnloadVerification();
 
-            m_timestamp = 4_999;
-            m_manager.RefreshUnloadDiagnostics();
-            Assert.False(sink.ContainsCode("INNO-ALC-PENDING"));
-
-            m_timestamp = 5_000;
-            m_manager.RefreshUnloadDiagnostics();
-            Assert.Equal("Script reload completed.", m_manager.compilationStatus);
-            Assert.True(sink.ContainsCode("INNO-ALC-PENDING"));
+            Assert.NotNull(failure);
+            Assert.False(m_manager.isUnloadVerificationPending);
+            Assert.Contains("remained reachable", failure.Message, StringComparison.Ordinal);
+            Assert.Contains("active generation remains committed", failure.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(sink.ContainsCode("INNO-ALC-UNLOAD"));
+            Assert.True(sink.ContainsDiagnostic("INNO-ALC-UNLOAD", DiagnosticSeverity.Error));
             Assert.Contains(
-                sink.GetMessages("INNO-ALC-PENDING"),
+                sink.GetMessages("INNO-ALC-UNLOAD"),
                 static message =>
                     message.Contains("EditorScripts", StringComparison.Ordinal) &&
                     message.Contains("InnoScripting/Editor", StringComparison.Ordinal) &&
                     message.Contains("generation", StringComparison.Ordinal));
+            Assert.Contains("committed", m_manager.compilationStatus, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("failed", m_manager.compilationStatus, StringComparison.OrdinalIgnoreCase);
             ClearStrongTypeHolder(holder);
             ForceCollection();
-            m_manager.RefreshUnloadDiagnostics();
-            Assert.False(sink.ContainsCode("INNO-ALC-PENDING"));
             GC.KeepAlive(holder);
         }
         finally
@@ -1969,6 +2143,8 @@ public sealed class ScriptManagerTests : IDisposable
         GameComponent previous = gameObject.AddComponent(previousType);
         Type previousSystemType = ResolveTypeByName("MigratingSystem");
         GameSystem previousSystem = scene.AddSystem(previousSystemType);
+        int previousComponentRuntimeTypeId = TypeCacheManager.GetTypeRef(previousType).runtimeId;
+        int previousSystemRuntimeTypeId = TypeCacheManager.GetTypeRef(previousSystemType).runtimeId;
         SetProperty(previous, "value", 37);
         previousType.GetProperty("target")!.SetValue(previous, referencedObject);
         SetProperty(previousSystem, "value", 51);
@@ -1989,8 +2165,13 @@ public sealed class ScriptManagerTests : IDisposable
             .Single(component => component.GetType().Name == "MigratingBehavior");
         GameSystem currentSystem = scene.GetSystems()
             .Single(system => system.GetType().Name == "MigratingSystem");
+        TypeRef currentComponentType = TypeCacheManager.GetTypeRef(current.GetType());
+        TypeRef currentSystemType = TypeCacheManager.GetTypeRef(currentSystem.GetType());
 
         Assert.NotSame(previous, current);
+        Assert.NotEqual(previousComponentRuntimeTypeId, currentComponentType.runtimeId);
+        Assert.Same(current, Assert.Single(GetComponents(gameObject, current.GetType())));
+        _ = Assert.Throws<InvalidOperationException>(() => gameObject.AddComponent(current.GetType()));
         Assert.True(previous.isDestroyed);
         Assert.Equal(1, GetProperty(previous, "disableCount"));
         Assert.Equal(persistentId, current.identity.persistentId);
@@ -2001,6 +2182,8 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.Equal(1, GetProperty(current, "enableCount"));
         Assert.Equal(2, GetProperty(current, "generation"));
         Assert.NotSame(previousSystem, currentSystem);
+        Assert.NotEqual(previousSystemRuntimeTypeId, currentSystemType.runtimeId);
+        _ = Assert.Throws<InvalidOperationException>(() => scene.AddSystem(currentSystem.GetType()));
         Assert.True(previousSystem.isDestroyed);
         Assert.Equal(1, GetProperty(previousSystem, "disableCount"));
         Assert.Equal(systemPersistentId, currentSystem.identity.persistentId);
@@ -2055,6 +2238,8 @@ public sealed class ScriptManagerTests : IDisposable
 
         Assert.Same(previous, IdentityManager.Get<GameComponent>(persistentId));
         Assert.Same(previous, Assert.Single(gameObject.GetComponents(), component => component.GetType() == previousType));
+        Assert.Same(previous, Assert.Single(GetComponents(gameObject, previousType)));
+        _ = Assert.Throws<InvalidOperationException>(() => gameObject.AddComponent(previousType));
         Assert.False(previous.isDestroyed);
         Assert.Same(previousType, ResolveTypeByName("MigratingBehavior"));
 
@@ -2063,6 +2248,7 @@ public sealed class ScriptManagerTests : IDisposable
             gameObject.GetComponents(),
             component => component.GetType().Name == "MigratingBehavior");
         Assert.NotSame(previous, current);
+        Assert.Same(current, Assert.Single(GetComponents(gameObject, current.GetType())));
         Assert.Equal(persistentId, current.identity.persistentId);
         Assert.Equal(2, GetProperty(current, "generation"));
     }
@@ -2160,6 +2346,7 @@ public sealed class ScriptManagerTests : IDisposable
         SetProperty(previousSystem, "value", 73);
         Guid componentId = previous.identity.persistentId;
         Guid systemId = previousSystem.identity.persistentId;
+        byte[] liveSceneData = SerializationManager.Serialize(scene);
         SceneManager.LoadScene(scene);
 
         WriteIdentityProbe(
@@ -2172,6 +2359,12 @@ public sealed class ScriptManagerTests : IDisposable
         try
         {
             Assert.True(m_manager.ApplyPendingReload());
+            Assert.True(missingSink.ContainsCode("INNOHR0002"));
+
+            missingSink.ClearPresentation();
+            ScriptCompilationResult unchangedCompilation = Compile();
+            Assert.True(unchangedCompilation.success, FormatDiagnostics(unchangedCompilation));
+            Assert.False(m_manager.ApplyPendingReload());
             Assert.True(missingSink.ContainsCode("INNOHR0002"));
         }
         finally
@@ -2192,6 +2385,24 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(previous.isDestroyed);
         Assert.True(previousSystem.isDestroyed);
 
+        byte[] missingSceneData = SerializationManager.Serialize(scene);
+        Assert.Equal(liveSceneData, missingSceneData);
+
+        m_manager.ReloadScripting();
+        ScriptCompilationResult persistentMissingCompilation = Compile();
+        Assert.True(persistentMissingCompilation.success, FormatDiagnostics(persistentMissingCompilation));
+        var persistentMissingSink = new TestDiagnosticSink();
+        DiagnosticManager.RegisterSink(persistentMissingSink);
+        try
+        {
+            Assert.True(m_manager.ApplyPendingReload());
+            Assert.True(persistentMissingSink.ContainsCode("INNOHR0002"));
+        }
+        finally
+        {
+            DiagnosticManager.UnregisterSink(persistentMissingSink);
+        }
+
         SceneAsset capturedMissingScene = SceneAsset.Capture(scene);
         Assert.True(AssetManager.Save("Scenes/Missing.iscene", capturedMissingScene));
         SceneAsset savedMissingScene = AssetManager.Load<SceneAsset>("Scenes/Missing.iscene");
@@ -2199,8 +2410,25 @@ public sealed class ScriptManagerTests : IDisposable
             AssetManager.GetDependencies(savedMissingScene),
             item => item.persistentId == dependency.identity.persistentId);
 
-        byte[] missingSceneData = SerializationManager.Serialize(scene);
+        var diagnosticTracker = new EditorScripting();
         Assert.True(SceneManager.UnloadScene(scene));
+        diagnosticTracker.ReconcileSceneDiagnostics(force: true);
+        var loadedMissingSink = new TestDiagnosticSink();
+        DiagnosticManager.RegisterSink(loadedMissingSink);
+        GameScene loadedMissingScene;
+        try
+        {
+            Assert.False(loadedMissingSink.ContainsCode("INNOHR0002"));
+            loadedMissingScene = savedMissingScene.Instantiate();
+            SceneManager.LoadScene(loadedMissingScene);
+            diagnosticTracker.ReconcileSceneDiagnostics();
+            Assert.True(loadedMissingSink.ContainsCode("INNOHR0002"));
+        }
+        finally
+        {
+            DiagnosticManager.UnregisterSink(loadedMissingSink);
+        }
+        Assert.True(SceneManager.UnloadScene(loadedMissingScene));
         GameScene restoredScene = SerializationManager.Deserialize<GameScene>(missingSceneData);
         SceneManager.LoadScene(restoredScene);
         GameObject restoredActor = restoredScene.GetObjects().Single(value => value.name == "Actor");
@@ -2218,7 +2446,8 @@ public sealed class ScriptManagerTests : IDisposable
         try
         {
             Assert.True(m_manager.ApplyPendingReload());
-            Assert.True(recoverySink.ContainsCode("INNOHR0003"));
+            Assert.False(recoverySink.ContainsCode("INNOHR0002"));
+            Assert.False(recoverySink.ContainsCode("INNOHR0003"));
         }
         finally
         {
@@ -2235,6 +2464,62 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.Same(restoredTarget, recovered.GetType().GetProperty("target")!.GetValue(recovered));
         Assert.Same(dependency, recovered.GetType().GetProperty("asset")!.GetValue(recovered));
         Assert.Equal(73, GetProperty(recoveredSystem, "value"));
+    }
+
+    [Fact]
+    public void MissingTransitionsDoNotDirtyCleanScenesAndRemainRecoverableAfterSavingOtherChanges()
+    {
+        const string componentTypeId = "1d930a18-6073-45d5-b600-229bac89382c";
+        const string systemTypeId = "0c947cea-3cc4-47c3-8bb8-d5ef842af1bb";
+        WriteIdentityProbe(componentTypeId, systemTypeId);
+        Assert.True(Compile().success);
+        Assert.True(m_manager.ApplyPendingReload());
+
+        var workspace = new EditorSceneWorkspace();
+        var context = new EditorContext(m_projectRoot);
+        workspace.Start(context);
+        try
+        {
+            GameScene scene = workspace.CreateScene();
+            scene.name = "Missing Dirty State";
+            GameObject actor = scene.CreateObject("Actor");
+            GameComponent component = actor.AddComponent(ResolveTypeByName("IdentityProbe"));
+            GameSystem system = scene.AddSystem(ResolveTypeByName("IdentityProbeSystem"));
+            Guid componentId = component.identity.persistentId;
+            Guid systemId = system.identity.persistentId;
+            _ = workspace.Save(scene, "Scenes");
+            Assert.False(workspace.IsDirty(scene));
+
+            WriteIdentityProbe(
+                "f67718d8-7376-4f8e-a685-e42a317024f4",
+                "8dd959be-5a8e-4499-bbab-8ef015ed310c");
+            Assert.True(Compile().success);
+            Assert.True(m_manager.ApplyPendingReload());
+            Assert.IsType<MissingGameComponent>(actor.GetComponents()
+                .Single(value => value.identity.persistentId == componentId));
+            Assert.IsType<MissingGameSystem>(scene.GetSystems()
+                .Single(value => value.identity.persistentId == systemId));
+            Assert.False(workspace.IsDirty(scene));
+
+            _ = scene.CreateObject("Saved While Missing");
+            Thread.Sleep(150);
+            Assert.True(workspace.IsDirty(scene));
+            _ = workspace.Save(scene, "Scenes");
+            Assert.False(workspace.IsDirty(scene));
+
+            WriteIdentityProbe(componentTypeId, systemTypeId);
+            Assert.True(Compile().success);
+            Assert.True(m_manager.ApplyPendingReload());
+            Assert.Equal("IdentityProbe", actor.GetComponents()
+                .Single(value => value.identity.persistentId == componentId).GetType().Name);
+            Assert.Equal("IdentityProbeSystem", scene.GetSystems()
+                .Single(value => value.identity.persistentId == systemId).GetType().Name);
+            Assert.False(workspace.IsDirty(scene));
+        }
+        finally
+        {
+            workspace.Stop(context);
+        }
     }
 
     [Fact]
@@ -2675,6 +2960,25 @@ public sealed class ScriptManagerTests : IDisposable
         => AssemblyManager.modules
             .Where(static module => module.moduleName is "ProjectPlugins" or "RuntimeScripts" or "EditorScripts")
             .ToDictionary(static module => module.moduleName, static module => module.generation, StringComparer.Ordinal);
+
+    private Exception? CompleteUnloadVerification()
+    {
+        for (int attempt = 0; attempt < 20; attempt++)
+        {
+            if (m_manager.AdvanceUnloadVerification(out Exception? failure))
+                return failure;
+        }
+        throw new Xunit.Sdk.XunitException("Unload verification did not finish within its bounded attempt count.");
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static WeakReference CaptureLoadContext(string typeName)
+    {
+        Type type = ResolveTypeByName(typeName);
+        AssemblyLoadContext context = AssemblyLoadContext.GetLoadContext(type.Assembly)!;
+        Assert.True(context.IsCollectible);
+        return new WeakReference(context);
+    }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static StrongTypeHolder CreateStrongTypeHolder(string typeName)
@@ -3122,6 +3426,17 @@ public sealed class ScriptManagerTests : IDisposable
     private static int ReadVersion(Type type)
         => (int)type.GetProperty("version")!.GetValue(Activator.CreateInstance(type))!;
 
+    private static IReadOnlyList<GameComponent> GetComponents(GameObject gameObject, Type componentType)
+    {
+        MethodInfo getComponents = typeof(GameObject).GetMethods(BindingFlags.Instance | BindingFlags.Public)
+            .Single(static method =>
+                method.Name == nameof(GameObject.GetComponents) &&
+                method.IsGenericMethodDefinition &&
+                method.GetParameters().Length == 0);
+        object result = getComponents.MakeGenericMethod(componentType).Invoke(gameObject, null)!;
+        return ((IEnumerable<GameComponent>)result).ToArray();
+    }
+
     private sealed class StrongTypeHolder(Type type)
     {
         internal Type? type = type;
@@ -3310,6 +3625,18 @@ public sealed class ScriptManagerTests : IDisposable
             }
         }
 
+        internal bool ContainsDiagnostic(string code, DiagnosticSeverity severity)
+        {
+            lock (m_sync)
+            {
+                return m_reports.Values.Any(
+                    report => report.diagnostics.Any(
+                        diagnostic =>
+                            string.Equals(diagnostic.code, code, StringComparison.Ordinal) &&
+                            diagnostic.severity == severity));
+            }
+        }
+
         internal IReadOnlyList<string> GetMessages(string code)
         {
             lock (m_sync)
@@ -3320,6 +3647,12 @@ public sealed class ScriptManagerTests : IDisposable
                     .Select(static diagnostic => diagnostic.message)
                     .ToArray();
             }
+        }
+
+        internal void ClearPresentation()
+        {
+            lock (m_sync)
+                m_reports.Clear();
         }
 
         public void Replace(DiagnosticReport report)
@@ -3350,4 +3683,11 @@ internal sealed class HistoryTestSystem : GameSystem
 {
     [SerializableProperty]
     public int value { get; set; }
+}
+
+[StableTypeId("6e40313b-5b67-46f4-9ad4-19c6ef7db20e")]
+internal sealed class SceneAssetDirtyProbe : GameComponent
+{
+    [SerializableProperty]
+    public SceneAsset? sceneAsset { get; set; }
 }
