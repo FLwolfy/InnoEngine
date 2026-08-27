@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Inno.Build.Global\Inno.Build.Global.csproj" />
-    <ProjectReference Include="..\Inno.Build.Sdl3\Inno.Build.Sdl3.csproj" />
+    <ProjectReference Include="..\Inno.Build.Global\Inno.Build.Global.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Build.Sdl3\Inno.Build.Sdl3.csproj" PrivateAssets="compile" />
   </ItemGroup>
 </Project>

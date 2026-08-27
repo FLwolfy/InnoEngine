@@ -7,7 +7,7 @@
     <InnoAssemblyDomain>InnoPlugin</InnoAssemblyDomain>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />
-    <ProjectReference Include="..\Inno.Core.Assemblies.TestDependency\Inno.Core.Assemblies.TestDependency.csproj" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Core.Assemblies.TestDependency\Inno.Core.Assemblies.TestDependency.csproj" PrivateAssets="compile" />
   </ItemGroup>
 </Project>

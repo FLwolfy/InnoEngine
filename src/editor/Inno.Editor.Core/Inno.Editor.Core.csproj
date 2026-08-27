@@ -7,11 +7,9 @@
     <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
     <InnoAssemblyScope>Editor</InnoAssemblyScope>
   </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
   </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\..\core\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" />
   </ItemGroup>

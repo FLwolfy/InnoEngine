@@ -7,7 +7,7 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\core\Inno.Core.Storage\Inno.Core.Storage.csproj" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Storage\Inno.Core.Storage.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

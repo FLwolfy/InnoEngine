@@ -8,12 +8,10 @@
     <InnoAssemblyScope>Editor</InnoAssemblyScope>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" PrivateAssets="compile" />
   </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\Inno.Editor.Core\Inno.Editor.Core.csproj" />
     <ProjectReference Include="..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" />

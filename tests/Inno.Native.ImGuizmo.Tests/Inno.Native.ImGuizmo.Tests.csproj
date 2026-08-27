@@ -8,9 +8,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\native\Inno.Native.Dll\Inno.Native.Dll.csproj" />
-    <ProjectReference Include="..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" />
-    <ProjectReference Include="..\..\native\Inno.Native.ImGuizmo\Inno.Native.ImGuizmo.csproj" />
+    <ProjectReference Include="..\..\native\Inno.Native.Dll\Inno.Native.Dll.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\native\Inno.Native.ImGuizmo\Inno.Native.ImGuizmo.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

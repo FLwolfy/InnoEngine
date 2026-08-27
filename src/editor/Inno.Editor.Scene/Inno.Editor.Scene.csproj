@@ -7,7 +7,6 @@
     <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
     <InnoAssemblyScope>Editor</InnoAssemblyScope>
   </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\assets\Inno.Assets.Core\Inno.Assets.Core.csproj" PrivateAssets="compile" />
@@ -23,11 +22,10 @@
     <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\engine\Inno.Engine.Scene.Assets\Inno.Engine.Scene.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" PrivateAssets="compile" />
   </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\Inno.Editor.Core\Inno.Editor.Core.csproj" />
-    <ProjectReference Include="..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" />
     <ProjectReference Include="..\..\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" />
   </ItemGroup>
 </Project>

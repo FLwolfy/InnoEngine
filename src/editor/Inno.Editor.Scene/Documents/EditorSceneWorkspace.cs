@@ -9,6 +9,7 @@ using System.Security.Cryptography;
 using Inno.Assets;
 using Inno.Assets.Core;
 using Inno.Assets.Serialization;
+using Inno.Core.Assemblies;
 using Inno.Core.Logging;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
@@ -24,7 +25,7 @@ namespace Inno.Editor.Scene;
 /// Tracks editor scene documents, their source paths, and serialized dirty state.
 /// </summary>
 [EditorModule("scene-workspace", order: 200)]
-internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
+internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace, IEditorReloadParticipant
 {
     private const double C_DIRTY_REFRESH_SECONDS = 0.1;
     private const string C_SCENE_EXTENSION = ".iscene";
@@ -38,6 +39,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
 
     private bool m_isAttached;
     private IDisposable? m_reloadIntegration;
+    private IDisposable? m_reloadRegistration;
     private string[]? m_pendingScenePaths;
     private string m_pendingActivePath = string.Empty;
     private long m_nextRestoreAttemptTimestamp;
@@ -350,6 +352,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
             return;
         AssetManager.Changed += OnAssetDatabaseChanged;
         m_reloadIntegration = SceneReloadIntegration.Acquire();
+        m_reloadRegistration = EditorReloadCoordinator.Register(this);
         m_isAttached = true;
         m_sceneStateDiagnostics.Reconcile(force: true);
     }
@@ -373,6 +376,8 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
         if (!m_isAttached)
             return;
         AssetManager.Changed -= OnAssetDatabaseChanged;
+        m_reloadRegistration?.Dispose();
+        m_reloadRegistration = null;
         SceneManager.UnloadAllScenes();
         m_sceneStateDiagnostics.Reconcile(force: true);
         m_reloadIntegration?.Dispose();
@@ -384,10 +389,42 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     /// <inheritdoc />
     protected override void OnDispose()
     {
+        m_reloadRegistration?.Dispose();
+        m_reloadRegistration = null;
         m_reloadIntegration?.Dispose();
         m_reloadIntegration = null;
         m_diagnostics.Dispose();
     }
+
+    IEditorReloadTransaction IEditorReloadParticipant.Capture(AssemblyReloadContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ApplyPendingSourceChanges();
+        var documents = new List<ReloadDocumentState>(m_documents.Count);
+        foreach ((Guid sceneId, SceneDocument document) in m_documents)
+        {
+            GameScene scene = document.scene;
+            if (scene.isDestroyed)
+                continue;
+            SynchronizeSource(scene, document);
+            bool wasDirty = string.IsNullOrEmpty(document.sourcePath) ||
+                            !string.Equals(
+                                scene.name,
+                                GetAssetName(document.sourcePath),
+                                StringComparison.Ordinal) ||
+                            HasSerializedChanges(scene, document);
+            documents.Add(new ReloadDocumentState(
+                sceneId,
+                document.savedHash.ToArray(),
+                document.isDirty,
+                document.nextRefreshTimestamp,
+                wasDirty));
+        }
+        return new WorkspaceReloadTransaction(this, documents);
+    }
+
+    void IEditorReloadParticipant.RefreshDiagnostics()
+        => m_sceneStateDiagnostics.Reconcile(force: true);
 
     private void SaveSceneAtPath(GameScene scene, string relativePath)
     {
@@ -846,6 +883,71 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
         => string.IsNullOrWhiteSpace(path)
             ? string.Empty
             : path.Replace('\\', '/').Trim('/');
+
+    private sealed class WorkspaceReloadTransaction(
+        EditorSceneWorkspace workspace,
+        IReadOnlyList<ReloadDocumentState> documents) : IEditorReloadTransaction
+    {
+        /// <inheritdoc />
+        public void PrepareForActivation()
+        {
+        }
+
+        /// <inheritdoc />
+        public void Apply()
+        {
+            workspace.SynchronizeReplacedScenes();
+            foreach (ReloadDocumentState state in documents)
+            {
+                if (!workspace.m_documents.TryGetValue(state.sceneId, out SceneDocument? document))
+                    continue;
+                if (state.wasDirty)
+                {
+                    document.isDirty = true;
+                    document.nextRefreshTimestamp = 0;
+                    continue;
+                }
+
+                document.savedHash = ComputeSceneHash(document.scene);
+                document.isDirty = false;
+                document.nextRefreshTimestamp = Stopwatch.GetTimestamp() +
+                                                (long)(Stopwatch.Frequency * C_DIRTY_REFRESH_SECONDS);
+            }
+        }
+
+        /// <inheritdoc />
+        public void Complete()
+        {
+        }
+
+        /// <inheritdoc />
+        public void RollbackStructure()
+            => RestoreBaseline();
+
+        /// <inheritdoc />
+        public void RestorePreviousState()
+            => RestoreBaseline();
+
+        private void RestoreBaseline()
+        {
+            workspace.SynchronizeReplacedScenes();
+            foreach (ReloadDocumentState state in documents)
+            {
+                if (!workspace.m_documents.TryGetValue(state.sceneId, out SceneDocument? document))
+                    continue;
+                document.savedHash = state.savedHash.ToArray();
+                document.isDirty = state.isDirty;
+                document.nextRefreshTimestamp = state.nextRefreshTimestamp;
+            }
+        }
+    }
+
+    private readonly record struct ReloadDocumentState(
+        Guid sceneId,
+        byte[] savedHash,
+        bool isDirty,
+        long nextRefreshTimestamp,
+        bool wasDirty);
 
     private sealed class SceneDocument(
         GameScene scene,

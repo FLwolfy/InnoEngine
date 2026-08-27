@@ -7,6 +7,6 @@
     <InnoAssemblyDomain>InnoPlugin</InnoAssemblyDomain>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
   </ItemGroup>
 </Project>

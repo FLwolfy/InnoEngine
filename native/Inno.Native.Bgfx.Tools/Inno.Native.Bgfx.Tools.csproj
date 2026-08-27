@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Inno.Native.Bgfx\Inno.Native.Bgfx.csproj" />
+    <ProjectReference Include="..\Inno.Native.Bgfx\Inno.Native.Bgfx.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Native.Dll\Inno.Native.Dll.csproj" PrivateAssets="compile" />
   </ItemGroup>
 </Project>

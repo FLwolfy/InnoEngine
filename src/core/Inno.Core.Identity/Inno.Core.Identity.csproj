@@ -7,6 +7,6 @@
     <NoWarn>$(NoWarn);CS1573;CS1591</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Inno.Core.Scripting\Inno.Core.Scripting.csproj" />
+    <ProjectReference Include="..\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
   </ItemGroup>
 </Project>

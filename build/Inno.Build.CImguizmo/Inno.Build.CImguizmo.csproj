@@ -6,6 +6,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Inno.Build.Global\Inno.Build.Global.csproj" />
+    <ProjectReference Include="..\Inno.Build.Global\Inno.Build.Global.csproj" PrivateAssets="compile" />
   </ItemGroup>
 </Project>

@@ -2522,7 +2522,7 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public void MissingTransitionsDoNotDirtyCleanScenesAndRemainRecoverableAfterSavingOtherChanges()
+    public void MissingTransitionsPreserveExistingDirtyStateAndRemainRecoverableAfterSavingOtherChanges()
     {
         const string componentTypeId = "1d930a18-6073-45d5-b600-229bac89382c";
         const string systemTypeId = "0c947cea-3cc4-47c3-8bb8-d5ef842af1bb";
@@ -2562,6 +2562,10 @@ public sealed class ScriptManagerTests : IDisposable
             _ = workspace.Save(scene, "Scenes");
             Assert.False(workspace.IsDirty(scene));
 
+            _ = scene.CreateObject("Unsaved Before Recovery");
+            Thread.Sleep(150);
+            Assert.True(workspace.IsDirty(scene));
+
             WriteIdentityProbe(componentTypeId, systemTypeId);
             Assert.True(Compile().success);
             Assert.True(m_manager.ApplyPendingReload());
@@ -2569,7 +2573,62 @@ public sealed class ScriptManagerTests : IDisposable
                 .Single(value => value.identity.persistentId == componentId).GetType().Name);
             Assert.Equal("IdentityProbeSystem", scene.GetSystems()
                 .Single(value => value.identity.persistentId == systemId).GetType().Name);
-            Assert.False(workspace.IsDirty(scene));
+            Thread.Sleep(150);
+            Assert.True(workspace.IsDirty(scene));
+        }
+        finally
+        {
+            workspace.Stop(context);
+        }
+    }
+
+    [Fact]
+    public void RecoveringMissingTypesInASceneOpenedWhileTheyWereUnavailableDoesNotDirtyTheScene()
+    {
+        const string componentTypeId = "9f7f512e-33d0-4e83-95d1-52bbd114ed21";
+        const string systemTypeId = "bf46939c-127b-45a0-8f8d-6d593dd3ed16";
+        WriteIdentityProbe(componentTypeId, systemTypeId);
+        Assert.True(Compile().success);
+        Assert.True(m_manager.ApplyPendingReload());
+
+        var workspace = new ReflectedSceneWorkspace();
+        var context = new EditorContext(m_projectRoot);
+        workspace.Start(context);
+        try
+        {
+            GameScene source = workspace.CreateScene();
+            source.name = "Opened Missing State";
+            GameObject actor = source.CreateObject("Actor");
+            _ = actor.AddComponent(ResolveTypeByName("IdentityProbe"));
+            _ = source.AddSystem(ResolveTypeByName("IdentityProbeSystem"));
+            string sourcePath = workspace.Save(source, "Scenes");
+
+            WriteIdentityProbe(
+                "f109df2f-0c6d-48b2-a44e-36c198bebeca",
+                "3c815b71-799a-4d88-a546-e40b1334eb81");
+            Assert.True(Compile().success);
+            Assert.True(m_manager.ApplyPendingReload());
+            Assert.True(workspace.CloseScene(source));
+
+            GameScene openedMissing = workspace.Open(sourcePath);
+            Assert.Contains(
+                openedMissing.GetObjects().SelectMany(static value => value.GetComponents()),
+                static value => value is MissingGameComponent);
+            Assert.Contains(openedMissing.GetSystems(), static value => value is MissingGameSystem);
+            Assert.False(workspace.IsDirty(openedMissing));
+
+            WriteIdentityProbe(componentTypeId, systemTypeId, includeAddedProperty: true);
+            Assert.True(Compile().success);
+            Assert.True(m_manager.ApplyPendingReload());
+            Thread.Sleep(150);
+
+            Assert.Contains(
+                openedMissing.GetObjects().SelectMany(static value => value.GetComponents()),
+                static value => value.GetType().Name == "IdentityProbe");
+            Assert.Contains(
+                openedMissing.GetSystems(),
+                static value => value.GetType().Name == "IdentityProbeSystem");
+            Assert.False(workspace.IsDirty(openedMissing));
         }
         finally
         {
@@ -3144,7 +3203,8 @@ public sealed class ScriptManagerTests : IDisposable
     private void WriteIdentityProbe(
         string stableTypeId,
         string systemStableTypeId,
-        bool throwOnConstruction = false)
+        bool throwOnConstruction = false,
+        bool includeAddedProperty = false)
         => Write("IdentityProbe.cs", $$"""
             using InnoEngine.Assets;
             using InnoEngine.Reflection;
@@ -3164,6 +3224,8 @@ public sealed class ScriptManagerTests : IDisposable
 
                 [SerializableProperty]
                 public AssetObject? asset { get; set; }
+
+                {{(includeAddedProperty ? "[SerializableProperty] public int addedValue { get; set; } = 17;" : string.Empty)}}
             }
 
             [StableTypeId("{{systemStableTypeId}}")]
@@ -3171,6 +3233,8 @@ public sealed class ScriptManagerTests : IDisposable
             {
                 [SerializableProperty]
                 public int value { get; set; }
+
+                {{(includeAddedProperty ? "[SerializableProperty] public int addedValue { get; set; } = 23;" : string.Empty)}}
             }
             """);
 

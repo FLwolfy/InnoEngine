@@ -7,8 +7,10 @@
     <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />
-    <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Inno.Assets.Core\Inno.Assets.Core.csproj" />
   </ItemGroup>
 </Project>

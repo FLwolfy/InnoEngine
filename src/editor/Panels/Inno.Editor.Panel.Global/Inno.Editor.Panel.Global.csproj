@@ -7,7 +7,6 @@
     <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
     <InnoAssemblyScope>Editor</InnoAssemblyScope>
   </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\..\..\core\Inno.Core.Input\Inno.Core.Input.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" PrivateAssets="compile" />

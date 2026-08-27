@@ -7,17 +7,13 @@
     <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
     <InnoAssemblyScope>Editor</InnoAssemblyScope>
   </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\..\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\core\Inno.Core.Diagnose\Inno.Core.Diagnose.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" PrivateAssets="compile" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\Inno.Editor.Core\Inno.Editor.Core.csproj" />
-    <ProjectReference Include="..\..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" />
+    <ProjectReference Include="..\..\Inno.Editor.Core\Inno.Editor.Core.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
   </ItemGroup>
 </Project>

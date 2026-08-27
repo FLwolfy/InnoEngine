@@ -6,18 +6,16 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
   </PropertyGroup>
-
   <ItemGroup>
-    <ProjectReference Include="..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\assets\Inno.Assets.Loader\Inno.Assets.Loader.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\assets\Inno.Assets.Serialization\Inno.Assets.Serialization.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
   </ItemGroup>
-
   <ItemGroup>
-    <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />
     <ProjectReference Include="..\..\assets\Inno.Assets.Core\Inno.Assets.Core.csproj" />
-    <ProjectReference Include="..\..\assets\Inno.Assets.Loader\Inno.Assets.Loader.csproj" />
-    <ProjectReference Include="..\..\assets\Inno.Assets.Serialization\Inno.Assets.Serialization.csproj" />
     <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
-    <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" />
     <ProjectReference Include="..\Inno.Engine.Scene\Inno.Engine.Scene.csproj" />
   </ItemGroup>
 </Project>

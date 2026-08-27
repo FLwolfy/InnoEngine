@@ -7,7 +7,6 @@
     <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
     <InnoAssemblyScope>Editor</InnoAssemblyScope>
   </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\..\Inno.Editor.Inspection\Inno.Editor.Inspection.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\Inno.Editor.Scene\Inno.Editor.Scene.csproj" PrivateAssets="compile" />
@@ -25,11 +24,10 @@
     <ProjectReference Include="..\..\..\engine\Inno.Engine.Scene.Assets\Inno.Engine.Scene.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\Inno.Editor.Core\Inno.Editor.Core.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" PrivateAssets="compile" />
   </ItemGroup>
-
   <ItemGroup>
-    <ProjectReference Include="..\..\Inno.Editor.Core\Inno.Editor.Core.csproj" />
-    <ProjectReference Include="..\..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" />
     <ProjectReference Include="..\..\..\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" />
   </ItemGroup>
 </Project>

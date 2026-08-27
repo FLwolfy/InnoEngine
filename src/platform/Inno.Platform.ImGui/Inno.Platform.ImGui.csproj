@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
@@ -6,13 +6,13 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);CS0108</NoWarn>
   </PropertyGroup>
-  
   <ItemGroup>
-    <ProjectReference Include="..\Inno.Platform\Inno.Platform.csproj" />
     <ProjectReference Include="..\..\..\native\Inno.Native.SDL3\Inno.Native.SDL3.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" PrivateAssets="compile" />
   </ItemGroup>
-
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Platform\Inno.Platform.csproj" />
+  </ItemGroup>
   <ItemGroup>
     <None Include="BuiltIn\**\*.*" CopyToOutputDirectory="PreserveNewest" />
     <None Update="BuiltIn\Icons\FA-Regular-400.ttf">
@@ -22,5 +22,4 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
-
 </Project>

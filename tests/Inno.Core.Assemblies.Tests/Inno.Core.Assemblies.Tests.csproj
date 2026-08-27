@@ -7,14 +7,11 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\core\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" />
-    <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />
-    <ProjectReference Include="..\Inno.Core.Assemblies.TestModule.V1\Inno.Core.Assemblies.TestModule.V1.csproj"
-                      ReferenceOutputAssembly="false" />
-    <ProjectReference Include="..\Inno.Core.Assemblies.TestModule.V2\Inno.Core.Assemblies.TestModule.V2.csproj"
-                      ReferenceOutputAssembly="false" />
-    <ProjectReference Include="..\Inno.Core.Assemblies.TestModule.Invalid\Inno.Core.Assemblies.TestModule.Invalid.csproj"
-                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Core.Assemblies.TestModule.V1\Inno.Core.Assemblies.TestModule.V1.csproj" ReferenceOutputAssembly="false" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Core.Assemblies.TestModule.V2\Inno.Core.Assemblies.TestModule.V2.csproj" ReferenceOutputAssembly="false" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Core.Assemblies.TestModule.Invalid\Inno.Core.Assemblies.TestModule.Invalid.csproj" ReferenceOutputAssembly="false" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

@@ -5,11 +5,9 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
-  
   <ItemGroup>
     <PackageReference Include="BGCS.Runtime" Version="1.0.1" PrivateAssets="compile" />
   </ItemGroup>
-  
   <ItemGroup>
     <ProjectReference Include="..\Inno.Native.Dll\Inno.Native.Dll.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Native.ImGui\Inno.Native.ImGui.csproj" PrivateAssets="compile" />

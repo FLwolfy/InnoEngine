@@ -7,7 +7,7 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\core\Inno.Core.Mathematics\Inno.Core.Mathematics.csproj" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Mathematics\Inno.Core.Mathematics.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Inno.Build.Global\Inno.Build.Global.csproj" />
-    <ProjectReference Include="..\Inno.Build.Cimgui\Inno.Build.Cimgui.csproj" />
+    <ProjectReference Include="..\Inno.Build.Global\Inno.Build.Global.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Build.Cimgui\Inno.Build.Cimgui.csproj" PrivateAssets="compile" />
   </ItemGroup>
 </Project>
