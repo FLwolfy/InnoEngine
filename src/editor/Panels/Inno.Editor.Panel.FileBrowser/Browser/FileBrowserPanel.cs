@@ -25,6 +25,7 @@ internal sealed class FileBrowserPanel : EditorPanel
     #region Constants
     private const int C_SEARCH_BUFFER_SIZE = 256;
     private const int C_GRID_LABEL_LINE_COUNT = 2;
+    private const float C_GRID_ICON_HORIZONTAL_OPTICAL_OFFSET = -1f;
     #endregion
 
     #region State
@@ -966,8 +967,10 @@ internal sealed class FileBrowserPanel : EditorPanel
                 iconBounds.W - iconBounds.Y);
         }
 
+        float horizontalCenter = min.X + size.X * 0.5f;
         Vector2 iconAreaCenter = new(
-            min.X + size.X * 0.5f,
+            horizontalCenter +
+            C_GRID_ICON_HORIZONTAL_OPTICAL_OFFSET * EditorWidget.style.zoom,
             iconAreaTop + maximumIconHeight * 0.5f);
 
         uint textColor = NativeImGui.ColorConvertFloat4ToU32(EditorPalette.assetText);
@@ -983,7 +986,7 @@ internal sealed class FileBrowserPanel : EditorPanel
         {
             Vector2 lineSize = NativeImGui.CalcTextSize(nameLines[i]);
             Vector2 linePosition = new(
-                min.X + (size.X - lineSize.X) * 0.5f,
+                horizontalCenter - lineSize.X * 0.5f,
                 labelY + lineAdvance * i);
             NativeImGui.AddText(drawList, linePosition, textColor, nameLines[i]);
         }
