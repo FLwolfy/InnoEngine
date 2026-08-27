@@ -2,7 +2,7 @@
 
 [Core 索引](README.md) · [上一页：Assemblies](Inno.Core.Assemblies.md) · [Editor Scripting](../editor/Inno.Editor.Scripting.md) · [Wiki 首页](../README.md)
 
-`Inno.Core.Scripting` 是一个极小、无 Roslyn 依赖的声明程序集。它只定义“哪些真实引擎类型属于脚本 API”的 assembly-level attribute；脚本发现、reference assembly 生成、编译和热重载仍由 Editor 层负责。
+`Inno.Core.Scripting` 是一个极小、无 Roslyn 依赖的声明程序集。它定义“哪些真实引擎类型属于脚本 API”的 assembly-level attribute，以及由领域基类声明脚本派生类型类别的 type-level metadata；脚本发现、reference assembly 生成、编译和热重载仍由 Editor 层负责。
 
 ## 设计边界
 
@@ -81,6 +81,16 @@ Editor 会为 IDE 生成一个真正声明 `InnoEngine.Scene.GameBehavior` 等�
 运行时热编译不使用 facade 产物；`ScriptCompiler` 在内存中将已声明的逻辑 `using` 改写到对应实现 namespace，并使用保留真实程序集身份的裁剪参考集编译。最终 IL 因此仍引用 `Inno.Engine.Scene.GameBehavior`，不会把 facade 类型带入运行时。
 
 脚本直接写 `using Inno.Engine.Scene;` 会得到 `INNO2001` 错误；使用已导出类型却没有导入对应逻辑 namespace 会得到 `INNO2002`。这两个诊断同时用于运行时 Roslyn 编译和生成的 IDE 工程。
+
+### ScriptingAttachableTypeAttribute
+
+```csharp
+ScriptingAttachableTypeAttribute(string kind)
+```
+
+领域项目把该 Attribute 放在允许脚本派生、且需要稳定 source-owned Type ID 的根基类上。`kind` 是非空、由领域定义的 manifest 分类名称；API catalog 从真实领域基类读取 metadata 并构建中立映射，编译器再沿脚本类型的基类链匹配该映射，而不硬编码 Scene、Component、System 或任何具体领域类型名。该设计不依赖裁剪 reference assembly 是否复制 host-only Attribute。
+
+例如 `GameBehavior` 与 `GameSystem` 分别声明自己的类别后，Editor Scripting 只依赖这项中立 metadata。将来其他领域增加可附着脚本基类时，只修改该领域基类，无需让 Scripting 项目引用该领域程序集，也无需扩展中央类型名列表。该 Attribute 本身不参与实例迁移，不保存 `Type`，也不会形成 collectible ALC 的长期引用。
 
 ### Namespace 导入规则
 

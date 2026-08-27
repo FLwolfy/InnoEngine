@@ -115,6 +115,8 @@ Scene/Prefab 的 History、Missing、序列化和 reload previous/candidate 边�
 
 ## Missing 脚本元素
 
+`GameBehavior` 与 `GameSystem` 分别使用 Core Scripting 的 `ScriptingAttachableTypeAttribute` 声明自己的脚本 manifest 类别。Editor Scripting 只读取该中立 metadata，不硬编码或引用 Scene 类型；具体实例迁移和 Missing 行为仍完全由 Scene 领域拥有。
+
 | 公开类型 | 说明 |
 | --- | --- |
 | `MissingGameComponent` | 原 Component 类型暂时不可用时，占据相同 attachment index 和 persistent ID。公开 `TypeRef missingType`、`missingTypeName` 供 Inspector/工具识别。 |

@@ -34,8 +34,10 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     private readonly ConcurrentQueue<AssetChange> m_sourceChanges = new();
     private readonly EditorSceneDiagnosticPublisher m_diagnostics = new();
     private readonly EditorInteractions? m_interactions;
+    private readonly SceneStateDiagnosticTracker m_sceneStateDiagnostics = new();
 
     private bool m_isAttached;
+    private IDisposable? m_reloadIntegration;
     private string[]? m_pendingScenePaths;
     private string m_pendingActivePath = string.Empty;
     private long m_nextRestoreAttemptTimestamp;
@@ -106,6 +108,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
             }
         }
         m_diagnostics.RetainSynchronizationTargets(synchronizedScenes);
+        m_sceneStateDiagnostics.Reconcile();
     }
 
     /// <summary>
@@ -346,7 +349,9 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
         if (m_isAttached)
             return;
         AssetManager.Changed += OnAssetDatabaseChanged;
+        m_reloadIntegration = SceneReloadIntegration.Acquire();
         m_isAttached = true;
+        m_sceneStateDiagnostics.Reconcile(force: true);
     }
 
     /// <summary>
@@ -369,13 +374,20 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
             return;
         AssetManager.Changed -= OnAssetDatabaseChanged;
         SceneManager.UnloadAllScenes();
+        m_sceneStateDiagnostics.Reconcile(force: true);
+        m_reloadIntegration?.Dispose();
+        m_reloadIntegration = null;
         m_isAttached = false;
         Clear();
     }
 
     /// <inheritdoc />
     protected override void OnDispose()
-        => m_diagnostics.Dispose();
+    {
+        m_reloadIntegration?.Dispose();
+        m_reloadIntegration = null;
+        m_diagnostics.Dispose();
+    }
 
     private void SaveSceneAtPath(GameScene scene, string relativePath)
     {

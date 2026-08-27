@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
+using Inno.Core.Scripting;
+
 namespace Inno.Editor.Core;
 
 /// <summary>
@@ -17,7 +19,8 @@ public sealed class EditorContext
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="projectDirectory"/> is empty.
     /// </exception>
-    internal EditorContext(string projectDirectory)
+    [ScriptingApiIgnore]
+    public EditorContext(string projectDirectory)
     {
         if (string.IsNullOrWhiteSpace(projectDirectory))
             throw new ArgumentException("A project directory is required.", nameof(projectDirectory));
@@ -33,12 +36,14 @@ public sealed class EditorContext
     /// <summary>
     /// Gets the absolute path of the project editor layout document.
     /// </summary>
-    internal string layoutPath => layout.path;
+    [ScriptingApiIgnore]
+    public string layoutPath => layout.path;
 
     /// <summary>
     /// Gets the Dear ImGui layout text without editor module or panel state sections.
     /// </summary>
-    internal string imguiLayout => layout.imguiLayout;
+    [ScriptingApiIgnore]
+    public string imguiLayout => layout.imguiLayout;
 
     internal EditorLayoutSettings layout { get; }
 
@@ -54,7 +59,8 @@ public sealed class EditorContext
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="prefix"/> is <see langword="null"/>.
     /// </exception>
-    internal IReadOnlyList<string> GetLayoutSectionNames(string prefix = "")
+    [ScriptingApiIgnore]
+    public IReadOnlyList<string> GetLayoutSectionNames(string prefix = "")
         => layout.GetSectionNames(prefix);
 
     /// <summary>
@@ -72,7 +78,8 @@ public sealed class EditorContext
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="sectionName"/> is empty or cannot be represented in the layout.
     /// </exception>
-    internal bool TryGetLayoutSection(
+    [ScriptingApiIgnore]
+    public bool TryGetLayoutSection(
         string sectionName,
         out IReadOnlyDictionary<string, string> values)
         => layout.TryGetSection(sectionName, out values);
@@ -92,7 +99,8 @@ public sealed class EditorContext
     /// <exception cref="ArgumentException">
     /// Thrown when a section name, key, or value cannot be represented in the layout.
     /// </exception>
-    internal void SetLayoutSection(
+    [ScriptingApiIgnore]
+    public void SetLayoutSection(
         string sectionName,
         IEnumerable<KeyValuePair<string, string>> values)
         => layout.SetSection(sectionName, values);
@@ -109,7 +117,8 @@ public sealed class EditorContext
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="sectionName"/> is empty or cannot be represented in the layout.
     /// </exception>
-    internal bool RemoveLayoutSection(string sectionName)
+    [ScriptingApiIgnore]
+    public bool RemoveLayoutSection(string sectionName)
         => layout.RemoveSection(sectionName);
 
     /// <summary>
@@ -118,7 +127,8 @@ public sealed class EditorContext
     /// <param name="value">
     /// The complete layout text returned by Dear ImGui.
     /// </param>
-    internal void SetImGuiLayout(string? value)
+    [ScriptingApiIgnore]
+    public void SetImGuiLayout(string? value)
         => layout.SetImGuiLayout(value);
 
     /// <summary>
@@ -133,7 +143,8 @@ public sealed class EditorContext
     /// <exception cref="UnauthorizedAccessException">
     /// Thrown when the layout document is inaccessible.
     /// </exception>
-    internal bool SaveLayoutIfChanged()
+    [ScriptingApiIgnore]
+    public bool SaveLayoutIfChanged()
         => layout.SaveIfChanged();
 
     /// <summary>
@@ -145,7 +156,8 @@ public sealed class EditorContext
     /// <exception cref="UnauthorizedAccessException">
     /// Thrown when the layout document is inaccessible.
     /// </exception>
-    internal void SaveLayout()
+    [ScriptingApiIgnore]
+    public void SaveLayout()
         => layout.Save();
 
     /// <summary>

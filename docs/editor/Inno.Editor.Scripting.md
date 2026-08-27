@@ -219,16 +219,16 @@ IDE 工程是补全和诊断模型；Editor 实际热编译仍使用进程内 Ro
 
 Plugin 只能引用 InnoInternal 稳定契约，不能引用项目脚本；Runtime Scripts 只能看到 runtime-scope Plugin/Internal，Editor Scripts 可看到 Runtime Scripts、所有 Plugin 和 Internal Editor API。Plugin 类型只能通过脚本文件中的普通 `using` 显式导入。错误方向、scope 泄漏、Assembly simple-name 冲突、坏 PE、缺失依赖或 cycle 会在 stage/publish 前失败，旧三层 generation 保持活动。ALC 是卸载隔离，不是安全沙箱。
 
-## Reload 与 Scene 状态
+## Reload coordination 与领域状态
 
-成功 build 通过一个多模块 `AssemblyManager.BeginReload` 准备完整候选 Assembly catalog、TypeCache 与 Registry。`SceneReloadService` 使用 `TypeRef` 捕获脚本 Component/System 的逻辑类型、serialized state、identity、顺序、引用和 lifecycle flags；长期 payload 只编码 Stable ID。旧 extension 的 Stop/Detach、交互瞬态清理、候选 Start/Attach 与状态恢复都在发布回调返回前完成；全部迁移成功才进入 cleanup-only Complete。
+成功 build 通过一个多模块 `AssemblyManager.BeginReload` 准备完整候选 Assembly catalog、TypeCache 与 Registry。Scripting 随后只把 prepared session 交给 [Inno.Editor.Core](Inno.Editor.Core.md) 的 `EditorReloadCoordinator`；它不知道 Scene、Component/System、Missing 或任何 Panel。Scene 等独立 feature 通过 Core 的中立 participant contract 捕获自己的 generation-bound live state。旧 extension 的 Stop/Detach、交互瞬态清理、候选 Start/Attach 与各 feature 状态恢复都在发布回调返回前完成；全部迁移成功才进入 cleanup-only Complete。
 
 内部 safe-point apply 在成功前只读取 candidate，不提前消费。Plugin/Runtime/Editor 任一 stage、Registry、Asset rescan、Scene restore 或 extension activation 失败都逆序恢复 Scene、extensions、TypeCache、Registry 与全部 previous modules，不发布部分 generation；同一 pending candidate 保留以便显式重试，后续成功编译可原子替换它。
 
 Serialized state 使用逐成员兼容迁移：成员类型保持兼容时恢复旧值；新增成员保留新默认值；删除成员忽略旧数据；同名成员改成不兼容类型时保留新默认值并输出 `INNOHR0001` warning，不会仅因单个字段变化回滚整个程序集。普通 Serialization API 仍保持严格模式。
 
-失败时 Scene 结构和 Assembly transaction 一起 rollback。Edit Mode 不触发生命周期；Runtime reload 会对旧 active instance 调用 `OnDisable`，新 instance 在下一次正常 update 调用 `OnEnable`，不会重复 `Awake`/`Start`，也不会调用 `Reset`/`OnDestroy`。
+失败时所有已捕获 feature transaction 和 Assembly transaction 一起反向 rollback。Scene feature 自己实现 Scene migration、Coroutine owner 停止与 Scene diagnostics；Scripting 不调用这些领域 API。Scene 的 Edit Mode migration 不触发生命周期；Runtime reload 会对旧 active instance 调用一次 `OnDisable`，新 instance 在下一次正常 update 调用 `OnEnable`，不会重复 `Awake`/`Start`，也不会调用 `Reset`/`OnDestroy`。
 
-如果候选 generation 缺少 live Component/System，reload 不再失败：对象会成为 host-owned missing placeholder，并继续保存 `TypeRef`（落盘仅原逻辑 Stable ID）、原类型名、property bytes、asset dependencies、persistent ID、顺序和图引用。placeholder 身份和 missing 标志不进入 Scene schema，类型消失/恢复本身不改变 clean Scene 的 dirty 状态。类型删除、插件移除、Scene/Prefab round-trip 都不会持有旧 ALC；相同 Stable ID 返回时 `isValid` 自动恢复并原位重建。`INNOHR0002` 是独立于 reload event 的当前状态诊断：Editor 主线程协调器在 loaded Scene 实例集合或 TypeCache generation 变化后的下一次安全更新完整替换该诊断组，所以打开一个带 Missing 的 `.iscene` 不需要等待 Recompile/Reload 就会出现在 Console；它只弱跟踪 Scene 实例，不增加 SceneManager 公共事件，也不通过订阅固定旧 ALC。每次 Recompile/Reload 完成还会强制对账，因此无变化 Recompile 不创建 generation，却仍会在 Console 被用户 Clear 后重新发布仍存在的 Missing；类型恢复后该组立即解除。恢复构造、identity 转移、property restore 或失败清理不完整时仍精确回滚到原占位对象。
+如果候选 generation 缺少 live Component/System，Scene participant 会把对象变为 host-owned missing placeholder，并继续保存 `TypeRef`（落盘仅原逻辑 Stable ID）、原类型名、property bytes、asset dependencies、persistent ID、顺序和图引用。placeholder 身份和 missing 标志不进入 Scene schema，类型消失/恢复本身不改变 clean Scene 的 dirty 状态。类型删除、插件移除、Scene/Prefab round-trip 都不会持有旧 ALC；相同 Stable ID 返回时 `isValid` 自动恢复并原位重建。`INNOHR0002` 完全由 Scene feature 按当前 loaded Scene 与 TypeCache generation 对账：打开带 Missing 的 `.iscene` 后，在 Scene workspace 下一次安全更新就会出现在 Console，不需要等待 Recompile/Reload。每次协调 reload 完成还会请求各领域刷新诊断，因此无变化 Recompile 后仍会重新发布用户 Clear 掉但依然成立的 Missing；类型恢复后该组立即解除。恢复构造、identity 转移、property restore 或失败清理不完整时仍精确回滚到原占位对象。
 
 无法自动迁移 static 字段、后台 Thread/Task、第三方事件订阅或外部裸 CLR 引用。用户代码需要在 `OnDisable` 释放这些资源。

@@ -48,7 +48,9 @@ public sealed class InspectionPipelineTests : IDisposable
     public void InlineChildFailureIsConsumedAndReadonlyDisabledScopeRemainsBalanced()
     {
         var editor = new EditorContext(m_projectRoot);
-        var interactions = new EditorInteractions(editor);
+        var interactions = (EditorInteractions)ScriptingTestReflection.Create(
+            typeof(EditorInteractions),
+            editor);
         using var drawers = new PropertyDrawerRegistry(interactions);
         var renderer = new SerializedPropertyRenderer(drawers, interactions, new NoopEditService());
         var owner = new InlineOwner();
@@ -112,15 +114,21 @@ public sealed class InspectionPipelineTests : IDisposable
         {
             PrepareNativeFrame();
             Exception? quarantined = null;
-            var modal = new EditorModalExtension(
+            var modal = (EditorModalExtension)ScriptingTestReflection.Create(
+                typeof(EditorModalExtension),
                 "tests.throwing-modal",
                 "Throwing Modal",
                 0,
                 new ThrowingModal(),
-                exception => quarantined = exception);
+                new Action<Exception>(exception => quarantined = exception));
             Assert.True(modal.TryGetPresentation(out EditorModalExtension.Presentation presentation));
 
-            EditorModalRenderer.Draw(
+            Type rendererType = typeof(EditorWidget).Assembly.GetType(
+                "Inno.Editor.ImGui.EditorModalRenderer",
+                throwOnError: true)!;
+            _ = ScriptingTestReflection.InvokeStatic<object?>(
+                rendererType,
+                "Draw",
                 modal.id,
                 modal.title,
                 1f,

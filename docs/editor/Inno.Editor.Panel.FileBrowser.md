@@ -122,6 +122,7 @@ CLR 层的 icon 常量仍是 ImGui 所需的 `const string` glyph；`AssetIconKi
 - F2 会使用当前正在操作的 Tree、List 或 Grid 展示位置绘制输入框。
 - Create Folder 完成后会选中新目录并自动进入重命名。
 - Rename Action 自己持有输入/验证状态；Tree/List/Grid 只调用 `Present` 绘制 inline editor。
+- 文件重命名只编辑最后一个扩展名前的真实名称，并在提交时无条件保留原文件的最后扩展名；目录名则完整可编辑。例如 `Player.iscene` 的输入值是 `Player`，`Tool.editor.cs` 的输入值是 `Tool.editor`。这里不为 `.editor.cs` 建立复合扩展特例，规则始终只是标准的最后扩展名 `.cs`。
 - Tree/List/Grid 与 Hierarchy 共用 `ImGuiWidget.InlineRename` 的紧凑输入框；输入框采用相同 frame metrics，在 row 内垂直居中，首次获得焦点时全选内容，并绘制在 selection/hover highlight 之上。蓝色焦点线框以实际输入框为基准只向外扩展 1px，使用与 DropTarget 相同的统一 overlay 粗细并绘制到 foreground。List 不读取隐藏标签 Selectable 的临时 item 高度，而是以 Table `RowPosY1/RowPosY2` 的实际屏幕边界为居中基准。
 - 输入框失去焦点或 selection 切换到其他 target 时，Rename Action 会提交当前有效名称并结束；无效名称保留原值并结束。
 - Tree/List/Grid 的未占用背景收到左键点击时会清除当前 Asset selection。

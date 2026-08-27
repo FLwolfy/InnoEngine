@@ -28,13 +28,18 @@ internal sealed record ScriptApiTypeMapping(
     string implementationName,
     int arity);
 
+internal sealed record ScriptApiAttachableType(
+    string implementationName,
+    string kind);
+
 internal sealed record ScriptApiProfile(
     string name,
     IReadOnlyList<ScriptApiAssembly> exports,
     IReadOnlyList<Assembly> implementationAssemblies,
     IReadOnlyList<string> apiNamespaces,
     IReadOnlyList<ScriptApiNamespaceMapping> namespaceMappings,
-    IReadOnlyList<ScriptApiTypeMapping> typeMappings);
+    IReadOnlyList<ScriptApiTypeMapping> typeMappings,
+    IReadOnlyList<ScriptApiAttachableType> attachableTypes);
 
 internal static class ScriptApiCatalog
 {
@@ -120,6 +125,19 @@ internal static class ScriptApiCatalog
                 mapping.implementationName,
                 StringComparison.Ordinal))
             .ToArray();
+        ScriptApiAttachableType[] attachableTypes = exports
+            .SelectMany(static export => export.exports)
+            .Select(static export => (
+                export.type,
+                metadata: export.type.GetCustomAttribute<ScriptingAttachableTypeAttribute>(inherit: false)))
+            .Where(static value => value.metadata is not null)
+            .Select(static value => new ScriptApiAttachableType(
+                value.type.FullName
+                    ?? throw new InvalidOperationException("An attachable scripting API type has no full name."),
+                value.metadata!.kind))
+            .Distinct()
+            .OrderBy(static value => value.implementationName, StringComparer.Ordinal)
+            .ToArray();
 
         return new ScriptApiProfile(
             includeEditor ? "Editor" : "Runtime",
@@ -129,7 +147,8 @@ internal static class ScriptApiCatalog
                 .ToArray(),
             apiNamespaces,
             publicMappings,
-            typeMappings);
+            typeMappings,
+            attachableTypes);
     }
 
     private static bool Includes(ScriptingApiScope scope, bool includeEditor)

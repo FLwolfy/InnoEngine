@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 
+using Inno.Core.Scripting;
 
 namespace Inno.Editor.Interactions;
 
@@ -38,7 +39,11 @@ public sealed class EditorMenuItem
     /// <summary>Gets the visible node label.</summary>
     public string label { get; }
 
-    internal string actionId { get; }
+    /// <summary>
+    /// Gets the stable action identifier consumed by a presentation backend.
+    /// </summary>
+    [ScriptingApiIgnore]
+    public string actionId { get; }
 
     /// <summary>Gets the stable ordering value.</summary>
     public int order { get; }
@@ -52,5 +57,9 @@ public sealed class EditorMenuItem
     /// <summary>Gets child menu nodes.</summary>
     public IReadOnlyList<EditorMenuItem> children { get; }
 
-    internal object? argument { get; }
+    /// <summary>
+    /// Gets the generation-local action argument consumed by a presentation backend.
+    /// </summary>
+    [ScriptingApiIgnore]
+    public object? argument { get; }
 }

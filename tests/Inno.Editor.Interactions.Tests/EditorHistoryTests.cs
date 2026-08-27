@@ -1,6 +1,10 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.ExceptionServices;
 
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
@@ -13,7 +17,7 @@ public sealed class EditorHistoryTests
     [Fact]
     public void ExecuteUndoAndRedoMoveOperationBetweenStacks()
     {
-        using var history = new EditorHistory();
+        using var history = new ReflectedEditorHistory();
         int value = 0;
 
         EditorHistoryResult applied = history.Execute(
@@ -42,7 +46,7 @@ public sealed class EditorHistoryTests
     [Fact]
     public void FailedRedoRemainsAvailableForRetry()
     {
-        using var history = new EditorHistory();
+        using var history = new ReflectedEditorHistory();
         bool allowRedo = true;
         int value = 0;
         Assert.True(history.Execute(
@@ -74,7 +78,7 @@ public sealed class EditorHistoryTests
     [Fact]
     public void AdjacentValueEditsWithSameKeyCoalesce()
     {
-        using var history = new EditorHistory();
+        using var history = new ReflectedEditorHistory();
         int value = 1;
         object key = new();
 
@@ -93,7 +97,7 @@ public sealed class EditorHistoryTests
     [Fact]
     public void TransactionCommitsAndRevertsAtomically()
     {
-        using var history = new EditorHistory();
+        using var history = new ReflectedEditorHistory();
         int first = 0;
         int second = 0;
         using (EditorHistoryTransaction transaction = history.BeginTransaction("Batch"))
@@ -137,7 +141,7 @@ public sealed class EditorHistoryTests
     [Fact]
     public void RecordingANewMutationDisposesTheRedoBranch()
     {
-        using var history = new EditorHistory();
+        using var history = new ReflectedEditorHistory();
         int value = 0;
         Assert.True(history.Execute(
             "First",
@@ -174,7 +178,7 @@ public sealed class EditorHistoryTests
     [Fact]
     public void FailedTransactionRollbackRemainsOnStackAndCanBeRetried()
     {
-        using var history = new EditorHistory();
+        using var history = new ReflectedEditorHistory();
         int first = 0;
         int second = 0;
         bool allowFirstUndo = false;
@@ -222,7 +226,7 @@ public sealed class EditorHistoryTests
     [Fact]
     public void DisposeCommitsAppliedTransactionWhenRollbackFailsSafely()
     {
-        using var history = new EditorHistory();
+        using var history = new ReflectedEditorHistory();
         int value = 0;
         bool allowUndo = false;
         EditorHistoryTransaction transaction = history.BeginTransaction("Batch");
@@ -254,7 +258,7 @@ public sealed class EditorHistoryTests
     [Fact]
     public void CompensationFailureFaultsHistoryAndPreventsFurtherTransitions()
     {
-        using var history = new EditorHistory();
+        using var history = new ReflectedEditorHistory();
         int first = 0;
         int second = 0;
         bool initialSecondApply = true;
@@ -297,33 +301,33 @@ public sealed class EditorHistoryTests
     [Fact]
     public void FaultedTransactionRetainsChildrenUntilHistoryIsCleared()
     {
-        using var history = new EditorHistory();
-        var first = new TrackingHistoryOperation(
-            "First",
-            undo: () => EditorHistoryResult.Failure("First cannot undo."),
-            redo: EditorHistoryResult.Success);
-        var second = new TrackingHistoryOperation(
-            "Second",
-            undo: EditorHistoryResult.Success,
-            redo: () => EditorHistoryResult.Failure("Second cannot compensate."));
+        using var history = new ReflectedEditorHistory();
+        int secondRedoCount = 0;
         EditorHistoryTransaction transaction = history.BeginTransaction("Batch");
-        history.RecordApplied(first);
-        history.RecordApplied(second);
+        Assert.True(history.Execute(
+            "First",
+            EditorHistoryResult.Success,
+            () => EditorHistoryResult.Failure("First cannot undo.")).succeeded);
+        Assert.True(history.Execute(
+            "Second",
+            () => ++secondRedoCount == 1
+                ? EditorHistoryResult.Success()
+                : EditorHistoryResult.Failure("Second cannot compensate."),
+            EditorHistoryResult.Success).succeeded);
+        object[] children = GetActiveTransactionChildren(history);
 
         EditorHistoryResult result = transaction.Rollback();
 
         Assert.False(result.statePreserved);
-        Assert.False(first.isDisposed);
-        Assert.False(second.isDisposed);
+        Assert.All(children, child => Assert.False(IsHistoryOperationDisposed(child)));
         history.Clear();
-        Assert.True(first.isDisposed);
-        Assert.True(second.isDisposed);
+        Assert.All(children, child => Assert.True(IsHistoryOperationDisposed(child)));
     }
 
     [Fact]
     public void FailedUndoDoesNotMoveTheOperationBetweenStacks()
     {
-        using var history = new EditorHistory();
+        using var history = new ReflectedEditorHistory();
         bool allowUndo = false;
         int value = 0;
         Assert.True(history.Execute(
@@ -357,11 +361,14 @@ public sealed class EditorHistoryTests
         string projectRoot = Path.Combine(Path.GetTempPath(), "InnoHistoryHandlerTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(projectRoot);
         var context = new EditorContext(projectRoot);
-        var interactions = new EditorInteractions(context);
-        using var history = new EditorHistory();
+        var interactions = (EditorInteractions)EditorTestReflection.Create(
+            typeof(EditorInteractions).Assembly,
+            "Inno.Editor.Interactions.EditorInteractions",
+            context);
+        using var history = new ReflectedEditorHistory();
         history.Attach(context, interactions);
         var handler = new TestNeutralHistoryHandler();
-        EditorHistory.HandlerUpdate initial = history.PrepareHandlerUpdate(
+        ReflectedHistoryUpdate initial = history.PrepareHandlerUpdate(
             new Dictionary<string, EditorHistoryHandler>(StringComparer.Ordinal)
             {
                 [TestNeutralHistoryHandler.C_KIND] = handler
@@ -374,7 +381,7 @@ public sealed class EditorHistoryTests
             new EditorHistoryChange(
                 TestNeutralHistoryHandler.C_KIND,
                 EditorHistoryPayload.FromBytes([])));
-        EditorHistory.HandlerUpdate candidate = history.PrepareHandlerUpdate(
+        ReflectedHistoryUpdate candidate = history.PrepareHandlerUpdate(
             new Dictionary<string, EditorHistoryHandler>(StringComparer.Ordinal));
         candidate.Activate();
         candidate.Rollback();
@@ -382,8 +389,147 @@ public sealed class EditorHistoryTests
         Assert.True(history.Undo().succeeded);
         Assert.Equal(0, TestNeutralHistoryHandler.value);
 
-        interactions.historyHost.Dispose();
+        PropertyInfo historyHostProperty = typeof(EditorInteractions).GetProperty(
+            "historyHost",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        ((IDisposable)historyHostProperty.GetValue(interactions)!).Dispose();
         Directory.Delete(projectRoot, recursive: true);
+    }
+
+    private static object[] GetActiveTransactionChildren(ReflectedEditorHistory history)
+    {
+        FieldInfo transactionsField = history.instance.GetType().GetField(
+            "m_transactions",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var transactions = (IEnumerable)transactionsField.GetValue(history.instance)!;
+        object transaction = Assert.Single(transactions.Cast<object>());
+        FieldInfo childrenField = transaction.GetType().GetField(
+            "m_children",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        return ((IEnumerable)childrenField.GetValue(transaction)!).Cast<object>().ToArray();
+    }
+
+    private static bool IsHistoryOperationDisposed(object operation)
+    {
+        Type operationType = typeof(EditorInteractions).Assembly.GetType(
+            "Inno.Editor.Interactions.EditorHistoryOperation",
+            throwOnError: true)!;
+        FieldInfo disposedField = operationType.GetField(
+            "m_isDisposed",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        return (bool)disposedField.GetValue(operation)!;
+    }
+}
+
+internal sealed class ReflectedEditorHistory : IDisposable
+{
+    private static readonly Type S_HISTORY_TYPE = typeof(EditorInteractions).Assembly.GetType(
+        "Inno.Editor.Interactions.EditorHistory",
+        throwOnError: true)!;
+
+    internal ReflectedEditorHistory()
+    {
+        instance = Activator.CreateInstance(
+            S_HISTORY_TYPE,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            args: [256],
+            culture: null)!;
+    }
+
+    internal object instance { get; }
+
+    internal bool canUndo => GetProperty<bool>("canUndo");
+
+    internal bool canRedo => GetProperty<bool>("canRedo");
+
+    internal bool isFaulted => GetProperty<bool>("isFaulted");
+
+    internal string? undoName => GetProperty<string?>("undoName");
+
+    internal string? redoName => GetProperty<string?>("redoName");
+
+    internal EditorHistoryTransaction BeginTransaction(string name)
+        => Invoke<EditorHistoryTransaction>(FindMethod("BeginTransaction", parameterCount: 1), name);
+
+    internal EditorHistoryResult Execute(
+        string name,
+        Func<EditorHistoryResult> execute,
+        Func<EditorHistoryResult> undo)
+        => Invoke<EditorHistoryResult>(FindMethod("Execute", parameterCount: 4), name, execute, undo, null);
+
+    internal void RecordValue<T>(string name, T before, T after, Action<T> apply, object mergeKey)
+    {
+        MethodInfo method = FindMethod("RecordValue", parameterCount: 5).MakeGenericMethod(typeof(T));
+        _ = Invoke<object?>(method, name, before, after, apply, mergeKey);
+    }
+
+    internal void RecordApplied(string name, EditorHistoryChange change)
+        => _ = Invoke<object?>(FindMethod("RecordApplied", parameterCount: 2), name, change);
+
+    internal EditorHistoryResult Undo()
+        => Invoke<EditorHistoryResult>(FindMethod("Undo", parameterCount: 0));
+
+    internal EditorHistoryResult Redo()
+        => Invoke<EditorHistoryResult>(FindMethod("Redo", parameterCount: 0));
+
+    internal void Clear()
+        => _ = Invoke<object?>(FindMethod("Clear", parameterCount: 0));
+
+    internal void Attach(EditorContext context, EditorInteractions interactions)
+        => _ = Invoke<object?>(FindMethod("Attach", parameterCount: 2), context, interactions);
+
+    internal ReflectedHistoryUpdate PrepareHandlerUpdate(
+        IReadOnlyDictionary<string, EditorHistoryHandler> handlers)
+        => new(Invoke<object>(FindMethod("PrepareHandlerUpdate", parameterCount: 1), handlers));
+
+    public void Dispose() => ((IDisposable)instance).Dispose();
+
+    private T GetProperty<T>(string name)
+        => (T)S_HISTORY_TYPE.GetProperty(
+            name,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.GetValue(instance)!;
+
+    private static MethodInfo FindMethod(string name, int parameterCount)
+        => S_HISTORY_TYPE.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .Single(method => method.Name == name && method.GetParameters().Length == parameterCount);
+
+    private T Invoke<T>(MethodInfo method, params object?[]? arguments)
+    {
+        try
+        {
+            return (T)method.Invoke(instance, arguments)!;
+        }
+        catch (TargetInvocationException exception) when (exception.InnerException is not null)
+        {
+            ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
+            throw;
+        }
+    }
+}
+
+internal sealed class ReflectedHistoryUpdate(object instance)
+{
+    internal void Activate() => Invoke("Activate");
+
+    internal void Rollback() => Invoke("Rollback");
+
+    internal void Complete() => Invoke("Complete");
+
+    private void Invoke(string name)
+    {
+        try
+        {
+            _ = instance.GetType().GetMethod(
+                name,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.Invoke(
+                    instance,
+                    parameters: null);
+        }
+        catch (TargetInvocationException exception) when (exception.InnerException is not null)
+        {
+            ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
+        }
     }
 }
 
@@ -406,20 +552,4 @@ internal sealed class TestNeutralHistoryHandler : EditorHistoryHandler
         value = direction == EditorHistoryDirection.Undo ? 0 : 1;
         return EditorHistoryResult.Success();
     }
-}
-
-internal sealed class TrackingHistoryOperation(
-    string operationName,
-    Func<EditorHistoryResult> undo,
-    Func<EditorHistoryResult> redo) : EditorHistoryOperation
-{
-    internal bool isDisposed { get; private set; }
-
-    public override string name => operationName;
-
-    protected override EditorHistoryResult Undo() => undo();
-
-    protected override EditorHistoryResult Redo() => redo();
-
-    protected override void Dispose(bool disposing) => isDisposed = disposing;
 }

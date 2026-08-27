@@ -232,7 +232,10 @@ public sealed class EditorRuntimeTests : IDisposable
     public void BuiltInUndoAndRedoActionsExposeHistoryThroughMenusAndShortcuts()
     {
         int value = 0;
-        Assert.True(m_runtime.interactions.historyHost.Execute(
+        object historyHost = EditorTestReflection.Get<object>(m_runtime.interactions, "historyHost");
+        Assert.True(EditorTestReflection.Invoke<EditorHistoryResult>(
+            historyHost,
+            "Execute",
             "Change Test Value",
             () =>
             {
@@ -243,7 +246,8 @@ public sealed class EditorRuntimeTests : IDisposable
             {
                 value = 0;
                 return EditorHistoryResult.Success();
-            }).succeeded);
+            },
+            null).succeeded);
         EditorInteraction global = m_runtime.interactions.For("editor/global");
 
         EditorActionState undo = global.Query("editor/undo");
@@ -281,7 +285,10 @@ public sealed class EditorRuntimeTests : IDisposable
     public void RuntimeBoundHistoryIsDiscardedWhenExtensionsRefresh()
     {
         int value = 0;
-        Assert.True(m_runtime.interactions.historyHost.Execute(
+        object historyHost = EditorTestReflection.Get<object>(m_runtime.interactions, "historyHost");
+        Assert.True(EditorTestReflection.Invoke<EditorHistoryResult>(
+            historyHost,
+            "Execute",
             "Runtime-bound Change",
             () =>
             {
@@ -292,7 +299,8 @@ public sealed class EditorRuntimeTests : IDisposable
             {
                 value = 0;
                 return EditorHistoryResult.Success();
-            }).succeeded);
+            },
+            null).succeeded);
 
         TypeCacheManager.Rebuild();
         _ = m_runtime.panelCount;
@@ -371,10 +379,13 @@ public sealed class EditorRuntimeTests : IDisposable
             : KeyModifier.Control;
         var gesture = new HotKeyGesture(KeyCode.Plus, primary);
 
-        Assert.True(gesture.Matches(new KeyPressedEvent(
-            windowId: 0,
-            KeyCode.Plus,
-            primary | KeyModifier.Shift)));
+        Assert.True(EditorTestReflection.Invoke<bool>(
+            gesture,
+            "Matches",
+            new KeyPressedEvent(
+                windowId: 0,
+                KeyCode.Plus,
+                primary | KeyModifier.Shift)));
         Assert.Equal(primary, gesture.modifiers);
         Assert.DoesNotContain("Shift", gesture.ToString(), StringComparison.Ordinal);
     }
@@ -382,28 +393,47 @@ public sealed class EditorRuntimeTests : IDisposable
     [Fact]
     public void EqualSpecificityShortcutConflictsAreRejectedDuringCatalogBuild()
     {
-        var left = new EditorExtensionCatalog.ActionRegistration(
+        Type catalogType = typeof(EditorInteractions).Assembly.GetType(
+            "Inno.Editor.Interactions.EditorExtensionCatalog",
+            throwOnError: true)!;
+        Type registrationType = catalogType.GetNestedType(
+            "ActionRegistration",
+            BindingFlags.Public | BindingFlags.NonPublic)!;
+        object left = Activator.CreateInstance(
+            registrationType,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            args: [
             new EditorActionAttribute("tests.shortcut-left", "tests/shortcut", priority: 20),
             typeof(DeferredAction),
             new DeferredAction(),
-            targetType: null,
-            argumentType: null,
-            [],
-            [new EditorShortcutAttribute(KeyCode.F1)]);
-        var right = new EditorExtensionCatalog.ActionRegistration(
+            null,
+            null,
+            Array.Empty<EditorMenuAttribute>(),
+            new[] { new EditorShortcutAttribute(KeyCode.F1) }],
+            culture: null)!;
+        object right = Activator.CreateInstance(
+            registrationType,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            args: [
             new EditorActionAttribute("tests.shortcut-right", "tests/shortcut", priority: 20),
             typeof(DeferredAction),
             new DeferredAction(),
-            targetType: null,
-            argumentType: null,
-            [],
-            [new EditorShortcutAttribute(KeyCode.F1)]);
-        MethodInfo validate = typeof(EditorExtensionCatalog).GetMethod(
+            null,
+            null,
+            Array.Empty<EditorMenuAttribute>(),
+            new[] { new EditorShortcutAttribute(KeyCode.F1) }],
+            culture: null)!;
+        Array registrations = Array.CreateInstance(registrationType, 2);
+        registrations.SetValue(left, 0);
+        registrations.SetValue(right, 1);
+        MethodInfo validate = catalogType.GetMethod(
             "ValidateShortcuts",
             BindingFlags.Static | BindingFlags.NonPublic)!;
 
         TargetInvocationException exception = Assert.Throws<TargetInvocationException>(
-            () => validate.Invoke(null, [new[] { left, right }]));
+            () => validate.Invoke(null, [registrations]));
 
         InvalidOperationException conflict = Assert.IsType<InvalidOperationException>(exception.InnerException);
         Assert.Contains("ambiguous", conflict.Message, StringComparison.OrdinalIgnoreCase);
@@ -507,14 +537,14 @@ public sealed class EditorRuntimeTests : IDisposable
             Assert.True(interaction.Select());
             interaction.Focus();
 
-            m_runtime.interactions.PrepareGenerationTransition();
+            EditorTestReflection.Invoke(m_runtime.interactions, "PrepareGenerationTransition");
 
             Assert.Null(m_runtime.interactions.selection.selectedTarget);
             Assert.Null(m_runtime.interactions.focusedTarget);
             Assert.True(IdentityManager.Unregister(previous));
             var replacement = Assert.IsAssignableFrom<IIdentityObject>(Activator.CreateInstance(collectibleType));
             Assert.True(IdentityManager.Register(replacement, persistentId));
-            m_runtime.interactions.CompleteGenerationTransition();
+            EditorTestReflection.Invoke(m_runtime.interactions, "CompleteGenerationTransition");
 
             m_runtime.Update(new EditorFrame(0.016f, 1f, isFocused: true));
 
@@ -1043,7 +1073,7 @@ public sealed class InteractionAction : EditorAction<InteractionTarget>
 
     protected override bool Present(EditorActionContext<InteractionTarget> context)
     {
-        if (context.argument is not InteractionPresentation presentation)
+        if (EditorTestReflection.Get<object?>(context, "argument") is not InteractionPresentation presentation)
             return false;
         if (presentation.cancel)
         {

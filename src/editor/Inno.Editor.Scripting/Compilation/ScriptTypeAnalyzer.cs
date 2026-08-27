@@ -14,12 +14,11 @@ internal static class ScriptTypeAnalyzer
 {
     private const string C_STABLE_TYPE_ID_ATTRIBUTE =
         "Inno.Core.Reflection.StableTypeIdAttribute";
-    private const string C_GAME_BEHAVIOR = "Inno.Engine.Scene.GameBehavior";
-    private const string C_GAME_SYSTEM = "Inno.Engine.Scene.GameSystem";
 
     internal static ScriptTypeAnalysisResult Analyze(
         CSharpCompilation compilation,
         IReadOnlyList<ScriptSourceInput> sources,
+        IReadOnlyDictionary<string, string> attachableTypes,
         CancellationToken cancellationToken)
     {
         var sourcesByPath = sources.ToDictionary(
@@ -40,7 +39,7 @@ internal static class ScriptTypeAnalyzer
                     symbol.TypeKind != TypeKind.Class ||
                     symbol.IsAbstract ||
                     symbol.IsGenericType ||
-                    !TryGetAttachableKind(symbol, out string kind))
+                    !TryGetAttachableKind(symbol, attachableTypes, out string kind))
                 {
                     continue;
                 }
@@ -196,19 +195,16 @@ internal static class ScriptTypeAnalyzer
         return source.ToString();
     }
 
-    private static bool TryGetAttachableKind(INamedTypeSymbol symbol, out string kind)
+    private static bool TryGetAttachableKind(
+        INamedTypeSymbol symbol,
+        IReadOnlyDictionary<string, string> attachableTypes,
+        out string kind)
     {
         for (INamedTypeSymbol? current = symbol.BaseType; current is not null; current = current.BaseType)
         {
-            string typeName = current.ToDisplayString();
-            if (string.Equals(typeName, C_GAME_BEHAVIOR, StringComparison.Ordinal))
+            if (attachableTypes.TryGetValue(GetMetadataTypeName(current), out string? value))
             {
-                kind = "GameBehavior";
-                return true;
-            }
-            if (string.Equals(typeName, C_GAME_SYSTEM, StringComparison.Ordinal))
-            {
-                kind = "GameSystem";
+                kind = value;
                 return true;
             }
         }

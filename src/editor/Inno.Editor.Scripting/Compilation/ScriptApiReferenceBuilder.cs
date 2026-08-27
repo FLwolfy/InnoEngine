@@ -260,6 +260,13 @@ internal static class ScriptApiReferenceBuilder
                 .Append('>')
                 .Append(mapping.implementationNamespace);
         }
+        foreach (ScriptApiAttachableType attachableType in profile.attachableTypes)
+        {
+            builder.Append('|')
+                .Append(attachableType.implementationName)
+                .Append('>')
+                .Append(attachableType.kind);
+        }
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
         return Convert.ToHexString(hash.AsSpan(0, 12)).ToLowerInvariant();
     }

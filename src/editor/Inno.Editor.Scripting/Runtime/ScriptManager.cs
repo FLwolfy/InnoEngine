@@ -10,9 +10,8 @@ using System.Threading.Tasks;
 using Inno.Assets;
 using Inno.Assets.Core;
 using Inno.Core.Assemblies;
-using Inno.Core.Framework;
 using Inno.Core.Reflection;
-using Inno.Engine.Scene.Assets;
+using Inno.Editor.Core;
 
 namespace Inno.Editor.Scripting;
 
@@ -329,7 +328,8 @@ public sealed class ScriptManager : IDisposable
         if (requests.Count == 0)
         {
             CompletePendingReload(pending);
-            ScriptDiagnosticPublisher.PublishMissingSceneElements();
+            ScriptDiagnosticPublisher.ClearReload();
+            EditorReloadCoordinator.RefreshDiagnostics();
             SetCompilationProgress(1f, "No scripting changes detected.");
             return false;
         }
@@ -342,59 +342,34 @@ public sealed class ScriptManager : IDisposable
                 StringComparison.Ordinal)))
             .ToArray();
         using AssemblyReloadSession reload = AssemblyManager.BeginReload(requests);
-        TypeCacheReloadContext typeReload = reload.context.GetContext<TypeCacheReloadContext>();
-        ISceneReloadMigration migration = SceneReloadService.Capture(typeReload);
-        try
+        SetCompilationProgress(C_MIGRATION_PROGRESS, "Migrating active editor state...");
+        Action? synchronizeAssets = AssetManager.isInitialized
+            ? AssetManager.Rescan
+            : null;
+        AssemblyUnloadMonitor unload = EditorReloadCoordinator.Execute(
+            reload,
+            synchronizeAssets);
+        if (retiringModules.Length > 0)
         {
-            SetCompilationProgress(C_MIGRATION_PROGRESS, "Migrating active script state...");
-            migration.PrepareForActivation();
-            if (Shell.isInitialized)
+            lock (m_sync)
             {
-                foreach (object retiredObject in migration.retiredObjects)
-                    Shell.instance.coroutineScheduler.StopAllCoroutines(retiredObject);
+                m_unloadObservations.Add(new UnloadObservation(
+                    unload,
+                    retiringModules));
+                m_unloadVerificationAttempt = 0;
             }
-            reload.Activate();
-            if (AssetManager.isInitialized)
-                AssetManager.Rescan();
-            migration.Apply();
-            migration.Complete();
-            AssemblyUnloadMonitor unload = reload.Complete();
-            if (retiringModules.Length > 0)
-            {
-                lock (m_sync)
-                {
-                    m_unloadObservations.Add(new UnloadObservation(
-                        unload,
-                        retiringModules));
-                    m_unloadVerificationAttempt = 0;
-                }
-            }
-            m_activeCompilationDirectory = pending.compilation.outputDirectory;
-            _ = m_artifactCache.Collect([m_activeCompilationDirectory]);
-            RefreshModuleHandles();
-            UpdateActiveFingerprints(requests);
-            SetCompilationProgress(
-                retiringModules.Length == 0 ? 1f : C_UNLOAD_VERIFICATION_PROGRESS,
-                retiringModules.Length == 0
-                    ? "Script reload completed."
-                    : "Script reload committed. Verifying retired assembly unload...");
         }
-        catch (Exception exception)
-        {
-            var rollbackFailures = new List<Exception>();
-            TryRollbackStage(migration.RollbackStructure, rollbackFailures);
-            TryRollbackStage(reload.Rollback, rollbackFailures);
-            if (AssetManager.isInitialized)
-                TryRollbackStage(AssetManager.Rescan, rollbackFailures);
-            TryRollbackStage(migration.RestorePreviousState, rollbackFailures);
-            if (rollbackFailures.Count == 0)
-                ExceptionDispatchInfo.Capture(exception).Throw();
-            throw new AggregateException(
-                "Script reload failed and one or more rollback stages also failed.",
-                [exception, .. rollbackFailures]);
-        }
-        ScriptDiagnosticPublisher.PublishReload(migration.diagnostics);
-        ScriptDiagnosticPublisher.PublishMissingSceneElements();
+        m_activeCompilationDirectory = pending.compilation.outputDirectory;
+        _ = m_artifactCache.Collect([m_activeCompilationDirectory]);
+        RefreshModuleHandles();
+        UpdateActiveFingerprints(requests);
+        SetCompilationProgress(
+            retiringModules.Length == 0 ? 1f : C_UNLOAD_VERIFICATION_PROGRESS,
+            retiringModules.Length == 0
+                ? "Script reload completed."
+                : "Script reload committed. Verifying retired assembly unload...");
+        ScriptDiagnosticPublisher.ClearReload();
+        EditorReloadCoordinator.RefreshDiagnostics();
         CompletePendingReload(pending);
         return true;
     }
@@ -697,18 +672,6 @@ public sealed class ScriptManager : IDisposable
            (path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
             path.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase) ||
             path.EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase));
-
-    private static void TryRollbackStage(Action rollback, ICollection<Exception> failures)
-    {
-        try
-        {
-            rollback();
-        }
-        catch (Exception exception)
-        {
-            failures.Add(exception);
-        }
-    }
 
     private static InvalidOperationException CreateUnloadVerificationFailure(
         IReadOnlyList<AssemblyModuleInfo> modules)

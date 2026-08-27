@@ -11,4 +11,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\core\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" />
+  </ItemGroup>
 </Project>

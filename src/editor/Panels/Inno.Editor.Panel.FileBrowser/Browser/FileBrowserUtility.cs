@@ -114,6 +114,41 @@ internal static class FileBrowserUtility
         return string.IsNullOrEmpty(directory) ? string.Empty : NormalizePath(directory);
     }
 
+    /// <summary>
+    /// Gets the editable entry name while excluding a file's final extension.
+    /// </summary>
+    /// <param name="name">The final source path segment.</param>
+    /// <param name="isDirectory">Whether the entry is a directory.</param>
+    /// <returns>
+    /// The complete directory name, or the file name without its final extension.
+    /// </returns>
+    internal static string GetEditableName(string name, bool isDirectory)
+    {
+        if (isDirectory)
+            return name;
+        string extension = Path.GetExtension(name);
+        return string.IsNullOrEmpty(extension)
+            ? name
+            : name[..^extension.Length];
+    }
+
+    /// <summary>
+    /// Combines an edited entry name with the original file's final extension.
+    /// </summary>
+    /// <param name="sourcePath">The current normalized source-relative path.</param>
+    /// <param name="editedName">The user-edited name that excludes the protected extension.</param>
+    /// <param name="isDirectory">Whether the entry is a directory.</param>
+    /// <returns>
+    /// The renamed final path segment with the original final extension preserved for files.
+    /// </returns>
+    internal static string ComposeRenamedEntryName(
+        string sourcePath,
+        string editedName,
+        bool isDirectory)
+        => isDirectory
+            ? editedName
+            : editedName + Path.GetExtension(sourcePath);
+
     internal static string[] FitTextToLines(string text, float maxWidth, int maxLines)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(maxLines, 1);

@@ -49,6 +49,7 @@ public sealed class ScriptManagerTests : IDisposable
         "InnoScriptManagerTests",
         Guid.NewGuid().ToString("N"));
     private readonly ScriptManager m_manager;
+    private readonly IDisposable m_sceneReloadIntegration;
 
     public ScriptManagerTests()
     {
@@ -75,7 +76,13 @@ public sealed class ScriptManagerTests : IDisposable
         {
             enableFileSystemWatcher = false
         });
-        m_manager = new ScriptManager(
+        Type sceneReloadIntegrationType = typeof(SceneEdits).Assembly.GetType(
+            "Inno.Editor.Scene.SceneReloadIntegration",
+            throwOnError: true)!;
+        m_sceneReloadIntegration = ScriptingTestReflection.InvokeStatic<IDisposable>(
+            sceneReloadIntegrationType,
+            "Acquire");
+        m_manager = ScriptingTestReflection.CreateScriptManager(
             new ScriptManagerOptions
             {
                 projectRootDirectory = m_projectRoot,
@@ -89,6 +96,7 @@ public sealed class ScriptManagerTests : IDisposable
     {
         SceneManager.UnloadAllScenes();
         m_manager.Dispose();
+        m_sceneReloadIntegration.Dispose();
         AssetManager.Shutdown();
         SerializationManager.Shutdown();
         TypeCacheManager.Shutdown();
@@ -121,18 +129,24 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void QueuedMenuReloadIsVisibleAtZeroProgressBeforeCompilationStarts()
     {
-        var scripting = new EditorScripting();
-        FieldInfo managerField = typeof(EditorScripting).GetField(
+        Type editorScriptingType = typeof(ScriptManager).Assembly.GetType(
+            "Inno.Editor.Scripting.EditorScripting",
+            throwOnError: true)!;
+        object scripting = ScriptingTestReflection.Create(editorScriptingType);
+        FieldInfo managerField = editorScriptingType.GetField(
             "m_manager",
             BindingFlags.Instance | BindingFlags.NonPublic)!;
         managerField.SetValue(scripting, m_manager);
         try
         {
-            scripting.ReloadPlugins();
+            ScriptingTestReflection.Invoke(scripting, "ReloadPlugins");
 
-            Assert.True(scripting.isCompiling);
-            Assert.Equal(0f, scripting.progress);
-            Assert.Contains("queued", scripting.status, StringComparison.OrdinalIgnoreCase);
+            Assert.True(ScriptingTestReflection.Get<bool>(scripting, "isCompiling"));
+            Assert.Equal(0f, ScriptingTestReflection.Get<float>(scripting, "progress"));
+            Assert.Contains(
+                "queued",
+                ScriptingTestReflection.Get<string>(scripting, "status"),
+                StringComparison.OrdinalIgnoreCase);
             Assert.True(m_manager.isCompilationPending);
         }
         finally
@@ -165,7 +179,7 @@ public sealed class ScriptManagerTests : IDisposable
         var releaseFirst = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously);
         int entryCount = 0;
-        using var manager = new ScriptManager(
+        using var manager = ScriptingTestReflection.CreateScriptManager(
             new ScriptManagerOptions
             {
                 projectRootDirectory = m_projectRoot,
@@ -203,7 +217,7 @@ public sealed class ScriptManagerTests : IDisposable
         int entryCount = 0;
         var firstEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var manager = new ScriptManager(
+        using var manager = ScriptingTestReflection.CreateScriptManager(
             new ScriptManagerOptions
             {
                 projectRootDirectory = m_projectRoot,
@@ -245,7 +259,7 @@ public sealed class ScriptManagerTests : IDisposable
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var cancellationObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var allowExit = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var manager = new ScriptManager(
+        using var manager = ScriptingTestReflection.CreateScriptManager(
             new ScriptManagerOptions
             {
                 projectRootDirectory = m_projectRoot,
@@ -288,7 +302,7 @@ public sealed class ScriptManagerTests : IDisposable
     {
         int entryCount = 0;
         var firstEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var manager = new ScriptManager(
+        using var manager = ScriptingTestReflection.CreateScriptManager(
             new ScriptManagerOptions
             {
                 projectRootDirectory = m_projectRoot,
@@ -551,7 +565,7 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void SceneWorkspaceSaveRenamesTheExistingSceneAsset()
     {
-        var workspace = new EditorSceneWorkspace();
+        var workspace = new ReflectedSceneWorkspace();
         GameScene scene = workspace.CreateScene();
         scene.name = "Original";
         string originalPath = workspace.Save(scene, "Scenes");
@@ -571,7 +585,7 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void SceneAssetRenameUpdatesTheLoadedDocumentWithoutMarkingItDirty()
     {
-        var workspace = new EditorSceneWorkspace();
+        var workspace = new ReflectedSceneWorkspace();
         var context = new EditorContext(m_projectRoot);
         workspace.Start(context);
         try
@@ -604,7 +618,7 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void MovingALoadedSceneDirectoryDoesNotMarkTheSceneDirty()
     {
-        var workspace = new EditorSceneWorkspace();
+        var workspace = new ReflectedSceneWorkspace();
         var context = new EditorContext(m_projectRoot);
         workspace.Start(context);
         try
@@ -632,7 +646,7 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void MovingALoadedSceneDirectoryPreservesAnExistingDirtyState()
     {
-        var workspace = new EditorSceneWorkspace();
+        var workspace = new ReflectedSceneWorkspace();
         var context = new EditorContext(m_projectRoot);
         workspace.Start(context);
         try
@@ -662,7 +676,7 @@ public sealed class ScriptManagerTests : IDisposable
     {
         using var runtime = new EditorInteractionRuntime(m_projectRoot);
         runtime.Start();
-        var workspace = new EditorSceneWorkspace(runtime.interactions);
+        var workspace = new ReflectedSceneWorkspace(runtime.interactions);
         var context = new EditorContext(m_projectRoot);
         workspace.Start(context);
         try
@@ -700,7 +714,7 @@ public sealed class ScriptManagerTests : IDisposable
     {
         using var runtime = new EditorInteractionRuntime(m_projectRoot);
         runtime.Start();
-        var workspace = new EditorSceneWorkspace(runtime.interactions);
+        var workspace = new ReflectedSceneWorkspace(runtime.interactions);
         var context = new EditorContext(m_projectRoot);
         workspace.Start(context);
         try
@@ -744,6 +758,37 @@ public sealed class ScriptManagerTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData("Player.iscene", false, "Player", "Renamed", "Renamed.iscene")]
+    [InlineData("Tool.editor.cs", false, "Tool.editor", "Renamed", "Renamed.cs")]
+    [InlineData("Tool.editor.cs", false, "Tool.editor", "Renamed.editor", "Renamed.editor.cs")]
+    [InlineData("Tool.cs", false, "Tool", "Renamed.txt", "Renamed.txt.cs")]
+    [InlineData("Folder.with.dot", true, "Folder.with.dot", "Renamed.folder", "Renamed.folder")]
+    public void FileBrowserRenameEditsOnlyTheNameAndPreservesTheFinalExtension(
+        string sourceName,
+        bool isDirectory,
+        string expectedEditableName,
+        string editedName,
+        string expectedResult)
+    {
+        Type utility = typeof(AssetEditor).Assembly.GetType(
+            "Inno.Editor.Panel.FileBrowser.FileBrowserUtility",
+            throwOnError: true)!;
+        MethodInfo getEditableName = utility.GetMethod(
+            "GetEditableName",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+        MethodInfo composeRenamedEntryName = utility.GetMethod(
+            "ComposeRenamedEntryName",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+
+        Assert.Equal(
+            expectedEditableName,
+            getEditableName.Invoke(null, [sourceName, isDirectory]));
+        Assert.Equal(
+            expectedResult,
+            composeRenamedEntryName.Invoke(null, [sourceName, editedName, isDirectory]));
+    }
+
     [Fact]
     public void GlobalSaveCreatesUnsavedScenesInTheOpenAssetDirectory()
     {
@@ -760,7 +805,7 @@ public sealed class ScriptManagerTests : IDisposable
 
         using var runtime = new EditorInteractionRuntime(editorContext);
         runtime.Start();
-        var workspace = new EditorSceneWorkspace(runtime.interactions);
+        var workspace = new ReflectedSceneWorkspace(runtime.interactions);
         GameScene scene = workspace.CreateScene();
         scene.name = "Current Directory Scene";
 
@@ -900,7 +945,7 @@ public sealed class ScriptManagerTests : IDisposable
         {
             using var runtime = new EditorInteractionRuntime(m_projectRoot);
             runtime.Start();
-            var workspace = new EditorSceneWorkspace(runtime.interactions);
+            var workspace = new ReflectedSceneWorkspace(runtime.interactions);
             GameObject gameObject = workspace.CreateScene().CreateObject("Undefined GameLayer Object");
             gameObject.layer = new GameLayer(7);
 
@@ -1047,7 +1092,10 @@ public sealed class ScriptManagerTests : IDisposable
         GameScene scene = SceneManager.activeScene!;
         Guid sceneId = scene.identity.persistentId;
         string originalName = scene.name;
-        var edits = new SceneEdits(new EditorSceneWorkspace(runtime.interactions), runtime.interactions);
+        var edits = (SceneEdits)ScriptingTestReflection.Create(
+            typeof(SceneEdits),
+            new ReflectedSceneWorkspace(runtime.interactions).instance,
+            runtime.interactions);
         edits.RenameScene(scene, "Renamed");
 
         Assert.True(runtime.interactions
@@ -1098,7 +1146,7 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void SceneWorkspaceOpenSceneLoadsAdditivelyAtTheBottom()
     {
-        var workspace = new EditorSceneWorkspace();
+        var workspace = new ReflectedSceneWorkspace();
         GameScene source = workspace.CreateScene();
         source.name = "Additive";
         string sourcePath = workspace.Save(source, "Scenes");
@@ -1115,7 +1163,7 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void SceneWorkspaceCloseSceneRemovesOnlyTheLoadedInstance()
     {
-        var workspace = new EditorSceneWorkspace();
+        var workspace = new ReflectedSceneWorkspace();
         GameScene first = workspace.CreateScene();
         GameScene second = workspace.CreateScene();
 
@@ -1134,11 +1182,11 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void SceneWorkspaceDoesNotCreateADefaultSceneForEmptyState()
     {
-        var workspace = new EditorSceneWorkspace();
+        var workspace = new ReflectedSceneWorkspace();
         var context = new EditorContext(m_projectRoot);
         workspace.Start(context);
 
-        RestoreExtensionState(workspace, new TestEditorState());
+        RestoreExtensionState(workspace.module, new TestEditorState());
         workspace.Update(context);
 
         Assert.Empty(SceneManager.loadedScenes);
@@ -1149,7 +1197,7 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void SceneModuleStateRestoresSavedScenesInOrderAndSelectsTheActiveScene()
     {
-        var sourceWorkspace = new EditorSceneWorkspace();
+        var sourceWorkspace = new ReflectedSceneWorkspace();
         GameScene first = sourceWorkspace.CreateScene();
         first.name = "First";
         _ = sourceWorkspace.Save(first, "Scenes");
@@ -1157,13 +1205,13 @@ public sealed class ScriptManagerTests : IDisposable
         second.name = "Second";
         _ = sourceWorkspace.Save(second, "Scenes");
         SceneManager.SetActiveScene(first);
-        TestEditorState state = CaptureExtensionState(sourceWorkspace);
+        TestEditorState state = CaptureExtensionState(sourceWorkspace.module);
 
         SceneManager.UnloadAllScenes();
-        var restoredWorkspace = new EditorSceneWorkspace();
+        var restoredWorkspace = new ReflectedSceneWorkspace();
         var context = new EditorContext(m_projectRoot);
         restoredWorkspace.Start(context);
-        RestoreExtensionState(restoredWorkspace, state);
+        RestoreExtensionState(restoredWorkspace.module, state);
         restoredWorkspace.Update(context);
 
         Assert.Equal(["First", "Second"], restoredWorkspace.scenes.Select(static scene => scene.name));
@@ -1174,19 +1222,19 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void SceneModuleStateReloadsLastSavedDataInsteadOfDirtyMemory()
     {
-        var sourceWorkspace = new EditorSceneWorkspace();
+        var sourceWorkspace = new ReflectedSceneWorkspace();
         GameScene scene = sourceWorkspace.CreateScene();
         scene.name = "Saved";
         _ = scene.CreateObject("Saved Object");
         _ = sourceWorkspace.Save(scene, "Scenes");
         _ = scene.CreateObject("Unsaved Object");
-        TestEditorState state = CaptureExtensionState(sourceWorkspace);
+        TestEditorState state = CaptureExtensionState(sourceWorkspace.module);
 
         SceneManager.UnloadAllScenes();
-        var restoredWorkspace = new EditorSceneWorkspace();
+        var restoredWorkspace = new ReflectedSceneWorkspace();
         var context = new EditorContext(m_projectRoot);
         restoredWorkspace.Start(context);
-        RestoreExtensionState(restoredWorkspace, state);
+        RestoreExtensionState(restoredWorkspace.module, state);
         restoredWorkspace.Update(context);
 
         Assert.NotNull(restoredWorkspace.activeScene!.FindObject("Saved Object"));
@@ -1602,7 +1650,7 @@ public sealed class ScriptManagerTests : IDisposable
     [Theory]
     [InlineData("Assets/Scripts/Player.cs", "FileCode")]
     [InlineData("Assets/Scenes/Main.iscene", "Cubes")]
-    [InlineData("Assets/Prefabs/Player.iprefab", "Cube")]
+    [InlineData("Assets/Prefabs/Player.iprefab", "DiceD6")]
     [InlineData("Assets/Plugins/Physics.dll", "Plug")]
     [InlineData("Assets/Scripts/Game.iasmdef", "Gears")]
     [InlineData("Assets/Data/Settings.JSON", "FileLines")]
@@ -1872,21 +1920,27 @@ public sealed class ScriptManagerTests : IDisposable
         Write("UnloadProbe.editor.cs", "public sealed class UnloadProbe { public int generation => 2; }");
         Assert.True(Compile().success);
         Assert.True(m_manager.ApplyPendingReload());
-        Assert.True(m_manager.isUnloadVerificationPending);
+        Assert.True(m_manager.IsUnloadVerificationPendingForTest());
         Assert.Equal(0.97f, m_manager.compilationProgress, 3);
-        var scripting = new EditorScripting();
-        FieldInfo managerField = typeof(EditorScripting).GetField(
+        Type editorScriptingType = typeof(ScriptManager).Assembly.GetType(
+            "Inno.Editor.Scripting.EditorScripting",
+            throwOnError: true)!;
+        object scripting = ScriptingTestReflection.Create(editorScriptingType);
+        FieldInfo managerField = editorScriptingType.GetField(
             "m_manager",
             BindingFlags.Instance | BindingFlags.NonPublic)!;
         managerField.SetValue(scripting, m_manager);
-        var modal = new ScriptCompilationModal(scripting);
-        Assert.True(modal.isVisible);
+        Type modalType = typeof(ScriptManager).Assembly.GetType(
+            "Inno.Editor.Scripting.ScriptCompilationModal",
+            throwOnError: true)!;
+        object modal = ScriptingTestReflection.Create(modalType, scripting);
+        Assert.True(ScriptingTestReflection.Get<bool>(modal, "isVisible"));
 
         Exception? failure = CompleteUnloadVerification();
 
         Assert.Null(failure);
-        Assert.False(m_manager.isUnloadVerificationPending);
-        Assert.False(modal.isVisible);
+        Assert.False(m_manager.IsUnloadVerificationPendingForTest());
+        Assert.False(ScriptingTestReflection.Get<bool>(modal, "isVisible"));
         Assert.False(retiredContext.IsAlive);
         Assert.Equal(
             "Script reload and retired assembly unload completed.",
@@ -1914,7 +1968,7 @@ public sealed class ScriptManagerTests : IDisposable
             Exception? failure = CompleteUnloadVerification();
 
             Assert.NotNull(failure);
-            Assert.False(m_manager.isUnloadVerificationPending);
+            Assert.False(m_manager.IsUnloadVerificationPendingForTest());
             Assert.Contains("remained reachable", failure.Message, StringComparison.Ordinal);
             Assert.Contains("active generation remains committed", failure.Message, StringComparison.OrdinalIgnoreCase);
             Assert.True(sink.ContainsCode("INNO-ALC-UNLOAD"));
@@ -1952,7 +2006,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(candidate.success, FormatDiagnostics(candidate));
         foreach (string failedModule in new[] { "ProjectPlugins", "RuntimeScripts", "EditorScripts" })
         {
-            IReadOnlyList<AssemblyLoadRequest> invalid = candidate.reloadRequests
+            IReadOnlyList<AssemblyLoadRequest> invalid = candidate.ReloadRequestsForTest()
                 .Select(request => string.Equals(request.moduleName, failedModule, StringComparison.Ordinal)
                     ? new AssemblyLoadRequest
                     {
@@ -1971,9 +2025,9 @@ public sealed class ScriptManagerTests : IDisposable
             Assert.Equal(previous, GetReloadModuleGenerations());
         }
 
-        AssemblyLoadRequest plugin = candidate.reloadRequests.Single(static request =>
+        AssemblyLoadRequest plugin = candidate.ReloadRequestsForTest().Single(static request =>
             request.domain == AssemblyDomain.InnoPlugin);
-        AssemblyLoadRequest runtime = candidate.reloadRequests.Single(static request =>
+        AssemblyLoadRequest runtime = candidate.ReloadRequestsForTest().Single(static request =>
             request.domain == AssemblyDomain.InnoScripting && request.scope == AssemblyScope.Runtime);
         Assert.Throws<InvalidOperationException>(() => AssemblyManager.BeginReload([plugin]));
         Assert.Throws<InvalidOperationException>(() => AssemblyManager.BeginReload([runtime]));
@@ -2410,25 +2464,26 @@ public sealed class ScriptManagerTests : IDisposable
             AssetManager.GetDependencies(savedMissingScene),
             item => item.persistentId == dependency.identity.persistentId);
 
-        var diagnosticTracker = new EditorScripting();
+        var diagnosticWorkspace = new ReflectedSceneWorkspace();
+        var diagnosticContext = new EditorContext(m_projectRoot);
+        diagnosticWorkspace.Start(diagnosticContext);
         Assert.True(SceneManager.UnloadScene(scene));
-        diagnosticTracker.ReconcileSceneDiagnostics(force: true);
+        diagnosticWorkspace.Update(diagnosticContext);
         var loadedMissingSink = new TestDiagnosticSink();
         DiagnosticManager.RegisterSink(loadedMissingSink);
-        GameScene loadedMissingScene;
         try
         {
             Assert.False(loadedMissingSink.ContainsCode("INNOHR0002"));
-            loadedMissingScene = savedMissingScene.Instantiate();
+            GameScene loadedMissingScene = savedMissingScene.Instantiate();
             SceneManager.LoadScene(loadedMissingScene);
-            diagnosticTracker.ReconcileSceneDiagnostics();
+            diagnosticWorkspace.Update(diagnosticContext);
             Assert.True(loadedMissingSink.ContainsCode("INNOHR0002"));
         }
         finally
         {
             DiagnosticManager.UnregisterSink(loadedMissingSink);
+            diagnosticWorkspace.Stop(diagnosticContext);
         }
-        Assert.True(SceneManager.UnloadScene(loadedMissingScene));
         GameScene restoredScene = SerializationManager.Deserialize<GameScene>(missingSceneData);
         SceneManager.LoadScene(restoredScene);
         GameObject restoredActor = restoredScene.GetObjects().Single(value => value.name == "Actor");
@@ -2475,7 +2530,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(Compile().success);
         Assert.True(m_manager.ApplyPendingReload());
 
-        var workspace = new EditorSceneWorkspace();
+        var workspace = new ReflectedSceneWorkspace();
         var context = new EditorContext(m_projectRoot);
         workspace.Start(context);
         try
@@ -2808,27 +2863,27 @@ public sealed class ScriptManagerTests : IDisposable
 
         ScriptCompilationResult first = Compile();
         Assert.True(first.success, FormatDiagnostics(first));
-        Assert.Contains("Project.Core", first.compiledAssemblies);
-        Assert.Contains("Project.Gameplay", first.compiledAssemblies);
-        Assert.Contains("Project.Independent", first.compiledAssemblies);
+        Assert.Contains("Project.Core", first.CompiledAssembliesForTest());
+        Assert.Contains("Project.Gameplay", first.CompiledAssembliesForTest());
+        Assert.Contains("Project.Independent", first.CompiledAssembliesForTest());
 
         Write("Core/CoreValue.cs", "public static class CoreValue { public const int value = 2; }");
         ScriptCompilationResult second = Compile();
 
         Assert.True(second.success, FormatDiagnostics(second));
-        Assert.Contains("Project.Core", second.compiledAssemblies);
-        Assert.Contains("Project.Gameplay", second.compiledAssemblies);
-        Assert.DoesNotContain("Project.Independent", second.compiledAssemblies);
-        Assert.Contains("Project.Independent", second.reusedAssemblies);
-        Assert.Contains("Inno.GameScripts", second.reusedAssemblies);
-        Assert.Contains("Inno.EditorScripts", second.reusedAssemblies);
+        Assert.Contains("Project.Core", second.CompiledAssembliesForTest());
+        Assert.Contains("Project.Gameplay", second.CompiledAssembliesForTest());
+        Assert.DoesNotContain("Project.Independent", second.CompiledAssembliesForTest());
+        Assert.Contains("Project.Independent", second.ReusedAssembliesForTest());
+        Assert.Contains("Inno.GameScripts", second.ReusedAssembliesForTest());
+        Assert.Contains("Inno.EditorScripts", second.ReusedAssembliesForTest());
 
         ScriptCompilationResult third = Compile();
         Assert.True(third.success, FormatDiagnostics(third));
-        Assert.Empty(third.compiledAssemblies);
+        Assert.Empty(third.CompiledAssembliesForTest());
         Assert.Equal(
-            first.compiledAssemblies.Count,
-            third.reusedAssemblies.Count);
+            first.CompiledAssembliesForTest().Count,
+            third.ReusedAssembliesForTest().Count);
     }
 
     [Fact]
@@ -2856,8 +2911,14 @@ public sealed class ScriptManagerTests : IDisposable
         Directory.SetLastWriteTimeUtc(staleGenerationStaging, stale);
         Directory.SetLastWriteTimeUtc(staleAssemblyStaging, stale);
 
-        var cache = new ScriptArtifactCache(root);
-        int removed = cache.Collect([protectedGeneration]);
+        Type cacheType = typeof(ScriptManager).Assembly.GetType(
+            "Inno.Editor.Scripting.ScriptArtifactCache",
+            throwOnError: true)!;
+        object cache = ScriptingTestReflection.Create(cacheType, root);
+        int removed = ScriptingTestReflection.Invoke<int>(
+            cache,
+            "Collect",
+            (object)new string?[] { protectedGeneration });
 
         Assert.Equal(3, removed);
         Assert.True(Directory.Exists(protectedGeneration));
@@ -2881,8 +2942,8 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(repaired.success, FormatDiagnostics(repaired));
         Assert.Equal("Inno.GameScripts", AssemblyName.GetAssemblyName(
             Path.Combine(repaired.outputDirectory!, "Inno.GameScripts.dll")).Name);
-        Assert.Empty(repaired.compiledAssemblies);
-        Assert.Contains("Inno.GameScripts", repaired.reusedAssemblies);
+        Assert.Empty(repaired.CompiledAssembliesForTest());
+        Assert.Contains("Inno.GameScripts", repaired.ReusedAssembliesForTest());
     }
 
     [Fact]

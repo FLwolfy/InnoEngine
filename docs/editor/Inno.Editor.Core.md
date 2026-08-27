@@ -2,7 +2,7 @@
 
 [Editor 索引](README.md) · [Interactions](Inno.Editor.Interactions.md) · [Wiki 首页](../README.md)
 
-`Inno.Editor.Core` 只保存 Editor 的被动生命周期契约。它不知道 Action、Menu、Selection、ImGui、Assets、Scene 或具体 Panel，因此可以被任意表现后端和 feature 安全引用。
+`Inno.Editor.Core` 保存 Editor 的基础生命周期契约与领域无关的 assembly reload 协调协议。它不知道 Action、Menu、Selection、ImGui、Assets、Scene、Scripting 或具体 Panel，因此可以被任意表现后端和 feature 安全引用。
 
 ## 目录与职责
 
@@ -22,6 +22,10 @@ Inno.Editor.Core/
 │  ├─ EditorModal.cs
 │  ├─ EditorModalAttribute.cs
 │  └─ IEditorPanelReloadState.cs
+├─ Reloading/
+│  ├─ EditorReloadCoordinator.cs
+│  ├─ IEditorReloadParticipant.cs
+│  └─ IEditorReloadTransaction.cs
 └─ Properties/ScriptingApi.cs
 ```
 
@@ -45,7 +49,7 @@ Console.WriteLine(context.projectDirectory);
 Console.WriteLine(context.frame.totalTime);
 ```
 
-构造函数、`layoutPath`、`imguiLayout`、section 读写、ImGui layout 更新和 Save 均为 internal host API，只通过精确的 `InternalsVisibleTo` 提供给 Application、Interactions 与必要测试程序集。EditorScripts 不能创建第二个 Context、读取原始 section、覆盖其他扩展状态或主动写入 `editor.ini`。
+构造函数、`layoutPath`、`imguiLayout`、section 读写、ImGui layout 更新和 Save 是 CLR host 边界。由于 Application 与 Interactions 是独立程序集，这些成员是 public CLR API，但全部标记 `ScriptingApiIgnore`，不会进入 EditorScripts facade。测试若要验证未公开实现细节只能使用反射；Editor 项目不使用 `InternalsVisibleTo`。EditorScripts 不能创建第二个 Context、读取原始 section、覆盖其他扩展状态或主动写入 `editor.ini`。
 
 这些 API 只处理 Module/Panel 项目状态与 Dear ImGui 使用的 `editor.ini`。业务设置由 [Inno.Editor.Settings](Inno.Editor.Settings.md) 独立写入项目根 `EditorSettings.json`。业务扩展若需要 Settings、Action/Menu/Selection，仍应在构造函数中接收 `EditorSettings` 或 `EditorInteractions`，而不是向 `EditorContext` 添加新服务属性。
 
@@ -137,9 +141,26 @@ public sealed class AnimationBakeModal(AnimationModule animation) : EditorModal
 
 `canMove`、`canResize` 默认均为 false，因此既有进度 Modal 继续保持居中 auto-size。需要 Settings 风格窗口时可分别开启移动和缩放，并用 `initialSize` / `minimumSize` 提供未乘 zoom 的逻辑尺寸。Modal 仍是非 Dock 契约；具体 backend 必须阻止 Dock 与 Collapse/最小化。
 
+## Reload coordination
+
+`EditorReloadCoordinator` 是 Core 中唯一的跨 feature reload 协调入口。`Register(IEditorReloadParticipant)` 只弱持有参与者；registration 被释放或参与者被回收后不会残留领域实例。Core 不知道 Scene、Missing、Panel 或脚本编译，仅编排中立事务。
+
+协调顺序固定为：全部 `PrepareForActivation` → Assembly candidate `Activate` → 可选外部状态同步 → 全部 `Apply` → Assembly `Complete` → 各 participant cleanup-only `Complete`。提交前任一步失败时，按反序恢复 feature 结构、Assembly generation、外部状态和 previous feature state。Assembly `Complete` 后的 participant cleanup 异常只能被隔离记录，因为发布已经不可回滚。
+
+| API | 说明 |
+| --- | --- |
+| `EditorReloadCoordinator.Register` | 弱注册一个拥有 generation-bound live state 的领域参与者。 |
+| `EditorReloadCoordinator.Execute` | 把 prepared `AssemblyReloadSession` 与所有领域事务作为一次原子切换执行。 |
+| `EditorReloadCoordinator.RefreshDiagnostics` | 请求所有存活领域按当前状态重新发布诊断。 |
+| `IEditorReloadParticipant.Capture` | 只捕获事务，不在 capture 阶段修改 live state。 |
+| `IEditorReloadParticipant.RefreshDiagnostics` | 重建当前状态诊断；不依赖某一种 reload 请求。 |
+| `IEditorReloadTransaction` | 定义 prepare、apply、rollback、previous-state restore 与 cleanup-only complete。 |
+
+Scripting 负责准备 assembly session 并调用协调器；Scene 独立注册自己的 participant。因此二者都只依赖 Core，不互相引用。
+
 ## Scripting API
 
-EditorScripts 使用唯一逻辑命名空间 `InnoEditor.Core`。它导出 Context、Frame、Runtime、Module、Panel、Modal、`EditorState` 和 Reload State 接口；不导出 layout reader/writer 或 JSON DOM。脚本 Module/Panel 只能实现 protected `OnStart/OnUpdate/OnStop`、`OnAttach/OnDetach/OnDraw` 与 `Capture/Restore` hooks，不能直接调用 Start、Update、Stop、Attach、Detach 或 Draw；所有脚本必须显式写普通 `using`。
+EditorScripts 使用唯一逻辑命名空间 `InnoEditor.Core`。它导出 Context、Frame、Runtime、Module、Panel、Modal、`EditorState` 和 Panel Reload State 接口；不导出 assembly reload coordinator、layout reader/writer 或 JSON DOM。脚本 Module/Panel 只能实现 protected `OnStart/OnUpdate/OnStop`、`OnAttach/OnDetach/OnDraw` 与 `Capture/Restore` hooks，不能直接调用标记为 `ScriptingApiIgnore` 的 Start、Update、Stop、Attach、Detach 或 Draw；所有脚本必须显式写普通 `using`。
 
 ## Module/Panel 项目状态
 
@@ -169,7 +190,7 @@ Scene document 的公开查询/工作流面位于 `Inno.Editor.Scene.IEditorScen
 
 ## 边界规则
 
-- 不向 Core 添加 Rename、Open、Save、Asset 或 Scene 等 feature 概念。
+- 不向 Core 添加 Rename、Open、Save、Asset、Missing 或 Scene 等 feature 概念。
 - 不向 Context 添加 `IWhateverService` 集合或可变注册接口。
 - 不在 Core 引用 ImGui。
 - Action/Menu/Drag/Selection 统一见 [Interactions](Inno.Editor.Interactions.md)。

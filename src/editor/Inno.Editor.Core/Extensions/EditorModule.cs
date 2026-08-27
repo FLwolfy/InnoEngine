@@ -1,5 +1,7 @@
 using System;
 
+using Inno.Core.Scripting;
+
 namespace Inno.Editor.Core;
 
 /// <summary>
@@ -24,7 +26,17 @@ public abstract class EditorModule : IDisposable
     /// Starts the module after the containing extension generation becomes active.
     /// </summary>
     /// <param name="context">The shared editor context for the active runtime.</param>
-    internal void Start(EditorContext context)
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="context"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">
+    /// Thrown after the module has been disposed.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the module is already started.
+    /// </exception>
+    [ScriptingApiIgnore]
+    public void Start(EditorContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -38,7 +50,17 @@ public abstract class EditorModule : IDisposable
     /// Updates the module once per editor frame before panels and modals are drawn.
     /// </summary>
     /// <param name="context">The shared editor context containing the current frame state.</param>
-    internal void Update(EditorContext context)
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="context"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">
+    /// Thrown after the module has been disposed.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the module is not started.
+    /// </exception>
+    [ScriptingApiIgnore]
+    public void Update(EditorContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -51,7 +73,17 @@ public abstract class EditorModule : IDisposable
     /// Stops the module before the containing extension generation is released.
     /// </summary>
     /// <param name="context">The shared editor context for the runtime being stopped.</param>
-    internal void Stop(EditorContext context)
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="context"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">
+    /// Thrown after the module has been disposed.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the module is not started.
+    /// </exception>
+    [ScriptingApiIgnore]
+    public void Stop(EditorContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         ObjectDisposedException.ThrowIf(m_disposed, this);

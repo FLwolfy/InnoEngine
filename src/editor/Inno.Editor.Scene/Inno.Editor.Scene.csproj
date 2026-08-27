@@ -13,7 +13,10 @@
     <ProjectReference Include="..\..\assets\Inno.Assets.Core\Inno.Assets.Core.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\assets\Inno.Assets.File\Inno.Assets.File.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\assets\Inno.Assets.Serialization\Inno.Assets.Serialization.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Coroutines\Inno.Core.Coroutines.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Diagnose\Inno.Core.Diagnose.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Framework\Inno.Core.Framework.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Identity\Inno.Core.Identity.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />

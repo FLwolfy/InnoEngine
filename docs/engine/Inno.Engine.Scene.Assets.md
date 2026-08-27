@@ -59,7 +59,7 @@ ISceneReloadMigration migration =
     SceneReloadService.Capture(typeCacheReloadContext);
 ```
 
-`ISceneReloadMigration` 提供 `retiredObjects`、`diagnostics`、`PrepareForActivation`、`Apply`、`RollbackStructure`、`RestorePreviousState`、`Complete`。Editor Scripting 的顺序是：
+`ISceneReloadMigration` 提供 `retiredObjects`、`diagnostics`、`PrepareForActivation`、`Apply`、`RollbackStructure`、`RestorePreviousState`、`Complete`。Editor Scene feature 通过中立 reload participant contract 编排的顺序是：
 
 1. capture/prepare Scene state；
 2. activate Assembly/TypeCache/Registry candidate；
@@ -67,7 +67,7 @@ ISceneReloadMigration migration =
 4. complete Scene 与 Assembly transactions；
 5. 异常时反向 rollback 并恢复旧生命周期状态。
 
-该 migration API 是 host boundary，不在 Scripting API facade 中导出。
+该 migration API 是 Scene host boundary，不在 Scripting API facade 中导出，也不会被 `Inno.Editor.Scripting` 直接引用。
 
 ## 局部 Scene 状态 API
 

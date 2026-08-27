@@ -1,5 +1,7 @@
 using System.Numerics;
 
+using Inno.Core.Scripting;
+
 namespace Inno.Editor.Core;
 
 /// <summary>Defines non-dockable modal editor content.</summary>
@@ -37,7 +39,15 @@ public abstract class EditorModal
     /// Draws the modal body inside the runtime-managed centered window.
     /// </summary>
     /// <param name="context">The shared editor context containing current project and frame state.</param>
-    internal void Draw(EditorContext context) => OnDraw(context);
+    /// <exception cref="System.ArgumentNullException">
+    /// Thrown when <paramref name="context"/> is <see langword="null"/>.
+    /// </exception>
+    [ScriptingApiIgnore]
+    public void Draw(EditorContext context)
+    {
+        System.ArgumentNullException.ThrowIfNull(context);
+        OnDraw(context);
+    }
 
     /// <summary>
     /// Draws the modal body inside the runtime-managed centered window.

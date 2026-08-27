@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 
+using Inno.Core.Scripting;
 using Inno.Core.Serialization;
 
 namespace Inno.Engine.Scene;
@@ -8,6 +9,7 @@ namespace Inno.Engine.Scene;
 /// <summary>
 /// Base type for serializable, ordered scene-level behaviors.
 /// </summary>
+[ScriptingAttachableType("GameSystem")]
 public abstract class GameSystem : EngineObject, ISerializable, ISceneLifecycleObject
 {
     private GameScene? m_scene;

@@ -1,6 +1,8 @@
 
 using System;
 
+using Inno.Core.Scripting;
+
 namespace Inno.Editor.Core;
 
 /// <summary>
@@ -25,7 +27,14 @@ public abstract class EditorPanel
     /// Attaches the panel after its extension generation becomes active.
     /// </summary>
     /// <param name="context">The shared editor context for the active runtime.</param>
-    internal void Attach(EditorContext context)
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="context"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the panel is already attached.
+    /// </exception>
+    [ScriptingApiIgnore]
+    public void Attach(EditorContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         if (m_attached)
@@ -38,7 +47,14 @@ public abstract class EditorPanel
     /// Detaches the panel before its extension generation is released.
     /// </summary>
     /// <param name="context">The shared editor context for the runtime being detached.</param>
-    internal void Detach(EditorContext context)
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="context"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the panel is not attached.
+    /// </exception>
+    [ScriptingApiIgnore]
+    public void Detach(EditorContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         if (!m_attached)
@@ -53,7 +69,14 @@ public abstract class EditorPanel
     /// <param name="context">
     /// The shared editor context containing current selection, focus, and frame state.
     /// </param>
-    internal void Draw(EditorContext context)
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="context"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the panel is not attached.
+    /// </exception>
+    [ScriptingApiIgnore]
+    public void Draw(EditorContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         if (!m_attached)

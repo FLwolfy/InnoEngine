@@ -2,7 +2,7 @@
 
 [Editor 索引](README.md) · [Core](Inno.Editor.Core.md) · [ImGui](Inno.Editor.ImGui.md)
 
-`Inno.Editor.Interactions` 提供表现后端无关的交互语言：稳定的 `string` area/action/panel ID、可选 `target`、轻量 `EditorInteraction`，以及 Attribute 自动发现的 Action、Menu、Shortcut 和 Drop。它不引用 ImGui、Assets、Scene 或任何 Panel project。
+`Inno.Editor.Interactions` 提供表现后端无关的交互语言：稳定的 `string` area/action/panel ID、可选 `target`、轻量 `EditorInteraction`，以及 Attribute 自动发现的 Action、Menu、Shortcut 和 Drop。它不引用 ImGui、Assets、Scene、Scripting 或任何 Panel project；跨 feature reload 协议位于 [Inno.Editor.Core](Inno.Editor.Core.md)。
 
 ## 最小心智模型
 
@@ -295,7 +295,7 @@ scene.hierarchy=true
 
 文件通过临时文件 flush 后原子替换，并在运行期间进行约两秒的内容变化节流。`EditorInteractionRuntime.SaveState()` 可显式捕获并 flush；退出时 Application 会在扩展停止前强制捕获所有有状态实例和最新 ImGui layout，然后强制写入完整文档。未知 Module/Panel section 会保留，因此暂时移除插件不会销毁其设置；损坏的单个值由 `EditorState.Get` 回退。Panel 的 `isOpen` 按稳定 Panel ID 自动保存，即使 Panel 没有 override Capture 也不受影响。
 
-Core 的 internal layout document 在内存中分别维护 ImGui layout 和具名 Inno Editor sections，避免两类内容互相覆盖。只有 Interactions/Application internal host bridge 可以读写当前具名 section；扩展拿到的 `EditorContext` 没有 layout façade，不存在第二套 Module/Panel 状态文档。
+Core 的 layout document 在内存中分别维护 ImGui layout 和具名 Inno Editor sections，避免两类内容互相覆盖。只有 Interactions/Application 的 host CLR 路径会调用这些标记为 `ScriptingApiIgnore` 的成员；扩展拿到的脚本 facade 没有 layout API，也不存在第二套 Module/Panel 状态文档。
 
 Module/Panel 的恢复状态按实例弱跟踪。只有成功完成 protected `Restore` 的实例才能参与后续 capture；脚本启动、TypeCache 重建或 Registry 事务在恢复回调中触发重入刷新时，同一实例不会被再次调用，也不会用尚未初始化的默认字段覆盖磁盘 section。被新 snapshot 保留的 Module/Panel 仍以实际恢复状态为准，而不是仅因实例相同就跳过首次恢复。
 

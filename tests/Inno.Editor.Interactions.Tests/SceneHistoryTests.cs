@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Runtime.ExceptionServices;
 
 using Inno.Core.Assemblies;
 using Inno.Core.Identity;
@@ -22,7 +24,7 @@ public sealed class SceneHistoryTests : IDisposable
         "InnoSceneHistoryTests",
         Guid.NewGuid().ToString("N"));
     private readonly EditorInteractionRuntime m_runtime;
-    private readonly EditorSceneWorkspace m_workspace;
+    private readonly object m_workspace;
     private readonly SceneEdits m_edits;
 
     public SceneHistoryTests()
@@ -37,8 +39,21 @@ public sealed class SceneHistoryTests : IDisposable
         SerializationManager.Initialize();
         m_runtime = new EditorInteractionRuntime(m_projectRoot);
         m_runtime.Start();
-        m_workspace = new EditorSceneWorkspace(m_runtime.interactions);
-        m_edits = new SceneEdits(m_workspace, m_runtime.interactions);
+        Type workspaceType = typeof(SceneEdits).Assembly.GetType(
+            "Inno.Editor.Scene.EditorSceneWorkspace",
+            throwOnError: true)!;
+        m_workspace = Activator.CreateInstance(
+            workspaceType,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            args: [m_runtime.interactions],
+            culture: null)!;
+        m_edits = (SceneEdits)Activator.CreateInstance(
+            typeof(SceneEdits),
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            args: [m_workspace, m_runtime.interactions],
+            culture: null)!;
     }
 
     public void Dispose()
@@ -56,7 +71,7 @@ public sealed class SceneHistoryTests : IDisposable
     [Fact]
     public void PropertyUndoRestoresOnlyThePropertyOnTheExistingSceneGraph()
     {
-        GameScene scene = m_workspace.CreateScene();
+        GameScene scene = CreateScene();
         GameObject gameObject = scene.CreateObject("Object");
         var component = gameObject.AddComponent<HistoryComponent>();
         component.value = 10;
@@ -85,7 +100,7 @@ public sealed class SceneHistoryTests : IDisposable
     [Fact]
     public void ComponentAddRemoveResetAndOrderPreserveLogicalIdentity()
     {
-        GameScene scene = m_workspace.CreateScene();
+        GameScene scene = CreateScene();
         GameObject gameObject = scene.CreateObject("Object");
         var first = (HistoryComponent)m_edits.AddComponent(gameObject, typeof(HistoryComponent));
         Guid firstId = first.identity.persistentId;
@@ -120,7 +135,7 @@ public sealed class SceneHistoryTests : IDisposable
     [Fact]
     public void RemovingAnElementAndSubtreeRestoresExternalSceneReferences()
     {
-        GameScene scene = m_workspace.CreateScene();
+        GameScene scene = CreateScene();
         GameObject targetObject = scene.CreateObject("Target");
         GameObject targetChild = scene.CreateObject("Child");
         targetChild.transform.SetParent(targetObject.transform);
@@ -156,29 +171,29 @@ public sealed class SceneHistoryTests : IDisposable
     [Fact]
     public void SceneHistoryCompensationUsesTheObservedPostconditionAfterRemovalThrows()
     {
-        GameScene scene = m_workspace.CreateScene();
+        GameScene scene = CreateScene();
         GameObject retained = scene.CreateObject("Retained");
 
-        SceneHistoryCompensationResult lost = SceneHistoryCompensation.Remove(
+        bool lost = RemoveWithCompensation(
             retained,
             static () => throw new InvalidOperationException("before removal"),
             "Retained object");
 
-        Assert.False(lost.statePreserved);
+        Assert.False(lost);
         Assert.True(retained.isRuntimeValid);
 
         GameObject unregisteredOnly = scene.CreateObject("Unregistered only");
-        SceneHistoryCompensationResult incomplete = SceneHistoryCompensation.Remove(
+        bool incomplete = RemoveWithCompensation(
             unregisteredOnly,
             () => IdentityManager.Unregister(unregisteredOnly),
             "Unregistered-only object");
 
-        Assert.False(incomplete.statePreserved);
+        Assert.False(incomplete);
         Assert.False(unregisteredOnly.isDestroyed);
         Assert.True(scene.DestroyObject(unregisteredOnly));
 
         GameObject removed = scene.CreateObject("Removed");
-        SceneHistoryCompensationResult preserved = SceneHistoryCompensation.Remove(
+        bool preserved = RemoveWithCompensation(
             removed,
             () =>
             {
@@ -187,7 +202,7 @@ public sealed class SceneHistoryTests : IDisposable
             },
             "Removed object");
 
-        Assert.True(preserved.statePreserved);
+        Assert.True(preserved);
         Assert.False(removed.isRuntimeValid);
         Assert.Null(IdentityManager.Get<GameObject>(removed.identity.persistentId));
     }
@@ -195,7 +210,7 @@ public sealed class SceneHistoryTests : IDisposable
     [Fact]
     public void ElementRestoreRejectsIgnoredPropertiesAndRemovesPartialElements()
     {
-        GameScene scene = m_workspace.CreateScene();
+        GameScene scene = CreateScene();
         GameObject sourceObject = scene.CreateObject("Source");
         var source = sourceObject.AddComponent<HistoryReferenceComponent>();
         byte[] incompatibleState = ScenePropertySerialization.CaptureProperties(source);
@@ -229,7 +244,7 @@ public sealed class SceneHistoryTests : IDisposable
     [Fact]
     public void ElementRestoreRemovesPartialElementWhenRestoreCallbackFails()
     {
-        GameScene scene = m_workspace.CreateScene();
+        GameScene scene = CreateScene();
         GameObject sourceOwner = scene.CreateObject("Source");
         var source = sourceOwner.AddComponent<RestoreCleanupFailureComponent>();
         byte[] state = ScenePropertySerialization.CaptureProperties(source);
@@ -251,13 +266,13 @@ public sealed class SceneHistoryTests : IDisposable
     [Fact]
     public void ElementRestoreReportsCleanupFailureAfterThePartialElementWasRemoved()
     {
-        GameScene scene = m_workspace.CreateScene();
+        GameScene scene = CreateScene();
         GameObject partialElement = scene.CreateObject("Partial");
         Guid persistentId = partialElement.identity.persistentId;
         var restoreFailure = new InvalidOperationException("Injected restore failure.");
 
         InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() =>
-            SceneElementSerialization.RethrowAfterCleanup(
+            RethrowElementRestoreAfterCleanup(
                 restoreFailure,
                 partialElement,
                 () =>
@@ -276,13 +291,13 @@ public sealed class SceneHistoryTests : IDisposable
     [Fact]
     public void ElementRestoreUsesTheObservedCleanupPostconditionWhenRemovalReportsFalse()
     {
-        GameScene scene = m_workspace.CreateScene();
+        GameScene scene = CreateScene();
         GameObject partialElement = scene.CreateObject("Partial");
         Guid persistentId = partialElement.identity.persistentId;
         var restoreFailure = new InvalidOperationException("Injected restore failure.");
 
         Exception failure = Assert.Throws<InvalidOperationException>(() =>
-            SceneElementSerialization.RethrowAfterCleanup(
+            RethrowElementRestoreAfterCleanup(
                 restoreFailure,
                 partialElement,
                 () =>
@@ -302,12 +317,12 @@ public sealed class SceneHistoryTests : IDisposable
     public void ElementRestoreRejectsAnyCleanupResultThatLeavesThePartialElementActive(
         bool reportedRemoved)
     {
-        GameScene scene = m_workspace.CreateScene();
+        GameScene scene = CreateScene();
         GameObject partialElement = scene.CreateObject("Partial");
         Guid persistentId = partialElement.identity.persistentId;
 
         InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() =>
-            SceneElementSerialization.RethrowAfterCleanup(
+            RethrowElementRestoreAfterCleanup(
                 new InvalidOperationException("Injected restore failure."),
                 partialElement,
                 () => reportedRemoved,
@@ -322,7 +337,7 @@ public sealed class SceneHistoryTests : IDisposable
     [Fact]
     public void FailedSubtreeRestoreRemovesEveryCreatedObjectDespiteDestructionCallbackFailures()
     {
-        GameScene scene = m_workspace.CreateScene();
+        GameScene scene = CreateScene();
         GameObject retained = scene.CreateObject("Retained");
         GameObject root = scene.CreateObject("Root");
         GameObject child = scene.CreateObject("Child");
@@ -352,7 +367,7 @@ public sealed class SceneHistoryTests : IDisposable
     [Fact]
     public void FailedSubtreeHistoryRestoreReportsPreservedOnlyAfterExactSceneRecovery()
     {
-        GameScene scene = m_workspace.CreateScene();
+        GameScene scene = CreateScene();
         GameObject retained = scene.CreateObject("Retained");
         GameObject root = scene.CreateObject("Root");
         GameObject child = scene.CreateObject("Child");
@@ -384,7 +399,7 @@ public sealed class SceneHistoryTests : IDisposable
     [Fact]
     public void HierarchyUndoRestoresOnlyAffectedPlacements()
     {
-        GameScene scene = m_workspace.CreateScene();
+        GameScene scene = CreateScene();
         GameObject firstParent = scene.CreateObject("First");
         GameObject secondParent = scene.CreateObject("Second");
         GameObject child = scene.CreateObject("Child");
@@ -404,7 +419,7 @@ public sealed class SceneHistoryTests : IDisposable
     [Fact]
     public void SystemHistoryPreservesIdentityStateAndExplicitOrder()
     {
-        GameScene scene = m_workspace.CreateScene();
+        GameScene scene = CreateScene();
         var first = (HistorySystem)m_edits.AddSystem(scene, typeof(HistorySystem));
         var second = (HistorySystem)m_edits.AddSystem(scene, typeof(HistorySystem));
         first.value = 30;
@@ -448,7 +463,7 @@ public sealed class SceneHistoryTests : IDisposable
     [Fact]
     public void SceneHistoryRemainsUsableAfterHostTypeCacheRefresh()
     {
-        GameScene scene = m_workspace.CreateScene();
+        GameScene scene = CreateScene();
         GameObject gameObject = scene.CreateObject("Before");
         m_edits.RenameGameObject(gameObject, "After");
 
@@ -464,7 +479,7 @@ public sealed class SceneHistoryTests : IDisposable
     [Fact]
     public void SceneRenameUsesTheSameScalarHistoryContractAsGameObjectRename()
     {
-        GameScene scene = m_workspace.CreateScene();
+        GameScene scene = CreateScene();
         GameObject gameObject = scene.CreateObject("Object Before");
 
         m_edits.RenameScene(scene, "Scene After");
@@ -485,7 +500,7 @@ public sealed class SceneHistoryTests : IDisposable
     [Fact]
     public void GameObjectTagUndoAndRedoRefreshSceneQueries()
     {
-        GameScene scene = m_workspace.CreateScene();
+        GameScene scene = CreateScene();
         GameObject gameObject = scene.CreateObject("Tagged");
 
         m_edits.SetGameObjectTag(gameObject, "Player");
@@ -503,7 +518,7 @@ public sealed class SceneHistoryTests : IDisposable
     [Fact]
     public void GameObjectLayerUndoAndRedoRefreshSceneQueries()
     {
-        GameScene scene = m_workspace.CreateScene();
+        GameScene scene = CreateScene();
         GameObject gameObject = scene.CreateObject("Layered");
         var gameplay = new GameLayer(6);
 
@@ -517,6 +532,50 @@ public sealed class SceneHistoryTests : IDisposable
         Assert.True(m_runtime.interactions.history.Redo().succeeded);
         Assert.Equal(gameplay, gameObject.layer);
         Assert.Same(gameObject, scene.FindObjectWithLayer(gameplay));
+    }
+
+    private GameScene CreateScene()
+    {
+        MethodInfo method = m_workspace.GetType().GetMethod(
+            "CreateScene",
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
+        return (GameScene)method.Invoke(m_workspace, parameters: null)!;
+    }
+
+    private static bool RemoveWithCompensation(
+        EngineObject target,
+        Func<bool> remove,
+        string description)
+    {
+        Type compensationType = typeof(SceneEdits).Assembly.GetType(
+            "Inno.Editor.Scene.SceneHistoryCompensation",
+            throwOnError: true)!;
+        MethodInfo method = compensationType.GetMethod(
+            "Remove",
+            BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)!;
+        object result = method.Invoke(null, [target, remove, description])!;
+        return (bool)result.GetType().GetProperty(
+            "statePreserved",
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.GetValue(result)!;
+    }
+
+    private static void RethrowElementRestoreAfterCleanup(
+        Exception restoreFailure,
+        EngineObject element,
+        Func<bool> remove,
+        string kind)
+    {
+        MethodInfo method = typeof(SceneElementSerialization).GetMethod(
+            "RethrowAfterCleanup",
+            BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)!;
+        try
+        {
+            _ = method.Invoke(null, [restoreFailure, element, remove, kind]);
+        }
+        catch (TargetInvocationException exception) when (exception.InnerException is not null)
+        {
+            ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
+        }
     }
 }
 

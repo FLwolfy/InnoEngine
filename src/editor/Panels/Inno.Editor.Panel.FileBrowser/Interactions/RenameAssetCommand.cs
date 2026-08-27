@@ -1,9 +1,11 @@
 using Inno.Assets.File;
-using Inno.Editor.Interactions;
 using Inno.Core.Input;
 using Inno.Core.Logging;
 using Inno.Editor.ImGui.ImGuiWidget;
+using Inno.Editor.Interactions;
+
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
+using static Inno.Editor.Panel.FileBrowser.FileBrowserUtility;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
@@ -26,7 +28,7 @@ internal sealed class RenameAssetCommand(AssetEditorModule assets) :
             return;
         Activate(context);
         m_asset = assetContext;
-        m_buffer = assetContext.name;
+        m_buffer = GetEditableName(assetContext.name, assetContext.isDirectory);
         m_requestFocus = true;
     }
 

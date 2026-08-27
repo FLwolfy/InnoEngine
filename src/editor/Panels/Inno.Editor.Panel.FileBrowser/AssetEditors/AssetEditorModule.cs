@@ -10,6 +10,7 @@ using Inno.Editor.Core;
 using Inno.Editor.Inspection;
 using Inno.Editor.Interactions;
 using Inno.Editor.Settings;
+using static Inno.Editor.Panel.FileBrowser.FileBrowserUtility;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
@@ -398,8 +399,9 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
                 "Asset names cannot contain path separators or invalid file-name characters.");
         }
 
+        string renamedEntry = ComposeRenamedEntryName(sourcePath, newName, context.isDirectory);
         string parent = Normalize(Path.GetDirectoryName(sourcePath));
-        targetPath = string.IsNullOrEmpty(parent) ? newName : $"{parent}/{newName}";
+        targetPath = string.IsNullOrEmpty(parent) ? renamedEntry : $"{parent}/{renamedEntry}";
         if (!string.Equals(sourcePath, targetPath, StringComparison.OrdinalIgnoreCase) &&
             AssetManager.TryGetFileSystemEntry(targetPath, out _))
         {

@@ -1,8 +1,11 @@
+using Inno.Core.Scripting;
+
 namespace Inno.Engine.Scene;
 
 /// <summary>
 /// Base component for user code driven by scene lifecycle callbacks.
 /// </summary>
+[ScriptingAttachableType("GameBehavior")]
 public abstract class GameBehavior : GameComponent, ISceneLifecycleObject
 {
     private bool m_enabled = true;

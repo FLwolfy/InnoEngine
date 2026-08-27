@@ -41,7 +41,16 @@ public sealed class EditorPanelExtension
         set => m_panel.isOpen = value;
     }
 
-    internal bool TryGetWindowPadding(out bool useWindowPadding)
+    /// <summary>
+    /// Safely reads the panel padding policy through the active extension boundary.
+    /// </summary>
+    /// <param name="useWindowPadding">
+    /// The requested padding policy, or the safe default when the panel is quarantined.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the policy was read without quarantining the panel.
+    /// </returns>
+    public bool TryGetWindowPadding(out bool useWindowPadding)
     {
         try
         {
@@ -57,8 +66,19 @@ public sealed class EditorPanelExtension
         }
     }
 
-    internal bool Draw(EditorContext context)
+    /// <summary>
+    /// Safely draws the panel body and quarantines a failing extension instance.
+    /// </summary>
+    /// <param name="context">The active editor context supplied by the presentation backend.</param>
+    /// <returns>
+    /// <see langword="true"/> when the panel completed drawing without being quarantined.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="context"/> is <see langword="null"/>.
+    /// </exception>
+    public bool Draw(EditorContext context)
     {
+        ArgumentNullException.ThrowIfNull(context);
         try
         {
             m_panel.Draw(context);

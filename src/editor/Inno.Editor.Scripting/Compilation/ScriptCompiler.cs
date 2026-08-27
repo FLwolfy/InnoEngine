@@ -322,6 +322,10 @@ internal static class ScriptCompiler
         ScriptTypeAnalysisResult typeAnalysis = ScriptTypeAnalyzer.Analyze(
             runtimeCompilation,
             sources,
+            api.attachableTypes.ToDictionary(
+                static value => value.implementationName,
+                static value => value.kind,
+                StringComparer.Ordinal),
             cancellationToken);
         if (typeAnalysis.mappings.Count > 0)
         {
@@ -536,6 +540,11 @@ internal static class ScriptCompiler
             {
                 AppendHash(hash, mapping.apiNamespace);
                 AppendHash(hash, mapping.implementationNamespace);
+            }
+            foreach (ScriptApiAttachableType attachableType in profile.attachableTypes)
+            {
+                AppendHash(hash, attachableType.implementationName);
+                AppendHash(hash, attachableType.kind);
             }
         }
     }
