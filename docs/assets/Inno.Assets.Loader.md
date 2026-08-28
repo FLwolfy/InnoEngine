@@ -54,11 +54,12 @@ Importer 必须是 concrete class、有可访问无参构造函数、标注 `[As
 
 ## Import context/writer
 
-`AssetImportContext` 提供 `relativePath`、`absolutePath`、`persistentId`、`sourceBytes`、`sourceHash`、`extension`、`ReadUtf8Text()`。`persistentId` 在 Importer 执行前已经确定，可用于生成需要随 source rename 保持稳定的 manifest。
+`AssetImportContext` 提供 `relativePath`、`absolutePath`、`persistentId`、`sourceBytes`、`sourceHash`、`extension`、`ReadUtf8Text()`。`persistentId` 在 Importer 执行前已经确定，可用于生成需要随 source rename 保持稳定的 manifest。需要读取另一个运行时 Asset 时使用 `ResolveDependency<TAsset>(path)`：Loader 会通过同一 canonical cache 解析目标，并自动记录 Asset dependency；缺失、类型不匹配或循环依赖会让本次 candidate Import 明确失败，而不会提交半成品。
 
 `AssetImportWriter<T>`：
 
 - `SetAsset`
+- `ResolveDependency<TAsset>`（位于 context；解析并声明运行时 Asset dependency）
 - `WriteArtifactAsync`
 - `DependsOnAsset(path/descriptor)`
 - `DependsOnSource`
@@ -93,7 +94,7 @@ public sealed class AtlasProcessor : AssetBuildProcessor<AtlasDefinitionAsset>
 }
 ```
 
-`AssetManager.BuildAsync` 根据 definition runtime type 找到 Processor。Build key 包含 processor ID、implementation MVID、definition identity 和全部输入 artifact key。代码变化会自然改变 MVID 并使缓存失效，不要求开发者维护手工版本号。它适合 Script Assembly、Shader Library、Atlas 等多输入 derived artifact。
+`AssetManager.BuildAsync` 根据 definition runtime type 找到 Processor。Build key 包含 processor ID、implementation MVID、definition type、definition identity、source hash、序列化状态、runtime payload 和全部输入 artifact key。代码或定义内容变化会自然使缓存失效，不要求也不允许开发者维护持久化 schema/version 字段。它适合 Script Assembly、Shader Library、Atlas 等多输入 derived artifact。
 
 ## AssetLoader 公开 API
 
@@ -174,7 +175,7 @@ Manifest 把稳定 output name 映射到物理文件，并记录 content hash/le
 - Importer/Processor 都通过 `TypeRegistry<TSnapshot>` 自动发现。
 - 活动 TypeCache snapshot 未变时读取现有 frozen registry。
 - 同一进程内 importer implementation generation 改变会强制相关 source reimport，即使显式 `version` 未提升。
-- 重启后的缓存兼容仍依赖开发者维护 `version`；MVID 不写入 `.imeta`。
+- Import/Build fingerprint 直接包含实现 MVID 与当前定义内容；MVID 不写入 `.imeta`，也没有手工 `version` 协议。
 - 候选 registry 冲突或构造失败时，Assembly reload 不会提交半更新 snapshot。
 
 ## 内置 Importer
@@ -184,4 +185,4 @@ Manifest 把稳定 output name 映射到物理文件，并记录 content hash/le
 | Text | `.txt`, `.json`, `.yaml`, `.yml`, `.md`, `.xml` | `TextAsset` |
 | Binary | `.bytes`, `.bin`, `.dat` | `BinaryAsset` |
 
-没有 wildcard Binary fallback，也没有 PNG/Shader Importer。
+没有 wildcard Binary fallback。Rendering 的 Shader、Material、Pipeline、Mesh 与 Texture Importer 位于独立的 `Inno.Rendering.Assets` 项目，详见 [Rendering Assets](../render/Inno.Rendering.Assets.md)。

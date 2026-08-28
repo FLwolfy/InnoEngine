@@ -26,7 +26,7 @@ public sealed partial class PlatformImGuiContext
     private readonly PlatformWindow m_window;
     private readonly ImGuiContextPtr m_context;
     private readonly PlatformImGuiViewportBackend? m_viewports;
-    private readonly PlatformImGuiSdlRenderer m_renderer;
+    private readonly IPlatformImGuiRenderer m_renderer;
     private readonly Dictionary<ImGuiMouseCursor, SDLCursorPtr> m_cursors = [];
     private readonly HashSet<uint> m_pendingLiveResizeWindowIds = [];
     private readonly Stopwatch m_frameTimer = Stopwatch.StartNew();
@@ -51,7 +51,10 @@ public sealed partial class PlatformImGuiContext
     private bool m_textInputActive;
     private bool m_disposed;
 
-    internal PlatformImGuiContext(PlatformWindow window, ImGuiContextFlags contextFlags)
+    internal PlatformImGuiContext(
+        PlatformWindow window,
+        ImGuiContextFlags contextFlags,
+        IPlatformImGuiRenderer? renderer)
     {
         var enableViewports = (contextFlags & ImGuiContextFlags.EnableViewports) != 0;
         var enableDocking = (contextFlags & ImGuiContextFlags.EnableDocking) != 0;
@@ -91,8 +94,8 @@ public sealed partial class PlatformImGuiContext
         ImGuiPackedColor.EnsureInitialized();
 
         UpdateDisplayMetrics(io);
-        m_viewports = enableViewports ? new PlatformImGuiViewportBackend(window) : null;
-        m_renderer = new PlatformImGuiSdlRenderer(window);
+        m_renderer = renderer ?? new PlatformImGuiSdlRenderer(window);
+        m_viewports = enableViewports ? new PlatformImGuiViewportBackend(window, m_renderer) : null;
     }
 
     public partial void SetIniFile(string? filePath)
@@ -132,6 +135,30 @@ public sealed partial class PlatformImGuiContext
 
         ImGuiNative.SetCurrentContext(m_context);
         ImGuiNative.LoadIniSettingsFromMemory(settings);
+    }
+
+    public unsafe partial void DrawImage(
+        ImGuiTextureHandle texture,
+        Vector2 size,
+        Vector2 uv0,
+        Vector2 uv1)
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (!texture.isValid)
+        {
+            throw new ArgumentException("ImGui texture token is invalid.", nameof(texture));
+        }
+
+        if (uv1 == default)
+        {
+            uv1 = Vector2.One;
+        }
+
+        ImGuiNative.Image(
+            new ImTextureRef(texId: new ImTextureID(texture.value)),
+            size,
+            uv0,
+            uv1);
     }
 
     public partial bool TryCaptureIniSettings(out string settings, bool force)
@@ -657,7 +684,7 @@ public sealed partial class PlatformImGuiContext
 
             io.MouseDrawCursor = false;
             var drawData = ImGuiNative.GetDrawData();
-            m_renderer.Render(drawData);
+            m_renderer.RenderMain(GetDrawDataAddress(drawData));
             if ((io.ConfigFlags & ImGuiConfigFlags.ViewportsEnable) != 0)
             {
                 ImGuiNative.UpdatePlatformWindows();
@@ -873,7 +900,12 @@ public sealed partial class PlatformImGuiContext
         foreach (uint windowId in windowIds)
         {
             if (windowId == m_window.windowId)
-                m_renderer.SynchronizeOutputSize();
+            {
+                int pixelWidth = 0;
+                int pixelHeight = 0;
+                SDL.GetWindowSizeInPixels(m_window.GetSdlWindow(), ref pixelWidth, ref pixelHeight);
+                m_renderer.SynchronizeMainOutput(pixelWidth, pixelHeight);
+            }
             else
                 m_viewports?.SynchronizeWindow(windowId);
         }

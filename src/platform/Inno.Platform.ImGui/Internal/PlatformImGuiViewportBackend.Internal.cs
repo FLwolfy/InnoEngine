@@ -15,6 +15,8 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
     {
         internal SDLWindowPtr window;
         internal SDLRendererPtr renderer;
+        internal IPlatformImGuiRenderer? externalRenderer;
+        internal PlatformImGuiViewportTarget? externalTarget;
         internal SDLTexturePtr fontTexture;
         internal int fontTextureWidth;
         internal int fontTextureHeight;
@@ -47,12 +49,22 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
 
     private static readonly Dictionary<uint, ViewportWindowData> s_viewportsById = [];
     private static readonly Dictionary<uint, uint> s_windowToViewport = [];
+    private static IPlatformImGuiRenderer? s_activeRenderer;
 
     private readonly SDLWindowPtr m_mainWindow;
     private bool m_disposed;
 
-    internal PlatformImGuiViewportBackend(PlatformWindow mainWindow)
+    internal PlatformImGuiViewportBackend(
+        PlatformWindow mainWindow,
+        IPlatformImGuiRenderer renderer)
     {
+        ArgumentNullException.ThrowIfNull(renderer);
+        if (s_activeRenderer is not null)
+        {
+            throw new InvalidOperationException("Only one multi-viewport ImGui renderer can be active.");
+        }
+
+        s_activeRenderer = renderer;
         _ = SDL.SetHint(SDL.SDL_HINT_WINDOW_ACTIVATE_WHEN_RAISED, "1");
         m_mainWindow = mainWindow.GetSdlWindow();
 
@@ -181,7 +193,19 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
         viewport.Handle->PlatformRequestMove = 1;
         viewport.Handle->PlatformRequestResize = 1;
 
-        SynchronizeRendererOutput(data.renderer);
+        if (data.externalRenderer is not null && data.externalTarget is not null)
+        {
+            int pixelWidth = 0;
+            int pixelHeight = 0;
+            SDL.GetWindowSizeInPixels(data.window, ref pixelWidth, ref pixelHeight);
+            data.externalTarget.width = Math.Max(1, pixelWidth);
+            data.externalTarget.height = Math.Max(1, pixelHeight);
+            data.externalRenderer.ResizeViewport(data.externalTarget);
+        }
+        else
+        {
+            SynchronizeRendererOutput(data.renderer);
+        }
     }
 
     /// <summary>
@@ -229,6 +253,7 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
             mainViewport.PlatformHandleRaw = null;
         }
 
+        s_activeRenderer = null;
         m_disposed = true;
     }
 
@@ -265,14 +290,20 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
 
         _ = SDL.SetWindowPosition(window, (int)viewport->Pos.X, (int)viewport->Pos.Y);
 
-        var renderer = SDL.CreateRenderer(window, (byte*)0);
-        if (renderer.IsNull)
+        IPlatformImGuiRenderer rendererBackend = s_activeRenderer
+            ?? throw new InvalidOperationException("The ImGui viewport renderer is unavailable.");
+        SDLRendererPtr renderer = SDLRendererPtr.Null;
+        if (!rendererBackend.supportsViewports)
         {
-            SDL.DestroyWindow(window);
-            return;
-        }
+            renderer = SDL.CreateRenderer(window, (byte*)0);
+            if (renderer.IsNull)
+            {
+                SDL.DestroyWindow(window);
+                return;
+            }
 
-        _ = SDL.SetRenderDrawBlendMode(renderer, (uint)SDLBlendMode.Blend);
+            _ = SDL.SetRenderDrawBlendMode(renderer, (uint)SDLBlendMode.Blend);
+        }
 
         var data = new ViewportWindowData
         {
@@ -280,6 +311,28 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
             renderer = renderer,
             windowId = SDL.GetWindowID(window)
         };
+        if (rendererBackend.supportsViewports)
+        {
+            int pixelWidth = 0;
+            int pixelHeight = 0;
+            SDL.GetWindowSizeInPixels(window, ref pixelWidth, ref pixelHeight);
+            data.externalRenderer = rendererBackend;
+            data.externalTarget = new PlatformImGuiViewportTarget(
+                viewport->ID,
+                data.windowId,
+                GetNativeHandles(window),
+                Math.Max(1, pixelWidth),
+                Math.Max(1, pixelHeight));
+            try
+            {
+                rendererBackend.CreateViewport(data.externalTarget);
+            }
+            catch
+            {
+                SDL.DestroyWindow(window);
+                throw;
+            }
+        }
         data.gcHandle = GCHandle.Alloc(data, GCHandleType.Normal);
 
         var handlePtr = GCHandle.ToIntPtr(data.gcHandle);
@@ -450,8 +503,15 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
             return;
         }
 
-        EnsureViewportFontTexture(data);
-        RenderDrawData(data, data.fontTexture, viewport->DrawData);
+        if (data.externalRenderer is not null && data.externalTarget is not null)
+        {
+            data.externalRenderer.RenderViewport(data.externalTarget, (IntPtr)viewport->DrawData);
+        }
+        else
+        {
+            EnsureViewportFontTexture(data);
+            RenderDrawData(data, data.fontTexture, viewport->DrawData);
+        }
     }
 
     private static void RendererSwapBuffersCallback(ImGuiViewport* viewport, void* renderArg)
@@ -462,7 +522,14 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
             return;
         }
 
-        _ = SDL.RenderPresent(data.renderer);
+        if (data.externalRenderer is not null && data.externalTarget is not null)
+        {
+            data.externalRenderer.PresentViewport(data.externalTarget);
+        }
+        else
+        {
+            _ = SDL.RenderPresent(data.renderer);
+        }
     }
 
     private static bool TryGetViewportData(ImGuiViewport* viewport, out ViewportWindowData data)
@@ -587,6 +654,13 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
 
     private static void DestroyViewportWindow(ViewportWindowData data)
     {
+        if (data.externalRenderer is not null && data.externalTarget is not null)
+        {
+            data.externalRenderer.DestroyViewport(data.externalTarget);
+            data.externalRenderer = null;
+            data.externalTarget = null;
+        }
+
         if (!data.fontTexture.IsNull)
         {
             SDL.DestroyTexture(data.fontTexture);
@@ -609,6 +683,35 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
         {
             data.gcHandle.Free();
         }
+    }
+
+    private static PlatformNativeHandles GetNativeHandles(SDLWindowPtr window)
+    {
+        uint properties = SDL.GetWindowProperties(window);
+        PlatformNativeHandleKind kind = PlatformNativeHandleKind.Unknown;
+        IntPtr windowHandle = IntPtr.Zero;
+        if (OperatingSystem.IsWindows())
+        {
+            kind = PlatformNativeHandleKind.Win32;
+            windowHandle = (IntPtr)SDL.GetPointerProperty(
+                properties,
+                SDL.SDL_PROP_WINDOW_WIN32_HWND_POINTER,
+                (void*)0);
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            kind = PlatformNativeHandleKind.Cocoa;
+            windowHandle = (IntPtr)SDL.GetPointerProperty(
+                properties,
+                SDL.SDL_PROP_WINDOW_COCOA_WINDOW_POINTER,
+                (void*)0);
+        }
+
+        return new PlatformNativeHandles(windowHandle, IntPtr.Zero, kind)
+        {
+            backendName = "SDL3",
+            backendWindowHandle = (IntPtr)window.Handle
+        };
     }
 
     private static void EnsureViewportFontTexture(ViewportWindowData data)

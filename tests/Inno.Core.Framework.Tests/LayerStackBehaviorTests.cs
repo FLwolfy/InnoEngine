@@ -223,6 +223,60 @@ public sealed class LayerStackBehaviorTests
         Assert.Throws<ObjectDisposedException>(() => layerStack.OnUpdate(0.1f));
         Assert.Throws<ObjectDisposedException>(() => layerStack.OnFixedUpdate(0.1f));
         Assert.Throws<ObjectDisposedException>(() => layerStack.OnLateUpdate(0.1f));
+        Assert.Throws<ObjectDisposedException>(() => layerStack.RenderFrame(0.1f));
+    }
+
+    [Fact]
+    public void RenderFrame_ExecutesPreparationAndSubmissionForward_ThenCompletionReverse()
+    {
+        var dispatcher = new EventDispatcher();
+        using var layerStack = new LayerStack(() => dispatcher.CreateHub());
+        var calls = new List<string>();
+
+        layerStack.PushLayer(new RenderLifecycleLayer("A", calls));
+        layerStack.PushOverlay(new RenderLifecycleLayer("B", calls));
+
+        layerStack.RenderFrame(0.1f);
+
+        Assert.Equal(
+            ["A.Before", "B.Before", "A.Render", "B.Render", "B.After", "A.After"],
+            calls);
+    }
+
+    [Fact]
+    public void RenderFrame_WhenSubmissionFails_UnwindsEveryPreparedLayer()
+    {
+        var dispatcher = new EventDispatcher();
+        using var layerStack = new LayerStack(() => dispatcher.CreateHub());
+        var calls = new List<string>();
+
+        layerStack.PushLayer(new RenderLifecycleLayer("A", calls));
+        layerStack.PushLayer(new RenderLifecycleLayer("B", calls, throwDuringRender: true));
+        layerStack.PushOverlay(new RenderLifecycleLayer("C", calls));
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => layerStack.RenderFrame(0.1f));
+
+        Assert.Equal("B render failed.", exception.Message);
+        Assert.Equal(
+            ["A.Before", "B.Before", "C.Before", "A.Render", "B.Render", "C.After", "B.After", "A.After"],
+            calls);
+    }
+
+    [Fact]
+    public void RenderFrame_WhenPreparationFails_UnwindsOnlyCompletedPreparation()
+    {
+        var dispatcher = new EventDispatcher();
+        using var layerStack = new LayerStack(() => dispatcher.CreateHub());
+        var calls = new List<string>();
+
+        layerStack.PushLayer(new RenderLifecycleLayer("A", calls));
+        layerStack.PushLayer(new RenderLifecycleLayer("B", calls, throwDuringBefore: true));
+        layerStack.PushOverlay(new RenderLifecycleLayer("C", calls));
+
+        Assert.Throws<InvalidOperationException>(() => layerStack.RenderFrame(0.1f));
+
+        Assert.Equal(["A.Before", "B.Before", "A.After"], calls);
     }
 
     private sealed class ProbeEvent(int value) : Event
@@ -295,6 +349,36 @@ public sealed class LayerStackBehaviorTests
         public override void OnDetach()
         {
             detachCount++;
+        }
+    }
+
+    private sealed class RenderLifecycleLayer(
+        string name,
+        List<string> calls,
+        bool throwDuringBefore = false,
+        bool throwDuringRender = false) : Layer(name)
+    {
+        public override void OnBeforeRender(float deltaTime)
+        {
+            calls.Add($"{name}.Before");
+            if (throwDuringBefore)
+            {
+                throw new InvalidOperationException($"{name} before failed.");
+            }
+        }
+
+        public override void OnRender(float deltaTime)
+        {
+            calls.Add($"{name}.Render");
+            if (throwDuringRender)
+            {
+                throw new InvalidOperationException($"{name} render failed.");
+            }
+        }
+
+        public override void OnAfterRender(float deltaTime)
+        {
+            calls.Add($"{name}.After");
         }
     }
 }

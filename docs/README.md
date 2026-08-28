@@ -2,7 +2,7 @@
 
 这里是 InnoEngine 的源码级 API Wiki。文档按 `src` 下的程序集边界组织；每个项目页同时说明职责、初始化方式、公开 API、常见工作流和易错点。
 
-> 当前详细覆盖 Core、Assets 与 Editor；Engine、Platform 与 Native 会沿用相同结构继续补充。
+> 当前详细覆盖 Core、Assets、Rendering 与 Editor；Engine、Platform 与 Native 会沿用相同结构继续补充。
 
 ## 快速入口
 
@@ -10,6 +10,7 @@
 | --- | --- | --- |
 | [Core](core/README.md) | 程序集、反射、序列化、框架、事件、协程、任务、数学、存储等基础设施 | 已完成 |
 | [Assets](assets/README.md) | 资产门面、资产模型、文件索引、Importer、序列化桥接与内置资产类型 | 已完成 |
+| [Rendering](render/README.md) | 后端中立资源、统一 Shader/Graph、双路径 Pipeline、BGFX 与 Editor GPU 合成 | macOS Metal 实机通过；Windows x64/macOS arm64 CI 已配置，Windows 首次远端结果待执行 |
 | [Engine](engine/README.md) | Scene、Rendering 等运行时能力 | 部分完成 |
 | [Editor](editor/README.md) | 编辑器交互契约、[Global/Settings](editor/Inno.Editor.Panel.Global.md)、领域 feature、ImGui、Scripting 与宿主 | 已完成 |
 | [Platform](platform/README.md) / Native | 窗口、图形后端与原生集成 | 部分完成 |

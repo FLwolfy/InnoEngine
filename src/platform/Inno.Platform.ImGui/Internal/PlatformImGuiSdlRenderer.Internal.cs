@@ -7,7 +7,7 @@ using ImGuiNative = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Platform.ImGui;
 
-internal sealed unsafe class PlatformImGuiSdlRenderer : IDisposable
+internal sealed unsafe class PlatformImGuiSdlRenderer : IPlatformImGuiRenderer
 {
     private SDLRendererPtr m_renderer;
     private SDLTexturePtr m_fontTexture;
@@ -25,6 +25,29 @@ internal sealed unsafe class PlatformImGuiSdlRenderer : IDisposable
 
         _ = SDL.SetRenderDrawBlendMode(m_renderer, (uint)SDLBlendMode.Blend);
     }
+
+    public bool supportsViewports => false;
+
+    public void RenderMain(IntPtr drawData)
+        => Render(new ImDrawDataPtr((ImDrawData*)drawData));
+
+    public void SynchronizeMainOutput(int pixelWidth, int pixelHeight)
+    {
+        _ = pixelWidth;
+        _ = pixelHeight;
+        SynchronizeOutputSize();
+    }
+
+    public void CreateViewport(PlatformImGuiViewportTarget target)
+        => throw new NotSupportedException("The SDL main renderer does not own detached viewport rendering.");
+
+    public void ResizeViewport(PlatformImGuiViewportTarget target) { }
+
+    public void RenderViewport(PlatformImGuiViewportTarget target, IntPtr drawData) { }
+
+    public void PresentViewport(PlatformImGuiViewportTarget target) { }
+
+    public void DestroyViewport(PlatformImGuiViewportTarget target) { }
 
     internal void Render(ImDrawDataPtr drawData)
     {

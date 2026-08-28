@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.ExceptionServices;
 using Inno.Core.Events;
 
 namespace Inno.Core.Framework;
@@ -196,6 +197,69 @@ public sealed class LayerStack : IDisposable
         {
             entry.layer.OnLateUpdate(deltaTime);
         }
+    }
+
+    /// <summary>
+    /// Executes the complete render lifecycle for all attached layers.
+    /// </summary>
+    /// <param name="deltaTime">Frame delta time in seconds.</param>
+    /// <remarks>
+    /// Preparation and submission execute in stack order. Completion executes
+    /// in reverse order and always unwinds every layer that completed preparation.
+    /// </remarks>
+    /// <exception cref="AggregateException">
+    /// Thrown when more than one render callback fails during execution or unwind.
+    /// </exception>
+    public void RenderFrame(float deltaTime)
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+
+        int preparedCount = 0;
+        List<Exception>? errors = null;
+
+        try
+        {
+            for (; preparedCount < m_layers.Count; preparedCount++)
+            {
+                m_layers[preparedCount].layer.OnBeforeRender(deltaTime);
+            }
+
+            for (int i = 0; i < preparedCount; i++)
+            {
+                m_layers[i].layer.OnRender(deltaTime);
+            }
+        }
+        catch (Exception exception)
+        {
+            errors = [exception];
+        }
+        finally
+        {
+            for (int i = preparedCount - 1; i >= 0; i--)
+            {
+                try
+                {
+                    m_layers[i].layer.OnAfterRender(deltaTime);
+                }
+                catch (Exception exception)
+                {
+                    errors ??= [];
+                    errors.Add(exception);
+                }
+            }
+        }
+
+        if (errors is null)
+        {
+            return;
+        }
+
+        if (errors.Count == 1)
+        {
+            ExceptionDispatchInfo.Capture(errors[0]).Throw();
+        }
+
+        throw new AggregateException("One or more layer render callbacks failed.", errors);
     }
 
     /// <summary>

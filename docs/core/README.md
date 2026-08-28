@@ -15,6 +15,7 @@ flowchart LR
     I["Identity"] --> F
     L["Logging"] --> F
     D["Diagnostics<br/>Current problem state"]
+    G["Graphs<br/>中立图文档与验证"]
 ```
 
 ## 项目目录
@@ -35,6 +36,7 @@ flowchart LR
 | [Inno.Core.Logging](Inno.Core.Logging.md) | `Inno.Core.Logging` | 日志门面、日志项、Console/File Sink |
 | [Inno.Core.Mathematics](Inno.Core.Mathematics.md) | `Inno.Core.Mathematics` | 向量、矩阵、四元数、颜色和矩形 |
 | [Inno.Core.Storage](Inno.Core.Storage.md) | `Inno.Core.Storage` | 依赖图与可索引对象存储 |
+| [Inno.Core.Graphs](Inno.Core.Graphs.md) | `Inno.Core.Graphs` | 通用图文档、稳定节点/端口 ID、动态端口与类型化验证 |
 
 ## 标准初始化顺序
 

@@ -10,6 +10,12 @@ using Inno.Core.Logging;
 using Inno.Editor.Core;
 using Inno.Platform;
 using Inno.Platform.ImGui;
+using Inno.Rendering;
+using Inno.Rendering.Bgfx;
+using Inno.Rendering.Core;
+using Inno.Rendering.ImGui;
+using Inno.Rendering.Pipelines;
+using Inno.Rendering.ShaderGraph;
 
 namespace Inno.Editor.Application;
 
@@ -26,6 +32,8 @@ internal sealed class EditorHost : IDisposable
     private readonly HashSet<uint> m_focusedWindowIds = [];
     private readonly Shell m_shell;
     private readonly PlatformImGuiContext m_imgui;
+    private readonly RenderingLayer m_renderingLayer;
+    private readonly EditorRenderingAssetRuntime m_renderingAssets;
     private readonly EditorLayer m_editorLayer;
     private readonly EditorHostResourceStack m_resources;
     private readonly string m_bootLogPath;
@@ -42,6 +50,8 @@ internal sealed class EditorHost : IDisposable
         PlatformWindow window,
         Shell shell,
         PlatformImGuiContext imgui,
+        RenderingLayer renderingLayer,
+        EditorRenderingAssetRuntime renderingAssets,
         EditorLayer editorLayer,
         EditorHostResourceStack resources)
     {
@@ -51,6 +61,8 @@ internal sealed class EditorHost : IDisposable
         m_window = window;
         m_shell = shell;
         m_imgui = imgui;
+        m_renderingLayer = renderingLayer;
+        m_renderingAssets = renderingAssets;
         m_editorLayer = editorLayer;
         m_resources = resources;
         if (m_window.isFocused)
@@ -66,7 +78,10 @@ internal sealed class EditorHost : IDisposable
         string bootLogPath = Path.Combine(logDirectory, C_BOOT_LOG_FILE_NAME);
         var resources = new EditorHostResourceStack(
             exception => AppendBootLog(bootLogPath, $"Teardown failure: {exception}"));
+        bool renderingLayerPushed = false;
         bool overlayPushed = false;
+        DefaultRenderPipelineExecutor? renderExecutor = null;
+        BgfxImGuiRenderer? bgfxImGui = null;
         try
         {
             AppendBootLog(bootLogPath, "EditorHost creation start.");
@@ -98,20 +113,88 @@ internal sealed class EditorHost : IDisposable
                     if (Shell.isInitialized)
                         Shell.Shutdown();
                 });
+            BgfxDevice graphicsDevice = resources.Acquire(
+                () => new BgfxDevice(new BgfxDeviceOptions
+                {
+                    window = window,
+                    verticalSync = true,
+                    sRgbBackbuffer = true
+                }),
+                static device => device.Dispose());
+            resources.Register(() =>
+            {
+                graphicsDevice.BeginFrame();
+                try
+                {
+                    bgfxImGui?.PrepareFrame(ulong.MaxValue);
+                    renderExecutor?.PrepareFrame(ulong.MaxValue);
+                    renderExecutor?.Dispose();
+                }
+                finally
+                {
+                    _ = graphicsDevice.EndFrame();
+                }
+            });
+            var renderArtifacts = new RenderPipelineArtifactRegistry();
+            GraphicsPipelineDescriptor imguiPipeline = EditorShaderBootstrap.Compile(
+                graphicsDevice.capabilities,
+                Path.Combine(normalizedProject, "Assets"),
+                renderArtifacts);
+            var renderDiagnostics = new EditorRenderDiagnosticSink();
+            renderExecutor = new DefaultRenderPipelineExecutor(
+                graphicsDevice,
+                renderArtifacts,
+                renderDiagnostics);
+            bgfxImGui = resources.Acquire(
+                () => new BgfxImGuiRenderer(graphicsDevice, imguiPipeline),
+                static renderer => renderer.Dispose());
             PlatformImGuiContext imgui = resources.Acquire(
                 () => platform.CreateImGuiContext(
                     window,
                     ImGuiContextFlags.EnableViewports |
                     ImGuiContextFlags.EnableDocking |
-                    ImGuiContextFlags.EnableSmoothResize),
+                    ImGuiContextFlags.EnableSmoothResize,
+                    bgfxImGui),
                 _ => platform.DestroyImGuiContext(window));
+            var pipelineAsset = new RenderPipelineAsset();
+            pipelineAsset.quality.bloom = false;
+            var renderingLayer = new RenderingLayer(
+                graphicsDevice,
+                pipelineAsset,
+                new UniversalRenderPipeline(),
+                renderExecutor,
+                renderDiagnostics,
+                contributors: [bgfxImGui],
+                discoverExtensions: true);
+            var renderingHost = resources.Acquire(
+                () => new EditorRenderingHostService(renderingLayer, renderExecutor, bgfxImGui, imgui),
+                static service => service.Dispose());
+            var shaderNodes = resources.Acquire(
+                static () => new ShaderNodeRegistry(discoverExtensions: true),
+                static registry => registry.Dispose());
+            shaderNodes.RefreshExtensions();
+            var renderingAssets = resources.Acquire(
+                () => new EditorRenderingAssetRuntime(
+                    graphicsDevice.capabilities,
+                    graphicsDevice,
+                    renderArtifacts,
+                    shaderNodes,
+                    renderDiagnostics),
+                static runtime => runtime.Dispose());
             var editorContext = new EditorContext(normalizedProject);
             imgui.SetIniFile(null);
             imgui.LoadIniSettings(editorContext.imguiLayout);
-            EditorLayer layer = new EditorLayer(imgui, editorContext)
+            EditorLayer layer = new EditorLayer(imgui, editorContext, [renderingHost, shaderNodes])
             {
                 isFocused = window.isFocused
             };
+            resources.Register(() =>
+            {
+                if (renderingLayerPushed)
+                    shell.layerStack.PopLayer(renderingLayer);
+            });
+            shell.layerStack.PushLayer(renderingLayer);
+            renderingLayerPushed = true;
             resources.Register(() =>
             {
                 if (overlayPushed)
@@ -130,9 +213,14 @@ internal sealed class EditorHost : IDisposable
                 window,
                 shell,
                 imgui,
+                renderingLayer,
+                renderingAssets,
                 layer,
                 resources);
             host.BootLog($"Editor layer attached with {layer.panelCount} panel(s).");
+            host.BootLog(
+                $"Rendering initialized with {graphicsDevice.capabilities.backend} " +
+                $"(views={graphicsDevice.capabilities.limits.maxViews}).");
             host.BootLog($"AssetManager initialized={AssetManager.isInitialized} root='{AssetManager.assetRoot}'.");
             return host;
         }
@@ -147,11 +235,17 @@ internal sealed class EditorHost : IDisposable
     public string projectDirectory { get; }
 
     /// <summary>
-    /// Runs the editor loop until window/application quit is requested.
+    /// Runs the editor loop until window/application quit is requested or an optional smoke limit is reached.
     /// </summary>
+    /// <param name="smokeFrameLimit">
+    /// Optional positive frame count used by automated native smoke tests; <see langword="null"/> runs interactively.
+    /// </param>
     /// <returns>The process exit code produced after the main editor window closes.</returns>
-    public int Run()
+    public int Run(int? smokeFrameLimit = null)
     {
+        if (smokeFrameLimit is <= 0)
+            throw new ArgumentOutOfRangeException(nameof(smokeFrameLimit));
+
         BootLog("Run loop start.");
         Stopwatch timer = Stopwatch.StartNew();
         double lastTime = 0.0;
@@ -191,6 +285,7 @@ internal sealed class EditorHost : IDisposable
                 BootLog("About to execute first shell.Tick.");
 
             m_editorLayer.isFocused = HasEditorFocus();
+            m_renderingAssets.Update();
             m_shell.Tick((float)now, delta);
 
             if (m_frameCount == 0)
@@ -198,6 +293,11 @@ internal sealed class EditorHost : IDisposable
 
             m_hasRenderedFrame = true;
             m_frameCount++;
+            if (smokeFrameLimit.HasValue && m_frameCount >= smokeFrameLimit.Value)
+            {
+                BootLog($"Smoke frame limit reached after {m_frameCount} frame(s).");
+                m_running = false;
+            }
         }
 
         SaveBeforeShutdown();

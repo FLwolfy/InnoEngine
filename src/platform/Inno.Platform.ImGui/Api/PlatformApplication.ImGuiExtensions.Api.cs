@@ -69,11 +69,13 @@ public static class PlatformApplicationImGuiExtensions
     /// <param name="application">Target platform application instance.</param>
     /// <param name="window">Target platform window.</param>
     /// <param name="contextFlags">ImGui context feature flags.</param>
+    /// <param name="renderer">Optional presentation backend; the SDL renderer is used when omitted.</param>
     /// <returns>The created or existing <see cref="PlatformImGuiContext"/>.</returns>
     public static PlatformImGuiContext CreateImGuiContext(
         this PlatformApplication application,
         PlatformWindow window,
-        ImGuiContextFlags contextFlags)
+        ImGuiContextFlags contextFlags,
+        IPlatformImGuiRenderer? renderer = null)
     {
         ArgumentNullException.ThrowIfNull(application);
         ArgumentNullException.ThrowIfNull(window);
@@ -85,7 +87,7 @@ public static class PlatformApplicationImGuiExtensions
         if (state.contexts.TryGetValue(window.windowId, out PlatformImGuiContext? existing))
             return existing;
 
-        var context = new PlatformImGuiContext(window, contextFlags);
+        var context = new PlatformImGuiContext(window, contextFlags, renderer);
         state.contexts[window.windowId] = context;
         return context;
     }

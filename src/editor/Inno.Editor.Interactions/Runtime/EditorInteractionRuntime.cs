@@ -30,10 +30,28 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
     /// <param name="context">The passive editor context shared with the presentation backend.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="context"/> is <see langword="null"/>.</exception>
     public EditorInteractionRuntime(EditorContext context)
+        : this(context, Array.Empty<object>())
+    {
+    }
+
+    /// <summary>Creates an interaction runtime with stable host-owned extension services.</summary>
+    /// <param name="context">The passive editor context shared with the presentation backend.</param>
+    /// <param name="hostServices">
+    /// Stable host-owned services that editor extension constructors may request by assignable contract.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="context"/> or <paramref name="hostServices"/> is <see langword="null"/>.
+    /// </exception>
+    public EditorInteractionRuntime(EditorContext context, IEnumerable<object> hostServices)
         : base(context)
     {
+        ArgumentNullException.ThrowIfNull(hostServices);
         m_interactions = new EditorInteractions(context);
-        m_catalog = new EditorExtensionCatalog(context, m_interactions, InvalidateDescriptions);
+        m_catalog = new EditorExtensionCatalog(
+            context,
+            m_interactions,
+            hostServices,
+            InvalidateDescriptions);
         m_interactions.Attach(m_catalog);
     }
 

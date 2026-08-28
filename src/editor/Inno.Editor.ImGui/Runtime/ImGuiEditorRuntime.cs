@@ -29,9 +29,21 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
     /// Thrown when <paramref name="context"/> is <see langword="null"/>.
     /// </exception>
     public ImGuiEditorRuntime(EditorContext context)
+        : this(context, Array.Empty<object>())
+    {
+    }
+
+    /// <summary>Creates an ImGui editor runtime with stable host-owned extension services.</summary>
+    /// <param name="context">The shared editor context that owns project settings and frame state.</param>
+    /// <param name="hostServices">Services available to discovered extension constructors.</param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="context"/> or <paramref name="hostServices"/> is <see langword="null"/>.
+    /// </exception>
+    public ImGuiEditorRuntime(EditorContext context, IEnumerable<object> hostServices)
         : base(context ?? throw new ArgumentNullException(nameof(context)))
     {
-        m_runtime = new EditorInteractionRuntime(context);
+        ArgumentNullException.ThrowIfNull(hostServices);
+        m_runtime = new EditorInteractionRuntime(context, hostServices);
     }
 
     /// <summary>Gets the active presentation-independent interaction entry point.</summary>

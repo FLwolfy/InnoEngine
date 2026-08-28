@@ -10,19 +10,24 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Inno.Editor.Core\Inno.Editor.Core.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Editor.Graph\Inno.Editor.Graph.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Editor.Inspection\Inno.Editor.Inspection.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Editor.Rendering\Inno.Editor.Rendering.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Editor.Scripting\Inno.Editor.Scripting.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Editor.Scene\Inno.Editor.Scene.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Editor.Settings\Inno.Editor.Settings.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Panels\Inno.Editor.Panel.FileBrowser\Inno.Editor.Panel.FileBrowser.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Panels\Inno.Editor.Panel.GameView\Inno.Editor.Panel.GameView.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Panels\Inno.Editor.Panel.Global\Inno.Editor.Panel.Global.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Panels\Inno.Editor.Panel.Hierarchy\Inno.Editor.Panel.Hierarchy.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Panels\Inno.Editor.Panel.Inspector\Inno.Editor.Panel.Inspector.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Panels\Inno.Editor.Panel.Logging\Inno.Editor.Panel.Logging.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Panels\Inno.Editor.Panel.Stats\Inno.Editor.Panel.Stats.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Panels\Inno.Editor.Panel.Settings\Inno.Editor.Panel.Settings.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Panels\Inno.Editor.Panel.SceneView\Inno.Editor.Panel.SceneView.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Panels\Inno.Editor.Panel.ShaderGraph\Inno.Editor.Panel.ShaderGraph.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Diagnose\Inno.Core.Diagnose.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Framework\Inno.Core.Framework.csproj" PrivateAssets="compile" />
@@ -32,5 +37,12 @@
     <ProjectReference Include="..\..\engine\Inno.Engine.Scene.Assets\Inno.Engine.Scene.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\platform\Inno.Platform\Inno.Platform.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\render\Inno.Rendering\Inno.Rendering.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\render\Inno.Rendering.Assets\Inno.Rendering.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\render\Inno.Rendering.Bgfx\Inno.Rendering.Bgfx.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\render\Inno.Rendering.Core\Inno.Rendering.Core.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\render\Inno.Rendering.ImGui\Inno.Rendering.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\render\Inno.Rendering.Pipelines\Inno.Rendering.Pipelines.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\render\Inno.Rendering.ShaderGraph\Inno.Rendering.ShaderGraph.csproj" PrivateAssets="compile" />
   </ItemGroup>
 </Project>

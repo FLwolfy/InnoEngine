@@ -21,13 +21,16 @@ internal sealed class EditorLayer : Layer
     private bool m_isShutdownPrepared;
     private double m_nextPersistenceRetryTime;
 
-    internal EditorLayer(PlatformImGuiContext imgui, EditorContext context)
+    internal EditorLayer(
+        PlatformImGuiContext imgui,
+        EditorContext context,
+        System.Collections.Generic.IEnumerable<object>? hostServices = null)
         : base("EditorLayer")
     {
         m_imgui = imgui;
         m_context = context;
         EditorWidget.SetupStyle();
-        m_runtime = new ImGuiEditorRuntime(context);
+        m_runtime = new ImGuiEditorRuntime(context, hostServices ?? Array.Empty<object>());
     }
 
     internal int panelCount => m_runtime.panelCount;

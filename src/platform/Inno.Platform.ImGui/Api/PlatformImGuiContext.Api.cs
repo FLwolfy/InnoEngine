@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 
 namespace Inno.Platform.ImGui;
 
@@ -47,6 +48,18 @@ public sealed partial class PlatformImGuiContext : IDisposable
     /// <param name="drawFrame">Draw callback that issues ImGui commands for this frame.</param>
     /// <returns>The native pointer to <c>ImDrawData</c> for the rendered frame.</returns>
     public partial IntPtr RenderFrame(Action drawFrame);
+
+    /// <summary>Draws a renderer-registered texture without exposing a native ImGui texture identifier.</summary>
+    /// <param name="texture">Opaque token allocated by the active presentation backend.</param>
+    /// <param name="size">Displayed size in logical ImGui pixels.</param>
+    /// <param name="uv0">Top-left texture coordinate.</param>
+    /// <param name="uv1">Bottom-right texture coordinate.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="texture"/> is invalid.</exception>
+    public unsafe partial void DrawImage(
+        ImGuiTextureHandle texture,
+        Vector2 size,
+        Vector2 uv0 = default,
+        Vector2 uv1 = default);
 
     /// <summary>
     /// Releases all unmanaged/native resources associated with this ImGui context.

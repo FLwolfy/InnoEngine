@@ -23,7 +23,9 @@ finally
 }
 ```
 
-每个 Platform window 最多关联一个 context。`DestroyImGuiContext(window)` 会释放 renderer、viewport backend、cursor、字体资源和 native ImGui context。
+每个 Platform window 最多关联一个 context。`CreateImGuiContext` 可接收 `IPlatformImGuiRenderer`；省略时继续使用轻量 SDL renderer，Editor 则注入 BGFX renderer。`DestroyImGuiContext(window)` 会释放 renderer、viewport backend、cursor、字体资源和 native ImGui context。
+
+`IPlatformImGuiRenderer` 公开主窗口 draw-data、detached viewport create/resize/render/present/destroy 与 `supportsViewports`。跨模块纹理只使用 `ImGuiTextureHandle`，Platform public/protected API 不泄漏任何 BGFX handle。
 
 ## PlatformImGuiContext
 

@@ -15,6 +15,7 @@ public sealed class AssetImportContext
     private readonly List<string> m_runtimeDependencyPaths = [];
     private readonly List<AssetDependency> m_runtimeDependencies = [];
     private readonly List<AssetImportDependency> m_importDependencies = [];
+    private readonly Func<string, Type, AssetObject?> m_dependencyResolver;
 
     /// <summary>Creates an asset import context.</summary>
     /// <param name="relativePath">The source-relative path.</param>
@@ -22,18 +23,22 @@ public sealed class AssetImportContext
     /// <param name="sourceBytes">The raw source bytes.</param>
     /// <param name="sourceHash">The deterministic source hash.</param>
     /// <param name="persistentId">The persistent identity assigned to the source asset.</param>
+    /// <param name="dependencyResolver">Resolver for typed runtime dependencies.</param>
     internal AssetImportContext(
         string relativePath,
         string absolutePath,
         ReadOnlyMemory<byte> sourceBytes,
         string sourceHash,
-        Guid persistentId)
+        Guid persistentId,
+        Func<string, Type, AssetObject?> dependencyResolver)
     {
         this.relativePath = relativePath ?? throw new ArgumentNullException(nameof(relativePath));
         this.absolutePath = absolutePath ?? throw new ArgumentNullException(nameof(absolutePath));
         this.sourceBytes = sourceBytes;
         this.sourceHash = sourceHash ?? throw new ArgumentNullException(nameof(sourceHash));
         this.persistentId = persistentId;
+        m_dependencyResolver = dependencyResolver
+            ?? throw new ArgumentNullException(nameof(dependencyResolver));
     }
 
     /// <summary>Gets the source-relative path.</summary>
@@ -76,6 +81,29 @@ public sealed class AssetImportContext
     public void DependsOnAsset(AssetDependency dependency)
     {
         m_runtimeDependencies.Add(dependency);
+    }
+
+    /// <summary>
+    /// Resolves and declares a strongly typed runtime asset dependency during import.
+    /// </summary>
+    /// <typeparam name="TAsset">Expected asset type.</typeparam>
+    /// <param name="relativePath">Project Assets-relative dependency path.</param>
+    /// <returns>The currently committed dependency asset.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the dependency cannot be imported or has another type.</exception>
+    public TAsset ResolveDependency<TAsset>(string relativePath)
+        where TAsset : AssetObject
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            throw new ArgumentException("A runtime dependency path is required.", nameof(relativePath));
+        }
+
+        string normalized = Normalize(relativePath);
+        DependsOnAsset(normalized);
+        AssetObject? resolved = m_dependencyResolver(normalized, typeof(TAsset));
+        return resolved as TAsset
+            ?? throw new InvalidOperationException(
+                $"Asset dependency '{normalized}' cannot be resolved as '{typeof(TAsset).FullName}'.");
     }
 
     /// <summary>Declares a source file that invalidates this imported asset.</summary>

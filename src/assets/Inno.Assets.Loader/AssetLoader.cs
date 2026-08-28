@@ -559,7 +559,10 @@ public sealed class AssetLoader : IDisposable
             GetSourcePath(relativePath),
             sourceBytes,
             sourceHash,
-            persistentId);
+            persistentId,
+            (dependencyPath, dependencyType) => LoadPathLocked(
+                NormalizeRelativePath(dependencyPath),
+                dependencyType));
         AssetImportProduct product = importer
             .ImportInternalAsync(context, CancellationToken.None)
             .AsTask()
@@ -2108,7 +2111,12 @@ public sealed class AssetLoader : IDisposable
             "Inno.AssetBuild",
             processor.processorId,
             processor.GetType().Assembly.ManifestModule.ModuleVersionId.ToString("D"),
-            definition.identity.persistentId.ToString("D")
+            definition.identity.persistentId.ToString("D"),
+            definition.GetType().Assembly.ManifestModule.ModuleVersionId.ToString("D"),
+            definition.GetType().FullName ?? definition.GetType().Name,
+            AssetRuntimeHost.GetSourceHash(definition),
+            ComputeSha256Hex(SerializationManager.Encode(writer => writer.WriteProperties(definition))),
+            ComputeSha256Hex(definition.runtimePayload.ToArray())
         };
         foreach (AssetInfo input in inputs.OrderBy(static value => value.persistentId))
         {

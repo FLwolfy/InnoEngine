@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\native\Inno.Native.Bgfx.Tools\Inno.Native.Bgfx.Tools.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\assets\Inno.Assets.Loader\Inno.Assets.Loader.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Rendering.ShaderGraph\Inno.Rendering.ShaderGraph.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Rendering\Inno.Rendering.csproj" />
+    <ProjectReference Include="..\Inno.Rendering.Core\Inno.Rendering.Core.csproj" />
+  </ItemGroup>
+</Project>

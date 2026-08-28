@@ -224,6 +224,7 @@ public sealed class Shell
 
             m_layers.OnUpdate(delta);
             m_layers.OnLateUpdate(delta);
+            m_layers.RenderFrame(delta);
         }
         finally
         {

@@ -1,84 +1,139 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using Inno.Native.Dll;
 
 namespace Inno.Native.Bgfx.Tools;
 
 /// <summary>
-/// Runs bgfx tool executables from the native output.
+/// Contains the immutable result of one bgfx tool invocation.
+/// </summary>
+public sealed class ToolRunResult
+{
+    /// <summary>
+    /// Creates a tool invocation result.
+    /// </summary>
+    /// <param name="exitCode">Native process exit code.</param>
+    /// <param name="standardOutput">Captured standard output.</param>
+    /// <param name="standardError">Captured standard error.</param>
+    public ToolRunResult(int exitCode, string standardOutput, string standardError)
+    {
+        this.exitCode = exitCode;
+        this.standardOutput = standardOutput ?? string.Empty;
+        this.standardError = standardError ?? string.Empty;
+    }
+
+    /// <summary>Gets the native process exit code.</summary>
+    public int exitCode { get; }
+
+    /// <summary>Gets captured standard output.</summary>
+    public string standardOutput { get; }
+
+    /// <summary>Gets captured standard error.</summary>
+    public string standardError { get; }
+
+    /// <summary>Gets whether the tool exited successfully.</summary>
+    public bool succeeded => exitCode == 0;
+}
+
+/// <summary>
+/// Runs bgfx tool executables from the native output with argument-safe process invocation.
 /// </summary>
 public static class ToolRunner
 {
     /// <summary>
-    /// Runs the specified tool with arguments.
+    /// Runs the specified tool and captures its output.
     /// </summary>
     /// <param name="tool">Tool to execute.</param>
-    /// <param name="arguments">Command line arguments.</param>
-    /// <param name="workingDirectory">Optional working directory; defaults to AppContext.BaseDirectory.</param>
-    /// <returns>Process exit code.</returns>
-    public static int Run(BgfxTool tool, string arguments, string? workingDirectory = null)
+    /// <param name="arguments">Individual command-line arguments without shell quoting.</param>
+    /// <param name="workingDirectory">Optional working directory; defaults to <see cref="AppContext.BaseDirectory"/>.</param>
+    /// <returns>The exit code and captured output.</returns>
+    public static ToolRunResult Run(
+        BgfxTool tool,
+        IReadOnlyList<string> arguments,
+        string? workingDirectory = null)
+        => RunAsync(tool, arguments, workingDirectory).AsTask().GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Runs the specified tool asynchronously and captures its output.
+    /// </summary>
+    /// <param name="tool">Tool to execute.</param>
+    /// <param name="arguments">Individual command-line arguments without shell quoting.</param>
+    /// <param name="workingDirectory">Optional working directory; defaults to <see cref="AppContext.BaseDirectory"/>.</param>
+    /// <param name="cancellationToken">Cancellation that terminates the child process tree.</param>
+    /// <returns>The exit code and captured output.</returns>
+    /// <exception cref="FileNotFoundException">Thrown when the requested bgfx tool cannot be resolved.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the native process cannot be started.</exception>
+    public static async ValueTask<ToolRunResult> RunAsync(
+        BgfxTool tool,
+        IReadOnlyList<string> arguments,
+        string? workingDirectory = null,
+        CancellationToken cancellationToken = default)
     {
-        var toolPath = ResolveToolPath(tool);
-        var psi = new ProcessStartInfo
+        ArgumentNullException.ThrowIfNull(arguments);
+        string toolPath = ResolveToolPath(tool);
+        var startInfo = new ProcessStartInfo
         {
             FileName = toolPath,
-            Arguments = arguments,
             WorkingDirectory = workingDirectory ?? AppContext.BaseDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            UseShellExecute = false,
+            UseShellExecute = false
         };
-
-        using var process = Process.Start(psi);
-        if (process == null)
+        foreach (string argument in arguments)
         {
-            throw new InvalidOperationException($"Failed to start tool: {toolPath}");
+            ArgumentNullException.ThrowIfNull(argument);
+            startInfo.ArgumentList.Add(argument);
         }
 
-        process.OutputDataReceived += (_, e) =>
+        using Process process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException($"Failed to start tool: {toolPath}");
+        try
         {
-            if (e.Data != null)
-            {
-                Console.WriteLine(e.Data);
-            }
-        };
-        process.ErrorDataReceived += (_, e) =>
+            Task<string> standardOutput = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            Task<string> standardError = process.StandardError.ReadToEndAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            return new ToolRunResult(
+                process.ExitCode,
+                await standardOutput.ConfigureAwait(false),
+                await standardError.ConfigureAwait(false));
+        }
+        catch (OperationCanceledException)
         {
-            if (e.Data != null)
+            if (!process.HasExited)
             {
-                Console.Error.WriteLine(e.Data);
+                process.Kill(entireProcessTree: true);
             }
-        };
 
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-        process.WaitForExit();
-        return process.ExitCode;
+            throw;
+        }
     }
 
     private static string ResolveToolPath(BgfxTool tool)
     {
-        var toolName = tool.ToString().ToLowerInvariant();
-        var suffix = GetConfigSuffix();
-        var primaryName = $"{toolName}{suffix}";
-        var primaryFileName = OperatingSystem.IsWindows() ? $"{primaryName}.exe" : primaryName;
-        var fallbackFileName = OperatingSystem.IsWindows() ? $"{toolName}.exe" : toolName;
+        string toolName = tool.ToString().ToLowerInvariant();
+        string suffix = GetConfigSuffix();
+        string primaryName = $"{toolName}{suffix}";
+        string primaryFileName = OperatingSystem.IsWindows() ? $"{primaryName}.exe" : primaryName;
+        string fallbackFileName = OperatingSystem.IsWindows() ? $"{toolName}.exe" : toolName;
 
         TryEnsureNativeFile(primaryFileName);
         TryEnsureNativeFile(fallbackFileName);
 
-        if (TryFindNativeFile(primaryFileName, out var primaryPath))
+        if (TryFindNativeFile(primaryFileName, out string primaryPath))
         {
             return primaryPath;
         }
 
-        if (TryFindNativeFile(fallbackFileName, out var fallbackPath))
+        if (TryFindNativeFile(fallbackFileName, out string fallbackPath))
         {
             return fallbackPath;
         }
 
-        var fromRepo = TryResolveFromRepo(toolName);
+        string? fromRepo = TryResolveFromRepo(toolName);
         if (fromRepo is not null)
         {
             return fromRepo;
@@ -105,7 +160,7 @@ public static class ToolRunner
         }
         catch (Exception)
         {
-            // Ignore here and continue with other resolution paths.
+            // Resolution continues through the local native output and repository fallback.
         }
     }
 
@@ -125,37 +180,38 @@ public static class ToolRunner
 
     private static string? TryResolveFromRepo(string toolName)
     {
-        var repoRoot = FindRepoRoot();
+        string? repoRoot = FindRepoRoot();
         if (repoRoot is null)
         {
             return null;
         }
 
-        var platform = OperatingSystem.IsMacOS() ? "darwin" : OperatingSystem.IsWindows() ? "windows" : "linux";
-        var fileName = OperatingSystem.IsWindows() ? $"{toolName}.exe" : toolName;
-        var candidate = Path.Combine(repoRoot, "extern", "bgfx", "tools", "bin", platform, fileName);
+        string platform = OperatingSystem.IsMacOS()
+            ? "darwin"
+            : OperatingSystem.IsWindows()
+                ? "windows"
+                : "linux";
+        string fileName = OperatingSystem.IsWindows() ? $"{toolName}.exe" : toolName;
+        string candidate = Path.Combine(repoRoot, "extern", "bgfx", "tools", "bin", platform, fileName);
         return File.Exists(candidate) ? candidate : null;
     }
 
     private static string? FindRepoRoot()
     {
-        var starts = new[]
-        {
+        string[] starts =
+        [
             AppContext.BaseDirectory,
             Directory.GetCurrentDirectory()
-        };
+        ];
 
-        foreach (var start in starts)
+        foreach (string start in starts)
         {
-            var dir = new DirectoryInfo(start);
-            while (dir != null)
+            for (DirectoryInfo? directory = new(start); directory is not null; directory = directory.Parent)
             {
-                if (File.Exists(Path.Combine(dir.FullName, "InnoEngine.sln")))
+                if (File.Exists(Path.Combine(directory.FullName, "InnoEngine.sln")))
                 {
-                    return dir.FullName;
+                    return directory.FullName;
                 }
-
-                dir = dir.Parent;
             }
         }
 

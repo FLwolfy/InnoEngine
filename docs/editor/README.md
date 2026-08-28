@@ -13,6 +13,8 @@ Editor 采用“被动核心 → 后端无关交互 → ImGui 表现 → 独立 
 | [Inno.Editor.Scene](Inno.Editor.Scene.md) | Scene document workspace、细粒度 Scene 编辑门面与 reload-safe History 协议。 |
 | [Inno.Editor.Settings](Inno.Editor.Settings.md) | 路径即身份的项目 Settings、`EditorSettingObject`、统一 Apply History 与根目录存储。 |
 | [Inno.Editor.ImGui](Inno.Editor.ImGui.md) | ImGui runtime、renderer、统一 Widget、Palette 与 Style metrics。 |
+| [Inno.Editor.Graph](Inno.Editor.Graph.md) | 后端无关 Graph document controller、画布状态、复制粘贴与中立 History。 |
+| [Inno.Editor.Rendering](Inno.Editor.Rendering.md) | Scene/Game viewport request、RenderTexture 输出与 opaque ImGui texture 桥接。 |
 | [Inno.Editor.Inspection](Inno.Editor.Inspection.md) | InspectionDrawer、PropertyDrawer、Registry 与 serialized property renderer。 |
 | [Inno.Editor.Scripting](Inno.Editor.Scripting.md) | Asset-backed Roslyn 编译、facade、IDE 工程与热重载。 |
 | [Inno.Editor.Panel.FileBrowser](Inno.Editor.Panel.FileBrowser.md) | AssetEditor、文件浏览、Asset 操作与 Asset-side drag/drop。 |
@@ -22,6 +24,9 @@ Editor 采用“被动核心 → 后端无关交互 → ImGui 表现 → 独立 
 | [Inno.Editor.Panel.Logging](Inno.Editor.Panel.Logging.md) | Editor 日志/诊断缓冲与 Console Panel。 |
 | [Inno.Editor.Panel.Settings](Inno.Editor.Panel.Settings.md) | 可缩放阻塞 Modal、可搜索 Page Tree、overview 与 Section field frontend。 |
 | [Inno.Editor.Panel.Stats](Inno.Editor.Panel.Stats.md) | 平滑后的帧统计与 Stats Panel。 |
+| [Inno.Editor.Panel.SceneView](Inno.Editor.Panel.SceneView.md) | 独立 Editor Camera、Picking 与 Forward+/Deferred 切换。 |
+| [Inno.Editor.Panel.GameView](Inno.Editor.Panel.GameView.md) | 当前运行时 Camera 的 GPU Game View。 |
+| [Inno.Editor.Panel.ShaderGraph](Inno.Editor.Panel.ShaderGraph.md) | ShaderGraph 画布、编辑、预览、诊断与状态恢复。 |
 | [Inno.Editor.Application](Inno.Editor.Application.md) | Platform、Shell、ImGui 和全部 feature 的组合根。 |
 
 ## 依赖方向

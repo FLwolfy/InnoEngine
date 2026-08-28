@@ -1,0 +1,100 @@
+name: Rendering CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/rendering-ci.yml"
+      - "build/**"
+      - "native/**"
+      - "src/core/**"
+      - "src/assets/**"
+      - "src/engine/**"
+      - "src/editor/**"
+      - "src/platform/**"
+      - "src/render/**"
+      - "tests/**"
+      - "InnoEngine.sln"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/rendering-ci.yml"
+      - "build/**"
+      - "native/**"
+      - "src/core/**"
+      - "src/assets/**"
+      - "src/engine/**"
+      - "src/editor/**"
+      - "src/platform/**"
+      - "src/render/**"
+      - "tests/**"
+      - "InnoEngine.sln"
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+
+jobs:
+  rendering:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            platform: windows-x64
+          - os: macos-14
+            platform: osx-arm64
+
+    steps:
+      - name: Checkout repository and native dependencies
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Install MSBuild
+        if: runner.os == 'Windows'
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build native runtime and shader tools
+        shell: pwsh
+        run: |
+          dotnet run --project build/Inno.Build.Sdl3 -- --config debug
+          dotnet run --project build/Inno.Build.Cimgui -- --config debug
+          dotnet run --project build/Inno.Build.CImguizmo -- --config debug
+          dotnet run --project build/Inno.Build.Bgfx -- --config debug
+          dotnet run --project build/Inno.Build.Bgfx.Tools -- --config debug
+
+      - name: Build managed solution
+        shell: pwsh
+        run: dotnet build InnoEngine.sln --disable-build-servers -m:1 -nr:false
+
+      - name: Run complete test suite
+        shell: pwsh
+        run: dotnet test InnoEngine.sln --no-build --no-restore --disable-build-servers -m:1 -nr:false
+
+      - name: Run real renderer smoke
+        shell: pwsh
+        run: |
+          $smokeProject = Join-Path $env:RUNNER_TEMP "InnoRenderingSmoke"
+          New-Item -ItemType Directory -Force (Join-Path $smokeProject "Assets") | Out-Null
+          dotnet src/editor/Inno.Editor.Application/bin/Debug/net9.0/Inno.Editor.Application.dll $smokeProject --smoke-frames 3
+
+      - name: Upload renderer smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendering-smoke-${{ matrix.platform }}
+          path: ${{ runner.temp }}/InnoRenderingSmoke/Logs/**
+          if-no-files-found: warn

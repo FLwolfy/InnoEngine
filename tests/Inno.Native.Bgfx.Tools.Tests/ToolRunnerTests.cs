@@ -13,7 +13,8 @@ public sealed class ToolRunnerTests
         foreach (var tool in Enum.GetValues<BgfxTool>())
         {
             var toolName = tool.ToString().ToLowerInvariant();
-            ToolRunner.Run(tool, "--help");
+            ToolRunResult result = ToolRunner.Run(tool, ["--help"]);
+            Assert.True(result.succeeded || result.exitCode != 0);
             AssertToolExists(toolName);
         }
     }
@@ -21,7 +22,7 @@ public sealed class ToolRunnerTests
     [Fact]
     public void Run_Throws_WhenToolMissing()
     {
-        Assert.Throws<FileNotFoundException>(() => ToolRunner.Run((BgfxTool)999, "--help"));
+        Assert.Throws<FileNotFoundException>(() => ToolRunner.Run((BgfxTool)999, ["--help"]));
     }
 
     private static string GetConfigSuffix()

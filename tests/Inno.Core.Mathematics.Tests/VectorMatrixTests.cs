@@ -132,6 +132,32 @@ public sealed class VectorMatrixTests
     }
 
     [Fact]
+    public void Matrix_PerspectiveLH_MapsNearFar()
+    {
+        float near = 0.1f;
+        float far = 10f;
+        var projection = Matrix.CreatePerspectiveFieldOfView(MathF.PI / 2f, 1f, near, far);
+
+        Vector3 projectedNear = (projection * new Vector4(0f, 0f, near, 1f)).ProjectToVector3();
+        Vector3 projectedFar = (projection * new Vector4(0f, 0f, far, 1f)).ProjectToVector3();
+
+        Assert.True(MathHelper.AlmostEquals(0f, projectedNear.z));
+        Assert.True(MathHelper.AlmostEquals(1f, projectedFar.z));
+    }
+
+    [Fact]
+    public void Matrix_LookAtLH_RotatesWorldIntoCameraAxes()
+    {
+        Matrix view = Matrix.CreateLookAt(Vector3.ZERO, Vector3.RIGHT, Vector3.UP);
+
+        Vector3 forward = Vector3.Transform(Vector3.RIGHT, view);
+        Vector3 right = Vector3.Transform(Vector3.BACK, view);
+
+        Assert.True(forward == Vector3.FORWARD);
+        Assert.True(right == Vector3.RIGHT);
+    }
+
+    [Fact]
     public void Matrix_OrthographicOffCenter_MapsEdges()
     {
         var ortho = Matrix.CreateOrthographicOffCenter(-2f, 2f, -1f, 1f, 0f, 10f);

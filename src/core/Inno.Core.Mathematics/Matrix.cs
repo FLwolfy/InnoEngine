@@ -246,10 +246,10 @@ public struct Matrix : IEquatable<Matrix>
         float nf = 1f / (far - near);
 
         return new Matrix(
-            f / aspect, 0, 0,                 0,
-            0,          f, 0,                 0,
-            0,          0, far * nf,          1,
-            0,          0, -near * far * nf,  0);
+            f / aspect, 0, 0,                0,
+            0,          f, 0,                0,
+            0,          0, far * nf,         -near * far * nf,
+            0,          0, 1,                0);
     }
 
     /// <summary>
@@ -332,9 +332,9 @@ public struct Matrix : IEquatable<Matrix>
         Vector3 y = Vector3.Cross(z, x);                // up
 
         return new Matrix(
-            x.x, y.x, z.x, -Vector3.Dot(x, eye),
-            x.y, y.y, z.y, -Vector3.Dot(y, eye),
-            x.z, y.z, z.z, -Vector3.Dot(z, eye),
+            x.x, x.y, x.z, -Vector3.Dot(x, eye),
+            y.x, y.y, y.z, -Vector3.Dot(y, eye),
+            z.x, z.y, z.z, -Vector3.Dot(z, eye),
             0,   0,   0,   1);
     }
 
@@ -349,9 +349,9 @@ public struct Matrix : IEquatable<Matrix>
         Vector3 y = Vector3.Cross(z, x);                // up
 
         return new Matrix(
-            x.x, y.x, z.x, -Vector3.Dot(x, eye),
-            x.y, y.y, z.y, -Vector3.Dot(y, eye),
-            x.z, y.z, z.z, -Vector3.Dot(z, eye),
+            x.x, x.y, x.z, -Vector3.Dot(x, eye),
+            y.x, y.y, y.z, -Vector3.Dot(y, eye),
+            z.x, z.y, z.z, -Vector3.Dot(z, eye),
             0,   0,   0,   1);
     }
 

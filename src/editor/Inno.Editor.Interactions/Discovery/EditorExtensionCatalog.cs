@@ -15,6 +15,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
     private readonly Action m_extensionsChanged;
     private readonly EditorExtensionDiagnosticPublisher m_diagnostics = new();
     private readonly EditorInteractions m_interactions;
+    private readonly object[] m_hostServices;
     private readonly EditorExtensionStateStore m_state;
     private readonly Dictionary<string, PanelState> m_panelStates = new(StringComparer.Ordinal);
     private Snapshot? m_active;
@@ -24,10 +25,15 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
     internal EditorExtensionCatalog(
         EditorContext context,
         EditorInteractions interactions,
+        IEnumerable<object> hostServices,
         Action extensionsChanged)
     {
         m_context = context ?? throw new ArgumentNullException(nameof(context));
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
+        ArgumentNullException.ThrowIfNull(hostServices);
+        m_hostServices = hostServices.Select(static service =>
+            service ?? throw new ArgumentException("Host services cannot contain null.", nameof(hostServices)))
+            .ToArray();
         m_extensionsChanged = extensionsChanged ?? throw new ArgumentNullException(nameof(extensionsChanged));
         m_state = new EditorExtensionStateStore(context);
     }
@@ -160,9 +166,11 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             m_interactions,
             moduleTypes,
             types.types.Select(typeRef => typeRef.Resolve(types)).ToArray(),
+            m_hostServices,
             m_active?.instances);
 
         ModuleRegistration[] modules = moduleTypes
+            .Where(activator.CanCreate)
             .Select(type => new ModuleRegistration(
                 type.GetCustomAttribute<EditorModuleAttribute>(false)!,
                 type,
@@ -174,6 +182,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         ActionRegistration[] actions = types.GetTypesWithAttribute<EditorActionAttribute>()
             .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
+            .Where(activator.CanCreate)
             .Select(type => CreateActionRegistration(type, activator))
             .ToArray();
         ValidateActions(actions);
@@ -182,6 +191,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         MenuSourceRegistration[] menuSources = types.GetTypesWithAttribute<EditorMenuSourceAttribute>()
             .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
+            .Where(activator.CanCreate)
             .SelectMany(type => CreateMenuSourceRegistrations(type, activator))
             .OrderByDescending(static value => value.priority)
             .ThenBy(static value => value.type.FullName, StringComparer.Ordinal)
@@ -190,6 +200,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         DropRegistration[] drops = types.GetTypesWithAttribute<EditorDropAttribute>()
             .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
+            .Where(activator.CanCreate)
             .SelectMany(type => CreateDropRegistrations(type, activator))
             .ToArray();
         ValidateDrops(drops);
@@ -197,6 +208,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         PanelRegistration[] panels = types.GetTypesWithAttribute<EditorPanelAttribute>()
             .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
+            .Where(activator.CanCreate)
             .Select(type => CreatePanelRegistration(type, activator))
             .OrderBy(static value => value.attribute.order)
             .ThenBy(static value => value.type.FullName, StringComparer.Ordinal)
@@ -207,6 +219,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         ModalRegistration[] modals = types.GetTypesWithAttribute<EditorModalAttribute>()
             .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
+            .Where(activator.CanCreate)
             .Select(type => CreateModalRegistration(type, activator))
             .OrderBy(static value => value.attribute.order)
             .ThenBy(static value => value.type.FullName, StringComparer.Ordinal)
@@ -217,6 +230,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             .GetTypesWithAttribute<EditorHistoryHandlerAttribute>()
             .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
+            .Where(activator.CanCreate)
             .Select(type => CreateHistoryHandlerRegistration(type, activator))
             .OrderBy(static value => value.attribute.kind, StringComparer.Ordinal)
             .ThenBy(static value => value.type.FullName, StringComparer.Ordinal)
@@ -280,8 +294,8 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             ModuleRegistration registration = candidate.modules[i];
             if (existing.Contains(registration.module))
                 continue;
-            activation.startedModules.Add(registration);
             registration.module.Start(m_context);
+            activation.startedModules.Add(registration);
             candidate.startedModules.Add(registration.module);
         }
 

@@ -62,12 +62,12 @@
 - 发现潜在编译风险时，要在提交说明中显式标注。
 
 ## 10. 目录边界
-- `src/core`, `src/engine`, `src/assets`, `src/editor`, `src/platform`, `build`, `tests`
+- `src/core`, `src/engine`, `src/assets`, `src/render`, `src/editor`, `src/platform`, `build`, `tests`
 - 新文件尽量放置在匹配现有分层与职责目录。
 
 ## 11. Wiki 文档维护
 - API Wiki 统一位于根目录 `docs/`，入口为 `docs/README.md`。
-- Wiki 目录优先映射源码分层：`docs/core`、`docs/assets`、`docs/engine`、`docs/editor`、`docs/platform`；每个分类必须有 `README.md` 索引。
+- Wiki 目录优先映射源码分层：`docs/core`、`docs/assets`、`docs/engine`、`docs/render`、`docs/editor`、`docs/platform`；每个分类必须有 `README.md` 索引。
 - 默认每个 `.csproj` 对应一个独立 Markdown 项目页，文件名使用完整项目名，例如 `docs/core/Inno.Core.Reflection.md`。
 - 项目页至少包含：职责与边界、依赖/初始化顺序、所有 `public` API、面向派生实现者的重要 `protected` 扩展点、常见工作流、可编译风格示例、错误/生命周期/热重载注意事项、相邻页面导航。
 - API 表格与示例必须以当前源码为依据；不得把 `internal` 实现描述成稳定公开契约。若解释内部机制，应明确标注其非公开性质。
@@ -122,5 +122,14 @@
 - 代码审查或清理包含 `version`、`legacy`、`migration`、`compatibility`、`former`、`deprecated` 等名称的实现时，必须先判断其是否只服务于旧数据/API；如果是，应连同测试和文档一起删除，而不是继续扩展。
 
 ## 16. 完成提示音
-- 完成用户要求的代码或文件操作并通过必要验证后，默认播放 `/System/Library/Sounds/Glass.aiff` 作为完成提示音，无需用户在每次任务中重复要求。
+- 在设计阶段等待用户作出会改变方案边界的决策前、最终设计完成后，以及完成用户要求的代码或文件操作并通过必要验证后，默认播放 `/System/Library/Sounds/Glass.aiff` 作为提示音，无需用户在每次任务中重复要求。
 - 如果当前环境无法访问音频设备，应在最终结果中明确说明提示音未能播放；用户明确要求静默时不播放。
+
+## 17. Rendering 强制边界
+- Rendering 的公开设计必须同时满足：跨平台、API 易用、扩展灵活和低耦合。不得以实现便利为由破坏其中任一项。
+- 只有 `Inno.Rendering.Bgfx` 可以引用 `Inno.Native.Bgfx`。BGFX handle、View ID、原生指针和 BGFX 枚举不得出现在其他项目的 public/protected API 中。
+- `Inno.Rendering.Core` 必须保持后端中立，且不得引用 Scene、Assets、Editor 或任何具体图形后端。上层模块通过资源描述、能力集合、RenderGraph 和命令编码接口工作。
+- 通用 Graph 不得引用 Rendering 或 ImGui；Rendering 也不得反向引用 ShaderGraph 或 Editor Graph。ShaderGraph 只能作为面向 Rendering 契约的上层编译前端。
+- 手写 Shader 与节点生成 Shader 必须进入同一个 Shader IR、编译、反射、验证和产物缓存链；不得维护第二套节点专用 shader 编译路径。
+- Pipeline、Feature、Pass、Shader Node、GPU 资源与编译产物必须 capability-aware、generation-scoped 且 reload-safe。持久状态只保存 Stable ID 与中立数据，禁止长期保存 collectible ALC 的 `Type`、delegate 或 runtime 对象。
+- Project 脚本扩展只允许使用后端中立 Rendering API。扩展失败必须隔离，候选成功后只能在帧安全点原子切换，并保留 last-good Pipeline、Shader 和 GPU 资源。

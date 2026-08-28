@@ -124,6 +124,35 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void ExtensionActivatorInjectsOneStableAssignableHostService()
+    {
+        var service = new TestHostService();
+        var activator = new EditorExtensionActivator(
+            m_runtime.context,
+            m_runtime.interactions,
+            Array.Empty<Type>(),
+            [typeof(HostServicePanel)],
+            [service]);
+
+        HostServicePanel panel = activator.CreateExtension<HostServicePanel>(typeof(HostServicePanel));
+
+        Assert.Same(service, panel.service);
+    }
+
+    [Fact]
+    public void ExtensionActivatorRejectsExtensionWhenHostServiceIsUnavailable()
+    {
+        var activator = new EditorExtensionActivator(
+            m_runtime.context,
+            m_runtime.interactions,
+            Array.Empty<Type>(),
+            [typeof(HostServicePanel)],
+            Array.Empty<object>());
+
+        Assert.False(activator.CanCreate(typeof(HostServicePanel)));
+    }
+
+    [Fact]
     public void InteractionIdentifiersArePlainValidatedStringsWithoutWrapperTypes()
     {
         Assembly assembly = typeof(EditorInteractions).Assembly;
@@ -837,6 +866,18 @@ public sealed class NeutralHistoryHandler : EditorHistoryHandler
             direction == EditorHistoryDirection.Undo ? 0 : sizeof(int));
         return EditorHistoryResult.Success();
     }
+}
+
+internal interface ITestHostService;
+
+internal sealed class TestHostService : ITestHostService;
+
+internal sealed class HostServicePanel(ITestHostService service) : EditorPanel
+{
+    internal ITestHostService service { get; } = service;
+
+    protected override void OnDraw(EditorContext context)
+        => _ = context;
 }
 
 [EditorModule("tests.state")]

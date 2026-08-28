@@ -46,6 +46,29 @@ public abstract class Layer(string name = "Layer")
     public virtual void OnLateUpdate(float deltaTime) { }
 
     /// <summary>
+    /// Prepares frame-scoped rendering state before render requests are submitted.
+    /// </summary>
+    /// <param name="deltaTime">Frame delta time in seconds.</param>
+    public virtual void OnBeforeRender(float deltaTime) { }
+
+    /// <summary>
+    /// Submits frame-scoped render requests without presenting the graphics backend.
+    /// </summary>
+    /// <param name="deltaTime">Frame delta time in seconds.</param>
+    public virtual void OnRender(float deltaTime) { }
+
+    /// <summary>
+    /// Completes frame-scoped rendering state and releases temporary frame ownership.
+    /// </summary>
+    /// <param name="deltaTime">Frame delta time in seconds.</param>
+    /// <remarks>
+    /// This callback is invoked in reverse layer order for every layer whose
+    /// <see cref="OnBeforeRender"/> callback completed successfully, including
+    /// when a later render callback fails.
+    /// </remarks>
+    public virtual void OnAfterRender(float deltaTime) { }
+
+    /// <summary>
     /// Subscribes to events in this layer's event hub.
     /// Subscription is automatically disposed when the layer detaches.
     /// </summary>

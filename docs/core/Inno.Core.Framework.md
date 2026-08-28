@@ -67,7 +67,10 @@ flowchart TD
     E --> F["0..N 次 Layer.OnFixedUpdate"]
     F --> G["Layer.OnUpdate"]
     G --> H["Layer.OnLateUpdate"]
-    H --> I["Job EndFrame"]
+    H --> R1["Layer.OnBeforeRender<br/>正序"]
+    R1 --> R2["Layer.OnRender<br/>正序提交请求"]
+    R2 --> R3["Layer.OnAfterRender<br/>逆序完整 unwind"]
+    R3 --> I["Job EndFrame"]
     I --> J["DrainMainThreadQueue"]
 ```
 
@@ -75,7 +78,9 @@ flowchart TD
 
 ## Layer
 
-派生 `Layer` 可覆盖：`OnAttach()`、`OnDetach()`、`OnFixedUpdate(float)`、`OnUpdate(float)`、`OnLateUpdate(float)`。公开 `name` 用于显示/诊断。
+派生 `Layer` 可覆盖：`OnAttach()`、`OnDetach()`、`OnFixedUpdate(float)`、`OnUpdate(float)`、`OnLateUpdate(float)`、`OnBeforeRender(float)`、`OnRender(float)`、`OnAfterRender(float)`。公开 `name` 用于显示/诊断。
+
+渲染三阶段由 `LayerStack.RenderFrame` 作为一个异常安全作用域执行。前两阶段按栈顺序运行；只要某层成功完成 `OnBeforeRender`，它的 `OnAfterRender` 就一定会在逆序 unwind 中执行。多个提交或清理错误会合并为 `AggregateException`，从而不会因首个错误跳过后续资源清理。
 
 受保护事件 API：
 
@@ -110,6 +115,7 @@ public sealed class GameLayer : Layer
 | `PushOverlay(Layer)` | 添加到栈顶 overlay 区域。 |
 | `PopLayer` / `PopOverlay` | 只从对应分区移除；成功返回 `true`。 |
 | `OnFixedUpdate` / `OnUpdate` / `OnLateUpdate` | 按栈顺序调用所有层。 |
+| `RenderFrame` | 正序执行 Before/Render，再逆序执行 After；失败时仍完整 unwind。 |
 | `Clear()` | 逆序 Detach 并移除全部层。 |
 | `Dispose()` | Clear 后永久关闭 stack。 |
 
