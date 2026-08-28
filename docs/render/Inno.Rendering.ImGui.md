@@ -6,6 +6,10 @@
 
 `Inno.Rendering.ImGui` 实现可插拔 `IPlatformImGuiRenderer`，把 ImGui draw data 转为 RenderGraph Pass。它让 Editor 主窗口、detached viewport 和 Scene/Game `RenderTexture` 共享一个 BGFX context，不经过 CPU readback；Platform API 只看 `ImGuiTextureHandle` 与平台窗口目标。
 
+Editor 保持单一 GPU 呈现所有者：SDL 负责窗口、事件、输入、光标和原生 viewport 生命周期，BGFX 负责主 backbuffer、detached viewport、Scene/Game 目标和 ImGui draw data。轻量应用仍可省略 renderer 参数并使用 `Inno.Platform.ImGui` 的默认 SDL renderer，但同一个窗口不能同时由 SDL renderer 与 BGFX 呈现。
+
+Editor 主 backbuffer 使用 sRGB 编码。ImGui packed vertex color 按显示空间（sRGB）定义，因此内置 ImGui fragment shader 会先把 RGB 转换到线性空间，再与字体或 `RenderTexture` 采样相乘；alpha 保持线性。这样主题色不会被 backbuffer 二次提亮，Scene/Game 的线性 Tone Mapping 输出也能在最终 present 时只进行一次 sRGB 编码。Presentation clear color 同样在线性空间提交。
+
 ## 公开 API
 
 | API | 语义 |

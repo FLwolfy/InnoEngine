@@ -20,6 +20,11 @@ public sealed unsafe class BgfxImGuiRenderer : IPlatformImGuiRenderer, IRenderFr
     private const int C_INITIAL_INDEX_CAPACITY = 8192;
 
     private static readonly RenderBindingId S_TEXTURE_BINDING = new("s_tex");
+    private static readonly RenderClearColor S_PRESENTATION_CLEAR_COLOR = new(
+        SrgbToLinear(0.08f),
+        SrgbToLinear(0.08f),
+        SrgbToLinear(0.09f),
+        1f);
     private static readonly RenderVertexLayout S_VERTEX_LAYOUT = new(
     [
         new RenderVertexAttribute(RenderVertexSemantic.Position, RenderVertexFormat.Float2),
@@ -277,7 +282,7 @@ public sealed unsafe class BgfxImGuiRenderer : IPlatformImGuiRenderer, IRenderFr
                     packet,
                     ExecutePacket);
                 pass.SetViewTransform(Identity(), Orthographic(packet.displayPosition, packet.displaySize))
-                    .ClearPresentationTarget(new RenderClearColor(0.08f, 0.08f, 0.09f, 1f))
+                    .ClearPresentationTarget(S_PRESENTATION_CLEAR_COLOR)
                     .HasSideEffect();
                 if (packet.surface.isValid)
                 {
@@ -772,6 +777,11 @@ public sealed unsafe class BgfxImGuiRenderer : IPlatformImGuiRenderer, IRenderFr
 
         return capacity;
     }
+
+    private static float SrgbToLinear(float value)
+        => value <= 0.04045f
+            ? value / 12.92f
+            : MathF.Pow((value + 0.055f) / 1.055f, 2.4f);
 
     private static float[] Identity()
         =>

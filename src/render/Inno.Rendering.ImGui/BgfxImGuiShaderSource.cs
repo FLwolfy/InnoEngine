@@ -32,9 +32,17 @@ public static class BgfxImGuiShaderSource
         #include <bgfx_shader.sh>
         SAMPLER2D(s_tex, 0);
 
+        vec3 InnoSrgbToLinear(vec3 color)
+        {
+            vec3 lower = color / 12.92;
+            vec3 upper = pow((color + 0.055) / 1.055, vec3(2.4));
+            return mix(upper, lower, step(color, vec3(0.04045)));
+        }
+
         void main()
         {
-            gl_FragColor = texture2D(s_tex, v_texcoord0) * v_color0;
+            vec4 vertexColor = vec4(InnoSrgbToLinear(v_color0.rgb), v_color0.a);
+            gl_FragColor = texture2D(s_tex, v_texcoord0) * vertexColor;
         }
         """;
 }
