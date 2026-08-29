@@ -11,6 +11,66 @@ namespace Inno.Editor.ImGui.ImGuiWidget;
 public static partial class ImGuiWidget
 {
     /// <summary>
+    /// Begins an explicitly opened popup using the editor context-menu presentation contract.
+    /// The popup sizes itself to its submitted content and never creates an implicit scroll range.
+    /// </summary>
+    /// <param name="id">The stable identifier previously passed to ImGui when opening the popup.</param>
+    /// <returns>
+    /// <see langword="true"/> when popup content should be submitted; otherwise,
+    /// <see langword="false"/>.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="id"/> is empty.
+    /// </exception>
+    public static bool BeginMenuPopup(string id)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        PushContextMenuStyle();
+        ImGuiWindowFlags flags = ImGuiWindowFlags.AlwaysAutoResize |
+                                 ImGuiWindowFlags.NoScrollbar |
+                                 ImGuiWindowFlags.NoScrollWithMouse |
+                                 ImGuiWindowFlags.NoSavedSettings;
+        if (NativeImGui.BeginPopup(id, flags))
+            return true;
+        PopContextMenuStyle();
+        return false;
+    }
+
+    /// <summary>
+    /// Ends a popup opened by <see cref="BeginMenuPopup"/> and restores the previous style.
+    /// </summary>
+    public static void EndMenuPopup()
+    {
+        NativeImGui.EndPopup();
+        PopContextMenuStyle();
+    }
+
+    /// <summary>
+    /// Begins a tooltip using the same padding, colors, border, and spacing as editor menus.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> when tooltip content should be submitted; otherwise,
+    /// <see langword="false"/>.
+    /// </returns>
+    public static bool BeginMenuTooltip()
+    {
+        PushContextMenuStyle();
+        if (NativeImGui.BeginTooltip())
+            return true;
+        PopContextMenuStyle();
+        return false;
+    }
+
+    /// <summary>
+    /// Ends a tooltip opened by <see cref="BeginMenuTooltip"/> and restores the previous style.
+    /// </summary>
+    public static void EndMenuTooltip()
+    {
+        NativeImGui.EndTooltip();
+        PopContextMenuStyle();
+    }
+
+    /// <summary>
     /// Begins a styled right-click context menu for the most recently submitted item.
     /// </summary>
     /// <param name="id">The stable popup identifier in the current ImGui ID scope.</param>
@@ -49,8 +109,7 @@ public static partial class ImGuiWidget
     /// </summary>
     public static void EndContextMenu()
     {
-        NativeImGui.EndPopup();
-        PopContextMenuStyle();
+        EndMenuPopup();
     }
 
     private static bool IsPopupBlockingInteraction()

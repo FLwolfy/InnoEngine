@@ -383,7 +383,7 @@ internal sealed class FileBrowserPanel : EditorPanel
         NativeImGui.SetNextWindowSizeConstraints(
             new Vector2(420f * EditorWidget.style.zoom, 0f),
             new Vector2(680f * EditorWidget.style.zoom, 600f * EditorWidget.style.zoom));
-        if (!NativeImGui.BeginPopup("##PluginManagerPopup"))
+        if (!EditorWidget.BeginMenuPopup("##PluginManagerPopup"))
             return;
         try
         {
@@ -452,7 +452,7 @@ internal sealed class FileBrowserPanel : EditorPanel
         }
         finally
         {
-            NativeImGui.EndPopup();
+            EditorWidget.EndMenuPopup();
         }
     }
 

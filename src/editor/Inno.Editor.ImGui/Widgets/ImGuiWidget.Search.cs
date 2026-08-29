@@ -50,7 +50,7 @@ public static partial class ImGuiWidget
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         if (width < 0f)
             width = style.searchPopupWidth;
-        if (!NativeImGui.BeginPopup(id))
+        if (!BeginMenuPopup(id))
             return false;
         if (NativeImGui.IsWindowAppearing())
             NativeImGui.SetKeyboardFocusHere();
@@ -62,5 +62,5 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Ends a popup opened by <see cref="BeginSearchPopup"/>.
     /// </summary>
-    public static void EndSearchPopup() => NativeImGui.EndPopup();
+    public static void EndSearchPopup() => EndMenuPopup();
 }

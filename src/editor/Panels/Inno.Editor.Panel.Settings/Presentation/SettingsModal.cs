@@ -248,31 +248,26 @@ internal sealed class SettingsModal(
 
     private void DrawButtons(SettingsEditSession session)
     {
-        NativeImGui.BeginDisabled(!session.isEditorDirty);
-        try
-        {
-            if (NativeImGui.Button("Apply Editor"))
-                _ = session.ApplyEditor();
-        }
-        finally
-        {
-            NativeImGui.EndDisabled();
-        }
-
-        NativeImGui.SameLine();
-        NativeImGui.BeginDisabled(!session.isProjectDirty);
-        try
-        {
-            if (NativeImGui.Button("Apply Project"))
-                _ = session.ApplyProject();
-        }
-        finally
-        {
-            NativeImGui.EndDisabled();
-        }
-
-        NativeImGui.SameLine();
+        ImGuiStylePtr style = NativeImGui.GetStyle();
+        float cancelWidth = NativeImGui.CalcTextSize("Cancel").X + style.FramePadding.X * 2f;
+        float applyWidth = NativeImGui.CalcTextSize("Apply").X + style.FramePadding.X * 2f;
+        float totalWidth = cancelWidth + style.ItemSpacing.X + applyWidth;
+        NativeImGui.SetCursorPosX(
+            NativeImGui.GetCursorPosX() +
+            MathF.Max(0f, NativeImGui.GetContentRegionAvail().X - totalWidth));
         if (NativeImGui.Button("Cancel"))
             window.Close();
+
+        NativeImGui.SameLine();
+        NativeImGui.BeginDisabled(!session.isDirty);
+        try
+        {
+            if (NativeImGui.Button("Apply"))
+                _ = session.Apply();
+        }
+        finally
+        {
+            NativeImGui.EndDisabled();
+        }
     }
 }

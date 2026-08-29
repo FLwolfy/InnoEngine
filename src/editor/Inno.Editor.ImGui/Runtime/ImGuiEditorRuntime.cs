@@ -7,6 +7,7 @@ using Inno.Editor.Core;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Editor.Interactions;
+using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.ImGui;
@@ -96,7 +97,7 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
         double now = m_timer.Elapsed.TotalSeconds;
         bool blocksInteraction = m_modals.Update(modals, now);
 
-        _ = NativeImGui.DockSpaceOverViewport();
+        DrawDockSpace();
         if (blocksInteraction)
             NativeImGui.BeginDisabled(true);
         try
@@ -115,6 +116,20 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
         modals = m_runtime.modals;
         _ = m_modals.Update(modals, now);
         m_modals.Draw(context, modals, now);
+    }
+
+    private static void DrawDockSpace()
+    {
+        NativeImGui.PushStyleColor(ImGuiCol.ResizeGripHovered, EditorPalette.accentHovered);
+        NativeImGui.PushStyleColor(ImGuiCol.ResizeGripActive, EditorPalette.accentActive);
+        try
+        {
+            _ = NativeImGui.DockSpaceOverViewport();
+        }
+        finally
+        {
+            NativeImGui.PopStyleColor(2);
+        }
     }
 
     /// <summary>Dispatches an unhandled keyboard event through contextual shortcuts.</summary>

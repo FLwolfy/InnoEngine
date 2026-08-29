@@ -58,12 +58,13 @@ internal sealed class SettingsEditSession
 {
     private readonly EditorSettings m_editorSettings;
     private readonly ProjectSettingsEditor m_projectSettings;
+    private readonly HashSet<string> m_editorInitiallyNonDefault = new(StringComparer.Ordinal);
     private readonly HashSet<string> m_editorModified = new(StringComparer.Ordinal);
     private readonly HashSet<string> m_editorResetIntent = new(StringComparer.Ordinal);
     private readonly HashSet<string> m_editorResets = new(StringComparer.Ordinal);
     private readonly Dictionary<string, EditorSettingObject> m_editorValues = new(StringComparer.Ordinal);
     private readonly HashSet<ProjectSettingId> m_projectModified = [];
-    private readonly HashSet<ProjectSettingId> m_projectOverrides = [];
+    private readonly HashSet<ProjectSettingId> m_projectInitiallyNonDefault = [];
     private readonly HashSet<ProjectSettingId> m_projectResetIntent = [];
     private readonly HashSet<ProjectSettingId> m_projectResets = [];
     private readonly Dictionary<ProjectSettingId, ISerializable> m_projectValues = [];
@@ -83,14 +84,18 @@ internal sealed class SettingsEditSession
             if (!definition.hasValue)
                 continue;
             fields.Add(new SettingsField(definition));
-            m_editorValues.Add(definition.path, editorSettings.Get(definition.path));
+            EditorSettingObject value = editorSettings.Get(definition.path);
+            m_editorValues.Add(definition.path, value);
+            if (!definition.IsDefault(value))
+                m_editorInitiallyNonDefault.Add(definition.path);
         }
         foreach (ProjectSettingEditor definition in projectSettings.definitions)
         {
             fields.Add(new SettingsField(definition));
-            m_projectValues.Add(definition.settingId, projectSettings.Get(definition));
-            if (ProjectSettingsManager.HasProjectOverride(definition.settingId))
-                m_projectOverrides.Add(definition.settingId);
+            ISerializable value = projectSettings.Get(definition);
+            m_projectValues.Add(definition.settingId, value);
+            if (!definition.ValuesEqual(value, projectSettings.GetComposedDefault(definition)))
+                m_projectInitiallyNonDefault.Add(definition.settingId);
         }
 
         string? duplicatePath = fields
@@ -132,9 +137,7 @@ internal sealed class SettingsEditSession
         bool differsFromDefault = !project.ValuesEqual(
             m_projectValues[project.settingId],
             m_projectSettings.GetComposedDefault(project));
-        return differsFromDefault ||
-               (m_projectOverrides.Contains(project.settingId) &&
-                !m_projectResets.Contains(project.settingId));
+        return differsFromDefault;
     }
 
     internal bool CanReset(SettingsPage page)
@@ -159,16 +162,22 @@ internal sealed class SettingsEditSession
         if (field.editor is EditorSetting editor)
         {
             m_editorValues[editor.path] = editor.defaultValue;
-            _ = m_editorResetIntent.Add(editor.path);
-            _ = m_editorResets.Add(editor.path);
+            SetResetState(
+                editor.path,
+                m_editorInitiallyNonDefault.Contains(editor.path),
+                m_editorResetIntent,
+                m_editorResets);
             _ = m_editorModified.Remove(editor.path);
             return;
         }
         ProjectSettingEditor project = field.project
             ?? throw new InvalidOperationException($"Settings field '{field.path}' has no owner.");
         m_projectValues[project.settingId] = m_projectSettings.GetComposedDefault(project);
-        _ = m_projectResetIntent.Add(project.settingId);
-        _ = m_projectResets.Add(project.settingId);
+        SetResetState(
+            project.settingId,
+            m_projectInitiallyNonDefault.Contains(project.settingId),
+            m_projectResetIntent,
+            m_projectResets);
         _ = m_projectModified.Remove(project.settingId);
     }
 
@@ -197,7 +206,17 @@ internal sealed class SettingsEditSession
         UpdateDirty(id, differsFromDrawBaseline, m_projectModified, m_projectResets, m_projectResetIntent);
     }
 
-    internal bool ApplyEditor()
+    internal bool Apply()
+    {
+        bool changed = false;
+        if (isEditorDirty)
+            changed |= ApplyEditor();
+        if (isProjectDirty)
+            changed |= ApplyProject();
+        return changed;
+    }
+
+    private bool ApplyEditor()
     {
         var values = m_editorModified.ToDictionary(
             path => path,
@@ -205,27 +224,35 @@ internal sealed class SettingsEditSession
             StringComparer.Ordinal);
         bool changed = m_editorSettings.Apply(values, m_editorResets);
         m_editorModified.Clear();
+        m_editorInitiallyNonDefault.Clear();
         m_editorResetIntent.Clear();
         m_editorResets.Clear();
         foreach (SettingsField field in definitions.Where(static field => field.scope == SettingsScope.Editor))
-            m_editorValues[field.path] = m_editorSettings.Get(field.path);
+        {
+            EditorSetting definition = field.editor!;
+            EditorSettingObject value = m_editorSettings.Get(field.path);
+            m_editorValues[field.path] = value;
+            if (!definition.IsDefault(value))
+                m_editorInitiallyNonDefault.Add(field.path);
+        }
         return changed;
     }
 
-    internal bool ApplyProject()
+    private bool ApplyProject()
     {
         var values = m_projectModified.ToDictionary(id => id, id => m_projectValues[id]);
         bool changed = m_projectSettings.Apply(values, m_projectResets);
         m_projectModified.Clear();
-        m_projectOverrides.Clear();
+        m_projectInitiallyNonDefault.Clear();
         m_projectResetIntent.Clear();
         m_projectResets.Clear();
         foreach (SettingsField field in definitions.Where(static field => field.scope == SettingsScope.Project))
         {
             ProjectSettingEditor definition = field.project!;
-            m_projectValues[definition.settingId] = m_projectSettings.Get(definition);
-            if (ProjectSettingsManager.HasProjectOverride(definition.settingId))
-                m_projectOverrides.Add(definition.settingId);
+            ISerializable value = m_projectSettings.Get(definition);
+            m_projectValues[definition.settingId] = value;
+            if (!definition.ValuesEqual(value, m_projectSettings.GetComposedDefault(definition)))
+                m_projectInitiallyNonDefault.Add(definition.settingId);
         }
         return changed;
     }
@@ -247,6 +274,23 @@ internal sealed class SettingsEditSession
         _ = modified.Remove(id);
         if (resetIntent.Contains(id))
             _ = resets.Add(id);
+    }
+
+    private static void SetResetState<T>(
+        T id,
+        bool changesEffectiveValue,
+        ISet<T> resetIntent,
+        ISet<T> resets)
+        where T : notnull
+    {
+        if (changesEffectiveValue)
+        {
+            _ = resetIntent.Add(id);
+            _ = resets.Add(id);
+            return;
+        }
+        _ = resetIntent.Remove(id);
+        _ = resets.Remove(id);
     }
 
     private static SettingsPage[] BuildPages(

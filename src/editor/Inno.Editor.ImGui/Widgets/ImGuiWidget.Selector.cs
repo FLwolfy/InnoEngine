@@ -70,25 +70,14 @@ public static partial class ImGuiWidget
         NativeImGui.SetNextWindowSizeConstraints(
             new Vector2(MathF.Max(width, minimumPopupWidth), 0f),
             new Vector2(float.MaxValue));
-        PushContextMenuStyle();
-        ImGuiWindowFlags flags = ImGuiWindowFlags.AlwaysAutoResize |
-                                 ImGuiWindowFlags.NoScrollbar |
-                                 ImGuiWindowFlags.NoScrollWithMouse |
-                                 ImGuiWindowFlags.NoSavedSettings;
-        if (NativeImGui.BeginPopup(popupId, flags))
-            return true;
-        PopContextMenuStyle();
-        return false;
+        return BeginMenuPopup(popupId);
     }
 
     /// <summary>
     /// Ends a selector popup opened by <see cref="BeginMenuSelector"/>.
     /// </summary>
     public static void EndMenuSelector()
-    {
-        NativeImGui.EndPopup();
-        PopContextMenuStyle();
-    }
+        => EndMenuPopup();
 
     private static void DrawMenuSelectorFrame(
         Vector2 minimum,

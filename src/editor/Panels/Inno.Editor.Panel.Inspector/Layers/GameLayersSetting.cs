@@ -252,8 +252,12 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
         NativeImGui.BeginDisabled(definedCount >= GameLayer.C_MAX_COUNT);
         try
         {
-            NativeImGui.SetNextItemWidth(-1f);
-            if (NativeImGui.BeginCombo("##add_game_layer", "Add layer..."))
+            float selectorWidth = MathF.Max(1f, NativeImGui.GetContentRegionAvail().X);
+            if (ImGuiWidget.BeginMenuSelector(
+                    "add_game_layer",
+                    "Add layer...",
+                    selectorWidth,
+                    selectorWidth))
             {
                 try
                 {
@@ -274,7 +278,7 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
                 }
                 finally
                 {
-                    NativeImGui.EndCombo();
+                    ImGuiWidget.EndMenuSelector();
                 }
             }
         }

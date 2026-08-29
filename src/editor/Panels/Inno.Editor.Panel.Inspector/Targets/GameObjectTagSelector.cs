@@ -41,11 +41,12 @@ internal sealed class GameObjectTagSelector
             : $"{target.tag} (Undefined)";
         EditorWidget.LabelChip("Tag", EditorPalette.inspectorTagLabel);
         NativeImGui.SameLine(0f, 0f);
-        NativeImGui.SetNextItemWidth(MathF.Max(1f, width));
-        if (!NativeImGui.BeginCombo(
-                $"##game_object_tag_{target.identity.persistentId:N}",
+        float selectorWidth = MathF.Max(1f, width);
+        if (!EditorWidget.BeginMenuSelector(
+                $"game_object_tag_{target.identity.persistentId:N}",
                 preview,
-                ImGuiComboFlags.None))
+                selectorWidth,
+                selectorWidth))
         {
             return;
         }
@@ -64,7 +65,7 @@ internal sealed class GameObjectTagSelector
         }
         finally
         {
-            NativeImGui.EndCombo();
+            EditorWidget.EndMenuSelector();
         }
     }
 

@@ -45,11 +45,12 @@ internal sealed class GameObjectLayerSelector
         string preview = FormatLayerPreview(stack.GetName(target.layer));
         ImGuiWidget.LabelChip("Layer", EditorPalette.inspectorLayerLabel);
         NativeImGui.SameLine(0f, 0f);
-        NativeImGui.SetNextItemWidth(MathF.Max(1f, width));
-        if (!NativeImGui.BeginCombo(
-                $"##game_object_layer_{target.identity.persistentId:N}",
+        float selectorWidth = MathF.Max(1f, width);
+        if (!ImGuiWidget.BeginMenuSelector(
+                $"game_object_layer_{target.identity.persistentId:N}",
                 preview,
-                ImGuiComboFlags.None))
+                selectorWidth,
+                selectorWidth))
         {
             return;
         }
@@ -67,7 +68,7 @@ internal sealed class GameObjectLayerSelector
         }
         finally
         {
-            NativeImGui.EndCombo();
+            ImGuiWidget.EndMenuSelector();
         }
     }
 

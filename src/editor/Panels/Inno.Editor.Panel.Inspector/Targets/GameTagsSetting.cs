@@ -82,19 +82,26 @@ internal sealed class GameTagsSetting : ProjectSettingEditor<GameTagCatalog>
         IReadOnlyList<string> tags = setting.GetTags();
         ImGuiTableFlags flags = ImGuiTableFlags.RowBg |
                                 ImGuiTableFlags.BordersInnerH |
+                                ImGuiTableFlags.BordersInnerV |
                                 ImGuiTableFlags.SizingStretchProp |
                                 ImGuiTableFlags.NoPadOuterX |
                                 ImGuiTableFlags.NoSavedSettings;
+        NativeImGui.PushStyleVar(ImGuiStyleVar.CellPadding, ImGuiWidget.style.cellPadding);
         if (!NativeImGui.BeginTable("##project_tag_definitions", 2, flags))
+        {
+            NativeImGui.PopStyleVar();
             return;
+        }
         try
         {
-            NativeImGui.TableSetupColumn("Tag", ImGuiTableColumnFlags.WidthStretch);
+            NativeImGui.TableSetupColumn(
+                "Tag",
+                ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoResize);
             NativeImGui.TableSetupColumn(
                 "Action",
-                ImGuiTableColumnFlags.WidthFixed,
+                ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize,
                 72f * ImGuiWidget.style.zoom);
-            NativeImGui.TableHeadersRow();
+            DrawTagTableHeader();
             for (int i = 0; i < tags.Count; i++)
             {
                 string tag = tags[i];
@@ -102,8 +109,10 @@ internal sealed class GameTagsSetting : ProjectSettingEditor<GameTagCatalog>
                 NativeImGui.TableNextRow();
                 _ = NativeImGui.TableSetColumnIndex(0);
                 NativeImGui.AlignTextToFramePadding();
+                InsetPlainCell();
                 NativeImGui.TextUnformatted(tag);
                 _ = NativeImGui.TableSetColumnIndex(1);
+                InsetPlainCell();
                 if (isDefault)
                 {
                     ImGuiWidget.ColoredText(EditorPalette.textDisabled, "Fixed");
@@ -124,6 +133,28 @@ internal sealed class GameTagsSetting : ProjectSettingEditor<GameTagCatalog>
         finally
         {
             NativeImGui.EndTable();
+            NativeImGui.PopStyleVar();
         }
     }
+
+    private static void DrawTagTableHeader()
+    {
+        uint background = NativeImGui.ColorConvertFloat4ToU32(EditorPalette.collectionHeader);
+        NativeImGui.TableNextRow();
+        NativeImGui.TableSetBgColor(ImGuiTableBgTarget.RowBg0, background);
+        NativeImGui.TableSetBgColor(ImGuiTableBgTarget.RowBg1, background);
+        DrawHeaderCell(0, "Tag");
+        DrawHeaderCell(1, "Action");
+    }
+
+    private static void DrawHeaderCell(int column, string label)
+    {
+        _ = NativeImGui.TableSetColumnIndex(column);
+        InsetPlainCell();
+        NativeImGui.TextUnformatted(label);
+    }
+
+    private static void InsetPlainCell()
+        => NativeImGui.SetCursorPosX(
+            NativeImGui.GetCursorPosX() + NativeImGui.GetStyle().FramePadding.X);
 }

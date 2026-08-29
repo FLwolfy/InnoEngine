@@ -11,7 +11,7 @@ Scene、Prefab、Folder 和普通文件 icon declaration 可以直接保存完�
 Tree 同时显示可写 `Assets` 与只读 `Plugins/<id>`。所有导航、搜索、selection 和 drag source 使用完整 `AssetPath(source, localPath)`，因此不同 mount 的同名文件不会碰撞。
 
 - Plugin 根和条目显示只读状态；Create、Rename、Move、Delete 与 drop target 会隐藏或明确拒绝。
-- 工具栏 `Plugins` 弹窗显示 discovery、active、trust-required 和 archive diagnostics。
+- 工具栏 `Plugins` 弹窗显示 discovery、active、trust-required 和 archive diagnostics；外层使用共享 menu popup contract 按内容自动定高，不保存临时尺寸，也不会在短内容右侧产生无意义 scrollbar。
 - 带代码 ZIP 的 Trust/Revoke 写入 `ProjectSettings.inno` 后触发候选 refresh；界面明确说明 ALC 不是安全沙箱。
 - `Create/Plugin Definition` 创建原生 `.iplugin`；`Export Plugin ZIP` 计算依赖闭包并输出到项目同级 `Plugins/`。
 

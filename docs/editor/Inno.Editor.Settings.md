@@ -81,7 +81,7 @@ public sealed class RenderingSettingEditor : ProjectSettingEditor<MyRenderingSet
 }
 ```
 
-`ProjectSettingEditor<TSetting>` 收到的是当前 generation 的隔离暂存副本。它只能修改该副本；Apply Project 以“Host + Plugin 合成结果”为 baseline：有 Composer 的协议只写语义 delta，没有 Composer 的协议写完整 replacement。Reset Project 删除项目 contribution，随后重新使用 Host 默认值与 Plugin 默认贡献的合成结果。如果编辑结果等于 baseline，Apply 会自动移除已有 project record，不留下空 override。
+`ProjectSettingEditor<TSetting>` 收到的是当前 generation 的隔离暂存副本。它只能修改该副本；统一 Apply 中的 Project scope 以“Host + Plugin 合成结果”为 baseline：有 Composer 的协议只写语义 delta，没有 Composer 的协议写完整 replacement。Reset Project 删除项目 contribution，随后重新使用 Host 默认值与 Plugin 默认贡献的合成结果。如果编辑结果等于 baseline，Apply 会自动移除已有 project record，不留下空 override。
 
 ## 公开 API
 
@@ -98,7 +98,7 @@ public sealed class RenderingSettingEditor : ProjectSettingEditor<MyRenderingSet
 
 ## 生命周期与约束
 
-- 两个域共享窗口、搜索、页面树和控件布局，但各自有独立 Apply 按钮、文档和 History entry，不伪装成跨文件原子事务。
+- 两个域共享窗口、搜索、页面树、控件布局与一个 Apply 按钮，但仍拥有独立文档和 History entry，不伪装成跨文件原子事务。
 - `Editor/...` 不参与 Plugin 默认贡献，也不进入 Player；`Project/...` 不使用 JSON property bag。
 - Project setting 的长期身份是 `ProjectSettingId` 与 Stable Type ID，UI 路径只决定 Editor 中的位置。
 - Catalog generation 先完整构建候选再原子切换；Drawer 不应订阅静态事件或长期保存传入的 setting 实例。

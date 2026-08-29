@@ -14,18 +14,18 @@ Settings
 
 - 主菜单 `Edit/Settings...` 打开可移动、可缩放但不可 Dock/Collapse 的 Modal。
 - 左侧 Tree 合并 `EditorSetting` 与 `ProjectSettingEditor` 的 placement；搜索匹配 page、path、label、section 与 description。
-- 右侧字段使用同一 label/content/reset 布局；字段自身拥有具体 ImGui 控件。
+- 右侧每个完整字段使用自动内容行高；label/content/reset 保持对齐，连续行之间没有空隙。Field Table 横向越过 page content padding，让背景严格贴合内容窗口左右边缘；文字与控件单独保留正常 window/cell inset。两种背景使用更明亮的灰色 RGB 与固定 `0.1` alpha。字段自身仍拥有具体 ImGui 控件。
 - 合成页面不需要中央 page 注册；frontend 根据 slash-delimited path 自动补齐祖先。
 - Catalog generation 改变时丢弃旧 staged generation，按新 definitions 原子重建窗口 session。
 
-## 两个 Apply 边界
+## 单一 Apply 操作
 
-底部操作是 `Apply Editor`、`Apply Project` 与 `Cancel`：
+底部只显示右对齐的 `Cancel` 与 `Apply`，其中 `Cancel` 在左、`Apply` 在右：
 
-- `Apply Editor` 只提交 `EditorSettingObject`，原子写入 `EditorSettings.json`，形成一条 `Apply Settings` History entry。
-- `Apply Project` 只提交强类型 `ISerializable` setting，原子写入 `ProjectSettings.inno`，形成一条 `Apply Project Settings` History entry。
-- `Cancel` 同时丢弃两个域尚未 Apply 的隔离 staged 值。
-- 两个 Apply 独立启用。窗口不会声称 JSON 与 native document 之间存在无法保证的跨文件事务。
+- `Apply` 一次提交所有 dirty scope；Editor 部分原子写入 `EditorSettings.json` 并形成 `Apply Settings` History entry，Project 部分原子写入 `ProjectSettings.inno` 并形成 `Apply Project Settings` History entry。
+- `Cancel` 同时丢弃两个域尚未 Apply 的隔离 staged 值并关闭窗口。
+- `Apply` 仅在 staged effective value 相对窗口打开或上次 Apply 的基线真正变化时启用。把一次未提交修改 Reset 回原始默认值不会留下虚假的 reset intent。
+- 两个持久化域仍分别保证各自的原子写入与 History；单一按钮不把两个文件伪装成一个跨文件事务。
 
 Reset Editor 恢复字段定义的 `defaultValue`。Reset Project 删除项目 override，并恢复 Host 默认值与依赖有序 Plugin 默认贡献的合成结果。页面顶部 Reset 会递归作用于当前页面所有后代字段，但提交仍遵循各自数据域。
 
@@ -61,7 +61,7 @@ Settings frontend 不内建 Boolean、Layer、Tag、PBR 或其他业务字段类
 
 ## 内部生命周期
 
-`SettingsEditSession` 按 scope 分别保存 staged objects、modified IDs 与 reset intent。Editor 值用定义 baseline 比较；Project 值使用 Inno Serialization property bytes 比较。Apply 后只刷新对应 scope，不会破坏另一个 scope 尚未提交的编辑。
+`SettingsEditSession` 按 scope 分别保存 staged objects、modified IDs、初始 effective-default 状态与必要的 reset intent。Editor 值用定义 baseline 比较；Project 值使用 Inno Serialization property bytes 比较。单一 Apply 只处理 dirty scope，并在成功后刷新对应基线。
 
 所有 ImGui Begin/End、Push/Pop 与 disabled scope 均在 `try/finally` 中配对。某个 extension 绘制失败由 Editor generation quarantine 隔离，不允许污染后续 ImGui stack。
 

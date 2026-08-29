@@ -161,10 +161,10 @@ public static partial class ImGuiWidget
                 hovered,
                 held);
 
-            if (hovered && NativeImGui.BeginTooltip())
+            if (hovered && BeginMenuTooltip())
             {
                 NativeImGui.TextUnformatted($"Close {title}");
-                NativeImGui.EndTooltip();
+                EndMenuTooltip();
             }
 
             return pressed;

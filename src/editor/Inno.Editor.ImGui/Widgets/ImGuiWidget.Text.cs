@@ -171,10 +171,10 @@ public static partial class ImGuiWidget
             cursor + controlSize * 0.5f,
             color);
 
-        if (!string.IsNullOrWhiteSpace(tooltip) && hovered && NativeImGui.BeginTooltip())
+        if (!string.IsNullOrWhiteSpace(tooltip) && hovered && BeginMenuTooltip())
         {
             NativeImGui.TextUnformatted(tooltip);
-            NativeImGui.EndTooltip();
+            EndMenuTooltip();
         }
         return pressed;
     }
@@ -226,10 +226,10 @@ public static partial class ImGuiWidget
             hovered,
             active);
 
-        if (!string.IsNullOrWhiteSpace(tooltip) && hovered && NativeImGui.BeginTooltip())
+        if (!string.IsNullOrWhiteSpace(tooltip) && hovered && BeginMenuTooltip())
         {
             NativeImGui.TextUnformatted(tooltip);
-            NativeImGui.EndTooltip();
+            EndMenuTooltip();
         }
 
         return pressed;

@@ -117,6 +117,9 @@ public sealed class EditorStyleMetrics
     /// <summary>Gets standard table cell padding.</summary>
     public Vector2 cellPadding => ScaleVector(new(3f, 2f));
 
+    /// <summary>Gets the inner padding applied to one complete Settings field.</summary>
+    public Vector2 settingsFieldPadding => ScaleVector(new(8f, 6f));
+
     /// <summary>Gets asset browser window padding.</summary>
     public Vector2 assetWindowPadding => ScaleVector(new(2f, 1f));
 
