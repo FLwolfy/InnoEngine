@@ -12,7 +12,7 @@ internal sealed class AssetReferenceDropHandler
         EditorDropContext<AssetInfo, AssetReferenceDropTarget> context)
     {
         if (context.source.persistentId == System.Guid.Empty ||
-            !AssetManager.TryGetAssetType(context.source.relativePath, out System.Type? assetType) ||
+            !AssetManager.TryGetAssetType(context.source.assetPath, out System.Type? assetType) ||
             assetType is null ||
             !context.target.expectedType.IsAssignableFrom(assetType))
         {

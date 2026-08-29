@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Inno.Rendering.Assets;
 
@@ -12,7 +14,11 @@ public interface ITextureTargetCompiler
     /// </summary>
     /// <param name="sourcePath">Absolute path to a supported source image.</param>
     /// <param name="colorSpace">Sampling color-space contract.</param>
-    /// <returns>Complete KTX bytes suitable for a backend-neutral texture container upload.</returns>
+    /// <param name="cancellationToken">Cancellation for the offline compiler process.</param>
+    /// <returns>An operation producing complete KTX bytes suitable for a backend-neutral texture container upload.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the target compiler rejects the source.</exception>
-    byte[] CompileKtx(string sourcePath, TextureColorSpace colorSpace);
+    ValueTask<byte[]> CompileKtxAsync(
+        string sourcePath,
+        TextureColorSpace colorSpace,
+        CancellationToken cancellationToken = default);
 }

@@ -66,13 +66,13 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
         {
             SetReferenceResolver(writer);
             ShaderSourceAsset vertex = Assert.IsType<ShaderSourceAsset>(writer.Load(
-                "Shaders/v.sc",
+                AssetPath.Project("Shaders/v.sc"),
                 typeof(ShaderSourceAsset)));
             ShaderSourceAsset fragment = Assert.IsType<ShaderSourceAsset>(writer.Load(
-                "Shaders/f.sc",
+                AssetPath.Project("Shaders/f.sc"),
                 typeof(ShaderSourceAsset)));
             ShaderSourceAsset varying = Assert.IsType<ShaderSourceAsset>(writer.Load(
-                "Shaders/varying.def.sc",
+                AssetPath.Project("Shaders/varying.def.sc"),
                 typeof(ShaderSourceAsset)));
             var pass = new ShaderPassDefinition(
                 "Draw",
@@ -95,12 +95,12 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
                     new ShaderTechniqueId("default"),
                     new ShaderContractId("tests.surface"),
                     [new ShaderTechniquePass(new ShaderPassRoleId("draw"), pass.name)])]));
-            Assert.True(writer.Save("Shaders/basic.ishader", shader));
+            Assert.True(writer.Save(AssetPath.Project("Shaders/basic.ishader"), shader));
 
             var material = new MaterialAsset { shader = shader };
             material.Set(new ShaderPropertyId("roughness"), MaterialValue.FromFloat(0.25f));
             material.SetMetadata("tests.queue", "opaque");
-            Assert.True(writer.Save("Materials/basic.imaterial", material));
+            Assert.True(writer.Save(AssetPath.Project("Materials/basic.imaterial"), material));
 
             var pipeline = new RenderPipelineAsset
             {
@@ -108,26 +108,26 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
                 pipelineState = new SerializedRenderExtensionState(Guid.Empty, [1, 2, 3])
             };
             pipeline.SetFeatures([new RenderFeatureConfiguration("tests.outline")]);
-            Assert.True(writer.Save("Pipelines/default.irenderpipeline", pipeline));
+            Assert.True(writer.Save(AssetPath.Project("Pipelines/default.irenderpipeline"), pipeline));
         }
 
         AssetSerializationServices.SetReferenceResolver(null);
         using var loader = new AssetLoader(m_assets, m_library);
         SetReferenceResolver(loader);
         ShaderAsset loadedShader = Assert.IsType<ShaderAsset>(loader.Load(
-            "Shaders/basic.ishader",
+            AssetPath.Project("Shaders/basic.ishader"),
             typeof(ShaderAsset)));
         MaterialAsset loadedMaterial = Assert.IsType<MaterialAsset>(loader.Load(
-            "Materials/basic.imaterial",
+            AssetPath.Project("Materials/basic.imaterial"),
             typeof(MaterialAsset)));
         RenderPipelineAsset loadedPipeline = Assert.IsType<RenderPipelineAsset>(loader.Load(
-            "Pipelines/default.irenderpipeline",
+            AssetPath.Project("Pipelines/default.irenderpipeline"),
             typeof(RenderPipelineAsset)));
         GeometryAsset geometry = Assert.IsType<GeometryAsset>(loader.Load(
-            "Meshes/triangle.obj",
+            AssetPath.Project("Meshes/triangle.obj"),
             typeof(GeometryAsset)));
         TextureAsset texture = Assert.IsType<TextureAsset>(loader.Load(
-            "Textures/color.png",
+            AssetPath.Project("Textures/color.png"),
             typeof(TextureAsset)));
 
         Assert.Equal("Tests/Basic", loadedShader.definition!.name);
@@ -193,7 +193,7 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
             Path.Combine(m_root, "DeclaredLibrary"));
         loader.Rescan();
         ShaderSourceAsset shader = Assert.IsType<ShaderSourceAsset>(loader.Load(
-            new AssetPath(consumerId, "main.sc").ToString(),
+            new AssetPath(consumerId, "main.sc"),
             typeof(ShaderSourceAsset)));
 
         Assert.Contains("#include <bgfx_shader.sh>", shader.content, StringComparison.Ordinal);

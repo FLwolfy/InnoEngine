@@ -297,24 +297,16 @@ public static class AssetManager
             throw new InvalidOperationException("The source-mount transaction is not the current candidate.");
     }
 
-    /// <summary>Loads a canonical asset by source-relative path.</summary>
-    /// <typeparam name="TAsset">The required asset type.</typeparam>
-    /// <param name="relativePath">The source-relative path.</param>
-    /// <returns>The canonical asset instance.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when no compatible asset can be loaded.</exception>
-    public static TAsset Load<TAsset>(string relativePath) where TAsset : AssetObject
-    {
-        AssetObject? asset = GetLoader().Load(relativePath, typeof(TAsset));
-        return asset as TAsset ?? throw new InvalidOperationException(
-            $"Asset '{relativePath}' cannot be loaded as '{typeof(TAsset).FullName}'.");
-    }
-
     /// <summary>Loads a canonical asset by isolated source path.</summary>
     /// <typeparam name="TAsset">The required asset type.</typeparam>
     /// <param name="path">The isolated source path.</param>
     /// <returns>The canonical asset instance.</returns>
     public static TAsset Load<TAsset>(AssetPath path) where TAsset : AssetObject
-        => Load<TAsset>(path.ToString());
+    {
+        AssetObject? asset = GetLoader().Load(path, typeof(TAsset));
+        return asset as TAsset ?? throw new InvalidOperationException(
+            $"Asset '{path}' cannot be loaded as '{typeof(TAsset).FullName}'.");
+    }
 
     /// <summary>Loads a canonical asset by persistent identity.</summary>
     /// <typeparam name="TAsset">The required asset type.</typeparam>
@@ -328,25 +320,17 @@ public static class AssetManager
             $"Asset '{persistentId}' cannot be loaded as '{typeof(TAsset).FullName}'.");
     }
 
-    /// <summary>Tries to load a canonical asset by source-relative path.</summary>
-    /// <typeparam name="TAsset">The required asset type.</typeparam>
-    /// <param name="relativePath">The source-relative path.</param>
-    /// <param name="asset">The canonical asset when successful.</param>
-    /// <returns><see langword="true"/> when a compatible asset was loaded.</returns>
-    public static bool TryLoad<TAsset>(string relativePath, out TAsset? asset) where TAsset : AssetObject
-    {
-        bool success = GetLoader().TryLoad(relativePath, typeof(TAsset), out AssetObject? value);
-        asset = value as TAsset;
-        return success && asset is not null;
-    }
-
     /// <summary>Tries to load a canonical asset by isolated source path.</summary>
     /// <typeparam name="TAsset">The required asset type.</typeparam>
     /// <param name="path">The isolated source path.</param>
     /// <param name="asset">The canonical asset when successful.</param>
     /// <returns><see langword="true"/> when a compatible asset was loaded.</returns>
     public static bool TryLoad<TAsset>(AssetPath path, out TAsset? asset) where TAsset : AssetObject
-        => TryLoad(path.ToString(), out asset);
+    {
+        bool success = GetLoader().TryLoad(path, typeof(TAsset), out AssetObject? value);
+        asset = value as TAsset;
+        return success && asset is not null;
+    }
 
     /// <summary>Tries to load a canonical asset by persistent identity.</summary>
     /// <typeparam name="TAsset">The required asset type.</typeparam>
@@ -360,22 +344,22 @@ public static class AssetManager
         return success && asset is not null;
     }
 
-    /// <summary>Asynchronously loads a canonical asset by source-relative path.</summary>
+    /// <summary>Asynchronously loads a canonical asset by isolated source path.</summary>
     /// <typeparam name="TAsset">The required asset type.</typeparam>
-    /// <param name="relativePath">The source-relative path.</param>
+    /// <param name="path">The isolated source path.</param>
     /// <param name="cancellationToken">Cancellation for the current caller's wait.</param>
     /// <returns>The canonical asset instance.</returns>
-    public static ValueTask<TAsset> LoadAsync<TAsset>(
-        string relativePath,
+    public static async ValueTask<TAsset> LoadAsync<TAsset>(
+        AssetPath path,
         CancellationToken cancellationToken = default)
         where TAsset : AssetObject
     {
-        EnsureOwnerThread();
-        cancellationToken.ThrowIfCancellationRequested();
-        AssetObject? asset = GetLoader().Load(relativePath, typeof(TAsset));
-        TAsset result = asset as TAsset ?? throw new InvalidOperationException(
-            $"Asset '{relativePath}' cannot be loaded as '{typeof(TAsset).FullName}'.");
-        return ValueTask.FromResult(result);
+        AssetLoader loader = GetLoader();
+        AssetObject? asset = await loader
+            .LoadAsync(path, typeof(TAsset), cancellationToken)
+            .ConfigureAwait(false);
+        return asset as TAsset ?? throw new InvalidOperationException(
+            $"Asset '{path}' cannot be loaded as '{typeof(TAsset).FullName}'.");
     }
 
     /// <summary>Asynchronously loads a canonical asset by persistent identity.</summary>
@@ -383,35 +367,30 @@ public static class AssetManager
     /// <param name="persistentId">The persistent asset identity.</param>
     /// <param name="cancellationToken">Cancellation for the current caller's wait.</param>
     /// <returns>The canonical asset instance.</returns>
-    public static ValueTask<TAsset> LoadAsync<TAsset>(
+    public static async ValueTask<TAsset> LoadAsync<TAsset>(
         Guid persistentId,
         CancellationToken cancellationToken = default)
         where TAsset : AssetObject
     {
-        EnsureOwnerThread();
-        cancellationToken.ThrowIfCancellationRequested();
-        AssetObject? asset = GetLoader().Load(persistentId, typeof(TAsset));
-        TAsset result = asset as TAsset ?? throw new InvalidOperationException(
+        AssetLoader loader = GetLoader();
+        AssetObject? asset = await loader
+            .LoadAsync(persistentId, typeof(TAsset), cancellationToken)
+            .ConfigureAwait(false);
+        return asset as TAsset ?? throw new InvalidOperationException(
             $"Asset '{persistentId}' cannot be loaded as '{typeof(TAsset).FullName}'.");
-        return ValueTask.FromResult(result);
-    }
-
-    /// <summary>Imports one source asset.</summary>
-    /// <param name="relativePath">The source-relative path.</param>
-    /// <returns><see langword="true"/> when an importer handled the source.</returns>
-    public static bool Import(string relativePath)
-    {
-        EnsureOwnerThread();
-        bool imported = GetLoader().Import(relativePath);
-        if (imported)
-            GetFileSystem().Refresh();
-        return imported;
     }
 
     /// <summary>Imports one source asset from an isolated source mount.</summary>
     /// <param name="path">The isolated source path.</param>
     /// <returns><see langword="true"/> when an importer handled the source.</returns>
-    public static bool Import(AssetPath path) => Import(path.ToString());
+    public static bool Import(AssetPath path)
+    {
+        EnsureOwnerThread();
+        bool imported = GetLoader().Import(path);
+        if (imported)
+            GetFileSystem().Refresh();
+        return imported;
+    }
 
     /// <summary>Saves an asset to its current source path.</summary>
     /// <param name="asset">The asset to save.</param>
@@ -425,37 +404,32 @@ public static class AssetManager
         return saved;
     }
 
-    /// <summary>Saves an unsaved asset to its initial source-relative path.</summary>
-    /// <param name="relativePath">The initial source-relative path.</param>
-    /// <param name="asset">The asset to save.</param>
+    /// <summary>Saves an asset to a writable isolated source path.</summary>
+    /// <param name="path">Writable isolated source path.</param>
+    /// <param name="asset">Asset to save.</param>
     /// <returns><see langword="true"/> when an importer exported the asset.</returns>
-    public static bool Save(string relativePath, AssetObject asset)
+    public static bool Save(AssetPath path, AssetObject asset)
     {
         EnsureOwnerThread();
-        bool saved = GetLoader().Save(relativePath, asset);
+        _ = NormalizeMutationPath(path, nameof(path));
+        bool saved = GetLoader().Save(path, asset);
         if (saved)
             GetFileSystem().Refresh();
         return saved;
     }
 
-    /// <summary>Saves an asset to a writable isolated source path.</summary>
-    /// <param name="path">Writable isolated source path.</param>
-    /// <param name="asset">Asset to save.</param>
-    /// <returns><see langword="true"/> when an importer exported the asset.</returns>
-    public static bool Save(AssetPath path, AssetObject asset) => Save(path.ToString(), asset);
-
     /// <summary>
     /// Moves a source asset while preserving its persistent identity and generated metadata.
     /// </summary>
-    /// <param name="sourceRelativePath">Existing source-relative path.</param>
-    /// <param name="targetRelativePath">New source-relative path.</param>
+    /// <param name="source">Existing isolated source path.</param>
+    /// <param name="target">New isolated source path.</param>
     /// <exception cref="FileNotFoundException">Thrown when the source does not exist.</exception>
     /// <exception cref="IOException">Thrown when the target source or metadata already exists.</exception>
-    public static void Move(string sourceRelativePath, string targetRelativePath)
+    public static void Move(AssetPath source, AssetPath target)
     {
         EnsureOwnerThread();
-        string sourcePath = NormalizeMutationPath(sourceRelativePath, nameof(sourceRelativePath));
-        string targetPath = NormalizeMutationPath(targetRelativePath, nameof(targetRelativePath));
+        string sourcePath = NormalizeMutationPath(source, nameof(source));
+        string targetPath = NormalizeMutationPath(target, nameof(target));
         if (string.Equals(sourcePath, targetPath, StringComparison.Ordinal))
             return;
 
@@ -509,12 +483,12 @@ public static class AssetManager
     /// <summary>
     /// Deletes a source asset and its metadata while retaining a Library tombstone for existing references.
     /// </summary>
-    /// <param name="relativePath">Existing source-relative file or directory path.</param>
+    /// <param name="path">Existing isolated file or directory path.</param>
     /// <exception cref="FileNotFoundException">Thrown when the source does not exist.</exception>
-    public static void Delete(string relativePath)
+    public static void Delete(AssetPath path)
     {
         EnsureOwnerThread();
-        string sourcePath = NormalizeMutationPath(relativePath, nameof(relativePath));
+        string sourcePath = NormalizeMutationPath(path, nameof(path));
         AssetFileSystem fileSystem = GetFileSystem();
         AssetLoader loader = GetLoader();
         DrainPendingChanges(fileSystem);
@@ -567,13 +541,13 @@ public static class AssetManager
     }
 
     /// <summary>Creates a tracked source directory and its persistent metadata.</summary>
-    /// <param name="relativePath">New source-relative directory path.</param>
+    /// <param name="path">New isolated directory path.</param>
     /// <exception cref="DirectoryNotFoundException">Thrown when the parent directory does not exist.</exception>
     /// <exception cref="IOException">Thrown when the target already exists.</exception>
-    public static void CreateDirectory(string relativePath)
+    public static void CreateDirectory(AssetPath path)
     {
         EnsureOwnerThread();
-        string sourcePath = NormalizeMutationPath(relativePath, nameof(relativePath));
+        string sourcePath = NormalizeMutationPath(path, nameof(path));
         AssetFileSystem fileSystem = GetFileSystem();
         AssetLoader loader = GetLoader();
         DrainPendingChanges(fileSystem);
@@ -653,25 +627,25 @@ public static class AssetManager
     public static int UnloadUnusedAssets() => GetLoader().UnloadUnusedAssets();
 
     /// <summary>Tries to resolve an asset type without loading the asset.</summary>
-    /// <param name="relativePath">The source-relative path.</param>
+    /// <param name="path">The isolated source path.</param>
     /// <param name="assetType">The resolved concrete asset type.</param>
     /// <returns><see langword="true"/> when the type can be resolved.</returns>
-    public static bool TryGetAssetType(string relativePath, out Type? assetType)
-        => GetLoader().TryGetAssetType(relativePath, out assetType);
+    public static bool TryGetAssetType(AssetPath path, out Type? assetType)
+        => GetLoader().TryGetAssetType(path, out assetType);
 
     /// <summary>Tries to resolve a persistent identity without loading the asset.</summary>
-    /// <param name="relativePath">The source-relative path.</param>
+    /// <param name="path">The isolated source path.</param>
     /// <param name="persistentId">The resolved persistent identity.</param>
     /// <returns><see langword="true"/> when catalog metadata exists.</returns>
-    public static bool TryGetPersistentId(string relativePath, out Guid persistentId)
-        => GetLoader().TryGetPersistentId(relativePath, out persistentId);
+    public static bool TryGetPersistentId(AssetPath path, out Guid persistentId)
+        => GetLoader().TryGetPersistentId(path, out persistentId);
 
     /// <summary>Tries to get a catalog snapshot by source-relative path.</summary>
-    /// <param name="relativePath">The source-relative path.</param>
+    /// <param name="path">The isolated source path.</param>
     /// <param name="info">The catalog snapshot when available.</param>
     /// <returns><see langword="true"/> when the path is cataloged.</returns>
-    public static bool TryGetInfo(string relativePath, out AssetInfo? info)
-        => GetLoader().TryGetInfo(relativePath, out info);
+    public static bool TryGetInfo(AssetPath path, out AssetInfo? info)
+        => GetLoader().TryGetInfo(path, out info);
 
     /// <summary>Tries to get a catalog snapshot by persistent identity.</summary>
     /// <param name="persistentId">The persistent asset identity.</param>
@@ -705,9 +679,10 @@ public static class AssetManager
         return GetLoader().BuildAsync(definition, inputs, cancellationToken);
     }
 
-    /// <summary>Gets source paths for all canonical loaded assets.</summary>
-    /// <returns>A stable source-relative path snapshot.</returns>
-    public static IReadOnlyList<string> GetLoadedPaths() => GetLoader().GetLoadedPaths();
+    /// <summary>Gets isolated source paths for all canonical loaded assets.</summary>
+    /// <returns>A stable isolated path snapshot.</returns>
+    public static IReadOnlyList<AssetPath> GetLoadedPaths()
+        => GetLoader().GetLoadedPaths();
 
     /// <summary>Gets direct or transitive runtime dependencies of an asset.</summary>
     /// <param name="asset">The asset to query.</param>
@@ -740,18 +715,18 @@ public static class AssetManager
         => GetFileSystem().GetEntries(includeDirectories);
 
     /// <summary>Gets immediate indexed children of a source directory.</summary>
-    /// <param name="parentRelativePath">The source-relative parent path.</param>
+    /// <param name="parent">The isolated parent path.</param>
     /// <returns>The immediate child entry snapshot.</returns>
-    public static IReadOnlyList<AssetFileEntry> GetFileSystemChildren(string parentRelativePath)
-        => GetFileSystem().GetChildren(parentRelativePath);
+    public static IReadOnlyList<AssetFileEntry> GetFileSystemChildren(AssetPath parent)
+        => GetFileSystem().GetChildren(parent);
 
     /// <summary>Tries to resolve an indexed source entry.</summary>
-    /// <param name="relativePath">The source-relative path.</param>
+    /// <param name="path">The isolated source path.</param>
     /// <param name="entry">The resolved source entry.</param>
     /// <returns><see langword="true"/> when the entry exists and is not generated metadata.</returns>
-    public static bool TryGetFileSystemEntry(string relativePath, out AssetFileEntry entry)
+    public static bool TryGetFileSystemEntry(AssetPath path, out AssetFileEntry entry)
     {
-        return GetFileSystem().TryGetEntry(relativePath, out entry);
+        return GetFileSystem().TryGetEntry(path, out entry);
     }
 
     /// <summary>Waits until queued source watcher changes have been processed.</summary>
@@ -847,10 +822,10 @@ public static class AssetManager
         string prefix = sourcePath + "/";
         return fileSystem.GetEntries()
             .Where(entry =>
-                string.Equals(entry.relativePath, sourcePath, StringComparison.OrdinalIgnoreCase) ||
-                entry.relativePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(static entry => entry.relativePath.Length)
-            .Select(static entry => new AssetChangedEvent(entry.relativePath, WatcherChangeTypes.Deleted))
+                string.Equals(entry.assetPath.ToString(), sourcePath, StringComparison.OrdinalIgnoreCase) ||
+                entry.assetPath.ToString().StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(static entry => entry.assetPath.ToString().Length)
+            .Select(static entry => new AssetChangedEvent(entry.assetPath.ToString(), WatcherChangeTypes.Deleted))
             .DefaultIfEmpty(new AssetChangedEvent(sourcePath, WatcherChangeTypes.Deleted))
             .ToArray();
     }
@@ -973,7 +948,7 @@ public static class AssetManager
             string path = string.IsNullOrWhiteSpace(change.oldRelativePath)
                 ? change.relativePath
                 : change.oldRelativePath;
-            if (loader.TryGetPersistentId(path, out Guid id))
+            if (loader.TryGetPersistentId(AssetPath.Parse(path), out Guid id))
                 result[path] = id;
         }
         return result;
@@ -986,7 +961,7 @@ public static class AssetManager
         bool requiresFullRescan)
     {
         if (requiresFullRescan && changes.Count == 0)
-            return [new AssetChange(AssetChangeKind.StatusChanged, Guid.Empty, string.Empty)];
+            return [new AssetChange(AssetChangeKind.StatusChanged, Guid.Empty, AssetPath.Project(string.Empty))];
 
         var result = new List<AssetChange>(changes.Count);
         for (int i = 0; i < changes.Count; i++)
@@ -995,7 +970,7 @@ public static class AssetManager
             bool moved = change.changeType.HasFlag(WatcherChangeTypes.Renamed);
             bool deleted = change.changeType.HasFlag(WatcherChangeTypes.Deleted);
             Guid id = Guid.Empty;
-            if (!loader.TryGetPersistentId(change.relativePath, out id))
+            if (!loader.TryGetPersistentId(AssetPath.Parse(change.relativePath), out id))
             {
                 string previousPath = moved ? change.oldRelativePath : change.relativePath;
                 _ = previousIds.TryGetValue(previousPath, out id);
@@ -1009,7 +984,13 @@ public static class AssetManager
                     : change.changeType.HasFlag(WatcherChangeTypes.Created)
                         ? AssetChangeKind.Added
                         : AssetChangeKind.Modified;
-            result.Add(new AssetChange(kind, id, change.relativePath, change.oldRelativePath));
+            result.Add(new AssetChange(
+                kind,
+                id,
+                AssetPath.Parse(change.relativePath),
+                string.IsNullOrWhiteSpace(change.oldRelativePath)
+                    ? null
+                    : AssetPath.Parse(change.oldRelativePath)));
         }
         return result.ToArray();
     }
@@ -1025,19 +1006,10 @@ public static class AssetManager
         }
     }
 
-    private static string NormalizeMutationPath(string relativePath, string parameterName)
+    private static string NormalizeMutationPath(AssetPath path, string parameterName)
     {
-        if (string.IsNullOrWhiteSpace(relativePath))
+        if (!path.isValid || string.IsNullOrWhiteSpace(path.localPath))
             throw new ArgumentException("Asset source path is required.", parameterName);
-        AssetPath path;
-        try
-        {
-            path = AssetPath.Parse(relativePath);
-        }
-        catch (ArgumentException exception)
-        {
-            throw new ArgumentException(exception.Message, parameterName, exception);
-        }
         if (path.source != AssetSourceId.project)
             throw new InvalidOperationException($"Asset source '{path.source}' is read-only.");
         return path.localPath;

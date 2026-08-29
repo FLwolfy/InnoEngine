@@ -33,20 +33,20 @@ internal sealed class GeometryAssetImporter : AssetImporter<GeometryAsset>
 
         GeometryData data = context.extension switch
         {
-            ".obj" => MeshSourceParser.ParseObj(context.relativePath, context.ReadUtf8Text()),
+            ".obj" => MeshSourceParser.ParseObj(context.assetPath.ToString(), context.ReadUtf8Text()),
             ".gltf" => MeshSourceParser.ParseGltf(
-                context.relativePath,
+                context.assetPath.ToString(),
                 context.sourceBytes.Span,
                 isBinary: false,
                 ReadDependency,
-                output.DependsOnSource),
+                path => output.DependsOnSource(AssetPath.Parse(path))),
             ".glb" => MeshSourceParser.ParseGltf(
-                context.relativePath,
+                context.assetPath.ToString(),
                 context.sourceBytes.Span,
                 isBinary: true,
                 ReadDependency,
-                output.DependsOnSource),
-            _ => throw new RenderingAssetFormatException(context.relativePath, "Unsupported geometry container.")
+                path => output.DependsOnSource(AssetPath.Parse(path))),
+            _ => throw new RenderingAssetFormatException(context.assetPath.ToString(), "Unsupported geometry container.")
         };
         (Vector3 boundsCenter, Vector3 boundsExtents) = CalculateBounds(data);
         var asset = new GeometryAsset

@@ -9,12 +9,13 @@
 | 分类 | API | 语义 |
 | --- | --- | --- |
 | 请求 | `RenderRequest`, `RenderTarget`, `RenderViewport`, `RenderFrameData` | 将目标、尺寸、可选 Pipeline 与 Plugin 自有帧数据提交给 Runtime。 |
+| 请求生产 | `RenderRequestProvider`, `RenderRequestProviderContext`, `RenderRequestProviderExtensionAttribute` | Plugin 每帧自动产生请求的 reload-safe TypeRegistry 扩展入口。 |
 | Pipeline | `RenderPipelineAsset`, `RenderPipeline`, `RenderPipelineContext` | Stable Type ID + 原生配置状态，以及每请求建图入口。 |
 | Feature | `RenderPipelineFeature`, `RenderFeatureContext`, `RenderFeatureConfiguration` | 有序、可重载的额外建图扩展。 |
 | 发现 | `RenderPipelineExtensionAttribute`, `RenderFeatureExtensionAttribute` | TypeCache 候选 generation 的稳定身份。 |
 | Shader | `ShaderAsset`, `ShaderDefinition`, `ShaderPassDefinition`, `ShaderTechniqueDefinition` | 通用 GPU Program、开放 Contract 与 Role 映射。 |
 | 材质 | `MaterialAsset`, `MaterialValue`, `MaterialPropertyBlock`, `MaterialPassResolver` | 稳定属性、Keyword、Metadata 与能力感知 Technique 解析。 |
-| 资源 | `TextureAsset`, `GeometryAsset`, `RenderTexture`, `IRenderResourceService` | 后端无关资产、原始 Buffer/Texture/Pipeline 获取和可选高级解析服务。 |
+| 资源 | `TextureAsset`, `GeometryAsset`, `RenderTexture`, `IRenderResourceService`, `IRenderFrameUploadService` | 后端无关资产、持久资源、异步预热与当前帧流式 Buffer。 |
 | 全局 | `GraphicsSettings`, `RenderFrameStatistics` | 当前 capability、默认 Pipeline 与只读统计。 |
 
 ## Shader → Technique → Material → Pipeline
@@ -57,6 +58,26 @@ public sealed class SamplePipeline : RenderPipeline
 ```
 
 `SampleFrameData` 可以描述 Canvas、tile map、Scene 快照、体素、光线追踪输入或其他任意模型。它只在当前帧和当前 Plugin generation 有效；持久资产仅保存 Stable ID、Persistent ID 与 Inno 序列化属性 bytes。
+
+Plugin 的生产入口不依赖 Host Service Locator：
+
+```csharp
+[RenderRequestProviderExtension("sample.viewport")]
+public sealed class SampleRequestProvider : RenderRequestProvider
+{
+    public override void Submit(RenderRequestProviderContext context)
+    {
+        context.requests.Submit(new RenderRequest(
+            "Sample View",
+            RenderTarget.backbuffer,
+            new RenderViewport(0, 0, 1280, 720)));
+    }
+}
+```
+
+逐帧 Sprite 顶点、粒子或实例数据使用 `context.uploads.UploadBuffer(...)`。它返回 opaque `RenderBufferSlice`，可直接交给 `RenderCommandEncoder.BindVertexBuffer`、`BindIndexBuffer`、`BindInstanceBuffer` 或 Storage `BindBuffer`，不暴露持久 Buffer handle，也不允许跨帧缓存。
+
+长期存在的动态图集、画布或 simulation texture 可通过 `IRenderResourceService.UpdateTexture(texture, region, data)` 原位更新局部矩形，不需要重建资源。通用 GPU→CPU 结果通过 `ReadTextureAsync` 返回不可变 `RenderTextureReadbackResult`；调用取消只停止该等待并安全回收 pending transfer。Readback texture 必须以 `RenderTextureUsage.Readback` 创建，Pipeline 自己决定何时 Copy/Blit 生产结果，因此 API 不内建 Picking、截图或任何领域语义。
 
 ## 热重载与失败隔离
 

@@ -70,7 +70,8 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
     }
 
     private static bool IsAvailableDirectory(string path)
-        => AssetManager.TryGetFileSystemEntry(path, out AssetFileEntry entry) && entry.isDirectory;
+        => AssetManager.TryGetFileSystemEntry(AssetPath.Parse(path), out AssetFileEntry entry)
+            && entry.isDirectory;
 
     internal EditorInteractions interactions => m_interactions;
 
@@ -83,17 +84,17 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
         string relativePath,
         out AssetEditorContext? context)
     {
-        if (!AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry entry))
+        if (!AssetManager.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry entry))
         {
             context = null;
             return false;
         }
-        _ = AssetManager.TryGetInfo(relativePath, out AssetInfo? info);
-        _ = AssetManager.TryGetAssetType(relativePath, out Type? assetType);
+        _ = AssetManager.TryGetInfo(AssetPath.Parse(relativePath), out AssetInfo? info);
+        _ = AssetManager.TryGetAssetType(AssetPath.Parse(relativePath), out Type? assetType);
         context = new AssetEditorContext(
             editor,
             m_interactions,
-            entry.relativePath,
+            entry.assetPath.ToString(),
             entry.name,
             entry.isDirectory,
             info,
@@ -240,7 +241,7 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
                 () => RequireMove(editor, context, targetPath, normalizedSource));
         }
 
-        return AssetManager.TryGetFileSystemEntry(targetPath, out AssetFileEntry moved)
+        return AssetManager.TryGetFileSystemEntry(AssetPath.Parse(targetPath), out AssetFileEntry moved)
             ? moved
             : throw new InvalidOperationException(
                 $"Moved asset '{targetPath}' is unavailable after the transaction.");
@@ -256,7 +257,7 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
             return false;
         }
         string path = context.relativePath;
-        AssetManager.Delete(path);
+        AssetManager.Delete(AssetPath.Parse(path));
         try
         {
             editor.OnDeleted(context);
@@ -325,7 +326,7 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
 
     internal void SelectPath(string relativePath)
     {
-        object? target = AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry entry)
+        object? target = AssetManager.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry entry)
             ? entry
             : null;
         _ = m_interactions.For(FileBrowserInteractionIds.C_AREA, target).Select();
@@ -359,8 +360,8 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
         ArgumentNullException.ThrowIfNull(entry);
         if (entry.isDirectory)
             return folderIcon;
-        _ = AssetManager.TryGetAssetType(entry.relativePath, out Type? assetType);
-        if (m_icons.TryResolve(assetType, entry.relativePath, out string icon))
+        _ = AssetManager.TryGetAssetType(entry.assetPath, out Type? assetType);
+        if (m_icons.TryResolve(assetType, entry.assetPath.ToString(), out string icon))
         {
             return icon;
         }
@@ -411,7 +412,7 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
         string parent = Normalize(Path.GetDirectoryName(sourcePath));
         targetPath = string.IsNullOrEmpty(parent) ? renamedEntry : $"{parent}/{renamedEntry}";
         if (!string.Equals(sourcePath, targetPath, StringComparison.OrdinalIgnoreCase) &&
-            AssetManager.TryGetFileSystemEntry(targetPath, out _))
+            AssetManager.TryGetFileSystemEntry(AssetPath.Parse(targetPath), out _))
         {
             return AssetOperationValidation.Invalid($"Asset '{targetPath}' already exists.");
         }
@@ -449,7 +450,7 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
             return false;
         }
         if (!string.IsNullOrEmpty(directory) &&
-            (!AssetManager.TryGetFileSystemEntry(directory, out AssetFileEntry destination) ||
+            (!AssetManager.TryGetFileSystemEntry(AssetPath.Parse(directory), out AssetFileEntry destination) ||
              !destination.isDirectory))
         {
             return false;
@@ -467,7 +468,7 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
 
         string name = Path.GetFileName(source);
         targetPath = string.IsNullOrEmpty(directory) ? name : $"{directory}/{name}";
-        if (AssetManager.TryGetFileSystemEntry(targetPath, out _))
+        if (AssetManager.TryGetFileSystemEntry(AssetPath.Parse(targetPath), out _))
             return false;
 
         editor = m_editors.Resolve(context.assetType);
@@ -480,7 +481,7 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
         string sourcePath,
         string targetPath)
     {
-        AssetManager.Move(sourcePath, targetPath);
+        AssetManager.Move(AssetPath.Parse(sourcePath), AssetPath.Parse(targetPath));
         try
         {
             editor.OnRenamed(context, sourcePath, targetPath);

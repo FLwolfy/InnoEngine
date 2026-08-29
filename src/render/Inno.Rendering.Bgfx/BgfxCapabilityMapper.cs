@@ -101,6 +101,11 @@ internal static class BgfxCapabilityMapper
             features |= GraphicsFeature.FragmentDepth;
         }
 
+        if ((supported & bgfx.CapsFlags.TextureReadBack) != 0)
+        {
+            features |= GraphicsFeature.TextureReadback;
+        }
+
         List<RenderTextureFormat> sampled = [];
         List<RenderTextureFormat> sampled3D = [];
         List<RenderTextureFormat> sampledCube = [];

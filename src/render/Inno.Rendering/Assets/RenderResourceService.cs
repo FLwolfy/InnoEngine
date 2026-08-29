@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Inno.Rendering.Core;
 
 namespace Inno.Rendering;
@@ -224,6 +226,14 @@ public interface IRenderResourceService
     /// <summary>Gets the active backend-neutral capability snapshot.</summary>
     GraphicsCapabilities capabilities { get; }
 
+    /// <summary>Queues all target shader work required by a material without blocking the render thread.</summary>
+    /// <param name="material">Material whose selected static variant should be prepared.</param>
+    void PrewarmMaterial(MaterialAsset material);
+
+    /// <summary>Queues target texture conversion without blocking the render thread.</summary>
+    /// <param name="texture">Texture source to prepare.</param>
+    void PrewarmTexture(TextureAsset texture);
+
     /// <summary>Acquires or atomically replaces a provider-owned persistent buffer.</summary>
     /// <param name="id">Globally stable provider-owned resource ID.</param>
     /// <param name="revision">Provider-controlled content revision.</param>
@@ -265,6 +275,25 @@ public interface IRenderResourceService
         ReadOnlyMemory<byte> containerData,
         bool sRgb,
         string name);
+
+    /// <summary>Updates a rectangular region of an active persistent texture without recreating it.</summary>
+    /// <param name="texture">Texture owned by the active device generation.</param>
+    /// <param name="region">Destination mip, texel rectangle, and layer range.</param>
+    /// <param name="data">Tightly packed region bytes.</param>
+    void UpdateTexture(
+        PersistentTextureHandle texture,
+        RenderTextureRegion region,
+        ReadOnlyMemory<byte> data);
+
+    /// <summary>Asynchronously copies one complete persistent texture mip into CPU-visible memory.</summary>
+    /// <param name="texture">Texture created with <see cref="RenderTextureUsage.Readback"/>.</param>
+    /// <param name="mipLevel">Zero-based mip level.</param>
+    /// <param name="cancellationToken">Cancellation for the caller's wait.</param>
+    /// <returns>The immutable readback result after a later GPU frame completes it.</returns>
+    ValueTask<RenderTextureReadbackResult> ReadTextureAsync(
+        PersistentTextureHandle texture,
+        int mipLevel = 0,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Acquires or atomically replaces a provider-owned graphics pipeline.</summary>
     /// <param name="id">Globally stable provider-owned resource ID.</param>

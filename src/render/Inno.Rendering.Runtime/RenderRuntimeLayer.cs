@@ -15,6 +15,7 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
     private readonly IRenderDevice m_device;
     private readonly IRenderDiagnosticSink m_diagnostics;
     private readonly RenderResourceService m_resourceService;
+    private readonly RenderFrameUploadService m_uploads;
     private readonly RenderExtensionRegistry m_extensions = new();
     private readonly Dictionary<RenderPipelineAsset, GenerationCacheEntry> m_generations = [];
     private readonly List<RenderRequest> m_pendingRequests = [];
@@ -22,6 +23,7 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
     private readonly List<IRenderFrameGraphContributor> m_contributors = [];
     private ulong m_frameIndex;
     private uint m_graphGeneration;
+    private RenderExtensionRegistry.RequestProviderGeneration? m_requestProviders;
     private bool m_acceptingCurrentFrame;
     private bool m_frameOpen;
     private RenderRuntimeReloadSession? m_reloadSession;
@@ -47,6 +49,7 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
             m_diagnostics,
             shaderCompiler,
             textureCompiler);
+        m_uploads = new RenderFrameUploadService(m_device);
         targets = new RenderTargetRegistry(device);
         if (contributors is not null)
             m_contributors.AddRange(contributors);
@@ -125,13 +128,14 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
     /// <inheritdoc />
     public override void OnBeforeRender(float deltaTime)
     {
-        _ = deltaTime;
         PruneRetiredGenerations();
+        EnsureRequestProviders();
         m_device.BeginFrame();
         m_frameOpen = true;
         try
         {
             m_resourceService.BeginFrame(m_frameIndex);
+            m_uploads.BeginFrame(m_frameIndex);
             targets.PrepareFrame();
             lock (m_requestLock)
             {
@@ -156,6 +160,34 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
     }
 
     /// <inheritdoc />
+    public override void OnRender(float deltaTime)
+    {
+        if (!m_frameOpen || m_requestProviders is null)
+            return;
+
+        var context = new RenderRequestProviderContext(
+            this,
+            m_device.capabilities,
+            m_frameIndex,
+            deltaTime);
+        foreach (RenderExtensionRegistry.RequestProviderEntry entry in m_requestProviders.providers)
+        {
+            try
+            {
+                entry.provider.Submit(context);
+            }
+            catch (Exception exception)
+            {
+                m_diagnostics.Publish(new RenderDiagnostic(
+                    "RENDER_REQUEST_PROVIDER_FAILED",
+                    $"Render request provider '{entry.id}' was isolated after failure: {exception.Message}",
+                    RenderDiagnosticSeverity.Error,
+                    entry.id));
+            }
+        }
+    }
+
+    /// <inheritdoc />
     public override void OnAfterRender(float deltaTime)
     {
         _ = deltaTime;
@@ -169,27 +201,28 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
             lock (m_requestLock)
                 m_acceptingCurrentFrame = false;
 
+            RenderGraphBuilder graph = CreateGraph();
             IReadOnlyList<IRenderFrameGraphContributor> preparedContributors = PrepareContributors();
+            int requestIndex = 0;
             foreach (RenderRequest request in m_currentRequests
                          .OrderBy(static value => value.priority)
                          .ThenBy(static value => value.name, StringComparer.Ordinal))
             {
-                bool executed = BuildAndExecuteRequest(
-                    request,
-                    executedViewCount,
-                    out int passCount,
-                    out int requestCulledPassCount);
-                culledPassCount += requestCulledPassCount;
-                if (executed)
-                    executedViewCount += passCount;
+                TryBuildRequest(graph, request, requestIndex++);
             }
 
-            GraphExecutionStatistics contributorStatistics = BuildAndExecuteContributors(
-                preparedContributors,
-                executedViewCount);
-            executedViewCount += contributorStatistics.viewCount;
-            culledPassCount += contributorStatistics.culledPassCount;
+            AddContributors(graph, preparedContributors);
+            RenderGraphCompileResult result = graph.Compile();
+            culledPassCount = result.culledPassCount;
+            PublishGraphDiagnostics(result, "Frame");
+            if (result.graph is not null)
+            {
+                executedViewCount = result.graph.passes.Count;
+                if (executedViewCount != 0)
+                    m_device.Execute(result.graph, m_frameIndex);
+            }
             m_resourceService.SweepUnused();
+            m_uploads.SweepUnused();
         }
         finally
         {
@@ -201,6 +234,7 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
             finally
             {
                 m_frameOpen = false;
+                m_uploads.EndFrame();
                 m_currentRequests.Clear();
                 m_frameIndex++;
                 GraphicsSettings.SetStatistics(new RenderFrameStatistics(
@@ -223,19 +257,19 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
         foreach (GenerationCacheEntry entry in m_generations.Values)
             entry.lastGood?.Dispose();
         m_generations.Clear();
+        m_requestProviders?.Dispose();
+        m_requestProviders = null;
         targets.Dispose();
+        m_uploads.Dispose();
         m_resourceService.Dispose();
         m_extensions.Dispose();
     }
 
-    private bool BuildAndExecuteRequest(
+    private bool TryBuildRequest(
+        RenderGraphBuilder graph,
         RenderRequest request,
-        int priorViews,
-        out int passCount,
-        out int culledPassCount)
+        int requestIndex)
     {
-        passCount = 0;
-        culledPassCount = 0;
         RenderPipelineAsset? asset = request.pipeline ?? GraphicsSettings.defaultPipeline;
         if (asset is null)
         {
@@ -252,7 +286,9 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
 
         try
         {
-            RenderGraphBuilder graph = CreateGraph();
+            using RenderGraphMutationScope mutation = graph.BeginMutationScope();
+            using RenderGraphNameScope names = graph.BeginNameScope(
+                $"Request[{requestIndex}] {request.name}");
             RenderTextureHandle outputTexture = request.target.kind == RenderTargetKind.Texture
                 ? targets.Import(
                     graph,
@@ -270,31 +306,18 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
                 new RenderResourceRegistry(),
                 m_diagnostics,
                 m_resourceService,
+                m_uploads,
                 m_frameIndex,
                 outputTexture);
             generation!.pipeline.Build(context);
             AddFeatures(asset, generation.features, context);
-            RenderGraphCompileResult result = graph.Compile();
-            culledPassCount = result.culledPassCount;
-            PublishGraphDiagnostics(result, request.name);
-            if (result.graph is null)
-                return false;
-
-            passCount = result.graph.passes.Count;
-            if (priorViews + passCount > m_device.capabilities.limits.maxViews)
+            RenderGraphCompileResult validation = graph.Validate();
+            if (validation.graph is null)
             {
-                m_diagnostics.Publish(new RenderDiagnostic(
-                    "RENDER_GRAPH_VIEW_LIMIT_EXCEEDED",
-                    $"Request '{request.name}' would exceed the device frame limit of " +
-                    $"{m_device.capabilities.limits.maxViews} views.",
-                    RenderDiagnosticSeverity.Error,
-                    request.name));
-                passCount = 0;
+                PublishGraphDiagnostics(validation, request.name);
                 return false;
             }
-
-            if (passCount != 0)
-                m_device.Execute(result.graph, m_frameIndex);
+            mutation.Commit();
             return true;
         }
         catch (Exception exception)
@@ -304,7 +327,6 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
                 $"Render request '{request.name}' was isolated after failure: {exception.Message}",
                 RenderDiagnosticSeverity.Error,
                 request.name));
-            passCount = 0;
             return false;
         }
     }
@@ -418,6 +440,36 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
             if (entry.attemptedTypeCacheVersion != snapshot.typeCacheVersion)
                 m_generations.Remove(asset);
         }
+
+        if (m_requestProviders is not null
+            && m_requestProviders.typeCacheVersion != snapshot.typeCacheVersion)
+        {
+            m_requestProviders.Dispose();
+            m_requestProviders = null;
+        }
+    }
+
+    private void EnsureRequestProviders()
+    {
+        RenderExtensionRegistry.Snapshot snapshot;
+        try
+        {
+            snapshot = m_extensions.extensions;
+            if (m_requestProviders?.typeCacheVersion == snapshot.typeCacheVersion)
+                return;
+            RenderExtensionRegistry.RequestProviderGeneration candidate =
+                snapshot.CreateRequestProviders();
+            RenderExtensionRegistry.RequestProviderGeneration? previous = m_requestProviders;
+            m_requestProviders = candidate;
+            previous?.Dispose();
+        }
+        catch (Exception exception)
+        {
+            m_diagnostics.Publish(new RenderDiagnostic(
+                "RENDER_REQUEST_PROVIDER_GENERATION_FAILED",
+                $"Render request provider generation was rejected: {exception.Message}",
+                RenderDiagnosticSeverity.Error));
+        }
     }
 
     private IReadOnlyList<IRenderFrameGraphContributor> PrepareContributors()
@@ -442,20 +494,25 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
         return prepared;
     }
 
-    private GraphExecutionStatistics BuildAndExecuteContributors(
-        IReadOnlyList<IRenderFrameGraphContributor> contributors,
-        int priorViews)
+    private void AddContributors(
+        RenderGraphBuilder graph,
+        IReadOnlyList<IRenderFrameGraphContributor> contributors)
     {
-        if (contributors.Count == 0)
-            return default;
-
-        RenderGraphBuilder graph = CreateGraph();
-        foreach (IRenderFrameGraphContributor contributor in contributors)
+        for (int index = 0; index < contributors.Count; index++)
         {
+            IRenderFrameGraphContributor contributor = contributors[index];
             using RenderGraphMutationScope mutation = graph.BeginMutationScope();
+            using RenderGraphNameScope names = graph.BeginNameScope(
+                $"Contributor[{index}] {contributor.GetType().Name}");
             try
             {
                 contributor.AddRenderPasses(graph, m_frameIndex);
+                RenderGraphCompileResult validation = graph.Validate();
+                if (validation.graph is null)
+                {
+                    PublishGraphDiagnostics(validation, contributor.GetType().Name);
+                    continue;
+                }
                 mutation.Commit();
             }
             catch (Exception exception)
@@ -463,23 +520,6 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
                 PublishContributorFailure(contributor, "graph build", exception);
             }
         }
-
-        RenderGraphCompileResult result = graph.Compile();
-        PublishGraphDiagnostics(result, "Frame Contributors");
-        if (result.graph is null || result.graph.passes.Count == 0)
-            return new GraphExecutionStatistics(0, result.culledPassCount);
-        if (priorViews + result.graph.passes.Count > m_device.capabilities.limits.maxViews)
-        {
-            m_diagnostics.Publish(new RenderDiagnostic(
-                "RENDER_GRAPH_VIEW_LIMIT_EXCEEDED",
-                "Frame contributors exceed the device view limit.",
-                RenderDiagnosticSeverity.Error,
-                "Frame Contributors"));
-            return new GraphExecutionStatistics(0, result.culledPassCount);
-        }
-
-        m_device.Execute(result.graph, m_frameIndex);
-        return new GraphExecutionStatistics(result.graph.passes.Count, result.culledPassCount);
     }
 
     private RenderGraphBuilder CreateGraph()
@@ -546,8 +586,6 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
         }
     }
 
-    private readonly record struct GraphExecutionStatistics(int viewCount, int culledPassCount);
-
     private sealed class GenerationCacheEntry
     {
         internal long attemptedTypeCacheVersion { get; set; } = -1;
@@ -564,17 +602,21 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
     {
         private readonly RenderRuntimeLayer m_owner;
         private readonly IReadOnlyDictionary<RenderPipelineAsset, GenerationState> m_previous;
+        private readonly RenderExtensionRegistry.RequestProviderGeneration? m_previousRequestProviders;
         private readonly Dictionary<RenderPipelineAsset, GenerationState> m_candidates = [];
+        private RenderExtensionRegistry.RequestProviderGeneration? m_candidateRequestProviders;
         private bool m_prepared;
         private bool m_activated;
         private bool m_finished;
 
         private RenderRuntimeReloadSession(
             RenderRuntimeLayer owner,
-            IReadOnlyDictionary<RenderPipelineAsset, GenerationState> previous)
+            IReadOnlyDictionary<RenderPipelineAsset, GenerationState> previous,
+            RenderExtensionRegistry.RequestProviderGeneration? previousRequestProviders)
         {
             m_owner = owner;
             m_previous = previous;
+            m_previousRequestProviders = previousRequestProviders;
         }
 
         internal static RenderRuntimeReloadSession Create(RenderRuntimeLayer owner)
@@ -587,7 +629,7 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
                     entry.attemptedFingerprint,
                     entry.lastGood));
             }
-            return new RenderRuntimeReloadSession(owner, previous);
+            return new RenderRuntimeReloadSession(owner, previous, owner.m_requestProviders);
         }
 
         internal void PrepareCandidate()
@@ -599,6 +641,7 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
             RenderExtensionRegistry.Snapshot snapshot = m_owner.m_extensions.extensions;
             try
             {
+                m_candidateRequestProviders = snapshot.CreateRequestProviders();
                 foreach ((RenderPipelineAsset asset, GenerationState previous) in m_previous)
                 {
                     if (previous.lastGood is null)
@@ -646,6 +689,7 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
                 entry.attemptedFingerprint = candidate.attemptedFingerprint;
                 entry.lastGood = candidate.lastGood;
             }
+            m_owner.m_requestProviders = m_candidateRequestProviders;
             m_activated = true;
         }
 
@@ -656,6 +700,7 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
                 throw new InvalidOperationException("Rendering extension candidates have not been activated.");
             foreach (GenerationState previous in m_previous.Values)
                 previous.lastGood?.Dispose();
+            m_previousRequestProviders?.Dispose();
             Finish();
         }
 
@@ -674,6 +719,7 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
                     entry.attemptedFingerprint = previous.attemptedFingerprint;
                     entry.lastGood = previous.lastGood;
                 }
+                m_owner.m_requestProviders = m_previousRequestProviders;
             }
             DisposeCandidates();
             Finish();
@@ -684,11 +730,14 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
             foreach (GenerationState candidate in m_candidates.Values)
                 candidate.lastGood?.Dispose();
             m_candidates.Clear();
+            m_candidateRequestProviders?.Dispose();
+            m_candidateRequestProviders = null;
         }
 
         private void Finish()
         {
             m_candidates.Clear();
+            m_candidateRequestProviders = null;
             m_finished = true;
             m_owner.EndReloadSession(this);
         }

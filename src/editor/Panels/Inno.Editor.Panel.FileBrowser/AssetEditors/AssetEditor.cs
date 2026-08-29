@@ -77,13 +77,13 @@ public abstract class AssetEditor
     public virtual EditorDragData CreateDragData(AssetEditorContext context)
     {
         if (context.isDirectory &&
-            AssetManager.TryGetFileSystemEntry(context.relativePath, out AssetFileEntry directory))
+            AssetManager.TryGetFileSystemEntry(AssetPath.Parse(context.relativePath), out AssetFileEntry directory))
         {
             return new EditorDragData(
                 directory,
                 context.name,
                 () => AssetManager.TryGetFileSystemEntry(
-                    context.relativePath,
+                    AssetPath.Parse(context.relativePath),
                     out AssetFileEntry current) &&
                     current.isDirectory);
         }

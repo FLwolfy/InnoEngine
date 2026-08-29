@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Inno.Core.Graphs;
+using Inno.Core.Storage;
 
 namespace Inno.Rendering.ShaderGraph;
 
@@ -265,35 +266,25 @@ public static class ShaderGraphCompiler
     private static IReadOnlyList<GraphNodeRecord> TopologicalOrder(GraphDocument document)
     {
         var byId = document.nodes.ToDictionary(static node => node.id);
-        var degree = document.nodes.ToDictionary(static node => node.id, static _ => 0);
-        var outgoing = document.nodes.ToDictionary(
-            static node => node.id,
-            static _ => new List<GraphNodeId>());
+        IComparer<GraphNodeId> ordering = Comparer<GraphNodeId>.Create(static (left, right) =>
+            StringComparer.Ordinal.Compare(left.value, right.value));
+        var graph = new DependencyGraph<GraphNodeId>(orderingComparer: ordering);
+        foreach (GraphNodeRecord node in document.nodes)
+            graph.AddNode(node.id);
         foreach (GraphEdgeRecord edge in document.edges)
         {
-            degree[edge.input.nodeId]++;
-            outgoing[edge.output.nodeId].Add(edge.input.nodeId);
+            if (!byId.ContainsKey(edge.input.nodeId) || !byId.ContainsKey(edge.output.nodeId))
+                throw new InvalidOperationException("Shader graph contains an edge with a missing endpoint.");
+            graph.AddDependency(edge.input.nodeId, edge.output.nodeId);
         }
-        var ready = new SortedSet<GraphNodeId>(
-            degree.Where(static pair => pair.Value == 0).Select(static pair => pair.Key),
-            Comparer<GraphNodeId>.Create(static (left, right) =>
-                StringComparer.Ordinal.Compare(left.value, right.value)));
-        var result = new List<GraphNodeRecord>(document.nodes.Count);
-        while (ready.Count > 0)
+        try
         {
-            GraphNodeId id = ready.Min;
-            ready.Remove(id);
-            result.Add(byId[id]);
-            foreach (GraphNodeId destination in outgoing[id])
-            {
-                degree[destination]--;
-                if (degree[destination] == 0)
-                    ready.Add(destination);
-            }
+            return graph.TopologicalSort().Select(id => byId[id]).ToArray();
         }
-        if (result.Count != document.nodes.Count)
-            throw new InvalidOperationException("Shader graph contains a cycle.");
-        return result;
+        catch (InvalidOperationException exception)
+        {
+            throw new InvalidOperationException($"Shader graph contains a cycle. {exception.Message}", exception);
+        }
     }
 
     private static HashSet<GraphNodeId> CollectAncestors(GraphDocument document, GraphNodeId root)

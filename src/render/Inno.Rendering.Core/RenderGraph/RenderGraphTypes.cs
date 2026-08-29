@@ -38,6 +38,15 @@ public enum RenderPassKind
     Copy
 }
 
+/// <summary>Controls where a frame-local pass callback records backend-neutral commands.</summary>
+public enum RenderPassRecordingMode
+{
+    /// <summary>Records directly on the graph execution thread.</summary>
+    Serial,
+    /// <summary>Records into an isolated command list on a worker thread, then replays in graph order.</summary>
+    Parallel
+}
+
 /// <summary>
 /// Controls how existing attachment contents enter a raster pass.
 /// </summary>
@@ -206,6 +215,7 @@ internal sealed class RenderPassRecord
     public RenderViewTransform? viewTransform { get; set; }
     public bool clearsPresentationTarget { get; set; }
     public bool hasSideEffect { get; set; }
+    public RenderPassRecordingMode recordingMode { get; set; }
 }
 
 internal sealed record RenderTextureRecord(

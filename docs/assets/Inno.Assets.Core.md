@@ -79,7 +79,7 @@ AssetManager.Changed += changeSet =>
     foreach (AssetChange change in changeSet.changes)
     {
         if (change.kind == AssetChangeKind.Moved)
-            Console.WriteLine($"{change.oldRelativePath} -> {change.relativePath}");
+            Console.WriteLine($"{change.previousAssetPath} -> {change.assetPath}");
     }
 };
 ```

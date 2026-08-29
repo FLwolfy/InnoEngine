@@ -52,17 +52,17 @@ public sealed class AssetImportWriter<TAsset> where TAsset : AssetObject
         return ValueTask.CompletedTask;
     }
 
-    /// <summary>Declares a runtime dependency by source-relative path.</summary>
-    /// <param name="relativePath">The dependency path.</param>
-    public void DependsOnAsset(string relativePath) => m_context.DependsOnAsset(relativePath);
+    /// <summary>Declares a runtime dependency by isolated source path.</summary>
+    /// <param name="path">The dependency path.</param>
+    public void DependsOnAsset(AssetPath path) => m_context.DependsOnAsset(path);
 
     /// <summary>Declares a runtime dependency by persistent descriptor.</summary>
     /// <param name="dependency">The dependency descriptor.</param>
     public void DependsOnAsset(AssetDependency dependency) => m_context.DependsOnAsset(dependency);
 
     /// <summary>Declares a source input that invalidates this import.</summary>
-    /// <param name="relativePath">The source-relative input path.</param>
-    public void DependsOnSource(string relativePath) => m_context.DependsOnSource(relativePath);
+    /// <param name="path">The isolated source input path.</param>
+    public void DependsOnSource(AssetPath path) => m_context.DependsOnSource(path);
 
     /// <summary>Declares an asset artifact input that invalidates this import.</summary>
     /// <param name="persistentId">The artifact owner identity.</param>

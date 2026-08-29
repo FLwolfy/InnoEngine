@@ -15,11 +15,12 @@ internal sealed class EditorScripting : EditorModule
 {
     private ScriptManager? m_manager;
     private Task<ScriptCompilationResult>? m_compilation;
+    private bool m_blockFollowingUpdates;
     private bool m_hideCompilationOnNextUpdate;
     private bool m_showCompilation;
 
     /// <inheritdoc />
-    public override bool blocksFollowingUpdates => isCompiling;
+    public override bool blocksFollowingUpdates => m_blockFollowingUpdates;
 
     /// <summary>
     /// Gets whether script compilation is currently active.
@@ -52,6 +53,9 @@ internal sealed class EditorScripting : EditorModule
     internal void ReloadPlugins()
         => QueueReload(static manager => manager.ReloadPlugins());
 
+    internal void CancelCompilation()
+        => m_manager?.CancelCompilation();
+
     /// <inheritdoc />
     protected override void OnStart(EditorContext context)
     {
@@ -70,6 +74,7 @@ internal sealed class EditorScripting : EditorModule
     /// <inheritdoc />
     protected override void OnUpdate(EditorContext context)
     {
+        m_blockFollowingUpdates = false;
         if (m_hideCompilationOnNextUpdate)
         {
             m_hideCompilationOnNextUpdate = false;
@@ -110,9 +115,17 @@ internal sealed class EditorScripting : EditorModule
             ScriptCompilationResult result = compilation.GetAwaiter().GetResult();
             ScriptDiagnosticPublisher.PublishCompilation(result);
             if (result.success)
+            {
+                m_blockFollowingUpdates = true;
                 _ = m_manager.ApplyPendingReload();
+            }
             else
                 PluginManager.RollbackPending();
+        }
+        catch (OperationCanceledException)
+        {
+            PluginManager.RollbackPending();
+            Log.Info("Script compilation was canceled; the active generation was retained.");
         }
         catch (Exception exception)
         {
@@ -163,6 +176,7 @@ internal sealed class EditorScripting : EditorModule
         m_compilation = null;
         m_hideCompilationOnNextUpdate = false;
         m_showCompilation = false;
+        m_blockFollowingUpdates = false;
         ScriptDiagnosticPublisher.ClearAll();
     }
 }

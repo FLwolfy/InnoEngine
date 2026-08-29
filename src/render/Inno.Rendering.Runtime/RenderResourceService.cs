@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 using Inno.Assets;
 using Inno.Assets.Core;
 using Inno.Assets.File;
@@ -19,15 +21,14 @@ internal sealed class RenderResourceService : IRenderResourceService, IDisposabl
     private readonly IRenderDevice m_device;
     private readonly IRenderDiagnosticSink m_diagnostics;
     private readonly ShaderCompiler? m_shaderCompiler;
-    private readonly ShaderLastGoodStore m_shaderLastGood = new();
-    private readonly ITextureTargetCompiler? m_textureCompiler;
+    private readonly RenderAssetPrewarmService m_prewarm;
     private readonly Dictionary<RenderPersistentResourceId, BufferEntry> m_buffers = [];
     private readonly Dictionary<RenderPersistentResourceId, TextureEntry> m_textures = [];
     private readonly Dictionary<RenderPersistentResourceId, GraphicsPipelineEntry> m_graphicsPipelines = [];
     private readonly Dictionary<RenderPersistentResourceId, ComputePipelineEntry> m_computePipelines = [];
     private readonly Dictionary<Guid, GeometryMetadata> m_geometryMetadata = [];
-    private readonly Dictionary<ShaderArtifactKey, ShaderArtifactEntry> m_shaderArtifacts = [];
     private readonly Dictionary<ProgramKey, ProgramEntry> m_programs = [];
+    private readonly Dictionary<RenderTextureReadbackHandle, PendingReadback> m_readbacks = [];
     private ulong m_frameIndex;
     private bool m_disposed;
 
@@ -40,10 +41,33 @@ internal sealed class RenderResourceService : IRenderResourceService, IDisposabl
         m_device = device ?? throw new ArgumentNullException(nameof(device));
         m_diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
         m_shaderCompiler = shaderCompiler;
-        m_textureCompiler = textureCompiler;
+        m_prewarm = new RenderAssetPrewarmService(shaderCompiler, textureCompiler, diagnostics);
     }
 
     public GraphicsCapabilities capabilities => m_device.capabilities;
+
+    public void PrewarmMaterial(MaterialAsset material)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(material);
+        ShaderAsset shader = material.shader
+            ?? throw new ArgumentException("A material must reference a shader before prewarming.", nameof(material));
+        if (m_shaderCompiler is null)
+            throw new InvalidOperationException("No shader target compiler is configured for this render runtime.");
+        ShaderVariantKey variant = BuildVariant(shader, material);
+        ShaderCompileTarget target = m_shaderCompiler.CreateTarget(
+            m_device.capabilities,
+            optimize: true,
+            debugInformation: false);
+        _ = m_prewarm.GetOrRequestShader(shader, target, variant);
+    }
+
+    public void PrewarmTexture(TextureAsset texture)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(texture);
+        _ = m_prewarm.GetOrRequestTexture(texture);
+    }
 
     public PersistentBufferHandle AcquireBuffer(
         RenderPersistentResourceId id,
@@ -171,6 +195,34 @@ internal sealed class RenderResourceService : IRenderResourceService, IDisposabl
             m_device.DestroyTexture(current.handle);
         m_textures[id] = replacement;
         return candidate;
+    }
+
+    public void UpdateTexture(
+        PersistentTextureHandle texture,
+        RenderTextureRegion region,
+        ReadOnlyMemory<byte> data)
+    {
+        ThrowIfDisposed();
+        if (!texture.isValid)
+            throw new ArgumentException("A valid persistent texture is required.", nameof(texture));
+        if (data.IsEmpty)
+            throw new ArgumentException("Texture update data cannot be empty.", nameof(data));
+        m_device.UpdateTextureRegion(texture, region, data.Span);
+    }
+
+    public ValueTask<RenderTextureReadbackResult> ReadTextureAsync(
+        PersistentTextureHandle texture,
+        int mipLevel = 0,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!m_device.capabilities.Supports(GraphicsFeature.TextureReadback))
+            throw new NotSupportedException("The active graphics backend does not support texture readback.");
+        RenderTextureReadbackHandle handle = m_device.BeginTextureReadback(texture, mipLevel);
+        var pending = new PendingReadback(handle, cancellationToken);
+        m_readbacks.Add(handle, pending);
+        return new ValueTask<RenderTextureReadbackResult>(pending.completion.Task);
     }
 
     public bool TryResolveGraphicsMaterial(
@@ -315,17 +367,29 @@ internal sealed class RenderResourceService : IRenderResourceService, IDisposabl
         }
         try
         {
-            if (m_textureCompiler is null)
+            PreparedTextureSelection selection = m_prewarm.GetOrRequestTexture(texture);
+            if (selection.artifact is null)
             {
-                throw new InvalidOperationException(
-                    "No texture target compiler is configured for this render runtime.");
+                if (selection.isPending)
+                {
+                    m_diagnostics.Publish(new RenderDiagnostic(
+                        "RENDER_TEXTURE_PREWARM_PENDING",
+                        $"Texture '{texture.assetPath}' is waiting for its target artifact.",
+                        RenderDiagnosticSeverity.Info,
+                        texture.assetPath.ToString()));
+                }
+                if (m_textures.TryGetValue(resourceId, out TextureEntry? lastGood))
+                {
+                    lastGood.lastUsedFrame = m_frameIndex;
+                    resolvedTexture = lastGood.handle;
+                    return true;
+                }
+                return false;
             }
-            string sourcePath = ResolvePhysicalSource(texture.assetPath);
-            byte[] ktx = m_textureCompiler.CompileKtx(sourcePath, texture.colorSpace);
             resolvedTexture = AcquireKtxTexture(
                 resourceId,
-                texture.contentVersion,
-                ktx,
+                selection.contentVersion,
+                selection.artifact,
                 sRgb,
                 texture.name);
             return true;
@@ -414,6 +478,12 @@ internal sealed class RenderResourceService : IRenderResourceService, IDisposabl
     {
         if (m_disposed)
             return;
+        foreach (PendingReadback pending in m_readbacks.Values)
+        {
+            m_device.CancelTextureReadback(pending.handle);
+            pending.CancelForDisposal();
+        }
+        m_readbacks.Clear();
         m_disposed = true;
         foreach (ProgramEntry program in m_programs.Values)
             DestroyProgram(program);
@@ -426,7 +496,7 @@ internal sealed class RenderResourceService : IRenderResourceService, IDisposabl
         foreach (ComputePipelineEntry pipeline in m_computePipelines.Values)
             m_device.DestroyComputePipeline(pipeline.handle);
         m_programs.Clear();
-        m_shaderArtifacts.Clear();
+        m_prewarm.Dispose();
         m_geometryMetadata.Clear();
         m_buffers.Clear();
         m_textures.Clear();
@@ -438,6 +508,26 @@ internal sealed class RenderResourceService : IRenderResourceService, IDisposabl
     {
         ThrowIfDisposed();
         m_frameIndex = frameIndex;
+        CompleteReadbacks();
+        m_prewarm.BeginFrame(frameIndex);
+    }
+
+    private void CompleteReadbacks()
+    {
+        foreach ((RenderTextureReadbackHandle handle, PendingReadback pending) in m_readbacks.ToArray())
+        {
+            if (pending.isCanceled)
+            {
+                m_device.CancelTextureReadback(handle);
+                m_readbacks.Remove(handle);
+                pending.Dispose();
+                continue;
+            }
+            if (!m_device.TryGetTextureReadback(handle, out RenderTextureReadbackResult? result))
+                continue;
+            m_readbacks.Remove(handle);
+            pending.Complete(result!);
+        }
     }
 
     internal void SweepUnused()
@@ -486,6 +576,7 @@ internal sealed class RenderResourceService : IRenderResourceService, IDisposabl
             if (m_computePipelines.Remove(id, out ComputePipelineEntry? entry))
                 m_device.DestroyComputePipeline(entry.handle);
         }
+        m_prewarm.SweepUnused();
     }
 
     private bool TryResolveMaterial(
@@ -589,18 +680,27 @@ internal sealed class RenderResourceService : IRenderResourceService, IDisposabl
             pass.programKind,
             vertexLayout);
         m_programs.TryGetValue(key, out ProgramEntry? current);
-        ShaderArtifactSelection selection = CompileShader(shader, target, variant);
-        if (!selection.candidateSucceeded && current is not null)
+        PreparedShaderSelection selection = m_prewarm.GetOrRequestShader(shader, target, variant);
+        if (selection.artifact is null && current is not null)
         {
             current.lastUsedFrame = m_frameIndex;
             program = current;
             return true;
         }
         if (selection.artifact is null)
+        {
+            if (selection.isPending)
+            {
+                m_diagnostics.Publish(new RenderDiagnostic(
+                    "RENDER_SHADER_PREWARM_PENDING",
+                    $"Shader '{shader.assetPath}' variant '{variant}' is waiting for its target artifact.",
+                    RenderDiagnosticSeverity.Info,
+                    shader.assetPath.ToString()));
+            }
             return false;
+        }
         if (current is not null
-            && current.shaderContentVersion == shader.contentVersion
-            && selection.candidateSucceeded)
+            && current.shaderContentVersion == selection.contentVersion)
         {
             current.lastUsedFrame = m_frameIndex;
             program = current;
@@ -630,7 +730,7 @@ internal sealed class RenderResourceService : IRenderResourceService, IDisposabl
                 shader,
                 compiledPass,
                 vertexLayout,
-                shader.contentVersion);
+                selection.contentVersion);
             candidate.lastUsedFrame = m_frameIndex;
             if (current is not null)
                 DestroyProgram(current);
@@ -652,74 +752,6 @@ internal sealed class RenderResourceService : IRenderResourceService, IDisposabl
             }
             return false;
         }
-    }
-
-    private ShaderArtifactSelection CompileShader(
-        ShaderAsset shader,
-        ShaderCompileTarget target,
-        ShaderVariantKey variant)
-    {
-        Guid shaderId = shader.identity.persistentId;
-        var key = new ShaderArtifactKey(shaderId, target.key, variant.value);
-        if (m_shaderArtifacts.TryGetValue(key, out ShaderArtifactEntry? cached)
-            && cached.attemptedContentVersion == shader.contentVersion)
-        {
-            return cached.selection;
-        }
-
-        ShaderCompilationResult result;
-        try
-        {
-            ShaderIRModule module = ShaderAssetRuntime.GetModule(shader);
-            result = m_shaderCompiler!.CompileAsync(
-                    module,
-                    target,
-                    variant,
-                    ResolveSourceRoot(shader.assetPath))
-                .AsTask()
-                .GetAwaiter()
-                .GetResult();
-        }
-        catch (Exception exception)
-        {
-            result = new ShaderCompilationResult(
-                null,
-                [new ShaderDiagnostic(
-                    "SHADER_COMPILE_EXCEPTION",
-                    ShaderDiagnosticSeverity.Error,
-                    exception.Message,
-                    new ShaderSourceLocation(
-                        shader.assetPath.ToString(),
-                        "Shader",
-                        ShaderStage.None))]);
-        }
-
-        foreach (ShaderDiagnostic diagnostic in result.diagnostics)
-        {
-            string diagnosticSource = diagnostic.location?.assetPath ?? shader.assetPath.ToString();
-            m_diagnostics.Publish(new RenderDiagnostic(
-                diagnostic.code,
-                diagnostic.message,
-                diagnostic.severity == ShaderDiagnosticSeverity.Error
-                    ? RenderDiagnosticSeverity.Error
-                    : diagnostic.severity == ShaderDiagnosticSeverity.Warning
-                        ? RenderDiagnosticSeverity.Warning
-                        : RenderDiagnosticSeverity.Info,
-                string.IsNullOrWhiteSpace(diagnosticSource)
-                    ? shader.assetPath.ToString()
-                    : diagnosticSource));
-        }
-        ShaderArtifactSelection selection = m_shaderLastGood.Select(shaderId, target.key, variant, result);
-        if (selection.usingLastGood)
-        {
-            m_diagnostics.Publish(new RenderDiagnostic(
-                "RENDER_SHADER_USING_LAST_GOOD",
-                $"Shader '{shader.assetPath.ToString()}' is using its last-good compiled artifact.",
-                RenderDiagnosticSeverity.Warning,
-                shader.assetPath.ToString()));
-        }
-        m_shaderArtifacts[key] = new ShaderArtifactEntry(shader.contentVersion, selection);
-        return selection;
     }
 
     private ProgramEntry CreateProgram(
@@ -979,16 +1011,6 @@ internal sealed class RenderResourceService : IRenderResourceService, IDisposabl
             && Equals(left.vertexLayout, right.vertexLayout)
             && left.indexFormat == right.indexFormat;
 
-    private static string ResolveSourceRoot(AssetPath assetPath)
-        => GetMount(assetPath.source).rootPath;
-
-    private static string ResolvePhysicalSource(AssetPath assetPath)
-        => GetMount(assetPath.source).Resolve(assetPath.localPath);
-
-    private static AssetSourceMount GetMount(AssetSourceId source)
-        => AssetManager.sourceMounts.FirstOrDefault(mount => mount.id == source)
-            ?? throw new InvalidOperationException($"Asset source mount '{source}' is not active.");
-
     private static void RequireId(RenderPersistentResourceId id)
     {
         if (!id.isValid)
@@ -1017,6 +1039,52 @@ internal sealed class RenderResourceService : IRenderResourceService, IDisposabl
     {
         Raw,
         Ktx
+    }
+
+    private sealed class PendingReadback : IDisposable
+    {
+        private readonly CancellationTokenRegistration m_cancellation;
+        private int m_canceled;
+
+        internal PendingReadback(
+            RenderTextureReadbackHandle handle,
+            CancellationToken cancellationToken)
+        {
+            this.handle = handle;
+            completion = new TaskCompletionSource<RenderTextureReadbackResult>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            if (cancellationToken.CanBeCanceled)
+            {
+                m_cancellation = cancellationToken.Register(
+                    static state => ((PendingReadback)state!).Cancel(),
+                    this);
+            }
+        }
+
+        internal RenderTextureReadbackHandle handle { get; }
+        internal TaskCompletionSource<RenderTextureReadbackResult> completion { get; }
+        internal bool isCanceled => Volatile.Read(ref m_canceled) != 0;
+
+        internal void Complete(RenderTextureReadbackResult result)
+        {
+            completion.TrySetResult(result);
+            Dispose();
+        }
+
+        internal void CancelForDisposal()
+        {
+            Interlocked.Exchange(ref m_canceled, 1);
+            completion.TrySetException(new ObjectDisposedException(nameof(RenderResourceService)));
+            Dispose();
+        }
+
+        private void Cancel()
+        {
+            Interlocked.Exchange(ref m_canceled, 1);
+            completion.TrySetCanceled();
+        }
+
+        public void Dispose() => m_cancellation.Dispose();
     }
 
     private sealed class BufferEntry
@@ -1099,18 +1167,6 @@ internal sealed class RenderResourceService : IRenderResourceService, IDisposabl
         internal ulong lastUsedFrame { get; set; }
     }
 
-    private sealed class ShaderArtifactEntry
-    {
-        internal ShaderArtifactEntry(long attemptedContentVersion, ShaderArtifactSelection selection)
-        {
-            this.attemptedContentVersion = attemptedContentVersion;
-            this.selection = selection;
-        }
-
-        internal long attemptedContentVersion { get; }
-        internal ShaderArtifactSelection selection { get; }
-    }
-
     private sealed record GeometryMetadata(
         RenderVertexLayout layout,
         int vertexCount,
@@ -1140,7 +1196,6 @@ internal sealed class RenderResourceService : IRenderResourceService, IDisposabl
         internal ulong lastUsedFrame { get; set; }
     }
 
-    private readonly record struct ShaderArtifactKey(Guid shaderId, string targetKey, string variantKey);
 
     private readonly record struct ProgramKey(
         Guid shaderId,

@@ -57,7 +57,9 @@ public enum RenderTextureUsage
     /// <summary>Copy operation source.</summary>
     CopySource = 1 << 4,
     /// <summary>Copy operation destination.</summary>
-    CopyDestination = 1 << 5
+    CopyDestination = 1 << 5,
+    /// <summary>Asynchronous transfer from GPU texture memory to CPU-visible bytes.</summary>
+    Readback = 1 << 6
 }
 
 /// <summary>

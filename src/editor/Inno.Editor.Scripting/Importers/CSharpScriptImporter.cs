@@ -28,7 +28,7 @@ internal sealed class CSharpScriptImporter : AssetImporter<ScriptSourceAsset>
         SyntaxTree tree = CSharpSyntaxTree.ParseText(
             source,
             new CSharpParseOptions(LanguageVersion.Latest, DocumentationMode.Parse),
-            context.relativePath,
+            context.assetPath.ToString(),
             Encoding.UTF8,
             cancellationToken);
         BaseTypeDeclarationSyntax[] declarations = tree.GetRoot(cancellationToken)
@@ -44,7 +44,7 @@ internal sealed class CSharpScriptImporter : AssetImporter<ScriptSourceAsset>
             .Where(static diagnostic => diagnostic.Severity != DiagnosticSeverity.Hidden)
             .Select(static diagnostic => diagnostic.ToString())
             .ToArray();
-        ScriptAssemblyScope scope = context.relativePath.EndsWith(
+        ScriptAssemblyScope scope = context.assetPath.localPath.EndsWith(
             ".editor.cs",
             StringComparison.OrdinalIgnoreCase)
             ? ScriptAssemblyScope.Editor
@@ -60,7 +60,7 @@ internal sealed class CSharpScriptImporter : AssetImporter<ScriptSourceAsset>
             cancellationToken).ConfigureAwait(false);
         var typeManifest = new ScriptSourceTypeManifest(
             context.persistentId,
-            context.relativePath,
+            context.assetPath.ToString(),
             declarations.Select(CreateTypeDeclaration).ToArray());
         await output.WriteArtifactAsync(
             "type-manifest",

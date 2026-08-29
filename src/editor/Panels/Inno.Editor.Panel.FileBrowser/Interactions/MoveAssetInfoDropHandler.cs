@@ -13,7 +13,7 @@ internal sealed class MoveAssetInfoDropHandler(AssetEditorModule assets)
     /// <inheritdoc />
     protected override EditorDropStatus Query(
         EditorDropContext<AssetInfo, string> context)
-        => assets.CanMoveToDirectory(context.source.relativePath, context.target)
+        => assets.CanMoveToDirectory(context.source.assetPath.ToString(), context.target)
             ? EditorDropStatus.Accept()
             : EditorDropStatus.rejected;
 
@@ -24,7 +24,7 @@ internal sealed class MoveAssetInfoDropHandler(AssetEditorModule assets)
         if (!Query(context).canDrop)
             return EditorDropResult.rejected;
         Inno.Assets.File.AssetFileEntry moved = assets.MoveToDirectoryWithHistory(
-            context.source.relativePath,
+            context.source.assetPath.ToString(),
             context.target,
             context.interactions.history);
         return EditorDropResult.Accepted(moved, moved);

@@ -64,13 +64,13 @@ public sealed class EditorSettingsTests : IDisposable
         Assert.True(m_settings.Apply(
             new Dictionary<string, EditorSettingObject>(StringComparer.Ordinal)
             {
-                ["Tests/Values/Project Count"] = value
+                ["Editor/Tests/Values/Project Count"] = value
             }));
 
         string path = Path.Combine(m_projectRoot, "EditorSettings.json");
         Assert.True(File.Exists(path));
         Assert.False(Directory.Exists(Path.Combine(m_projectRoot, "Settings")));
-        Assert.Equal(10, m_settings.Get("Tests/Values/Project Count").GetAsInt32("value"));
+        Assert.Equal(10, m_settings.Get("Editor/Tests/Values/Project Count").GetAsInt32("value"));
         Assert.Equal(1, changedCount);
         Assert.Same(m_settings, published);
     }
@@ -87,26 +87,26 @@ public sealed class EditorSettingsTests : IDisposable
         Assert.True(m_settings.Apply(
             new Dictionary<string, EditorSettingObject>(StringComparer.Ordinal)
             {
-                ["Tests/Values/Project Count"] = value
+                ["Editor/Tests/Values/Project Count"] = value
             }));
         Assert.Equal(1, delivered);
         Assert.True(m_runtime.interactions.history.Undo().succeeded);
         Assert.Equal(2, delivered);
-        Assert.Equal(3, m_settings.Get("Tests/Values/Project Count").GetAsInt32("value"));
+        Assert.Equal(3, m_settings.Get("Editor/Tests/Values/Project Count").GetAsInt32("value"));
         Assert.True(m_runtime.interactions.history.Redo().succeeded);
         Assert.Equal(3, delivered);
-        Assert.Equal(11, m_settings.Get("Tests/Values/Project Count").GetAsInt32("value"));
+        Assert.Equal(11, m_settings.Get("Editor/Tests/Values/Project Count").GetAsInt32("value"));
     }
 
     [Fact]
     public void GetReturnsIsolatedObjectsAndRejectsPagesOrMissingPaths()
     {
-        EditorSettingObject first = m_settings.Get("Tests/Values/Project Count");
+        EditorSettingObject first = m_settings.Get("Editor/Tests/Values/Project Count");
         first.SetAsInt32("value", 99);
 
-        Assert.Equal(3, m_settings.Get("Tests/Values/Project Count").GetAsInt32("value"));
-        Assert.Throws<ArgumentException>(() => m_settings.Get("Tests"));
-        Assert.Throws<ArgumentException>(() => m_settings.Get("Tests/Missing"));
+        Assert.Equal(3, m_settings.Get("Editor/Tests/Values/Project Count").GetAsInt32("value"));
+        Assert.Throws<ArgumentException>(() => m_settings.Get("Editor/Tests"));
+        Assert.Throws<ArgumentException>(() => m_settings.Get("Editor/Tests/Missing"));
     }
 
     [Fact]
@@ -114,28 +114,28 @@ public sealed class EditorSettingsTests : IDisposable
     {
         EditorSetting definition = Assert.Single(
             m_settings.definitions,
-            static setting => setting.path == "Tests/Values/Project Count");
+            static setting => setting.path == "Editor/Tests/Values/Project Count");
         var value = new EditorSettingObject();
         value.SetAsInt32("value", 8);
         Assert.True(m_settings.Apply(
             new Dictionary<string, EditorSettingObject>
             {
-                ["Tests/Values/Project Count"] = value
+                ["Editor/Tests/Values/Project Count"] = value
             }));
-        Assert.False(definition.IsDefault(m_settings.Get("Tests/Values/Project Count")));
+        Assert.False(definition.IsDefault(m_settings.Get("Editor/Tests/Values/Project Count")));
 
         Assert.True(m_settings.Apply(
             new Dictionary<string, EditorSettingObject>(),
             new HashSet<string>(StringComparer.Ordinal)
             {
-                "Tests/Values/Project Count"
+                "Editor/Tests/Values/Project Count"
             }));
 
-        Assert.Equal(3, m_settings.Get("Tests/Values/Project Count").GetAsInt32("value"));
-        Assert.True(definition.IsDefault(m_settings.Get("Tests/Values/Project Count")));
+        Assert.Equal(3, m_settings.Get("Editor/Tests/Values/Project Count").GetAsInt32("value"));
+        Assert.True(definition.IsDefault(m_settings.Get("Editor/Tests/Values/Project Count")));
         Assert.NotSame(definition.defaultValue, definition.defaultValue);
         Assert.DoesNotContain(
-            "Tests/Values/Project Count",
+            "Editor/Tests/Values/Project Count",
             File.ReadAllText(Path.Combine(m_projectRoot, "EditorSettings.json")));
     }
 
@@ -150,16 +150,16 @@ public sealed class EditorSettingsTests : IDisposable
         Assert.True(m_settings.Apply(
             new Dictionary<string, EditorSettingObject>(StringComparer.Ordinal)
             {
-                ["Tests/Values/Project Count"] = count,
-                ["Tests/Values/Project Toggle"] = toggle
+                ["Editor/Tests/Values/Project Count"] = count,
+                ["Editor/Tests/Values/Project Toggle"] = toggle
             }));
         Assert.Equal("Apply Settings", m_runtime.interactions.history.undoName);
         Assert.True(m_runtime.interactions.history.Undo().succeeded);
-        Assert.Equal(3, m_settings.Get("Tests/Values/Project Count").GetAsInt32("value"));
-        Assert.True(m_settings.Get("Tests/Values/Project Toggle").GetAsBoolean("value"));
+        Assert.Equal(3, m_settings.Get("Editor/Tests/Values/Project Count").GetAsInt32("value"));
+        Assert.True(m_settings.Get("Editor/Tests/Values/Project Toggle").GetAsBoolean("value"));
         Assert.True(m_runtime.interactions.history.Redo().succeeded);
-        Assert.Equal(7, m_settings.Get("Tests/Values/Project Count").GetAsInt32("value"));
-        Assert.False(m_settings.Get("Tests/Values/Project Toggle").GetAsBoolean("value"));
+        Assert.Equal(7, m_settings.Get("Editor/Tests/Values/Project Count").GetAsInt32("value"));
+        Assert.False(m_settings.Get("Editor/Tests/Values/Project Toggle").GetAsBoolean("value"));
     }
 
     [Fact]
@@ -167,13 +167,13 @@ public sealed class EditorSettingsTests : IDisposable
     {
         EditorSetting page = Assert.Single(
             m_settings.definitions,
-            static definition => definition.path == "Tests");
+            static definition => definition.path == "Editor/Tests");
         Assert.False(page.hasValue);
         Assert.Equal("Test-only settings overview.", page.description);
         Assert.Equal(
             new[] { "Alpha", "Numbers" },
             m_settings.definitions
-                .Where(static definition => definition.pagePath == "Tests/Values")
+                .Where(static definition => definition.pagePath == "Editor/Tests/Values")
                 .OrderBy(static definition => definition.section, StringComparer.Ordinal)
                 .Select(static definition => definition.section));
     }
@@ -187,7 +187,7 @@ public sealed class EditorSettingsTests : IDisposable
         Assert.Empty(constructor.GetParameters());
         EditorSetting page = Assert.Single(
             m_settings.definitions,
-            static definition => definition.path == "Tests");
+            static definition => definition.path == "Editor/Tests");
         Assert.Null(page.defaultValue);
         Assert.Throws<InvalidOperationException>(() => page.IsDefault(new EditorSettingObject()));
     }
@@ -214,12 +214,12 @@ public sealed class EditorSettingsTests : IDisposable
         Assert.True(m_settings.Apply(
             new Dictionary<string, EditorSettingObject>(StringComparer.Ordinal)
             {
-                ["Tests/Objects/Primitives"] = value
+                ["Editor/Tests/Objects/Primitives"] = value
             }));
         Assert.True(m_runtime.interactions.history.Undo().succeeded);
         Assert.True(m_runtime.interactions.history.Redo().succeeded);
 
-        EditorSettingObject restored = m_settings.Get("Tests/Objects/Primitives");
+        EditorSettingObject restored = m_settings.Get("Editor/Tests/Objects/Primitives");
         Assert.True(restored.GetAsBoolean("boolean"));
         Assert.Equal(-32, restored.GetAsInt32("int32"));
         Assert.Equal(32u, restored.GetAsUInt32("uint32"));
@@ -250,7 +250,7 @@ public sealed class EditorSettingsTests : IDisposable
     {
         EditorSetting definition = Assert.Single(
             m_settings.definitions,
-            static setting => setting.path == "Tests/Objects/Draw Mutation");
+            static setting => setting.path == "Editor/Tests/Objects/Draw Mutation");
         var value = new EditorSettingObject();
 
         Assert.True(definition.Draw(value));
@@ -271,13 +271,13 @@ public sealed class EditorSettingsTests : IDisposable
             => current = settings;
     }
 
-    [EditorSettingPath("Tests")]
+    [EditorSettingPath("Editor/Tests")]
     private sealed class TestSettingsPage : EditorSetting
     {
         public override string description => "Test-only settings overview.";
     }
 
-    [EditorSettingPath("Tests/Values/Project Count")]
+    [EditorSettingPath("Editor/Tests/Values/Project Count")]
     private sealed class TestCountSetting : EditorSetting
     {
         public override EditorSettingObject defaultValue => CreateDefault();
@@ -298,7 +298,7 @@ public sealed class EditorSettingsTests : IDisposable
         }
     }
 
-    [EditorSettingPath("Tests/Values/Project Toggle")]
+    [EditorSettingPath("Editor/Tests/Values/Project Toggle")]
     private sealed class TestToggleSetting : EditorSetting
     {
         public override EditorSettingObject defaultValue => CreateDefault();
@@ -317,7 +317,7 @@ public sealed class EditorSettingsTests : IDisposable
         }
     }
 
-    [EditorSettingPath("Tests/Objects/Primitives")]
+    [EditorSettingPath("Editor/Tests/Objects/Primitives")]
     private sealed class TestPrimitiveObjectSetting : EditorSetting
     {
         public override EditorSettingObject defaultValue => new();
@@ -327,7 +327,7 @@ public sealed class EditorSettingsTests : IDisposable
         }
     }
 
-    [EditorSettingPath("Tests/Objects/Draw Mutation")]
+    [EditorSettingPath("Editor/Tests/Objects/Draw Mutation")]
     private sealed class TestDrawMutationSetting : EditorSetting
     {
         public override EditorSettingObject defaultValue => new();

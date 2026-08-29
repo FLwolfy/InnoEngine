@@ -17,7 +17,7 @@ internal sealed class ExportPluginCommand : EditorAction<AssetFileEntry>
     {
         if (context.target.isReadOnly || context.target.source != AssetSourceId.project)
             return EditorActionState.hidden;
-        return AssetManager.TryGetAssetType(context.target.relativePath, out Type? assetType) &&
+        return AssetManager.TryGetAssetType(context.target.assetPath, out Type? assetType) &&
                assetType == typeof(PluginDefinitionAsset)
             ? EditorActionState.enabled
             : EditorActionState.hidden;
@@ -25,7 +25,7 @@ internal sealed class ExportPluginCommand : EditorAction<AssetFileEntry>
 
     protected override void Execute(EditorActionContext<AssetFileEntry> context)
     {
-        PluginDefinitionAsset definition = AssetManager.Load<PluginDefinitionAsset>(context.target.relativePath);
+        PluginDefinitionAsset definition = AssetManager.Load<PluginDefinitionAsset>(context.target.assetPath);
         string projectRoot = Path.GetDirectoryName(AssetManager.assetRoot)
             ?? throw new InvalidOperationException("The project Assets root has no parent directory.");
         string output = Path.Combine(projectRoot, "Plugins", definition.pluginId + ".zip");

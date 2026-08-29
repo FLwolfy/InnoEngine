@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Numerics;
 using Inno.Assets;
+using Inno.Assets.Core;
 using Inno.Core.Graphs;
 using Inno.Editor.Core;
 using Inno.Editor.Graph;
@@ -102,7 +103,7 @@ internal sealed class ShaderGraphPanel : EditorPanel
 
         m_documentPath = NormalizeDocumentPath(m_documentPath);
         GraphDocument document;
-        if (AssetManager.TryLoad(m_documentPath, out ShaderGraphAsset? asset)
+        if (AssetManager.TryLoad(AssetPath.Parse(m_documentPath), out ShaderGraphAsset? asset)
             && asset?.document is not null)
         {
             m_asset = asset;
@@ -478,7 +479,7 @@ internal sealed class ShaderGraphPanel : EditorPanel
         _ = context;
         m_asset ??= new ShaderGraphAsset();
         m_asset.SetDocument(m_controller!.document);
-        if (!AssetManager.Save(m_documentPath, m_asset))
+        if (!AssetManager.Save(AssetPath.Parse(m_documentPath), m_asset))
             throw new InvalidOperationException($"No Shader Graph importer can save '{m_documentPath}'.");
         m_controller.MarkSaved();
     }

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 using Inno.Rendering.Core;
 using Xunit;
 
@@ -12,6 +14,29 @@ public sealed class RenderGraphCompilerTests
     private static readonly RenderPhaseId C_TRANSPARENT = new("tests.transparent");
     private static readonly RenderPhaseId C_POST = new("tests.post");
     private static readonly RenderPhaseId C_FINAL = new("tests.final");
+
+    [Fact]
+    public void NameScopesIsolateRepeatedProducerNamesInsideOneFrameGraph()
+    {
+        RenderGraphBuilder graph = CreateGraph();
+        using (graph.BeginNameScope("Request[0] First"))
+        {
+            graph.AddRasterPass("Visible", C_GEOMETRY, 0, static (_, _) => { })
+                .HasSideEffect();
+        }
+        using (graph.BeginNameScope("Request[1] Second"))
+        {
+            graph.AddRasterPass("Visible", C_GEOMETRY, 0, static (_, _) => { })
+                .HasSideEffect();
+        }
+
+        RenderGraphCompileResult result = graph.Compile();
+
+        Assert.True(result.succeeded);
+        Assert.Equal(
+            ["Request[0] First/Visible", "Request[1] Second/Visible"],
+            PassNames(result.graph!));
+    }
 
     [Fact]
     public void MutationScope_Uncommitted_RollsBackPassesResourcesAndOutputs()
@@ -504,6 +529,52 @@ public sealed class RenderGraphCompilerTests
         Assert.Equal(["BeginGraph", "Begin:Failure", "End:Failure", "EndGraph"], backend.calls);
     }
 
+    [Fact]
+    public void Execute_ParallelRecordingOverlapsEligibleCallbacksAndReplaysInGraphOrder()
+    {
+        RenderGraphBuilder graph = CreateGraph();
+        int activeRecorders = 0;
+        int maximumRecorders = 0;
+        void Record(int drawCount, RenderPassContext context)
+        {
+            int active = Interlocked.Increment(ref activeRecorders);
+            int observed;
+            while (active > (observed = Volatile.Read(ref maximumRecorders)))
+                _ = Interlocked.CompareExchange(ref maximumRecorders, active, observed);
+            Thread.Sleep(40);
+            context.commands.Draw(drawCount);
+            _ = Interlocked.Decrement(ref activeRecorders);
+        }
+
+        graph.AddRasterPass("Parallel A", C_GEOMETRY, 1, Record)
+            .AllowParallelRecording()
+            .HasSideEffect();
+        graph.AddRasterPass("Parallel B", C_PROCESS, 2, Record)
+            .AllowParallelRecording()
+            .HasSideEffect();
+        graph.AddRasterPass("Serial", C_FINAL, 3, Record)
+            .HasSideEffect();
+        CompiledRenderGraph compiled = graph.Compile().graph!;
+        RecordingBackend backend = new();
+
+        compiled.Execute(backend, 42);
+
+        Assert.Equal(
+            [
+                "BeginGraph",
+                "Begin:Parallel A", "Draw:Parallel A:1", "End:Parallel A",
+                "Begin:Parallel B", "Draw:Parallel B:2", "End:Parallel B",
+                "Begin:Serial", "Draw:Serial:3", "End:Serial",
+                "EndGraph"
+            ],
+            backend.calls);
+        Assert.Equal(
+            [RenderPassRecordingMode.Parallel, RenderPassRecordingMode.Parallel, RenderPassRecordingMode.Serial],
+            compiled.passes.Select(static pass => pass.recordingMode));
+        if (Environment.ProcessorCount > 1)
+            Assert.True(maximumRecorders > 1, "Parallel pass callbacks did not overlap.");
+    }
+
     private static RenderGraphBuilder CreateGraph() => new(1, CreateCapabilities(64));
 
     private static GraphicsCapabilities CreateCapabilities(
@@ -565,7 +636,7 @@ public sealed class RenderGraphCompilerTests
         public RenderCommandEncoder BeginPass(CompiledRenderPass pass)
         {
             calls.Add($"Begin:{pass.name}");
-            return new EmptyEncoder();
+            return new EmptyEncoder(drawCount => calls.Add($"Draw:{pass.name}:{drawCount}"));
         }
 
         public void EndPass(CompiledRenderPass pass) => calls.Add($"End:{pass.name}");
@@ -575,6 +646,13 @@ public sealed class RenderGraphCompilerTests
 
     private sealed class EmptyEncoder : RenderCommandEncoder
     {
+        private readonly Action<int>? m_onDraw;
+
+        internal EmptyEncoder(Action<int>? onDraw = null)
+        {
+            m_onDraw = onDraw;
+        }
+
         public override void BindGraphicsPipeline(GraphicsPipelineHandle pipeline) { }
         public override void BindComputePipeline(ComputePipelineHandle pipeline) { }
         public override void BindTexture(
@@ -613,7 +691,7 @@ public sealed class RenderGraphCompilerTests
             PersistentBufferHandle buffer,
             int firstInstance,
             int instanceCount) { }
-        public override void Draw(int vertexCount, int instanceCount = 1) { }
+        public override void Draw(int vertexCount, int instanceCount = 1) => m_onDraw?.Invoke(vertexCount);
         public override void DrawProcedural(int vertexCount, int instanceCount = 1) { }
         public override void DrawIndexed(int indexCount, int instanceCount = 1) { }
         public override void DrawIndirect(

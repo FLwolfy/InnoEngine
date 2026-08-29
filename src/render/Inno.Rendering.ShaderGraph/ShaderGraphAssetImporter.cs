@@ -34,8 +34,8 @@ internal sealed class ShaderGraphAssetImporter : AssetImporter<ShaderGraphAsset>
         using var registry = new ShaderNodeRegistry(discoverExtensions: true);
         registry.RefreshExtensions();
         ShaderGraphCompileResult compilation = ShaderGraphCompiler.Compile(
-            context.relativePath,
-            Path.GetFileNameWithoutExtension(context.relativePath),
+            context.assetPath.ToString(),
+            Path.GetFileNameWithoutExtension(context.assetPath.localPath),
             document,
             registry);
         output.SetAsset(asset);

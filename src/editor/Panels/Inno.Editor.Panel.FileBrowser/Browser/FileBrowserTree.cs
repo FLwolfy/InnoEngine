@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using Inno.Assets;
+using Inno.Assets.Core;
 using Inno.Assets.File;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
@@ -62,7 +63,8 @@ internal sealed class FileBrowserTree
         bool isCurrentDirectory = isDirectory &&
                                   string.Equals(m_assets.browser.currentDirectory, relativePath, StringComparison.Ordinal);
         string icon = m_assets.folderIcon;
-        if (!isDirectory && AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry iconEntry))
+        if (!isDirectory
+            && AssetManager.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry iconEntry))
             icon = m_assets.GetIcon(iconEntry);
         bool editing = !isRoot && m_rename.IsEditing(
             context,
@@ -86,7 +88,8 @@ internal sealed class FileBrowserTree
             new TreeNodeOptions { selected = selected, isLeaf = isLeaf });
 
         AssetFileEntry? treeEntry = null;
-        if (!isRoot && AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry resolvedEntry))
+        if (!isRoot
+            && AssetManager.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry resolvedEntry))
             treeEntry = resolvedEntry;
         if (treeEntry is not null && result.isDoubleClicked)
         {
@@ -112,12 +115,12 @@ internal sealed class FileBrowserTree
                 {
                     m_contextMenu.DrawEntry(
                         context,
-                        $"##asset_tree_context_{treeEntry.relativePath}",
-                        treeEntry.relativePath,
+                        $"##asset_tree_context_{treeEntry.assetPath.ToString()}",
+                        treeEntry.assetPath.ToString(),
                         FileBrowserPresentation.Tree);
                 }
                 if (treeEntry.isDirectory && !treeEntry.isReadOnly)
-                    m_dragDrop.DrawDirectoryTarget(context, treeEntry.relativePath);
+                    m_dragDrop.DrawDirectoryTarget(context, treeEntry.assetPath.ToString());
             }
         }
         else if (isRoot && !isReadOnlyRoot)
@@ -135,7 +138,7 @@ internal sealed class FileBrowserTree
         for (int i = 0; i < sorted.Count; i++)
         {
             AssetFileEntry child = sorted[i];
-            DrawEntry(context, child.relativePath, child.name, false);
+            DrawEntry(context, child.assetPath.ToString(), child.name, false);
         }
         NativeImGui.TreePop();
     }

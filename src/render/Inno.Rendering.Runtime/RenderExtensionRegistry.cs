@@ -23,7 +23,13 @@ internal sealed class RenderExtensionRegistry : TypeRegistry<RenderExtensionRegi
             types,
             static attribute => attribute.id,
             "render feature");
-        return new Snapshot(types.version, pipelines, features);
+        Dictionary<string, Type> requestProviders = Discover<
+            RenderRequestProviderExtensionAttribute,
+            RenderRequestProvider>(
+            types,
+            static attribute => attribute.id,
+            "render request provider");
+        return new Snapshot(types.version, pipelines, features, requestProviders);
     }
 
     internal static string GetConfigurationFingerprint(RenderPipelineAsset asset)
@@ -103,18 +109,53 @@ internal sealed class RenderExtensionRegistry : TypeRegistry<RenderExtensionRegi
     {
         private readonly IReadOnlyDictionary<string, Type> m_pipelines;
         private readonly IReadOnlyDictionary<string, Type> m_features;
+        private readonly IReadOnlyDictionary<string, Type> m_requestProviders;
 
         internal Snapshot(
             long typeCacheVersion,
             IReadOnlyDictionary<string, Type> pipelines,
-            IReadOnlyDictionary<string, Type> features)
+            IReadOnlyDictionary<string, Type> features,
+            IReadOnlyDictionary<string, Type> requestProviders)
         {
             this.typeCacheVersion = typeCacheVersion;
             m_pipelines = pipelines;
             m_features = features;
+            m_requestProviders = requestProviders;
         }
 
         internal long typeCacheVersion { get; }
+
+        internal RequestProviderGeneration CreateRequestProviders()
+        {
+            var providers = new List<RequestProviderEntry>(m_requestProviders.Count);
+            try
+            {
+                foreach ((string id, Type type) in m_requestProviders)
+                {
+                    RenderRequestProviderExtensionAttribute attribute =
+                        type.GetCustomAttribute<RenderRequestProviderExtensionAttribute>(inherit: false)!;
+                    providers.Add(new RequestProviderEntry(
+                        id,
+                        attribute.priority,
+                        Create<RenderRequestProvider>(type)));
+                }
+
+                providers.Sort(static (left, right) =>
+                {
+                    int priority = left.priority.CompareTo(right.priority);
+                    return priority != 0
+                        ? priority
+                        : string.CompareOrdinal(left.id, right.id);
+                });
+                return new RequestProviderGeneration(typeCacheVersion, providers);
+            }
+            catch
+            {
+                foreach (RequestProviderEntry entry in providers)
+                    entry.provider.Dispose();
+                throw;
+            }
+        }
 
         internal Generation CreateGeneration(RenderPipelineAsset asset)
         {
@@ -179,6 +220,34 @@ internal sealed class RenderExtensionRegistry : TypeRegistry<RenderExtensionRegi
             }
         }
     }
+
+    internal sealed class RequestProviderGeneration : IDisposable
+    {
+        private readonly IReadOnlyList<RequestProviderEntry> m_providers;
+
+        internal RequestProviderGeneration(
+            long typeCacheVersion,
+            IReadOnlyList<RequestProviderEntry> providers)
+        {
+            this.typeCacheVersion = typeCacheVersion;
+            m_providers = providers;
+        }
+
+        internal long typeCacheVersion { get; }
+
+        internal IReadOnlyList<RequestProviderEntry> providers => m_providers;
+
+        public void Dispose()
+        {
+            foreach (RequestProviderEntry entry in m_providers)
+                entry.provider.Dispose();
+        }
+    }
+
+    internal sealed record RequestProviderEntry(
+        string id,
+        int priority,
+        RenderRequestProvider provider);
 
     internal sealed class Generation : IDisposable
     {

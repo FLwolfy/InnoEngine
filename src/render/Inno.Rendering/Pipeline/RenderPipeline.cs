@@ -147,6 +147,7 @@ public sealed class RenderPipelineContext
     /// <param name="resources">Open semantic resource registry.</param>
     /// <param name="diagnostics">Structured diagnostic sink.</param>
     /// <param name="resourceService">Generation-aware shader, material and persistent GPU resource service.</param>
+    /// <param name="uploads">Frame-scoped streaming buffer service.</param>
     /// <param name="frameIndex">Monotonic render frame index.</param>
     /// <param name="outputTexture">Imported offscreen target, or an invalid handle for the backbuffer.</param>
     public RenderPipelineContext(
@@ -157,6 +158,7 @@ public sealed class RenderPipelineContext
         RenderResourceRegistry resources,
         IRenderDiagnosticSink diagnostics,
         IRenderResourceService resourceService,
+        IRenderFrameUploadService uploads,
         ulong frameIndex,
         RenderTextureHandle outputTexture = default)
     {
@@ -167,6 +169,7 @@ public sealed class RenderPipelineContext
         ArgumentNullException.ThrowIfNull(resources);
         ArgumentNullException.ThrowIfNull(diagnostics);
         ArgumentNullException.ThrowIfNull(resourceService);
+        ArgumentNullException.ThrowIfNull(uploads);
         this.request = request;
         this.pipelineAsset = pipelineAsset;
         this.graph = graph;
@@ -174,6 +177,7 @@ public sealed class RenderPipelineContext
         this.resources = resources;
         this.diagnostics = diagnostics;
         this.resourceService = resourceService;
+        this.uploads = uploads;
         this.frameIndex = frameIndex;
         this.outputTexture = outputTexture;
     }
@@ -198,6 +202,9 @@ public sealed class RenderPipelineContext
 
     /// <summary>Gets the generation-aware neutral GPU resource service.</summary>
     public IRenderResourceService resourceService { get; }
+
+    /// <summary>Gets the frame-scoped streaming buffer service.</summary>
+    public IRenderFrameUploadService uploads { get; }
 
     /// <summary>Gets the monotonic render frame index.</summary>
     public ulong frameIndex { get; }
@@ -235,6 +242,9 @@ public sealed class RenderFeatureContext
 
     /// <summary>Gets the generation-aware neutral GPU resource service.</summary>
     public IRenderResourceService resourceService => pipeline.resourceService;
+
+    /// <summary>Gets the frame-scoped streaming buffer service.</summary>
+    public IRenderFrameUploadService uploads => pipeline.uploads;
 }
 
 /// <summary>Builds frame-local passes without prescribing a rendering model.</summary>

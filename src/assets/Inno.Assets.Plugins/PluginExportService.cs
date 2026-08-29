@@ -165,7 +165,9 @@ public static class PluginExportService
         while (pending.Count > 0)
         {
             string path = pending.Dequeue();
-            if (!visited.Add(path) || !AssetManager.TryLoad<AssetObject>(path, out AssetObject? asset) || asset is null)
+            if (!visited.Add(path)
+                || !AssetManager.TryLoad<AssetObject>(AssetPath.Project(path), out AssetObject? asset)
+                || asset is null)
                 continue;
             foreach (AssetDependency dependency in AssetManager.GetDependencies(asset))
             {

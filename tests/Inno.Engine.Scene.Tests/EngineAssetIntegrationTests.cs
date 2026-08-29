@@ -52,8 +52,8 @@ public sealed class EngineAssetIntegrationTests : IDisposable
         source.CreateObject("Object");
         SceneAsset captured = SceneAsset.Capture(source);
 
-        Assert.True(AssetManager.Save("Scenes/sample.iscene", captured));
-        SceneAsset byPath = AssetManager.Load<SceneAsset>("Scenes/sample.iscene");
+        Assert.True(AssetManager.Save(AssetPath.Project("Scenes/sample.iscene"), captured));
+        SceneAsset byPath = AssetManager.Load<SceneAsset>(AssetPath.Project("Scenes/sample.iscene"));
         SceneAsset byId = AssetManager.Load<SceneAsset>(byPath.identity.persistentId);
         GameScene first = byPath.Instantiate();
         GameScene second = byPath.Instantiate();
@@ -82,8 +82,8 @@ public sealed class EngineAssetIntegrationTests : IDisposable
         sourceRoot.AddComponent<EngineObjectReferenceComponent>().targetObject = sourceChild;
         PrefabAsset captured = PrefabAsset.Capture(sourceRoot);
 
-        Assert.True(AssetManager.Save("Prefabs/sample.iprefab", captured));
-        PrefabAsset prefab = AssetManager.Load<PrefabAsset>("Prefabs/sample.iprefab");
+        Assert.True(AssetManager.Save(AssetPath.Project("Prefabs/sample.iprefab"), captured));
+        PrefabAsset prefab = AssetManager.Load<PrefabAsset>(AssetPath.Project("Prefabs/sample.iprefab"));
         var targetScene = new GameScene("Target");
         GameObject first = prefab.Instantiate(targetScene);
         GameObject second = prefab.Instantiate(targetScene);
@@ -109,16 +109,16 @@ public sealed class EngineAssetIntegrationTests : IDisposable
     public void SceneAsset_DirectAssetReferenceUsesCanonicalInstanceAndDependencyMetadata()
     {
         WriteAsset("Text/shared.txt", "shared");
-        Assert.True(AssetManager.Import("Text/shared.txt"));
-        TextAsset text = AssetManager.Load<TextAsset>("Text/shared.txt");
+        Assert.True(AssetManager.Import(AssetPath.Project("Text/shared.txt")));
+        TextAsset text = AssetManager.Load<TextAsset>(AssetPath.Project("Text/shared.txt"));
         var sourceScene = new GameScene("Assets");
         sourceScene.CreateObject("Object")
             .AddComponent<EngineAssetReferenceComponent>()
             .asset = text;
         SceneAsset captured = SceneAsset.Capture(sourceScene);
 
-        Assert.True(AssetManager.Save("Scenes/assets.iscene", captured));
-        SceneAsset sceneAsset = AssetManager.Load<SceneAsset>("Scenes/assets.iscene");
+        Assert.True(AssetManager.Save(AssetPath.Project("Scenes/assets.iscene"), captured));
+        SceneAsset sceneAsset = AssetManager.Load<SceneAsset>(AssetPath.Project("Scenes/assets.iscene"));
         AssetDependency dependency = Assert.Single(AssetManager.GetDependencies(sceneAsset));
         GameScene instance = sceneAsset.Instantiate();
         TextAsset restored = Assert.Single(instance.GetObjects())
@@ -141,8 +141,8 @@ public sealed class EngineAssetIntegrationTests : IDisposable
         sourceRoot.AddComponent<EngineObjectReferenceComponent>().value = 10;
         sourceScene.CreateObject("Source Child").transform.SetParent(sourceRoot.transform);
         PrefabAsset captured = PrefabAsset.Capture(sourceRoot);
-        Assert.True(AssetManager.Save("Prefabs/overrides.iprefab", captured));
-        PrefabAsset prefab = AssetManager.Load<PrefabAsset>("Prefabs/overrides.iprefab");
+        Assert.True(AssetManager.Save(AssetPath.Project("Prefabs/overrides.iprefab"), captured));
+        PrefabAsset prefab = AssetManager.Load<PrefabAsset>(AssetPath.Project("Prefabs/overrides.iprefab"));
         var targetScene = new GameScene("Target");
         GameObject instance = prefab.Instantiate(targetScene);
         instance.GetComponent<EngineObjectReferenceComponent>().value = 42;
@@ -200,8 +200,9 @@ public sealed class EngineAssetIntegrationTests : IDisposable
         sourceScene.CreateObject("Child").transform.SetParent(sourceRoot.transform);
         PrefabAsset captured = PrefabAsset.Capture(sourceRoot);
         const string relativePath = "Prefabs/missing.iprefab";
-        Assert.True(AssetManager.Save(relativePath, captured));
-        PrefabAsset prefab = AssetManager.Load<PrefabAsset>(relativePath);
+        AssetPath assetPath = AssetPath.Project(relativePath);
+        Assert.True(AssetManager.Save(assetPath, captured));
+        PrefabAsset prefab = AssetManager.Load<PrefabAsset>(assetPath);
         var targetScene = new GameScene("Target");
         _ = prefab.Instantiate(targetScene);
         byte[] sceneBytes = SerializationManager.Serialize(targetScene);
@@ -252,7 +253,7 @@ public sealed class EngineAssetIntegrationTests : IDisposable
         var source = new GameScene("Original Name");
         source.CreateObject("Object");
         SceneAsset asset = SceneAsset.Capture(source);
-        Assert.True(AssetManager.Save("Scenes/old.iscene", asset));
+        Assert.True(AssetManager.Save(AssetPath.Project("Scenes/old.iscene"), asset));
         Guid id = asset.identity.persistentId;
         string oldPath = Path.Combine(m_root, "Assets", "Scenes", "old.iscene");
         string newPath = Path.Combine(m_root, "Assets", "Scenes", "renamed.iscene");
@@ -277,7 +278,7 @@ public sealed class EngineAssetIntegrationTests : IDisposable
         GameObject root = sourceScene.CreateObject("Old Root");
         sourceScene.CreateObject("Child").transform.SetParent(root.transform);
         PrefabAsset asset = PrefabAsset.Capture(root);
-        Assert.True(AssetManager.Save("Prefabs/old.iprefab", asset));
+        Assert.True(AssetManager.Save(AssetPath.Project("Prefabs/old.iprefab"), asset));
         Guid id = asset.identity.persistentId;
         string oldPath = Path.Combine(m_root, "Assets", "Prefabs", "old.iprefab");
         string newPath = Path.Combine(m_root, "Assets", "Prefabs", "renamed.iprefab");
@@ -302,8 +303,8 @@ public sealed class EngineAssetIntegrationTests : IDisposable
         var source = new GameScene("Source");
         source.CreateObject("Object");
         SceneAsset captured = SceneAsset.Capture(source);
-        Assert.True(AssetManager.Save("Scenes/retained.iscene", captured));
-        SceneAsset loaded = AssetManager.Load<SceneAsset>("Scenes/retained.iscene");
+        Assert.True(AssetManager.Save(AssetPath.Project("Scenes/retained.iscene"), captured));
+        SceneAsset loaded = AssetManager.Load<SceneAsset>(AssetPath.Project("Scenes/retained.iscene"));
         GameScene first = loaded.Instantiate();
         GameScene second = loaded.Instantiate();
         DestroyScene(source);
@@ -318,8 +319,8 @@ public sealed class EngineAssetIntegrationTests : IDisposable
         var source = new GameScene("Source");
         GameObject root = source.CreateObject("Root");
         PrefabAsset captured = PrefabAsset.Capture(root);
-        Assert.True(AssetManager.Save("Prefabs/retained.iprefab", captured));
-        PrefabAsset loaded = AssetManager.Load<PrefabAsset>("Prefabs/retained.iprefab");
+        Assert.True(AssetManager.Save(AssetPath.Project("Prefabs/retained.iprefab"), captured));
+        PrefabAsset loaded = AssetManager.Load<PrefabAsset>(AssetPath.Project("Prefabs/retained.iprefab"));
         var target = new GameScene("Target");
         _ = loaded.Instantiate(target);
         DestroyScene(source);

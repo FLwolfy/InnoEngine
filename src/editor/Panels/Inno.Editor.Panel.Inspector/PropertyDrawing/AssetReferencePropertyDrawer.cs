@@ -53,7 +53,7 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
                 ? $"Missing {missing.GetType().Name} [{persistentId}]"
             : selected is null
                 ? $"Missing ({persistentId})"
-                : selected.relativePath;
+                : selected.assetPath.ToString();
 
         bool open = NativeImGui.BeginCombo($"##{context.path}", preview);
         Vector2 dropMinimum = NativeImGui.GetItemRectMin();
@@ -98,12 +98,12 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
         {
             AssetCandidate candidate = candidates[i];
             if (!string.IsNullOrWhiteSpace(search) &&
-                candidate.relativePath.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0)
+                candidate.assetPath.ToString().IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0)
             {
                 continue;
             }
 
-            if (NativeImGui.Selectable(candidate.relativePath, candidate.persistentId == persistentId))
+            if (NativeImGui.Selectable(candidate.assetPath.ToString(), candidate.persistentId == persistentId))
             {
                 AssignAsset(context, assetType, candidate);
             }
@@ -124,21 +124,24 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
             for (int i = 0; i < entries.Count; i++)
             {
                 AssetFileEntry entry = entries[i];
-                if (!AssetManager.TryGetAssetType(entry.relativePath, out Type? assetType) ||
+                if (!AssetManager.TryGetAssetType(entry.assetPath, out Type? assetType) ||
                     assetType is null ||
                     !targetAssetType.IsAssignableFrom(assetType))
                 {
                     continue;
                 }
 
-                if (AssetManager.TryGetPersistentId(entry.relativePath, out Guid persistentId))
+                if (AssetManager.TryGetPersistentId(entry.assetPath, out Guid persistentId))
                 {
-                    candidates.Add(new AssetCandidate(entry.relativePath, persistentId));
+                    candidates.Add(new AssetCandidate(entry.assetPath, persistentId));
                 }
             }
 
             candidates.Sort(static (left, right) =>
-                string.Compare(left.relativePath, right.relativePath, StringComparison.OrdinalIgnoreCase));
+                string.Compare(
+                    left.assetPath.ToString(),
+                    right.assetPath.ToString(),
+                    StringComparison.OrdinalIgnoreCase));
             AssetCandidate[] result = candidates.ToArray();
             s_candidatesByType.Add(targetAssetType, new CandidatesBox(result));
             return result;
@@ -155,11 +158,11 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
     {
         if (ReadPersistentId(context.GetValue()) == candidate.persistentId)
             return;
-        object asset = LoadAsset(assetType, candidate.relativePath);
+        object asset = LoadAsset(assetType, candidate.assetPath);
         context.SetValue(asset);
     }
 
-    private static object LoadAsset(Type assetType, string relativePath)
+    private static object LoadAsset(Type assetType, AssetPath assetPath)
     {
         MethodInfo method = Array.Find(
             typeof(AssetManager).GetMethods(BindingFlags.Public | BindingFlags.Static),
@@ -167,11 +170,11 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
                 candidate.Name == nameof(AssetManager.Load) &&
                 candidate.IsGenericMethodDefinition &&
                 candidate.GetParameters().Length == 1 &&
-                candidate.GetParameters()[0].ParameterType == typeof(string))
+                candidate.GetParameters()[0].ParameterType == typeof(AssetPath))
             ?? throw new MissingMethodException(nameof(AssetManager), nameof(AssetManager.Load));
-        return method.MakeGenericMethod(assetType).Invoke(null, [relativePath])!;
+        return method.MakeGenericMethod(assetType).Invoke(null, [assetPath])!;
     }
 
-    private sealed record AssetCandidate(string relativePath, Guid persistentId);
+    private sealed record AssetCandidate(AssetPath assetPath, Guid persistentId);
     private sealed record CandidatesBox(AssetCandidate[] candidates);
 }

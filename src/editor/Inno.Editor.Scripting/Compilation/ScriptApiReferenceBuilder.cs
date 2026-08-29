@@ -16,15 +16,29 @@ namespace Inno.Editor.Scripting;
 
 internal sealed record ScriptApiReferenceSet(
     IReadOnlyList<string> runtimeReferencePaths,
-    IReadOnlyList<string> ideReferencePaths);
+    IReadOnlyList<string> ideReferencePaths,
+    string contractFingerprint,
+    string cacheDirectory);
 
 internal static class ScriptApiReferenceBuilder
 {
+    private static readonly object S_BUILD_SYNC = new();
+
     internal static ScriptApiReferenceSet Build(
         ScriptManagerOptions options,
         ScriptApiProfile profile,
         ScriptApiProfile? baseProfile = null,
         ScriptApiReferenceSet? baseReferences = null)
+    {
+        lock (S_BUILD_SYNC)
+            return BuildLocked(options, profile, baseProfile, baseReferences);
+    }
+
+    private static ScriptApiReferenceSet BuildLocked(
+        ScriptManagerOptions options,
+        ScriptApiProfile profile,
+        ScriptApiProfile? baseProfile,
+        ScriptApiReferenceSet? baseReferences)
     {
         string fingerprint = CreateFingerprint(profile);
         string directory = Path.Combine(options.scriptApiDirectory, profile.name, fingerprint);
@@ -84,7 +98,14 @@ internal static class ScriptApiReferenceBuilder
                 profile.typeMappings);
             ideReferencePaths.Add(referencePath);
         }
-        return new ScriptApiReferenceSet(runtimeReferencePaths, ideReferencePaths);
+        ScriptApiArtifactCache.Collect(
+            options.scriptApiDirectory,
+            new[] { directory, baseReferences?.cacheDirectory });
+        return new ScriptApiReferenceSet(
+            runtimeReferencePaths,
+            ideReferencePaths,
+            fingerprint,
+            directory);
     }
 
     private static void EmitImplementationReferenceAssembly(
@@ -236,31 +257,53 @@ internal static class ScriptApiReferenceBuilder
 
     private static string CreateFingerprint(ScriptApiProfile profile)
     {
-        var builder = new StringBuilder(
-                typeof(ScriptApiReferenceBuilder).Assembly.ManifestModule.ModuleVersionId.ToString("D"))
+        ScriptApiTypeExport[] allExports = profile.exports
+            .SelectMany(static export => export.exports)
+            .ToArray();
+        HashSet<Type> exportedTypes = allExports
+            .Select(static export => export.type)
+            .ToHashSet();
+        var builder = new StringBuilder("Inno.ScriptApi.PublicContract")
             .Append('|')
             .Append(profile.name);
-        foreach (ScriptApiAssembly export in profile.exports)
+        foreach (ScriptApiAssembly export in profile.exports
+                     .OrderBy(static value => value.assembly.GetName().Name, StringComparer.Ordinal))
         {
-            builder.Append('|').Append(export.assembly.ManifestModule.ModuleVersionId.ToString("D"));
-            foreach (ScriptApiTypeExport typeExport in export.exports)
-            {
-                builder.Append('|')
-                    .Append(typeExport.type.AssemblyQualifiedName)
-                    .Append('>')
-                    .Append(typeExport.name);
-            }
+            builder.Append("|implementation:")
+                .Append(export.assembly.GetName().Name)
+                .Append('|')
+                .Append(ScriptApiStubSourceBuilder.BuildImplementation(export, exportedTypes));
         }
-        foreach (string apiNamespace in profile.apiNamespaces)
+        foreach (string apiNamespace in profile.apiNamespaces.OrderBy(static value => value, StringComparer.Ordinal))
             builder.Append('|').Append(apiNamespace);
-        foreach (ScriptApiNamespaceMapping mapping in profile.namespaceMappings)
+        foreach (ScriptApiNamespaceMapping mapping in profile.namespaceMappings
+                     .OrderBy(static value => value.apiNamespace, StringComparer.Ordinal)
+                     .ThenBy(static value => value.implementationNamespace, StringComparer.Ordinal))
         {
             builder.Append('|')
                 .Append(mapping.apiNamespace)
                 .Append('>')
                 .Append(mapping.implementationNamespace);
         }
-        foreach (ScriptApiAttachableType attachableType in profile.attachableTypes)
+        foreach (ScriptApiTypeMapping mapping in profile.typeMappings
+                     .OrderBy(static value => value.apiNamespace, StringComparer.Ordinal)
+                     .ThenBy(static value => value.apiName, StringComparer.Ordinal)
+                     .ThenBy(static value => value.implementationNamespace, StringComparer.Ordinal)
+                     .ThenBy(static value => value.implementationName, StringComparer.Ordinal))
+        {
+            builder.Append('|')
+                .Append(mapping.apiNamespace)
+                .Append('.')
+                .Append(mapping.apiName)
+                .Append('>')
+                .Append(mapping.implementationNamespace)
+                .Append('.')
+                .Append(mapping.implementationName)
+                .Append('`')
+                .Append(mapping.arity);
+        }
+        foreach (ScriptApiAttachableType attachableType in profile.attachableTypes
+                     .OrderBy(static value => value.implementationName, StringComparer.Ordinal))
         {
             builder.Append('|')
                 .Append(attachableType.implementationName)
@@ -268,7 +311,7 @@ internal static class ScriptApiReferenceBuilder
                 .Append(attachableType.kind);
         }
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
-        return Convert.ToHexString(hash.AsSpan(0, 12)).ToLowerInvariant();
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     private static string[] GetImplementationPaths(ScriptApiProfile profile)

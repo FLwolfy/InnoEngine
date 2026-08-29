@@ -106,5 +106,5 @@ internal sealed class RenameAssetCommand(AssetEditorModule assets) :
     private bool TryGetAssetContext(
         EditorActionContext<AssetFileEntry> context,
         out AssetEditorContext? assetContext)
-        => assets.TryCreateContext(context.editor, context.target.relativePath, out assetContext);
+        => assets.TryCreateContext(context.editor, context.target.assetPath.ToString(), out assetContext);
 }

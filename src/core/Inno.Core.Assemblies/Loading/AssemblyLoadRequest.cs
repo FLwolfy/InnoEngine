@@ -24,6 +24,15 @@ public sealed class AssemblyLoadRequest
     public IReadOnlyList<string> preloadAssemblyPaths { get; init; } = Array.Empty<string>();
 
     /// <summary>
+    /// Gets stable module names whose exported assemblies may satisfy this module's managed dependencies.
+    /// </summary>
+    /// <remarks>
+    /// Dependencies are explicit for Plugin modules. Scripting modules may also declare them to make
+    /// reload closure and load ordering independent from process-wide discovery.
+    /// </remarks>
+    public IReadOnlyList<string> upstreamModuleNames { get; init; } = Array.Empty<string>();
+
+    /// <summary>
     /// Gets or sets whether the module load context supports cooperative unloading.
     /// </summary>
     public bool collectible { get; init; } = true;

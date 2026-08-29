@@ -22,9 +22,9 @@ internal sealed class CreateAssetFolderCommand : EditorAction<string>
         string parent = Normalize(context.target);
         string candidate = Combine(parent, "New Folder");
         int suffix = 1;
-        while (AssetManager.TryGetFileSystemEntry(candidate, out _))
+        while (AssetManager.TryGetFileSystemEntry(AssetPath.Parse(candidate), out _))
             candidate = Combine(parent, $"New Folder {suffix++}");
-        AssetManager.CreateDirectory(candidate);
+        AssetManager.CreateDirectory(AssetPath.Parse(candidate));
         var data = new AssetHistoryData(
             AssetHistoryOperationKind.CreateDirectory,
             candidate,
@@ -43,7 +43,7 @@ internal sealed class CreateAssetFolderCommand : EditorAction<string>
         {
             try
             {
-                AssetManager.Delete(candidate);
+                AssetManager.Delete(AssetPath.Parse(candidate));
             }
             catch (Exception rollbackException)
             {
@@ -54,7 +54,7 @@ internal sealed class CreateAssetFolderCommand : EditorAction<string>
             }
             throw;
         }
-        if (!AssetManager.TryGetFileSystemEntry(candidate, out AssetFileEntry target))
+        if (!AssetManager.TryGetFileSystemEntry(AssetPath.Parse(candidate), out AssetFileEntry target))
             return;
         EditorInteraction interaction = context.interactions.For(FileBrowserInteractionIds.C_AREA, target);
         _ = interaction.Select();
@@ -77,6 +77,7 @@ internal sealed class CreateAssetFolderCommand : EditorAction<string>
         if (mount is null || mount.isReadOnly)
             return false;
         return string.IsNullOrEmpty(AssetPath.Parse(normalized).localPath) ||
-               AssetManager.TryGetFileSystemEntry(normalized, out AssetFileEntry entry) && entry.isDirectory;
+               AssetManager.TryGetFileSystemEntry(AssetPath.Parse(normalized), out AssetFileEntry entry)
+               && entry.isDirectory;
     }
 }

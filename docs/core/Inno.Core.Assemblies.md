@@ -60,7 +60,8 @@ Shadow generation 是可再生缓存，不是序列化状态。collectible ALC �
 | `Load(AssemblyLoadRequest)` | shadow copy 并激活一个新 managed module，返回稳定 handle。 |
 | `Register(string, IReadOnlyList<Assembly>)` | 注册调用者已经加载的 assembly；Manager 不拥有也不卸载它们。 |
 | `BeginReload(handle, request)` | 加载并验证候选代际，但尚不发布；返回 reload session。 |
-| `BeginReload(requests)` | 按依赖顺序 stage 一个完整 reload closure，并用一个 session 原子切换。 |
+| `BeginReload(requests)` | 按显式模块依赖顺序 stage 一个 reload closure，并用一个 session 原子切换。 |
+| `BeginReload(requests, removedModuleNames)` | 在同一候选 Catalog 中原子替换与移除模块；缺失反向依赖 closure 时拒绝。 |
 | `Unload(handle)` | 从活动 catalog 移除模块，并对 owned collectible ALC 发起卸载。 |
 | `Unload(handles)` | 用一个 catalog transaction 移除闭包，并按 Editor → Runtime → Plugin 请求卸载。 |
 | `Refresh()` | 仅在 Host AssemblyLoad 令 catalog dirty 时刷新；无变化时不重建。 |
@@ -85,15 +86,16 @@ Shadow generation 是可再生缓存，不是序列化状态。collectible ALC �
 | `required moduleName` | 跨代际稳定的逻辑名称；Reload 时必须与旧模块一致。 |
 | `required mainAssemblyPath` | 主 DLL 路径。 |
 | `preloadAssemblyPaths` | 在同一 ALC 中预加载的 DLL 列表。 |
+| `upstreamModuleNames` | 可满足本模块 AssemblyRef 的稳定上游模块名；也用于拓扑排序和反向依赖 closure。 |
 | `collectible` | 是否允许协作式 unload，默认 `true`。 |
 | `domain` | `InnoPlugin` 或 `InnoScripting`；`InnoInternal` 不能进入 collectible module。 |
 | `scope` | 模块的 `Runtime`/`Editor` 依赖边界。 |
-| `assemblyScopes` | 统一 Plugin ALC 内按 simple name 声明每个 DLL scope；未列出项使用 `scope`。 |
+| `assemblyScopes` | 同一模块 ALC 内按 simple name 声明每个 DLL scope；未列出项使用 `scope`。 |
 
 ### 诊断类型
 
 - `AssemblyModuleHandle(Guid id)`：不持有 Assembly/ALC 的稳定句柄。
-- `AssemblyModuleInfo`：record，公开 `handle`、`moduleName`、`generation`、`collectible`、`externallyOwned`、`domain`、`scope`、`status`、`assemblyNames`。
+- `AssemblyModuleInfo`：record，公开 `handle`、`moduleName`、`generation`、`collectible`、`externallyOwned`、`domain`、`scope`、`status`、`assemblyNames` 与 `upstreamModuleNames`。
 - `AssemblyModuleStatus.Active`：当前公开状态。
 - `AssemblyUnloadMonitor.status` / `isCompleted`：通过弱引用观察旧 ALC 是否已经不可达。
 - `AssemblyUnloadStatus.Pending` / `Completed`：卸载仍被引用或已经完成。
@@ -147,9 +149,9 @@ sequenceDiagram
 
 `AssemblyReloadSession.Dispose()` 会对未完成 session 自动 rollback。`Complete()` 后 `AssemblyReloadContext` 会释放强引用，不能继续访问。
 
-多模块 session 固定按 Plugin → Runtime Scripts → Editor Scripts stage；下游 `ModuleLoadContext` 显式复用同一事务上游 candidate 中的精确 `Assembly` 实例，不复制并二次加载 Plugin/Runtime DLL。发布时一次切换 module map、Assembly catalog、TypeCache 与全部 Registry candidate；任一 stage、participant、Scene 或 extension 激活失败都恢复完整 previous 集合并逆序卸载 candidate。`Complete` 仅释放 previous snapshot 并按 Editor → Runtime → Plugin 请求协作式卸载，不执行可失败的发现或刷新。
+多模块 session 使用 [Core Storage](Inno.Core.Storage.md) 的 `DependencyGraph<string>` 对 `upstreamModuleNames` 做确定性拓扑排序；Project Scripting 自然位于其 Plugin 依赖之后，Editor Scripts 位于 Runtime Scripts 之后。下游 `ModuleLoadContext` 显式复用同一事务上游 candidate 中的精确 `Assembly` 实例，不复制并二次加载依赖 DLL。发布时一次切换 module map、Assembly catalog、TypeCache 与全部 Registry candidate；任一 stage、participant、Scene 或 extension 激活失败都恢复完整 previous 集合并逆序卸载 candidate。`Complete` 仅释放 previous snapshot 并按反向拓扑请求协作式卸载，不执行可失败的发现或刷新。
 
-依赖闭包是强制约束：Runtime Scripts reload 必须包含 Editor Scripts；Plugin reload/unload 必须包含两个 Scripting scope。只允许一个统一 Plugin module、一个 Runtime Scripting module 和一个 Editor Scripting module。每个事务会在加载前建立完整 simple-name/domain/scope 图，并在加载后校验实际 AssemblyRef；重复 simple name、Runtime → Editor、Plugin → Scripting、模块内 cycle、未随模块提供的自定义依赖以及非 `InnoInternal` 的 Default ALC 共享依赖都会在发布前拒绝。只有受信任的平台程序集与具有当前 `InnoInternal` metadata 的 Host contract 可以从 Default ALC 共享。
+依赖闭包是强制约束：Runtime Scripts reload 必须包含 Editor Scripts；某个 Plugin reload/unload 必须包含依赖它的 Plugin 与 Project Scripting。Plugin module 数量不封闭，通常每个稳定 Plugin ID 对应独立 collectible ALC；Runtime Scripting 和 Editor Scripting 各保持一个模块。每个事务会在加载前建立完整 module/simple-name/domain/scope 图，并在加载后校验实际 AssemblyRef；重复 simple name、Runtime → Editor、Plugin → Scripting、模块依赖 cycle、未声明的自定义依赖以及非 `InnoInternal` 的 Default ALC 共享依赖都会在发布前拒绝。只有受信任的平台程序集与具有当前 `InnoInternal` metadata 的 Host contract 可以从 Default ALC 共享。
 
 ### AssemblyReloadContext
 
@@ -193,7 +195,7 @@ AssemblyScope scope = typeof(MyType).Assembly.GetInnoAssemblyScope();
 
 两个查询使用 `ConditionalWeakTable<Assembly, ...>`，不会因分类缓存固定可卸载程序集。旧 `AssemblyGroup`、旧 metadata key 和兼容 reader 已删除。
 
-物理 ALC 拓扑固定为 Default/Internal、统一 Plugin、Runtime Scripts、Editor Scripts。依赖只能沿 Internal ← Plugin ← Runtime Scripts ← Editor Scripts 方向；Editor Scripts 还可访问 editor-scope Plugin/Internal API。ALC 只提供卸载隔离，不是安全沙箱。
+物理 ALC 拓扑为 Default/Internal、多个按显式 DAG 连接的 `Plugin.<id>`、Runtime Scripts、Editor Scripts。依赖只能沿 Internal ← dependency Plugin ← dependent Plugin ← Runtime Scripts ← Editor Scripts 方向；Editor Scripts 还可访问 editor-scope Plugin/Internal API。ALC 只提供卸载和更新粒度，不是安全沙箱。
 
 ## 常见误区
 

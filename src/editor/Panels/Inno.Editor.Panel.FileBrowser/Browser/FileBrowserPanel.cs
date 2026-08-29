@@ -808,8 +808,8 @@ internal sealed class FileBrowserPanel : EditorPanel
         _ = NativeImGui.TableSetColumnIndex(0);
         string icon = m_assets.GetIcon(entry);
         string name = entry.nameWithoutExtension;
-        bool selected = string.Equals(m_assets.browser.GetSelectedPath(context), entry.relativePath, StringComparison.Ordinal);
-        bool editing = m_rename.IsEditing(context, entry.relativePath, FileBrowserPresentation.List);
+        bool selected = string.Equals(m_assets.browser.GetSelectedPath(context), entry.assetPath.ToString(), StringComparison.Ordinal);
+        bool editing = m_rename.IsEditing(context, entry.assetPath.ToString(), FileBrowserPresentation.List);
         ImGuiTablePtr table = ImGuiP.GetCurrentTable();
         float rowMinimumY = table.RowPosY1;
         float rowMaximumY = table.RowPosY2;
@@ -824,7 +824,7 @@ internal sealed class FileBrowserPanel : EditorPanel
             ImGuiSelectableFlags.AllowDoubleClick |
             ImGuiSelectableFlags.AllowOverlap;
         bool activated = NativeImGui.Selectable(
-            $"##entry_{entry.relativePath}",
+            $"##entry_{entry.assetPath.ToString()}",
             selected,
             selectableFlags);
         bool itemHovered = NativeImGui.IsItemHovered();
@@ -843,8 +843,8 @@ internal sealed class FileBrowserPanel : EditorPanel
         {
             m_contextMenu.DrawEntry(
                 context,
-                $"##asset_context_{entry.relativePath}",
-                entry.relativePath,
+                $"##asset_context_{entry.assetPath.ToString()}",
+                entry.assetPath.ToString(),
                 FileBrowserPresentation.List);
         }
         if (selected || itemHovered)
@@ -860,7 +860,7 @@ internal sealed class FileBrowserPanel : EditorPanel
         {
             m_dragDrop.DrawAssetSource(context, entry);
             if (entry.isDirectory && !entry.isReadOnly)
-                m_dragDrop.DrawDirectoryTarget(context, entry.relativePath);
+                m_dragDrop.DrawDirectoryTarget(context, entry.assetPath.ToString());
         }
 
         NativeImGui.SameLine(iconTextPos.X - NativeImGui.GetWindowPos().X, 0f);
@@ -872,8 +872,8 @@ internal sealed class FileBrowserPanel : EditorPanel
             NativeImGui.SetCursorScreenPos(new Vector2(renameCursor.X, rowMinimumY));
             m_rename.Draw(
                 context,
-                $"list_{entry.relativePath}",
-                entry.relativePath,
+                $"list_{entry.assetPath.ToString()}",
+                entry.assetPath.ToString(),
                 FileBrowserPresentation.List,
                 NativeImGui.GetContentRegionAvail().X,
                 MathF.Max(1f, rowMaximumY - rowMinimumY));
@@ -924,11 +924,11 @@ internal sealed class FileBrowserPanel : EditorPanel
         float cellSize = GetGridCellSize();
         string icon = m_assets.GetIcon(entry);
         string name = entry.name;
-        bool selected = string.Equals(m_assets.browser.GetSelectedPath(context), entry.relativePath, StringComparison.Ordinal);
-        bool editing = m_rename.IsEditing(context, entry.relativePath, FileBrowserPresentation.Grid);
+        bool selected = string.Equals(m_assets.browser.GetSelectedPath(context), entry.assetPath.ToString(), StringComparison.Ordinal);
+        bool editing = m_rename.IsEditing(context, entry.assetPath.ToString(), FileBrowserPresentation.Grid);
         Vector2 itemSize = new(cellSize - EditorWidget.style.assetGridCellPadding, cellSize - EditorWidget.style.assetGridCellPadding);
 
-        NativeImGui.PushID(entry.relativePath);
+        NativeImGui.PushID(entry.assetPath.ToString());
         NativeImGui.PushStyleColor(ImGuiCol.Header, EditorPalette.transparent);
         NativeImGui.PushStyleColor(ImGuiCol.HeaderHovered, EditorPalette.transparent);
         NativeImGui.PushStyleColor(ImGuiCol.HeaderActive, EditorPalette.transparent);
@@ -964,11 +964,11 @@ internal sealed class FileBrowserPanel : EditorPanel
                 m_contextMenu.DrawEntry(
                     context,
                     "##asset_grid_context",
-                    entry.relativePath,
+                    entry.assetPath.ToString(),
                     FileBrowserPresentation.Grid);
             }
             if (entry.isDirectory && !entry.isReadOnly)
-                m_dragDrop.DrawDirectoryTarget(context, entry.relativePath);
+                m_dragDrop.DrawDirectoryTarget(context, entry.assetPath.ToString());
         }
         DrawGridItemVisual(
             icon,
@@ -1001,8 +1001,8 @@ internal sealed class FileBrowserPanel : EditorPanel
                 y));
             m_rename.Draw(
                 context,
-                $"grid_{entry.relativePath}",
-                entry.relativePath,
+                $"grid_{entry.assetPath.ToString()}",
+                entry.assetPath.ToString(),
                 FileBrowserPresentation.Grid,
                 width,
                 lineHeight);
@@ -1026,8 +1026,8 @@ internal sealed class FileBrowserPanel : EditorPanel
             return;
         }
 
-        m_assets.browser.Select(context, entry.relativePath);
-        m_tree.RequestRevealPath(entry.relativePath);
+        m_assets.browser.Select(context, entry.assetPath.ToString());
+        m_tree.RequestRevealPath(entry.assetPath.ToString());
     }
 
     private static void DrawGridItemVisual(

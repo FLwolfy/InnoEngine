@@ -26,7 +26,7 @@ sample.rendering.zip
 ## 安装与激活
 
 1. `PluginArchiveService` 扫描 ZIP，并验证路径逃逸、绝对路径、符号链接、重复/大小写/Unicode 规范化冲突、Windows 保留名、entry 数量、压缩比和大小限制。
-2. 验证 `Plugin.inno`、依赖拓扑、每个可导入源的 `.imeta`、Persistent ID 冲突和禁止的 DLL/原生库。
+2. 使用 Core Storage 的通用 DependencyGraph 验证 `Plugin.inno` 依赖拓扑、环与反向阻塞链，并验证每个可导入源的 `.imeta`、Persistent ID 冲突和禁止的 DLL/原生库。
 3. 安全解压到内容 hash 目录，建立 `AssetSourceMount(pluginId, ..., isReadOnly: true)`。
 4. 纯资产 Plugin 可进入候选；带 `.cs` 的 Plugin 必须先按稳定 Plugin ID 信任。
 5. `PluginManager` 用隔离 `AssetSourceMountTransaction` 构建候选 Asset Catalog；脚本编译通过 `compilationAssets` / `compilationPlugins` 读取候选，但 active Catalog、普通 Asset API、File Browser 与 Settings 仍保持 last-good。

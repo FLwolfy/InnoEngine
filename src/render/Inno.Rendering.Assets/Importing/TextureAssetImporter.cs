@@ -28,7 +28,7 @@ internal sealed partial class TextureAssetImporter : AssetImporter<TextureAsset>
             ".jpg" or ".jpeg" => ReadJpegSize(context.sourceBytes.Span),
             ".tga" => ReadTgaSize(context.sourceBytes.Span),
             ".hdr" => ReadHdrSize(context.ReadUtf8Text()),
-            _ => throw new RenderingAssetFormatException(context.relativePath, "Unsupported texture container.")
+            _ => throw new RenderingAssetFormatException(context.assetPath.ToString(), "Unsupported texture container.")
         };
         var asset = new TextureAsset
         {

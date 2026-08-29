@@ -22,7 +22,7 @@ internal sealed class CreatePluginDefinitionCommand : EditorAction<string>
         string parent = AssetPath.Parse(context.target).localPath;
         string candidate = Combine(parent, "New Plugin.iplugin");
         int suffix = 1;
-        while (AssetManager.TryGetFileSystemEntry(candidate, out _))
+        while (AssetManager.TryGetFileSystemEntry(AssetPath.Parse(candidate), out _))
             candidate = Combine(parent, $"New Plugin {suffix++}.iplugin");
 
         var definition = new PluginDefinitionAsset
@@ -30,7 +30,7 @@ internal sealed class CreatePluginDefinitionCommand : EditorAction<string>
             pluginId = "new.plugin",
             displayName = "New Plugin"
         };
-        if (!AssetManager.Save(candidate, definition))
+        if (!AssetManager.Save(AssetPath.Parse(candidate), definition))
             throw new InvalidOperationException("No importer accepted the Plugin definition Asset.");
         byte[] archive = AssetSourceArchive.Capture(candidate, out bool isDirectory);
         var data = new AssetHistoryData(
@@ -49,10 +49,10 @@ internal sealed class CreatePluginDefinitionCommand : EditorAction<string>
         }
         catch
         {
-            AssetManager.Delete(candidate);
+            AssetManager.Delete(AssetPath.Parse(candidate));
             throw;
         }
-        if (AssetManager.TryGetFileSystemEntry(candidate, out AssetFileEntry created))
+        if (AssetManager.TryGetFileSystemEntry(AssetPath.Parse(candidate), out AssetFileEntry created))
             _ = context.interactions.For(FileBrowserInteractionIds.C_AREA, created).Select();
     }
 
@@ -63,7 +63,7 @@ internal sealed class CreatePluginDefinitionCommand : EditorAction<string>
         if (mount is null || mount.isReadOnly)
             return false;
         return string.IsNullOrEmpty(path.localPath) ||
-               AssetManager.TryGetFileSystemEntry(path.ToString(), out AssetFileEntry entry) && entry.isDirectory;
+               AssetManager.TryGetFileSystemEntry(path, out AssetFileEntry entry) && entry.isDirectory;
     }
 
     private static string Combine(string parent, string name)

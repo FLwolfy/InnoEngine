@@ -53,7 +53,8 @@ internal static class FileBrowserUtility
     }
 
     internal static bool IsDirectoryPath(string relativePath)
-        => AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry entry) && entry.isDirectory;
+        => AssetManager.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry entry)
+            && entry.isDirectory;
 
     internal static string GetDirectoryLabel(string relativePath)
     {

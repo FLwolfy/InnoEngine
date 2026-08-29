@@ -73,43 +73,43 @@ public sealed class AssetHistoryTests : IDisposable
         Assert.True(m_runtime.interactions
             .For("panel/asset.file-browser", string.Empty)
             .Execute("file-browser/create-folder"));
-        Assert.True(AssetManager.TryGetFileSystemEntry("New Folder", out AssetFileEntry created));
+        Assert.True(AssetManager.TryGetFileSystemEntry(AssetPath.Project("New Folder"), out AssetFileEntry created));
         Assert.True(created.isDirectory);
 
         Assert.True(m_runtime.interactions.history.Undo().succeeded);
-        Assert.False(AssetManager.TryGetFileSystemEntry("New Folder", out _));
+        Assert.False(AssetManager.TryGetFileSystemEntry(AssetPath.Project("New Folder"), out _));
         Assert.True(m_runtime.interactions.history.Redo().succeeded);
-        Assert.True(AssetManager.TryGetFileSystemEntry("New Folder", out _));
+        Assert.True(AssetManager.TryGetFileSystemEntry(AssetPath.Project("New Folder"), out _));
     }
 
     [Fact]
     public void DeleteFolderUndoRestoresIdentityMetadataAndEmptyDescendants()
     {
-        AssetManager.CreateDirectory("Folder");
-        AssetManager.CreateDirectory("Folder/Empty");
-        Assert.True(AssetManager.TryGetPersistentId("Folder", out Guid folderId));
-        Assert.True(AssetManager.TryGetFileSystemEntry("Folder", out AssetFileEntry folder));
+        AssetManager.CreateDirectory(AssetPath.Project("Folder"));
+        AssetManager.CreateDirectory(AssetPath.Project("Folder/Empty"));
+        Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("Folder"), out Guid folderId));
+        Assert.True(AssetManager.TryGetFileSystemEntry(AssetPath.Project("Folder"), out AssetFileEntry folder));
 
         Assert.True(m_runtime.interactions
             .For("panel/asset.file-browser", folder)
             .Execute("file-browser/delete"));
-        Assert.False(AssetManager.TryGetFileSystemEntry("Folder", out _));
+        Assert.False(AssetManager.TryGetFileSystemEntry(AssetPath.Project("Folder"), out _));
 
         Assert.True(m_runtime.interactions.history.Undo().succeeded);
-        Assert.True(AssetManager.TryGetFileSystemEntry("Folder/Empty", out AssetFileEntry restoredEmpty));
+        Assert.True(AssetManager.TryGetFileSystemEntry(AssetPath.Project("Folder/Empty"), out AssetFileEntry restoredEmpty));
         Assert.True(restoredEmpty.isDirectory);
-        Assert.True(AssetManager.TryGetPersistentId("Folder", out Guid restoredId));
+        Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("Folder"), out Guid restoredId));
         Assert.Equal(folderId, restoredId);
 
         Assert.True(m_runtime.interactions.history.Redo().succeeded);
-        Assert.False(AssetManager.TryGetFileSystemEntry("Folder", out _));
+        Assert.False(AssetManager.TryGetFileSystemEntry(AssetPath.Project("Folder"), out _));
     }
 
     [Fact]
     public void AssetDeleteHistorySurvivesATypeCatalogRefresh()
     {
-        AssetManager.CreateDirectory("ReloadSafe");
-        Assert.True(AssetManager.TryGetFileSystemEntry("ReloadSafe", out AssetFileEntry folder));
+        AssetManager.CreateDirectory(AssetPath.Project("ReloadSafe"));
+        Assert.True(AssetManager.TryGetFileSystemEntry(AssetPath.Project("ReloadSafe"), out AssetFileEntry folder));
         Assert.True(m_runtime.interactions
             .For("panel/asset.file-browser", folder)
             .Execute("file-browser/delete"));
@@ -118,18 +118,18 @@ public sealed class AssetHistoryTests : IDisposable
         _ = m_runtime.panelCount;
 
         Assert.True(m_runtime.interactions.history.Undo().succeeded);
-        Assert.True(AssetManager.TryGetFileSystemEntry("ReloadSafe", out _));
+        Assert.True(AssetManager.TryGetFileSystemEntry(AssetPath.Project("ReloadSafe"), out _));
     }
 
     [Fact]
     public void FileBrowserDropMovesFilesAndFoldersWithUndoRedo()
     {
-        AssetManager.CreateDirectory("From");
-        AssetManager.CreateDirectory("From/Folder");
-        AssetManager.CreateDirectory("From/Folder/Child");
-        AssetManager.CreateDirectory("To");
-        Assert.True(AssetManager.Save("From/Value.txt", new TextAsset("value")));
-        Assert.True(AssetManager.TryGetInfo("From/Value.txt", out AssetInfo? file));
+        AssetManager.CreateDirectory(AssetPath.Project("From"));
+        AssetManager.CreateDirectory(AssetPath.Project("From/Folder"));
+        AssetManager.CreateDirectory(AssetPath.Project("From/Folder/Child"));
+        AssetManager.CreateDirectory(AssetPath.Project("To"));
+        Assert.True(AssetManager.Save(AssetPath.Project("From/Value.txt"), new TextAsset("value")));
+        Assert.True(AssetManager.TryGetInfo(AssetPath.Project("From/Value.txt"), out AssetInfo? file));
         Assert.NotNull(file);
 
         Guid fileToken = m_runtime.interactions
@@ -138,34 +138,34 @@ public sealed class AssetHistoryTests : IDisposable
         EditorInteraction destination = m_runtime.interactions.For("panel/asset.file-browser", "To");
         Assert.True(destination.QueryDrop(fileToken, EditorDropPlacement.Into).canDrop);
         Assert.True(destination.Drop(fileToken, EditorDropPlacement.Into).accepted);
-        Assert.True(AssetManager.TryGetFileSystemEntry("To/Value.txt", out _));
-        Assert.False(AssetManager.TryGetFileSystemEntry("From/Value.txt", out _));
+        Assert.True(AssetManager.TryGetFileSystemEntry(AssetPath.Project("To/Value.txt"), out _));
+        Assert.False(AssetManager.TryGetFileSystemEntry(AssetPath.Project("From/Value.txt"), out _));
 
         Assert.True(m_runtime.interactions.history.Undo().succeeded);
-        Assert.True(AssetManager.TryGetFileSystemEntry("From/Value.txt", out _));
+        Assert.True(AssetManager.TryGetFileSystemEntry(AssetPath.Project("From/Value.txt"), out _));
         Assert.True(m_runtime.interactions.history.Redo().succeeded);
-        Assert.True(AssetManager.TryGetFileSystemEntry("To/Value.txt", out _));
+        Assert.True(AssetManager.TryGetFileSystemEntry(AssetPath.Project("To/Value.txt"), out _));
 
-        Assert.True(AssetManager.TryGetFileSystemEntry("From/Folder", out AssetFileEntry folder));
+        Assert.True(AssetManager.TryGetFileSystemEntry(AssetPath.Project("From/Folder"), out AssetFileEntry folder));
         Guid folderToken = m_runtime.interactions
             .For("panel/asset.file-browser", folder)
             .BeginDrag(new EditorDragData(folder, "Folder"));
         Assert.True(destination.QueryDrop(folderToken, EditorDropPlacement.Into).canDrop);
         Assert.True(destination.Drop(folderToken, EditorDropPlacement.Into).accepted);
-        Assert.True(AssetManager.TryGetFileSystemEntry("To/Folder/Child", out _));
+        Assert.True(AssetManager.TryGetFileSystemEntry(AssetPath.Project("To/Folder/Child"), out _));
 
         Assert.True(m_runtime.interactions.history.Undo().succeeded);
-        Assert.True(AssetManager.TryGetFileSystemEntry("From/Folder/Child", out _));
+        Assert.True(AssetManager.TryGetFileSystemEntry(AssetPath.Project("From/Folder/Child"), out _));
     }
 
     [Fact]
     public void FileBrowserDropRejectsAFolderOwnDescendantAndNameCollisions()
     {
-        AssetManager.CreateDirectory("Source");
-        AssetManager.CreateDirectory("Source/Child");
-        AssetManager.CreateDirectory("Target");
-        AssetManager.CreateDirectory("Target/Source");
-        Assert.True(AssetManager.TryGetFileSystemEntry("Source", out AssetFileEntry source));
+        AssetManager.CreateDirectory(AssetPath.Project("Source"));
+        AssetManager.CreateDirectory(AssetPath.Project("Source/Child"));
+        AssetManager.CreateDirectory(AssetPath.Project("Target"));
+        AssetManager.CreateDirectory(AssetPath.Project("Target/Source"));
+        Assert.True(AssetManager.TryGetFileSystemEntry(AssetPath.Project("Source"), out AssetFileEntry source));
 
         Guid descendantToken = m_runtime.interactions
             .For("panel/asset.file-browser", source)

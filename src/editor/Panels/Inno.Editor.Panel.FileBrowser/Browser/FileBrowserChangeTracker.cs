@@ -36,10 +36,12 @@ internal sealed class FileBrowserChangeTracker(AssetEditorModule assets)
         if (context is null)
             return;
         string currentDirectory = FileBrowserUtility.NormalizePath(assets.browser.currentDirectory);
-        if (!AssetManager.TryGetFileSystemEntry(currentDirectory, out AssetFileEntry current) || !current.isDirectory)
+        if (!AssetManager.TryGetFileSystemEntry(AssetPath.Parse(currentDirectory), out AssetFileEntry current)
+            || !current.isDirectory)
             assets.browser.SetCurrentDirectory(string.Empty);
         string selectedPath = FileBrowserUtility.NormalizePath(assets.browser.GetSelectedPath(context));
-        if (!string.IsNullOrEmpty(selectedPath) && !AssetManager.TryGetFileSystemEntry(selectedPath, out _))
+        if (!string.IsNullOrEmpty(selectedPath)
+            && !AssetManager.TryGetFileSystemEntry(AssetPath.Parse(selectedPath), out _))
             assets.browser.Select(context, null);
     }
 
@@ -53,9 +55,12 @@ internal sealed class FileBrowserChangeTracker(AssetEditorModule assets)
         {
             AssetChange change = changes.changes[i];
             if (change.kind == AssetChangeKind.Moved)
-                ApplyMove(context, change.oldRelativePath, change.relativePath);
+                ApplyMove(
+                    context,
+                    change.previousAssetPath?.ToString() ?? string.Empty,
+                    change.assetPath.ToString());
             else if (change.kind is AssetChangeKind.Missing or AssetChangeKind.Removed)
-                ApplyRemoval(context, change.relativePath);
+                ApplyRemoval(context, change.assetPath.ToString());
         }
     }
 
@@ -103,11 +108,12 @@ internal sealed class FileBrowserChangeTracker(AssetEditorModule assets)
                    fallback,
                    FileBrowserUtility.GetParentDirectory(fallback),
                    StringComparison.Ordinal) &&
-               (!AssetManager.TryGetFileSystemEntry(fallback, out var entry) || !entry.isDirectory))
+               (!AssetManager.TryGetFileSystemEntry(AssetPath.Parse(fallback), out var entry) || !entry.isDirectory))
         {
             fallback = FileBrowserUtility.GetParentDirectory(fallback);
         }
-        if (!AssetManager.TryGetFileSystemEntry(fallback, out AssetFileEntry available) || !available.isDirectory)
+        if (!AssetManager.TryGetFileSystemEntry(AssetPath.Parse(fallback), out AssetFileEntry available)
+            || !available.isDirectory)
             fallback = string.Empty;
         assets.browser.SetCurrentDirectory(fallback);
     }

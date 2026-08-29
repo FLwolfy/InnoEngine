@@ -120,12 +120,12 @@ public sealed class AssetFileSystem : IDisposable
     }
 
     /// <summary>Determines whether an indexed source entry exists.</summary>
-    /// <param name="relativePath">The source-relative path.</param>
+    /// <param name="path">The isolated source path.</param>
     /// <returns><see langword="true"/> when the entry exists.</returns>
-    public bool Exists(string relativePath)
+    public bool Exists(AssetPath path)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
-        string normalized = NormalizeRelativePath(relativePath);
+        string normalized = NormalizeAssetPath(path);
         lock (m_sync)
         {
             return m_entries.First(m_pathKey, normalized) is not null;
@@ -133,13 +133,13 @@ public sealed class AssetFileSystem : IDisposable
     }
 
     /// <summary>Tries to resolve an indexed source entry.</summary>
-    /// <param name="relativePath">The source-relative path.</param>
+    /// <param name="path">The isolated source path.</param>
     /// <param name="entry">The resolved entry when available.</param>
     /// <returns><see langword="true"/> when the entry exists.</returns>
-    public bool TryGetEntry(string relativePath, out AssetFileEntry entry)
+    public bool TryGetEntry(AssetPath path, out AssetFileEntry entry)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
-        string normalized = NormalizeRelativePath(relativePath);
+        string normalized = NormalizeAssetPath(path);
         lock (m_sync)
         {
             AssetFileEntry? found = m_entries.First(m_pathKey, normalized);
@@ -167,27 +167,27 @@ public sealed class AssetFileSystem : IDisposable
                 : m_entries.Find(m_isDirectoryKey, false);
 
             return all
-                .OrderBy(static x => x.relativePath, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static x => x.assetPath.ToString(), StringComparer.OrdinalIgnoreCase)
                 .ToArray();
         }
     }
 
     /// <summary>Gets immediate children of an indexed directory.</summary>
-    /// <param name="parentRelativePath">The source-relative parent path.</param>
+    /// <param name="parent">The isolated parent directory path.</param>
     /// <returns>The immediate child entries.</returns>
-    public IReadOnlyList<AssetFileEntry> GetChildren(string parentRelativePath)
+    public IReadOnlyList<AssetFileEntry> GetChildren(AssetPath parent)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
-        string parent = NormalizeRelativePath(parentRelativePath);
+        string normalizedParent = NormalizeAssetPath(parent);
         lock (m_sync)
         {
             IReadOnlyList<AssetFileEntry> children = m_entries
-                .Find(m_parentPathKey, parent)
-                .Where(x => !string.Equals(x.relativePath, parent, StringComparison.Ordinal))
+                .Find(m_parentPathKey, normalizedParent)
+                .Where(x => !string.Equals(x.assetPath.ToString(), normalizedParent, StringComparison.Ordinal))
                 .ToArray();
             return children
                 .OrderBy(static x => x.isDirectory ? 0 : 1)
-                .ThenBy(static x => x.relativePath, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static x => x.assetPath.ToString(), StringComparer.OrdinalIgnoreCase)
                 .ToArray();
         }
     }
@@ -305,16 +305,15 @@ public sealed class AssetFileSystem : IDisposable
 
         existing.assetPath = assetPath;
         existing.isReadOnly = isReadOnly;
-        existing.relativePath = path;
-        existing.parentRelativePath = GetParentPath(path);
+        existing.parentAssetPath = AssetPath.Parse(GetParentPath(path));
         existing.isDirectory = isDirectory;
         existing.extension = isDirectory
             ? string.Empty
             : Path.GetExtension(path).ToLowerInvariant();
 
         m_entries.Add(existing)
-            .Set(m_pathKey, existing.relativePath)
-            .Set(m_parentPathKey, existing.parentRelativePath)
+            .Set(m_pathKey, existing.assetPath.ToString())
+            .Set(m_parentPathKey, existing.parentAssetPath.ToString())
             .Set(m_isDirectoryKey, existing.isDirectory)
             .Set(m_extensionKey, existing.extension);
     }
@@ -334,9 +333,13 @@ public sealed class AssetFileSystem : IDisposable
     private static string CombineLocalPath(string a, string b)
         => NormalizeLocalPath(Path.Combine(NormalizeLocalPath(a), NormalizeLocalPath(b)));
 
-    private static string NormalizeRelativePath(string relativePath)
+    private string NormalizeAssetPath(AssetPath path)
     {
-        return AssetPath.Parse(relativePath ?? string.Empty).ToString();
+        if (!path.isValid)
+            throw new ArgumentException("An isolated asset path is required.", nameof(path));
+        if (!m_mounts.ContainsKey(path.source))
+            throw new ArgumentException($"Asset source mount '{path.source}' is not indexed.", nameof(path));
+        return path.ToString();
     }
 
     private static string NormalizeLocalPath(string relativePath)

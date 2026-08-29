@@ -22,7 +22,7 @@ internal sealed partial class ShaderSourceAssetImporter : AssetImporter<ShaderSo
         AssetImportWriter<ShaderSourceAsset> output,
         CancellationToken cancellationToken)
     {
-        AssetPath root = AssetPath.Parse(context.relativePath);
+        AssetPath root = context.assetPath;
         var visiting = new HashSet<AssetPath>();
         string content = Expand(root, context.ReadUtf8Text(), context, visiting);
         output.SetAsset(new ShaderSourceAsset { content = content });
@@ -47,7 +47,7 @@ internal sealed partial class ShaderSourceAssetImporter : AssetImporter<ShaderSo
                 if (!isQuotedAsset && !include.Contains("::", StringComparison.Ordinal))
                     return match.Value;
                 AssetPath dependency = ResolveInclude(source, include);
-                string dependencyContent = context.ReadSourceUtf8Text(dependency.ToString());
+                string dependencyContent = context.ReadSourceUtf8Text(dependency);
                 return $"\n// begin include {dependency}\n" +
                        Expand(dependency, dependencyContent, context, visiting) +
                        $"\n// end include {dependency}\n";

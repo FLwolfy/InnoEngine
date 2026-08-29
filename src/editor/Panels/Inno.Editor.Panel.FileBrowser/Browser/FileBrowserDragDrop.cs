@@ -23,7 +23,7 @@ internal sealed class FileBrowserDragDrop(AssetEditorModule assets)
     {
         if (!assets.TryCreateContext(
                 context,
-                entry.relativePath,
+                entry.assetPath.ToString(),
                 out AssetEditorContext? assetContext) ||
             assetContext is null ||
             !assets.TryCreateDragData(assetContext, out EditorDragData? data) ||

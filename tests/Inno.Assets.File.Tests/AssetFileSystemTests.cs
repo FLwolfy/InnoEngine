@@ -21,9 +21,9 @@ public sealed class AssetFileSystemTests
         {
             using var fileSystem = new AssetFileSystem(root, autoStart: false);
 
-            Assert.Throws<ArgumentException>(() => fileSystem.Exists("../outside.txt"));
-            Assert.Throws<ArgumentException>(() => fileSystem.GetChildren("A/../../outside"));
-            Assert.Throws<ArgumentException>(() => fileSystem.TryGetEntry(Path.GetFullPath(root), out _));
+            Assert.Throws<ArgumentException>(() => AssetPath.Project("../outside.txt"));
+            Assert.Throws<ArgumentException>(() => AssetPath.Project("A/../../outside"));
+            Assert.Throws<ArgumentException>(() => AssetPath.Project(Path.GetFullPath(root)));
         }
         finally
         {
@@ -44,15 +44,15 @@ public sealed class AssetFileSystemTests
             using var fs = new AssetFileSystem(root, autoStart: false);
             var entries = fs.GetEntries(includeDirectories: true);
 
-            Assert.Contains(entries, static x => x.relativePath == string.Empty && x.isDirectory);
-            Assert.Contains(entries, static x => x.relativePath == "Config" && x.isDirectory);
-            Assert.Contains(entries, static x => x.relativePath == "Config/a.json" && !x.isDirectory);
-            Assert.Contains(entries, static x => x.relativePath == "readme.txt" && !x.isDirectory);
+            Assert.Contains(entries, static x => x.assetPath == AssetPath.Project(string.Empty) && x.isDirectory);
+            Assert.Contains(entries, static x => x.assetPath == AssetPath.Project("Config") && x.isDirectory);
+            Assert.Contains(entries, static x => x.assetPath == AssetPath.Project("Config/a.json") && !x.isDirectory);
+            Assert.Contains(entries, static x => x.assetPath == AssetPath.Project("readme.txt") && !x.isDirectory);
 
-            var rootChildren = fs.GetChildren(string.Empty);
+            var rootChildren = fs.GetChildren(AssetPath.Project(string.Empty));
             Assert.Equal(2, rootChildren.Count);
-            Assert.Equal("Config", rootChildren[0].relativePath);
-            Assert.Equal("readme.txt", rootChildren[1].relativePath);
+            Assert.Equal(AssetPath.Project("Config"), rootChildren[0].assetPath);
+            Assert.Equal(AssetPath.Project("readme.txt"), rootChildren[1].assetPath);
         }
         finally
         {
@@ -75,7 +75,7 @@ public sealed class AssetFileSystemTests
             IReadOnlyList<AssetChangedEvent> batch = fs.WaitForIdle();
 
             Assert.Contains(batch, static x => x.relativePath == "Config/watch.txt");
-            Assert.True(fs.Exists("Config/watch.txt"));
+            Assert.True(fs.Exists(AssetPath.Project("Config/watch.txt")));
         }
         finally
         {
@@ -129,17 +129,23 @@ public sealed class AssetFileSystemTests
                 ],
                 autoStart: false);
 
-            Assert.True(fileSystem.TryGetEntry("same.txt", out AssetFileEntry projectEntry));
-            Assert.True(fileSystem.TryGetEntry("tests.mount::same.txt", out AssetFileEntry pluginEntry));
+            Assert.True(fileSystem.TryGetEntry(AssetPath.Project("same.txt"), out AssetFileEntry projectEntry));
+            Assert.True(fileSystem.TryGetEntry(new AssetPath(pluginId, "same.txt"), out AssetFileEntry pluginEntry));
             Assert.Equal("same.txt", projectEntry.name);
             Assert.Equal("same.txt", pluginEntry.name);
             Assert.False(projectEntry.isReadOnly);
             Assert.True(pluginEntry.isReadOnly);
             Assert.Equal(AssetSourceId.project, projectEntry.source);
             Assert.Equal(pluginId, pluginEntry.source);
-            Assert.Contains(fileSystem.GetChildren(string.Empty), entry => entry.source == AssetSourceId.project);
-            Assert.Contains(fileSystem.GetChildren(string.Empty), entry => entry.relativePath == "tests.mount::");
-            Assert.Contains(fileSystem.GetChildren("tests.mount::"), entry => entry.relativePath == "tests.mount::same.txt");
+            Assert.Contains(
+                fileSystem.GetChildren(AssetPath.Project(string.Empty)),
+                entry => entry.source == AssetSourceId.project);
+            Assert.Contains(
+                fileSystem.GetChildren(AssetPath.Project(string.Empty)),
+                entry => entry.assetPath == new AssetPath(pluginId, string.Empty));
+            Assert.Contains(
+                fileSystem.GetChildren(new AssetPath(pluginId, string.Empty)),
+                entry => entry.assetPath == new AssetPath(pluginId, "same.txt"));
         }
         finally
         {
@@ -165,8 +171,8 @@ public sealed class AssetFileSystemTests
                 change.changeType.HasFlag(WatcherChangeTypes.Renamed));
             Assert.Equal("old.txt", moved.oldRelativePath);
             Assert.Equal("new.txt", moved.relativePath);
-            Assert.False(fileSystem.Exists("old.txt"));
-            Assert.True(fileSystem.Exists("new.txt"));
+            Assert.False(fileSystem.Exists(AssetPath.Project("old.txt")));
+            Assert.True(fileSystem.Exists(AssetPath.Project("new.txt")));
         }
         finally
         {

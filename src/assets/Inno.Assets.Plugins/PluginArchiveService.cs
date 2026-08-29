@@ -8,6 +8,7 @@ using System.Text;
 using Inno.Assets.Core;
 using Inno.Assets.File;
 using Inno.Core.Serialization;
+using Inno.Core.Storage;
 
 using IOFile = System.IO.File;
 
@@ -257,36 +258,51 @@ public sealed class PluginArchiveService
             }
         }
 
-        var result = new List<PluginArchiveCandidate>();
-        var remaining = byId.Values
-            .Where(candidate => !rejected.Contains(candidate.manifest.pluginId))
-            .ToDictionary(static candidate => candidate.manifest.pluginId, StringComparer.Ordinal);
-        while (remaining.Count > 0)
+        bool rejectionChanged;
+        do
         {
-            PluginArchiveCandidate[] ready = remaining.Values
-                .Where(candidate => candidate.manifest.dependencies.All(dependency =>
-                    !rejected.Contains(dependency)
-                    && result.Any(active => active.manifest.pluginId == dependency)))
-                .OrderBy(static candidate => candidate.manifest.pluginId, StringComparer.Ordinal)
-                .ToArray();
-            if (ready.Length == 0)
+            rejectionChanged = false;
+            foreach (PluginArchiveCandidate candidate in byId.Values)
             {
-                foreach (PluginArchiveCandidate candidate in remaining.Values)
-                {
-                    rejected.Add(candidate.manifest.pluginId);
-                    diagnostics.Add(new PluginArchiveDiagnostic(
-                        candidate.archivePath,
-                        $"Plugin dependency cycle includes '{candidate.manifest.pluginId}'."));
-                }
-                break;
-            }
-            foreach (PluginArchiveCandidate candidate in ready)
-            {
-                result.Add(candidate);
-                remaining.Remove(candidate.manifest.pluginId);
+                if (rejected.Contains(candidate.manifest.pluginId))
+                    continue;
+                string? blocked = candidate.manifest.dependencies.FirstOrDefault(rejected.Contains);
+                if (blocked is null)
+                    continue;
+                rejected.Add(candidate.manifest.pluginId);
+                rejectionChanged = true;
+                diagnostics.Add(new PluginArchiveDiagnostic(
+                    candidate.archivePath,
+                    $"Plugin dependency '{blocked}' is unavailable."));
             }
         }
-        return result;
+        while (rejectionChanged);
+
+        var graph = new DependencyGraph<string>(StringComparer.Ordinal, StringComparer.Ordinal);
+        foreach (PluginArchiveCandidate candidate in byId.Values.Where(candidate =>
+                     !rejected.Contains(candidate.manifest.pluginId)))
+        {
+            graph.AddNode(candidate.manifest.pluginId);
+            foreach (string dependency in candidate.manifest.dependencies)
+                graph.AddDependency(candidate.manifest.pluginId, dependency);
+        }
+        string[] cyclic = graph.GetStronglyConnectedComponents()
+            .Where(component => component.Count > 1 || graph.DependsOn(component[0], component[0]))
+            .SelectMany(static component => component)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var cycleBlocked = new HashSet<string>(cyclic, StringComparer.Ordinal);
+        foreach (string node in cyclic)
+            cycleBlocked.UnionWith(graph.GetDependents(node, recursive: true));
+        foreach (string pluginId in cycleBlocked.OrderBy(static value => value, StringComparer.Ordinal))
+        {
+            PluginArchiveCandidate candidate = byId[pluginId];
+            diagnostics.Add(new PluginArchiveDiagnostic(
+                candidate.archivePath,
+                $"Plugin dependency cycle prevents '{pluginId}' from loading."));
+            graph.RemoveNode(pluginId);
+        }
+        return graph.TopologicalSort().Select(pluginId => byId[pluginId]).ToArray();
     }
 
     private static string ValidateEntryPath(string value)

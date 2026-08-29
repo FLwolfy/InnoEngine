@@ -1,6 +1,7 @@
 using System;
 
 using Inno.Assets;
+using Inno.Assets.Core;
 using Inno.Core.Logging;
 using Inno.Editor.Interactions;
 
@@ -93,8 +94,8 @@ internal sealed class AssetHistoryHandler(AssetEditorModule assets) : EditorHist
         }
         catch (Exception exception)
         {
-            if (!AssetManager.TryGetFileSystemEntry(sourcePath, out _) &&
-                AssetManager.TryGetFileSystemEntry(targetPath, out _))
+            if (!AssetManager.TryGetFileSystemEntry(AssetPath.Parse(sourcePath), out _) &&
+                AssetManager.TryGetFileSystemEntry(AssetPath.Parse(targetPath), out _))
             {
                 try
                 {
@@ -119,10 +120,10 @@ internal sealed class AssetHistoryHandler(AssetEditorModule assets) : EditorHist
         try
         {
             if (shouldExist)
-                AssetManager.CreateDirectory(data.sourcePath);
+                AssetManager.CreateDirectory(AssetPath.Parse(data.sourcePath));
             else
-                AssetManager.Delete(data.sourcePath);
-            bool exists = AssetManager.TryGetFileSystemEntry(data.sourcePath, out _);
+                AssetManager.Delete(AssetPath.Parse(data.sourcePath));
+            bool exists = AssetManager.TryGetFileSystemEntry(AssetPath.Parse(data.sourcePath), out _);
             if (exists != shouldExist)
                 throw new InvalidOperationException("The folder operation did not reach its requested state.");
             return EditorHistoryResult.Success();
@@ -131,11 +132,11 @@ internal sealed class AssetHistoryHandler(AssetEditorModule assets) : EditorHist
         {
             try
             {
-                bool exists = AssetManager.TryGetFileSystemEntry(data.sourcePath, out _);
+                bool exists = AssetManager.TryGetFileSystemEntry(AssetPath.Parse(data.sourcePath), out _);
                 if (shouldExist && exists)
-                    AssetManager.Delete(data.sourcePath);
+                    AssetManager.Delete(AssetPath.Parse(data.sourcePath));
                 else if (!shouldExist && !exists)
-                    AssetManager.CreateDirectory(data.sourcePath);
+                    AssetManager.CreateDirectory(AssetPath.Parse(data.sourcePath));
             }
             catch (Exception rollbackException)
             {
@@ -158,7 +159,7 @@ internal sealed class AssetHistoryHandler(AssetEditorModule assets) : EditorHist
                 AssetSourceArchive.Restore(data.sourcePath, data.isDirectory, data.archive);
             else
                 assets.DeleteFromHistory(data.sourcePath);
-            bool exists = AssetManager.TryGetFileSystemEntry(data.sourcePath, out _);
+            bool exists = AssetManager.TryGetFileSystemEntry(AssetPath.Parse(data.sourcePath), out _);
             if (exists != shouldExist)
                 throw new InvalidOperationException("The Asset delete operation did not reach its requested state.");
             return EditorHistoryResult.Success();
@@ -167,9 +168,9 @@ internal sealed class AssetHistoryHandler(AssetEditorModule assets) : EditorHist
         {
             try
             {
-                bool exists = AssetManager.TryGetFileSystemEntry(data.sourcePath, out _);
+                bool exists = AssetManager.TryGetFileSystemEntry(AssetPath.Parse(data.sourcePath), out _);
                 if (shouldExist && exists)
-                    AssetManager.Delete(data.sourcePath);
+                    AssetManager.Delete(AssetPath.Parse(data.sourcePath));
                 else if (!shouldExist && !exists)
                     AssetSourceArchive.Restore(data.sourcePath, data.isDirectory, data.archive);
             }
@@ -194,7 +195,7 @@ internal sealed class AssetHistoryHandler(AssetEditorModule assets) : EditorHist
                 AssetSourceArchive.Restore(data.sourcePath, isDirectory: false, data.archive);
             else
                 assets.DeleteFromHistory(data.sourcePath);
-            bool exists = AssetManager.TryGetFileSystemEntry(data.sourcePath, out _);
+            bool exists = AssetManager.TryGetFileSystemEntry(AssetPath.Parse(data.sourcePath), out _);
             if (exists != shouldExist)
                 throw new InvalidOperationException("The created Asset did not reach its requested history state.");
             return EditorHistoryResult.Success();
@@ -203,7 +204,7 @@ internal sealed class AssetHistoryHandler(AssetEditorModule assets) : EditorHist
         {
             try
             {
-                bool exists = AssetManager.TryGetFileSystemEntry(data.sourcePath, out _);
+                bool exists = AssetManager.TryGetFileSystemEntry(AssetPath.Parse(data.sourcePath), out _);
                 if (shouldExist && exists)
                     assets.DeleteFromHistory(data.sourcePath);
                 else if (!shouldExist && !exists)
@@ -225,9 +226,9 @@ internal sealed class AssetHistoryHandler(AssetEditorModule assets) : EditorHist
     {
         string source = direction == EditorHistoryDirection.Undo ? data.targetPath : data.sourcePath;
         string target = direction == EditorHistoryDirection.Undo ? data.sourcePath : data.targetPath;
-        if (!AssetManager.TryGetFileSystemEntry(source, out _))
+        if (!AssetManager.TryGetFileSystemEntry(AssetPath.Parse(source), out _))
             return EditorHistoryAvailability.Unavailable($"Asset '{source}' no longer exists.");
-        return !AssetManager.TryGetFileSystemEntry(target, out _)
+        return !AssetManager.TryGetFileSystemEntry(AssetPath.Parse(target), out _)
             ? EditorHistoryAvailability.Available()
             : EditorHistoryAvailability.Unavailable($"Asset '{target}' already exists.");
     }
@@ -236,10 +237,10 @@ internal sealed class AssetHistoryHandler(AssetEditorModule assets) : EditorHist
         AssetHistoryData data,
         EditorHistoryDirection direction)
         => direction == EditorHistoryDirection.Undo
-            ? AssetManager.TryGetFileSystemEntry(data.sourcePath, out _)
+            ? AssetManager.TryGetFileSystemEntry(AssetPath.Parse(data.sourcePath), out _)
                 ? EditorHistoryAvailability.Available()
                 : EditorHistoryAvailability.Unavailable($"Folder '{data.sourcePath}' no longer exists.")
-            : !AssetManager.TryGetFileSystemEntry(data.sourcePath, out _)
+            : !AssetManager.TryGetFileSystemEntry(AssetPath.Parse(data.sourcePath), out _)
                 ? EditorHistoryAvailability.Available()
                 : EditorHistoryAvailability.Unavailable($"Folder '{data.sourcePath}' already exists.");
 
@@ -247,10 +248,10 @@ internal sealed class AssetHistoryHandler(AssetEditorModule assets) : EditorHist
         AssetHistoryData data,
         EditorHistoryDirection direction)
         => direction == EditorHistoryDirection.Undo
-            ? !AssetManager.TryGetFileSystemEntry(data.sourcePath, out _)
+            ? !AssetManager.TryGetFileSystemEntry(AssetPath.Parse(data.sourcePath), out _)
                 ? EditorHistoryAvailability.Available()
                 : EditorHistoryAvailability.Unavailable($"Asset '{data.sourcePath}' already exists.")
-            : AssetManager.TryGetFileSystemEntry(data.sourcePath, out _)
+            : AssetManager.TryGetFileSystemEntry(AssetPath.Parse(data.sourcePath), out _)
                 ? EditorHistoryAvailability.Available()
                 : EditorHistoryAvailability.Unavailable($"Asset '{data.sourcePath}' no longer exists.");
 
@@ -258,10 +259,10 @@ internal sealed class AssetHistoryHandler(AssetEditorModule assets) : EditorHist
         AssetHistoryData data,
         EditorHistoryDirection direction)
         => direction == EditorHistoryDirection.Undo
-            ? AssetManager.TryGetFileSystemEntry(data.sourcePath, out _)
+            ? AssetManager.TryGetFileSystemEntry(AssetPath.Parse(data.sourcePath), out _)
                 ? EditorHistoryAvailability.Available()
                 : EditorHistoryAvailability.Unavailable($"Asset '{data.sourcePath}' no longer exists.")
-            : !AssetManager.TryGetFileSystemEntry(data.sourcePath, out _)
+            : !AssetManager.TryGetFileSystemEntry(AssetPath.Parse(data.sourcePath), out _)
                 ? EditorHistoryAvailability.Available()
                 : EditorHistoryAvailability.Unavailable($"Asset '{data.sourcePath}' already exists.");
 }

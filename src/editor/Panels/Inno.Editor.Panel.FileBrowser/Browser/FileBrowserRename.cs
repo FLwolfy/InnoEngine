@@ -45,7 +45,7 @@ internal sealed class FileBrowserRename(AssetEditorModule assets)
         Update(context);
         return m_activeTarget is AssetFileEntry target &&
                m_activePresentation == presentation &&
-               string.Equals(target.relativePath, relativePath, StringComparison.Ordinal);
+               string.Equals(target.assetPath.ToString(), relativePath, StringComparison.Ordinal);
     }
 
     internal void Draw(

@@ -133,6 +133,60 @@ public sealed class AssemblyManagerTests : IDisposable
     }
 
     [Fact]
+    public void ExplicitPluginDependenciesUseSeparateContextsAndRemoveAtomically()
+    {
+        string directory = Path.Combine(AppContext.BaseDirectory, "Modules", "V1");
+        var dependency = new AssemblyLoadRequest
+        {
+            moduleName = "Plugin.Dependency",
+            mainAssemblyPath = Path.Combine(directory, "Reloadable.PrivateDependency.dll"),
+            domain = AssemblyDomain.InnoPlugin,
+            scope = AssemblyScope.Runtime
+        };
+        var consumer = new AssemblyLoadRequest
+        {
+            moduleName = "Plugin.Consumer",
+            mainAssemblyPath = Path.Combine(directory, "Inno.Core.Assemblies.TestModule.dll"),
+            upstreamModuleNames = [dependency.moduleName],
+            domain = AssemblyDomain.InnoPlugin,
+            scope = AssemblyScope.Runtime
+        };
+
+        using (AssemblyReloadSession addition = AssemblyManager.BeginReload([consumer, dependency]))
+        {
+            addition.Activate();
+            _ = addition.Complete();
+        }
+
+        AssemblyModuleInfo consumerInfo = AssemblyManager.modules.Single(module =>
+            module.moduleName == consumer.moduleName);
+        Assert.Equal([dependency.moduleName], consumerInfo.upstreamModuleNames);
+        Type consumerType = new TypeRef(S_RELOADABLE_TYPE_ID).Resolve();
+        Assert.Equal(1, ReadVersion(consumerType));
+        Assembly dependencyAssembly = AppDomain.CurrentDomain.GetAssemblies().Single(assembly =>
+            string.Equals(
+                assembly.GetName().Name,
+                "Reloadable.PrivateDependency",
+                StringComparison.Ordinal) &&
+            AssemblyLoadContext.GetLoadContext(assembly)?.IsCollectible == true);
+        Assert.NotSame(
+            AssemblyLoadContext.GetLoadContext(consumerType.Assembly),
+            AssemblyLoadContext.GetLoadContext(dependencyAssembly));
+
+        Assert.Throws<InvalidOperationException>(() => AssemblyManager.BeginReload(
+            [],
+            [dependency.moduleName]));
+        using (AssemblyReloadSession removal = AssemblyManager.BeginReload(
+                   [],
+                   [consumer.moduleName, dependency.moduleName]))
+        {
+            removal.Activate();
+            _ = removal.Complete();
+        }
+        Assert.Empty(AssemblyManager.modules);
+    }
+
+    [Fact]
     public void CompletedReloadAllowsThePreviousContextToUnload()
     {
         AssemblyModuleHandle handle = LoadVersion("V1");

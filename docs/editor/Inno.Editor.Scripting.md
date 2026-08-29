@@ -11,7 +11,7 @@
 | `*.cs` | `ScriptSourceAsset` | `CSharpScriptImporter` | `source`, `diagnostics`, `type-manifest`, `asset-state` |
 | `*.iasmdef` | `ScriptAssemblyDefinitionAsset` | `ScriptAssemblyDefinitionImporter` | `source`, `asset-state` |
 
-每个受支持 source 都有 `.imeta` 和 persistent ID。`type-manifest` 保存该 source 的声明、位置和 partial 信息；聚合编译后还会生成 assembly 级 `*.types.inno`，记录可附加类型最终使用的 source identity、Stable Type ID、类型种类和 canonical source。C# 语法错误不会取消 source identity；parse diagnostics 进入 source asset，聚合 assembly build 可以失败并继续运行旧程序集。
+每个受支持 source 都有 `.imeta` 和 persistent ID。`type-manifest` 保存该 source 的声明、位置和 partial 信息；聚合编译后还会生成 assembly 级 `*.types.cache`，记录可附加类型最终使用的 source identity、Stable Type ID、类型种类和 canonical source。该文件和 `diagnostics.cache` 都是可丢弃、严格校验的内部编译缓存，不是项目结构化资产。C# 语法错误不会取消 source identity；parse diagnostics 进入 source asset，聚合 assembly build 可以失败并继续运行旧程序集。
 
 Compiler 读取不可变 artifact snapshot，不直接读取正在被外部编辑器写入的 source 文件。普通 Project 编译使用已提交 Asset Catalog；Plugin 安装/更新使用隔离 `AssetSourceMountTransaction` 的候选 Catalog。两者都保证一次 build 的 fingerprint、语法树和 Plugin source 来自同一 revision，但候选 Plugin 在成功前不会出现在 active Asset/Plugin API 中。
 
@@ -57,8 +57,8 @@ AssetManager.Save("Scripts/Gameplay/Gameplay.iasmdef", definition);
 │  │        ├─ *.dll
 │  │        ├─ *.pdb
 │  │        ├─ *.xml
-│  │        ├─ *.types.inno
-│  │        └─ diagnostics.inno
+│  │        ├─ *.types.cache
+│  │        └─ diagnostics.cache
 │  ├─ ScriptApi/
 │  └─ IDE/
 ├─ Inno.GameScripts.csproj
@@ -67,9 +67,9 @@ AssetManager.Save("Scripts/Gameplay/Gameplay.iasmdef", definition);
 └─ InnoProject.sln
 ```
 
-`ScriptAssemblies` 不再出现 `1/2/3...` 数字 generation。每个 asmdef/builtin assembly 的 key 分别覆盖自己的 definition、source artifact、scope/options、适用 API、所属 Source Mount 及直接 dependency key；依赖 key 变化会自然传播到反向依赖，而无关 assembly 直接复用 `.assemblies` 中的 DLL/PDB/XML/type manifest/diagnostics。完整 generation key 组合有序 assembly key 与 Plugin content key，并在成功后一次性形成 load staging。Editor 启动和成功 reload 后会对两级 immutable cache 共用 7 天 grace period 与 4 GiB 上限；目录存在只占磁盘，不等于 ALC 常驻内存。
+`ScriptAssemblies` 不再出现 `1/2/3...` 数字 generation。每个 asmdef/builtin assembly 的 key 覆盖脚本内容 hash、规范化 asmdef 配置、scope/options、公开 Script API contract fingerprint、所属 Source Mount 及直接 dependency key；它不使用无关 Importer 实现 MVID。依赖 key 变化会自然传播到反向依赖，而无关 assembly 直接复用 `.assemblies` 中的 DLL/PDB/XML/type manifest/diagnostics。完整 generation key 组合有序 assembly key 与 Plugin content key，并在成功后一次性形成 load staging。Script assembly cache 使用 7 天 grace period 与 4 GiB 上限；`Library/ScriptApi` reference artifact cache 独立使用 7 天与 512 MiB 上限，并保护当前 Runtime/Editor contract 目录。
 
-增量同时作用于 artifact 与 ALC closure。物理上下文固定为统一 Plugin ALC、Runtime Scripts ALC、Editor Scripts ALC：Editor-only 变化只替换 Editor；Runtime 变化替换 Runtime + Editor；Plugin 变化替换三者。未重编译 assembly 可以复用不可变字节产物，但每个被纳入 closure 的目标 ALC 都是新 generation，下游绑定同一事务中的精确上游 Assembly 实例，不会出现同名 Plugin/Runtime 类型转换失败。
+增量同时作用于 artifact 与 ALC closure。每个已激活 Plugin 使用独立 `Plugin.<id>` collectible ALC，并通过 manifest 依赖形成显式拓扑；Project Runtime 与 Editor Scripts 各使用一个 ALC。Editor-only 变化只替换 Editor；Runtime 变化替换 Runtime + Editor；某个 Plugin 变化只替换该 Plugin、依赖它的 Plugin 及 Project Scripting。未重编译 assembly 可以复用不可变字节产物，但每个被纳入 closure 的目标 ALC 都是新 generation，下游绑定同一事务中的精确上游 Assembly 实例。
 
 AssemblyManager 自己的 runtime generation 仍存在于 assembly shadow cache，用于区分 collectible ALC；它不写入 `.imeta`、Scene、Prefab 或 artifact identity。
 
@@ -78,8 +78,9 @@ AssemblyManager 自己的 runtime generation 仍存在于 assembly shadow cache�
 | 属性 | 默认 | 说明 |
 | --- | --- | --- |
 | `projectRootDirectory` | required | 包含 Assets/Library 的 Project root。 |
-| `autoCompile` | `true` | 启动与后续 Asset change 是否产生自动编译请求。首次请求固定为 `ReloadPlugins` 并立即执行，确保 Plugin、Runtime Scripts 与 Editor Scripts 从统一新 generation 启动；后续请求等待 focus safe point。 |
+| `autoCompile` | `true` | 启动与后续 Asset change 是否产生自动编译请求。启动先探测 pending Plugin candidate 与活动 Scripting 状态：只有待激活 ZIP 才请求 `ReloadPlugins`，否则走可命中内容缓存的 Scripting 请求，不做无条件 Plugin reload。 |
 | `debounceMilliseconds` | `250` | 后续 change request 可消费前的 quiet period；首次编译不受影响。 |
+| `compilationWarningTimeout` | `10s` | 超过该时长时状态显示 long-running warning；`Timeout.InfiniteTimeSpan` 关闭警告，不会自动取消。 |
 
 已移除 `retainedCompilationGenerations`。
 
@@ -90,12 +91,14 @@ AssemblyManager 自己的 runtime generation 仍存在于 assembly shadow cache�
 | `isCompiling` | compiler gate 是否被占用。 |
 | `isCompilationPending` | 是否有等待 focus safe point 的请求。 |
 | `compilationProgress` | 真实已完成工作项比例。 |
-| `compilationStatus` | 当前 stage。 |
+| `compilationStatus` | 当前 stage；超时后包含已运行时长警告。 |
+| `compilationElapsed` / `isCompilationTakingLong` | 当前或最近一次耗时，以及是否超过警告阈值。 |
 | `lastCompilation` | 最近完整结果。 |
-| `Start` | 建立 IDE 文件、订阅 `AssetManager.Changed`、请求初始 build。 |
+| `Start` | 订阅已提交 Asset/Mount change，并请求 cache-aware 初始 build；不会同步全量 `Rescan`。 |
+| `CancelCompilation()` | 取消当前编译等待并保留活动程序集、资产和 GPU generation。 |
 | `RecompileScripting()` | 扫描变化、增量编译并只排队必要的反向依赖 ALC closure；无变化不创建 generation。 |
 | `ReloadScripting()` | 保留 Plugin generation，强制重建 Runtime + Editor Scripting ALC；有效 artifact 复用。 |
-| `ReloadPlugins()` | 强制重建统一 Plugin 及两个 Scripting ALC；仅在引用 fingerprint 失效时重编脚本 artifact。 |
+| `ReloadPlugins()` | 重建受影响的 `Plugin.<id>` 模块及依赖 closure；仅在引用 fingerprint 失效时重编脚本 artifact。 |
 | `GenerateProjectFiles` | 从 Asset Catalog/asmdef 图生成显式 Compile items。 |
 | `Dispose` | 取消 manager lifetime token，等待活动和排队 compiler gate 工作退出，再取消 Asset observer并按 Editor → Runtime → Plugin 卸载活动模块。 |
 
@@ -111,23 +114,23 @@ scripts.ReloadScripting();
 scripts.ReloadPlugins();
 ```
 
-三个 public 操作只排队；内部 scheduler 在 Editor 主线程 focus safe point 消费请求、后台编译并在安全点激活。请求强度为 Recompile < ReloadScripting < ReloadPlugins，并发请求合并为最强项，同时只允许一个 compiler/reload transaction。若新请求在编译期间到达，本次结果会被标记为 superseded 而不发布中间 generation，随后以合并后的最强请求重新取得 source/plugin snapshot。Asset Update/Rescan 只在主线程内部启动点和 generation 切换安全点发生，后台编译不调用全局 AssetManager。
+三个 public 操作只排队；内部 scheduler 在 Editor 主线程 focus safe point 捕获已提交 snapshot，后台以串行 Roslyn assembly emit 编译，并仅在候选原子激活的短安全点暂停后续 Module 更新。请求强度为 Recompile < ReloadScripting < ReloadPlugins，并发请求合并为最强项，同时只允许一个 compiler/reload transaction。若新请求在编译期间到达，本次结果会被标记为 superseded 而不发布中间 generation，随后以合并后的最强请求重新取得 source/plugin snapshot。后台编译不调用全局 AssetManager，也不冻结 Editor 输入、绘制或普通 Panel 更新。
 
 Assembly reload 使用一组有顺序的 transaction participant，而不是提交后再通知：TypeRegistry 激活候选 snapshot 后，AssetManager 在候选 generation 下完成 Source Catalog 对账；若存在 ZIP Plugin 候选，再临时激活其隔离 Mount/Catalog/Settings；Scene 随后迁移对象，Rendering Runtime 预构造所有活动 Pipeline/Feature。只有全部 participant 与外部 generation 同步成功才提交；后续失败会逆序 Rollback，恢复旧 Mount、Settings、Pipeline/Feature、Scene、TypeCache 和 Asset Catalog。完整提交后才通知 Source Mount 观察者、释放旧 Loader/渲染实例并开始旧 ALC 卸载验证。
 
 这套事务会释放旧脚本 Asset 的 canonical 实例、修复仍存活 host Asset 的引用，并移除已退休脚本代际留在静态事件上的 observer。场景替换任一步失败时会逐项尝试结构、assembly generation、Asset 和旧属性/生命周期补偿；identity observer 在转移期间失败也必须恢复旧对象的注册与附着状态。失败编译不会清除上一个尚未应用的成功 candidate。`Dispose` 返回后不会再有活动或排队编译写入状态。
 
-`compilationStatus` 描述 queued、compiling、staged、migrating、committed、unload-verifying、completed 或 failed 阶段。Scripting reload 提交后不会在旧 ALC 仍为 `Pending` 时关闭 modal：Editor 在独立后续帧执行有界的 Full GC、finalizer 和第二次 Full GC，并通过只持有弱引用的 monitor 验证退休 context。验证期间进度保持 97%，后续 Module 更新和新编译请求消费继续被阻塞。全部 context 不可达后才显示 100% 并关闭 modal。
+`compilationStatus` 描述 queued、compiling、staged、migrating、committed、unload-verifying、completed 或 failed 阶段。Scripting reload 提交后不会在旧 ALC 仍为 `Pending` 时关闭进度窗口：Editor 在独立后续帧执行有界的 Full GC、finalizer 和第二次 Full GC，并通过只持有弱引用的 monitor 验证退休 context。验证期间进度保持 97%，Editor 仍可操作；新的编译候选消费等待验证完成，避免重叠两个 Assembly transaction。全部 context 不可达后才显示 100% 并关闭窗口。
 
 验证达到十次仍有 context 存活时，modal 显示“reload 已提交但卸载验证失败”，并向 Console 的 `Script Unload` 来源发布 `INNO-ALC-UNLOAD` Error，逐项列出 module、domain/scope 与 generation。这个错误是 post-commit 资源回收失败：新 generation 已经可用且不会伪回滚；外部保存的旧 `Type`、object、delegate、extension、task、subscription 或 thread 仍必须由持有方释放，GC 不能强行破坏可达引用。
 
 ## 编译进度 modal
 
-用户从菜单排队请求或文件观察器产生请求时，Editor 立即以 0% 打开 modal；focus safe point 随后消费请求并锁定交互。Modal 使用固定宽度，状态文字按可用 content width 自动换行，并始终完成淡入、最短停留和淡出，即使实际编译很快完成。
+用户从菜单排队请求或文件观察器产生请求时，Editor 立即以 0% 打开阻塞式 Modal，与 Settings Modal 使用相同的后方交互禁用和 popup 规则。Modal 使用固定宽度，状态文字按可用 content width 自动换行，并提供 Cancel。后台编译、Editor frame 与进度绘制继续运行；阻塞的是后方窗口输入，而原子激活候选仍只发生在短 safe point。
 
-进度由 project generation、source parse、API analysis、diagnostics、emit 和 reload preparation 等真实工作项推进。编译阶段占 0–80%，candidate staging 推进到 86%，Scene/extension 原子迁移推进到 94%，事务提交后进入 97% 的强制卸载验证，只有验证成功、验证确定失败或无需 reload 时才显示 100%。Roslyn 单次 Emit 没有内部百分比 callback，因此执行某个工作项时进度会停留，完成后跳到下一个比例；不会用计时器伪造连续进度。百分比文字固定绘制在完整进度条的几何中心，不随已填充区域移动。
+进度由 project generation、source parse、API analysis、diagnostics、emit 和 reload preparation 等真实工作项推进。`ScriptCompilationResult.stageTimings` 按执行顺序保留每个完成阶段的 wall time。编译阶段占 0–80%，candidate staging 推进到 86%，Scene/extension 原子迁移推进到 94%，事务提交后进入 97% 的强制卸载验证，只有验证成功、验证确定失败或无需 reload 时才显示 100%。Roslyn 单次 Emit 没有内部百分比 callback，因此执行某个工作项时进度会停留，完成后跳到下一个比例；不会用计时器伪造连续进度。
 
-成功 assembly artifact 同时保存完整的原生 `diagnostics.inno`。启动命中内容缓存时会重新发布同一组 warning，而不是只复用 DLL/PDB 后返回空 diagnostics；因此缓存命中与实际 Roslyn emit 对 Console Panel 具有一致的可观察结果。
+成功 assembly artifact 同时保存完整的内部 `diagnostics.cache`。启动命中内容缓存时会重新发布同一组 warning，而不是只复用 DLL/PDB 后返回空 diagnostics；因此缓存命中与实际 Roslyn emit 对 Console Panel 具有一致的可观察结果。
 
 ## Scripting API facade
 
@@ -159,7 +162,7 @@ public sealed class PlayerController : GameBehavior
 - 裁剪 reference 只保留其实现成员同样可见的接口；只由 private 显式成员实现的基础设施接口不会出现在 facade base list，因此不会泄漏 `EditorModule` 的 internal Dispose adapter，也不会产生缺失接口成员的 reference assembly。Module/Panel 项目状态直接由 protected `EditorState` hooks 提供，facade 不导出 Workspace interface、reader/writer 或 JSON DOM。
 - 所有脚本文件必须显式声明自己使用的 `InnoEngine.*` / `InnoEditor.*` namespace。
 - 编译范围导入、MSBuild `Using` item、隐式导入和 plugin metadata 注入均不受支持。
-- API/export/comment/MVID 变化会改变 facade/build fingerprint。
+- Script API fingerprint 来自规范化 public/protected contract、逻辑 namespace/type mapping 与可附加类型身份；实现方法体或实现程序集 MVID 单独变化不会使 reference artifact 失效。XML documentation 每次写入当前内容，不作为二进制公开契约。
 - `AssetManagerOptions` 等 host initialization 类型不导出；脚本只看到查询、加载、Importer writer 与 Build Processor 所需契约。
 
 Editor facade 按 feature 分布：
@@ -220,7 +223,7 @@ IDE 工程是补全和诊断模型；Editor 实际热编译仍使用进程内 Ro
 
 Plugin 只能来自项目根 `Plugins/*.zip`。归档必须通过 `Plugin.inno`、路径安全、依赖图、`.imeta` 完整性与代码信任校验，再进入隔离只读 `AssetSourceMount` 候选；编译与迁移全部成功后才进入统一 active Asset Database。预编译 DLL 和“路径里含 Plugins 就视为插件”的协议不存在。无 `.iasmdef` 时，每个 Plugin ID 自动获得 Runtime 与 Editor 默认程序集；`*.editor.cs` 进入 Editor scope，其余 `.cs` 进入 Runtime scope。显式 `.iasmdef` 必须列在清单 `assemblyDefinitions` 中。
 
-Plugin 只能引用 Host API 与清单声明的依赖 Plugin，不能引用项目脚本；Runtime Scripts 能看到 runtime-scope Plugin，Editor Scripts 可看到 Runtime Scripts 与 Plugin Editor API。Plugin 类型只能通过脚本文件中的普通 `using` 显式导入。错误方向、scope 泄漏、程序集名称冲突、缺失依赖、cycle 或 Roslyn 编译错误会在 stage/publish 前失败；Editor host 会丢弃隔离候选，旧三层 generation、Mount、Catalog、Type/Registry、资产和设置保持活动。ALC 是卸载隔离，不是安全沙箱；受信任代码与项目脚本具有相同本机权限。
+Plugin 只能引用 Host API 与清单声明的依赖 Plugin，不能引用项目脚本；Runtime Scripts 能看到 runtime-scope Plugin，Editor Scripts 可看到 Runtime Scripts 与 Plugin Editor API。每个 Plugin ID 对应独立 `Plugin.<id>` collectible ALC，清单依赖成为 `upstreamModuleNames`，更新/移除只影响反向依赖 closure。错误方向、scope 泄漏、程序集名称冲突、缺失依赖、cycle 或 Roslyn 编译错误会在 stage/publish 前失败；Editor host 会丢弃隔离候选，旧模块 generation、Mount、Catalog、Type/Registry、资产和设置保持活动。ALC 是卸载隔离，不是安全沙箱；受信任代码与项目脚本具有相同本机权限。
 
 ## Reload coordination 与领域状态
 

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 
 using Inno.Core.Serialization;
+using Inno.Core.Storage;
 
 namespace Inno.Core.Settings;
 
@@ -359,30 +360,57 @@ public sealed class ProjectSettings : IDisposable
     {
         var byId = contributors.ToDictionary(static contributor => contributor.id, StringComparer.Ordinal);
         var result = new HashSet<string>(StringComparer.Ordinal);
-        var pending = new Stack<string>(directDependencies);
-        while (pending.Count > 0)
+        DependencyGraph<string> graph = CreateContributorGraph(contributors);
+        foreach (string id in directDependencies)
         {
-            string id = pending.Pop();
-            if (!result.Add(id))
-                continue;
-            if (!byId.TryGetValue(id, out ProjectSettingsContributor? contributor))
+            if (!byId.ContainsKey(id))
                 throw new InvalidOperationException($"Declared Plugin dependency '{id}' is not active.");
-            foreach (string dependency in contributor.dependencies)
-                pending.Push(dependency);
+            result.Add(id);
+            result.UnionWith(graph.GetDependencies(id, recursive: true));
         }
         return result;
     }
 
-    private static void ValidateContributorOrder(IReadOnlyList<ProjectSettingsContributor> contributors)
+    internal static void ValidateContributorOrder(IReadOnlyList<ProjectSettingsContributor> contributors)
     {
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        DependencyGraph<string> graph = CreateContributorGraph(contributors);
+        IReadOnlyList<string> ordered;
+        try
+        {
+            ordered = graph.TopologicalSort();
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new InvalidOperationException($"Project settings contributors are cyclic. {exception.Message}", exception);
+        }
+        if (!contributors.Select(static contributor => contributor.id).SequenceEqual(ordered, StringComparer.Ordinal))
+            throw new InvalidOperationException("Project settings contributors are not dependency-ordered.");
+    }
+
+    private static DependencyGraph<string> CreateContributorGraph(
+        IReadOnlyList<ProjectSettingsContributor> contributors)
+    {
+        var graph = new DependencyGraph<string>(StringComparer.Ordinal);
+        var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (ProjectSettingsContributor contributor in contributors)
         {
-            if (!seen.Add(contributor.id))
+            if (!ids.Add(contributor.id))
                 throw new InvalidOperationException($"Settings contributor '{contributor.id}' is declared more than once.");
-            if (!contributor.dependencies.All(seen.Contains))
-                throw new InvalidOperationException($"Settings contributor '{contributor.id}' is not dependency-ordered.");
+            graph.AddNode(contributor.id);
         }
+        foreach (ProjectSettingsContributor contributor in contributors)
+        {
+            foreach (string dependency in contributor.dependencies)
+            {
+                if (!ids.Contains(dependency))
+                {
+                    throw new InvalidOperationException(
+                        $"Settings contributor '{contributor.id}' requires inactive dependency '{dependency}'.");
+                }
+                graph.AddDependency(contributor.id, dependency);
+            }
+        }
+        return graph;
     }
 
     private static bool RecordsEqual(ProjectSettingRecord left, ProjectSettingRecord right)

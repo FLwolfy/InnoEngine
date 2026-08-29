@@ -80,7 +80,7 @@ public sealed class AssetCoreTests
         Guid id = Guid.NewGuid();
         var info = new AssetInfo(
             id,
-            "Scripts/Player.cs",
+            AssetPath.Project("Scripts/Player.cs"),
             AssetSourceKind.File,
             AssetImportStatus.Imported,
             "inno.editor.csharp-script",
@@ -101,13 +101,17 @@ public sealed class AssetCoreTests
     public void ChangeSet_PreservesMoveIdentityAndRevision()
     {
         Guid id = Guid.NewGuid();
-        var change = new AssetChange(AssetChangeKind.Moved, id, "B/value.txt", "A/value.txt");
+        var change = new AssetChange(
+            AssetChangeKind.Moved,
+            id,
+            AssetPath.Project("B/value.txt"),
+            AssetPath.Project("A/value.txt"));
         var set = new AssetChangeSet(42, new List<AssetChange> { change });
 
         Assert.Equal(42, set.revision);
         Assert.False(set.isEmpty);
         Assert.Equal(id, set.changes[0].persistentId);
-        Assert.Equal("A/value.txt", set.changes[0].oldRelativePath);
-        Assert.Equal("B/value.txt", set.changes[0].relativePath);
+        Assert.Equal(AssetPath.Project("A/value.txt"), set.changes[0].previousAssetPath);
+        Assert.Equal(AssetPath.Project("B/value.txt"), set.changes[0].assetPath);
     }
 }

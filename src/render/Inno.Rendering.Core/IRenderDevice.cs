@@ -99,6 +99,35 @@ public interface IRenderDevice : IDisposable
         int mipLevel = 0,
         int arrayLayer = 0);
 
+    /// <summary>Replaces a tightly packed rectangular region in one persistent texture subresource.</summary>
+    /// <param name="texture">Texture owned by this device generation.</param>
+    /// <param name="region">Destination mip, texel rectangle, and layer range.</param>
+    /// <param name="data">Tightly packed region bytes.</param>
+    void UpdateTextureRegion(
+        PersistentTextureHandle texture,
+        RenderTextureRegion region,
+        ReadOnlySpan<byte> data);
+
+    /// <summary>Begins an asynchronous readback of one complete persistent texture mip.</summary>
+    /// <param name="texture">Texture created with <see cref="RenderTextureUsage.Readback"/>.</param>
+    /// <param name="mipLevel">Zero-based mip level.</param>
+    /// <returns>An opaque device-generation readback handle.</returns>
+    RenderTextureReadbackHandle BeginTextureReadback(
+        PersistentTextureHandle texture,
+        int mipLevel = 0);
+
+    /// <summary>Tries to complete one previously requested texture readback.</summary>
+    /// <param name="readback">Readback handle returned by <see cref="BeginTextureReadback"/>.</param>
+    /// <param name="result">Receives immutable CPU-visible bytes when complete.</param>
+    /// <returns><see langword="true"/> when the result completed and was consumed.</returns>
+    bool TryGetTextureReadback(
+        RenderTextureReadbackHandle readback,
+        out RenderTextureReadbackResult? result);
+
+    /// <summary>Stops retaining a readback result that is no longer needed by its caller.</summary>
+    /// <param name="readback">Pending readback handle.</param>
+    void CancelTextureReadback(RenderTextureReadbackHandle readback);
+
     /// <summary>Queues a persistent texture for delayed GPU-safe destruction.</summary>
     /// <param name="texture">Texture owned by this device generation.</param>
     void DestroyTexture(PersistentTextureHandle texture);

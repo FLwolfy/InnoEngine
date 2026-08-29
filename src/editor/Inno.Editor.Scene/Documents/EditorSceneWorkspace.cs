@@ -215,7 +215,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     {
         ArgumentNullException.ThrowIfNull(gameObject);
         string relativePath = CreateUniquePath(currentDirectory, gameObject.name, C_PREFAB_EXTENSION);
-        if (!AssetManager.Save(relativePath, PrefabAsset.Capture(gameObject)))
+        if (!AssetManager.Save(AssetPath.Project(relativePath), PrefabAsset.Capture(gameObject)))
             throw new InvalidOperationException($"No asset importer could save prefab '{relativePath}'.");
         return relativePath;
     }
@@ -239,7 +239,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
             return existing.scene;
         }
 
-        SceneAsset asset = AssetManager.Load<SceneAsset>(normalizedPath);
+        SceneAsset asset = AssetManager.Load<SceneAsset>(AssetPath.Parse(normalizedPath));
         GameScene scene = asset.Instantiate();
         scene.name = GetAssetName(normalizedPath);
         byte[] savedHash = ComputeSceneHash(scene);
@@ -429,12 +429,12 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     private void SaveSceneAtPath(GameScene scene, string relativePath)
     {
         scene.name = GetAssetName(relativePath);
-        bool exists = AssetManager.TryLoad(relativePath, out SceneAsset? sceneAsset);
+        bool exists = AssetManager.TryLoad(AssetPath.Parse(relativePath), out SceneAsset? sceneAsset);
         sceneAsset ??= new SceneAsset();
         sceneAsset.CaptureFrom(scene);
         bool saved = exists
             ? AssetManager.Save(sceneAsset)
-            : AssetManager.Save(relativePath, sceneAsset);
+            : AssetManager.Save(AssetPath.Parse(relativePath), sceneAsset);
         if (!saved)
             throw new InvalidOperationException($"No asset importer could save scene '{relativePath}'.");
 
@@ -495,7 +495,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     {
         string oldPath = NormalizePath(oldRelativePath);
         string newPath = NormalizePath(newRelativePath);
-        if (AssetManager.TryGetFileSystemEntry(newPath, out Inno.Assets.File.AssetFileEntry entry) &&
+        if (AssetManager.TryGetFileSystemEntry(AssetPath.Parse(newPath), out Inno.Assets.File.AssetFileEntry entry) &&
             entry.isDirectory)
         {
             ApplyDirectoryRename(oldPath, newPath);
@@ -546,7 +546,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
         bool wasDirty = HasSerializedChanges(document.scene, document);
         document.sourcePath = newPath;
         document.scene.name = GetAssetName(newPath);
-        if (AssetManager.TryGetPersistentId(newPath, out Guid sourceAssetId))
+        if (AssetManager.TryGetPersistentId(AssetPath.Parse(newPath), out Guid sourceAssetId))
             document.sourceAssetId = sourceAssetId;
         if (!wasDirty)
             document.savedHash = ComputeSceneHash(document.scene);
@@ -562,20 +562,20 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
         string targetPath = Combine(directory, SanitizeFileName(scene.name) + C_SCENE_EXTENSION);
         if (string.Equals(currentPath, targetPath, StringComparison.Ordinal))
             return currentPath;
-        if (AssetManager.TryGetFileSystemEntry(targetPath, out _))
+        if (AssetManager.TryGetFileSystemEntry(AssetPath.Parse(targetPath), out _))
         {
             throw new IOException(
                 $"Scene asset '{targetPath}' already exists. Choose a different scene name before saving.");
         }
 
-        AssetManager.Move(currentPath, targetPath);
+        AssetManager.Move(AssetPath.Parse(currentPath), AssetPath.Parse(targetPath));
         document.sourcePath = targetPath;
         return targetPath;
     }
 
     private static void ApplyPrefabRename(string oldPath, string newPath)
     {
-        if (!AssetManager.TryGetPersistentId(newPath, out Guid sourceAssetId))
+        if (!AssetManager.TryGetPersistentId(AssetPath.Parse(newPath), out Guid sourceAssetId))
             return;
         string oldName = GetAssetName(oldPath);
         string newName = GetAssetName(newPath);
@@ -611,7 +611,9 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
             try
             {
                 if (change.kind == AssetChangeKind.Moved)
-                    ApplyRename(change.oldRelativePath, change.relativePath);
+                    ApplyRename(
+                        change.previousAssetPath?.ToString() ?? string.Empty,
+                        change.assetPath.ToString());
             }
             catch (Exception exception)
             {
@@ -642,7 +644,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
             for (int i = 0; i < m_pendingScenePaths.Length; i++)
             {
                 string path = m_pendingScenePaths[i];
-                if (!AssetManager.TryGetFileSystemEntry(path, out _))
+                if (!AssetManager.TryGetFileSystemEntry(AssetPath.Parse(path), out _))
                 {
                     string absolutePath = Path.Combine(
                         AssetManager.assetRoot,
@@ -655,7 +657,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
                     Log.Warn("Editor scene workspace skipped missing scene '{0}'.", path);
                     continue;
                 }
-                SceneAsset asset = AssetManager.Load<SceneAsset>(path);
+                SceneAsset asset = AssetManager.Load<SceneAsset>(AssetPath.Parse(path));
                 GameScene scene = asset.Instantiate();
                 scene.name = GetAssetName(path);
                 candidates.Add((
@@ -841,7 +843,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
         directory = NormalizePath(directory);
         string fileName = SanitizeFileName(name);
         string candidate = Combine(directory, fileName + extension);
-        for (int suffix = 1; AssetManager.TryGetFileSystemEntry(candidate, out _); suffix++)
+        for (int suffix = 1; AssetManager.TryGetFileSystemEntry(AssetPath.Parse(candidate), out _); suffix++)
             candidate = Combine(directory, $"{fileName} {suffix}{extension}");
         return candidate;
     }

@@ -26,4 +26,8 @@ public sealed record AssemblyModuleInfo(
     AssemblyDomain domain,
     AssemblyScope scope,
     AssemblyModuleStatus status,
-    IReadOnlyList<string> assemblyNames);
+    IReadOnlyList<string> assemblyNames)
+{
+    /// <summary>Gets stable module dependencies used by this active generation.</summary>
+    public IReadOnlyList<string> upstreamModuleNames { get; init; } = Array.Empty<string>();
+}

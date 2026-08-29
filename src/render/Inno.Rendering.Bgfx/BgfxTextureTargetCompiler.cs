@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using Inno.Native.Bgfx.Tools;
 using Inno.Rendering.Assets;
 
@@ -10,7 +12,10 @@ namespace Inno.Rendering.Bgfx;
 public sealed class BgfxTextureTargetCompiler : ITextureTargetCompiler
 {
     /// <inheritdoc />
-    public byte[] CompileKtx(string sourcePath, TextureColorSpace colorSpace)
+    public async ValueTask<byte[]> CompileKtxAsync(
+        string sourcePath,
+        TextureColorSpace colorSpace,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         string temporaryDirectory = Path.Combine(
@@ -33,7 +38,11 @@ public sealed class BgfxTextureTargetCompiler : ITextureTargetCompiler
             if (colorSpace == TextureColorSpace.Linear)
                 arguments.Add("--linear");
 
-            ToolRunResult result = ToolRunner.Run(BgfxTool.Texturec, arguments, temporaryDirectory);
+            ToolRunResult result = await ToolRunner.RunAsync(
+                BgfxTool.Texturec,
+                arguments,
+                temporaryDirectory,
+                cancellationToken).ConfigureAwait(false);
             if (!result.succeeded || !File.Exists(outputPath))
             {
                 string diagnostics = string.Join(
@@ -43,7 +52,8 @@ public sealed class BgfxTextureTargetCompiler : ITextureTargetCompiler
                     $"texturec failed for '{sourcePath}' with exit code {result.exitCode}: {diagnostics}");
             }
 
-            byte[] artifact = File.ReadAllBytes(outputPath);
+            byte[] artifact = await File.ReadAllBytesAsync(outputPath, cancellationToken)
+                .ConfigureAwait(false);
             if (artifact.Length == 0)
                 throw new InvalidOperationException($"texturec produced an empty artifact for '{sourcePath}'.");
             return artifact;

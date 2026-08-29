@@ -300,8 +300,8 @@ public sealed class PluginArchiveServiceTests : IDisposable
             sourceMounts = defaults.sourceMounts,
             cacheOptions = defaults.cacheOptions
         });
-        AssetManager.CreateDirectory("Content");
-        Assert.True(AssetManager.Save("Content/value.txt", new TextAsset("deterministic")));
+        AssetManager.CreateDirectory(AssetPath.Project("Content"));
+        Assert.True(AssetManager.Save(AssetPath.Project("Content/value.txt"), new TextAsset("deterministic")));
         ProjectSettingsManager.SetProjectOverride(
             PluginDefaultTestSetting.id,
             new PluginDefaultTestSetting { value = 73 },
@@ -343,17 +343,17 @@ public sealed class PluginArchiveServiceTests : IDisposable
     public void ExportIncludesTransitiveProjectDependenciesAndExcludesDefinitionAssets()
     {
         InitializeProjectAssets();
-        AssetManager.CreateDirectory("Content");
-        AssetManager.CreateDirectory("Definitions");
-        Assert.True(AssetManager.Save("Content/value.txt", new TextAsset("dependency")));
-        TextAsset dependency = AssetManager.Load<TextAsset>("Content/value.txt");
-        Assert.True(AssetManager.Save("Definitions/nested.iplugin", new PluginDefinitionAsset
+        AssetManager.CreateDirectory(AssetPath.Project("Content"));
+        AssetManager.CreateDirectory(AssetPath.Project("Definitions"));
+        Assert.True(AssetManager.Save(AssetPath.Project("Content/value.txt"), new TextAsset("dependency")));
+        TextAsset dependency = AssetManager.Load<TextAsset>(AssetPath.Project("Content/value.txt"));
+        Assert.True(AssetManager.Save(AssetPath.Project("Definitions/nested.iplugin"), new PluginDefinitionAsset
         {
             pluginId = "tests.nested",
             displayName = "Nested",
             assets = [dependency]
         }));
-        PluginDefinitionAsset nested = AssetManager.Load<PluginDefinitionAsset>("Definitions/nested.iplugin");
+        PluginDefinitionAsset nested = AssetManager.Load<PluginDefinitionAsset>(AssetPath.Project("Definitions/nested.iplugin"));
         var definition = new PluginDefinitionAsset
         {
             pluginId = "tests.transitive",
@@ -375,8 +375,8 @@ public sealed class PluginArchiveServiceTests : IDisposable
     public void ExportRequiresDeclaredPluginDependenciesAndDoesNotCopyTheirAssets()
     {
         InitializeProjectAssets();
-        AssetManager.CreateDirectory("Local");
-        Assert.True(AssetManager.Save("Local/marker.txt", new TextAsset("local")));
+        AssetManager.CreateDirectory(AssetPath.Project("Local"));
+        Assert.True(AssetManager.Save(AssetPath.Project("Local/marker.txt"), new TextAsset("local")));
         string pluginRoot = Path.Combine(m_root, "DependencyPlugin");
         Directory.CreateDirectory(pluginRoot);
         System.IO.File.WriteAllText(Path.Combine(pluginRoot, "external.txt"), "external");

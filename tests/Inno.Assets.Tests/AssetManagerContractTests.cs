@@ -47,8 +47,8 @@ public sealed class AssetManagerContractTests : IDisposable
     [Fact]
     public void PublicApis_RejectUseBeforeInitialization()
     {
-        Assert.Throws<InvalidOperationException>(() => AssetManager.Import("Missing/nope.txt"));
-        Assert.Throws<InvalidOperationException>(() => AssetManager.Load<TextAsset>("Missing/nope.txt"));
+        Assert.Throws<InvalidOperationException>(() => AssetManager.Import(AssetPath.Project("Missing/nope.txt")));
+        Assert.Throws<InvalidOperationException>(() => AssetManager.Load<TextAsset>(AssetPath.Project("Missing/nope.txt")));
         Assert.Throws<InvalidOperationException>(() => AssetManager.Load<TextAsset>(Guid.NewGuid()));
         Assert.Throws<InvalidOperationException>(() => AssetManager.GetLoadedPaths());
         Assert.Throws<InvalidOperationException>(() => AssetManager.UnloadUnusedAssets());
@@ -98,10 +98,10 @@ public sealed class AssetManagerContractTests : IDisposable
         workspace.Write("Text/shared.txt", "shared");
         AssetManager.Initialize(workspace.options);
 
-        TextAsset first = AssetManager.Load<TextAsset>("Text/shared.txt");
-        TextAsset repeated = AssetManager.Load<TextAsset>("Text/shared.txt");
+        TextAsset first = AssetManager.Load<TextAsset>(AssetPath.Project("Text/shared.txt"));
+        TextAsset repeated = AssetManager.Load<TextAsset>(AssetPath.Project("Text/shared.txt"));
         TextAsset byId = AssetManager.Load<TextAsset>(first.identity.persistentId);
-        Assert.True(AssetManager.TryLoad("Text/shared.txt", out TextAsset? tried));
+        Assert.True(AssetManager.TryLoad(AssetPath.Project("Text/shared.txt"), out TextAsset? tried));
         TextAsset asyncLoaded = await AssetManager.LoadAsync<TextAsset>(first.identity.persistentId);
 
         Assert.Same(first, repeated);
@@ -109,9 +109,9 @@ public sealed class AssetManagerContractTests : IDisposable
         Assert.Same(first, tried);
         Assert.Same(first, asyncLoaded);
         Assert.Single(AssetManager.GetLoadedPaths());
-        Assert.False(AssetManager.TryLoad("Missing/nope.txt", out TextAsset? missing));
+        Assert.False(AssetManager.TryLoad(AssetPath.Project("Missing/nope.txt"), out TextAsset? missing));
         Assert.Null(missing);
-        Assert.False(AssetManager.TryLoad("Text/shared.txt", out BinaryAsset? wrongType));
+        Assert.False(AssetManager.TryLoad(AssetPath.Project("Text/shared.txt"), out BinaryAsset? wrongType));
         Assert.Null(wrongType);
     }
 
@@ -122,7 +122,7 @@ public sealed class AssetManagerContractTests : IDisposable
         AssetManager.Initialize(workspace.options);
         var unsaved = new TextAsset("one", "plain");
 
-        Assert.True(AssetManager.Save("Text/value.txt", unsaved));
+        Assert.True(AssetManager.Save(AssetPath.Project("Text/value.txt"), unsaved));
         Guid persistentId = unsaved.identity.persistentId;
         long version = unsaved.contentVersion;
         workspace.Write("Text/value.txt", "two");
@@ -132,7 +132,7 @@ public sealed class AssetManagerContractTests : IDisposable
         Assert.Same(unsaved, reloaded);
         Assert.Equal("two", reloaded.content);
         Assert.Equal(version + 1, reloaded.contentVersion);
-        Assert.True(AssetManager.TryGetPersistentId("Text/value.txt", out Guid catalogId));
+        Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("Text/value.txt"), out Guid catalogId));
         Assert.Equal(persistentId, catalogId);
     }
 
@@ -142,7 +142,7 @@ public sealed class AssetManagerContractTests : IDisposable
         using TestAssetWorkspace workspace = new();
         workspace.Write("Text/catalog.txt", "one");
         AssetManager.Initialize(workspace.options);
-        TextAsset canonical = AssetManager.Load<TextAsset>("Text/catalog.txt");
+        TextAsset canonical = AssetManager.Load<TextAsset>(AssetPath.Project("Text/catalog.txt"));
         Guid persistentId = canonical.identity.persistentId;
 
         workspace.Write("Text/catalog.txt", "two");
@@ -161,7 +161,7 @@ public sealed class AssetManagerContractTests : IDisposable
         workspace.Write("Graphs/root.managerdep", "Graphs/middle.managerdep");
         AssetManager.Initialize(workspace.options);
 
-        ManagerDependencyAsset root = AssetManager.Load<ManagerDependencyAsset>("Graphs/root.managerdep");
+        ManagerDependencyAsset root = AssetManager.Load<ManagerDependencyAsset>(AssetPath.Project("Graphs/root.managerdep"));
         IReadOnlyList<AssetDependency> direct = AssetManager.GetDependencies(root);
         IReadOnlyList<AssetDependency> recursive = AssetManager.GetDependencies(root, recursive: true);
 
@@ -178,7 +178,7 @@ public sealed class AssetManagerContractTests : IDisposable
         workspace.Write("Text/leaf.txt", "leaf");
         workspace.Write("Graphs/root.managerdep", "Text/leaf.txt");
         AssetManager.Initialize(workspace.options);
-        ManagerDependencyAsset root = AssetManager.Load<ManagerDependencyAsset>("Graphs/root.managerdep");
+        ManagerDependencyAsset root = AssetManager.Load<ManagerDependencyAsset>(AssetPath.Project("Graphs/root.managerdep"));
         TextAsset leaf = AssetManager.Load<TextAsset>(Assert.Single(AssetManager.GetDependencies(root)).persistentId);
 
         AssetReferenceInfo info = AssetManager.GetReferenceInfo(leaf);
@@ -195,7 +195,7 @@ public sealed class AssetManagerContractTests : IDisposable
         using TestAssetWorkspace workspace = new();
         workspace.Write("Text/missing.txt", "value");
         AssetManager.Initialize(workspace.options);
-        TextAsset loaded = AssetManager.Load<TextAsset>("Text/missing.txt");
+        TextAsset loaded = AssetManager.Load<TextAsset>(AssetPath.Project("Text/missing.txt"));
         Guid persistentId = loaded.identity.persistentId;
         byte[] bytes = SerializationManager.Serialize(new AssetHolder { asset = loaded });
 
@@ -216,7 +216,7 @@ public sealed class AssetManagerContractTests : IDisposable
         using TestAssetWorkspace workspace = new();
         workspace.Write("Text/unused.txt", "unused");
         AssetManager.Initialize(workspace.options);
-        TextAsset retained = AssetManager.Load<TextAsset>("Text/unused.txt");
+        TextAsset retained = AssetManager.Load<TextAsset>(AssetPath.Project("Text/unused.txt"));
 
         Assert.Equal(0, AssetManager.UnloadUnusedAssets());
         Assert.Single(AssetManager.GetLoadedPaths());
@@ -243,7 +243,7 @@ public sealed class AssetManagerContractTests : IDisposable
         using TestAssetWorkspace workspace = new();
         workspace.Write("Text/reload.txt", "one");
         AssetManager.Initialize(workspace.options);
-        TextAsset asset = AssetManager.Load<TextAsset>("Text/reload.txt");
+        TextAsset asset = AssetManager.Load<TextAsset>(AssetPath.Project("Text/reload.txt"));
         int observed = 0;
         AssetManager.AssetReloaded += _ => throw new InvalidOperationException("observer");
         AssetManager.AssetReloaded += _ => observed++;
@@ -261,7 +261,7 @@ public sealed class AssetManagerContractTests : IDisposable
         using TestAssetWorkspace workspace = new();
         workspace.Write("Text/value.txt", "value");
         AssetManager.Initialize(workspace.options);
-        _ = AssetManager.Load<TextAsset>("Text/value.txt");
+        _ = AssetManager.Load<TextAsset>(AssetPath.Project("Text/value.txt"));
         AssetManager.AssetReloaded += _ => { };
 
         AssetManager.Shutdown();
@@ -278,7 +278,7 @@ public sealed class AssetManagerContractTests : IDisposable
         using TestAssetWorkspace workspace = new();
         workspace.Write("Text/project.txt", "project");
         AssetManager.Initialize(workspace.options);
-        Guid projectId = AssetManager.Load<TextAsset>("Text/project.txt").identity.persistentId;
+        Guid projectId = AssetManager.Load<TextAsset>(AssetPath.Project("Text/project.txt")).identity.persistentId;
         string pluginRoot = workspace.CreateExternalRoot("ConflictPlugin");
         WriteReadOnlyAsset(
             pluginRoot,
@@ -326,10 +326,10 @@ public sealed class AssetManagerContractTests : IDisposable
         Assert.Equal("plugin", AssetManager.Load<TextAsset>(pluginPath).content);
         Assert.Throws<InvalidOperationException>(() =>
             AssetManager.Save(pluginPath, new TextAsset("changed")));
-        Assert.Throws<InvalidOperationException>(() => AssetManager.Move(pluginPath.ToString(), "moved.txt"));
-        Assert.Throws<InvalidOperationException>(() => AssetManager.Delete(pluginPath.ToString()));
+        Assert.Throws<InvalidOperationException>(() => AssetManager.Move(pluginPath, AssetPath.Project("moved.txt")));
+        Assert.Throws<InvalidOperationException>(() => AssetManager.Delete(pluginPath));
         Assert.Throws<InvalidOperationException>(() =>
-            AssetManager.CreateDirectory(new AssetPath(pluginId, "Folder").ToString()));
+            AssetManager.CreateDirectory(new AssetPath(pluginId, "Folder")));
     }
 
     [Fact]
@@ -466,7 +466,7 @@ public sealed class AssetManagerContractTests : IDisposable
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static WeakReference LoadWithoutEscaping(string relativePath)
     {
-        TextAsset asset = AssetManager.Load<TextAsset>(relativePath);
+        TextAsset asset = AssetManager.Load<TextAsset>(AssetPath.Project(relativePath));
         return new WeakReference(asset);
     }
 
@@ -582,7 +582,7 @@ internal sealed class ManagerDependencyImporter : AssetImporter<ManagerDependenc
     {
         string dependency = context.ReadUtf8Text().Trim();
         if (!string.IsNullOrWhiteSpace(dependency))
-            output.DependsOnAsset(dependency);
+            output.DependsOnAsset(AssetPath.Parse(dependency));
         output.SetAsset(new ManagerDependencyAsset());
         return output.WriteArtifactAsync("runtime", context.sourceBytes, cancellationToken);
     }

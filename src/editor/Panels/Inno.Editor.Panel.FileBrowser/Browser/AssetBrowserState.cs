@@ -32,7 +32,7 @@ public sealed class AssetBrowserState
     public string? GetSelectedPath(EditorContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        return (m_interactions.selection.selectedTarget as Inno.Assets.File.AssetFileEntry)?.relativePath;
+        return (m_interactions.selection.selectedTarget as Inno.Assets.File.AssetFileEntry)?.assetPath.ToString();
     }
 
     /// <summary>
@@ -55,7 +55,7 @@ public sealed class AssetBrowserState
         if (!string.IsNullOrWhiteSpace(relativePath))
         {
             if (Inno.Assets.AssetManager.TryGetFileSystemEntry(
-                    Normalize(relativePath),
+                    Inno.Assets.Core.AssetPath.Parse(Normalize(relativePath)),
                     out Inno.Assets.File.AssetFileEntry entry))
             {
                 target = entry;

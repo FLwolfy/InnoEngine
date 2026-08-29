@@ -39,17 +39,18 @@ public sealed class ScriptManager : IDisposable
     private readonly Func<CancellationToken, ValueTask>? m_compileGateProbe;
     private readonly List<UnloadObservation> m_unloadObservations = [];
 
+    private CancellationTokenSource? m_activeCompilationCancellation;
     private PendingReload? m_pendingCompilation;
     private ScriptCompilationResult? m_lastCompilation;
-    private AssemblyModuleHandle? m_pluginModule;
+    private readonly Dictionary<string, AssemblyModuleHandle> m_pluginModules = new(StringComparer.Ordinal);
     private AssemblyModuleHandle? m_runtimeScriptModule;
     private AssemblyModuleHandle? m_editorScriptModule;
     private string? m_activeCompilationDirectory;
-    private string? m_activePluginFingerprint;
-    private string? m_activeRuntimeFingerprint;
-    private string? m_activeEditorFingerprint;
+    private readonly Dictionary<string, string> m_activeModuleFingerprints = new(StringComparer.Ordinal);
     private string m_compilationStatus = "Waiting for script changes.";
     private long m_lastCompileRequestTimestamp;
+    private long m_compilationStartedTimestamp;
+    private TimeSpan m_lastCompilationElapsed;
     private float m_compilationProgress;
     private int m_unloadVerificationAttempt;
     private ScriptReloadRequest m_requestedReload;
@@ -79,11 +80,19 @@ public sealed class ScriptManager : IDisposable
             throw new ArgumentException("Project root directory is required.", nameof(options));
         if (options.debounceMilliseconds < 0)
             throw new ArgumentOutOfRangeException(nameof(options), "Debounce duration cannot be negative.");
+        if (options.compilationWarningTimeout <= TimeSpan.Zero &&
+            options.compilationWarningTimeout != Timeout.InfiniteTimeSpan)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                "Compilation warning timeout must be positive or infinite.");
+        }
         m_options = new ScriptManagerOptions
         {
             projectRootDirectory = System.IO.Path.GetFullPath(options.projectRootDirectory),
             autoCompile = options.autoCompile,
-            debounceMilliseconds = options.debounceMilliseconds
+            debounceMilliseconds = options.debounceMilliseconds,
+            compilationWarningTimeout = options.compilationWarningTimeout
         };
         m_artifactCache = new ScriptArtifactCache(m_options.outputDirectory);
         m_compileGateProbe = compileGateProbe;
@@ -107,7 +116,34 @@ public sealed class ScriptManager : IDisposable
     public float compilationProgress => Volatile.Read(ref m_compilationProgress);
 
     /// <summary>Gets a short description of the current compilation stage.</summary>
-    public string compilationStatus => Volatile.Read(ref m_compilationStatus);
+    public string compilationStatus
+    {
+        get
+        {
+            string status = Volatile.Read(ref m_compilationStatus);
+            return isCompilationTakingLong
+                ? $"Long-running compilation ({compilationElapsed.TotalSeconds:F1}s). {status}"
+                : status;
+        }
+    }
+
+    /// <summary>Gets the elapsed duration of the active or most recently completed compilation.</summary>
+    public TimeSpan compilationElapsed
+    {
+        get
+        {
+            long started = Volatile.Read(ref m_compilationStartedTimestamp);
+            return isCompiling && started != 0
+                ? TimeSpan.FromMilliseconds(Math.Max(0, Environment.TickCount64 - started))
+                : m_lastCompilationElapsed;
+        }
+    }
+
+    /// <summary>Gets whether the active compilation exceeded the configured warning duration.</summary>
+    public bool isCompilationTakingLong
+        => isCompiling &&
+           m_options.compilationWarningTimeout != Timeout.InfiniteTimeSpan &&
+           compilationElapsed >= m_options.compilationWarningTimeout;
 
     /// <summary>Gets the most recently completed compilation.</summary>
     public ScriptCompilationResult? lastCompilation
@@ -129,7 +165,7 @@ public sealed class ScriptManager : IDisposable
     }
 
     /// <summary>
-    /// Generates IDE files, subscribes to the Asset Database, and requests the initial compilation.
+    /// Subscribes to committed asset changes and queues a cache-aware initial compilation request.
     /// </summary>
     public void Start()
     {
@@ -138,9 +174,7 @@ public sealed class ScriptManager : IDisposable
             throw new InvalidOperationException("ScriptManager requires AssetManager to be initialized first.");
         System.IO.Directory.CreateDirectory(m_options.assetDirectory);
         System.IO.Directory.CreateDirectory(m_options.outputDirectory);
-        _ = m_artifactCache.Collect([]);
-        AssetManager.Rescan();
-        GenerateProjectFiles();
+        AssetManager.Update();
         AssetManager.Changed -= OnAssetDatabaseChanged;
         AssetManager.Changed += OnAssetDatabaseChanged;
         AssetManager.SourceMountsChanged -= OnSourceMountsChanged;
@@ -151,12 +185,43 @@ public sealed class ScriptManager : IDisposable
         {
             lock (m_sync)
             {
-                m_requestedReload = ScriptReloadRequest.ReloadPlugins;
+                bool hasActiveScripting = AssemblyManager.isInitialized &&
+                    AssemblyManager.modules.Any(static module => module.domain == AssemblyDomain.InnoScripting);
+                m_requestedReload = PluginManager.hasPendingActivation
+                    ? ScriptReloadRequest.ReloadPlugins
+                    : hasActiveScripting
+                        ? ScriptReloadRequest.Recompile
+                        : ScriptReloadRequest.ReloadScripting;
                 m_initialCompileRequested = true;
                 m_lastCompileRequestTimestamp = Environment.TickCount64;
             }
-            SetCompilationProgress(0f, "Initial plugin and scripting reload queued.");
+            SetCompilationProgress(0f, "Initial scripting cache probe queued.");
         }
+    }
+
+    /// <summary>
+    /// Requests cancellation of the active compilation without changing the active script generation.
+    /// </summary>
+    /// <returns><see langword="true"/> when an active compilation received the request.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown after the manager has been disposed.</exception>
+    public bool CancelCompilation()
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        CancellationTokenSource? cancellation;
+        lock (m_sync)
+            cancellation = m_activeCompilationCancellation;
+        if (cancellation is null)
+            return false;
+        try
+        {
+            cancellation.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            return false;
+        }
+        SetCompilationProgress(compilationProgress, "Canceling script compilation...");
+        return true;
     }
 
     /// <summary>
@@ -207,10 +272,7 @@ public sealed class ScriptManager : IDisposable
             m_initialCompileRequested = false;
         }
         if (AssetManager.isInitialized)
-        {
             AssetManager.Update();
-            AssetManager.Rescan();
-        }
         compilation = CompileAsync(request).AsTask();
         return true;
     }
@@ -240,6 +302,9 @@ public sealed class ScriptManager : IDisposable
             effectiveCancellation.ThrowIfCancellationRequested();
             ObjectDisposedException.ThrowIf(m_disposed, this);
             Volatile.Write(ref m_isCompiling, 1);
+            Volatile.Write(ref m_compilationStartedTimestamp, Environment.TickCount64);
+            lock (m_sync)
+                m_activeCompilationCancellation = linkedCancellation;
             if (m_compileGateProbe is not null)
                 await m_compileGateProbe(effectiveCancellation).ConfigureAwait(false);
             SetCompilationProgress(0f, "Generating IDE project files...");
@@ -302,6 +367,17 @@ public sealed class ScriptManager : IDisposable
         }
         finally
         {
+            long started = Interlocked.Exchange(ref m_compilationStartedTimestamp, 0);
+            if (started != 0)
+            {
+                m_lastCompilationElapsed = TimeSpan.FromMilliseconds(
+                    Math.Max(0, Environment.TickCount64 - started));
+            }
+            lock (m_sync)
+            {
+                if (ReferenceEquals(m_activeCompilationCancellation, linkedCancellation))
+                    m_activeCompilationCancellation = null;
+            }
             Volatile.Write(ref m_isCompiling, 0);
             m_compileGate.Release();
         }
@@ -330,8 +406,8 @@ public sealed class ScriptManager : IDisposable
         if (pending is null)
             return false;
 
-        IReadOnlyList<AssemblyLoadRequest> requests = SelectReloadRequests(pending);
-        if (requests.Count == 0)
+        ReloadPlan plan = SelectReloadPlan(pending);
+        if (plan.requests.Count == 0 && plan.removedModuleNames.Count == 0)
         {
             PluginManager.ActivatePending();
             ProjectSettingsManager.RebuildCurrent();
@@ -345,12 +421,15 @@ public sealed class ScriptManager : IDisposable
 
         SetCompilationProgress(C_STAGING_PROGRESS, "Staging script reload candidates...");
         AssemblyModuleInfo[] retiringModules = AssemblyManager.modules
-            .Where(module => requests.Any(request => string.Equals(
-                request.moduleName,
-                module.moduleName,
-                StringComparison.Ordinal)))
+            .Where(module => plan.requests.Any(request => string.Equals(
+                    request.moduleName,
+                    module.moduleName,
+                    StringComparison.Ordinal)) ||
+                plan.removedModuleNames.Contains(module.moduleName, StringComparer.Ordinal))
             .ToArray();
-        using AssemblyReloadSession reload = AssemblyManager.BeginReload(requests);
+        using AssemblyReloadSession reload = AssemblyManager.BeginReload(
+            plan.requests,
+            plan.removedModuleNames);
         SetCompilationProgress(C_MIGRATION_PROGRESS, "Migrating active editor state...");
         Action activateCandidate = static () =>
         {
@@ -385,7 +464,7 @@ public sealed class ScriptManager : IDisposable
         m_activeCompilationDirectory = pending.compilation.outputDirectory;
         _ = m_artifactCache.Collect([m_activeCompilationDirectory]);
         RefreshModuleHandles();
-        UpdateActiveFingerprints(requests);
+        UpdateActiveFingerprints(plan);
         PluginManager.CommitPending();
         SetCompilationProgress(
             retiringModules.Length == 0 ? 1f : C_UNLOAD_VERIFICATION_PROGRESS,
@@ -451,12 +530,13 @@ public sealed class ScriptManager : IDisposable
                 {
                     AssemblyModuleHandle[] modules =
                     [
-                        .. new[] { m_editorScriptModule, m_runtimeScriptModule, m_pluginModule }
-                            .OfType<AssemblyModuleHandle>()
+                        .. new[] { m_editorScriptModule, m_runtimeScriptModule }
+                            .OfType<AssemblyModuleHandle>(),
+                        .. m_pluginModules.Values
                     ];
                     if (modules.Length > 0)
                         _ = AssemblyManager.Unload(modules);
-                    m_pluginModule = null;
+                    m_pluginModules.Clear();
                     m_runtimeScriptModule = null;
                     m_editorScriptModule = null;
                     if (modules.Length > 0 && AssetManager.isInitialized)
@@ -558,9 +638,11 @@ public sealed class ScriptManager : IDisposable
         for (int i = 0; i < changeSet.changes.Count; i++)
         {
             AssetChange change = changeSet.changes[i];
-            if (!IsScriptInput(change.relativePath) && !IsScriptInput(change.oldRelativePath))
+            string path = change.assetPath.ToString();
+            string previousPath = change.previousAssetPath?.ToString() ?? string.Empty;
+            if (!IsScriptInput(path) && !IsScriptInput(previousPath))
                 continue;
-            QueueReload(IsPluginInput(change.relativePath) || IsPluginInput(change.oldRelativePath)
+            QueueReload(IsPluginInput(path) || IsPluginInput(previousPath)
                 ? ScriptReloadRequest.ReloadPlugins
                 : ScriptReloadRequest.Recompile);
             return;
@@ -607,71 +689,103 @@ public sealed class ScriptManager : IDisposable
         ScriptDiagnosticPublisher.ClearUnload();
     }
 
-    private IReadOnlyList<AssemblyLoadRequest> SelectReloadRequests(PendingReload pending)
+    private ReloadPlan SelectReloadPlan(PendingReload pending)
     {
         IReadOnlyList<AssemblyLoadRequest> requests = pending.compilation.reloadRequests;
-        if (requests.Count == 0)
-            return [];
-        if (m_pluginModule is null || m_runtimeScriptModule is null || m_editorScriptModule is null)
-            return requests;
+        string[] candidatePlugins = requests
+            .Where(static request => request.domain == AssemblyDomain.InnoPlugin)
+            .Select(static request => request.moduleName)
+            .ToArray();
+        string[] removedPlugins = pending.request == ScriptReloadRequest.ReloadPlugins
+            ? m_pluginModules.Keys.Except(candidatePlugins, StringComparer.Ordinal).ToArray()
+            : [];
+        if (m_runtimeScriptModule is null || m_editorScriptModule is null ||
+            candidatePlugins.Any(plugin => !m_pluginModules.ContainsKey(plugin)))
+        {
+            return new ReloadPlan(requests, removedPlugins);
+        }
         if (pending.request == ScriptReloadRequest.ReloadPlugins)
-            return requests;
+            return new ReloadPlan(requests, removedPlugins);
         if (pending.request == ScriptReloadRequest.ReloadScripting)
-            return requests.Where(static request => request.domain == AssemblyDomain.InnoScripting).ToArray();
+        {
+            return new ReloadPlan(
+                requests.Where(static request => request.domain == AssemblyDomain.InnoScripting).ToArray(),
+                []);
+        }
         if (string.Equals(
                 pending.compilation.outputDirectory,
                 m_activeCompilationDirectory,
                 StringComparison.OrdinalIgnoreCase))
         {
-            return [];
+            return new ReloadPlan([], []);
         }
 
         var compiled = pending.compilation.compiledAssemblies.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var selected = requests
+            .Where(request => GetOwnedAssemblyNames(request).Any(compiled.Contains) ||
+                              !m_activeModuleFingerprints.TryGetValue(
+                                  request.moduleName,
+                                  out string? activeFingerprint) ||
+                              !string.Equals(
+                                  ComputeRequestFingerprint(request),
+                                  activeFingerprint,
+                                  StringComparison.Ordinal))
+            .Select(static request => request.moduleName)
+            .ToHashSet(StringComparer.Ordinal);
+        if (selected.Any(name => requests.Any(request =>
+                request.domain == AssemblyDomain.InnoPlugin &&
+                string.Equals(request.moduleName, name, StringComparison.Ordinal))))
+        {
+            bool changed;
+            do
+            {
+                changed = false;
+                foreach (AssemblyLoadRequest request in requests.Where(static request =>
+                             request.domain == AssemblyDomain.InnoPlugin))
+                {
+                    if (!selected.Contains(request.moduleName) && request.upstreamModuleNames.Any(selected.Contains))
+                        changed |= selected.Add(request.moduleName);
+                }
+            }
+            while (changed);
+            selected.UnionWith(requests
+                .Where(static request => request.domain == AssemblyDomain.InnoScripting)
+                .Select(static request => request.moduleName));
+        }
         AssemblyLoadRequest? runtime = requests.SingleOrDefault(static request =>
             request.domain == AssemblyDomain.InnoScripting && request.scope == AssemblyScope.Runtime);
-        AssemblyLoadRequest? editor = requests.SingleOrDefault(static request =>
-            request.domain == AssemblyDomain.InnoScripting && request.scope == AssemblyScope.Editor);
-        if (runtime is not null &&
-            (GetOwnedAssemblyNames(runtime).Any(compiled.Contains) ||
-             !string.Equals(
-                 ComputeRequestFingerprint(runtime),
-                 m_activeRuntimeFingerprint,
-                 StringComparison.Ordinal)))
+        if (runtime is not null && selected.Contains(runtime.moduleName))
         {
-            return requests.Where(static request => request.domain == AssemblyDomain.InnoScripting).ToArray();
+            AssemblyLoadRequest? editor = requests.SingleOrDefault(static request =>
+                request.domain == AssemblyDomain.InnoScripting && request.scope == AssemblyScope.Editor);
+            if (editor is not null)
+                selected.Add(editor.moduleName);
         }
-        if (editor is not null &&
-            (GetOwnedAssemblyNames(editor).Any(compiled.Contains) ||
-             !string.Equals(
-                 ComputeRequestFingerprint(editor),
-                 m_activeEditorFingerprint,
-                 StringComparison.Ordinal)))
-        {
-            return [editor];
-        }
-        return [];
+        return new ReloadPlan(
+            requests.Where(request => selected.Contains(request.moduleName)).ToArray(),
+            []);
     }
 
     private void RefreshModuleHandles()
     {
         IReadOnlyList<AssemblyModuleInfo> modules = AssemblyManager.modules;
-        m_pluginModule = modules.Single(static module => module.moduleName == "ProjectPlugins").handle;
+        m_pluginModules.Clear();
+        foreach (AssemblyModuleInfo module in modules.Where(static module =>
+                     module.domain == AssemblyDomain.InnoPlugin &&
+                     module.moduleName.StartsWith("Plugin.", StringComparison.Ordinal)))
+        {
+            m_pluginModules.Add(module.moduleName, module.handle);
+        }
         m_runtimeScriptModule = modules.Single(static module => module.moduleName == "RuntimeScripts").handle;
         m_editorScriptModule = modules.Single(static module => module.moduleName == "EditorScripts").handle;
     }
 
-    private void UpdateActiveFingerprints(IReadOnlyList<AssemblyLoadRequest> requests)
+    private void UpdateActiveFingerprints(ReloadPlan plan)
     {
-        foreach (AssemblyLoadRequest request in requests)
-        {
-            string fingerprint = ComputeRequestFingerprint(request);
-            if (request.domain == AssemblyDomain.InnoPlugin)
-                m_activePluginFingerprint = fingerprint;
-            else if (request.scope == AssemblyScope.Runtime)
-                m_activeRuntimeFingerprint = fingerprint;
-            else
-                m_activeEditorFingerprint = fingerprint;
-        }
+        foreach (string removed in plan.removedModuleNames)
+            m_activeModuleFingerprints.Remove(removed);
+        foreach (AssemblyLoadRequest request in plan.requests)
+            m_activeModuleFingerprints[request.moduleName] = ComputeRequestFingerprint(request);
     }
 
     private static IEnumerable<string> GetOwnedAssemblyNames(AssemblyLoadRequest request)
@@ -745,6 +859,10 @@ public sealed class ScriptManager : IDisposable
     private sealed record PendingReload(
         ScriptCompilationResult compilation,
         ScriptReloadRequest request);
+
+    private sealed record ReloadPlan(
+        IReadOnlyList<AssemblyLoadRequest> requests,
+        IReadOnlyList<string> removedModuleNames);
 
     private sealed record UnloadObservation(
         AssemblyUnloadMonitor monitor,

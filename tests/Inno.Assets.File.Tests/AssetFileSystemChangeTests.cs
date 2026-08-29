@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 
+using Inno.Assets.Core;
 using Inno.Assets.File;
 
 using Xunit;
@@ -25,13 +26,13 @@ public sealed class AssetFileSystemChangeTests
             System.IO.File.WriteAllText(path, "two");
             IReadOnlyList<AssetChangedEvent> observed = fileSystem.WaitForIdle();
 
-            Assert.True(fileSystem.TryGetEntry("Flow/item.txt", out AssetFileEntry created));
+            Assert.True(fileSystem.TryGetEntry(AssetPath.Project("Flow/item.txt"), out AssetFileEntry created));
             Assert.False(created.isDirectory);
 
             System.IO.File.Delete(path);
             observed = observed.Concat(fileSystem.WaitForIdle()).ToArray();
 
-            Assert.False(fileSystem.TryGetEntry("Flow/item.txt", out _));
+            Assert.False(fileSystem.TryGetEntry(AssetPath.Project("Flow/item.txt"), out _));
             Assert.Contains(observed, static change =>
                 change.relativePath == "Flow/item.txt" &&
                 change.changeType.HasFlag(WatcherChangeTypes.Deleted));
@@ -59,8 +60,8 @@ public sealed class AssetFileSystemChangeTests
                 change.changeType.HasFlag(WatcherChangeTypes.Renamed)));
             Assert.Equal("old.txt", renamed.oldRelativePath);
             Assert.Equal("new.txt", renamed.relativePath);
-            Assert.False(fileSystem.Exists("old.txt"));
-            Assert.True(fileSystem.Exists("new.txt"));
+            Assert.False(fileSystem.Exists(AssetPath.Project("old.txt")));
+            Assert.True(fileSystem.Exists(AssetPath.Project("new.txt")));
         }
         finally
         {

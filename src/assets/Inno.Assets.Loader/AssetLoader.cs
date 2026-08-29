@@ -53,6 +53,7 @@ public sealed class AssetLoader : IDisposable
     private readonly IReadOnlyDictionary<AssetSourceId, AssetSourceMount> m_mounts;
 
     private bool m_disposed;
+    private bool m_disposeRequested;
     private long m_importerRegistryVersion = -1;
     private long m_buildProcessorRegistryVersion = -1;
 
@@ -125,34 +126,34 @@ public sealed class AssetLoader : IDisposable
     /// <summary>Occurs after a loaded canonical asset is updated in place.</summary>
     public event Action<AssetObject>? AssetReloaded;
 
-    /// <summary>Imports one source file into metadata and a runtime artifact.</summary>
-    /// <param name="relativePath">The source-relative path.</param>
+    /// <summary>Imports one isolated source file into metadata and a runtime artifact.</summary>
+    /// <param name="path">The isolated source path.</param>
     /// <returns><see langword="true"/> when an importer handled the source.</returns>
-    public bool Import(string relativePath)
-        => Execute(() => ImportLocked(NormalizeRelativePath(relativePath)));
+    public bool Import(AssetPath path)
+        => Execute(() => ImportLocked(NormalizeAssetPath(path)));
 
     /// <summary>Reconciles source files, metadata, artifacts and the in-memory catalog.</summary>
     public void Rescan()
         => Execute(RescanLocked);
 
-    /// <summary>Loads a canonical asset by source-relative path.</summary>
-    /// <param name="relativePath">The source-relative path.</param>
+    /// <summary>Loads a canonical asset by isolated source path.</summary>
+    /// <param name="path">The isolated source path.</param>
     /// <param name="requestedAssetType">The required assignable asset type.</param>
     /// <returns>The canonical asset, or <see langword="null"/> when unavailable or incompatible.</returns>
-    public AssetObject? Load(string relativePath, Type requestedAssetType)
+    public AssetObject? Load(AssetPath path, Type requestedAssetType)
     {
         ArgumentNullException.ThrowIfNull(requestedAssetType);
-        return Execute(() => LoadPathLocked(NormalizeRelativePath(relativePath), requestedAssetType));
+        return Execute(() => LoadPathLocked(NormalizeAssetPath(path), requestedAssetType));
     }
 
-    /// <summary>Tries to load a canonical asset by source-relative path.</summary>
-    /// <param name="relativePath">The source-relative path.</param>
+    /// <summary>Tries to load a canonical asset by isolated source path.</summary>
+    /// <param name="path">The isolated source path.</param>
     /// <param name="requestedAssetType">The required assignable asset type.</param>
     /// <param name="asset">The canonical asset when successful.</param>
     /// <returns><see langword="true"/> when a compatible asset was loaded.</returns>
-    public bool TryLoad(string relativePath, Type requestedAssetType, out AssetObject? asset)
+    public bool TryLoad(AssetPath path, Type requestedAssetType, out AssetObject? asset)
     {
-        asset = Load(relativePath, requestedAssetType);
+        asset = Load(path, requestedAssetType);
         return asset is not null;
     }
 
@@ -177,24 +178,25 @@ public sealed class AssetLoader : IDisposable
         return asset is not null;
     }
 
-    /// <summary>Asynchronously loads a canonical asset by source-relative path.</summary>
-    /// <param name="relativePath">The source-relative path.</param>
+    /// <summary>Asynchronously loads a canonical asset by isolated source path.</summary>
+    /// <param name="path">The isolated source path.</param>
     /// <param name="requestedAssetType">The required assignable asset type.</param>
     /// <param name="cancellationToken">Cancellation for the current caller's wait.</param>
     /// <returns>The canonical asset, or <see langword="null"/> when unavailable or incompatible.</returns>
     public ValueTask<AssetObject?> LoadAsync(
-        string relativePath,
+        AssetPath path,
         Type requestedAssetType,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(requestedAssetType);
-        string normalized = NormalizeRelativePath(relativePath);
+        string normalized = NormalizeAssetPath(path);
         Task<AssetObject?> operation;
         lock (m_asyncSync)
         {
+            ObjectDisposedException.ThrowIf(m_disposeRequested, this);
             if (!m_inFlightPathLoads.TryGetValue(normalized, out operation!))
             {
-                operation = Task.Run(() => Load(normalized, typeof(AssetObject)));
+                operation = Task.Run(() => Load(AssetPath.Parse(normalized), typeof(AssetObject)));
                 m_inFlightPathLoads.Add(normalized, operation);
                 _ = operation.ContinueWith(
                     _ => RemovePathOperation(normalized, operation),
@@ -220,6 +222,7 @@ public sealed class AssetLoader : IDisposable
         Task<AssetObject?> operation;
         lock (m_asyncSync)
         {
+            ObjectDisposedException.ThrowIf(m_disposeRequested, this);
             if (!m_inFlightIdLoads.TryGetValue(persistentId, out operation!))
             {
                 operation = Task.Run(() => Load(persistentId, typeof(AssetObject)));
@@ -260,17 +263,17 @@ public sealed class AssetLoader : IDisposable
         ArgumentNullException.ThrowIfNull(asset);
         if (string.IsNullOrWhiteSpace(asset.assetPath.ToString()))
             throw new InvalidOperationException("An unsaved asset requires an explicit source-relative path.");
-        return Save(asset.assetPath.ToString(), asset);
+        return Save(asset.assetPath, asset);
     }
 
-    /// <summary>Saves an asset to its initial or existing source-relative path.</summary>
-    /// <param name="relativePath">The source-relative path.</param>
+    /// <summary>Saves an asset to its initial or existing isolated source path.</summary>
+    /// <param name="path">The isolated source path.</param>
     /// <param name="asset">The asset to export.</param>
     /// <returns><see langword="true"/> when an importer exported the asset.</returns>
-    public bool Save(string relativePath, AssetObject asset)
+    public bool Save(AssetPath path, AssetObject asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
-        string normalized = NormalizeRelativePath(relativePath);
+        string normalized = NormalizeAssetPath(path);
         return Execute(() => SaveLocked(normalized, asset));
     }
 
@@ -334,10 +337,13 @@ public sealed class AssetLoader : IDisposable
                 string.Join("\n", record.meta.diagnostics)))
             .ToHashSet());
 
-    /// <summary>Tries to get a catalog snapshot by source-relative path.</summary>
-    public bool TryGetInfo(string relativePath, out AssetInfo? info)
+    /// <summary>Tries to get a catalog snapshot by isolated source path.</summary>
+    /// <param name="path">The isolated source path.</param>
+    /// <param name="info">The immutable catalog snapshot when found.</param>
+    /// <returns><see langword="true"/> when the source is cataloged.</returns>
+    public bool TryGetInfo(AssetPath path, out AssetInfo? info)
     {
-        string normalized = NormalizeRelativePath(relativePath);
+        string normalized = NormalizeAssetPath(path);
         AssetInfo? result = Execute(() => CreateInfo(FindRecordLocked(normalized)));
         info = result;
         return result is not null;
@@ -420,36 +426,37 @@ public sealed class AssetLoader : IDisposable
     }
 
     /// <summary>Tries to resolve a persistent identity without loading the asset.</summary>
-    /// <param name="relativePath">The source-relative path.</param>
+    /// <param name="path">The isolated source path.</param>
     /// <param name="persistentId">The resolved identity.</param>
     /// <returns><see langword="true"/> when catalog metadata exists.</returns>
-    public bool TryGetPersistentId(string relativePath, out Guid persistentId)
+    public bool TryGetPersistentId(AssetPath path, out Guid persistentId)
     {
-        string normalized = NormalizeRelativePath(relativePath);
+        string normalized = NormalizeAssetPath(path);
         Guid result = Execute(() => FindRecordLocked(normalized)?.persistentId ?? Guid.Empty);
         persistentId = result;
         return result != Guid.Empty;
     }
 
     /// <summary>Tries to resolve the concrete asset type without loading it.</summary>
-    /// <param name="relativePath">The source-relative path.</param>
+    /// <param name="path">The isolated source path.</param>
     /// <param name="assetType">The resolved type.</param>
     /// <returns><see langword="true"/> when the type can be resolved.</returns>
-    public bool TryGetAssetType(string relativePath, out Type? assetType)
+    public bool TryGetAssetType(AssetPath path, out Type? assetType)
     {
-        string normalized = NormalizeRelativePath(relativePath);
+        string normalized = NormalizeAssetPath(path);
         Type? result = Execute(() => ResolveRecordType(FindRecordLocked(normalized)));
         assetType = result;
         return result is not null;
     }
 
-    /// <summary>Gets source paths of all canonical loaded assets.</summary>
-    /// <returns>A stable source-relative path snapshot.</returns>
-    public IReadOnlyList<string> GetLoadedPaths()
+    /// <summary>Gets isolated source paths of all canonical loaded assets.</summary>
+    /// <returns>A stable isolated path snapshot.</returns>
+    public IReadOnlyList<AssetPath> GetLoadedPaths()
         => Execute(() => m_recordsByPath.Values
             .Where(static record => record.asset is not null)
-            .Select(static record => record.relativePath)
-            .OrderBy(static path => path, StringComparer.Ordinal)
+            .Select(static record => AssetPath.Parse(record.relativePath))
+            .OrderBy(static path => path.source.value, StringComparer.Ordinal)
+            .ThenBy(static path => path.localPath, StringComparer.Ordinal)
             .ToArray());
 
     /// <summary>Gets direct or transitive runtime dependencies of an asset.</summary>
@@ -499,6 +506,29 @@ public sealed class AssetLoader : IDisposable
     {
         if (m_disposed)
             return;
+        Task[] pending;
+        lock (m_asyncSync)
+        {
+            if (m_disposeRequested)
+                return;
+            m_disposeRequested = true;
+            pending = m_inFlightPathLoads.Values
+                .Concat(m_inFlightIdLoads.Values)
+                .Distinct()
+                .Cast<Task>()
+                .ToArray();
+        }
+        if (pending.Length > 0)
+        {
+            try
+            {
+                Task.WhenAll(pending).GetAwaiter().GetResult();
+            }
+            catch
+            {
+                // Load failures are observed by their callers and do not prevent deterministic disposal.
+            }
+        }
         Execute(DisposeLocked, allowDisposed: true);
         m_operationGate.Dispose();
     }
@@ -698,7 +728,7 @@ public sealed class AssetLoader : IDisposable
             assetStateBytes = state,
             runtimeDependencies = runtimeDependencies.Select(ToData).ToArray(),
             importDependencies = context.importDependencies
-                .Select(dependency => CreateImportDependencyDataLocked(context.relativePath, dependency))
+                .Select(dependency => CreateImportDependencyDataLocked(context.assetPath.ToString(), dependency))
                 .ToArray(),
             importStatus = (int)AssetImportStatus.Imported,
             importerImplementationFingerprint = implementationFingerprint,
@@ -1112,12 +1142,12 @@ public sealed class AssetLoader : IDisposable
                 dependencyPath = record.relativePath;
             }
             if (!string.IsNullOrWhiteSpace(dependencyPath))
-                ValidateSourceReferenceLocked(context.relativePath, NormalizeRelativePath(dependencyPath));
+                ValidateSourceReferenceLocked(context.assetPath.ToString(), NormalizeRelativePath(dependencyPath));
         }
         foreach (string path in context.runtimeDependencyPaths.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             string normalized = NormalizeRelativePath(path);
-            ValidateSourceReferenceLocked(context.relativePath, normalized);
+            ValidateSourceReferenceLocked(context.assetPath.ToString(), normalized);
             if (m_activeImports.Contains(normalized))
             {
                 Guid pendingId = m_pendingImportIds[normalized];
@@ -1135,7 +1165,7 @@ public sealed class AssetLoader : IDisposable
             if (dependencyStale && !ImportLocked(normalized))
             {
                 throw new InvalidOperationException(
-                    $"Runtime dependency '{normalized}' referenced by '{context.relativePath}' cannot be imported.");
+                    $"Runtime dependency '{normalized}' referenced by '{context.assetPath}' cannot be imported.");
             }
             dependencyRecord = FindRecordLocked(normalized)
                 ?? throw new InvalidOperationException($"Runtime dependency '{normalized}' has no metadata.");
@@ -2010,13 +2040,21 @@ public sealed class AssetLoader : IDisposable
         return path.ToString();
     }
 
+    private string NormalizeAssetPath(AssetPath path)
+    {
+        if (!path.isValid || string.IsNullOrWhiteSpace(path.localPath))
+            throw new ArgumentException("An isolated asset path is required.", nameof(path));
+        _ = GetMount(path);
+        return path.ToString();
+    }
+
     private AssetInfo? CreateInfo(AssetRecord? record)
     {
         if (record is null)
             return null;
         return new AssetInfo(
             record.persistentId,
-            record.relativePath,
+            AssetPath.Parse(record.relativePath),
             record.meta.isDirectory ? AssetSourceKind.Directory : AssetSourceKind.File,
             Enum.IsDefined(typeof(AssetImportStatus), record.meta.importStatus)
                 ? (AssetImportStatus)record.meta.importStatus

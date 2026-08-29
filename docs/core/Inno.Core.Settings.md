@@ -39,6 +39,8 @@ SampleRenderingSettings settings =
 
 `ProjectSettings.inno` 只保存项目 contribution。持久真相是 `ProjectSettingId`、Stable Type ID 和 Inno Serialization bytes；Editor UI 路径不是 runtime identity。
 
+Contributor 的依赖闭包、顺序和环检测复用 [Core Storage](Inno.Core.Storage.md) 的 `DependencyGraph<string>`。Settings 只在此之上增加 owner/override 与协议合成规则，不维护另一套拓扑实现。
+
 设置协议有两种组合方式：
 
 - 未声明 Composer：贡献是完整值，保持明确的 replacement 语义。两个无依赖关系的 Plugin 同时贡献同一 Setting ID 会冲突；后一个 Plugin 只有同时声明依赖与显式 override 才能替换。

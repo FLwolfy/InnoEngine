@@ -18,7 +18,7 @@ public sealed class CsvImporter : AssetImporter<TableAsset>
         AssetImportWriter<TableAsset> output,
         CancellationToken cancellationToken)
     {
-        output.DependsOnSource("Schemas/table.schema");
+        output.DependsOnSource(AssetPath.Project("Schemas/table.schema"));
         TableAsset table = Parse(context.ReadUtf8Text());
         output.SetAsset(table);
         await output.WriteArtifactAsync(
@@ -54,7 +54,7 @@ Importer 必须是 concrete class、有可访问无参构造函数、标注 `[As
 
 ## Import context/writer
 
-`AssetImportContext` 提供 `relativePath`、`absolutePath`、`persistentId`、`sourceBytes`、`sourceHash`、`extension`、`ReadUtf8Text()`。`persistentId` 在 Importer 执行前已经确定，可用于生成需要随 source rename 保持稳定的 manifest。需要读取另一个运行时 Asset 时使用 `ResolveDependency<TAsset>(path)`：Loader 会通过同一 canonical cache 解析目标，并自动记录 Asset dependency；缺失、类型不匹配或循环依赖会让本次 candidate Import 明确失败，而不会提交半成品。
+`AssetImportContext` 提供 `assetPath`、`absolutePath`、`persistentId`、`sourceBytes`、`sourceHash`、`extension`、`ReadUtf8Text()`。`persistentId` 在 Importer 执行前已经确定，可用于生成需要随 source rename 保持稳定的 manifest。需要读取另一个运行时 Asset 时使用 `ResolveDependency<TAsset>(path)`：Loader 会通过同一 canonical cache 解析目标，并自动记录 Asset dependency；缺失、类型不匹配或循环依赖会让本次 candidate Import 明确失败，而不会提交半成品。
 
 Importer 读取 include、schema 等 companion source 时使用 `ReadSourceBytes(path)` 或 `ReadSourceUtf8Text(path)`。两者从当前隔离的 Source Mount candidate 读取稳定 snapshot 并自动记录 import dependency；Plugin 跨 Mount 路径必须写成 `plugin.id::local/path`，且 owning Plugin 必须声明该依赖。Importer 不应自行访问 `AssetManager.sourceMounts` 或拼接 Library/Plugin 物理路径，否则候选激活期间会错误地读取 active generation。
 
@@ -105,19 +105,23 @@ public sealed class AtlasProcessor : AssetBuildProcessor<AtlasDefinitionAsset>
 ```csharp
 using var loader = new AssetLoader(assetRoot, libraryRoot);
 loader.Rescan();
-TextAsset? asset = loader.Load("Data/file.txt", typeof(TextAsset)) as TextAsset;
+TextAsset? asset = loader.Load(
+    AssetPath.Project("Data/file.txt"),
+    typeof(TextAsset)) as TextAsset;
 ```
 
 | 分类 | API |
 | --- | --- |
 | 根目录 | `assetRoot`、`libraryRoot`、派生 `artifactRoot` |
 | 导入 | `Import`、`Rescan`、`ApplySourceChanges`、`RefreshRegistries` |
-| 加载 | `Load`/`TryLoad`/`LoadAsync`（path 或 ID） |
+| 加载 | `Load`/`TryLoad`/`LoadAsync`（`AssetPath` 或 ID） |
 | 保存 | `Save(asset)`、`Save(path,asset)` |
 | 查询 | `TryGetInfo`、`TryGetArtifact`、`TryGetPersistentId`、`TryGetAssetType` |
 | 构建 | `BuildAsync` |
 | 引用 | `ResolveReference`、`GetDependencies`、`GetReferenceInfo` |
 | 回收 | `UnloadUnusedAssets`、`CollectArtifacts`、`WaitForIdle` |
+
+`LoadAsync` 不是同步 `Load` 的包装。Loader 按 `AssetPath` 或 persistent ID 合并同一时刻的后台加载任务，导入和 artifact materialization 在 worker 执行；所有等待者最终取得同一 canonical instance。某个等待者取消时只取消自己的 await，共享任务继续服务其他调用者。Loader 退休时先停止接受请求，再等待已接受任务完成，避免 generation 切换或关闭期间的 use-after-dispose。
 
 ## `.imeta`
 

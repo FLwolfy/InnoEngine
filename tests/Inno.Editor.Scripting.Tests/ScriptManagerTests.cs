@@ -133,11 +133,65 @@ public sealed class ScriptManagerTests : IDisposable
 
         automaticManager.Start();
 
-        Assert.Contains("plugin", automaticManager.compilationStatus, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("cache probe", automaticManager.compilationStatus, StringComparison.OrdinalIgnoreCase);
         Assert.True(automaticManager.TryCompilePending(out Task<ScriptCompilationResult>? compilation));
         Assert.NotNull(compilation);
         ScriptCompilationResult result = await compilation!;
         Assert.True(result.success, FormatDiagnostics(result));
+    }
+
+    // AssetManager owns one thread in this fixture, so cancellation is observed synchronously here.
+#pragma warning disable xUnit1031
+    [Fact]
+    public void LongRunningCompilationWarnsAndCanBeCanceledWithoutPublishingACandidate()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var manager = ScriptingTestReflection.CreateScriptManager(
+            new ScriptManagerOptions
+            {
+                projectRootDirectory = m_projectRoot,
+                autoCompile = false,
+                debounceMilliseconds = 0,
+                compilationWarningTimeout = TimeSpan.FromMilliseconds(20)
+            },
+            async cancellationToken =>
+            {
+                entered.TrySetResult();
+                await release.Task.WaitAsync(cancellationToken);
+            });
+        manager.RecompileScripting();
+        Assert.True(manager.TryCompilePending(out Task<ScriptCompilationResult>? compilation));
+        Assert.True(entered.Task.Wait(TimeSpan.FromSeconds(3)));
+        Assert.True(SpinWait.SpinUntil(
+            () => manager.isCompilationTakingLong,
+            TimeSpan.FromSeconds(3)));
+
+        Assert.Contains("Long-running", manager.compilationStatus, StringComparison.Ordinal);
+        Assert.True(manager.CancelCompilation());
+        Assert.ThrowsAny<OperationCanceledException>(() => compilation!.GetAwaiter().GetResult());
+        Assert.False(manager.isCompiling);
+        Assert.False(manager.ApplyPendingReload());
+        Assert.Empty(AssemblyManager.modules);
+    }
+#pragma warning restore xUnit1031
+
+    [Fact]
+    public void SuccessfulCompilationReportsOrderedStageTimings()
+    {
+        Write("StageTimingProbe.cs", "public sealed class StageTimingProbe { }");
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.True(result.success, FormatDiagnostics(result));
+        Assert.NotEmpty(result.stageTimings);
+        Assert.All(result.stageTimings, static timing =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(timing.stage));
+            Assert.True(timing.elapsed >= TimeSpan.Zero);
+        });
+        Assert.Contains(result.stageTimings, static timing =>
+            timing.stage.Contains("Emitting Inno.GameScripts", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -260,8 +314,8 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(manager.TryCompilePending(out Task<ScriptCompilationResult>? replacement));
         Assert.True(replacement!.GetAwaiter().GetResult().success);
         Assert.True(manager.ApplyPendingReload());
-        Assert.Equal(3, AssemblyManager.modules.Count);
-        Assert.Single(AssemblyManager.modules, static module => module.domain == AssemblyDomain.InnoPlugin);
+        Assert.Equal(2, AssemblyManager.modules.Count);
+        Assert.Empty(AssemblyManager.modules.Where(static module => module.domain == AssemblyDomain.InnoPlugin));
         Assert.Equal(2, AssemblyManager.modules.Count(static module =>
             module.domain == AssemblyDomain.InnoScripting));
     }
@@ -474,6 +528,9 @@ public sealed class ScriptManagerTests : IDisposable
         IRenderResourceService resources = DispatchProxy.Create<
             IRenderResourceService,
             EmptyRenderResourceServiceProxy>();
+        IRenderFrameUploadService uploads = DispatchProxy.Create<
+            IRenderFrameUploadService,
+            EmptyRenderResourceServiceProxy>();
         var context = new RenderPipelineContext(
             request,
             asset,
@@ -482,6 +539,7 @@ public sealed class ScriptManagerTests : IDisposable
             new RenderResourceRegistry(),
             new FixtureRenderDiagnosticSink(),
             resources,
+            uploads,
             frameIndex: 0);
         using RenderPipeline pipeline = (RenderPipeline)Activator.CreateInstance(pipelineType)!;
         pipeline.Build(context);
@@ -679,7 +737,7 @@ public sealed class ScriptManagerTests : IDisposable
             LoadAsset("Data/value.candidate", previousType));
         Assert.Equal(1, GetProperty<int>(restoredAsset, "importerGeneration"));
         Assert.Equal("fail", GetProperty<string>(restoredAsset, "value"));
-        Assert.True(AssetManager.TryGetInfo("Data/value.candidate", out AssetInfo? restoredInfo));
+        Assert.True(AssetManager.TryGetInfo(AssetPath.Project("Data/value.candidate"), out AssetInfo? restoredInfo));
         Assert.Equal(AssetImportStatus.Imported, restoredInfo!.status);
     }
 
@@ -695,7 +753,7 @@ public sealed class ScriptManagerTests : IDisposable
 
         Write("Data/value.candidate", "fail");
         AssetManager.Rescan();
-        Assert.True(AssetManager.TryGetInfo("Data/value.candidate", out AssetInfo? failedInfo));
+        Assert.True(AssetManager.TryGetInfo(AssetPath.Project("Data/value.candidate"), out AssetInfo? failedInfo));
         Assert.Equal(AssetImportStatus.Failed, failedInfo!.status);
 
         WriteUnrelatedCandidateScript(version: 2);
@@ -704,7 +762,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(m_manager.ApplyPendingReload());
 
         Assert.Equal(2, ReadVersion(ResolveTypeByName("UnrelatedCandidateBehavior")));
-        Assert.True(AssetManager.TryGetInfo("Data/value.candidate", out AssetInfo? retainedFailure));
+        Assert.True(AssetManager.TryGetInfo(AssetPath.Project("Data/value.candidate"), out AssetInfo? retainedFailure));
         Assert.Equal(AssetImportStatus.Failed, retainedFailure!.status);
         Assert.Contains(
             retainedFailure.diagnostics,
@@ -809,59 +867,22 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public void InspectorTagCatalogRoundTripsThroughReadableModuleStateAndProtectsTheDefaultTag()
+    public void GameTagCatalogRoundTripsThroughInnoSerializationAndProtectsTheDefaultTag()
     {
-        Type catalogType = typeof(AssetReferenceDropTarget).Assembly.GetType(
-            "Inno.Editor.Panel.Inspector.GameObjectTagCatalog",
-            throwOnError: true)!;
-        object catalog = Activator.CreateInstance(
-            catalogType,
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-            binder: null,
-            args: null,
-            culture: null)!;
-        MethodInfo add = catalogType.GetMethod(
-            "Add",
-            BindingFlags.Instance | BindingFlags.NonPublic)!;
-        MethodInfo remove = catalogType.GetMethod(
-            "Remove",
-            BindingFlags.Instance | BindingFlags.NonPublic)!;
-        MethodInfo restore = catalogType.GetMethod(
-            "Restore",
-            BindingFlags.Instance | BindingFlags.NonPublic)!;
-        MethodInfo getTags = catalogType.GetMethod(
-            "GetTags",
-            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var catalog = new GameTagCatalog();
 
-        Assert.True((bool)add.Invoke(catalog, ["Player"])!);
-        Assert.False((bool)add.Invoke(catalog, [" Player "])!);
-        Assert.False((bool)remove.Invoke(catalog, [GameObject.defaultTag])!);
+        Assert.True(catalog.Add("Player"));
+        Assert.False(catalog.Add(" Player "));
+        Assert.False(catalog.Remove(GameObject.defaultTag));
 
-        string payload = JsonSerializer.Serialize(new Dictionary<string, object?>
-        {
-            ["tags"] = getTags.Invoke(catalog, null)
-        });
-        Assert.Contains("\"tags\"", payload, StringComparison.Ordinal);
-        Assert.Contains(GameObject.defaultTag, payload, StringComparison.Ordinal);
-        Assert.Contains("Player", payload, StringComparison.Ordinal);
-
-        object restored = Activator.CreateInstance(
-            catalogType,
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-            binder: null,
-            args: null,
-            culture: null)!;
-        string[] restoredValues = JsonSerializer
-            .Deserialize<Dictionary<string, string[]>>(payload)!["tags"];
-        _ = restore.Invoke(restored, [restoredValues]);
-        var restoredTags = Assert.IsAssignableFrom<System.Collections.Generic.IReadOnlyList<string>>(
-            getTags.Invoke(restored, null));
+        byte[] payload = SerializationManager.Serialize(catalog);
+        GameTagCatalog restored = SerializationManager.Deserialize<GameTagCatalog>(payload);
+        IReadOnlyList<string> restoredTags = restored.GetTags();
         Assert.Contains(GameObject.defaultTag, restoredTags);
         Assert.Contains("Player", restoredTags);
 
-        Assert.True((bool)remove.Invoke(catalog, ["Player"])!);
-        Assert.DoesNotContain("Player", Assert.IsAssignableFrom<System.Collections.Generic.IReadOnlyList<string>>(
-            getTags.Invoke(catalog, null)));
+        Assert.True(catalog.Remove("Player"));
+        Assert.DoesNotContain("Player", catalog.GetTags());
     }
 
     [Fact]
@@ -871,15 +892,15 @@ public sealed class ScriptManagerTests : IDisposable
         GameScene scene = workspace.CreateScene();
         scene.name = "Original";
         string originalPath = workspace.Save(scene, "Scenes");
-        Assert.True(AssetManager.TryGetPersistentId(originalPath, out Guid persistentId));
+        Assert.True(AssetManager.TryGetPersistentId(AssetPath.Parse(originalPath), out Guid persistentId));
 
         scene.name = "Renamed";
         Assert.True(workspace.IsDirty(scene));
         string renamedPath = workspace.Save(scene, "Scenes");
 
         Assert.Equal("Scenes/Renamed.iscene", renamedPath);
-        Assert.False(AssetManager.TryGetFileSystemEntry(originalPath, out _));
-        Assert.True(AssetManager.TryGetPersistentId(renamedPath, out Guid renamedId));
+        Assert.False(AssetManager.TryGetFileSystemEntry(AssetPath.Parse(originalPath), out _));
+        Assert.True(AssetManager.TryGetPersistentId(AssetPath.Parse(renamedPath), out Guid renamedId));
         Assert.Equal(persistentId, renamedId);
         Assert.False(workspace.IsDirty(scene));
     }
@@ -902,7 +923,7 @@ public sealed class ScriptManagerTests : IDisposable
             scene.name = "TestScene";
 
             const string renamedPath = "Scenes/TestScene1.iscene";
-            AssetManager.Move(sourcePath, renamedPath);
+            AssetManager.Move(AssetPath.Parse(sourcePath), AssetPath.Project(renamedPath));
             Assert.False(workspace.IsDirty(scene));
             workspace.Update(context);
 
@@ -930,7 +951,7 @@ public sealed class ScriptManagerTests : IDisposable
             _ = workspace.Save(scene, "Scenes/Nested");
             Assert.False(workspace.IsDirty(scene));
 
-            AssetManager.Move("Scenes", "ArchivedScenes");
+            AssetManager.Move(AssetPath.Project("Scenes"), AssetPath.Project("ArchivedScenes"));
             Assert.False(workspace.IsDirty(scene));
             workspace.Update(context);
 
@@ -960,7 +981,7 @@ public sealed class ScriptManagerTests : IDisposable
             Thread.Sleep(150);
             Assert.True(workspace.IsDirty(scene));
 
-            AssetManager.Move("Scenes", "ArchivedScenes");
+            AssetManager.Move(AssetPath.Project("Scenes"), AssetPath.Project("ArchivedScenes"));
             workspace.Update(context);
 
             Assert.True(workspace.TryGetSourcePath(scene, out string synchronizedPath));
@@ -983,12 +1004,12 @@ public sealed class ScriptManagerTests : IDisposable
         workspace.Start(context);
         try
         {
-            AssetManager.CreateDirectory("Destination");
+            AssetManager.CreateDirectory(AssetPath.Project("Destination"));
             GameScene scene = workspace.CreateScene();
             scene.name = "DraggedScene";
             string sourcePath = workspace.Save(scene, "Source");
             Assert.False(workspace.IsDirty(scene));
-            Assert.True(AssetManager.TryGetInfo(sourcePath, out AssetInfo? sceneInfo));
+            Assert.True(AssetManager.TryGetInfo(AssetPath.Parse(sourcePath), out AssetInfo? sceneInfo));
             Assert.NotNull(sceneInfo);
 
             Guid token = runtime.interactions
@@ -1021,12 +1042,12 @@ public sealed class ScriptManagerTests : IDisposable
         workspace.Start(context);
         try
         {
-            AssetManager.CreateDirectory("Destination");
+            AssetManager.CreateDirectory(AssetPath.Project("Destination"));
             GameScene referencedScene = workspace.CreateScene();
             referencedScene.name = "Referenced";
             string referencedPath = workspace.Save(referencedScene, "References");
             Assert.True(workspace.CloseScene(referencedScene));
-            SceneAsset referencedAsset = AssetManager.Load<SceneAsset>(referencedPath);
+            SceneAsset referencedAsset = AssetManager.Load<SceneAsset>(AssetPath.Parse(referencedPath));
 
             GameScene hostScene = workspace.CreateScene();
             hostScene.name = "Host";
@@ -1035,7 +1056,7 @@ public sealed class ScriptManagerTests : IDisposable
                 .sceneAsset = referencedAsset;
             _ = workspace.Save(hostScene, "Scenes");
             Assert.False(workspace.IsDirty(hostScene));
-            Assert.True(AssetManager.TryGetInfo(referencedPath, out AssetInfo? sceneInfo));
+            Assert.True(AssetManager.TryGetInfo(AssetPath.Parse(referencedPath), out AssetInfo? sceneInfo));
             Assert.NotNull(sceneInfo);
 
             Guid token = runtime.interactions
@@ -1049,7 +1070,7 @@ public sealed class ScriptManagerTests : IDisposable
             Assert.Equal("Destination/Referenced.iscene", referencedAsset.assetPath.ToString());
             Assert.False(workspace.IsDirty(hostScene));
 
-            AssetManager.Move("Destination/Referenced.iscene", "Destination/Renamed.iscene");
+            AssetManager.Move(AssetPath.Project("Destination/Referenced.iscene"), AssetPath.Project("Destination/Renamed.iscene"));
 
             Assert.Equal("Destination/Renamed.iscene", referencedAsset.assetPath.ToString());
             Assert.False(workspace.IsDirty(hostScene));
@@ -1096,7 +1117,7 @@ public sealed class ScriptManagerTests : IDisposable
     {
         _ = Assembly.Load(typeof(HierarchyObjectDropTarget).Assembly.GetName());
         TypeCacheManager.Rebuild();
-        AssetManager.CreateDirectory("Open Folder");
+        AssetManager.CreateDirectory(AssetPath.Project("Open Folder"));
         var editorContext = new EditorContext(m_projectRoot);
         editorContext.SetLayoutSection(
             "Module.asset-browser",
@@ -1115,10 +1136,10 @@ public sealed class ScriptManagerTests : IDisposable
             .For("editor/main-menu")
             .Execute("editor/save"));
         Assert.True(AssetManager.TryGetFileSystemEntry(
-            "Open Folder/Current Directory Scene.iscene",
+            AssetPath.Project("Open Folder/Current Directory Scene.iscene"),
             out _));
         Assert.False(AssetManager.TryGetFileSystemEntry(
-            "Current Directory Scene.iscene",
+            AssetPath.Project("Current Directory Scene.iscene"),
             out _));
     }
 
@@ -1158,7 +1179,7 @@ public sealed class ScriptManagerTests : IDisposable
         string settingsPath = Path.Combine(m_projectRoot, "EditorSettings.json");
         File.WriteAllText(
             settingsPath,
-            "{\"Global/Appearance/Accessibility/Actual Size\":{\"value\":1.2}}");
+            "{\"Editor/Appearance/Accessibility/Actual Size\":{\"value\":1.2}}");
 
         try
         {
@@ -1193,7 +1214,7 @@ public sealed class ScriptManagerTests : IDisposable
             Assert.Equal(1.2f, EditorWidget.style.zoom, 3);
 
             Assert.Contains(
-                "Global/Appearance/Accessibility/Actual Size",
+                "Editor/Appearance/Accessibility/Actual Size",
                 File.ReadAllText(settingsPath));
         }
         finally
@@ -1267,39 +1288,31 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public void GameLayersPersistThroughEditorSettingsWithoutAssetRegistration()
+    public void GameLayersPersistThroughProjectSettingsWithoutAssetRegistration()
     {
         _ = Assembly.Load(typeof(AssetReferenceDropTarget).Assembly.GetName());
         TypeCacheManager.Rebuild();
-        const string path = "Project/Layers/Game Layers";
-        using (EditorInteractionRuntime runtime = CreateSettingsRuntime(out EditorSettings settings))
-        {
-            EditorSettingObject value = settings.Get(path);
-            string?[] names = value.GetAsStringArray("names");
-            uint[] masks = value.GetAsUInt32Array("interactionMasks");
-            names[7] = "Gameplay";
-            masks[7] &= ~(1u << 8);
-            masks[8] &= ~(1u << 7);
-            value.SetAsStringArray("names", names);
-            value.SetAsUInt32Array("interactionMasks", masks);
-            Assert.True(settings.Apply(
-                new Dictionary<string, EditorSettingObject>(StringComparer.Ordinal)
-                {
-                    [path] = value
-                }));
-        }
+        ProjectSettingsManager.RebuildCurrent();
+        GameLayerStack value = ProjectSettingsManager.Get<GameLayerStack>(GameLayerStack.settingId);
+        var gameplay = new GameLayer(7);
+        var effects = new GameLayer(8);
+        value.Define(gameplay, "Gameplay");
+        value.Define(effects, "Effects");
+        value.SetInteraction(gameplay, effects, canInteract: false);
+        ProjectSettingsManager.SetProjectOverride(GameLayerStack.settingId, value, []);
 
-        string documentPath = Path.Combine(m_projectRoot, "EditorSettings.json");
+        string documentPath = Path.Combine(m_projectRoot, "ProjectSettings.inno");
         Assert.True(File.Exists(documentPath));
-        Assert.Contains(path, File.ReadAllText(documentPath), StringComparison.Ordinal);
         Assert.False(Directory.Exists(Path.Combine(m_projectRoot, "Assets", "Settings")));
-        using EditorInteractionRuntime restoredRuntime = CreateSettingsRuntime(out EditorSettings restored);
-        EditorSettingObject restoredValue = restored.Get(path);
-        Assert.Equal("Gameplay", restoredValue.GetAsStringArray("names")[7]);
-        Assert.Equal(0u, restoredValue.GetAsUInt32Array("interactionMasks")[7] & (1u << 8));
-        string?[] detachedNames = restoredValue.GetAsStringArray("names");
-        detachedNames[9] = "Detached";
-        Assert.Null(restored.Get(path).GetAsStringArray("names")[9]);
+        ProjectSettingsManager.RebuildCurrent();
+        GameLayerStack restored = ProjectSettingsManager.Get<GameLayerStack>(GameLayerStack.settingId);
+        Assert.Equal("Gameplay", restored.GetName(gameplay));
+        Assert.False(restored.CanInteract(gameplay, effects));
+
+        restored.Define(new GameLayer(9), "Detached");
+        Assert.False(ProjectSettingsManager
+            .Get<GameLayerStack>(GameLayerStack.settingId)
+            .IsDefined(new GameLayer(9)));
     }
 
     [Fact]
@@ -1716,13 +1729,14 @@ public sealed class ScriptManagerTests : IDisposable
         Write("InteractionExtensions.editor.cs", """
             using InnoEditor.Assets;
             using InnoEditor.Core;
+            using InnoEditor.ImGui;
             using InnoEditor.Interactions;
             using InnoEngine.Assets;
 
             [EditorAction("tests.interactions.execute", "tests/interactions")]
             [EditorMenu("tests/interactions", "Tools/Create/Execute")]
-            [AssetIcon(typeof(TextAsset), AssetIconKind.FileImage, priority: 100)]
-            [AssetIcon(".binary-icon", AssetIconKind.FileAudio, priority: 100)]
+            [AssetIcon(typeof(TextAsset), ImGuiIcon.FileImage, priority: 100)]
+            [AssetIcon(".binary-icon", ImGuiIcon.FileAudio, priority: 100)]
             public sealed class ScriptAction : EditorAction
             {
                 private int m_value;
@@ -1828,7 +1842,7 @@ public sealed class ScriptManagerTests : IDisposable
         Write("ProjectSettings.editor.cs", """
             using InnoEditor.Settings;
 
-            [EditorSettingPath("Tests/Overlay/Show Overlay")]
+            [EditorSettingPath("Editor/Tests/Overlay/Show Overlay")]
             public sealed class ProjectOverlaySetting : EditorSetting
             {
                 public override EditorSettingObject defaultValue => CreateDefault();
@@ -1856,8 +1870,8 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.NotNull(settingType.GetCustomAttribute<EditorSettingPathAttribute>());
         using EditorInteractionRuntime settingsRuntime = CreateSettingsRuntime(out EditorSettings settings);
         EditorSetting definition = Assert.Single(settings.definitions, static definition =>
-            definition.path == "Tests/Overlay/Show Overlay");
-        Assert.Equal("Tests/Overlay/Show Overlay", definition.path);
+            definition.path == "Editor/Tests/Overlay/Show Overlay");
+        Assert.Equal("Editor/Tests/Overlay/Show Overlay", definition.path);
         EditorSettingObject value = settings.Get(definition.path);
         value.SetAsBoolean("value", false);
         Assert.True(settings.Apply(
@@ -1872,12 +1886,12 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(replacement.success, FormatDiagnostics(replacement));
         Assert.True(m_manager.ApplyPendingReload());
         Assert.DoesNotContain(settings.definitions, static definition =>
-            definition.path == "Tests/Overlay/Show Overlay");
-        Assert.Throws<ArgumentException>(() => settings.Get("Tests/Overlay/Show Overlay"));
+            definition.path == "Editor/Tests/Overlay/Show Overlay");
+        Assert.Throws<ArgumentException>(() => settings.Get("Editor/Tests/Overlay/Show Overlay"));
     }
 
     [Fact]
-    public void AssetIconKindFacadeAliasesEveryImGuiIconConstant()
+    public void ImGuiIconScriptingFacadeExportsEveryIconConstant()
     {
         string[] iconNames = GetImGuiIconType()
             .GetFields(BindingFlags.Public | BindingFlags.Static)
@@ -1885,31 +1899,24 @@ public sealed class ScriptManagerTests : IDisposable
             .Select(static field => field.Name)
             .OrderBy(static name => name, StringComparer.Ordinal)
             .ToArray();
-        string fields = string.Join(
-            Environment.NewLine,
-            iconNames.Select(static name =>
-                $"    public const string {name} = AssetIconKind.{name};"));
+        string values = string.Join(
+            "," + Environment.NewLine,
+            iconNames.Select(static name => $"        ImGuiIcon.{name}"));
         Write("AssetIconCatalog.editor.cs", $$"""
-            using InnoEditor.Assets;
+            using InnoEditor.ImGui;
 
             public static class AssetIconCatalog
             {
-            {{fields}}
-                public const string FullyQualified = InnoEditor.Assets.AssetIconKind.File;
+                public static string[] values =>
+                [
+            {{values}}
+                ];
             }
             """);
 
         ScriptCompilationResult result = Compile();
 
         Assert.True(result.success, FormatDiagnostics(result));
-        string documentationPath = Directory.EnumerateFiles(
-            Path.Combine(m_projectRoot, "Library", "ScriptApi", "Editor"),
-            "Inno.ScriptApi.Editor.xml",
-            SearchOption.AllDirectories).Single();
-        string documentation = File.ReadAllText(documentationPath);
-        Assert.Contains("T:InnoEditor.Assets.AssetIconKind", documentation);
-        Assert.Contains("F:InnoEditor.Assets.AssetIconKind.File", documentation);
-        Assert.Contains("Provides the File value from AssetIconKind.", documentation);
     }
 
     [Fact]
@@ -1917,9 +1924,10 @@ public sealed class ScriptManagerTests : IDisposable
     {
         Write("AssetIconReloadProbe.editor.cs", """
             using InnoEditor.Assets;
+            using InnoEditor.ImGui;
             using InnoEngine.Assets;
 
-            [AssetIcon(typeof(TextAsset), AssetIconKind.FileImage, priority: 100)]
+            [AssetIcon(typeof(TextAsset), ImGuiIcon.FileImage, priority: 100)]
             public sealed class AssetIconReloadProbe
             {
             }
@@ -1969,9 +1977,10 @@ public sealed class ScriptManagerTests : IDisposable
     {
         Write("CustomIconAsset.editor.cs", """
             using InnoEditor.Assets;
+            using InnoEditor.ImGui;
             using InnoEngine.Assets;
 
-            [AssetIcon(typeof(CustomIconAsset), AssetIconKind.FileImage)]
+            [AssetIcon(typeof(CustomIconAsset), ImGuiIcon.FileImage)]
             public sealed class CustomIconAsset : AssetObject
             {
             }
@@ -2182,6 +2191,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(initial.success, FormatDiagnostics(initial));
         Assert.True(m_manager.ApplyPendingReload());
         IReadOnlyDictionary<string, int> generations = GetReloadModuleGenerations();
+        string pluginModule = GetSinglePluginModuleName();
         Type pluginType = ResolveTypeByName("PluginObject");
         Type runtimeType = ResolveTypeByName("RuntimeReloadProbe");
         Type editorType = ResolveTypeByName("EditorReloadProbe");
@@ -2210,7 +2220,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(editorChange.success, FormatDiagnostics(editorChange));
         Assert.True(m_manager.ApplyPendingReload());
         IReadOnlyDictionary<string, int> afterEditor = GetReloadModuleGenerations();
-        Assert.Equal(generations["ProjectPlugins"], afterEditor["ProjectPlugins"]);
+        Assert.Equal(generations[pluginModule], afterEditor[pluginModule]);
         Assert.Equal(generations["RuntimeScripts"], afterEditor["RuntimeScripts"]);
         Assert.Equal(generations["EditorScripts"] + 1, afterEditor["EditorScripts"]);
 
@@ -2227,7 +2237,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(runtimeChange.success, FormatDiagnostics(runtimeChange));
         Assert.True(m_manager.ApplyPendingReload());
         IReadOnlyDictionary<string, int> afterRuntime = GetReloadModuleGenerations();
-        Assert.Equal(afterEditor["ProjectPlugins"], afterRuntime["ProjectPlugins"]);
+        Assert.Equal(afterEditor[pluginModule], afterRuntime[pluginModule]);
         Assert.Equal(afterEditor["RuntimeScripts"] + 1, afterRuntime["RuntimeScripts"]);
         Assert.Equal(afterEditor["EditorScripts"] + 1, afterRuntime["EditorScripts"]);
 
@@ -2236,7 +2246,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(fullScripting.success, FormatDiagnostics(fullScripting));
         Assert.True(m_manager.ApplyPendingReload());
         IReadOnlyDictionary<string, int> afterScripting = GetReloadModuleGenerations();
-        Assert.Equal(afterRuntime["ProjectPlugins"], afterScripting["ProjectPlugins"]);
+        Assert.Equal(afterRuntime[pluginModule], afterScripting[pluginModule]);
         Assert.Equal(afterRuntime["RuntimeScripts"] + 1, afterScripting["RuntimeScripts"]);
         Assert.Equal(afterRuntime["EditorScripts"] + 1, afterScripting["EditorScripts"]);
         Assert.Contains("Verifying", m_manager.compilationStatus, StringComparison.OrdinalIgnoreCase);
@@ -2249,7 +2259,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(fullPlugin.success, FormatDiagnostics(fullPlugin));
         Assert.True(m_manager.ApplyPendingReload());
         IReadOnlyDictionary<string, int> afterPlugins = GetReloadModuleGenerations();
-        Assert.Equal(afterScripting["ProjectPlugins"] + 1, afterPlugins["ProjectPlugins"]);
+        Assert.Equal(afterScripting[pluginModule] + 1, afterPlugins[pluginModule]);
         Assert.Equal(afterScripting["RuntimeScripts"] + 1, afterPlugins["RuntimeScripts"]);
         Assert.Equal(afterScripting["EditorScripts"] + 1, afterPlugins["EditorScripts"]);
         Assert.Contains("Verifying", m_manager.compilationStatus, StringComparison.OrdinalIgnoreCase);
@@ -2282,6 +2292,7 @@ public sealed class ScriptManagerTests : IDisposable
             throwOnError: true)!;
         object modal = ScriptingTestReflection.Create(modalType, scripting);
         Assert.True(ScriptingTestReflection.Get<bool>(modal, "isVisible"));
+        Assert.True(ScriptingTestReflection.Get<bool>(modal, "blocksInteraction"));
 
         Exception? failure = CompleteUnloadVerification();
 
@@ -2341,6 +2352,7 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void CandidateFailureAtEveryDomainNeverPublishesAPartialGeneration()
     {
+        InstallSourcePlugin();
         Write("AtomicRuntime.cs", "public sealed class AtomicRuntime { }");
         Write("AtomicEditor.editor.cs", "public sealed class AtomicEditor { public AtomicRuntime value = new(); }");
         ScriptCompilationResult initial = Compile();
@@ -2351,7 +2363,10 @@ public sealed class ScriptManagerTests : IDisposable
         m_manager.ReloadPlugins();
         ScriptCompilationResult candidate = Compile();
         Assert.True(candidate.success, FormatDiagnostics(candidate));
-        foreach (string failedModule in new[] { "ProjectPlugins", "RuntimeScripts", "EditorScripts" })
+        string[] failedModules = candidate.ReloadRequestsForTest()
+            .Select(static request => request.moduleName)
+            .ToArray();
+        foreach (string failedModule in failedModules)
         {
             IReadOnlyList<AssemblyLoadRequest> invalid = candidate.ReloadRequestsForTest()
                 .Select(request => string.Equals(request.moduleName, failedModule, StringComparison.Ordinal)
@@ -2360,6 +2375,7 @@ public sealed class ScriptManagerTests : IDisposable
                         moduleName = request.moduleName,
                         mainAssemblyPath = Path.Combine(m_projectRoot, "Missing", failedModule + ".dll"),
                         preloadAssemblyPaths = request.preloadAssemblyPaths,
+                        upstreamModuleNames = request.upstreamModuleNames,
                         collectible = request.collectible,
                         domain = request.domain,
                         scope = request.scope,
@@ -2729,7 +2745,7 @@ public sealed class ScriptManagerTests : IDisposable
         const string systemTypeId = "0164a502-aea6-427d-998e-026dd4098836";
         Write("Data/MissingDependency.txt", "dependency");
         AssetManager.Rescan();
-        TextAsset dependency = AssetManager.Load<TextAsset>("Data/MissingDependency.txt");
+        TextAsset dependency = AssetManager.Load<TextAsset>(AssetPath.Project("Data/MissingDependency.txt"));
         WriteIdentityProbe(componentTypeId, systemTypeId);
         ScriptCompilationResult firstCompilation = Compile();
         Assert.True(firstCompilation.success, FormatDiagnostics(firstCompilation));
@@ -2805,8 +2821,8 @@ public sealed class ScriptManagerTests : IDisposable
         }
 
         SceneAsset capturedMissingScene = SceneAsset.Capture(scene);
-        Assert.True(AssetManager.Save("Scenes/Missing.iscene", capturedMissingScene));
-        SceneAsset savedMissingScene = AssetManager.Load<SceneAsset>("Scenes/Missing.iscene");
+        Assert.True(AssetManager.Save(AssetPath.Project("Scenes/Missing.iscene"), capturedMissingScene));
+        SceneAsset savedMissingScene = AssetManager.Load<SceneAsset>(AssetPath.Project("Scenes/Missing.iscene"));
         Assert.Contains(
             AssetManager.GetDependencies(savedMissingScene),
             item => item.persistentId == dependency.identity.persistentId);
@@ -3103,7 +3119,7 @@ public sealed class ScriptManagerTests : IDisposable
 
         Assert.True(result.success, FormatDiagnostics(result));
         Assert.True(File.Exists(Path.Combine(m_projectRoot, "Assets", "Scripts", "Tracked.cs.imeta")));
-        Assert.True(AssetManager.TryGetInfo("Scripts/Tracked.cs", out AssetInfo? info));
+        Assert.True(AssetManager.TryGetInfo(AssetPath.Project("Scripts/Tracked.cs"), out AssetInfo? info));
         Assert.NotNull(info);
         Assert.Equal(AssetImportStatus.Imported, info.status);
         Assert.Equal("inno.editor.csharp-script", info.importerId);
@@ -3124,7 +3140,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.NotNull(result.outputDirectory);
         Assert.True(File.Exists(Path.Combine(
             result.outputDirectory!,
-            "Inno.GameScripts.types.inno")));
+            "Inno.GameScripts.types.cache")));
         Assert.DoesNotMatch(@"[/\\]ScriptAssemblies[/\\]\d+$", result.outputDirectory!);
     }
 
@@ -3140,7 +3156,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(m_manager.ApplyPendingReload());
         Type previous = ResolveTypeByName("RenameProbe");
         Guid previousStableTypeId = TypeCacheManager.GetTypeRef(previous).stableId;
-        Assert.True(AssetManager.TryGetInfo("RenameProbe.cs", out AssetInfo? previousInfo));
+        Assert.True(AssetManager.TryGetInfo(AssetPath.Project("RenameProbe.cs"), out AssetInfo? previousInfo));
         Assert.NotNull(previousInfo);
         var scene = new GameScene("Rename Probe");
         GameObject gameObject = scene.CreateObject("Actor");
@@ -3164,7 +3180,7 @@ public sealed class ScriptManagerTests : IDisposable
             .Single(component => component.GetType() == current);
         Assert.NotSame(previousComponent, currentComponent);
         Assert.True(previousComponent.isDestroyed);
-        Assert.True(AssetManager.TryGetInfo("RenamedProbe.cs", out AssetInfo? currentInfo));
+        Assert.True(AssetManager.TryGetInfo(AssetPath.Project("RenamedProbe.cs"), out AssetInfo? currentInfo));
         Assert.NotNull(currentInfo);
         Assert.Equal(previousInfo.persistentId, currentInfo.persistentId);
     }
@@ -3191,7 +3207,7 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(m_manager.ApplyPendingReload());
         Type type = ResolveTypeByName("PartialProbe");
         Guid stableTypeId = TypeCacheManager.GetTypeRef(type).stableId;
-        Assert.True(AssetManager.TryGetInfo("PartialProbe.cs", out AssetInfo? canonicalInfo));
+        Assert.True(AssetManager.TryGetInfo(AssetPath.Project("PartialProbe.cs"), out AssetInfo? canonicalInfo));
         Assert.NotNull(canonicalInfo);
         Assert.NotEqual(Guid.Empty, stableTypeId);
         Assert.Equal(type, new TypeRef(stableTypeId).Resolve());
@@ -3329,6 +3345,35 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.True(Directory.Exists(recentAssembly));
         Assert.False(Directory.Exists(staleGenerationStaging));
         Assert.False(Directory.Exists(staleAssemblyStaging));
+    }
+
+    [Fact]
+    public void ScriptApiCacheCollectsExpiredContractsAndPreservesTheActiveContract()
+    {
+        string root = Path.Combine(m_projectRoot, "Library", "ScriptApi");
+        string profile = Path.Combine(root, "TestProfile");
+        string stale = Path.Combine(profile, new string('A', 64));
+        string active = Path.Combine(profile, new string('B', 64));
+        Directory.CreateDirectory(stale);
+        Directory.CreateDirectory(active);
+        File.WriteAllText(Path.Combine(stale, "reference.dll"), "stale");
+        File.WriteAllText(Path.Combine(active, "reference.dll"), "active");
+        DateTime old = DateTime.UtcNow - TimeSpan.FromDays(8);
+        Directory.SetLastWriteTimeUtc(stale, old);
+        Directory.SetLastWriteTimeUtc(active, old);
+        Type cacheType = typeof(ScriptManager).Assembly.GetType(
+            "Inno.Editor.Scripting.ScriptApiArtifactCache",
+            throwOnError: true)!;
+
+        int removed = ScriptingTestReflection.InvokeStatic<int>(
+            cacheType,
+            "Collect",
+            root,
+            (object)new string?[] { active });
+
+        Assert.Equal(1, removed);
+        Assert.False(Directory.Exists(stale));
+        Assert.True(Directory.Exists(active));
     }
 
     [Fact]
@@ -3472,6 +3517,9 @@ public sealed class ScriptManagerTests : IDisposable
 
     private ScriptCompilationResult Compile()
     {
+        // The fixture intentionally disables file-system watchers, so reconcile its direct file writes
+        // before asking the production manager to compile the already-indexed Asset catalog.
+        AssetManager.Rescan();
         m_manager.RecompileScripting();
         Assert.True(m_manager.TryCompilePending(out Task<ScriptCompilationResult>? compilation));
         Assert.NotNull(compilation);
@@ -3505,8 +3553,12 @@ public sealed class ScriptManagerTests : IDisposable
 
     private static IReadOnlyDictionary<string, int> GetReloadModuleGenerations()
         => AssemblyManager.modules
-            .Where(static module => module.moduleName is "ProjectPlugins" or "RuntimeScripts" or "EditorScripts")
+            .Where(static module => module.domain == AssemblyDomain.InnoPlugin ||
+                                    module.moduleName is "RuntimeScripts" or "EditorScripts")
             .ToDictionary(static module => module.moduleName, static module => module.generation, StringComparer.Ordinal);
+
+    private static string GetSinglePluginModuleName()
+        => AssemblyManager.modules.Single(static module => module.domain == AssemblyDomain.InnoPlugin).moduleName;
 
     private Exception? CompleteUnloadVerification()
     {
@@ -3901,7 +3953,7 @@ public sealed class ScriptManagerTests : IDisposable
     {
         Type observer = ResolveTypeByName("ReloadObserver");
         observer.GetMethod("Install", BindingFlags.Public | BindingFlags.Static)!.Invoke(null, null);
-        AssetObject asset = AssetManager.Load<AssetObject>("Data/Reload.rasset");
+        AssetObject asset = AssetManager.Load<AssetObject>(AssetPath.Project("Data/Reload.rasset"));
         Assert.Equal("ReloadAsset", asset.GetType().Name);
         Assert.Equal(generation, asset.GetType().GetProperty("generation")!.GetValue(asset));
         AssemblyLoadContext context = AssemblyLoadContext.GetLoadContext(asset.GetType().Assembly)!;
@@ -4036,7 +4088,7 @@ public sealed class ScriptManagerTests : IDisposable
                 public int value => PluginValue.value;
             }
             """);
-        Assert.True(AssetManager.Import(sourceName));
+        Assert.True(AssetManager.Import(AssetPath.Project(sourceName)));
         string projectSource = Path.Combine(m_projectRoot, "Assets", sourceName);
         byte[] sourceBytes = File.ReadAllBytes(projectSource);
         byte[] metadataBytes = File.ReadAllBytes(projectSource + ".imeta");
@@ -4094,7 +4146,7 @@ public sealed class ScriptManagerTests : IDisposable
 
     private (byte[] source, byte[] metadata) CaptureProjectSource(string relativePath)
     {
-        Assert.True(AssetManager.Import(relativePath));
+        Assert.True(AssetManager.Import(AssetPath.Project(relativePath)));
         string projectSource = Path.Combine(m_projectRoot, "Assets", relativePath);
         byte[] source = File.ReadAllBytes(projectSource);
         byte[] metadata = File.ReadAllBytes(projectSource + ".imeta");
@@ -4256,8 +4308,8 @@ public sealed class ScriptManagerTests : IDisposable
                 }
             }
             """);
-        Assert.True(AssetManager.Import(sourceName));
-        Assert.True(AssetManager.Import(editorSourceName));
+        Assert.True(AssetManager.Import(AssetPath.Project(sourceName)));
+        Assert.True(AssetManager.Import(AssetPath.Project(editorSourceName)));
         string projectSource = Path.Combine(m_projectRoot, "Assets", sourceName);
         string projectEditorSource = Path.Combine(m_projectRoot, "Assets", editorSourceName);
         byte[] sourceBytes = File.ReadAllBytes(projectSource);
@@ -4344,8 +4396,10 @@ public sealed class ScriptManagerTests : IDisposable
                 method.Name == nameof(AssetManager.Load) &&
                 method.IsGenericMethodDefinition &&
                 method.GetParameters() is [{ ParameterType: var parameterType }] &&
-                parameterType == typeof(string));
-        return (AssetObject)load.MakeGenericMethod(assetType).Invoke(null, [relativePath])!;
+                parameterType == typeof(AssetPath));
+        return (AssetObject)load.MakeGenericMethod(assetType).Invoke(
+            null,
+            [AssetPath.Project(relativePath)])!;
     }
 
     private sealed class StrongTypeHolder(Type type)

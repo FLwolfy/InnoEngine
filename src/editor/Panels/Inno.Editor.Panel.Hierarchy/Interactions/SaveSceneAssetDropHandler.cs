@@ -1,4 +1,5 @@
 using Inno.Assets;
+using Inno.Assets.Core;
 using Inno.Assets.File;
 
 using Inno.Editor.Core;
@@ -28,7 +29,7 @@ internal sealed class SaveSceneAssetDropHandler
         EditorDropContext<GameScene, string> context)
     {
         string path = m_workspace.SaveToDirectory(context.source, context.target);
-        if (!AssetManager.TryGetFileSystemEntry(path, out AssetFileEntry selection))
+        if (!AssetManager.TryGetFileSystemEntry(AssetPath.Parse(path), out AssetFileEntry selection))
             return EditorDropResult.rejected;
         _ = context.interactions.For(context.area, selection).Select();
         return EditorDropResult.Accepted(selection);

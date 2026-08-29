@@ -190,17 +190,7 @@ public static class ProjectSettingsManager
     {
         ArgumentNullException.ThrowIfNull(contributors);
         ProjectSettingsContributor[] snapshot = contributors.ToArray();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (ProjectSettingsContributor contributor in snapshot)
-        {
-            if (!seen.Add(contributor.id))
-                throw new InvalidOperationException($"Settings contributor '{contributor.id}' is declared more than once.");
-            if (!contributor.dependencies.All(seen.Contains))
-            {
-                throw new InvalidOperationException(
-                    $"Settings contributor '{contributor.id}' is not dependency-ordered.");
-            }
-        }
+        ProjectSettings.ValidateContributorOrder(snapshot);
         lock (S_SYNC)
         {
             _ = RequireCurrent();

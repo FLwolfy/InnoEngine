@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -22,8 +23,6 @@ internal static class ScriptCompiler
 {
     private const string C_GAME_ASSEMBLY_NAME = "Inno.GameScripts";
     private const string C_EDITOR_ASSEMBLY_NAME = "Inno.EditorScripts";
-    private const string C_PLUGIN_MARKER_ASSEMBLY_NAME = "Inno.ProjectPlugins";
-    private const string C_PLUGIN_MODULE_NAME = "ProjectPlugins";
     private const string C_RUNTIME_MODULE_NAME = "RuntimeScripts";
     private const string C_EDITOR_MODULE_NAME = "EditorScripts";
     private static readonly object S_CACHE_SYNC = new();
@@ -54,12 +53,13 @@ internal static class ScriptCompiler
             editorApi,
             runtimeApi,
             runtimeApiReferences);
-        IReadOnlyList<MetadataReference> platformReferences = FrameworkReferenceResolver.CreateRuntimeReferences();
         progress.Complete("Script references resolved.");
         var assemblyKeys = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (ScriptAssemblyInput assembly in sources.assemblies)
         {
-            ScriptApiProfile api = assembly.scope == ScriptAssemblyScope.Editor ? editorApi : runtimeApi;
+            ScriptApiReferenceSet api = assembly.scope == ScriptAssemblyScope.Editor
+                ? editorApiReferences
+                : runtimeApiReferences;
             assemblyKeys.Add(
                 assembly.name,
                 ComputeAssemblyBuildKey(assembly, api, assemblyKeys));
@@ -78,8 +78,11 @@ internal static class ScriptCompiler
                 cachedResult.outputDirectory,
                 cachedResult.reloadRequests,
                 compiledAssemblies: [],
-                reusedAssemblies: sources.assemblies.Select(static assembly => assembly.name).ToArray());
+                reusedAssemblies: sources.assemblies.Select(static assembly => assembly.name).ToArray(),
+                stageTimings: progress.Snapshot());
         }
+
+        IReadOnlyList<MetadataReference> platformReferences = FrameworkReferenceResolver.CreateRuntimeReferences();
 
         string stagingRoot = Path.Combine(options.outputDirectory, ".staging");
         using var generationStaging = new TemporaryDirectory(stagingRoot);
@@ -87,12 +90,8 @@ internal static class ScriptCompiler
         var diagnostics = new List<ScriptDiagnostic>();
         var compiledAssemblies = new List<string>();
         var reusedAssemblies = new List<string>();
-        progress.Begin("Preparing the unified Plugin load context...");
-        if (!TryEmitPluginMarker(stagingDirectory, platformReferences, diagnostics))
-        {
-            DeleteStagingDirectory(stagingDirectory);
-            return new ScriptCompilationResult(false, diagnostics, outputDirectory: null, reloadRequests: null);
-        }
+        progress.Begin("Preparing isolated Plugin module boundaries...");
+        progress.Complete("Isolated Plugin module boundaries prepared.");
 
         var compiledPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (ScriptAssemblyInput assembly in sources.assemblies)
@@ -144,7 +143,12 @@ internal static class ScriptCompiler
             {
                 DeleteStagingDirectory(assemblyStagingDirectory);
                 DeleteStagingDirectory(stagingDirectory);
-                return new ScriptCompilationResult(false, diagnostics, outputDirectory: null, reloadRequests: null);
+                return new ScriptCompilationResult(
+                    false,
+                    diagnostics,
+                    outputDirectory: null,
+                    reloadRequests: null,
+                    stageTimings: progress.Snapshot());
             }
             File.WriteAllBytes(
                 GetDiagnosticsPath(assemblyStagingDirectory),
@@ -182,7 +186,8 @@ internal static class ScriptCompiler
             outputDirectory,
             requests,
             compiledAssemblies,
-            reusedAssemblies);
+            reusedAssemblies,
+            progress.Snapshot());
     }
 
     private static async ValueTask<CompilationResult> CompileAssemblyAsync(
@@ -254,7 +259,7 @@ internal static class ScriptCompiler
                 checkOverflow: true,
                 allowUnsafe: allowUnsafe,
                 deterministic: true,
-                concurrentBuild: true,
+                concurrentBuild: false,
                 nullableContextOptions: nullable
                     ? NullableContextOptions.Enable
                     : NullableContextOptions.Disable));
@@ -370,7 +375,10 @@ internal static class ScriptCompiler
     private sealed class CompilationProgress
     {
         private readonly Action<float, string>? m_report;
+        private readonly List<ScriptCompilationStageTiming> m_timings = [];
+        private readonly Stopwatch m_stageStopwatch = new();
         private readonly int m_total;
+        private string? m_stage;
         private int m_completed;
 
         internal CompilationProgress(
@@ -385,31 +393,49 @@ internal static class ScriptCompiler
 
         internal void Begin(string status)
         {
+            FinishCurrentStage();
+            m_stage = status;
+            m_stageStopwatch.Restart();
             m_report?.Invoke((float)m_completed / m_total, status);
         }
 
         internal void Complete(string status)
         {
+            FinishCurrentStage();
             m_completed++;
             m_report?.Invoke(Math.Min(1f, (float)m_completed / m_total), status);
+        }
+
+        internal IReadOnlyList<ScriptCompilationStageTiming> Snapshot()
+        {
+            FinishCurrentStage();
+            return m_timings.ToArray();
+        }
+
+        private void FinishCurrentStage()
+        {
+            if (m_stage is null)
+                return;
+            m_stageStopwatch.Stop();
+            m_timings.Add(new ScriptCompilationStageTiming(m_stage, m_stageStopwatch.Elapsed));
+            m_stage = null;
         }
     }
 
     private static string ComputeAssemblyBuildKey(
         ScriptAssemblyInput assembly,
-        ScriptApiProfile api,
+        ScriptApiReferenceSet api,
         IReadOnlyDictionary<string, string> dependencyKeys)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         AppendHash(hash, "Inno.ScriptAssemblyArtifact.Incremental");
-        AppendHash(hash, typeof(ScriptCompiler).Assembly.ManifestModule.ModuleVersionId.ToString("D"));
         AppendHash(hash, System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription);
         AppendHash(hash, Environment.Version.ToString());
         AppendHash(hash, assembly.name);
         AppendHash(hash, assembly.scope.ToString());
         AppendHash(hash, assembly.domain.ToString());
         AppendHash(hash, assembly.ownerPluginId);
-        AppendHash(hash, assembly.definitionArtifactKey);
+        AppendHash(hash, assembly.definitionHash);
         AppendHash(hash, assembly.nullable.ToString());
         AppendHash(hash, assembly.allowUnsafe.ToString());
         foreach (string define in assembly.defines.OrderBy(static value => value, StringComparer.Ordinal))
@@ -417,42 +443,15 @@ internal static class ScriptCompiler
         foreach (ScriptSourceInput source in assembly.sources.OrderBy(static value => value.relativePath, StringComparer.Ordinal))
         {
             AppendHash(hash, source.relativePath);
-            AppendHash(hash, source.persistentId.ToString("D"));
-            AppendHash(hash, source.artifactKey);
+            AppendHash(hash, source.contentHash);
         }
         foreach (string reference in assembly.references.OrderBy(static value => value, StringComparer.Ordinal))
         {
             AppendHash(hash, reference);
             AppendHash(hash, dependencyKeys[reference]);
         }
-        AppendProfile(api);
+        AppendHash(hash, api.contractFingerprint);
         return Convert.ToHexString(hash.GetHashAndReset());
-
-        void AppendProfile(ScriptApiProfile profile)
-        {
-            AppendHash(hash, profile.name);
-            foreach (ScriptApiAssembly export in profile.exports
-                         .OrderBy(static value => value.assembly.GetName().Name, StringComparer.Ordinal))
-            {
-                AppendHash(hash, export.assembly.ManifestModule.ModuleVersionId.ToString("D"));
-                foreach (ScriptApiTypeExport typeExport in export.exports)
-                {
-                    Type type = typeExport.type;
-                    AppendHash(hash, type.AssemblyQualifiedName ?? type.FullName ?? type.Name);
-                    AppendHash(hash, typeExport.name);
-                }
-            }
-            foreach (ScriptApiNamespaceMapping mapping in profile.namespaceMappings)
-            {
-                AppendHash(hash, mapping.apiNamespace);
-                AppendHash(hash, mapping.implementationNamespace);
-            }
-            foreach (ScriptApiAttachableType attachableType in profile.attachableTypes)
-            {
-                AppendHash(hash, attachableType.implementationName);
-                AppendHash(hash, attachableType.kind);
-            }
-        }
     }
 
     private static string ComputeGenerationBuildKey(
@@ -625,8 +624,6 @@ internal static class ScriptCompiler
             if (!IsCachedAssemblyComplete(outputDirectory, assembly.name))
                 return false;
         }
-        if (!File.Exists(Path.Combine(outputDirectory, C_PLUGIN_MARKER_ASSEMBLY_NAME + ".dll")))
-            return false;
         result = new ScriptCompilationResult(
             success: true,
             diagnostics: diagnostics,
@@ -699,10 +696,10 @@ internal static class ScriptCompiler
     }
 
     private static string GetDiagnosticsPath(string outputDirectory)
-        => Path.Combine(outputDirectory, "diagnostics.inno");
+        => Path.Combine(outputDirectory, "diagnostics.cache");
 
     private static string GetTypeManifestPath(string assemblyPath)
-        => Path.ChangeExtension(assemblyPath, ".types.inno");
+        => Path.ChangeExtension(assemblyPath, ".types.cache");
 
     private static void AppendHash(IncrementalHash hash, string value)
     {
@@ -729,21 +726,61 @@ internal static class ScriptCompiler
         string outputDirectory,
         ScriptSourceSet sources)
     {
-        var pluginScopes = new Dictionary<string, AssemblyScope>(StringComparer.OrdinalIgnoreCase)
-        {
-            [C_PLUGIN_MARKER_ASSEMBLY_NAME] = AssemblyScope.Runtime
-        };
         ScriptAssemblyInput[] pluginAssemblies = sources.assemblies
             .Where(static assembly => assembly.domain == AssemblyDomain.InnoPlugin)
             .ToArray();
-        foreach (ScriptAssemblyInput plugin in pluginAssemblies)
-        {
-            pluginScopes[plugin.name] = plugin.scope == ScriptAssemblyScope.Editor
-                ? AssemblyScope.Editor
-                : AssemblyScope.Runtime;
-        }
-
         string AssemblyPath(string name) => Path.Combine(outputDirectory, name + ".dll");
+        Dictionary<string, string> pluginModules = pluginAssemblies
+            .Select(static assembly => assembly.ownerPluginId)
+            .Distinct(StringComparer.Ordinal)
+            .ToDictionary(
+                static pluginId => pluginId,
+                static pluginId => "Plugin." + pluginId,
+                StringComparer.Ordinal);
+        Dictionary<string, ScriptAssemblyInput> assembliesByName = sources.assemblies.ToDictionary(
+            static assembly => assembly.name,
+            StringComparer.OrdinalIgnoreCase);
+        var requests = new List<AssemblyLoadRequest>();
+        foreach (IGrouping<string, ScriptAssemblyInput> group in pluginAssemblies
+                     .GroupBy(static assembly => assembly.ownerPluginId, StringComparer.Ordinal)
+                     .OrderBy(static group => group.Key, StringComparer.Ordinal))
+        {
+            ScriptAssemblyInput[] owned = group
+                .OrderBy(static assembly => assembly.scope)
+                .ThenBy(static assembly => assembly.name, StringComparer.Ordinal)
+                .ToArray();
+            ScriptAssemblyInput main = owned[0];
+            string[] dependencies = owned
+                .SelectMany(static assembly => assembly.references)
+                .Select(reference => assembliesByName[reference].ownerPluginId)
+                .Where(owner => !string.IsNullOrEmpty(owner) &&
+                                !string.Equals(owner, group.Key, StringComparison.Ordinal))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(static value => value, StringComparer.Ordinal)
+                .Select(owner => pluginModules[owner])
+                .ToArray();
+            requests.Add(new AssemblyLoadRequest
+            {
+                moduleName = pluginModules[group.Key],
+                mainAssemblyPath = AssemblyPath(main.name),
+                preloadAssemblyPaths = owned
+                    .Where(assembly => !ReferenceEquals(assembly, main))
+                    .Select(assembly => AssemblyPath(assembly.name))
+                    .ToArray(),
+                upstreamModuleNames = dependencies,
+                collectible = true,
+                domain = AssemblyDomain.InnoPlugin,
+                scope = main.scope == ScriptAssemblyScope.Editor
+                    ? AssemblyScope.Editor
+                    : AssemblyScope.Runtime,
+                assemblyScopes = owned.ToDictionary(
+                    static assembly => assembly.name,
+                    static assembly => assembly.scope == ScriptAssemblyScope.Editor
+                        ? AssemblyScope.Editor
+                        : AssemblyScope.Runtime,
+                    StringComparer.OrdinalIgnoreCase)
+            });
+        }
         ScriptAssemblyInput[] runtimeAssemblies = sources.assemblies
             .Where(static assembly => assembly.domain == AssemblyDomain.InnoScripting
                 && assembly.scope == ScriptAssemblyScope.Runtime)
@@ -752,18 +789,10 @@ internal static class ScriptCompiler
             .Where(static assembly => assembly.domain == AssemblyDomain.InnoScripting
                 && assembly.scope == ScriptAssemblyScope.Editor)
             .ToArray();
-        return
-        [
-            new AssemblyLoadRequest
-            {
-                moduleName = C_PLUGIN_MODULE_NAME,
-                mainAssemblyPath = AssemblyPath(C_PLUGIN_MARKER_ASSEMBLY_NAME),
-                preloadAssemblyPaths = pluginAssemblies.Select(assembly => AssemblyPath(assembly.name)).ToArray(),
-                collectible = true,
-                domain = AssemblyDomain.InnoPlugin,
-                scope = AssemblyScope.Runtime,
-                assemblyScopes = pluginScopes
-            },
+        string[] pluginModuleNames = pluginModules.Values
+            .OrderBy(static value => value, StringComparer.Ordinal)
+            .ToArray();
+        requests.Add(
             new AssemblyLoadRequest
             {
                 moduleName = C_RUNTIME_MODULE_NAME,
@@ -772,10 +801,12 @@ internal static class ScriptCompiler
                     .Where(static assembly => assembly.name != C_GAME_ASSEMBLY_NAME)
                     .Select(assembly => AssemblyPath(assembly.name))
                     .ToArray(),
+                upstreamModuleNames = pluginModuleNames,
                 collectible = true,
                 domain = AssemblyDomain.InnoScripting,
                 scope = AssemblyScope.Runtime
-            },
+            });
+        requests.Add(
             new AssemblyLoadRequest
             {
                 moduleName = C_EDITOR_MODULE_NAME,
@@ -784,6 +815,7 @@ internal static class ScriptCompiler
                     .Where(static assembly => assembly.name != C_EDITOR_ASSEMBLY_NAME)
                     .Select(assembly => AssemblyPath(assembly.name))
                     .ToArray(),
+                upstreamModuleNames = pluginModuleNames.Concat([C_RUNTIME_MODULE_NAME]).ToArray(),
                 collectible = true,
                 domain = AssemblyDomain.InnoScripting,
                 scope = AssemblyScope.Editor,
@@ -791,30 +823,8 @@ internal static class ScriptCompiler
                     static assembly => assembly.name,
                     static _ => AssemblyScope.Editor,
                     StringComparer.OrdinalIgnoreCase)
-            }
-        ];
-    }
-
-    private static bool TryEmitPluginMarker(
-        string outputDirectory,
-        IReadOnlyList<MetadataReference> references,
-        ICollection<ScriptDiagnostic> diagnostics)
-    {
-        SyntaxTree source = CSharpSyntaxTree.ParseText(
-            """
-            [assembly: System.Reflection.AssemblyMetadata("Inno.AssemblyDomain", "InnoPlugin")]
-            [assembly: System.Reflection.AssemblyMetadata("Inno.AssemblyScope", "Runtime")]
-            """);
-        CSharpCompilation compilation = CSharpCompilation.Create(
-            C_PLUGIN_MARKER_ASSEMBLY_NAME,
-            [source],
-            references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-        string path = Path.Combine(outputDirectory, C_PLUGIN_MARKER_ASSEMBLY_NAME + ".dll");
-        EmitResult result = compilation.Emit(path);
-        foreach (Diagnostic diagnostic in result.Diagnostics)
-            diagnostics.Add(ToDiagnostic(diagnostic));
-        return result.Success;
+            });
+        return requests;
     }
 
     private static ScriptDiagnostic ToDiagnostic(Diagnostic diagnostic)

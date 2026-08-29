@@ -67,8 +67,8 @@ internal sealed class FileBrowserNavigation(AssetEditorModule assets)
     {
         if (entry.isDirectory)
         {
-            tree.RequestOpenTreeToPath(entry.relativePath);
-            NavigateTo(context, entry.relativePath, entry.relativePath);
+            tree.RequestOpenTreeToPath(entry.assetPath.ToString());
+            NavigateTo(context, entry.assetPath.ToString(), entry.assetPath.ToString());
             return;
         }
         _ = assets.interactions

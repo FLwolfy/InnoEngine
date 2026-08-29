@@ -27,6 +27,15 @@ public sealed class ScriptManagerOptions
     /// </summary>
     public int debounceMilliseconds { get; init; } = 250;
 
+    /// <summary>
+    /// Gets or sets the elapsed duration after which an active compilation is reported as long-running.
+    /// </summary>
+    /// <remarks>
+    /// Use <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> to disable the warning. The warning
+    /// never cancels compilation automatically.
+    /// </remarks>
+    public TimeSpan compilationWarningTimeout { get; init; } = TimeSpan.FromSeconds(10);
+
     internal string assetDirectory => Path.Combine(projectRootDirectory, "Assets");
     internal string ideDirectory => Path.Combine(projectRootDirectory, "Library", "IDE");
     internal string outputDirectory => Path.Combine(projectRootDirectory, "Library", "Artifacts", "ScriptAssemblies");

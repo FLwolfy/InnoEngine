@@ -16,7 +16,8 @@ public sealed class ScriptCompilationResult
         string? outputDirectory,
         IReadOnlyList<AssemblyLoadRequest>? reloadRequests,
         IReadOnlyList<string>? compiledAssemblies = null,
-        IReadOnlyList<string>? reusedAssemblies = null)
+        IReadOnlyList<string>? reusedAssemblies = null,
+        IReadOnlyList<ScriptCompilationStageTiming>? stageTimings = null)
     {
         this.success = success;
         this.diagnostics = diagnostics;
@@ -24,6 +25,7 @@ public sealed class ScriptCompilationResult
         this.reloadRequests = reloadRequests ?? [];
         this.compiledAssemblies = compiledAssemblies ?? [];
         this.reusedAssemblies = reusedAssemblies ?? [];
+        this.stageTimings = stageTimings ?? [];
     }
 
     /// <summary>Gets whether every discovered script assembly compiled or reused successfully.</summary>
@@ -34,6 +36,9 @@ public sealed class ScriptCompilationResult
 
     /// <summary>Gets the generation output directory when one was created.</summary>
     public string? outputDirectory { get; }
+
+    /// <summary>Gets completed compiler stage timings in execution order.</summary>
+    public IReadOnlyList<ScriptCompilationStageTiming> stageTimings { get; }
 
     internal IReadOnlyList<AssemblyLoadRequest> reloadRequests { get; }
 

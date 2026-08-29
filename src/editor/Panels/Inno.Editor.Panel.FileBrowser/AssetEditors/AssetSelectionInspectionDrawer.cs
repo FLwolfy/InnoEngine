@@ -40,7 +40,7 @@ internal sealed class AssetSelectionInspectionDrawer : InspectionDrawer<AssetFil
         => (target.nameWithoutExtension, null);
 
     protected override void DrawHeader(InspectionDrawContext context, AssetFileEntry target)
-        => EditorWidget.ColoredText(EditorPalette.assetBreadcrumbText, target.relativePath);
+        => EditorWidget.ColoredText(EditorPalette.assetBreadcrumbText, target.assetPath.ToString());
 
     protected override void Draw(InspectionDrawContext context, AssetFileEntry entry)
     {

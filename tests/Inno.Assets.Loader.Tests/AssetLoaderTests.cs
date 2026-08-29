@@ -59,14 +59,14 @@ public sealed class AssetLoaderTests : IDisposable
         workspace.WriteText("Config/game.txt", "one");
         using var loader = workspace.CreateLoader();
 
-        Assert.True(loader.Import("Config/game.txt"));
+        Assert.True(loader.Import(AssetPath.Project("Config/game.txt")));
         Assert.True(System.IO.File.Exists(workspace.SourcePath("Config/game.txt.imeta")));
-        Assert.True(loader.TryGetPersistentId("Config/game.txt", out Guid persistentId));
+        Assert.True(loader.TryGetPersistentId(AssetPath.Project("Config/game.txt"), out Guid persistentId));
         Assert.NotEqual(Guid.Empty, persistentId);
         Assert.True(loader.TryGetArtifact(persistentId, "runtime", out AssetArtifactInfo? artifact));
         Assert.NotNull(artifact);
         Assert.True(System.IO.File.Exists(artifact.absolutePath));
-        Assert.True(loader.TryGetAssetType("Config/game.txt", out Type? assetType));
+        Assert.True(loader.TryGetAssetType(AssetPath.Project("Config/game.txt"), out Type? assetType));
         Assert.Equal(typeof(TextAsset), assetType);
         Assert.Empty(loader.GetLoadedPaths());
     }
@@ -79,11 +79,11 @@ public sealed class AssetLoaderTests : IDisposable
         using var loader = workspace.CreateLoader();
 
         PrivateConstructorAsset asset = Assert.IsType<PrivateConstructorAsset>(
-            loader.Load("Private/item.privateasset", typeof(PrivateConstructorAsset)));
+            loader.Load(AssetPath.Project("Private/item.privateasset"), typeof(PrivateConstructorAsset)));
 
         Assert.Equal("private", asset.value);
         TypeCacheManager.Rebuild();
-        Assert.Same(asset, loader.Load("Private/item.privateasset", typeof(PrivateConstructorAsset)));
+        Assert.Same(asset, loader.Load(AssetPath.Project("Private/item.privateasset"), typeof(PrivateConstructorAsset)));
     }
 
     [Fact]
@@ -94,8 +94,8 @@ public sealed class AssetLoaderTests : IDisposable
         workspace.WriteText("Graphs/b.depgraph2", string.Empty);
         using var loader = workspace.CreateLoader();
 
-        Assert.IsType<DependencyAsset>(loader.Load("Graphs/a.depgraph", typeof(DependencyAsset)));
-        Assert.IsType<DependencyAsset>(loader.Load("Graphs/b.depgraph2", typeof(DependencyAsset)));
+        Assert.IsType<DependencyAsset>(loader.Load(AssetPath.Project("Graphs/a.depgraph"), typeof(DependencyAsset)));
+        Assert.IsType<DependencyAsset>(loader.Load(AssetPath.Project("Graphs/b.depgraph2"), typeof(DependencyAsset)));
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public sealed class AssetLoaderTests : IDisposable
         ImporterConflictProbe.mode = ImporterConflictMode.DuplicateId;
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => loader.Import("Conflict/value.probea"));
+            () => loader.Import(AssetPath.Project("Conflict/value.probea")));
 
         Assert.Contains("importer id", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -121,7 +121,7 @@ public sealed class AssetLoaderTests : IDisposable
         ImporterConflictProbe.mode = ImporterConflictMode.DuplicateExtension;
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => loader.Import("Conflict/value.conflict"));
+            () => loader.Import(AssetPath.Project("Conflict/value.conflict")));
 
         Assert.Contains("extension", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -133,11 +133,11 @@ public sealed class AssetLoaderTests : IDisposable
         workspace.WriteText("Text/shared.txt", "shared");
         using var loader = workspace.CreateLoader();
 
-        TextAsset byPath = Assert.IsType<TextAsset>(loader.Load("Text/shared.txt", typeof(TextAsset)));
+        TextAsset byPath = Assert.IsType<TextAsset>(loader.Load(AssetPath.Project("Text/shared.txt"), typeof(TextAsset)));
         TextAsset byId = Assert.IsType<TextAsset>(loader.Load(byPath.identity.persistentId, typeof(TextAsset)));
 
         Assert.Same(byPath, byId);
-        Assert.Equal(new[] { "Text/shared.txt" }, loader.GetLoadedPaths());
+        Assert.Equal(new[] { AssetPath.Project("Text/shared.txt") }, loader.GetLoadedPaths());
     }
 
     [Fact]
@@ -156,7 +156,7 @@ public sealed class AssetLoaderTests : IDisposable
             FileShare.None);
 
         TextAsset asset = Assert.IsType<TextAsset>(
-            loader.Load("Text/cached.txt", typeof(TextAsset)));
+            loader.Load(AssetPath.Project("Text/cached.txt"), typeof(TextAsset)));
 
         Assert.Equal("cached", asset.content);
     }
@@ -168,7 +168,7 @@ public sealed class AssetLoaderTests : IDisposable
         workspace.WriteText("Text/touched.txt", "value");
         using var loader = workspace.CreateLoader();
         TextAsset before = Assert.IsType<TextAsset>(
-            loader.Load("Text/touched.txt", typeof(TextAsset)));
+            loader.Load(AssetPath.Project("Text/touched.txt"), typeof(TextAsset)));
         long version = before.contentVersion;
         string sourcePath = workspace.SourcePath("Text/touched.txt");
         System.IO.File.SetLastWriteTimeUtc(
@@ -176,7 +176,7 @@ public sealed class AssetLoaderTests : IDisposable
             System.IO.File.GetLastWriteTimeUtc(sourcePath).AddSeconds(1));
 
         TextAsset after = Assert.IsType<TextAsset>(
-            loader.Load("Text/touched.txt", typeof(TextAsset)));
+            loader.Load(AssetPath.Project("Text/touched.txt"), typeof(TextAsset)));
 
         Assert.Same(before, after);
         Assert.Equal(version, after.contentVersion);
@@ -189,7 +189,7 @@ public sealed class AssetLoaderTests : IDisposable
         workspace.WriteText("Import/schema.inc", "schema");
         workspace.WriteText("Import/root.importgraph", "Import/schema.inc");
         using var loader = workspace.CreateLoader();
-        Assert.True(loader.Import("Import/root.importgraph"));
+        Assert.True(loader.Import(AssetPath.Project("Import/root.importgraph")));
         using var sourceLock = new FileStream(
             workspace.SourcePath("Import/schema.inc"),
             FileMode.Open,
@@ -197,7 +197,7 @@ public sealed class AssetLoaderTests : IDisposable
             FileShare.None);
 
         ImportGraphAsset asset = Assert.IsType<ImportGraphAsset>(
-            loader.Load("Import/root.importgraph", typeof(ImportGraphAsset)));
+            loader.Load(AssetPath.Project("Import/root.importgraph"), typeof(ImportGraphAsset)));
 
         Assert.False(asset.isMissing);
     }
@@ -210,10 +210,10 @@ public sealed class AssetLoaderTests : IDisposable
         using var loader = workspace.CreateLoader();
         using var cancellation = new CancellationTokenSource();
 
-        ValueTask<AssetObject?> first = loader.LoadAsync("Slow/item.slowasset", typeof(SlowAsset));
+        ValueTask<AssetObject?> first = loader.LoadAsync(AssetPath.Project("Slow/item.slowasset"), typeof(SlowAsset));
         Assert.True(SlowAssetImporter.importStarted.Wait(TimeSpan.FromSeconds(3)));
         ValueTask<AssetObject?> second = loader.LoadAsync(
-            "Slow/item.slowasset",
+            AssetPath.Project("Slow/item.slowasset"),
             typeof(SlowAsset),
             cancellation.Token);
         cancellation.Cancel();
@@ -232,12 +232,12 @@ public sealed class AssetLoaderTests : IDisposable
         using TestWorkspace workspace = new();
         workspace.WriteText("Text/reload.txt", "one");
         using var loader = workspace.CreateLoader();
-        TextAsset before = Assert.IsType<TextAsset>(loader.Load("Text/reload.txt", typeof(TextAsset)));
+        TextAsset before = Assert.IsType<TextAsset>(loader.Load(AssetPath.Project("Text/reload.txt"), typeof(TextAsset)));
         Guid persistentId = before.identity.persistentId;
         long version = before.contentVersion;
 
         workspace.WriteText("Text/reload.txt", "two");
-        TextAsset after = Assert.IsType<TextAsset>(loader.Load("Text/reload.txt", typeof(TextAsset)));
+        TextAsset after = Assert.IsType<TextAsset>(loader.Load(AssetPath.Project("Text/reload.txt"), typeof(TextAsset)));
 
         Assert.Same(before, after);
         Assert.Equal(persistentId, after.identity.persistentId);
@@ -254,7 +254,7 @@ public sealed class AssetLoaderTests : IDisposable
         using var loader = workspace.CreateLoader();
 
         DependencyAsset root = Assert.IsType<DependencyAsset>(
-            loader.Load("Graphs/a.depgraph", typeof(DependencyAsset)));
+            loader.Load(AssetPath.Project("Graphs/a.depgraph"), typeof(DependencyAsset)));
         IReadOnlyList<AssetDependency> direct = loader.GetDependencies(root);
         IReadOnlyList<AssetDependency> recursive = loader.GetDependencies(root, recursive: true);
 
@@ -272,9 +272,9 @@ public sealed class AssetLoaderTests : IDisposable
         workspace.WriteText("Import/b.importgraph", "Import/a.importgraph");
         using var loader = workspace.CreateLoader();
 
-        Assert.True(loader.Import("Import/a.importgraph"));
-        Assert.False(loader.Import("Import/b.importgraph"));
-        Assert.True(loader.TryGetInfo("Import/b.importgraph", out AssetInfo? info));
+        Assert.True(loader.Import(AssetPath.Project("Import/a.importgraph")));
+        Assert.False(loader.Import(AssetPath.Project("Import/b.importgraph")));
+        Assert.True(loader.TryGetInfo(AssetPath.Project("Import/b.importgraph"), out AssetInfo? info));
         Assert.NotNull(info);
         Assert.Equal(AssetImportStatus.Failed, info.status);
         string diagnostic = Assert.Single(info.diagnostics);
@@ -290,7 +290,7 @@ public sealed class AssetLoaderTests : IDisposable
         using TestWorkspace workspace = new();
         workspace.WriteText("Text/old.txt", "value");
         using var loader = workspace.CreateLoader();
-        TextAsset asset = Assert.IsType<TextAsset>(loader.Load("Text/old.txt", typeof(TextAsset)));
+        TextAsset asset = Assert.IsType<TextAsset>(loader.Load(AssetPath.Project("Text/old.txt"), typeof(TextAsset)));
         Guid persistentId = asset.identity.persistentId;
 
         workspace.Move("Text/old.txt", "Text/new.txt");
@@ -310,7 +310,7 @@ public sealed class AssetLoaderTests : IDisposable
         Assert.Equal(persistentId, asset.identity.persistentId);
         Assert.True(asset.runtimePayload.IsEmpty);
         Assert.False(System.IO.File.Exists(workspace.SourcePath("Text/new.txt.imeta")));
-        Assert.False(loader.TryGetInfo("Text/new.txt", out _));
+        Assert.False(loader.TryGetInfo(AssetPath.Project("Text/new.txt"), out _));
         Assert.True(loader.TryGetInfo(persistentId, out AssetInfo? tombstone));
         Assert.NotNull(tombstone);
         Assert.Equal(AssetImportStatus.Missing, tombstone.status);
@@ -324,7 +324,7 @@ public sealed class AssetLoaderTests : IDisposable
         using TestWorkspace workspace = new();
         workspace.WriteText("Text/recover.txt", "one");
         using var loader = workspace.CreateLoader();
-        TextAsset asset = Assert.IsType<TextAsset>(loader.Load("Text/recover.txt", typeof(TextAsset)));
+        TextAsset asset = Assert.IsType<TextAsset>(loader.Load(AssetPath.Project("Text/recover.txt"), typeof(TextAsset)));
 
         workspace.DeleteSource("Text/recover.txt");
         loader.ApplySourceChanges([
@@ -336,7 +336,7 @@ public sealed class AssetLoaderTests : IDisposable
         ]);
 
         TextAsset replacement = Assert.IsType<TextAsset>(
-            loader.Load("Text/recover.txt", typeof(TextAsset)));
+            loader.Load(AssetPath.Project("Text/recover.txt"), typeof(TextAsset)));
         Assert.True(asset.isMissing);
         Assert.False(replacement.isMissing);
         Assert.Equal("two", replacement.content);
@@ -353,7 +353,7 @@ public sealed class AssetLoaderTests : IDisposable
         using (AssetLoader loader = workspace.CreateLoader())
         {
             loader.Rescan();
-            Assert.True(loader.TryGetPersistentId("Text/value.txt", out oldId));
+            Assert.True(loader.TryGetPersistentId(AssetPath.Project("Text/value.txt"), out oldId));
             workspace.DeleteSource("Text/value.txt");
             loader.ApplySourceChanges([
                 new Inno.Assets.File.AssetChangedEvent("Text/value.txt", WatcherChangeTypes.Deleted)
@@ -366,7 +366,7 @@ public sealed class AssetLoaderTests : IDisposable
 
         Assert.True(restarted.TryGetInfo(oldId, out AssetInfo? tombstone));
         Assert.Equal(AssetImportStatus.Missing, tombstone!.status);
-        Assert.True(restarted.TryGetPersistentId("Text/value.txt", out Guid newId));
+        Assert.True(restarted.TryGetPersistentId(AssetPath.Project("Text/value.txt"), out Guid newId));
         Assert.NotEqual(oldId, newId);
     }
 
@@ -376,7 +376,7 @@ public sealed class AssetLoaderTests : IDisposable
         using TestWorkspace workspace = new();
         workspace.WriteText("Text/recover.txt", "one");
         using var loader = workspace.CreateLoader();
-        TextAsset asset = Assert.IsType<TextAsset>(loader.Load("Text/recover.txt", typeof(TextAsset)));
+        TextAsset asset = Assert.IsType<TextAsset>(loader.Load(AssetPath.Project("Text/recover.txt"), typeof(TextAsset)));
         Guid id = asset.identity.persistentId;
         byte[] metadata = System.IO.File.ReadAllBytes(workspace.SourcePath("Text/recover.txt.imeta"));
 
@@ -390,7 +390,7 @@ public sealed class AssetLoaderTests : IDisposable
             new Inno.Assets.File.AssetChangedEvent("Text/recover.txt", WatcherChangeTypes.Created)
         ]);
 
-        TextAsset restored = Assert.IsType<TextAsset>(loader.Load("Text/recover.txt", typeof(TextAsset)));
+        TextAsset restored = Assert.IsType<TextAsset>(loader.Load(AssetPath.Project("Text/recover.txt"), typeof(TextAsset)));
         Assert.Same(asset, restored);
         Assert.Equal(id, restored.identity.persistentId);
         Assert.False(restored.isMissing);
@@ -404,7 +404,7 @@ public sealed class AssetLoaderTests : IDisposable
         workspace.WriteText("Text/old.txt", "value");
         using var loader = workspace.CreateLoader();
         loader.Rescan();
-        Assert.True(loader.TryGetPersistentId("Text/old.txt", out Guid id));
+        Assert.True(loader.TryGetPersistentId(AssetPath.Project("Text/old.txt"), out Guid id));
 
         workspace.Move("Text/old.txt", "Text/new.txt");
         loader.ApplySourceChanges([
@@ -412,7 +412,7 @@ public sealed class AssetLoaderTests : IDisposable
             new Inno.Assets.File.AssetChangedEvent("Text/new.txt", WatcherChangeTypes.Created)
         ]);
 
-        Assert.True(loader.TryGetPersistentId("Text/new.txt", out Guid movedId));
+        Assert.True(loader.TryGetPersistentId(AssetPath.Project("Text/new.txt"), out Guid movedId));
         Assert.Equal(id, movedId);
         Assert.False(System.IO.File.Exists(workspace.SourcePath("Text/old.txt.imeta")));
         Assert.True(System.IO.File.Exists(workspace.SourcePath("Text/new.txt.imeta")));
@@ -426,8 +426,8 @@ public sealed class AssetLoaderTests : IDisposable
         workspace.WriteText("Text/second.txt", "same");
         using var loader = workspace.CreateLoader();
         loader.Rescan();
-        Assert.True(loader.TryGetPersistentId("Text/first.txt", out Guid firstId));
-        Assert.True(loader.TryGetPersistentId("Text/second.txt", out Guid secondId));
+        Assert.True(loader.TryGetPersistentId(AssetPath.Project("Text/first.txt"), out Guid firstId));
+        Assert.True(loader.TryGetPersistentId(AssetPath.Project("Text/second.txt"), out Guid secondId));
 
         workspace.DeleteSource("Text/first.txt");
         workspace.DeleteSource("Text/second.txt");
@@ -438,10 +438,10 @@ public sealed class AssetLoaderTests : IDisposable
             new Inno.Assets.File.AssetChangedEvent("Text/new.txt", WatcherChangeTypes.Created)
         ]);
 
-        Assert.True(loader.TryGetPersistentId("Text/new.txt", out Guid newId));
+        Assert.True(loader.TryGetPersistentId(AssetPath.Project("Text/new.txt"), out Guid newId));
         Assert.NotEqual(firstId, newId);
         Assert.NotEqual(secondId, newId);
-        Assert.True(loader.TryGetInfo("Text/new.txt", out AssetInfo? newInfo));
+        Assert.True(loader.TryGetInfo(AssetPath.Project("Text/new.txt"), out AssetInfo? newInfo));
         Assert.Contains(newInfo!.diagnostics, diagnostic =>
             diagnostic.Contains("matched 2 removed assets", StringComparison.Ordinal));
         Assert.True(loader.TryGetInfo(firstId, out AssetInfo? firstTombstone));
@@ -457,7 +457,7 @@ public sealed class AssetLoaderTests : IDisposable
         using var loader = workspace.CreateLoader();
         var asset = new MutableAsset { value = "one" };
 
-        Assert.True(loader.Save("Data/value.mutableasset", asset));
+        Assert.True(loader.Save(AssetPath.Project("Data/value.mutableasset"), asset));
         Guid persistentId = asset.identity.persistentId;
         long version = asset.contentVersion;
         asset.value = "two";
@@ -467,7 +467,7 @@ public sealed class AssetLoaderTests : IDisposable
         Assert.Equal(version + 1, asset.contentVersion);
         Assert.Equal("two", workspace.ReadText("Data/value.mutableasset"));
         Assert.Same(asset, loader.Load(persistentId, typeof(MutableAsset)));
-        Assert.Throws<InvalidOperationException>(() => loader.Save("Data/copy.mutableasset", asset));
+        Assert.Throws<InvalidOperationException>(() => loader.Save(AssetPath.Project("Data/copy.mutableasset"), asset));
     }
 
     [Fact]
@@ -477,12 +477,12 @@ public sealed class AssetLoaderTests : IDisposable
         workspace.WriteText("Data/stable.mutableasset", "one");
         using var loader = workspace.CreateLoader();
         MutableAsset asset = Assert.IsType<MutableAsset>(
-            loader.Load("Data/stable.mutableasset", typeof(MutableAsset)));
+            loader.Load(AssetPath.Project("Data/stable.mutableasset"), typeof(MutableAsset)));
         long version = asset.contentVersion;
 
         workspace.WriteText("Data/stable.mutableasset", "!invalid!");
-        Assert.False(loader.Import("Data/stable.mutableasset"));
-        Assert.True(loader.TryGetInfo("Data/stable.mutableasset", out AssetInfo? info));
+        Assert.False(loader.Import(AssetPath.Project("Data/stable.mutableasset")));
+        Assert.True(loader.TryGetInfo(AssetPath.Project("Data/stable.mutableasset"), out AssetInfo? info));
         Assert.NotNull(info);
         Assert.Equal(AssetImportStatus.Failed, info.status);
         Assert.Contains(info.diagnostics, static value => value.Contains("InvalidDataException"));
@@ -502,10 +502,10 @@ public sealed class AssetLoaderTests : IDisposable
         try
         {
             MutableAsset asset = Assert.IsType<MutableAsset>(
-                loader.Load("Data/diagnostic.mutableasset", typeof(MutableAsset)));
+                loader.Load(AssetPath.Project("Data/diagnostic.mutableasset"), typeof(MutableAsset)));
             workspace.WriteText("Data/diagnostic.mutableasset", "!invalid!");
 
-            Assert.False(loader.Import("Data/diagnostic.mutableasset"));
+            Assert.False(loader.Import(AssetPath.Project("Data/diagnostic.mutableasset")));
             DiagnosticReport report = Assert.Single(sink.reports.Values.Where(value =>
                 value.source.displayName == "Data/diagnostic.mutableasset"));
             Diagnostic diagnostic = Assert.Single(report.diagnostics);
@@ -513,7 +513,7 @@ public sealed class AssetLoaderTests : IDisposable
             Assert.Equal(DiagnosticSeverity.Error, diagnostic.severity);
 
             workspace.WriteText("Data/diagnostic.mutableasset", "recovered");
-            Assert.True(loader.Import("Data/diagnostic.mutableasset"));
+            Assert.True(loader.Import(AssetPath.Project("Data/diagnostic.mutableasset")));
             Assert.DoesNotContain(
                 sink.reports.Values,
                 value => value.source.displayName == "Data/diagnostic.mutableasset");
@@ -531,7 +531,7 @@ public sealed class AssetLoaderTests : IDisposable
         using TestWorkspace workspace = new();
         using var loader = workspace.CreateLoader();
         var asset = new MutableAsset { value = "one" };
-        Assert.True(loader.Save("Data/rollback.mutableasset", asset));
+        Assert.True(loader.Save(AssetPath.Project("Data/rollback.mutableasset"), asset));
         byte[] sourceBefore = System.IO.File.ReadAllBytes(workspace.SourcePath("Data/rollback.mutableasset"));
         byte[] metaBefore = System.IO.File.ReadAllBytes(workspace.SourcePath("Data/rollback.mutableasset.imeta"));
         Assert.True(loader.TryGetArtifact(asset.identity.persistentId, "runtime", out AssetArtifactInfo? artifact));
@@ -556,7 +556,7 @@ public sealed class AssetLoaderTests : IDisposable
         workspace.WriteText("Graphs/root.depgraph", "Text/dependency.txt");
         using var loader = workspace.CreateLoader();
         DependencyAsset root = Assert.IsType<DependencyAsset>(
-            loader.Load("Graphs/root.depgraph", typeof(DependencyAsset)));
+            loader.Load(AssetPath.Project("Graphs/root.depgraph"), typeof(DependencyAsset)));
 
         Assert.Equal(0, loader.UnloadUnusedAssets());
         Assert.Equal(2, loader.GetLoadedPaths().Count);
@@ -599,7 +599,7 @@ public sealed class AssetLoaderTests : IDisposable
         using TestWorkspace workspace = new();
         workspace.WriteText("Hooks/value.hookasset", "value");
         var loader = workspace.CreateLoader();
-        HookAsset asset = Assert.IsType<HookAsset>(loader.Load("Hooks/value.hookasset", typeof(HookAsset)));
+        HookAsset asset = Assert.IsType<HookAsset>(loader.Load(AssetPath.Project("Hooks/value.hookasset"), typeof(HookAsset)));
 
         loader.Dispose();
         loader.Dispose();
@@ -619,12 +619,12 @@ public sealed class AssetLoaderTests : IDisposable
 
         loader.Rescan();
 
-        Assert.True(loader.TryGetInfo("EmptyFolder", out AssetInfo? folder));
+        Assert.True(loader.TryGetInfo(AssetPath.Project("EmptyFolder"), out AssetInfo? folder));
         Assert.Equal(AssetSourceKind.Directory, folder!.sourceKind);
         Assert.Equal(AssetImportStatus.Imported, folder.status);
         Assert.True(System.IO.File.Exists(workspace.SourcePath("EmptyFolder.imeta")));
         Assert.True(folder.artifactKey.isEmpty);
-        Assert.True(loader.TryGetInfo("Unknown/value.unknown", out AssetInfo? unsupported));
+        Assert.True(loader.TryGetInfo(AssetPath.Project("Unknown/value.unknown"), out AssetInfo? unsupported));
         Assert.Equal(AssetImportStatus.Unsupported, unsupported!.status);
         Assert.Equal(Guid.Empty, unsupported.persistentId);
         Assert.False(System.IO.File.Exists(workspace.SourcePath("Unknown/value.unknown.imeta")));
@@ -640,7 +640,7 @@ public sealed class AssetLoaderTests : IDisposable
         using (AssetLoader first = workspace.CreateLoader())
         {
             first.Rescan();
-            Assert.True(first.TryGetPersistentId("Text/value.txt", out id));
+            Assert.True(first.TryGetPersistentId(AssetPath.Project("Text/value.txt"), out id));
         }
         Directory.Delete(workspace.libraryRoot, recursive: true);
         Directory.CreateDirectory(workspace.libraryRoot);
@@ -648,7 +648,7 @@ public sealed class AssetLoaderTests : IDisposable
         using AssetLoader rebuilt = workspace.CreateLoader();
         rebuilt.Rescan();
 
-        Assert.True(rebuilt.TryGetPersistentId("Text/value.txt", out Guid restored));
+        Assert.True(rebuilt.TryGetPersistentId(AssetPath.Project("Text/value.txt"), out Guid restored));
         Assert.Equal(id, restored);
     }
 
@@ -660,14 +660,14 @@ public sealed class AssetLoaderTests : IDisposable
         workspace.WriteText("Text/second.txt", "same");
         using var loader = workspace.CreateLoader();
         loader.Rescan();
-        Assert.True(loader.TryGetInfo("Text/first.txt", out AssetInfo? first));
-        Assert.True(loader.TryGetInfo("Text/second.txt", out AssetInfo? second));
+        Assert.True(loader.TryGetInfo(AssetPath.Project("Text/first.txt"), out AssetInfo? first));
+        Assert.True(loader.TryGetInfo(AssetPath.Project("Text/second.txt"), out AssetInfo? second));
         Assert.Equal(first!.artifactKey, second!.artifactKey);
         Assert.True(loader.TryGetArtifact(first.persistentId, "runtime", out AssetArtifactInfo? oldArtifact));
         Assert.NotNull(oldArtifact);
 
         workspace.WriteText("Text/first.txt", "changed");
-        Assert.True(loader.Import("Text/first.txt"));
+        Assert.True(loader.Import(AssetPath.Project("Text/first.txt")));
         Assert.True(loader.TryGetArtifact(first.persistentId, "runtime", out AssetArtifactInfo? currentArtifact));
         Assert.NotNull(currentArtifact);
         Assert.NotEqual(oldArtifact.key, currentArtifact.key);
@@ -690,7 +690,7 @@ public sealed class AssetLoaderTests : IDisposable
         workspace.WriteText("Text/input.txt", "value");
         using var loader = workspace.CreateLoader();
         loader.Rescan();
-        Assert.True(loader.TryGetInfo("Text/input.txt", out AssetInfo? input));
+        Assert.True(loader.TryGetInfo(AssetPath.Project("Text/input.txt"), out AssetInfo? input));
         Assert.NotNull(input);
         var definition = new TestBuildDefinitionAsset { label = "bundle" };
 
@@ -704,7 +704,7 @@ public sealed class AssetLoaderTests : IDisposable
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static (WeakReference first, WeakReference second) LoadCycleWithoutEscaping(AssetLoader loader)
     {
-        AssetObject first = loader.Load("Graphs/a.depgraph", typeof(DependencyAsset))!;
+        AssetObject first = loader.Load(AssetPath.Project("Graphs/a.depgraph"), typeof(DependencyAsset))!;
         AssetDependency secondDescriptor = Assert.Single(loader.GetDependencies(first));
         AssetObject second = loader.Load(secondDescriptor.persistentId, typeof(DependencyAsset))!;
         return (new WeakReference(first), new WeakReference(second));
@@ -713,7 +713,7 @@ public sealed class AssetLoaderTests : IDisposable
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static WeakReference LoadAndInspectWithoutEscaping(AssetLoader loader)
     {
-        AssetObject root = loader.Load("Graphs/root.depgraph", typeof(DependencyAsset))!;
+        AssetObject root = loader.Load(AssetPath.Project("Graphs/root.depgraph"), typeof(DependencyAsset))!;
         AssetDependency descriptor = Assert.Single(loader.GetDependencies(root));
         AssetObject dependency = loader.Load(descriptor.persistentId, typeof(TextAsset))!;
         AssetReferenceInfo info = loader.GetReferenceInfo(dependency);
@@ -828,7 +828,7 @@ internal sealed class DependencyAssetImporter : AssetImporter<DependencyAsset>
     {
         string dependency = context.ReadUtf8Text().Trim();
         if (!string.IsNullOrWhiteSpace(dependency))
-            output.DependsOnAsset(dependency);
+            output.DependsOnAsset(AssetPath.Parse(dependency));
         output.SetAsset(new DependencyAsset());
         return output.WriteArtifactAsync("runtime", context.sourceBytes, cancellationToken);
     }
@@ -866,7 +866,7 @@ internal sealed class ImportGraphAssetImporter : AssetImporter<ImportGraphAsset>
     {
         string dependency = context.ReadUtf8Text().Trim();
         if (!string.IsNullOrWhiteSpace(dependency))
-            output.DependsOnSource(dependency);
+            output.DependsOnSource(AssetPath.Parse(dependency));
         output.SetAsset(new ImportGraphAsset());
         return output.WriteArtifactAsync("runtime", context.sourceBytes, cancellationToken);
     }

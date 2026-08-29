@@ -116,6 +116,9 @@ public readonly record struct RenderTextureRegion
 /// </summary>
 public abstract class RenderCommandEncoder
 {
+    private ulong m_frameIndex;
+    private bool m_hasFrameIndex;
+
     /// <summary>Binds a graphics pipeline for subsequent draw commands.</summary>
     /// <param name="pipeline">Graphics pipeline to bind.</param>
     public abstract void BindGraphicsPipeline(GraphicsPipelineHandle pipeline);
@@ -182,6 +185,21 @@ public abstract class RenderCommandEncoder
     /// <param name="buffer">Persistent buffer owned by the active device generation.</param>
     public abstract void BindBuffer(RenderBindingId binding, PersistentBufferHandle buffer);
 
+    /// <summary>Binds a frame-uploaded storage buffer to a shader interface slot.</summary>
+    /// <param name="binding">Stable shader binding identifier.</param>
+    /// <param name="buffer">Current-frame storage slice.</param>
+    public void BindBuffer(RenderBindingId binding, RenderBufferSlice buffer)
+    {
+        ValidateSlice(buffer, RenderBufferUsage.Storage);
+        if (buffer.firstElement != 0)
+        {
+            throw new ArgumentException(
+                "Storage upload slices must begin at the first backing element.",
+                nameof(buffer));
+        }
+        BindBuffer(binding, buffer.buffer);
+    }
+
     /// <summary>Uploads one uniform value using manifest-validated bytes.</summary>
     /// <param name="binding">Stable shader binding identifier.</param>
     /// <param name="value">Uniform bytes matching the reflected shader interface.</param>
@@ -223,6 +241,14 @@ public abstract class RenderCommandEncoder
     /// <param name="firstVertex">First vertex element.</param>
     public abstract void BindVertexBuffer(PersistentBufferHandle buffer, int firstVertex = 0);
 
+    /// <summary>Binds a frame-uploaded vertex slice.</summary>
+    /// <param name="buffer">Current-frame vertex slice.</param>
+    public void BindVertexBuffer(RenderBufferSlice buffer)
+    {
+        ValidateSlice(buffer, RenderBufferUsage.Vertex);
+        BindVertexBuffer(buffer.buffer, buffer.firstElement);
+    }
+
     /// <summary>Binds a graph buffer as index input.</summary>
     /// <param name="buffer">Index buffer.</param>
     /// <param name="firstIndex">First index element.</param>
@@ -232,6 +258,14 @@ public abstract class RenderCommandEncoder
     /// <param name="buffer">Persistent index buffer.</param>
     /// <param name="firstIndex">First index element.</param>
     public abstract void BindIndexBuffer(PersistentBufferHandle buffer, int firstIndex = 0);
+
+    /// <summary>Binds a frame-uploaded index slice.</summary>
+    /// <param name="buffer">Current-frame index slice.</param>
+    public void BindIndexBuffer(RenderBufferSlice buffer)
+    {
+        ValidateSlice(buffer, RenderBufferUsage.Index);
+        BindIndexBuffer(buffer.buffer, buffer.firstElement);
+    }
 
     /// <summary>Binds graph buffer elements as per-instance input.</summary>
     /// <param name="buffer">Vertex-compatible graph buffer containing instance records.</param>
@@ -250,6 +284,14 @@ public abstract class RenderCommandEncoder
         PersistentBufferHandle buffer,
         int firstInstance,
         int instanceCount);
+
+    /// <summary>Binds a frame-uploaded vertex slice as per-instance input.</summary>
+    /// <param name="buffer">Current-frame instance records.</param>
+    public void BindInstanceBuffer(RenderBufferSlice buffer)
+    {
+        ValidateSlice(buffer, RenderBufferUsage.Vertex);
+        BindInstanceBuffer(buffer.buffer, buffer.firstElement, buffer.elementCount);
+    }
 
     /// <summary>Issues a non-indexed draw.</summary>
     /// <param name="vertexCount">Number of vertices.</param>
@@ -331,6 +373,30 @@ public abstract class RenderCommandEncoder
     /// <param name="destination">Copy destination buffer.</param>
     /// <exception cref="NotSupportedException">Thrown when the backend has no safe buffer-copy path.</exception>
     public abstract void CopyBuffer(RenderBufferHandle source, RenderBufferHandle destination);
+
+    internal void SetFrameIndex(ulong frameIndex)
+    {
+        m_frameIndex = frameIndex;
+        m_hasFrameIndex = true;
+    }
+
+    private void ValidateSlice(RenderBufferSlice buffer, RenderBufferUsage requiredUsage)
+    {
+        if (!buffer.isValid)
+            throw new ArgumentException("A frame buffer slice must be valid.", nameof(buffer));
+        if (!m_hasFrameIndex || buffer.frameIndex != m_frameIndex)
+        {
+            throw new ArgumentException(
+                "A frame buffer slice cannot be used outside the frame that uploaded it.",
+                nameof(buffer));
+        }
+        if ((buffer.usage & requiredUsage) == 0)
+        {
+            throw new ArgumentException(
+                $"The frame buffer slice does not declare {requiredUsage} usage.",
+                nameof(buffer));
+        }
+    }
 }
 
 /// <summary>

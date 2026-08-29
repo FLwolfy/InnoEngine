@@ -863,6 +863,7 @@ internal static class RenderGraphCompiler
                 pass.clearsPresentationTarget,
                 pass.presentationClearColor,
                 pass.viewTransform,
+                pass.recordingMode,
                 pass.execute));
         }
 

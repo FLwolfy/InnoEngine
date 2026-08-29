@@ -43,7 +43,6 @@ AssetManager.Initialize(AssetManagerOptions.Create(
 - `Delete`
 - `CreateDirectory`
 - `Rescan`
-- Manager 的 `LoadAsync` 提交阶段
 - `BuildAsync`
 
 `Shell.Tick()` 在每帧开始调用 `AssetManager.Update()`。Watcher callback 只 enqueue；`Update` 才 poll、对账、commit 和发布 observer。
@@ -78,7 +77,7 @@ Observer 按订阅顺序在 owner thread 调用。某个 observer 抛异常会�
 | --- | --- |
 | `Load<T>(AssetPath/id)` | 返回跨 mount canonical instance；缺失或类型不兼容时抛异常。字符串重载表示 Project mount。 |
 | `TryLoad<T>(path/id,out asset)` | 安全失败。 |
-| `LoadAsync<T>(path/id,token)` | 保持异步 API 形状，但 canonical commit 仍受 owner-thread 约束。 |
+| `LoadAsync<T>(path/id,token)` | 在 worker 上执行真实加载/导入等待；相同 path 或 ID 的并发请求共享任务并返回同一 canonical instance。取消只终止当前调用者的等待，不取消其他调用者共享的加载。 |
 | `Import(path)` | 显式导入单一受支持 source。 |
 | `Save(asset)` | 导出到现有 source path。 |
 | `Save(path,asset)` | 为新资产建立初始 source identity。 |
@@ -88,6 +87,8 @@ Observer 按订阅顺序在 owner thread 调用。某个 observer 抛异常会�
 | `Rescan()` | 对账全部 source/meta/catalog/artifact。 |
 
 初始化会自动 `Rescan`，无需为已有文件逐个调用 `Import`。
+
+异步加载捕获调用时的 Loader generation；Mount/Registry 原子切换不会让任务读到一半新、一半旧的 Catalog。`AssetManager.Dispose`/generation 退休会先拒绝新请求，再等待已经接受的加载结束后释放底层 Loader，因此后台任务不会访问已释放状态。最终 canonical cache 的发布仍由 Loader 自身的事务锁保护，不要求调用者切回 owner thread。
 
 `Rescan` 同时是 TypeCache generation 的资源收敛安全点。若已加载 canonical asset 的运行时类型已退休，Loader 会从内部 record、identity 和 dependency retention 中释放它；仍存活的 host asset 会用当前 generation 重新恢复其序列化引用。调用方自己仍强持有旧 canonical instance 时，旧 collectible ALC 会按普通 CLR 引用规则延迟卸载，这不影响 Loader 返回当前 generation 的新实例。
 
@@ -106,11 +107,11 @@ Observer 按订阅顺序在 owner thread 调用。某个 observer 抛异常会�
 | `BuildAsync(definition,inputs,token)` | 调用自动发现的 aggregate Build Processor。 |
 | `GetDependencies(asset,recursive)` | runtime dependency graph。 |
 | `GetReferenceInfo(asset)` | engine-known reference diagnostics。 |
-| `GetLoadedPaths()` | 当前 canonical cache path snapshot。 |
+| `GetLoadedPaths()` | 当前 canonical cache 的 `AssetPath` snapshot。 |
 | `UnloadUnusedAssets()` | 协作式释放无外部 managed root 的实例。 |
 
 ```csharp
-if (AssetManager.TryGetInfo("Scripts/Player.cs", out AssetInfo? script) &&
+if (AssetManager.TryGetInfo(AssetPath.Project("Scripts/Player.cs"), out AssetInfo? script) &&
     script.status == AssetImportStatus.Imported &&
     AssetManager.TryGetArtifact(script.persistentId, "source", out AssetArtifactInfo? source))
 {
@@ -126,7 +127,7 @@ if (AssetManager.TryGetInfo("Scripts/Player.cs", out AssetInfo? script) &&
 
 Plugin mount 必须只读；跨 mount 依赖必须由 mount 的 `dependencySourceIds` 明确授权。任何 Persistent ID 冲突或未声明依赖都会拒绝候选并保留旧 snapshot。该两阶段协议也允许 ZIP Plugin 脚本从隔离候选 artifact 编译，而 File Browser、运行时资产与当前 Plugin Catalog 始终只观察 last-good generation。
 
-FileBrowser List 使用 `AssetFileEntry.nameWithoutExtension` 显示名字，Grid 保持完整 `name`。所有实际命令始终使用完整 `relativePath`。
+FileBrowser List 使用 `AssetFileEntry.nameWithoutExtension` 显示名字，Grid 保持完整 `name`。所有实际命令始终使用完整 `assetPath`；公开 Manager/Loader/FileSystem 寻址 API 不再接受裸字符串路径。
 
 ## 外部 rename/delete/recovery
 

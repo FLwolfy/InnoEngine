@@ -16,6 +16,7 @@ public sealed class RenderGraphBuilder
     private readonly List<RenderBufferRecord> m_buffers = [];
     private readonly List<RenderPassRecord> m_passes = [];
     private readonly HashSet<RenderResourceKey> m_outputs = [];
+    private readonly List<string> m_nameScopes = [];
     private bool m_compiled;
 
     /// <summary>
@@ -46,7 +47,7 @@ public sealed class RenderGraphBuilder
         EnsureBuilding();
         ValidateNameAndValue(name, descriptor);
         RenderTextureHandle handle = new(m_textures.Count, m_generation);
-        m_textures.Add(new RenderTextureRecord(name, descriptor, false, default));
+        m_textures.Add(new RenderTextureRecord(QualifyName(name), descriptor, false, default));
         return handle;
     }
 
@@ -70,7 +71,7 @@ public sealed class RenderGraphBuilder
         }
 
         RenderTextureHandle handle = new(m_textures.Count, m_generation);
-        m_textures.Add(new RenderTextureRecord(name, descriptor, true, texture));
+        m_textures.Add(new RenderTextureRecord(QualifyName(name), descriptor, true, texture));
         return handle;
     }
 
@@ -85,7 +86,7 @@ public sealed class RenderGraphBuilder
         EnsureBuilding();
         ValidateNameAndValue(name, descriptor);
         RenderBufferHandle handle = new(m_buffers.Count, m_generation);
-        m_buffers.Add(new RenderBufferRecord(name, descriptor, false, default));
+        m_buffers.Add(new RenderBufferRecord(QualifyName(name), descriptor, false, default));
         return handle;
     }
 
@@ -109,7 +110,7 @@ public sealed class RenderGraphBuilder
         }
 
         RenderBufferHandle handle = new(m_buffers.Count, m_generation);
-        m_buffers.Add(new RenderBufferRecord(name, descriptor, true, buffer));
+        m_buffers.Add(new RenderBufferRecord(QualifyName(name), descriptor, true, buffer));
         return handle;
     }
 
@@ -146,6 +147,17 @@ public sealed class RenderGraphBuilder
             m_buffers.Count,
             m_passes.Count,
             new HashSet<RenderResourceKey>(m_outputs));
+    }
+
+    /// <summary>Prefixes pass and resource diagnostic names until the returned scope is disposed.</summary>
+    /// <param name="name">Non-empty scope segment.</param>
+    /// <returns>A disposable name scope that must be closed in nesting order.</returns>
+    public RenderGraphNameScope BeginNameScope(string name)
+    {
+        EnsureBuilding();
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        m_nameScopes.Add(name.Trim());
+        return new RenderGraphNameScope(this, m_nameScopes.Count);
     }
 
     /// <summary>
@@ -217,6 +229,26 @@ public sealed class RenderGraphBuilder
             m_outputs);
     }
 
+    internal RenderGraphCompileResult Validate()
+    {
+        EnsureBuilding();
+        return RenderGraphCompiler.Compile(
+            m_generation,
+            m_capabilities,
+            m_textures,
+            m_buffers,
+            m_passes,
+            m_outputs);
+    }
+
+    internal void EndNameScope(int depth)
+    {
+        EnsureBuilding();
+        if (m_nameScopes.Count != depth)
+            throw new InvalidOperationException("Render graph name scopes must be disposed in nesting order.");
+        m_nameScopes.RemoveAt(m_nameScopes.Count - 1);
+    }
+
     internal void AddUse(
         RenderPassRecord pass,
         RenderTextureHandle texture,
@@ -277,14 +309,15 @@ public sealed class RenderGraphBuilder
         EnsureBuilding();
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(execute);
-        if (m_passes.Exists(pass => StringComparer.Ordinal.Equals(pass.name, name)))
+        string qualifiedName = QualifyName(name);
+        if (m_passes.Exists(pass => StringComparer.Ordinal.Equals(pass.name, qualifiedName)))
         {
-            throw new ArgumentException($"Render pass '{name}' already exists.", nameof(name));
+            throw new ArgumentException($"Render pass '{qualifiedName}' already exists.", nameof(name));
         }
 
         RenderPassRecord pass = new()
         {
-            name = name,
+            name = qualifiedName,
             phase = phase,
             kind = kind,
             execute = context => execute(passData, context)
@@ -319,11 +352,39 @@ public sealed class RenderGraphBuilder
         }
     }
 
+    private string QualifyName(string name)
+        => m_nameScopes.Count == 0
+            ? name
+            : $"{string.Join('/', m_nameScopes)}/{name}";
+
     private static void ValidateNameAndValue<T>(string name, T value)
         where T : class
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(value);
+    }
+}
+
+/// <summary>Owns one nested diagnostic-name prefix in a render graph builder.</summary>
+public sealed class RenderGraphNameScope : IDisposable
+{
+    private RenderGraphBuilder? m_graph;
+    private readonly int m_depth;
+
+    internal RenderGraphNameScope(RenderGraphBuilder graph, int depth)
+    {
+        m_graph = graph;
+        m_depth = depth;
+    }
+
+    /// <summary>Ends the name prefix scope.</summary>
+    public void Dispose()
+    {
+        RenderGraphBuilder? graph = m_graph;
+        if (graph is null)
+            return;
+        graph.EndNameScope(m_depth);
+        m_graph = null;
     }
 }
 
@@ -423,6 +484,20 @@ public abstract class RenderPassBuilder
     public RenderPassBuilder HasSideEffect()
     {
         m_pass.hasSideEffect = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Opts this pass into worker-thread recording through an isolated backend-neutral command list.
+    /// </summary>
+    /// <remarks>
+    /// Pass data and code reached by the callback must be safe for worker-thread access. GPU execution
+    /// and backend view order remain identical to the compiled graph order.
+    /// </remarks>
+    /// <returns>This builder for fluent declarations.</returns>
+    public RenderPassBuilder AllowParallelRecording()
+    {
+        m_pass.recordingMode = RenderPassRecordingMode.Parallel;
         return this;
     }
 

@@ -42,7 +42,8 @@ internal static class EditorModalRenderer
         string popupId = $"{title}##{id}";
         ImGuiViewportPtr viewport = NativeImGui.GetMainViewport();
         Vector2 center = viewport.WorkPos + viewport.WorkSize * 0.5f;
-        NativeImGui.OpenPopup(popupId, ImGuiPopupFlags.NoReopen);
+        if (presentation.blocksInteraction)
+            NativeImGui.OpenPopup(popupId, ImGuiPopupFlags.NoReopen);
         NativeImGui.SetNextWindowViewport(viewport.ID);
         ImGuiCond placementCondition = presentation.canMove || presentation.canResize
             ? ImGuiCond.Appearing
@@ -75,19 +76,27 @@ internal static class EditorModalRenderer
             flags |= ImGuiWindowFlags.NoMove;
         if (!presentation.canResize)
             flags |= ImGuiWindowFlags.NoResize | ImGuiWindowFlags.AlwaysAutoResize;
-        bool beganPopup = false;
+        bool beganWindow = false;
         try
         {
-            if (NativeImGui.BeginPopupModal(popupId, flags))
+            bool visible = presentation.blocksInteraction
+                ? NativeImGui.BeginPopupModal(popupId, flags)
+                : NativeImGui.Begin(popupId, flags | ImGuiWindowFlags.NoSavedSettings);
+            beganWindow = !presentation.blocksInteraction || visible;
+            if (visible)
             {
-                beganPopup = true;
                 _ = modal.Draw(context);
             }
         }
         finally
         {
-            if (beganPopup)
-                NativeImGui.EndPopup();
+            if (beganWindow)
+            {
+                if (presentation.blocksInteraction)
+                    NativeImGui.EndPopup();
+                else
+                    NativeImGui.End();
+            }
             NativeImGui.PopStyleVar();
         }
     }

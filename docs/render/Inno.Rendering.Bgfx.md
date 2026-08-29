@@ -42,9 +42,11 @@ Metal、D3D、Vulkan 等 BGFX renderer 不要求分别维护业务 Shader：同�
 - 同一物理别名槽只创建一个 transient texture；跨帧纹理必须通过 `PersistentTextureHandle` 导入。
 - 所有 BGFX 字符串 API 使用显式 UTF-8 字节长度，避免绑定层把负长度解释成超大拷贝。
 - Noop 后端不执行无意义的 backbuffer reset，但仍更新逻辑尺寸并推进 frame。
-- `CopyTexture`/`BlitTexture`、2D/3D/Cube texture、Program、Vertex/Index/Storage Buffer、Storage Texture、普通/Indexed/Instanced/Indirect/Procedural Draw、Dispatch、uniform 与 KTX texture container 已映射；所有外部 API 仍只使用 Core opaque handle。
+- `CopyTexture`/`BlitTexture`、2D/3D/Cube texture、完整/局部 texture update、异步 texture readback、Program、Vertex/Index/Storage Buffer、Storage Texture、普通/Indexed/Instanced/Indirect/Procedural Draw、Dispatch、uniform 与 KTX texture container 已映射；所有外部 API 仍只使用 Core opaque handle。
 - Storage Texture 通过 `encoder_set_image` 绑定。BGFX 的 `TextureImageRead`/`TextureImageWrite` 格式位分别映射为 Core 的 access-specific capability，`RenderStorageAccess.ReadWrite` 要求两者同时成立；graphics program 明确拒绝 BGFX 无法表达的 storage binding，compute program 才接受 StorageTexture/StorageBuffer slot。
 - BGFX capability 会映射 sampled format、2D/Cube Array、3D、StorageTexture、UInt32 Index、Instancing、VertexID、Half/10:10:10:2 vertex、Alpha-to-Coverage、SwapChain 等中立 feature；Core Graph 和直接资源/命令入口都会拒绝不支持组合，Plugin 可以根据同一 snapshot 明确降级。
+- BGFX `TextureReadBack` 映射为 `GraphicsFeature.TextureReadback`。Readback 资源使用 BGFX transfer flags，`read_texture` 返回的目标 frame 到达前由后端持有 unmanaged buffer；完成或取消后在 API thread 安全释放。当前契约读取完整 mip，且拒绝 multisample/attachment/storage 混用；调用方先显式 Copy/Blit 到 readback texture。
+- `UpdateTextureRegion` 分别映射 2D、3D 与 Cube update API，并在进入 native call 前校验 mip texel bounds、层/face 与精确 byte count；持久 handle 和设备 generation 保持不变。
 - `Draw` 不会在缺少 Vertex Buffer 时隐式转成 procedural；调用方必须使用 `DrawProcedural`。Indirect Draw 会先提交当前 Vertex/Index range，无 Vertex Buffer 时要求 ProceduralDraw capability。
 - 每次直接或间接 draw/dispatch 成功交给 BGFX Encoder 后更新 `frameCounters`；`BeginFrame` 原子清零，因此 Runtime 读取的是本帧真实提交量。
 - shaderc/profile 和 texturec 不再位于通用 Assets 或 Runtime；Editor 显式注入 BGFX 实现，Player 可换成预编译 artifact provider。

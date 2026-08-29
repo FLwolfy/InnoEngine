@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.ExceptionServices;
+using System.Threading.Tasks;
 
 namespace Inno.Rendering.Core;
 
@@ -192,6 +194,7 @@ public sealed class CompiledRenderPass
         bool clearsPresentationTarget,
         RenderClearColor presentationClearColor,
         RenderViewTransform? viewTransform,
+        RenderPassRecordingMode recordingMode,
         Action<RenderPassContext> execute)
     {
         this.name = name;
@@ -203,6 +206,7 @@ public sealed class CompiledRenderPass
         this.clearsPresentationTarget = clearsPresentationTarget;
         this.presentationClearColor = presentationClearColor;
         this.viewTransform = viewTransform;
+        this.recordingMode = recordingMode;
         m_execute = execute;
     }
 
@@ -232,6 +236,9 @@ public sealed class CompiledRenderPass
 
     /// <summary>Gets backend-ready view transforms, or <see langword="null"/> for a matrix-free pass.</summary>
     public RenderViewTransform? viewTransform { get; }
+
+    /// <summary>Gets whether callback recording is serial or worker-thread eligible.</summary>
+    public RenderPassRecordingMode recordingMode { get; }
 
     internal void Execute(RenderPassContext context) => m_execute(context);
 }
@@ -308,6 +315,8 @@ public sealed class CompiledRenderGraph
         {
             backend.BeginGraph(this);
             graphStarted = true;
+            Dictionary<CompiledRenderPass, RecordedRenderCommandEncoder> recorded =
+                RecordParallelPasses(frameIndex);
             foreach (CompiledRenderPass pass in m_passes)
             {
                 bool passStarted = false;
@@ -315,8 +324,12 @@ public sealed class CompiledRenderGraph
                 {
                     RenderCommandEncoder commands = backend.BeginPass(pass);
                     ArgumentNullException.ThrowIfNull(commands);
+                    commands.SetFrameIndex(frameIndex);
                     passStarted = true;
-                    pass.Execute(new RenderPassContext(commands, frameIndex));
+                    if (recorded.TryGetValue(pass, out RecordedRenderCommandEncoder? commandList))
+                        commandList.Replay(commands);
+                    else
+                        pass.Execute(new RenderPassContext(commands, frameIndex));
                 }
                 finally
                 {
@@ -358,6 +371,34 @@ public sealed class CompiledRenderGraph
         }
 
         throw new AggregateException("Render graph execution failed during recording or cleanup.", errors);
+    }
+
+    private Dictionary<CompiledRenderPass, RecordedRenderCommandEncoder> RecordParallelPasses(
+        ulong frameIndex)
+    {
+        CompiledRenderPass[] parallelPasses = m_passes
+            .Where(static pass => pass.recordingMode == RenderPassRecordingMode.Parallel)
+            .ToArray();
+        var recorded = new System.Collections.Concurrent.ConcurrentDictionary<
+            CompiledRenderPass,
+            RecordedRenderCommandEncoder>();
+        Parallel.ForEach(
+            parallelPasses,
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Math.Max(
+                    1,
+                    Math.Min(Environment.ProcessorCount, parallelPasses.Length))
+            },
+            pass =>
+            {
+                var commands = new RecordedRenderCommandEncoder();
+                commands.SetFrameIndex(frameIndex);
+                pass.Execute(new RenderPassContext(commands, frameIndex));
+                commands.Seal();
+                recorded[pass] = commands;
+            });
+        return recorded.ToDictionary(static pair => pair.Key, static pair => pair.Value);
     }
 }
 

@@ -63,7 +63,7 @@ public sealed class AssetSourceMountTransaction : IDisposable
     public TAsset Load<TAsset>(AssetPath path) where TAsset : AssetObject
     {
         EnsureOpen();
-        AssetObject? asset = candidateLoader.Load(path.ToString(), typeof(TAsset));
+        AssetObject? asset = candidateLoader.Load(path, typeof(TAsset));
         return asset as TAsset ?? throw new InvalidOperationException(
             $"Candidate asset '{path}' cannot be loaded as '{typeof(TAsset).FullName}'.");
     }
@@ -76,7 +76,7 @@ public sealed class AssetSourceMountTransaction : IDisposable
     public bool TryGetInfo(AssetPath path, out AssetInfo? info)
     {
         EnsureOpen();
-        return candidateLoader.TryGetInfo(path.ToString(), out info);
+        return candidateLoader.TryGetInfo(path, out info);
     }
 
     /// <summary>Tries to resolve one named candidate artifact.</summary>

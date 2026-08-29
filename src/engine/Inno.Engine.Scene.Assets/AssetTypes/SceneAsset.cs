@@ -24,7 +24,7 @@ public sealed class SceneAsset : AssetObject
     /// Captures a runtime scene into a new unsaved scene asset.
     /// </summary>
     /// <param name="scene">Scene to capture.</param>
-    /// <returns>A scene asset ready to pass to <see cref="Inno.Assets.AssetManager.Save(string, AssetObject)"/>.</returns>
+    /// <returns>A scene asset ready to pass to <see cref="Inno.Assets.AssetManager.Save(AssetPath, AssetObject)"/>.</returns>
     public static SceneAsset Capture(GameScene scene)
     {
         var asset = new SceneAsset();

@@ -21,7 +21,7 @@ internal sealed class OpenAssetCommand(AssetEditorModule assets) : EditorAction<
     {
         if (!TryGetAssetContext(context, out AssetEditorContext? assetContext) || assetContext is null)
             return;
-        if (AssetManager.TryLoad<AssetObject>(assetContext.relativePath, out AssetObject? asset) &&
+        if (AssetManager.TryLoad<AssetObject>(AssetPath.Parse(assetContext.relativePath), out AssetObject? asset) &&
             asset is not null &&
             context.interactions.For(FileBrowserInteractionIds.C_AREA, asset).Execute(
                 FileBrowserInteractionIds.C_OPEN,
@@ -35,5 +35,5 @@ internal sealed class OpenAssetCommand(AssetEditorModule assets) : EditorAction<
     private bool TryGetAssetContext(
         EditorActionContext<AssetFileEntry> context,
         out AssetEditorContext? assetContext)
-        => assets.TryCreateContext(context.editor, context.target.relativePath, out assetContext);
+        => assets.TryCreateContext(context.editor, context.target.assetPath.ToString(), out assetContext);
 }

@@ -9,6 +9,7 @@ using Inno.Assets.Core;
 using Inno.Assets.File;
 using Inno.Assets.Plugins;
 using Inno.Core.Assemblies;
+using Inno.Core.Storage;
 
 namespace Inno.Editor.Scripting;
 
@@ -121,7 +122,7 @@ internal sealed record ScriptSourceSet(
                     || !pluginDefaultNames.TryGetValue(plugin.manifest.pluginId, out PluginDefaultNames names))
                 {
                     throw new InvalidDataException(
-                        $"Script '{entry.relativePath}' does not belong to an active trusted Plugin.");
+                        $"Script '{entry.assetPath}' does not belong to an active trusted Plugin.");
                 }
                 builder = builders[scope == ScriptAssemblyScope.Editor ? names.editor : names.runtime];
             }
@@ -144,10 +145,10 @@ internal sealed record ScriptSourceSet(
             ? AssetManager.Load<ScriptAssemblyDefinitionAsset>(entry.assetPath)
             : candidateAssets.Load<ScriptAssemblyDefinitionAsset>(entry.assetPath);
         bool hasInfo = candidateAssets is null
-            ? AssetManager.TryGetInfo(entry.relativePath, out AssetInfo? info)
+            ? AssetManager.TryGetInfo(entry.assetPath, out AssetInfo? info)
             : candidateAssets.TryGetInfo(entry.assetPath, out info);
         if (!hasInfo || info is null)
-            throw new InvalidDataException($"Script assembly definition '{entry.relativePath}' has no metadata.");
+            throw new InvalidDataException($"Script assembly definition '{entry.assetPath}' has no metadata.");
         bool isPlugin = entry.assetPath.source != AssetSourceId.project;
         return new ScriptAssemblyDefinition(
             asset.assemblyName,
@@ -160,7 +161,7 @@ internal sealed record ScriptSourceSet(
             asset.defines,
             asset.nullable,
             asset.allowUnsafe,
-            info.artifactKey.value);
+            ComputeDefinitionHash(asset));
     }
 
     private static ScriptSourceInput CreateSourceInput(
@@ -168,7 +169,7 @@ internal sealed record ScriptSourceSet(
         AssetSourceMountTransaction? candidateAssets)
     {
         bool hasInfo = candidateAssets is null
-            ? AssetManager.TryGetInfo(entry.relativePath, out AssetInfo? info)
+            ? AssetManager.TryGetInfo(entry.assetPath, out AssetInfo? info)
             : candidateAssets.TryGetInfo(entry.assetPath, out info);
         if (!hasInfo
             || info is null
@@ -178,7 +179,7 @@ internal sealed record ScriptSourceSet(
                 : candidateAssets.TryGetArtifact(info.persistentId, "source", out source))
             || source is null)
         {
-            throw new InvalidDataException($"Script source '{entry.relativePath}' has no committed source artifact.");
+            throw new InvalidDataException($"Script source '{entry.assetPath}' has no committed source artifact.");
         }
         IReadOnlyList<AssetSourceMount> mounts = candidateAssets?.sourceMounts ?? AssetManager.sourceMounts;
         AssetSourceMount mount = mounts.Single(candidate => candidate.id == entry.assetPath.source);
@@ -187,7 +188,24 @@ internal sealed record ScriptSourceSet(
             mount.Resolve(entry.assetPath.localPath),
             source.absolutePath,
             info.persistentId,
-            info.artifactKey.value);
+            source.contentHash);
+    }
+
+    private static string ComputeDefinitionHash(ScriptAssemblyDefinitionAsset asset)
+    {
+        string normalized = string.Join(
+            '\n',
+            new[]
+            {
+                asset.assemblyName,
+                asset.scope.ToString(),
+                asset.nullable.ToString(),
+                asset.allowUnsafe.ToString()
+            }
+            .Concat(asset.references.OrderBy(static value => value, StringComparer.Ordinal))
+            .Concat(asset.defines.OrderBy(static value => value, StringComparer.Ordinal)));
+        return Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(normalized)));
     }
 
     private static void ValidateManifestDefinitions(
@@ -276,9 +294,15 @@ internal sealed record ScriptSourceSet(
     private static ScriptAssemblyInput[] ValidateAndOrderAssemblies(
         IReadOnlyDictionary<string, AssemblyBuilder> builders)
     {
+        var referencesByAssembly = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         foreach (AssemblyBuilder builder in builders.Values)
         {
-            foreach (string reference in builder.references.Distinct(StringComparer.OrdinalIgnoreCase))
+            string[] references = builder.references
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static value => value, StringComparer.Ordinal)
+                .ToArray();
+            referencesByAssembly.Add(builder.definition.name, references);
+            foreach (string reference in references)
             {
                 if (!builders.TryGetValue(reference, out AssemblyBuilder? dependency))
                 {
@@ -295,36 +319,40 @@ internal sealed record ScriptSourceSet(
             }
         }
 
-        var ordered = new List<ScriptAssemblyInput>(builders.Count);
-        var states = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (string name in builders.Keys.OrderBy(static value => value, StringComparer.Ordinal))
-            Visit(name);
-        return ordered.ToArray();
-
-        void Visit(string name)
+        var graph = new DependencyGraph<string>(
+            StringComparer.OrdinalIgnoreCase,
+            StringComparer.Ordinal);
+        foreach (string name in builders.Keys)
+            graph.AddNode(name);
+        foreach ((string name, string[] references) in referencesByAssembly)
         {
-            int state = states.GetValueOrDefault(name);
-            if (state == 2)
-                return;
-            if (state == 1)
-                throw new InvalidDataException($"Script assembly reference cycle contains '{name}'.");
-            states[name] = 1;
+            foreach (string reference in references)
+                graph.AddDependency(name, reference);
+        }
+        IReadOnlyList<string> order;
+        try
+        {
+            order = graph.TopologicalSort();
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new InvalidDataException(exception.Message, exception);
+        }
+        return order.Select(name =>
+        {
             AssemblyBuilder builder = builders[name];
-            foreach (string reference in builder.references.Distinct(StringComparer.OrdinalIgnoreCase))
-                Visit(reference);
-            states[name] = 2;
-            ordered.Add(new ScriptAssemblyInput(
+            return new ScriptAssemblyInput(
                 builder.definition.name,
                 builder.definition.scope,
                 builder.definition.domain,
                 builder.definition.ownerPluginId,
                 builder.sources.OrderBy(static value => value.assetPath.ToString(), StringComparer.Ordinal).ToArray(),
-                builder.references.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+                referencesByAssembly[name],
                 builder.definition.defines,
                 builder.definition.nullable,
                 builder.definition.allowUnsafe,
-                builder.definition.artifactKey));
-        }
+                builder.definition.configurationHash);
+        }).ToArray();
     }
 
     private static void ValidateDomainDependency(
@@ -358,7 +386,7 @@ internal sealed record ScriptSourceSet(
         ScriptAssemblyScope scope,
         AssemblyDomain domain,
         string ownerPluginId,
-        string artifactKey)
+        string configurationHash)
         => new(
             name,
             source,
@@ -370,7 +398,7 @@ internal sealed record ScriptSourceSet(
             ["DEBUG", "TRACE"],
             nullable: true,
             allowUnsafe: false,
-            artifactKey);
+            configurationHash);
 
     private static void AddBuilder(
         IDictionary<string, AssemblyBuilder> builders,
@@ -424,7 +452,7 @@ internal sealed record ScriptAssemblyDefinition(
     IReadOnlyList<string> defines,
     bool nullable,
     bool allowUnsafe,
-    string artifactKey);
+    string configurationHash);
 
 internal sealed record ScriptAssemblyInput(
     string name,
@@ -436,14 +464,14 @@ internal sealed record ScriptAssemblyInput(
     IReadOnlyList<string> defines,
     bool nullable,
     bool allowUnsafe,
-    string definitionArtifactKey);
+    string definitionHash);
 
 internal sealed record ScriptSourceInput(
     AssetPath assetPath,
     string sourcePath,
     string snapshotPath,
     Guid persistentId,
-    string artifactKey)
+    string contentHash)
 {
     internal string relativePath => assetPath.ToString();
 }

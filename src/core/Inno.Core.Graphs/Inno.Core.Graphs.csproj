@@ -9,5 +9,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Core.Storage\Inno.Core.Storage.csproj" PrivateAssets="compile" />
   </ItemGroup>
 </Project>

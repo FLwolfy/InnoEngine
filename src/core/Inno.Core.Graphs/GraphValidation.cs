@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 
+using Inno.Core.Storage;
+
 namespace Inno.Core.Graphs;
 
 /// <summary>
@@ -296,64 +298,24 @@ public static class GraphValidator
 
     private static void ValidateCycles(GraphDocument document, List<GraphDiagnostic> diagnostics)
     {
-        Dictionary<GraphNodeId, List<GraphNodeId>> adjacency = [];
+        var graph = new DependencyGraph<GraphNodeId>();
         foreach (GraphNodeRecord node in document.nodes)
-        {
-            adjacency[node.id] = [];
-        }
+            graph.AddNode(node.id);
 
         foreach (GraphEdgeRecord edge in document.edges)
         {
-            if (adjacency.TryGetValue(edge.output.nodeId, out List<GraphNodeId>? targets)
-                && adjacency.ContainsKey(edge.input.nodeId))
-            {
-                targets.Add(edge.input.nodeId);
-            }
+            if (graph.ContainsNode(edge.output.nodeId) && graph.ContainsNode(edge.input.nodeId))
+                graph.AddDependency(edge.input.nodeId, edge.output.nodeId);
         }
 
-        HashSet<GraphNodeId> visiting = [];
-        HashSet<GraphNodeId> visited = [];
-        foreach (GraphNodeRecord node in document.nodes)
+        if (graph.TryFindCycle(out IReadOnlyList<GraphNodeId> cycle))
         {
-            if (ContainsCycle(node.id, adjacency, visiting, visited))
-            {
-                diagnostics.Add(new GraphDiagnostic(
-                    "GRAPH_CYCLE",
-                    "The graph contains a directed cycle.",
-                    GraphDiagnosticSeverity.Error,
-                    node.id));
-                return;
-            }
+            diagnostics.Add(new GraphDiagnostic(
+                "GRAPH_CYCLE",
+                "The graph contains a directed cycle.",
+                GraphDiagnosticSeverity.Error,
+                cycle[0]));
         }
-    }
-
-    private static bool ContainsCycle(
-        GraphNodeId nodeId,
-        IReadOnlyDictionary<GraphNodeId, List<GraphNodeId>> adjacency,
-        HashSet<GraphNodeId> visiting,
-        HashSet<GraphNodeId> visited)
-    {
-        if (visited.Contains(nodeId))
-        {
-            return false;
-        }
-
-        if (!visiting.Add(nodeId))
-        {
-            return true;
-        }
-
-        foreach (GraphNodeId target in adjacency[nodeId])
-        {
-            if (ContainsCycle(target, adjacency, visiting, visited))
-            {
-                return true;
-            }
-        }
-
-        visiting.Remove(nodeId);
-        visited.Add(nodeId);
-        return false;
     }
 
     private static bool TryGetPort(

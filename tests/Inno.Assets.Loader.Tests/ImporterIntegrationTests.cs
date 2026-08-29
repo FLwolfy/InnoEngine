@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 
+using Inno.Assets.Core;
 using Inno.Assets.Loader;
 using Inno.Assets.Types;
 using Inno.Core.Assemblies;
@@ -49,8 +50,9 @@ public sealed class ImporterIntegrationTests : IDisposable
         workspace.Write(relativePath, Encoding.UTF8.GetBytes("content"));
         using var loader = new AssetLoader(workspace.assetRoot, workspace.libraryRoot);
 
-        Assert.True(loader.Import(relativePath));
-        TextAsset asset = Assert.IsType<TextAsset>(loader.Load(relativePath, typeof(TextAsset)));
+        AssetPath path = AssetPath.Project(relativePath);
+        Assert.True(loader.Import(path));
+        TextAsset asset = Assert.IsType<TextAsset>(loader.Load(path, typeof(TextAsset)));
         Assert.Equal("content", asset.content);
         Assert.Equal(languageHint, asset.languageHint);
     }
@@ -62,7 +64,7 @@ public sealed class ImporterIntegrationTests : IDisposable
         workspace.Write("Data/blob.bytes", [1, 2, 3, 4]);
         using var loader = new AssetLoader(workspace.assetRoot, workspace.libraryRoot);
 
-        BinaryAsset binary = Assert.IsType<BinaryAsset>(loader.Load("Data/blob.bytes", typeof(BinaryAsset)));
+        BinaryAsset binary = Assert.IsType<BinaryAsset>(loader.Load(AssetPath.Project("Data/blob.bytes"), typeof(BinaryAsset)));
 
         Assert.Equal(4, binary.byteLength);
     }
@@ -74,8 +76,8 @@ public sealed class ImporterIntegrationTests : IDisposable
         using var loader = new AssetLoader(workspace.assetRoot, workspace.libraryRoot);
         var source = new TextAsset("saved", "plain");
 
-        Assert.True(loader.Save("Text/saved.txt", source));
-        TextAsset loaded = Assert.IsType<TextAsset>(loader.Load("Text/saved.txt", typeof(TextAsset)));
+        Assert.True(loader.Save(AssetPath.Project("Text/saved.txt"), source));
+        TextAsset loaded = Assert.IsType<TextAsset>(loader.Load(AssetPath.Project("Text/saved.txt"), typeof(TextAsset)));
 
         Assert.Same(source, loaded);
         Assert.Equal("saved", System.IO.File.ReadAllText(Path.Combine(workspace.assetRoot, "Text/saved.txt")));

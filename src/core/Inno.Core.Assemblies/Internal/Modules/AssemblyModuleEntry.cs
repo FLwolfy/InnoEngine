@@ -17,6 +17,7 @@ internal sealed class AssemblyModuleEntry
     internal required AssemblyScope scope { get; init; }
     internal required Assembly[] assemblies { get; init; }
     internal required IReadOnlyDictionary<Assembly, AssemblyScope> assemblyScopes { get; init; }
+    internal IReadOnlyList<string> upstreamModuleNames { get; init; } = [];
     internal AssemblyLoadContext? loadContext { get; init; }
     internal string? shadowDirectory { get; init; }
 
@@ -33,5 +34,8 @@ internal sealed class AssemblyModuleEntry
             assemblies
                 .Select(static assembly => assembly.GetName().Name ?? assembly.FullName ?? "Unknown")
                 .OrderBy(static name => name, StringComparer.Ordinal)
-                .ToArray());
+                .ToArray())
+        {
+            upstreamModuleNames = upstreamModuleNames
+        };
 }

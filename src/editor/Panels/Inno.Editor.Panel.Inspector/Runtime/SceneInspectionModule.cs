@@ -77,7 +77,7 @@ internal sealed class SceneInspectionModule : EditorModule
         out InspectionDrawContext? drawContext)
     {
         if (target is AssetFileEntry { isDirectory: false } entry &&
-            AssetManager.TryLoad(entry.relativePath, out AssetObject? asset) &&
+            AssetManager.TryLoad(entry.assetPath, out AssetObject? asset) &&
             asset is not null &&
             m_inspectors.TryResolveExact(
                 editorContext,

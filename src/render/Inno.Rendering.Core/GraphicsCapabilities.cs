@@ -73,7 +73,9 @@ public enum GraphicsFeature
     /// <summary>Fragment shaders may write depth explicitly.</summary>
     FragmentDepth = 1 << 17,
     /// <summary>Shader-readable and writable storage textures are supported.</summary>
-    StorageTexture = 1 << 18
+    StorageTexture = 1 << 18,
+    /// <summary>Asynchronous texture transfer from GPU memory to CPU-visible bytes.</summary>
+    TextureReadback = 1 << 19
 }
 
 /// <summary>

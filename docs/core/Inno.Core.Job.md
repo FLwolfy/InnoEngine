@@ -99,3 +99,16 @@ finally
 - 不要把跨帧失效的 JobHandle 当持久 ID。
 - Main-thread callback 的异常会由 Drain 聚合为 `AggregateException`。
 - `EndFrame` 即同步边界，不应在它之后仍保留本帧尚未完成的任务。
+
+## 与 async I/O、编译和 GPU 的边界
+
+Job System 不应成为所有异步工作的统一包装。项目使用四个明确的并发域：
+
+| 工作类型 | 机制 | 原因 |
+| --- | --- | --- |
+| 帧内、有界 CPU 数据并行 | `IJobSystem` | culling、sorting、batch 构建、动画、粒子和可选 Pass 录制可在 `EndFrame` 前完成。 |
+| 跨帧 I/O 与外部工具 | `Task` / `ValueTask` + cancellation | Asset 读取、ZIP、Roslyn、shaderc/texturec 的时长不可预测，不能占用固定 worker 或强迫本帧完成。 |
+| GPU 异步结果 | frame/fence handle + `ValueTask` adapter | readback 完成由设备帧推进，不是 CPU job 完成。 |
+| Catalog/ALC/GPU generation 发布 | owner/API thread safe point | 需要原子事务和严格线程亲和，不能从任意 worker 直接提交。 |
+
+领域实现可以把纯 CPU 阶段投递给 Job System，但不能把 `Task.Run`、文件 I/O、进程等待或 GPU fence 伪装成长期 Job。Rendering Core 也不读取全局 `JobSystemManager`；若后续需要统一 Render Pass worker 预算，应由 Runtime 注入一个 Job-backed scheduler adapter，保持 Core 的可测试性和后端中立边界。

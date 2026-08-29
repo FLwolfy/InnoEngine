@@ -28,7 +28,7 @@ IReadOnlyList<AssetChangedEvent> changes = files.PollChanges();
 | `Refresh` | 在调用线程递归重建 source index。 |
 | `PollChanges` | 在调用线程取出 quiet batch，并刷新 index。 |
 | `WaitForIdle` | 等待 quiet window 后 poll；主要用于测试和工具。 |
-| `Exists` / `TryGetEntry` | 按规范相对路径查询。 |
+| `Exists` / `TryGetEntry` | 按完整 `AssetPath` 查询。 |
 | `GetEntries` / `GetChildren` | 返回稳定只读快照。 |
 
 不存在 `ChangedBatch` 回调。Owner 必须显式 poll，因此公共 observer 不会意外运行在 `FileSystemWatcher` ThreadPool callback 上。
@@ -39,14 +39,14 @@ IReadOnlyList<AssetChangedEvent> changes = files.PollChanges();
 
 | 属性 | 示例 `Scripts/Tool.editor.cs` |
 | --- | --- |
-| `relativePath` | `Scripts/Tool.editor.cs` |
-| `parentRelativePath` | `Scripts` |
+| `assetPath` | `project::Scripts/Tool.editor.cs`（项目路径显示时省略 `project::`） |
+| `parentAssetPath` | `project::Scripts` |
 | `name` | `Tool.editor.cs` |
 | `nameWithoutExtension` | `Tool.editor` |
 | `extension` | `.cs` |
 | `isDirectory` | `false` |
 
-`nameWithoutExtension` 只去掉最后一层扩展名，正是 FileBrowser List 的显示语义。选择、拖拽、双击和保存仍使用完整 `relativePath`。
+`nameWithoutExtension` 只去掉最后一层扩展名，正是 FileBrowser List 的显示语义。选择、拖拽、双击和保存始终使用完整 `assetPath`。
 
 ## Rename/delete 规范化
 
@@ -56,4 +56,4 @@ IReadOnlyList<AssetChangedEvent> changes = files.PollChanges();
 
 ## 路径安全
 
-所有查询接受 source-relative path，内部统一 `/`。Rooted path 和会逃离 `assetRoot` 的 traversal 会抛出 `ArgumentException`。根目录 entry 的 `relativePath` 是空字符串。
+所有目录查询接受 `AssetPath`，其中 Source ID 决定 Mount、`localPath` 内部统一 `/`。Rooted path、未激活 Source ID 和 traversal 会抛出 `ArgumentException`。每个 Mount 根目录 entry 的 `assetPath.localPath` 是空字符串。`AssetChangedEvent` 仍是可写 Project Mount 的物理 watcher 协议，所以它有意保存 mount-local 字符串；它不属于公开资产寻址协议。

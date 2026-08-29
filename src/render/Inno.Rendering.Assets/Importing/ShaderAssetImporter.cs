@@ -26,7 +26,7 @@ internal sealed class ShaderAssetImporter : AssetImporter<ShaderAsset>
             out IReadOnlyList<AssetDependency> dependencies);
         foreach (AssetDependency dependency in dependencies)
             output.DependsOnAsset(dependency);
-        ShaderIRModule module = CreateModule(asset, context.relativePath);
+        ShaderIRModule module = CreateModule(asset, context.assetPath.ToString());
         ShaderIRValidationResult validation = ShaderIRValidator.Validate(module);
         ShaderDiagnostic? error = validation.diagnostics.FirstOrDefault(static diagnostic =>
             diagnostic.severity == ShaderDiagnosticSeverity.Error);

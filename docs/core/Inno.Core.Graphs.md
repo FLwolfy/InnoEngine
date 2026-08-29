@@ -9,7 +9,7 @@
 - `GraphDocument` 拥有有序 `GraphNodeRecord`、`GraphEdgeRecord` 和中立 metadata。
 - `GraphNodeId`、`GraphEdgeId`、`GraphPortId` 是稳定字符串 ID，不依赖进程内 hash。
 - `GraphNodeDefinition.GetPorts` 支持根据节点中立数据生成动态端口。
-- `GraphValidator` 检查方向、类型转换、端口容量、必填输入、缺失 endpoint 和有向循环。
+- `GraphValidator` 检查方向、类型转换、端口容量、必填输入、缺失 endpoint，并复用 Core Storage DependencyGraph 检查确定性有向循环。
 - Missing Node 是 warning：文档保持可编辑；真正缺失的物理 node/port endpoint 才是 error。
 
 该项目只私有引用 `Inno.Core.Scripting` 以声明逻辑脚本 API `InnoEngine.Graphs`。ShaderGraph 是上层消费者，Core Graph 不知道 Shader 语义。

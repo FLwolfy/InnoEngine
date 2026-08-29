@@ -57,7 +57,7 @@ internal sealed class FileBrowserData(AssetEditorModule assets)
                 StringComparison.OrdinalIgnoreCase);
             return byExtension != 0
                 ? byExtension
-                : string.CompareOrdinal(left.relativePath, right.relativePath);
+                : string.CompareOrdinal(left.assetPath.ToString(), right.assetPath.ToString());
         });
         return entries;
     }
@@ -95,7 +95,7 @@ internal sealed class FileBrowserData(AssetEditorModule assets)
             AssetFileEntry child = children[i];
             entries.Add(child);
             if (child.isDirectory)
-                CollectEntriesRecursive(child.relativePath, entries);
+                CollectEntriesRecursive(child.assetPath.ToString(), entries);
         }
     }
 
@@ -117,7 +117,7 @@ internal sealed class FileBrowserData(AssetEditorModule assets)
     internal IReadOnlyList<AssetFileEntry> GetVisibleChildren(string relativePath)
     {
         AssetSourceId source = AssetPath.Parse(relativePath).source;
-        IReadOnlyList<AssetFileEntry> children = AssetManager.GetFileSystemChildren(relativePath);
+        IReadOnlyList<AssetFileEntry> children = AssetManager.GetFileSystemChildren(AssetPath.Parse(relativePath));
         if (children.Count == 0)
             return children;
         List<AssetFileEntry> isolated = [];

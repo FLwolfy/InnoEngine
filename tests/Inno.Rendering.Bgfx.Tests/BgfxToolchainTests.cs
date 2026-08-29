@@ -58,12 +58,12 @@ public sealed class BgfxToolchainTests : IDisposable
     }
 
     [Fact]
-    public void TextureCompilerProducesValidatedPortableContainer()
+    public async System.Threading.Tasks.Task TextureCompilerProducesValidatedPortableContainer()
     {
         string sourcePath = Path.Combine(m_root, "checker.tga");
         File.WriteAllBytes(sourcePath, CreateTga());
 
-        byte[] artifact = new BgfxTextureTargetCompiler().CompileKtx(
+        byte[] artifact = await new BgfxTextureTargetCompiler().CompileKtxAsync(
             sourcePath,
             TextureColorSpace.Srgb);
 

@@ -49,6 +49,10 @@ graph.AddDependency("Material", "Texture");
 IReadOnlyList<string> order = graph.TopologicalSort();
 ```
 
+当前共享消费者包括 Asset runtime/import dependency、Assembly reload module、ZIP Plugin manifest、Script asmdef、Project Settings contributor、通用 Graph validation 和 ShaderGraph node。它们统一使用相同的边方向、确定性排序、环路径与反向依赖定义，不再各自维护 DFS/Kahn 变体。
+
+RenderGraph 编译器和 Job scheduler 内部没有改用该容器：前者每帧处理紧凑整数索引并需要资源 hazard 来源诊断，后者直接维护可复用 job slot/dependent counter；在这些高频路径套用带读写锁和通用 key 的持久 Graph 会增加分配与锁竞争。它们只共享算法语义，不共享存储表示。
+
 ## IndexedObjectStore&lt;T&gt;
 
 Store 按引用身份存储 class，支持为同一对象定义多个 typed key。名称使用 `Store` 是为了明确表达其职责：它不负责对象创建、复用或生命周期回收，而是“稠密对象集合 + 多索引 + 查询”容器。

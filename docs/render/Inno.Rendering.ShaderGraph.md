@@ -9,7 +9,7 @@
 - `ShaderGraphAsset` 只保存中立 `GraphDocument`，通过 Inno 原生序列化持久化。
 - `ShaderNodeDefinition` 声明端口、允许阶段和类型化发射。
 - `ShaderGraphProgramNodeDefinition` 是唯一 Program Output；它决定产生 Raster/Compute Pass、Technique、Contract、Role、源码和资源接口。
-- `ShaderGraphCompiler` 验证 Missing Node、连接、类型转换、阶段合法性和输出数量，然后生成普通 `ShaderIRModule`。
+- `ShaderGraphCompiler` 验证 Missing Node、连接、类型转换、阶段合法性和输出数量，使用 Core Storage DependencyGraph 生成确定性节点拓扑，然后生成普通 `ShaderIRModule`。
 - `ShaderNodeRegistry` 以 Stable ID 原子切换 Plugin generation；默认 `definitions` 为空。
 
 ## Plugin 节点示例

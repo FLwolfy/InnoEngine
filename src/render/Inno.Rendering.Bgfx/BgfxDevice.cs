@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using Inno.Native.Bgfx;
@@ -23,6 +25,7 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
     private readonly Dictionary<ulong, bgfx.TextureHandle> m_persistentTextures = [];
     private readonly Dictionary<ulong, RenderTextureDescriptor> m_persistentTextureDescriptors = [];
     private readonly List<DeferredResource> m_deferredResources = [];
+    private readonly Dictionary<ulong, PendingTextureReadback> m_textureReadbacks = [];
     private readonly Dictionary<int, bgfx.TextureHandle> m_graphTextures = [];
     private readonly Dictionary<int, bgfx.TextureHandle> m_transientTextureSlots = [];
     private readonly List<bgfx.FrameBufferHandle> m_graphFrameBuffers = [];
@@ -31,6 +34,7 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
     private CompiledRenderGraph? m_activeGraph;
     private bgfx.Encoder* m_activeEncoder;
     private ulong m_nextPersistentId = 1;
+    private ulong m_nextReadbackId = 1;
     private uint m_backendFrame;
     private int m_activeGraphViewBase;
     private int m_backbufferWidth;
@@ -148,6 +152,7 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
         Volatile.Write(ref m_drawCount, 0);
         Volatile.Write(ref m_dispatchCount, 0);
         ProcessDeferredResources(force: false);
+        ProcessCanceledReadbacks();
         if (m_pendingWidth > 0 && m_pendingHeight > 0)
         {
             m_backbufferWidth = m_pendingWidth;
@@ -353,6 +358,181 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
             default:
                 throw new ArgumentOutOfRangeException(nameof(descriptor));
         }
+    }
+
+    /// <inheritdoc />
+    public void UpdateTextureRegion(
+        PersistentTextureHandle texture,
+        RenderTextureRegion region,
+        ReadOnlySpan<byte> data)
+    {
+        EnsureFrameSafetyPoint();
+        ValidatePersistentHandle(texture);
+        if (!m_persistentTextures.TryGetValue(texture.value, out bgfx.TextureHandle nativeTexture)
+            || !m_persistentTextureDescriptors.TryGetValue(texture.value, out RenderTextureDescriptor? descriptor))
+        {
+            throw new ArgumentException("Persistent texture is not active on this device.", nameof(texture));
+        }
+        if (region.mip >= descriptor.mipCount)
+            throw new ArgumentOutOfRangeException(nameof(region), "Texture mip is outside its descriptor.");
+        int mipWidth = Math.Max(1, descriptor.width >> region.mip);
+        int mipHeight = Math.Max(1, descriptor.height >> region.mip);
+        int layerCount = descriptor.GetSubresourceLayerCount(region.mip);
+        if (region.x + region.width > mipWidth ||
+            region.y + region.height > mipHeight ||
+            region.layer + region.depth > layerCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(region), "Texture update region is outside its descriptor.");
+        }
+        if (descriptor.dimension != RenderTextureDimension.Texture3D && region.depth != 1)
+        {
+            throw new ArgumentException(
+                "Two-dimensional and cubemap updates address exactly one layer or face.",
+                nameof(region));
+        }
+        int rowPitch = checked(region.width * BytesPerPixel(descriptor.format));
+        int expectedSize = checked(rowPitch * region.height * region.depth);
+        if (data.Length != expectedSize)
+        {
+            throw new ArgumentException(
+                $"Texture region update requires exactly {expectedSize} tightly packed bytes.",
+                nameof(data));
+        }
+
+        bgfx.Memory* memory;
+        fixed (byte* pointer = data)
+            memory = bgfx.copy(pointer, checked((uint)data.Length));
+        switch (descriptor.dimension)
+        {
+            case RenderTextureDimension.Texture2D:
+                bgfx.update_texture_2d(
+                    nativeTexture,
+                    checked((ushort)region.layer),
+                    checked((byte)region.mip),
+                    checked((ushort)region.x),
+                    checked((ushort)region.y),
+                    checked((ushort)region.width),
+                    checked((ushort)region.height),
+                    memory,
+                    checked((ushort)rowPitch));
+                break;
+            case RenderTextureDimension.Texture3D:
+                bgfx.update_texture_3d(
+                    nativeTexture,
+                    checked((byte)region.mip),
+                    checked((ushort)region.x),
+                    checked((ushort)region.y),
+                    checked((ushort)region.layer),
+                    checked((ushort)region.width),
+                    checked((ushort)region.height),
+                    checked((ushort)region.depth),
+                    memory);
+                break;
+            case RenderTextureDimension.Cube:
+                bgfx.update_texture_cube(
+                    nativeTexture,
+                    checked((ushort)(region.layer / 6)),
+                    checked((byte)(region.layer % 6)),
+                    checked((byte)region.mip),
+                    checked((ushort)region.x),
+                    checked((ushort)region.y),
+                    checked((ushort)region.width),
+                    checked((ushort)region.height),
+                    memory,
+                    checked((ushort)rowPitch));
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(descriptor));
+        }
+    }
+
+    /// <inheritdoc />
+    public RenderTextureReadbackHandle BeginTextureReadback(
+        PersistentTextureHandle texture,
+        int mipLevel = 0)
+    {
+        EnsureFrameSafetyPoint();
+        ArgumentOutOfRangeException.ThrowIfNegative(mipLevel);
+        ValidatePersistentHandle(texture);
+        if (!capabilities.Supports(GraphicsFeature.TextureReadback))
+            throw new NotSupportedException("The active BGFX renderer does not support texture readback.");
+        if (!m_persistentTextures.TryGetValue(texture.value, out bgfx.TextureHandle nativeTexture)
+            || !m_persistentTextureDescriptors.TryGetValue(texture.value, out RenderTextureDescriptor? descriptor))
+        {
+            throw new ArgumentException("Persistent texture is not active on this device.", nameof(texture));
+        }
+        if ((descriptor.usage & RenderTextureUsage.Readback) == 0)
+            throw new ArgumentException("Texture was not created for readback.", nameof(texture));
+        if (mipLevel >= descriptor.mipCount)
+            throw new ArgumentOutOfRangeException(nameof(mipLevel));
+        int width = Math.Max(1, descriptor.width >> mipLevel);
+        int height = Math.Max(1, descriptor.height >> mipLevel);
+        int layers = descriptor.GetSubresourceLayerCount(mipLevel);
+        int rowPitch = checked(width * BytesPerPixel(descriptor.format));
+        int byteCount = checked(rowPitch * height * layers);
+        void* data = NativeMemory.Alloc(checked((nuint)byteCount));
+        uint readyFrame;
+        try
+        {
+            readyFrame = bgfx.read_texture(nativeTexture, data, checked((byte)mipLevel));
+        }
+        catch
+        {
+            NativeMemory.Free(data);
+            throw;
+        }
+        ulong id = m_nextReadbackId++;
+        m_textureReadbacks.Add(
+            id,
+            new PendingTextureReadback(
+                descriptor,
+                mipLevel,
+                rowPitch,
+                byteCount,
+                (nint)data,
+                readyFrame));
+        return new RenderTextureReadbackHandle(id, generation);
+    }
+
+    /// <inheritdoc />
+    public bool TryGetTextureReadback(
+        RenderTextureReadbackHandle readback,
+        out RenderTextureReadbackResult? result)
+    {
+        EnsureFrameSafetyPoint();
+        ValidateReadbackHandle(readback);
+        if (!m_textureReadbacks.TryGetValue(readback.value, out PendingTextureReadback? pending))
+            throw new ArgumentException("Texture readback is not active on this device.", nameof(readback));
+        result = null;
+        if (m_backendFrame < pending.readyFrame)
+            return false;
+        m_textureReadbacks.Remove(readback.value);
+        try
+        {
+            if (pending.canceled)
+                return false;
+            byte[] bytes = new byte[pending.byteCount];
+            Marshal.Copy(pending.data, bytes, 0, bytes.Length);
+            result = new RenderTextureReadbackResult(
+                pending.descriptor,
+                pending.mipLevel,
+                pending.rowPitch,
+                bytes);
+            return true;
+        }
+        finally
+        {
+            NativeMemory.Free((void*)pending.data);
+        }
+    }
+
+    /// <inheritdoc />
+    public void CancelTextureReadback(RenderTextureReadbackHandle readback)
+    {
+        EnsureFrameSafetyPoint();
+        ValidateReadbackHandle(readback);
+        if (m_textureReadbacks.TryGetValue(readback.value, out PendingTextureReadback? pending))
+            pending.canceled = true;
     }
 
     /// <inheritdoc />
@@ -592,6 +772,9 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
         m_windowSurfaces.Clear();
         DrainDeferredResourcesForShutdown();
         bgfx.shutdown();
+        foreach (PendingTextureReadback pending in m_textureReadbacks.Values)
+            NativeMemory.Free((void*)pending.data);
+        m_textureReadbacks.Clear();
         m_disposed = true;
         generation = 0;
         lock (S_DEVICE_LOCK)
@@ -779,6 +962,21 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
                 $"The active graphics backend cannot use texture format '{descriptor.format}' for storage access.");
         }
 
+        if ((descriptor.usage & RenderTextureUsage.Readback) != 0)
+        {
+            if (!capabilities.Supports(GraphicsFeature.TextureReadback))
+                throw new NotSupportedException("The active graphics backend does not support texture readback.");
+            if (descriptor.sampleCount != 1 ||
+                (descriptor.usage & (RenderTextureUsage.ColorAttachment |
+                                     RenderTextureUsage.DepthStencilAttachment |
+                                     RenderTextureUsage.Storage)) != 0)
+            {
+                throw new ArgumentException(
+                    "Readback textures must be single-sampled transfer resources, not attachments or storage images.",
+                    nameof(descriptor));
+            }
+        }
+
         if (descriptor.dimension == RenderTextureDimension.Texture2D
             && descriptor.arrayLayers > 1
             && !capabilities.Supports(GraphicsFeature.Texture2DArray))
@@ -825,6 +1023,11 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
         if ((descriptor.usage & RenderTextureUsage.CopyDestination) != 0)
         {
             flags |= bgfx.TextureFlags.BlitDst;
+        }
+
+        if ((descriptor.usage & RenderTextureUsage.Readback) != 0)
+        {
+            flags |= bgfx.TextureFlags.ReadBack | bgfx.TextureFlags.BlitDst;
         }
 
         if (descriptor.format == RenderTextureFormat.RGBA8Srgb)
@@ -1056,6 +1259,40 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
             RenderTextureFormat.RGBA16Float => 8,
             _ => throw new ArgumentOutOfRangeException(nameof(format))
         };
+
+    private void ProcessCanceledReadbacks()
+    {
+        foreach ((ulong id, PendingTextureReadback pending) in m_textureReadbacks.ToArray())
+        {
+            if (!pending.canceled || m_backendFrame < pending.readyFrame)
+                continue;
+            NativeMemory.Free((void*)pending.data);
+            m_textureReadbacks.Remove(id);
+        }
+    }
+
+    private void ValidateReadbackHandle(RenderTextureReadbackHandle readback)
+    {
+        if (!readback.isValid || readback.deviceGeneration != generation)
+            throw new ArgumentException("Texture readback belongs to another device generation.", nameof(readback));
+    }
+
+    private sealed class PendingTextureReadback(
+        RenderTextureDescriptor descriptor,
+        int mipLevel,
+        int rowPitch,
+        int byteCount,
+        nint data,
+        uint readyFrame)
+    {
+        internal RenderTextureDescriptor descriptor { get; } = descriptor;
+        internal int mipLevel { get; } = mipLevel;
+        internal int rowPitch { get; } = rowPitch;
+        internal int byteCount { get; } = byteCount;
+        internal nint data { get; } = data;
+        internal uint readyFrame { get; } = readyFrame;
+        internal bool canceled { get; set; }
+    }
 
     private static bgfx.ClearFlags ColorDiscardFlag(int slot)
         => slot switch

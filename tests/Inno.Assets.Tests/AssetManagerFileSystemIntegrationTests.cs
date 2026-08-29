@@ -48,15 +48,15 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
         {
             AssetManager.Initialize(AssetManagerOptions.Create(assets, library));
 
-            Assert.True(AssetManager.TryGetPersistentId("Config/game.txt", out Guid persistentId));
+            Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("Config/game.txt"), out Guid persistentId));
             Assert.True(System.IO.File.Exists(Path.Combine(assets, "Config/game.txt.imeta")));
             Assert.NotEqual(Guid.Empty, persistentId);
             Assert.True(AssetManager.TryGetArtifact(persistentId, "runtime", out AssetArtifactInfo? artifact));
             Assert.NotNull(artifact);
             Assert.StartsWith(Path.Combine(library, "Artifacts"), artifact.absolutePath, StringComparison.Ordinal);
-            Assert.True(AssetManager.TryGetAssetType("Config/game.txt", out Type? assetType));
+            Assert.True(AssetManager.TryGetAssetType(AssetPath.Project("Config/game.txt"), out Type? assetType));
             Assert.Equal(typeof(TextAsset), assetType);
-            Assert.True(AssetManager.TryGetFileSystemEntry("Config/game.txt", out AssetFileEntry entry));
+            Assert.True(AssetManager.TryGetFileSystemEntry(AssetPath.Project("Config/game.txt"), out AssetFileEntry entry));
             Assert.Equal(".txt", entry.extension);
         }
         finally
@@ -76,7 +76,7 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
         try
         {
             AssetManager.Initialize(AssetManagerOptions.Create(assets, library));
-            TextAsset before = AssetManager.Load<TextAsset>("Config/game.txt");
+            TextAsset before = AssetManager.Load<TextAsset>(AssetPath.Project("Config/game.txt"));
             Guid persistentId = before.identity.persistentId;
             Write(assets, "Config/game.txt", "two");
             AssetManager.Rescan();
@@ -104,7 +104,7 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
         {
             AssetManagerOptions options = AssetManagerOptions.Create(assets, library);
             AssetManager.Initialize(options);
-            TextAsset canonical = AssetManager.Load<TextAsset>("Config/old.txt");
+            TextAsset canonical = AssetManager.Load<TextAsset>(AssetPath.Project("Config/old.txt"));
             Guid id = canonical.identity.persistentId;
             Assert.True(AssetManager.TryGetInfo(id, out AssetInfo? before));
             Assert.NotNull(before);
@@ -124,7 +124,7 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
 
             Assert.False(System.IO.File.Exists(Path.Combine(assets, "Config", "old.txt.imeta")));
             Assert.True(System.IO.File.Exists(Path.Combine(assets, "Config", "new.txt.imeta")));
-            Assert.True(AssetManager.TryGetInfo("Config/new.txt", out AssetInfo? after));
+            Assert.True(AssetManager.TryGetInfo(AssetPath.Project("Config/new.txt"), out AssetInfo? after));
             Assert.NotNull(after);
             Assert.Equal(id, after.persistentId);
             Assert.Equal(before.artifactKey, after.artifactKey);
@@ -133,7 +133,7 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
             Assert.Equal(ownerThread, observerThread);
             Assert.True(observed.HasValue);
             Assert.Equal(id, observed.Value.persistentId);
-            Assert.Equal("Config/old.txt", observed.Value.oldRelativePath);
+            Assert.Equal(AssetPath.Project("Config/old.txt"), observed.Value.previousAssetPath);
         }
         finally
         {
@@ -155,26 +155,26 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
             {
                 enableFileSystemWatcher = false
             });
-            TextAsset canonical = AssetManager.Load<TextAsset>("Config/old.txt");
+            TextAsset canonical = AssetManager.Load<TextAsset>(AssetPath.Project("Config/old.txt"));
             Guid persistentId = canonical.identity.persistentId;
             AssetChange? observed = null;
             AssetManager.Changed += changes =>
                 observed = Assert.Single(changes.changes);
 
-            AssetManager.Move("Config/old.txt", "Config/renamed.txt");
+            AssetManager.Move(AssetPath.Project("Config/old.txt"), AssetPath.Project("Config/renamed.txt"));
 
             Assert.False(System.IO.File.Exists(Path.Combine(assets, "Config/old.txt")));
             Assert.False(System.IO.File.Exists(Path.Combine(assets, "Config/old.txt.imeta")));
             Assert.True(System.IO.File.Exists(Path.Combine(assets, "Config/renamed.txt")));
             Assert.True(System.IO.File.Exists(Path.Combine(assets, "Config/renamed.txt.imeta")));
-            Assert.True(AssetManager.TryGetPersistentId("Config/renamed.txt", out Guid movedId));
+            Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("Config/renamed.txt"), out Guid movedId));
             Assert.Equal(persistentId, movedId);
             Assert.Same(canonical, AssetManager.Load<TextAsset>(movedId));
             Assert.Equal("Config/renamed.txt", canonical.assetPath.ToString());
             Assert.NotNull(observed);
             Assert.Equal(AssetChangeKind.Moved, observed.Value.kind);
-            Assert.Equal("Config/old.txt", observed.Value.oldRelativePath);
-            Assert.Equal("Config/renamed.txt", observed.Value.relativePath);
+            Assert.Equal(AssetPath.Project("Config/old.txt"), observed.Value.previousAssetPath);
+            Assert.Equal(AssetPath.Project("Config/renamed.txt"), observed.Value.assetPath);
         }
         finally
         {
@@ -196,17 +196,17 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
             {
                 enableFileSystemWatcher = false
             });
-            Assert.True(AssetManager.TryGetPersistentId("Old", out Guid folderId));
-            Assert.True(AssetManager.TryGetPersistentId("Old/Sub/value.txt", out Guid assetId));
+            Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("Old"), out Guid folderId));
+            Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("Old/Sub/value.txt"), out Guid assetId));
 
-            AssetManager.Move("Old", "New");
+            AssetManager.Move(AssetPath.Project("Old"), AssetPath.Project("New"));
 
             Assert.False(Directory.Exists(Path.Combine(assets, "Old")));
             Assert.False(System.IO.File.Exists(Path.Combine(assets, "Old.imeta")));
             Assert.True(Directory.Exists(Path.Combine(assets, "New")));
             Assert.True(System.IO.File.Exists(Path.Combine(assets, "New.imeta")));
-            Assert.True(AssetManager.TryGetPersistentId("New", out Guid movedFolderId));
-            Assert.True(AssetManager.TryGetPersistentId("New/Sub/value.txt", out Guid movedAssetId));
+            Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("New"), out Guid movedFolderId));
+            Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("New/Sub/value.txt"), out Guid movedAssetId));
             Assert.Equal(folderId, movedFolderId);
             Assert.Equal(assetId, movedAssetId);
         }
@@ -230,13 +230,13 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
             {
                 enableFileSystemWatcher = false
             });
-            TextAsset oldAsset = AssetManager.Load<TextAsset>("Config/value.txt");
+            TextAsset oldAsset = AssetManager.Load<TextAsset>(AssetPath.Project("Config/value.txt"));
             Guid id = oldAsset.identity.persistentId;
 
-            AssetManager.Move("Config/value.txt", "Config/value.bin");
+            AssetManager.Move(AssetPath.Project("Config/value.txt"), AssetPath.Project("Config/value.bin"));
 
             Assert.True(oldAsset.isMissing);
-            Assert.True(AssetManager.TryGetPersistentId("Config/value.bin", out Guid movedId));
+            Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("Config/value.bin"), out Guid movedId));
             Assert.Equal(id, movedId);
             BinaryAsset replacement = AssetManager.Load<BinaryAsset>(id);
             Assert.Equal(3, replacement.byteLength);
@@ -261,7 +261,7 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
             AssetManager.Initialize(AssetManagerOptions.Create(assets, library));
             Write(assets, "Config/live.txt", "one");
             AssetManager.WaitForIdle();
-            TextAsset canonical = AssetManager.Load<TextAsset>("Config/live.txt");
+            TextAsset canonical = AssetManager.Load<TextAsset>(AssetPath.Project("Config/live.txt"));
             Guid id = canonical.identity.persistentId;
             Assert.True(System.IO.File.Exists(Path.Combine(assets, "Config", "live.txt.imeta")));
 
@@ -292,7 +292,7 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
             {
                 fileWatcherFlushDelayMs = 100
             });
-            TextAsset canonical = AssetManager.Load<TextAsset>("Config/atomic.txt");
+            TextAsset canonical = AssetManager.Load<TextAsset>(AssetPath.Project("Config/atomic.txt"));
             Guid id = canonical.identity.persistentId;
             var observed = new System.Collections.Generic.List<AssetChange>();
             AssetManager.Changed += changes => observed.AddRange(changes.changes);
@@ -332,11 +332,11 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
             AssetChange? observed = null;
             AssetManager.Changed += changes => observed = Assert.Single(changes.changes);
 
-            AssetManager.CreateDirectory("Config/New Folder");
+            AssetManager.CreateDirectory(AssetPath.Project("Config/New Folder"));
 
             Assert.True(Directory.Exists(Path.Combine(assets, "Config", "New Folder")));
             Assert.True(System.IO.File.Exists(Path.Combine(assets, "Config", "New Folder.imeta")));
-            Assert.True(AssetManager.TryGetInfo("Config/New Folder", out AssetInfo? info));
+            Assert.True(AssetManager.TryGetInfo(AssetPath.Project("Config/New Folder"), out AssetInfo? info));
             Assert.NotNull(info);
             Assert.Equal(AssetSourceKind.Directory, info.sourceKind);
             Assert.True(info.artifactKey.isEmpty);
@@ -360,7 +360,7 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
         try
         {
             AssetManager.Initialize(AssetManagerOptions.Create(assets, library));
-            Assert.True(AssetManager.TryGetPersistentId("Config/old.txt", out Guid id));
+            Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("Config/old.txt"), out Guid id));
             System.IO.File.Move(
                 Path.Combine(assets, "Config", "old.txt"),
                 Path.Combine(assets, "Config", "new.txt"));
@@ -370,7 +370,7 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
 
             AssetManager.WaitForIdle();
 
-            Assert.True(AssetManager.TryGetPersistentId("Config/new.txt", out Guid movedId));
+            Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("Config/new.txt"), out Guid movedId));
             Assert.Equal(id, movedId);
             Assert.False(System.IO.File.Exists(Path.Combine(assets, "Config", "old.txt.imeta")));
             Assert.True(System.IO.File.Exists(Path.Combine(assets, "Config", "new.txt.imeta")));
@@ -392,16 +392,16 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
         try
         {
             AssetManager.Initialize(AssetManagerOptions.Create(assets, library));
-            Assert.True(AssetManager.TryGetPersistentId("Old", out Guid folderId));
-            Assert.True(AssetManager.TryGetPersistentId("Old/Sub/value.txt", out Guid assetId));
+            Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("Old"), out Guid folderId));
+            Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("Old/Sub/value.txt"), out Guid assetId));
 
             Directory.Move(Path.Combine(assets, "Old"), Path.Combine(assets, "New"));
             AssetManager.WaitForIdle();
 
             Assert.False(System.IO.File.Exists(Path.Combine(assets, "Old.imeta")));
             Assert.True(System.IO.File.Exists(Path.Combine(assets, "New.imeta")));
-            Assert.True(AssetManager.TryGetPersistentId("New", out Guid movedFolderId));
-            Assert.True(AssetManager.TryGetPersistentId("New/Sub/value.txt", out Guid movedAssetId));
+            Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("New"), out Guid movedFolderId));
+            Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("New/Sub/value.txt"), out Guid movedAssetId));
             Assert.Equal(folderId, movedFolderId);
             Assert.Equal(assetId, movedAssetId);
         }
@@ -422,13 +422,13 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
         try
         {
             AssetManager.Initialize(AssetManagerOptions.Create(assets, library));
-            Assert.True(AssetManager.TryGetPersistentId("Config/value.txt", out Guid id));
+            Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("Config/value.txt"), out Guid id));
             System.IO.File.Delete(Path.Combine(assets, "Config", "value.txt"));
             System.IO.File.Delete(Path.Combine(assets, "Config", "value.txt.imeta"));
 
             AssetManager.WaitForIdle();
 
-            Assert.False(AssetManager.TryGetInfo("Config/value.txt", out _));
+            Assert.False(AssetManager.TryGetInfo(AssetPath.Project("Config/value.txt"), out _));
             Assert.True(AssetManager.TryGetInfo(id, out AssetInfo? tombstone));
             Assert.NotNull(tombstone);
             Assert.Equal(AssetImportStatus.Missing, tombstone.status);
@@ -451,14 +451,14 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
         try
         {
             AssetManager.Initialize(AssetManagerOptions.Create(assets, library));
-            TextAsset canonical = AssetManager.Load<TextAsset>("Config/recover.txt");
+            TextAsset canonical = AssetManager.Load<TextAsset>(AssetPath.Project("Config/recover.txt"));
             Guid id = canonical.identity.persistentId;
 
             System.IO.File.Delete(Path.Combine(assets, "Config", "recover.txt"));
             AssetManager.WaitForIdle();
             Assert.True(canonical.isMissing);
             Assert.False(System.IO.File.Exists(Path.Combine(assets, "Config", "recover.txt.imeta")));
-            Assert.False(AssetManager.TryGetInfo("Config/recover.txt", out _));
+            Assert.False(AssetManager.TryGetInfo(AssetPath.Project("Config/recover.txt"), out _));
             Assert.True(AssetManager.TryGetInfo(id, out AssetInfo? missing));
             Assert.Equal(AssetImportStatus.Missing, missing!.status);
             Assert.True(missing.artifactKey.isEmpty);
@@ -466,7 +466,7 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
 
             Write(assets, "Config/recover.txt", "two");
             AssetManager.WaitForIdle();
-            TextAsset replacement = AssetManager.Load<TextAsset>("Config/recover.txt");
+            TextAsset replacement = AssetManager.Load<TextAsset>(AssetPath.Project("Config/recover.txt"));
             Assert.True(canonical.isMissing);
             Assert.False(replacement.isMissing);
             Assert.Equal("two", replacement.content);
@@ -498,18 +498,18 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
                     garbageCollectionGracePeriod = TimeSpan.Zero
                 }
             });
-            TextAsset canonical = AssetManager.Load<TextAsset>("Config/delete.txt");
+            TextAsset canonical = AssetManager.Load<TextAsset>(AssetPath.Project("Config/delete.txt"));
             Guid id = canonical.identity.persistentId;
             Assert.True(AssetManager.TryGetArtifact(id, "runtime", out AssetArtifactInfo? artifact));
             Assert.NotNull(artifact);
             AssetChange? observed = null;
             AssetManager.Changed += changes => observed = Assert.Single(changes.changes);
 
-            AssetManager.Delete("Config/delete.txt");
+            AssetManager.Delete(AssetPath.Project("Config/delete.txt"));
 
             Assert.False(System.IO.File.Exists(Path.Combine(assets, "Config", "delete.txt")));
             Assert.False(System.IO.File.Exists(Path.Combine(assets, "Config", "delete.txt.imeta")));
-            Assert.False(AssetManager.TryGetInfo("Config/delete.txt", out _));
+            Assert.False(AssetManager.TryGetInfo(AssetPath.Project("Config/delete.txt"), out _));
             Assert.True(AssetManager.TryGetInfo(id, out AssetInfo? tombstone));
             Assert.NotNull(tombstone);
             Assert.Equal(AssetImportStatus.Missing, tombstone.status);
@@ -541,17 +541,17 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
             {
                 enableFileSystemWatcher = false
             });
-            Assert.True(AssetManager.TryGetPersistentId("Config/Sub", out Guid directoryId));
-            Assert.True(AssetManager.TryGetPersistentId("Config/Sub/first.txt", out Guid firstId));
-            Assert.True(AssetManager.TryGetPersistentId("Config/Sub/second.txt", out Guid secondId));
+            Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("Config/Sub"), out Guid directoryId));
+            Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("Config/Sub/first.txt"), out Guid firstId));
+            Assert.True(AssetManager.TryGetPersistentId(AssetPath.Project("Config/Sub/second.txt"), out Guid secondId));
             AssetChangeSet? observed = null;
             AssetManager.Changed += changes => observed = changes;
 
-            AssetManager.Delete("Config/Sub");
+            AssetManager.Delete(AssetPath.Project("Config/Sub"));
 
             Assert.False(Directory.Exists(Path.Combine(assets, "Config", "Sub")));
             Assert.False(System.IO.File.Exists(Path.Combine(assets, "Config", "Sub.imeta")));
-            Assert.False(AssetManager.TryGetInfo("Config/Sub", out _));
+            Assert.False(AssetManager.TryGetInfo(AssetPath.Project("Config/Sub"), out _));
             Assert.True(AssetManager.TryGetInfo(directoryId, out AssetInfo? directory));
             Assert.True(AssetManager.TryGetInfo(firstId, out AssetInfo? first));
             Assert.True(AssetManager.TryGetInfo(secondId, out AssetInfo? second));
