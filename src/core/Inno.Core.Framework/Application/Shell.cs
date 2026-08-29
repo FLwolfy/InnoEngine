@@ -1,8 +1,12 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 
 using Inno.Assets;
+using Inno.Assets.Core;
+using Inno.Assets.File;
+using Inno.Assets.Plugins;
 using Inno.Core.Assemblies;
 using Inno.Core.Coroutines;
 using Inno.Core.Events;
@@ -11,6 +15,7 @@ using Inno.Core.Identity;
 using Inno.Core.Logging;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
+using Inno.Core.Settings;
 
 namespace Inno.Core.Framework;
 
@@ -20,9 +25,11 @@ namespace Inno.Core.Framework;
 public sealed class Shell
 {
     private const string DEFAULT_ASSET_DIRECTORY = "Assets";
+    private const string DEFAULT_PLUGIN_DIRECTORY = "Plugins";
     private const string DEFAULT_LIBRARY_DIRECTORY = "Library";
     private const string DEFAULT_LOG_DIRECTORY = "Logs";
     private const string DEFAULT_ASSEMBLY_CACHE_DIRECTORY = "Library/Assemblies";
+    private const string DEFAULT_PROJECT_SETTINGS_FILE = "ProjectSettings.inno";
 
     private static readonly Lock S_LIFECYCLE_LOCK = new();
     private static Shell? s_instance;
@@ -135,14 +142,32 @@ public sealed class Shell
             TypeCacheManager.Initialize();
             SerializationManager.Initialize();
 
-            AssetManager.Initialize(AssetManagerOptions.Create(
-                Path.Combine(settings.projectRootDirectory, DEFAULT_ASSET_DIRECTORY),
-                Path.Combine(settings.projectRootDirectory, DEFAULT_LIBRARY_DIRECTORY)
-            ));
+            string projectRoot = Path.GetFullPath(settings.projectRootDirectory);
+            string assetRoot = Path.Combine(projectRoot, DEFAULT_ASSET_DIRECTORY);
+            string libraryRoot = Path.Combine(projectRoot, DEFAULT_LIBRARY_DIRECTORY);
+            ProjectSettingsManager.Initialize(Path.Combine(projectRoot, DEFAULT_PROJECT_SETTINGS_FILE));
+            PluginTrustSettings trust = ProjectSettingsManager.Get<PluginTrustSettings>(PluginTrustSettings.id);
+            var pluginArchives = new PluginArchiveService(
+                Path.Combine(projectRoot, DEFAULT_PLUGIN_DIRECTORY),
+                libraryRoot);
+            PluginScanResult pluginScan = pluginArchives.Scan(
+                trust.trustedPluginIds.ToHashSet(StringComparer.Ordinal));
+
+            AssetManagerOptions assetOptions = AssetManagerOptions.Create(assetRoot, libraryRoot);
+            AssetManager.Initialize(assetOptions);
+            PluginManager.Initialize(
+                Path.Combine(projectRoot, DEFAULT_PLUGIN_DIRECTORY),
+                libraryRoot,
+                pluginScan);
+            foreach (PluginArchiveDiagnostic diagnostic in PluginCatalog.discovery.diagnostics)
+                Log.Warn("Plugin archive '{0}': {1}", diagnostic.archivePath, diagnostic.message);
         }
         catch
         {
+            PluginManager.Shutdown();
             AssetManager.Shutdown();
+            PluginCatalog.Shutdown();
+            ProjectSettingsManager.Shutdown();
             SerializationManager.Shutdown();
             TypeCacheManager.Shutdown();
             AssemblyManager.Shutdown();
@@ -201,6 +226,7 @@ public sealed class Shell
 
         try
         {
+            PluginManager.Update();
             AssetManager.Update();
             m_events.Flush();
             Time.Update(totalTime, delta);
@@ -251,7 +277,10 @@ public sealed class Shell
         {
             m_layers.Dispose();
             m_coroutines.Dispose();
+            PluginManager.Shutdown();
             AssetManager.Shutdown();
+            PluginCatalog.Shutdown();
+            ProjectSettingsManager.Shutdown();
             SerializationManager.Shutdown();
             TypeCacheManager.Shutdown();
             AssemblyManager.Shutdown();

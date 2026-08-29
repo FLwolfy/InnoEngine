@@ -75,7 +75,7 @@ Diagnostics.Set(
     asset.identity.persistentId,
     "Import",
     importDiagnostics,
-    displayName: asset.sourcePath);
+    displayName: asset.assetPath.ToString());
 
 Diagnostics.Clear(
     asset.identity.persistentId,

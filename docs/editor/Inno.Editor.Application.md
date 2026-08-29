@@ -24,7 +24,7 @@ Editor 当前不需要额外的 InnoEngine project descriptor。目录本身就�
 
 `EditorHost` 是 Application 内部的启动实现，不属于公开 API。`EditorHost.Create(projectDirectory)` 依次构造 Platform、Window、Shell、ImGui context、EditorContext 与 EditorLayer；每个成功阶段立即登记清理动作，全部验证通过后才返回 host。启动失败与正常 `Dispose` 共用同一个幂等资源栈，严格按 Layer/overlay → ImGui → Shell → Window → Platform 的逆序释放；单项清理异常会记录到 boot log，但不会遮蔽原始启动异常或阻止后续清理。
 
-`editor.ini`、`EditorSettings.json`、Editor boot log、Assets 与脚本产物都以 `projectDirectory` 为根目录。`editor.ini` 只保存标准 ImGui docking/window layout 与各有状态 Module/Panel 的可读 section；业务设置由独立的根目录 `EditorSettings.json` 保存。两种文档各有单一所有者，不会互相覆盖。
+`editor.ini`、`EditorSettings.json`、`ProjectSettings.inno`、Editor boot log、Assets、Plugins 与脚本产物都以 `projectDirectory` 为根目录。`editor.ini` 只保存 ImGui layout 与 Module/Panel 状态；Editor 外观、图标与缩放由 `Inno.Editor.Settings` 写入 `EditorSettings.json`；Layer、Tag 与 Plugin/runtime 的强类型项目协议由 `Inno.Core.Settings` 写入 `ProjectSettings.inno`。三个文档各有单一所有者。
 
 Module/Panel 状态只使用 `editor.ini` 中由 Attribute ID 确定的具名可读 section，没有独立 Workspace 文档或第二个状态 ID。
 
@@ -39,5 +39,7 @@ Module/Panel 状态只使用 `editor.ini` 中由 Attribute ID 确定的具名可
 Editor 启动阶段在 Shell 日志系统可用之前产生的诊断写入 `<Project>/Logs/EditorBoot.log`；Shell 初始化后的轮转日志写入同一目录，并使用 `log_<timestamp>.log` 文件名。项目根目录不生成独立日志文件。
 
 每帧安全点顺序为：更新 `EditorFrame` 和 Module → 绘制统一主菜单与自动发现 Panel → flush deferred Action → 绘制统一 Modal。脚本编译弹窗位于 `Inno.Editor.Scripting`，由 internal `EditorScripting` module 驱动真实编译阶段进度；`EditorModalRenderer` 使用主 viewport work area 中心、固定 style width 和 `0.5/0.5` pivot 定位。Application 不包含 Scene action、Asset 类型判断、context menu 排列或 ScriptManager 状态机。
+
+internal `EditorRenderingHostService` 只负责组合通用 Render Runtime、BGFX 设备与 ImGui contributor，并作为 Scripting reload participant 协调 Pipeline/Feature generation。它不提供任何 Camera、Light、PBR 或固定 Scene 语义；没有受信任的 Viewport/Pipeline Plugin 时 Editor 仍正常运行，Scene/Game View 只显示无活动 rendering provider 的诊断。
 
 启动时 `EditorHost` 会检查发现的 Panel 数量；为零会立即抛出明确异常，避免再次出现“窗口正常但内容完全为空”的静默失败。

@@ -1,72 +1,81 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
+using Inno.Core.Assemblies;
 using Inno.Core.Graphs;
+using Inno.Core.Reflection;
+using Inno.Core.Serialization;
 using Inno.Rendering.Assets;
+using Inno.Rendering.Bgfx;
 using Inno.Rendering.Core;
 using Xunit;
 
 namespace Inno.Rendering.ShaderGraph.Tests;
 
-public sealed class ShaderGraphCompilerTests
+[Collection(ShaderNodeRegistryExtensionCollection.name)]
+public sealed class ShaderGraphCompilerTests : IDisposable
 {
-    [Fact]
-    public void Compile_Surface_EmitsSharedProductionPasses()
-    {
-        GraphDocument document = SurfaceGraph();
+    private readonly string m_cacheDirectory = Path.Combine(
+        Path.GetTempPath(),
+        "InnoShaderGraphCompilerTests",
+        Guid.NewGuid().ToString("N"));
 
+    public ShaderGraphCompilerTests()
+    {
+        AssemblyManager.Initialize(new AssemblyManagerOptions { cacheDirectory = m_cacheDirectory });
+        TypeCacheManager.Initialize();
+        SerializationManager.Initialize();
+    }
+
+    public void Dispose()
+    {
+        SerializationManager.Shutdown();
+        TypeCacheManager.Shutdown();
+        AssemblyManager.Shutdown();
+        if (Directory.Exists(m_cacheDirectory))
+        {
+            Directory.Delete(m_cacheDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Compile_PluginRasterProgram_EmitsOpenContractThroughSharedIr()
+    {
         ShaderGraphCompileResult result = ShaderGraphCompiler.Compile(
-            "Shaders/Pbr.ishadergraph",
-            "PBR Graph",
-            ShaderGraphTarget.Surface,
-            document,
+            "Shaders/PluginRaster.ishadergraph",
+            "Plugin Raster",
+            RasterGraph(),
             Registry());
 
         Assert.True(result.succeeded, Format(result));
         ShaderIRModule module = Assert.IsType<ShaderIRModule>(result.module);
-        Assert.Equal(
-            [
-                BuiltinShaderPassTags.ForwardLitClustered,
-                BuiltinShaderPassTags.ForwardLit,
-                BuiltinShaderPassTags.GBuffer,
-                BuiltinShaderPassTags.DepthOnly,
-                BuiltinShaderPassTags.ShadowCaster,
-                BuiltinShaderPassTags.Picking
-            ],
-            module.passes.Select(static pass => pass.definition.tag));
-        ShaderIRStageModule forward = module.passes[0].stages.Single(
-            static stage => stage.stage == ShaderStage.Fragment);
-        Assert.Contains("inno_camera_position.xyz - v_worldPosition", forward.source, StringComparison.Ordinal);
-        Assert.Contains("BUFFER_RO(inno_cluster_grid, uint", forward.source, StringComparison.Ordinal);
-        Assert.Contains("inno_cluster_light_indices[inno_grid_offset", forward.source, StringComparison.Ordinal);
-        Assert.Contains(
-            module.passes[0].bindingIds,
-            static value => value.value == "inno_cluster_grid");
-        Assert.DoesNotContain(
-            module.passes[1].bindingIds,
-            static value => value.value == "inno_cluster_grid");
-        Assert.Contains("gl_FragColor = inno_object_id", module.passes[^1].stages[1].source, StringComparison.Ordinal);
-        Assert.All(module.passes, static pass => Assert.NotNull(pass.generatedVaryingSource));
+        ShaderTechniqueDefinition technique = Assert.Single(module.definition.techniques);
+        Assert.Equal(TestRasterProgramDefinition.contractId, technique.contract.value);
+        Assert.Equal(TestRasterProgramDefinition.roleId, Assert.Single(technique.passes).role.value);
+        ShaderIRPass pass = Assert.Single(module.passes);
+        Assert.Equal("Draw", pass.definition.name);
+        Assert.Equal(ShaderProgramKind.Raster, pass.definition.programKind);
+        Assert.All(pass.stages, static stage => Assert.Equal(ShaderIRSourceKind.Generated, stage.sourceKind));
+        Assert.Contains("vec4(0.8, 0.2, 0.1, 1)", pass.stages[1].source, StringComparison.Ordinal);
+        Assert.Equal("output", pass.stages[1].location.nodeId);
     }
 
     [Fact]
-    public void Compile_Compute_EmitsStorageKernelThroughCommonIr()
+    public void Compile_PluginComputeProgram_EmitsComputeKernelThroughSharedIr()
     {
         var document = new GraphDocument();
-        GraphNodeRecord value = Node("value", BuiltinShaderNodes.Float4);
-        value.SetValue("value", Json(new[] { 1f, 2f, 3f, 4f }));
-        GraphNodeRecord output = Node("output", BuiltinShaderNodes.ComputeOutput);
+        GraphNodeRecord value = ColorNode("value", 1f, 2f, 3f, 4f);
+        GraphNodeRecord output = Node("output", TestComputeProgramDefinition.ID);
         document.AddNode(value);
         document.AddNode(output);
         document.AddEdge(Edge("e", value, "value", output, "value"));
 
         ShaderGraphCompileResult result = ShaderGraphCompiler.Compile(
-            "Shaders/Compute.ishadergraph",
-            "Compute Graph",
-            ShaderGraphTarget.Compute,
+            "Shaders/PluginCompute.ishadergraph",
+            "Plugin Compute",
             document,
             Registry());
 
@@ -74,23 +83,24 @@ public sealed class ShaderGraphCompilerTests
         ShaderIRPass pass = Assert.Single(result.module!.passes);
         ShaderIRStageModule stage = Assert.Single(pass.stages);
         Assert.Equal(ShaderStage.Compute, stage.stage);
-        Assert.Contains("inno_compute_output[gl_GlobalInvocationID.x]", stage.source, StringComparison.Ordinal);
+        Assert.Contains("gl_GlobalInvocationID.x", stage.source, StringComparison.Ordinal);
         Assert.True((pass.definition.requiredFeatures & GraphicsFeature.Compute) != 0);
+        Assert.Equal(TestComputeProgramDefinition.contractId, result.module.definition.techniques[0].contract.value);
     }
 
     [Fact]
-    public async Task Compile_Surface_RealShadercAcceptsClusteredAndFallbackPasses()
+    public async Task Compile_PluginRasterProgram_RealShadercAcceptsGeneratedPass()
     {
-        ShaderTargetPlatform platform;
+        BgfxShaderTargetPlatform platform;
         GraphicsBackend backend;
         if (OperatingSystem.IsMacOS())
         {
-            platform = ShaderTargetPlatform.MacOSArm64;
+            platform = BgfxShaderTargetPlatform.MacOSArm64;
             backend = GraphicsBackend.Metal;
         }
         else if (OperatingSystem.IsWindows())
         {
-            platform = ShaderTargetPlatform.WindowsX64;
+            platform = BgfxShaderTargetPlatform.WindowsX64;
             backend = GraphicsBackend.Direct3D11;
         }
         else
@@ -99,10 +109,9 @@ public sealed class ShaderGraphCompilerTests
         }
 
         ShaderGraphCompileResult graphResult = ShaderGraphCompiler.Compile(
-            "Shaders/Pbr.ishadergraph",
-            "PBR Graph",
-            ShaderGraphTarget.Surface,
-            SurfaceGraph(),
+            "Shaders/PluginRaster.ishadergraph",
+            "Plugin Raster",
+            RasterGraph(),
             Registry());
         Assert.True(graphResult.succeeded, Format(graphResult));
         GraphicsCapabilities capabilities = new(
@@ -111,15 +120,17 @@ public sealed class ShaderGraphCompilerTests
             new GraphicsLimits(256, 8, 16384, 16),
             Enum.GetValues<RenderTextureFormat>(),
             Enum.GetValues<RenderTextureFormat>(),
+            Enum.GetValues<RenderTextureFormat>(),
+            Enum.GetValues<RenderTextureFormat>(),
             originBottomLeft: false,
             homogeneousDepth: false);
-        var target = new ShaderCompileTarget(
-            RendererProfileCatalog.Resolve(platform, capabilities),
+        var shaderCompiler = new ShaderCompiler(new BgfxShadercToolchain(platform));
+        ShaderCompileTarget target = shaderCompiler.CreateTarget(
             capabilities,
             optimize: false,
             debugInformation: true);
 
-        ShaderCompilationResult result = await new ShaderCompiler().CompileAsync(
+        ShaderCompilationResult result = await shaderCompiler.CompileAsync(
             graphResult.module!,
             target,
             ShaderVariantKey.empty,
@@ -128,44 +139,8 @@ public sealed class ShaderGraphCompilerTests
         Assert.True(result.succeeded, string.Join(
             Environment.NewLine,
             result.diagnostics.Select(static value => $"{value.code}: {value.message}")));
-        Assert.Equal(6, result.artifact!.passes.Count);
-        Assert.Contains(result.artifact.passes, static pass =>
-            pass.definition.tag == BuiltinShaderPassTags.ForwardLitClustered
-            && pass.shaderInterface.bindings.Any(binding => binding.id.value == "inno_cluster_grid"));
-        Assert.Contains(result.artifact.passes, static pass =>
-            pass.definition.tag == BuiltinShaderPassTags.ForwardLit
-            && pass.shaderInterface.bindings.All(binding => binding.id.value != "inno_cluster_grid"));
-    }
-
-    [Fact]
-    public void Compile_VertexFragment_EmitsConnectedVertexStack()
-    {
-        var document = new GraphDocument();
-        GraphNodeRecord position = Node("position", BuiltinShaderNodes.Float3);
-        position.SetValue("value", Json(new[] { 0f, 0.25f, 0f }));
-        GraphNodeRecord vertex = Node("vertex", BuiltinShaderNodes.VertexOutput);
-        GraphNodeRecord color = Node("color", BuiltinShaderNodes.Color);
-        color.SetValue("value", Json(new[] { 0.2f, 0.4f, 1f, 1f }));
-        GraphNodeRecord fragment = Node("fragment", BuiltinShaderNodes.FragmentOutput);
-        document.AddNode(position);
-        document.AddNode(vertex);
-        document.AddNode(color);
-        document.AddNode(fragment);
-        document.AddEdge(Edge("position-edge", position, "value", vertex, "position"));
-        document.AddEdge(Edge("color-edge", color, "value", fragment, "color"));
-
-        ShaderGraphCompileResult result = ShaderGraphCompiler.Compile(
-            "Shaders/VertexFragment.ishadergraph",
-            "Vertex Fragment",
-            ShaderGraphTarget.VertexFragment,
-            document,
-            Registry());
-
-        Assert.True(result.succeeded, Format(result));
-        ShaderIRStageModule vertexStage = result.module!.passes[0].stages.Single(
-            static stage => stage.stage == ShaderStage.Vertex);
-        Assert.Contains("vec4(vec3(0, 0.25, 0), 1.0)", vertexStage.source, StringComparison.Ordinal);
-        Assert.Equal("vertex", vertexStage.location.nodeId);
+        Assert.Single(result.artifact!.passes);
+        Assert.Equal("Draw", result.artifact.passes[0].definition.name);
     }
 
     [Fact]
@@ -173,29 +148,33 @@ public sealed class ShaderGraphCompilerTests
     {
         var document = new GraphDocument();
         document.AddNode(Node("missing", "project.shader.missing"));
-        string before = ShaderGraphDocumentCodec.Encode(ShaderGraphTarget.Surface, document);
+        byte[] before = ShaderGraphDocumentCodec.Encode(document);
 
         ShaderGraphCompileResult result = ShaderGraphCompiler.Compile(
             "Shaders/Missing.ishadergraph",
             "Missing",
-            ShaderGraphTarget.Surface,
             document,
             Registry());
 
         Assert.False(result.succeeded);
         Assert.Contains(result.diagnostics, static value => value.code == "SHADER_GRAPH_MISSING_NODE");
-        Assert.Equal(before, ShaderGraphDocumentCodec.Encode(ShaderGraphTarget.Surface, document));
+        Assert.Equal(before, ShaderGraphDocumentCodec.Encode(document));
     }
 
     [Fact]
     public void Compile_StageIllegalExtension_ReturnsNodeMappedError()
     {
-        ShaderNodeDefinition[] definitions = [.. BuiltinShaderNodes.CreateDefinitions(), new VertexOnlyDefinition()];
-        var registry = new ShaderNodeRegistry();
+        ShaderNodeDefinition[] definitions =
+        [
+            new ConstantColorDefinition(),
+            new TestRasterProgramDefinition(),
+            new VertexOnlyDefinition()
+        ];
+        using var registry = new ShaderNodeRegistry();
         registry.Replace(definitions);
         var document = new GraphDocument();
         GraphNodeRecord value = Node("value", VertexOnlyDefinition.ID);
-        GraphNodeRecord output = Node("output", BuiltinShaderNodes.FragmentOutput);
+        GraphNodeRecord output = Node("output", TestRasterProgramDefinition.ID);
         document.AddNode(value);
         document.AddNode(output);
         document.AddEdge(Edge("e", value, "value", output, "color"));
@@ -203,7 +182,6 @@ public sealed class ShaderGraphCompilerTests
         ShaderGraphCompileResult result = ShaderGraphCompiler.Compile(
             "Shaders/Illegal.ishadergraph",
             "Illegal",
-            ShaderGraphTarget.VertexFragment,
             document,
             registry);
 
@@ -213,50 +191,84 @@ public sealed class ShaderGraphCompilerTests
     }
 
     [Fact]
-    public void Registry_DuplicateCandidate_DoesNotReplaceActiveGeneration()
+    public void Compile_WithoutPluginProgramOutput_ReturnsExplicitError()
     {
-        ShaderNodeRegistry registry = Registry();
+        var document = new GraphDocument();
+        document.AddNode(ColorNode("color", 1f, 1f, 1f, 1f));
+
+        ShaderGraphCompileResult result = ShaderGraphCompiler.Compile(
+            "Shaders/NoProgram.ishadergraph",
+            "No Program",
+            document,
+            Registry());
+
+        Assert.False(result.succeeded);
+        Assert.Contains(result.diagnostics, static value => value.code == "SHADER_GRAPH_PROGRAM_OUTPUT_COUNT");
+    }
+
+    [Fact]
+    public void Registry_DefaultGenerationIsEmptyAndDuplicateCandidateIsAtomic()
+    {
+        using var empty = new ShaderNodeRegistry();
+        Assert.Empty(empty.definitions);
+
+        using ShaderNodeRegistry registry = Registry();
         int before = registry.definitions.Count;
-        ShaderNodeDefinition duplicate = BuiltinShaderNodes.CreateDefinitions()[0];
+        var duplicate = new ConstantColorDefinition();
 
         Assert.Throws<ArgumentException>(() => registry.Replace([duplicate, duplicate]));
 
         Assert.Equal(before, registry.definitions.Count);
-        Assert.True(registry.TryResolveShader(BuiltinShaderNodes.SurfaceOutput, out _));
+        Assert.True(registry.TryResolveShader(TestRasterProgramDefinition.ID, out _));
     }
 
     [Fact]
-    public void Codec_RoundTripsCommentsAndRejectsUnknownFields()
+    public void Codec_RoundTripsNativeNeutralDocumentAndRejectsCorruptPayload()
     {
-        string json = ShaderGraphDocumentCodec.Encode(ShaderGraphTarget.Surface, SurfaceGraph());
-        ShaderGraphDocumentData decoded = ShaderGraphDocumentCodec.Decode(
-            json.Replace("{", "{/* accepted comment */", StringComparison.Ordinal).Replace(
-                "\n}",
-                "\n,}",
-                StringComparison.Ordinal));
-        Assert.Equal(ShaderGraphTarget.Surface, decoded.target);
+        GraphDocument document = RasterGraph();
+        document.SetMetadata("tests.preview", GraphSerializedValue.From("sphere"));
+
+        byte[] bytes = ShaderGraphDocumentCodec.Encode(document);
+        ShaderGraphDocumentData decoded = ShaderGraphDocumentCodec.Decode(bytes);
+
         Assert.Equal(2, decoded.document.nodes.Count);
-        Assert.Throws<JsonException>(() => ShaderGraphDocumentCodec.Decode(
-            "{\"target\":\"Surface\",\"nodes\":[],\"edges\":[],\"metadata\":{},\"schemaVersion\":1}"));
+        Assert.Equal("sphere", decoded.document.metadata["tests.preview"].Deserialize<string>());
+        Assert.ThrowsAny<Exception>(() => ShaderGraphDocumentCodec.Decode([1, 2, 3]));
     }
 
-    private static GraphDocument SurfaceGraph()
+    private static GraphDocument RasterGraph()
     {
         var document = new GraphDocument();
-        GraphNodeRecord color = Node("color", BuiltinShaderNodes.Color);
-        color.SetValue("value", Json(new[] { 0.8f, 0.2f, 0.1f, 1f }));
-        GraphNodeRecord output = Node("surface", BuiltinShaderNodes.SurfaceOutput);
+        GraphNodeRecord color = ColorNode("color", 0.8f, 0.2f, 0.1f, 1f);
+        GraphNodeRecord output = Node("output", TestRasterProgramDefinition.ID);
         document.AddNode(color);
         document.AddNode(output);
-        document.AddEdge(Edge("base-color", color, "value", output, "baseColor"));
+        document.AddEdge(Edge("color-edge", color, "value", output, "color"));
         return document;
     }
 
     private static ShaderNodeRegistry Registry()
     {
         var registry = new ShaderNodeRegistry();
-        registry.Replace(BuiltinShaderNodes.CreateDefinitions());
+        registry.Replace(
+        [
+            new ConstantColorDefinition(),
+            new TestRasterProgramDefinition(),
+            new TestComputeProgramDefinition()
+        ]);
         return registry;
+    }
+
+    private static GraphNodeRecord ColorNode(
+        string id,
+        float x,
+        float y,
+        float z,
+        float w)
+    {
+        GraphNodeRecord node = Node(id, ConstantColorDefinition.ID);
+        node.SetValue("value", GraphSerializedValue.From(new[] { x, y, z, w }));
+        return node;
     }
 
     private static GraphNodeRecord Node(string id, string definition)
@@ -273,24 +285,23 @@ public sealed class ShaderGraphCompilerTests
             new GraphEndpoint(outputNode.id, new GraphPortId(outputPort)),
             new GraphEndpoint(inputNode.id, new GraphPortId(inputPort)));
 
-    private static GraphSerializedValue Json<T>(T value)
-        => new(JsonSerializer.Serialize(value));
-
     private static string Format(ShaderGraphCompileResult result)
         => string.Join(Environment.NewLine, result.diagnostics.Select(
             static value => $"{value.code}: {value.message}"));
 
-    private sealed class VertexOnlyDefinition : ShaderNodeDefinition
+    private sealed class ConstantColorDefinition : ShaderNodeDefinition
     {
-        public const string ID = "test.shader.vertex-only";
+        public const string ID = "tests.shader.constant-color";
 
-        public VertexOnlyDefinition()
-            : base(ID, "Vertex Only", "Tests", ShaderStage.Vertex)
+        public ConstantColorDefinition()
+            : base(ID, "Constant Color", "Tests", ShaderStage.Vertex | ShaderStage.Fragment | ShaderStage.Compute)
         {
         }
 
         public override IReadOnlyList<GraphPortDefinition> GetPorts(GraphNodeRecord node)
-            =>
+        {
+            _ = node;
+            return
             [
                 new GraphPortDefinition(
                     new GraphPortId("value"),
@@ -298,6 +309,180 @@ public sealed class ShaderGraphCompilerTests
                     ShaderGraphValueTypes.GetId(ShaderValueType.Color),
                     GraphPortDirection.Output)
             ];
+        }
+
+        public override void Emit(ShaderNodeEmitContext context)
+        {
+            float[] value = context.node.TryGetValue("value", out GraphSerializedValue? serialized)
+                ? serialized!.Deserialize<float[]>()
+                : [1f, 1f, 1f, 1f];
+            string expression = string.Create(
+                CultureInfo.InvariantCulture,
+                $"vec4({value[0]:0.########}, {value[1]:0.########}, {value[2]:0.########}, {value[3]:0.########})");
+            context.SetOutput(
+                new GraphPortId("value"),
+                new ShaderValue(ShaderValueType.Color, expression, context.node.id));
+        }
+    }
+
+    private sealed class TestRasterProgramDefinition : ShaderGraphProgramNodeDefinition
+    {
+        public const string ID = "tests.shader.raster-program";
+        public const string contractId = "tests.raster-contract";
+        public const string roleId = "tests.draw";
+
+        public TestRasterProgramDefinition()
+            : base(ID, "Test Raster Program", "Tests", ShaderStage.Fragment)
+        {
+        }
+
+        public override IReadOnlyList<GraphPortDefinition> GetPorts(GraphNodeRecord node)
+        {
+            _ = node;
+            return
+            [
+                new GraphPortDefinition(
+                    new GraphPortId("color"),
+                    "Color",
+                    ShaderGraphValueTypes.GetId(ShaderValueType.Color),
+                    GraphPortDirection.Input,
+                    required: true)
+            ];
+        }
+
+        public override void Emit(ShaderNodeEmitContext context)
+            => context.SetSemantic("color", context.GetInput(new GraphPortId("color")));
+
+        public override ShaderIRModule BuildProgram(ShaderGraphProgramContext context)
+        {
+            ShaderGraphEmission fragment = context.Emit(ShaderStage.Fragment);
+            ShaderValue color = fragment.GetSemantic("color");
+            var pass = new ShaderPassDefinition("Draw", ShaderProgramKind.Raster);
+            string vertexSource = """
+                $input a_position
+                #include <bgfx_shader.sh>
+
+                void main()
+                {
+                    gl_Position = vec4(a_position, 1.0);
+                }
+                """;
+            string fragmentSource = $$"""
+                #include <bgfx_shader.sh>
+
+                void main()
+                {
+                    gl_FragColor = {{color.expression}};
+                }
+                """;
+            var definition = new ShaderDefinition(
+                context.shaderName,
+                fragment.properties,
+                [],
+                [pass],
+                [new ShaderTechniqueDefinition(
+                    new ShaderTechniqueId("default"),
+                    new ShaderContractId(contractId),
+                    [new ShaderTechniquePass(new ShaderPassRoleId(roleId), pass.name)])]);
+            return new ShaderIRModule(
+                definition,
+                [new ShaderIRPass(
+                    pass,
+                    [
+                        new ShaderIRStageModule(
+                            ShaderStage.Vertex,
+                            "main",
+                            vertexSource,
+                            ShaderIRSourceKind.Generated,
+                            new ShaderSourceLocation(context.assetPath, pass.name, ShaderStage.Vertex, nodeId: context.outputNode.id.value)),
+                        context.CreateStage(pass.name, ShaderStage.Fragment, fragmentSource, fragment)
+                    ],
+                    "vec3 a_position : POSITION;")]);
+        }
+    }
+
+    private sealed class TestComputeProgramDefinition : ShaderGraphProgramNodeDefinition
+    {
+        public const string ID = "tests.shader.compute-program";
+        public const string contractId = "tests.compute-contract";
+
+        public TestComputeProgramDefinition()
+            : base(ID, "Test Compute Program", "Tests", ShaderStage.Compute)
+        {
+        }
+
+        public override IReadOnlyList<GraphPortDefinition> GetPorts(GraphNodeRecord node)
+        {
+            _ = node;
+            return
+            [
+                new GraphPortDefinition(
+                    new GraphPortId("value"),
+                    "Value",
+                    ShaderGraphValueTypes.GetId(ShaderValueType.Color),
+                    GraphPortDirection.Input,
+                    required: true)
+            ];
+        }
+
+        public override void Emit(ShaderNodeEmitContext context)
+            => context.SetSemantic("value", context.GetInput(new GraphPortId("value")));
+
+        public override ShaderIRModule BuildProgram(ShaderGraphProgramContext context)
+        {
+            ShaderGraphEmission compute = context.Emit(ShaderStage.Compute);
+            ShaderValue value = compute.GetSemantic("value");
+            var pass = new ShaderPassDefinition(
+                "Compute",
+                ShaderProgramKind.Compute,
+                requiredFeatures: GraphicsFeature.Compute | GraphicsFeature.StorageBuffer);
+            string source = $$"""
+                #include <bgfx_compute.sh>
+                BUFFER_RW(inno_test_output, vec4, 0);
+                NUM_THREADS(1, 1, 1)
+
+                void main()
+                {
+                    inno_test_output[gl_GlobalInvocationID.x] = {{value.expression}};
+                }
+                """;
+            var definition = new ShaderDefinition(
+                context.shaderName,
+                [],
+                [],
+                [pass],
+                [new ShaderTechniqueDefinition(
+                    new ShaderTechniqueId("default"),
+                    new ShaderContractId(contractId),
+                    [new ShaderTechniquePass(new ShaderPassRoleId("tests.dispatch"), pass.name)],
+                    GraphicsFeature.Compute | GraphicsFeature.StorageBuffer)]);
+            return new ShaderIRModule(
+                definition,
+                [new ShaderIRPass(pass, [context.CreateStage(pass.name, ShaderStage.Compute, source, compute)])]);
+        }
+    }
+
+    private sealed class VertexOnlyDefinition : ShaderNodeDefinition
+    {
+        public const string ID = "tests.shader.vertex-only";
+
+        public VertexOnlyDefinition()
+            : base(ID, "Vertex Only", "Tests", ShaderStage.Vertex)
+        {
+        }
+
+        public override IReadOnlyList<GraphPortDefinition> GetPorts(GraphNodeRecord node)
+        {
+            _ = node;
+            return
+            [
+                new GraphPortDefinition(
+                    new GraphPortId("value"),
+                    "Value",
+                    ShaderGraphValueTypes.GetId(ShaderValueType.Color),
+                    GraphPortDirection.Output)
+            ];
+        }
 
         public override void Emit(ShaderNodeEmitContext context)
             => context.SetOutput(

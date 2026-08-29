@@ -14,14 +14,14 @@ public sealed class AssetReferenceInfo
 {
     internal AssetReferenceInfo(
         Guid persistentId,
-        string sourcePath,
+        AssetPath assetPath,
         long contentVersion,
         bool isLoaded,
         bool? lastSweepReachability,
         IReadOnlyList<AssetReferenceLocation> references)
     {
         this.persistentId = persistentId;
-        this.sourcePath = sourcePath ?? string.Empty;
+        this.assetPath = assetPath;
         this.contentVersion = contentVersion;
         this.isLoaded = isLoaded;
         this.lastSweepReachability = lastSweepReachability;
@@ -31,8 +31,8 @@ public sealed class AssetReferenceInfo
     /// <summary>Gets the persistent asset identity.</summary>
     public Guid persistentId { get; }
 
-    /// <summary>Gets the current source-relative path.</summary>
-    public string sourcePath { get; }
+    /// <summary>Gets the current mount-qualified asset path.</summary>
+    public AssetPath assetPath { get; }
 
     /// <summary>Gets the current runtime content version.</summary>
     public long contentVersion { get; }

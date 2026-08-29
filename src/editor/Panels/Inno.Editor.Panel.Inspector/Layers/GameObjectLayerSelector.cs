@@ -16,18 +16,18 @@ namespace Inno.Editor.Panel.Inspector;
 /// </summary>
 internal sealed class GameObjectLayerSelector
 {
-    private readonly GameLayerSettingsModule m_settings;
+    private readonly SceneProjectSettingsModule m_settings;
     private readonly SceneEdits m_edits;
 
     /// <summary>
     /// Creates a layer selector backed by the project Settings layer catalog.
     /// </summary>
-    /// <param name="settings">The project layer-settings module.</param>
+    /// <param name="settings">The project Scene-classification settings module.</param>
     /// <param name="edits">The Scene editing service used to record GameObject layer changes.</param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="settings"/> or <paramref name="edits"/> is <see langword="null"/>.
     /// </exception>
-    internal GameObjectLayerSelector(GameLayerSettingsModule settings, SceneEdits edits)
+    internal GameObjectLayerSelector(SceneProjectSettingsModule settings, SceneEdits edits)
     {
         m_settings = settings ?? throw new ArgumentNullException(nameof(settings));
         m_edits = edits ?? throw new ArgumentNullException(nameof(edits));

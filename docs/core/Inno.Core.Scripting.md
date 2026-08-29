@@ -34,14 +34,14 @@ ScriptingApiExportAttribute(Type type, string name, ScriptingApiScope scope)
 
 ```csharp
 [assembly: ScriptingApiExport(
-    typeof(ImGuiIcon),
-    "AssetIconKind",
+    typeof(ImplementationType),
+    "PublicApiName",
     ScriptingApiScope.Editor)]
 ```
 
-EditorScripts 看到的是 `AssetIconKind`，Host 和运行时仍使用 `ImGuiIcon`。已有 XML 注释会迁移到别名后的 identity；没有 XML 文档的别名常量目录会获得基础 fallback 文档。泛型类型不能更名，因为 C# 不支持为开放泛型声明普通 using alias。
+EditorScripts 看到的是 `PublicApiName`，Host 和运行时仍使用 `ImplementationType`。已有 XML 注释会迁移到别名后的 identity；泛型类型不能更名，因为 C# 不支持为开放泛型声明普通 using alias。
 
-例如 FileBrowser feature 可以在自己的 `ScriptingApi.cs` 中导出 `Inno.Platform.ImGui.ImGuiIcon`，而不需要让底层 ImGui 项目知道 `InnoEditor.Assets`。清单所有权因此属于“决定公开该能力的 feature”，类型的运行时所有权仍属于原程序集。
+清单所有权属于决定公开该能力的 feature，类型的运行时所有权仍属于原程序集。当前 `ImGuiIcon` 和 `NativeImGui` 由 `Inno.Editor.ImGui` 自己导出到 `InnoEditor.ImGui`，FileBrowser 不再维护别名。
 
 ### ScriptingApiNamespaceAttribute
 

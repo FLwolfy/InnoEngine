@@ -9,7 +9,7 @@ public interface IRenderFrameGraphContributor
     /// <param name="frameIndex">Monotonic engine render frame index.</param>
     void PrepareFrame(ulong frameIndex);
 
-    /// <summary>Adds frame-scoped passes after all camera render graphs have executed.</summary>
+    /// <summary>Adds frame-scoped passes after all user render-request graphs have executed.</summary>
     /// <param name="graph">Shared final graph builder.</param>
     /// <param name="frameIndex">Monotonic engine render frame index.</param>
     void AddRenderPasses(RenderGraphBuilder graph, ulong frameIndex);

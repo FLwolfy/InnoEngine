@@ -21,8 +21,9 @@ AssetManager.Initialize(AssetManagerOptions.Create(
 
 | 属性 | 说明 |
 | --- | --- |
-| `assetRoot` | 唯一 Source Database 根目录。 |
+| `assetRoot` | 可写 Project Source Mount 根目录。 |
 | `libraryRoot` | 可重建的 Project Library 根目录。 |
+| `sourceMounts` | Project 与已激活 Plugin 的完整 mount 候选。 |
 | `enableFileSystemWatcher` | 是否观察外部文件系统变更。 |
 | `fileWatcherFlushDelayMs` | raw event quiet/debounce 窗口。 |
 | `sourcePolicy` | 统一 Source ignore policy。 |
@@ -63,6 +64,8 @@ while (running)
 | --- | --- |
 | `isInitialized` | 服务是否可用。 |
 | `assetRoot` / `libraryRoot` / `artifactRoot` | 初始化后的绝对路径。 |
+| `sourceMounts` | 当前原子发布的 Project/Plugin mount snapshot。 |
+| `SourceMountsChanged` | mount generation 成功替换后的 owner-thread 通知。 |
 | `Changed` | 一次 commit 后的 `AssetChangeSet`。 |
 | `AssetReloaded` | loaded canonical asset 已原位更新。 |
 
@@ -73,13 +76,13 @@ Observer 按订阅顺序在 owner thread 调用。某个 observer 抛异常会�
 
 | API | 行为 |
 | --- | --- |
-| `Load<T>(path/id)` | 返回 canonical instance；缺失或类型不兼容时抛异常。 |
+| `Load<T>(AssetPath/id)` | 返回跨 mount canonical instance；缺失或类型不兼容时抛异常。字符串重载表示 Project mount。 |
 | `TryLoad<T>(path/id,out asset)` | 安全失败。 |
 | `LoadAsync<T>(path/id,token)` | 保持异步 API 形状，但 canonical commit 仍受 owner-thread 约束。 |
 | `Import(path)` | 显式导入单一受支持 source。 |
 | `Save(asset)` | 导出到现有 source path。 |
 | `Save(path,asset)` | 为新资产建立初始 source identity。 |
-| `Move(oldPath,newPath)` | 事务式移动 source 与 `.imeta`，保留 persistent ID、canonical instance 和 artifact。 |
+| `Move(oldPath,newPath)` | 仅在可写 mount 内事务式移动 source 与 `.imeta`，保留 persistent ID、canonical instance 和 artifact。 |
 | `Delete(path)` | 事务式删除 file/directory source 与 sidecar；释放路径并保留 ID tombstone。 |
 | `CreateDirectory(path)` | 创建带稳定 `.imeta` 的 source folder；folder 不生成 artifact。 |
 | `Rescan()` | 对账全部 source/meta/catalog/artifact。 |
@@ -87,6 +90,10 @@ Observer 按订阅顺序在 owner thread 调用。某个 observer 抛异常会�
 初始化会自动 `Rescan`，无需为已有文件逐个调用 `Import`。
 
 `Rescan` 同时是 TypeCache generation 的资源收敛安全点。若已加载 canonical asset 的运行时类型已退休，Loader 会从内部 record、identity 和 dependency retention 中释放它；仍存活的 host asset 会用当前 generation 重新恢复其序列化引用。调用方自己仍强持有旧 canonical instance 时，旧 collectible ALC 会按普通 CLR 引用规则延迟卸载，这不影响 Loader 返回当前 generation 的新实例。
+
+`AssetManager` 还是统一 Assembly Catalog transaction participant。候选 TypeCache 与 Importer/Build Processor Registry 激活后、Assembly Catalog 对外发布前，它会在 owner thread 对全部 Source Mount 重新对账；兼容的 host canonical asset 原位更新，退休的 Plugin 类型退出当前缓存。激活前会按 source path、状态、source hash、Importer ID 与结构化诊断记录可写 Project Mount 已有的失败指纹；候选 Importer 新制造或改变任何 Project Asset 导入失败时，整个 Assembly/Plugin 候选都会被拒绝。仅因无关脚本重编译而变化的程序集 MVID 不属于失败语义，所以完全相同的既有失败会继续作为诊断而不会阻塞 reload。Plugin 只读 Mount 的导入失败或 Persistent ID 冲突始终直接拒绝 Source Mount 候选。
+
+若本 transaction 或后续 participant 失败，AssemblyManager 先恢复旧 TypeCache，AssetManager 再在下一次 owner-thread `Update`/访问时用旧 generation 自动恢复目录快照。因而外部观察者不会看到“新 Registry + 旧 Asset Catalog”的半切换状态。
 
 ## Catalog 与 artifact 查询
 
@@ -113,7 +120,11 @@ if (AssetManager.TryGetInfo("Scripts/Player.cs", out AssetInfo? script) &&
 
 ## Source 文件树
 
-`GetFileSystemEntries`、`GetFileSystemChildren` 和 `TryGetFileSystemEntry` 返回统一 Source Policy 过滤后的视图。`.imeta`、artifact、IDE cache 和默认系统噪声不出现；Unsupported source 仍出现。
+`GetFileSystemEntries`、`GetFileSystemChildren` 和 `TryGetFileSystemEntry` 返回所有活动 mount 的统一 Source Policy 视图。条目的 `assetPath.source` 保持来源隔离；`.imeta`、artifact、IDE cache 和默认系统噪声不出现，Unsupported source 仍出现。
+
+`PrepareSourceMounts` 返回隔离的 `AssetSourceMountTransaction`。候选拥有自己的 Loader、FileSystem、Catalog 与查询入口；在 `Activate` 前不会改变 `AssetManager.sourceMounts` 或普通加载结果。`Activate` 只做安全点内的临时切换，不释放旧 generation，也不通知观察者；`Complete` 才发布 `SourceMountsChanged` 并退休旧 generation，`Rollback` 则丢弃候选或恢复旧 generation。`ReplaceSourceMounts` 是立即执行 Prepare → Activate → Complete 的便利入口。
+
+Plugin mount 必须只读；跨 mount 依赖必须由 mount 的 `dependencySourceIds` 明确授权。任何 Persistent ID 冲突或未声明依赖都会拒绝候选并保留旧 snapshot。该两阶段协议也允许 ZIP Plugin 脚本从隔离候选 artifact 编译，而 File Browser、运行时资产与当前 Plugin Catalog 始终只观察 last-good generation。
 
 FileBrowser List 使用 `AssetFileEntry.nameWithoutExtension` 显示名字，Grid 保持完整 `name`。所有实际命令始终使用完整 `relativePath`。
 
@@ -126,7 +137,7 @@ FileBrowser List 使用 `AssetFileEntry.nameWithoutExtension` 显示名字，Gri
 1. native rename old/new path 优先关联；
 2. Loader 检查目标 meta identity 冲突；
 3. `.imeta` 无 overwrite 地移动到新路径；
-4. Catalog path 与 loaded canonical `sourcePath` 原位更新；
+4. Catalog path 与 loaded canonical `assetPath` 原位更新；
 5. CAS artifact 不移动，内容不变时 key 不变；
 6. 发布带 ID、oldPath、newPath 的 `Moved`。
 

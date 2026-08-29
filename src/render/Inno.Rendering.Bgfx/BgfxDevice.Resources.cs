@@ -65,6 +65,11 @@ public sealed unsafe partial class BgfxDevice
         }
 
         BgfxBufferResource resource = ResolveBuffer(buffer);
+        if (resource.kind == BgfxBufferKind.Indirect)
+        {
+            throw new NotSupportedException(
+                "BGFX indirect command buffers are populated by compute shaders, not CPU updates.");
+        }
         if ((resource.descriptor.usage & RenderBufferUsage.Dynamic) == 0)
         {
             throw new ArgumentException("Only buffers declared Dynamic can be updated.", nameof(buffer));
@@ -171,6 +176,17 @@ public sealed unsafe partial class BgfxDevice
         return nativeTexture;
     }
 
+    internal RenderTextureDescriptor ResolveTextureDescriptor(PersistentTextureHandle texture)
+    {
+        ValidatePersistentHandle(texture);
+        if (!m_persistentTextureDescriptors.TryGetValue(texture.value, out RenderTextureDescriptor? descriptor))
+        {
+            throw new ArgumentException("Persistent texture is not active on this device.", nameof(texture));
+        }
+
+        return descriptor;
+    }
+
     internal BgfxBufferResource ResolveBuffer(RenderBufferHandle buffer)
     {
         if (m_activeGraph is null
@@ -256,8 +272,31 @@ public sealed unsafe partial class BgfxDevice
         string name)
     {
         RenderBufferDescriptor buffer = descriptor.buffer;
+        if ((buffer.usage & RenderBufferUsage.Indirect) != 0
+            && (buffer.usage & (RenderBufferUsage.Vertex | RenderBufferUsage.Index)) == 0)
+        {
+            if (!capabilities.Supports(GraphicsFeature.Indirect))
+                throw new NotSupportedException("The active backend does not support indirect command buffers.");
+            if (!initialData.IsEmpty)
+            {
+                throw new ArgumentException(
+                    "BGFX indirect buffers cannot be initialized from CPU data.",
+                    nameof(initialData));
+            }
+            bgfx.IndirectBufferHandle indirect = bgfx.create_indirect_buffer(
+                checked((uint)buffer.elementCount));
+            EnsureValid(indirect.Valid, name);
+            return BgfxBufferResource.FromIndirect(buffer, indirect);
+        }
         bool indexBuffer = (buffer.usage & RenderBufferUsage.Index) != 0;
         bool dynamic = (buffer.usage & (RenderBufferUsage.Dynamic | RenderBufferUsage.Storage)) != 0;
+        if (indexBuffer
+            && descriptor.indexFormat == RenderIndexFormat.UInt32
+            && !capabilities.Supports(GraphicsFeature.Index32))
+        {
+            throw new NotSupportedException("The active backend does not support unsigned 32-bit indices.");
+        }
+        ValidateVertexLayoutCapabilities(descriptor.vertexLayout);
         ushort flags = BufferFlags(buffer, descriptor.indexFormat);
 
         if (indexBuffer)
@@ -321,6 +360,16 @@ public sealed unsafe partial class BgfxDevice
 
     private BgfxBufferResource CreateTransientBuffer(RenderBufferDescriptor descriptor)
     {
+        if ((descriptor.usage & RenderBufferUsage.Indirect) != 0
+            && (descriptor.usage & (RenderBufferUsage.Vertex | RenderBufferUsage.Index)) == 0)
+        {
+            if (!capabilities.Supports(GraphicsFeature.Indirect))
+                throw new NotSupportedException("The active backend does not support indirect command buffers.");
+            bgfx.IndirectBufferHandle indirect = bgfx.create_indirect_buffer(
+                checked((uint)descriptor.elementCount));
+            EnsureValid(indirect.Valid, "transient indirect buffer");
+            return BgfxBufferResource.FromIndirect(descriptor, indirect);
+        }
         if ((descriptor.usage & RenderBufferUsage.Index) != 0)
         {
             RenderIndexFormat format = descriptor.elementStride switch
@@ -329,6 +378,11 @@ public sealed unsafe partial class BgfxDevice
                 4 => RenderIndexFormat.UInt32,
                 _ => throw new NotSupportedException("Transient index buffers require a two- or four-byte stride.")
             };
+            if (format == RenderIndexFormat.UInt32
+                && !capabilities.Supports(GraphicsFeature.Index32))
+            {
+                throw new NotSupportedException("The active backend does not support unsigned 32-bit indices.");
+            }
             bgfx.DynamicIndexBufferHandle index = bgfx.create_dynamic_index_buffer(
                 checked((uint)descriptor.elementCount),
                 BufferFlags(descriptor, format));
@@ -355,7 +409,9 @@ public sealed unsafe partial class BgfxDevice
         GraphicsPipelineDescriptor descriptor,
         string name)
     {
-        ValidateBindingSlots(descriptor.bindings);
+        ValidateBindingSlots(descriptor.bindings, allowStorageResources: false);
+        ValidateVertexLayoutCapabilities(descriptor.vertexLayout);
+        ValidateRasterStateCapabilities(descriptor.rasterState);
         bgfx.ShaderHandle vertexShader = InvalidShader();
         bgfx.ShaderHandle fragmentShader = InvalidShader();
         bgfx.ProgramHandle program = InvalidProgram();
@@ -368,14 +424,12 @@ public sealed unsafe partial class BgfxDevice
             IReadOnlyDictionary<string, BgfxShaderBindingResource> bindings =
                 ValidateReflectedBindings(descriptor.bindings, reflected);
 
-            program = bgfx.create_program(vertexShader, fragmentShader, true);
-            if (program.Valid)
-            {
-                vertexShader = InvalidShader();
-                fragmentShader = InvalidShader();
-            }
-
+            program = bgfx.create_program(vertexShader, fragmentShader, false);
             EnsureValid(program.Valid, name);
+            bgfx.destroy_shader(vertexShader);
+            vertexShader = InvalidShader();
+            bgfx.destroy_shader(fragmentShader);
+            fragmentShader = InvalidShader();
             if (descriptor.vertexLayout is not null)
             {
                 bgfx.VertexLayout nativeLayout = CreateNativeLayout(descriptor.vertexLayout);
@@ -409,11 +463,43 @@ public sealed unsafe partial class BgfxDevice
         }
     }
 
+    private void ValidateVertexLayoutCapabilities(RenderVertexLayout? layout)
+    {
+        if (layout is null)
+            return;
+        foreach (RenderVertexAttribute attribute in layout.attributes)
+        {
+            if (attribute.format is RenderVertexFormat.Half2 or RenderVertexFormat.Half4
+                && !capabilities.Supports(GraphicsFeature.VertexAttributeHalf))
+            {
+                throw new NotSupportedException(
+                    "The active backend does not support half-precision vertex attributes.");
+            }
+
+            if (attribute.format == RenderVertexFormat.UInt10Normalized4
+                && !capabilities.Supports(GraphicsFeature.VertexAttributeUInt10))
+            {
+                throw new NotSupportedException(
+                    "The active backend does not support packed 10:10:10:2 vertex attributes.");
+            }
+        }
+    }
+
+    private void ValidateRasterStateCapabilities(RenderRasterState state)
+    {
+        if (state.blend.alphaToCoverage
+            && !capabilities.Supports(GraphicsFeature.AlphaToCoverage))
+        {
+            throw new NotSupportedException(
+                "The active backend does not support alpha-to-coverage rasterization.");
+        }
+    }
+
     private BgfxPipelineResource CreateComputePipelineResource(
         ComputePipelineDescriptor descriptor,
         string name)
     {
-        ValidateBindingSlots(descriptor.bindings);
+        ValidateBindingSlots(descriptor.bindings, allowStorageResources: true);
         bgfx.ShaderHandle computeShader = InvalidShader();
         bgfx.ProgramHandle program = InvalidProgram();
         try
@@ -422,13 +508,10 @@ public sealed unsafe partial class BgfxDevice
             Dictionary<string, ReflectedUniform> reflected = ReflectShaders(computeShader);
             IReadOnlyDictionary<string, BgfxShaderBindingResource> bindings =
                 ValidateReflectedBindings(descriptor.bindings, reflected);
-            program = bgfx.create_compute_program(computeShader, true);
-            if (program.Valid)
-            {
-                computeShader = InvalidShader();
-            }
-
+            program = bgfx.create_compute_program(computeShader, false);
             EnsureValid(program.Valid, name);
+            bgfx.destroy_shader(computeShader);
+            computeShader = InvalidShader();
             return new BgfxPipelineResource(
                 program,
                 bindings,
@@ -459,7 +542,7 @@ public sealed unsafe partial class BgfxDevice
         foreach ((string name, ReflectedUniform uniform) in reflected)
         {
             if (!declared.TryGetValue(name, out RenderShaderBindingDescriptor? binding)
-                || binding.kind == RenderShaderBindingKind.StorageBuffer)
+                || binding.kind is RenderShaderBindingKind.StorageBuffer or RenderShaderBindingKind.StorageTexture)
             {
                 throw new InvalidOperationException(
                     $"Shader reflection contains undeclared uniform '{name}'.");
@@ -479,7 +562,7 @@ public sealed unsafe partial class BgfxDevice
         Dictionary<string, BgfxShaderBindingResource> result = new(StringComparer.Ordinal);
         foreach (RenderShaderBindingDescriptor binding in declaredBindings)
         {
-            if (binding.kind == RenderShaderBindingKind.StorageBuffer)
+            if (binding.kind is RenderShaderBindingKind.StorageBuffer or RenderShaderBindingKind.StorageTexture)
             {
                 result.Add(binding.id.value, new BgfxShaderBindingResource(binding, InvalidUniform()));
                 continue;
@@ -558,8 +641,10 @@ public sealed unsafe partial class BgfxDevice
     {
         bgfx.VertexLayout native = default;
         bgfx.vertex_layout_begin(&native, BgfxCapabilityMapper.ToNativeRenderer(capabilities.backend));
+        int currentOffset = 0;
         foreach (RenderVertexAttribute attribute in layout.attributes)
         {
+            AddVertexLayoutPadding(&native, attribute.byteOffset - currentOffset);
             (byte count, bgfx.AttribType type, bool normalized, bool asInteger) = AttributeFormat(attribute.format);
             bgfx.vertex_layout_add(
                 &native,
@@ -568,7 +653,10 @@ public sealed unsafe partial class BgfxDevice
                 type,
                 normalized,
                 asInteger);
+            currentOffset = checked(attribute.byteOffset + attribute.byteSize);
         }
+
+        AddVertexLayoutPadding(&native, layout.stride - currentOffset);
 
         bgfx.vertex_layout_end(&native);
         if (native.stride != layout.stride)
@@ -578,6 +666,18 @@ public sealed unsafe partial class BgfxDevice
         }
 
         return native;
+    }
+
+    private static void AddVertexLayoutPadding(bgfx.VertexLayout* layout, int byteCount)
+    {
+        if (byteCount < 0)
+            throw new InvalidOperationException("A resolved vertex layout cannot contain overlapping attributes.");
+        while (byteCount != 0)
+        {
+            byte chunk = checked((byte)Math.Min(byteCount, byte.MaxValue));
+            bgfx.vertex_layout_skip(layout, chunk);
+            byteCount -= chunk;
+        }
     }
 
     private bgfx.VertexLayout CreateSkippedLayout(int stride)
@@ -600,14 +700,21 @@ public sealed unsafe partial class BgfxDevice
         RenderVertexFormat format)
         => format switch
         {
+            RenderVertexFormat.Float1 => (1, bgfx.AttribType.Float, false, false),
             RenderVertexFormat.Float2 => (2, bgfx.AttribType.Float, false, false),
             RenderVertexFormat.Float3 => (3, bgfx.AttribType.Float, false, false),
             RenderVertexFormat.Float4 => (4, bgfx.AttribType.Float, false, false),
             RenderVertexFormat.Half2 => (2, bgfx.AttribType.Half, false, false),
             RenderVertexFormat.Half4 => (4, bgfx.AttribType.Half, false, false),
+            RenderVertexFormat.UInt8Normalized2 => (2, bgfx.AttribType.Uint8, true, false),
             RenderVertexFormat.UInt8Normalized4 => (4, bgfx.AttribType.Uint8, true, false),
+            RenderVertexFormat.UInt8Integer2 => (2, bgfx.AttribType.Uint8, false, true),
             RenderVertexFormat.UInt8Integer4 => (4, bgfx.AttribType.Uint8, false, true),
+            RenderVertexFormat.UInt10Normalized4 => (4, bgfx.AttribType.Uint10, true, false),
+            RenderVertexFormat.Int16Normalized2 => (2, bgfx.AttribType.Int16, true, false),
             RenderVertexFormat.Int16Normalized4 => (4, bgfx.AttribType.Int16, true, false),
+            RenderVertexFormat.Int16Integer2 => (2, bgfx.AttribType.Int16, false, true),
+            RenderVertexFormat.Int16Integer4 => (4, bgfx.AttribType.Int16, false, true),
             _ => throw new ArgumentOutOfRangeException(nameof(format))
         };
 
@@ -617,9 +724,19 @@ public sealed unsafe partial class BgfxDevice
             RenderVertexSemantic.Position => bgfx.Attrib.Position,
             RenderVertexSemantic.Normal => bgfx.Attrib.Normal,
             RenderVertexSemantic.Tangent => bgfx.Attrib.Tangent,
+            RenderVertexSemantic.Bitangent => bgfx.Attrib.Bitangent,
             RenderVertexSemantic.Color0 => bgfx.Attrib.Color0,
+            RenderVertexSemantic.Color1 => bgfx.Attrib.Color1,
+            RenderVertexSemantic.Color2 => bgfx.Attrib.Color2,
+            RenderVertexSemantic.Color3 => bgfx.Attrib.Color3,
             RenderVertexSemantic.TextureCoordinate0 => bgfx.Attrib.TexCoord0,
             RenderVertexSemantic.TextureCoordinate1 => bgfx.Attrib.TexCoord1,
+            RenderVertexSemantic.TextureCoordinate2 => bgfx.Attrib.TexCoord2,
+            RenderVertexSemantic.TextureCoordinate3 => bgfx.Attrib.TexCoord3,
+            RenderVertexSemantic.TextureCoordinate4 => bgfx.Attrib.TexCoord4,
+            RenderVertexSemantic.TextureCoordinate5 => bgfx.Attrib.TexCoord5,
+            RenderVertexSemantic.TextureCoordinate6 => bgfx.Attrib.TexCoord6,
+            RenderVertexSemantic.TextureCoordinate7 => bgfx.Attrib.TexCoord7,
             RenderVertexSemantic.BlendIndices => bgfx.Attrib.Indices,
             RenderVertexSemantic.BlendWeights => bgfx.Attrib.Weight,
             _ => throw new ArgumentOutOfRangeException(nameof(semantic))
@@ -634,20 +751,46 @@ public sealed unsafe partial class BgfxDevice
             _ => throw new ArgumentOutOfRangeException(nameof(type))
         };
 
-    private void ValidateBindingSlots(IReadOnlyList<RenderShaderBindingDescriptor> bindings)
+    private void ValidateBindingSlots(
+        IReadOnlyList<RenderShaderBindingDescriptor> bindings,
+        bool allowStorageResources)
     {
+        var storageSlots = new HashSet<int>();
         foreach (RenderShaderBindingDescriptor binding in bindings)
         {
-            if (binding.kind is RenderShaderBindingKind.Texture or RenderShaderBindingKind.StorageBuffer
+            if (binding.kind is RenderShaderBindingKind.Texture
+                    or RenderShaderBindingKind.StorageTexture
+                    or RenderShaderBindingKind.StorageBuffer
                 && binding.slot > byte.MaxValue)
             {
                 throw new ArgumentOutOfRangeException(
                     nameof(bindings),
                     $"Binding '{binding.id.value}' slot exceeds the BGFX byte-sized stage range.");
             }
+            if (binding.kind is not (RenderShaderBindingKind.StorageTexture or RenderShaderBindingKind.StorageBuffer))
+                continue;
+            if (!allowStorageResources)
+            {
+                throw new NotSupportedException(
+                    $"BGFX graphics pipelines cannot bind storage resource '{binding.id.value}'.");
+            }
+            if (!storageSlots.Add(binding.slot))
+            {
+                throw new ArgumentException(
+                    $"Storage binding slot {binding.slot} is declared more than once.",
+                    nameof(bindings));
+            }
+            GraphicsFeature required = binding.kind == RenderShaderBindingKind.StorageTexture
+                ? GraphicsFeature.StorageTexture
+                : GraphicsFeature.StorageBuffer;
+            if (!capabilities.Supports(required))
+            {
+                throw new NotSupportedException(
+                    $"The active backend does not support {binding.kind} binding '{binding.id.value}'.");
+            }
         }
 
-        int storageCount = bindings.Count(static value => value.kind == RenderShaderBindingKind.StorageBuffer);
+        int storageCount = storageSlots.Count;
         if (storageCount > capabilities.limits.maxComputeBindings)
         {
             throw new NotSupportedException(
@@ -716,6 +859,9 @@ public sealed unsafe partial class BgfxDevice
                 break;
             case BgfxBufferKind.DynamicIndex:
                 bgfx.destroy_dynamic_index_buffer(new bgfx.DynamicIndexBufferHandle { idx = buffer.nativeIndex });
+                break;
+            case BgfxBufferKind.Indirect:
+                bgfx.destroy_indirect_buffer(new bgfx.IndirectBufferHandle { idx = buffer.nativeIndex });
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(buffer));

@@ -1,53 +1,44 @@
 using System;
-using System.Text.Json;
+using Inno.Core.Serialization;
 
 namespace Inno.Core.Graphs;
 
-/// <summary>
-/// Stores an editor- and runtime-neutral JSON value for graph properties.
-/// </summary>
+/// <summary>Stores one graph property as backend-neutral Inno serialization bytes.</summary>
 public sealed class GraphSerializedValue
 {
-    private readonly string m_json;
+    private readonly byte[] m_data;
 
-    /// <summary>
-    /// Creates a serialized graph value from one complete JSON value.
-    /// </summary>
-    /// <param name="json">JSON text containing exactly one value.</param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="json"/> is empty.</exception>
-    /// <exception cref="JsonException">Thrown when <paramref name="json"/> is invalid JSON.</exception>
-    public GraphSerializedValue(string json)
+    /// <summary>Creates a graph value from one complete native serialization payload.</summary>
+    /// <param name="data">Bytes produced by the common Inno serialization pipeline.</param>
+    /// <exception cref="ArgumentException">Thrown when the payload is empty.</exception>
+    public GraphSerializedValue(ReadOnlySpan<byte> data)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(json);
-        using JsonDocument document = JsonDocument.Parse(json);
-        m_json = document.RootElement.GetRawText();
+        if (data.IsEmpty)
+            throw new ArgumentException("A graph value payload cannot be empty.", nameof(data));
+        m_data = data.ToArray();
     }
 
-    /// <summary>
-    /// Gets the normalized JSON representation.
-    /// </summary>
-    public string json => m_json;
+    /// <summary>Gets an immutable view of the native serialized value.</summary>
+    public ReadOnlyMemory<byte> data => m_data;
 
-    /// <summary>
-    /// Serializes a neutral graph property value.
-    /// </summary>
-    /// <typeparam name="T">Serializable value type.</typeparam>
+    /// <summary>Serializes a neutral graph property through the common Inno serializer.</summary>
+    /// <typeparam name="T">Declared serializable value type.</typeparam>
     /// <param name="value">Value to serialize.</param>
-    /// <param name="options">Optional serializer settings.</param>
-    /// <returns>A validated serialized graph value.</returns>
-    public static GraphSerializedValue From<T>(T value, JsonSerializerOptions? options = null)
-        => new(JsonSerializer.Serialize(value, options));
+    /// <returns>A detached graph value containing native serialization bytes.</returns>
+    public static GraphSerializedValue From<T>(T value)
+        => new(SerializationManager.Encode(writer => writer.Write("value", value)));
 
-    /// <summary>
-    /// Deserializes the value to the requested neutral data type.
-    /// </summary>
-    /// <typeparam name="T">Requested result type.</typeparam>
-    /// <param name="options">Optional serializer settings.</param>
-    /// <returns>The deserialized value, or <see langword="null"/> when JSON represents null.</returns>
-    /// <exception cref="JsonException">Thrown when the value cannot be converted to <typeparamref name="T"/>.</exception>
-    public T? Deserialize<T>(JsonSerializerOptions? options = null)
-        => JsonSerializer.Deserialize<T>(m_json, options);
+    /// <summary>Deserializes this value through the common Inno serializer.</summary>
+    /// <typeparam name="T">Requested declared result type.</typeparam>
+    /// <returns>The restored neutral value.</returns>
+    public T Deserialize<T>()
+        => SerializationManager.Decode(m_data, reader => reader.Read<T>("value"));
 
-    /// <inheritdoc />
-    public override string ToString() => m_json;
+    /// <summary>Creates an independent copy of the neutral value.</summary>
+    /// <returns>A graph value that shares no mutable byte storage.</returns>
+    public GraphSerializedValue Clone() => new(m_data);
+
+    /// <summary>Copies the native payload for persistence or reload-safe history.</summary>
+    /// <returns>A new byte array containing the complete native value.</returns>
+    public byte[] ToArray() => (byte[])m_data.Clone();
 }

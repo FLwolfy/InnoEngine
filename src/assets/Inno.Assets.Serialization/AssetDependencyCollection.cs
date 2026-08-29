@@ -64,6 +64,6 @@ public sealed class AssetDependencyCollection
         m_dependencies[persistentId] = new AssetDependency(
             persistentId,
             typeRef,
-            includeLastKnownPaths ? asset.sourcePath : string.Empty);
+            includeLastKnownPaths ? asset.assetPath.ToString() : string.Empty);
     }
 }

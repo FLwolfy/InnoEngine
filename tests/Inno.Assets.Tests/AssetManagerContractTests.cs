@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using Inno.Assets.Core;
+using Inno.Assets.File;
 using Inno.Assets.Loader;
 using Inno.Assets.Types;
 using Inno.Core.Assemblies;
@@ -136,6 +137,22 @@ public sealed class AssetManagerContractTests : IDisposable
     }
 
     [Fact]
+    public void AssemblyCatalogActivationReconcilesAssetsBeforePublicationCompletes()
+    {
+        using TestAssetWorkspace workspace = new();
+        workspace.Write("Text/catalog.txt", "one");
+        AssetManager.Initialize(workspace.options);
+        TextAsset canonical = AssetManager.Load<TextAsset>("Text/catalog.txt");
+        Guid persistentId = canonical.identity.persistentId;
+
+        workspace.Write("Text/catalog.txt", "two");
+        TypeCacheManager.Rebuild();
+
+        Assert.Equal("two", canonical.content);
+        Assert.Same(canonical, AssetManager.Load<TextAsset>(persistentId));
+    }
+
+    [Fact]
     public void DirectAndRecursiveDependencies_AreQueryableWithoutOwnerTracking()
     {
         using TestAssetWorkspace workspace = new();
@@ -189,7 +206,7 @@ public sealed class AssetManagerContractTests : IDisposable
         Assert.Same(loaded, restored.asset);
         Assert.True(restored.asset!.isMissing);
         Assert.Equal(persistentId, restored.asset.identity.persistentId);
-        Assert.Equal("Text/missing.txt", restored.asset.sourcePath);
+        Assert.Equal("Text/missing.txt", restored.asset.assetPath.ToString());
         Assert.NotEmpty(SerializationManager.Serialize(restored));
     }
 
@@ -255,6 +272,197 @@ public sealed class AssetManagerContractTests : IDisposable
         Assert.Throws<InvalidOperationException>(() => AssetManager.GetLoadedPaths());
     }
 
+    [Fact]
+    public void ReplaceSourceMounts_WhenPersistentIdentityConflicts_KeepsActiveGeneration()
+    {
+        using TestAssetWorkspace workspace = new();
+        workspace.Write("Text/project.txt", "project");
+        AssetManager.Initialize(workspace.options);
+        Guid projectId = AssetManager.Load<TextAsset>("Text/project.txt").identity.persistentId;
+        string pluginRoot = workspace.CreateExternalRoot("ConflictPlugin");
+        WriteReadOnlyAsset(
+            pluginRoot,
+            "conflict.txt",
+            "plugin",
+            projectId,
+            "Inno.Assets.Loader.Importers.TextAssetImporter");
+        AssetSourceMount plugin = new(
+            new AssetSourceId("tests.conflict"),
+            pluginRoot,
+            isReadOnly: true);
+
+        Assert.Throws<InvalidDataException>(() => AssetManager.ReplaceSourceMounts(
+        [
+            new AssetSourceMount(AssetSourceId.project, workspace.assetRoot, isReadOnly: false),
+            plugin
+        ]));
+
+        Assert.Collection(
+            AssetManager.sourceMounts,
+            mount => Assert.Equal(AssetSourceId.project, mount.id));
+        Assert.Equal("project", AssetManager.Load<TextAsset>(projectId).content);
+    }
+
+    [Fact]
+    public void ReadOnlyMount_AllowsLoadingButRejectsEveryAssetMutation()
+    {
+        using TestAssetWorkspace workspace = new();
+        AssetManager.Initialize(workspace.options);
+        string pluginRoot = workspace.CreateExternalRoot("ReadOnlyPlugin");
+        WriteReadOnlyAsset(
+            pluginRoot,
+            "value.txt",
+            "plugin",
+            Guid.NewGuid(),
+            "Inno.Assets.Loader.Importers.TextAssetImporter");
+        AssetSourceId pluginId = new("tests.read-only");
+        AssetManager.ReplaceSourceMounts(
+        [
+            new AssetSourceMount(AssetSourceId.project, workspace.assetRoot, isReadOnly: false),
+            new AssetSourceMount(pluginId, pluginRoot, isReadOnly: true)
+        ]);
+        AssetPath pluginPath = new(pluginId, "value.txt");
+
+        Assert.Equal("plugin", AssetManager.Load<TextAsset>(pluginPath).content);
+        Assert.Throws<InvalidOperationException>(() =>
+            AssetManager.Save(pluginPath, new TextAsset("changed")));
+        Assert.Throws<InvalidOperationException>(() => AssetManager.Move(pluginPath.ToString(), "moved.txt"));
+        Assert.Throws<InvalidOperationException>(() => AssetManager.Delete(pluginPath.ToString()));
+        Assert.Throws<InvalidOperationException>(() =>
+            AssetManager.CreateDirectory(new AssetPath(pluginId, "Folder").ToString()));
+    }
+
+    [Fact]
+    public void SourceMountTransaction_HidesCandidateUntilCommitAndRestoresAfterRollback()
+    {
+        using TestAssetWorkspace workspace = new();
+        workspace.Write("Text/project.txt", "project");
+        AssetManager.Initialize(workspace.options);
+        string pluginRoot = workspace.CreateExternalRoot("StagedPlugin");
+        WriteReadOnlyAsset(
+            pluginRoot,
+            "value.txt",
+            "candidate",
+            Guid.NewGuid(),
+            "Inno.Assets.Loader.Importers.TextAssetImporter");
+        AssetSourceId pluginId = new("tests.staged");
+        AssetSourceMount[] mounts =
+        [
+            new AssetSourceMount(AssetSourceId.project, workspace.assetRoot, isReadOnly: false),
+            new AssetSourceMount(pluginId, pluginRoot, isReadOnly: true)
+        ];
+
+        using (AssetSourceMountTransaction transaction = AssetManager.PrepareSourceMounts(mounts))
+        {
+            Assert.Single(AssetManager.sourceMounts);
+            Assert.DoesNotContain(
+                AssetManager.GetFileSystemEntries(),
+                entry => entry.assetPath.source == pluginId);
+            Assert.Contains(
+                transaction.GetFileSystemEntries(),
+                entry => entry.assetPath == new AssetPath(pluginId, "value.txt"));
+            Assert.Equal(
+                "candidate",
+                transaction.Load<TextAsset>(new AssetPath(pluginId, "value.txt")).content);
+
+            transaction.Activate();
+            Assert.Contains(AssetManager.sourceMounts, mount => mount.id == pluginId);
+            transaction.Rollback();
+        }
+
+        Assert.Collection(
+            AssetManager.sourceMounts,
+            mount => Assert.Equal(AssetSourceId.project, mount.id));
+
+        int changes = 0;
+        AssetManager.SourceMountsChanged += () => changes++;
+        using AssetSourceMountTransaction committed = AssetManager.PrepareSourceMounts(mounts);
+        committed.Activate();
+        Assert.Equal(0, changes);
+        committed.Complete();
+
+        Assert.Equal(1, changes);
+        Assert.Equal(
+            "candidate",
+            AssetManager.Load<TextAsset>(new AssetPath(pluginId, "value.txt")).content);
+    }
+
+    [Fact]
+    public void PluginCrossMountDependency_RequiresExplicitSourceDependency()
+    {
+        using TestAssetWorkspace workspace = new();
+        AssetManager.Initialize(workspace.options);
+        AssetSourceId providerId = new("tests.provider");
+        AssetSourceId consumerId = new("tests.consumer");
+        string providerRoot = workspace.CreateExternalRoot("ProviderPlugin");
+        string consumerRoot = workspace.CreateExternalRoot("ConsumerPlugin");
+        WriteReadOnlyAsset(
+            providerRoot,
+            "leaf.txt",
+            "leaf",
+            Guid.NewGuid(),
+            "Inno.Assets.Loader.Importers.TextAssetImporter");
+        WriteReadOnlyAsset(
+            consumerRoot,
+            "root.managerdep",
+            new AssetPath(providerId, "leaf.txt").ToString(),
+            Guid.NewGuid(),
+            "inno.tests.manager-dependency");
+        AssetSourceMount project = new(AssetSourceId.project, workspace.assetRoot, isReadOnly: false);
+        AssetSourceMount provider = new(providerId, providerRoot, isReadOnly: true);
+        AssetSourceMount undeclaredConsumer = new(consumerId, consumerRoot, isReadOnly: true);
+
+        Assert.Throws<InvalidDataException>(() => AssetManager.ReplaceSourceMounts(
+            [project, provider, undeclaredConsumer]));
+        Assert.Collection(
+            AssetManager.sourceMounts,
+            mount => Assert.Equal(AssetSourceId.project, mount.id));
+
+        AssetSourceMount declaredConsumer = new(
+            consumerId,
+            consumerRoot,
+            isReadOnly: true,
+            dependencies: [providerId]);
+        AssetManager.ReplaceSourceMounts([project, provider, declaredConsumer]);
+        ManagerDependencyAsset root = AssetManager.Load<ManagerDependencyAsset>(
+            new AssetPath(consumerId, "root.managerdep"));
+        AssetDependency dependency = Assert.Single(AssetManager.GetDependencies(root));
+
+        Assert.Equal(new AssetPath(providerId, "leaf.txt").ToString(), dependency.lastKnownPath);
+    }
+
+    [Fact]
+    public void ReplaceSourceMounts_WhenPluginIsRemoved_RetiresItsCatalogRecords()
+    {
+        using TestAssetWorkspace workspace = new();
+        AssetManager.Initialize(workspace.options);
+        string pluginRoot = workspace.CreateExternalRoot("RemovedPlugin");
+        Guid pluginAssetId = Guid.NewGuid();
+        WriteReadOnlyAsset(
+            pluginRoot,
+            "value.txt",
+            "plugin",
+            pluginAssetId,
+            "Inno.Assets.Loader.Importers.TextAssetImporter");
+        AssetSourceId pluginId = new("tests.removed");
+        AssetSourceMount project = new(AssetSourceId.project, workspace.assetRoot, isReadOnly: false);
+        AssetManager.ReplaceSourceMounts(
+        [
+            project,
+            new AssetSourceMount(pluginId, pluginRoot, isReadOnly: true)
+        ]);
+        Assert.True(AssetManager.TryLoad(pluginAssetId, out TextAsset? loaded));
+        Assert.NotNull(loaded);
+
+        AssetManager.ReplaceSourceMounts([project]);
+
+        Assert.Collection(
+            AssetManager.sourceMounts,
+            mount => Assert.Equal(AssetSourceId.project, mount.id));
+        Assert.False(AssetManager.TryLoad(pluginAssetId, out TextAsset? removed));
+        Assert.Null(removed);
+    }
+
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static WeakReference LoadWithoutEscaping(string relativePath)
     {
@@ -307,12 +515,54 @@ public sealed class AssetManagerContractTests : IDisposable
                 System.IO.File.Delete(path);
         }
 
+        internal string CreateExternalRoot(string name)
+        {
+            string path = Path.Combine(m_root, name);
+            Directory.CreateDirectory(path);
+            return path;
+        }
+
         public void Dispose()
         {
             AssetManager.Shutdown();
             if (Directory.Exists(m_root))
                 Directory.Delete(m_root, recursive: true);
         }
+    }
+
+    private static void WriteReadOnlyAsset(
+        string root,
+        string relativePath,
+        string content,
+        Guid persistentId,
+        string importerId)
+    {
+        string path = Path.Combine(root, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        System.IO.File.WriteAllText(path, content, new UTF8Encoding(false));
+        System.IO.File.WriteAllBytes(
+            path + ".imeta",
+            SerializationManager.Serialize(new TestAssetSourceMeta
+            {
+                persistentId = persistentId,
+                sourceKind = 0,
+                importerId = importerId
+            }));
+    }
+
+    private sealed class TestAssetSourceMeta : ISerializable
+    {
+        [SerializableProperty]
+        public Guid persistentId { get; set; }
+
+        [SerializableProperty]
+        public int sourceKind { get; set; }
+
+        [SerializableProperty]
+        public string importerId { get; set; } = string.Empty;
+
+        [SerializableProperty]
+        public byte[] importerSettingsBytes { get; set; } = [];
     }
 }
 

@@ -217,16 +217,24 @@ public sealed class RenderGraphBuilder
             m_outputs);
     }
 
-    internal void AddUse(RenderPassRecord pass, RenderTextureHandle texture, RenderResourceAccess access)
+    internal void AddUse(
+        RenderPassRecord pass,
+        RenderTextureHandle texture,
+        RenderResourceAccess access,
+        RenderResourceUseKind kind)
     {
         EnsureTexture(texture);
-        pass.resources.Add(new RenderResourceUse(new RenderResourceKey(true, texture.index), access));
+        pass.resources.Add(new RenderResourceUse(new RenderResourceKey(true, texture.index), access, kind));
     }
 
-    internal void AddUse(RenderPassRecord pass, RenderBufferHandle buffer, RenderResourceAccess access)
+    internal void AddUse(
+        RenderPassRecord pass,
+        RenderBufferHandle buffer,
+        RenderResourceAccess access,
+        RenderResourceUseKind kind)
     {
         EnsureBuffer(buffer);
-        pass.resources.Add(new RenderResourceUse(new RenderResourceKey(false, buffer.index), access));
+        pass.resources.Add(new RenderResourceUse(new RenderResourceKey(false, buffer.index), access, kind));
     }
 
     internal void AddAttachment(RenderPassRecord pass, RenderAttachment attachment)
@@ -238,7 +246,10 @@ public sealed class RenderGraphBuilder
             attachment.texture,
             attachment.loadAction == RenderLoadAction.Load
                 ? RenderResourceAccess.ReadWrite
-                : RenderResourceAccess.Write);
+                : RenderResourceAccess.Write,
+            attachment.isDepth
+                ? RenderResourceUseKind.DepthStencilAttachment
+                : RenderResourceUseKind.ColorAttachment);
     }
 
     internal void Rollback(
@@ -422,7 +433,11 @@ public abstract class RenderPassBuilder
     /// <returns>This builder for fluent declarations.</returns>
     public RenderPassBuilder ReadTexture(RenderTextureHandle texture)
     {
-        m_graph.AddUse(m_pass, texture, RenderResourceAccess.Read);
+        m_graph.AddUse(
+            m_pass,
+            texture,
+            RenderResourceAccess.Read,
+            RenderResourceUseKind.GenericRead);
         return this;
     }
 
@@ -433,7 +448,11 @@ public abstract class RenderPassBuilder
     /// <returns>This builder for fluent declarations.</returns>
     public RenderPassBuilder ReadBuffer(RenderBufferHandle buffer)
     {
-        m_graph.AddUse(m_pass, buffer, RenderResourceAccess.Read);
+        m_graph.AddUse(
+            m_pass,
+            buffer,
+            RenderResourceAccess.Read,
+            RenderResourceUseKind.GenericRead);
         return this;
     }
 }
@@ -447,7 +466,7 @@ public sealed class RasterPassBuilder : RenderPassBuilder
         : base(graph, pass) { }
 
     /// <summary>
-    /// Sets backend-ready column-major camera matrices for this raster view.
+    /// Sets backend-ready column-major transform matrices for this raster view.
     /// </summary>
     /// <param name="viewMatrix">Exactly sixteen column-major world-to-view values.</param>
     /// <param name="projectionMatrix">Exactly sixteen column-major projection values.</param>
@@ -570,7 +589,7 @@ public sealed class ComputePassBuilder : RenderPassBuilder
         : base(graph, pass) { }
 
     /// <summary>
-    /// Sets backend-ready column-major camera matrices exposed to this compute view.
+    /// Sets backend-ready column-major transform matrices exposed to this compute view.
     /// </summary>
     /// <param name="viewMatrix">Exactly sixteen column-major world-to-view values.</param>
     /// <param name="projectionMatrix">Exactly sixteen column-major projection values.</param>
@@ -583,39 +602,81 @@ public sealed class ComputePassBuilder : RenderPassBuilder
         return this;
     }
 
-    /// <summary>Declares an unordered texture write.</summary>
-    /// <param name="texture">Texture written by compute work.</param>
+    /// <summary>Declares an unordered texture read.</summary>
+    /// <param name="texture">Storage texture read by compute work.</param>
     /// <returns>This builder for fluent declarations.</returns>
-    public ComputePassBuilder WriteTexture(RenderTextureHandle texture)
+    public ComputePassBuilder ReadStorageTexture(RenderTextureHandle texture)
     {
-        graph.AddUse(pass, texture, RenderResourceAccess.Write);
+        graph.AddUse(
+            pass,
+            texture,
+            RenderResourceAccess.Read,
+            RenderResourceUseKind.StorageRead);
+        return this;
+    }
+
+    /// <summary>Declares an unordered texture write.</summary>
+    /// <param name="texture">Storage texture written by compute work.</param>
+    /// <returns>This builder for fluent declarations.</returns>
+    public ComputePassBuilder WriteStorageTexture(RenderTextureHandle texture)
+    {
+        graph.AddUse(
+            pass,
+            texture,
+            RenderResourceAccess.Write,
+            RenderResourceUseKind.StorageWrite);
         return this;
     }
 
     /// <summary>Declares an unordered texture read and write.</summary>
-    /// <param name="texture">Texture read and written by compute work.</param>
+    /// <param name="texture">Storage texture read and written by compute work.</param>
     /// <returns>This builder for fluent declarations.</returns>
-    public ComputePassBuilder ReadWriteTexture(RenderTextureHandle texture)
+    public ComputePassBuilder ReadWriteStorageTexture(RenderTextureHandle texture)
     {
-        graph.AddUse(pass, texture, RenderResourceAccess.ReadWrite);
+        graph.AddUse(
+            pass,
+            texture,
+            RenderResourceAccess.ReadWrite,
+            RenderResourceUseKind.StorageReadWrite);
+        return this;
+    }
+
+    /// <summary>Declares an unordered buffer read.</summary>
+    /// <param name="buffer">Storage buffer read by compute work.</param>
+    /// <returns>This builder for fluent declarations.</returns>
+    public ComputePassBuilder ReadStorageBuffer(RenderBufferHandle buffer)
+    {
+        graph.AddUse(
+            pass,
+            buffer,
+            RenderResourceAccess.Read,
+            RenderResourceUseKind.StorageRead);
         return this;
     }
 
     /// <summary>Declares an unordered buffer write.</summary>
-    /// <param name="buffer">Buffer written by compute work.</param>
+    /// <param name="buffer">Storage buffer written by compute work.</param>
     /// <returns>This builder for fluent declarations.</returns>
-    public ComputePassBuilder WriteBuffer(RenderBufferHandle buffer)
+    public ComputePassBuilder WriteStorageBuffer(RenderBufferHandle buffer)
     {
-        graph.AddUse(pass, buffer, RenderResourceAccess.Write);
+        graph.AddUse(
+            pass,
+            buffer,
+            RenderResourceAccess.Write,
+            RenderResourceUseKind.StorageWrite);
         return this;
     }
 
     /// <summary>Declares an unordered buffer read and write.</summary>
-    /// <param name="buffer">Buffer read and written by compute work.</param>
+    /// <param name="buffer">Storage buffer read and written by compute work.</param>
     /// <returns>This builder for fluent declarations.</returns>
-    public ComputePassBuilder ReadWriteBuffer(RenderBufferHandle buffer)
+    public ComputePassBuilder ReadWriteStorageBuffer(RenderBufferHandle buffer)
     {
-        graph.AddUse(pass, buffer, RenderResourceAccess.ReadWrite);
+        graph.AddUse(
+            pass,
+            buffer,
+            RenderResourceAccess.ReadWrite,
+            RenderResourceUseKind.StorageReadWrite);
         return this;
     }
 }
@@ -634,8 +695,16 @@ public sealed class CopyPassBuilder : RenderPassBuilder
     /// <returns>This builder for fluent declarations.</returns>
     public CopyPassBuilder CopyTexture(RenderTextureHandle source, RenderTextureHandle destination)
     {
-        graph.AddUse(pass, source, RenderResourceAccess.Read);
-        graph.AddUse(pass, destination, RenderResourceAccess.Write);
+        graph.AddUse(
+            pass,
+            source,
+            RenderResourceAccess.Read,
+            RenderResourceUseKind.CopySource);
+        graph.AddUse(
+            pass,
+            destination,
+            RenderResourceAccess.Write,
+            RenderResourceUseKind.CopyDestination);
         return this;
     }
 
@@ -645,8 +714,16 @@ public sealed class CopyPassBuilder : RenderPassBuilder
     /// <returns>This builder for fluent declarations.</returns>
     public CopyPassBuilder CopyBuffer(RenderBufferHandle source, RenderBufferHandle destination)
     {
-        graph.AddUse(pass, source, RenderResourceAccess.Read);
-        graph.AddUse(pass, destination, RenderResourceAccess.Write);
+        graph.AddUse(
+            pass,
+            source,
+            RenderResourceAccess.Read,
+            RenderResourceUseKind.CopySource);
+        graph.AddUse(
+            pass,
+            destination,
+            RenderResourceAccess.Write,
+            RenderResourceUseKind.CopyDestination);
         return this;
     }
 }

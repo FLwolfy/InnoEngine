@@ -23,7 +23,7 @@ internal static class BgfxCapabilityMapper
 
         if ((supported & bgfx.CapsFlags.ImageRw) != 0)
         {
-            features |= GraphicsFeature.StorageBuffer;
+            features |= GraphicsFeature.StorageBuffer | GraphicsFeature.StorageTexture;
         }
 
         if ((supported & bgfx.CapsFlags.DrawIndirect) != 0)
@@ -46,20 +46,114 @@ internal static class BgfxCapabilityMapper
             features |= GraphicsFeature.TextureBlit;
         }
 
+        if ((supported & bgfx.CapsFlags.AlphaToCoverage) != 0)
+        {
+            features |= GraphicsFeature.AlphaToCoverage;
+        }
+
+        if ((supported & bgfx.CapsFlags.Index32) != 0)
+        {
+            features |= GraphicsFeature.Index32;
+        }
+
+        if ((supported & bgfx.CapsFlags.Instancing) != 0)
+        {
+            features |= GraphicsFeature.Instancing;
+        }
+
+        if ((supported & bgfx.CapsFlags.SwapChain) != 0)
+        {
+            features |= GraphicsFeature.SwapChain;
+        }
+
+        if ((supported & bgfx.CapsFlags.Texture2dArray) != 0)
+        {
+            features |= GraphicsFeature.Texture2DArray;
+        }
+
+        if ((supported & bgfx.CapsFlags.Texture3d) != 0)
+        {
+            features |= GraphicsFeature.Texture3D;
+        }
+
+        if ((supported & bgfx.CapsFlags.TextureCubeArray) != 0)
+        {
+            features |= GraphicsFeature.TextureCubeArray;
+        }
+
+        if ((supported & bgfx.CapsFlags.VertexAttribHalf) != 0)
+        {
+            features |= GraphicsFeature.VertexAttributeHalf;
+        }
+
+        if ((supported & bgfx.CapsFlags.VertexAttribUint10) != 0)
+        {
+            features |= GraphicsFeature.VertexAttributeUInt10;
+        }
+
+        if ((supported & bgfx.CapsFlags.VertexId) != 0)
+        {
+            features |= GraphicsFeature.ProceduralDraw;
+        }
+
+        if ((supported & bgfx.CapsFlags.FragmentDepth) != 0)
+        {
+            features |= GraphicsFeature.FragmentDepth;
+        }
+
+        List<RenderTextureFormat> sampled = [];
+        List<RenderTextureFormat> sampled3D = [];
+        List<RenderTextureFormat> sampledCube = [];
         List<RenderTextureFormat> renderTargets = [];
-        List<RenderTextureFormat> storage = [];
+        List<RenderTextureFormat> multisampleRenderTargets = [];
+        List<RenderTextureFormat> storageRead = [];
+        List<RenderTextureFormat> storageWrite = [];
         foreach (RenderTextureFormat format in Enum.GetValues<RenderTextureFormat>())
         {
             bgfx.TextureFormat nativeFormat = ToNativeFormat(format);
             bgfx.CapsFormatFlags formatCaps = (bgfx.CapsFormatFlags)caps->formats[(int)nativeFormat];
+            bgfx.CapsFormatFlags sampledFlag = format == RenderTextureFormat.RGBA8Srgb
+                ? bgfx.CapsFormatFlags.Texture2dSrgb
+                : bgfx.CapsFormatFlags.Texture2d;
+            if ((formatCaps & sampledFlag) != 0)
+            {
+                sampled.Add(format);
+            }
+
+            bgfx.CapsFormatFlags sampled3DFlag = format == RenderTextureFormat.RGBA8Srgb
+                ? bgfx.CapsFormatFlags.Texture3dSrgb
+                : bgfx.CapsFormatFlags.Texture3d;
+            if ((formatCaps & sampled3DFlag) != 0)
+            {
+                sampled3D.Add(format);
+            }
+
+            bgfx.CapsFormatFlags sampledCubeFlag = format == RenderTextureFormat.RGBA8Srgb
+                ? bgfx.CapsFormatFlags.TextureCubeSrgb
+                : bgfx.CapsFormatFlags.TextureCube;
+            if ((formatCaps & sampledCubeFlag) != 0)
+            {
+                sampledCube.Add(format);
+            }
+
             if ((formatCaps & bgfx.CapsFormatFlags.TextureFramebuffer) != 0)
             {
                 renderTargets.Add(format);
             }
 
+            if ((formatCaps & bgfx.CapsFormatFlags.TextureFramebufferMsaa) != 0)
+            {
+                multisampleRenderTargets.Add(format);
+            }
+
+            if ((formatCaps & bgfx.CapsFormatFlags.TextureImageRead) != 0)
+            {
+                storageRead.Add(format);
+            }
+
             if ((formatCaps & bgfx.CapsFormatFlags.TextureImageWrite) != 0)
             {
-                storage.Add(format);
+                storageWrite.Add(format);
             }
         }
 
@@ -71,10 +165,15 @@ internal static class BgfxCapabilityMapper
                 checked((int)caps->limits.maxFBAttachments),
                 checked((int)caps->limits.maxTextureSize),
                 checked((int)caps->limits.maxComputeBindings)),
+            sampled,
             renderTargets,
-            storage,
+            storageRead,
+            storageWrite,
             caps->originBottomLeft != 0,
-            caps->homogeneousDepth != 0);
+            caps->homogeneousDepth != 0,
+            sampled3D,
+            sampledCube,
+            multisampleRenderTargets);
     }
 
     public static bgfx.RendererType ToNativeRenderer(GraphicsBackend backend)

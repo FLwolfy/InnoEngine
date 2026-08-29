@@ -56,6 +56,8 @@ Importer 必须是 concrete class、有可访问无参构造函数、标注 `[As
 
 `AssetImportContext` 提供 `relativePath`、`absolutePath`、`persistentId`、`sourceBytes`、`sourceHash`、`extension`、`ReadUtf8Text()`。`persistentId` 在 Importer 执行前已经确定，可用于生成需要随 source rename 保持稳定的 manifest。需要读取另一个运行时 Asset 时使用 `ResolveDependency<TAsset>(path)`：Loader 会通过同一 canonical cache 解析目标，并自动记录 Asset dependency；缺失、类型不匹配或循环依赖会让本次 candidate Import 明确失败，而不会提交半成品。
 
+Importer 读取 include、schema 等 companion source 时使用 `ReadSourceBytes(path)` 或 `ReadSourceUtf8Text(path)`。两者从当前隔离的 Source Mount candidate 读取稳定 snapshot 并自动记录 import dependency；Plugin 跨 Mount 路径必须写成 `plugin.id::local/path`，且 owning Plugin 必须声明该依赖。Importer 不应自行访问 `AssetManager.sourceMounts` 或拼接 Library/Plugin 物理路径，否则候选激活期间会错误地读取 active generation。
+
 `AssetImportWriter<T>`：
 
 - `SetAsset`
@@ -177,6 +179,7 @@ Manifest 把稳定 output name 映射到物理文件，并记录 content hash/le
 - 同一进程内 importer implementation generation 改变会强制相关 source reimport，即使显式 `version` 未提升。
 - Import/Build fingerprint 直接包含实现 MVID 与当前定义内容；MVID 不写入 `.imeta`，也没有手工 `version` 协议。
 - 候选 registry 冲突或构造失败时，Assembly reload 不会提交半更新 snapshot。
+- AssetManager 作为 Assembly Catalog transaction participant，在候选 Registry 激活后、Catalog 发布前执行 Source 对账；后续失败会在旧 TypeCache 恢复后自动重新对账，详见 [Inno.Assets](Inno.Assets.md)。
 
 ## 内置 Importer
 

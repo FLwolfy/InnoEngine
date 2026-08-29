@@ -3,7 +3,6 @@ using System.Collections.Generic;
 
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
-using Inno.Editor.Settings;
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
@@ -117,7 +116,7 @@ internal sealed class SettingsTree
         }
         for (int i = 0; i < page.settings.Count; i++)
         {
-            EditorSetting setting = page.settings[i];
+            SettingsField setting = page.settings[i];
             if (setting.label.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 (setting.section?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false) ||
                 setting.description.Contains(query, StringComparison.OrdinalIgnoreCase))
@@ -137,7 +136,7 @@ internal sealed class SettingsTree
             SettingsPage page = pages[i];
             for (int settingIndex = 0; settingIndex < page.settings.Count; settingIndex++)
             {
-                EditorSetting setting = page.settings[settingIndex];
+                SettingsField setting = page.settings[settingIndex];
                 if (setting.label.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                     (setting.section?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false) ||
                     setting.description.Contains(query, StringComparison.OrdinalIgnoreCase))

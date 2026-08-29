@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/rendering-ci.yml"
       - "build/**"
+      - "extern/**"
       - "native/**"
       - "src/core/**"
       - "src/assets/**"
@@ -14,6 +15,8 @@ on:
       - "src/platform/**"
       - "src/render/**"
       - "tests/**"
+      - ".gitmodules"
+      - "Directory.Build.props"
       - "InnoEngine.sln"
   push:
     branches:
@@ -21,6 +24,7 @@ on:
     paths:
       - ".github/workflows/rendering-ci.yml"
       - "build/**"
+      - "extern/**"
       - "native/**"
       - "src/core/**"
       - "src/assets/**"
@@ -29,6 +33,8 @@ on:
       - "src/platform/**"
       - "src/render/**"
       - "tests/**"
+      - ".gitmodules"
+      - "Directory.Build.props"
       - "InnoEngine.sln"
 
 permissions:
@@ -49,8 +55,12 @@ jobs:
         include:
           - os: windows-2022
             platform: windows-x64
-          - os: macos-14
+            architecture: X64
+            backend_pattern: "Rendering initialized with Direct3D(11|12)"
+          - os: macos-15
             platform: osx-arm64
+            architecture: Arm64
+            backend_pattern: "Rendering initialized with Metal"
 
     steps:
       - name: Checkout repository and native dependencies
@@ -66,6 +76,14 @@ jobs:
       - name: Install MSBuild
         if: runner.os == 'Windows'
         uses: microsoft/setup-msbuild@v2
+
+      - name: Verify runner architecture
+        shell: pwsh
+        run: |
+          $actual = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
+          if ($actual -ne '${{ matrix.architecture }}') {
+            throw "Runner architecture '$actual' does not match required '${{ matrix.architecture }}'."
+          }
 
       - name: Build native runtime and shader tools
         shell: pwsh
@@ -89,7 +107,42 @@ jobs:
         run: |
           $smokeProject = Join-Path $env:RUNNER_TEMP "InnoRenderingSmoke"
           New-Item -ItemType Directory -Force (Join-Path $smokeProject "Assets") | Out-Null
-          dotnet src/editor/Inno.Editor.Application/bin/Debug/net9.0/Inno.Editor.Application.dll $smokeProject --smoke-frames 3
+          $nativeLog = Join-Path $smokeProject "Logs/NativeRendering.log"
+          New-Item -ItemType Directory -Force (Split-Path $nativeLog) | Out-Null
+          dotnet src/editor/Inno.Editor.Application/bin/Debug/net9.0/Inno.Editor.Application.dll `
+            $smokeProject --smoke-frames 3 2>&1 | Tee-Object -FilePath $nativeLog
+          if ($LASTEXITCODE -ne 0) {
+            throw "Renderer smoke exited with code $LASTEXITCODE."
+          }
+
+          $bootLog = Join-Path $smokeProject "Logs/EditorBoot.log"
+          if (-not (Test-Path $bootLog)) {
+            throw "Renderer smoke did not produce EditorBoot.log."
+          }
+          $boot = Get-Content -Raw $bootLog
+          if ($boot -notmatch '${{ matrix.backend_pattern }}') {
+            throw "Renderer smoke did not initialize the required backend pattern '${{ matrix.backend_pattern }}'."
+          }
+          if ($boot -notmatch 'Smoke frame limit reached after 3 frame\(s\)\.') {
+            throw "Renderer smoke did not submit the required frame count."
+          }
+          if ($boot -notmatch 'Dispose end\.') {
+            throw "Renderer smoke did not complete orderly shutdown."
+          }
+          if ($boot -match 'Teardown failure') {
+            throw "Renderer smoke reported a teardown failure."
+          }
+
+          $native = Get-Content -Raw $nativeLog
+          if ($native -notmatch '\[x\] sRGB Back Buffer') {
+            throw "Renderer smoke did not enable the sRGB backbuffer contract."
+          }
+          if ($native -notmatch 'BGFX Shutdown complete\.') {
+            throw "Renderer smoke did not complete BGFX shutdown."
+          }
+          if ($native -match 'BGFX FATAL') {
+            throw "Renderer smoke reported a BGFX fatal diagnostic."
+          }
 
       - name: Upload renderer smoke logs
         if: always()

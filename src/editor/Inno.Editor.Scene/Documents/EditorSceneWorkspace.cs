@@ -475,7 +475,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
             return;
         }
 
-        string sourcePath = NormalizePath(asset.sourcePath);
+        string sourcePath = NormalizePath(asset.assetPath.ToString());
         string sourceName = GetAssetName(sourcePath);
         bool pathChanged = !string.Equals(document.sourcePath, sourcePath, StringComparison.Ordinal);
         if (!pathChanged)

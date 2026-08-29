@@ -20,7 +20,7 @@ internal sealed class ShaderNodeExtensionRegistry
     protected override Snapshot Build(TypeCacheSnapshot types)
     {
         ArgumentNullException.ThrowIfNull(types);
-        var definitions = new List<ShaderNodeDefinition>(BuiltinShaderNodes.CreateDefinitions());
+        var definitions = new List<ShaderNodeDefinition>();
         try
         {
             foreach (TypeRef typeRef in types.GetTypesWithAttribute<ShaderNodeExtensionAttribute>())

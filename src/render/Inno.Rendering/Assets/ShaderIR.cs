@@ -194,7 +194,6 @@ public sealed class ShaderIRPass
         string? generatedVaryingSource = null,
         IReadOnlyList<ShaderPropertyId>? bindingIds = null)
     {
-        ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(stages);
         this.definition = definition;
         this.stages = stages;
@@ -260,17 +259,27 @@ public sealed class ShaderInterfaceBinding
     /// <param name="type">Expected value or resource type.</param>
     /// <param name="stages">Stages that consume the binding.</param>
     /// <param name="arrayCount">Required array element count.</param>
+    /// <param name="bindingKind">Backend-neutral interface binding domain.</param>
+    /// <param name="storageAccess">Required access for storage resources.</param>
     public ShaderInterfaceBinding(
         ShaderPropertyId id,
         ShaderPropertyType type,
         ShaderStage stages,
-        int arrayCount = 1)
+        int arrayCount = 1,
+        ShaderPropertyBindingKind bindingKind = ShaderPropertyBindingKind.Uniform,
+        RenderStorageAccess storageAccess = RenderStorageAccess.Read)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(arrayCount);
+        if (!Enum.IsDefined(bindingKind))
+            throw new ArgumentOutOfRangeException(nameof(bindingKind));
+        if (!Enum.IsDefined(storageAccess))
+            throw new ArgumentOutOfRangeException(nameof(storageAccess));
         this.id = id;
         this.type = type;
         this.stages = stages;
         this.arrayCount = arrayCount;
+        this.bindingKind = bindingKind;
+        this.storageAccess = storageAccess;
     }
 
     /// <summary>Gets the stable property ID.</summary>
@@ -284,6 +293,12 @@ public sealed class ShaderInterfaceBinding
 
     /// <summary>Gets the required array element count.</summary>
     public int arrayCount { get; }
+
+    /// <summary>Gets the backend-neutral interface binding domain.</summary>
+    public ShaderPropertyBindingKind bindingKind { get; }
+
+    /// <summary>Gets required access for storage resources.</summary>
+    public RenderStorageAccess storageAccess { get; }
 }
 
 /// <summary>
@@ -314,7 +329,9 @@ public sealed class ShaderInterface
             .Select(static property => new ShaderInterfaceBinding(
                 property.id,
                 property.type,
-                property.stages))
+                property.stages,
+                bindingKind: property.bindingKind,
+                storageAccess: property.storageAccess))
             .ToArray());
     }
 
@@ -353,7 +370,9 @@ public sealed class ShaderInterface
             .Select(property => new ShaderInterfaceBinding(
                 property.id,
                 property.type,
-                property.stages & stageMask))
+                property.stages & stageMask,
+                bindingKind: property.bindingKind,
+                storageAccess: property.storageAccess))
             .ToArray());
     }
 }
@@ -403,6 +422,22 @@ public static class ShaderIRValidator
             "SHADER_IR_DUPLICATE_PROPERTY",
             "property",
             diagnostics);
+        foreach (ShaderPropertyDefinition property in module.definition.properties)
+        {
+            if (!ShaderPropertyDefinition.IsBindingKindCompatible(property.type, property.bindingKind))
+            {
+                diagnostics.Add(Error(
+                    "SHADER_IR_PROPERTY_BINDING_INCOMPATIBLE",
+                    $"Shader property '{property.id}' type '{property.type}' is incompatible with "
+                    + $"binding kind '{property.bindingKind}'."));
+            }
+            if (!Enum.IsDefined(property.storageAccess))
+            {
+                diagnostics.Add(Error(
+                    "SHADER_IR_STORAGE_ACCESS_INVALID",
+                    $"Shader property '{property.id}' declares invalid storage access."));
+            }
+        }
         AddDuplicateDiagnostics(
             module.definition.keywords.Select(static value => value.id),
             "SHADER_IR_DUPLICATE_KEYWORD",
@@ -413,6 +448,32 @@ public static class ShaderIRValidator
             "SHADER_IR_DUPLICATE_PASS",
             "pass",
             diagnostics);
+        AddDuplicateDiagnostics(
+            module.definition.techniques.Select(static value => value.id.value),
+            "SHADER_IR_DUPLICATE_TECHNIQUE",
+            "technique",
+            diagnostics);
+
+        HashSet<string> declaredPassNames = module.definition.passes
+            .Select(static value => value.name)
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (ShaderTechniqueDefinition technique in module.definition.techniques)
+        {
+            AddDuplicateDiagnostics(
+                technique.passes.Select(static value => value.role.value),
+                "SHADER_IR_DUPLICATE_TECHNIQUE_ROLE",
+                $"role in technique '{technique.id}'",
+                diagnostics);
+            foreach (string missingPass in technique.passes
+                         .Select(static value => value.passName)
+                         .Where(value => !declaredPassNames.Contains(value))
+                         .Distinct(StringComparer.Ordinal))
+            {
+                diagnostics.Add(Error(
+                    "SHADER_IR_UNKNOWN_TECHNIQUE_PASS",
+                    $"Technique '{technique.id}' maps to unknown pass '{missingPass}'."));
+            }
+        }
 
         Dictionary<string, ShaderIRPass> implementations = module.passes
             .GroupBy(static value => value.definition.name, StringComparer.Ordinal)
@@ -478,9 +539,8 @@ public static class ShaderIRValidator
         GraphicsCapabilities? capabilities,
         List<ShaderDiagnostic> diagnostics)
     {
-        if (!ReferenceEquals(definition, pass.definition)
-            && (!string.Equals(definition.tag, pass.definition.tag, StringComparison.Ordinal)
-                || definition.requiredFeatures != pass.definition.requiredFeatures))
+        if (definition.programKind != pass.definition.programKind
+            || definition.requiredFeatures != pass.definition.requiredFeatures)
         {
             diagnostics.Add(Error(
                 "SHADER_IR_PASS_CONTRACT_MISMATCH",
@@ -543,13 +603,16 @@ public static class ShaderIRValidator
                 "SHADER_IR_MIXED_COMPUTE_RASTER",
                 $"Pass '{definition.name}' mixes compute and raster stages."));
         }
-        else if (compute && !string.Equals(definition.tag, BuiltinShaderPassTags.Compute, StringComparison.Ordinal))
+        else if (compute && definition.programKind != ShaderProgramKind.Compute)
         {
             diagnostics.Add(Error(
-                "SHADER_IR_COMPUTE_TAG_REQUIRED",
-                $"Compute pass '{definition.name}' must use the '{BuiltinShaderPassTags.Compute}' tag."));
+                "SHADER_IR_COMPUTE_KIND_REQUIRED",
+                $"Compute pass '{definition.name}' must declare the compute program kind."));
         }
-        else if (!compute && (!stages.Contains(ShaderStage.Vertex) || !stages.Contains(ShaderStage.Fragment)))
+        else if (!compute
+            && (definition.programKind != ShaderProgramKind.Raster
+                || !stages.Contains(ShaderStage.Vertex)
+                || !stages.Contains(ShaderStage.Fragment)))
         {
             diagnostics.Add(Error(
                 "SHADER_IR_RASTER_STAGE_PAIR_REQUIRED",

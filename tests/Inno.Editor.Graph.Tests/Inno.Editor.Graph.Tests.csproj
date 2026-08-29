@@ -8,6 +8,10 @@
     <InnoAssemblyScope>Editor</InnoAssemblyScope>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\core\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\editor\Panels\Inno.Editor.Panel.ShaderGraph\Inno.Editor.Panel.ShaderGraph.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\src\editor\Inno.Editor.Graph\Inno.Editor.Graph.csproj" />
   </ItemGroup>
   <ItemGroup>

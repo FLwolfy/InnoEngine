@@ -54,8 +54,8 @@ public sealed class PrefabAsset : AssetObject
         if (parent is not null)
             context = context.With(parent);
         GameObject root = SerializationManager.Deserialize<GameObject>(GetPayload(), context);
-        if (!string.IsNullOrWhiteSpace(sourcePath))
-            root.name = Path.GetFileNameWithoutExtension(sourcePath);
+        if (!string.IsNullOrWhiteSpace(assetPath.localPath))
+            root.name = Path.GetFileNameWithoutExtension(assetPath.localPath);
         return root;
     }
 
@@ -85,7 +85,7 @@ public sealed class PrefabAsset : AssetObject
             return runtimePayload.ToArray();
         if (m_pendingPayload.Length != 0)
             return (byte[])m_pendingPayload.Clone();
-        throw new InvalidOperationException($"Prefab asset '{sourcePath}' does not contain an imported or pending prefab payload.");
+        throw new InvalidOperationException($"Prefab asset '{assetPath}' does not contain an imported or pending prefab payload.");
     }
 
     private AssetDependency[] GetDependencies()

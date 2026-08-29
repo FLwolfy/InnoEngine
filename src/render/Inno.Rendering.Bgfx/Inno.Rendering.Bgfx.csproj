@@ -9,9 +9,11 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\native\Inno.Native.Bgfx\Inno.Native.Bgfx.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\native\Inno.Native.Bgfx.Tools\Inno.Native.Bgfx.Tools.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\platform\Inno.Platform\Inno.Platform.csproj" />
+    <ProjectReference Include="..\Inno.Rendering.Assets\Inno.Rendering.Assets.csproj" />
     <ProjectReference Include="..\Inno.Rendering.Core\Inno.Rendering.Core.csproj" />
   </ItemGroup>
 </Project>

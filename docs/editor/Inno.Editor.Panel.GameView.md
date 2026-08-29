@@ -1,9 +1,7 @@
 # Inno.Editor.Panel.GameView
 
-[返回 Editor 索引](README.md) · [Wiki 首页](../README.md) · [Editor Rendering](Inno.Editor.Rendering.md)
+[Editor 索引](README.md) · [Editor Rendering](Inno.Editor.Rendering.md) · [Scene View](Inno.Editor.Panel.SceneView.md)
 
-该 Panel 查找第一个 active runtime `Camera`，使用其 `CreateRenderRequest` 契约提交 GPU Game View。没有 Camera 时不创建隐式 Scene 或 Camera，并立即释放旧 viewport target。内容尺寸变化通过 Host 安全替换 RenderTexture；画面以 opaque ImGui texture 直接合成，无 CPU readback。
+Game View 是开放 kind `inno.editor.viewport.game` 的通用 viewport host。活动 Plugin Provider 自行选择运行时数据、Pipeline、目标格式和交互行为；Panel 不查找内建 Camera，也不解释 Scene。
 
-Panel 没有额外公开 API；稳定行为由 `Camera`、`EditorViewportRequest` 与 `EditorRenderingModule` 提供。关闭 Panel 时释放 `game-view` target。
-
-相邻页面：[Scene View](Inno.Editor.Panel.SceneView.md) · [Inno.Rendering](../render/Inno.Rendering.md)
+内容尺寸变化会在渲染安全点 resize `RenderTexture`。输出直接作为 BGFX ImGui texture 合成，不做 CPU 回读。无 Provider 或 Provider reload 失败时 Panel 显示明确状态并释放不可用输出，不影响 Editor 主界面。

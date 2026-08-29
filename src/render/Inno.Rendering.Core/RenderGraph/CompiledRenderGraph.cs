@@ -5,7 +5,7 @@ using System.Runtime.ExceptionServices;
 namespace Inno.Rendering.Core;
 
 /// <summary>
-/// Stores backend-ready column-major camera matrices for one raster view.
+/// Stores backend-ready column-major transform matrices for one programmable view.
 /// </summary>
 public sealed class RenderViewTransform
 {
@@ -230,7 +230,7 @@ public sealed class CompiledRenderPass
     /// <summary>Gets the linear clear color for a presentation target.</summary>
     public RenderClearColor presentationClearColor { get; }
 
-    /// <summary>Gets backend-ready camera matrices, or <see langword="null"/> for a matrix-free pass.</summary>
+    /// <summary>Gets backend-ready view transforms, or <see langword="null"/> for a matrix-free pass.</summary>
     public RenderViewTransform? viewTransform { get; }
 
     internal void Execute(RenderPassContext context) => m_execute(context);
@@ -370,10 +370,13 @@ public sealed class RenderGraphCompileResult
 
     internal RenderGraphCompileResult(
         CompiledRenderGraph? graph,
-        IReadOnlyList<RenderGraphDiagnostic> diagnostics)
+        IReadOnlyList<RenderGraphDiagnostic> diagnostics,
+        int culledPassCount = 0)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(culledPassCount);
         this.graph = graph;
         m_diagnostics = diagnostics;
+        this.culledPassCount = culledPassCount;
     }
 
     /// <summary>Gets the executable graph, or <see langword="null"/> when compilation failed.</summary>
@@ -381,6 +384,9 @@ public sealed class RenderGraphCompileResult
 
     /// <summary>Gets deterministic compilation diagnostics.</summary>
     public IReadOnlyList<RenderGraphDiagnostic> diagnostics => m_diagnostics;
+
+    /// <summary>Gets passes removed because they did not contribute to an output or side effect.</summary>
+    public int culledPassCount { get; }
 
     /// <summary>Gets whether an executable graph was produced.</summary>
     public bool succeeded => graph is not null;

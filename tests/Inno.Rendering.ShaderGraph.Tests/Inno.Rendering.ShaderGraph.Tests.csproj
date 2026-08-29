@@ -12,6 +12,7 @@
     <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\src\render\Inno.Rendering\Inno.Rendering.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\src\render\Inno.Rendering.Assets\Inno.Rendering.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\render\Inno.Rendering.Bgfx\Inno.Rendering.Bgfx.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\src\render\Inno.Rendering.ShaderGraph\Inno.Rendering.ShaderGraph.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>

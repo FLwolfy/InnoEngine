@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 
+using Inno.Assets.Core;
 using Inno.Assets.File;
 
 using Xunit;
@@ -101,6 +102,44 @@ public sealed class AssetFileSystemTests
             Assert.Equal("Tool.editor.cs", entry.name);
             Assert.Equal("Tool.editor", entry.nameWithoutExtension);
             Assert.Equal(".cs", entry.extension);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Fact]
+    public void MultipleSourcesKeepCanonicalPathsNamesAndReadOnlyStateIsolated()
+    {
+        string root = CreateRoot();
+        string project = Path.Combine(root, "Assets");
+        string plugin = Path.Combine(root, "PluginAssets");
+        try
+        {
+            Directory.CreateDirectory(project);
+            Directory.CreateDirectory(plugin);
+            System.IO.File.WriteAllText(Path.Combine(project, "same.txt"), "project");
+            System.IO.File.WriteAllText(Path.Combine(plugin, "same.txt"), "plugin");
+            var pluginId = new AssetSourceId("tests.mount");
+            using var fileSystem = new AssetFileSystem(
+                [
+                    new AssetSourceMount(AssetSourceId.project, project, isReadOnly: false),
+                    new AssetSourceMount(pluginId, plugin, isReadOnly: true)
+                ],
+                autoStart: false);
+
+            Assert.True(fileSystem.TryGetEntry("same.txt", out AssetFileEntry projectEntry));
+            Assert.True(fileSystem.TryGetEntry("tests.mount::same.txt", out AssetFileEntry pluginEntry));
+            Assert.Equal("same.txt", projectEntry.name);
+            Assert.Equal("same.txt", pluginEntry.name);
+            Assert.False(projectEntry.isReadOnly);
+            Assert.True(pluginEntry.isReadOnly);
+            Assert.Equal(AssetSourceId.project, projectEntry.source);
+            Assert.Equal(pluginId, pluginEntry.source);
+            Assert.Contains(fileSystem.GetChildren(string.Empty), entry => entry.source == AssetSourceId.project);
+            Assert.Contains(fileSystem.GetChildren(string.Empty), entry => entry.relativePath == "tests.mount::");
+            Assert.Contains(fileSystem.GetChildren("tests.mount::"), entry => entry.relativePath == "tests.mount::same.txt");
         }
         finally
         {

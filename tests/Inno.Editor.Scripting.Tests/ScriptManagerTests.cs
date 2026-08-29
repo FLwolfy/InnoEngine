@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -13,15 +14,18 @@ using Inno.Assets;
 using Inno.Assets.Core;
 using Inno.Assets.File;
 using Inno.Assets.Loader;
+using Inno.Assets.Plugins;
 using Inno.Assets.Serialization;
 using Inno.Assets.Types;
 using Inno.Core.Assemblies;
 using Inno.Core.Diagnose;
 using Inno.Core.Events;
+using Inno.Core.Graphs;
 using Inno.Core.Identity;
 using Inno.Core.Input;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
+using Inno.Core.Settings;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 using Inno.Editor.ImGui;
@@ -31,12 +35,17 @@ using Inno.Editor.Inspection;
 using Inno.Editor.Panel.FileBrowser;
 using Inno.Editor.Panel.Hierarchy;
 using Inno.Editor.Panel.Inspector;
+using Inno.Editor.Rendering;
 using Inno.Editor.Scene;
 using Inno.Editor.Settings;
 using Inno.Editor.Scripting;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Assets;
 using Inno.Engine.Scene.Layers;
+using Inno.Platform.ImGui;
+using Inno.Rendering;
+using Inno.Rendering.Core;
+using Inno.Rendering.ShaderGraph;
 
 using Xunit;
 
@@ -62,6 +71,7 @@ public sealed class ScriptManagerTests : IDisposable
         _ = Assembly.Load(typeof(ImGuiWidget).Assembly.GetName());
         _ = Assembly.Load(typeof(AssetEditor).Assembly.GetName());
         _ = Assembly.Load(typeof(IPropertyDrawer).Assembly.GetName());
+        _ = Assembly.Load(typeof(EditorRenderingModule).Assembly.GetName());
         _ = Assembly.Load("Inno.Editor.Panel.Settings");
         IdentityManager.Initialize();
         AssemblyManager.Initialize(new AssemblyManagerOptions
@@ -70,6 +80,7 @@ public sealed class ScriptManagerTests : IDisposable
         });
         TypeCacheManager.Initialize();
         SerializationManager.Initialize();
+        ProjectSettingsManager.Initialize(Path.Combine(m_projectRoot, "ProjectSettings.inno"));
         AssetManager.Initialize(AssetManagerOptions.Create(
             Path.Combine(m_projectRoot, "Assets"),
             Path.Combine(m_projectRoot, "Library")) with
@@ -97,7 +108,10 @@ public sealed class ScriptManagerTests : IDisposable
         SceneManager.UnloadAllScenes();
         m_manager.Dispose();
         m_sceneReloadIntegration.Dispose();
+        PluginManager.Shutdown();
+        PluginCatalog.Shutdown();
         AssetManager.Shutdown();
+        ProjectSettingsManager.Shutdown();
         SerializationManager.Shutdown();
         TypeCacheManager.Shutdown();
         AssemblyManager.Shutdown();
@@ -409,6 +423,294 @@ public sealed class ScriptManagerTests : IDisposable
         Assert.Equal(AssemblyScope.Runtime, behavior.Assembly.GetInnoAssemblyScope());
         Assert.Equal(AssemblyDomain.InnoScripting, drawer.Assembly.GetInnoAssemblyDomain());
         Assert.Equal(AssemblyScope.Editor, drawer.Assembly.GetInnoAssemblyScope());
+    }
+
+    [Fact]
+    public void TrustedZipPluginProvidesRasterComputeShaderNodeAndGameplayExtensions()
+    {
+        const string pipelineId = "tests.fixture.pipeline";
+        const string shaderNodeId = "tests.fixture.compute-value";
+        InstallProgrammableRenderingPlugin();
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.True(result.success, FormatDiagnostics(result));
+        Assert.True(m_manager.ApplyPendingReload());
+        Assert.False(PluginManager.hasPendingActivation);
+        Assert.Equal("tests.rendering-fixture", Assert.Single(PluginCatalog.activePlugins).manifest.pluginId);
+
+        Type componentType = ResolveTypeByName("FixtureRenderComponent");
+        Type pipelineType = ResolveTypeByName("FixtureRenderPipeline");
+        Type nodeType = ResolveTypeByName("FixtureComputeValueNode");
+        Assert.True(typeof(GameBehavior).IsAssignableFrom(componentType));
+        Assert.True(typeof(RenderPipeline).IsAssignableFrom(pipelineType));
+        Assert.True(typeof(ShaderNodeDefinition).IsAssignableFrom(nodeType));
+        Assert.All(
+            new[] { componentType, pipelineType, nodeType },
+            static type => Assert.Equal(AssemblyDomain.InnoPlugin, type.Assembly.GetInnoAssemblyDomain()));
+
+        using var nodes = new ShaderNodeRegistry(discoverExtensions: true);
+        nodes.RefreshExtensions();
+        Assert.True(nodes.TryResolveShader(shaderNodeId, out ShaderNodeDefinition? node));
+        Assert.Equal(ShaderStage.Compute, node!.supportedStages);
+
+        var capabilities = new GraphicsCapabilities(
+            GraphicsBackend.Noop,
+            GraphicsFeature.Compute,
+            new GraphicsLimits(64, 4, 4096, 8),
+            Enum.GetValues<RenderTextureFormat>(),
+            Enum.GetValues<RenderTextureFormat>(),
+            Enum.GetValues<RenderTextureFormat>(),
+            Enum.GetValues<RenderTextureFormat>(),
+            originBottomLeft: false,
+            homogeneousDepth: false);
+        var graph = new RenderGraphBuilder(1, capabilities);
+        var asset = new RenderPipelineAsset { pipelineTypeId = pipelineId };
+        var request = new RenderRequest(
+            "Plugin Fixture",
+            RenderTarget.backbuffer,
+            new RenderViewport(0, 0, 64, 64),
+            asset);
+        IRenderResourceService resources = DispatchProxy.Create<
+            IRenderResourceService,
+            EmptyRenderResourceServiceProxy>();
+        var context = new RenderPipelineContext(
+            request,
+            asset,
+            graph,
+            capabilities,
+            new RenderResourceRegistry(),
+            new FixtureRenderDiagnosticSink(),
+            resources,
+            frameIndex: 0);
+        using RenderPipeline pipeline = (RenderPipeline)Activator.CreateInstance(pipelineType)!;
+        pipeline.Build(context);
+        RenderGraphCompileResult compiled = graph.Compile();
+
+        Assert.True(compiled.succeeded, string.Join("; ", compiled.diagnostics.Select(d => d.message)));
+        Assert.Collection(
+            compiled.graph!.passes,
+            pass =>
+            {
+                Assert.Equal("Fixture Clear Triangle", pass.name);
+                Assert.Equal(RenderPassKind.Raster, pass.kind);
+                Assert.True(pass.clearsPresentationTarget);
+            },
+            pass =>
+            {
+                Assert.Equal("Fixture Compute", pass.name);
+                Assert.Equal(RenderPassKind.Compute, pass.kind);
+            });
+    }
+
+#pragma warning disable xUnit1031
+    [Fact]
+    public void EditorViewportProviderFollowsTheActivePluginGeneration()
+    {
+        const string pluginId = "tests.rendering-fixture";
+        var kind = new EditorViewportKindId("tests.fixture.viewport");
+        InstallProgrammableRenderingPlugin();
+        ScriptCompilationResult initial = Compile();
+        Assert.True(initial.success, FormatDiagnostics(initial));
+        Assert.True(m_manager.ApplyPendingReload());
+
+        var host = new TestEditorRenderingHost();
+        Type providerType;
+        {
+            var context = new EditorContext(m_projectRoot);
+            using var interactions = new EditorInteractionRuntime(context);
+            using var module = new EditorRenderingModule(host, interactions.interactions);
+            module.Start(context);
+            try
+            {
+                Assert.True(module.HasProvider(kind));
+                Assert.True(module.TrySubmit(kind, "tests.viewport", 320, 180, out EditorViewportOutput output));
+                Assert.True(output.isReady);
+                Assert.NotNull(host.lastRequest);
+                EditorViewportRequest request = host.lastRequest!;
+                Assert.Equal("tests.viewport", request.viewportId);
+                Assert.Equal(320, request.pixelWidth);
+                Assert.Equal(180, request.pixelHeight);
+                Assert.Equal(RenderTextureFormat.RGBA16Float, request.targetFormat);
+                Assert.Equal(17, request.priority);
+                Assert.True(request.data.TryGet(
+                    new RenderDataChannelId("tests.fixture.viewport-size"),
+                    out string? viewportSize));
+                Assert.Equal("320x180", viewportSize);
+
+                module.DrawProviderToolbar(kind, "tests.viewport", 320, 180);
+                module.HandlePointer(kind, "tests.viewport", 320, 180, -1f, 2f, 4);
+                providerType = ResolveTypeByName("FixtureViewportProvider");
+                Assert.Equal(1, GetStaticField<int>(providerType, "toolbarDrawCount"));
+                Assert.Equal(0f, GetStaticField<float>(providerType, "lastPointerX"));
+                Assert.Equal(1f, GetStaticField<float>(providerType, "lastPointerY"));
+                Assert.Equal(4, GetStaticField<int>(providerType, "lastPointerButton"));
+            }
+            finally
+            {
+                module.Stop(context);
+            }
+        }
+
+        string archivePath = Assert.Single(PluginCatalog.activePlugins).archivePath;
+        Assert.Equal(pluginId, Assert.Single(PluginCatalog.activePlugins).manifest.pluginId);
+        File.Delete(archivePath);
+        Assert.True(PluginManager.Refresh());
+        m_manager.ReloadPlugins();
+        Assert.True(m_manager.TryCompilePending(out Task<ScriptCompilationResult>? compilation));
+        ScriptCompilationResult removed = compilation!.GetAwaiter().GetResult();
+        Assert.True(removed.success, FormatDiagnostics(removed));
+        Assert.True(m_manager.ApplyPendingReload());
+        providerType = null!;
+
+        Assert.Empty(PluginCatalog.activePlugins);
+        {
+            var context = new EditorContext(m_projectRoot);
+            using var interactions = new EditorInteractionRuntime(context);
+            using var module = new EditorRenderingModule(host, interactions.interactions);
+            module.Start(context);
+            try
+            {
+                Assert.False(module.HasProvider(kind));
+                Assert.False(module.TrySubmit(kind, "tests.viewport", 320, 180, out _));
+                Assert.Contains("tests.viewport", host.releasedViewportIds);
+                Assert.Null(module.GetProviderError(kind));
+            }
+            finally
+            {
+                module.Stop(context);
+            }
+        }
+    }
+#pragma warning restore xUnit1031
+
+#pragma warning disable xUnit1031
+    [Fact]
+    public void PluginCompilationFailureKeepsTheCompleteActiveGeneration()
+    {
+        InstallProgrammableRenderingPlugin();
+        ScriptCompilationResult initial = Compile();
+        Assert.True(initial.success, FormatDiagnostics(initial));
+        Assert.True(m_manager.ApplyPendingReload());
+        PluginArchiveCandidate activePlugin = Assert.Single(PluginCatalog.activePlugins);
+        string activeHash = activePlugin.contentHash;
+        Type activePipeline = ResolveTypeByName("FixtureRenderPipeline");
+        string archivePath = activePlugin.archivePath;
+        byte[] metadata;
+        using (var archive = ZipFile.OpenRead(archivePath))
+        {
+            ZipArchiveEntry entry = archive.GetEntry(
+                "Assets/ProgrammableRenderingFixture.cs.imeta")!;
+            using Stream input = entry.Open();
+            using var bytes = new MemoryStream();
+            input.CopyTo(bytes);
+            metadata = bytes.ToArray();
+        }
+
+        using (FileStream stream = File.Create(archivePath))
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create))
+        {
+            WritePluginEntry(archive, "Plugin.inno", SerializationManager.Serialize(new PluginManifest
+            {
+                pluginId = "tests.rendering-fixture",
+                displayName = "Programmable Rendering Fixture"
+            }));
+            WritePluginEntry(
+                archive,
+                "Assets/ProgrammableRenderingFixture.cs",
+                "public sealed class BrokenPlugin {"u8.ToArray());
+            WritePluginEntry(
+                archive,
+                "Assets/ProgrammableRenderingFixture.cs.imeta",
+                metadata);
+        }
+
+        Assert.True(PluginManager.Refresh());
+        Assert.True(PluginManager.hasPendingActivation);
+        Assert.Equal(activeHash, Assert.Single(PluginCatalog.activePlugins).contentHash);
+        Assert.Same(activePipeline, ResolveTypeByName("FixtureRenderPipeline"));
+        Assert.Equal(
+            [AssetSourceId.project, new AssetSourceId("tests.rendering-fixture")],
+            AssetManager.sourceMounts.Select(static mount => mount.id));
+
+        m_manager.ReloadPlugins();
+        Assert.True(m_manager.TryCompilePending(out Task<ScriptCompilationResult>? compilation));
+        ScriptCompilationResult failed = compilation!.GetAwaiter().GetResult();
+        Assert.False(failed.success);
+        CompleteCompilationThroughEditorHost(failed);
+
+        Assert.False(PluginManager.hasPendingActivation);
+        Assert.Equal(activeHash, Assert.Single(PluginCatalog.activePlugins).contentHash);
+        Assert.Same(activePipeline, ResolveTypeByName("FixtureRenderPipeline"));
+        Assert.Equal(
+            [AssetSourceId.project, new AssetSourceId("tests.rendering-fixture")],
+            AssetManager.sourceMounts.Select(static mount => mount.id));
+    }
+#pragma warning restore xUnit1031
+
+    [Fact]
+    public void ProjectImporterCandidateFailureRollsBackAssemblyAndAssetCatalog()
+    {
+        Write("Data/value.candidate", "accepted");
+        WriteCandidateImporterScript(generation: 1, rejectFailureToken: false);
+        ScriptCompilationResult initial = Compile();
+        Assert.True(initial.success, FormatDiagnostics(initial));
+        Assert.True(m_manager.ApplyPendingReload());
+
+        Type previousType = ResolveTypeByName("CandidateImportedAsset");
+        AssetObject initialAsset = Assert.IsAssignableFrom<AssetObject>(
+            LoadAsset("Data/value.candidate", previousType));
+        Assert.Equal(1, GetProperty<int>(initialAsset, "importerGeneration"));
+        Assert.Equal("accepted", GetProperty<string>(initialAsset, "value"));
+
+        Write("Data/value.candidate", "fail");
+        WriteCandidateImporterScript(generation: 2, rejectFailureToken: true);
+        ScriptCompilationResult candidate = Compile();
+        Assert.True(candidate.success, FormatDiagnostics(candidate));
+
+        Exception failure = Assert.ThrowsAny<Exception>(() => m_manager.ApplyPendingReload());
+
+        Assert.Contains(
+            "introduced or changed writable Asset import failures",
+            failure.ToString(),
+            StringComparison.Ordinal);
+        Assert.Same(previousType, ResolveTypeByName("CandidateImportedAsset"));
+        AssetObject restoredAsset = Assert.IsAssignableFrom<AssetObject>(
+            LoadAsset("Data/value.candidate", previousType));
+        Assert.Equal(1, GetProperty<int>(restoredAsset, "importerGeneration"));
+        Assert.Equal("fail", GetProperty<string>(restoredAsset, "value"));
+        Assert.True(AssetManager.TryGetInfo("Data/value.candidate", out AssetInfo? restoredInfo));
+        Assert.Equal(AssetImportStatus.Imported, restoredInfo!.status);
+    }
+
+    [Fact]
+    public void ExistingWritableImportFailureDoesNotBlockUnrelatedAssemblyCandidate()
+    {
+        Write("Data/value.candidate", "accepted");
+        WriteCandidateImporterScript(generation: 1, rejectFailureToken: true);
+        WriteUnrelatedCandidateScript(version: 1);
+        ScriptCompilationResult initial = Compile();
+        Assert.True(initial.success, FormatDiagnostics(initial));
+        Assert.True(m_manager.ApplyPendingReload());
+
+        Write("Data/value.candidate", "fail");
+        AssetManager.Rescan();
+        Assert.True(AssetManager.TryGetInfo("Data/value.candidate", out AssetInfo? failedInfo));
+        Assert.Equal(AssetImportStatus.Failed, failedInfo!.status);
+
+        WriteUnrelatedCandidateScript(version: 2);
+        ScriptCompilationResult candidate = Compile();
+        Assert.True(candidate.success, FormatDiagnostics(candidate));
+        Assert.True(m_manager.ApplyPendingReload());
+
+        Assert.Equal(2, ReadVersion(ResolveTypeByName("UnrelatedCandidateBehavior")));
+        Assert.True(AssetManager.TryGetInfo("Data/value.candidate", out AssetInfo? retainedFailure));
+        Assert.Equal(AssetImportStatus.Failed, retainedFailure!.status);
+        Assert.Contains(
+            retainedFailure.diagnostics,
+            static diagnostic => diagnostic.Contains(
+                "Injected candidate importer failure",
+                StringComparison.Ordinal));
     }
 
     [Fact]
@@ -744,12 +1046,12 @@ public sealed class ScriptManagerTests : IDisposable
                 .Drop(token, EditorDropPlacement.Into);
 
             Assert.True(drop.accepted);
-            Assert.Equal("Destination/Referenced.iscene", referencedAsset.sourcePath);
+            Assert.Equal("Destination/Referenced.iscene", referencedAsset.assetPath.ToString());
             Assert.False(workspace.IsDirty(hostScene));
 
             AssetManager.Move("Destination/Referenced.iscene", "Destination/Renamed.iscene");
 
-            Assert.Equal("Destination/Renamed.iscene", referencedAsset.sourcePath);
+            Assert.Equal("Destination/Renamed.iscene", referencedAsset.assetPath.ToString());
             Assert.False(workspace.IsDirty(hostScene));
         }
         finally
@@ -965,7 +1267,7 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public void GameLayersPersistThroughProjectSettingsWithoutAssetRegistration()
+    public void GameLayersPersistThroughEditorSettingsWithoutAssetRegistration()
     {
         _ = Assembly.Load(typeof(AssetReferenceDropTarget).Assembly.GetName());
         TypeCacheManager.Rebuild();
@@ -1651,7 +1953,6 @@ public sealed class ScriptManagerTests : IDisposable
     [InlineData("Assets/Scripts/Player.cs", "FileCode")]
     [InlineData("Assets/Scenes/Main.iscene", "Cubes")]
     [InlineData("Assets/Prefabs/Player.iprefab", "DiceD6")]
-    [InlineData("Assets/Plugins/Physics.dll", "Plug")]
     [InlineData("Assets/Scripts/Game.iasmdef", "Gears")]
     [InlineData("Assets/Data/Settings.JSON", "FileLines")]
     public void BuiltInAssetIconsResolveFromFileExtensions(string relativePath, string iconName)
@@ -1726,11 +2027,7 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void LocalPluginTypesRequireAnExplicitNamespaceImport()
     {
-        string pluginDirectory = Path.Combine(m_projectRoot, "Assets", "Plugins");
-        Directory.CreateDirectory(pluginDirectory);
-        File.Copy(
-            Path.Combine(AppContext.BaseDirectory, "Plugins", "Inno.Editor.Scripting.TestPlugin.dll"),
-            Path.Combine(pluginDirectory, "ProjectPlugin.dll"));
+        InstallSourcePlugin();
         Write("PluginConsumer.cs", """
             using ProjectPluginApi;
 
@@ -1750,13 +2047,71 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
+    public void PluginRuntimeAssemblyCanReferenceDeclaredPluginDependency()
+    {
+        InstallSourcePlugins(
+            new SourcePluginFixture(
+                "tests.dependency-base",
+                [],
+                "Base.cs",
+                "namespace DependencyBaseApi; public static class BaseValue { public const int value = 42; }"),
+            new SourcePluginFixture(
+                "tests.dependency-consumer",
+                ["tests.dependency-base"],
+                "Consumer.cs",
+                "using DependencyBaseApi; namespace DependencyConsumerApi; "
+                + "public sealed class ConsumerValue { public int value => BaseValue.value; }"));
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.True(result.success, FormatDiagnostics(result));
+        Assert.True(m_manager.ApplyPendingReload());
+        Type consumerType = ResolveTypeByName("ConsumerValue");
+        object consumer = Activator.CreateInstance(consumerType)!;
+        Assert.Equal(42, consumerType.GetProperty("value")!.GetValue(consumer));
+    }
+
+    [Fact]
+    public void PluginAssemblyDefinitionCannotReferenceProjectAssembly()
+    {
+        Write("ProjectOnly.cs", "public sealed class ProjectOnly { }");
+        const string pluginId = "tests.project-reference";
+        const string sourcePath = "Plugin.cs";
+        const string definitionPath = "Plugin.iasmdef";
+        Write(sourcePath, "public sealed class ForbiddenPluginType { }");
+        WriteAssemblyDefinition(
+            definitionPath,
+            "Plugin.Forbidden",
+            ScriptAssemblyScope.Runtime,
+            references: ["Inno.GameScripts"]);
+        (byte[] source, byte[] sourceMeta) = CaptureProjectSource(sourcePath);
+        (byte[] definition, byte[] definitionMeta) = CaptureProjectSource(definitionPath);
+        InstallPluginArchives(
+        [
+            new PluginArchiveFixture(
+                pluginId,
+                [],
+                ["Assets/" + definitionPath],
+                new Dictionary<string, byte[]>
+                {
+                    ["Assets/" + sourcePath] = source,
+                    ["Assets/" + sourcePath + ".imeta"] = sourceMeta,
+                    ["Assets/" + definitionPath] = definition,
+                    ["Assets/" + definitionPath + ".imeta"] = definitionMeta
+                })
+        ]);
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.False(result.success);
+        Assert.Contains(result.diagnostics, static diagnostic =>
+            diagnostic.message.Contains("cannot reference project assembly", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void EditorPluginDescriptorIsVisibleOnlyToEditorScripts()
     {
-        string pluginDirectory = Path.Combine(m_projectRoot, "Assets", "Plugins");
-        Directory.CreateDirectory(pluginDirectory);
-        File.Copy(
-            Path.Combine(AppContext.BaseDirectory, "Plugins", "Inno.Editor.Scripting.TestPlugin.dll"),
-            Path.Combine(pluginDirectory, "ProjectPlugin.editor.dll"));
+        InstallSourcePlugin(editorOnly: true);
         Write("RuntimePluginConsumer.cs", """
             using ProjectPluginApi;
             public sealed class RuntimePluginConsumer
@@ -1787,11 +2142,7 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void ProcessWideAssetResolverRejectsACollectiblePluginTarget()
     {
-        string pluginDirectory = Path.Combine(m_projectRoot, "Assets", "Plugins");
-        Directory.CreateDirectory(pluginDirectory);
-        File.Copy(
-            Path.Combine(AppContext.BaseDirectory, "Plugins", "Inno.Editor.Scripting.TestPlugin.dll"),
-            Path.Combine(pluginDirectory, "ProjectPlugin.dll"));
+        InstallSourcePlugin();
         ScriptCompilationResult initial = Compile();
         Assert.True(initial.success, FormatDiagnostics(initial));
         Assert.True(m_manager.ApplyPendingReload());
@@ -1809,11 +2160,7 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void ReloadOperationsUseTheRequiredDependencyClosureAndExactUpstreamAssemblies()
     {
-        string pluginDirectory = Path.Combine(m_projectRoot, "Assets", "Plugins");
-        Directory.CreateDirectory(pluginDirectory);
-        File.Copy(
-            Path.Combine(AppContext.BaseDirectory, "Plugins", "Inno.Editor.Scripting.TestPlugin.dll"),
-            Path.Combine(pluginDirectory, "ProjectPlugin.dll"));
+        InstallSourcePlugin();
         Write("RuntimeReloadProbe.cs", """
             using ProjectPluginApi;
 
@@ -2767,14 +3114,17 @@ public sealed class ScriptManagerTests : IDisposable
             "type-manifest",
             out AssetArtifactInfo? typeManifest));
         Assert.NotNull(typeManifest);
-        Assert.Contains(info.persistentId.ToString("D"), File.ReadAllText(typeManifest.absolutePath));
+        Guid manifestSourceId = SerializationManager.Decode(
+            File.ReadAllBytes(typeManifest.absolutePath),
+            static reader => reader.Read<Guid>("sourcePersistentId"));
+        Assert.Equal(info.persistentId, manifestSourceId);
         Assert.Equal(
             File.ReadAllText(Path.Combine(m_projectRoot, "Assets", "Scripts", "Tracked.cs")),
             File.ReadAllText(source.absolutePath));
         Assert.NotNull(result.outputDirectory);
         Assert.True(File.Exists(Path.Combine(
             result.outputDirectory!,
-            "Inno.GameScripts.types.json")));
+            "Inno.GameScripts.types.inno")));
         Assert.DoesNotMatch(@"[/\\]ScriptAssemblies[/\\]\d+$", result.outputDirectory!);
     }
 
@@ -2869,27 +3219,17 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void AssemblyDefinitionsControlScopeReferencesAndGeneratedIdeProjects()
     {
-        Write("Runtime/Runtime.iasmdef", """
-            {
-              "name": "Project.Runtime",
-              "scope": "Runtime",
-              "references": [],
-              "defines": ["PROJECT_RUNTIME"],
-              "nullable": true,
-              "allowUnsafe": false
-            }
-            """);
+        WriteAssemblyDefinition(
+            "Runtime/Runtime.iasmdef",
+            "Project.Runtime",
+            ScriptAssemblyScope.Runtime,
+            defines: ["PROJECT_RUNTIME"]);
         Write("Runtime/RuntimeType.cs", "public sealed class RuntimeType { }");
-        Write("Editor/Editor.iasmdef", """
-            {
-              "name": "Project.Editor",
-              "scope": "Editor",
-              "references": ["Project.Runtime"],
-              "defines": [],
-              "nullable": true,
-              "allowUnsafe": false
-            }
-            """);
+        WriteAssemblyDefinition(
+            "Editor/Editor.iasmdef",
+            "Project.Editor",
+            ScriptAssemblyScope.Editor,
+            references: ["Project.Runtime"]);
         Write("Editor/EditorType.cs", "public sealed class EditorType { public RuntimeType value = new(); }");
 
         ScriptCompilationResult result = Compile();
@@ -2907,17 +3247,21 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void IncrementalCompilation_RebuildsOnlyChangedAssemblyAndTransitiveDependents()
     {
-        Write("Core/Core.iasmdef", """
-            { "name": "Project.Core", "scope": "Runtime", "references": [] }
-            """);
+        WriteAssemblyDefinition(
+            "Core/Core.iasmdef",
+            "Project.Core",
+            ScriptAssemblyScope.Runtime);
         Write("Core/CoreValue.cs", "public static class CoreValue { public const int value = 1; }");
-        Write("Gameplay/Gameplay.iasmdef", """
-            { "name": "Project.Gameplay", "scope": "Runtime", "references": ["Project.Core"] }
-            """);
+        WriteAssemblyDefinition(
+            "Gameplay/Gameplay.iasmdef",
+            "Project.Gameplay",
+            ScriptAssemblyScope.Runtime,
+            references: ["Project.Core"]);
         Write("Gameplay/GameplayValue.cs", "public static class GameplayValue { public const int value = CoreValue.value; }");
-        Write("Independent/Independent.iasmdef", """
-            { "name": "Project.Independent", "scope": "Runtime", "references": [] }
-            """);
+        WriteAssemblyDefinition(
+            "Independent/Independent.iasmdef",
+            "Project.Independent",
+            ScriptAssemblyScope.Runtime);
         Write("Independent/IndependentValue.cs", "public static class IndependentValue { public const int value = 9; }");
 
         ScriptCompilationResult first = Compile();
@@ -3021,13 +3365,16 @@ public sealed class ScriptManagerTests : IDisposable
     [Fact]
     public void RuntimeAssemblyDefinitionCannotReferenceEditorAssembly()
     {
-        Write("Editor/Editor.iasmdef", """
-            { "name": "Project.Editor", "scope": "Editor", "references": [] }
-            """);
+        WriteAssemblyDefinition(
+            "Editor/Editor.iasmdef",
+            "Project.Editor",
+            ScriptAssemblyScope.Editor);
         Write("Editor/Tool.cs", "public sealed class Tool { }");
-        Write("Runtime/Runtime.iasmdef", """
-            { "name": "Project.Runtime", "scope": "Runtime", "references": ["Project.Editor"] }
-            """);
+        WriteAssemblyDefinition(
+            "Runtime/Runtime.iasmdef",
+            "Project.Runtime",
+            ScriptAssemblyScope.Runtime,
+            references: ["Project.Editor"]);
         Write("Runtime/Game.cs", "public sealed class Game { }");
 
         ScriptCompilationResult result = Compile();
@@ -3068,12 +3415,92 @@ public sealed class ScriptManagerTests : IDisposable
             }
             """);
 
+    private void WriteCandidateImporterScript(int generation, bool rejectFailureToken)
+        => Write("CandidateImporter.cs", $$"""
+            using InnoEngine.Assets;
+            using InnoEngine.Reflection;
+            using InnoEngine.Serialization;
+
+            [StableTypeId("4342a609-aa4d-492a-b65e-823276041a31")]
+            public sealed class CandidateImportedAsset : AssetObject
+            {
+                [SerializableProperty]
+                public int importerGeneration { get; set; }
+
+                [SerializableProperty]
+                public string value { get; set; } = string.Empty;
+            }
+
+            [AssetImporterExtension]
+            public sealed class CandidateImporter : AssetImporter<CandidateImportedAsset>
+            {
+                public override string importerId => "tests.candidate-importer";
+
+                public override string[] supportedExtensions => [".candidate"];
+
+                protected override async System.Threading.Tasks.ValueTask ImportAsync(
+                    AssetImportContext context,
+                    AssetImportWriter<CandidateImportedAsset> output,
+                    System.Threading.CancellationToken cancellationToken)
+                {
+                    string content = context.ReadUtf8Text();
+                    if ({{rejectFailureToken.ToString().ToLowerInvariant()}}
+                        && string.Equals(content, "fail", System.StringComparison.Ordinal))
+                    {
+                        throw new System.IO.InvalidDataException("Injected candidate importer failure.");
+                    }
+                    output.SetAsset(new CandidateImportedAsset
+                    {
+                        importerGeneration = {{generation}},
+                        value = content
+                    });
+                    await output.WriteArtifactAsync("runtime", context.sourceBytes, cancellationToken);
+                }
+            }
+            """);
+
+    private void WriteUnrelatedCandidateScript(int version)
+        => Write("UnrelatedCandidateBehavior.cs", $$"""
+            using InnoEngine.Reflection;
+
+            [StableTypeId("8fd1b10a-ea68-4878-a885-8623aab5d8e8")]
+            public sealed class UnrelatedCandidateBehavior
+            {
+                public int version => {{version}};
+            }
+            """);
+
     private ScriptCompilationResult Compile()
     {
         m_manager.RecompileScripting();
         Assert.True(m_manager.TryCompilePending(out Task<ScriptCompilationResult>? compilation));
         Assert.NotNull(compilation);
         return compilation.GetAwaiter().GetResult();
+    }
+
+    private void CompleteCompilationThroughEditorHost(ScriptCompilationResult compilation)
+    {
+        Type editorScriptingType = typeof(ScriptManager).Assembly.GetType(
+            "Inno.Editor.Scripting.EditorScripting",
+            throwOnError: true)!;
+        object scripting = ScriptingTestReflection.Create(editorScriptingType);
+        FieldInfo managerField = editorScriptingType.GetField(
+            "m_manager",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        FieldInfo compilationField = editorScriptingType.GetField(
+            "m_compilation",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        managerField.SetValue(scripting, m_manager);
+        compilationField.SetValue(scripting, Task.FromResult(compilation));
+        try
+        {
+            ScriptingTestReflection.Invoke(scripting, "CompleteCompilation");
+        }
+        finally
+        {
+            compilationField.SetValue(scripting, null);
+            managerField.SetValue(scripting, null);
+        }
     }
 
     private static IReadOnlyDictionary<string, int> GetReloadModuleGenerations()
@@ -3516,6 +3943,18 @@ public sealed class ScriptManagerTests : IDisposable
         WeakReference panel,
         WeakReference observerType);
 
+    private sealed record SourcePluginFixture(
+        string id,
+        string[] dependencies,
+        string sourceName,
+        string source);
+
+    private sealed record PluginArchiveFixture(
+        string id,
+        string[] dependencies,
+        string[] assemblyDefinitions,
+        IReadOnlyDictionary<string, byte[]> entries);
+
     private sealed record MissingGenerationReferences(
         WeakReference context,
         GameScene scene,
@@ -3523,11 +3962,347 @@ public sealed class ScriptManagerTests : IDisposable
         Guid componentId,
         Guid systemId);
 
+    private sealed class FixtureRenderDiagnosticSink : IRenderDiagnosticSink
+    {
+        public void Publish(RenderDiagnostic diagnostic) => _ = diagnostic;
+    }
+
+    private class EmptyRenderResourceServiceProxy : DispatchProxy
+    {
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            _ = args;
+            if (targetMethod is null)
+                throw new InvalidOperationException("A resource service proxy call requires method metadata.");
+            if (targetMethod.Name == "get_capabilities")
+            {
+                return new GraphicsCapabilities(
+                    GraphicsBackend.Noop,
+                    GraphicsFeature.Compute,
+                    new GraphicsLimits(64, 4, 4096, 8),
+                    Enum.GetValues<RenderTextureFormat>(),
+                    Enum.GetValues<RenderTextureFormat>(),
+                    Enum.GetValues<RenderTextureFormat>(),
+                    Enum.GetValues<RenderTextureFormat>(),
+                    originBottomLeft: false,
+                    homogeneousDepth: false);
+            }
+            return targetMethod.ReturnType == typeof(void)
+                ? null
+                : targetMethod.ReturnType.IsValueType
+                    ? Activator.CreateInstance(targetMethod.ReturnType)
+                    : null;
+        }
+    }
+
     private void Write(string relativePath, string content)
     {
         string path = Path.Combine(m_projectRoot, "Assets", relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content);
+    }
+
+    private void WriteAssemblyDefinition(
+        string relativePath,
+        string assemblyName,
+        ScriptAssemblyScope scope,
+        string[]? references = null,
+        string[]? defines = null)
+    {
+        var definition = new ScriptAssemblyDefinitionAsset(
+            assemblyName,
+            scope,
+            references,
+            defines);
+        string path = Path.Combine(m_projectRoot, "Assets", relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(path, NativeAssetSourceSerialization.Export(definition));
+    }
+
+    private void InstallSourcePlugin(bool editorOnly = false)
+    {
+        const string pluginId = "tests.scripting";
+        string sourceName = editorOnly ? "PluginValue.editor.cs" : "PluginValue.cs";
+        Write(sourceName, """
+            namespace ProjectPluginApi;
+
+            public static class PluginValue
+            {
+                public const int value = 42;
+            }
+
+            public sealed class PluginObject
+            {
+                public int value => PluginValue.value;
+            }
+            """);
+        Assert.True(AssetManager.Import(sourceName));
+        string projectSource = Path.Combine(m_projectRoot, "Assets", sourceName);
+        byte[] sourceBytes = File.ReadAllBytes(projectSource);
+        byte[] metadataBytes = File.ReadAllBytes(projectSource + ".imeta");
+        File.Delete(projectSource);
+        File.Delete(projectSource + ".imeta");
+        AssetManager.Rescan();
+
+        string pluginRoot = Path.Combine(m_projectRoot, "Plugins");
+        Directory.CreateDirectory(pluginRoot);
+        string archivePath = Path.Combine(pluginRoot, "ScriptingTests.zip");
+        using (FileStream stream = File.Create(archivePath))
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create))
+        {
+            WritePluginEntry(archive, "Plugin.inno", SerializationManager.Serialize(new PluginManifest
+            {
+                pluginId = pluginId,
+                displayName = "Scripting Tests"
+            }));
+            WritePluginEntry(archive, "Assets/" + sourceName, sourceBytes);
+            WritePluginEntry(archive, "Assets/" + sourceName + ".imeta", metadataBytes);
+        }
+
+        var archives = new PluginArchiveService(
+            pluginRoot,
+            Path.Combine(m_projectRoot, "Library"));
+        PluginScanResult scan = archives.Scan(new HashSet<string>([pluginId], StringComparer.Ordinal));
+        Assert.Empty(scan.diagnostics);
+        PluginCatalog.Activate(scan);
+        AssetSourceMount projectMount = AssetManager.sourceMounts.Single(
+            static mount => mount.id == AssetSourceId.project);
+        AssetManager.ReplaceSourceMounts(
+            [projectMount, .. PluginArchiveService.GetActivatableMounts(scan)]);
+    }
+
+    private void InstallSourcePlugins(params SourcePluginFixture[] plugins)
+    {
+        var archives = new List<PluginArchiveFixture>();
+        foreach (SourcePluginFixture plugin in plugins)
+        {
+            string stagingPath = "PluginStaging/" + plugin.id + "/" + plugin.sourceName;
+            Write(stagingPath, plugin.source);
+            (byte[] source, byte[] metadata) = CaptureProjectSource(stagingPath);
+            archives.Add(new PluginArchiveFixture(
+                plugin.id,
+                plugin.dependencies,
+                [],
+                new Dictionary<string, byte[]>
+                {
+                    ["Assets/" + plugin.sourceName] = source,
+                    ["Assets/" + plugin.sourceName + ".imeta"] = metadata
+                }));
+        }
+        InstallPluginArchives(archives);
+    }
+
+    private (byte[] source, byte[] metadata) CaptureProjectSource(string relativePath)
+    {
+        Assert.True(AssetManager.Import(relativePath));
+        string projectSource = Path.Combine(m_projectRoot, "Assets", relativePath);
+        byte[] source = File.ReadAllBytes(projectSource);
+        byte[] metadata = File.ReadAllBytes(projectSource + ".imeta");
+        File.Delete(projectSource);
+        File.Delete(projectSource + ".imeta");
+        AssetManager.Rescan();
+        return (source, metadata);
+    }
+
+    private void InstallPluginArchives(IReadOnlyList<PluginArchiveFixture> plugins)
+    {
+        string pluginRoot = Path.Combine(m_projectRoot, "Plugins");
+        Directory.CreateDirectory(pluginRoot);
+        foreach (PluginArchiveFixture plugin in plugins)
+        {
+            string archivePath = Path.Combine(pluginRoot, plugin.id + ".zip");
+            using FileStream stream = File.Create(archivePath);
+            using var archive = new ZipArchive(stream, ZipArchiveMode.Create);
+            WritePluginEntry(archive, "Plugin.inno", SerializationManager.Serialize(new PluginManifest
+            {
+                pluginId = plugin.id,
+                displayName = plugin.id,
+                dependencies = plugin.dependencies,
+                assemblyDefinitions = plugin.assemblyDefinitions
+            }));
+            foreach ((string path, byte[] bytes) in plugin.entries)
+                WritePluginEntry(archive, path, bytes);
+        }
+
+        var archiveService = new PluginArchiveService(
+            pluginRoot,
+            Path.Combine(m_projectRoot, "Library"));
+        PluginScanResult scan = archiveService.Scan(
+            plugins.Select(static plugin => plugin.id).ToHashSet(StringComparer.Ordinal));
+        Assert.Empty(scan.diagnostics);
+        PluginCatalog.Activate(scan);
+        AssetSourceMount projectMount = AssetManager.sourceMounts.Single(
+            static mount => mount.id == AssetSourceId.project);
+        AssetManager.ReplaceSourceMounts(
+            [projectMount, .. PluginArchiveService.GetActivatableMounts(scan)]);
+    }
+
+    private void InstallProgrammableRenderingPlugin()
+    {
+        const string pluginId = "tests.rendering-fixture";
+        const string sourceName = "ProgrammableRenderingFixture.cs";
+        const string editorSourceName = "ProgrammableRenderingFixture.editor.cs";
+        Write(sourceName, """
+            using System.Collections.Generic;
+            using InnoEngine.Graphs;
+            using InnoEngine.Reflection;
+            using InnoEngine.Rendering;
+            using InnoEngine.Rendering.ShaderGraph;
+            using InnoEngine.Scene;
+
+            [StableTypeId("85070103-bc64-4461-b197-105cbeea7a8b")]
+            public sealed class FixtureRenderComponent : GameBehavior
+            {
+            }
+
+            [RenderPipelineExtension("tests.fixture.pipeline")]
+            public sealed class FixtureRenderPipeline : RenderPipeline
+            {
+                private static readonly RenderPhaseId s_raster = new("tests.fixture.raster");
+                private static readonly RenderPhaseId s_compute = new("tests.fixture.compute");
+
+                public override void Build(RenderPipelineContext context)
+                {
+                    context.graph
+                        .AddRasterPass(
+                            "Fixture Clear Triangle",
+                            s_raster,
+                            0,
+                            static (_, pass) => pass.commands.DrawProcedural(3))
+                        .ClearPresentationTarget(new RenderClearColor(0.05f, 0.1f, 0.2f, 1f))
+                        .HasSideEffect();
+                    context.graph
+                        .AddComputePass(
+                            "Fixture Compute",
+                            s_compute,
+                            0,
+                            static (_, pass) => pass.commands.Dispatch(1, 1, 1))
+                        .After(s_raster)
+                        .HasSideEffect();
+                }
+            }
+
+            [ShaderNodeExtension("tests.fixture.compute-value")]
+            public sealed class FixtureComputeValueNode : ShaderNodeDefinition
+            {
+                private static readonly GraphPortId s_output = new("value");
+
+                public FixtureComputeValueNode()
+                    : base(
+                        "tests.fixture.compute-value",
+                        "Fixture Compute Value",
+                        "Tests/Fixture",
+                        ShaderStage.Compute)
+                {
+                }
+
+                public override IReadOnlyList<GraphPortDefinition> GetPorts(GraphNodeRecord node)
+                {
+                    _ = node;
+                    return
+                    [
+                        new GraphPortDefinition(
+                            s_output,
+                            "Value",
+                            ShaderGraphValueTypes.GetId(ShaderValueType.Float),
+                            GraphPortDirection.Output)
+                    ];
+                }
+
+                public override void Emit(ShaderNodeEmitContext context)
+                    => context.SetOutput(
+                        s_output,
+                        new ShaderValue(ShaderValueType.Float, "1.0", context.node.id));
+            }
+            """);
+        Write(editorSourceName, """
+            using InnoEditor.Rendering;
+            using InnoEngine.Rendering;
+
+            [EditorViewportProviderExtension(
+                "tests.fixture.viewport-provider",
+                "tests.fixture.viewport")]
+            public sealed class FixtureViewportProvider : EditorViewportProvider
+            {
+                private static readonly RenderDataChannelId s_size =
+                    new("tests.fixture.viewport-size");
+
+                public static int toolbarDrawCount;
+                public static float lastPointerX;
+                public static float lastPointerY;
+                public static int lastPointerButton;
+
+                public override EditorViewportSubmission Build(EditorViewportContext context)
+                {
+                    var data = new RenderFrameData();
+                    data.Set(s_size, $"{context.pixelWidth}x{context.pixelHeight}");
+                    return new EditorViewportSubmission(
+                        data,
+                        targetFormat: RenderTextureFormat.RGBA16Float,
+                        priority: 17);
+                }
+
+                public override void DrawToolbar(EditorViewportContext context)
+                {
+                    _ = context;
+                    toolbarDrawCount++;
+                }
+
+                public override void HandlePointer(EditorViewportPointerContext context)
+                {
+                    lastPointerX = context.x;
+                    lastPointerY = context.y;
+                    lastPointerButton = context.button;
+                }
+            }
+            """);
+        Assert.True(AssetManager.Import(sourceName));
+        Assert.True(AssetManager.Import(editorSourceName));
+        string projectSource = Path.Combine(m_projectRoot, "Assets", sourceName);
+        string projectEditorSource = Path.Combine(m_projectRoot, "Assets", editorSourceName);
+        byte[] sourceBytes = File.ReadAllBytes(projectSource);
+        byte[] metadataBytes = File.ReadAllBytes(projectSource + ".imeta");
+        byte[] editorSourceBytes = File.ReadAllBytes(projectEditorSource);
+        byte[] editorMetadataBytes = File.ReadAllBytes(projectEditorSource + ".imeta");
+        File.Delete(projectSource);
+        File.Delete(projectSource + ".imeta");
+        File.Delete(projectEditorSource);
+        File.Delete(projectEditorSource + ".imeta");
+        AssetManager.Rescan();
+
+        string pluginRoot = Path.Combine(m_projectRoot, "Plugins");
+        Directory.CreateDirectory(pluginRoot);
+        string archivePath = Path.Combine(pluginRoot, "ProgrammableRenderingFixture.zip");
+        using (FileStream stream = File.Create(archivePath))
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create))
+        {
+            WritePluginEntry(archive, "Plugin.inno", SerializationManager.Serialize(new PluginManifest
+            {
+                pluginId = pluginId,
+                displayName = "Programmable Rendering Fixture"
+            }));
+            WritePluginEntry(archive, "Assets/" + sourceName, sourceBytes);
+            WritePluginEntry(archive, "Assets/" + sourceName + ".imeta", metadataBytes);
+            WritePluginEntry(archive, "Assets/" + editorSourceName, editorSourceBytes);
+            WritePluginEntry(archive, "Assets/" + editorSourceName + ".imeta", editorMetadataBytes);
+        }
+
+        string libraryRoot = Path.Combine(m_projectRoot, "Library");
+        var archives = new PluginArchiveService(pluginRoot, libraryRoot);
+        PluginScanResult untrusted = archives.Scan(new HashSet<string>(StringComparer.Ordinal));
+        Assert.Empty(PluginArchiveService.GetActivatableCandidates(untrusted));
+        Assert.Contains(untrusted.diagnostics, static diagnostic =>
+            diagnostic.message.Contains("trust", StringComparison.OrdinalIgnoreCase));
+        PluginManager.Initialize(pluginRoot, libraryRoot, untrusted);
+        PluginManager.SetTrusted(pluginId, trusted: true);
+        Assert.True(PluginManager.hasPendingActivation);
+    }
+
+    private static void WritePluginEntry(ZipArchive archive, string path, byte[] bytes)
+    {
+        ZipArchiveEntry entry = archive.CreateEntry(path, CompressionLevel.Optimal);
+        using Stream output = entry.Open();
+        output.Write(bytes);
     }
 
     private void MoveWithMeta(string sourceRelativePath, string destinationRelativePath)
@@ -3560,6 +4335,17 @@ public sealed class ScriptManagerTests : IDisposable
                 method.GetParameters().Length == 0);
         object result = getComponents.MakeGenericMethod(componentType).Invoke(gameObject, null)!;
         return ((IEnumerable<GameComponent>)result).ToArray();
+    }
+
+    private static AssetObject LoadAsset(string relativePath, Type assetType)
+    {
+        MethodInfo load = typeof(AssetManager).GetMethods(BindingFlags.Static | BindingFlags.Public)
+            .Single(static method =>
+                method.Name == nameof(AssetManager.Load) &&
+                method.IsGenericMethodDefinition &&
+                method.GetParameters() is [{ ParameterType: var parameterType }] &&
+                parameterType == typeof(string));
+        return (AssetObject)load.MakeGenericMethod(assetType).Invoke(null, [relativePath])!;
     }
 
     private sealed class StrongTypeHolder(Type type)
@@ -3638,14 +4424,37 @@ public sealed class ScriptManagerTests : IDisposable
                ?? throw new InvalidOperationException($"Could not create '{typeName}'.");
     }
 
+    private static T GetProperty<T>(object target, string propertyName)
+        => Assert.IsType<T>(target.GetType().GetProperty(
+            propertyName,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.GetValue(target));
+
+    private static T GetStaticField<T>(Type type, string fieldName)
+        => Assert.IsType<T>(type.GetField(
+            fieldName,
+            BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)!.GetValue(null));
+
+    private static void SetProperty<T>(object target, string propertyName, T value)
+        => target.GetType().GetProperty(
+            propertyName,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.SetValue(target, value);
+
     private EditorInteractionRuntime CreateSettingsRuntime(out EditorSettings settings)
     {
         SettingsCaptureModule.current = null;
         var runtime = new EditorInteractionRuntime(m_projectRoot);
-        runtime.Start();
-        settings = SettingsCaptureModule.current
-            ?? throw new InvalidOperationException("The Settings module was not discovered.");
-        return runtime;
+        try
+        {
+            runtime.Start();
+            settings = SettingsCaptureModule.current
+                ?? throw new InvalidOperationException("The Settings module was not discovered.");
+            return runtime;
+        }
+        catch
+        {
+            runtime.Dispose();
+            throw;
+        }
     }
 
     private IDisposable CreateAssetIconRegistry()
@@ -3790,6 +4599,35 @@ public sealed class ScriptManagerTests : IDisposable
         {
             lock (m_sync)
                 m_reports.Remove(source.id);
+        }
+    }
+
+    private sealed class TestEditorRenderingHost : IEditorRenderingHost
+    {
+        internal EditorViewportRequest? lastRequest { get; private set; }
+
+        internal List<string> releasedViewportIds { get; } = [];
+
+        public EditorViewportOutput Submit(EditorViewportRequest request)
+        {
+            lastRequest = request;
+            return new EditorViewportOutput(
+                request.viewportId,
+                new ImGuiTextureHandle(1),
+                request.pixelWidth,
+                request.pixelHeight);
+        }
+
+        public void Draw(EditorViewportOutput output, System.Numerics.Vector2 logicalSize)
+        {
+            _ = output;
+            _ = logicalSize;
+        }
+
+        public void Release(string viewportId) => releasedViewportIds.Add(viewportId);
+
+        public void ReleaseAll()
+        {
         }
     }
 }

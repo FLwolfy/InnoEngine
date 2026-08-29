@@ -1,17 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
 using Inno.Assets.Core;
 using Inno.Core.Mathematics;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
+using Inno.Rendering.Core;
 
 namespace Inno.Rendering;
 
-/// <summary>
-/// Identifies the neutral value stored by a material property.
-/// </summary>
+/// <summary>Identifies the neutral value stored by a material property.</summary>
 public enum MaterialValueKind
 {
     /// <summary>Scalar floating-point value.</summary>
@@ -26,137 +24,167 @@ public enum MaterialValueKind
     Texture
 }
 
-/// <summary>
-/// Stores one backend-neutral material value without a GPU binding.
-/// </summary>
-public readonly record struct MaterialValue
+/// <summary>Stores one native-serializable material value without a GPU binding.</summary>
+public struct MaterialValue
 {
     private MaterialValue(
         MaterialValueKind kind,
         Vector4 vector,
         Matrix matrix,
-        TextureAsset? texture)
+        TextureAsset? texture,
+        RenderSamplerState sampler)
     {
         this.kind = kind;
         this.vector = vector;
         this.matrix = matrix;
         this.texture = texture;
+        this.sampler = sampler;
     }
 
-    /// <summary>Gets the stored value kind.</summary>
-    public MaterialValueKind kind { get; }
+    /// <summary>Gets or sets the stored value kind.</summary>
+    public MaterialValueKind kind { get; set; }
 
-    /// <summary>Gets scalar, vector or color components.</summary>
-    public Vector4 vector { get; }
+    /// <summary>Gets or sets scalar, vector, or color components.</summary>
+    public Vector4 vector { get; set; }
 
-    /// <summary>Gets the matrix value when <see cref="kind"/> is <see cref="MaterialValueKind.Matrix"/>.</summary>
-    public Matrix matrix { get; }
+    /// <summary>Gets or sets the matrix value.</summary>
+    public Matrix matrix { get; set; }
 
-    /// <summary>Gets the texture reference when <see cref="kind"/> is <see cref="MaterialValueKind.Texture"/>.</summary>
-    public TextureAsset? texture { get; }
+    /// <summary>Gets or sets the texture reference.</summary>
+    public TextureAsset? texture { get; set; }
+
+    /// <summary>Gets or sets the sampler used when this value stores a texture.</summary>
+    public RenderSamplerState sampler { get; set; }
 
     /// <summary>Creates a scalar material value.</summary>
     /// <param name="value">Scalar value.</param>
     /// <returns>A scalar material value.</returns>
     public static MaterialValue FromFloat(float value)
-        => new(MaterialValueKind.Float, new Vector4(value, 0f, 0f, 0f), default, null);
+        => new(MaterialValueKind.Float, new Vector4(value, 0f, 0f, 0f), default, null, default);
 
     /// <summary>Creates a vector material value.</summary>
     /// <param name="value">Vector value.</param>
     /// <returns>A vector material value.</returns>
     public static MaterialValue FromVector(Vector4 value)
-        => new(MaterialValueKind.Vector, value, default, null);
+        => new(MaterialValueKind.Vector, value, default, null, default);
 
     /// <summary>Creates a linear color material value.</summary>
     /// <param name="value">Color value.</param>
     /// <returns>A color material value.</returns>
     public static MaterialValue FromColor(Color value)
-        => new(MaterialValueKind.Color, new Vector4(value.r, value.g, value.b, value.a), default, null);
+        => new(MaterialValueKind.Color, new Vector4(value.r, value.g, value.b, value.a), default, null, default);
 
     /// <summary>Creates a matrix material value.</summary>
     /// <param name="value">Four-by-four matrix value.</param>
     /// <returns>A matrix material value.</returns>
     public static MaterialValue FromMatrix(Matrix value)
-        => new(MaterialValueKind.Matrix, default, value, null);
+        => new(MaterialValueKind.Matrix, default, value, null, default);
 
     /// <summary>Creates a texture material value.</summary>
     /// <param name="value">Texture asset reference.</param>
+    /// <param name="sampler">Optional sampler state; linear clamp is used when omitted.</param>
     /// <returns>A texture material value.</returns>
-    public static MaterialValue FromTexture(TextureAsset value)
+    public static MaterialValue FromTexture(
+        TextureAsset value,
+        RenderSamplerState? sampler = null)
     {
         ArgumentNullException.ThrowIfNull(value);
-        return new MaterialValue(MaterialValueKind.Texture, default, default, value);
+        return new MaterialValue(
+            MaterialValueKind.Texture,
+            default,
+            default,
+            value,
+            sampler ?? RenderSamplerState.linearClamp);
     }
 }
 
-/// <summary>
-/// Stores one persistent material property entry.
-/// </summary>
-public sealed class MaterialPropertyEntry
+/// <summary>Stores one persistent material property entry.</summary>
+public struct MaterialPropertyEntry
 {
-    /// <summary>
-    /// Creates a persistent material property entry.
-    /// </summary>
+    /// <summary>Creates a persistent material property entry.</summary>
     /// <param name="id">Stable shader property identifier.</param>
     /// <param name="value">Neutral material value.</param>
     public MaterialPropertyEntry(ShaderPropertyId id, MaterialValue value)
     {
+        if (!id.isValid)
+            throw new ArgumentException("A material property ID must be valid.", nameof(id));
         this.id = id;
         this.value = value;
     }
 
-    /// <summary>Gets the stable shader property identifier.</summary>
-    public ShaderPropertyId id { get; }
+    /// <summary>Gets or sets the stable shader property identifier.</summary>
+    public ShaderPropertyId id { get; set; }
 
     /// <summary>Gets or sets the neutral material value.</summary>
     public MaterialValue value { get; set; }
 }
 
-/// <summary>
-/// Represents imported material state keyed by stable shader property identifiers.
-/// </summary>
+/// <summary>Stores one open material metadata key and value.</summary>
+public struct MaterialMetadataEntry
+{
+    /// <summary>Creates a material metadata entry.</summary>
+    /// <param name="key">Stable provider-defined key.</param>
+    /// <param name="value">Provider-defined value.</param>
+    public MaterialMetadataEntry(string key, string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        this.key = key;
+        this.value = value ?? string.Empty;
+    }
+
+    /// <summary>Gets or sets the stable metadata key.</summary>
+    public string key { get; set; }
+
+    /// <summary>Gets or sets the metadata value.</summary>
+    public string value { get; set; }
+}
+
+/// <summary>Represents material state keyed by stable shader property identifiers.</summary>
 [StableTypeId("56f1fdc7-dad9-464a-848f-fcae4c33ecf2")]
 public sealed class MaterialAsset : AssetObject
 {
-    private readonly List<MaterialPropertyEntry> m_properties = [];
-    private readonly HashSet<string> m_keywords = new(StringComparer.Ordinal);
     [SerializableProperty(PropertyVisibility.Hide)]
-    private string m_propertyStateJson = "[]";
+    private MaterialPropertyEntry[] m_properties = [];
+
     [SerializableProperty(PropertyVisibility.Hide)]
-    private TextureAsset?[] m_textureDependencies = [];
+    private string[] m_keywords = [];
+
     [SerializableProperty(PropertyVisibility.Hide)]
-    private string[] m_keywordState = [];
+    private MaterialMetadataEntry[] m_metadata = [];
 
     /// <summary>Gets or sets the referenced shader asset.</summary>
     [SerializableProperty]
     public ShaderAsset? shader { get; set; }
 
+    /// <summary>Gets or sets an optional explicitly selected technique.</summary>
+    [SerializableProperty]
+    public ShaderTechniqueId techniqueId { get; set; }
+
     /// <summary>Gets persistent material values in stable insertion order.</summary>
     public IReadOnlyList<MaterialPropertyEntry> properties => m_properties;
 
     /// <summary>Gets enabled stable keyword option identifiers.</summary>
-    public IReadOnlySet<string> keywords => m_keywords;
+    public IReadOnlyList<string> keywords => m_keywords;
 
-    /// <summary>Gets or sets an optional render queue override.</summary>
-    [SerializableProperty]
-    public int? renderQueue { get; set; }
+    /// <summary>Gets open provider-defined metadata.</summary>
+    public IReadOnlyList<MaterialMetadataEntry> metadata => m_metadata;
 
     /// <summary>Creates or replaces one material property.</summary>
     /// <param name="id">Stable shader property identifier.</param>
     /// <param name="value">Neutral material value.</param>
     public void Set(ShaderPropertyId id, MaterialValue value)
     {
-        MaterialPropertyEntry? entry = m_properties.Find(candidate => candidate.id == id);
-        if (entry is null)
+        if (!id.isValid)
+            throw new ArgumentException("A material property ID must be valid.", nameof(id));
+        int index = Array.FindIndex(m_properties, candidate => candidate.id == id);
+        if (index < 0)
         {
-            m_properties.Add(new MaterialPropertyEntry(id, value));
-        }
-        else
-        {
-            entry.value = value;
+            Array.Resize(ref m_properties, m_properties.Length + 1);
+            m_properties[^1] = new MaterialPropertyEntry(id, value);
+            return;
         }
 
-        SynchronizeState();
+        m_properties[index] = new MaterialPropertyEntry(id, value);
     }
 
     /// <summary>Tries to read one material property.</summary>
@@ -165,9 +193,9 @@ public sealed class MaterialAsset : AssetObject
     /// <returns><see langword="true"/> when the property exists.</returns>
     public bool TryGet(ShaderPropertyId id, out MaterialValue value)
     {
-        MaterialPropertyEntry? entry = m_properties.Find(candidate => candidate.id == id);
-        value = entry?.value ?? default;
-        return entry is not null;
+        int index = Array.FindIndex(m_properties, candidate => candidate.id == id);
+        value = index < 0 ? default : m_properties[index].value;
+        return index >= 0;
     }
 
     /// <summary>Enables or disables a declared static keyword option.</summary>
@@ -176,137 +204,44 @@ public sealed class MaterialAsset : AssetObject
     public void SetKeyword(string keyword, bool enabled)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(keyword);
+        var values = m_keywords.ToHashSet(StringComparer.Ordinal);
         if (enabled)
-        {
-            m_keywords.Add(keyword);
-        }
+            values.Add(keyword);
         else
-        {
-            m_keywords.Remove(keyword);
-        }
-
-        m_keywordState = m_keywords.OrderBy(static value => value, StringComparer.Ordinal).ToArray();
+            values.Remove(keyword);
+        m_keywords = values.OrderBy(static value => value, StringComparer.Ordinal).ToArray();
     }
 
-    [OnSerializableRestored]
-    private void OnSerializableRestored()
+    /// <summary>Creates or replaces one provider-defined metadata value.</summary>
+    /// <param name="key">Stable metadata key.</param>
+    /// <param name="value">Provider-defined value.</param>
+    public void SetMetadata(string key, string value)
     {
-        m_properties.Clear();
-        MaterialPropertyData[] values = JsonSerializer.Deserialize<MaterialPropertyData[]>(m_propertyStateJson)
-            ?? [];
-        foreach (MaterialPropertyData value in values)
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        int index = Array.FindIndex(m_metadata, entry => string.Equals(entry.key, key, StringComparison.Ordinal));
+        if (index < 0)
         {
-            TextureAsset? texture = value.textureIndex >= 0
-                && value.textureIndex < m_textureDependencies.Length
-                    ? m_textureDependencies[value.textureIndex]
-                    : null;
-            MaterialValue materialValue = value.kind switch
-            {
-                MaterialValueKind.Float => MaterialValue.FromFloat(value.x),
-                MaterialValueKind.Vector => MaterialValue.FromVector(
-                    new Vector4(value.x, value.y, value.z, value.w)),
-                MaterialValueKind.Color => MaterialValue.FromColor(
-                    new Color(value.x, value.y, value.z, value.w)),
-                MaterialValueKind.Matrix => MaterialValue.FromMatrix(new Matrix(
-                    value.m11, value.m12, value.m13, value.m14,
-                    value.m21, value.m22, value.m23, value.m24,
-                    value.m31, value.m32, value.m33, value.m34,
-                    value.m41, value.m42, value.m43, value.m44)),
-                MaterialValueKind.Texture when texture is not null => MaterialValue.FromTexture(texture),
-                MaterialValueKind.Texture => throw new InvalidOperationException(
-                    $"Material texture property '{value.id}' has no dependency."),
-                _ => throw new InvalidOperationException($"Unsupported material value kind '{value.kind}'.")
-            };
-            m_properties.Add(new MaterialPropertyEntry(new ShaderPropertyId(value.id), materialValue));
+            Array.Resize(ref m_metadata, m_metadata.Length + 1);
+            m_metadata[^1] = new MaterialMetadataEntry(key, value);
+            return;
         }
 
-        m_keywords.Clear();
-        foreach (string keyword in m_keywordState)
-        {
-            m_keywords.Add(keyword);
-        }
+        m_metadata[index] = new MaterialMetadataEntry(key, value);
     }
 
-    private void SynchronizeState()
+    /// <summary>Tries to read one provider-defined metadata value.</summary>
+    /// <param name="key">Stable metadata key.</param>
+    /// <param name="value">Receives the metadata value when present.</param>
+    /// <returns><see langword="true"/> when the key exists.</returns>
+    public bool TryGetMetadata(string key, out string? value)
     {
-        var textures = new List<TextureAsset>();
-        var values = new List<MaterialPropertyData>(m_properties.Count);
-        foreach (MaterialPropertyEntry entry in m_properties)
-        {
-            int textureIndex = -1;
-            if (entry.value.texture is not null)
-            {
-                textureIndex = textures.IndexOf(entry.value.texture);
-                if (textureIndex < 0)
-                {
-                    textureIndex = textures.Count;
-                    textures.Add(entry.value.texture);
-                }
-            }
-
-            values.Add(new MaterialPropertyData
-            {
-                id = entry.id.value,
-                kind = entry.value.kind,
-                x = entry.value.vector.x,
-                y = entry.value.vector.y,
-                z = entry.value.vector.z,
-                w = entry.value.vector.w,
-                m11 = entry.value.matrix.m11,
-                m12 = entry.value.matrix.m12,
-                m13 = entry.value.matrix.m13,
-                m14 = entry.value.matrix.m14,
-                m21 = entry.value.matrix.m21,
-                m22 = entry.value.matrix.m22,
-                m23 = entry.value.matrix.m23,
-                m24 = entry.value.matrix.m24,
-                m31 = entry.value.matrix.m31,
-                m32 = entry.value.matrix.m32,
-                m33 = entry.value.matrix.m33,
-                m34 = entry.value.matrix.m34,
-                m41 = entry.value.matrix.m41,
-                m42 = entry.value.matrix.m42,
-                m43 = entry.value.matrix.m43,
-                m44 = entry.value.matrix.m44,
-                textureIndex = textureIndex
-            });
-        }
-
-        m_textureDependencies = [.. textures];
-        m_propertyStateJson = JsonSerializer.Serialize(values);
-    }
-
-    private sealed class MaterialPropertyData
-    {
-        public string id { get; set; } = string.Empty;
-        public MaterialValueKind kind { get; set; }
-        public float x { get; set; }
-        public float y { get; set; }
-        public float z { get; set; }
-        public float w { get; set; }
-        public float m11 { get; set; }
-        public float m12 { get; set; }
-        public float m13 { get; set; }
-        public float m14 { get; set; }
-        public float m21 { get; set; }
-        public float m22 { get; set; }
-        public float m23 { get; set; }
-        public float m24 { get; set; }
-        public float m31 { get; set; }
-        public float m32 { get; set; }
-        public float m33 { get; set; }
-        public float m34 { get; set; }
-        public float m41 { get; set; }
-        public float m42 { get; set; }
-        public float m43 { get; set; }
-        public float m44 { get; set; }
-        public int textureIndex { get; set; } = -1;
+        int index = Array.FindIndex(m_metadata, entry => string.Equals(entry.key, key, StringComparison.Ordinal));
+        value = index < 0 ? null : m_metadata[index].value;
+        return index >= 0;
     }
 }
 
-/// <summary>
-/// Holds per-renderer material overrides without modifying shared material assets.
-/// </summary>
+/// <summary>Holds frame-local material overrides without modifying a shared asset.</summary>
 public sealed class MaterialPropertyBlock
 {
     private readonly Dictionary<ShaderPropertyId, MaterialValue> m_values = [];
@@ -314,28 +249,97 @@ public sealed class MaterialPropertyBlock
     /// <summary>Gets the number of active overrides.</summary>
     public int count => m_values.Count;
 
-    /// <summary>Creates or replaces one per-renderer override.</summary>
+    /// <summary>Creates or replaces one frame-local override.</summary>
     /// <param name="id">Stable shader property identifier.</param>
     /// <param name="value">Neutral material value.</param>
-    public void Set(ShaderPropertyId id, MaterialValue value) => m_values[id] = value;
+    public void Set(ShaderPropertyId id, MaterialValue value)
+    {
+        if (!id.isValid)
+            throw new ArgumentException("A material property ID must be valid.", nameof(id));
+        m_values[id] = value;
+    }
 
-    /// <summary>Tries to read one per-renderer override.</summary>
+    /// <summary>Tries to read one frame-local override.</summary>
     /// <param name="id">Stable shader property identifier.</param>
     /// <param name="value">Receives the neutral value when present.</param>
     /// <returns><see langword="true"/> when the override exists.</returns>
     public bool TryGet(ShaderPropertyId id, out MaterialValue value) => m_values.TryGetValue(id, out value);
 
-    /// <summary>Removes all per-renderer overrides.</summary>
+    /// <summary>Removes all frame-local overrides.</summary>
     public void Clear() => m_values.Clear();
 
     internal MaterialPropertyBlock Snapshot()
     {
         var snapshot = new MaterialPropertyBlock();
         foreach ((ShaderPropertyId id, MaterialValue value) in m_values)
-        {
             snapshot.m_values.Add(id, value);
+        return snapshot;
+    }
+}
+
+/// <summary>Describes one capability-compatible material pass selection.</summary>
+public sealed class MaterialPassResolution
+{
+    /// <summary>Creates a material pass resolution.</summary>
+    /// <param name="technique">Selected open-contract technique.</param>
+    /// <param name="pass">Concrete pass mapped to the requested role.</param>
+    public MaterialPassResolution(ShaderTechniqueDefinition technique, ShaderPassDefinition pass)
+    {
+        this.technique = technique;
+        this.pass = pass;
+    }
+
+    /// <summary>Gets the selected technique.</summary>
+    public ShaderTechniqueDefinition technique { get; }
+
+    /// <summary>Gets the concrete shader pass.</summary>
+    public ShaderPassDefinition pass { get; }
+}
+
+/// <summary>Resolves materials through open provider-owned shader contracts and roles.</summary>
+public static class MaterialPassResolver
+{
+    /// <summary>Resolves one capability-compatible pass.</summary>
+    /// <param name="material">Material whose shader and technique should be queried.</param>
+    /// <param name="contractId">Rendering-provider contract required by the caller.</param>
+    /// <param name="passRoleId">Provider-defined pass role required by the caller.</param>
+    /// <param name="capabilities">Current device capability snapshot.</param>
+    /// <returns>The selected technique and pass, or <see langword="null"/> when no compatible mapping exists.</returns>
+    public static MaterialPassResolution? Resolve(
+        MaterialAsset material,
+        ShaderContractId contractId,
+        ShaderPassRoleId passRoleId,
+        GraphicsCapabilities capabilities)
+    {
+        ArgumentNullException.ThrowIfNull(material);
+        ArgumentNullException.ThrowIfNull(capabilities);
+        if (!contractId.isValid)
+            throw new ArgumentException("A shader contract ID must be valid.", nameof(contractId));
+        if (!passRoleId.isValid)
+            throw new ArgumentException("A shader pass role ID must be valid.", nameof(passRoleId));
+
+        ShaderDefinition? definition = material.shader?.definition;
+        if (definition is null)
+            return null;
+
+        IEnumerable<ShaderTechniqueDefinition> candidates = definition.techniques.Where(technique =>
+            technique.contract == contractId
+            && capabilities.Supports(technique.requiredFeatures));
+        if (material.techniqueId.isValid)
+            candidates = candidates.Where(technique => technique.id == material.techniqueId);
+
+        foreach (ShaderTechniqueDefinition technique in candidates)
+        {
+            ShaderTechniquePass mapping = technique.passes.FirstOrDefault(value => value.role == passRoleId);
+            if (string.IsNullOrWhiteSpace(mapping.passName))
+                continue;
+            int passIndex = Array.FindIndex(definition.passes, pass =>
+                string.Equals(pass.name, mapping.passName, StringComparison.Ordinal)
+                && capabilities.Supports(pass.requiredFeatures));
+            if (passIndex >= 0)
+                return new MaterialPassResolution(technique, definition.passes[passIndex]);
         }
 
-        return snapshot;
+        return null;
     }
 }

@@ -21,6 +21,6 @@ public static class ShaderAssetRuntime
             throw new InvalidOperationException($"Shader asset '{shader.name}' has no committed IR payload.");
         }
 
-        return ShaderIRArtifactCodec.Decode(shader.runtimePayload.Span);
+        return ShaderIRArtifactSerialization.Decode(shader.runtimePayload.Span);
     }
 }

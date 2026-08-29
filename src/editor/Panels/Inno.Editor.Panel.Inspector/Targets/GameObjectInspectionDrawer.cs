@@ -33,43 +33,40 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
     private string m_componentSearch = string.Empty;
 
     /// <summary>
-    /// Creates a GameObject drawer backed by the current project tag catalog.
+    /// Creates a GameObject drawer backed by the current project classification settings.
     /// </summary>
     /// <param name="edits">
     /// The Scene editing service used for compact Undo/Redo records.
     /// </param>
-    /// <param name="tags">
-    /// The project tag catalog displayed in the target header.
-    /// </param>
-    /// <param name="layerSettings">
-    /// The project Settings layer catalog displayed in the target header.
+    /// <param name="classificationSettings">
+    /// The project tag and layer catalogs displayed in the target header.
     /// </param>
     /// <param name="settings">
     /// The project Settings service that owns semantic icon values.
     /// </param>
     /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="edits"/>, <paramref name="tags"/>, or
-    /// <paramref name="layerSettings"/>, or <paramref name="settings"/> is <see langword="null"/>.
+    /// Thrown when <paramref name="edits"/>, <paramref name="classificationSettings"/>, or
+    /// <paramref name="settings"/> is <see langword="null"/>.
     /// </exception>
     internal GameObjectInspectionDrawer(
         SceneEdits edits,
-        GameObjectTagCatalog tags,
-        GameLayerSettingsModule layerSettings,
+        SceneProjectSettingsModule classificationSettings,
         EditorSettings settings)
     {
         m_edits = edits ?? throw new ArgumentNullException(nameof(edits));
+        ArgumentNullException.ThrowIfNull(classificationSettings);
         m_tagSelector = new GameObjectTagSelector(
-            tags ?? throw new ArgumentNullException(nameof(tags)),
+            classificationSettings,
             edits);
         m_layerSelector = new GameObjectLayerSelector(
-            layerSettings ?? throw new ArgumentNullException(nameof(layerSettings)),
+            classificationSettings,
             edits);
         m_settings = settings ?? throw new ArgumentNullException(nameof(settings));
     }
 
     /// <inheritdoc />
     public override string icon => m_settings
-        .Get("Global/Appearance/Icons/GameObject")
+        .Get("Editor/Appearance/Icons/GameObject")
         .GetAsString("value", ImGuiIcon.Cube)!;
 
     protected override (string name, Action<string>? setter) BindName(
@@ -96,7 +93,7 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
             1f,
             (available - tagLabelWidth - layerLabelWidth -
              EditorWidget.style.inspectorHeaderSectionSpacing) * 0.5f);
-        m_tagSelector.Draw(context, target, controlWidth);
+        m_tagSelector.Draw(target, controlWidth);
         NativeImGui.SameLine(0f, EditorWidget.style.inspectorHeaderSectionSpacing);
         m_layerSelector.Draw(target, controlWidth);
     }
@@ -116,6 +113,16 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
             ImGuiWidget.WrappedText(
                 $"Layer slot {gameObject.layer.index} is not defined in the current project settings. " +
                 "Choose Default or restore that layer definition.");
+            NativeImGui.PopStyleColor();
+            NativeImGui.Spacing();
+        }
+
+        if (!m_tagSelector.IsTagDefined(gameObject.tag))
+        {
+            NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.error);
+            ImGuiWidget.WrappedText(
+                $"Tag '{gameObject.tag}' is not defined in the current Project Settings. " +
+                "Choose another tag or restore that tag definition.");
             NativeImGui.PopStyleColor();
             NativeImGui.Spacing();
         }

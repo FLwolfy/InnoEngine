@@ -1,10 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Numerics;
 
 using Inno.Assets;
+using Inno.Assets.Core;
 using Inno.Assets.File;
+using Inno.Assets.Plugins;
+using Inno.Core.Logging;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
@@ -281,6 +285,14 @@ internal sealed class FileBrowserPanel : EditorPanel
         {
             m_tree.PrepareOpenRequests(context);
             m_tree.DrawEntry(context, string.Empty, "Assets", true);
+            for (int i = 0; i < AssetManager.sourceMounts.Count; i++)
+            {
+                AssetSourceMount mount = AssetManager.sourceMounts[i];
+                if (mount.id == AssetSourceId.project)
+                    continue;
+                string root = new AssetPath(mount.id, string.Empty).ToString();
+                m_tree.DrawEntry(context, root, $"Plugins/{mount.id}", true, mount.isReadOnly);
+            }
             m_tree.ClearOpenRequests();
             HandleBackgroundSelection(context);
             m_contextMenu.DrawBackground(
@@ -290,7 +302,8 @@ internal sealed class FileBrowserPanel : EditorPanel
         }
 
         NativeImGui.EndChild();
-        m_dragDrop.DrawDirectoryTarget(context, string.Empty);
+        if (!IsReadOnlySource(m_assets.browser.currentDirectory))
+            m_dragDrop.DrawDirectoryTarget(context, m_assets.browser.currentDirectory);
         NativeImGui.PopStyleColor();
     }
 
@@ -306,7 +319,8 @@ internal sealed class FileBrowserPanel : EditorPanel
         }
 
         NativeImGui.EndChild();
-        m_dragDrop.DrawDirectoryTarget(context, m_assets.browser.currentDirectory);
+        if (!IsReadOnlySource(m_assets.browser.currentDirectory))
+            m_dragDrop.DrawDirectoryTarget(context, m_assets.browser.currentDirectory);
         NativeImGui.PopStyleColor();
     }
     #endregion
@@ -349,7 +363,121 @@ internal sealed class FileBrowserPanel : EditorPanel
         NativeImGui.TextUnformatted(GetDirectoryLabel(current));
         NativeImGui.PopStyleColor();
 
+        NativeImGui.SameLine(0f, EditorWidget.style.assetToolbarSectionSpacing);
+        DrawPluginManager();
+
         NativeImGui.PopStyleVar();
+    }
+
+    private static void DrawPluginManager()
+    {
+        PluginScanResult discovery = PluginCatalog.discovery;
+        int attention = discovery.candidates.Count(static candidate => candidate.containsCode && !candidate.isTrusted) +
+                        discovery.diagnostics.Count;
+        string label = attention == 0 ? "Plugins" : $"Plugins ({attention})";
+        PushButtonColors(attention == 0 ? EditorPalette.assetBorderSoft : EditorPalette.assetAccent);
+        if (NativeImGui.SmallButton($"{label}##PluginManager"))
+            NativeImGui.OpenPopup("##PluginManagerPopup");
+        NativeImGui.PopStyleColor(3);
+
+        NativeImGui.SetNextWindowSizeConstraints(
+            new Vector2(420f * EditorWidget.style.zoom, 0f),
+            new Vector2(680f * EditorWidget.style.zoom, 600f * EditorWidget.style.zoom));
+        if (!NativeImGui.BeginPopup("##PluginManagerPopup"))
+            return;
+        try
+        {
+            NativeImGui.TextUnformatted("Installed ZIP Plugins");
+            NativeImGui.Separator();
+            NativeImGui.PushTextWrapPos(NativeImGui.GetCursorPosX() + 620f * EditorWidget.style.zoom);
+            NativeImGui.TextUnformatted(
+                "Trusted Plugin code has the same native process permissions as project scripts. " +
+                "The collectible load context supports reload; it is not a security sandbox.");
+            NativeImGui.PopTextWrapPos();
+            NativeImGui.Separator();
+
+            HashSet<string> active = PluginCatalog.activePlugins
+                .Select(static candidate => candidate.manifest.pluginId)
+                .ToHashSet(StringComparer.Ordinal);
+            if (discovery.candidates.Count == 0)
+                EditorWidget.ColoredText(
+                    EditorPalette.textDisabled,
+                    "No valid ZIP Plugins were discovered.");
+            for (int i = 0; i < discovery.candidates.Count; i++)
+            {
+                PluginArchiveCandidate candidate = discovery.candidates[i];
+                string id = candidate.manifest.pluginId;
+                NativeImGui.PushID(id);
+                NativeImGui.TextUnformatted(candidate.manifest.displayName);
+                NativeImGui.SameLine();
+                string status = active.Contains(id)
+                    ? "Active"
+                    : candidate.containsCode && !candidate.isTrusted
+                        ? "Trust required"
+                        : "Installed";
+                EditorWidget.ColoredText(EditorPalette.textDisabled, $"{id} · {status}");
+                if (candidate.containsCode)
+                {
+                    bool trusted = candidate.isTrusted;
+                    if (NativeImGui.SmallButton(trusted ? "Revoke trust" : "Trust and activate"))
+                        TrySetPluginTrust(id, !trusted);
+                }
+                else
+                {
+                    EditorWidget.ColoredText(
+                        EditorPalette.textDisabled,
+                        "Assets and data only; code trust is not required.");
+                }
+                NativeImGui.PopID();
+                if (i + 1 < discovery.candidates.Count)
+                    NativeImGui.Separator();
+            }
+
+            if (discovery.diagnostics.Count > 0)
+            {
+                NativeImGui.Separator();
+                NativeImGui.TextUnformatted("Diagnostics");
+                for (int i = 0; i < discovery.diagnostics.Count; i++)
+                {
+                    PluginArchiveDiagnostic diagnostic = discovery.diagnostics[i];
+                    EditorWidget.ColoredText(
+                        EditorPalette.error,
+                        $"{Path.GetFileName(diagnostic.archivePath)}: {diagnostic.message}");
+                }
+            }
+
+            NativeImGui.Separator();
+            if (NativeImGui.SmallButton("Refresh"))
+                TryRefreshPlugins();
+        }
+        finally
+        {
+            NativeImGui.EndPopup();
+        }
+    }
+
+    private static void TrySetPluginTrust(string pluginId, bool trusted)
+    {
+        try
+        {
+            PluginManager.SetTrusted(pluginId, trusted);
+        }
+        catch (Exception exception)
+        {
+            Log.Error("Plugin trust change failed for '{0}': {1}", pluginId, exception);
+        }
+    }
+
+    private static void TryRefreshPlugins()
+    {
+        try
+        {
+            _ = PluginManager.Refresh();
+        }
+        catch (Exception exception)
+        {
+            Log.Error("Plugin refresh failed: {0}", exception);
+        }
     }
 
     private void DrawViewAndSearchBar()
@@ -731,7 +859,7 @@ internal sealed class FileBrowserPanel : EditorPanel
         if (!editing)
         {
             m_dragDrop.DrawAssetSource(context, entry);
-            if (entry.isDirectory)
+            if (entry.isDirectory && !entry.isReadOnly)
                 m_dragDrop.DrawDirectoryTarget(context, entry.relativePath);
         }
 
@@ -795,7 +923,7 @@ internal sealed class FileBrowserPanel : EditorPanel
     {
         float cellSize = GetGridCellSize();
         string icon = m_assets.GetIcon(entry);
-        string name = Path.GetFileName(entry.relativePath);
+        string name = entry.name;
         bool selected = string.Equals(m_assets.browser.GetSelectedPath(context), entry.relativePath, StringComparison.Ordinal);
         bool editing = m_rename.IsEditing(context, entry.relativePath, FileBrowserPresentation.Grid);
         Vector2 itemSize = new(cellSize - EditorWidget.style.assetGridCellPadding, cellSize - EditorWidget.style.assetGridCellPadding);
@@ -830,13 +958,16 @@ internal sealed class FileBrowserPanel : EditorPanel
 
         if (!editing)
         {
-            m_contextMenu.DrawEntry(
-                context,
-                "##asset_grid_context",
-                entry.relativePath,
-                FileBrowserPresentation.Grid);
             m_dragDrop.DrawAssetSource(context, entry);
-            if (entry.isDirectory)
+            if (!entry.isReadOnly)
+            {
+                m_contextMenu.DrawEntry(
+                    context,
+                    "##asset_grid_context",
+                    entry.relativePath,
+                    FileBrowserPresentation.Grid);
+            }
+            if (entry.isDirectory && !entry.isReadOnly)
                 m_dragDrop.DrawDirectoryTarget(context, entry.relativePath);
         }
         DrawGridItemVisual(

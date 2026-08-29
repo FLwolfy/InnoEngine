@@ -5,7 +5,6 @@ using System.Linq;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
-using Inno.Editor.Settings;
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
@@ -32,7 +31,7 @@ internal sealed class SettingsPageView(SettingsEditSession session)
             return;
         }
 
-        foreach (IGrouping<string, EditorSetting> group in page.settings.GroupBy(
+        foreach (IGrouping<string, SettingsField> group in page.settings.GroupBy(
                      static setting => setting.section ?? string.Empty,
                      StringComparer.OrdinalIgnoreCase))
         {
@@ -109,7 +108,7 @@ internal sealed class SettingsPageView(SettingsEditSession session)
     }
 
     private void DrawSection(
-        IEnumerable<EditorSetting> settings)
+        IEnumerable<SettingsField> settings)
     {
         ImGuiTableFlags flags = ImGuiTableFlags.SizingStretchProp |
                                 ImGuiTableFlags.NoSavedSettings |
@@ -135,7 +134,7 @@ internal sealed class SettingsPageView(SettingsEditSession session)
                 "##settings_reset",
                 ImGuiTableColumnFlags.WidthFixed,
                 GetResetColumnWidth());
-            foreach (EditorSetting setting in settings)
+            foreach (SettingsField setting in settings)
             {
                 NativeImGui.TableNextRow();
                 _ = NativeImGui.TableSetColumnIndex(0);
@@ -150,7 +149,7 @@ internal sealed class SettingsPageView(SettingsEditSession session)
                 {
                     NativeImGui.BeginGroup();
                     groupStarted = true;
-                    session.UpdateDirty(setting, setting.Draw(session.Get(setting)));
+                    session.UpdateDirty(setting, session.Draw(setting));
                     NativeImGui.EndGroup();
                     groupStarted = false;
 

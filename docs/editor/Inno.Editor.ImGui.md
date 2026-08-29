@@ -4,6 +4,8 @@
 
 `Inno.Editor.ImGui` 提供编辑器统一控件、菜单/拖放渲染桥和视觉配置。它只包装可复用的 UI 原语，不持有 Scene、Selection 或 Panel 业务状态。
 
+EditorScripts 使用逻辑 namespace `InnoEditor.ImGui`。该项目的唯一 `Properties/ScriptingApi.cs` 同时导出 `ImGuiIcon`、Editor widgets、常用 Dear ImGui flags 与 pointer-free `ImGui` facade；`Inno.Platform.ImGui` 不声明脚本 API。Facade 覆盖常用 input、layout、table、combo、tab、popup、style、item query 与当前 window draw-list primitive，同时不暴露 `ImDrawListPtr`、`ImGuiStylePtr`、native pointer、callback userdata 或 Renderer texture ID。脚本只能在 Panel/Modal/Drawer 的绘制回调期间调用这些方法。
+
 ```text
 Inno.Editor.ImGui/
 ├─ Styling/
@@ -50,7 +52,7 @@ Palette 与 Style Metrics 并列位于 `Styling`，runtime host 与三个表现�
 | `View/Zoom Out` | Command/Ctrl + `-` | 在 actual size 基础上减少一个 `0.10` 倍率步长。 |
 | `View/Actual Size` | Command/Ctrl + `0` | 恢复 Settings 中配置的 actual size。 |
 
-有效范围固定为 `0.75..1.50`；到达边界后对应菜单项禁用。持久值使用完整路径 `Global/Appearance/Accessibility/Actual Size`，只由 Settings Apply 写入 `<ProjectRoot>/EditorSettings.json`。Zoom In/Out 是 session 内的临时倍率：有效值按 `actualSize × (1 + step × 0.10)` 计算，Actual Size 把 step 恢复为零，不改持久设置，也不制造 History。`EditorZoomModule` 与三个 Action 均属于 `Inno.Editor.Panel.Global`；ImGui 项目只保留 style metric 和表现基础设施，不拥有全局 zoom feature。
+有效范围固定为 `0.75..1.50`；到达边界后对应菜单项禁用。持久值使用完整路径 `Editor/Appearance/Accessibility/Actual Size`，只由 Settings Apply 写入 `<ProjectRoot>/EditorSettings.json`。Zoom In/Out 是 session 内的临时倍率：有效值按 `actualSize × (1 + step × 0.10)` 计算，Actual Size 把 step 恢复为零，不改持久设置，也不制造 History。`EditorZoomModule` 与三个 Action 均属于 `Inno.Editor.Panel.Global`；ImGui 项目只保留 style metric 和表现基础设施，不拥有全局 zoom feature。
 
 ## Modal renderer
 
@@ -99,7 +101,7 @@ if (open)
         id,
         drawContent: DrawSerializedProperties,
         dimmed: !enabled);
-    NativeImGui.TreePop();
+    ImGui.TreePop();
 }
 ```
 

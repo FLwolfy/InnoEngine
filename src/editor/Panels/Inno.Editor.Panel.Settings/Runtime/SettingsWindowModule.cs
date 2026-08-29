@@ -4,7 +4,9 @@ using Inno.Editor.Settings;
 namespace Inno.Editor.Panel.Settings;
 
 [EditorModule("settings-window", order: 20)]
-internal sealed class SettingsWindowModule(EditorSettings settings) : EditorModule
+internal sealed class SettingsWindowModule(
+    EditorSettings editorSettings,
+    ProjectSettingsEditor projectSettings) : EditorModule
 {
     private SettingsEditSession? m_session;
 
@@ -15,7 +17,7 @@ internal sealed class SettingsWindowModule(EditorSettings settings) : EditorModu
     internal void Open()
     {
         if (!isVisible)
-            m_session = new SettingsEditSession(settings);
+            m_session = new SettingsEditSession(editorSettings, projectSettings);
         isVisible = true;
     }
 
@@ -27,7 +29,7 @@ internal sealed class SettingsWindowModule(EditorSettings settings) : EditorModu
 
     internal void Refresh()
     {
-        m_session = new SettingsEditSession(settings);
+        m_session = new SettingsEditSession(editorSettings, projectSettings);
     }
 
     /// <inheritdoc />

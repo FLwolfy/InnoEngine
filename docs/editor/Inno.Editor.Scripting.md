@@ -2,32 +2,31 @@
 
 [Editor 索引](README.md) · [Core Scripting](../core/Inno.Core.Scripting.md) · [Assets](../assets/README.md) · [Assemblies](../core/Inno.Core.Assemblies.md)
 
-`Inno.Editor.Scripting` 把 C# source、managed plugin 与 assembly definition 当成正式资产，再把它们编译为可回滚的 collectible Script Module。文件发现和变化来源是 Asset Database；该项目没有自己的 `FileSystemWatcher`，也不递归扫描 Project 目录。
+`Inno.Editor.Scripting` 把 Project 与已激活 ZIP Plugin Mount 中的 C# source、assembly definition 当成正式资产，再把它们编译为可回滚的 collectible Script Module。文件发现和变化来源是统一 Asset Database；该项目没有自己的 `FileSystemWatcher`，也不递归扫描 Project 目录。
 
 ## Source 资产
 
 | Source | Asset | Importer | Named outputs |
 | --- | --- | --- | --- |
 | `*.cs` | `ScriptSourceAsset` | `CSharpScriptImporter` | `source`, `diagnostics`, `type-manifest`, `asset-state` |
-| `*.dll` | `ManagedPluginAsset` | `ManagedPluginImporter` | `assembly`, optional `symbols`/`dependencies`, `asset-state` |
 | `*.iasmdef` | `ScriptAssemblyDefinitionAsset` | `ScriptAssemblyDefinitionImporter` | `source`, `asset-state` |
 
-每个受支持 source 都有 `.imeta` 和 persistent ID。`type-manifest` 保存该 source 的声明、位置和 partial 信息；聚合编译后还会生成 assembly 级 `*.types.json`，记录可附加类型最终使用的 source identity、Stable Type ID、类型种类和 canonical source。C# 语法错误不会取消 source identity；parse diagnostics 进入 source asset，聚合 assembly build 可以失败并继续运行旧程序集。
+每个受支持 source 都有 `.imeta` 和 persistent ID。`type-manifest` 保存该 source 的声明、位置和 partial 信息；聚合编译后还会生成 assembly 级 `*.types.inno`，记录可附加类型最终使用的 source identity、Stable Type ID、类型种类和 canonical source。C# 语法错误不会取消 source identity；parse diagnostics 进入 source asset，聚合 assembly build 可以失败并继续运行旧程序集。
 
-Compiler 读取已提交 artifact snapshot，不直接读取正在被外部编辑器写入的 source/plugin 文件。这样一次 build 的 fingerprint、语法树和 plugin bytes 来自同一 Catalog revision。
+Compiler 读取不可变 artifact snapshot，不直接读取正在被外部编辑器写入的 source 文件。普通 Project 编译使用已提交 Asset Catalog；Plugin 安装/更新使用隔离 `AssetSourceMountTransaction` 的候选 Catalog。两者都保证一次 build 的 fingerprint、语法树和 Plugin source 来自同一 revision，但候选 Plugin 在成功前不会出现在 active Asset/Plugin API 中。
 
 ## Assembly Definition
 
-```json
-{
-  "name": "Project.Gameplay",
-  "scope": "Runtime",
-  "references": ["Project.Common"],
-  "defines": ["GAMEPLAY_DEBUG"],
-  "nullable": true,
-  "allowUnsafe": false
-}
+```csharp
+var definition = new ScriptAssemblyDefinitionAsset(
+    "Project.Gameplay",
+    ScriptAssemblyScope.Runtime,
+    references: ["Project.Common"],
+    defines: ["GAMEPLAY_DEBUG"]);
+AssetManager.Save("Scripts/Gameplay/Gameplay.iasmdef", definition);
 ```
+
+`.iasmdef` 是 Inno Serialization 原生资产，不是 JSON 文档。Editor 与工具通过 `AssetManager.Save` 和对应 Importer 共用同一序列化、metadata 与依赖通道。
 
 最近父目录的 `.iasmdef` 决定脚本归属。没有 definition 时：
 
@@ -44,10 +43,12 @@ Compiler 读取已提交 artifact snapshot，不直接读取正在被外部编�
 <Project>/
 ├─ Assets/
 │  ├─ Scripts/**/*.cs
-│  ├─ Plugins/**/*.dll
 │  └─ **/*.iasmdef
+├─ Plugins/
+│  └─ *.zip
 ├─ Library/
 │  ├─ AssetDatabase/
+│  ├─ Plugins/<id>/<contentHash>/Assets/
 │  ├─ Artifacts/
 │  │  ├─ ab/cd/<asset-key>/...
 │  │  └─ ScriptAssemblies/
@@ -56,8 +57,8 @@ Compiler 读取已提交 artifact snapshot，不直接读取正在被外部编�
 │  │        ├─ *.dll
 │  │        ├─ *.pdb
 │  │        ├─ *.xml
-│  │        ├─ *.types.json
-│  │        └─ diagnostics.json
+│  │        ├─ *.types.inno
+│  │        └─ diagnostics.inno
 │  ├─ ScriptApi/
 │  └─ IDE/
 ├─ Inno.GameScripts.csproj
@@ -66,7 +67,7 @@ Compiler 读取已提交 artifact snapshot，不直接读取正在被外部编�
 └─ InnoProject.sln
 ```
 
-`ScriptAssemblies` 不再出现 `1/2/3...` 数字 generation。每个 asmdef/builtin assembly 的 key 分别覆盖自己的 definition、source artifact、scope/options、适用 API、plugin 及直接 dependency key；依赖 key 变化会自然传播到反向依赖，而无关 assembly 直接复用 `.assemblies` 中的 DLL/PDB/XML/type manifest/diagnostics。完整 generation key 只组合有序 assembly key 与 plugin key，并在成功后一次性形成 load staging。Editor 启动和成功 reload 后会对两级 immutable cache 共用 7 天 grace period 与 4 GiB 上限；目录存在只占磁盘，不等于 ALC 常驻内存。
+`ScriptAssemblies` 不再出现 `1/2/3...` 数字 generation。每个 asmdef/builtin assembly 的 key 分别覆盖自己的 definition、source artifact、scope/options、适用 API、所属 Source Mount 及直接 dependency key；依赖 key 变化会自然传播到反向依赖，而无关 assembly 直接复用 `.assemblies` 中的 DLL/PDB/XML/type manifest/diagnostics。完整 generation key 组合有序 assembly key 与 Plugin content key，并在成功后一次性形成 load staging。Editor 启动和成功 reload 后会对两级 immutable cache 共用 7 天 grace period 与 4 GiB 上限；目录存在只占磁盘，不等于 ALC 常驻内存。
 
 增量同时作用于 artifact 与 ALC closure。物理上下文固定为统一 Plugin ALC、Runtime Scripts ALC、Editor Scripts ALC：Editor-only 变化只替换 Editor；Runtime 变化替换 Runtime + Editor；Plugin 变化替换三者。未重编译 assembly 可以复用不可变字节产物，但每个被纳入 closure 的目标 ALC 都是新 generation，下游绑定同一事务中的精确上游 Assembly 实例，不会出现同名 Plugin/Runtime 类型转换失败。
 
@@ -112,7 +113,9 @@ scripts.ReloadPlugins();
 
 三个 public 操作只排队；内部 scheduler 在 Editor 主线程 focus safe point 消费请求、后台编译并在安全点激活。请求强度为 Recompile < ReloadScripting < ReloadPlugins，并发请求合并为最强项，同时只允许一个 compiler/reload transaction。若新请求在编译期间到达，本次结果会被标记为 superseded 而不发布中间 generation，随后以合并后的最强请求重新取得 source/plugin snapshot。Asset Update/Rescan 只在主线程内部启动点和 generation 切换安全点发生，后台编译不调用全局 AssetManager。
 
-重载激活后会对账 Asset Database：释放旧脚本 Asset 的 canonical 实例、修复仍存活 host Asset 的引用，并移除已退休脚本代际留在静态事件上的 observer。场景替换任一步失败时会逐项尝试结构、assembly generation、Asset 和旧属性/生命周期补偿；identity observer 在转移期间失败也必须恢复旧对象的注册与附着状态。失败编译不会清除上一个尚未应用的成功 candidate。`Dispose` 返回后不会再有活动或排队编译写入状态。
+Assembly reload 使用一组有顺序的 transaction participant，而不是提交后再通知：TypeRegistry 激活候选 snapshot 后，AssetManager 在候选 generation 下完成 Source Catalog 对账；若存在 ZIP Plugin 候选，再临时激活其隔离 Mount/Catalog/Settings；Scene 随后迁移对象，Rendering Runtime 预构造所有活动 Pipeline/Feature。只有全部 participant 与外部 generation 同步成功才提交；后续失败会逆序 Rollback，恢复旧 Mount、Settings、Pipeline/Feature、Scene、TypeCache 和 Asset Catalog。完整提交后才通知 Source Mount 观察者、释放旧 Loader/渲染实例并开始旧 ALC 卸载验证。
+
+这套事务会释放旧脚本 Asset 的 canonical 实例、修复仍存活 host Asset 的引用，并移除已退休脚本代际留在静态事件上的 observer。场景替换任一步失败时会逐项尝试结构、assembly generation、Asset 和旧属性/生命周期补偿；identity observer 在转移期间失败也必须恢复旧对象的注册与附着状态。失败编译不会清除上一个尚未应用的成功 candidate。`Dispose` 返回后不会再有活动或排队编译写入状态。
 
 `compilationStatus` 描述 queued、compiling、staged、migrating、committed、unload-verifying、completed 或 failed 阶段。Scripting reload 提交后不会在旧 ALC 仍为 `Pending` 时关闭 modal：Editor 在独立后续帧执行有界的 Full GC、finalizer 和第二次 Full GC，并通过只持有弱引用的 monitor 验证退休 context。验证期间进度保持 97%，后续 Module 更新和新编译请求消费继续被阻塞。全部 context 不可达后才显示 100% 并关闭 modal。
 
@@ -124,7 +127,7 @@ scripts.ReloadPlugins();
 
 进度由 project generation、source parse、API analysis、diagnostics、emit 和 reload preparation 等真实工作项推进。编译阶段占 0–80%，candidate staging 推进到 86%，Scene/extension 原子迁移推进到 94%，事务提交后进入 97% 的强制卸载验证，只有验证成功、验证确定失败或无需 reload 时才显示 100%。Roslyn 单次 Emit 没有内部百分比 callback，因此执行某个工作项时进度会停留，完成后跳到下一个比例；不会用计时器伪造连续进度。百分比文字固定绘制在完整进度条的几何中心，不随已填充区域移动。
 
-成功 assembly artifact 同时保存完整的 `diagnostics.json`。启动命中内容缓存时会重新发布同一组 warning，而不是只复用 DLL/PDB 后返回空 diagnostics；因此缓存命中与实际 Roslyn emit 对 Console Panel 具有一致的可观察结果。
+成功 assembly artifact 同时保存完整的原生 `diagnostics.inno`。启动命中内容缓存时会重新发布同一组 warning，而不是只复用 DLL/PDB 后返回空 diagnostics；因此缓存命中与实际 Roslyn emit 对 Console Panel 具有一致的可观察结果。
 
 ## Scripting API facade
 
@@ -169,7 +172,7 @@ Editor facade 按 feature 分布：
 | `InnoEditor.Scene` | `IEditorSceneWorkspace` 查询/工作流接口与 `SceneEdits` 编辑门面 |
 | `InnoEditor.Hierarchy` | `Inno.Editor.Panel.Hierarchy` area/action/drop contracts |
 | `InnoEditor.Inspection` | `Inno.Editor.Inspection` drawer contracts，以及 `Inno.Editor.Panel.Inspector` 的 area/action/drop contracts |
-| `InnoEditor.ImGui` | `EditorPalette`、`EditorStyleMetrics` 与 widgets |
+| `InnoEditor.ImGui` | `ImGuiIcon`、pointer-free `NativeImGui`、`EditorPalette`、`EditorStyleMetrics` 与 widgets |
 
 菜单直接声明在 Action 上，不需要 package class 或集中注册：
 
@@ -215,9 +218,9 @@ IDE 工程是补全和诊断模型；Editor 实际热编译仍使用进程内 Ro
 
 ## Plugin
 
-`Assets/**/Plugins/*.dll` 必须是 managed .NET assembly。`.editor.dll` 由 Plugin asset descriptor 归类为 Editor scope；其他 DLL 为 Runtime scope。所有 Plugin DLL 加入一个统一 collectible generation，原 DLL 不要求写 Inno metadata。PDB/deps 是 DLL source unit 的 companion dependency，不单独变成 `BinaryAsset`。
+Plugin 只能来自项目根 `Plugins/*.zip`。归档必须通过 `Plugin.inno`、路径安全、依赖图、`.imeta` 完整性与代码信任校验，再进入隔离只读 `AssetSourceMount` 候选；编译与迁移全部成功后才进入统一 active Asset Database。预编译 DLL 和“路径里含 Plugins 就视为插件”的协议不存在。无 `.iasmdef` 时，每个 Plugin ID 自动获得 Runtime 与 Editor 默认程序集；`*.editor.cs` 进入 Editor scope，其余 `.cs` 进入 Runtime scope。显式 `.iasmdef` 必须列在清单 `assemblyDefinitions` 中。
 
-Plugin 只能引用 InnoInternal 稳定契约，不能引用项目脚本；Runtime Scripts 只能看到 runtime-scope Plugin/Internal，Editor Scripts 可看到 Runtime Scripts、所有 Plugin 和 Internal Editor API。Plugin 类型只能通过脚本文件中的普通 `using` 显式导入。错误方向、scope 泄漏、Assembly simple-name 冲突、坏 PE、缺失依赖或 cycle 会在 stage/publish 前失败，旧三层 generation 保持活动。ALC 是卸载隔离，不是安全沙箱。
+Plugin 只能引用 Host API 与清单声明的依赖 Plugin，不能引用项目脚本；Runtime Scripts 能看到 runtime-scope Plugin，Editor Scripts 可看到 Runtime Scripts 与 Plugin Editor API。Plugin 类型只能通过脚本文件中的普通 `using` 显式导入。错误方向、scope 泄漏、程序集名称冲突、缺失依赖、cycle 或 Roslyn 编译错误会在 stage/publish 前失败；Editor host 会丢弃隔离候选，旧三层 generation、Mount、Catalog、Type/Registry、资产和设置保持活动。ALC 是卸载隔离，不是安全沙箱；受信任代码与项目脚本具有相同本机权限。
 
 ## Reload coordination 与领域状态
 

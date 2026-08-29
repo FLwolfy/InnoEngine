@@ -4,6 +4,7 @@ using System.IO;
 
 using Inno.Assets;
 using Inno.Assets.Core;
+using Inno.Assets.File;
 using Inno.Editor.Core;
 
 namespace Inno.Editor.Panel.FileBrowser;
@@ -18,12 +19,28 @@ internal sealed class FileBrowserChangeTracker(AssetEditorModule assets)
         m_context = context;
         AssetManager.Changed -= OnAssetsChanged;
         AssetManager.Changed += OnAssetsChanged;
+        AssetManager.SourceMountsChanged -= OnSourceMountsChanged;
+        AssetManager.SourceMountsChanged += OnSourceMountsChanged;
     }
 
     internal void Detach()
     {
         AssetManager.Changed -= OnAssetsChanged;
+        AssetManager.SourceMountsChanged -= OnSourceMountsChanged;
         m_context = null;
+    }
+
+    private void OnSourceMountsChanged()
+    {
+        EditorContext? context = m_context;
+        if (context is null)
+            return;
+        string currentDirectory = FileBrowserUtility.NormalizePath(assets.browser.currentDirectory);
+        if (!AssetManager.TryGetFileSystemEntry(currentDirectory, out AssetFileEntry current) || !current.isDirectory)
+            assets.browser.SetCurrentDirectory(string.Empty);
+        string selectedPath = FileBrowserUtility.NormalizePath(assets.browser.GetSelectedPath(context));
+        if (!string.IsNullOrEmpty(selectedPath) && !AssetManager.TryGetFileSystemEntry(selectedPath, out _))
+            assets.browser.Select(context, null);
     }
 
     private void OnAssetsChanged(AssetChangeSet changes)
@@ -81,12 +98,17 @@ internal sealed class FileBrowserChangeTracker(AssetEditorModule assets)
         if (!IsSameOrDescendant(currentDirectory, removedPath))
             return;
 
-        string fallback = Normalize(Path.GetDirectoryName(removedPath));
-        while (!string.IsNullOrEmpty(fallback) &&
+        string fallback = FileBrowserUtility.GetParentDirectory(removedPath);
+        while (!string.Equals(
+                   fallback,
+                   FileBrowserUtility.GetParentDirectory(fallback),
+                   StringComparison.Ordinal) &&
                (!AssetManager.TryGetFileSystemEntry(fallback, out var entry) || !entry.isDirectory))
         {
-            fallback = Normalize(Path.GetDirectoryName(fallback));
+            fallback = FileBrowserUtility.GetParentDirectory(fallback);
         }
+        if (!AssetManager.TryGetFileSystemEntry(fallback, out AssetFileEntry available) || !available.isDirectory)
+            fallback = string.Empty;
         assets.browser.SetCurrentDirectory(fallback);
     }
 

@@ -1,10 +1,8 @@
 using System;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
-using System.Text.Json;
 using Inno.Core.Graphs;
 using Inno.Editor.Interactions;
 
@@ -12,176 +10,9 @@ namespace Inno.Editor.Graph;
 
 internal static class GraphHistoryDocumentCodec
 {
-    private static readonly HashSet<string> S_ROOT = new(["nodes", "edges", "metadata"], StringComparer.Ordinal);
-    private static readonly HashSet<string> S_NODE = new(["id", "definition", "position", "values"], StringComparer.Ordinal);
-    private static readonly HashSet<string> S_EDGE = new(["id", "output", "input"], StringComparer.Ordinal);
-    private static readonly HashSet<string> S_ENDPOINT = new(["node", "port"], StringComparer.Ordinal);
+    public static byte[] Encode(GraphDocument document) => GraphDocumentCodec.Encode(document);
 
-    public static byte[] Encode(GraphDocument document)
-    {
-        ArgumentNullException.ThrowIfNull(document);
-        using var stream = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(stream))
-        {
-            writer.WriteStartObject();
-            writer.WritePropertyName("nodes");
-            writer.WriteStartArray();
-            foreach (GraphNodeRecord node in document.nodes)
-            {
-                writer.WriteStartObject();
-                writer.WriteString("id", node.id.value);
-                writer.WriteString("definition", node.definitionId);
-                writer.WritePropertyName("position");
-                writer.WriteStartArray();
-                writer.WriteNumberValue(node.position.x);
-                writer.WriteNumberValue(node.position.y);
-                writer.WriteEndArray();
-                writer.WritePropertyName("values");
-                writer.WriteStartObject();
-                foreach ((string id, GraphSerializedValue value) in node.values)
-                {
-                    writer.WritePropertyName(id);
-                    using JsonDocument property = JsonDocument.Parse(value.json);
-                    property.RootElement.WriteTo(writer);
-                }
-
-                writer.WriteEndObject();
-                writer.WriteEndObject();
-            }
-
-            writer.WriteEndArray();
-            writer.WritePropertyName("edges");
-            writer.WriteStartArray();
-            foreach (GraphEdgeRecord edge in document.edges)
-            {
-                writer.WriteStartObject();
-                writer.WriteString("id", edge.id.value);
-                WriteEndpoint(writer, "output", edge.output);
-                WriteEndpoint(writer, "input", edge.input);
-                writer.WriteEndObject();
-            }
-
-            writer.WriteEndArray();
-            writer.WritePropertyName("metadata");
-            writer.WriteStartObject();
-            foreach ((string key, GraphSerializedValue value) in document.metadata)
-            {
-                writer.WritePropertyName(key);
-                using JsonDocument metadata = JsonDocument.Parse(value.json);
-                metadata.RootElement.WriteTo(writer);
-            }
-
-            writer.WriteEndObject();
-            writer.WriteEndObject();
-        }
-
-        return stream.ToArray();
-    }
-
-    public static GraphDocument Decode(ReadOnlySpan<byte> bytes)
-    {
-        using JsonDocument source = JsonDocument.Parse(bytes.ToArray());
-        JsonElement root = RequireObject(source.RootElement, "$", S_ROOT);
-        var document = new GraphDocument();
-        foreach (JsonElement nodeElement in root.GetProperty("nodes").EnumerateArray())
-        {
-            JsonElement nodeObject = RequireObject(nodeElement, "$.nodes[]", S_NODE);
-            var node = new GraphNodeRecord(
-                new GraphNodeId(RequireString(nodeObject, "id")),
-                RequireString(nodeObject, "definition"));
-            JsonElement position = nodeObject.GetProperty("position");
-            if (position.ValueKind != JsonValueKind.Array || position.GetArrayLength() != 2)
-            {
-                throw new InvalidDataException("Graph node position must contain exactly two numbers.");
-            }
-
-            node.position = new GraphPosition(position[0].GetSingle(), position[1].GetSingle());
-            JsonElement values = nodeObject.GetProperty("values");
-            if (values.ValueKind != JsonValueKind.Object)
-            {
-                throw new InvalidDataException("Graph node values must be an object.");
-            }
-
-            foreach (JsonProperty property in values.EnumerateObject())
-            {
-                node.SetValue(property.Name, new GraphSerializedValue(property.Value.GetRawText()));
-            }
-
-            document.AddNode(node);
-        }
-
-        foreach (JsonElement edgeElement in root.GetProperty("edges").EnumerateArray())
-        {
-            JsonElement edge = RequireObject(edgeElement, "$.edges[]", S_EDGE);
-            document.AddEdge(new GraphEdgeRecord(
-                new GraphEdgeId(RequireString(edge, "id")),
-                ReadEndpoint(edge.GetProperty("output")),
-                ReadEndpoint(edge.GetProperty("input"))));
-        }
-
-        JsonElement metadata = root.GetProperty("metadata");
-        if (metadata.ValueKind != JsonValueKind.Object)
-        {
-            throw new InvalidDataException("Graph metadata must be an object.");
-        }
-
-        foreach (JsonProperty property in metadata.EnumerateObject())
-        {
-            document.SetMetadata(property.Name, new GraphSerializedValue(property.Value.GetRawText()));
-        }
-
-        return document;
-    }
-
-    private static void WriteEndpoint(Utf8JsonWriter writer, string name, GraphEndpoint endpoint)
-    {
-        writer.WritePropertyName(name);
-        writer.WriteStartObject();
-        writer.WriteString("node", endpoint.nodeId.value);
-        writer.WriteString("port", endpoint.portId.value);
-        writer.WriteEndObject();
-    }
-
-    private static GraphEndpoint ReadEndpoint(JsonElement element)
-    {
-        JsonElement endpoint = RequireObject(element, "$.edges[].endpoint", S_ENDPOINT);
-        return new GraphEndpoint(
-            new GraphNodeId(RequireString(endpoint, "node")),
-            new GraphPortId(RequireString(endpoint, "port")));
-    }
-
-    private static JsonElement RequireObject(
-        JsonElement element,
-        string path,
-        IReadOnlySet<string> allowed)
-    {
-        if (element.ValueKind != JsonValueKind.Object)
-        {
-            throw new InvalidDataException($"{path} must be an object.");
-        }
-
-        foreach (JsonProperty property in element.EnumerateObject())
-        {
-            if (!allowed.Contains(property.Name))
-            {
-                throw new InvalidDataException($"{path}.{property.Name} is not a current graph field.");
-            }
-        }
-
-        foreach (string required in allowed)
-        {
-            if (!element.TryGetProperty(required, out _))
-            {
-                throw new InvalidDataException($"{path}.{required} is required.");
-            }
-        }
-
-        return element;
-    }
-
-    private static string RequireString(JsonElement element, string property)
-        => element.GetProperty(property).GetString()
-            ?? throw new InvalidDataException($"Graph property '{property}' must be a string.");
+    public static GraphDocument Decode(ReadOnlySpan<byte> bytes) => GraphDocumentCodec.Decode(bytes);
 }
 
 internal sealed record GraphHistoryData(

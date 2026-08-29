@@ -20,6 +20,7 @@ public sealed unsafe class BgfxImGuiRenderer : IPlatformImGuiRenderer, IRenderFr
     private const int C_INITIAL_INDEX_CAPACITY = 8192;
 
     private static readonly RenderBindingId S_TEXTURE_BINDING = new("s_tex");
+    private static readonly RenderPhaseId S_USER_INTERFACE_PHASE = new("inno.imgui.compose");
     private static readonly RenderClearColor S_PRESENTATION_CLEAR_COLOR = new(
         SrgbToLinear(0.08f),
         SrgbToLinear(0.08f),
@@ -278,7 +279,7 @@ public sealed unsafe class BgfxImGuiRenderer : IPlatformImGuiRenderer, IRenderFr
             {
                 RasterPassBuilder pass = graph.AddRasterPass(
                     packet.viewportId == 0 ? "ImGui/Main" : $"ImGui/Viewport/{packet.viewportId}",
-                    BuiltinRenderPhases.userInterface,
+                    S_USER_INTERFACE_PHASE,
                     packet,
                     ExecutePacket);
                 pass.SetViewTransform(Identity(), Orthographic(packet.displayPosition, packet.displaySize))

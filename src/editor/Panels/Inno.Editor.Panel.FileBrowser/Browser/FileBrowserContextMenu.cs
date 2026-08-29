@@ -18,6 +18,11 @@ internal sealed class FileBrowserContextMenu(
         string relativePath,
         FileBrowserPresentation presentation)
     {
+        if (AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry readOnlyEntry) &&
+            readOnlyEntry.isReadOnly)
+        {
+            return;
+        }
         if (NativeImGui.IsItemClicked(ImGuiMouseButton.Right))
             assets.browser.Select(context, relativePath);
         bool isOpen = EditorMenuRenderer.ContextMenu(
@@ -35,6 +40,8 @@ internal sealed class FileBrowserContextMenu(
         string relativePath,
         FileBrowserPresentation presentation)
     {
+        if (IsReadOnlySource(relativePath))
+            return;
         bool isOpen = EditorMenuRenderer.ContextMenu(
             id,
             CreateDirectoryInteraction(relativePath));
@@ -47,6 +54,8 @@ internal sealed class FileBrowserContextMenu(
         string id,
         FileBrowserPresentation presentation)
     {
+        if (IsReadOnlySource(assets.browser.currentDirectory))
+            return;
         bool isOpen = EditorMenuRenderer.WindowContextMenu(
             id,
             CreateDirectoryInteraction(assets.browser.currentDirectory));

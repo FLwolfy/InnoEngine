@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
 using Inno.Assets.Core;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
@@ -9,228 +8,122 @@ using Inno.Core.Serialization;
 namespace Inno.Rendering;
 
 /// <summary>
-/// Stores one ordered, reload-safe pipeline feature configuration.
+/// Stores reload-safe configuration for one pipeline or feature extension generation.
 /// </summary>
-public sealed class RenderFeatureConfiguration
+public struct SerializedRenderExtensionState
 {
-    /// <summary>
-    /// Creates a feature configuration.
-    /// </summary>
-    /// <param name="featureTypeId">Stable feature extension identifier.</param>
-    /// <param name="settingsJson">Neutral JSON settings owned by the feature.</param>
+    /// <summary>Creates empty extension state for deserialization.</summary>
+    public SerializedRenderExtensionState()
+    {
+        propertyData = [];
+    }
+
+    /// <summary>Creates immutable extension state from stable identity and property bytes.</summary>
+    /// <param name="stableTypeId">Stable type identity, or empty when the extension has no typed settings.</param>
+    /// <param name="propertyData">Neutral bytes produced by <see cref="SerializationManager.CapturePropertiesData"/>.</param>
+    public SerializedRenderExtensionState(Guid stableTypeId, ReadOnlySpan<byte> propertyData)
+    {
+        this.stableTypeId = stableTypeId;
+        this.propertyData = propertyData.ToArray();
+    }
+
+    /// <summary>Gets or sets the stable settings type identity.</summary>
+    [SerializableProperty]
+    public Guid stableTypeId { get; set; }
+
+    /// <summary>Gets or sets neutral serialized property bytes.</summary>
+    [SerializableProperty]
+    public byte[] propertyData { get; set; }
+
+    /// <summary>Restores settings into a generation-local instance.</summary>
+    /// <typeparam name="TSettings">Current settings contract.</typeparam>
+    /// <param name="target">Current generation instance to restore.</param>
+    /// <exception cref="ArgumentException">Thrown when the active type does not match the stored stable identity.</exception>
+    public void Restore<TSettings>(TSettings target) where TSettings : class, ISerializable
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        TypeRef activeType = TypeCacheManager.GetTypeRef(target.GetType());
+        if (stableTypeId != Guid.Empty && activeType.stableId != stableTypeId)
+        {
+            throw new ArgumentException(
+                $"Settings type '{activeType.stableId:D}' does not match '{stableTypeId:D}'.",
+                nameof(target));
+        }
+
+        if (propertyData is { Length: > 0 })
+            _ = SerializationManager.RestorePropertiesData(target, propertyData);
+    }
+}
+
+/// <summary>Stores one ordered feature extension selection using only stable data.</summary>
+public struct RenderFeatureConfiguration
+{
+    /// <summary>Creates an empty feature configuration for deserialization.</summary>
+    public RenderFeatureConfiguration()
+    {
+    }
+
+    /// <summary>Creates a feature configuration.</summary>
+    /// <param name="featureTypeId">Globally stable feature extension identifier.</param>
+    /// <param name="state">Optional reload-safe settings state.</param>
     /// <param name="enabled">Whether the feature participates in graph building.</param>
-    public RenderFeatureConfiguration(string featureTypeId, string settingsJson = "{}", bool enabled = true)
+    public RenderFeatureConfiguration(
+        string featureTypeId,
+        SerializedRenderExtensionState? state = null,
+        bool enabled = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(featureTypeId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(settingsJson);
-        using JsonDocument settings = JsonDocument.Parse(settingsJson);
         this.featureTypeId = featureTypeId;
-        this.settingsJson = settings.RootElement.GetRawText();
+        this.state = state ?? new SerializedRenderExtensionState();
         this.enabled = enabled;
     }
 
-    /// <summary>Gets the stable feature extension identifier.</summary>
-    public string featureTypeId { get; }
+    /// <summary>Gets or sets the stable feature extension identifier.</summary>
+    [SerializableProperty]
+    public string featureTypeId { get; set; } = string.Empty;
 
-    /// <summary>Gets normalized neutral JSON settings.</summary>
-    public string settingsJson { get; }
+    /// <summary>Gets or sets reload-safe settings state.</summary>
+    [SerializableProperty]
+    public SerializedRenderExtensionState state { get; set; }
 
-    /// <summary>Gets whether the feature participates in graph building.</summary>
-    public bool enabled { get; }
+    /// <summary>Gets or sets whether the feature participates in graph building.</summary>
+    [SerializableProperty]
+    public bool enabled { get; set; } = true;
 }
 
 /// <summary>
-/// Stores quality controls shared by built-in Forward+ and Deferred paths.
-/// </summary>
-public sealed class RenderQualitySettings
-{
-    private readonly Action? m_changed;
-    private int m_directionalShadowCascades = 4;
-    private int m_shadowResolution = 2048;
-    private bool m_hdr = true;
-    private bool m_bloom = true;
-    private float m_exposure;
-
-    /// <summary>Creates default production quality settings.</summary>
-    public RenderQualitySettings()
-    {
-    }
-
-    internal RenderQualitySettings(Action changed)
-    {
-        m_changed = changed ?? throw new ArgumentNullException(nameof(changed));
-    }
-
-    /// <summary>Gets or sets whether the pipeline renders an HDR intermediate target.</summary>
-    public bool hdr
-    {
-        get => m_hdr;
-        set
-        {
-            m_hdr = value;
-            m_changed?.Invoke();
-        }
-    }
-
-    /// <summary>Gets or sets whether Bloom participates in post-processing.</summary>
-    public bool bloom
-    {
-        get => m_bloom;
-        set
-        {
-            m_bloom = value;
-            m_changed?.Invoke();
-        }
-    }
-
-    /// <summary>Gets or sets exposure in photographic stops.</summary>
-    public float exposure
-    {
-        get => m_exposure;
-        set
-        {
-            m_exposure = float.IsFinite(value)
-                ? value
-                : throw new ArgumentOutOfRangeException(nameof(value));
-            m_changed?.Invoke();
-        }
-    }
-
-    /// <summary>Gets or sets directional shadow cascade count from one through four.</summary>
-    public int directionalShadowCascades
-    {
-        get => m_directionalShadowCascades;
-        set
-        {
-            m_directionalShadowCascades = Math.Clamp(value, 1, 4);
-            m_changed?.Invoke();
-        }
-    }
-
-    /// <summary>Gets or sets directional shadow-map resolution.</summary>
-    public int shadowResolution
-    {
-        get => m_shadowResolution;
-        set
-        {
-            m_shadowResolution = Math.Clamp(value, 256, 8192);
-            m_changed?.Invoke();
-        }
-    }
-
-    internal void Restore(
-        bool hdr,
-        bool bloom,
-        float exposure,
-        int directionalShadowCascades,
-        int shadowResolution)
-    {
-        m_hdr = hdr;
-        m_bloom = bloom;
-        m_exposure = exposure;
-        m_directionalShadowCascades = Math.Clamp(directionalShadowCascades, 1, 4);
-        m_shadowResolution = Math.Clamp(shadowResolution, 256, 8192);
-    }
-}
-
-/// <summary>
-/// Selects a pipeline extension, default path, quality and ordered features as project data.
+/// Selects a pipeline extension and ordered feature configuration without defining a render path.
 /// </summary>
 [StableTypeId("b17d289e-62de-4299-9e85-497143911798")]
 public sealed class RenderPipelineAsset : AssetObject
 {
-    private readonly List<RenderFeatureConfiguration> m_features = [];
-    [SerializableProperty(PropertyVisibility.Hide)]
-    private string m_qualityStateJson = "{}";
-    [SerializableProperty(PropertyVisibility.Hide)]
-    private string m_featureStateJson = "[]";
+    private RenderFeatureConfiguration[] m_features = [];
 
-    /// <summary>Creates a pipeline asset with default production quality.</summary>
-    public RenderPipelineAsset()
-    {
-        quality = new RenderQualitySettings(SynchronizeQuality);
-        SynchronizeQuality();
-    }
-
-    /// <summary>Gets or sets the stable pipeline extension identifier.</summary>
+    /// <summary>Gets or sets the globally stable pipeline extension identifier.</summary>
     [SerializableProperty]
-    public string pipelineTypeId { get; set; } = "inno.pipeline.universal";
+    public string pipelineTypeId { get; set; } = string.Empty;
 
-    /// <summary>Gets or sets the default render path.</summary>
+    /// <summary>Gets or sets reload-safe pipeline settings.</summary>
     [SerializableProperty]
-    public RenderPath defaultRenderPath { get; set; } = RenderPath.ForwardPlus;
-
-    /// <summary>Gets quality settings shared by pipeline paths.</summary>
-    public RenderQualitySettings quality { get; }
+    public SerializedRenderExtensionState pipelineState { get; set; } = new();
 
     /// <summary>Gets ordered feature configurations.</summary>
-    public IReadOnlyList<RenderFeatureConfiguration> features => m_features;
+    [SerializableProperty]
+    public RenderFeatureConfiguration[] features
+    {
+        get => m_features;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            m_features = value.ToArray();
+        }
+    }
 
-    /// <summary>
-    /// Replaces ordered feature configurations.
-    /// </summary>
-    /// <param name="features">Ordered neutral feature configurations.</param>
+    /// <summary>Replaces ordered feature configurations.</summary>
+    /// <param name="features">Complete ordered feature configuration set.</param>
     public void SetFeatures(IEnumerable<RenderFeatureConfiguration> features)
     {
         ArgumentNullException.ThrowIfNull(features);
-        m_features.Clear();
-        foreach (RenderFeatureConfiguration feature in features)
-        {
-            ArgumentNullException.ThrowIfNull(feature);
-            m_features.Add(feature);
-        }
-
-        m_featureStateJson = JsonSerializer.Serialize(m_features.Select(static value => new FeatureData
-        {
-            featureTypeId = value.featureTypeId,
-            settingsJson = value.settingsJson,
-            enabled = value.enabled
-        }));
-    }
-
-    [OnSerializableRestored]
-    private void OnSerializableRestored()
-    {
-        QualityData qualityData = JsonSerializer.Deserialize<QualityData>(m_qualityStateJson) ?? new QualityData();
-        quality.Restore(
-            qualityData.hdr,
-            qualityData.bloom,
-            qualityData.exposure,
-            qualityData.directionalShadowCascades,
-            qualityData.shadowResolution);
-        FeatureData[] features = JsonSerializer.Deserialize<FeatureData[]>(m_featureStateJson) ?? [];
-        m_features.Clear();
-        m_features.AddRange(features.Select(static value => new RenderFeatureConfiguration(
-            value.featureTypeId,
-            value.settingsJson,
-            value.enabled)));
-    }
-
-    private void SynchronizeQuality()
-    {
-        m_qualityStateJson = JsonSerializer.Serialize(new QualityData
-        {
-            hdr = quality.hdr,
-            bloom = quality.bloom,
-            exposure = quality.exposure,
-            directionalShadowCascades = quality.directionalShadowCascades,
-            shadowResolution = quality.shadowResolution
-        });
-    }
-
-    private sealed class QualityData
-    {
-        public bool hdr { get; set; } = true;
-        public bool bloom { get; set; } = true;
-        public float exposure { get; set; }
-        public int directionalShadowCascades { get; set; } = 4;
-        public int shadowResolution { get; set; } = 2048;
-    }
-
-    private sealed class FeatureData
-    {
-        public string featureTypeId { get; set; } = string.Empty;
-        public string settingsJson { get; set; } = "{}";
-        public bool enabled { get; set; } = true;
+        this.features = features.ToArray();
     }
 }

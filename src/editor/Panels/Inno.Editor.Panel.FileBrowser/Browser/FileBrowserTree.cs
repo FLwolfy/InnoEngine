@@ -1,8 +1,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.IO;
-
 using Inno.Assets;
 using Inno.Assets.File;
 using Inno.Editor.Core;
@@ -53,7 +51,8 @@ internal sealed class FileBrowserTree
         EditorContext context,
         string relativePath,
         string label,
-        bool isRoot)
+        bool isRoot,
+        bool isReadOnlyRoot = false)
     {
         List<AssetFileEntry> sorted = m_data.SortTreeEntries(
             m_data.GetVisibleChildren(relativePath));
@@ -69,7 +68,7 @@ internal sealed class FileBrowserTree
             context,
             relativePath,
             FileBrowserPresentation.Tree);
-        string nodeId = $"tree_{(isRoot ? "root" : relativePath)}";
+        string nodeId = $"tree_{(isRoot ? $"root_{relativePath}" : relativePath)}";
         if (ShouldOpenTreeEntry(relativePath, isRoot, isDirectory))
             EditorWidget.SetNextTreeNodeOpen(true);
 
@@ -99,36 +98,36 @@ internal sealed class FileBrowserTree
             m_rename.MarkInteraction(FileBrowserPresentation.Tree);
             m_assets.browser.Select(context, relativePath);
         }
-        else if (isRoot && result.isDoubleClicked)
+        else if (isRoot && (result.isClicked || result.isDoubleClicked))
         {
-            m_navigation.NavigateTo(context, relativePath, relativePath);
-        }
-        else if (isRoot && result.isClicked)
-        {
-            m_assets.browser.Select(context, relativePath);
+            m_navigation.NavigateTo(context, relativePath);
+            m_assets.browser.Select(context, null);
         }
         if (treeEntry is not null)
         {
             if (!editing)
             {
-                m_contextMenu.DrawEntry(
-                    context,
-                    $"##asset_tree_context_{treeEntry.relativePath}",
-                    treeEntry.relativePath,
-                    FileBrowserPresentation.Tree);
                 m_dragDrop.DrawAssetSource(context, treeEntry);
-                if (treeEntry.isDirectory)
+                if (!treeEntry.isReadOnly)
+                {
+                    m_contextMenu.DrawEntry(
+                        context,
+                        $"##asset_tree_context_{treeEntry.relativePath}",
+                        treeEntry.relativePath,
+                        FileBrowserPresentation.Tree);
+                }
+                if (treeEntry.isDirectory && !treeEntry.isReadOnly)
                     m_dragDrop.DrawDirectoryTarget(context, treeEntry.relativePath);
             }
         }
-        else if (isRoot)
+        else if (isRoot && !isReadOnlyRoot)
         {
             m_contextMenu.DrawDirectory(
                 context,
-                "##asset_tree_root_context",
-                string.Empty,
+                $"##asset_tree_root_context_{relativePath}",
+                relativePath,
                 FileBrowserPresentation.Tree);
-            m_dragDrop.DrawDirectoryTarget(context, string.Empty);
+            m_dragDrop.DrawDirectoryTarget(context, relativePath);
         }
         if (!result.isOpen)
             return;
@@ -136,7 +135,7 @@ internal sealed class FileBrowserTree
         for (int i = 0; i < sorted.Count; i++)
         {
             AssetFileEntry child = sorted[i];
-            DrawEntry(context, child.relativePath, Path.GetFileName(child.relativePath), false);
+            DrawEntry(context, child.relativePath, child.name, false);
         }
         NativeImGui.TreePop();
     }

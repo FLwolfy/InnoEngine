@@ -38,6 +38,8 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
     private int m_nextViewId;
     private int m_pendingWidth;
     private int m_pendingHeight;
+    private int m_drawCount;
+    private int m_dispatchCount;
     private bool m_frameOpen;
     private bool m_disposed;
 
@@ -125,6 +127,10 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
     /// <inheritdoc />
     public uint generation { get; private set; }
 
+    /// <inheritdoc />
+    public RenderDeviceFrameCounters frameCounters
+        => new(Volatile.Read(ref m_drawCount), Volatile.Read(ref m_dispatchCount));
+
     /// <summary>Gets the last frame number returned by BGFX submission.</summary>
     public uint backendFrame => m_backendFrame;
 
@@ -139,6 +145,8 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
         }
 
         ResetPreviousViews();
+        Volatile.Write(ref m_drawCount, 0);
+        Volatile.Write(ref m_dispatchCount, 0);
         ProcessDeferredResources(force: false);
         if (m_pendingWidth > 0 && m_pendingHeight > 0)
         {
@@ -281,7 +289,8 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
             throw new ArgumentException("Persistent texture is not active on this device.", nameof(texture));
         }
 
-        if (mipLevel >= descriptor.mipCount || arrayLayer >= descriptor.arrayLayers)
+        if (mipLevel >= descriptor.mipCount
+            || arrayLayer >= descriptor.GetSubresourceLayerCount(mipLevel))
         {
             throw new ArgumentOutOfRangeException(nameof(mipLevel), "Texture subresource is outside the descriptor.");
         }
@@ -302,16 +311,48 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
             memory = bgfx.copy(pointer, checked((uint)data.Length));
         }
 
-        bgfx.update_texture_2d(
-            nativeTexture,
-            checked((ushort)arrayLayer),
-            checked((byte)mipLevel),
-            0,
-            0,
-            checked((ushort)width),
-            checked((ushort)height),
-            memory,
-            ushort.MaxValue);
+        switch (descriptor.dimension)
+        {
+            case RenderTextureDimension.Texture2D:
+                bgfx.update_texture_2d(
+                    nativeTexture,
+                    checked((ushort)arrayLayer),
+                    checked((byte)mipLevel),
+                    0,
+                    0,
+                    checked((ushort)width),
+                    checked((ushort)height),
+                    memory,
+                    ushort.MaxValue);
+                break;
+            case RenderTextureDimension.Texture3D:
+                bgfx.update_texture_3d(
+                    nativeTexture,
+                    checked((byte)mipLevel),
+                    0,
+                    0,
+                    checked((ushort)arrayLayer),
+                    checked((ushort)width),
+                    checked((ushort)height),
+                    1,
+                    memory);
+                break;
+            case RenderTextureDimension.Cube:
+                bgfx.update_texture_cube(
+                    nativeTexture,
+                    checked((ushort)(arrayLayer / 6)),
+                    checked((byte)(arrayLayer % 6)),
+                    checked((byte)mipLevel),
+                    0,
+                    0,
+                    checked((ushort)width),
+                    checked((ushort)height),
+                    memory,
+                    ushort.MaxValue);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(descriptor));
+        }
     }
 
     /// <inheritdoc />
@@ -486,6 +527,10 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
     }
 
     internal int allocatedViewCount => m_nextViewId;
+
+    internal void RecordDraw(int count = 1) => Interlocked.Add(ref m_drawCount, count);
+
+    internal void RecordDispatch(int count = 1) => Interlocked.Add(ref m_dispatchCount, count);
 
     /// <summary>
     /// Shuts down BGFX after releasing all active and queued backend resources.
@@ -692,6 +737,71 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
 
     private bgfx.TextureHandle CreateNativeTexture(RenderTextureDescriptor descriptor)
     {
+        if (descriptor.width > capabilities.limits.maxTextureSize
+            || descriptor.height > capabilities.limits.maxTextureSize
+            || descriptor.depth > capabilities.limits.maxTextureSize)
+        {
+            throw new NotSupportedException(
+                "The texture descriptor exceeds the active backend extent limit.");
+        }
+
+        if (!capabilities.SupportsSampled(descriptor.format, descriptor.dimension)
+            && (descriptor.usage & RenderTextureUsage.Sampled) != 0)
+        {
+            throw new NotSupportedException(
+                $"The active graphics backend cannot sample {descriptor.dimension} textures in format '{descriptor.format}'.");
+        }
+
+        if ((descriptor.usage
+                & (RenderTextureUsage.ColorAttachment | RenderTextureUsage.DepthStencilAttachment)) != 0
+            && !capabilities.SupportsRenderTarget(descriptor.format))
+        {
+            throw new NotSupportedException(
+                $"The active graphics backend cannot attach texture format '{descriptor.format}'.");
+        }
+
+        if ((descriptor.usage
+                & (RenderTextureUsage.ColorAttachment | RenderTextureUsage.DepthStencilAttachment)) != 0
+            && descriptor.sampleCount > 1
+            && !capabilities.SupportsMultisampleRenderTarget(descriptor.format))
+        {
+            throw new NotSupportedException(
+                $"The active graphics backend cannot multisample texture format '{descriptor.format}'.");
+        }
+
+        if ((descriptor.usage & RenderTextureUsage.Storage) != 0
+            && (!capabilities.Supports(GraphicsFeature.Compute)
+                || !capabilities.Supports(GraphicsFeature.StorageTexture)
+                || (!capabilities.SupportsStorage(descriptor.format, RenderStorageAccess.Read)
+                    && !capabilities.SupportsStorage(descriptor.format, RenderStorageAccess.Write))))
+        {
+            throw new NotSupportedException(
+                $"The active graphics backend cannot use texture format '{descriptor.format}' for storage access.");
+        }
+
+        if (descriptor.dimension == RenderTextureDimension.Texture2D
+            && descriptor.arrayLayers > 1
+            && !capabilities.Supports(GraphicsFeature.Texture2DArray))
+        {
+            throw new NotSupportedException(
+                "The active graphics backend does not support two-dimensional texture arrays.");
+        }
+
+        if (descriptor.dimension == RenderTextureDimension.Texture3D
+            && !capabilities.Supports(GraphicsFeature.Texture3D))
+        {
+            throw new NotSupportedException(
+                "The active graphics backend does not support three-dimensional textures.");
+        }
+
+        if (descriptor.dimension == RenderTextureDimension.Cube
+            && descriptor.arrayLayers > 1
+            && !capabilities.Supports(GraphicsFeature.TextureCubeArray))
+        {
+            throw new NotSupportedException(
+                "The active graphics backend does not support cubemap texture arrays.");
+        }
+
         bgfx.TextureFlags flags = bgfx.TextureFlags.None;
         if ((descriptor.usage
             & (RenderTextureUsage.ColorAttachment | RenderTextureUsage.DepthStencilAttachment)) != 0)
@@ -722,28 +832,47 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
             flags |= bgfx.TextureFlags.Srgb;
         }
 
-        return bgfx.create_texture_2d(
-            checked((ushort)descriptor.width),
-            checked((ushort)descriptor.height),
-            descriptor.mipCount > 1,
-            checked((ushort)descriptor.arrayLayers),
-            BgfxCapabilityMapper.ToNativeFormat(descriptor.format),
-            (ulong)flags,
-            null,
-            0);
+        return descriptor.dimension switch
+        {
+            RenderTextureDimension.Texture2D => bgfx.create_texture_2d(
+                checked((ushort)descriptor.width),
+                checked((ushort)descriptor.height),
+                descriptor.mipCount > 1,
+                checked((ushort)descriptor.arrayLayers),
+                BgfxCapabilityMapper.ToNativeFormat(descriptor.format),
+                (ulong)flags,
+                null,
+                0),
+            RenderTextureDimension.Texture3D => bgfx.create_texture_3d(
+                checked((ushort)descriptor.width),
+                checked((ushort)descriptor.height),
+                checked((ushort)descriptor.depth),
+                descriptor.mipCount > 1,
+                BgfxCapabilityMapper.ToNativeFormat(descriptor.format),
+                (ulong)flags,
+                null,
+                0),
+            RenderTextureDimension.Cube => bgfx.create_texture_cube(
+                checked((ushort)descriptor.width),
+                descriptor.mipCount > 1,
+                checked((ushort)descriptor.arrayLayers),
+                BgfxCapabilityMapper.ToNativeFormat(descriptor.format),
+                (ulong)flags,
+                null,
+                0),
+            _ => throw new ArgumentOutOfRangeException(nameof(descriptor))
+        };
     }
 
-    private void EnqueueDestroy(DeferredResource resource, int delayMultiplier = 1)
+    private void EnqueueDestroy(DeferredResource resource)
         => m_deferredResources.Add(resource with
         {
             eligibleFrame = m_backendFrame
-                + checked((uint)(m_deferredDestroyFrames * delayMultiplier))
+                + checked((uint)m_deferredDestroyFrames)
         });
 
     private void EnqueuePipelineDestroy(BgfxPipelineResource pipeline)
-    {
-        EnqueueDestroy(DeferredResource.ForProgram(pipeline.program));
-    }
+        => EnqueueDestroy(DeferredResource.ForProgram(pipeline.program));
 
     private void ReleasePreparedGraphResources()
     {
@@ -806,6 +935,9 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
                     break;
                 case DeferredResourceKind.DynamicIndexBuffer:
                     bgfx.destroy_dynamic_index_buffer(new bgfx.DynamicIndexBufferHandle { idx = resource.index });
+                    break;
+                case DeferredResourceKind.IndirectBuffer:
+                    bgfx.destroy_indirect_buffer(new bgfx.IndirectBufferHandle { idx = resource.index });
                     break;
                 case DeferredResourceKind.Program:
                     bgfx.destroy_program(new bgfx.ProgramHandle { idx = resource.index });
@@ -947,6 +1079,7 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
         IndexBuffer,
         DynamicVertexBuffer,
         DynamicIndexBuffer,
+        IndirectBuffer,
         Program,
         VertexLayout
     }
@@ -969,6 +1102,7 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
                 BgfxBufferKind.Index => DeferredResourceKind.IndexBuffer,
                 BgfxBufferKind.DynamicVertex => DeferredResourceKind.DynamicVertexBuffer,
                 BgfxBufferKind.DynamicIndex => DeferredResourceKind.DynamicIndexBuffer,
+                BgfxBufferKind.Indirect => DeferredResourceKind.IndirectBuffer,
                 _ => throw new ArgumentOutOfRangeException(nameof(buffer))
             }, buffer.nativeIndex, 0);
 

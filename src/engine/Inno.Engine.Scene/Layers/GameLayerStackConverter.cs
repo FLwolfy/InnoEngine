@@ -19,6 +19,9 @@ internal sealed class GameLayerStackConverter : SerializationConverter<GameLayer
         ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(value);
         writer.Write(
+            "ids",
+            value.CaptureIds().Select(static id => id ?? string.Empty).ToArray());
+        writer.Write(
             "names",
             value.CaptureNames().Select(static name => name ?? string.Empty).ToArray());
         writer.Write("interactionMasks", value.CaptureInteractionMasks());
@@ -28,10 +31,14 @@ internal sealed class GameLayerStackConverter : SerializationConverter<GameLayer
     public override GameLayerStack Read(SerializationReader reader)
     {
         ArgumentNullException.ThrowIfNull(reader);
+        string[] serializedIds = reader.Read<string[]>("ids");
+        string?[] ids = serializedIds
+            .Select(static id => string.IsNullOrEmpty(id) ? null : id)
+            .ToArray();
         string[] serializedNames = reader.Read<string[]>("names");
         string?[] names = serializedNames
             .Select(static name => string.IsNullOrEmpty(name) ? null : name)
             .ToArray();
-        return GameLayerStack.Restore(names, reader.Read<uint[]>("interactionMasks"));
+        return GameLayerStack.Restore(ids, names, reader.Read<uint[]>("interactionMasks"));
     }
 }

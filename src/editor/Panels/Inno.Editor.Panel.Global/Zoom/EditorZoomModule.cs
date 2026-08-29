@@ -13,7 +13,7 @@ namespace Inno.Editor.Panel.Global;
 [EditorModule("editor-zoom", order: 10)]
 internal sealed class EditorZoomModule(EditorSettings settings) : EditorModule
 {
-    private const string C_ACTUAL_SIZE_PATH = "Global/Appearance/Accessibility/Actual Size";
+    private const string C_ACTUAL_SIZE_PATH = "Editor/Appearance/Accessibility/Actual Size";
 
     private float m_actualSize = 1f;
     private int m_zoomStep;

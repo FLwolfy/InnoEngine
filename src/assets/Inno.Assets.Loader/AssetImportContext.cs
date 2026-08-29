@@ -16,6 +16,8 @@ public sealed class AssetImportContext
     private readonly List<AssetDependency> m_runtimeDependencies = [];
     private readonly List<AssetImportDependency> m_importDependencies = [];
     private readonly Func<string, Type, AssetObject?> m_dependencyResolver;
+    private readonly Func<string, ReadOnlyMemory<byte>> m_sourceReader;
+    private readonly AssetPath m_sourceAssetPath;
 
     /// <summary>Creates an asset import context.</summary>
     /// <param name="relativePath">The source-relative path.</param>
@@ -24,21 +26,25 @@ public sealed class AssetImportContext
     /// <param name="sourceHash">The deterministic source hash.</param>
     /// <param name="persistentId">The persistent identity assigned to the source asset.</param>
     /// <param name="dependencyResolver">Resolver for typed runtime dependencies.</param>
+    /// <param name="sourceReader">Reader for controlled source dependencies in the current mount snapshot.</param>
     internal AssetImportContext(
         string relativePath,
         string absolutePath,
         ReadOnlyMemory<byte> sourceBytes,
         string sourceHash,
         Guid persistentId,
-        Func<string, Type, AssetObject?> dependencyResolver)
+        Func<string, Type, AssetObject?> dependencyResolver,
+        Func<string, ReadOnlyMemory<byte>> sourceReader)
     {
         this.relativePath = relativePath ?? throw new ArgumentNullException(nameof(relativePath));
         this.absolutePath = absolutePath ?? throw new ArgumentNullException(nameof(absolutePath));
         this.sourceBytes = sourceBytes;
         this.sourceHash = sourceHash ?? throw new ArgumentNullException(nameof(sourceHash));
         this.persistentId = persistentId;
+        m_sourceAssetPath = AssetPath.Parse(relativePath);
         m_dependencyResolver = dependencyResolver
             ?? throw new ArgumentNullException(nameof(dependencyResolver));
+        m_sourceReader = sourceReader ?? throw new ArgumentNullException(nameof(sourceReader));
     }
 
     /// <summary>Gets the source-relative path.</summary>
@@ -63,7 +69,42 @@ public sealed class AssetImportContext
     /// <returns>The decoded text without an optional byte-order mark.</returns>
     public string ReadUtf8Text()
     {
-        string text = Encoding.UTF8.GetString(sourceBytes.Span);
+        return DecodeUtf8(sourceBytes.Span);
+    }
+
+    /// <summary>
+    /// Reads another source from the same candidate mount snapshot and records it as an import dependency.
+    /// </summary>
+    /// <param name="relativePath">
+    /// A path in the current source, or an explicitly source-qualified path whose mount dependency was declared.
+    /// </param>
+    /// <returns>An immutable source snapshot owned by the import operation.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the source crosses an undeclared mount boundary or references the writable Project from a Plugin.
+    /// </exception>
+    /// <exception cref="FileNotFoundException">Thrown when the resolved source does not exist.</exception>
+    public ReadOnlyMemory<byte> ReadSourceBytes(string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+            throw new ArgumentException("An import source dependency path is required.", nameof(relativePath));
+        string normalized = Normalize(relativePath);
+        DependsOnSource(normalized);
+        return m_sourceReader(normalized);
+    }
+
+    /// <summary>
+    /// Reads another source as UTF-8 from the current candidate mount snapshot and records the dependency.
+    /// </summary>
+    /// <param name="relativePath">
+    /// A path in the current source, or an explicitly source-qualified path whose mount dependency was declared.
+    /// </param>
+    /// <returns>Decoded UTF-8 text without an optional byte-order mark.</returns>
+    public string ReadSourceUtf8Text(string relativePath)
+        => DecodeUtf8(ReadSourceBytes(relativePath).Span);
+
+    private static string DecodeUtf8(ReadOnlySpan<byte> bytes)
+    {
+        string text = Encoding.UTF8.GetString(bytes);
         return text.Length > 0 && text[0] == '\uFEFF' ? text[1..] : text;
     }
 
@@ -87,7 +128,7 @@ public sealed class AssetImportContext
     /// Resolves and declares a strongly typed runtime asset dependency during import.
     /// </summary>
     /// <typeparam name="TAsset">Expected asset type.</typeparam>
-    /// <param name="relativePath">Project Assets-relative dependency path.</param>
+    /// <param name="relativePath">Source-local path, or an explicitly source-qualified cross-mount path.</param>
     /// <returns>The currently committed dependency asset.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the dependency cannot be imported or has another type.</exception>
     public TAsset ResolveDependency<TAsset>(string relativePath)
@@ -147,7 +188,13 @@ public sealed class AssetImportContext
     internal IReadOnlyList<AssetDependency> runtimeDependencies => m_runtimeDependencies;
     internal IReadOnlyList<AssetImportDependency> importDependencies => m_importDependencies;
 
-    private static string Normalize(string path) => path.Replace('\\', '/').TrimStart('/');
+    private string Normalize(string path)
+    {
+        string normalized = path.Replace('\\', '/').TrimStart('/');
+        return normalized.Contains("::", StringComparison.Ordinal)
+            ? AssetPath.Parse(normalized).ToString()
+            : new AssetPath(m_sourceAssetPath.source, normalized).ToString();
+    }
 }
 
 internal enum AssetImportDependencyKind

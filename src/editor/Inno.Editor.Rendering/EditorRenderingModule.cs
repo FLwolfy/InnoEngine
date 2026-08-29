@@ -1,45 +1,153 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+
+using Inno.Core.Scripting;
 using Inno.Editor.Core;
+using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Rendering;
 
-/// <summary>
-/// Provides reload-safe editor panels with backend-neutral viewport submission and presentation.
-/// </summary>
+/// <summary>Hosts reloadable viewport providers while retaining only opaque presentation outputs.</summary>
 [EditorModule("rendering.viewports", order: 175)]
 public sealed class EditorRenderingModule : EditorModule
 {
+    private readonly Dictionary<EditorViewportKindId, string> m_providerErrors = [];
     private readonly IEditorRenderingHost m_host;
+    private readonly EditorInteractions m_interactions;
+    private readonly EditorViewportProviderRegistry m_providers = new();
+    private EditorContext? m_context;
 
-    /// <summary>Creates the module around the stable host rendering service.</summary>
-    /// <param name="host">Host-owned rendering and opaque presentation bridge.</param>
-    public EditorRenderingModule(IEditorRenderingHost host)
+    /// <summary>Creates the provider host around stable rendering and interaction services.</summary>
+    /// <param name="host">Host-owned target and opaque texture bridge.</param>
+    /// <param name="interactions">Shared Editor interaction and selection service.</param>
+    [ScriptingApiIgnore]
+    public EditorRenderingModule(IEditorRenderingHost host, EditorInteractions interactions)
     {
         m_host = host ?? throw new ArgumentNullException(nameof(host));
+        m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
     }
 
-    /// <summary>Gets the active project-relative pipeline asset path, or <see langword="null"/> for host defaults.</summary>
-    public string? activePipelineAssetPath => m_host.activePipelineAssetPath;
+    /// <summary>Gets whether the current extension generation provides one viewport purpose.</summary>
+    /// <param name="kind">Open viewport purpose.</param>
+    /// <returns><see langword="true"/> when an active provider is available.</returns>
+    public bool HasProvider(EditorViewportKindId kind)
+        => kind.isValid && m_providers.providers.byKind.ContainsKey(kind);
 
-    /// <summary>Enumerates pipeline assets available to the current project.</summary>
-    /// <returns>Stable picker data sorted by project-relative path.</returns>
-    public IReadOnlyList<EditorPipelineAssetInfo> GetPipelineAssets() => m_host.GetPipelineAssets();
+    /// <summary>Gets the most recent isolated provider failure for a viewport purpose.</summary>
+    /// <param name="kind">Open viewport purpose.</param>
+    /// <returns>The failure message, or null when no current failure exists.</returns>
+    public string? GetProviderError(EditorViewportKindId kind)
+        => m_providerErrors.GetValueOrDefault(kind);
 
-    /// <summary>Attempts to activate a complete pipeline and feature generation from one project asset.</summary>
-    /// <param name="assetPath">Project-relative pipeline asset path.</param>
-    /// <returns><see langword="true"/> when activation succeeded without replacing last-good state on failure.</returns>
-    public bool TryActivatePipelineAsset(string assetPath) => m_host.TryActivatePipelineAsset(assetPath);
+    /// <summary>Draws toolbar controls owned by the selected Plugin provider.</summary>
+    /// <param name="kind">Open viewport purpose.</param>
+    /// <param name="viewportId">Stable panel viewport identity.</param>
+    /// <param name="pixelWidth">Current target width.</param>
+    /// <param name="pixelHeight">Current target height.</param>
+    public void DrawProviderToolbar(
+        EditorViewportKindId kind,
+        string viewportId,
+        int pixelWidth,
+        int pixelHeight)
+    {
+        if (!TryCreateContext(kind, viewportId, pixelWidth, pixelHeight, out EditorViewportContext? context)
+            || !m_providers.providers.byKind.TryGetValue(kind, out EditorViewportProviderRegistry.Registration? registration))
+        {
+            return;
+        }
+        try
+        {
+            registration.provider.DrawToolbar(context!);
+            m_providerErrors.Remove(kind);
+        }
+        catch (Exception exception)
+        {
+            m_providerErrors[kind] =
+                $"Viewport provider '{registration.attribute.id}' toolbar failed: {exception.Message}";
+        }
+    }
 
-    /// <summary>Submits or updates one offscreen viewport for the current editor frame.</summary>
-    /// <param name="request">Complete viewport request.</param>
-    /// <returns>The current output, which can be warming up for one frame.</returns>
-    public EditorViewportOutput Submit(EditorViewportRequest request)
-        => m_host.Submit(request ?? throw new ArgumentNullException(nameof(request)));
+    /// <summary>Builds, submits, and returns one provider-owned offscreen viewport.</summary>
+    /// <param name="kind">Open viewport purpose.</param>
+    /// <param name="viewportId">Stable panel viewport identity.</param>
+    /// <param name="pixelWidth">Positive target width.</param>
+    /// <param name="pixelHeight">Positive target height.</param>
+    /// <param name="output">Receives the opaque viewport output.</param>
+    /// <returns><see langword="true"/> when a provider submission was accepted.</returns>
+    public bool TrySubmit(
+        EditorViewportKindId kind,
+        string viewportId,
+        int pixelWidth,
+        int pixelHeight,
+        out EditorViewportOutput output)
+    {
+        output = default;
+        if (!TryCreateContext(kind, viewportId, pixelWidth, pixelHeight, out EditorViewportContext? context)
+            || !m_providers.providers.byKind.TryGetValue(kind, out EditorViewportProviderRegistry.Registration? registration))
+        {
+            m_host.Release(viewportId);
+            return false;
+        }
+        try
+        {
+            EditorViewportSubmission submission = registration.provider.Build(context!);
+            output = m_host.Submit(new EditorViewportRequest(
+                viewportId,
+                pixelWidth,
+                pixelHeight,
+                submission.pipeline,
+                submission.data,
+                submission.targetFormat,
+                submission.priority));
+            m_providerErrors.Remove(kind);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            m_providerErrors[kind] =
+                $"Viewport provider '{registration.attribute.id}' failed: {exception.Message}";
+            m_host.Release(viewportId);
+            return false;
+        }
+    }
+
+    /// <summary>Forwards a normalized click to the selected Plugin provider.</summary>
+    /// <param name="kind">Open viewport purpose.</param>
+    /// <param name="viewportId">Stable panel viewport identity.</param>
+    /// <param name="pixelWidth">Current target width.</param>
+    /// <param name="pixelHeight">Current target height.</param>
+    /// <param name="x">Normalized horizontal position.</param>
+    /// <param name="y">Normalized vertical position.</param>
+    /// <param name="button">Platform-independent pointer button index.</param>
+    public void HandlePointer(
+        EditorViewportKindId kind,
+        string viewportId,
+        int pixelWidth,
+        int pixelHeight,
+        float x,
+        float y,
+        int button)
+    {
+        if (!TryCreateContext(kind, viewportId, pixelWidth, pixelHeight, out EditorViewportContext? context)
+            || !m_providers.providers.byKind.TryGetValue(kind, out EditorViewportProviderRegistry.Registration? registration))
+        {
+            return;
+        }
+        try
+        {
+            registration.provider.HandlePointer(new EditorViewportPointerContext(context!, x, y, button));
+            m_providerErrors.Remove(kind);
+        }
+        catch (Exception exception)
+        {
+            m_providerErrors[kind] =
+                $"Viewport provider '{registration.attribute.id}' pointer handler failed: {exception.Message}";
+        }
+    }
 
     /// <summary>Draws a ready output in the current panel.</summary>
-    /// <param name="output">Output returned by <see cref="Submit"/>.</param>
+    /// <param name="output">Opaque output returned by <see cref="TrySubmit"/>.</param>
     /// <param name="logicalSize">Destination size in logical UI pixels.</param>
     public void Draw(EditorViewportOutput output, Vector2 logicalSize)
         => m_host.Draw(output, logicalSize);
@@ -49,5 +157,50 @@ public sealed class EditorRenderingModule : EditorModule
     public void Release(string viewportId) => m_host.Release(viewportId);
 
     /// <inheritdoc />
-    protected override void OnDispose() => m_host.ReleaseAll();
+    protected override void OnStart(EditorContext context)
+    {
+        m_context = context;
+        _ = m_providers.providers;
+    }
+
+    /// <inheritdoc />
+    protected override void OnStop(EditorContext context)
+    {
+        _ = context;
+        m_context = null;
+        m_host.ReleaseAll();
+        m_providerErrors.Clear();
+    }
+
+    /// <inheritdoc />
+    protected override void OnDispose()
+    {
+        m_providers.Dispose();
+        m_host.ReleaseAll();
+    }
+
+    private bool TryCreateContext(
+        EditorViewportKindId kind,
+        string viewportId,
+        int pixelWidth,
+        int pixelHeight,
+        out EditorViewportContext? context)
+    {
+        if (!kind.isValid || m_context is null)
+        {
+            context = null;
+            return false;
+        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(viewportId);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelWidth);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelHeight);
+        context = new EditorViewportContext(
+            m_context,
+            m_interactions,
+            kind,
+            viewportId,
+            pixelWidth,
+            pixelHeight);
+        return true;
+    }
 }

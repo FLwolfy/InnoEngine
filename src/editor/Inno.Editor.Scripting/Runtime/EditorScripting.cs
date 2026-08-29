@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 
+using Inno.Assets.Plugins;
 using Inno.Core.Logging;
 using Inno.Editor.Core;
 
@@ -110,9 +111,12 @@ internal sealed class EditorScripting : EditorModule
             ScriptDiagnosticPublisher.PublishCompilation(result);
             if (result.success)
                 _ = m_manager.ApplyPendingReload();
+            else
+                PluginManager.RollbackPending();
         }
         catch (Exception exception)
         {
+            PluginManager.RollbackPending();
             ScriptDiagnosticPublisher.PublishReloadFailure(exception);
             Log.Error("Script assembly reload failed: {0}", exception);
         }

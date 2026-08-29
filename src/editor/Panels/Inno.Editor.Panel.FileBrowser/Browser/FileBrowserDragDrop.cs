@@ -44,6 +44,8 @@ internal sealed class FileBrowserDragDrop(AssetEditorModule assets)
         EditorContext context,
         string relativePath)
     {
+        if (FileBrowserUtility.IsReadOnlySource(relativePath))
+            return;
         System.Numerics.Vector2 minimum = NativeImGui.GetItemRectMin();
         System.Numerics.Vector2 maximum = NativeImGui.GetItemRectMax();
         EditorDropWidgetResult result = EditorDragDropRenderer.Target(

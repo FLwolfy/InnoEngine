@@ -10,7 +10,8 @@ internal enum BgfxBufferKind
     Vertex,
     Index,
     DynamicVertex,
-    DynamicIndex
+    DynamicIndex,
+    Indirect
 }
 
 internal sealed class BgfxBufferResource
@@ -58,6 +59,11 @@ internal sealed class BgfxBufferResource
         RenderIndexFormat format,
         bgfx.DynamicIndexBufferHandle handle)
         => new(descriptor, null, format, BgfxBufferKind.DynamicIndex, handle.idx);
+
+    public static BgfxBufferResource FromIndirect(
+        RenderBufferDescriptor descriptor,
+        bgfx.IndirectBufferHandle handle)
+        => new(descriptor, null, RenderIndexFormat.UInt32, BgfxBufferKind.Indirect, handle.idx);
 }
 
 internal sealed class BgfxShaderBindingResource

@@ -30,7 +30,7 @@ public sealed class AssetCoreTests
         var asset = new TextAsset();
 
         Assert.Equal(nameof(TextAsset), asset.name);
-        Assert.Equal(string.Empty, asset.sourcePath);
+        Assert.Equal(AssetPath.Project(string.Empty), asset.assetPath);
         Assert.False(asset.isMissing);
         Assert.Equal(0, asset.contentVersion);
         Assert.True(asset.runtimePayload.IsEmpty);
@@ -55,7 +55,9 @@ public sealed class AssetCoreTests
 
         Assert.DoesNotContain("sourceHash", propertyNames);
         Assert.DoesNotContain("dependencies", propertyNames);
-        Assert.False(typeof(AssetObject).GetProperty(nameof(AssetObject.sourcePath))!.SetMethod?.IsPublic ?? false);
+        Assert.Null(typeof(AssetObject).GetProperty("sourcePath"));
+        Assert.Null(typeof(AssetReferenceInfo).GetProperty("sourcePath"));
+        Assert.NotNull(typeof(AssetReferenceInfo).GetProperty(nameof(AssetReferenceInfo.assetPath)));
         Assert.Null(typeof(AssetObject).GetProperty(nameof(AssetObject.contentVersion))!.SetMethod);
         Assert.Null(typeof(AssetObject).GetProperty(nameof(AssetObject.runtimePayload))!.SetMethod);
     }

@@ -128,7 +128,7 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
             Assert.NotNull(after);
             Assert.Equal(id, after.persistentId);
             Assert.Equal(before.artifactKey, after.artifactKey);
-            Assert.Equal("Config/new.txt", canonical.sourcePath);
+            Assert.Equal("Config/new.txt", canonical.assetPath.ToString());
             Assert.Same(canonical, AssetManager.Load<TextAsset>(id));
             Assert.Equal(ownerThread, observerThread);
             Assert.True(observed.HasValue);
@@ -170,7 +170,7 @@ public sealed class AssetManagerFileSystemIntegrationTests : IDisposable
             Assert.True(AssetManager.TryGetPersistentId("Config/renamed.txt", out Guid movedId));
             Assert.Equal(persistentId, movedId);
             Assert.Same(canonical, AssetManager.Load<TextAsset>(movedId));
-            Assert.Equal("Config/renamed.txt", canonical.sourcePath);
+            Assert.Equal("Config/renamed.txt", canonical.assetPath.ToString());
             Assert.NotNull(observed);
             Assert.Equal(AssetChangeKind.Moved, observed.Value.kind);
             Assert.Equal("Config/old.txt", observed.Value.oldRelativePath);

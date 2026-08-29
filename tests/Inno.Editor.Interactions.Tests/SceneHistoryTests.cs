@@ -8,6 +8,7 @@ using Inno.Core.Assemblies;
 using Inno.Core.Identity;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
+using Inno.Core.Settings;
 using Inno.Editor.Scene;
 using Inno.Engine.Scene;
 using Inno.Engine.Scene.Assets;
@@ -37,6 +38,7 @@ public sealed class SceneHistoryTests : IDisposable
         });
         TypeCacheManager.Initialize();
         SerializationManager.Initialize();
+        ProjectSettingsManager.Initialize(Path.Combine(m_projectRoot, "ProjectSettings.inno"));
         m_runtime = new EditorInteractionRuntime(m_projectRoot);
         m_runtime.Start();
         Type workspaceType = typeof(SceneEdits).Assembly.GetType(
@@ -60,6 +62,7 @@ public sealed class SceneHistoryTests : IDisposable
     {
         m_runtime.Dispose();
         SceneManager.UnloadAllScenes();
+        ProjectSettingsManager.Shutdown();
         SerializationManager.Shutdown();
         TypeCacheManager.Shutdown();
         AssemblyManager.Shutdown();

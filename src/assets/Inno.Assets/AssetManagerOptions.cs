@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using Inno.Assets.File;
 
@@ -24,6 +25,9 @@ public readonly struct AssetManagerOptions
     /// <summary>Gets the source filtering policy.</summary>
     public AssetSourcePolicy? sourcePolicy { get; init; }
 
+    /// <summary>Gets the complete source mount snapshot, or null to mount only <see cref="assetRoot"/>.</summary>
+    public IReadOnlyList<AssetSourceMount>? sourceMounts { get; init; }
+
     /// <summary>Gets the rebuildable cache policy.</summary>
     public AssetCacheOptions cacheOptions { get; init; }
 
@@ -47,6 +51,7 @@ public readonly struct AssetManagerOptions
             enableFileSystemWatcher = true,
             fileWatcherFlushDelayMs = 80,
             sourcePolicy = AssetSourcePolicy.defaultPolicy,
+            sourceMounts = [new AssetSourceMount(Inno.Assets.Core.AssetSourceId.project, assetRoot, isReadOnly: false)],
             cacheOptions = AssetCacheOptions.CreateDefault()
         };
     }

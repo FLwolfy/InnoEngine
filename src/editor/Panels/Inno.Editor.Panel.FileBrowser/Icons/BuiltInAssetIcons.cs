@@ -12,9 +12,9 @@ namespace Inno.Editor.Panel.FileBrowser;
 [AssetIcon(".bytes", ImGuiIcon.File)]
 [AssetIcon(".bin", ImGuiIcon.File)]
 [AssetIcon(".dat", ImGuiIcon.File)]
-[AssetIcon(".iscene", "Global/Appearance/Icons/Scene")]
-[AssetIcon(".iprefab", "Global/Appearance/Icons/Prefab")]
+[AssetIcon(".iscene", "Editor/Appearance/Icons/Scene")]
+[AssetIcon(".iprefab", "Editor/Appearance/Icons/Prefab")]
+[AssetIcon(".iplugin", ImGuiIcon.Plug)]
 [AssetIcon(".cs", ImGuiIcon.FileCode)]
-[AssetIcon(".dll", ImGuiIcon.Plug)]
 [AssetIcon(".iasmdef", ImGuiIcon.Gears)]
 internal static class BuiltInAssetIcons;

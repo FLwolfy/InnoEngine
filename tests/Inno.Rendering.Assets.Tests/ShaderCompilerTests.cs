@@ -64,19 +64,11 @@ public sealed class ShaderCompilerTests
         var compiler = new ShaderCompiler(toolchain);
         var clustered = new ShaderPassDefinition(
             "Clustered",
-            BuiltinShaderPassTags.ForwardLitClustered,
-            null,
-            null,
-            null,
-            null,
-            GraphicsFeature.Compute | GraphicsFeature.StorageBuffer);
+            ShaderProgramKind.Raster,
+            requiredFeatures: GraphicsFeature.Compute | GraphicsFeature.StorageBuffer);
         var fallback = new ShaderPassDefinition(
             "Fallback",
-            BuiltinShaderPassTags.ForwardLit,
-            null,
-            null,
-            null,
-            null);
+            ShaderProgramKind.Raster);
         var definition = new ShaderDefinition("Tests/Alternatives", [], [], [clustered, fallback]);
         ShaderIRPass CreatePass(ShaderPassDefinition pass) => new(
             pass,
@@ -103,27 +95,11 @@ public sealed class ShaderCompilerTests
             "/project/Assets");
 
         Assert.True(result.succeeded);
-        Assert.Equal(BuiltinShaderPassTags.ForwardLit, Assert.Single(result.artifact!.passes).definition.tag);
+        Assert.Equal("Fallback", Assert.Single(result.artifact!.passes).definition.name);
         Assert.Equal(2, toolchain.requests.Count);
         Assert.Contains(result.diagnostics, static value =>
             value.code == "SHADER_IR_CAPABILITY_UNAVAILABLE"
             && value.severity == ShaderDiagnosticSeverity.Warning);
-    }
-
-    [Fact]
-    public void ProfileCatalog_UsesMetalOnlyForMacTarget()
-    {
-        GraphicsCapabilities capabilities = CreateCapabilities(GraphicsBackend.Metal, GraphicsFeature.Compute);
-
-        ShaderCompilerProfile profile = RendererProfileCatalog.Resolve(
-            ShaderTargetPlatform.MacOSArm64,
-            capabilities);
-
-        Assert.Equal("osx", profile.shadercPlatform);
-        Assert.Equal("metal", profile.GetStageProfile(ShaderStage.Compute));
-        Assert.Throws<NotSupportedException>(() => RendererProfileCatalog.Resolve(
-            ShaderTargetPlatform.WindowsX64,
-            capabilities));
     }
 
     [Fact]
@@ -158,7 +134,7 @@ public sealed class ShaderCompilerTests
     {
         GraphicsCapabilities capabilities = CreateCapabilities(GraphicsBackend.Metal, features);
         return new ShaderCompileTarget(
-            RendererProfileCatalog.Resolve(ShaderTargetPlatform.MacOSArm64, capabilities),
+            "tests:metal",
             capabilities);
     }
 
@@ -169,6 +145,8 @@ public sealed class ShaderCompilerTests
             backend,
             features,
             new GraphicsLimits(256, 8, 8192, 16),
+            Enum.GetValues<RenderTextureFormat>(),
+            Enum.GetValues<RenderTextureFormat>(),
             Enum.GetValues<RenderTextureFormat>(),
             Enum.GetValues<RenderTextureFormat>(),
             originBottomLeft: false,
@@ -190,6 +168,12 @@ public sealed class ShaderCompilerTests
     private sealed class FakeToolchain : IShaderCompilerToolchain
     {
         internal List<ShaderToolRequest> requests { get; } = [];
+
+        public ShaderCompileTarget CreateTarget(
+            GraphicsCapabilities capabilities,
+            bool optimize = true,
+            bool debugInformation = false)
+            => new("tests:fake", capabilities, optimize, debugInformation);
 
         public ValueTask<ShaderToolResult> CompileAsync(
             ShaderToolRequest request,

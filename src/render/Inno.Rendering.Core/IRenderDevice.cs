@@ -11,6 +11,27 @@ public enum RenderTextureContainer
     Ktx
 }
 
+/// <summary>Contains backend-recorded GPU command submissions for the current frame.</summary>
+public readonly record struct RenderDeviceFrameCounters
+{
+    /// <summary>Creates immutable device frame counters.</summary>
+    /// <param name="drawCount">Direct and indirect draw commands submitted so far.</param>
+    /// <param name="dispatchCount">Direct and indirect compute dispatches submitted so far.</param>
+    public RenderDeviceFrameCounters(int drawCount, int dispatchCount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(drawCount);
+        ArgumentOutOfRangeException.ThrowIfNegative(dispatchCount);
+        this.drawCount = drawCount;
+        this.dispatchCount = dispatchCount;
+    }
+
+    /// <summary>Gets direct and indirect draw commands submitted during the current frame.</summary>
+    public int drawCount { get; }
+
+    /// <summary>Gets direct and indirect compute dispatches submitted during the current frame.</summary>
+    public int dispatchCount { get; }
+}
+
 /// <summary>
 /// Owns one graphics backend generation and its frame submission boundary.
 /// </summary>
@@ -21,6 +42,12 @@ public interface IRenderDevice : IDisposable
 
     /// <summary>Gets the non-zero device generation used to reject stale persistent handles.</summary>
     uint generation { get; }
+
+    /// <summary>
+    /// Gets command counts recorded since the latest <see cref="BeginFrame"/> call.
+    /// Backends that cannot provide command accounting return zero counters.
+    /// </summary>
+    RenderDeviceFrameCounters frameCounters => default;
 
     /// <summary>Begins the sole API-thread frame scope and processes queued resource work.</summary>
     void BeginFrame();
@@ -59,11 +86,13 @@ public interface IRenderDevice : IDisposable
         string name)
         => throw new NotSupportedException("This render device does not support encoded texture containers.");
 
-    /// <summary>Replaces one complete mip and array layer of a persistent texture.</summary>
+    /// <summary>Replaces one complete mip and addressable layer, slice, or cubemap face.</summary>
     /// <param name="texture">Texture owned by this device generation.</param>
     /// <param name="data">Tightly packed complete subresource bytes.</param>
     /// <param name="mipLevel">Zero-based mip level.</param>
-    /// <param name="arrayLayer">Zero-based array layer.</param>
+    /// <param name="arrayLayer">
+    /// Zero-based 2D array layer, 3D Z slice, or flattened cubemap face using cube-layer * 6 + face.
+    /// </param>
     void UpdateTexture(
         PersistentTextureHandle texture,
         ReadOnlySpan<byte> data,

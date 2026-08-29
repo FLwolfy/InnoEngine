@@ -1,203 +1,76 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Numerics;
 
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
-using Inno.Editor.Inspection;
-using Inno.Editor.Interactions;
 using Inno.Editor.Scene;
 using Inno.Engine.Scene;
 using Inno.Native.ImGui;
-using Inno.Platform.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Inspector;
 
-/// <summary>
-/// Draws the project tag picker and manages its transient add-tag input state.
-/// </summary>
+/// <summary>Draws the project-defined tag picker used by GameObject target headers.</summary>
 internal sealed class GameObjectTagSelector
 {
-    private const nuint C_TAG_BUFFER_SIZE = 128;
-
-    private readonly GameObjectTagCatalog m_catalog;
+    private readonly SceneProjectSettingsModule m_settings;
     private readonly SceneEdits m_edits;
-    private string m_newTag = string.Empty;
 
-    /// <summary>
-    /// Creates a tag selector backed by one project catalog.
-    /// </summary>
-    /// <param name="catalog">The project tag catalog to present and mutate.</param>
+    /// <summary>Creates a tag selector backed by the effective Project Settings snapshot.</summary>
+    /// <param name="settings">The project Scene-classification settings module.</param>
     /// <param name="edits">The Scene editing service used to record GameObject tag changes.</param>
     /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="catalog"/> or <paramref name="edits"/> is
-    /// <see langword="null"/>.
+    /// Thrown when <paramref name="settings"/> or <paramref name="edits"/> is <see langword="null"/>.
     /// </exception>
-    internal GameObjectTagSelector(GameObjectTagCatalog catalog, SceneEdits edits)
+    internal GameObjectTagSelector(SceneProjectSettingsModule settings, SceneEdits edits)
     {
-        m_catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+        m_settings = settings ?? throw new ArgumentNullException(nameof(settings));
         m_edits = edits ?? throw new ArgumentNullException(nameof(edits));
     }
 
-    /// <summary>
-    /// Draws a compact tag selector for one live game object.
-    /// </summary>
-    /// <param name="context">The current Inspector drawing context.</param>
-    /// <param name="target">The game object whose tag should be displayed.</param>
-    /// <param name="width">The width reserved for the combo control.</param>
-    internal void Draw(InspectionDrawContext context, GameObject target, float width)
+    /// <summary>Draws a compact tag selector for one live GameObject.</summary>
+    /// <param name="target">The GameObject whose tag should be displayed and edited.</param>
+    /// <param name="width">The width reserved for the selector.</param>
+    internal void Draw(GameObject target, float width)
     {
-        ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(target);
-        SynchronizeLoadedTags();
-        IReadOnlyList<string> tags = m_catalog.GetTags();
-        float selectorWidth = MathF.Max(1f, width);
-        float popupWidth = CalculatePopupWidth(tags, selectorWidth);
-
+        IReadOnlyList<string> tags = m_settings.tagCatalog.GetTags();
+        string preview = m_settings.tagCatalog.IsDefined(target.tag)
+            ? target.tag
+            : $"{target.tag} (Undefined)";
         EditorWidget.LabelChip("Tag", EditorPalette.inspectorTagLabel);
         NativeImGui.SameLine(0f, 0f);
-        if (!EditorWidget.BeginMenuSelector(
-                $"game_object_tag_{target.identity.persistentId:N}",
-                target.tag,
-                selectorWidth,
-                popupWidth))
+        NativeImGui.SetNextItemWidth(MathF.Max(1f, width));
+        if (!NativeImGui.BeginCombo(
+                $"##game_object_tag_{target.identity.persistentId:N}",
+                preview,
+                ImGuiComboFlags.None))
         {
             return;
         }
-
         try
         {
-            DrawCreateRow(context, target);
-            NativeImGui.Separator();
             for (int i = 0; i < tags.Count; i++)
-                DrawTagRow(context, target, tags[i]);
+            {
+                string tag = tags[i];
+                if (NativeImGui.Selectable(
+                        tag,
+                        string.Equals(target.tag, tag, StringComparison.Ordinal)))
+                {
+                    m_edits.SetGameObjectTag(target, tag);
+                }
+            }
         }
         finally
         {
-            EditorWidget.EndMenuSelector();
+            NativeImGui.EndCombo();
         }
     }
 
-    private void DrawCreateRow(InspectionDrawContext context, GameObject target)
-    {
-        Vector2 actionSize = EditorWidget.GetCompactIconSize();
-        float spacing = NativeImGui.GetStyle().ItemSpacing.X;
-        float inputWidth = MathF.Max(
-            1f,
-            NativeImGui.GetContentRegionAvail().X - actionSize.X - spacing);
-        NativeImGui.SetNextItemWidth(inputWidth);
-        bool submit = NativeImGui.InputTextWithHint(
-            $"##new_game_object_tag_{target.identity.persistentId:N}",
-            "Add tag...",
-            ref m_newTag,
-            C_TAG_BUFFER_SIZE,
-            ImGuiInputTextFlags.EnterReturnsTrue);
-        NativeImGui.SameLine(0f, spacing);
-        submit |= EditorWidget.ClickableText(
-            $"add_game_object_tag_{target.identity.persistentId:N}",
-            ImGuiIcon.Plus,
-            new Vector2(actionSize.X, NativeImGui.GetFrameHeight()),
-            "Add and select tag");
-        if (!submit || string.IsNullOrWhiteSpace(m_newTag))
-            return;
-
-        string tag = m_newTag.Trim();
-        _ = m_catalog.Add(tag);
-        m_edits.SetGameObjectTag(target, tag);
-        m_newTag = string.Empty;
-        NativeImGui.CloseCurrentPopup();
-    }
-
-    private void DrawTagRow(
-        InspectionDrawContext context,
-        GameObject target,
-        string tag)
-    {
-        bool isDefault = string.Equals(tag, GameObject.defaultTag, StringComparison.Ordinal);
-        Vector2 actionSize = EditorWidget.GetCompactIconSize();
-        float spacing = NativeImGui.GetStyle().ItemSpacing.X;
-        float selectableWidth = isDefault
-            ? NativeImGui.GetContentRegionAvail().X
-            : MathF.Max(1f, NativeImGui.GetContentRegionAvail().X - actionSize.X - spacing);
-        if (NativeImGui.Selectable(
-                $"{tag}##tag_{target.identity.persistentId:N}_{tag}",
-                string.Equals(target.tag, tag, StringComparison.Ordinal),
-                ImGuiSelectableFlags.None,
-                new Vector2(selectableWidth, 0f)))
-        {
-            m_edits.SetGameObjectTag(target, tag);
-        }
-
-        if (isDefault)
-            return;
-
-        NativeImGui.SameLine(0f, spacing);
-        bool remove = EditorWidget.ClickableIcon(
-            $"remove_game_object_tag_{tag}",
-            ImGuiIcon.TrashCan,
-            "Delete tag and reset matching GameObjects");
-        if (remove)
-            RemoveTag(context, tag);
-    }
-
-    private void SynchronizeLoadedTags()
-        => m_catalog.Synchronize(
-            SceneManager.loadedScenes.SelectMany(static scene => scene.GetObjects())
-                .Select(static gameObject => gameObject.tag));
-
-    private static float CalculatePopupWidth(
-        IReadOnlyList<string> tags,
-        float selectorWidth)
-    {
-        float longestRowWidth = 0f;
-        for (int i = 0; i < tags.Count; i++)
-        {
-            float rowWidth = NativeImGui.CalcTextSize(tags[i]).X;
-            if (!string.Equals(tags[i], GameObject.defaultTag, StringComparison.Ordinal))
-            {
-                rowWidth += EditorWidget.style.menuItemSpacing.X +
-                            EditorWidget.GetCompactIconSize().X;
-            }
-            longestRowWidth = MathF.Max(longestRowWidth, rowWidth);
-        }
-
-        float addRowWidth = NativeImGui.CalcTextSize("Add tag...").X +
-                            EditorWidget.style.menuFramePadding.X * 2f +
-                            EditorWidget.style.menuItemSpacing.X +
-                            EditorWidget.GetCompactIconSize().X;
-        float contentWidth = MathF.Max(longestRowWidth, addRowWidth);
-        return MathF.Max(
-            selectorWidth,
-            contentWidth + EditorWidget.style.menuWindowPadding.X * 2f);
-    }
-
-    private void RemoveTag(InspectionDrawContext context, string tag)
-    {
-        GameObject[] matches = SceneManager.loadedScenes
-            .SelectMany(scene => scene.FindObjectsWithTag(tag))
-            .ToArray();
-        using EditorHistoryTransaction transaction = context.interactions.history.BeginTransaction(
-            $"Delete Tag '{tag}'");
-        using EditorHistoryChange change = GameObjectTagHistoryHandler.CreateChange(tag);
-        EditorHistoryResult catalogResult = context.interactions.history.Execute(
-            $"Delete Tag Definition '{tag}'",
-            change);
-        if (!catalogResult.succeeded)
-        {
-            _ = transaction.Rollback();
-            return;
-        }
-
-        for (int i = 0; i < matches.Length; i++)
-        {
-            m_edits.SetGameObjectTag(
-                matches[i],
-                GameObject.defaultTag,
-                $"Reset Tag on '{matches[i].name}'");
-        }
-        transaction.Commit();
-    }
+    /// <summary>Determines whether the current Project Settings catalog defines a tag.</summary>
+    /// <param name="tag">The tag value to resolve.</param>
+    /// <returns><see langword="true"/> when the tag is currently defined.</returns>
+    internal bool IsTagDefined(string tag)
+        => m_settings.tagCatalog.IsDefined(tag);
 }

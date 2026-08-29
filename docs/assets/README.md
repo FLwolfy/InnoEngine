@@ -2,11 +2,12 @@
 
 [返回 Wiki 首页](../README.md) · [前往 Core](../core/README.md) · [Editor Scripting](../editor/Inno.Editor.Scripting.md)
 
-Assets 层把 Project 的 `Assets` 目录作为唯一 Source Database。受支持的文件会获得稳定 `.imeta`、Catalog 记录和内容寻址 artifact；目录获得 `.imeta` 但没有 runtime artifact；未知文件仍可见，状态为 `Unsupported`，不会被隐式当成 `BinaryAsset`。
+Assets 层把可写 `Assets/` 与已激活的只读 `Plugins/<id>` 组织成同一套多 Source Mount Database。受支持的文件共享 `.imeta`、Catalog、Importer、artifact、依赖图和 canonical cache；不存在 Plugin 专用 Loader 或序列化器。
 
 ```mermaid
 flowchart LR
     FS["Inno.Assets.File<br/>Source policy / index / poll"] --> AM["Inno.Assets<br/>AssetManager owner-thread orchestration"]
+    PLUGIN["Inno.Assets.Plugins<br/>ZIP / trust / mounts"] --> AM
     CORE["Inno.Assets.Core<br/>public contracts"] --> LOAD["Inno.Assets.Loader<br/>import / build / catalog / CAS"]
     TYPES["Inno.Assets.Types<br/>Text / Binary"] --> LOAD
     LOAD --> AM
@@ -25,6 +26,7 @@ flowchart LR
 | [Inno.Assets.Loader](Inno.Assets.Loader.md) | Importer/Build Processor Registry、`.imeta`、Catalog、CAS、canonical instance |
 | [Inno.Assets.Serialization](Inno.Assets.Serialization.md) | `AssetObject` 引用编码、恢复与依赖收集 |
 | [Inno.Assets.Types](Inno.Assets.Types.md) | 内置 `TextAsset` 与 `BinaryAsset` |
+| [Inno.Assets.Plugins](Inno.Assets.Plugins.md) | 本地 ZIP、安全校验、只读 Source Mount、信任、导出与原子激活 |
 
 没有额外的 `Inno.Assets.Database` 或 `Inno.Assets.Pipeline` 程序集。Catalog、Artifact Store 和 transaction helper 都是 Loader 内部协作对象，避免为实现细节制造程序集依赖环。
 
@@ -37,7 +39,11 @@ flowchart LR
 │  ├─ Config/game.json.imeta
 │  ├─ Scripts/Player.cs
 │  └─ Scripts/Player.cs.imeta
+├─ Plugins/
+│  └─ sample.gameplay.zip
+├─ ProjectSettings.inno
 └─ Library/
+   ├─ Plugins/<id>/<contentHash>/
    ├─ AssetDatabase/
    │  ├─ Catalog.snapshot
    │  └─ Catalog.journal
@@ -61,7 +67,7 @@ AssetManager.Initialize(AssetManagerOptions.Create(
 // Call once at the start of each host frame.
 AssetManager.Update();
 
-TextAsset settings = AssetManager.Load<TextAsset>("Config/game.json");
+TextAsset settings = AssetManager.Load<TextAsset>(AssetPath.Project("Config/game.json"));
 Console.WriteLine(settings.content);
 
 AssetManager.Shutdown();
@@ -72,6 +78,8 @@ AssetManager.Shutdown();
 ## 身份、路径与类型
 
 - source persistent ID 来自 `.imeta`，不是路径 hash；文件或目录移动后 ID 不变。
+- `AssetPath` 由 `AssetSourceId` 和 mount-local path 组成；相同文件名可在不同 mount 隔离共存。
+- Project mount 可写；Plugin mount 只读，写操作返回明确错误。
 - runtime Type 的 Stable Type ID 与 source persistent ID 是两套身份。脚本文件改名不会改变 Component/System 类型身份。
 - 同一 persistent ID 在运行时最多对应一个 canonical `AssetObject`。
 - 扩展名改变时 source ID 保留；若导入类型兼容则原位更新，不兼容时产生 replacement/missing 语义。

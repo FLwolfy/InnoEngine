@@ -1,81 +1,66 @@
 # Inno.Rendering
 
-[返回 Rendering 索引](README.md) · [Wiki 首页](../README.md) · [后端中立核心](Inno.Rendering.Core.md) · [内置 Pipelines](Inno.Rendering.Pipelines.md) · [BGFX 后端](Inno.Rendering.Bgfx.md)
+[Rendering 索引](README.md) · [后端中立核心](Inno.Rendering.Core.md) · [Runtime](Inno.Rendering.Runtime.md) · [ShaderGraph](Inno.Rendering.ShaderGraph.md)
 
-## 职责与边界
+`Inno.Rendering` 是 Project/Plugin 脚本面对的通用渲染 API。它不引用 Scene，也不定义 Camera、Light、MeshRenderer、PBR 参数、Render Queue 或固定 Pass Tag。
 
-`Inno.Rendering` 是艺术家、游戏脚本和 Pipeline 作者面对的运行时契约。它提供 Camera、Light、MeshRenderer、Shader、Material、RenderTexture、RenderRequest 和可组合 Pipeline/Feature API，但不暴露 BGFX handle、View ID、原生指针或 BGFX 枚举。
+## 公开契约
 
-该程序集单向依赖 Scene、Assets Core、Mathematics 与 `Inno.Rendering.Core`。Scene 不反向引用 Rendering，因此渲染组件以普通 `GameComponent` 扩展 Scene。ShaderGraph 和具体 Pipeline 将依赖本项目，本项目不会反向依赖它们。
+| 分类 | API | 语义 |
+| --- | --- | --- |
+| 请求 | `RenderRequest`, `RenderTarget`, `RenderViewport`, `RenderFrameData` | 将目标、尺寸、可选 Pipeline 与 Plugin 自有帧数据提交给 Runtime。 |
+| Pipeline | `RenderPipelineAsset`, `RenderPipeline`, `RenderPipelineContext` | Stable Type ID + 原生配置状态，以及每请求建图入口。 |
+| Feature | `RenderPipelineFeature`, `RenderFeatureContext`, `RenderFeatureConfiguration` | 有序、可重载的额外建图扩展。 |
+| 发现 | `RenderPipelineExtensionAttribute`, `RenderFeatureExtensionAttribute` | TypeCache 候选 generation 的稳定身份。 |
+| Shader | `ShaderAsset`, `ShaderDefinition`, `ShaderPassDefinition`, `ShaderTechniqueDefinition` | 通用 GPU Program、开放 Contract 与 Role 映射。 |
+| 材质 | `MaterialAsset`, `MaterialValue`, `MaterialPropertyBlock`, `MaterialPassResolver` | 稳定属性、Keyword、Metadata 与能力感知 Technique 解析。 |
+| 资源 | `TextureAsset`, `GeometryAsset`, `RenderTexture`, `IRenderResourceService` | 后端无关资产、原始 Buffer/Texture/Pipeline 获取和可选高级解析服务。 |
+| 全局 | `GraphicsSettings`, `RenderFrameStatistics` | 当前 capability、默认 Pipeline 与只读统计。 |
 
-## 初始化与生命周期
+## Shader → Technique → Material → Pipeline
 
-宿主先创建 `IRenderDevice`，再从活动 `RenderPipelineAsset` 的 Stable Type ID 解析 Pipeline 扩展。每个 Camera 或 Editor 视口产生一个 `RenderRequest`；Pipeline 在当前帧的 `RenderGraphBuilder` 上声明资源与 Pass。Feature 只保存中立配置，每帧创建回调，不能把运行时委托、CLR `Type` 或 GPU 对象写入资产。
-
-设备宿主在帧安全点更新 `GraphicsSettings` 的内部状态，脚本通过 `GraphicsSettings.capabilities`、`pipelineAsset` 和 `frameStatistics` 读取只读快照。切换 Pipeline 后应在帧边界原子替换并释放旧实例。
-
-## 公开 API
-
-| API | 语义 |
-| --- | --- |
-| `GraphicsSettings`, `RenderFrameStatistics` | 当前能力、活动 Pipeline 与只读帧统计 |
-| `RenderPipelineAsset`, `RenderQualitySettings`, `RenderFeatureConfiguration` | Pipeline Stable Type ID、默认路径、质量和有序 Feature 配置 |
-| `RenderPipeline`, `RenderPipelineFeature` | 每视图建图入口与可组合功能扩展基类 |
-| `RenderPipelineExtensionAttribute`, `RenderFeatureExtensionAttribute` | TypeRegistry 使用的稳定扩展身份 |
-| `RenderPipelineContext`, `RenderFeatureContext`, `BuiltinRenderResources` | 当前帧/视图上下文、诊断与类型化标准资源 |
-| `RenderWorldSnapshot`, `RenderCullingResults`, `RenderObjectData`, `RenderLightData` | 帧级 Scene 快照、视锥裁剪与确定性 Opaque/Transparent 排序 |
-| `RenderPipelineOperation`, `RenderTextureBinding`, `RenderBufferBinding`, `RenderUniformBinding` | 用稳定绑定名提交 Scene/Fullscreen/Compute 资源与类型化 uniform，不暴露后端 handle |
-| `RenderView`, `RenderRequest`, `RenderTarget`, `RenderTexture` | 相机参数、渲染请求、可选 selected object ID 和后端中立输出目标 |
-| `RenderPicking` | 稳定对象 ID 的 GPU RGBA 编码，以及 Scene View 无回读 bounds-ray 选择回退 |
-| `Camera`, `DirectionalLight`, `PointLight`, `SpotLight`, `MeshRenderer` | Scene 渲染组件；Camera 可覆盖 Pipeline 默认 Render Path |
-| `ShaderAsset`, `ShaderDefinition`, `ShaderPassDefinition` | 可派生 Shader 资产、Pass tag/state/source 定义 |
-| `BuiltinShaderPassTags`, `BuiltinShaderMetadataTags` | 开放 Pass 协议常量；`PipelineOperation` metadata 把 Shader Pass 注册到稳定 Operation ID |
-| `ShaderPropertyDefinition`, `ShaderKeywordDefinition`, `ShaderPropertyId` | 稳定属性与静态变体契约 |
-| `MaterialAsset`, `MaterialValue`, `MaterialPropertyBlock` | 持久材质值和逐绘制临时覆盖 |
-| `TextureAsset`, `MeshAsset` | 不持有 GPU handle 的资源资产对象；Mesh 同时保存导入后的对象空间 bounds |
-
-## 常见工作流
+Shader Pass 只有稳定名称和通用 fixed-function state；状态覆盖 primitive topology、front-face、cull、depth、blend、color mask 与 multisampling，stencil 则保留为 draw/pass 级动态状态。Technique 由渲染提供者声明开放 `ShaderContractId`，并把开放 `ShaderPassRoleId` 映射到具体 Pass。Pipeline 使用自己的协议解析材质：
 
 ```csharp
-using Inno.Rendering;
-using Inno.Rendering.Core;
+MaterialPassResolution? selection = MaterialPassResolver.Resolve(
+    material,
+    new ShaderContractId("sample.sprite"),
+    new ShaderPassRoleId("sample.draw"),
+    context.capabilities);
+```
 
-[RenderFeatureExtension("sample.outline")]
-public sealed class OutlineFeature : RenderPipelineFeature
+另一个 Plugin 可以使用完全不同的 Contract、Role、Metadata、排序和资源布局，内核不需要修改。
+
+解析不是“内建所有模型再用开关启用”。Resolver 只做四件通用工作：按 Plugin 提供的 Contract 找 Technique、按设备能力过滤、尊重 Material 显式 Technique、按 Plugin 提供的 Role 找 Pass。它不知道 sprite、PBR、shadow 或 post process；这些名字、属性、排序和 pass 组合都由 Pipeline/Plugin 拥有。解析结果会被确定性缓存和验证，不会在每个 draw 上用 CLR 反射猜测语义。
+
+Material/Geometry 是可选帮助层，不是强制执行路径。纹理 `MaterialValue` 同时保存后端中立 `RenderSamplerState`，因此 filter/address mode 不由 Runtime 写死；BGFX 的 texture/sampler 组合绑定不会伪装成不可用的独立 Material Sampler property。Buffer 属于 Pipeline/Pass 显式资源接口，不被 Material helper 隐式拥有。低级 Pipeline 可以通过 `IRenderResourceService.AcquireBuffer`、`AcquireTexture`、`AcquireKtxTexture`、`AcquireGraphicsPipeline` 和 `AcquireComputePipeline` 提交自己的目标二进制与资源描述，再直接使用 `RenderCommandEncoder` 绑定和录制；这些入口仍只返回后端中立 opaque handle。
+
+`ShaderPropertyDefinition.bindingKind` 用 `ShaderPropertyBindingKind` 明确区分 `Uniform`、`SampledTexture`、`StorageTexture` 与 `StorageBuffer`；storage binding 还通过 `RenderStorageAccess` 声明 Read、Write 或 ReadWrite。数值默认推断为 Uniform，纹理默认推断为 SampledTexture，Buffer 默认推断为 StorageBuffer，但资产可以显式声明。Shader IR、Pass-local `ShaderInterface`、编译 artifact 与 Runtime binding descriptor 会保留同一个绑定契约。Material 只拥有 Uniform 与 SampledTexture 值；StorageTexture/StorageBuffer 必须由 Pipeline 在对应 Pass 中显式获取、向 RenderGraph 声明，并通过 `BindStorageTexture`/`BindBuffer` 绑定，避免把帧级 UAV 错误持久化到材质资产。
+
+## Pipeline 示例骨架
+
+```csharp
+[RenderPipelineExtension("sample.pipeline")]
+public sealed class SamplePipeline : RenderPipeline
 {
-    /// <inheritdoc />
-    public override void AddRenderPasses(RenderFeatureContext context)
+    public override void Build(RenderPipelineContext context)
     {
-        context.graph
-            .AddRasterPass("Outline", BuiltinRenderPhases.postProcessing, 0, static (_, _) => { })
-            .UseColorAttachment(
-                context.resources.sceneColor,
-                0,
-                RenderLoadAction.Load)
-            .ReadTexture(context.resources.sceneDepth)
+        SampleFrameData data = context.request.data.Get<SampleFrameData>(
+            new RenderDataChannelId("sample.frame"));
+        var phase = new RenderPhaseId("sample.draw");
+        context.graph.AddRasterPass("Sample Draw", phase, data,
+            static (frame, pass) => frame.Record(pass.commands))
+            .UseColorAttachment(context.outputTexture, 0, RenderLoadAction.Clear)
             .HasSideEffect();
     }
 }
 ```
 
-Feature 应以稳定阶段、`before`/`after` 和资源依赖表达顺序。不要保存 `RenderGraphBuilder`、generation-scoped handle 或当前帧回调。
+`SampleFrameData` 可以描述 Canvas、tile map、Scene 快照、体素、光线追踪输入或其他任意模型。它只在当前帧和当前 Plugin generation 有效；持久资产仅保存 Stable ID、Persistent ID 与 Inno 序列化属性 bytes。
 
-Fullscreen/Compute Feature 的 `.ishader` Pass 可声明 `"tags": { "PipelineOperation": "project.effect" }`。Editor 只在完整目标 artifact 编译成功后安装该 ID；Feature 通过 `IRenderPipelineExecutor` 准备并执行 operation，失败时旧 operation program 继续可用。
+## 热重载与失败隔离
 
-## 错误、热重载与注意事项
-
-- `RenderRequest` 会拒绝无效尺寸、近远裁剪面和未初始化矩阵。
-- `RenderRequest.selectedObjectId` 只传递稳定 renderer identity；Feature 可据此绘制选中轮廓，不保存 Scene 对象或 GPU handle。
-- Pipeline/Feature 候选失败时，宿主应保留 last-good Registry 与 Pipeline；成功候选只在帧边界切换。
-- Material 持久化使用 `ShaderPropertyId` 的字符串值；运行时哈希不能写回资产。
-- `MeshRenderer` 的有序材质槽通过隐藏的中立序列化属性进入 Scene/Prefab；Inspector 和脚本仍使用只读 `materials` 与显式 `SetMaterial(s)`，不会暴露持久化实现。
-- Camera、Light 和 MeshRenderer 不直接创建 GPU 资源，资产 generation 切换不会固定旧脚本 ALC。
-- Shader 编译、Importer 与 CPU artifact 已由 [Inno.Rendering.Assets](Inno.Rendering.Assets.md) 落地；Forward+/Deferred 图由 [Inno.Rendering.Pipelines](Inno.Rendering.Pipelines.md) 实现。
-
-## 相邻页面
-
-- [Inno.Rendering.Core](Inno.Rendering.Core.md)：RenderGraph 与命令边界。
-- [Inno.Rendering.Assets](Inno.Rendering.Assets.md)：统一 Shader IR、Importer 与离线产物。
-- [Inno.Rendering.Pipelines](Inno.Rendering.Pipelines.md)：RenderWorld、Forward+/Deferred 与后处理图。
-- [Inno.Rendering.Bgfx](Inno.Rendering.Bgfx.md)：唯一 BGFX 适配层。
-- [Inno.Engine.Scene](../engine/Inno.Engine.Scene.md)：GameComponent 和 Scene 生命周期。
+- Pipeline/Feature 候选只在帧边界发布，失败保留 last-good generation。
+- `RenderFrameData`、Graph handle、回调和 `RenderPipelineContext` 不得跨帧缓存。
+- 普通艺术参数使用 Material value；只有接口、控制流或状态变化才应成为静态 Keyword 变体。
+- Project/Plugin API 中不存在 BGFX 类型。需要的后端能力通过 `GraphicsCapabilities` 查询。

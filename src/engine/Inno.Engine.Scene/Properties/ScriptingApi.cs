@@ -29,5 +29,7 @@ using Inno.Engine.Scene.Layers;
 [assembly: ScriptingApiExport(typeof(Transform), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GameLayer), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GameLayerDefinition), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(GameLayerId), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GameLayerMask), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GameLayerStack), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(GameTagCatalog), ScriptingApiScope.Runtime)]

@@ -8,6 +8,10 @@ namespace Inno.Rendering.Bgfx.Tests;
 [Collection(BgfxDeviceCollection.name)]
 public sealed class BgfxDeviceTests
 {
+    private static readonly RenderPhaseId C_FIRST = new("tests.first");
+    private static readonly RenderPhaseId C_COMPUTE = new("tests.compute");
+    private static readonly RenderPhaseId C_LAYERED = new("tests.layered");
+
     private readonly BgfxDevice m_device;
 
     public BgfxDeviceTests(BgfxDeviceFixture fixture)
@@ -19,7 +23,7 @@ public sealed class BgfxDeviceTests
     public void NoopDevice_ExecutesOneGraphAndSubmitsOneFrame()
     {
         RenderGraphBuilder builder = new(1, m_device.capabilities);
-        builder.AddRasterPass("Noop Clear", BuiltinRenderPhases.opaque, 0, static (_, _) => { })
+        builder.AddRasterPass("Noop Clear", C_FIRST, 0, static (_, _) => { })
             .HasSideEffect();
         CompiledRenderGraph graph = builder.Compile().graph!;
 
@@ -33,40 +37,13 @@ public sealed class BgfxDeviceTests
     }
 
     [Fact]
-    public void NoopDevice_AllocatesViewIdsAcrossAllGraphsInTheFrame()
+    public void NoopDevice_ResetsPublicCommandCountersPerFrame()
     {
-        RenderGraphBuilder firstBuilder = new(21, m_device.capabilities);
-        firstBuilder.AddRasterPass("First", BuiltinRenderPhases.opaque, 0, static (_, _) => { })
-            .HasSideEffect();
-        RenderGraphBuilder secondBuilder = new(22, m_device.capabilities);
-        secondBuilder.AddRasterPass("Second A", BuiltinRenderPhases.opaque, 0, static (_, _) => { })
-            .HasSideEffect();
-        secondBuilder.AddRasterPass("Second B", BuiltinRenderPhases.postProcessing, 0, static (_, _) => { })
-            .After(BuiltinRenderPhases.opaque)
-            .HasSideEffect();
-
         m_device.BeginFrame();
-        m_device.Execute(firstBuilder.Compile().graph!, 21);
-        m_device.Execute(secondBuilder.Compile().graph!, 22);
-
-        Assert.Equal(3, m_device.allocatedViewCount);
-        m_device.EndFrame();
-    }
-
-    [Fact]
-    public void NoopDevice_ResetsFrameViewAllocationAtTheNextFrame()
-    {
-        RenderGraphBuilder builder = new(23, m_device.capabilities);
-        builder.AddRasterPass("Only", BuiltinRenderPhases.opaque, 0, static (_, _) => { })
-            .HasSideEffect();
-        CompiledRenderGraph graph = builder.Compile().graph!;
-
-        m_device.BeginFrame();
-        m_device.Execute(graph, 23);
+        Assert.Equal(default, m_device.frameCounters);
         m_device.EndFrame();
         m_device.BeginFrame();
-
-        Assert.Equal(0, m_device.allocatedViewCount);
+        Assert.Equal(default, m_device.frameCounters);
         m_device.EndFrame();
     }
 
@@ -124,6 +101,40 @@ public sealed class BgfxDeviceTests
     }
 
     [Fact]
+    public void NoopDevice_CreatesAndUpdatesVolumeAndCubemapSubresources()
+    {
+        Assert.True(m_device.capabilities.Supports(GraphicsFeature.Texture3D));
+        Assert.True(m_device.capabilities.SupportsSampled(
+            RenderTextureFormat.RGBA8,
+            RenderTextureDimension.Texture3D));
+        Assert.True(m_device.capabilities.SupportsSampled(
+            RenderTextureFormat.RGBA8,
+            RenderTextureDimension.Cube));
+        RenderTextureDescriptor volumeDescriptor = new(
+            4,
+            4,
+            RenderTextureFormat.RGBA8,
+            RenderTextureUsage.Sampled,
+            dimension: RenderTextureDimension.Texture3D,
+            depth: 2);
+        RenderTextureDescriptor cubeDescriptor = new(
+            4,
+            4,
+            RenderTextureFormat.RGBA8,
+            RenderTextureUsage.Sampled,
+            dimension: RenderTextureDimension.Cube);
+
+        m_device.BeginFrame();
+        PersistentTextureHandle volume = m_device.CreateTexture(volumeDescriptor, "Volume");
+        PersistentTextureHandle cube = m_device.CreateTexture(cubeDescriptor, "Cube");
+        m_device.UpdateTexture(volume, new byte[4 * 4 * 4], arrayLayer: 1);
+        m_device.UpdateTexture(cube, new byte[4 * 4 * 4], arrayLayer: 5);
+        m_device.DestroyTexture(volume);
+        m_device.DestroyTexture(cube);
+        m_device.EndFrame();
+    }
+
+    [Fact]
     public void NoopDevice_UpdatesDynamicVertexBuffer()
     {
         RenderVertexLayout layout = new(
@@ -139,6 +150,29 @@ public sealed class BgfxDeviceTests
         m_device.UpdateBuffer(buffer, new byte[layout.stride * 3]);
         m_device.DestroyBuffer(buffer);
         m_device.EndFrame();
+    }
+
+    [Fact]
+    public void NoopDevice_CreatesVertexBufferWithExplicitPadding()
+    {
+        RenderVertexLayout layout = new(
+        [
+            new RenderVertexAttribute(RenderVertexSemantic.Position, RenderVertexFormat.Float3, 0),
+            new RenderVertexAttribute(RenderVertexSemantic.Color0, RenderVertexFormat.UInt8Normalized4, 16)
+        ], stride: 32);
+        PersistentBufferDescriptor descriptor = new(
+            new RenderBufferDescriptor(3, layout.stride, RenderBufferUsage.Vertex),
+            layout);
+
+        m_device.BeginFrame();
+        PersistentBufferHandle buffer = m_device.CreateBuffer(
+            descriptor,
+            new byte[layout.stride * 3],
+            "Padded Vertices");
+        m_device.DestroyBuffer(buffer);
+        m_device.EndFrame();
+
+        Assert.True(buffer.isValid);
     }
 
     [Fact]
@@ -173,8 +207,8 @@ public sealed class BgfxDeviceTests
         RenderBufferHandle buffer = builder.CreateBuffer(
             "Cluster Light List",
             new RenderBufferDescriptor(64, 16, RenderBufferUsage.Storage));
-        builder.AddComputePass("Build Light List", BuiltinRenderPhases.lighting, 0, static (_, _) => { })
-            .WriteBuffer(buffer)
+        builder.AddComputePass("Build Data", C_COMPUTE, 0, static (_, _) => { })
+            .WriteStorageBuffer(buffer)
             .HasSideEffect();
         CompiledRenderGraph graph = builder.Compile().graph!;
 
@@ -183,6 +217,33 @@ public sealed class BgfxDeviceTests
         m_device.EndFrame();
 
         Assert.Single(graph.buffers);
+    }
+
+    [Fact]
+    public void NoopDevice_AllocatesTransientStorageTextureForCompiledGraph()
+    {
+        Assert.True(m_device.capabilities.Supports(GraphicsFeature.StorageTexture));
+        Assert.True(m_device.capabilities.SupportsStorage(
+            RenderTextureFormat.RGBA8,
+            RenderStorageAccess.Write));
+        RenderGraphBuilder builder = new(9, m_device.capabilities);
+        RenderTextureHandle texture = builder.CreateTexture(
+            "Compute Output",
+            new RenderTextureDescriptor(
+                8,
+                8,
+                RenderTextureFormat.RGBA8,
+                RenderTextureUsage.Storage));
+        builder.AddComputePass("Write Image", C_COMPUTE, 0, static (_, _) => { })
+            .WriteStorageTexture(texture)
+            .HasSideEffect();
+        CompiledRenderGraph graph = builder.Compile().graph!;
+
+        m_device.BeginFrame();
+        m_device.Execute(graph, 9);
+        m_device.EndFrame();
+
+        Assert.Single(graph.textures);
     }
 
     [Fact]
@@ -213,7 +274,7 @@ public sealed class BgfxDeviceTests
                 RenderTextureFormat.RGBA8,
                 RenderTextureUsage.ColorAttachment,
                 arrayLayers: 2));
-        builder.AddRasterPass("Layer One", BuiltinRenderPhases.shadows, 0, static (_, _) => { })
+        builder.AddRasterPass("Layer One", C_LAYERED, 0, static (_, _) => { })
             .UseColorAttachment(
                 texture,
                 0,

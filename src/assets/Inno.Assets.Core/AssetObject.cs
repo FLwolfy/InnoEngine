@@ -23,14 +23,14 @@ public abstract class AssetObject : ISerializable, IIdentityObject
         ReleaseRuntimeResources();
     }
 
-    /// <summary>Gets the source-relative path associated with this asset.</summary>
+    /// <summary>Gets the isolated source path associated with this asset.</summary>
     [SerializableProperty(PropertyVisibility.Hide)]
-    public string sourcePath { get; private set; } = string.Empty;
+    public AssetPath assetPath { get; private set; } = AssetPath.Project(string.Empty);
 
-    /// <summary>Gets a display name derived from <see cref="sourcePath"/>.</summary>
-    public string name => string.IsNullOrWhiteSpace(sourcePath)
+    /// <summary>Gets a display name derived from the source-local path.</summary>
+    public string name => string.IsNullOrWhiteSpace(assetPath.localPath)
         ? GetType().Name
-        : Path.GetFileName(sourcePath);
+        : Path.GetFileName(assetPath.localPath);
 
     /// <summary>Gets the persistent and runtime identity associated with this asset.</summary>
     public Identity identity => ((IIdentityObject)this).GetIdentity();
@@ -61,14 +61,14 @@ public abstract class AssetObject : ISerializable, IIdentityObject
     internal string sourceHash => m_sourceHash;
 
     internal void InitializeRuntimeState(
-        string relativePath,
+        AssetPath assetPath,
         string sourceHash,
         ReadOnlyMemory<byte> payload,
         bool isMissing,
         long version)
     {
         ReadOnlyMemory<byte> previous = m_runtimePayload;
-        sourcePath = relativePath ?? string.Empty;
+        this.assetPath = assetPath;
         m_sourceHash = sourceHash ?? string.Empty;
         m_runtimePayload = payload.ToArray();
         m_isMissing = isMissing;
@@ -79,9 +79,9 @@ public abstract class AssetObject : ISerializable, IIdentityObject
         OnRuntimePayloadChanged(previous, m_runtimePayload);
     }
 
-    internal void UpdateSourcePath(string relativePath)
+    internal void UpdateAssetPath(AssetPath assetPath)
     {
-        sourcePath = relativePath ?? string.Empty;
+        this.assetPath = assetPath;
     }
 
     internal void ReleaseRuntimeResources()

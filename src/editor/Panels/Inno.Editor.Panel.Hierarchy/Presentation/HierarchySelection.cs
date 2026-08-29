@@ -73,7 +73,7 @@ internal sealed class HierarchySelection(
     {
         EditorWidget.IconText(
             settings
-                .Get("Global/Appearance/Icons/Scene")
+                .Get("Editor/Appearance/Icons/Scene")
                 .GetAsString("value", ImGuiIcon.Cubes)!,
             scene.name,
             ReferenceEquals(scene, SceneManager.activeScene));

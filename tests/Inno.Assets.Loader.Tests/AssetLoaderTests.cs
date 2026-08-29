@@ -298,7 +298,7 @@ public sealed class AssetLoaderTests : IDisposable
             new Inno.Assets.File.AssetChangedEvent("Text/new.txt", WatcherChangeTypes.Renamed, "Text/old.txt")
         ]);
 
-        Assert.Equal("Text/new.txt", asset.sourcePath);
+        Assert.Equal("Text/new.txt", asset.assetPath.ToString());
         Assert.Same(asset, loader.Load(persistentId, typeof(TextAsset)));
 
         workspace.DeleteSource("Text/new.txt");

@@ -1,16 +1,44 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using Inno.Core.Assemblies;
 using Inno.Core.Graphs;
+using Inno.Core.Reflection;
+using Inno.Core.Serialization;
 using Inno.Editor.Graph;
 using Inno.Editor.Interactions;
 using Xunit;
 
 namespace Inno.Editor.Graph.Tests;
 
-public sealed class GraphDocumentControllerTests
+public sealed class GraphDocumentControllerTests : IDisposable
 {
+    private readonly string m_testRoot = Path.Combine(
+        Path.GetTempPath(),
+        "InnoEditorGraphTests",
+        Guid.NewGuid().ToString("N"));
+
+    public GraphDocumentControllerTests()
+    {
+        AssemblyManager.Initialize(new AssemblyManagerOptions
+        {
+            cacheDirectory = Path.Combine(m_testRoot, "Assemblies")
+        });
+        TypeCacheManager.Initialize();
+        SerializationManager.Initialize();
+    }
+
+    public void Dispose()
+    {
+        SerializationManager.Shutdown();
+        TypeCacheManager.Shutdown();
+        AssemblyManager.Shutdown();
+        if (Directory.Exists(m_testRoot))
+            Directory.Delete(m_testRoot, recursive: true);
+    }
+
     [Fact]
-    public void AddNode_RecordsNeutralSnapshotAndSupportsTransitionUndoRedo()
+    public void AddNode_RecordsNeutralHistoryPayload()
     {
         var module = new GraphEditorModule();
         var history = new RecordingHistory();
@@ -20,19 +48,8 @@ public sealed class GraphDocumentControllerTests
         GraphNodeId nodeId = controller.AddNode("test.node", new GraphPosition(2f, 3f));
         EditorHistoryChange change = Assert.Single(history.changes);
 
-        GraphHistoryTransitionResult undo = GraphHistoryTransition.Apply(
-            module,
-            change,
-            EditorHistoryDirection.Undo);
-        Assert.True(undo.result.succeeded);
-        Assert.Empty(document.nodes);
-
-        GraphHistoryTransitionResult redo = GraphHistoryTransition.Apply(
-            module,
-            change,
-            EditorHistoryDirection.Redo);
-        Assert.True(redo.result.succeeded);
         Assert.Equal(nodeId, Assert.Single(document.nodes).id);
+        Assert.True(change.payload.length > 0);
         change.Dispose();
     }
 

@@ -15,11 +15,19 @@ public sealed class EditorSettingPathAttribute : Attribute
     /// <param name="path">The slash-delimited page and field path.</param>
     /// <param name="order">The stable order among fields with the same section and label.</param>
     /// <exception cref="ArgumentException">
-    /// Thrown when <paramref name="path"/> contains an empty segment.
+    /// Thrown when <paramref name="path"/> contains an empty segment or is outside the <c>Editor</c> root.
     /// </exception>
     public EditorSettingPathAttribute(string path, int order = 0)
     {
-        this.path = EditorSettingsPathUtility.Normalize(path);
+        string normalized = EditorSettingsPathUtility.Normalize(path);
+        if (!string.Equals(normalized, "Editor", StringComparison.Ordinal) &&
+            !normalized.StartsWith("Editor/", StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "An Editor setting path must be 'Editor' or begin with 'Editor/'.",
+                nameof(path));
+        }
+        this.path = normalized;
         this.order = order;
     }
 

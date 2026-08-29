@@ -15,7 +15,7 @@ internal static partial class MeshSourceParser
     private const uint C_JSON_CHUNK = 0x4e4f534a;
     private const uint C_BIN_CHUNK = 0x004e4942;
 
-    internal static MeshData ParseGltf(
+    internal static GeometryData ParseGltf(
         string sourcePath,
         ReadOnlySpan<byte> source,
         bool isBinary,
@@ -36,7 +36,7 @@ internal static partial class MeshSourceParser
         }
 
         using JsonDocument document = JsonDocument.Parse(jsonBytes);
-        JsonElement root = RenderingJson.RequireObject(document.RootElement, "$gltf");
+        JsonElement root = GltfJson.RequireObject(document.RootElement, "$gltf");
         byte[][] buffers = ReadBuffers(
             sourcePath,
             root,
@@ -102,20 +102,20 @@ internal static partial class MeshSourceParser
             throw new RenderingAssetFormatException(sourcePath, "glTF buffers are missing.");
         }
 
-        RenderingJson.RequireKind(bufferArray, JsonValueKind.Array, "$gltf.buffers");
+        GltfJson.RequireKind(bufferArray, JsonValueKind.Array, "$gltf.buffers");
         string directory = GetProjectDirectory(sourcePath);
         var buffers = new List<byte[]>();
         int index = 0;
         foreach (JsonElement buffer in bufferArray.EnumerateArray())
         {
-            RenderingJson.RequireObject(buffer, $"$gltf.buffers[{index}]");
-            int byteLength = RenderingJson.RequireInt32(
+            GltfJson.RequireObject(buffer, $"$gltf.buffers[{index}]");
+            int byteLength = GltfJson.RequireInt32(
                 buffer.GetProperty("byteLength"),
                 $"$gltf.buffers[{index}].byteLength");
             byte[] bytes;
             if (buffer.TryGetProperty("uri", out JsonElement uriElement))
             {
-                string uri = RenderingJson.RequireString(uriElement, $"$gltf.buffers[{index}].uri");
+                string uri = GltfJson.RequireString(uriElement, $"$gltf.buffers[{index}].uri");
                 if (uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
                 {
                     int separator = uri.IndexOf(',');
@@ -169,22 +169,22 @@ internal static partial class MeshSourceParser
             return [];
         }
 
-        RenderingJson.RequireKind(viewArray, JsonValueKind.Array, "$gltf.bufferViews");
+        GltfJson.RequireKind(viewArray, JsonValueKind.Array, "$gltf.bufferViews");
         var result = new List<BufferView>();
         int index = 0;
         foreach (JsonElement view in viewArray.EnumerateArray())
         {
-            int bufferIndex = RenderingJson.RequireInt32(
+            int bufferIndex = GltfJson.RequireInt32(
                 view.GetProperty("buffer"),
                 $"$gltf.bufferViews[{index}].buffer");
             int offset = view.TryGetProperty("byteOffset", out JsonElement offsetElement)
-                ? RenderingJson.RequireInt32(offsetElement, $"$gltf.bufferViews[{index}].byteOffset")
+                ? GltfJson.RequireInt32(offsetElement, $"$gltf.bufferViews[{index}].byteOffset")
                 : 0;
-            int length = RenderingJson.RequireInt32(
+            int length = GltfJson.RequireInt32(
                 view.GetProperty("byteLength"),
                 $"$gltf.bufferViews[{index}].byteLength");
             int stride = view.TryGetProperty("byteStride", out JsonElement strideElement)
-                ? RenderingJson.RequireInt32(strideElement, $"$gltf.bufferViews[{index}].byteStride")
+                ? GltfJson.RequireInt32(strideElement, $"$gltf.bufferViews[{index}].byteStride")
                 : 0;
             if (bufferIndex < 0 || bufferIndex >= buffers.Count
                 || offset < 0 || length < 0 || offset + length > buffers[bufferIndex].Length
@@ -209,7 +209,7 @@ internal static partial class MeshSourceParser
             return [];
         }
 
-        RenderingJson.RequireKind(accessorArray, JsonValueKind.Array, "$gltf.accessors");
+        GltfJson.RequireKind(accessorArray, JsonValueKind.Array, "$gltf.accessors");
         var result = new List<Accessor>();
         int index = 0;
         foreach (JsonElement accessor in accessorArray.EnumerateArray())
@@ -221,23 +221,23 @@ internal static partial class MeshSourceParser
                     "Sparse accessors are not supported by the first mesh importer.");
             }
 
-            int viewIndex = RenderingJson.RequireInt32(
+            int viewIndex = GltfJson.RequireInt32(
                 accessor.GetProperty("bufferView"),
                 $"$gltf.accessors[{index}].bufferView");
             int offset = accessor.TryGetProperty("byteOffset", out JsonElement offsetElement)
-                ? RenderingJson.RequireInt32(offsetElement, $"$gltf.accessors[{index}].byteOffset")
+                ? GltfJson.RequireInt32(offsetElement, $"$gltf.accessors[{index}].byteOffset")
                 : 0;
-            int componentType = RenderingJson.RequireInt32(
+            int componentType = GltfJson.RequireInt32(
                 accessor.GetProperty("componentType"),
                 $"$gltf.accessors[{index}].componentType");
-            int count = RenderingJson.RequireInt32(
+            int count = GltfJson.RequireInt32(
                 accessor.GetProperty("count"),
                 $"$gltf.accessors[{index}].count");
-            string type = RenderingJson.RequireString(
+            string type = GltfJson.RequireString(
                 accessor.GetProperty("type"),
                 $"$gltf.accessors[{index}].type");
             bool normalized = accessor.TryGetProperty("normalized", out JsonElement normalizedElement)
-                && RenderingJson.RequireBoolean(normalizedElement, $"$gltf.accessors[{index}].normalized");
+                && GltfJson.RequireBoolean(normalizedElement, $"$gltf.accessors[{index}].normalized");
             if (viewIndex < 0 || viewIndex >= views.Count || offset < 0 || count <= 0)
             {
                 throw new RenderingAssetFormatException(
@@ -252,7 +252,7 @@ internal static partial class MeshSourceParser
         return [.. result];
     }
 
-    private static MeshData ReadMeshes(
+    private static GeometryData ReadMeshes(
         string sourcePath,
         JsonElement root,
         IReadOnlyList<Accessor> accessors)
@@ -262,18 +262,18 @@ internal static partial class MeshSourceParser
             throw new RenderingAssetFormatException(sourcePath, "glTF contains no meshes.");
         }
 
-        RenderingJson.RequireKind(meshes, JsonValueKind.Array, "$gltf.meshes");
+        GltfJson.RequireKind(meshes, JsonValueKind.Array, "$gltf.meshes");
         var vertices = new List<MutableVertex>();
         var indices = new List<uint>();
-        var subMeshes = new List<MeshSubMesh>();
+        var sections = new List<GeometrySection>();
         foreach (JsonElement mesh in meshes.EnumerateArray())
         {
             JsonElement primitives = mesh.GetProperty("primitives");
-            RenderingJson.RequireKind(primitives, JsonValueKind.Array, "$gltf.meshes[].primitives");
+            GltfJson.RequireKind(primitives, JsonValueKind.Array, "$gltf.meshes[].primitives");
             foreach (JsonElement primitive in primitives.EnumerateArray())
             {
                 int mode = primitive.TryGetProperty("mode", out JsonElement modeElement)
-                    ? RenderingJson.RequireInt32(modeElement, "$gltf.meshes[].primitives[].mode")
+                    ? GltfJson.RequireInt32(modeElement, "$gltf.meshes[].primitives[].mode")
                     : 4;
                 if (mode != 4)
                 {
@@ -283,7 +283,7 @@ internal static partial class MeshSourceParser
                 }
 
                 JsonElement attributes = primitive.GetProperty("attributes");
-                int positionAccessor = RenderingJson.RequireInt32(
+                int positionAccessor = GltfJson.RequireInt32(
                     attributes.GetProperty("POSITION"),
                     "$gltf.meshes[].primitives[].attributes.POSITION");
                 float[][] positions = ReadFloatAccessor(accessors, positionAccessor, 3, "POSITION");
@@ -320,7 +320,7 @@ internal static partial class MeshSourceParser
                 uint[] localIndices = primitive.TryGetProperty("indices", out JsonElement indexElement)
                     ? ReadIndexAccessor(
                         accessors,
-                        RenderingJson.RequireInt32(indexElement, "$gltf.meshes[].primitives[].indices"))
+                        GltfJson.RequireInt32(indexElement, "$gltf.meshes[].primitives[].indices"))
                     : Enumerable.Range(0, positions.Length).Select(static value => checked((uint)value)).ToArray();
                 if (localIndices.Length % 3 != 0)
                 {
@@ -340,7 +340,7 @@ internal static partial class MeshSourceParser
                     indices.Add(checked((uint)baseVertex + localIndices[index + 1]));
                 }
 
-                subMeshes.Add(new MeshSubMesh(firstIndex, indices.Count - firstIndex));
+                sections.Add(new GeometrySection(firstIndex, indices.Count - firstIndex));
             }
         }
 
@@ -350,12 +350,12 @@ internal static partial class MeshSourceParser
         }
 
         GenerateMissingNormalsAndTangents(vertices, indices);
-        MeshVertex[] normalizedVertices = vertices.Select(static value => new MeshVertex(
+        GeometryVertex[] normalizedVertices = vertices.Select(static value => new GeometryVertex(
             value.position,
             Vector3.NormalizeSafe(value.normal),
             ToTangent(value.tangent, value.tangentW),
             value.textureCoordinate)).ToArray();
-        return new MeshData(normalizedVertices, [.. indices], [.. subMeshes]);
+        return new GeometryData(normalizedVertices, [.. indices], [.. sections]);
     }
 
     private static float[][]? TryReadAttribute(
@@ -366,7 +366,7 @@ internal static partial class MeshSourceParser
         => attributes.TryGetProperty(name, out JsonElement accessor)
             ? ReadFloatAccessor(
                 accessors,
-                RenderingJson.RequireInt32(accessor, $"$gltf.attributes.{name}"),
+                GltfJson.RequireInt32(accessor, $"$gltf.attributes.{name}"),
                 components,
                 name)
             : null;

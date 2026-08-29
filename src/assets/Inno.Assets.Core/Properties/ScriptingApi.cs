@@ -15,6 +15,8 @@ using Inno.Core.Scripting;
 [assembly: ScriptingApiExport(typeof(AssetImportStatus), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(AssetInfo), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(AssetObject), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(AssetSourceId), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(AssetPath), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(AssetReferenceInfo), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(AssetReferenceKind), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(AssetReferenceLocation), ScriptingApiScope.Runtime)]

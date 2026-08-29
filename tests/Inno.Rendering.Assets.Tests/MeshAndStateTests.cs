@@ -8,6 +8,7 @@ using Inno.Core.Assemblies;
 using Inno.Core.Mathematics;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
+using Inno.Rendering.Core;
 using Xunit;
 
 namespace Inno.Rendering.Assets.Tests;
@@ -33,95 +34,24 @@ public sealed class MeshAndStateTests : IDisposable
     }
 
     [Fact]
-    public void ObjParser_TriangulatesAndGeneratesNormals()
-    {
-        const string source = """
-        v -1 0 -1
-        v  1 0 -1
-        v  1 0  1
-        v -1 0  1
-        vt 0 0
-        vt 1 0
-        vt 1 1
-        vt 0 1
-        f 1/1 2/2 3/3 4/4
-        """;
-
-        MeshData data = MeshSourceParser.ParseObj("quad.obj", source);
-        MeshData restored = MeshArtifactCodec.Decode(MeshArtifactCodec.Encode(data));
-
-        Assert.Equal(4, restored.vertices.Count);
-        Assert.Equal(6, restored.indices.Count);
-        Assert.Single(restored.subMeshes);
-        Assert.True(restored.vertices[0].normal.LengthSquared() > 0.9f);
-    }
-
-    [Fact]
-    public void GltfParser_ConvertsRightHandedWindingToEngineLeftHanded()
-    {
-        byte[] buffer = new byte[42];
-        float[] positions = [-1f, 0f, 2f, 1f, 0f, 2f, 0f, 1f, 2f];
-        for (int index = 0; index < positions.Length; index++)
-        {
-            BinaryPrimitives.WriteInt32LittleEndian(
-                buffer.AsSpan(index * 4, 4),
-                BitConverter.SingleToInt32Bits(positions[index]));
-        }
-        BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(36, 2), 0);
-        BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(38, 2), 1);
-        BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(40, 2), 2);
-        string json = $$"""
-        {
-          "asset": { "version": "2.0" },
-          "buffers": [{ "byteLength": 42, "uri": "data:application/octet-stream;base64,{{Convert.ToBase64String(buffer)}}" }],
-          "bufferViews": [
-            { "buffer": 0, "byteOffset": 0, "byteLength": 36 },
-            { "buffer": 0, "byteOffset": 36, "byteLength": 6 }
-          ],
-          "accessors": [
-            { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3" },
-            { "bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR" }
-          ],
-          "meshes": [{ "primitives": [{ "attributes": { "POSITION": 0 }, "indices": 1 }] }]
-        }
-        """;
-
-        MeshData data = MeshSourceParser.ParseGltf(
-            "triangle.gltf",
-            Encoding.UTF8.GetBytes(json),
-            isBinary: false,
-            static _ => throw new InvalidOperationException(),
-            static _ => { });
-
-        Assert.Equal(-2f, data.vertices[0].position.z);
-        Assert.Equal<uint>(0, data.indices[0]);
-        Assert.Equal<uint>(2, data.indices[1]);
-        Assert.Equal<uint>(1, data.indices[2]);
-    }
-
-    [Fact]
-    public void TextureHeaders_ReportDimensionsAndColorSourceInputs()
-    {
-        byte[] png = new byte[24];
-        new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }.CopyTo(png, 0);
-        BinaryPrimitives.WriteUInt32BigEndian(png.AsSpan(16, 4), 64);
-        BinaryPrimitives.WriteUInt32BigEndian(png.AsSpan(20, 4), 32);
-        byte[] tga = new byte[18];
-        BinaryPrimitives.WriteUInt16LittleEndian(tga.AsSpan(12, 2), 20);
-        BinaryPrimitives.WriteUInt16LittleEndian(tga.AsSpan(14, 2), 10);
-
-        Assert.Equal((64, 32), TextureAssetImporter.ReadPngSize(png));
-        Assert.Equal((20, 10), TextureAssetImporter.ReadTgaSize(tga));
-        Assert.Equal((1024, 512), TextureAssetImporter.ReadHdrSize("#?RADIANCE\n-Y 512 +X 1024\n"));
-    }
-
-    [Fact]
     public void MaterialAndPipelineState_RoundTripsThroughAssetSerialization()
     {
-        var material = new MaterialAsset { renderQueue = 2450 };
+        var material = new MaterialAsset { techniqueId = new ShaderTechniqueId("high-quality") };
         material.Set(new ShaderPropertyId("roughness"), MaterialValue.FromFloat(0.4f));
         material.Set(new ShaderPropertyId("transform"), MaterialValue.FromMatrix(Matrix.identity));
+        material.Set(
+            new ShaderPropertyId("albedo"),
+            new MaterialValue
+            {
+                kind = MaterialValueKind.Texture,
+                sampler = new RenderSamplerState(
+                    RenderSamplerFilter.Point,
+                    RenderSamplerAddressMode.Repeat,
+                    RenderSamplerAddressMode.Mirror,
+                    RenderSamplerAddressMode.Clamp)
+            });
         material.SetKeyword("Cutout", enabled: true);
+        material.SetMetadata("tests.sort", "2450");
         byte[] materialState = SerializationManager.Encode(writer => writer.WriteProperties(material));
         var restoredMaterial = new MaterialAsset();
         SerializationManager.Decode(materialState, reader =>
@@ -132,15 +62,25 @@ public sealed class MeshAndStateTests : IDisposable
 
         Assert.True(restoredMaterial.TryGet(new ShaderPropertyId("roughness"), out MaterialValue roughness));
         Assert.Equal(0.4f, roughness.vector.x);
+        Assert.True(restoredMaterial.TryGet(new ShaderPropertyId("albedo"), out MaterialValue albedo));
+        Assert.Equal(RenderSamplerFilter.Point, albedo.sampler.filter);
+        Assert.Equal(RenderSamplerAddressMode.Mirror, albedo.sampler.addressV);
         Assert.Contains("Cutout", restoredMaterial.keywords);
+        Assert.Equal("high-quality", restoredMaterial.techniqueId.value);
+        Assert.True(restoredMaterial.TryGetMetadata("tests.sort", out string? sort));
+        Assert.Equal("2450", sort);
 
         var pipeline = new RenderPipelineAsset
         {
             pipelineTypeId = "tests.pipeline",
-            defaultRenderPath = RenderPath.Deferred
+            pipelineState = new SerializedRenderExtensionState(Guid.Empty, [1, 2, 3])
         };
-        pipeline.quality.exposure = 1.5f;
-        pipeline.SetFeatures([new RenderFeatureConfiguration("tests.feature", "{\"radius\":2}")]);
+        pipeline.SetFeatures([
+            new RenderFeatureConfiguration(
+                "tests.feature",
+                new SerializedRenderExtensionState(Guid.Empty, [4, 5]),
+                enabled: true)
+        ]);
         byte[] pipelineState = SerializationManager.Encode(writer => writer.WriteProperties(pipeline));
         var restoredPipeline = new RenderPipelineAsset();
         SerializationManager.Decode(pipelineState, reader =>
@@ -150,45 +90,129 @@ public sealed class MeshAndStateTests : IDisposable
         });
 
         Assert.Equal("tests.pipeline", restoredPipeline.pipelineTypeId);
-        Assert.Equal(RenderPath.Deferred, restoredPipeline.defaultRenderPath);
-        Assert.Equal(1.5f, restoredPipeline.quality.exposure);
-        Assert.Single(restoredPipeline.features);
+        Assert.Equal([1, 2, 3], restoredPipeline.pipelineState.propertyData);
+        RenderFeatureConfiguration feature = Assert.Single(restoredPipeline.features);
+        Assert.Equal("tests.feature", feature.featureTypeId);
+        Assert.Equal([4, 5], feature.state.propertyData);
     }
 
     [Fact]
-    public void MeshRendererMaterialSlots_ArePersistentButHiddenFromInspection()
+    public void MaterialResolver_UsesProviderOwnedContractsRolesAndCapabilities()
     {
-        var first = new MaterialAsset();
-        var second = new MaterialAsset();
-        var source = new MeshRenderer();
-        source.SetMaterials([first, second]);
-        var assets = new Dictionary<Guid, MaterialAsset>
-        {
-            [first.identity.persistentId] = first,
-            [second.identity.persistentId] = second
-        };
-        byte[] state = SerializationManager.Encode(writer => writer.WriteProperties(source));
-        var restored = new MeshRenderer();
-        AssetSerializationServices.SetReferenceResolver(
-            (persistentId, _, _, _, _) => assets[persistentId]);
-        try
-        {
-            SerializationManager.Decode(state, reader =>
-            {
-                reader.RestoreProperties(restored);
-                return 0;
-            });
-        }
-        finally
-        {
-            AssetSerializationServices.SetReferenceResolver(null);
-        }
+        var advancedPass = new ShaderPassDefinition(
+            "advanced-draw",
+            ShaderProgramKind.Raster,
+            requiredFeatures: GraphicsFeature.Compute);
+        var basicPass = new ShaderPassDefinition("basic-draw", ShaderProgramKind.Raster);
+        var shader = new ShaderAsset();
+        shader.SetDefinition(new ShaderDefinition(
+            "Provider-owned shader",
+            [],
+            [],
+            [advancedPass, basicPass],
+            [
+                new ShaderTechniqueDefinition(
+                    new ShaderTechniqueId("advanced"),
+                    new ShaderContractId("example.2d.sprite"),
+                    [new ShaderTechniquePass(new ShaderPassRoleId("draw"), advancedPass.name)],
+                    GraphicsFeature.Compute),
+                new ShaderTechniqueDefinition(
+                    new ShaderTechniqueId("basic"),
+                    new ShaderContractId("example.2d.sprite"),
+                    [new ShaderTechniquePass(new ShaderPassRoleId("draw"), basicPass.name)])
+            ]));
+        var material = new MaterialAsset { shader = shader };
+        GraphicsCapabilities basicCapabilities = CreateCapabilities(GraphicsFeature.None);
+        GraphicsCapabilities computeCapabilities = CreateCapabilities(GraphicsFeature.Compute);
 
-        Assert.DoesNotContain(
-            SerializationManager.GetProperties(source),
-            static value => value.name == "materialSlots");
-        Assert.Equal([first, second], restored.materials);
+        MaterialPassResolution basic = Assert.IsType<MaterialPassResolution>(MaterialPassResolver.Resolve(
+            material,
+            new ShaderContractId("example.2d.sprite"),
+            new ShaderPassRoleId("draw"),
+            basicCapabilities));
+        MaterialPassResolution advanced = Assert.IsType<MaterialPassResolution>(MaterialPassResolver.Resolve(
+            material,
+            new ShaderContractId("example.2d.sprite"),
+            new ShaderPassRoleId("draw"),
+            computeCapabilities));
+
+        Assert.Equal("basic", basic.technique.id.value);
+        Assert.Equal("basic-draw", basic.pass.name);
+        Assert.Equal("advanced", advanced.technique.id.value);
+        Assert.Equal("advanced-draw", advanced.pass.name);
+        Assert.Null(MaterialPassResolver.Resolve(
+            material,
+            new ShaderContractId("unrelated.contract"),
+            new ShaderPassRoleId("draw"),
+            computeCapabilities));
     }
+
+    [Fact]
+    public void ShaderRasterState_RoundTripsWithoutLosingProviderChoices()
+    {
+        ShaderRenderState sourceState = ShaderRenderState.opaque;
+        sourceState.topology = RenderPrimitiveTopology.LineStrip;
+        sourceState.cull = ShaderCullMode.Front;
+        sourceState.frontFace = RenderFrontFace.Clockwise;
+        sourceState.multisampling = false;
+        var source = new ShaderAsset();
+        source.SetDefinition(new ShaderDefinition(
+            "Tests/RasterState",
+            [],
+            [],
+            [
+                new ShaderPassDefinition(
+                    "wire",
+                    ShaderProgramKind.Raster,
+                    renderState: sourceState)
+            ]));
+
+        byte[] state = SerializationManager.Encode(writer => writer.WriteProperties(source));
+        var restored = new ShaderAsset();
+        SerializationManager.Decode(state, reader =>
+        {
+            reader.RestoreProperties(restored);
+            return 0;
+        });
+
+        ShaderRenderState restoredState = Assert.Single(restored.definition!.passes).renderState;
+        Assert.Equal(RenderPrimitiveTopology.LineStrip, restoredState.topology);
+        Assert.Equal(ShaderCullMode.Front, restoredState.cull);
+        Assert.Equal(RenderFrontFace.Clockwise, restoredState.frontFace);
+        Assert.False(restoredState.multisampling);
+    }
+
+    [Fact]
+    public void MaterialMetadataRemainsAnOpenProviderProtocol()
+    {
+        var source = new MaterialAsset();
+        source.SetMetadata("sprite.order", "17");
+        source.SetMetadata("raytracing.mask", "opaque");
+        byte[] state = SerializationManager.Encode(writer => writer.WriteProperties(source));
+        var restored = new MaterialAsset();
+        SerializationManager.Decode(state, reader =>
+        {
+            reader.RestoreProperties(restored);
+            return 0;
+        });
+
+        Assert.True(restored.TryGetMetadata("sprite.order", out string? spriteOrder));
+        Assert.Equal("17", spriteOrder);
+        Assert.True(restored.TryGetMetadata("raytracing.mask", out string? rayMask));
+        Assert.Equal("opaque", rayMask);
+    }
+
+    private static GraphicsCapabilities CreateCapabilities(GraphicsFeature features)
+        => new(
+            GraphicsBackend.Noop,
+            features,
+            new GraphicsLimits(64, 4, 4096, 8),
+            Enum.GetValues<RenderTextureFormat>(),
+            Enum.GetValues<RenderTextureFormat>(),
+            [],
+            [],
+            originBottomLeft: false,
+            homogeneousDepth: false);
 }
 
 [CollectionDefinition("Rendering assets serialization", DisableParallelization = true)]

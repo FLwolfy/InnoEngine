@@ -57,7 +57,7 @@ public static class GraphicsSettings
 {
     private static readonly object S_LOCK = new();
     private static GraphicsCapabilities? s_capabilities;
-    private static RenderPipelineAsset? s_pipelineAsset;
+    private static RenderPipelineAsset? s_defaultPipeline;
     private static RenderFrameStatistics? s_statistics;
 
     /// <summary>Gets current device capabilities, or <see langword="null"/> before device initialization.</summary>
@@ -72,14 +72,21 @@ public static class GraphicsSettings
         }
     }
 
-    /// <summary>Gets the active pipeline asset, or <see langword="null"/> before configuration.</summary>
-    public static RenderPipelineAsset? pipelineAsset
+    /// <summary>Gets or sets the project default pipeline used by requests without an override.</summary>
+    public static RenderPipelineAsset? defaultPipeline
     {
         get
         {
             lock (S_LOCK)
             {
-                return s_pipelineAsset;
+                return s_defaultPipeline;
+            }
+        }
+        set
+        {
+            lock (S_LOCK)
+            {
+                s_defaultPipeline = value;
             }
         }
     }
@@ -101,14 +108,6 @@ public static class GraphicsSettings
         lock (S_LOCK)
         {
             s_capabilities = capabilities;
-        }
-    }
-
-    internal static void SetPipelineAsset(RenderPipelineAsset? pipelineAsset)
-    {
-        lock (S_LOCK)
-        {
-            s_pipelineAsset = pipelineAsset;
         }
     }
 

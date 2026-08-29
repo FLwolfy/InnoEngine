@@ -53,8 +53,8 @@ public sealed class SceneAsset : AssetObject
     {
         SerializationContext context = SerializationContext.empty.With<AssetObject>(this);
         GameScene scene = SerializationManager.Deserialize<GameScene>(GetPayload(), context);
-        if (!string.IsNullOrWhiteSpace(sourcePath))
-            scene.name = Path.GetFileNameWithoutExtension(sourcePath);
+        if (!string.IsNullOrWhiteSpace(assetPath.localPath))
+            scene.name = Path.GetFileNameWithoutExtension(assetPath.localPath);
         return scene;
     }
 
@@ -84,7 +84,7 @@ public sealed class SceneAsset : AssetObject
             return (byte[])m_pendingPayload.Clone();
         if (!runtimePayload.IsEmpty)
             return runtimePayload.ToArray();
-        throw new InvalidOperationException($"Scene asset '{sourcePath}' does not contain an imported or pending scene payload.");
+        throw new InvalidOperationException($"Scene asset '{assetPath}' does not contain an imported or pending scene payload.");
     }
 
     private AssetDependency[] GetDependencies()

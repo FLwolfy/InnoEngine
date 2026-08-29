@@ -16,6 +16,7 @@ flowchart LR
     L["Logging"] --> F
     D["Diagnostics<br/>Current problem state"]
     G["Graphs<br/>中立图文档与验证"]
+    PS["Settings<br/>原生设置与 Plugin 默认合成"]
 ```
 
 ## 项目目录
@@ -37,6 +38,7 @@ flowchart LR
 | [Inno.Core.Mathematics](Inno.Core.Mathematics.md) | `Inno.Core.Mathematics` | 向量、矩阵、四元数、颜色和矩形 |
 | [Inno.Core.Storage](Inno.Core.Storage.md) | `Inno.Core.Storage` | 依赖图与可索引对象存储 |
 | [Inno.Core.Graphs](Inno.Core.Graphs.md) | `Inno.Core.Graphs` | 通用图文档、稳定节点/端口 ID、动态端口与类型化验证 |
+| [Inno.Core.Settings](Inno.Core.Settings.md) | `Inno.Core.Settings` | 原生项目设置、Stable ID、Plugin 默认贡献与原子覆盖 |
 
 ## 标准初始化顺序
 

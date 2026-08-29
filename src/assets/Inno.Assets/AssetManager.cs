@@ -10,6 +10,7 @@ using Inno.Assets.Core;
 using Inno.Assets.File;
 using Inno.Assets.Loader;
 using Inno.Assets.Serialization;
+using Inno.Core.Assemblies;
 using Inno.Core.Identity;
 using Inno.Core.Logging;
 using Inno.Core.Reflection;
@@ -25,13 +26,19 @@ namespace Inno.Assets;
 public static class AssetManager
 {
     private static readonly Lock S_LIFECYCLE_LOCK = new();
+    private static readonly AssetCatalogParticipant S_CATALOG_PARTICIPANT = new();
 
     private static AssetLoader? s_loader;
     private static AssetFileSystem? s_fileSystem;
+    private static IDisposable? s_catalogParticipantRegistration;
     private static int s_ownerThreadId;
     private static long s_revision;
     private static AssetCacheOptions s_cacheOptions;
     private static long s_lastArtifactCollectionTimestamp;
+    private static AssetManagerOptions s_options;
+    private static bool s_catalogActivationInProgress;
+    private static bool s_catalogRecoveryRequired;
+    private static AssetSourceMountTransaction? s_sourceMountCandidate;
 
     /// <summary>Gets whether asset services are initialized.</summary>
     public static bool isInitialized { get; private set; }
@@ -45,11 +52,19 @@ public static class AssetManager
     /// <summary>Gets the absolute generated artifact root.</summary>
     public static string artifactRoot { get; private set; } = string.Empty;
 
+    /// <summary>Gets the active isolated source mount snapshot.</summary>
+    [ScriptingApiIgnore]
+    public static IReadOnlyList<AssetSourceMount> sourceMounts { get; private set; } = [];
+
     /// <summary>Occurs after an asset database transaction has committed.</summary>
     public static event Action<AssetChangeSet>? Changed;
 
     /// <summary>Occurs after a canonical loaded asset has been updated in place.</summary>
     public static event Action<AssetObject>? AssetReloaded;
+
+    /// <summary>Occurs after a complete isolated source-mount generation is atomically replaced.</summary>
+    [ScriptingApiIgnore]
+    public static event Action? SourceMountsChanged;
 
     /// <summary>Initializes global asset services.</summary>
     /// <param name="options">The asset source, artifact and watcher configuration.</param>
@@ -73,12 +88,19 @@ public static class AssetManager
         lock (S_LIFECYCLE_LOCK)
         {
             ShutdownLocked();
-            assetRoot = Path.GetFullPath(options.assetRoot);
+            AssetSourceMount[] mounts = options.sourceMounts?.ToArray()
+                ?? [new AssetSourceMount(AssetSourceId.project, options.assetRoot, isReadOnly: false)];
+            AssetSourceMount projectMount = mounts.SingleOrDefault(static mount => mount.id == AssetSourceId.project)
+                ?? throw new ArgumentException("A project asset source mount is required.", nameof(options));
+            if (projectMount.isReadOnly)
+                throw new ArgumentException("The project asset source mount must be writable.", nameof(options));
+            assetRoot = projectMount.rootPath;
             libraryRoot = Path.GetFullPath(options.libraryRoot);
             artifactRoot = Path.Combine(libraryRoot, "Artifacts");
-            AssetLoader loader = new(assetRoot, libraryRoot, options.sourcePolicy);
+            sourceMounts = mounts;
+            AssetLoader loader = new(mounts, libraryRoot, options.sourcePolicy);
             AssetFileSystem fileSystem = new(
-                assetRoot,
+                mounts,
                 autoStart: false,
                 options.fileWatcherFlushDelayMs,
                 options.sourcePolicy);
@@ -88,6 +110,7 @@ public static class AssetManager
             s_ownerThreadId = Environment.CurrentManagedThreadId;
             s_revision = 0;
             s_cacheOptions = options.cacheOptions;
+            s_options = options with { sourceMounts = mounts };
             s_lastArtifactCollectionTimestamp = 0;
             isInitialized = true;
             AssetSerializationServices.SetReferenceResolver(ResolveSerializedReference);
@@ -98,6 +121,8 @@ public static class AssetManager
                 fileSystem.Refresh();
                 if (options.enableFileSystemWatcher)
                     fileSystem.Start();
+                s_catalogParticipantRegistration = AssemblyManager.RegisterCatalogParticipant(
+                    S_CATALOG_PARTICIPANT);
             }
             catch
             {
@@ -114,6 +139,164 @@ public static class AssetManager
             ShutdownLocked();
     }
 
+    /// <summary>
+    /// Validates and atomically replaces the complete source-mount generation while preserving the active
+    /// generation after any candidate failure.
+    /// </summary>
+    /// <param name="mounts">A writable project source followed by zero or more read-only sources.</param>
+    [ScriptingApiIgnore]
+    public static void ReplaceSourceMounts(IReadOnlyList<AssetSourceMount> mounts)
+    {
+        using AssetSourceMountTransaction transaction = PrepareSourceMounts(mounts);
+        transaction.Activate();
+        transaction.Complete();
+    }
+
+    /// <summary>
+    /// Builds and validates an isolated source-mount candidate without changing active AssetManager state.
+    /// </summary>
+    /// <param name="mounts">A writable project source followed by zero or more read-only sources.</param>
+    /// <returns>A transaction that can be inspected, activated, completed, or rolled back.</returns>
+    [ScriptingApiIgnore]
+    public static AssetSourceMountTransaction PrepareSourceMounts(IReadOnlyList<AssetSourceMount> mounts)
+    {
+        ArgumentNullException.ThrowIfNull(mounts);
+        EnsureOwnerThread();
+        AssetLoader? candidateLoader = null;
+        AssetFileSystem? candidateFileSystem = null;
+        lock (S_LIFECYCLE_LOCK)
+        {
+            if (s_sourceMountCandidate is not null)
+                throw new InvalidOperationException("Another source-mount candidate is already pending.");
+            AssetSourceMount[] snapshot = mounts.ToArray();
+            AssetSourceMount projectMount = snapshot.SingleOrDefault(static mount => mount.id == AssetSourceId.project)
+                ?? throw new ArgumentException("A project asset source mount is required.", nameof(mounts));
+            if (projectMount.isReadOnly)
+                throw new ArgumentException("The project asset source mount must be writable.", nameof(mounts));
+            if (snapshot.Select(static mount => mount.id).Distinct().Count() != snapshot.Length)
+                throw new ArgumentException("Asset source mount IDs must be unique.", nameof(mounts));
+            try
+            {
+                candidateLoader = new AssetLoader(snapshot, libraryRoot, s_options.sourcePolicy);
+                candidateFileSystem = new AssetFileSystem(
+                    snapshot,
+                    autoStart: false,
+                    s_options.fileWatcherFlushDelayMs,
+                    s_options.sourcePolicy);
+                candidateLoader.Rescan();
+                candidateFileSystem.Refresh();
+            }
+            catch
+            {
+                candidateFileSystem?.Dispose();
+                candidateLoader?.Dispose();
+                throw;
+            }
+
+            var transaction = new AssetSourceMountTransaction(
+                snapshot,
+                candidateLoader,
+                candidateFileSystem);
+            s_sourceMountCandidate = transaction;
+            return transaction;
+        }
+    }
+
+    internal static void ActivatePreparedSourceMounts(AssetSourceMountTransaction transaction)
+    {
+        ArgumentNullException.ThrowIfNull(transaction);
+        EnsureOwnerThread();
+        lock (S_LIFECYCLE_LOCK)
+        {
+            EnsurePendingSourceMountTransaction(transaction);
+            if (transaction.isActivated)
+                return;
+            _ = transaction.candidateLoader.RefreshRegistries();
+            transaction.candidateFileSystem.Refresh();
+            transaction.previousLoader = s_loader;
+            transaction.previousFileSystem = s_fileSystem;
+            transaction.previousMounts = sourceMounts;
+            transaction.previousOptions = s_options;
+            transaction.candidateLoader.AssetReloaded += OnAssetReloaded;
+            s_loader = transaction.candidateLoader;
+            s_fileSystem = transaction.candidateFileSystem;
+            sourceMounts = transaction.sourceMounts;
+            AssetSourceMount project = transaction.sourceMounts.Single(
+                static mount => mount.id == AssetSourceId.project);
+            assetRoot = project.rootPath;
+            s_options = s_options with { assetRoot = assetRoot, sourceMounts = transaction.sourceMounts };
+            s_revision++;
+            transaction.isActivated = true;
+        }
+    }
+
+    internal static void CompletePreparedSourceMounts(AssetSourceMountTransaction transaction)
+    {
+        ArgumentNullException.ThrowIfNull(transaction);
+        EnsureOwnerThread();
+        AssetLoader? previousLoader;
+        AssetFileSystem? previousFileSystem;
+        Action? changed;
+        lock (S_LIFECYCLE_LOCK)
+        {
+            EnsurePendingSourceMountTransaction(transaction);
+            if (!transaction.isActivated)
+                throw new InvalidOperationException("A source-mount candidate must be activated before completion.");
+            if (s_options.enableFileSystemWatcher)
+                transaction.candidateFileSystem.Start();
+            previousLoader = transaction.previousLoader;
+            previousFileSystem = transaction.previousFileSystem;
+            transaction.previousLoader = null;
+            transaction.previousFileSystem = null;
+            transaction.isFinished = true;
+            s_sourceMountCandidate = null;
+            changed = SourceMountsChanged;
+        }
+
+        previousFileSystem?.Dispose();
+        if (previousLoader is not null)
+        {
+            previousLoader.AssetReloaded -= OnAssetReloaded;
+            previousLoader.Dispose();
+        }
+        InvokeObservers(changed);
+    }
+
+    internal static void RollbackPreparedSourceMounts(AssetSourceMountTransaction transaction)
+    {
+        ArgumentNullException.ThrowIfNull(transaction);
+        if (transaction.isFinished)
+            return;
+        EnsureOwnerThread();
+        lock (S_LIFECYCLE_LOCK)
+        {
+            EnsurePendingSourceMountTransaction(transaction);
+            if (transaction.isActivated)
+            {
+                transaction.candidateLoader.AssetReloaded -= OnAssetReloaded;
+                s_loader = transaction.previousLoader;
+                s_fileSystem = transaction.previousFileSystem;
+                sourceMounts = transaction.previousMounts ?? [];
+                s_options = transaction.previousOptions;
+                AssetSourceMount? project = sourceMounts.SingleOrDefault(
+                    static mount => mount.id == AssetSourceId.project);
+                assetRoot = project?.rootPath ?? string.Empty;
+                s_revision++;
+            }
+            transaction.isFinished = true;
+            s_sourceMountCandidate = null;
+        }
+
+        transaction.candidateFileSystem.Dispose();
+        transaction.candidateLoader.Dispose();
+    }
+
+    private static void EnsurePendingSourceMountTransaction(AssetSourceMountTransaction transaction)
+    {
+        if (!ReferenceEquals(s_sourceMountCandidate, transaction))
+            throw new InvalidOperationException("The source-mount transaction is not the current candidate.");
+    }
+
     /// <summary>Loads a canonical asset by source-relative path.</summary>
     /// <typeparam name="TAsset">The required asset type.</typeparam>
     /// <param name="relativePath">The source-relative path.</param>
@@ -125,6 +308,13 @@ public static class AssetManager
         return asset as TAsset ?? throw new InvalidOperationException(
             $"Asset '{relativePath}' cannot be loaded as '{typeof(TAsset).FullName}'.");
     }
+
+    /// <summary>Loads a canonical asset by isolated source path.</summary>
+    /// <typeparam name="TAsset">The required asset type.</typeparam>
+    /// <param name="path">The isolated source path.</param>
+    /// <returns>The canonical asset instance.</returns>
+    public static TAsset Load<TAsset>(AssetPath path) where TAsset : AssetObject
+        => Load<TAsset>(path.ToString());
 
     /// <summary>Loads a canonical asset by persistent identity.</summary>
     /// <typeparam name="TAsset">The required asset type.</typeparam>
@@ -149,6 +339,14 @@ public static class AssetManager
         asset = value as TAsset;
         return success && asset is not null;
     }
+
+    /// <summary>Tries to load a canonical asset by isolated source path.</summary>
+    /// <typeparam name="TAsset">The required asset type.</typeparam>
+    /// <param name="path">The isolated source path.</param>
+    /// <param name="asset">The canonical asset when successful.</param>
+    /// <returns><see langword="true"/> when a compatible asset was loaded.</returns>
+    public static bool TryLoad<TAsset>(AssetPath path, out TAsset? asset) where TAsset : AssetObject
+        => TryLoad(path.ToString(), out asset);
 
     /// <summary>Tries to load a canonical asset by persistent identity.</summary>
     /// <typeparam name="TAsset">The required asset type.</typeparam>
@@ -210,6 +408,11 @@ public static class AssetManager
         return imported;
     }
 
+    /// <summary>Imports one source asset from an isolated source mount.</summary>
+    /// <param name="path">The isolated source path.</param>
+    /// <returns><see langword="true"/> when an importer handled the source.</returns>
+    public static bool Import(AssetPath path) => Import(path.ToString());
+
     /// <summary>Saves an asset to its current source path.</summary>
     /// <param name="asset">The asset to save.</param>
     /// <returns><see langword="true"/> when an importer exported the asset.</returns>
@@ -234,6 +437,12 @@ public static class AssetManager
             GetFileSystem().Refresh();
         return saved;
     }
+
+    /// <summary>Saves an asset to a writable isolated source path.</summary>
+    /// <param name="path">Writable isolated source path.</param>
+    /// <param name="asset">Asset to save.</param>
+    /// <returns><see langword="true"/> when an importer exported the asset.</returns>
+    public static bool Save(AssetPath path, AssetObject asset) => Save(path.ToString(), asset);
 
     /// <summary>
     /// Moves a source asset while preserving its persistent identity and generated metadata.
@@ -509,6 +718,15 @@ public static class AssetManager
         bool recursive = false)
         => GetLoader().GetDependencies(asset, recursive);
 
+    /// <summary>Gets source import dependencies that invalidate an asset artifact.</summary>
+    /// <param name="asset">The asset to query.</param>
+    /// <param name="recursive">Whether transitive source dependencies should be included.</param>
+    /// <returns>Canonical isolated source paths in stable order.</returns>
+    public static IReadOnlyList<AssetPath> GetImportDependencies(
+        AssetObject asset,
+        bool recursive = false)
+        => GetLoader().GetImportDependencies(asset, recursive);
+
     /// <summary>Gets an engine-known reference diagnostic snapshot.</summary>
     /// <param name="asset">The asset to inspect.</param>
     /// <returns>The reference diagnostic snapshot.</returns>
@@ -657,6 +875,23 @@ public static class AssetManager
         }
     }
 
+    private static void InvokeObservers(Action? handlers)
+    {
+        if (handlers is null)
+            return;
+        foreach (Delegate handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((Action)handler)();
+            }
+            catch
+            {
+                // Observer failures cannot roll back committed manager state.
+            }
+        }
+    }
+
     private static void PruneRetiredObservers()
     {
         RemoveRetiredObservers(Changed, observer => Changed -= observer);
@@ -696,9 +931,31 @@ public static class AssetManager
     }
 
     private static AssetLoader GetLoader()
-        => isInitialized && s_loader is not null
+    {
+        AssetLoader loader = isInitialized && s_loader is not null
             ? s_loader
             : throw new InvalidOperationException("AssetManager is not initialized.");
+        RecoverCatalogIfRequired(loader);
+        return loader;
+    }
+
+    private static void RecoverCatalogIfRequired(AssetLoader loader)
+    {
+        if (!s_catalogRecoveryRequired || s_catalogActivationInProgress)
+            return;
+        EnsureOwnerThread();
+        s_catalogActivationInProgress = true;
+        try
+        {
+            loader.Rescan();
+            s_fileSystem?.Refresh();
+            s_catalogRecoveryRequired = false;
+        }
+        finally
+        {
+            s_catalogActivationInProgress = false;
+        }
+    }
 
     private static AssetFileSystem GetFileSystem()
         => isInitialized && s_fileSystem is not null
@@ -772,15 +1029,18 @@ public static class AssetManager
     {
         if (string.IsNullOrWhiteSpace(relativePath))
             throw new ArgumentException("Asset source path is required.", parameterName);
-        if (Path.IsPathRooted(relativePath))
-            throw new ArgumentException("Asset source paths must be relative.", parameterName);
-        string normalized = relativePath.Replace('\\', '/').Trim('/');
-        if (normalized.Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .Any(static segment => segment == ".."))
+        AssetPath path;
+        try
         {
-            throw new ArgumentException("Asset source paths cannot escape the configured root.", parameterName);
+            path = AssetPath.Parse(relativePath);
         }
-        return normalized;
+        catch (ArgumentException exception)
+        {
+            throw new ArgumentException(exception.Message, parameterName, exception);
+        }
+        if (path.source != AssetSourceId.project)
+            throw new InvalidOperationException($"Asset source '{path.source}' is read-only.");
+        return path.localPath;
     }
 
     private static void MovePhysicalSource(string sourcePath, string targetPath, bool isDirectory)
@@ -869,6 +1129,22 @@ public static class AssetManager
 
     private static void ShutdownLocked()
     {
+        if (s_sourceMountCandidate is not null)
+        {
+            AssetSourceMountTransaction candidate = s_sourceMountCandidate;
+            if (candidate.isActivated)
+            {
+                candidate.candidateLoader.AssetReloaded -= OnAssetReloaded;
+                s_loader = candidate.previousLoader;
+                s_fileSystem = candidate.previousFileSystem;
+            }
+            candidate.candidateFileSystem.Dispose();
+            candidate.candidateLoader.Dispose();
+            candidate.isFinished = true;
+            s_sourceMountCandidate = null;
+        }
+        s_catalogParticipantRegistration?.Dispose();
+        s_catalogParticipantRegistration = null;
         AssetManagerDiagnosticPublisher.ResolveSourceDatabase();
         AssetSerializationServices.SetReferenceResolver(null);
         if (s_fileSystem is not null)
@@ -885,12 +1161,107 @@ public static class AssetManager
         assetRoot = string.Empty;
         libraryRoot = string.Empty;
         artifactRoot = string.Empty;
+        sourceMounts = [];
         s_ownerThreadId = 0;
         s_revision = 0;
         s_cacheOptions = default;
+        s_options = default;
+        s_catalogActivationInProgress = false;
+        s_catalogRecoveryRequired = false;
         s_lastArtifactCollectionTimestamp = 0;
         isInitialized = false;
         Changed = null;
         AssetReloaded = null;
+        SourceMountsChanged = null;
+    }
+
+    private sealed class AssetCatalogParticipant : IAssemblyCatalogParticipant
+    {
+        public IAssemblyCatalogTransaction Prepare(AssemblyCatalogSnapshot catalog)
+        {
+            ArgumentNullException.ThrowIfNull(catalog);
+            IReadOnlySet<AssetImportFailureFingerprint> existingFailures =
+                isInitialized && s_loader is not null
+                    ? s_loader.CaptureWritableImportFailures()
+                    : new HashSet<AssetImportFailureFingerprint>();
+            return new AssetCatalogTransaction(existingFailures);
+        }
+    }
+
+    private sealed class AssetCatalogTransaction(
+        IReadOnlySet<AssetImportFailureFingerprint> existingFailures) : IAssemblyCatalogTransaction
+    {
+        private readonly IReadOnlySet<AssetImportFailureFingerprint> m_existingFailures = existingFailures;
+        private bool m_activated;
+        private bool m_finished;
+
+        public object? context => null;
+
+        public void Activate()
+        {
+            EnsureNotFinished();
+            if (!isInitialized || s_loader is null)
+            {
+                m_activated = true;
+                return;
+            }
+
+            EnsureOwnerThread();
+            s_catalogActivationInProgress = true;
+            try
+            {
+                s_loader.Rescan();
+                AssetImportFailureFingerprint[] candidateFailures = s_loader
+                    .CaptureWritableImportFailures()
+                    .Where(failure => !m_existingFailures.Contains(failure))
+                    .OrderBy(static failure => failure.relativePath, StringComparer.Ordinal)
+                    .ToArray();
+                if (candidateFailures.Length != 0)
+                {
+                    string details = string.Join(
+                        "; ",
+                        candidateFailures.Select(static failure =>
+                            $"{failure.relativePath}: {failure.diagnostics}"));
+                    throw new InvalidDataException(
+                        "The candidate assembly catalog introduced or changed writable Asset import failures: "
+                        + details);
+                }
+                s_fileSystem?.Refresh();
+                s_catalogRecoveryRequired = false;
+                m_activated = true;
+            }
+            catch
+            {
+                s_catalogRecoveryRequired = true;
+                throw;
+            }
+            finally
+            {
+                s_catalogActivationInProgress = false;
+            }
+        }
+
+        public void Complete()
+        {
+            EnsureNotFinished();
+            if (!m_activated)
+                throw new InvalidOperationException("Asset catalog transaction has not been activated.");
+            m_finished = true;
+        }
+
+        public void Rollback()
+        {
+            if (m_finished)
+                return;
+            if (m_activated && isInitialized)
+                s_catalogRecoveryRequired = true;
+            m_finished = true;
+        }
+
+        private void EnsureNotFinished()
+        {
+            if (m_finished)
+                throw new InvalidOperationException("Asset catalog transaction is already finished.");
+        }
     }
 }

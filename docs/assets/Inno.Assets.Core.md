@@ -10,7 +10,7 @@
 
 | 成员 | 语义 |
 | --- | --- |
-| `sourcePath` | 当前 source-relative path；移动时由 host 原位更新。 |
+| `assetPath` | 当前 mount-qualified `AssetPath`；移动或 mount 切换时由 host 原位更新。 |
 | `name` | 有路径时为完整文件名，否则为 CLR 类型名。 |
 | `identity` | persistent/runtime Identity。 |
 | `isMissing` | source 当前不可用或旧类型已被替换。 |
@@ -65,7 +65,7 @@ public sealed class AudioAsset : AssetObject
 
 ### AssetInfo
 
-`AssetInfo` 是不可变 Catalog snapshot：`persistentId`、`relativePath`、`sourceKind`、`status`、`importerId`、`stableAssetTypeId`、`artifactKey`、`lastSuccessfulArtifactKey`、`diagnostics`。它适合 Editor、build graph 和诊断读取；不提供修改 Catalog 的 setter。
+`AssetInfo` 是不可变 Catalog snapshot：`persistentId`、`assetPath`、`sourceKind`、`status`、`importerId`、`stableAssetTypeId`、`artifactKey`、`lastSuccessfulArtifactKey`、`diagnostics`。它适合 Editor、build graph 和诊断读取；不提供修改 Catalog 的 setter。
 
 ## 变更契约
 
@@ -88,8 +88,8 @@ AssetManager.Changed += changeSet =>
 
 `AssetDependency` 的 equality 只使用 `persistentId`；`TypeRef type` 和 `lastKnownPath` 用于类型验证、恢复和诊断。内存协议不再保存裸 runtime ID/Stable Guid，序列化 converter 只把 `type.stableId` 写为 `stableTypeId`，不会写 runtime hint。含 `TypeRef` 的构造器与属性从 Scripting API facade 精确排除，因此 `TypeRef` 本身不向脚本导出。路径改变不改变依赖身份。
 
-`AssetReferenceInfo`/`AssetReferenceLocation` 描述引擎已知引用位置，不等价于 CLR GC 引用计数。`AssetReferenceKind` 包含资产依赖、序列化属性、Scene、Prefab、Editor 与 runtime subsystem 等来源。
+`AssetReferenceInfo`/`AssetReferenceLocation` 描述引擎已知引用位置，不等价于 CLR GC 引用计数。`AssetReferenceInfo.assetPath` 保留 mount 身份；不存在并行的字符串 `sourcePath`。`AssetReferenceKind` 包含资产依赖、序列化属性、Scene、Prefab、Editor 与 runtime subsystem 等来源。
 
 ## Runtime host 边界
 
-`AssetRuntimeHost` 是最小 public host bridge，用来提交 canonical state、更新 source path 和释放资源。它公开是为了避免 friend assembly，不会由任何 `Properties/ScriptingApi.cs` 导出。游戏脚本只能看到显式 facade exports，不能借此修改资产内部状态。
+`AssetRuntimeHost` 是最小 public host bridge，用来提交 canonical state、更新 `AssetPath` 和释放资源。它公开是为了避免 friend assembly，不会由任何 `Properties/ScriptingApi.cs` 导出。游戏脚本只能看到显式 facade exports，不能借此修改资产内部状态。

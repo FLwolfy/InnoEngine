@@ -20,7 +20,6 @@ internal sealed class SceneInspectionModule : EditorModule
     private readonly InspectionDrawerRegistry m_inspectors;
     private readonly PropertyDrawerRegistry m_properties;
     private readonly SerializedPropertyRenderer m_renderer;
-    private readonly GameObjectTagCatalog m_tags = new();
 
     /// <summary>
     /// Creates the scene inspection module and its generation-aware drawer registries.
@@ -34,35 +33,34 @@ internal sealed class SceneInspectionModule : EditorModule
     /// <param name="assetIcons">
     /// The Asset Browser presentation provider used by Asset inspection drawers.
     /// </param>
-    /// <param name="layerSettings">
-    /// The project Settings layer catalog module.
+    /// <param name="classificationSettings">
+    /// The project tag and layer settings module.
     /// </param>
     /// <param name="settings">
     /// The project Settings service supplied to built-in drawers.
     /// </param>
     /// <exception cref="System.ArgumentNullException">
     /// Thrown when <paramref name="interactions"/>, <paramref name="edits"/>,
-    /// <paramref name="assetIcons"/>, <paramref name="layerSettings"/>, or <paramref name="settings"/>
+    /// <paramref name="assetIcons"/>, <paramref name="classificationSettings"/>, or <paramref name="settings"/>
     /// is <see langword="null"/>.
     /// </exception>
     internal SceneInspectionModule(
         EditorInteractions interactions,
         SceneEdits edits,
         IInspectionIconProvider<AssetFileEntry> assetIcons,
-        GameLayerSettingsModule layerSettings,
+        SceneProjectSettingsModule classificationSettings,
         EditorSettings settings)
     {
         System.ArgumentNullException.ThrowIfNull(interactions);
         System.ArgumentNullException.ThrowIfNull(edits);
         System.ArgumentNullException.ThrowIfNull(assetIcons);
-        System.ArgumentNullException.ThrowIfNull(layerSettings);
+        System.ArgumentNullException.ThrowIfNull(classificationSettings);
         System.ArgumentNullException.ThrowIfNull(settings);
         var activator = new InspectionDrawerActivator(
             interactions,
             edits,
             assetIcons,
-            m_tags,
-            layerSettings,
+            classificationSettings,
             settings);
         m_inspectors = new InspectionDrawerRegistry(interactions, activator.Create);
         m_properties = new PropertyDrawerRegistry(interactions);
@@ -71,16 +69,6 @@ internal sealed class SceneInspectionModule : EditorModule
             interactions,
             new SceneInspectionPropertyEditService(edits));
     }
-
-    internal GameObjectTagCatalog tags => m_tags;
-
-    /// <inheritdoc />
-    protected override void Capture(EditorState state)
-        => state.Set("tags", m_tags.GetTags());
-
-    /// <inheritdoc />
-    protected override void Restore(EditorState state)
-        => m_tags.Restore(state.Get("tags", Array.Empty<string>()));
 
     internal bool TryResolve(
         EditorContext editorContext,

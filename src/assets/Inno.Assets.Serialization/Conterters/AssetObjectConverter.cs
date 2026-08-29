@@ -33,7 +33,7 @@ internal sealed class AssetObjectConverter : SerializationConverter<AssetObject>
         writer.Write(C_STABLE_TYPE_ID, typeRef.stableId);
         writer.Write(
             C_LAST_KNOWN_PATH,
-            !hasDependencies || dependencies!.includeLastKnownPaths ? value.sourcePath : string.Empty);
+            !hasDependencies || dependencies!.includeLastKnownPaths ? value.assetPath.ToString() : string.Empty);
         if (hasDependencies)
             dependencies!.Add(value);
     }

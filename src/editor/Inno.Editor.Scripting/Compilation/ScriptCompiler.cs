@@ -6,7 +6,6 @@ using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -61,12 +60,9 @@ internal static class ScriptCompiler
         foreach (ScriptAssemblyInput assembly in sources.assemblies)
         {
             ScriptApiProfile api = assembly.scope == ScriptAssemblyScope.Editor ? editorApi : runtimeApi;
-            IReadOnlyList<ScriptPluginInput> plugins = assembly.scope == ScriptAssemblyScope.Editor
-                ? sources.runtimePlugins.Concat(sources.editorPlugins).ToArray()
-                : sources.runtimePlugins;
             assemblyKeys.Add(
                 assembly.name,
-                ComputeAssemblyBuildKey(assembly, api, plugins, assemblyKeys));
+                ComputeAssemblyBuildKey(assembly, api, assemblyKeys));
         }
         string buildKey = ComputeGenerationBuildKey(sources, assemblyKeys);
         string outputDirectory = Path.Combine(options.outputDirectory, buildKey);
@@ -91,13 +87,7 @@ internal static class ScriptCompiler
         var diagnostics = new List<ScriptDiagnostic>();
         var compiledAssemblies = new List<string>();
         var reusedAssemblies = new List<string>();
-        progress.Begin("Copying script plugins...");
-        if (!TryCopyPlugins(sources, stagingDirectory, diagnostics, out string[] runtimePlugins, out string[] editorPlugins))
-        {
-            DeleteStagingDirectory(stagingDirectory);
-            return new ScriptCompilationResult(false, diagnostics, outputDirectory: null, reloadRequests: null);
-        }
-        progress.Complete("Script plugins copied.");
+        progress.Begin("Preparing the unified Plugin load context...");
         if (!TryEmitPluginMarker(stagingDirectory, platformReferences, diagnostics))
         {
             DeleteStagingDirectory(stagingDirectory);
@@ -110,9 +100,6 @@ internal static class ScriptCompiler
             bool editor = assembly.scope == ScriptAssemblyScope.Editor;
             ScriptApiProfile api = editor ? editorApi : runtimeApi;
             ScriptApiReferenceSet apiReferences = editor ? editorApiReferences : runtimeApiReferences;
-            IReadOnlyList<string> plugins = editor
-                ? runtimePlugins.Concat(editorPlugins).ToArray()
-                : runtimePlugins;
             string assemblyPath = Path.Combine(stagingDirectory, assembly.name + ".dll");
             string assemblyCacheDirectory = Path.Combine(
                 options.outputDirectory,
@@ -144,9 +131,9 @@ internal static class ScriptCompiler
                 api,
                 apiReferences,
                 platformReferences.Concat(dependencyReferences).ToArray(),
-                plugins,
                 assemblyStagingPath,
                 assembly.scope,
+                assembly.domain,
                 assembly.defines,
                 assembly.nullable,
                 assembly.allowUnsafe,
@@ -159,9 +146,9 @@ internal static class ScriptCompiler
                 DeleteStagingDirectory(stagingDirectory);
                 return new ScriptCompilationResult(false, diagnostics, outputDirectory: null, reloadRequests: null);
             }
-            File.WriteAllText(
+            File.WriteAllBytes(
                 GetDiagnosticsPath(assemblyStagingDirectory),
-                JsonSerializer.Serialize(result.diagnostics));
+                ScriptCompilerCacheSerialization.EncodeDiagnostics(result.diagnostics));
             CommitAssemblyCache(
                 assemblyStagingDirectory,
                 assemblyCacheDirectory,
@@ -179,20 +166,15 @@ internal static class ScriptCompiler
             compiledAssemblies.Add(assembly.name);
         }
 
-        File.WriteAllText(
+        File.WriteAllBytes(
             GetDiagnosticsPath(stagingDirectory),
-            JsonSerializer.Serialize(diagnostics));
+            ScriptCompilerCacheSerialization.EncodeDiagnostics(diagnostics));
         CommitGenerationCache(stagingDirectory, outputDirectory, sources);
-
-        runtimePlugins = ResolveCommittedPluginPaths(outputDirectory, runtimePlugins);
-        editorPlugins = ResolveCommittedPluginPaths(outputDirectory, editorPlugins);
 
         progress.Begin("Preparing the script reload...");
         IReadOnlyList<AssemblyLoadRequest> requests = CreateReloadRequests(
             outputDirectory,
-            sources,
-            runtimePlugins,
-            editorPlugins);
+            sources);
         progress.Complete("Script reload prepared.");
         return new ScriptCompilationResult(
             true,
@@ -209,9 +191,9 @@ internal static class ScriptCompiler
         ScriptApiProfile api,
         ScriptApiReferenceSet apiReferences,
         IReadOnlyList<MetadataReference> platformReferences,
-        IReadOnlyList<string> pluginPaths,
         string outputPath,
         ScriptAssemblyScope scope,
+        AssemblyDomain domain,
         IReadOnlyList<string> defines,
         bool nullable,
         bool allowUnsafe,
@@ -245,7 +227,8 @@ internal static class ScriptCompiler
             SourceText.From(
                 CreateGeneratedSource(
                     assemblyName,
-                    scope == ScriptAssemblyScope.Editor),
+                    scope == ScriptAssemblyScope.Editor,
+                    domain),
                 Encoding.UTF8),
             parseOptions,
             $"<{assemblyName}.Generated.g.cs>",
@@ -260,13 +243,6 @@ internal static class ScriptCompiler
         }
         foreach (string referencePath in apiReferences.runtimeReferencePaths)
             references[referencePath] = MetadataReference.CreateFromFile(referencePath);
-        foreach (string pluginPath in pluginPaths)
-        {
-            // Pin one immutable metadata image so an asset refresh cannot replace the plugin beneath Roslyn.
-            references[pluginPath] = MetadataReference.CreateFromImage(
-                ImmutableArray.CreateRange(File.ReadAllBytes(pluginPath)),
-                filePath: pluginPath);
-        }
 
         var validationCompilation = CSharpCompilation.Create(
             assemblyName,
@@ -375,11 +351,9 @@ internal static class ScriptCompiler
             cancellationToken: cancellationToken);
         if (emit.Success)
         {
-            await File.WriteAllTextAsync(
+            await File.WriteAllBytesAsync(
                 GetTypeManifestPath(outputPath),
-                JsonSerializer.Serialize(
-                    typeAnalysis.manifest,
-                    new JsonSerializerOptions { WriteIndented = true }),
+                ScriptCompilerCacheSerialization.EncodeTypeManifest(typeAnalysis.manifest),
                 cancellationToken).ConfigureAwait(false);
         }
         progress.Complete($"Emitted {assemblyName}.");
@@ -421,74 +395,9 @@ internal static class ScriptCompiler
         }
     }
 
-    private static bool TryCopyPlugins(
-        ScriptSourceSet sources,
-        string outputDirectory,
-        ICollection<ScriptDiagnostic> diagnostics,
-        out string[] runtimePlugins,
-        out string[] editorPlugins)
-    {
-        var copiedByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        runtimePlugins = CopySet(sources.runtimePlugins);
-        editorPlugins = CopySet(sources.editorPlugins);
-        return diagnostics.All(static diagnostic => diagnostic.severity != ScriptDiagnosticSeverity.Error);
-
-        string[] CopySet(IReadOnlyList<ScriptPluginInput> pluginInputs)
-        {
-            var result = new List<string>(pluginInputs.Count);
-            foreach (ScriptPluginInput plugin in pluginInputs)
-            {
-                try
-                {
-                    AssemblyName assemblyName = AssemblyName.GetAssemblyName(plugin.assemblyArtifactPath);
-                    string simpleName = assemblyName.Name
-                        ?? throw new BadImageFormatException("Managed assembly has no simple name.");
-                    if (copiedByName.TryGetValue(simpleName, out string? existing))
-                    {
-                        diagnostics.Add(new ScriptDiagnostic(
-                            "INNO1001",
-                            ScriptDiagnosticSeverity.Error,
-                            $"Plugin assembly name '{simpleName}' is duplicated by '{existing}' and '{plugin.sourcePath}'.",
-                            plugin.sourcePath,
-                            0,
-                            0));
-                        continue;
-                    }
-
-                    string destinationPath = Path.Combine(outputDirectory, simpleName + ".dll");
-                    File.Copy(plugin.assemblyArtifactPath, destinationPath, overwrite: true);
-                    CopyCompanion(plugin.symbolsArtifactPath, Path.ChangeExtension(destinationPath, ".pdb"));
-                    CopyCompanion(
-                        plugin.dependenciesArtifactPath,
-                        Path.ChangeExtension(destinationPath, ".deps.json"));
-                    copiedByName.Add(simpleName, plugin.sourcePath);
-                    result.Add(destinationPath);
-                }
-                catch (Exception exception) when (exception is BadImageFormatException or FileLoadException or IOException)
-                {
-                    diagnostics.Add(new ScriptDiagnostic(
-                        "INNO1000",
-                        ScriptDiagnosticSeverity.Error,
-                        $"Plugin '{plugin.sourcePath}' is not a readable managed assembly: {exception.Message}",
-                        plugin.sourcePath,
-                        0,
-                        0));
-                }
-            }
-            return result.ToArray();
-        }
-    }
-
-    private static void CopyCompanion(string? sourcePath, string destinationPath)
-    {
-        if (!string.IsNullOrWhiteSpace(sourcePath) && File.Exists(sourcePath))
-            File.Copy(sourcePath, destinationPath, overwrite: true);
-    }
-
     private static string ComputeAssemblyBuildKey(
         ScriptAssemblyInput assembly,
         ScriptApiProfile api,
-        IReadOnlyList<ScriptPluginInput> plugins,
         IReadOnlyDictionary<string, string> dependencyKeys)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
@@ -498,6 +407,8 @@ internal static class ScriptCompiler
         AppendHash(hash, Environment.Version.ToString());
         AppendHash(hash, assembly.name);
         AppendHash(hash, assembly.scope.ToString());
+        AppendHash(hash, assembly.domain.ToString());
+        AppendHash(hash, assembly.ownerPluginId);
         AppendHash(hash, assembly.definitionArtifactKey);
         AppendHash(hash, assembly.nullable.ToString());
         AppendHash(hash, assembly.allowUnsafe.ToString());
@@ -513,11 +424,6 @@ internal static class ScriptCompiler
         {
             AppendHash(hash, reference);
             AppendHash(hash, dependencyKeys[reference]);
-        }
-        foreach (ScriptPluginInput plugin in plugins.OrderBy(static value => value.sourcePath, StringComparer.Ordinal))
-        {
-            AppendHash(hash, plugin.sourcePath);
-            AppendHash(hash, plugin.artifactKey);
         }
         AppendProfile(api);
         return Convert.ToHexString(hash.GetHashAndReset());
@@ -560,12 +466,6 @@ internal static class ScriptCompiler
             AppendHash(hash, assembly.name);
             AppendHash(hash, assemblyKeys[assembly.name]);
         }
-        foreach (ScriptPluginInput plugin in sources.runtimePlugins.Concat(sources.editorPlugins)
-                     .OrderBy(static value => value.sourcePath, StringComparer.Ordinal))
-        {
-            AppendHash(hash, plugin.sourcePath);
-            AppendHash(hash, plugin.artifactKey);
-        }
         return Convert.ToHexString(hash.GetHashAndReset());
     }
 
@@ -589,8 +489,8 @@ internal static class ScriptCompiler
             return false;
         try
         {
-            diagnostics = JsonSerializer.Deserialize<ScriptDiagnostic[]>(
-                File.ReadAllText(diagnosticsPath)) ?? [];
+            diagnostics = ScriptCompilerCacheSerialization.DecodeDiagnostics(
+                File.ReadAllBytes(diagnosticsPath));
             Directory.CreateDirectory(destinationDirectory);
             for (int i = 0; i < sourcePaths.Length; i++)
             {
@@ -602,7 +502,7 @@ internal static class ScriptCompiler
             TryTouchCacheDirectory(cacheDirectory);
             return true;
         }
-        catch (JsonException)
+        catch (InvalidOperationException)
         {
             return false;
         }
@@ -653,11 +553,11 @@ internal static class ScriptCompiler
         {
             if (!HasExpectedAssemblyIdentity(assemblyPath, assemblyName))
                 return false;
-            _ = JsonSerializer.Deserialize<ScriptDiagnostic[]>(
-                File.ReadAllText(GetDiagnosticsPath(cacheDirectory)));
-            ScriptTypeManifest? manifest = JsonSerializer.Deserialize<ScriptTypeManifest>(
-                File.ReadAllText(GetTypeManifestPath(assemblyPath)));
-            if (manifest is null || !string.Equals(
+            _ = ScriptCompilerCacheSerialization.DecodeDiagnostics(
+                File.ReadAllBytes(GetDiagnosticsPath(cacheDirectory)));
+            ScriptTypeManifest manifest = ScriptCompilerCacheSerialization.DecodeTypeManifest(
+                File.ReadAllBytes(GetTypeManifestPath(assemblyPath)));
+            if (!string.Equals(
                     manifest.assemblyName,
                     assemblyName,
                     StringComparison.Ordinal))
@@ -667,7 +567,7 @@ internal static class ScriptCompiler
             return true;
         }
         catch (Exception exception) when (exception is
-            JsonException or
+            InvalidOperationException or
             IOException or
             BadImageFormatException)
         {
@@ -709,10 +609,10 @@ internal static class ScriptCompiler
         ScriptDiagnostic[] diagnostics;
         try
         {
-            diagnostics = JsonSerializer.Deserialize<ScriptDiagnostic[]>(
-                File.ReadAllText(diagnosticsPath)) ?? [];
+            diagnostics = ScriptCompilerCacheSerialization.DecodeDiagnostics(
+                File.ReadAllBytes(diagnosticsPath));
         }
-        catch (JsonException)
+        catch (InvalidOperationException)
         {
             return false;
         }
@@ -727,61 +627,16 @@ internal static class ScriptCompiler
         }
         if (!File.Exists(Path.Combine(outputDirectory, C_PLUGIN_MARKER_ASSEMBLY_NAME + ".dll")))
             return false;
-
-        string[] runtimePlugins = ResolveCachedPluginPaths(
-            outputDirectory,
-            sources.runtimePlugins.Select(static plugin => plugin.sourcePath).ToArray());
-        string[] editorPlugins = ResolveCachedPluginPaths(
-            outputDirectory,
-            sources.editorPlugins.Select(static plugin => plugin.sourcePath).ToArray());
-        if (runtimePlugins.Length != sources.runtimePlugins.Count ||
-            editorPlugins.Length != sources.editorPlugins.Count)
-        {
-            return false;
-        }
         result = new ScriptCompilationResult(
             success: true,
             diagnostics: diagnostics,
             outputDirectory: outputDirectory,
             reloadRequests: CreateReloadRequests(
                 outputDirectory,
-                sources,
-                runtimePlugins,
-                editorPlugins));
+                sources));
         TryTouchCacheDirectory(outputDirectory);
         return true;
     }
-
-    private static string[] ResolveCachedPluginPaths(
-        string outputDirectory,
-        IReadOnlyList<string> sourcePaths)
-    {
-        var result = new List<string>(sourcePaths.Count);
-        for (int i = 0; i < sourcePaths.Count; i++)
-        {
-            try
-            {
-                string? name = AssemblyName.GetAssemblyName(sourcePaths[i]).Name;
-                if (string.IsNullOrWhiteSpace(name))
-                    continue;
-                string path = Path.Combine(outputDirectory, name + ".dll");
-                if (File.Exists(path))
-                    result.Add(path);
-            }
-            catch (BadImageFormatException)
-            {
-                return [];
-            }
-        }
-        return result.ToArray();
-    }
-
-    private static string[] ResolveCommittedPluginPaths(
-        string outputDirectory,
-        IReadOnlyList<string> stagingPaths)
-        => stagingPaths
-            .Select(path => Path.Combine(outputDirectory, Path.GetFileName(path)))
-            .ToArray();
 
     private static void DeleteStagingDirectory(string path)
     {
@@ -844,10 +699,10 @@ internal static class ScriptCompiler
     }
 
     private static string GetDiagnosticsPath(string outputDirectory)
-        => Path.Combine(outputDirectory, "diagnostics.json");
+        => Path.Combine(outputDirectory, "diagnostics.inno");
 
     private static string GetTypeManifestPath(string assemblyPath)
-        => Path.ChangeExtension(assemblyPath, ".types.json");
+        => Path.ChangeExtension(assemblyPath, ".types.inno");
 
     private static void AppendHash(IncrementalHash hash, string value)
     {
@@ -858,12 +713,13 @@ internal static class ScriptCompiler
 
     private static string CreateGeneratedSource(
         string assemblyName,
-        bool isEditorAssembly)
+        bool isEditorAssembly,
+        AssemblyDomain domain)
     {
         string assemblyScope = isEditorAssembly ? "Editor" : "Runtime";
         return $"""
             #nullable enable
-            [assembly: System.Reflection.AssemblyMetadata("Inno.AssemblyDomain", "InnoScripting")]
+            [assembly: System.Reflection.AssemblyMetadata("Inno.AssemblyDomain", "{domain}")]
             [assembly: System.Reflection.AssemblyMetadata("Inno.AssemblyScope", "{assemblyScope}")]
             [assembly: System.Reflection.AssemblyMetadata("Inno.ScriptAssembly", "{assemblyName}")]
             """;
@@ -871,25 +727,30 @@ internal static class ScriptCompiler
 
     private static IReadOnlyList<AssemblyLoadRequest> CreateReloadRequests(
         string outputDirectory,
-        ScriptSourceSet sources,
-        IReadOnlyList<string> runtimePlugins,
-        IReadOnlyList<string> editorPlugins)
+        ScriptSourceSet sources)
     {
         var pluginScopes = new Dictionary<string, AssemblyScope>(StringComparer.OrdinalIgnoreCase)
         {
             [C_PLUGIN_MARKER_ASSEMBLY_NAME] = AssemblyScope.Runtime
         };
-        foreach (string plugin in runtimePlugins)
-            pluginScopes[AssemblyName.GetAssemblyName(plugin).Name!] = AssemblyScope.Runtime;
-        foreach (string plugin in editorPlugins)
-            pluginScopes[AssemblyName.GetAssemblyName(plugin).Name!] = AssemblyScope.Editor;
+        ScriptAssemblyInput[] pluginAssemblies = sources.assemblies
+            .Where(static assembly => assembly.domain == AssemblyDomain.InnoPlugin)
+            .ToArray();
+        foreach (ScriptAssemblyInput plugin in pluginAssemblies)
+        {
+            pluginScopes[plugin.name] = plugin.scope == ScriptAssemblyScope.Editor
+                ? AssemblyScope.Editor
+                : AssemblyScope.Runtime;
+        }
 
         string AssemblyPath(string name) => Path.Combine(outputDirectory, name + ".dll");
         ScriptAssemblyInput[] runtimeAssemblies = sources.assemblies
-            .Where(static assembly => assembly.scope == ScriptAssemblyScope.Runtime)
+            .Where(static assembly => assembly.domain == AssemblyDomain.InnoScripting
+                && assembly.scope == ScriptAssemblyScope.Runtime)
             .ToArray();
         ScriptAssemblyInput[] editorAssemblies = sources.assemblies
-            .Where(static assembly => assembly.scope == ScriptAssemblyScope.Editor)
+            .Where(static assembly => assembly.domain == AssemblyDomain.InnoScripting
+                && assembly.scope == ScriptAssemblyScope.Editor)
             .ToArray();
         return
         [
@@ -897,7 +758,7 @@ internal static class ScriptCompiler
             {
                 moduleName = C_PLUGIN_MODULE_NAME,
                 mainAssemblyPath = AssemblyPath(C_PLUGIN_MARKER_ASSEMBLY_NAME),
-                preloadAssemblyPaths = runtimePlugins.Concat(editorPlugins).ToArray(),
+                preloadAssemblyPaths = pluginAssemblies.Select(assembly => AssemblyPath(assembly.name)).ToArray(),
                 collectible = true,
                 domain = AssemblyDomain.InnoPlugin,
                 scope = AssemblyScope.Runtime,

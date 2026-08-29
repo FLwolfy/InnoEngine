@@ -22,6 +22,7 @@ internal sealed class AssetHistoryHandler(AssetEditorModule assets) : EditorHist
                 AssetHistoryOperationKind.Move => QueryMove(data, direction),
                 AssetHistoryOperationKind.CreateDirectory => QueryCreateDirectory(data, direction),
                 AssetHistoryOperationKind.Delete => QueryDelete(data, direction),
+                AssetHistoryOperationKind.CreateAsset => QueryCreateAsset(data, direction),
                 _ => EditorHistoryAvailability.Unavailable("Unknown asset history operation.")
             };
         }
@@ -58,6 +59,9 @@ internal sealed class AssetHistoryHandler(AssetEditorModule assets) : EditorHist
                     break;
                 case AssetHistoryOperationKind.Delete:
                     result = ApplyDelete(data, direction);
+                    break;
+                case AssetHistoryOperationKind.CreateAsset:
+                    result = ApplyCreateAsset(data, direction);
                     break;
                 default:
                     return EditorHistoryResult.Failure("Unknown asset history operation.");
@@ -179,6 +183,42 @@ internal sealed class AssetHistoryHandler(AssetEditorModule assets) : EditorHist
         }
     }
 
+    private EditorHistoryResult ApplyCreateAsset(
+        AssetHistoryData data,
+        EditorHistoryDirection direction)
+    {
+        bool shouldExist = direction == EditorHistoryDirection.Redo;
+        try
+        {
+            if (shouldExist)
+                AssetSourceArchive.Restore(data.sourcePath, isDirectory: false, data.archive);
+            else
+                assets.DeleteFromHistory(data.sourcePath);
+            bool exists = AssetManager.TryGetFileSystemEntry(data.sourcePath, out _);
+            if (exists != shouldExist)
+                throw new InvalidOperationException("The created Asset did not reach its requested history state.");
+            return EditorHistoryResult.Success();
+        }
+        catch (Exception exception)
+        {
+            try
+            {
+                bool exists = AssetManager.TryGetFileSystemEntry(data.sourcePath, out _);
+                if (shouldExist && exists)
+                    assets.DeleteFromHistory(data.sourcePath);
+                else if (!shouldExist && !exists)
+                    AssetSourceArchive.Restore(data.sourcePath, isDirectory: false, data.archive);
+            }
+            catch (Exception rollbackException)
+            {
+                return StateIntegrityFailure(
+                    $"Asset creation history failed: {exception.Message} " +
+                    $"Rollback failed: {rollbackException.Message}");
+            }
+            return EditorHistoryResult.Failure(exception.Message);
+        }
+    }
+
     private static EditorHistoryAvailability QueryMove(
         AssetHistoryData data,
         EditorHistoryDirection direction)
@@ -213,4 +253,15 @@ internal sealed class AssetHistoryHandler(AssetEditorModule assets) : EditorHist
             : AssetManager.TryGetFileSystemEntry(data.sourcePath, out _)
                 ? EditorHistoryAvailability.Available()
                 : EditorHistoryAvailability.Unavailable($"Asset '{data.sourcePath}' no longer exists.");
+
+    private static EditorHistoryAvailability QueryCreateAsset(
+        AssetHistoryData data,
+        EditorHistoryDirection direction)
+        => direction == EditorHistoryDirection.Undo
+            ? AssetManager.TryGetFileSystemEntry(data.sourcePath, out _)
+                ? EditorHistoryAvailability.Available()
+                : EditorHistoryAvailability.Unavailable($"Asset '{data.sourcePath}' no longer exists.")
+            : !AssetManager.TryGetFileSystemEntry(data.sourcePath, out _)
+                ? EditorHistoryAvailability.Available()
+                : EditorHistoryAvailability.Unavailable($"Asset '{data.sourcePath}' already exists.");
 }

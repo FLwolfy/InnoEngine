@@ -45,9 +45,12 @@ public static class EditorReloadCoordinator
     /// Applies one prepared assembly reload together with every registered editor feature migration.
     /// </summary>
     /// <param name="reload">The prepared assembly reload session to activate and complete.</param>
-    /// <param name="synchronizeExternalState">
-    /// Optional synchronization performed after candidate activation and again after assembly
-    /// rollback, such as reconciling an asset database against the active generation.
+    /// <param name="activateExternalCandidate">
+    /// Optional synchronization performed after candidate assembly activation, such as provisionally
+    /// activating a staged Asset or Plugin generation.
+    /// </param>
+    /// <param name="restoreExternalState">
+    /// Optional synchronization performed after assembly rollback to restore the previous external generation.
     /// </param>
     /// <returns>
     /// A monitor that observes cooperative unloading of assemblies retired by the committed reload.
@@ -60,7 +63,8 @@ public static class EditorReloadCoordinator
     /// </exception>
     public static AssemblyUnloadMonitor Execute(
         AssemblyReloadSession reload,
-        Action? synchronizeExternalState = null)
+        Action? activateExternalCandidate = null,
+        Action? restoreExternalState = null)
     {
         ArgumentNullException.ThrowIfNull(reload);
         IEditorReloadTransaction[] transactions = CaptureTransactions(reload.context);
@@ -69,7 +73,7 @@ public static class EditorReloadCoordinator
             for (int i = 0; i < transactions.Length; i++)
                 transactions[i].PrepareForActivation();
             reload.Activate();
-            synchronizeExternalState?.Invoke();
+            activateExternalCandidate?.Invoke();
             for (int i = 0; i < transactions.Length; i++)
                 transactions[i].Apply();
             AssemblyUnloadMonitor monitor = reload.Complete();
@@ -88,10 +92,10 @@ public static class EditorReloadCoordinator
                     rollbackFailures);
             }
             TryRollback(reload.Rollback, "assembly generation rollback", rollbackFailures);
-            if (synchronizeExternalState is not null)
+            if (restoreExternalState is not null)
             {
                 TryRollback(
-                    synchronizeExternalState,
+                    restoreExternalState,
                     "external state rollback synchronization",
                     rollbackFailures);
             }

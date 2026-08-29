@@ -51,7 +51,7 @@ Stable Type ID：`5298dd91-e9a7-4298-a343-bf8a6c5fc779`。
 
 ## 创建与保存
 
-构造函数创建的对象尚无 `sourcePath` 或 runtime identity。通过显式路径保存后，Loader 才会写源文件、metadata，建立 canonical runtime state：
+构造函数创建的对象尚无有效的 `assetPath` 或 runtime identity。通过显式路径保存后，Loader 才会写源文件、metadata，建立 canonical runtime state：
 
 ```csharp
 TextAsset created = new("Hello", "plain");

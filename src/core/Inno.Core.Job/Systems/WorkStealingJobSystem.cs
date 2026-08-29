@@ -59,9 +59,12 @@ public sealed class WorkStealingJobSystem : IJobSystem
         for (var i = 0; i < m_workers.Length; i++)
         {
             var workerId = i;
-            var worker = new WorkerRuntime(workerId, () => WorkerLoop(workerId));
-            m_workers[i] = worker;
-            worker.thread.Start();
+            m_workers[i] = new WorkerRuntime(workerId, () => WorkerLoop(workerId));
+        }
+
+        for (var i = 0; i < m_workers.Length; i++)
+        {
+            m_workers[i].thread.Start();
         }
     }
 

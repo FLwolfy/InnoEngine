@@ -26,42 +26,6 @@ public readonly record struct RenderPhaseId
 }
 
 /// <summary>
-/// Provides stable injection points used by built-in pipelines and custom features.
-/// </summary>
-public static class BuiltinRenderPhases
-{
-    /// <summary>Runs before depth and shadow preparation.</summary>
-    public static RenderPhaseId beforeRendering { get; } = new("inno.before-rendering");
-
-    /// <summary>Renders directional and local-light shadow maps.</summary>
-    public static RenderPhaseId shadows { get; } = new("inno.shadows");
-
-    /// <summary>Prepares depth and visibility resources.</summary>
-    public static RenderPhaseId depthPrepass { get; } = new("inno.depth-prepass");
-
-    /// <summary>Renders opaque surface data or direct lighting.</summary>
-    public static RenderPhaseId opaque { get; } = new("inno.opaque");
-
-    /// <summary>Resolves scene lighting before transparent rendering.</summary>
-    public static RenderPhaseId lighting { get; } = new("inno.lighting");
-
-    /// <summary>Renders transparent geometry.</summary>
-    public static RenderPhaseId transparent { get; } = new("inno.transparent");
-
-    /// <summary>Applies image-space post-processing.</summary>
-    public static RenderPhaseId postProcessing { get; } = new("inno.post-processing");
-
-    /// <summary>Renders editor overlays, picking and gizmos.</summary>
-    public static RenderPhaseId editorOverlay { get; } = new("inno.editor-overlay");
-
-    /// <summary>Runs after the final display-ready target is produced.</summary>
-    public static RenderPhaseId afterRendering { get; } = new("inno.after-rendering");
-
-    /// <summary>Composites engine and editor user interfaces into presentation surfaces.</summary>
-    public static RenderPhaseId userInterface { get; } = new("inno.user-interface");
-}
-
-/// <summary>
 /// Distinguishes pass command domains for validation and backend execution.
 /// </summary>
 public enum RenderPassKind
@@ -196,9 +160,24 @@ internal enum RenderResourceAccess
     ReadWrite
 }
 
+internal enum RenderResourceUseKind
+{
+    GenericRead,
+    StorageRead,
+    StorageWrite,
+    StorageReadWrite,
+    CopySource,
+    CopyDestination,
+    ColorAttachment,
+    DepthStencilAttachment
+}
+
 internal readonly record struct RenderResourceKey(bool isTexture, int index);
 
-internal sealed record RenderResourceUse(RenderResourceKey key, RenderResourceAccess access);
+internal sealed record RenderResourceUse(
+    RenderResourceKey key,
+    RenderResourceAccess access,
+    RenderResourceUseKind kind);
 
 internal sealed record RenderAttachment(
     RenderTextureHandle texture,

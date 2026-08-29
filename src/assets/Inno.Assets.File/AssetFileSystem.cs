@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 
+using Inno.Assets.Core;
 using Inno.Core.Storage;
 
 namespace Inno.Assets.File;
@@ -21,6 +22,7 @@ public sealed class AssetFileSystem : IDisposable
     private readonly Lock m_sync = new();
     private readonly AssetWatcher m_watcher;
     private readonly AssetSourcePolicy m_sourcePolicy;
+    private readonly IReadOnlyDictionary<AssetSourceId, AssetSourceMount> m_mounts;
     private bool m_disposed;
 
     /// <summary>Gets the absolute source asset root.</summary>
@@ -39,12 +41,41 @@ public sealed class AssetFileSystem : IDisposable
         bool autoStart = true,
         int flushDelayMs = 80,
         AssetSourcePolicy? sourcePolicy = null)
+        : this(
+            [new AssetSourceMount(AssetSourceId.project, assetRoot, isReadOnly: false)],
+            autoStart,
+            flushDelayMs,
+            sourcePolicy)
     {
-        if (string.IsNullOrWhiteSpace(assetRoot))
-            throw new ArgumentException("Asset root is required.", nameof(assetRoot));
+    }
 
-        this.assetRoot = Path.GetFullPath(assetRoot);
-        Directory.CreateDirectory(this.assetRoot);
+    /// <summary>Creates an indexed file system over isolated source mounts.</summary>
+    /// <param name="mounts">Complete source mount snapshot.</param>
+    /// <param name="autoStart">Whether writable project source watching starts immediately.</param>
+    /// <param name="flushDelayMs">Watcher batch delay in milliseconds.</param>
+    /// <param name="sourcePolicy">Source filtering policy, or <see langword="null"/> for defaults.</param>
+    public AssetFileSystem(
+        IReadOnlyList<AssetSourceMount> mounts,
+        bool autoStart = true,
+        int flushDelayMs = 80,
+        AssetSourcePolicy? sourcePolicy = null)
+    {
+        ArgumentNullException.ThrowIfNull(mounts);
+        if (mounts.Count == 0)
+            throw new ArgumentException("At least one asset source mount is required.", nameof(mounts));
+        Dictionary<AssetSourceId, AssetSourceMount> byId = mounts.ToDictionary(static mount => mount.id);
+        if (byId.Count != mounts.Count)
+            throw new ArgumentException("Asset source mount IDs must be unique.", nameof(mounts));
+        if (!byId.TryGetValue(AssetSourceId.project, out AssetSourceMount? project)
+            || project.isReadOnly)
+        {
+            throw new ArgumentException("A writable project asset source mount is required.", nameof(mounts));
+        }
+
+        assetRoot = project.rootPath;
+        m_mounts = byId;
+        foreach (AssetSourceMount mount in mounts)
+            Directory.CreateDirectory(mount.rootPath);
         m_sourcePolicy = sourcePolicy ?? AssetSourcePolicy.defaultPolicy;
 
         m_pathKey = m_entries.DefineKey<string>("filesystem.path", IndexedObjectKeyFlags.Unique);
@@ -54,7 +85,7 @@ public sealed class AssetFileSystem : IDisposable
 
         Refresh();
 
-        m_watcher = new AssetWatcher(this.assetRoot, flushDelayMs);
+        m_watcher = new AssetWatcher(assetRoot, flushDelayMs);
         if (autoStart)
             m_watcher.Start();
     }
@@ -83,7 +114,8 @@ public sealed class AssetFileSystem : IDisposable
         lock (m_sync)
         {
             m_entries.RemoveAll();
-            IndexDirectoryRecursive(assetRoot, string.Empty);
+            foreach (AssetSourceMount mount in m_mounts.Values.OrderBy(static value => value.id.value, StringComparer.Ordinal))
+                IndexDirectoryRecursive(mount, mount.rootPath, string.Empty);
         }
     }
 
@@ -234,33 +266,36 @@ public sealed class AssetFileSystem : IDisposable
         }
     }
 
-    private void IndexDirectoryRecursive(string absoluteDirectoryPath, string relativeDirectoryPath)
+    private void IndexDirectoryRecursive(
+        AssetSourceMount mount,
+        string absoluteDirectoryPath,
+        string localDirectoryPath)
     {
-        string normalizedDirectory = NormalizeRelativePath(relativeDirectoryPath);
-        AddOrUpdateEntry(normalizedDirectory, isDirectory: true);
+        string normalizedDirectory = NormalizeLocalPath(localDirectoryPath);
+        AddOrUpdateEntry(new AssetPath(mount.id, normalizedDirectory), mount.isReadOnly, isDirectory: true);
 
         foreach (string absoluteChildDirectory in Directory.EnumerateDirectories(absoluteDirectoryPath))
         {
             string name = Path.GetFileName(absoluteChildDirectory);
-            string childRelativePath = CombineRelativePath(normalizedDirectory, name);
+            string childRelativePath = CombineLocalPath(normalizedDirectory, name);
             if (m_sourcePolicy.IsIgnored(childRelativePath, isDirectory: true))
                 continue;
-            IndexDirectoryRecursive(absoluteChildDirectory, childRelativePath);
+            IndexDirectoryRecursive(mount, absoluteChildDirectory, childRelativePath);
         }
 
         foreach (string absoluteFile in Directory.EnumerateFiles(absoluteDirectoryPath))
         {
             string name = Path.GetFileName(absoluteFile);
-            string fileRelativePath = CombineRelativePath(normalizedDirectory, name);
+            string fileRelativePath = CombineLocalPath(normalizedDirectory, name);
             if (m_sourcePolicy.IsIgnored(fileRelativePath, isDirectory: false))
                 continue;
-            AddOrUpdateEntry(fileRelativePath, isDirectory: false);
+            AddOrUpdateEntry(new AssetPath(mount.id, fileRelativePath), mount.isReadOnly, isDirectory: false);
         }
     }
 
-    private void AddOrUpdateEntry(string normalizedRelativePath, bool isDirectory)
+    private void AddOrUpdateEntry(AssetPath assetPath, bool isReadOnly, bool isDirectory)
     {
-        string path = NormalizeRelativePath(normalizedRelativePath);
+        string path = assetPath.ToString();
         AssetFileEntry? existing = m_entries.First(m_pathKey, path);
         if (existing is null)
         {
@@ -268,6 +303,8 @@ public sealed class AssetFileSystem : IDisposable
             m_entries.Add(existing);
         }
 
+        existing.assetPath = assetPath;
+        existing.isReadOnly = isReadOnly;
         existing.relativePath = path;
         existing.parentRelativePath = GetParentPath(path);
         existing.isDirectory = isDirectory;
@@ -284,43 +321,24 @@ public sealed class AssetFileSystem : IDisposable
 
     private static string GetParentPath(string relativePath)
     {
-        if (string.IsNullOrWhiteSpace(relativePath))
+        AssetPath path = AssetPath.Parse(relativePath ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(path.localPath))
             return string.Empty;
 
-        int lastSeparator = relativePath.LastIndexOf('/');
-        if (lastSeparator < 0)
-            return string.Empty;
+        int lastSeparator = path.localPath.LastIndexOf('/');
+        string parent = lastSeparator < 0 ? string.Empty : path.localPath[..lastSeparator];
 
-        return relativePath[..lastSeparator];
+        return new AssetPath(path.source, parent).ToString();
     }
 
-    private static string CombineRelativePath(string a, string b)
-        => NormalizeRelativePath(Path.Combine(NormalizeRelativePath(a), NormalizeRelativePath(b)));
+    private static string CombineLocalPath(string a, string b)
+        => NormalizeLocalPath(Path.Combine(NormalizeLocalPath(a), NormalizeLocalPath(b)));
 
     private static string NormalizeRelativePath(string relativePath)
     {
-        if (string.IsNullOrWhiteSpace(relativePath))
-            return string.Empty;
-
-        if (Path.IsPathRooted(relativePath))
-            throw new ArgumentException("Asset file-system paths must be relative.", nameof(relativePath));
-
-        string path = relativePath.Replace('\\', '/').Trim();
-        while (path.StartsWith("./", StringComparison.Ordinal))
-            path = path[2..];
-        while (path.StartsWith("/", StringComparison.Ordinal))
-            path = path[1..];
-        while (path.EndsWith("/", StringComparison.Ordinal))
-            path = path[..^1];
-
-        if (path == ".")
-            return string.Empty;
-        if (path.Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .Any(static segment => segment == ".."))
-        {
-            throw new ArgumentException("Asset file-system paths cannot escape the configured root.", nameof(relativePath));
-        }
-
-        return path;
+        return AssetPath.Parse(relativePath ?? string.Empty).ToString();
     }
+
+    private static string NormalizeLocalPath(string relativePath)
+        => new AssetPath(AssetSourceId.project, relativePath ?? string.Empty).localPath;
 }

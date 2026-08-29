@@ -11,10 +11,11 @@ using Inno.Editor.Core;
 using Inno.Platform;
 using Inno.Platform.ImGui;
 using Inno.Rendering;
+using Inno.Rendering.Assets;
 using Inno.Rendering.Bgfx;
 using Inno.Rendering.Core;
 using Inno.Rendering.ImGui;
-using Inno.Rendering.Pipelines;
+using Inno.Rendering.Runtime;
 using Inno.Rendering.ShaderGraph;
 
 namespace Inno.Editor.Application;
@@ -32,8 +33,7 @@ internal sealed class EditorHost : IDisposable
     private readonly HashSet<uint> m_focusedWindowIds = [];
     private readonly Shell m_shell;
     private readonly PlatformImGuiContext m_imgui;
-    private readonly RenderingLayer m_renderingLayer;
-    private readonly EditorRenderingAssetRuntime m_renderingAssets;
+    private readonly RenderRuntimeLayer m_renderingLayer;
     private readonly EditorLayer m_editorLayer;
     private readonly EditorHostResourceStack m_resources;
     private readonly string m_bootLogPath;
@@ -50,8 +50,7 @@ internal sealed class EditorHost : IDisposable
         PlatformWindow window,
         Shell shell,
         PlatformImGuiContext imgui,
-        RenderingLayer renderingLayer,
-        EditorRenderingAssetRuntime renderingAssets,
+        RenderRuntimeLayer renderingLayer,
         EditorLayer editorLayer,
         EditorHostResourceStack resources)
     {
@@ -62,7 +61,6 @@ internal sealed class EditorHost : IDisposable
         m_shell = shell;
         m_imgui = imgui;
         m_renderingLayer = renderingLayer;
-        m_renderingAssets = renderingAssets;
         m_editorLayer = editorLayer;
         m_resources = resources;
         if (m_window.isFocused)
@@ -80,7 +78,6 @@ internal sealed class EditorHost : IDisposable
             exception => AppendBootLog(bootLogPath, $"Teardown failure: {exception}"));
         bool renderingLayerPushed = false;
         bool overlayPushed = false;
-        DefaultRenderPipelineExecutor? renderExecutor = null;
         BgfxImGuiRenderer? bgfxImGui = null;
         try
         {
@@ -127,24 +124,19 @@ internal sealed class EditorHost : IDisposable
                 try
                 {
                     bgfxImGui?.PrepareFrame(ulong.MaxValue);
-                    renderExecutor?.PrepareFrame(ulong.MaxValue);
-                    renderExecutor?.Dispose();
                 }
                 finally
                 {
                     _ = graphicsDevice.EndFrame();
                 }
             });
-            var renderArtifacts = new RenderPipelineArtifactRegistry();
+            var shaderCompiler = new ShaderCompiler(new BgfxShadercToolchain());
+            var textureCompiler = new BgfxTextureTargetCompiler();
             GraphicsPipelineDescriptor imguiPipeline = EditorShaderBootstrap.Compile(
+                shaderCompiler,
                 graphicsDevice.capabilities,
-                Path.Combine(normalizedProject, "Assets"),
-                renderArtifacts);
+                Path.Combine(normalizedProject, "Assets"));
             var renderDiagnostics = new EditorRenderDiagnosticSink();
-            renderExecutor = new DefaultRenderPipelineExecutor(
-                graphicsDevice,
-                renderArtifacts,
-                renderDiagnostics);
             bgfxImGui = resources.Acquire(
                 () => new BgfxImGuiRenderer(graphicsDevice, imguiPipeline),
                 static renderer => renderer.Dispose());
@@ -156,31 +148,19 @@ internal sealed class EditorHost : IDisposable
                     ImGuiContextFlags.EnableSmoothResize,
                     bgfxImGui),
                 _ => platform.DestroyImGuiContext(window));
-            var pipelineAsset = new RenderPipelineAsset();
-            pipelineAsset.quality.bloom = false;
-            var renderingLayer = new RenderingLayer(
+            var renderingLayer = new RenderRuntimeLayer(
                 graphicsDevice,
-                pipelineAsset,
-                new UniversalRenderPipeline(),
-                renderExecutor,
                 renderDiagnostics,
                 contributors: [bgfxImGui],
-                discoverExtensions: true);
+                shaderCompiler,
+                textureCompiler);
             var renderingHost = resources.Acquire(
-                () => new EditorRenderingHostService(renderingLayer, renderExecutor, bgfxImGui, imgui),
+                () => new EditorRenderingHostService(renderingLayer, bgfxImGui, imgui),
                 static service => service.Dispose());
             var shaderNodes = resources.Acquire(
                 static () => new ShaderNodeRegistry(discoverExtensions: true),
                 static registry => registry.Dispose());
             shaderNodes.RefreshExtensions();
-            var renderingAssets = resources.Acquire(
-                () => new EditorRenderingAssetRuntime(
-                    graphicsDevice.capabilities,
-                    graphicsDevice,
-                    renderArtifacts,
-                    shaderNodes,
-                    renderDiagnostics),
-                static runtime => runtime.Dispose());
             var editorContext = new EditorContext(normalizedProject);
             imgui.SetIniFile(null);
             imgui.LoadIniSettings(editorContext.imguiLayout);
@@ -214,7 +194,6 @@ internal sealed class EditorHost : IDisposable
                 shell,
                 imgui,
                 renderingLayer,
-                renderingAssets,
                 layer,
                 resources);
             host.BootLog($"Editor layer attached with {layer.panelCount} panel(s).");
@@ -285,7 +264,6 @@ internal sealed class EditorHost : IDisposable
                 BootLog("About to execute first shell.Tick.");
 
             m_editorLayer.isFocused = HasEditorFocus();
-            m_renderingAssets.Update();
             m_shell.Tick((float)now, delta);
 
             if (m_frameCount == 0)

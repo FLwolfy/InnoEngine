@@ -192,7 +192,7 @@ public sealed class GraphDocument
             };
             foreach ((string propertyId, GraphSerializedValue value) in sourceNode.values)
             {
-                node.SetValue(propertyId, new GraphSerializedValue(value.json));
+                node.SetValue(propertyId, value.Clone());
             }
 
             nodes.Add(node);
@@ -207,7 +207,7 @@ public sealed class GraphDocument
         Dictionary<string, GraphSerializedValue> metadata = new(StringComparer.Ordinal);
         foreach ((string key, GraphSerializedValue value) in source.metadata)
         {
-            metadata.Add(key, new GraphSerializedValue(value.json));
+            metadata.Add(key, value.Clone());
         }
 
         m_nodes.Clear();

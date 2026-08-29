@@ -82,6 +82,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Framework", "src\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Serialization", "src\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj", "{9BEF8427-815B-47E0-8D36-CFE6CD2E4180}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Settings", "src\core\Inno.Core.Settings\Inno.Core.Settings.csproj", "{C17A86B1-75D1-4D52-9A08-558969A60101}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Mathematics", "src\core\Inno.Core.Mathematics\Inno.Core.Mathematics.csproj", "{25E18700-3F38-421F-9FB7-8F152CBA65DA}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Reflection", "src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj", "{4C0E589F-1B3A-4F8E-A4DF-2A7D67D5B4C1}"
@@ -136,9 +138,13 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Assets.File", "src\ass
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Assets.Loader", "src\assets\Inno.Assets.Loader\Inno.Assets.Loader.csproj", "{B6BD8E2F-9535-4F86-9C4A-A37E6BA09F52}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Assets.Plugins", "src\assets\Inno.Assets.Plugins\Inno.Assets.Plugins.csproj", "{C17A86B1-75D1-4D52-9A08-558969A60102}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Assets.Types", "src\assets\Inno.Assets.Types\Inno.Assets.Types.csproj", "{A5BF3BEA-BAA3-4858-9E95-B146D2991417}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Assets.Tests", "tests\Inno.Assets.Tests\Inno.Assets.Tests.csproj", "{F30C0F20-79AB-4E1A-A6CC-0E6EAA0A50C1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Assets.Plugins.Tests", "tests\Inno.Assets.Plugins.Tests\Inno.Assets.Plugins.Tests.csproj", "{F1A2C3D4-5E6F-47A8-91B2-C3D4E5F60718}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Assets.Core.Tests", "tests\Inno.Assets.Core.Tests\Inno.Assets.Core.Tests.csproj", "{7A5E9433-0F92-4D1C-9A8D-6F7ED6401E91}"
 EndProject
@@ -190,8 +196,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Scripting.Tests
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Interactions.Tests", "tests\Inno.Editor.Interactions.Tests\Inno.Editor.Interactions.Tests.csproj", "{6B13A5E9-0C7D-48C6-AB91-2B57B9480D32}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Scripting.TestPlugin", "tests\Inno.Editor.Scripting.TestPlugin\Inno.Editor.Scripting.TestPlugin.csproj", "{6E6DD32F-A1A6-4E4D-94F0-5B3A1BD8E113}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Assemblies.TestDependency", "tests\Inno.Core.Assemblies.TestDependency\Inno.Core.Assemblies.TestDependency.csproj", "{F0627D94-EC6C-44EA-9635-EDDEEA3ED58F}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Panels", "Panels", "{16240CF0-290C-7E0D-0DA7-BABEDEA71422}"
@@ -242,9 +246,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Assets", "sr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Assets.Tests", "tests\Inno.Rendering.Assets.Tests\Inno.Rendering.Assets.Tests.csproj", "{4B53E825-361B-47E5-C5DB-A72803D4CB4B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Pipelines", "src\render\Inno.Rendering.Pipelines\Inno.Rendering.Pipelines.csproj", "{5C64F936-472C-48F6-D6EC-B83914E5DC5C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Runtime", "src\render\Inno.Rendering.Runtime\Inno.Rendering.Runtime.csproj", "{5C64F936-472C-48F6-D6EC-B83914E5DC5C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Pipelines.Tests", "tests\Inno.Rendering.Pipelines.Tests\Inno.Rendering.Pipelines.Tests.csproj", "{6D750A47-583D-4907-E7FD-C94A25F6ED6D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Runtime.Tests", "tests\Inno.Rendering.Runtime.Tests\Inno.Rendering.Runtime.Tests.csproj", "{6D750A47-583D-4907-E7FD-C94A25F6ED6D}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.ShaderGraph", "src\render\Inno.Rendering.ShaderGraph\Inno.Rendering.ShaderGraph.csproj", "{5326CB12-9495-4B03-AEAB-55DE459237CA}"
 EndProject
@@ -264,14 +268,20 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.GameView"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.ShaderGraph", "src\editor\Panels\Inno.Editor.Panel.ShaderGraph\Inno.Editor.Panel.ShaderGraph.csproj", "{E33468E8-2D74-444C-B70C-C807A4418497}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.RenderingShowcase", "build\Inno.Build.RenderingShowcase\Inno.Build.RenderingShowcase.csproj", "{552342CB-4AB7-4C6D-A772-7F24B1BA17A2}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C17A86B1-75D1-4D52-9A08-558969A60101}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C17A86B1-75D1-4D52-9A08-558969A60101}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C17A86B1-75D1-4D52-9A08-558969A60101}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C17A86B1-75D1-4D52-9A08-558969A60101}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C17A86B1-75D1-4D52-9A08-558969A60102}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C17A86B1-75D1-4D52-9A08-558969A60102}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C17A86B1-75D1-4D52-9A08-558969A60102}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C17A86B1-75D1-4D52-9A08-558969A60102}.Release|Any CPU.Build.0 = Release|Any CPU
 		{A12F4E8B-9C71-4D4B-AB31-0D8F6E2A3101}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{A12F4E8B-9C71-4D4B-AB31-0D8F6E2A3101}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A12F4E8B-9C71-4D4B-AB31-0D8F6E2A3101}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -532,6 +542,10 @@ Global
 		{F30C0F20-79AB-4E1A-A6CC-0E6EAA0A50C1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F30C0F20-79AB-4E1A-A6CC-0E6EAA0A50C1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F30C0F20-79AB-4E1A-A6CC-0E6EAA0A50C1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F1A2C3D4-5E6F-47A8-91B2-C3D4E5F60718}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F1A2C3D4-5E6F-47A8-91B2-C3D4E5F60718}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F1A2C3D4-5E6F-47A8-91B2-C3D4E5F60718}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F1A2C3D4-5E6F-47A8-91B2-C3D4E5F60718}.Release|Any CPU.Build.0 = Release|Any CPU
 		{7A5E9433-0F92-4D1C-9A8D-6F7ED6401E91}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{7A5E9433-0F92-4D1C-9A8D-6F7ED6401E91}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7A5E9433-0F92-4D1C-9A8D-6F7ED6401E91}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -620,10 +634,6 @@ Global
 		{6B13A5E9-0C7D-48C6-AB91-2B57B9480D32}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6B13A5E9-0C7D-48C6-AB91-2B57B9480D32}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6B13A5E9-0C7D-48C6-AB91-2B57B9480D32}.Release|Any CPU.Build.0 = Release|Any CPU
-		{6E6DD32F-A1A6-4E4D-94F0-5B3A1BD8E113}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{6E6DD32F-A1A6-4E4D-94F0-5B3A1BD8E113}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{6E6DD32F-A1A6-4E4D-94F0-5B3A1BD8E113}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{6E6DD32F-A1A6-4E4D-94F0-5B3A1BD8E113}.Release|Any CPU.Build.0 = Release|Any CPU
 		{F0627D94-EC6C-44EA-9635-EDDEEA3ED58F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{F0627D94-EC6C-44EA-9635-EDDEEA3ED58F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F0627D94-EC6C-44EA-9635-EDDEEA3ED58F}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -704,15 +714,13 @@ Global
 		{E33468E8-2D74-444C-B70C-C807A4418497}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E33468E8-2D74-444C-B70C-C807A4418497}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E33468E8-2D74-444C-B70C-C807A4418497}.Release|Any CPU.Build.0 = Release|Any CPU
-		{552342CB-4AB7-4C6D-A772-7F24B1BA17A2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{552342CB-4AB7-4C6D-A772-7F24B1BA17A2}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{552342CB-4AB7-4C6D-A772-7F24B1BA17A2}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{552342CB-4AB7-4C6D-A772-7F24B1BA17A2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{C17A86B1-75D1-4D52-9A08-558969A60101} = {390EB70E-21BA-4C7D-8000-D8CE42F9A3E2}
+		{C17A86B1-75D1-4D52-9A08-558969A60102} = {AEDE1921-094A-4E29-AE02-235D63064618}
 		{A12F4E8B-9C71-4D4B-AB31-0D8F6E2A3101} = {390EB70E-21BA-4C7D-8000-D8CE42F9A3E2}
 		{B23A5F9C-AD82-4E5C-BC42-1E9F7A3B4202} = {5CEA3D05-0D66-4758-97F1-1B5C727F75B5}
 		{C34B60AD-BE93-4F6D-CD53-2FA08B4C5303} = {CDFC5005-C553-4720-9330-CB51FE34BE76}
@@ -792,6 +800,7 @@ Global
 		{B6BD8E2F-9535-4F86-9C4A-A37E6BA09F52} = {AEDE1921-094A-4E29-AE02-235D63064618}
 		{A5BF3BEA-BAA3-4858-9E95-B146D2991417} = {AEDE1921-094A-4E29-AE02-235D63064618}
 		{F30C0F20-79AB-4E1A-A6CC-0E6EAA0A50C1} = {71D595C5-5FCA-4FEF-ABB9-42240FC19118}
+		{F1A2C3D4-5E6F-47A8-91B2-C3D4E5F60718} = {71D595C5-5FCA-4FEF-ABB9-42240FC19118}
 		{7A5E9433-0F92-4D1C-9A8D-6F7ED6401E91} = {71D595C5-5FCA-4FEF-ABB9-42240FC19118}
 		{2D97343F-47CD-4D31-8A62-0BF4A488B22B} = {71D595C5-5FCA-4FEF-ABB9-42240FC19118}
 		{AD8D784A-1C5E-4A7F-8891-A10623F61F38} = {71D595C5-5FCA-4FEF-ABB9-42240FC19118}
@@ -829,7 +838,6 @@ Global
 		{B5C0F72B-EE35-43A4-87CE-A5C8B669C020} = {16240CF0-290C-7E0D-0DA7-BABEDEA71422}
 		{1651D3F9-7E6E-4091-A95F-5E666A300502} = {B7F13E20-4F12-4C14-9C2D-9A8451C7B4E9}
 		{6B13A5E9-0C7D-48C6-AB91-2B57B9480D32} = {1651D3F9-7E6E-4091-A95F-5E666A300502}
-		{6E6DD32F-A1A6-4E4D-94F0-5B3A1BD8E113} = {1651D3F9-7E6E-4091-A95F-5E666A300502}
 		{019B5094-E66D-4F48-988C-6434301B5077} = {1651D3F9-7E6E-4091-A95F-5E666A300502}
 		{5326CB12-9495-4B03-AEAB-55DE459237CA} = {C34B60AD-BE93-4F6D-CD53-2FA08B4C5303}
 		{A8C0A17D-0AEE-4EC7-8C9A-F108D0CEA5AA} = {B7F13E20-4F12-4C14-9C2D-9A8451C7B4E9}
@@ -840,6 +848,5 @@ Global
 		{95B0B15D-047D-48BF-9F60-CA6C8785F901} = {16240CF0-290C-7E0D-0DA7-BABEDEA71422}
 		{A52D78A2-BF89-4E4F-82C8-7495FF99451D} = {16240CF0-290C-7E0D-0DA7-BABEDEA71422}
 		{E33468E8-2D74-444C-B70C-C807A4418497} = {16240CF0-290C-7E0D-0DA7-BABEDEA71422}
-		{552342CB-4AB7-4C6D-A772-7F24B1BA17A2} = {47891007-1E47-4233-87C7-9448692ECDED}
 	EndGlobalSection
 EndGlobal

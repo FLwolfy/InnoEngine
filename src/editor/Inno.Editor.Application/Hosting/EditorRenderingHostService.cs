@@ -1,99 +1,39 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Numerics;
-using Inno.Assets;
-using Inno.Assets.Core;
-using Inno.Assets.File;
+
+using Inno.Core.Assemblies;
+using Inno.Editor.Core;
 using Inno.Editor.Rendering;
 using Inno.Platform.ImGui;
 using Inno.Rendering;
 using Inno.Rendering.Core;
 using Inno.Rendering.ImGui;
-using Inno.Rendering.Pipelines;
+using Inno.Rendering.Runtime;
 
 namespace Inno.Editor.Application;
 
-internal sealed class EditorRenderingHostService : IEditorRenderingHost
+internal sealed class EditorRenderingHostService :
+    IEditorRenderingHost,
+    IEditorReloadParticipant,
+    IDisposable
 {
-    private readonly RenderingLayer m_renderingLayer;
-    private readonly IRenderPipelineExecutor m_executor;
     private readonly BgfxImGuiRenderer m_renderer;
+    private readonly RenderRuntimeLayer m_runtime;
     private readonly PlatformImGuiContext m_imgui;
+    private readonly IDisposable m_reloadRegistration;
     private readonly Dictionary<string, ViewportState> m_viewports = new(StringComparer.Ordinal);
     private bool m_disposed;
-    private string? m_activePipelineAssetPath;
 
     internal EditorRenderingHostService(
-        RenderingLayer renderingLayer,
-        IRenderPipelineExecutor executor,
+        RenderRuntimeLayer runtime,
         BgfxImGuiRenderer renderer,
         PlatformImGuiContext imgui)
     {
-        m_renderingLayer = renderingLayer ?? throw new ArgumentNullException(nameof(renderingLayer));
-        m_executor = executor ?? throw new ArgumentNullException(nameof(executor));
+        m_runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         m_renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
         m_imgui = imgui ?? throw new ArgumentNullException(nameof(imgui));
-        AssetManager.AssetReloaded += OnAssetReloaded;
-    }
-
-    /// <inheritdoc />
-    public string? activePipelineAssetPath => m_activePipelineAssetPath;
-
-    /// <inheritdoc />
-    public IReadOnlyList<EditorPipelineAssetInfo> GetPipelineAssets()
-    {
-        ObjectDisposedException.ThrowIf(m_disposed, this);
-        var result = new List<EditorPipelineAssetInfo>();
-        foreach (AssetFileEntry entry in AssetManager.GetFileSystemEntries(includeDirectories: false)
-                     .Where(static value => value.extension == ".irenderpipeline")
-                     .OrderBy(static value => value.relativePath, StringComparer.Ordinal))
-        {
-            try
-            {
-                if (AssetManager.TryLoad(entry.relativePath, out RenderPipelineAsset? asset)
-                    && asset is not null)
-                {
-                    result.Add(new EditorPipelineAssetInfo(
-                        entry.relativePath,
-                        Path.GetFileNameWithoutExtension(entry.relativePath),
-                        asset.defaultRenderPath));
-                }
-            }
-            catch
-            {
-                // Invalid candidates remain visible through asset diagnostics and do not enter the picker.
-            }
-        }
-
-        return result;
-    }
-
-    /// <inheritdoc />
-    public bool TryActivatePipelineAsset(string assetPath)
-    {
-        ObjectDisposedException.ThrowIf(m_disposed, this);
-        ArgumentException.ThrowIfNullOrWhiteSpace(assetPath);
-        try
-        {
-            if (!AssetManager.TryLoad(assetPath, out RenderPipelineAsset? asset) || asset is null)
-            {
-                return false;
-            }
-
-            if (!m_renderingLayer.TryActivatePipelineAsset(asset))
-            {
-                return false;
-            }
-
-            m_activePipelineAssetPath = assetPath;
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
+        m_reloadRegistration = EditorReloadCoordinator.Register(this);
     }
 
     /// <inheritdoc />
@@ -101,32 +41,27 @@ internal sealed class EditorRenderingHostService : IEditorRenderingHost
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
         ArgumentNullException.ThrowIfNull(request);
+        RenderTextureDescriptor descriptor = CreateDescriptor(request);
         if (!m_viewports.TryGetValue(request.viewportId, out ViewportState? state))
         {
-            state = new ViewportState(new RenderTexture(
-                $"Editor/{request.viewportId}",
-                CreateDescriptor(request.view.pixelWidth, request.view.pixelHeight)));
+            state = new ViewportState(new RenderTexture($"Editor/{request.viewportId}", descriptor));
             m_viewports.Add(request.viewportId, state);
         }
-        else if (state.target.descriptor.width != request.view.pixelWidth
-                 || state.target.descriptor.height != request.view.pixelHeight)
+        else if (!state.target.descriptor.Equals(descriptor))
         {
-            state.target.Resize(CreateDescriptor(request.view.pixelWidth, request.view.pixelHeight));
+            state.target.Resize(descriptor);
             Unregister(state);
         }
 
-        m_renderingLayer.Submit(new RenderRequest(
+        m_runtime.Submit(new RenderRequest(
             $"Editor:{request.viewportId}",
-            request.view,
             RenderTarget.FromTexture(state.target),
-            request.renderPath,
-            request.clearMode,
-            request.backgroundColor,
-            request.priority,
-            request.enablePicking,
-            request.selectedObjectId));
+            new RenderViewport(0, 0, request.pixelWidth, request.pixelHeight),
+            request.pipeline,
+            request.data,
+            request.priority));
 
-        if (m_executor.TryGetTargetTexture(state.target, out PersistentTextureHandle resident)
+        if (m_runtime.targets.TryGetTexture(state.target, out PersistentTextureHandle resident)
             && resident != state.residentTexture)
         {
             Unregister(state);
@@ -137,8 +72,8 @@ internal sealed class EditorRenderingHostService : IEditorRenderingHost
         return new EditorViewportOutput(
             request.viewportId,
             state.presentationTexture,
-            request.view.pixelWidth,
-            request.view.pixelHeight);
+            request.pixelWidth,
+            request.pixelHeight);
     }
 
     /// <inheritdoc />
@@ -150,7 +85,6 @@ internal sealed class EditorRenderingHostService : IEditorRenderingHost
             throw new InvalidOperationException(
                 $"Editor viewport '{output.viewportId}' has no completed render texture yet.");
         }
-
         m_imgui.DrawImage(output.texture, logicalSize);
     }
 
@@ -160,73 +94,85 @@ internal sealed class EditorRenderingHostService : IEditorRenderingHost
         ObjectDisposedException.ThrowIf(m_disposed, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(viewportId);
         if (!m_viewports.Remove(viewportId, out ViewportState? state))
-        {
             return;
-        }
-
         Unregister(state);
-        m_executor.ReleaseTarget(state.target);
+        m_runtime.targets.Release(state.target);
     }
 
     /// <inheritdoc />
     public void ReleaseAll()
     {
         if (m_disposed)
-        {
             return;
-        }
-
         foreach (ViewportState state in m_viewports.Values)
         {
             Unregister(state);
-            m_executor.ReleaseTarget(state.target);
+            m_runtime.targets.Release(state.target);
         }
-
         m_viewports.Clear();
     }
 
-    internal void Dispose()
+    /// <inheritdoc />
+    public void Dispose()
     {
         if (m_disposed)
-        {
             return;
-        }
-
+        m_reloadRegistration.Dispose();
         ReleaseAll();
-        AssetManager.AssetReloaded -= OnAssetReloaded;
         m_disposed = true;
     }
 
-    private void OnAssetReloaded(AssetObject asset)
+    IEditorReloadTransaction IEditorReloadParticipant.Capture(AssemblyReloadContext context)
     {
-        if (asset is RenderPipelineAsset pipeline
-            && string.Equals(pipeline.sourcePath, m_activePipelineAssetPath, StringComparison.Ordinal))
-        {
-            _ = m_renderingLayer.TryActivatePipelineAsset(pipeline);
-        }
+        ArgumentNullException.ThrowIfNull(context);
+        return new RenderingReloadTransaction(m_runtime.BeginExtensionReload());
     }
+
+    void IEditorReloadParticipant.RefreshDiagnostics()
+    {
+    }
+
+    private static RenderTextureDescriptor CreateDescriptor(EditorViewportRequest request)
+        => new(
+            request.pixelWidth,
+            request.pixelHeight,
+            request.targetFormat,
+            RenderTextureUsage.ColorAttachment | RenderTextureUsage.Sampled);
 
     private void Unregister(ViewportState state)
     {
         if (state.presentationTexture.isValid)
-        {
             _ = m_renderer.UnregisterTexture(state.presentationTexture);
-            state.presentationTexture = default;
-            state.residentTexture = default;
-        }
+        state.presentationTexture = default;
+        state.residentTexture = default;
     }
-
-    private static RenderTextureDescriptor CreateDescriptor(int width, int height)
-        => new(
-            width,
-            height,
-            RenderTextureFormat.RGBA8,
-            RenderTextureUsage.ColorAttachment | RenderTextureUsage.Sampled);
 
     private sealed class ViewportState(RenderTexture target)
     {
         internal RenderTexture target { get; } = target;
         internal PersistentTextureHandle residentTexture { get; set; }
         internal ImGuiTextureHandle presentationTexture { get; set; }
+    }
+
+    private sealed class RenderingReloadTransaction(
+        RenderRuntimeLayer.RenderRuntimeReloadSession session) : IEditorReloadTransaction
+    {
+        public void PrepareForActivation()
+        {
+        }
+
+        public void Apply()
+        {
+            session.PrepareCandidate();
+            session.Activate();
+        }
+
+        public void Complete() => session.Complete();
+
+        public void RollbackStructure() => session.Rollback();
+
+        public void RestorePreviousState()
+        {
+        }
     }
 }

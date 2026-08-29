@@ -8,7 +8,7 @@ namespace Inno.Rendering.Assets;
 
 internal static partial class MeshSourceParser
 {
-    internal static MeshData ParseObj(string sourcePath, string text)
+    internal static GeometryData ParseObj(string sourcePath, string text)
     {
         var positions = new List<Vector3>();
         var normals = new List<Vector3>();
@@ -16,7 +16,7 @@ internal static partial class MeshSourceParser
         var vertices = new List<MutableVertex>();
         var indices = new List<uint>();
         var vertexMap = new Dictionary<ObjVertexKey, uint>();
-        var subMeshes = new List<MeshSubMesh>();
+        var sections = new List<GeometrySection>();
         int subMeshStart = 0;
 
         string[] lines = text.Split('\n');
@@ -78,24 +78,24 @@ internal static partial class MeshSourceParser
                 case "g":
                 case "o":
                 case "usemtl":
-                    CloseSubMesh(indices.Count, ref subMeshStart, subMeshes);
+                    CloseSubMesh(indices.Count, ref subMeshStart, sections);
                     break;
             }
         }
 
-        CloseSubMesh(indices.Count, ref subMeshStart, subMeshes);
+        CloseSubMesh(indices.Count, ref subMeshStart, sections);
         if (vertices.Count == 0 || indices.Count == 0)
         {
             throw new RenderingAssetFormatException(sourcePath, "OBJ contains no triangle geometry.");
         }
 
         GenerateMissingNormalsAndTangents(vertices, indices);
-        MeshVertex[] resultVertices = vertices.Select(static value => new MeshVertex(
+        GeometryVertex[] resultVertices = vertices.Select(static value => new GeometryVertex(
             value.position,
             Vector3.NormalizeSafe(value.normal),
             ToTangent(value.tangent, value.tangentW),
             value.textureCoordinate)).ToArray();
-        return new MeshData(resultVertices, [.. indices], [.. subMeshes]);
+        return new GeometryData(resultVertices, [.. indices], [.. sections]);
     }
 
     internal static void GenerateMissingNormalsAndTangents(
@@ -210,11 +210,11 @@ internal static partial class MeshSourceParser
     private static void CloseSubMesh(
         int currentIndexCount,
         ref int subMeshStart,
-        List<MeshSubMesh> subMeshes)
+        List<GeometrySection> sections)
     {
         if (currentIndexCount > subMeshStart)
         {
-            subMeshes.Add(new MeshSubMesh(subMeshStart, currentIndexCount - subMeshStart));
+            sections.Add(new GeometrySection(subMeshStart, currentIndexCount - subMeshStart));
             subMeshStart = currentIndexCount;
         }
     }

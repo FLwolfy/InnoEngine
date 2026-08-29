@@ -1,6 +1,7 @@
 
 using System;
 
+using Inno.Assets.Core;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 
@@ -67,9 +68,6 @@ public sealed class AssetBrowserState
     {
         if (string.IsNullOrWhiteSpace(relativePath))
             return string.Empty;
-        string path = relativePath.Replace('\\', '/').Trim();
-        while (path.StartsWith("./", StringComparison.Ordinal))
-            path = path[2..];
-        return path.Trim('/');
+        return AssetPath.Parse(relativePath.Replace('\\', '/').Trim()).ToString();
     }
 }

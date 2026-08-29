@@ -1,3 +1,4 @@
+using System.Numerics;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -23,5 +24,29 @@ public sealed class ImGuiInitTests
         Assert.False(string.IsNullOrWhiteSpace(version));
 
         ImGui.DestroyContext(context);
+    }
+
+    [Fact]
+    public void TextDisabled_UsesTheLoadedCimguiSymbol()
+    {
+        var context = ImGui.CreateContext();
+        try
+        {
+            ImGuiIOPtr io = ImGui.GetIO();
+            io.DisplaySize = new Vector2(320f, 200f);
+            io.DeltaTime = 1f / 60f;
+            io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
+            io.Fonts.RendererHasTextures = true;
+
+            ImGui.NewFrame();
+            _ = ImGui.Begin("Native Text Test");
+            ImGui.TextDisabled("Plugin status");
+            ImGui.End();
+            ImGui.Render();
+        }
+        finally
+        {
+            ImGui.DestroyContext(context);
+        }
     }
 }

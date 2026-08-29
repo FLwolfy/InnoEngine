@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
+using Inno.Assets;
 using Inno.Core.Graphs;
 using Inno.Editor.Core;
 using Inno.Editor.Graph;
@@ -18,7 +19,7 @@ namespace Inno.Editor.Panel.ShaderGraph;
 [EditorPanel("rendering.shader-graph", "Shader Graph", order: 230)]
 internal sealed class ShaderGraphPanel : EditorPanel
 {
-    private const string C_DEFAULT_PATH = "Assets/RenderingShowcase/Graphs/EditorPreview.ishadergraph";
+    private const string C_DEFAULT_PATH = "NewShader.ishadergraph";
     private const float C_NODE_WIDTH = 184f;
     private const float C_NODE_HEADER_HEIGHT = 30f;
     private const float C_PORT_ROW_HEIGHT = 22f;
@@ -30,8 +31,8 @@ internal sealed class ShaderGraphPanel : EditorPanel
     private readonly ShaderNodeRegistry m_nodes;
     private GraphDocumentController? m_controller;
     private ShaderGraphCompileResult? m_compileResult;
+    private ShaderGraphAsset? m_asset;
     private string m_documentPath = C_DEFAULT_PATH;
-    private ShaderGraphTarget m_target = ShaderGraphTarget.Surface;
     private ulong m_lastCompiledRevision = ulong.MaxValue;
     private ulong m_lastNodeGeneration = ulong.MaxValue;
     private bool m_draggingSelection;
@@ -75,7 +76,6 @@ internal sealed class ShaderGraphPanel : EditorPanel
     protected override void Capture(EditorState state)
     {
         state.Set("document", m_documentPath);
-        state.Set("target", (int)m_target);
         state.Set("panX", m_canvas.pan.x);
         state.Set("panY", m_canvas.pan.y);
         state.Set("zoom", m_canvas.zoom);
@@ -84,15 +84,14 @@ internal sealed class ShaderGraphPanel : EditorPanel
     /// <inheritdoc />
     protected override void Restore(EditorState state)
     {
-        m_documentPath = state.Get("document", C_DEFAULT_PATH);
-        int target = state.Get("target", (int)ShaderGraphTarget.Surface);
-        m_target = Enum.IsDefined(typeof(ShaderGraphTarget), target)
-            ? (ShaderGraphTarget)target
-            : ShaderGraphTarget.Surface;
+        m_documentPath = NormalizeDocumentPath(state.Get("document", C_DEFAULT_PATH));
         m_canvas.SetViewport(
             new GraphPosition(state.Get("panX", 48f), state.Get("panY", 48f)),
             state.Get("zoom", 1f));
     }
+
+    internal static string NormalizeDocumentPath(string? path)
+        => string.IsNullOrWhiteSpace(path) ? C_DEFAULT_PATH : path;
 
     private void EnsureDocument(EditorContext context)
     {
@@ -101,17 +100,18 @@ internal sealed class ShaderGraphPanel : EditorPanel
             return;
         }
 
-        string fullPath = ResolveDocumentPath(context.projectDirectory);
+        m_documentPath = NormalizeDocumentPath(m_documentPath);
         GraphDocument document;
-        if (File.Exists(fullPath))
+        if (AssetManager.TryLoad(m_documentPath, out ShaderGraphAsset? asset)
+            && asset?.document is not null)
         {
-            ShaderGraphDocumentData data = ShaderGraphDocumentCodec.Decode(File.ReadAllText(fullPath));
-            m_target = data.target;
-            document = data.document;
+            m_asset = asset;
+            document = asset.document.Clone();
         }
         else
         {
-            document = CreateDefaultDocument(m_target);
+            m_asset = new ShaderGraphAsset();
+            document = new GraphDocument();
         }
 
         m_controller = m_graphs.OpenDocument(m_documentPath, document, m_interactions.history);
@@ -125,28 +125,7 @@ internal sealed class ShaderGraphPanel : EditorPanel
         }
 
         NativeImGui.SameLine();
-        if (NativeImGui.Button("Float"))
-        {
-            AddNode(BuiltinShaderNodes.Float);
-        }
-
-        NativeImGui.SameLine();
-        if (NativeImGui.Button("Color"))
-        {
-            AddNode(BuiltinShaderNodes.Color);
-        }
-
-        NativeImGui.SameLine();
-        if (NativeImGui.Button("Add"))
-        {
-            AddNode(BuiltinShaderNodes.AddFloat);
-        }
-
-        NativeImGui.SameLine();
-        if (NativeImGui.Button("Texture Sample"))
-        {
-            AddNode(BuiltinShaderNodes.SampleTexture2D);
-        }
+        DrawNodePicker();
 
         NativeImGui.SameLine();
         if (NativeImGui.Button("Delete") && m_canvas.selectedNodes.Count != 0)
@@ -159,6 +138,31 @@ internal sealed class ShaderGraphPanel : EditorPanel
         NativeImGui.TextUnformatted(
             $"{m_documentPath}{(m_controller!.isDirty ? " *" : string.Empty)}  " +
             $"Zoom {m_canvas.zoom:F2}");
+    }
+
+    private void DrawNodePicker()
+    {
+        NativeImGui.SameLine();
+        if (!NativeImGui.BeginCombo("##shader_graph_add_node", "Add Node..."))
+            return;
+        try
+        {
+            foreach (ShaderNodeDefinition definition in m_nodes.definitions
+                         .OrderBy(static value => value.category, StringComparer.Ordinal)
+                         .ThenBy(static value => value.displayName, StringComparer.Ordinal)
+                         .ThenBy(static value => value.id, StringComparer.Ordinal))
+            {
+                string label = string.IsNullOrWhiteSpace(definition.category)
+                    ? definition.displayName
+                    : $"{definition.category}/{definition.displayName}";
+                if (NativeImGui.Selectable(label))
+                    AddNode(definition.id);
+            }
+        }
+        finally
+        {
+            NativeImGui.EndCombo();
+        }
     }
 
     private void DrawCompileStatus()
@@ -463,7 +467,6 @@ internal sealed class ShaderGraphPanel : EditorPanel
         m_compileResult = ShaderGraphCompiler.Compile(
             m_documentPath,
             Path.GetFileNameWithoutExtension(m_documentPath),
-            m_target,
             m_controller.document,
             m_nodes);
         m_lastCompiledRevision = m_controller.revision;
@@ -472,45 +475,12 @@ internal sealed class ShaderGraphPanel : EditorPanel
 
     private void Save(EditorContext context)
     {
-        string path = ResolveDocumentPath(context.projectDirectory);
-        string? directory = Path.GetDirectoryName(path);
-        if (!string.IsNullOrWhiteSpace(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        string temporary = $"{path}.tmp-{Guid.NewGuid():N}";
-        try
-        {
-            File.WriteAllText(
-                temporary,
-                ShaderGraphDocumentCodec.Encode(m_target, m_controller!.document));
-            File.Move(temporary, path, overwrite: true);
-            m_controller.MarkSaved();
-        }
-        finally
-        {
-            if (File.Exists(temporary))
-            {
-                File.Delete(temporary);
-            }
-        }
-    }
-
-    private string ResolveDocumentPath(string projectDirectory)
-    {
-        string fullPath = Path.GetFullPath(Path.Combine(
-            projectDirectory,
-            m_documentPath.Replace('/', Path.DirectorySeparatorChar)));
-        string prefix = Path.GetFullPath(projectDirectory).TrimEnd(Path.DirectorySeparatorChar)
-            + Path.DirectorySeparatorChar;
-        if (!fullPath.StartsWith(prefix, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException(
-                $"Shader Graph document '{m_documentPath}' resolves outside the project directory.");
-        }
-
-        return fullPath;
+        _ = context;
+        m_asset ??= new ShaderGraphAsset();
+        m_asset.SetDocument(m_controller!.document);
+        if (!AssetManager.Save(m_documentPath, m_asset))
+            throw new InvalidOperationException($"No Shader Graph importer can save '{m_documentPath}'.");
+        m_controller.MarkSaved();
     }
 
     private GraphPortDefinition RequirePort(GraphEndpoint endpoint)
@@ -560,25 +530,6 @@ internal sealed class ShaderGraphPanel : EditorPanel
             C_NODE_WIDTH,
             C_NODE_HEADER_HEIGHT + C_PORT_ROW_HEIGHT * MathF.Max(1f, portRows)) * m_canvas.zoom;
         return new Rect(min, max);
-    }
-
-    private static GraphDocument CreateDefaultDocument(ShaderGraphTarget target)
-    {
-        var document = new GraphDocument();
-        string output = target switch
-        {
-            ShaderGraphTarget.Surface => BuiltinShaderNodes.SurfaceOutput,
-            ShaderGraphTarget.VertexFragment => BuiltinShaderNodes.FragmentOutput,
-            ShaderGraphTarget.Compute => BuiltinShaderNodes.ComputeOutput,
-            _ => throw new ArgumentOutOfRangeException(nameof(target))
-        };
-        document.AddNode(new GraphNodeRecord(
-            new GraphNodeId(Guid.NewGuid().ToString("N")),
-            output)
-        {
-            position = new GraphPosition(420f, 180f)
-        });
-        return document;
     }
 
     private static bool Contains(Rect rect, Vector2 value)

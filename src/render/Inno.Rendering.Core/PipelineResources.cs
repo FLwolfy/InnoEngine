@@ -15,12 +15,32 @@ public enum RenderVertexSemantic
     Normal,
     /// <summary>Object-space tangent and handedness.</summary>
     Tangent,
+    /// <summary>Object-space bitangent.</summary>
+    Bitangent,
     /// <summary>Primary vertex color.</summary>
     Color0,
+    /// <summary>Secondary vertex color.</summary>
+    Color1,
+    /// <summary>Third vertex color channel.</summary>
+    Color2,
+    /// <summary>Fourth vertex color channel.</summary>
+    Color3,
     /// <summary>Primary texture coordinate.</summary>
     TextureCoordinate0,
     /// <summary>Secondary texture coordinate.</summary>
     TextureCoordinate1,
+    /// <summary>Third texture coordinate.</summary>
+    TextureCoordinate2,
+    /// <summary>Fourth texture coordinate.</summary>
+    TextureCoordinate3,
+    /// <summary>Fifth texture coordinate.</summary>
+    TextureCoordinate4,
+    /// <summary>Sixth texture coordinate.</summary>
+    TextureCoordinate5,
+    /// <summary>Seventh texture coordinate.</summary>
+    TextureCoordinate6,
+    /// <summary>Eighth texture coordinate.</summary>
+    TextureCoordinate7,
     /// <summary>Skinning indices.</summary>
     BlendIndices,
     /// <summary>Skinning weights.</summary>
@@ -32,6 +52,8 @@ public enum RenderVertexSemantic
 /// </summary>
 public enum RenderVertexFormat
 {
+    /// <summary>One 32-bit floating-point component.</summary>
+    Float1,
     /// <summary>Two 32-bit floating-point components.</summary>
     Float2,
     /// <summary>Three 32-bit floating-point components.</summary>
@@ -44,10 +66,22 @@ public enum RenderVertexFormat
     Half4,
     /// <summary>Four normalized unsigned bytes.</summary>
     UInt8Normalized4,
+    /// <summary>Two normalized unsigned bytes.</summary>
+    UInt8Normalized2,
     /// <summary>Four unsigned bytes interpreted as integers.</summary>
     UInt8Integer4,
+    /// <summary>Two unsigned bytes interpreted as integers.</summary>
+    UInt8Integer2,
+    /// <summary>Four normalized unsigned components packed into 10:10:10:2 bits.</summary>
+    UInt10Normalized4,
+    /// <summary>Two normalized signed 16-bit components.</summary>
+    Int16Normalized2,
     /// <summary>Four normalized signed 16-bit components.</summary>
-    Int16Normalized4
+    Int16Normalized4,
+    /// <summary>Two signed 16-bit components interpreted as integers.</summary>
+    Int16Integer2,
+    /// <summary>Four signed 16-bit components interpreted as integers.</summary>
+    Int16Integer4
 }
 
 /// <summary>
@@ -60,10 +94,19 @@ public readonly record struct RenderVertexAttribute
     /// </summary>
     /// <param name="semantic">Shader input semantic.</param>
     /// <param name="format">Packed component representation.</param>
-    public RenderVertexAttribute(RenderVertexSemantic semantic, RenderVertexFormat format)
+    /// <param name="byteOffset">
+    /// Explicit byte offset in the stream, or -1 to place the attribute directly after the preceding attribute.
+    /// </param>
+    public RenderVertexAttribute(
+        RenderVertexSemantic semantic,
+        RenderVertexFormat format,
+        int byteOffset = -1)
     {
+        if (byteOffset < -1)
+            throw new ArgumentOutOfRangeException(nameof(byteOffset));
         this.semantic = semantic;
         this.format = format;
+        this.byteOffset = byteOffset;
     }
 
     /// <summary>Gets the shader input semantic.</summary>
@@ -72,17 +115,29 @@ public readonly record struct RenderVertexAttribute
     /// <summary>Gets the packed component representation.</summary>
     public RenderVertexFormat format { get; }
 
+    /// <summary>
+    /// Gets the explicit byte offset in the resolved stream layout, or -1 before a layout resolves automatic placement.
+    /// </summary>
+    public int byteOffset { get; }
+
     /// <summary>Gets the packed byte size.</summary>
     public int byteSize => format switch
     {
+        RenderVertexFormat.Float1 => 4,
         RenderVertexFormat.Float2 => 8,
         RenderVertexFormat.Float3 => 12,
         RenderVertexFormat.Float4 => 16,
         RenderVertexFormat.Half2 => 4,
         RenderVertexFormat.Half4 => 8,
+        RenderVertexFormat.UInt8Normalized2 => 2,
         RenderVertexFormat.UInt8Normalized4 => 4,
+        RenderVertexFormat.UInt8Integer2 => 2,
         RenderVertexFormat.UInt8Integer4 => 4,
+        RenderVertexFormat.UInt10Normalized4 => 4,
+        RenderVertexFormat.Int16Normalized2 => 4,
         RenderVertexFormat.Int16Normalized4 => 8,
+        RenderVertexFormat.Int16Integer2 => 4,
+        RenderVertexFormat.Int16Integer4 => 8,
         _ => throw new ArgumentOutOfRangeException(nameof(format))
     };
 }
@@ -97,10 +152,17 @@ public sealed class RenderVertexLayout : IEquatable<RenderVertexLayout>
     /// <summary>
     /// Creates an interleaved vertex layout.
     /// </summary>
-    /// <param name="attributes">Unique attributes in byte-stream order.</param>
-    public RenderVertexLayout(IReadOnlyList<RenderVertexAttribute> attributes)
+    /// <param name="attributes">
+    /// Unique attributes in ascending byte order. Attributes with offset -1 are packed after the preceding attribute.
+    /// </param>
+    /// <param name="stride">
+    /// Explicit positive stream stride, or zero to use the end of the final attribute. A larger stride preserves
+    /// trailing application-defined padding.
+    /// </param>
+    public RenderVertexLayout(IReadOnlyList<RenderVertexAttribute> attributes, int stride = 0)
     {
         ArgumentNullException.ThrowIfNull(attributes);
+        ArgumentOutOfRangeException.ThrowIfNegative(stride);
         if (attributes.Count == 0)
         {
             throw new ArgumentException("A vertex layout requires at least one attribute.", nameof(attributes));
@@ -111,8 +173,32 @@ public sealed class RenderVertexLayout : IEquatable<RenderVertexLayout>
             throw new ArgumentException("A vertex layout cannot repeat a semantic.", nameof(attributes));
         }
 
-        m_attributes = attributes.ToArray();
-        stride = m_attributes.Sum(static value => value.byteSize);
+        var resolved = new RenderVertexAttribute[attributes.Count];
+        int occupiedEnd = 0;
+        for (int index = 0; index < attributes.Count; index++)
+        {
+            RenderVertexAttribute attribute = attributes[index];
+            int offset = attribute.byteOffset < 0 ? occupiedEnd : attribute.byteOffset;
+            if (offset < occupiedEnd)
+            {
+                throw new ArgumentException(
+                    $"Vertex attribute '{attribute.semantic}' overlaps a preceding attribute.",
+                    nameof(attributes));
+            }
+
+            resolved[index] = new RenderVertexAttribute(attribute.semantic, attribute.format, offset);
+            occupiedEnd = checked(offset + attribute.byteSize);
+        }
+
+        if (stride != 0 && stride < occupiedEnd)
+        {
+            throw new ArgumentException(
+                "Vertex stride cannot end before the final attribute.",
+                nameof(stride));
+        }
+
+        m_attributes = resolved;
+        this.stride = stride == 0 ? occupiedEnd : stride;
     }
 
     /// <summary>Gets attributes in byte-stream order.</summary>
@@ -123,7 +209,9 @@ public sealed class RenderVertexLayout : IEquatable<RenderVertexLayout>
 
     /// <inheritdoc />
     public bool Equals(RenderVertexLayout? other)
-        => other is not null && m_attributes.SequenceEqual(other.m_attributes);
+        => other is not null
+            && stride == other.stride
+            && m_attributes.SequenceEqual(other.m_attributes);
 
     /// <inheritdoc />
     public override bool Equals(object? obj) => Equals(obj as RenderVertexLayout);
@@ -136,6 +224,8 @@ public sealed class RenderVertexLayout : IEquatable<RenderVertexLayout>
         {
             hash.Add(attribute);
         }
+
+        hash.Add(stride);
 
         return hash.ToHashCode();
     }
@@ -150,6 +240,114 @@ public enum RenderIndexFormat
     UInt16,
     /// <summary>Unsigned 32-bit indices.</summary>
     UInt32
+}
+
+/// <summary>Selects the primitive assembly used by raster draw commands.</summary>
+public enum RenderPrimitiveTopology
+{
+    /// <summary>Independent triangle triplets.</summary>
+    TriangleList,
+    /// <summary>Connected triangle strip.</summary>
+    TriangleStrip,
+    /// <summary>Independent line pairs.</summary>
+    LineList,
+    /// <summary>Connected line strip.</summary>
+    LineStrip,
+    /// <summary>Independent points.</summary>
+    PointList
+}
+
+/// <summary>Selects texture filtering independently from a graphics backend.</summary>
+public enum RenderSamplerFilter
+{
+    /// <summary>Uses nearest-neighbor filtering.</summary>
+    Point,
+    /// <summary>Uses linear filtering.</summary>
+    Linear,
+    /// <summary>Uses anisotropic filtering when supported.</summary>
+    Anisotropic
+}
+
+/// <summary>Selects texture addressing independently for each coordinate axis.</summary>
+public enum RenderSamplerAddressMode
+{
+    /// <summary>Repeats texture coordinates.</summary>
+    Repeat,
+    /// <summary>Mirrors repeated texture coordinates.</summary>
+    Mirror,
+    /// <summary>Clamps coordinates to the texture edge.</summary>
+    Clamp,
+    /// <summary>Samples the backend border color outside the texture.</summary>
+    Border
+}
+
+/// <summary>Describes one native-serializable backend-neutral sampler binding.</summary>
+public struct RenderSamplerState : IEquatable<RenderSamplerState>
+{
+    /// <summary>Gets linear filtering with clamped addressing.</summary>
+    public static RenderSamplerState linearClamp => new(
+        RenderSamplerFilter.Linear,
+        RenderSamplerAddressMode.Clamp,
+        RenderSamplerAddressMode.Clamp,
+        RenderSamplerAddressMode.Clamp);
+
+    /// <summary>Creates a sampler state.</summary>
+    /// <param name="filter">Minification, magnification, and mip filtering contract.</param>
+    /// <param name="addressU">Horizontal address mode.</param>
+    /// <param name="addressV">Vertical address mode.</param>
+    /// <param name="addressW">Depth or cube address mode.</param>
+    public RenderSamplerState(
+        RenderSamplerFilter filter,
+        RenderSamplerAddressMode addressU,
+        RenderSamplerAddressMode addressV,
+        RenderSamplerAddressMode addressW)
+    {
+        this.filter = filter;
+        this.addressU = addressU;
+        this.addressV = addressV;
+        this.addressW = addressW;
+    }
+
+    /// <summary>Gets the filter contract.</summary>
+    public RenderSamplerFilter filter { get; set; }
+
+    /// <summary>Gets horizontal addressing.</summary>
+    public RenderSamplerAddressMode addressU { get; set; }
+
+    /// <summary>Gets vertical addressing.</summary>
+    public RenderSamplerAddressMode addressV { get; set; }
+
+    /// <summary>Gets depth or cube addressing.</summary>
+    public RenderSamplerAddressMode addressW { get; set; }
+
+    /// <inheritdoc />
+    public readonly bool Equals(RenderSamplerState other)
+        => filter == other.filter
+           && addressU == other.addressU
+           && addressV == other.addressV
+           && addressW == other.addressW;
+
+    /// <inheritdoc />
+    public override readonly bool Equals(object? obj)
+        => obj is RenderSamplerState other && Equals(other);
+
+    /// <inheritdoc />
+    public override readonly int GetHashCode()
+        => HashCode.Combine(filter, addressU, addressV, addressW);
+
+    /// <summary>Determines whether two sampler descriptions are equal.</summary>
+    /// <param name="left">Left sampler description.</param>
+    /// <param name="right">Right sampler description.</param>
+    /// <returns>True when every filtering and addressing field is equal.</returns>
+    public static bool operator ==(RenderSamplerState left, RenderSamplerState right)
+        => left.Equals(right);
+
+    /// <summary>Determines whether two sampler descriptions differ.</summary>
+    /// <param name="left">Left sampler description.</param>
+    /// <param name="right">Right sampler description.</param>
+    /// <returns>True when at least one filtering or addressing field differs.</returns>
+    public static bool operator !=(RenderSamplerState left, RenderSamplerState right)
+        => !left.Equals(right);
 }
 
 /// <summary>
@@ -221,6 +419,8 @@ public enum RenderShaderBindingKind
     Uniform,
     /// <summary>Sampled texture and sampler state.</summary>
     Texture,
+    /// <summary>Shader-readable or writable storage texture.</summary>
+    StorageTexture,
     /// <summary>Compute-readable or writable buffer.</summary>
     StorageBuffer
 }
@@ -239,9 +439,9 @@ public enum RenderUniformType
 }
 
 /// <summary>
-/// Selects compute-buffer access for one shader binding.
+/// Selects unordered storage-resource access for one shader binding.
 /// </summary>
-public enum RenderBufferBindingAccess
+public enum RenderStorageAccess
 {
     /// <summary>Shader read-only access.</summary>
     Read,
@@ -264,14 +464,14 @@ public sealed class RenderShaderBindingDescriptor
     /// <param name="slot">Backend-neutral texture or storage slot.</param>
     /// <param name="uniformType">Uniform shape when <paramref name="kind"/> is Uniform.</param>
     /// <param name="count">Uniform array element count.</param>
-    /// <param name="bufferAccess">Storage-buffer access.</param>
+    /// <param name="storageAccess">Storage texture or buffer access.</param>
     public RenderShaderBindingDescriptor(
         RenderBindingId id,
         RenderShaderBindingKind kind,
         int slot = 0,
         RenderUniformType uniformType = RenderUniformType.Vector4,
         int count = 1,
-        RenderBufferBindingAccess bufferAccess = RenderBufferBindingAccess.Read)
+        RenderStorageAccess storageAccess = RenderStorageAccess.Read)
     {
         if (!id.isValid)
         {
@@ -280,12 +480,16 @@ public sealed class RenderShaderBindingDescriptor
 
         ArgumentOutOfRangeException.ThrowIfNegative(slot);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(count);
+        if (!Enum.IsDefined(kind))
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        if (!Enum.IsDefined(storageAccess))
+            throw new ArgumentOutOfRangeException(nameof(storageAccess));
         this.id = id;
         this.kind = kind;
         this.slot = slot;
         this.uniformType = uniformType;
         this.count = count;
-        this.bufferAccess = bufferAccess;
+        this.storageAccess = storageAccess;
     }
 
     /// <summary>Gets the stable manifest binding name.</summary>
@@ -303,8 +507,8 @@ public sealed class RenderShaderBindingDescriptor
     /// <summary>Gets uniform array element count.</summary>
     public int count { get; }
 
-    /// <summary>Gets storage-buffer access.</summary>
-    public RenderBufferBindingAccess bufferAccess { get; }
+    /// <summary>Gets storage texture or buffer access.</summary>
+    public RenderStorageAccess storageAccess { get; }
 }
 
 /// <summary>
@@ -355,18 +559,230 @@ public enum RenderDepthCompare
 }
 
 /// <summary>
-/// Selects a common cross-platform color blend contract.
+/// Selects one source or destination blend multiplier.
 /// </summary>
-public enum RenderBlendMode
+public enum RenderBlendFactor
 {
-    /// <summary>Disables blending.</summary>
-    Opaque,
-    /// <summary>Uses source alpha over destination color.</summary>
-    Alpha,
-    /// <summary>Adds source color using source alpha.</summary>
-    Additive,
-    /// <summary>Uses premultiplied source alpha over destination color.</summary>
-    Premultiplied
+    /// <summary>Multiplies by zero.</summary>
+    Zero,
+    /// <summary>Multiplies by one.</summary>
+    One,
+    /// <summary>Multiplies by source color.</summary>
+    SourceColor,
+    /// <summary>Multiplies by one minus source color.</summary>
+    InverseSourceColor,
+    /// <summary>Multiplies by source alpha.</summary>
+    SourceAlpha,
+    /// <summary>Multiplies by one minus source alpha.</summary>
+    InverseSourceAlpha,
+    /// <summary>Multiplies by destination alpha.</summary>
+    DestinationAlpha,
+    /// <summary>Multiplies by one minus destination alpha.</summary>
+    InverseDestinationAlpha,
+    /// <summary>Multiplies by destination color.</summary>
+    DestinationColor,
+    /// <summary>Multiplies by one minus destination color.</summary>
+    InverseDestinationColor,
+    /// <summary>Uses the saturated source-alpha factor.</summary>
+    SourceAlphaSaturate,
+    /// <summary>Multiplies by the packed constant blend color.</summary>
+    Constant,
+    /// <summary>Multiplies by one minus the packed constant blend color.</summary>
+    InverseConstant
+}
+
+/// <summary>Selects the arithmetic operation combining source and destination blend terms.</summary>
+public enum RenderBlendEquation
+{
+    /// <summary>Adds source and destination terms.</summary>
+    Add,
+    /// <summary>Subtracts the destination term from the source term.</summary>
+    Subtract,
+    /// <summary>Subtracts the source term from the destination term.</summary>
+    ReverseSubtract,
+    /// <summary>Selects the component-wise minimum.</summary>
+    Minimum,
+    /// <summary>Selects the component-wise maximum.</summary>
+    Maximum
+}
+
+/// <summary>Describes independent color and alpha blending without backend-native flags.</summary>
+public struct RenderBlendState
+{
+    /// <summary>Gets the disabled opaque blend state.</summary>
+    public static RenderBlendState opaque => new()
+    {
+        enabled = false,
+        colorSource = RenderBlendFactor.One,
+        colorDestination = RenderBlendFactor.Zero,
+        alphaSource = RenderBlendFactor.One,
+        alphaDestination = RenderBlendFactor.Zero
+    };
+
+    /// <summary>Gets conventional straight-alpha blending.</summary>
+    public static RenderBlendState alpha => new()
+    {
+        enabled = true,
+        colorSource = RenderBlendFactor.SourceAlpha,
+        colorDestination = RenderBlendFactor.InverseSourceAlpha,
+        alphaSource = RenderBlendFactor.One,
+        alphaDestination = RenderBlendFactor.InverseSourceAlpha
+    };
+
+    /// <summary>Gets additive source-alpha blending.</summary>
+    public static RenderBlendState additive => new()
+    {
+        enabled = true,
+        colorSource = RenderBlendFactor.SourceAlpha,
+        colorDestination = RenderBlendFactor.One,
+        alphaSource = RenderBlendFactor.One,
+        alphaDestination = RenderBlendFactor.One
+    };
+
+    /// <summary>Gets conventional premultiplied-alpha blending.</summary>
+    public static RenderBlendState premultiplied => new()
+    {
+        enabled = true,
+        colorSource = RenderBlendFactor.One,
+        colorDestination = RenderBlendFactor.InverseSourceAlpha,
+        alphaSource = RenderBlendFactor.One,
+        alphaDestination = RenderBlendFactor.InverseSourceAlpha
+    };
+
+    /// <summary>Gets or sets whether blending is enabled.</summary>
+    public bool enabled { get; set; }
+
+    /// <summary>Gets or sets the source multiplier for RGB channels.</summary>
+    public RenderBlendFactor colorSource { get; set; }
+
+    /// <summary>Gets or sets the destination multiplier for RGB channels.</summary>
+    public RenderBlendFactor colorDestination { get; set; }
+
+    /// <summary>Gets or sets the RGB combination equation.</summary>
+    public RenderBlendEquation colorEquation { get; set; }
+
+    /// <summary>Gets or sets the source multiplier for alpha.</summary>
+    public RenderBlendFactor alphaSource { get; set; }
+
+    /// <summary>Gets or sets the destination multiplier for alpha.</summary>
+    public RenderBlendFactor alphaDestination { get; set; }
+
+    /// <summary>Gets or sets the alpha combination equation.</summary>
+    public RenderBlendEquation alphaEquation { get; set; }
+
+    /// <summary>Gets or sets the packed RGBA8 constant used by constant blend factors.</summary>
+    public uint constantRgba { get; set; }
+
+    /// <summary>Gets or sets whether alpha-to-coverage is enabled.</summary>
+    public bool alphaToCoverage { get; set; }
+}
+
+/// <summary>Selects the comparison applied to stencil reference and stored values.</summary>
+public enum RenderStencilCompare
+{
+    /// <summary>Never passes.</summary>
+    Never,
+    /// <summary>Passes when reference is smaller.</summary>
+    Less,
+    /// <summary>Passes when values are equal.</summary>
+    Equal,
+    /// <summary>Passes when reference is smaller or equal.</summary>
+    LessEqual,
+    /// <summary>Passes when reference is greater.</summary>
+    Greater,
+    /// <summary>Passes when values differ.</summary>
+    NotEqual,
+    /// <summary>Passes when reference is greater or equal.</summary>
+    GreaterEqual,
+    /// <summary>Always passes.</summary>
+    Always
+}
+
+/// <summary>Selects the update applied to a stencil value.</summary>
+public enum RenderStencilOperation
+{
+    /// <summary>Keeps the stored value.</summary>
+    Keep,
+    /// <summary>Clears the stored value to zero.</summary>
+    Zero,
+    /// <summary>Replaces the stored value with the reference.</summary>
+    Replace,
+    /// <summary>Increments and clamps the stored value.</summary>
+    IncrementClamp,
+    /// <summary>Increments and wraps the stored value.</summary>
+    IncrementWrap,
+    /// <summary>Decrements and clamps the stored value.</summary>
+    DecrementClamp,
+    /// <summary>Decrements and wraps the stored value.</summary>
+    DecrementWrap,
+    /// <summary>Bitwise-inverts the stored value.</summary>
+    Invert
+}
+
+/// <summary>Describes stencil behavior for one triangle face orientation.</summary>
+public readonly record struct RenderStencilFaceState
+{
+    /// <summary>Creates one face stencil state.</summary>
+    /// <param name="compare">Stencil comparison.</param>
+    /// <param name="fail">Operation after stencil comparison failure.</param>
+    /// <param name="depthFail">Operation after stencil success and depth failure.</param>
+    /// <param name="pass">Operation after stencil and depth success.</param>
+    public RenderStencilFaceState(
+        RenderStencilCompare compare,
+        RenderStencilOperation fail,
+        RenderStencilOperation depthFail,
+        RenderStencilOperation pass)
+    {
+        this.compare = compare;
+        this.fail = fail;
+        this.depthFail = depthFail;
+        this.pass = pass;
+    }
+
+    /// <summary>Gets stencil comparison.</summary>
+    public RenderStencilCompare compare { get; }
+
+    /// <summary>Gets the stencil-failure operation.</summary>
+    public RenderStencilOperation fail { get; }
+
+    /// <summary>Gets the depth-failure operation.</summary>
+    public RenderStencilOperation depthFail { get; }
+
+    /// <summary>Gets the complete-pass operation.</summary>
+    public RenderStencilOperation pass { get; }
+}
+
+/// <summary>Describes complete two-sided stencil state for one draw.</summary>
+public sealed class RenderStencilState
+{
+    /// <summary>Gets disabled stencil state.</summary>
+    public static RenderStencilState disabled { get; } = new() { enabled = false };
+
+    /// <summary>Gets whether stencil testing and updates are active.</summary>
+    public bool enabled { get; init; }
+
+    /// <summary>Gets the eight-bit stencil reference value.</summary>
+    public byte reference { get; init; }
+
+    /// <summary>Gets the mask applied while reading stored stencil.</summary>
+    public byte readMask { get; init; } = byte.MaxValue;
+
+    /// <summary>Gets the mask applied while writing stencil.</summary>
+    public byte writeMask { get; init; } = byte.MaxValue;
+
+    /// <summary>Gets front-face stencil behavior.</summary>
+    public RenderStencilFaceState front { get; init; } = new(
+        RenderStencilCompare.Always,
+        RenderStencilOperation.Keep,
+        RenderStencilOperation.Keep,
+        RenderStencilOperation.Keep);
+
+    /// <summary>Gets back-face stencil behavior.</summary>
+    public RenderStencilFaceState back { get; init; } = new(
+        RenderStencilCompare.Always,
+        RenderStencilOperation.Keep,
+        RenderStencilOperation.Keep,
+        RenderStencilOperation.Keep);
 }
 
 /// <summary>
@@ -389,14 +805,17 @@ public sealed class RenderRasterState
     /// <summary>Gets whether accepted fragments update depth.</summary>
     public bool depthWrite { get; init; } = true;
 
-    /// <summary>Gets color blending.</summary>
-    public RenderBlendMode blend { get; init; } = RenderBlendMode.Opaque;
+    /// <summary>Gets independent RGB and alpha blending.</summary>
+    public RenderBlendState blend { get; init; } = RenderBlendState.opaque;
 
     /// <summary>Gets the four-bit RGBA write mask.</summary>
     public byte colorWriteMask { get; init; } = 0x0f;
 
     /// <summary>Gets whether multisample rasterization is enabled for compatible targets.</summary>
     public bool multisampling { get; init; } = true;
+
+    /// <summary>Gets primitive assembly for subsequent draw commands.</summary>
+    public RenderPrimitiveTopology topology { get; init; } = RenderPrimitiveTopology.TriangleList;
 }
 
 /// <summary>

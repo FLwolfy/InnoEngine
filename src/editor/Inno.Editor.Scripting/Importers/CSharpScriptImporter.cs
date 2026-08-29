@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
 using Inno.Assets.Loader;
+using Inno.Core.Serialization;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -64,9 +64,7 @@ internal sealed class CSharpScriptImporter : AssetImporter<ScriptSourceAsset>
             declarations.Select(CreateTypeDeclaration).ToArray());
         await output.WriteArtifactAsync(
             "type-manifest",
-            JsonSerializer.SerializeToUtf8Bytes(
-                typeManifest,
-                new JsonSerializerOptions { WriteIndented = true }),
+            SerializationManager.Serialize(typeManifest),
             cancellationToken).ConfigureAwait(false);
     }
 

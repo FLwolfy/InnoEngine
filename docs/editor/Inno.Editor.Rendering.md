@@ -1,9 +1,36 @@
 # Inno.Editor.Rendering
 
-[返回 Editor 索引](README.md) · [Wiki 首页](../README.md) · [Rendering](../render/README.md) · [Rendering ImGui](../render/Inno.Rendering.ImGui.md)
+[Editor 索引](README.md) · [Rendering](../render/README.md) · [Scene View](Inno.Editor.Panel.SceneView.md) · [Game View](Inno.Editor.Panel.GameView.md)
 
-`Inno.Editor.Rendering` 是 Editor 与运行时渲染之间的后端无关桥。`EditorViewportRequest` 以稳定 viewport ID、`RenderView`、路径覆盖、Clear、优先级、Picking 选项和 selected renderer ID 描述需求；`EditorViewportOutput` 返回 opaque `ImGuiTextureHandle` 与物理尺寸；`EditorRenderingModule` 负责 Submit、Draw 和 Release。
+`Inno.Editor.Rendering` 是 Editor viewport 与任意 Plugin 渲染模型之间的后端中立桥。Editor 不知道 Camera、Scene snapshot、Picking buffer、Render Path 或材质世界观。
 
-公开 `IEditorRenderingHost` 由 Application 组合根实现：它创建/resize `RenderTexture`、提交 `RenderRequest`、把 resident texture 注册到 ImGui renderer，并在 Panel 关闭或 Editor 退出时释放 token 与 GPU target。`EditorPipelineAssetInfo`、`GetPipelineAssets` 与 `TryActivatePipelineAsset` 提供不泄漏 AssetLoader/BGFX 的 Pipeline 选择器；活动资产 reload 时重新构建 candidate，失败不替换当前画面。Panel 不接触 BGFX handle，也不执行 CPU readback。
+## Provider 协议
 
-相邻页面：[Scene View](Inno.Editor.Panel.SceneView.md) · [Game View](Inno.Editor.Panel.GameView.md) · [Inno.Rendering](../render/Inno.Rendering.md)
+| API | 说明 |
+| --- | --- |
+| `EditorViewportKindId` | 开放 viewport 用途，例如 `inno.editor.viewport.scene` 或 Plugin 自定义预览。 |
+| `EditorViewportProviderExtensionAttribute` | Stable ID、kind 与优先级的热重载发现入口。 |
+| `EditorViewportProvider` | 构建提交、绘制工具栏和处理归一化 pointer。 |
+| `EditorViewportContext` | 当前 Editor、交互服务、viewport ID 与物理尺寸。 |
+| `EditorViewportSubmission` | Plugin 提供的 `RenderFrameData`、可选 Pipeline、目标格式和优先级。 |
+| `EditorViewportRequest`, `EditorViewportOutput` | Host 请求与 opaque `ImGuiTextureHandle` 输出。 |
+| `EditorRenderingModule` | Provider generation、Submit/Draw/Release 与异常隔离。 |
+
+Plugin 示例：
+
+```csharp
+[EditorViewportProviderExtension(
+    "sample.scene-provider",
+    "inno.editor.viewport.scene")]
+public sealed class SampleSceneProvider : EditorViewportProvider
+{
+    public override EditorViewportSubmission Build(EditorViewportContext context)
+    {
+        var data = new RenderFrameData();
+        data.Set(new RenderDataChannelId("sample.scene"), BuildFrame(context));
+        return new EditorViewportSubmission(data, LoadPipeline());
+    }
+}
+```
+
+Host 创建或 resize `RenderTexture`，提交普通 `RenderRequest`，再将 GPU texture 注册为 `ImGuiTextureHandle`。不存在 CPU readback，也不向 Panel 暴露 BGFX handle。Provider 构建失败只影响对应 viewport；无 Provider 时显示 “No active rendering provider”，Editor 其他功能继续运行。

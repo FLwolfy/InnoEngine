@@ -261,7 +261,7 @@ public sealed class EngineAssetIntegrationTests : IDisposable
         AssetManager.Rescan();
 
         Assert.Equal(id, asset.identity.persistentId);
-        Assert.Equal("Scenes/renamed.iscene", asset.sourcePath);
+        Assert.Equal("Scenes/renamed.iscene", asset.assetPath.ToString());
         Assert.Same(asset, AssetManager.Load<SceneAsset>(id));
         GameScene instance = asset.Instantiate();
         Assert.Equal("renamed", instance.name);
@@ -288,7 +288,7 @@ public sealed class EngineAssetIntegrationTests : IDisposable
         GameObject instance = asset.Instantiate(targetScene);
 
         Assert.Equal(id, asset.identity.persistentId);
-        Assert.Equal("Prefabs/renamed.iprefab", asset.sourcePath);
+        Assert.Equal("Prefabs/renamed.iprefab", asset.assetPath.ToString());
         Assert.Equal("renamed", instance.name);
         Assert.Equal("Child", Assert.Single(instance.transform.children).gameObject.name);
 

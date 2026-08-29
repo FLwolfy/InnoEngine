@@ -1,9 +1,8 @@
 
 using System;
 using System.Collections.Generic;
-using System.IO;
-
 using Inno.Assets;
+using Inno.Assets.Core;
 using Inno.Assets.File;
 using Inno.Editor.Core;
 
@@ -84,7 +83,7 @@ internal sealed class FileBrowserData(AssetEditorModule assets)
         if (!string.IsNullOrEmpty(filter))
         {
             entries.RemoveAll(entry =>
-                !Path.GetFileName(entry.relativePath).Contains(filter, StringComparison.OrdinalIgnoreCase));
+                !entry.name.Contains(filter, StringComparison.OrdinalIgnoreCase));
         }
     }
 
@@ -108,8 +107,8 @@ internal sealed class FileBrowserData(AssetEditorModule assets)
             if (left.isDirectory != right.isDirectory)
                 return left.isDirectory ? -1 : 1;
             return string.Compare(
-                Path.GetFileName(left.relativePath),
-                Path.GetFileName(right.relativePath),
+                left.name,
+                right.name,
                 StringComparison.OrdinalIgnoreCase);
         });
         return sorted;
@@ -117,6 +116,16 @@ internal sealed class FileBrowserData(AssetEditorModule assets)
 
     internal IReadOnlyList<AssetFileEntry> GetVisibleChildren(string relativePath)
     {
-        return AssetManager.GetFileSystemChildren(relativePath);
+        AssetSourceId source = AssetPath.Parse(relativePath).source;
+        IReadOnlyList<AssetFileEntry> children = AssetManager.GetFileSystemChildren(relativePath);
+        if (children.Count == 0)
+            return children;
+        List<AssetFileEntry> isolated = [];
+        for (int i = 0; i < children.Count; i++)
+        {
+            if (children[i].source == source)
+                isolated.Add(children[i]);
+        }
+        return isolated;
     }
 }

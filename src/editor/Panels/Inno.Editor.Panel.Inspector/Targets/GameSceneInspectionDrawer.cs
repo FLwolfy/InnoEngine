@@ -49,7 +49,7 @@ internal sealed class GameSceneInspectionDrawer : InspectionDrawer<GameScene>
 
     /// <inheritdoc />
     public override string icon => m_settings
-        .Get("Global/Appearance/Icons/Scene")
+        .Get("Editor/Appearance/Icons/Scene")
         .GetAsString("value", ImGuiIcon.Cubes)!;
 
     protected override (string name, Action<string>? setter) BindName(

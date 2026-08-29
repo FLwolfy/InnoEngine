@@ -55,19 +55,27 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
     /// <inheritdoc />
     protected override void Restore(EditorState state)
     {
-        string directory = state.Get("currentDirectory", string.Empty);
-        while (!string.IsNullOrEmpty(directory) &&
-               (!AssetManager.TryGetFileSystemEntry(directory, out AssetFileEntry entry) || !entry.isDirectory))
+        string directory = NormalizePath(state.Get("currentDirectory", string.Empty));
+        while (!IsAvailableDirectory(directory))
         {
-            directory = Normalize(Path.GetDirectoryName(directory));
+            string parent = GetParentDirectory(directory);
+            if (string.Equals(parent, directory, StringComparison.Ordinal))
+            {
+                directory = string.Empty;
+                break;
+            }
+            directory = parent;
         }
         browser.SetCurrentDirectory(directory);
     }
 
+    private static bool IsAvailableDirectory(string path)
+        => AssetManager.TryGetFileSystemEntry(path, out AssetFileEntry entry) && entry.isDirectory;
+
     internal EditorInteractions interactions => m_interactions;
 
     internal string folderIcon => m_settings
-        .Get("Global/Appearance/Icons/Folder")
+        .Get("Editor/Appearance/Icons/Folder")
         .GetAsString("value", Inno.Platform.ImGui.ImGuiIcon.Folder)!;
 
     internal bool TryCreateContext(
@@ -357,7 +365,7 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
             return icon;
         }
         return m_settings
-            .Get("Global/Appearance/Icons/File")
+            .Get("Editor/Appearance/Icons/File")
             .GetAsString("value", Inno.Platform.ImGui.ImGuiIcon.File)!;
     }
 
@@ -425,6 +433,13 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
         targetPath = string.Empty;
         string source = Normalize(sourcePath);
         string directory = Normalize(targetDirectory);
+        AssetPath isolatedSource = AssetPath.Parse(source);
+        AssetPath isolatedDirectory = AssetPath.Parse(directory);
+        if (isolatedSource.source != AssetSourceId.project ||
+            isolatedDirectory.source != AssetSourceId.project)
+        {
+            return false;
+        }
         EditorContext? editorContext = m_context;
         if (editorContext is null ||
             string.IsNullOrEmpty(source) ||

@@ -30,11 +30,6 @@ internal static class ScriptProjectGenerator
             bool editor = assembly.scope == ScriptAssemblyScope.Editor;
             ScriptApiProfile api = editor ? editorApi : runtimeApi;
             ScriptApiReferenceSet references = editor ? editorApiReferences : runtimeApiReferences;
-            IReadOnlyList<string> plugins = editor
-                ? sources.runtimePlugins.Concat(sources.editorPlugins)
-                    .Select(static plugin => plugin.sourcePath)
-                    .ToArray()
-                : sources.runtimePlugins.Select(static plugin => plugin.sourcePath).ToArray();
             string apiMapPath = Path.Combine(
                 apiMapDirectory,
                 assembly.name + ScriptApiMapBuilder.C_FILE_EXTENSION);
@@ -46,7 +41,7 @@ internal static class ScriptProjectGenerator
                         assembly.sources.Select(static source => source.sourcePath).ToArray()),
                     api,
                     references,
-                    plugins,
+                    [],
                     apiMapPath,
                     codeAnalysisPath,
                     assembly.references.Select(static reference => reference + ".csproj").ToArray(),

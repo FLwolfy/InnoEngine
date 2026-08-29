@@ -1,125 +1,162 @@
 using System;
-using Inno.Core.Mathematics;
-using Inno.Engine.Scene.Layers;
+using System.Collections.Generic;
 
 namespace Inno.Rendering;
 
 /// <summary>
-/// Contains immutable camera matrices and viewport data for one render request.
+/// Defines a destination pixel rectangle without assuming producer or rendering semantics.
 /// </summary>
-public sealed class RenderView
+public readonly record struct RenderViewport
 {
-    /// <summary>
-    /// Creates an immutable render view.
-    /// </summary>
-    /// <param name="viewMatrix">Left-handed world-to-view matrix.</param>
-    /// <param name="projectionMatrix">Left-handed zero-to-one projection before backend correction.</param>
-    /// <param name="worldPosition">Camera world position.</param>
-    /// <param name="pixelWidth">Viewport width in pixels.</param>
-    /// <param name="pixelHeight">Viewport height in pixels.</param>
-    /// <param name="cullingMask">Scene layers visible to this view.</param>
-    public RenderView(
-        Matrix viewMatrix,
-        Matrix projectionMatrix,
-        Vector3 worldPosition,
-        int pixelWidth,
-        int pixelHeight,
-        GameLayerMask cullingMask)
+    /// <summary>Creates a render viewport.</summary>
+    /// <param name="x">Left pixel offset in the destination.</param>
+    /// <param name="y">Top pixel offset in the destination.</param>
+    /// <param name="width">Positive viewport width.</param>
+    /// <param name="height">Positive viewport height.</param>
+    public RenderViewport(int x, int y, int width, int height)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelWidth);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelHeight);
-        this.viewMatrix = viewMatrix;
-        this.projectionMatrix = projectionMatrix;
-        this.worldPosition = worldPosition;
-        this.pixelWidth = pixelWidth;
-        this.pixelHeight = pixelHeight;
-        this.cullingMask = cullingMask;
+        ArgumentOutOfRangeException.ThrowIfNegative(x);
+        ArgumentOutOfRangeException.ThrowIfNegative(y);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
     }
 
-    /// <summary>Gets the left-handed world-to-view matrix.</summary>
-    public Matrix viewMatrix { get; }
+    /// <summary>Gets the left pixel offset.</summary>
+    public int x { get; }
 
-    /// <summary>Gets the left-handed zero-to-one projection before backend correction.</summary>
-    public Matrix projectionMatrix { get; }
+    /// <summary>Gets the top pixel offset.</summary>
+    public int y { get; }
 
-    /// <summary>Gets the camera world position.</summary>
-    public Vector3 worldPosition { get; }
+    /// <summary>Gets the viewport width.</summary>
+    public int width { get; }
 
-    /// <summary>Gets the viewport width in pixels.</summary>
-    public int pixelWidth { get; }
-
-    /// <summary>Gets the viewport height in pixels.</summary>
-    public int pixelHeight { get; }
-
-    /// <summary>Gets scene layers visible to this view.</summary>
-    public GameLayerMask cullingMask { get; }
+    /// <summary>Gets the viewport height.</summary>
+    public int height { get; }
 }
 
 /// <summary>
-/// Requests one camera or editor view from the active render pipeline.
+/// Carries generation-scoped, frame-only payloads between a request producer and its pipeline.
+/// </summary>
+/// <remarks>
+/// Values may use reloadable plugin types because a snapshot is retained only until the owning
+/// render frame completes. Persistent configuration must use stable identifiers and serialized bytes.
+/// </remarks>
+public sealed class RenderFrameData
+{
+    private readonly Dictionary<FrameDataKey, object> m_values = [];
+    private bool m_isReadOnly;
+
+    /// <summary>Gets the number of populated channel and value-type pairs.</summary>
+    public int count => m_values.Count;
+
+    /// <summary>Adds or replaces one typed value in an open data channel.</summary>
+    /// <typeparam name="TValue">Frame-local payload type.</typeparam>
+    /// <param name="channel">Pipeline-defined stable data channel.</param>
+    /// <param name="value">Value retained until the current frame completes.</param>
+    /// <exception cref="InvalidOperationException">Thrown after the data has entered a request.</exception>
+    public void Set<TValue>(Inno.Rendering.Core.RenderDataChannelId channel, TValue value)
+        where TValue : notnull
+    {
+        if (!channel.isValid)
+            throw new ArgumentException("A render data channel must be valid.", nameof(channel));
+        if (m_isReadOnly)
+            throw new InvalidOperationException("Submitted render frame data is immutable.");
+        ArgumentNullException.ThrowIfNull(value);
+        m_values[new FrameDataKey(channel, typeof(TValue))] = value;
+    }
+
+    /// <summary>Tries to read one typed value from an open data channel.</summary>
+    /// <typeparam name="TValue">Expected frame-local payload type.</typeparam>
+    /// <param name="channel">Pipeline-defined stable data channel.</param>
+    /// <param name="value">Receives the stored value when present.</param>
+    /// <returns><see langword="true"/> when the channel contains the exact requested type.</returns>
+    public bool TryGet<TValue>(
+        Inno.Rendering.Core.RenderDataChannelId channel,
+        out TValue? value)
+    {
+        if (channel.isValid
+            && m_values.TryGetValue(new FrameDataKey(channel, typeof(TValue)), out object? stored)
+            && stored is TValue typed)
+        {
+            value = typed;
+            return true;
+        }
+
+        value = default;
+        return false;
+    }
+
+    /// <summary>Removes all values before this object enters a submitted request.</summary>
+    /// <exception cref="InvalidOperationException">Thrown after the data has entered a request.</exception>
+    public void Clear()
+    {
+        if (m_isReadOnly)
+            throw new InvalidOperationException("Submitted render frame data is immutable.");
+        m_values.Clear();
+    }
+
+    internal RenderFrameData Snapshot()
+    {
+        var snapshot = new RenderFrameData();
+        foreach ((FrameDataKey key, object value) in m_values)
+            snapshot.m_values.Add(key, value);
+        snapshot.m_isReadOnly = true;
+        return snapshot;
+    }
+
+    private readonly record struct FrameDataKey(
+        Inno.Rendering.Core.RenderDataChannelId channel,
+        Type type);
+}
+
+/// <summary>
+/// Requests one pipeline-defined rendering operation without prescribing world semantics.
 /// </summary>
 public sealed class RenderRequest
 {
-    /// <summary>
-    /// Creates a render request.
-    /// </summary>
-    /// <param name="name">Unique frame-local diagnostic name.</param>
-    /// <param name="view">Immutable camera view.</param>
+    /// <summary>Creates an immutable render request.</summary>
+    /// <param name="name">Frame-local diagnostic name.</param>
     /// <param name="target">Render destination.</param>
-    /// <param name="renderPath">Per-view path override.</param>
-    /// <param name="clearMode">Target initialization mode.</param>
-    /// <param name="backgroundColor">Linear background clear color.</param>
-    /// <param name="priority">Ascending camera scheduling priority.</param>
-    /// <param name="enablePicking">Whether the pipeline should generate a GPU object-ID target.</param>
-    /// <param name="selectedObjectId">Optional renderer identity consumed by editor overlay features.</param>
+    /// <param name="viewport">Destination pixel viewport.</param>
+    /// <param name="pipeline">Optional per-request pipeline asset; the project default is used when null.</param>
+    /// <param name="data">Optional pipeline-defined frame data copied into an immutable snapshot.</param>
+    /// <param name="priority">Ascending frame scheduling priority.</param>
     public RenderRequest(
         string name,
-        RenderView view,
         RenderTarget target,
-        RenderPath renderPath = RenderPath.Automatic,
-        CameraClearMode clearMode = CameraClearMode.Sky,
-        Color backgroundColor = default,
-        int priority = 0,
-        bool enablePicking = false,
-        Guid selectedObjectId = default)
+        RenderViewport viewport,
+        RenderPipelineAsset? pipeline = null,
+        RenderFrameData? data = null,
+        int priority = 0)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        ArgumentNullException.ThrowIfNull(view);
         this.name = name;
-        this.view = view;
         this.target = target;
-        this.renderPath = renderPath;
-        this.clearMode = clearMode;
-        this.backgroundColor = backgroundColor;
+        this.viewport = viewport;
+        this.pipeline = pipeline;
+        this.data = data?.Snapshot() ?? new RenderFrameData().Snapshot();
         this.priority = priority;
-        this.enablePicking = enablePicking;
-        this.selectedObjectId = selectedObjectId;
     }
 
-    /// <summary>Gets the unique frame-local diagnostic name.</summary>
+    /// <summary>Gets the frame-local diagnostic name.</summary>
     public string name { get; }
-
-    /// <summary>Gets the immutable camera view.</summary>
-    public RenderView view { get; }
 
     /// <summary>Gets the render destination.</summary>
     public RenderTarget target { get; }
 
-    /// <summary>Gets the per-view path override.</summary>
-    public RenderPath renderPath { get; }
+    /// <summary>Gets the destination pixel viewport.</summary>
+    public RenderViewport viewport { get; }
 
-    /// <summary>Gets target initialization mode.</summary>
-    public CameraClearMode clearMode { get; }
+    /// <summary>Gets the per-request pipeline asset, or null to use the project default.</summary>
+    public RenderPipelineAsset? pipeline { get; }
 
-    /// <summary>Gets the linear background clear color.</summary>
-    public Color backgroundColor { get; }
+    /// <summary>Gets immutable pipeline-defined frame data.</summary>
+    public RenderFrameData data { get; }
 
-    /// <summary>Gets ascending camera scheduling priority.</summary>
+    /// <summary>Gets the ascending frame scheduling priority.</summary>
     public int priority { get; }
-
-    /// <summary>Gets whether a GPU object-ID target is requested for this view.</summary>
-    public bool enablePicking { get; }
-
-    /// <summary>Gets the optional selected renderer identity for editor overlay features.</summary>
-    public Guid selectedObjectId { get; }
 }

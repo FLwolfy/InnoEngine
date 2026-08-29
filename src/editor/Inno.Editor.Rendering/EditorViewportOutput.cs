@@ -1,7 +1,8 @@
 using System;
-using System.Collections.Generic;
 using System.Numerics;
 using Inno.Platform.ImGui;
+using Inno.Rendering;
+using Inno.Rendering.Core;
 
 namespace Inno.Editor.Rendering;
 
@@ -51,18 +52,6 @@ public readonly record struct EditorViewportOutput
 /// </summary>
 public interface IEditorRenderingHost
 {
-    /// <summary>Gets the active project-relative pipeline asset path, or <see langword="null"/> for host defaults.</summary>
-    string? activePipelineAssetPath { get; }
-
-    /// <summary>Enumerates valid pipeline assets currently available in the project.</summary>
-    /// <returns>Stable picker data sorted by project-relative path.</returns>
-    IReadOnlyList<EditorPipelineAssetInfo> GetPipelineAssets();
-
-    /// <summary>Attempts to activate an imported pipeline and its complete feature generation.</summary>
-    /// <param name="assetPath">Project-relative pipeline asset path.</param>
-    /// <returns><see langword="true"/> when the candidate became active.</returns>
-    bool TryActivatePipelineAsset(string assetPath);
-
     /// <summary>Submits or updates one offscreen editor viewport.</summary>
     /// <param name="request">Complete frame request.</param>
     /// <returns>The current presentation output, which can be warming up for one frame.</returns>
@@ -79,4 +68,59 @@ public interface IEditorRenderingHost
 
     /// <summary>Releases every viewport owned by this editor host service.</summary>
     void ReleaseAll();
+}
+
+/// <summary>Describes one model-neutral offscreen request prepared by an Editor viewport provider.</summary>
+public sealed class EditorViewportRequest
+{
+    /// <summary>Creates one immutable model-neutral viewport request.</summary>
+    /// <param name="viewportId">Stable panel viewport identity.</param>
+    /// <param name="pixelWidth">Positive target width.</param>
+    /// <param name="pixelHeight">Positive target height.</param>
+    /// <param name="pipeline">Provider-selected pipeline, or null for the project default.</param>
+    /// <param name="data">Provider-defined frame-only data.</param>
+    /// <param name="targetFormat">Provider-selected presentation target format.</param>
+    /// <param name="priority">Ascending render scheduling priority.</param>
+    public EditorViewportRequest(
+        string viewportId,
+        int pixelWidth,
+        int pixelHeight,
+        RenderPipelineAsset? pipeline,
+        RenderFrameData data,
+        RenderTextureFormat targetFormat = RenderTextureFormat.RGBA8Srgb,
+        int priority = 0)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(viewportId);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelWidth);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelHeight);
+        ArgumentNullException.ThrowIfNull(data);
+        this.viewportId = viewportId;
+        this.pixelWidth = pixelWidth;
+        this.pixelHeight = pixelHeight;
+        this.pipeline = pipeline;
+        this.data = data;
+        this.targetFormat = targetFormat;
+        this.priority = priority;
+    }
+
+    /// <summary>Gets the stable viewport identity.</summary>
+    public string viewportId { get; }
+
+    /// <summary>Gets the target width.</summary>
+    public int pixelWidth { get; }
+
+    /// <summary>Gets the target height.</summary>
+    public int pixelHeight { get; }
+
+    /// <summary>Gets the provider-selected pipeline, or null for the project default.</summary>
+    public RenderPipelineAsset? pipeline { get; }
+
+    /// <summary>Gets provider-defined frame-only data.</summary>
+    public RenderFrameData data { get; }
+
+    /// <summary>Gets the provider-selected presentation target format.</summary>
+    public RenderTextureFormat targetFormat { get; }
+
+    /// <summary>Gets ascending render scheduling priority.</summary>
+    public int priority { get; }
 }

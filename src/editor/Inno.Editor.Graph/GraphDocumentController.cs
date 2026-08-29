@@ -70,7 +70,7 @@ public sealed class GraphDocumentController
             {
                 foreach ((string propertyId, GraphSerializedValue value) in values)
                 {
-                    node.SetValue(propertyId, new GraphSerializedValue(value.json));
+                    node.SetValue(propertyId, value.Clone());
                 }
             }
 
@@ -188,7 +188,7 @@ public sealed class GraphDocumentController
         Mutate(
             "Edit Node Property",
             $"graph:{documentId}:value:{nodeId.value}:{propertyId}",
-            () => node.SetValue(propertyId, new GraphSerializedValue(value.json)));
+            () => node.SetValue(propertyId, value.Clone()));
     }
 
     /// <summary>Removes one neutral node property as a structural edit.</summary>
@@ -315,7 +315,7 @@ public sealed class GraphDocumentController
         var clone = new GraphNodeRecord(id, source.definitionId) { position = position };
         foreach ((string propertyId, GraphSerializedValue value) in source.values)
         {
-            clone.SetValue(propertyId, new GraphSerializedValue(value.json));
+            clone.SetValue(propertyId, value.Clone());
         }
 
         return clone;

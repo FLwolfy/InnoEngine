@@ -11,6 +11,7 @@ using Inno.Core.Scripting;
 [assembly: ScriptingApiExport(typeof(GraphPortId), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GraphPosition), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GraphSerializedValue), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(GraphDocumentCodec), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GraphNodeRecord), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GraphEndpoint), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GraphEdgeRecord), ScriptingApiScope.Runtime)]

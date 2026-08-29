@@ -1,0 +1,179 @@
+using System;
+
+using Inno.Editor.Core;
+using Inno.Editor.Interactions;
+using Inno.Rendering;
+using Inno.Rendering.Core;
+
+namespace Inno.Editor.Rendering;
+
+/// <summary>Identifies one open Editor viewport purpose without prescribing rendering semantics.</summary>
+public readonly record struct EditorViewportKindId
+{
+    /// <summary>Creates a stable viewport purpose identifier.</summary>
+    /// <param name="value">Globally stable viewport purpose.</param>
+    public EditorViewportKindId(string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+        this.value = value.Trim();
+    }
+
+    /// <summary>Gets the stable viewport purpose.</summary>
+    public string value { get; }
+
+    /// <summary>Gets whether this identifier is usable.</summary>
+    public bool isValid => !string.IsNullOrWhiteSpace(value);
+
+    /// <inheritdoc />
+    public override string ToString() => value ?? string.Empty;
+}
+
+/// <summary>Marks a reloadable Plugin adapter that can build one kind of Editor viewport.</summary>
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+public sealed class EditorViewportProviderExtensionAttribute : Attribute
+{
+    /// <summary>Creates a viewport provider declaration.</summary>
+    /// <param name="id">Globally stable provider identity.</param>
+    /// <param name="kind">Open viewport purpose handled by the provider.</param>
+    /// <param name="priority">Selection priority when several providers handle the same purpose.</param>
+    public EditorViewportProviderExtensionAttribute(string id, string kind, int priority = 0)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentException.ThrowIfNullOrWhiteSpace(kind);
+        this.id = id.Trim();
+        this.kind = new EditorViewportKindId(kind);
+        this.priority = priority;
+    }
+
+    /// <summary>Gets the globally stable provider identity.</summary>
+    public string id { get; }
+
+    /// <summary>Gets the open viewport purpose handled by the provider.</summary>
+    public EditorViewportKindId kind { get; }
+
+    /// <summary>Gets provider selection priority.</summary>
+    public int priority { get; }
+}
+
+/// <summary>Supplies frame-only Editor interaction and output dimensions to a provider.</summary>
+public sealed class EditorViewportContext
+{
+    internal EditorViewportContext(
+        EditorContext editor,
+        EditorInteractions interactions,
+        EditorViewportKindId kind,
+        string viewportId,
+        int pixelWidth,
+        int pixelHeight)
+    {
+        this.editor = editor;
+        this.interactions = interactions;
+        this.kind = kind;
+        this.viewportId = viewportId;
+        this.pixelWidth = pixelWidth;
+        this.pixelHeight = pixelHeight;
+    }
+
+    /// <summary>Gets the current Editor context.</summary>
+    public EditorContext editor { get; }
+
+    /// <summary>Gets the shared Editor interaction and selection service.</summary>
+    public EditorInteractions interactions { get; }
+
+    /// <summary>Gets the open viewport purpose.</summary>
+    public EditorViewportKindId kind { get; }
+
+    /// <summary>Gets the stable panel viewport identity.</summary>
+    public string viewportId { get; }
+
+    /// <summary>Gets target width in physical pixels.</summary>
+    public int pixelWidth { get; }
+
+    /// <summary>Gets target height in physical pixels.</summary>
+    public int pixelHeight { get; }
+}
+
+/// <summary>Returns provider-selected pipeline and frame data without exposing a GPU backend.</summary>
+public sealed class EditorViewportSubmission
+{
+    /// <summary>Creates a viewport submission.</summary>
+    /// <param name="data">Pipeline-defined frame-only data.</param>
+    /// <param name="pipeline">Provider-selected pipeline, or null for the project default.</param>
+    /// <param name="targetFormat">Presentation target format expected by the pipeline.</param>
+    /// <param name="priority">Ascending render scheduling priority.</param>
+    public EditorViewportSubmission(
+        RenderFrameData data,
+        RenderPipelineAsset? pipeline = null,
+        RenderTextureFormat targetFormat = RenderTextureFormat.RGBA8Srgb,
+        int priority = 0)
+    {
+        this.data = data ?? throw new ArgumentNullException(nameof(data));
+        this.pipeline = pipeline;
+        this.targetFormat = targetFormat;
+        this.priority = priority;
+    }
+
+    /// <summary>Gets pipeline-defined frame-only data.</summary>
+    public RenderFrameData data { get; }
+
+    /// <summary>Gets the selected pipeline, or null for the project default.</summary>
+    public RenderPipelineAsset? pipeline { get; }
+
+    /// <summary>Gets the presentation target format expected by the pipeline.</summary>
+    public RenderTextureFormat targetFormat { get; }
+
+    /// <summary>Gets ascending render scheduling priority.</summary>
+    public int priority { get; }
+}
+
+/// <summary>Supplies normalized pointer interaction over one rendered viewport.</summary>
+public sealed class EditorViewportPointerContext
+{
+    internal EditorViewportPointerContext(EditorViewportContext viewport, float x, float y, int button)
+    {
+        this.viewport = viewport;
+        this.x = Math.Clamp(x, 0f, 1f);
+        this.y = Math.Clamp(y, 0f, 1f);
+        this.button = button;
+    }
+
+    /// <summary>Gets the owning frame-only viewport context.</summary>
+    public EditorViewportContext viewport { get; }
+
+    /// <summary>Gets normalized horizontal pointer position.</summary>
+    public float x { get; }
+
+    /// <summary>Gets normalized vertical pointer position.</summary>
+    public float y { get; }
+
+    /// <summary>Gets the platform-independent pointer button index.</summary>
+    public int button { get; }
+}
+
+/// <summary>
+/// Builds rendering-model-specific Editor requests while the host owns targets and presentation.
+/// </summary>
+public abstract class EditorViewportProvider
+{
+    /// <summary>Creates a parameterless reloadable viewport provider.</summary>
+    protected EditorViewportProvider()
+    {
+    }
+
+    /// <summary>Builds one model-neutral render submission for the current frame.</summary>
+    /// <param name="context">Frame-only Editor and viewport context.</param>
+    /// <returns>Provider-selected pipeline and frame data.</returns>
+    public abstract EditorViewportSubmission Build(EditorViewportContext context);
+
+    /// <summary>Draws optional provider-specific toolbar controls.</summary>
+    /// <param name="context">Frame-only Editor and viewport context.</param>
+    public virtual void DrawToolbar(EditorViewportContext context)
+    {
+    }
+
+    /// <summary>Handles one pointer click after the viewport image has been presented.</summary>
+    /// <param name="context">Normalized frame-only pointer context.</param>
+    public virtual void HandlePointer(EditorViewportPointerContext context)
+    {
+    }
+}

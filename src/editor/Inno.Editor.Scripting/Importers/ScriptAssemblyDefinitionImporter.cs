@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Inno.Assets.Core;
 using Inno.Assets.Loader;
+using Inno.Assets.Serialization;
 
 namespace Inno.Editor.Scripting;
 
@@ -19,32 +20,27 @@ internal sealed class ScriptAssemblyDefinitionImporter : AssetImporter<ScriptAss
         AssetImportWriter<ScriptAssemblyDefinitionAsset> output,
         CancellationToken cancellationToken)
     {
-        DefinitionModel model = JsonSerializer.Deserialize<DefinitionModel>(
+        ScriptAssemblyDefinitionAsset asset = NativeAssetSourceSerialization.Import<ScriptAssemblyDefinitionAsset>(
             context.sourceBytes.Span,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-            ?? throw new InvalidOperationException("Assembly definition source is empty.");
-        if (string.IsNullOrWhiteSpace(model.name))
+            out IReadOnlyList<AssetDependency> dependencies);
+        foreach (AssetDependency dependency in dependencies)
+            output.DependsOnAsset(dependency);
+        if (string.IsNullOrWhiteSpace(asset.assemblyName))
             throw new InvalidOperationException("Assembly definition name is required.");
-        if (!Enum.TryParse(model.scope, ignoreCase: true, out ScriptAssemblyScope scope))
+        if (!Enum.IsDefined(asset.scope))
             throw new InvalidOperationException("Assembly definition scope must be Runtime or Editor.");
-        output.SetAsset(new ScriptAssemblyDefinitionAsset(
-            model.name.Trim(),
-            scope,
-            model.references ?? [],
-            model.defines ?? [],
-            model.nullable,
-            model.allowUnsafe));
+        output.SetAsset(asset);
         await output.WriteArtifactAsync("source", context.sourceBytes, cancellationToken)
             .ConfigureAwait(false);
     }
 
-    private sealed class DefinitionModel
+    protected override ValueTask<ReadOnlyMemory<byte>?> ExportAsync(
+        ScriptAssemblyDefinitionAsset asset,
+        CancellationToken cancellationToken)
     {
-        public string name { get; set; } = string.Empty;
-        public string scope { get; set; } = "Runtime";
-        public string[]? references { get; set; }
-        public string[]? defines { get; set; }
-        public bool nullable { get; set; } = true;
-        public bool allowUnsafe { get; set; }
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(asset.assemblyName))
+            throw new InvalidOperationException("Assembly definition name is required.");
+        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(NativeAssetSourceSerialization.Export(asset));
     }
 }

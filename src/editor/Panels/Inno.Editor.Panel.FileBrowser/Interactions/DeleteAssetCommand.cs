@@ -10,7 +10,9 @@ namespace Inno.Editor.Panel.FileBrowser;
 internal sealed class DeleteAssetCommand(AssetEditorModule assets) : EditorAction<AssetFileEntry>
 {
     protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
-        => TryGetAssetContext(context, out _) ? EditorActionState.enabled : EditorActionState.hidden;
+        => !context.target.isReadOnly && TryGetAssetContext(context, out _)
+            ? EditorActionState.enabled
+            : EditorActionState.hidden;
 
     protected override void Execute(EditorActionContext<AssetFileEntry> context)
     {

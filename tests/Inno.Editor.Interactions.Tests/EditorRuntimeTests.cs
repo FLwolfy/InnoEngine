@@ -11,6 +11,8 @@ using Inno.Core.Events;
 using Inno.Core.Identity;
 using Inno.Core.Input;
 using Inno.Core.Reflection;
+using Inno.Core.Serialization;
+using Inno.Core.Settings;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 using Xunit;
@@ -33,6 +35,8 @@ public sealed class EditorRuntimeTests : IDisposable
             cacheDirectory = Path.Combine(m_projectRoot, "Library", "Assemblies")
         });
         TypeCacheManager.Initialize();
+        SerializationManager.Initialize();
+        ProjectSettingsManager.Initialize(Path.Combine(m_projectRoot, "ProjectSettings.inno"));
 
         TestModule.startCount = 0;
         TestModule.stopCount = 0;
@@ -68,6 +72,8 @@ public sealed class EditorRuntimeTests : IDisposable
     public void Dispose()
     {
         m_runtime.Dispose();
+        ProjectSettingsManager.Shutdown();
+        SerializationManager.Shutdown();
         TypeCacheManager.Shutdown();
         AssemblyManager.Shutdown();
         if (Directory.Exists(m_projectRoot))
@@ -124,32 +130,30 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
-    public void ExtensionActivatorInjectsOneStableAssignableHostService()
+    public void InteractionRuntimeInjectsOneStableAssignableHostService()
     {
         var service = new TestHostService();
-        var activator = new EditorExtensionActivator(
-            m_runtime.context,
-            m_runtime.interactions,
-            Array.Empty<Type>(),
-            [typeof(HostServicePanel)],
+        HostServicePanel.current = null;
+        using var runtime = new EditorInteractionRuntime(
+            new EditorContext(m_projectRoot),
             [service]);
 
-        HostServicePanel panel = activator.CreateExtension<HostServicePanel>(typeof(HostServicePanel));
+        runtime.Start();
 
-        Assert.Same(service, panel.service);
+        Assert.Contains(runtime.panels, static panel => panel.id == "tests.host-service");
+        Assert.Same(service, HostServicePanel.current);
     }
 
     [Fact]
-    public void ExtensionActivatorRejectsExtensionWhenHostServiceIsUnavailable()
+    public void InteractionRuntimeRejectsExtensionWhenHostServiceIsUnavailable()
     {
-        var activator = new EditorExtensionActivator(
-            m_runtime.context,
-            m_runtime.interactions,
-            Array.Empty<Type>(),
-            [typeof(HostServicePanel)],
-            Array.Empty<object>());
+        HostServicePanel.current = null;
+        using var runtime = new EditorInteractionRuntime(new EditorContext(m_projectRoot));
 
-        Assert.False(activator.CanCreate(typeof(HostServicePanel)));
+        runtime.Start();
+
+        Assert.DoesNotContain(runtime.panels, static panel => panel.id == "tests.host-service");
+        Assert.Null(HostServicePanel.current);
     }
 
     [Fact]
@@ -868,13 +872,19 @@ public sealed class NeutralHistoryHandler : EditorHistoryHandler
     }
 }
 
-internal interface ITestHostService;
+public interface ITestHostService;
 
-internal sealed class TestHostService : ITestHostService;
+public sealed class TestHostService : ITestHostService;
 
-internal sealed class HostServicePanel(ITestHostService service) : EditorPanel
+[EditorPanel("tests.host-service", "Host Service")]
+public sealed class HostServicePanel : EditorPanel
 {
-    internal ITestHostService service { get; } = service;
+    public static ITestHostService? current;
+
+    public HostServicePanel(ITestHostService service)
+    {
+        current = service;
+    }
 
     protected override void OnDraw(EditorContext context)
         => _ = context;

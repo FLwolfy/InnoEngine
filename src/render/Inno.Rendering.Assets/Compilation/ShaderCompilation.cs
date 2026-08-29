@@ -74,33 +74,26 @@ public sealed class ShaderCompileTarget
     /// <summary>
     /// Creates a shader compilation target.
     /// </summary>
-    /// <param name="profile">Target shaderc profile.</param>
+    /// <param name="profileKey">Backend compiler-owned stable profile key.</param>
     /// <param name="capabilities">Target renderer capabilities.</param>
     /// <param name="optimize">Whether release optimization is enabled.</param>
     /// <param name="debugInformation">Whether shader debug information is emitted.</param>
     public ShaderCompileTarget(
-        ShaderCompilerProfile profile,
+        string profileKey,
         GraphicsCapabilities capabilities,
         bool optimize = true,
         bool debugInformation = false)
     {
-        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentException.ThrowIfNullOrWhiteSpace(profileKey);
         ArgumentNullException.ThrowIfNull(capabilities);
-        if (profile.backend != capabilities.backend)
-        {
-            throw new ArgumentException(
-                "Shader profile backend must match the capability snapshot.",
-                nameof(capabilities));
-        }
-
-        this.profile = profile;
+        this.profileKey = profileKey;
         this.capabilities = capabilities;
         this.optimize = optimize;
         this.debugInformation = debugInformation;
     }
 
-    /// <summary>Gets the target compiler profile.</summary>
-    public ShaderCompilerProfile profile { get; }
+    /// <summary>Gets the backend compiler-owned stable profile key.</summary>
+    public string profileKey { get; }
 
     /// <summary>Gets target renderer capabilities.</summary>
     public GraphicsCapabilities capabilities { get; }
@@ -112,7 +105,7 @@ public sealed class ShaderCompileTarget
     public bool debugInformation { get; }
 
     /// <summary>Gets a stable target cache-key fragment.</summary>
-    public string key => $"{profile.key}:opt={optimize}:debug={debugInformation}";
+    public string key => $"{profileKey}:opt={optimize}:debug={debugInformation}";
 }
 
 /// <summary>
@@ -169,7 +162,6 @@ public sealed class CompiledShaderPass
         IReadOnlyList<ShaderStageArtifact> stages,
         ShaderInterface shaderInterface)
     {
-        ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(stages);
         ArgumentNullException.ThrowIfNull(shaderInterface);
         this.definition = definition;
@@ -264,7 +256,14 @@ public sealed class ShaderCompilationResult
         && diagnostics.All(static value => value.severity != ShaderDiagnosticSeverity.Error);
 }
 
-internal sealed record ShaderToolRequest(
+/// <summary>Supplies one validated IR stage to a backend-owned shader compiler.</summary>
+/// <param name="stage">Validated stage module.</param>
+/// <param name="stagePass">Owning IR pass.</param>
+/// <param name="pass">Stable pass definition.</param>
+/// <param name="target">Backend compiler target.</param>
+/// <param name="variant">Static keyword variant.</param>
+/// <param name="sourceRoot">Controlled source root used to resolve includes.</param>
+public sealed record ShaderToolRequest(
     ShaderIRStageModule stage,
     ShaderIRPass stagePass,
     ShaderPassDefinition pass,
@@ -272,14 +271,34 @@ internal sealed record ShaderToolRequest(
     ShaderVariantKey variant,
     string sourceRoot);
 
-internal sealed record ShaderToolResult(
+/// <summary>Returns one backend compiler process result without activating it.</summary>
+/// <param name="bytes">Compiled stage bytes, or <see langword="null"/> after failure.</param>
+/// <param name="exitCode">Compiler process exit code.</param>
+/// <param name="standardOutput">Captured standard output.</param>
+/// <param name="standardError">Captured standard error.</param>
+public sealed record ShaderToolResult(
     byte[]? bytes,
     int exitCode,
     string standardOutput,
     string standardError);
 
-internal interface IShaderCompilerToolchain
+/// <summary>Defines a backend-owned target compiler used by the common Shader IR pipeline.</summary>
+public interface IShaderCompilerToolchain
 {
+    /// <summary>Creates a target supported by this toolchain and capability snapshot.</summary>
+    /// <param name="capabilities">Target renderer capabilities.</param>
+    /// <param name="optimize">Whether release optimization is enabled.</param>
+    /// <param name="debugInformation">Whether compiler debug information is emitted.</param>
+    /// <returns>A stable target description accepted by this toolchain.</returns>
+    ShaderCompileTarget CreateTarget(
+        GraphicsCapabilities capabilities,
+        bool optimize = true,
+        bool debugInformation = false);
+
+    /// <summary>Compiles one validated stage without mutating active GPU state.</summary>
+    /// <param name="request">Complete stage compilation request.</param>
+    /// <param name="cancellationToken">Compilation cancellation.</param>
+    /// <returns>The target stage bytes and captured diagnostics.</returns>
     ValueTask<ShaderToolResult> CompileAsync(
         ShaderToolRequest request,
         CancellationToken cancellationToken);
@@ -292,16 +311,23 @@ public sealed partial class ShaderCompiler
 {
     private readonly IShaderCompilerToolchain m_toolchain;
 
-    /// <summary>Creates a compiler backed by the bundled BGFX shaderc executable.</summary>
-    public ShaderCompiler()
-        : this(new BgfxShadercToolchain())
-    {
-    }
-
-    internal ShaderCompiler(IShaderCompilerToolchain toolchain)
+    /// <summary>Creates a common IR compiler with one backend-owned target toolchain.</summary>
+    /// <param name="toolchain">Backend compiler implementation.</param>
+    public ShaderCompiler(IShaderCompilerToolchain toolchain)
     {
         m_toolchain = toolchain ?? throw new ArgumentNullException(nameof(toolchain));
     }
+
+    /// <summary>Creates a target supported by the configured backend compiler.</summary>
+    /// <param name="capabilities">Target renderer capabilities.</param>
+    /// <param name="optimize">Whether release optimization is enabled.</param>
+    /// <param name="debugInformation">Whether compiler debug information is emitted.</param>
+    /// <returns>A stable target description accepted by this compiler.</returns>
+    public ShaderCompileTarget CreateTarget(
+        GraphicsCapabilities capabilities,
+        bool optimize = true,
+        bool debugInformation = false)
+        => m_toolchain.CreateTarget(capabilities, optimize, debugInformation);
 
     /// <summary>
     /// Compiles a complete shader candidate without replacing any active artifact.
@@ -353,9 +379,9 @@ public sealed partial class ShaderCompiler
                     if (!diagnostics.Any(static value => value.severity == ShaderDiagnosticSeverity.Error))
                     {
                         diagnostics.Add(new ShaderDiagnostic(
-                            "SHADERC_FAILED",
+                            "SHADER_TARGET_COMPILE_FAILED",
                             ShaderDiagnosticSeverity.Error,
-                            $"shaderc failed for pass '{pass.definition.name}' stage '{stage.stage}' " +
+                            $"Target compiler failed for pass '{pass.definition.name}' stage '{stage.stage}' " +
                             $"with exit code {result.exitCode}.",
                             stage.location));
                     }
@@ -400,7 +426,7 @@ public sealed partial class ShaderCompiler
             .ToDictionary(static value => value.id, StringComparer.Ordinal);
         foreach ((string id, string option) in variant.options)
         {
-            if (!definitions.TryGetValue(id, out ShaderKeywordDefinition? definition))
+            if (!definitions.TryGetValue(id, out ShaderKeywordDefinition definition))
             {
                 diagnostics.Add(new ShaderDiagnostic(
                     "SHADER_VARIANT_UNKNOWN_KEYWORD",

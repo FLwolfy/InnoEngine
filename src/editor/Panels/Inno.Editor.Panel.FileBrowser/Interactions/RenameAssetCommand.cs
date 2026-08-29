@@ -20,7 +20,9 @@ internal sealed class RenameAssetCommand(AssetEditorModule assets) :
     private bool m_requestFocus;
 
     protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
-        => TryGetAssetContext(context, out _) ? EditorActionState.enabled : EditorActionState.hidden;
+        => !context.target.isReadOnly && TryGetAssetContext(context, out _)
+            ? EditorActionState.enabled
+            : EditorActionState.hidden;
 
     protected override void Execute(EditorActionContext<AssetFileEntry> context)
     {

@@ -14,7 +14,8 @@ namespace Inno.Editor.Panel.Settings;
 
 [EditorModal("editor.settings", "Settings", order: 100)]
 internal sealed class SettingsModal(
-    EditorSettings settings,
+    EditorSettings editorSettings,
+    ProjectSettingsEditor projectSettings,
     SettingsWindowModule window) : EditorModal
 {
     private readonly SettingsTree m_tree = new();
@@ -44,7 +45,8 @@ internal sealed class SettingsModal(
         SettingsEditSession? session = window.session;
         if (session is null)
             return;
-        if (session.catalogRevision != settings.catalogRevision)
+        if (session.editorCatalogRevision != editorSettings.catalogRevision ||
+            session.projectCatalogRevision != projectSettings.catalogRevision)
         {
             window.Refresh();
             session = window.session;
@@ -246,11 +248,23 @@ internal sealed class SettingsModal(
 
     private void DrawButtons(SettingsEditSession session)
     {
-        NativeImGui.BeginDisabled(!session.isDirty);
+        NativeImGui.BeginDisabled(!session.isEditorDirty);
         try
         {
-            if (NativeImGui.Button("Apply"))
-                _ = session.Apply();
+            if (NativeImGui.Button("Apply Editor"))
+                _ = session.ApplyEditor();
+        }
+        finally
+        {
+            NativeImGui.EndDisabled();
+        }
+
+        NativeImGui.SameLine();
+        NativeImGui.BeginDisabled(!session.isProjectDirty);
+        try
+        {
+            if (NativeImGui.Button("Apply Project"))
+                _ = session.ApplyProject();
         }
         finally
         {

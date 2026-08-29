@@ -9,8 +9,10 @@ using System.Threading.Tasks;
 
 using Inno.Assets;
 using Inno.Assets.Core;
+using Inno.Assets.Plugins;
 using Inno.Core.Assemblies;
 using Inno.Core.Reflection;
+using Inno.Core.Settings;
 using Inno.Editor.Core;
 
 namespace Inno.Editor.Scripting;
@@ -141,6 +143,10 @@ public sealed class ScriptManager : IDisposable
         GenerateProjectFiles();
         AssetManager.Changed -= OnAssetDatabaseChanged;
         AssetManager.Changed += OnAssetDatabaseChanged;
+        AssetManager.SourceMountsChanged -= OnSourceMountsChanged;
+        AssetManager.SourceMountsChanged += OnSourceMountsChanged;
+        PluginManager.ActivationCandidateChanged -= OnPluginActivationCandidateChanged;
+        PluginManager.ActivationCandidateChanged += OnPluginActivationCandidateChanged;
         if (m_options.autoCompile)
         {
             lock (m_sync)
@@ -327,6 +333,9 @@ public sealed class ScriptManager : IDisposable
         IReadOnlyList<AssemblyLoadRequest> requests = SelectReloadRequests(pending);
         if (requests.Count == 0)
         {
+            PluginManager.ActivatePending();
+            ProjectSettingsManager.RebuildCurrent();
+            PluginManager.CommitPending();
             CompletePendingReload(pending);
             ScriptDiagnosticPublisher.ClearReload();
             EditorReloadCoordinator.RefreshDiagnostics();
@@ -343,12 +352,26 @@ public sealed class ScriptManager : IDisposable
             .ToArray();
         using AssemblyReloadSession reload = AssemblyManager.BeginReload(requests);
         SetCompilationProgress(C_MIGRATION_PROGRESS, "Migrating active editor state...");
-        Action? synchronizeAssets = AssetManager.isInitialized
-            ? AssetManager.Rescan
-            : null;
+        Action activateCandidate = static () =>
+        {
+            PluginManager.ActivatePending();
+            if (AssetManager.isInitialized)
+                AssetManager.Update();
+            if (ProjectSettingsManager.isInitialized)
+                ProjectSettingsManager.RebuildCurrent();
+        };
+        Action restorePrevious = static () =>
+        {
+            PluginManager.RollbackPending();
+            if (AssetManager.isInitialized)
+                AssetManager.Update();
+            if (ProjectSettingsManager.isInitialized)
+                ProjectSettingsManager.RebuildCurrent();
+        };
         AssemblyUnloadMonitor unload = EditorReloadCoordinator.Execute(
             reload,
-            synchronizeAssets);
+            activateCandidate,
+            restorePrevious);
         if (retiringModules.Length > 0)
         {
             lock (m_sync)
@@ -363,6 +386,7 @@ public sealed class ScriptManager : IDisposable
         _ = m_artifactCache.Collect([m_activeCompilationDirectory]);
         RefreshModuleHandles();
         UpdateActiveFingerprints(requests);
+        PluginManager.CommitPending();
         SetCompilationProgress(
             retiringModules.Length == 0 ? 1f : C_UNLOAD_VERIFICATION_PROGRESS,
             retiringModules.Length == 0
@@ -411,7 +435,11 @@ public sealed class ScriptManager : IDisposable
             try
             {
                 if (AssetManager.isInitialized)
+                {
                     AssetManager.Changed -= OnAssetDatabaseChanged;
+                    AssetManager.SourceMountsChanged -= OnSourceMountsChanged;
+                }
+                PluginManager.ActivationCandidateChanged -= OnPluginActivationCandidateChanged;
                 lock (m_sync)
                 {
                     m_requestedReload = ScriptReloadRequest.None;
@@ -539,6 +567,22 @@ public sealed class ScriptManager : IDisposable
         }
     }
 
+    private void OnSourceMountsChanged()
+    {
+        if (m_disposed || !m_options.autoCompile)
+            return;
+        if (PluginManager.hasPendingActivation)
+            return;
+        QueueReload(ScriptReloadRequest.ReloadPlugins);
+    }
+
+    private void OnPluginActivationCandidateChanged()
+    {
+        if (m_disposed || !m_options.autoCompile)
+            return;
+        QueueReload(ScriptReloadRequest.ReloadPlugins);
+    }
+
     private void SetCompilationProgress(float progress, string status)
     {
         Volatile.Write(ref m_compilationProgress, Math.Clamp(progress, 0f, 1f));
@@ -660,18 +704,21 @@ public sealed class ScriptManager : IDisposable
 
     private static bool IsScriptInput(string path)
         => path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
-           path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
-           path.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase) ||
-           path.EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase) ||
            path.EndsWith(".iasmdef", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsPluginInput(string path)
-        => !string.IsNullOrWhiteSpace(path) &&
-           (path.StartsWith("Plugins/", StringComparison.OrdinalIgnoreCase) ||
-            path.Contains("/Plugins/", StringComparison.OrdinalIgnoreCase)) &&
-           (path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
-            path.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase) ||
-            path.EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase));
+    {
+        if (string.IsNullOrWhiteSpace(path) || !IsScriptInput(path))
+            return false;
+        try
+        {
+            return AssetPath.Parse(path).source != AssetSourceId.project;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
 
     private static InvalidOperationException CreateUnloadVerificationFailure(
         IReadOnlyList<AssemblyModuleInfo> modules)

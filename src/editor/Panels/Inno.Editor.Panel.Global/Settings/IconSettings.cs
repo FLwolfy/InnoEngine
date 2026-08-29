@@ -169,42 +169,42 @@ internal abstract class IconSetting : EditorSetting
     }
 }
 
-[EditorSettingPath("Global/Appearance/Icons/Scene")]
+[EditorSettingPath("Editor/Appearance/Icons/Scene")]
 internal sealed class SceneIconSetting() : IconSetting(ImGuiIcon.Cubes)
 {
     public override string description
         => "Selects the icon used wherever the editor presents a scene document or loaded scene.";
 }
 
-[EditorSettingPath("Global/Appearance/Icons/GameObject")]
+[EditorSettingPath("Editor/Appearance/Icons/GameObject")]
 internal sealed class GameObjectIconSetting() : IconSetting(ImGuiIcon.Cube)
 {
     public override string description
         => "Selects the icon used wherever the editor presents a scene GameObject.";
 }
 
-[EditorSettingPath("Global/Appearance/Icons/Prefab")]
+[EditorSettingPath("Editor/Appearance/Icons/Prefab")]
 internal sealed class PrefabIconSetting() : IconSetting(ImGuiIcon.DiceD6)
 {
     public override string description
         => "Selects the icon used wherever the editor presents a reusable prefab object.";
 }
 
-[EditorSettingPath("Global/Appearance/Icons/Layers")]
+[EditorSettingPath("Editor/Appearance/Icons/Layers")]
 internal sealed class LayersIconSetting() : IconSetting(ImGuiIcon.LayerGroup)
 {
     public override string description
         => "Selects the icon used wherever the editor presents a project layer configuration.";
 }
 
-[EditorSettingPath("Global/Appearance/Icons/Folder")]
+[EditorSettingPath("Editor/Appearance/Icons/Folder")]
 internal sealed class FolderIconSetting() : IconSetting(ImGuiIcon.Folder)
 {
     public override string description
         => "Selects the icon used wherever the editor presents a source directory.";
 }
 
-[EditorSettingPath("Global/Appearance/Icons/File")]
+[EditorSettingPath("Editor/Appearance/Icons/File")]
 internal sealed class FileIconSetting() : IconSetting(ImGuiIcon.File)
 {
     public override string description

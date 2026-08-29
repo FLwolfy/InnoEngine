@@ -1,3 +1,5 @@
+using System;
+
 using Inno.Assets.Core;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
@@ -37,18 +39,27 @@ public sealed class ScriptAssemblyDefinitionAsset : AssetObject
     {
     }
 
-    internal ScriptAssemblyDefinitionAsset(
+    /// <summary>Creates a configured script assembly definition for native asset export.</summary>
+    /// <param name="assemblyName">Stable managed assembly name.</param>
+    /// <param name="scope">Runtime or Editor API scope.</param>
+    /// <param name="references">Referenced script assembly names.</param>
+    /// <param name="defines">Preprocessor symbols.</param>
+    /// <param name="nullable">Whether nullable reference analysis is enabled.</param>
+    /// <param name="allowUnsafe">Whether unsafe source is permitted.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="assemblyName"/> is empty.</exception>
+    public ScriptAssemblyDefinitionAsset(
         string assemblyName,
         ScriptAssemblyScope scope,
-        string[] references,
-        string[] defines,
-        bool nullable,
-        bool allowUnsafe)
+        string[]? references = null,
+        string[]? defines = null,
+        bool nullable = true,
+        bool allowUnsafe = false)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(assemblyName);
         this.assemblyName = assemblyName;
         this.scope = scope;
-        this.references = references;
-        this.defines = defines;
+        this.references = references is null ? [] : [.. references];
+        this.defines = defines is null ? [] : [.. defines];
         this.nullable = nullable;
         this.allowUnsafe = allowUnsafe;
     }

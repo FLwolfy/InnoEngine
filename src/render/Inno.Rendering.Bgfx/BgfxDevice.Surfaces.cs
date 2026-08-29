@@ -31,6 +31,11 @@ public sealed unsafe partial class BgfxDevice
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ValidateWindowHandles(nativeHandles);
+        if (!capabilities.Supports(GraphicsFeature.SwapChain))
+        {
+            throw new NotSupportedException(
+                "The active graphics backend does not support additional presentation surfaces.");
+        }
 
         bgfx.FrameBufferHandle frameBuffer = CreateNativeWindowSurface(nativeHandles, width, height);
         if (!frameBuffer.Valid)

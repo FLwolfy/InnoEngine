@@ -279,7 +279,7 @@ internal sealed class HierarchyPanel : EditorPanel
             {
                 EditorWidget.IconText(
                     m_settings
-                        .Get("Global/Appearance/Icons/GameObject")
+                        .Get("Editor/Appearance/Icons/GameObject")
                         .GetAsString("value", ImGuiIcon.Cube)!,
                     string.Empty,
                     false);
@@ -302,7 +302,7 @@ internal sealed class HierarchyPanel : EditorPanel
             {
                 EditorWidget.IconText(
                     m_settings
-                        .Get("Global/Appearance/Icons/GameObject")
+                        .Get("Editor/Appearance/Icons/GameObject")
                         .GetAsString("value", ImGuiIcon.Cube)!,
                     gameObject.name,
                     false);
@@ -331,7 +331,7 @@ internal sealed class HierarchyPanel : EditorPanel
 
         EditorWidget.IconText(
             m_settings
-                .Get("Global/Appearance/Icons/Scene")
+                .Get("Editor/Appearance/Icons/Scene")
                 .GetAsString("value", ImGuiIcon.Cubes)!,
             string.Empty,
             ReferenceEquals(scene, SceneManager.activeScene));

@@ -3,13 +3,13 @@ using System.Buffers.Binary;
 using System.IO;
 using System.Text;
 using Inno.Assets.Core;
+using Inno.Assets.File;
 using Inno.Assets.Loader;
 using Inno.Assets.Serialization;
 using Inno.Core.Assemblies;
 using Inno.Core.Identity;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
-using Inno.Rendering.ShaderGraph;
 using Xunit;
 
 namespace Inno.Rendering.Assets.Tests;
@@ -46,85 +46,170 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
         AssemblyManager.Shutdown();
         IdentityManager.Shutdown();
         if (Directory.Exists(m_root))
-        {
             Directory.Delete(m_root, recursive: true);
-        }
     }
 
     [Fact]
-    public void Loader_DiscoversRenderingImportersAndResolvesMaterialShaderDependency()
+    public void LoaderUsesNativeShaderMaterialAndPipelineAssetsWithOneSharedIr()
     {
         WriteText("Shaders/v.sc", "void main() {}");
         WriteText("Shaders/f.sc", "void main() {}");
         WriteText("Shaders/varying.def.sc", "vec3 a_position : POSITION;");
-        WriteText("Shaders/basic.ishader", """
-        {
-          "name": "Tests/Basic",
-          "properties": [
-            { "id": "roughness", "type": "Float", "stages": ["Fragment"], "default": 0.5 }
-          ],
-          "passes": [
-            {
-              "name": "Forward",
-              "tag": "ForwardLit",
-              "vertex": "Shaders/v.sc",
-              "fragment": "Shaders/f.sc",
-              "varying": "Shaders/varying.def.sc"
-            }
-          ]
-        }
-        """);
-        WriteText("Materials/basic.imaterial", """
-        {
-          "shader": "Shaders/basic.ishader",
-          "properties": { "roughness": 0.25 },
-          "keywords": []
-        }
-        """);
-        WriteText("Pipelines/default.irenderpipeline", """
-        {
-          "pipeline": "inno.pipeline.universal",
-          "renderPath": "Deferred",
-          "quality": { "hdr": true, "bloom": true, "exposure": 1.0 },
-          "features": [{ "type": "tests.outline", "settings": { "width": 2 } }]
-        }
-        """);
-        WriteText("Shaders/basic.ishadergraph", """
-        {
-          "target": "Surface",
-          "nodes": [
-            {
-              "id": "surface",
-              "definition": "inno.shader.output.surface",
-              "position": [320, 120],
-              "values": {}
-            }
-          ],
-          "edges": [],
-          "metadata": {}
-        }
-        """);
-        WriteText("Materials/graph.imaterial", """
-        {
-          "shader": "Shaders/basic.ishadergraph",
-          "properties": {},
-          "keywords": []
-        }
-        """);
-        WriteText("Meshes/triangle.obj", """
-        v 0 0 0
-        v 1 0 0
-        v 0 1 0
-        f 1 2 3
-        """);
+        WriteText("Meshes/triangle.obj", "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
         byte[] png = new byte[24];
         new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }.CopyTo(png, 0);
         BinaryPrimitives.WriteUInt32BigEndian(png.AsSpan(16, 4), 8);
         BinaryPrimitives.WriteUInt32BigEndian(png.AsSpan(20, 4), 4);
         WriteBytes("Textures/color.png", png);
 
+        using (var writer = new AssetLoader(m_assets, m_library))
+        {
+            SetReferenceResolver(writer);
+            ShaderSourceAsset vertex = Assert.IsType<ShaderSourceAsset>(writer.Load(
+                "Shaders/v.sc",
+                typeof(ShaderSourceAsset)));
+            ShaderSourceAsset fragment = Assert.IsType<ShaderSourceAsset>(writer.Load(
+                "Shaders/f.sc",
+                typeof(ShaderSourceAsset)));
+            ShaderSourceAsset varying = Assert.IsType<ShaderSourceAsset>(writer.Load(
+                "Shaders/varying.def.sc",
+                typeof(ShaderSourceAsset)));
+            var pass = new ShaderPassDefinition(
+                "Draw",
+                ShaderProgramKind.Raster,
+                vertex,
+                fragment,
+                varyingSource: varying);
+            var shader = new ShaderAsset();
+            shader.SetDefinition(new ShaderDefinition(
+                "Tests/Basic",
+                [new ShaderPropertyDefinition(
+                    new ShaderPropertyId("roughness"),
+                    "Roughness",
+                    ShaderPropertyType.Float,
+                    ShaderStage.Fragment,
+                    MaterialValue.FromFloat(0.5f))],
+                [],
+                [pass],
+                [new ShaderTechniqueDefinition(
+                    new ShaderTechniqueId("default"),
+                    new ShaderContractId("tests.surface"),
+                    [new ShaderTechniquePass(new ShaderPassRoleId("draw"), pass.name)])]));
+            Assert.True(writer.Save("Shaders/basic.ishader", shader));
+
+            var material = new MaterialAsset { shader = shader };
+            material.Set(new ShaderPropertyId("roughness"), MaterialValue.FromFloat(0.25f));
+            material.SetMetadata("tests.queue", "opaque");
+            Assert.True(writer.Save("Materials/basic.imaterial", material));
+
+            var pipeline = new RenderPipelineAsset
+            {
+                pipelineTypeId = "tests.pipeline",
+                pipelineState = new SerializedRenderExtensionState(Guid.Empty, [1, 2, 3])
+            };
+            pipeline.SetFeatures([new RenderFeatureConfiguration("tests.outline")]);
+            Assert.True(writer.Save("Pipelines/default.irenderpipeline", pipeline));
+        }
+
+        AssetSerializationServices.SetReferenceResolver(null);
         using var loader = new AssetLoader(m_assets, m_library);
-        AssetSerializationServices.SetReferenceResolver((
+        SetReferenceResolver(loader);
+        ShaderAsset loadedShader = Assert.IsType<ShaderAsset>(loader.Load(
+            "Shaders/basic.ishader",
+            typeof(ShaderAsset)));
+        MaterialAsset loadedMaterial = Assert.IsType<MaterialAsset>(loader.Load(
+            "Materials/basic.imaterial",
+            typeof(MaterialAsset)));
+        RenderPipelineAsset loadedPipeline = Assert.IsType<RenderPipelineAsset>(loader.Load(
+            "Pipelines/default.irenderpipeline",
+            typeof(RenderPipelineAsset)));
+        GeometryAsset geometry = Assert.IsType<GeometryAsset>(loader.Load(
+            "Meshes/triangle.obj",
+            typeof(GeometryAsset)));
+        TextureAsset texture = Assert.IsType<TextureAsset>(loader.Load(
+            "Textures/color.png",
+            typeof(TextureAsset)));
+
+        Assert.Equal("Tests/Basic", loadedShader.definition!.name);
+        Assert.Single(ShaderAssetRuntime.GetModule(loadedShader).passes);
+        Assert.Same(loadedShader, loadedMaterial.shader);
+        Assert.True(loadedMaterial.TryGet(new ShaderPropertyId("roughness"), out MaterialValue roughness));
+        Assert.Equal(0.25f, roughness.vector.x);
+        Assert.True(loadedMaterial.TryGetMetadata("tests.queue", out string? queue));
+        Assert.Equal("opaque", queue);
+        Assert.Equal("tests.pipeline", loadedPipeline.pipelineTypeId);
+        Assert.Equal([1, 2, 3], loadedPipeline.pipelineState.propertyData);
+        Assert.Single(loadedPipeline.features);
+        Assert.Equal(3, geometry.vertexCount);
+        Assert.Equal(8, texture.width);
+        Assert.Equal(TextureColorSpace.Srgb, texture.colorSpace);
+    }
+
+    [Fact]
+    public void ShaderIncludesUseTheCandidateMountSnapshotAndDeclaredPluginDependencies()
+    {
+        AssetSourceId providerId = new("tests.provider");
+        AssetSourceId consumerId = new("tests.consumer");
+        string providerRoot = Path.Combine(m_root, "ProviderPlugin");
+        string consumerRoot = Path.Combine(m_root, "ConsumerPlugin");
+        Directory.CreateDirectory(providerRoot);
+        Directory.CreateDirectory(consumerRoot);
+        WriteReadOnlyShaderSource(
+            providerRoot,
+            "common.sc",
+            "vec4 ProviderColor() { return vec4(0.2, 0.4, 0.6, 1.0); }");
+        WriteReadOnlyShaderSource(
+            consumerRoot,
+            "local.sc",
+            "float LocalValue() { return 0.5; }");
+        WriteReadOnlyShaderSource(
+            consumerRoot,
+            "main.sc",
+            """
+            #include <bgfx_shader.sh>
+            #include "local.sc"
+            #include "tests.provider::common.sc"
+            void main() { gl_FragColor = ProviderColor() * LocalValue(); }
+            """);
+        AssetSourceMount project = new(AssetSourceId.project, m_assets, isReadOnly: false);
+        AssetSourceMount provider = new(providerId, providerRoot, isReadOnly: true);
+        AssetSourceMount undeclaredConsumer = new(consumerId, consumerRoot, isReadOnly: true);
+
+        using (var undeclared = new AssetLoader(
+                   [project, provider, undeclaredConsumer],
+                   Path.Combine(m_root, "UndeclaredLibrary")))
+        {
+            InvalidDataException error = Assert.Throws<InvalidDataException>(undeclared.Rescan);
+            Assert.Contains("did not declare dependency", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        AssetSourceMount declaredConsumer = new(
+            consumerId,
+            consumerRoot,
+            isReadOnly: true,
+            dependencies: [providerId]);
+        using var loader = new AssetLoader(
+            [project, provider, declaredConsumer],
+            Path.Combine(m_root, "DeclaredLibrary"));
+        loader.Rescan();
+        ShaderSourceAsset shader = Assert.IsType<ShaderSourceAsset>(loader.Load(
+            new AssetPath(consumerId, "main.sc").ToString(),
+            typeof(ShaderSourceAsset)));
+
+        Assert.Contains("#include <bgfx_shader.sh>", shader.content, StringComparison.Ordinal);
+        Assert.Contains("float LocalValue()", shader.content, StringComparison.Ordinal);
+        Assert.Contains("vec4 ProviderColor()", shader.content, StringComparison.Ordinal);
+        Assert.DoesNotContain("#include \"local.sc\"", shader.content, StringComparison.Ordinal);
+        Assert.DoesNotContain("#include \"tests.provider::common.sc\"", shader.content, StringComparison.Ordinal);
+        Assert.Equal(
+        [
+            new AssetPath(consumerId, "local.sc"),
+            new AssetPath(providerId, "common.sc")
+        ], loader.GetImportDependencies(shader));
+    }
+
+    private static void SetReferenceResolver(AssetLoader loader)
+        => AssetSerializationServices.SetReferenceResolver((
             persistentId,
             stableTypeId,
             lastKnownPath,
@@ -134,45 +219,6 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
                 stableTypeId,
                 lastKnownPath,
                 expectedType));
-        ShaderAsset shader = Assert.IsType<ShaderAsset>(loader.Load(
-            "Shaders/basic.ishader",
-            typeof(ShaderAsset)));
-        bool materialImported = loader.Import("Materials/basic.imaterial");
-        Assert.True(
-            materialImported,
-            GetImportDiagnostics(loader, "Materials/basic.imaterial"));
-        MaterialAsset material = Assert.IsType<MaterialAsset>(loader.Load(
-            "Materials/basic.imaterial",
-            typeof(MaterialAsset)));
-        RenderPipelineAsset pipeline = Assert.IsType<RenderPipelineAsset>(loader.Load(
-            "Pipelines/default.irenderpipeline",
-            typeof(RenderPipelineAsset)));
-        MeshAsset mesh = Assert.IsType<MeshAsset>(loader.Load("Meshes/triangle.obj", typeof(MeshAsset)));
-        TextureAsset texture = Assert.IsType<TextureAsset>(loader.Load("Textures/color.png", typeof(TextureAsset)));
-        ShaderGraphAsset graph = Assert.IsType<ShaderGraphAsset>(loader.Load(
-            "Shaders/basic.ishadergraph",
-            typeof(ShaderGraphAsset)));
-        bool graphMaterialImported = loader.Import("Materials/graph.imaterial");
-        Assert.True(graphMaterialImported, GetImportDiagnostics(loader, "Materials/graph.imaterial"));
-        MaterialAsset graphMaterial = Assert.IsType<MaterialAsset>(loader.Load(
-            "Materials/graph.imaterial",
-            typeof(MaterialAsset)));
-
-        Assert.Equal("Tests/Basic", shader.definition!.name);
-        Assert.Same(shader, material.shader);
-        Assert.True(material.TryGet(new ShaderPropertyId("roughness"), out MaterialValue roughness));
-        Assert.Equal(0.25f, roughness.vector.x);
-        Assert.Equal(RenderPath.Deferred, pipeline.defaultRenderPath);
-        Assert.Single(pipeline.features);
-        Assert.Equal(3, mesh.vertexCount);
-        Assert.Equal(8, texture.width);
-        Assert.Equal(TextureColorSpace.Srgb, texture.colorSpace);
-        Assert.Equal(ShaderGraphTarget.Surface, graph.target);
-        Assert.Single(graph.document!.nodes);
-        Assert.Same(graph, graphMaterial.shader);
-        Assert.NotNull(graph.definition);
-        Assert.Equal(6, ShaderAssetRuntime.GetModule(graph).passes.Count);
-    }
 
     private void WriteText(string relativePath, string value)
         => WriteBytes(relativePath, Encoding.UTF8.GetBytes(value));
@@ -181,18 +227,35 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
     {
         string path = Path.Combine(m_assets, relativePath.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllBytes(path, bytes);
+        System.IO.File.WriteAllBytes(path, bytes);
     }
 
-    private static string GetImportDiagnostics(AssetLoader loader, string relativePath)
+    private static void WriteReadOnlyShaderSource(string root, string localPath, string content)
     {
-        if (!loader.TryGetPersistentId(relativePath, out Guid persistentId)
-            || !loader.TryGetInfo(persistentId, out AssetInfo? info)
-            || info is null)
-        {
-            return "No catalog diagnostics were produced.";
-        }
-
-        return string.Join(Environment.NewLine, info.diagnostics);
+        string path = Path.Combine(root, localPath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        System.IO.File.WriteAllText(path, content, Encoding.UTF8);
+        System.IO.File.WriteAllBytes(path + ".imeta", SerializationManager.Serialize(
+            new RenderingAssetSourceMeta
+            {
+                persistentId = Guid.NewGuid(),
+                sourceKind = (int)AssetSourceKind.File,
+                importerId = "inno.rendering.shader-source"
+            }));
     }
+}
+
+internal sealed class RenderingAssetSourceMeta : ISerializable
+{
+    [SerializableProperty]
+    public Guid persistentId { get; set; }
+
+    [SerializableProperty]
+    public int sourceKind { get; set; }
+
+    [SerializableProperty]
+    public string importerId { get; set; } = string.Empty;
+
+    [SerializableProperty]
+    public byte[] importerSettingsBytes { get; set; } = [];
 }

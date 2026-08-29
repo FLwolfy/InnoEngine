@@ -9,8 +9,8 @@
 | 分类 | 内容 | 状态 |
 | --- | --- | --- |
 | [Core](core/README.md) | 程序集、反射、序列化、框架、事件、协程、任务、数学、存储等基础设施 | 已完成 |
-| [Assets](assets/README.md) | 资产门面、资产模型、文件索引、Importer、序列化桥接与内置资产类型 | 已完成 |
-| [Rendering](render/README.md) | 后端中立资源、统一 Shader/Graph、双路径 Pipeline、BGFX 与 Editor GPU 合成 | macOS Metal 实机通过；Windows x64/macOS arm64 CI 已配置，Windows 首次远端结果待执行 |
+| [Assets](assets/README.md) | 多 Source Mount、统一资产链、本地 ZIP Plugin、信任与原子激活 | 已完成 |
+| [Rendering](render/README.md) | 空渲染内核、开放 Shader/Technique/Material/Pipeline、统一 Graph/IR、BGFX 与 Editor GPU 合成 | 当前工作树实现完成，双平台最终实机验收见项目 CI |
 | [Engine](engine/README.md) | Scene、Rendering 等运行时能力 | 部分完成 |
 | [Editor](editor/README.md) | 编辑器交互契约、[Global/Settings](editor/Inno.Editor.Panel.Global.md)、领域 feature、ImGui、Scripting 与宿主 | 已完成 |
 | [Platform](platform/README.md) / Native | 窗口、图形后端与原生集成 | 部分完成 |
@@ -25,6 +25,8 @@
 4. [Inno.Core.Serialization](core/Inno.Core.Serialization.md)：属性序列化与 Converter 扩展。
 5. [Inno.Assets.Loader](assets/Inno.Assets.Loader.md)：Importer 发现、导入缓存与加载。
 6. [Inno.Assets](assets/Inno.Assets.md)：应用层使用的资产系统门面。
+7. [Inno.Assets.Plugins](assets/Inno.Assets.Plugins.md)：ZIP Plugin、安全、信任与 Source Mount 激活。
+8. [Rendering](render/README.md)：由 Project/Plugin 构建具体渲染模型的空内核。
 
 如果只想开始写游戏脚本，通常先看 [Framework](core/Inno.Core.Framework.md)、[Mathematics](core/Inno.Core.Mathematics.md) 和 [Assets](assets/README.md) 即可。
 

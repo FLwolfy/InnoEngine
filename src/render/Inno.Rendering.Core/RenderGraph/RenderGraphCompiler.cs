@@ -15,11 +15,18 @@ internal static class RenderGraphCompiler
     {
         List<RenderGraphDiagnostic> diagnostics = [];
         ValidateResources(capabilities, textures, buffers, diagnostics);
-        ValidatePasses(capabilities, textures, passes, diagnostics);
+        ValidatePasses(capabilities, textures, buffers, passes, diagnostics);
 
         List<HashSet<int>> dependencies = CreateEdgeSets(passes.Count);
         List<HashSet<int>> dataDependencies = CreateEdgeSets(passes.Count);
-        BuildResourceDependencies(textures, buffers, passes, dependencies, dataDependencies, diagnostics);
+        BuildResourceDependencies(
+            textures,
+            buffers,
+            passes,
+            outputs,
+            dependencies,
+            dataDependencies,
+            diagnostics);
         BuildPhaseDependencies(passes, dependencies);
 
         if (ContainsErrors(diagnostics))
@@ -57,7 +64,8 @@ internal static class RenderGraphCompiler
         int[] bufferSlots = AllocateBufferSlots(buffers, passes, schedulePositions);
         return new RenderGraphCompileResult(
             BuildCompiledGraph(generation, textures, buffers, passes, schedule, textureSlots, bufferSlots),
-            diagnostics);
+            diagnostics,
+            passes.Count - livePasses.Count);
     }
 
     private static void ValidateResources(
@@ -70,7 +78,8 @@ internal static class RenderGraphCompiler
         {
             RenderTextureDescriptor descriptor = texture.descriptor;
             if (descriptor.width > capabilities.limits.maxTextureSize
-                || descriptor.height > capabilities.limits.maxTextureSize)
+                || descriptor.height > capabilities.limits.maxTextureSize
+                || descriptor.depth > capabilities.limits.maxTextureSize)
             {
                 diagnostics.Add(new RenderGraphDiagnostic(
                     "RENDER_GRAPH_TEXTURE_LIMIT",
@@ -79,8 +88,50 @@ internal static class RenderGraphCompiler
                     resourceName: texture.name));
             }
 
+            if (descriptor.dimension == RenderTextureDimension.Texture2D
+                && descriptor.arrayLayers > 1
+                && !capabilities.Supports(GraphicsFeature.Texture2DArray))
+            {
+                diagnostics.Add(new RenderGraphDiagnostic(
+                    "RENDER_GRAPH_TEXTURE_ARRAY_UNSUPPORTED",
+                    $"Texture '{texture.name}' requires two-dimensional texture-array capability.",
+                    RenderGraphDiagnosticSeverity.Error,
+                    resourceName: texture.name));
+            }
+
+            if (descriptor.dimension == RenderTextureDimension.Texture3D
+                && !capabilities.Supports(GraphicsFeature.Texture3D))
+            {
+                diagnostics.Add(new RenderGraphDiagnostic(
+                    "RENDER_GRAPH_TEXTURE_3D_UNSUPPORTED",
+                    $"Texture '{texture.name}' requires three-dimensional texture capability.",
+                    RenderGraphDiagnosticSeverity.Error,
+                    resourceName: texture.name));
+            }
+
+            if (descriptor.dimension == RenderTextureDimension.Cube
+                && descriptor.arrayLayers > 1
+                && !capabilities.Supports(GraphicsFeature.TextureCubeArray))
+            {
+                diagnostics.Add(new RenderGraphDiagnostic(
+                    "RENDER_GRAPH_TEXTURE_CUBE_ARRAY_UNSUPPORTED",
+                    $"Texture '{texture.name}' requires cubemap-array capability.",
+                    RenderGraphDiagnosticSeverity.Error,
+                    resourceName: texture.name));
+            }
+
             bool attachmentUsage = (descriptor.usage
                 & (RenderTextureUsage.ColorAttachment | RenderTextureUsage.DepthStencilAttachment)) != 0;
+            if ((descriptor.usage & RenderTextureUsage.Sampled) != 0
+                && !capabilities.SupportsSampled(descriptor.format, descriptor.dimension))
+            {
+                diagnostics.Add(new RenderGraphDiagnostic(
+                    "RENDER_GRAPH_FORMAT_SAMPLED_UNSUPPORTED",
+                    $"Texture format '{descriptor.format}' is not supported for sampling.",
+                    RenderGraphDiagnosticSeverity.Error,
+                    resourceName: texture.name));
+            }
+
             if (attachmentUsage && !capabilities.SupportsRenderTarget(descriptor.format))
             {
                 diagnostics.Add(new RenderGraphDiagnostic(
@@ -90,9 +141,22 @@ internal static class RenderGraphCompiler
                     resourceName: texture.name));
             }
 
+            if (attachmentUsage
+                && descriptor.sampleCount > 1
+                && !capabilities.SupportsMultisampleRenderTarget(descriptor.format))
+            {
+                diagnostics.Add(new RenderGraphDiagnostic(
+                    "RENDER_GRAPH_FORMAT_MSAA_UNSUPPORTED",
+                    $"Texture format '{descriptor.format}' is not supported as a multisampled attachment.",
+                    RenderGraphDiagnosticSeverity.Error,
+                    resourceName: texture.name));
+            }
+
             if ((descriptor.usage & RenderTextureUsage.Storage) != 0
                 && (!capabilities.Supports(GraphicsFeature.Compute)
-                    || !capabilities.SupportsStorage(descriptor.format)))
+                    || !capabilities.Supports(GraphicsFeature.StorageTexture)
+                    || (!capabilities.SupportsStorage(descriptor.format, RenderStorageAccess.Read)
+                        && !capabilities.SupportsStorage(descriptor.format, RenderStorageAccess.Write))))
             {
                 diagnostics.Add(new RenderGraphDiagnostic(
                     "RENDER_GRAPH_FORMAT_STORAGE_UNSUPPORTED",
@@ -113,12 +177,25 @@ internal static class RenderGraphCompiler
                     RenderGraphDiagnosticSeverity.Error,
                     resourceName: buffer.name));
             }
+
+
+            if ((buffer.descriptor.usage & RenderBufferUsage.Index) != 0
+                && buffer.descriptor.elementStride == sizeof(uint)
+                && !capabilities.Supports(GraphicsFeature.Index32))
+            {
+                diagnostics.Add(new RenderGraphDiagnostic(
+                    "RENDER_GRAPH_INDEX32_UNSUPPORTED",
+                    $"Buffer '{buffer.name}' requires unsigned 32-bit index capability.",
+                    RenderGraphDiagnosticSeverity.Error,
+                    resourceName: buffer.name));
+            }
         }
     }
 
     private static void ValidatePasses(
         GraphicsCapabilities capabilities,
         IReadOnlyList<RenderTextureRecord> textures,
+        IReadOnlyList<RenderBufferRecord> buffers,
         IReadOnlyList<RenderPassRecord> passes,
         List<RenderGraphDiagnostic> diagnostics)
     {
@@ -134,6 +211,7 @@ internal static class RenderGraphCompiler
             }
 
             ValidatePassResourceConflicts(pass, diagnostics);
+            ValidatePassResourceUsage(capabilities, textures, buffers, pass, diagnostics);
             if (pass.kind != RenderPassKind.Raster && pass.attachments.Count != 0)
             {
                 diagnostics.Add(new RenderGraphDiagnostic(
@@ -176,6 +254,7 @@ internal static class RenderGraphCompiler
             }
 
             HashSet<int> colorSlots = [];
+            HashSet<int> attachedTextures = [];
             int colorCount = 0;
             int depthCount = 0;
             RenderTextureDescriptor? firstDescriptor = null;
@@ -183,8 +262,19 @@ internal static class RenderGraphCompiler
             {
                 RenderTextureRecord texture = textures[attachment.texture.index];
                 RenderTextureDescriptor descriptor = texture.descriptor;
+                if (!attachedTextures.Add(attachment.texture.index))
+                {
+                    diagnostics.Add(new RenderGraphDiagnostic(
+                        "RENDER_GRAPH_DUPLICATE_ATTACHMENT_RESOURCE",
+                        $"Raster pass '{pass.name}' attaches texture '{texture.name}' more than once.",
+                        RenderGraphDiagnosticSeverity.Error,
+                        pass.name,
+                        texture.name));
+                }
+
                 if (attachment.mipLevel >= descriptor.mipCount
-                    || attachment.arrayLayer >= descriptor.arrayLayers)
+                    || (attachment.mipLevel < descriptor.mipCount
+                        && attachment.arrayLayer >= descriptor.GetSubresourceLayerCount(attachment.mipLevel)))
                 {
                     diagnostics.Add(new RenderGraphDiagnostic(
                         "RENDER_GRAPH_ATTACHMENT_SUBRESOURCE",
@@ -281,27 +371,163 @@ internal static class RenderGraphCompiler
         }
     }
 
+    private static void ValidatePassResourceUsage(
+        GraphicsCapabilities capabilities,
+        IReadOnlyList<RenderTextureRecord> textures,
+        IReadOnlyList<RenderBufferRecord> buffers,
+        RenderPassRecord pass,
+        List<RenderGraphDiagnostic> diagnostics)
+    {
+        foreach (RenderResourceUse use in pass.resources)
+        {
+            if (use.key.isTexture)
+            {
+                RenderTextureRecord texture = textures[use.key.index];
+                RenderTextureUsage required = use.kind switch
+                {
+                    RenderResourceUseKind.GenericRead => RenderTextureUsage.Sampled,
+                    RenderResourceUseKind.StorageRead
+                        or RenderResourceUseKind.StorageWrite
+                        or RenderResourceUseKind.StorageReadWrite
+                        => RenderTextureUsage.Storage,
+                    RenderResourceUseKind.CopySource => RenderTextureUsage.CopySource,
+                    RenderResourceUseKind.CopyDestination => RenderTextureUsage.CopyDestination,
+                    RenderResourceUseKind.ColorAttachment => RenderTextureUsage.ColorAttachment,
+                    RenderResourceUseKind.DepthStencilAttachment
+                        => RenderTextureUsage.DepthStencilAttachment,
+                    _ => 0
+                };
+                if ((texture.descriptor.usage & required) != required)
+                {
+                    AddResourceUsageError(pass, texture.name, required.ToString(), diagnostics);
+                }
+
+                if (use.kind is RenderResourceUseKind.CopySource
+                    or RenderResourceUseKind.CopyDestination
+                    && !capabilities.Supports(GraphicsFeature.TextureBlit))
+                {
+                    AddCapabilityError(
+                        pass,
+                        texture.name,
+                        "texture-copy",
+                        GraphicsFeature.TextureBlit,
+                        diagnostics);
+                }
+
+                if (use.kind is RenderResourceUseKind.StorageRead
+                    or RenderResourceUseKind.StorageWrite
+                    or RenderResourceUseKind.StorageReadWrite)
+                {
+                    RenderStorageAccess access = use.kind switch
+                    {
+                        RenderResourceUseKind.StorageRead => RenderStorageAccess.Read,
+                        RenderResourceUseKind.StorageWrite => RenderStorageAccess.Write,
+                        RenderResourceUseKind.StorageReadWrite => RenderStorageAccess.ReadWrite,
+                        _ => throw new InvalidOperationException("Unexpected storage texture access.")
+                    };
+                    if (!capabilities.Supports(GraphicsFeature.StorageTexture)
+                        || !capabilities.SupportsStorage(texture.descriptor.format, access))
+                    {
+                        diagnostics.Add(new RenderGraphDiagnostic(
+                            "RENDER_GRAPH_STORAGE_TEXTURE_ACCESS_UNSUPPORTED",
+                            $"Texture '{texture.name}' does not support {access} storage access required by pass '{pass.name}'.",
+                            RenderGraphDiagnosticSeverity.Error,
+                            pass.name,
+                            texture.name));
+                    }
+                }
+
+                continue;
+            }
+
+            RenderBufferUsage requiredBufferUsage = use.kind switch
+            {
+                RenderResourceUseKind.StorageRead
+                    or RenderResourceUseKind.StorageWrite
+                    or RenderResourceUseKind.StorageReadWrite
+                    => RenderBufferUsage.Storage,
+                RenderResourceUseKind.CopySource => RenderBufferUsage.CopySource,
+                RenderResourceUseKind.CopyDestination => RenderBufferUsage.CopyDestination,
+                _ => 0
+            };
+            if (requiredBufferUsage != 0)
+            {
+                // Buffer names and descriptors are validated by the overload below.
+                ValidateBufferUse(
+                    capabilities,
+                    buffers,
+                    pass,
+                    use,
+                    requiredBufferUsage,
+                    diagnostics);
+            }
+        }
+    }
+
+    private static void ValidateBufferUse(
+        GraphicsCapabilities capabilities,
+        IReadOnlyList<RenderBufferRecord> buffers,
+        RenderPassRecord pass,
+        RenderResourceUse use,
+        RenderBufferUsage requiredUsage,
+        List<RenderGraphDiagnostic> diagnostics)
+    {
+        RenderBufferRecord buffer = buffers[use.key.index];
+        if ((buffer.descriptor.usage & requiredUsage) != requiredUsage)
+        {
+            AddResourceUsageError(pass, buffer.name, requiredUsage.ToString(), diagnostics);
+        }
+
+        if (use.kind is RenderResourceUseKind.CopySource or RenderResourceUseKind.CopyDestination
+            && !capabilities.Supports(GraphicsFeature.BufferCopy))
+        {
+            AddCapabilityError(
+                pass,
+                buffer.name,
+                "buffer-copy",
+                GraphicsFeature.BufferCopy,
+                diagnostics);
+        }
+    }
+
     private static void BuildResourceDependencies(
         IReadOnlyList<RenderTextureRecord> textures,
         IReadOnlyList<RenderBufferRecord> buffers,
         IReadOnlyList<RenderPassRecord> passes,
+        IReadOnlySet<RenderResourceKey> outputs,
         IReadOnlyList<HashSet<int>> dependencies,
         IReadOnlyList<HashSet<int>> dataDependencies,
         List<RenderGraphDiagnostic> diagnostics)
     {
         Dictionary<RenderResourceKey, int> lastWriters = [];
         Dictionary<RenderResourceKey, List<int>> readers = [];
+        HashSet<RenderResourceKey> initialized = [];
+        for (int textureIndex = 0; textureIndex < textures.Count; textureIndex++)
+        {
+            if (textures[textureIndex].imported)
+            {
+                initialized.Add(new RenderResourceKey(true, textureIndex));
+            }
+        }
+
+        for (int bufferIndex = 0; bufferIndex < buffers.Count; bufferIndex++)
+        {
+            if (buffers[bufferIndex].imported)
+            {
+                initialized.Add(new RenderResourceKey(false, bufferIndex));
+            }
+        }
 
         for (int passIndex = 0; passIndex < passes.Count; passIndex++)
         {
-            foreach (RenderResourceUse use in UniqueUses(passes[passIndex].resources))
+            RenderPassRecord pass = passes[passIndex];
+            IReadOnlyList<RenderResourceUse> uniqueUses = [.. UniqueUses(pass.resources)];
+            foreach (RenderResourceUse use in uniqueUses)
             {
-                bool initialized = IsImported(use.key, textures, buffers)
-                    || lastWriters.ContainsKey(use.key);
                 bool reads = use.access is RenderResourceAccess.Read or RenderResourceAccess.ReadWrite;
                 bool writes = use.access is RenderResourceAccess.Write or RenderResourceAccess.ReadWrite;
 
-                if (reads && !initialized)
+                if (reads && !initialized.Contains(use.key))
                 {
                     diagnostics.Add(new RenderGraphDiagnostic(
                         "RENDER_GRAPH_UNINITIALIZED_READ",
@@ -341,7 +567,53 @@ internal static class RenderGraphCompiler
                     resourceReaders.Add(passIndex);
                 }
             }
+
+            foreach (RenderResourceUse use in uniqueUses)
+            {
+                bool writes = use.access is RenderResourceAccess.Write or RenderResourceAccess.ReadWrite;
+                if (!writes)
+                {
+                    continue;
+                }
+
+                if (StoresResult(pass, use.key))
+                {
+                    initialized.Add(use.key);
+                }
+                else
+                {
+                    initialized.Remove(use.key);
+                }
+            }
         }
+
+        foreach (RenderResourceKey output in outputs)
+        {
+            if (!initialized.Contains(output))
+            {
+                string resourceName = GetResourceName(output, textures, buffers);
+                diagnostics.Add(new RenderGraphDiagnostic(
+                    "RENDER_GRAPH_OUTPUT_UNINITIALIZED",
+                    $"Graph output '{resourceName}' has no stored contents at the end of the graph.",
+                    RenderGraphDiagnosticSeverity.Error,
+                    resourceName: resourceName));
+            }
+        }
+    }
+
+    private static bool StoresResult(RenderPassRecord pass, RenderResourceKey key)
+    {
+        foreach (RenderAttachment attachment in pass.attachments)
+        {
+            if (key.isTexture
+                && attachment.texture.index == key.index
+                && attachment.storeAction == RenderStoreAction.Discard)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static void BuildPhaseDependencies(
@@ -701,5 +973,34 @@ internal static class RenderGraphCompiler
             RenderGraphDiagnosticSeverity.Error,
             pass.name,
             texture.name));
+    }
+
+    private static void AddResourceUsageError(
+        RenderPassRecord pass,
+        string resourceName,
+        string requiredUsage,
+        List<RenderGraphDiagnostic> diagnostics)
+    {
+        diagnostics.Add(new RenderGraphDiagnostic(
+            "RENDER_GRAPH_RESOURCE_USAGE",
+            $"Resource '{resourceName}' used by pass '{pass.name}' requires '{requiredUsage}' usage.",
+            RenderGraphDiagnosticSeverity.Error,
+            pass.name,
+            resourceName));
+    }
+
+    private static void AddCapabilityError(
+        RenderPassRecord pass,
+        string resourceName,
+        string operation,
+        GraphicsFeature requiredFeature,
+        List<RenderGraphDiagnostic> diagnostics)
+    {
+        diagnostics.Add(new RenderGraphDiagnostic(
+            "RENDER_GRAPH_CAPABILITY_UNSUPPORTED",
+            $"Pass '{pass.name}' requires '{requiredFeature}' for {operation} operations.",
+            RenderGraphDiagnosticSeverity.Error,
+            pass.name,
+            resourceName));
     }
 }

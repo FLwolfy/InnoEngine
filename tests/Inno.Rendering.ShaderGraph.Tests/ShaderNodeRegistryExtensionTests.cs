@@ -48,7 +48,7 @@ public sealed class ShaderNodeRegistryExtensionTests : IDisposable
         Assert.True(registry.TryResolveShader(DisposableShaderNodeDefinition.ID, out ShaderNodeDefinition? second));
         Assert.NotSame(first, second);
         Assert.Equal(1, DisposableShaderNodeDefinition.disposeCount);
-        Assert.True(registry.TryResolveShader(BuiltinShaderNodes.SurfaceOutput, out _));
+        Assert.Single(registry.definitions);
     }
 }
 

@@ -9,6 +9,7 @@ using Inno.Core.Assemblies;
 using Inno.Core.Identity;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
+using Inno.Core.Settings;
 using Inno.Editor.Panel.FileBrowser;
 using Xunit;
 
@@ -35,6 +36,7 @@ public sealed class AssetHistoryTests : IDisposable
         });
         TypeCacheManager.Initialize();
         SerializationManager.Initialize();
+        ProjectSettingsManager.Initialize(Path.Combine(m_projectRoot, "ProjectSettings.inno"));
         AssetManagerOptions options = AssetManagerOptions.Create(
             assetRoot,
             Path.Combine(m_projectRoot, "Library"));
@@ -56,6 +58,7 @@ public sealed class AssetHistoryTests : IDisposable
     {
         m_runtime.Dispose();
         AssetManager.Shutdown();
+        ProjectSettingsManager.Shutdown();
         SerializationManager.Shutdown();
         TypeCacheManager.Shutdown();
         AssemblyManager.Shutdown();

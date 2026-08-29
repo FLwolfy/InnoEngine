@@ -1,11 +1,40 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
+using Inno.Core.Assemblies;
 using Inno.Core.Graphs;
+using Inno.Core.Reflection;
+using Inno.Core.Serialization;
 using Xunit;
 
 namespace Inno.Core.Graphs.Tests;
 
-public sealed class GraphValidatorTests
+public sealed class GraphValidatorTests : IDisposable
 {
+    private readonly string m_testRoot = Path.Combine(
+        Path.GetTempPath(),
+        "InnoCoreGraphsTests",
+        Guid.NewGuid().ToString("N"));
+
+    public GraphValidatorTests()
+    {
+        AssemblyManager.Initialize(new AssemblyManagerOptions
+        {
+            cacheDirectory = Path.Combine(m_testRoot, "Assemblies")
+        });
+        TypeCacheManager.Initialize();
+        SerializationManager.Initialize();
+    }
+
+    public void Dispose()
+    {
+        SerializationManager.Shutdown();
+        TypeCacheManager.Shutdown();
+        AssemblyManager.Shutdown();
+        if (Directory.Exists(m_testRoot))
+            Directory.Delete(m_testRoot, recursive: true);
+    }
+
     [Fact]
     public void Validate_WithCompatibleConnection_IsValid()
     {

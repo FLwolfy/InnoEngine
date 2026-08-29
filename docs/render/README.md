@@ -1,44 +1,49 @@
 # Rendering API
 
-[返回 Wiki 首页](../README.md) · [前往 Core Graphs](../core/Inno.Core.Graphs.md) · [前往 Engine](../engine/README.md)
+[返回 Wiki 首页](../README.md) · [Core Graphs](../core/Inno.Core.Graphs.md) · [ZIP Plugin](../assets/Inno.Assets.Plugins.md)
 
-Rendering 位于 `src/render`，按“后端中立核心 → 艺术家 API → Pipeline/ShaderGraph → 唯一 BGFX 后端”的单向依赖建设。任何 BGFX handle、View ID、原生指针或枚举都不能离开 `Inno.Rendering.Bgfx`。
+Rendering 位于 `src/render`。生产内核是可编程 GPU 基础设施，不包含 2D、3D、PBR、光照、阴影、相机、可渲染组件或固定后处理。项目脚本与 ZIP Plugin 通过开放协议从零定义世界数据、Shader Contract、Pass Role、Pipeline、Feature、Shader Node 和 Editor Viewport Provider。
+
+> Rendering Core 只提供机制。任何具体渲染策略都必须能在不修改引擎的前提下由项目或 Plugin 完整构建。
 
 ## 项目目录
 
-| 项目 | 主要 namespace | 当前状态 |
-| --- | --- | --- |
-| [Inno.Rendering.Core](Inno.Rendering.Core.md) | `Inno.Rendering.Core` | 已实现设备能力、资源描述、RenderGraph 编译与命令边界 |
-| [Inno.Rendering](Inno.Rendering.md) | `Inno.Rendering` | 已实现脚本/艺术家 API、Scene 组件、材质与 Pipeline 扩展契约 |
-| [Inno.Rendering.Assets](Inno.Rendering.Assets.md) | `Inno.Rendering.Assets` | 已实现严格 JSON Importer、统一 Shader IR/shaderc、last-good、Texture/Mesh 规范化产物 |
-| [Inno.Rendering.Pipelines](Inno.Rendering.Pipelines.md) | `Inno.Rendering.Pipelines` | 已实现 RenderWorld、Forward+/Deferred 生产图、CSM/透明/Bloom/Tone Mapping 与能力降级 |
-| [Inno.Rendering.ShaderGraph](Inno.Rendering.ShaderGraph.md) | `Inno.Rendering.ShaderGraph` | 已实现 Surface/VertexFragment/Compute Graph、节点扩展、统一 IR 与节点诊断 |
-| [Inno.Rendering.Bgfx](Inno.Rendering.Bgfx.md) | `Inno.Rendering.Bgfx` | 已实现设备、View/Encoder、纹理与安全帧提交的 BGFX 后端垂直切片 |
-| [Inno.Rendering.ImGui](Inno.Rendering.ImGui.md) | `Inno.Rendering.ImGui` | 已实现主窗口、detached viewport 与 GPU Texture 的 BGFX ImGui 合成 |
+| 项目 | 稳定职责 |
+| --- | --- |
+| [Inno.Rendering.Core](Inno.Rendering.Core.md) | 后端中立 capability、资源描述、RenderGraph 与命令编码。 |
+| [Inno.Rendering](Inno.Rendering.md) | Shader、Technique、Material、Pipeline、Feature、请求与资源服务公开契约。 |
+| [Inno.Rendering.Runtime](Inno.Rendering.Runtime.md) | 唯一帧调度、请求队列、扩展 generation、last-good 与 GPU 安全点。 |
+| [Inno.Rendering.Assets](Inno.Rendering.Assets.md) | 原生渲染资产、Geometry/Texture 导入、统一 Shader IR 与后端编译契约。 |
+| [Inno.Rendering.ShaderGraph](Inno.Rendering.ShaderGraph.md) | 空节点注册表、开放 Program Output、类型检查和统一 IR 前端。 |
+| [Inno.Rendering.Bgfx](Inno.Rendering.Bgfx.md) | 唯一允许引用 BGFX 的设备实现。 |
+| [Inno.Rendering.ImGui](Inno.Rendering.ImGui.md) | Editor ImGui 的 BGFX GPU 合成，不属于用户 Pipeline。 |
 
-`Inno.Editor.Graph`、`Inno.Editor.Rendering` 及 Scene/Game/ShaderGraph Panel 的入口位于 [Editor 索引](../editor/README.md)。
+不存在生产 `Inno.Rendering.Pipelines` 项目。具体 Pipeline 应位于 Project Scripts 或 Plugin。
 
-## 当前依赖边界
+## 依赖方向
 
 ```mermaid
 flowchart LR
-    Script["Project Script"] --> Artist["Rendering"]
-    Artist --> Core["Rendering.Core"]
-    Assets["Rendering.Assets"] --> Artist
-    ShaderGraph["Rendering.ShaderGraph"] --> Assets
+    Plugin["Project / ZIP Plugin"] --> Rendering["Inno.Rendering"]
+    Plugin --> ShaderGraph["Rendering.ShaderGraph"]
+    Runtime["Rendering.Runtime"] --> Rendering
+    Rendering --> Core["Rendering.Core"]
+    Assets["Rendering.Assets"] --> Rendering
+    ShaderGraph --> Assets
     ShaderGraph --> Graphs["Core.Graphs"]
-    Assets --> Tools["shaderc / offline tools"]
-    Pipeline["Rendering.Pipelines"] --> Artist
-    Pipeline --> Core
-    Backend["Rendering.Bgfx"] --> Core
-    Backend --> Native["Inno.Native.Bgfx"]
-    ImGui["Rendering.ImGui"] --> Backend
+    Runtime --> Core
+    Runtime --> Assets
+    Bgfx["Rendering.Bgfx"] --> Core
+    Bgfx --> Assets
+    Bgfx --> Native["Inno.Native.Bgfx"]
+    ImGui["Rendering.ImGui"] --> Bgfx
 ```
 
-`Inno.Rendering.Core` 不引用 Scene、Assets、Editor、Graph 或 BGFX。它公开 generation-scoped handle，所有具体资源创建、View 分配和提交由后端实现。
+`Inno.Rendering.Core` 不引用 Scene、Assets、Editor、ShaderGraph 或 BGFX；`Inno.Rendering` 不引用 Scene 或 ShaderGraph；只有 `Inno.Rendering.Bgfx` 能看到原生 handle、View ID 和 BGFX 枚举。
 
-## 验证与示例
+## 当前验收基线
 
-- `.github/workflows/rendering-ci.yml` 在 Windows x64 与 macOS arm64 构建原生依赖、完整解决方案，运行全测试及三帧真实 Editor renderer smoke；本地已完成 macOS Metal 验证，Windows 首次远端结果仍须由 CI 执行。
-- `InnoProject/Assets/RenderingShowcase/Showcase.iscene` 是不会覆盖 TestScene 的完整对照场景，包含手写/节点材质、三类光源和阴影接收地面。
-- `build/Inno.Build.RenderingShowcase` 可重复导入 Showcase 依赖、生成场景并重新加载验证 Camera、Light、Mesh、Material 引用。
+- 无 Pipeline Plugin 时 Editor 与 ImGui 继续运行，Scene/Game 显示明确的 provider 缺失信息。
+- 手写和节点生成 Shader 使用同一 `ShaderIRModule`、验证、shaderc、反射、缓存与 last-good 链。
+- 同一 `.sc` 由注入的 `BgfxShadercToolchain` 为 Metal、D3D 或其他 BGFX 后端生成目标产物，不维护平台专用源文件副本；通用 Assets 与 Runtime 不知道 profile。
+- RenderGraph、BGFX Noop、原生资产、ShaderGraph、Source Mount 与 ZIP 安全测试均不依赖任何内建渲染模型。

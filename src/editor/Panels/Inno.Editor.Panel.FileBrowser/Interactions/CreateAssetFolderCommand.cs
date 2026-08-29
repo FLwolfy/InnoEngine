@@ -1,6 +1,8 @@
 using System;
+using System.Linq;
 
 using Inno.Assets;
+using Inno.Assets.Core;
 using Inno.Assets.File;
 using Inno.Editor.Interactions;
 
@@ -11,7 +13,7 @@ namespace Inno.Editor.Panel.FileBrowser;
 internal sealed class CreateAssetFolderCommand : EditorAction<string>
 {
     protected override EditorActionState Query(EditorActionContext<string> context)
-        => AssetManager.isInitialized && IsDirectory(context.target)
+        => AssetManager.isInitialized && IsWritableDirectory(context.target)
             ? EditorActionState.enabled
             : EditorActionState.disabled;
 
@@ -67,11 +69,14 @@ internal sealed class CreateAssetFolderCommand : EditorAction<string>
             ? string.Empty
             : path.Replace('\\', '/').Trim('/');
 
-    private static bool IsDirectory(string relativePath)
+    private static bool IsWritableDirectory(string relativePath)
     {
         string normalized = Normalize(relativePath);
-        return string.IsNullOrEmpty(normalized) ||
-               AssetManager.TryGetFileSystemEntry(normalized, out AssetFileEntry entry) &&
-               entry.isDirectory;
+        AssetSourceId source = AssetPath.Parse(normalized).source;
+        AssetSourceMount? mount = AssetManager.sourceMounts.FirstOrDefault(candidate => candidate.id == source);
+        if (mount is null || mount.isReadOnly)
+            return false;
+        return string.IsNullOrEmpty(AssetPath.Parse(normalized).localPath) ||
+               AssetManager.TryGetFileSystemEntry(normalized, out AssetFileEntry entry) && entry.isDirectory;
     }
 }

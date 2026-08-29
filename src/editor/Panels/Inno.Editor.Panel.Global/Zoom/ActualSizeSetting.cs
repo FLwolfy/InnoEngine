@@ -7,7 +7,7 @@ using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Global;
 
-[EditorSettingPath("Global/Appearance/Accessibility/Actual Size")]
+[EditorSettingPath("Editor/Appearance/Accessibility/Actual Size")]
 internal sealed class ActualSizeSetting : EditorSetting
 {
     private static readonly (float Value, string Label)[] C_CHOICES =

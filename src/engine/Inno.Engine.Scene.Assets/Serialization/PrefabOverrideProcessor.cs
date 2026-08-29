@@ -608,8 +608,8 @@ internal static class PrefabOverrideProcessor
                 GameObject sourceRoot = SerializationManager.Deserialize<GameObject>(
                     sourceAsset.runtimePayload.Span,
                     context);
-                if (!string.IsNullOrWhiteSpace(sourceAsset.sourcePath))
-                    sourceRoot.name = Path.GetFileNameWithoutExtension(sourceAsset.sourcePath);
+                if (!string.IsNullOrWhiteSpace(sourceAsset.assetPath.ToString()))
+                    sourceRoot.name = Path.GetFileNameWithoutExtension(sourceAsset.assetPath.ToString());
                 PrefabConnectionRecord connection = sourceRoot.prefabConnection
                     ?? throw new InvalidOperationException(
                         $"Prefab source asset '{sourceAsset.identity.persistentId}' did not create a source mapping.");
