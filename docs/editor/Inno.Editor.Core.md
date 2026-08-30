@@ -90,7 +90,12 @@ Module、Panel、Action、Menu source 和 Drop handler 可以在唯一构造函�
 ## Panel
 
 ```csharp
-[EditorPanel("animation.graph", "Animator", order: 500, defaultOpen: true)]
+[EditorPanel(
+    "animation.graph",
+    "Animator",
+    order: 500,
+    defaultOpen: true,
+    menuPath: "Authoring")]
 public sealed class AnimatorPanel(AnimationModule animation) : EditorPanel
 {
     protected override void OnDraw(EditorContext context)
@@ -102,7 +107,11 @@ public sealed class AnimatorPanel(AnimationModule animation) : EditorPanel
 
 `EditorPanel.useWindowPadding` 默认返回 `true`，表示表现后端应使用标准窗口内边距。需要让背景、Tree 行或根滚动区域与 Dock body 边缘对齐的 Panel 可以重写为 `false`；正文仍可通过表现层的统一 content region 恢复恰好一层内边距。这是 Panel 的布局策略，不要求业务代码修改或重置滚动位置。
 
-`EditorPanelAttribute.id` 必须稳定且全局唯一；它用于 Panel 菜单、窗口 identity 和 reload 状态。`title` 只用于显示，可以变化。
+`EditorPanel.allowScrolling` 默认返回 `true`。Scene/Game/Graph 等自行管理画布导航的
+全画布 Panel 应返回 `false`，Host 会同时禁用窗口滚动条和鼠标滚动范围。普通列表、
+Inspector 与文档 Panel 保持默认值，并自动使用 Editor 的全局 overlay scrollbar。
+
+`EditorPanelAttribute.id` 必须稳定且全局唯一；它用于 Panel 菜单、窗口 identity 和 reload 状态。`title` 只用于显示，可以变化。可选 `menuPath` 是 `Panel` 主菜单下的开放斜杠分类路径，`separatorBefore` 可在最终分类内开始新的视觉分组；Panel 分类不由 Host 维护封闭名单。
 
 运行时始终按 ID 迁移 `isOpen`。需要迁移更多中立状态时实现 `IEditorPanelReloadState`，只返回不引用插件对象的字节：
 

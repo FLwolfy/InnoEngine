@@ -28,11 +28,18 @@ internal sealed class ProjectSettingEditorCatalog : TypeRegistry<ProjectSettingE
         if (duplicatePath is not null)
             throw new InvalidOperationException($"Project setting path '{duplicatePath}' is registered more than once.");
 
-        ProjectSettingId? duplicateId = definitions
+        IGrouping<ProjectSettingId, ProjectSettingEditor>? incompatiblePresentations = definitions
             .GroupBy(static definition => definition.settingId)
-            .FirstOrDefault(static group => group.Count() > 1)?.Key;
-        if (duplicateId is ProjectSettingId id)
-            throw new InvalidOperationException($"Project setting ID '{id}' has more than one Editor presentation.");
+            .FirstOrDefault(static group => group
+                .Select(static definition => definition.valueType)
+                .Distinct()
+                .Skip(1)
+                .Any());
+        if (incompatiblePresentations is not null)
+        {
+            throw new InvalidOperationException(
+                $"Project setting ID '{incompatiblePresentations.Key}' has Editor presentations for more than one value type.");
+        }
 
         return new Snapshot(types.version, definitions);
     }

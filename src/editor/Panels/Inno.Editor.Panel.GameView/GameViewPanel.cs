@@ -13,7 +13,7 @@ using NativeImGui = Inno.Native.ImGui.ImGui;
 namespace Inno.Editor.Panel.GameView;
 
 /// <summary>Presents the active Plugin provider for the open Game viewport purpose.</summary>
-[EditorPanel("rendering.game-view", "Game", order: 220)]
+[EditorPanel("rendering.game-view", "Game", order: 220, menuPath: "Viewports")]
 internal sealed class GameViewPanel : EditorPanel
 {
     private const string C_VIEWPORT_ID = "game-view";
@@ -36,6 +36,9 @@ internal sealed class GameViewPanel : EditorPanel
 
     /// <inheritdoc />
     public override bool useWindowPadding => false;
+
+    /// <inheritdoc />
+    public override bool allowScrolling => false;
 
     /// <inheritdoc />
     protected override void OnDraw(EditorContext context)

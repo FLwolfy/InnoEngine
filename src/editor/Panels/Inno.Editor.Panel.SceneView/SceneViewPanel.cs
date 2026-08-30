@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Numerics;
 
 using Inno.Editor.Core;
+using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.ImGuiWidget;
 using Inno.Editor.Interactions;
 using Inno.Editor.Rendering;
 using Inno.Editor.Scene;
@@ -11,9 +13,11 @@ using Inno.Engine.Scene;
 using Inno.Engine.Scene.Components;
 using Inno.Native.ImGui;
 using Inno.Native.ImGuizmo;
+using Inno.Platform.ImGui;
 using Inno.Rendering;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 using NativeImGuizmo = Inno.Native.ImGuizmo.ImGuizmo;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using EngineMatrix = Inno.Core.Mathematics.Matrix;
 using EngineQuaternion = Inno.Core.Mathematics.Quaternion;
 using EngineVector3 = Inno.Core.Mathematics.Vector3;
@@ -21,10 +25,11 @@ using EngineVector3 = Inno.Core.Mathematics.Vector3;
 namespace Inno.Editor.Panel.SceneView;
 
 /// <summary>Presents the active Plugin provider and host-owned transform manipulation for the Scene viewport.</summary>
-[EditorPanel("rendering.scene-view", "Scene", order: 210)]
+[EditorPanel("rendering.scene-view", "Scene", order: 210, menuPath: "Viewports")]
 internal sealed class SceneViewPanel : EditorPanel
 {
     private const string C_VIEWPORT_ID = "scene-view";
+    private const int C_MANIPULATION_TOOL_COUNT = 4;
     private static readonly EditorViewportKindId S_KIND = new("inno.editor.viewport.scene");
 
     private readonly EditorRenderingModule m_rendering;
@@ -58,13 +63,14 @@ internal sealed class SceneViewPanel : EditorPanel
     public override bool useWindowPadding => false;
 
     /// <inheritdoc />
+    public override bool allowScrolling => false;
+
+    /// <inheritdoc />
     protected override void OnDraw(EditorContext context)
     {
         _ = context;
         if (m_gestureTarget is not null && !NativeImGui.IsMouseDown(ImGuiMouseButton.Left))
             CommitGesture();
-
-        DrawManipulationToolbar();
 
         Vector2 available = NativeImGui.GetContentRegionAvail();
         int width = Math.Max(1, (int)MathF.Floor(available.X));
@@ -75,7 +81,9 @@ internal sealed class SceneViewPanel : EditorPanel
         m_rendering.SetContentScope(C_VIEWPORT_ID, CreateContentScope());
         Vector2 minimum = NativeImGui.GetCursorScreenPos();
         Vector2 maximum = minimum + new Vector2(width, height);
+        ManipulationToolbarLayout toolbar = CreateManipulationToolbarLayout(minimum, maximum);
         bool hovered = NativeImGui.IsMouseHoveringRect(minimum, maximum);
+        bool toolbarHovered = IsManipulationToolbarHovered(toolbar);
         _ = m_rendering.TryConfigureNavigation(
             S_KIND,
             C_VIEWPORT_ID,
@@ -84,7 +92,7 @@ internal sealed class SceneViewPanel : EditorPanel
             out EditorViewportNavigationProfile navigationProfile);
         bool navigationOwnsPointer = HandleNavigation(
             navigationProfile,
-            hovered,
+            hovered && !toolbarHovered,
             minimum,
             maximum);
         if (!m_rendering.TrySubmit(S_KIND, C_VIEWPORT_ID, width, height, out EditorViewportOutput output))
@@ -92,19 +100,28 @@ internal sealed class SceneViewPanel : EditorPanel
             DrawUnavailable(
                 available,
                 m_rendering.GetProviderError(S_KIND) ?? "No active rendering provider for Scene View.");
+            _ = DrawManipulationToolbar(toolbar);
             return;
         }
         if (!output.isReady)
         {
             DrawUnavailable(available, "Preparing Scene View GPU target...");
+            _ = DrawManipulationToolbar(toolbar);
             return;
         }
 
         m_rendering.Draw(output, new Vector2(width, height));
         minimum = NativeImGui.GetItemRectMin();
         maximum = NativeImGui.GetItemRectMax();
-        bool gizmoOwnsPointer = !navigationOwnsPointer && DrawTransformGizmo(minimum, maximum);
-        if (!NativeImGui.IsItemClicked(ImGuiMouseButton.Left)
+        bool viewportClicked = NativeImGui.IsItemClicked(ImGuiMouseButton.Left);
+        toolbar = CreateManipulationToolbarLayout(minimum, maximum);
+        toolbarHovered = IsManipulationToolbarHovered(toolbar);
+        bool gizmoOwnsPointer = !navigationOwnsPointer
+                                && !toolbarHovered
+                                && DrawTransformGizmo(minimum, maximum);
+        bool toolbarOwnsPointer = DrawManipulationToolbar(toolbar);
+        if (!viewportClicked
+            || toolbarOwnsPointer
             || gizmoOwnsPointer
             || navigationOwnsPointer
             || NativeImGui.GetIO().KeyAlt)
@@ -535,30 +552,187 @@ internal sealed class SceneViewPanel : EditorPanel
     {
         Vector2 minimum = NativeImGui.GetCursorScreenPos();
         Vector2 maximum = minimum + size;
-        NativeImGui.GetWindowDrawList().AddRectFilled(
+        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
+        drawList.AddRectFilled(
             minimum,
             maximum,
             NativeImGui.ColorConvertFloat4ToU32(m_backgroundColor));
-        NativeImGui.TextUnformatted(message);
+        drawList.AddText(
+            minimum + NativeImGui.GetStyle().WindowPadding,
+            NativeImGui.GetColorU32(ImGuiCol.TextDisabled),
+            message);
+        NativeImGui.Dummy(size);
     }
 
     private static Inno.Core.Mathematics.Color ToEngineColor(Vector4 value)
         => new(value.X, value.Y, value.Z, value.W);
 
-    private void DrawManipulationToolbar()
+    private bool DrawManipulationToolbar(ManipulationToolbarLayout layout)
     {
-        if (NativeImGui.Button(m_operation == ImGuizmoOperation.Translate ? "Move *" : "Move"))
-            m_operation = ImGuizmoOperation.Translate;
-        NativeImGui.SameLine();
-        if (NativeImGui.Button(m_operation == ImGuizmoOperation.Rotate ? "Rotate *" : "Rotate"))
-            m_operation = ImGuizmoOperation.Rotate;
-        NativeImGui.SameLine();
-        if (NativeImGui.Button(m_operation == ImGuizmoOperation.Scale ? "Scale *" : "Scale"))
-            m_operation = ImGuizmoOperation.Scale;
-        NativeImGui.SameLine();
-        if (NativeImGui.Button(m_mode == ImGuizmoMode.Local ? "Local" : "World"))
-            m_mode = m_mode == ImGuizmoMode.Local ? ImGuizmoMode.World : ImGuizmoMode.Local;
+        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
+        Vector4 background = EditorPalette.inspectorTargetHeader;
+        background.W = 0.5f;
+        drawList.AddRectFilled(
+            layout.minimum,
+            layout.maximum,
+            NativeImGui.ColorConvertFloat4ToU32(background),
+            EditorWidget.style.frameRounding);
+
+        float itemX = layout.minimum.X + layout.padding;
+        float itemY = layout.minimum.Y + layout.padding;
+        try
+        {
+            if (DrawManipulationTool(
+                    "move",
+                    ImGuiIcon.UpDownLeftRight,
+                    "Move",
+                    new Vector2(itemX, itemY),
+                    layout.itemSize,
+                    m_operation == ImGuizmoOperation.Translate))
+            {
+                m_operation = ImGuizmoOperation.Translate;
+            }
+            itemY += layout.itemSize.Y + layout.spacing;
+
+            if (DrawManipulationTool(
+                    "rotate",
+                    ImGuiIcon.Rotate,
+                    "Rotate",
+                    new Vector2(itemX, itemY),
+                    layout.itemSize,
+                    m_operation == ImGuizmoOperation.Rotate))
+            {
+                m_operation = ImGuizmoOperation.Rotate;
+            }
+            itemY += layout.itemSize.Y + layout.spacing;
+
+            if (DrawManipulationTool(
+                    "scale",
+                    ImGuiIcon.UpRightAndDownLeftFromCenter,
+                    "Scale",
+                    new Vector2(itemX, itemY),
+                    layout.itemSize,
+                    m_operation == ImGuizmoOperation.Scale))
+            {
+                m_operation = ImGuizmoOperation.Scale;
+            }
+            itemY += layout.itemSize.Y + layout.sectionSpacing;
+
+            float separatorY = itemY - layout.sectionSpacing * 0.5f;
+            drawList.AddLine(
+                new Vector2(layout.minimum.X + layout.padding, separatorY),
+                new Vector2(layout.maximum.X - layout.padding, separatorY),
+                NativeImGui.ColorConvertFloat4ToU32(EditorPalette.tableBorderLight),
+                EditorWidget.style.borderSize);
+
+            string modeIcon = m_mode == ImGuizmoMode.Local
+                ? ImGuiIcon.Cube
+                : ImGuiIcon.Globe;
+            string modeTooltip = m_mode == ImGuizmoMode.Local
+                ? "Coordinate Space: Local (click for World)"
+                : "Coordinate Space: World (click for Local)";
+            if (DrawManipulationTool(
+                    "coordinate_space",
+                    modeIcon,
+                    modeTooltip,
+                    new Vector2(itemX, itemY),
+                    layout.itemSize,
+                    selected: false))
+            {
+                m_mode = m_mode == ImGuizmoMode.Local
+                    ? ImGuizmoMode.World
+                    : ImGuizmoMode.Local;
+            }
+        }
+        finally
+        {
+            NativeImGui.SetCursorScreenPos(layout.viewportMaximum);
+            NativeImGui.Dummy(Vector2.Zero);
+        }
+        return IsManipulationToolbarHovered(layout);
     }
+
+    private static bool DrawManipulationTool(
+        string id,
+        string icon,
+        string tooltip,
+        Vector2 position,
+        Vector2 size,
+        bool selected)
+    {
+        NativeImGui.SetCursorScreenPos(position);
+        if (selected)
+            NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.accentActive);
+        bool pressed;
+        try
+        {
+            pressed = EditorWidget.ClickableText(
+                $"scene_transform_{id}",
+                icon,
+                size,
+                tooltip);
+        }
+        finally
+        {
+            if (selected)
+                NativeImGui.PopStyleColor();
+        }
+
+        if (selected)
+        {
+            Vector2 minimum = NativeImGui.GetItemRectMin();
+            Vector2 maximum = NativeImGui.GetItemRectMax();
+            float thickness = EditorWidget.style.interactionOverlayThickness;
+            NativeImGui.GetWindowDrawList().AddRectFilled(
+                minimum,
+                new Vector2(minimum.X + thickness, maximum.Y),
+                NativeImGui.ColorConvertFloat4ToU32(EditorPalette.accentActive));
+        }
+        return pressed;
+    }
+
+    private static ManipulationToolbarLayout CreateManipulationToolbarLayout(
+        Vector2 viewportMinimum,
+        Vector2 viewportMaximum)
+    {
+        float zoom = EditorWidget.style.zoom;
+        float inset = 10f * zoom;
+        float padding = 4f * zoom;
+        float spacing = 2f * zoom;
+        float sectionSpacing = 8f * zoom;
+        float itemExtent = MathF.Max(NativeImGui.GetFrameHeight(), 26f * zoom);
+        Vector2 itemSize = new(itemExtent);
+        float width = itemExtent + padding * 2f;
+        float height = padding * 2f
+                       + itemExtent * C_MANIPULATION_TOOL_COUNT
+                       + spacing * 2f
+                       + sectionSpacing;
+        Vector2 minimum = viewportMinimum + new Vector2(inset);
+        Vector2 maximum = minimum + new Vector2(width, height);
+        if (maximum.X > viewportMaximum.X - inset)
+        {
+            float offset = maximum.X - (viewportMaximum.X - inset);
+            minimum.X -= offset;
+            maximum.X -= offset;
+        }
+        if (maximum.Y > viewportMaximum.Y - inset)
+        {
+            float offset = maximum.Y - (viewportMaximum.Y - inset);
+            minimum.Y -= offset;
+            maximum.Y -= offset;
+        }
+        return new ManipulationToolbarLayout(
+            minimum,
+            maximum,
+            viewportMaximum,
+            itemSize,
+            padding,
+            spacing,
+            sectionSpacing);
+    }
+
+    private static bool IsManipulationToolbarHovered(ManipulationToolbarLayout layout)
+        => NativeImGui.IsMouseHoveringRect(layout.minimum, layout.maximum);
 
     private unsafe bool DrawTransformGizmo(Vector2 minimum, Vector2 maximum)
     {
@@ -708,6 +882,15 @@ internal sealed class SceneViewPanel : EditorPanel
             source[1], source[5], source[9], source[13],
             source[2], source[6], source[10], source[14],
             source[3], source[7], source[11], source[15]);
+
+    private readonly record struct ManipulationToolbarLayout(
+        Vector2 minimum,
+        Vector2 maximum,
+        Vector2 viewportMaximum,
+        Vector2 itemSize,
+        float padding,
+        float spacing,
+        float sectionSpacing);
 
     private readonly record struct TransformSnapshot(
         Inno.Core.Mathematics.Vector3 position,

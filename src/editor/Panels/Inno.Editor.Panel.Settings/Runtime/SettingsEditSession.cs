@@ -67,6 +67,7 @@ internal sealed class SettingsEditSession
     private readonly HashSet<ProjectSettingId> m_projectInitiallyNonDefault = [];
     private readonly HashSet<ProjectSettingId> m_projectResetIntent = [];
     private readonly HashSet<ProjectSettingId> m_projectResets = [];
+    private readonly Dictionary<ProjectSettingId, ISerializable> m_projectOriginalValues = [];
     private readonly Dictionary<ProjectSettingId, ISerializable> m_projectValues = [];
 
     internal SettingsEditSession(
@@ -92,8 +93,11 @@ internal sealed class SettingsEditSession
         foreach (ProjectSettingEditor definition in projectSettings.definitions)
         {
             fields.Add(new SettingsField(definition));
+            if (m_projectValues.ContainsKey(definition.settingId))
+                continue;
             ISerializable value = projectSettings.Get(definition);
             m_projectValues.Add(definition.settingId, value);
+            m_projectOriginalValues.Add(definition.settingId, projectSettings.Get(definition));
             if (!definition.ValuesEqual(value, projectSettings.GetComposedDefault(definition)))
                 m_projectInitiallyNonDefault.Add(definition.settingId);
         }
@@ -203,7 +207,25 @@ internal sealed class SettingsEditSession
         }
         ProjectSettingId id = field.project?.settingId
             ?? throw new InvalidOperationException($"Settings field '{field.path}' has no owner.");
-        UpdateDirty(id, differsFromDrawBaseline, m_projectModified, m_projectResets, m_projectResetIntent);
+        ProjectSettingEditor project = field.project;
+        ISerializable value = m_projectValues[id];
+        if (m_projectResetIntent.Contains(id))
+        {
+            ISerializable composedDefault = m_projectSettings.GetComposedDefault(project);
+            if (project.ValuesEqual(value, composedDefault))
+            {
+                _ = m_projectModified.Remove(id);
+                return;
+            }
+            _ = m_projectResetIntent.Remove(id);
+            _ = m_projectResets.Remove(id);
+        }
+
+        bool differsFromOriginal = !project.ValuesEqual(value, m_projectOriginalValues[id]);
+        if (differsFromOriginal)
+            _ = m_projectModified.Add(id);
+        else
+            _ = m_projectModified.Remove(id);
     }
 
     internal bool Apply()
@@ -246,11 +268,15 @@ internal sealed class SettingsEditSession
         m_projectInitiallyNonDefault.Clear();
         m_projectResetIntent.Clear();
         m_projectResets.Clear();
-        foreach (SettingsField field in definitions.Where(static field => field.scope == SettingsScope.Project))
+        foreach (SettingsField field in definitions
+                     .Where(static field => field.scope == SettingsScope.Project)
+                     .GroupBy(static field => field.project!.settingId)
+                     .Select(static group => group.First()))
         {
             ProjectSettingEditor definition = field.project!;
             ISerializable value = m_projectSettings.Get(definition);
             m_projectValues[definition.settingId] = value;
+            m_projectOriginalValues[definition.settingId] = m_projectSettings.Get(definition);
             if (!definition.ValuesEqual(value, m_projectSettings.GetComposedDefault(definition)))
                 m_projectInitiallyNonDefault.Add(definition.settingId);
         }

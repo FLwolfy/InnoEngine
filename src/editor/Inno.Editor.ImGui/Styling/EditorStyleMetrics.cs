@@ -141,6 +141,9 @@ public sealed class EditorStyleMetrics
     /// <summary>Gets scrollbar width.</summary>
     public float scrollbarSize => Scale(12f);
 
+    /// <summary>Gets the inset that keeps an overlay scrollbar grab visually lightweight.</summary>
+    public float scrollbarPadding => Scale(3f);
+
     /// <summary>Gets minimum grab size.</summary>
     public float grabMinimumSize => Scale(12f);
 

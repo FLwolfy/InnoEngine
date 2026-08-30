@@ -17,7 +17,7 @@ using NativeImGui = Inno.Native.ImGui.ImGui;
 namespace Inno.Editor.Panel.ShaderGraph;
 
 /// <summary>Edits neutral raster and compute shader graphs through the shared Graph and Shader IR contracts.</summary>
-[EditorPanel("rendering.shader-graph", "Shader Graph", order: 230)]
+[EditorPanel("rendering.shader-graph", "Shader Graph", order: 230, menuPath: "Authoring")]
 internal sealed class ShaderGraphPanel : EditorPanel
 {
     private const string C_DEFAULT_PATH = "NewShader.ishadergraph";

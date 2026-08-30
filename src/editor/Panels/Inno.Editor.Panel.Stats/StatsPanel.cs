@@ -9,7 +9,7 @@ namespace Inno.Editor.Panel.Stats;
 /// <summary>
 /// Shows lightweight runtime metrics.
 /// </summary>
-[EditorPanel("diagnostics.stats", "Stats", order: 500)]
+[EditorPanel("diagnostics.stats", "Stats", order: 500, menuPath: "Diagnostics")]
 internal sealed class StatsPanel : EditorPanel
 {
     private readonly FrameStatisticsSampler m_statistics = new();

@@ -16,7 +16,7 @@ namespace Inno.Editor.Panel.Inspector;
 /// <summary>
 /// Draws the registered inspector for the current editor selection.
 /// </summary>
-[EditorPanel("scene.inspector", "Inspector", order: 200)]
+[EditorPanel("scene.inspector", "Inspector", order: 200, menuPath: "Workspace")]
 internal sealed class InspectorPanel : EditorPanel
 {
     private readonly SceneInspectionModule m_inspection;

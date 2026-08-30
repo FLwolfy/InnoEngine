@@ -46,6 +46,8 @@ Palette 与 Style Metrics 并列位于 `Styling`，runtime host 与三个表现�
 
 `EditorStyleMetrics.zoom` 是整个 Editor 的统一 UI 倍率。字体、窗口与 frame padding、item spacing、rounding、border、scrollbar、最小尺寸及各 Panel 的语义像素指标都从同一基准乘以 zoom；归一化列比例、图标相对倍率、透明度和时间值保持不变，所以布局比例不会发生二次缩放。
 
+Editor ImGui context 默认启用 Inno overlay scrollbar 扩展。纵横滚动条不参与 `InnerRect`/content width 分配，直接覆盖在内容边缘；滚轮、程序化滚动或正在拖动时立即显示，停止交互 `0.60` 秒后在 `0.30` 秒内淡出。完全淡出后滚动条不参与 hit test，因此不会拦截底层元素。Scrollbar thumb 使用 `EditorPalette.scrollbarGrab*` 的浅紫语义色。交互在 Window Begin 阶段处理，视觉则延迟到 Window End 并提交到所属 viewport 的 foreground draw list，以当前 Window rect 作为精确 clip；因此它与 DropTarget highlight 处于同一顶层表现层，不会被 Parent、Child、Table、Image、Canvas 或自定义 Drawer 遮挡。横纵滚动条同时存在时各自避开右下角交叉区域。该行为在 context 层统一覆盖 Panel、Child、Table host 与 Popup；明确声明 `allowScrolling = false` 的 Scene/Game 等 viewport 则完全不创建滚动条。SDL 轻量 Demo 使用自己的 context，不被 Editor 策略修改。
+
 | 操作 | 快捷键 | 结果 |
 | --- | --- | --- |
 | `View/Zoom In` | Command/Ctrl + `+` | 在 actual size 基础上增加一个 `0.10` 倍率步长。 |

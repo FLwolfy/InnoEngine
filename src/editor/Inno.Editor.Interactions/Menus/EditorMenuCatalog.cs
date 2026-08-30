@@ -69,11 +69,14 @@ internal sealed class EditorMenuCatalog(
         {
             foreach (EditorExtensionCatalog.PanelRegistration panel in catalog.extensions.panels)
             {
+                string menuPath = string.IsNullOrEmpty(panel.attribute.menuPath)
+                    ? panel.attribute.title
+                    : $"{panel.attribute.menuPath}/{panel.attribute.title}";
                 placements.Add(new Placement(
-                    $"Panel/{panel.attribute.title}",
+                    $"Panel/{menuPath}",
                     EditorBuiltInInteractionIds.C_TOGGLE_PANEL,
                     panel.attribute.order,
-                    separatorBefore: false,
+                    panel.attribute.separatorBefore,
                     panel.attribute.id));
             }
         }

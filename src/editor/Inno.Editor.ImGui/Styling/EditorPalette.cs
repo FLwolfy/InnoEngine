@@ -72,13 +72,13 @@ public static class EditorPalette
     public static Vector4 titleCollapsed { get; } = new(0.12f, 0.12f, 0.12f, 1f);
 
     /// <summary>Gets the standard scrollbar thumb.</summary>
-    public static Vector4 scrollbarGrab { get; } = new(0.15686275f, 0.15686275f, 0.15686275f, 1f);
+    public static Vector4 scrollbarGrab { get; } = new(0.62f, 0.56f, 0.80f, 0.78f);
 
     /// <summary>Gets the hovered scrollbar thumb.</summary>
-    public static Vector4 scrollbarGrabHovered { get; } = new(0.23529412f, 0.23529412f, 0.23529412f, 1f);
+    public static Vector4 scrollbarGrabHovered { get; } = new(0.72f, 0.66f, 0.90f, 0.90f);
 
     /// <summary>Gets the active scrollbar thumb.</summary>
-    public static Vector4 scrollbarGrabActive { get; } = new(0.29411766f, 0.29411766f, 0.29411766f, 1f);
+    public static Vector4 scrollbarGrabActive { get; } = new(0.82f, 0.77f, 0.96f, 1f);
 
     /// <summary>Gets the standard accent color.</summary>
     public static Vector4 accent { get; } = new(0.61960787f, 0.5764706f, 0.76862746f, 0.54901963f);
@@ -171,10 +171,10 @@ public static class EditorPalette
     public static Vector4 collectionRowAlternate { get; } = new(0.215f, 0.215f, 0.215f, 1f);
 
     /// <summary>Gets the translucent primary background of a complete Settings field.</summary>
-    public static Vector4 settingsField { get; } = new(0.36f, 0.36f, 0.38f, 0.03f);
+    public static Vector4 settingsField { get; } = new(0.36f, 0.36f, 0.38f, 0.005f);
 
     /// <summary>Gets the translucent alternate background of a complete Settings field.</summary>
-    public static Vector4 settingsFieldAlternate { get; } = new(0.52f, 0.52f, 0.56f, 0.03f);
+    public static Vector4 settingsFieldAlternate { get; } = new(0.52f, 0.52f, 0.56f, 0.005f);
 
     /// <summary>Gets the asset browser field background.</summary>
     public static Vector4 assetField { get; } = new(0.235f, 0.22f, 0.27f, 1f);

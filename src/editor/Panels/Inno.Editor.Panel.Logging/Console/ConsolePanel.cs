@@ -18,7 +18,7 @@ namespace Inno.Editor.Panel.Logging;
 /// <summary>
 /// Displays append-only logs and current diagnostics in the unified editor Console.
 /// </summary>
-[EditorPanel("diagnostics.console", "Console", order: 400)]
+[EditorPanel("diagnostics.console", "Console", order: 400, menuPath: "Diagnostics")]
 internal sealed class ConsolePanel : EditorPanel
 {
     #region State

@@ -135,6 +135,8 @@ public sealed class AnimationTemplateMenu : EditorMenuSource
 
 Action 的 `Query` 决定条目是否可见、可用、勾选和动态标题；快捷键标签从 `[EditorShortcut]` 自动生成。
 
+Panel 主菜单使用同一棵层级菜单模型。`EditorPanelAttribute.menuPath` 是 `Panel/` 下的开放分类路径，支持任意斜杠层级；`separatorBefore` 在条目所在分类内开启视觉分组。Host 不维护封闭类别枚举，内置 Panel 当前按 Workspace、Viewports、Authoring、Content 与 Diagnostics 分类，Plugin Panel 可以声明自己的稳定分类而无需修改 Editor。
+
 快捷键显示与键盘 dispatch 共用同一个 resolver：先按 action ID、area、target specificity 与 priority 解析实际 registration，再读取它的 gesture。同一 Action 可声明多个不同 gesture，每个都可 dispatch；菜单只显示当前 area 的第一个可用 gesture。精确 area shortcut 存在时会覆盖该 registration 的 global shortcuts。同一 Action 在同一有效 area 重复同一 gesture，或不同 Action 形成同 specificity 歧义，都会在 catalog Build 阶段被拒绝。
 
 ## Selection 与 Focus

@@ -115,12 +115,7 @@ internal sealed class SettingsPageView(SettingsEditSession session)
         ImGuiTableFlags flags = ImGuiTableFlags.SizingStretchProp |
                                 ImGuiTableFlags.NoSavedSettings |
                                 ImGuiTableFlags.NoPadOuterX;
-        float horizontalBleed = NativeImGui.GetStyle().WindowPadding.X;
-        float originalCursorX = NativeImGui.GetCursorPosX();
-        float tableWidth = MathF.Max(
-            1f,
-            NativeImGui.GetContentRegionAvail().X + horizontalBleed * 2f);
-        NativeImGui.SetCursorPosX(originalCursorX - horizontalBleed);
+        float tableWidth = MathF.Max(1f, NativeImGui.GetContentRegionAvail().X);
         NativeImGui.PushStyleVar(
             ImGuiStyleVar.CellPadding,
             EditorWidget.style.settingsFieldPadding);
@@ -159,7 +154,6 @@ internal sealed class SettingsPageView(SettingsEditSession session)
             if (tableStarted)
                 NativeImGui.EndTable();
             NativeImGui.PopStyleVar();
-            NativeImGui.SetCursorPosX(originalCursorX);
         }
     }
 
@@ -207,6 +201,48 @@ internal sealed class SettingsPageView(SettingsEditSession session)
         finally
         {
             NativeImGui.PopID();
+        }
+        DrawFieldBackgroundGutters(background);
+    }
+
+    private static void DrawFieldBackgroundGutters(uint background)
+    {
+        ImGuiTablePtr table = ImGuiP.GetCurrentTable();
+        ImGuiWindowPtr window = ImGuiP.GetCurrentWindow();
+        float tableMinimumX = table.OuterRect.Min.X;
+        float tableMaximumX = table.OuterRect.Max.X;
+        float rowMinimumY = table.RowPosY1;
+        float rowMaximumY = table.RowPosY2;
+        float windowMinimumX = window.InnerRect.Min.X;
+        float windowMaximumX = window.InnerRect.Max.X;
+        if (rowMaximumY <= rowMinimumY)
+            return;
+
+        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
+        drawList.PushClipRect(
+            new System.Numerics.Vector2(windowMinimumX, rowMinimumY),
+            new System.Numerics.Vector2(windowMaximumX, rowMaximumY),
+            false);
+        try
+        {
+            if (tableMinimumX > windowMinimumX)
+            {
+                drawList.AddRectFilled(
+                    new System.Numerics.Vector2(windowMinimumX, rowMinimumY),
+                    new System.Numerics.Vector2(tableMinimumX, rowMaximumY),
+                    background);
+            }
+            if (tableMaximumX < windowMaximumX)
+            {
+                drawList.AddRectFilled(
+                    new System.Numerics.Vector2(tableMaximumX, rowMinimumY),
+                    new System.Numerics.Vector2(windowMaximumX, rowMaximumY),
+                    background);
+            }
+        }
+        finally
+        {
+            drawList.PopClipRect();
         }
     }
 

@@ -15,6 +15,7 @@ using Inno.Core.Serialization;
 using Inno.Core.Settings;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
+using Inno.Editor.Settings;
 using Xunit;
 
 namespace Inno.Editor.Interactions.Tests;
@@ -399,9 +400,40 @@ public sealed class EditorRuntimeTests : IDisposable
             .BuildMenu();
 
         EditorMenuItem panel = Assert.Single(menu.items.Where(static item => item.label == "Panel"));
-        Assert.Contains(panel.children, static item => item.label == "Test");
+        EditorMenuItem testing = Assert.Single(panel.children.Where(static item => item.label == "Testing"));
+        Assert.Contains(testing.children, static item => item.label == "Test");
         EditorMenuItem? view = menu.items.SingleOrDefault(static item => item.label == "View");
         Assert.True(view is null || view.children.All(static item => item.label != "Test"));
+    }
+
+    [Fact]
+    public void ProjectSettingProtocolSupportsMultipleTypedEditorPlacements()
+    {
+        var editor = (ProjectSettingsEditor?)Activator.CreateInstance(
+            typeof(ProjectSettingsEditor),
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            binder: null,
+            args: [m_runtime.interactions],
+            culture: null);
+        Assert.NotNull(editor);
+        try
+        {
+            ProjectSettingEditor[] presentations = editor.definitions
+                .Where(static definition =>
+                    definition.settingId == MultiPresentationSetting.settingId)
+                .ToArray();
+
+            Assert.Equal(2, presentations.Length);
+            Assert.Equal(
+                ["Project/Tests/Multi/Primary", "Project/Tests/Multi/Secondary"],
+                presentations.Select(static definition => definition.path).Order());
+            Assert.All(presentations, definition =>
+                Assert.IsType<MultiPresentationSetting>(editor.Get(definition)));
+        }
+        finally
+        {
+            ((IDisposable)editor).Dispose();
+        }
     }
 
     [Fact]
@@ -637,7 +669,7 @@ public sealed class EditorRuntimeTests : IDisposable
         EditorPanelExtension panel = Assert.Single(
             m_runtime.panels.Where(static value => value.id == "tests.panel"));
 
-        Assert.False(panel.TryGetWindowPadding(out _));
+        Assert.False(panel.TryGetWindowPresentation(out _, out _));
         Assert.False(panel.isOpen);
     }
 
@@ -957,7 +989,7 @@ public sealed class FollowingUpdateModule : EditorModule
     protected override void OnUpdate(EditorContext context) => updateCount++;
 }
 
-[EditorPanel("tests.panel", "Test", defaultOpen: false)]
+[EditorPanel("tests.panel", "Test", defaultOpen: false, menuPath: "Testing")]
 public sealed class TestPanel(TestModule module) : EditorPanel
 {
     public static int attachCount;
@@ -986,6 +1018,34 @@ public sealed class TestPanel(TestModule module) : EditorPanel
     protected override void OnDraw(EditorContext context)
     {
     }
+}
+
+[StableTypeId("0fbd66e2-303e-4b35-83a1-fc2b90d58360")]
+[ProjectSettingDefinition("tests.editor.multi-presentation")]
+public sealed class MultiPresentationSetting : ISerializable
+{
+    public static ProjectSettingId settingId => new("tests.editor.multi-presentation");
+
+    [SerializableProperty]
+    public int value { get; set; } = 7;
+}
+
+[ProjectSettingPath("Project/Tests/Multi/Primary")]
+public sealed class PrimaryMultiPresentationEditor : ProjectSettingEditor<MultiPresentationSetting>
+{
+    public override ProjectSettingId settingId => MultiPresentationSetting.settingId;
+
+    protected override void OnDraw(MultiPresentationSetting setting)
+        => _ = setting;
+}
+
+[ProjectSettingPath("Project/Tests/Multi/Secondary")]
+public sealed class SecondaryMultiPresentationEditor : ProjectSettingEditor<MultiPresentationSetting>
+{
+    public override ProjectSettingId settingId => MultiPresentationSetting.settingId;
+
+    protected override void OnDraw(MultiPresentationSetting setting)
+        => _ = setting;
 }
 
 [EditorAction("tests.resolve")]

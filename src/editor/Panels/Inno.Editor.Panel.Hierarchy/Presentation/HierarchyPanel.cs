@@ -21,7 +21,7 @@ namespace Inno.Editor.Panel.Hierarchy;
 /// <summary>
 /// Edits the active scene object hierarchy.
 /// </summary>
-[EditorPanel("scene.hierarchy", "Hierarchy", order: 100)]
+[EditorPanel("scene.hierarchy", "Hierarchy", order: 100, menuPath: "Workspace")]
 internal sealed class HierarchyPanel : EditorPanel
 {
     private const nuint C_NAME_BUFFER_SIZE = 512;

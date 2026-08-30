@@ -42,24 +42,31 @@ public sealed class EditorPanelExtension
     }
 
     /// <summary>
-    /// Safely reads the panel padding policy through the active extension boundary.
+    /// Safely reads the panel window-presentation policy through the active extension boundary.
     /// </summary>
     /// <param name="useWindowPadding">
     /// The requested padding policy, or the safe default when the panel is quarantined.
     /// </param>
+    /// <param name="allowScrolling">
+    /// The requested scrolling policy, or the safe default when the panel is quarantined.
+    /// </param>
     /// <returns>
     /// <see langword="true"/> when the policy was read without quarantining the panel.
     /// </returns>
-    public bool TryGetWindowPadding(out bool useWindowPadding)
+    public bool TryGetWindowPresentation(
+        out bool useWindowPadding,
+        out bool allowScrolling)
     {
         try
         {
             useWindowPadding = m_panel.useWindowPadding;
+            allowScrolling = m_panel.allowScrolling;
             return true;
         }
         catch (Exception exception)
         {
             useWindowPadding = true;
+            allowScrolling = true;
             m_panel.isOpen = false;
             m_quarantine(exception);
             return false;

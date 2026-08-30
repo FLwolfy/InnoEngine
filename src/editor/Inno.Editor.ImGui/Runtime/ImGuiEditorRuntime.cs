@@ -44,6 +44,8 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
         : base(context ?? throw new ArgumentNullException(nameof(context)))
     {
         ArgumentNullException.ThrowIfNull(hostServices);
+        ImGuiIOPtr io = NativeImGui.GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags.InnoOverlayScrollbars;
         m_runtime = new EditorInteractionRuntime(context, hostServices);
     }
 
@@ -158,9 +160,14 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
         for (int i = 0; i < panels.Count; i++)
         {
             EditorPanelExtension extension = panels[i];
-            if (!extension.isOpen || !extension.TryGetWindowPadding(out bool useWindowPadding))
+            if (!extension.isOpen || !extension.TryGetWindowPresentation(
+                    out bool useWindowPadding,
+                    out bool allowScrolling))
                 continue;
             bool isOpen = extension.isOpen;
+            ImGuiWindowFlags flags = ImGuiWindowFlags.NoCollapse;
+            if (!allowScrolling)
+                flags |= ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
             EditorWidget.PanelWindow(extension.title, ref isOpen, () =>
             {
                 if (extension.Draw(context) &&
@@ -170,7 +177,7 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
                         $"panel/{extension.id}",
                         interactions.selection.selectedTarget).Focus();
                 }
-            }, useWindowPadding: useWindowPadding);
+            }, flags, useWindowPadding);
             extension.isOpen = isOpen;
         }
     }

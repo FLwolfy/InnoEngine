@@ -21,7 +21,7 @@ namespace Inno.Editor.Panel.FileBrowser;
 /// <summary>
 /// Asset browser panel with a tree pane and filtered table view.
 /// </summary>
-[EditorPanel("asset.file-browser", "File", order: 300)]
+[EditorPanel("asset.file-browser", "File", order: 300, menuPath: "Content")]
 internal sealed class FileBrowserPanel : EditorPanel
 {
     #region Constants

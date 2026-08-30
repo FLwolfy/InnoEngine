@@ -59,6 +59,7 @@ public static partial class ImGuiWidget
         nativeStyle.IndentSpacing = style.indentSpacing;
         nativeStyle.ColumnsMinSpacing = style.columnMinimumSpacing;
         nativeStyle.ScrollbarSize = style.scrollbarSize;
+        nativeStyle.ScrollbarPadding = style.scrollbarPadding;
         nativeStyle.ScrollbarRounding = style.frameRounding;
         nativeStyle.GrabMinSize = style.grabMinimumSize;
         nativeStyle.GrabRounding = style.frameRounding;

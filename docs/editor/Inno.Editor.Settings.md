@@ -83,6 +83,11 @@ public sealed class RenderingSettingEditor : ProjectSettingEditor<MyRenderingSet
 
 `ProjectSettingEditor<TSetting>` 收到的是当前 generation 的隔离暂存副本。它只能修改该副本；统一 Apply 中的 Project scope 以“Host + Plugin 合成结果”为 baseline：有 Composer 的协议只写语义 delta，没有 Composer 的协议写完整 replacement。Reset Project 删除项目 contribution，随后重新使用 Host 默认值与 Plugin 默认贡献的合成结果。如果编辑结果等于 baseline，Apply 会自动移除已有 project record，不留下空 override。
 
+同一个 `ProjectSettingId` 可以注册多个不同 placement 的 Editor 表现，只要它们的
+`TSetting` 完全相同。所有表现共享同一份隔离暂存对象、dirty 状态、Reset、Apply 和
+History 事务；这允许一个较大的运行时设置协议在 UI 中拆成多个完整 section，而不必
+为了排版拆碎运行时数据模型。各 placement path 仍必须全局唯一。
+
 ## 公开 API
 
 | API | 稳定语义 |

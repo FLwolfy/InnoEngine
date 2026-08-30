@@ -19,6 +19,15 @@ public abstract class EditorPanel
     public virtual bool useWindowPadding => true;
 
     /// <summary>
+    /// Gets whether the presentation backend may create a scroll range for this panel window.
+    /// </summary>
+    /// <remarks>
+    /// Full-canvas panels should return <see langword="false"/> and manage navigation inside their
+    /// own content instead of allowing the host window to scroll.
+    /// </remarks>
+    public virtual bool allowScrolling => true;
+
+    /// <summary>
     /// Gets or sets whether panel is visible.
     /// </summary>
     public bool isOpen { get; set; } = true;

@@ -14,7 +14,7 @@ Settings
 
 - 主菜单 `Edit/Settings...` 打开可移动、可缩放但不可 Dock/Collapse 的 Modal。
 - 左侧 Tree 合并 `EditorSetting` 与 `ProjectSettingEditor` 的 placement；搜索匹配 page、path、label、section 与 description。
-- 右侧每个完整字段使用自动内容行高；label/content/reset 保持对齐，连续行之间没有空隙。Field Table 横向越过 page content padding，让背景严格贴合内容窗口左右边缘；文字与控件单独保留正常 window/cell inset。两种背景使用更明亮的灰色 RGB 与固定 `0.1` alpha。字段自身仍拥有具体 ImGui 控件。
+- 右侧每个完整字段使用自动内容行高；label/content/reset 保持对齐，连续行之间没有空隙。Field Table 严格使用 page 的真实 content width，不通过负 cursor 或扩大 table width 穿透 padding，因此不会污染 `CursorMaxPos` 或产生虚假水平滚动范围。左右 gutter 背景作为不参与 layout 的 draw-list geometry 延伸至内容窗口边缘，文字与控件继续使用正常 window/cell inset。两种背景使用轻微明度差和固定 `0.005` alpha，只辅助辨认连续字段而不形成明显色块。
 - 合成页面不需要中央 page 注册；frontend 根据 slash-delimited path 自动补齐祖先。
 - Catalog generation 改变时丢弃旧 staged generation，按新 definitions 原子重建窗口 session。
 
@@ -56,6 +56,8 @@ public sealed class RenderingSettingsEditor
     }
 }
 ```
+
+同一个 `ProjectSettingId` 可以注册多个 `ProjectSettingEditor<TSetting>` presentation，前提是它们使用完全相同的 `TSetting`。不同 presentation 可以使用同一 `pagePath` 和不同 `section`，由 frontend 绘制为同级、全宽的分节横线；它们共享一个 staged setting、Reset、dirty 判断与 Apply，不复制运行时配置对象。Renderer 与 Sorting Layers 这类同属一个设置协议、但视觉上应分节的内容应采用这种组合方式，不应在 `OnDraw` 内手写嵌套 separator。
 
 Settings frontend 不内建 Boolean、Layer、Tag、PBR 或其他业务字段类型。Game Layers/Tags 的 Drawer 当前由 Inspector feature 提供；Plugin 可以以同一协议增加自己的页面而不修改 Panel。
 

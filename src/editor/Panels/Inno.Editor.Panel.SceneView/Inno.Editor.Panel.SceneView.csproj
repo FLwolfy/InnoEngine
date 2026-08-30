@@ -11,6 +11,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\native\Inno.Native.ImGuizmo\Inno.Native.ImGuizmo.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\Inno.Editor.Core\Inno.Editor.Core.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\Inno.Editor.Rendering\Inno.Editor.Rendering.csproj" PrivateAssets="compile" />
@@ -19,6 +20,7 @@
     <ProjectReference Include="..\..\..\..\src\core\Inno.Core.Identity\Inno.Core.Identity.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\src\core\Inno.Core.Mathematics\Inno.Core.Mathematics.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\src\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\src\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\src\render\Inno.Rendering\Inno.Rendering.csproj" PrivateAssets="compile" />
   </ItemGroup>
 </Project>
