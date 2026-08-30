@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using Inno.Rendering.Assets;
 using Inno.Rendering.Core;
 using Xunit;
@@ -55,6 +57,48 @@ public sealed class BgfxToolchainTests : IDisposable
         Assert.Contains(":Metal:", metal.profileKey, StringComparison.Ordinal);
         Assert.Contains(":Direct3D11:", direct3D.profileKey, StringComparison.Ordinal);
         Assert.NotEqual(metal.profileKey, direct3D.profileKey);
+    }
+
+    [Fact]
+    public async Task Direct3DProfileCompilesCommonSourceOnWindows()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+        const string vertex = "$input a_position\n#include <bgfx_shader.sh>\nvoid main() { gl_Position = vec4(a_position, 1.0); }";
+        const string fragment = "#include <bgfx_shader.sh>\nvoid main() { gl_FragColor = vec4(1.0); }";
+        const string varying = "vec3 a_position : POSITION;";
+        var pass = new ShaderPassDefinition("Draw", ShaderProgramKind.Raster);
+        var module = new ShaderIRModule(
+            new ShaderDefinition("Tests/Direct3D", [], [], [pass]),
+            [new ShaderIRPass(
+                pass,
+                [
+                    new ShaderIRStageModule(
+                        ShaderStage.Vertex,
+                        "main",
+                        vertex,
+                        ShaderIRSourceKind.Handwritten,
+                        new ShaderSourceLocation("Shaders/test.vs.sc", "Draw", ShaderStage.Vertex)),
+                    new ShaderIRStageModule(
+                        ShaderStage.Fragment,
+                        "main",
+                        fragment,
+                        ShaderIRSourceKind.Handwritten,
+                        new ShaderSourceLocation("Shaders/test.fs.sc", "Draw", ShaderStage.Fragment))
+                ],
+                varying)]);
+        var compiler = new ShaderCompiler(new BgfxShadercToolchain(BgfxShaderTargetPlatform.WindowsX64));
+
+        ShaderCompilationResult result = await compiler.CompileAsync(
+            module,
+            compiler.CreateTarget(CreateCapabilities(GraphicsBackend.Direct3D11, GraphicsFeature.None)),
+            ShaderVariantKey.empty,
+            m_root);
+
+        Assert.True(result.succeeded, string.Join(
+            Environment.NewLine,
+            result.diagnostics.Select(static diagnostic => $"{diagnostic.code}: {diagnostic.message}")));
+        Assert.Single(result.artifact!.passes);
     }
 
     [Fact]

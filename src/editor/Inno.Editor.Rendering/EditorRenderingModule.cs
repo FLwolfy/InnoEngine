@@ -13,6 +13,8 @@ namespace Inno.Editor.Rendering;
 public sealed class EditorRenderingModule : EditorModule
 {
     private readonly Dictionary<EditorViewportKindId, string> m_providerErrors = [];
+    private readonly Dictionary<string, EditorViewportManipulationSpace> m_manipulationSpaces =
+        new(StringComparer.Ordinal);
     private readonly IEditorRenderingHost m_host;
     private readonly EditorInteractions m_interactions;
     private readonly EditorViewportProviderRegistry m_providers = new();
@@ -39,6 +41,19 @@ public sealed class EditorRenderingModule : EditorModule
     /// <returns>The failure message, or null when no current failure exists.</returns>
     public string? GetProviderError(EditorViewportKindId kind)
         => m_providerErrors.GetValueOrDefault(kind);
+
+    /// <summary>Tries to get the manipulation space from the latest accepted submission for one viewport.</summary>
+    /// <param name="viewportId">Stable panel viewport identity.</param>
+    /// <param name="space">Receives the latest exact view/projection contract.</param>
+    /// <returns><see langword="true"/> when the active provider supplied a manipulation space.</returns>
+    [ScriptingApiIgnore]
+    public bool TryGetManipulationSpace(
+        string viewportId,
+        out EditorViewportManipulationSpace space)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(viewportId);
+        return m_manipulationSpaces.TryGetValue(viewportId, out space);
+    }
 
     /// <summary>Draws toolbar controls owned by the selected Plugin provider.</summary>
     /// <param name="kind">Open viewport purpose.</param>
@@ -87,6 +102,7 @@ public sealed class EditorRenderingModule : EditorModule
             || !m_providers.providers.byKind.TryGetValue(kind, out EditorViewportProviderRegistry.Registration? registration))
         {
             m_host.Release(viewportId);
+            m_manipulationSpaces.Remove(viewportId);
             return false;
         }
         try
@@ -100,6 +116,10 @@ public sealed class EditorRenderingModule : EditorModule
                 submission.data,
                 submission.targetFormat,
                 submission.priority));
+            if (submission.manipulationSpace is EditorViewportManipulationSpace manipulationSpace)
+                m_manipulationSpaces[viewportId] = manipulationSpace;
+            else
+                m_manipulationSpaces.Remove(viewportId);
             m_providerErrors.Remove(kind);
             return true;
         }
@@ -108,6 +128,7 @@ public sealed class EditorRenderingModule : EditorModule
             m_providerErrors[kind] =
                 $"Viewport provider '{registration.attribute.id}' failed: {exception.Message}";
             m_host.Release(viewportId);
+            m_manipulationSpaces.Remove(viewportId);
             return false;
         }
     }
@@ -154,7 +175,12 @@ public sealed class EditorRenderingModule : EditorModule
 
     /// <summary>Stops retaining one viewport target.</summary>
     /// <param name="viewportId">Stable viewport identity.</param>
-    public void Release(string viewportId) => m_host.Release(viewportId);
+    public void Release(string viewportId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(viewportId);
+        m_manipulationSpaces.Remove(viewportId);
+        m_host.Release(viewportId);
+    }
 
     /// <inheritdoc />
     protected override void OnStart(EditorContext context)
@@ -170,12 +196,14 @@ public sealed class EditorRenderingModule : EditorModule
         m_context = null;
         m_host.ReleaseAll();
         m_providerErrors.Clear();
+        m_manipulationSpaces.Clear();
     }
 
     /// <inheritdoc />
     protected override void OnDispose()
     {
         m_providers.Dispose();
+        m_manipulationSpaces.Clear();
         m_host.ReleaseAll();
     }
 

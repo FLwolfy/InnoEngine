@@ -6,7 +6,7 @@ using Inno.Core.Settings;
 
 namespace Inno.Assets.Plugins;
 
-/// <summary>Defines project-owned content and settings exported into one local ZIP Plugin.</summary>
+/// <summary>Defines project-owned content and settings exported into one local ZIP or directory Plugin.</summary>
 [StableTypeId("21ac4d44-c9aa-42ca-b2f6-d2f8d85d6d5f")]
 public sealed class PluginDefinitionAsset : AssetObject
 {

@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using Inno.Assets.Core;
 using Inno.Assets.File;
 using Inno.Assets.Loader;
+using Inno.Assets.Serialization;
 using Inno.Assets.Types;
 using Inno.Core.Assemblies;
 using Inno.Core.Identity;
@@ -26,6 +27,7 @@ public sealed class AssetManagerContractTests : IDisposable
     public AssetManagerContractTests()
     {
         _ = typeof(ManagerDependencyImporter);
+        _ = typeof(ManagerReferenceImporter);
         IdentityManager.Initialize();
         AssemblyManager.Initialize(new AssemblyManagerOptions
         {
@@ -388,6 +390,198 @@ public sealed class AssetManagerContractTests : IDisposable
     }
 
     [Fact]
+    public void SourceMountCandidate_StagesCatalogUntilCompleteAndRemovesItOnRollback()
+    {
+        using TestAssetWorkspace workspace = new();
+        workspace.Write("Text/project.txt", "active");
+        AssetManager.Initialize(workspace.options);
+        string canonicalSnapshot = Path.Combine(
+            workspace.libraryRoot,
+            "AssetDatabase",
+            "Catalog.snapshot");
+        byte[] before = System.IO.File.ReadAllBytes(canonicalSnapshot);
+        string pluginRoot = workspace.CreateExternalRoot("CatalogCandidatePlugin");
+        AssetSourceId pluginId = new("tests.catalog-candidate");
+        WriteReadOnlyAsset(
+            pluginRoot,
+            "value.txt",
+            "candidate",
+            Guid.NewGuid(),
+            "Inno.Assets.Loader.Importers.TextAssetImporter");
+
+        using (AssetSourceMountTransaction transaction = AssetManager.PrepareSourceMounts(
+        [
+            new AssetSourceMount(AssetSourceId.project, workspace.assetRoot, isReadOnly: false),
+            new AssetSourceMount(pluginId, pluginRoot, isReadOnly: true)
+        ]))
+        {
+            Assert.Equal(before, System.IO.File.ReadAllBytes(canonicalSnapshot));
+            Assert.True(Directory.Exists(Path.Combine(
+                workspace.libraryRoot,
+                "AssetDatabase",
+                "Candidates")));
+            transaction.Rollback();
+        }
+
+        Assert.Equal(before, System.IO.File.ReadAllBytes(canonicalSnapshot));
+        Assert.False(Directory.Exists(Path.Combine(
+            workspace.libraryRoot,
+            "AssetDatabase",
+            "Candidates")));
+        Assert.Single(AssetManager.sourceMounts);
+    }
+
+    [Fact]
+    public void SourceMountComplete_AtomicallyPromotesTheCandidateCatalog()
+    {
+        using TestAssetWorkspace workspace = new();
+        workspace.Write("Text/project.txt", "active");
+        AssetManager.Initialize(workspace.options);
+        string canonicalSnapshot = Path.Combine(
+            workspace.libraryRoot,
+            "AssetDatabase",
+            "Catalog.snapshot");
+        byte[] before = System.IO.File.ReadAllBytes(canonicalSnapshot);
+        string pluginRoot = workspace.CreateExternalRoot("PromotedCatalogPlugin");
+        AssetSourceId pluginId = new("tests.promoted-catalog");
+        WriteReadOnlyAsset(
+            pluginRoot,
+            "value.txt",
+            "candidate",
+            Guid.NewGuid(),
+            "Inno.Assets.Loader.Importers.TextAssetImporter");
+
+        using AssetSourceMountTransaction transaction = AssetManager.PrepareSourceMounts(
+        [
+            new AssetSourceMount(AssetSourceId.project, workspace.assetRoot, isReadOnly: false),
+            new AssetSourceMount(pluginId, pluginRoot, isReadOnly: true)
+        ]);
+        transaction.Activate();
+        transaction.Complete();
+
+        Assert.False(before.SequenceEqual(System.IO.File.ReadAllBytes(canonicalSnapshot)));
+        Assert.False(Directory.Exists(Path.Combine(
+            workspace.libraryRoot,
+            "AssetDatabase",
+            "Candidates")));
+        Assert.True(AssetManager.TryGetInfo(
+            new AssetPath(pluginId, "value.txt"),
+            out AssetInfo? pluginInfo));
+        Assert.NotNull(pluginInfo);
+    }
+
+    [Fact]
+    public void SourceMountCandidate_ResolvesReferencesInsideItsOwnUnpublishedGeneration()
+    {
+        using TestAssetWorkspace workspace = new();
+        workspace.Write("Text/project.txt", "active");
+        AssetManager.Initialize(workspace.options);
+        TextAsset active = AssetManager.Load<TextAsset>(AssetPath.Project("Text/project.txt"));
+        string pluginRoot = workspace.CreateExternalRoot("ReferencedPlugin");
+        string writerProjectRoot = workspace.CreateExternalRoot("ReferencedPluginProject");
+        string writerLibrary = workspace.CreateExternalRoot("ReferencedPluginLibrary");
+        AssetSourceId pluginId = new("tests.referenced-candidate");
+        using (var writer = new AssetLoader(
+                   [
+                       new AssetSourceMount(AssetSourceId.project, writerProjectRoot, isReadOnly: false),
+                       new AssetSourceMount(pluginId, pluginRoot, isReadOnly: false)
+                   ],
+                   writerLibrary))
+        {
+            using IDisposable resolver = AssetSerializationServices.PushReferenceResolver((
+                persistentId,
+                stableTypeId,
+                lastKnownPath,
+                expectedType,
+                _) => writer.ResolveReference(
+                    persistentId,
+                    stableTypeId,
+                    lastKnownPath,
+                    expectedType));
+            TextAsset dependency = new("candidate", "plain");
+            Assert.True(writer.Save(new AssetPath(pluginId, "value.txt"), dependency));
+            Assert.True(writer.Save(
+                new AssetPath(pluginId, "holder.managerref"),
+                new ManagerReferenceAsset { asset = dependency }));
+        }
+
+        AssetSourceMount[] mounts =
+        [
+            new AssetSourceMount(AssetSourceId.project, workspace.assetRoot, isReadOnly: false),
+            new AssetSourceMount(pluginId, pluginRoot, isReadOnly: true)
+        ];
+
+        using (AssetSourceMountTransaction transaction = AssetManager.PrepareSourceMounts(mounts))
+        {
+            ManagerReferenceAsset holder = transaction.Load<ManagerReferenceAsset>(
+                new AssetPath(pluginId, "holder.managerref"));
+            Assert.NotNull(holder.asset);
+            Assert.Equal("candidate", holder.asset!.content);
+            Assert.Single(AssetManager.sourceMounts);
+            transaction.Rollback();
+        }
+
+        Assert.Same(active, AssetManager.Load<TextAsset>(active.identity.persistentId));
+        Assert.Single(AssetManager.sourceMounts);
+    }
+
+    [Fact]
+    public void SourceMountCandidate_CanonicalizesRelocatedReferenceHintsByPersistentIdentity()
+    {
+        using TestAssetWorkspace workspace = new();
+        AssetManager.Initialize(workspace.options);
+        string pluginRoot = workspace.CreateExternalRoot("RelocatedReferencePlugin");
+        string writerProjectRoot = workspace.CreateExternalRoot("RelocatedReferenceProject");
+        string writerLibrary = workspace.CreateExternalRoot("RelocatedReferenceLibrary");
+        Guid dependencyId;
+        using (var writer = new AssetLoader(writerProjectRoot, writerLibrary))
+        {
+            using IDisposable resolver = AssetSerializationServices.PushReferenceResolver((
+                persistentId,
+                stableTypeId,
+                lastKnownPath,
+                expectedType,
+                _) => writer.ResolveReference(
+                    persistentId,
+                    stableTypeId,
+                    lastKnownPath,
+                    expectedType));
+            TextAsset dependency = new("candidate", "plain");
+            Assert.True(writer.Save(AssetPath.Project("value.txt"), dependency));
+            dependencyId = dependency.identity.persistentId;
+            Assert.True(writer.Save(
+                AssetPath.Project("holder.managerref"),
+                new ManagerReferenceAsset { asset = dependency }));
+        }
+
+        foreach (string fileName in new[]
+                 {
+                     "value.txt",
+                     "value.txt.imeta",
+                     "holder.managerref",
+                     "holder.managerref.imeta"
+                 })
+        {
+            System.IO.File.Move(
+                Path.Combine(writerProjectRoot, fileName),
+                Path.Combine(pluginRoot, fileName));
+        }
+
+        AssetSourceId pluginId = new("tests.relocated-reference");
+        using AssetSourceMountTransaction transaction = AssetManager.PrepareSourceMounts(
+        [
+            new AssetSourceMount(AssetSourceId.project, workspace.assetRoot, isReadOnly: false),
+            new AssetSourceMount(pluginId, pluginRoot, isReadOnly: true)
+        ]);
+        ManagerReferenceAsset holder = transaction.Load<ManagerReferenceAsset>(
+            new AssetPath(pluginId, "holder.managerref"));
+
+        Assert.NotNull(holder.asset);
+        Assert.Equal(dependencyId, holder.asset!.identity.persistentId);
+        Assert.Equal(new AssetPath(pluginId, "value.txt"), holder.asset.assetPath);
+    }
+
+    [Fact]
     public void PluginCrossMountDependency_RequiresExplicitSourceDependency()
     {
         using TestAssetWorkspace workspace = new();
@@ -569,6 +763,13 @@ public sealed class AssetManagerContractTests : IDisposable
 [StableTypeId("dbb8bd75-4038-457a-8f75-a51194f89750")]
 internal sealed class ManagerDependencyAsset : AssetObject;
 
+[StableTypeId("4fdbac40-3619-4b80-a487-9c449ca34fef")]
+internal sealed class ManagerReferenceAsset : AssetObject
+{
+    [SerializableProperty]
+    public TextAsset? asset { get; set; }
+}
+
 [AssetImporterExtension]
 internal sealed class ManagerDependencyImporter : AssetImporter<ManagerDependencyAsset>
 {
@@ -585,5 +786,34 @@ internal sealed class ManagerDependencyImporter : AssetImporter<ManagerDependenc
             output.DependsOnAsset(AssetPath.Parse(dependency));
         output.SetAsset(new ManagerDependencyAsset());
         return output.WriteArtifactAsync("runtime", context.sourceBytes, cancellationToken);
+    }
+}
+
+[AssetImporterExtension]
+internal sealed class ManagerReferenceImporter : AssetImporter<ManagerReferenceAsset>
+{
+    public override string importerId => "inno.tests.manager-reference";
+    public override IReadOnlyList<string> supportedExtensions { get; } = [".managerref"];
+
+    protected override async ValueTask ImportAsync(
+        AssetImportContext context,
+        AssetImportWriter<ManagerReferenceAsset> output,
+        CancellationToken cancellationToken)
+    {
+        ManagerReferenceAsset asset = NativeAssetSourceSerialization.Import<ManagerReferenceAsset>(
+            context.sourceBytes.Span,
+            out IReadOnlyList<AssetDependency> dependencies);
+        output.SetAsset(asset);
+        foreach (AssetDependency dependency in dependencies)
+            output.DependsOnAsset(dependency);
+        await output.WriteArtifactAsync("runtime", context.sourceBytes, cancellationToken);
+    }
+
+    protected override ValueTask<ReadOnlyMemory<byte>?> ExportAsync(
+        ManagerReferenceAsset asset,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(NativeAssetSourceSerialization.Export(asset));
     }
 }

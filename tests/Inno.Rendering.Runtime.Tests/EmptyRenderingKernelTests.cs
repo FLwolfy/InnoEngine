@@ -177,6 +177,93 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
     }
 
     [Fact]
+    public void ReplacedAndReleasedTargetsRemainValidAcrossPreparedPresentationFrames()
+    {
+        IRenderDevice device = TestDeviceProxy.Create(out TestDeviceProxy proxy);
+        var registry = new RenderTargetRegistry(device);
+        var target = new RenderTexture(
+            "Deferred Target",
+            new RenderTextureDescriptor(
+                32,
+                32,
+                RenderTextureFormat.RGBA8,
+                RenderTextureUsage.ColorAttachment | RenderTextureUsage.Sampled));
+
+        device.BeginFrame();
+        registry.PrepareFrame();
+        _ = registry.Import(new RenderGraphBuilder(1, device.capabilities), target);
+        _ = device.EndFrame();
+        PersistentTextureHandle first = Assert.Single(proxy.createdTextures);
+
+        target.Resize(new RenderTextureDescriptor(
+            64,
+            64,
+            RenderTextureFormat.RGBA8,
+            RenderTextureUsage.ColorAttachment | RenderTextureUsage.Sampled));
+        device.BeginFrame();
+        registry.PrepareFrame();
+        _ = registry.Import(new RenderGraphBuilder(2, device.capabilities), target);
+        _ = device.EndFrame();
+        PersistentTextureHandle second = proxy.createdTextures[1];
+        Assert.Empty(proxy.destroyedTextures);
+
+        device.BeginFrame();
+        registry.PrepareFrame();
+        _ = device.EndFrame();
+        Assert.Empty(proxy.destroyedTextures);
+
+        device.BeginFrame();
+        registry.PrepareFrame();
+        _ = device.EndFrame();
+        Assert.Equal(new[] { first }, proxy.destroyedTextures);
+
+        registry.Release(target);
+        for (int frame = 0; frame < 2; frame++)
+        {
+            device.BeginFrame();
+            registry.PrepareFrame();
+            _ = device.EndFrame();
+        }
+        Assert.Equal(new[] { first }, proxy.destroyedTextures);
+
+        device.BeginFrame();
+        registry.PrepareFrame();
+        registry.Dispose();
+        _ = device.EndFrame();
+        Assert.Equal(new[] { first, second }, proxy.destroyedTextures);
+    }
+
+    [Fact]
+    public void DetachUsesADeviceSafetyFrameToReleaseResidentTargets()
+    {
+        IRenderDevice device = TestDeviceProxy.Create(out TestDeviceProxy proxy);
+        var runtime = new RenderRuntimeLayer(device, new TestDiagnosticSink());
+        var asset = new RenderPipelineAsset { pipelineTypeId = SideEffectPipeline.extensionId };
+        var target = new RenderTexture(
+            "Detach Target",
+            new RenderTextureDescriptor(
+                16,
+                16,
+                RenderTextureFormat.RGBA8,
+                RenderTextureUsage.ColorAttachment));
+        runtime.Submit(new RenderRequest(
+            "Detach",
+            RenderTarget.FromTexture(target),
+            new RenderViewport(0, 0, 16, 16),
+            asset));
+
+        runtime.OnBeforeRender(0f);
+        runtime.OnAfterRender(0f);
+        PersistentTextureHandle resident = Assert.Single(proxy.createdTextures);
+
+        runtime.OnDetach();
+
+        Assert.Equal(new[] { resident }, proxy.destroyedTextures);
+        Assert.False(proxy.frameOpen);
+        Assert.Equal(2, proxy.endFrameCount);
+    }
+
+    [Fact]
     public void FailedRequestRollsBackWithoutDiscardingOtherRequests()
     {
         IRenderDevice device = TestDeviceProxy.Create(out TestDeviceProxy proxy);
@@ -572,6 +659,10 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
             homogeneousDepth: false);
 
         internal RenderDeviceFrameCounters frameCounters { get; set; }
+        internal List<PersistentTextureHandle> createdTextures { get; } = [];
+        internal List<PersistentTextureHandle> destroyedTextures { get; } = [];
+        internal bool frameOpen { get; private set; }
+        internal int endFrameCount { get; private set; }
         internal int executeCount { get; private set; }
         internal CompiledRenderGraph? lastGraph { get; private set; }
 
@@ -591,13 +682,33 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
                 case "get_capabilities":
                     return S_CAPABILITIES;
                 case "get_generation":
-                case nameof(IRenderDevice.EndFrame):
                     return 1u;
+                case nameof(IRenderDevice.BeginFrame):
+                    Assert.False(frameOpen);
+                    frameOpen = true;
+                    return null;
+                case nameof(IRenderDevice.EndFrame):
+                    Assert.True(frameOpen);
+                    frameOpen = false;
+                    endFrameCount++;
+                    return checked((uint)endFrameCount);
                 case "get_frameCounters":
                     return frameCounters;
                 case nameof(IRenderDevice.Execute):
+                    Assert.True(frameOpen);
                     executeCount++;
                     lastGraph = (CompiledRenderGraph?)args![0];
+                    return null;
+                case nameof(IRenderDevice.CreateTexture):
+                    Assert.True(frameOpen);
+                    PersistentTextureHandle texture = CreateOpaqueHandle<PersistentTextureHandle>(
+                        checked((ulong)createdTextures.Count + 1),
+                        1);
+                    createdTextures.Add(texture);
+                    return texture;
+                case nameof(IRenderDevice.DestroyTexture):
+                    Assert.True(frameOpen);
+                    destroyedTextures.Add((PersistentTextureHandle)args![0]!);
                     return null;
                 default:
                     return targetMethod.ReturnType == typeof(void)
@@ -606,6 +717,18 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
                             ? Activator.CreateInstance(targetMethod.ReturnType)
                             : null;
             }
+        }
+
+        private static THandle CreateOpaqueHandle<THandle>(ulong value, uint deviceGeneration)
+            where THandle : struct
+        {
+            ConstructorInfo constructor = typeof(THandle).GetConstructor(
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                binder: null,
+                [typeof(ulong), typeof(uint)],
+                modifiers: null) ?? throw new InvalidOperationException(
+                    $"Opaque render handle '{typeof(THandle).Name}' has no device constructor.");
+            return (THandle)constructor.Invoke([value, deviceGeneration]);
         }
     }
 

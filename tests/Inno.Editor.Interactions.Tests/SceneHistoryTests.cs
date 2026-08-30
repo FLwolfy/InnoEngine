@@ -101,6 +101,48 @@ public sealed class SceneHistoryTests : IDisposable
     }
 
     [Fact]
+    public void TransformManipulationTransactionUndoesAllLocalValuesAtomically()
+    {
+        GameObject gameObject = CreateScene().CreateObject("Manipulated");
+        Transform transform = gameObject.transform;
+        var position = new Inno.Core.Mathematics.Vector3(3f, -2f, 4f);
+        Inno.Core.Mathematics.Quaternion rotation =
+            Inno.Core.Mathematics.Quaternion.CreateFromYawPitchRoll(0.2f, 0.3f, 0.4f);
+        var scale = new Inno.Core.Mathematics.Vector3(2f, 3f, 4f);
+
+        using (EditorHistoryTransaction transaction =
+               m_runtime.interactions.history.BeginTransaction("Move GameObject"))
+        {
+            Assert.True(m_edits.ChangeProperty(
+                transform,
+                nameof(Transform.localPosition),
+                () => transform.localPosition = position,
+                "Move GameObject"));
+            Assert.True(m_edits.ChangeProperty(
+                transform,
+                nameof(Transform.localRotation),
+                () => transform.localRotation = rotation,
+                "Move GameObject"));
+            Assert.True(m_edits.ChangeProperty(
+                transform,
+                nameof(Transform.localScale),
+                () => transform.localScale = scale,
+                "Move GameObject"));
+            transaction.Commit();
+        }
+
+        Assert.Equal("Move GameObject", m_runtime.interactions.history.undoName);
+        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        Assert.Equal(Inno.Core.Mathematics.Vector3.ZERO, transform.localPosition);
+        Assert.Equal(Inno.Core.Mathematics.Quaternion.identity, transform.localRotation);
+        Assert.Equal(Inno.Core.Mathematics.Vector3.ONE, transform.localScale);
+        Assert.True(m_runtime.interactions.history.Redo().succeeded);
+        Assert.Equal(position, transform.localPosition);
+        Assert.Equal(rotation, transform.localRotation);
+        Assert.Equal(scale, transform.localScale);
+    }
+
+    [Fact]
     public void ComponentAddRemoveResetAndOrderPreserveLogicalIdentity()
     {
         GameScene scene = CreateScene();

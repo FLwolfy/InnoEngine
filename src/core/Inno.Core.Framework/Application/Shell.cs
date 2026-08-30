@@ -146,21 +146,29 @@ public sealed class Shell
             string assetRoot = Path.Combine(projectRoot, DEFAULT_ASSET_DIRECTORY);
             string libraryRoot = Path.Combine(projectRoot, DEFAULT_LIBRARY_DIRECTORY);
             ProjectSettingsManager.Initialize(Path.Combine(projectRoot, DEFAULT_PROJECT_SETTINGS_FILE));
-            PluginTrustSettings trust = ProjectSettingsManager.Get<PluginTrustSettings>(PluginTrustSettings.id);
-            var pluginArchives = new PluginArchiveService(
+            var pluginSources = new PluginSourceService(
                 Path.Combine(projectRoot, DEFAULT_PLUGIN_DIRECTORY),
                 libraryRoot);
-            PluginScanResult pluginScan = pluginArchives.Scan(
-                trust.trustedPluginIds.ToHashSet(StringComparer.Ordinal));
+            PluginScanResult pluginScan = pluginSources.Scan();
 
             AssetManagerOptions assetOptions = AssetManagerOptions.Create(assetRoot, libraryRoot);
+            AssetSourceMount projectMount = assetOptions.sourceMounts!.Single(
+                static mount => mount.id == AssetSourceId.project);
+            assetOptions = assetOptions with
+            {
+                sourceMounts =
+                [
+                    projectMount,
+                    .. PluginSourceService.GetActivatableMounts(pluginScan)
+                ]
+            };
             AssetManager.Initialize(assetOptions);
             PluginManager.Initialize(
                 Path.Combine(projectRoot, DEFAULT_PLUGIN_DIRECTORY),
                 libraryRoot,
                 pluginScan);
-            foreach (PluginArchiveDiagnostic diagnostic in PluginCatalog.discovery.diagnostics)
-                Log.Warn("Plugin archive '{0}': {1}", diagnostic.archivePath, diagnostic.message);
+            foreach (PluginDiagnostic diagnostic in PluginCatalog.discovery.diagnostics)
+                Log.Warn("Plugin source '{0}': {1}", diagnostic.sourcePath, diagnostic.message);
         }
         catch
         {

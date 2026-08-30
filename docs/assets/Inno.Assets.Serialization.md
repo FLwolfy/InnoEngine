@@ -35,6 +35,10 @@ AssetSerializationServices.SetReferenceResolver(
 
 没有 resolver 时读取 AssetObject reference 会抛 `InvalidOperationException`，而不会静默返回 null。
 
+`NativeAssetSourceSerialization.Import/Export` 已导出到逻辑脚本命名空间 `InnoEngine.Assets`。因此 Plugin 自定义 Atlas、Animation、Tilemap 或其他原生资产 Importer 可以复用完全相同的引用收集、Persistent ID 与 Converter 链，不需要 JSON 或 Plugin 专用 serializer。
+
+Host 在构建未发布 Source Mount 时使用 async-local resolver scope，让候选资产之间的引用只解析到候选 Loader。该 scope 标记 `ScriptingApiIgnore`，不是 Project/Plugin API；它拒绝 collectible delegate，并要求严格逆序释放。这样候选 Material→Shader、Atlas→Texture 等引用既不会误读 active generation，也不会把候选对象泄漏到进程级 resolver。
+
 ## 内部 Converter 行为
 
 虽然 Converter 类型是 internal，不属于调用 API，但其持久 schema 是兼容性契约：

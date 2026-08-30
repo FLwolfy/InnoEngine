@@ -168,6 +168,7 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
         var context = new RenderRequestProviderContext(
             this,
             m_device.capabilities,
+            m_device.primaryPresentationSize,
             m_frameIndex,
             deltaTime);
         foreach (RenderExtensionRegistry.RequestProviderEntry entry in m_requestProviders.providers)
@@ -180,7 +181,7 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
             {
                 m_diagnostics.Publish(new RenderDiagnostic(
                     "RENDER_REQUEST_PROVIDER_FAILED",
-                    $"Render request provider '{entry.id}' was isolated after failure: {exception.Message}",
+                    $"Render request provider '{entry.id}' was isolated after failure: {exception}",
                     RenderDiagnosticSeverity.Error,
                     entry.id));
             }
@@ -259,9 +260,33 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
         m_generations.Clear();
         m_requestProviders?.Dispose();
         m_requestProviders = null;
-        targets.Dispose();
-        m_uploads.Dispose();
-        m_resourceService.Dispose();
+        bool openedMaintenanceFrame = !m_frameOpen;
+        if (openedMaintenanceFrame)
+        {
+            m_device.BeginFrame();
+            m_frameOpen = true;
+        }
+        try
+        {
+            targets.Dispose();
+            m_uploads.Dispose();
+            m_resourceService.Dispose();
+        }
+        finally
+        {
+            if (m_frameOpen)
+            {
+                try
+                {
+                    _ = m_device.EndFrame();
+                }
+                finally
+                {
+                    m_frameOpen = false;
+                    m_uploads.EndFrame();
+                }
+            }
+        }
         m_extensions.Dispose();
     }
 

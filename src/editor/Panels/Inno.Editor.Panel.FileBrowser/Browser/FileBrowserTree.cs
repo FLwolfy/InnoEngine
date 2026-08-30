@@ -1,6 +1,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Inno.Assets;
 using Inno.Assets.Core;
 using Inno.Assets.File;
@@ -139,6 +140,37 @@ internal sealed class FileBrowserTree
         {
             AssetFileEntry child = sorted[i];
             DrawEntry(context, child.assetPath.ToString(), child.name, false);
+        }
+        NativeImGui.TreePop();
+    }
+
+    internal void DrawPluginRoot(
+        EditorContext context,
+        IReadOnlyList<AssetSourceMount> sourceMounts)
+    {
+        AssetSourceMount[] plugins = sourceMounts
+            .Where(static mount => mount.id != AssetSourceId.project)
+            .OrderBy(static mount => mount.id.value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        AssetPath current = AssetPath.Parse(m_assets.browser.currentDirectory);
+        string? selectedPath = m_assets.browser.GetSelectedPath(context);
+        bool hasPluginNavigation = current.source != AssetSourceId.project
+            || (!string.IsNullOrWhiteSpace(selectedPath)
+                && AssetPath.Parse(selectedPath).source != AssetSourceId.project);
+        if (m_rootOpenRequest || hasPluginNavigation)
+            EditorWidget.SetNextTreeNodeOpen(true);
+
+        TreeNodeResult result = EditorWidget.TreeNode(
+            "tree_virtual_plugins",
+            _ => EditorWidget.IconText(m_assets.folderIcon, "Plugins", false),
+            new TreeNodeOptions { isLeaf = plugins.Length == 0 });
+        if (!result.isOpen)
+            return;
+        for (int i = 0; i < plugins.Length; i++)
+        {
+            AssetSourceMount mount = plugins[i];
+            string root = new AssetPath(mount.id, string.Empty).ToString();
+            DrawEntry(context, root, mount.id.value, true, mount.isReadOnly);
         }
         NativeImGui.TreePop();
     }

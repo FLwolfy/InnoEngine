@@ -40,6 +40,6 @@ Editor 启动阶段在 Shell 日志系统可用之前产生的诊断写入 `<Pro
 
 每帧安全点顺序为：更新 `EditorFrame` 和 Module → 绘制统一主菜单与自动发现 Panel → flush deferred Action → 绘制统一 Modal。脚本编译弹窗位于 `Inno.Editor.Scripting`，由 internal `EditorScripting` module 驱动真实编译阶段进度；`EditorModalRenderer` 使用主 viewport work area 中心、固定 style width 和 `0.5/0.5` pivot 定位。Application 不包含 Scene action、Asset 类型判断、context menu 排列或 ScriptManager 状态机。
 
-internal `EditorRenderingHostService` 只负责组合通用 Render Runtime、BGFX 设备与 ImGui contributor，并作为 Scripting reload participant 协调 Pipeline/Feature generation。它不提供任何 Camera、Light、PBR 或固定 Scene 语义；没有受信任的 Viewport/Pipeline Plugin 时 Editor 仍正常运行，Scene/Game View 只显示无活动 rendering provider 的诊断。
+internal `EditorRenderingHostService` 只负责组合通用 Render Runtime、BGFX 设备与 ImGui contributor，并作为 Scripting reload participant 协调 Pipeline/Feature generation。它不提供任何 Camera、Light、PBR 或固定 Scene 语义；没有活动 Viewport/Pipeline Plugin 时 Editor 仍正常运行，Scene/Game View 只显示无活动 rendering provider 的诊断。
 
 启动时 `EditorHost` 会检查发现的 Panel 数量；为零会立即抛出明确异常，避免再次出现“窗口正常但内容完全为空”的静默失败。

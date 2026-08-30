@@ -27,7 +27,7 @@ OnAfterRender
 | API | 说明 |
 | --- | --- |
 | `RenderRuntimeLayer` | 唯一设备帧拥有者与 `IRenderRequestSink` 实现。 |
-| `RenderTargetRegistry` | 在帧安全点创建、resize、导入和释放离屏目标。 |
+| `RenderTargetRegistry` | 在帧安全点创建、resize、导入和释放离屏目标；被替换的目标会跨一个完整提交帧退役，避免已录制的 UI/呈现命令持有失效句柄。 |
 | `IRenderFrameGraphContributor` | 在用户请求后向同一帧贡献 Graph，例如 ImGui。 |
 
 Project/Plugin 不需要获得 Runtime 实例。实现 `[RenderRequestProviderExtension(id)]` 后，Provider 会随 TypeCache candidate 一起发现、排序、恢复和原子切换，并在 `OnRender` 通过公开 `RenderRequestProviderContext.requests` 提交零到多个请求。单个 Provider 抛异常只隔离该 Provider；其他请求和 Editor 合成继续运行。

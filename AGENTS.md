@@ -137,8 +137,8 @@
 - Shader、Technique、Material 与 Pipeline 通过开放 Stable ID 契约组合；内核不得维护封闭 Pass Tag、Render Path、资源语义或质量设置名单。
 
 ## 18. Plugin 与结构化内容强制边界
-- Project 根目录的 `Plugins` 与 `Assets` 平级。分发插件是源码优先的只读 ZIP，安装内容必须通过 Asset Source Mount 进入现有 Asset Catalog、Importer、依赖图和 Artifact 流程，禁止建立 Plugin 专用资产数据库。
-- Plugin ZIP 只是本地内容与代码容器，不得引入 Package Manager、远程仓库、语义版本解析或平台产物发布系统。Plugin 依赖使用稳定 Plugin ID；Archive content hash 只用于候选与缓存身份。
+- Project 根目录的 `Plugins` 与 `Assets` 平级。Plugin 可以是源码 ZIP，也可以是便于本地开发的源码目录；两者必须经过相同校验并作为只读 Asset Source Mount 进入现有 Asset Catalog、Importer、依赖图和 Artifact 流程，禁止建立 Plugin 专用资产数据库。
+- Plugin ZIP/目录只是本地内容与代码容器，不得引入 Package Manager、远程仓库、语义版本解析或平台产物发布系统。Plugin 依赖使用稳定 Plugin ID；规范化 source content hash 只用于候选、变化检测与缓存身份。
 - Plugin 扩展必须复用现有 `AssemblyDomain.InnoPlugin`、collectible ALC、TypeCache、TypeRegistry 和候选事务。持久状态不得保存 Plugin `Type`、实例或 delegate。
 - 所有结构化资产、Graph、Plugin 清单和 Project Settings 必须使用 `ISerializable`、`SerializableProperty`、Serialization Converter 与 `SerializationManager`。只有 C#、Shader source/include 和普通文档等天然文本允许保持文本格式；禁止为 Rendering、Plugin 或 Settings 建立独立 JSON 持久化旁路。
 - Plugin 可以同时贡献资产、Shader、Pipeline、Importer、Component、Editor 扩展、设置和玩法代码。Manifest 不得维护各领域类型名单；具体扩展继续由稳定 attribute 和 TypeRegistry 自动发现。

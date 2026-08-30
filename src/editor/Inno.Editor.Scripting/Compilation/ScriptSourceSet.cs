@@ -49,7 +49,7 @@ internal sealed record ScriptSourceSet(
                 $"Assembly definitions cannot use the reserved {C_GAME_ASSEMBLY_NAME} or {C_EDITOR_ASSEMBLY_NAME} names.");
         }
 
-        PluginArchiveCandidate[] codePlugins = PluginManager.compilationPlugins
+        PluginCandidate[] codePlugins = PluginManager.compilationPlugins
             .Where(candidate => entries.Any(entry =>
                 entry.assetPath.source == candidate.sourceMount.id
                 && string.Equals(entry.extension, ".cs", StringComparison.OrdinalIgnoreCase)))
@@ -57,7 +57,7 @@ internal sealed record ScriptSourceSet(
         ValidateManifestDefinitions(entries, explicitDefinitions, codePlugins);
 
         var pluginDefaultNames = new Dictionary<string, PluginDefaultNames>(StringComparer.Ordinal);
-        foreach (PluginArchiveCandidate plugin in codePlugins)
+        foreach (PluginCandidate plugin in codePlugins)
         {
             string runtimeName = CreatePluginAssemblyName(plugin.manifest.pluginId);
             string editorName = runtimeName + ".Editor";
@@ -117,12 +117,12 @@ internal sealed record ScriptSourceSet(
             {
                 if (!PluginManager.TryGetCompilationPlugin(
                         entry.assetPath.source,
-                        out PluginArchiveCandidate? plugin)
+                        out PluginCandidate? plugin)
                     || plugin is null
                     || !pluginDefaultNames.TryGetValue(plugin.manifest.pluginId, out PluginDefaultNames names))
                 {
                     throw new InvalidDataException(
-                        $"Script '{entry.assetPath}' does not belong to an active trusted Plugin.");
+                        $"Script '{entry.assetPath}' does not belong to an active Plugin source.");
                 }
                 builder = builders[scope == ScriptAssemblyScope.Editor ? names.editor : names.runtime];
             }
@@ -211,10 +211,10 @@ internal sealed record ScriptSourceSet(
     private static void ValidateManifestDefinitions(
         IReadOnlyList<AssetFileEntry> entries,
         IReadOnlyList<ScriptAssemblyDefinition> definitions,
-        IReadOnlyList<PluginArchiveCandidate> plugins)
+        IReadOnlyList<PluginCandidate> plugins)
     {
         _ = definitions;
-        foreach (PluginArchiveCandidate plugin in plugins)
+        foreach (PluginCandidate plugin in plugins)
         {
             string[] declared = plugin.manifest.assemblyDefinitions
                 .Select(static path => path.StartsWith("Assets/", StringComparison.Ordinal)
@@ -239,12 +239,12 @@ internal sealed record ScriptSourceSet(
     private static void ConfigureDefaultReferences(
         IReadOnlyDictionary<string, AssemblyBuilder> builders,
         IReadOnlyList<ScriptAssemblyDefinition> explicitDefinitions,
-        IReadOnlyList<PluginArchiveCandidate> plugins,
+        IReadOnlyList<PluginCandidate> plugins,
         IReadOnlyDictionary<string, PluginDefaultNames> defaultNames)
     {
         AssemblyBuilder game = builders[C_GAME_ASSEMBLY_NAME];
         AssemblyBuilder editor = builders[C_EDITOR_ASSEMBLY_NAME];
-        foreach (PluginArchiveCandidate plugin in plugins)
+        foreach (PluginCandidate plugin in plugins)
         {
             PluginDefaultNames names = defaultNames[plugin.manifest.pluginId];
             AssemblyBuilder runtime = builders[names.runtime];
@@ -370,7 +370,7 @@ internal sealed record ScriptSourceSet(
             return;
         if (!PluginManager.TryGetCompilationPlugin(
                 new AssetSourceId(assembly.ownerPluginId),
-                out PluginArchiveCandidate? owner)
+                out PluginCandidate? owner)
             || owner is null
             || !owner.manifest.dependencies.Contains(dependency.ownerPluginId, StringComparer.Ordinal))
         {

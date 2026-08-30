@@ -10,6 +10,7 @@ using Inno.Rendering.Core;
 [assembly: ScriptingApiExport(typeof(GraphicsFeature), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GraphicsLimits), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GraphicsCapabilities), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(RenderPresentationSize), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(RenderTextureFormat), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(RenderTextureDimension), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(RenderTextureUsage), ScriptingApiScope.Runtime)]

@@ -2,7 +2,7 @@
 
 [Editor 索引](README.md) · [Core Scripting](../core/Inno.Core.Scripting.md) · [Assets](../assets/README.md) · [Assemblies](../core/Inno.Core.Assemblies.md)
 
-`Inno.Editor.Scripting` 把 Project 与已激活 ZIP Plugin Mount 中的 C# source、assembly definition 当成正式资产，再把它们编译为可回滚的 collectible Script Module。文件发现和变化来源是统一 Asset Database；该项目没有自己的 `FileSystemWatcher`，也不递归扫描 Project 目录。
+`Inno.Editor.Scripting` 把 Project 与已激活 ZIP/Folder Plugin Mount 中的 C# source、assembly definition 当成正式资产，再把它们编译为可回滚的 collectible Script Module。文件发现和变化来源是统一 Asset Database；该项目没有自己的 `FileSystemWatcher`，也不递归扫描 Project 目录。
 
 ## Source 资产
 
@@ -45,7 +45,8 @@ AssetManager.Save("Scripts/Gameplay/Gameplay.iasmdef", definition);
 │  ├─ Scripts/**/*.cs
 │  └─ **/*.iasmdef
 ├─ Plugins/
-│  └─ *.zip
+│  ├─ *.zip
+│  └─ <Plugin folder>/
 ├─ Library/
 │  ├─ AssetDatabase/
 │  ├─ Plugins/<id>/<contentHash>/Assets/
@@ -78,7 +79,7 @@ AssemblyManager 自己的 runtime generation 仍存在于 assembly shadow cache�
 | 属性 | 默认 | 说明 |
 | --- | --- | --- |
 | `projectRootDirectory` | required | 包含 Assets/Library 的 Project root。 |
-| `autoCompile` | `true` | 启动与后续 Asset change 是否产生自动编译请求。启动先探测 pending Plugin candidate 与活动 Scripting 状态：只有待激活 ZIP 才请求 `ReloadPlugins`，否则走可命中内容缓存的 Scripting 请求，不做无条件 Plugin reload。 |
+| `autoCompile` | `true` | 启动与后续 Asset change 是否产生自动编译请求。启动先探测 pending Plugin candidate 与活动 Scripting 状态：只有待激活 ZIP/Folder source 才请求 `ReloadPlugins`，否则走可命中内容缓存的 Scripting 请求，不做无条件 Plugin reload。 |
 | `debounceMilliseconds` | `250` | 后续 change request 可消费前的 quiet period；首次编译不受影响。 |
 | `compilationWarningTimeout` | `10s` | 超过该时长时状态显示 long-running warning；`Timeout.InfiniteTimeSpan` 关闭警告，不会自动取消。 |
 
@@ -116,7 +117,7 @@ scripts.ReloadPlugins();
 
 三个 public 操作只排队；内部 scheduler 在 Editor 主线程 focus safe point 捕获已提交 snapshot，后台以串行 Roslyn assembly emit 编译，并仅在候选原子激活的短安全点暂停后续 Module 更新。请求强度为 Recompile < ReloadScripting < ReloadPlugins，并发请求合并为最强项，同时只允许一个 compiler/reload transaction。若新请求在编译期间到达，本次结果会被标记为 superseded 而不发布中间 generation，随后以合并后的最强请求重新取得 source/plugin snapshot。后台编译不调用全局 AssetManager，也不冻结 Editor 输入、绘制或普通 Panel 更新。
 
-Assembly reload 使用一组有顺序的 transaction participant，而不是提交后再通知：TypeRegistry 激活候选 snapshot 后，AssetManager 在候选 generation 下完成 Source Catalog 对账；若存在 ZIP Plugin 候选，再临时激活其隔离 Mount/Catalog/Settings；Scene 随后迁移对象，Rendering Runtime 预构造所有活动 Pipeline/Feature。只有全部 participant 与外部 generation 同步成功才提交；后续失败会逆序 Rollback，恢复旧 Mount、Settings、Pipeline/Feature、Scene、TypeCache 和 Asset Catalog。完整提交后才通知 Source Mount 观察者、释放旧 Loader/渲染实例并开始旧 ALC 卸载验证。
+Assembly reload 使用一组有顺序的 transaction participant，而不是提交后再通知：TypeRegistry 激活候选 snapshot 后，AssetManager 在候选 generation 下完成 Source Catalog 对账；若存在 Plugin source 候选，再临时激活其隔离 Mount/Catalog/Settings；Scene 随后迁移对象，Rendering Runtime 预构造所有活动 Pipeline/Feature。只有全部 participant 与外部 generation 同步成功才提交；后续失败会逆序 Rollback，恢复旧 Mount、Settings、Pipeline/Feature、Scene、TypeCache 和 Asset Catalog。完整提交后才通知 Source Mount 观察者、释放旧 Loader/渲染实例并开始旧 ALC 卸载验证。
 
 这套事务会释放旧脚本 Asset 的 canonical 实例、修复仍存活 host Asset 的引用，并移除已退休脚本代际留在静态事件上的 observer。场景替换任一步失败时会逐项尝试结构、assembly generation、Asset 和旧属性/生命周期补偿；identity observer 在转移期间失败也必须恢复旧对象的注册与附着状态。失败编译不会清除上一个尚未应用的成功 candidate。`Dispose` 返回后不会再有活动或排队编译写入状态。
 
@@ -221,9 +222,9 @@ IDE 工程是补全和诊断模型；Editor 实际热编译仍使用进程内 Ro
 
 ## Plugin
 
-Plugin 只能来自项目根 `Plugins/*.zip`。归档必须通过 `Plugin.inno`、路径安全、依赖图、`.imeta` 完整性与代码信任校验，再进入隔离只读 `AssetSourceMount` 候选；编译与迁移全部成功后才进入统一 active Asset Database。预编译 DLL 和“路径里含 Plugins 就视为插件”的协议不存在。无 `.iasmdef` 时，每个 Plugin ID 自动获得 Runtime 与 Editor 默认程序集；`*.editor.cs` 进入 Editor scope，其余 `.cs` 进入 Runtime scope。显式 `.iasmdef` 必须列在清单 `assemblyDefinitions` 中。
+Plugin 只能来自项目根 `Plugins/*.zip` 或 `Plugins/<folder>/`，两种容器都必须通过 `Plugin.inno`、路径安全、依赖图与 `.imeta` 完整性校验，再进入隔离只读 `AssetSourceMount` 候选；编译与迁移全部成功后才进入统一 active Asset Database。预编译 DLL 和“路径里含 Plugins 就视为插件”的协议不存在。无 `.iasmdef` 时，每个 Plugin ID 自动获得 Runtime 与 Editor 默认程序集；`*.editor.cs` 进入 Editor scope，其余 `.cs` 进入 Runtime scope。显式 `.iasmdef` 必须列在清单 `assemblyDefinitions` 中。
 
-Plugin 只能引用 Host API 与清单声明的依赖 Plugin，不能引用项目脚本；Runtime Scripts 能看到 runtime-scope Plugin，Editor Scripts 可看到 Runtime Scripts 与 Plugin Editor API。每个 Plugin ID 对应独立 `Plugin.<id>` collectible ALC，清单依赖成为 `upstreamModuleNames`，更新/移除只影响反向依赖 closure。错误方向、scope 泄漏、程序集名称冲突、缺失依赖、cycle 或 Roslyn 编译错误会在 stage/publish 前失败；Editor host 会丢弃隔离候选，旧模块 generation、Mount、Catalog、Type/Registry、资产和设置保持活动。ALC 是卸载隔离，不是安全沙箱；受信任代码与项目脚本具有相同本机权限。
+Plugin 只能引用 Host API 与清单声明的依赖 Plugin，不能引用项目脚本；Runtime Scripts 能看到 runtime-scope Plugin，Editor Scripts 可看到 Runtime Scripts 与 Plugin Editor API。每个 Plugin ID 对应独立 `Plugin.<id>` collectible ALC，清单依赖成为 `upstreamModuleNames`，更新/移除只影响反向依赖 closure。错误方向、scope 泄漏、程序集名称冲突、缺失依赖、cycle 或 Roslyn 编译错误会在 stage/publish 前失败；Editor host 会丢弃隔离候选，旧模块 generation、Mount、Catalog、Type/Registry、资产和设置保持活动。ALC 是卸载隔离，不是安全沙箱；把带代码容器放入 `Plugins/` 就表示允许它以项目脚本相同的本机权限执行。
 
 ## Reload coordination 与领域状态
 

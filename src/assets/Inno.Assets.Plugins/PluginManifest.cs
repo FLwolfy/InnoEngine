@@ -6,7 +6,7 @@ using Inno.Core.Serialization;
 
 namespace Inno.Assets.Plugins;
 
-/// <summary>Describes one local ZIP Plugin without listing discovered extension types.</summary>
+/// <summary>Describes one local ZIP or directory Plugin without listing discovered extension types.</summary>
 public sealed class PluginManifest : ISerializable
 {
     /// <summary>Gets or sets the globally stable lowercase Plugin ID.</summary>
@@ -25,7 +25,7 @@ public sealed class PluginManifest : ISerializable
     [SerializableProperty]
     public string[] overrides { get; set; } = [];
 
-    /// <summary>Gets or sets source-local content roots relative to the archive.</summary>
+    /// <summary>Gets or sets source-local content roots relative to the Plugin container.</summary>
     [SerializableProperty]
     public string[] contentRoots { get; set; } = ["Assets"];
 
@@ -96,7 +96,7 @@ public sealed class PluginManifest : ISerializable
         string[] normalized = values.Select(static value =>
         {
             if (value.Contains('\\') || value.StartsWith("/", StringComparison.Ordinal))
-                throw new InvalidDataException("Plugin manifest paths must be portable archive-relative paths.");
+                throw new InvalidDataException("Plugin manifest paths must be portable container-relative paths.");
             string path = value.Trim('/');
             if (path.Split('/').Any(static segment => segment is "" or "." or ".."))
                 throw new InvalidDataException("Plugin manifest paths cannot contain traversal segments.");

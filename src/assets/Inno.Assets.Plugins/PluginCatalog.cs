@@ -17,7 +17,7 @@ public static class PluginCatalog
     public static event Action? Changed;
 
     /// <summary>Gets dependency-ordered active Plugins.</summary>
-    public static IReadOnlyList<PluginArchiveCandidate> activePlugins
+    public static IReadOnlyList<PluginCandidate> activePlugins
     {
         get
         {
@@ -26,7 +26,7 @@ public static class PluginCatalog
         }
     }
 
-    /// <summary>Gets the latest validated installed Plugin discovery, including candidates awaiting trust.</summary>
+    /// <summary>Gets the latest validated installed Plugin discovery and isolated diagnostics.</summary>
     public static PluginScanResult discovery
     {
         get
@@ -40,18 +40,18 @@ public static class PluginCatalog
     /// <param name="source">Asset source identity.</param>
     /// <param name="plugin">Receives the active Plugin candidate.</param>
     /// <returns><see langword="true"/> when the source belongs to an active Plugin.</returns>
-    public static bool TryGet(AssetSourceId source, out PluginArchiveCandidate? plugin)
+    public static bool TryGet(AssetSourceId source, out PluginCandidate? plugin)
     {
         lock (S_SYNC)
             return s_current.bySource.TryGetValue(source, out plugin);
     }
 
     /// <summary>Atomically publishes a fully validated Plugin scan.</summary>
-    /// <param name="result">Validated archive scan result.</param>
+    /// <param name="result">Validated Plugin source scan result.</param>
     public static void Activate(PluginScanResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
-        PluginArchiveCandidate[] ordered = PluginArchiveService.GetActivatableCandidates(result).ToArray();
+        PluginCandidate[] ordered = PluginSourceService.GetActivatableCandidates(result).ToArray();
         var bySource = ordered.ToFrozenDictionary(
             static candidate => candidate.sourceMount.id,
             static candidate => candidate);
@@ -66,7 +66,7 @@ public static class PluginCatalog
     }
 
     /// <summary>Publishes discovery diagnostics without changing the active mount generation.</summary>
-    /// <param name="result">Latest validated installed archive scan.</param>
+    /// <param name="result">Latest validated installed Plugin source scan.</param>
     public static void PublishDiscovery(PluginScanResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
@@ -91,11 +91,11 @@ public static class PluginCatalog
     }
 
     private sealed record Snapshot(
-        IReadOnlyList<PluginArchiveCandidate> ordered,
-        FrozenDictionary<AssetSourceId, PluginArchiveCandidate> bySource)
+        IReadOnlyList<PluginCandidate> ordered,
+        FrozenDictionary<AssetSourceId, PluginCandidate> bySource)
     {
         internal static Snapshot empty { get; } = new(
             [],
-            new Dictionary<AssetSourceId, PluginArchiveCandidate>().ToFrozenDictionary());
+            new Dictionary<AssetSourceId, PluginCandidate>().ToFrozenDictionary());
     }
 }

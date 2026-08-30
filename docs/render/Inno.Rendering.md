@@ -9,7 +9,7 @@
 | 分类 | API | 语义 |
 | --- | --- | --- |
 | 请求 | `RenderRequest`, `RenderTarget`, `RenderViewport`, `RenderFrameData` | 将目标、尺寸、可选 Pipeline 与 Plugin 自有帧数据提交给 Runtime。 |
-| 请求生产 | `RenderRequestProvider`, `RenderRequestProviderContext`, `RenderRequestProviderExtensionAttribute` | Plugin 每帧自动产生请求的 reload-safe TypeRegistry 扩展入口。 |
+| 请求生产 | `RenderRequestProvider`, `RenderRequestProviderContext`, `RenderRequestProviderExtensionAttribute` | Plugin 每帧自动产生请求的 reload-safe TypeRegistry 扩展入口；Context 提供 capability 与主呈现目标的物理像素尺寸，不预设 Camera。 |
 | Pipeline | `RenderPipelineAsset`, `RenderPipeline`, `RenderPipelineContext` | Stable Type ID + 原生配置状态，以及每请求建图入口。 |
 | Feature | `RenderPipelineFeature`, `RenderFeatureContext`, `RenderFeatureConfiguration` | 有序、可重载的额外建图扩展。 |
 | 发现 | `RenderPipelineExtensionAttribute`, `RenderFeatureExtensionAttribute` | TypeCache 候选 generation 的稳定身份。 |
@@ -67,10 +67,11 @@ public sealed class SampleRequestProvider : RenderRequestProvider
 {
     public override void Submit(RenderRequestProviderContext context)
     {
+        RenderPresentationSize size = context.primaryPresentationSize;
         context.requests.Submit(new RenderRequest(
             "Sample View",
             RenderTarget.backbuffer,
-            new RenderViewport(0, 0, 1280, 720)));
+            new RenderViewport(0, 0, size.width, size.height)));
     }
 }
 ```

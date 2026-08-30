@@ -17,7 +17,7 @@
 | Pass | `RasterPassBuilder`, `ComputePassBuilder`, `CopyPassBuilder` | 显式采样读取、Storage Read/Write/ReadWrite、Attachment、copy、side effect、before/after 与可选并行录制。 |
 | 命令 | `RenderCommandEncoder` | Direct/Indexed/Instanced/Indirect/Procedural draw、dispatch、copy/blit、绑定和状态。 |
 | 编译 | `RenderGraphBuilder`, `RenderGraphNameScope`, `RenderGraphCompileResult`, `CompiledRenderGraph` | 命名隔离、验证、裁剪、拓扑排序、生命周期和别名分配。 |
-| 后端 | `IRenderDevice`, `IRenderGraphBackend`, `RenderDeviceFrameCounters` | 设备与编译图执行边界，以及当前帧后端实际提交的 draw/dispatch 数。 |
+| 后端 | `IRenderDevice`, `IRenderGraphBackend`, `RenderPresentationSize`, `RenderDeviceFrameCounters` | 设备与编译图执行边界、主呈现目标物理尺寸，以及当前帧后端实际提交的 draw/dispatch 数。 |
 
 `GraphicsBackend.Metal`、`Direct3D12` 等值只描述“Host 当前选择了哪个图形 API family”。它不是 Metal/DX 原生 API，也不会要求 Pipeline 写两套实现。正常启动由 BGFX 选择平台默认 backend；Host 可通过非脚本的设备启动选项显式偏好另一个 backend。Pipeline 通常只查询 `GraphicsFeature`、format 和 limits，只有确实存在 backend 差异时才读取该 identity。Shader 仍维护同一份 `.sc`/Shader IR；离线编译器根据目标平台与 backend identity 选择 Metal、DX 或 Vulkan profile/产物。Plugin 和项目脚本不参与 BGFX handle、View ID 或原生 shader language 适配。
 

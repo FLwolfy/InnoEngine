@@ -138,6 +138,8 @@ importerSettingsBytes
 
 文件夹也有 `.imeta`；`Assets` root 本身没有。`.imeta` 不携带 schema version，也不包含旧格式迁移分支；当前源码和当前引擎始终使用同一份直接契约。
 
+Loader 会在读取 source body 前先索引当前 Mount snapshot 内全部 `.imeta` identity。因此结构化资产不依赖文件枚举顺序：Material 可以先于 Shader 出现，Scene 也可以先于 Texture 出现。序列化引用始终以 Persistent ID 为真相，`lastKnownPath` 只作为缺失引用的定位提示；当一组资产从 Project source 整体移动到 Plugin Mount 时，Loader 会按 Persistent ID 找到当前真实 source，并把本次 Catalog dependency 规范化为新的 Mount 路径，再执行跨 Mount 依赖检查。这样不会把仍指向 Project 的旧位置提示误判为 Plugin 反向依赖 Project。
+
 ## Catalog 与 journal
 
 ```text
@@ -160,7 +162,7 @@ Catalog 同时保存 source 与 source dependency 的 cheap file stamp：文件�
 - Watcher overflow/error 触发全量目录 reconciliation；
 - Importer 执行期间 source stamp 再次变化会放弃 candidate，避免把旧内容与新 stamp 一起提交。
 
-`Load(persistentId)` 继续直接读取一致的 Catalog/artifact snapshot；外部变更在 owner-thread `AssetManager.Update()` commit 后对其可见。
+`Load(persistentId)` 对已提交记录直接读取一致的 Catalog/artifact snapshot；若该 ID 仅由启动期 sidecar 预索引，则先通过对应 source 的 freshness/import gate，再 hydrate artifact。Guid 查询不会被同一路径上后来创建但 Persistent ID 不同的新资产替代；外部变更在 owner-thread `AssetManager.Update()` commit 后对其可见。
 
 ## Content-addressed artifact store
 

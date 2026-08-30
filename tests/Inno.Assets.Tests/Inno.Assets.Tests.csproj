@@ -11,6 +11,7 @@
     <ProjectReference Include="..\..\src\assets\Inno.Assets.Core\Inno.Assets.Core.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\src\assets\Inno.Assets.File\Inno.Assets.File.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\src\assets\Inno.Assets.Loader\Inno.Assets.Loader.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\assets\Inno.Assets.Serialization\Inno.Assets.Serialization.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\src\assets\Inno.Assets.Types\Inno.Assets.Types.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\src\core\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" PrivateAssets="compile" />

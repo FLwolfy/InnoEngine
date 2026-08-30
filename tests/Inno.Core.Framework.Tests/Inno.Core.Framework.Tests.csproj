@@ -8,6 +8,8 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\assets\Inno.Assets.Plugins\Inno.Assets.Plugins.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\src\core\Inno.Core.Job\Inno.Core.Job.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\src\core\Inno.Core.Framework\Inno.Core.Framework.csproj" PrivateAssets="compile" />
   </ItemGroup>

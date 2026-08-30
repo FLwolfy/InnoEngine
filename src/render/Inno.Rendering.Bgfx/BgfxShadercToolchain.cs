@@ -240,9 +240,9 @@ internal static class BgfxRendererProfileCatalog
                 targetPlatform,
                 capabilities.backend,
                 "windows",
-                "vs_5_0",
-                "ps_5_0",
-                compute ? "cs_5_0" : string.Empty),
+                "s_5_0",
+                "s_5_0",
+                compute ? "s_5_0" : string.Empty),
             (BgfxShaderTargetPlatform.MacOSArm64, GraphicsBackend.Metal) => new(
                 targetPlatform,
                 capabilities.backend,

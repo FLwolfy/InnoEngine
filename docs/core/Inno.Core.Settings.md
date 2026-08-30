@@ -1,6 +1,6 @@
 # Inno.Core.Settings
 
-[Core 索引](README.md) · [Wiki 首页](../README.md) · [ZIP Plugin](../assets/Inno.Assets.Plugins.md) · [Editor Settings](../editor/Inno.Editor.Settings.md)
+[Core 索引](README.md) · [Wiki 首页](../README.md) · [Plugin](../assets/Inno.Assets.Plugins.md) · [Editor Settings](../editor/Inno.Editor.Settings.md)
 
 `Inno.Core.Settings` 提供宿主中立、强类型、可热重载的 runtime/Plugin 项目设置。它不依赖 Editor、Rendering、Scene 或 Plugin Loader；Game Layers、Tags、渲染质量、输入映射及任意 Plugin 协议都只是普通设置定义。
 

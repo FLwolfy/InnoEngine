@@ -6,14 +6,14 @@
 
 Scene、Prefab、Folder 和普通文件 icon declaration 可以直接保存完整 `Editor/...` Settings path；`AssetIconRegistry` 用 `EditorSettings.Get(path).GetAsString("value")` 读取 JSON property bag 中的 glyph。脚本声明仍可填写 literal glyph。
 
-## 多根与 ZIP Plugin
+## 多根与 ZIP/Folder Plugin
 
-Tree 同时显示可写 `Assets` 与只读 `Plugins/<id>`。所有导航、搜索、selection 和 drag source 使用完整 `AssetPath(source, localPath)`，因此不同 mount 的同名文件不会碰撞。
+Tree 同时显示可写 `Assets` 根和普通 `Plugins` 根；`Plugins` 下每个 Plugin ID 是独立可展开的只读目录，不再把 `Plugins/<id>` 合并成一个根 label。所有导航、搜索、selection 和 drag source 使用完整 `AssetPath(source, localPath)`，因此不同 mount 的同名文件不会碰撞。
 
 - Plugin 根和条目显示只读状态；Create、Rename、Move、Delete 与 drop target 会隐藏或明确拒绝。
-- 工具栏 `Plugins` 弹窗显示 discovery、active、trust-required 和 archive diagnostics；外层使用共享 menu popup contract 按内容自动定高，不保存临时尺寸，也不会在短内容右侧产生无意义 scrollbar。
-- 带代码 ZIP 的 Trust/Revoke 写入 `ProjectSettings.inno` 后触发候选 refresh；界面明确说明 ALC 不是安全沙箱。
-- `Create/Plugin Definition` 创建原生 `.iplugin`；`Export Plugin ZIP` 计算依赖闭包并输出到项目同级 `Plugins/`。
+- File Browser 不提供 Plugin 管理或 trust 按钮；ZIP/Folder 的文件系统变化由 `PluginManager` 自动轮询并进入统一候选事务，错误通过 Diagnostics/Console 报告。
+- 放入带代码的 Plugin 即表示允许其以项目脚本相同的本机权限执行；File Browser 只展示 active Source Mount，不承担安全确认职责。
+- `Create/Plugin Definition` 创建原生 `.iplugin`；`Export Plugin ZIP` 生成确定性安装包，`Export Plugin Folder` 生成可继续编辑的目录。两者进入同一校验、content hash 与激活通道。
 
 ## 公共扩展 API
 

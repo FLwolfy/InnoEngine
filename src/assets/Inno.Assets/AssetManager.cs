@@ -96,6 +96,7 @@ public static class AssetManager
                 throw new ArgumentException("The project asset source mount must be writable.", nameof(options));
             assetRoot = projectMount.rootPath;
             libraryRoot = Path.GetFullPath(options.libraryRoot);
+            DeleteCandidateCatalogRoots(libraryRoot);
             artifactRoot = Path.Combine(libraryRoot, "Artifacts");
             sourceMounts = mounts;
             AssetLoader loader = new(mounts, libraryRoot, options.sourcePolicy);
@@ -164,6 +165,7 @@ public static class AssetManager
         EnsureOwnerThread();
         AssetLoader? candidateLoader = null;
         AssetFileSystem? candidateFileSystem = null;
+        string? candidateCatalogLibraryRoot = null;
         lock (S_LIFECYCLE_LOCK)
         {
             if (s_sourceMountCandidate is not null)
@@ -177,26 +179,35 @@ public static class AssetManager
                 throw new ArgumentException("Asset source mount IDs must be unique.", nameof(mounts));
             try
             {
-                candidateLoader = new AssetLoader(snapshot, libraryRoot, s_options.sourcePolicy);
+                candidateCatalogLibraryRoot = CreateCandidateCatalogLibraryRoot(libraryRoot);
+                GetLoader().CopyCatalogTo(candidateCatalogLibraryRoot);
+                candidateLoader = new AssetLoader(
+                    snapshot,
+                    libraryRoot,
+                    candidateCatalogLibraryRoot,
+                    s_options.sourcePolicy);
                 candidateFileSystem = new AssetFileSystem(
                     snapshot,
                     autoStart: false,
                     s_options.fileWatcherFlushDelayMs,
                     s_options.sourcePolicy);
-                candidateLoader.Rescan();
+                using (PushReferenceResolver(candidateLoader))
+                    candidateLoader.Rescan();
                 candidateFileSystem.Refresh();
             }
             catch
             {
                 candidateFileSystem?.Dispose();
                 candidateLoader?.Dispose();
+                DeleteCandidateCatalogRoot(candidateCatalogLibraryRoot);
                 throw;
             }
 
             var transaction = new AssetSourceMountTransaction(
                 snapshot,
                 candidateLoader,
-                candidateFileSystem);
+                candidateFileSystem,
+                candidateCatalogLibraryRoot);
             s_sourceMountCandidate = transaction;
             return transaction;
         }
@@ -211,7 +222,8 @@ public static class AssetManager
             EnsurePendingSourceMountTransaction(transaction);
             if (transaction.isActivated)
                 return;
-            _ = transaction.candidateLoader.RefreshRegistries();
+            using (PushReferenceResolver(transaction.candidateLoader))
+                _ = transaction.candidateLoader.RefreshRegistries();
             transaction.candidateFileSystem.Refresh();
             transaction.previousLoader = s_loader;
             transaction.previousFileSystem = s_fileSystem;
@@ -242,6 +254,7 @@ public static class AssetManager
             EnsurePendingSourceMountTransaction(transaction);
             if (!transaction.isActivated)
                 throw new InvalidOperationException("A source-mount candidate must be activated before completion.");
+            transaction.candidateLoader.PromoteCatalogTo(libraryRoot);
             if (s_options.enableFileSystemWatcher)
                 transaction.candidateFileSystem.Start();
             previousLoader = transaction.previousLoader;
@@ -259,6 +272,7 @@ public static class AssetManager
             previousLoader.AssetReloaded -= OnAssetReloaded;
             previousLoader.Dispose();
         }
+        DeleteCandidateCatalogRoot(transaction.candidateCatalogLibraryRoot);
         InvokeObservers(changed);
     }
 
@@ -289,6 +303,31 @@ public static class AssetManager
 
         transaction.candidateFileSystem.Dispose();
         transaction.candidateLoader.Dispose();
+        DeleteCandidateCatalogRoot(transaction.candidateCatalogLibraryRoot);
+    }
+
+    private static string CreateCandidateCatalogLibraryRoot(string activeLibraryRoot)
+    {
+        string root = Path.Combine(activeLibraryRoot, "AssetDatabase", "Candidates");
+        Directory.CreateDirectory(root);
+        return Path.Combine(root, Guid.NewGuid().ToString("N"));
+    }
+
+    private static void DeleteCandidateCatalogRoots(string activeLibraryRoot)
+    {
+        string root = Path.Combine(activeLibraryRoot, "AssetDatabase", "Candidates");
+        if (Directory.Exists(root))
+            Directory.Delete(root, recursive: true);
+    }
+
+    private static void DeleteCandidateCatalogRoot(string? candidateLibraryRoot)
+    {
+        if (string.IsNullOrWhiteSpace(candidateLibraryRoot) || !Directory.Exists(candidateLibraryRoot))
+            return;
+        Directory.Delete(candidateLibraryRoot, recursive: true);
+        string? parent = Directory.GetParent(candidateLibraryRoot)?.FullName;
+        if (parent is not null && Directory.Exists(parent) && !Directory.EnumerateFileSystemEntries(parent).Any())
+            Directory.Delete(parent);
     }
 
     private static void EnsurePendingSourceMountTransaction(AssetSourceMountTransaction transaction)
@@ -763,6 +802,34 @@ public static class AssetManager
                 $"'{expectedType.FullName}'.",
                 exception);
         }
+    }
+
+    internal static IDisposable PushReferenceResolver(AssetLoader loader)
+    {
+        ArgumentNullException.ThrowIfNull(loader);
+        return AssetSerializationServices.PushReferenceResolver((
+            persistentId,
+            stableTypeId,
+            lastKnownPath,
+            expectedType,
+            propertyPath) =>
+        {
+            try
+            {
+                return loader.ResolveReference(
+                    persistentId,
+                    stableTypeId,
+                    lastKnownPath,
+                    expectedType);
+            }
+            catch (Exception exception)
+            {
+                throw new InvalidOperationException(
+                    $"Candidate asset reference '{persistentId}' at '{propertyPath}' cannot be resolved as " +
+                    $"'{expectedType.FullName}'.",
+                    exception);
+            }
+        });
     }
 
     private static void ApplySourceChanges(

@@ -1,8 +1,12 @@
 using System;
+using System.IO;
+using System.Linq;
 
 using Inno.Assets;
+using Inno.Assets.Plugins;
 using Inno.Core.Events;
 using Inno.Core.Job;
+using Inno.Core.Serialization;
 
 using Xunit;
 
@@ -150,6 +154,51 @@ public sealed class ShellBehaviorTests : IDisposable
         Shell.Shutdown();
 
         Assert.False(AssetManager.isInitialized);
+    }
+
+    [Fact]
+    public void Initialize_PublishesValidatedPluginMountsInTheFirstAssetGeneration()
+    {
+        string projectRoot = Path.Combine(
+            Path.GetTempPath(),
+            "InnoShellPluginMountTests",
+            Guid.NewGuid().ToString("N"));
+        string pluginRoot = Path.Combine(projectRoot, "Plugins", "InitialPlugin");
+        Directory.CreateDirectory(Path.Combine(pluginRoot, "Assets"));
+        try
+        {
+            Shell.Initialize(new ShellSettings
+            {
+                projectRootDirectory = projectRoot,
+                useSingleThreadJobSystem = true
+            });
+            byte[] manifest = SerializationManager.Serialize(new PluginManifest
+            {
+                pluginId = "tests.initial-plugin",
+                displayName = "Initial Plugin"
+            });
+            Shell.Shutdown();
+            File.WriteAllBytes(Path.Combine(pluginRoot, "Plugin.inno"), manifest);
+
+            Shell.Initialize(new ShellSettings
+            {
+                projectRootDirectory = projectRoot,
+                useSingleThreadJobSystem = true
+            });
+
+            Assert.Contains(
+                AssetManager.sourceMounts,
+                static mount => mount.id.value == "tests.initial-plugin");
+            Assert.Equal(
+                "tests.initial-plugin",
+                AssetManager.sourceMounts.Last().id.value);
+        }
+        finally
+        {
+            Shell.Shutdown();
+            if (Directory.Exists(projectRoot))
+                Directory.Delete(projectRoot, recursive: true);
+        }
     }
 
     private sealed class ProbeEvent(int value) : Event

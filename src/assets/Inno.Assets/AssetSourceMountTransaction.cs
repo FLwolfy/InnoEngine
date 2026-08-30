@@ -17,16 +17,20 @@ public sealed class AssetSourceMountTransaction : IDisposable
     internal AssetSourceMountTransaction(
         IReadOnlyList<AssetSourceMount> mounts,
         AssetLoader candidateLoader,
-        AssetFileSystem candidateFileSystem)
+        AssetFileSystem candidateFileSystem,
+        string candidateCatalogLibraryRoot)
     {
         m_mounts = mounts;
         this.candidateLoader = candidateLoader;
         this.candidateFileSystem = candidateFileSystem;
+        this.candidateCatalogLibraryRoot = candidateCatalogLibraryRoot;
     }
 
     internal AssetLoader candidateLoader { get; }
 
     internal AssetFileSystem candidateFileSystem { get; }
+
+    internal string candidateCatalogLibraryRoot { get; }
 
     internal AssetLoader? previousLoader { get; set; }
 
@@ -63,6 +67,7 @@ public sealed class AssetSourceMountTransaction : IDisposable
     public TAsset Load<TAsset>(AssetPath path) where TAsset : AssetObject
     {
         EnsureOpen();
+        using IDisposable resolver = AssetManager.PushReferenceResolver(candidateLoader);
         AssetObject? asset = candidateLoader.Load(path, typeof(TAsset));
         return asset as TAsset ?? throw new InvalidOperationException(
             $"Candidate asset '{path}' cannot be loaded as '{typeof(TAsset).FullName}'.");

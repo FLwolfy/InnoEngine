@@ -123,9 +123,9 @@ if (AssetManager.TryGetInfo(AssetPath.Project("Scripts/Player.cs"), out AssetInf
 
 `GetFileSystemEntries`、`GetFileSystemChildren` 和 `TryGetFileSystemEntry` 返回所有活动 mount 的统一 Source Policy 视图。条目的 `assetPath.source` 保持来源隔离；`.imeta`、artifact、IDE cache 和默认系统噪声不出现，Unsupported source 仍出现。
 
-`PrepareSourceMounts` 返回隔离的 `AssetSourceMountTransaction`。候选拥有自己的 Loader、FileSystem、Catalog 与查询入口；在 `Activate` 前不会改变 `AssetManager.sourceMounts` 或普通加载结果。`Activate` 只做安全点内的临时切换，不释放旧 generation，也不通知观察者；`Complete` 才发布 `SourceMountsChanged` 并退休旧 generation，`Rollback` 则丢弃候选或恢复旧 generation。`ReplaceSourceMounts` 是立即执行 Prepare → Activate → Complete 的便利入口。
+`PrepareSourceMounts` 返回隔离的 `AssetSourceMountTransaction`。候选拥有自己的 Loader、FileSystem、Catalog 暂存文件与查询入口；在 `Activate` 前不会改变 `AssetManager.sourceMounts`、普通加载结果或正式 `Library/AssetDatabase/Catalog.snapshot`。内容寻址 Artifact 可以安全复用正式缓存，但 Catalog 只有 `Complete` 时才执行单次 atomic replace；`Rollback` 删除暂存 Catalog，进程异常遗留的候选目录会在下次初始化清理。`Activate` 只做安全点内的临时切换，不释放旧 generation，也不通知观察者；`Complete` 才发布 `SourceMountsChanged` 并退休旧 generation。`ReplaceSourceMounts` 是立即执行 Prepare → Activate → Complete 的便利入口。
 
-Plugin mount 必须只读；跨 mount 依赖必须由 mount 的 `dependencySourceIds` 明确授权。任何 Persistent ID 冲突或未声明依赖都会拒绝候选并保留旧 snapshot。该两阶段协议也允许 ZIP Plugin 脚本从隔离候选 artifact 编译，而 File Browser、运行时资产与当前 Plugin Catalog 始终只观察 last-good generation。
+Plugin mount 必须只读；这个限制同样适用于物理上可编辑的 Folder Plugin，防止运行时绕过 source transaction 直接写入。跨 mount 依赖必须由 mount 的 `dependencySourceIds` 明确授权。任何 Persistent ID 冲突或未声明依赖都会拒绝候选并保留旧 snapshot。该两阶段协议也允许 ZIP/Folder Plugin 脚本从隔离候选 artifact 编译，而 File Browser、运行时资产与当前 Plugin Catalog 始终只观察 last-good generation。
 
 FileBrowser List 使用 `AssetFileEntry.nameWithoutExtension` 显示名字，Grid 保持完整 `name`。所有实际命令始终使用完整 `assetPath`；公开 Manager/Loader/FileSystem 寻址 API 不再接受裸字符串路径。
 

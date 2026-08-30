@@ -132,6 +132,10 @@ public sealed unsafe partial class BgfxDevice : IRenderDevice, IRenderGraphBacke
     public uint generation { get; private set; }
 
     /// <inheritdoc />
+    public RenderPresentationSize primaryPresentationSize
+        => new(m_backbufferWidth, m_backbufferHeight);
+
+    /// <inheritdoc />
     public RenderDeviceFrameCounters frameCounters
         => new(Volatile.Read(ref m_drawCount), Volatile.Read(ref m_dispatchCount));
 

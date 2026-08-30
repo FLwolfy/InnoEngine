@@ -7,7 +7,7 @@ Assets 层把可写 `Assets/` 与已激活的只读 `Plugins/<id>` 组织成同�
 ```mermaid
 flowchart LR
     FS["Inno.Assets.File<br/>Source policy / index / poll"] --> AM["Inno.Assets<br/>AssetManager owner-thread orchestration"]
-    PLUGIN["Inno.Assets.Plugins<br/>ZIP / trust / mounts"] --> AM
+    PLUGIN["Inno.Assets.Plugins<br/>ZIP / Folder / mounts"] --> AM
     CORE["Inno.Assets.Core<br/>public contracts"] --> LOAD["Inno.Assets.Loader<br/>import / build / catalog / CAS"]
     TYPES["Inno.Assets.Types<br/>Text / Binary"] --> LOAD
     LOAD --> AM
@@ -26,7 +26,7 @@ flowchart LR
 | [Inno.Assets.Loader](Inno.Assets.Loader.md) | Importer/Build Processor Registry、`.imeta`、Catalog、CAS、canonical instance |
 | [Inno.Assets.Serialization](Inno.Assets.Serialization.md) | `AssetObject` 引用编码、恢复与依赖收集 |
 | [Inno.Assets.Types](Inno.Assets.Types.md) | 内置 `TextAsset` 与 `BinaryAsset` |
-| [Inno.Assets.Plugins](Inno.Assets.Plugins.md) | 本地 ZIP、安全校验、只读 Source Mount、信任、导出与原子激活 |
+| [Inno.Assets.Plugins](Inno.Assets.Plugins.md) | 本地 ZIP/Folder、安全校验、只读 Source Mount、导出与原子激活 |
 
 没有额外的 `Inno.Assets.Database` 或 `Inno.Assets.Pipeline` 程序集。Catalog、Artifact Store 和 transaction helper 都是 Loader 内部协作对象，避免为实现细节制造程序集依赖环。
 

@@ -480,7 +480,7 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public void TrustedZipPluginProvidesRasterComputeShaderNodeAndGameplayExtensions()
+    public void ZipPluginProvidesRasterComputeShaderNodeAndGameplayExtensions()
     {
         const string pipelineId = "tests.fixture.pipeline";
         const string shaderNodeId = "tests.fixture.compute-value";
@@ -603,6 +603,12 @@ public sealed class ScriptManagerTests : IDisposable
                 Assert.Equal(0f, GetStaticField<float>(providerType, "lastPointerX"));
                 Assert.Equal(1f, GetStaticField<float>(providerType, "lastPointerY"));
                 Assert.Equal(4, GetStaticField<int>(providerType, "lastPointerButton"));
+                Assert.True(module.TryGetManipulationSpace(
+                    "tests.viewport",
+                    out EditorViewportManipulationSpace manipulationSpace));
+                Assert.True(manipulationSpace.isOrthographic);
+                Assert.Equal(1f, manipulationSpace.viewMatrix.m11);
+                Assert.Equal(2f, manipulationSpace.projectionMatrix.m11);
             }
             finally
             {
@@ -610,7 +616,7 @@ public sealed class ScriptManagerTests : IDisposable
             }
         }
 
-        string archivePath = Assert.Single(PluginCatalog.activePlugins).archivePath;
+        string archivePath = Assert.Single(PluginCatalog.activePlugins).sourcePath;
         Assert.Equal(pluginId, Assert.Single(PluginCatalog.activePlugins).manifest.pluginId);
         File.Delete(archivePath);
         Assert.True(PluginManager.Refresh());
@@ -650,10 +656,10 @@ public sealed class ScriptManagerTests : IDisposable
         ScriptCompilationResult initial = Compile();
         Assert.True(initial.success, FormatDiagnostics(initial));
         Assert.True(m_manager.ApplyPendingReload());
-        PluginArchiveCandidate activePlugin = Assert.Single(PluginCatalog.activePlugins);
+        PluginCandidate activePlugin = Assert.Single(PluginCatalog.activePlugins);
         string activeHash = activePlugin.contentHash;
         Type activePipeline = ResolveTypeByName("FixtureRenderPipeline");
-        string archivePath = activePlugin.archivePath;
+        string archivePath = activePlugin.sourcePath;
         byte[] metadata;
         using (var archive = ZipFile.OpenRead(archivePath))
         {
@@ -2053,6 +2059,62 @@ public sealed class ScriptManagerTests : IDisposable
         Type consumerType = ResolveTypeByName("PluginConsumer");
         object consumer = Activator.CreateInstance(consumerType)!;
         Assert.Equal(42, consumerType.GetProperty("value")!.GetValue(consumer));
+    }
+
+    [Fact]
+    public void FolderPluginUsesTheSameRuntimeCompilationAndActivationPathAsZip()
+    {
+        InstallSourcePlugin(asDirectory: true);
+        Assert.Equal(PluginSourceKind.Directory, Assert.Single(PluginCatalog.activePlugins).sourceKind);
+        Write("FolderPluginConsumer.cs", """
+            using ProjectPluginApi;
+
+            public sealed class FolderPluginConsumer
+            {
+                public int value => PluginValue.value;
+            }
+            """);
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.True(result.success, FormatDiagnostics(result));
+        Assert.True(m_manager.ApplyPendingReload());
+        Type consumerType = ResolveTypeByName("FolderPluginConsumer");
+        object consumer = Activator.CreateInstance(consumerType)!;
+        Assert.Equal(42, consumerType.GetProperty("value")!.GetValue(consumer));
+    }
+
+    [Fact]
+    public void FolderPluginEditorAssemblyCanUseRuntimeAndEditorLogicalApisTogether()
+    {
+        InstallSourcePlugin(
+            editorOnly: true,
+            asDirectory: true,
+            source: """
+                using InnoEditor.Rendering;
+                using InnoEngine.Scene;
+
+                [EditorViewportProviderExtension(
+                    "tests.folder-plugin.viewport-provider",
+                    "tests.folder-plugin.viewport")]
+                public sealed class FolderPluginViewportProvider : EditorViewportProvider
+                {
+                    private readonly GameScene m_scene = new("Folder Plugin Editor Scene");
+
+                    public override EditorViewportSubmission Build(EditorViewportContext context)
+                    {
+                        _ = context;
+                        _ = m_scene;
+                        throw new System.NotSupportedException();
+                    }
+                }
+                """);
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.True(result.success, FormatDiagnostics(result));
+        Assert.True(m_manager.ApplyPendingReload());
+        Assert.NotNull(ResolveTypeByName("FolderPluginViewportProvider"));
     }
 
     [Fact]
@@ -4071,11 +4133,14 @@ public sealed class ScriptManagerTests : IDisposable
         File.WriteAllBytes(path, NativeAssetSourceSerialization.Export(definition));
     }
 
-    private void InstallSourcePlugin(bool editorOnly = false)
+    private void InstallSourcePlugin(
+        bool editorOnly = false,
+        bool asDirectory = false,
+        string? source = null)
     {
         const string pluginId = "tests.scripting";
         string sourceName = editorOnly ? "PluginValue.editor.cs" : "PluginValue.cs";
-        Write(sourceName, """
+        Write(sourceName, source ?? """
             namespace ProjectPluginApi;
 
             public static class PluginValue
@@ -4098,10 +4163,26 @@ public sealed class ScriptManagerTests : IDisposable
 
         string pluginRoot = Path.Combine(m_projectRoot, "Plugins");
         Directory.CreateDirectory(pluginRoot);
-        string archivePath = Path.Combine(pluginRoot, "ScriptingTests.zip");
-        using (FileStream stream = File.Create(archivePath))
-        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create))
+        if (asDirectory)
         {
+            string directoryPath = Path.Combine(pluginRoot, "ScriptingTests");
+            string assetsPath = Path.Combine(directoryPath, "Assets");
+            Directory.CreateDirectory(assetsPath);
+            File.WriteAllBytes(
+                Path.Combine(directoryPath, "Plugin.inno"),
+                SerializationManager.Serialize(new PluginManifest
+                {
+                    pluginId = pluginId,
+                    displayName = "Scripting Tests"
+                }));
+            File.WriteAllBytes(Path.Combine(assetsPath, sourceName), sourceBytes);
+            File.WriteAllBytes(Path.Combine(assetsPath, sourceName + ".imeta"), metadataBytes);
+        }
+        else
+        {
+            string archivePath = Path.Combine(pluginRoot, "ScriptingTests.zip");
+            using FileStream stream = File.Create(archivePath);
+            using var archive = new ZipArchive(stream, ZipArchiveMode.Create);
             WritePluginEntry(archive, "Plugin.inno", SerializationManager.Serialize(new PluginManifest
             {
                 pluginId = pluginId,
@@ -4111,16 +4192,16 @@ public sealed class ScriptManagerTests : IDisposable
             WritePluginEntry(archive, "Assets/" + sourceName + ".imeta", metadataBytes);
         }
 
-        var archives = new PluginArchiveService(
+        var archives = new PluginSourceService(
             pluginRoot,
             Path.Combine(m_projectRoot, "Library"));
-        PluginScanResult scan = archives.Scan(new HashSet<string>([pluginId], StringComparer.Ordinal));
+        PluginScanResult scan = archives.Scan();
         Assert.Empty(scan.diagnostics);
         PluginCatalog.Activate(scan);
         AssetSourceMount projectMount = AssetManager.sourceMounts.Single(
             static mount => mount.id == AssetSourceId.project);
         AssetManager.ReplaceSourceMounts(
-            [projectMount, .. PluginArchiveService.GetActivatableMounts(scan)]);
+            [projectMount, .. PluginSourceService.GetActivatableMounts(scan)]);
     }
 
     private void InstallSourcePlugins(params SourcePluginFixture[] plugins)
@@ -4176,17 +4257,16 @@ public sealed class ScriptManagerTests : IDisposable
                 WritePluginEntry(archive, path, bytes);
         }
 
-        var archiveService = new PluginArchiveService(
+        var archiveService = new PluginSourceService(
             pluginRoot,
             Path.Combine(m_projectRoot, "Library"));
-        PluginScanResult scan = archiveService.Scan(
-            plugins.Select(static plugin => plugin.id).ToHashSet(StringComparer.Ordinal));
+        PluginScanResult scan = archiveService.Scan();
         Assert.Empty(scan.diagnostics);
         PluginCatalog.Activate(scan);
         AssetSourceMount projectMount = AssetManager.sourceMounts.Single(
             static mount => mount.id == AssetSourceId.project);
         AssetManager.ReplaceSourceMounts(
-            [projectMount, .. PluginArchiveService.GetActivatableMounts(scan)]);
+            [projectMount, .. PluginSourceService.GetActivatableMounts(scan)]);
     }
 
     private void InstallProgrammableRenderingPlugin()
@@ -4269,6 +4349,7 @@ public sealed class ScriptManagerTests : IDisposable
             """);
         Write(editorSourceName, """
             using InnoEditor.Rendering;
+            using InnoEngine.Mathematics;
             using InnoEngine.Rendering;
 
             [EditorViewportProviderExtension(
@@ -4291,7 +4372,11 @@ public sealed class ScriptManagerTests : IDisposable
                     return new EditorViewportSubmission(
                         data,
                         targetFormat: RenderTextureFormat.RGBA16Float,
-                        priority: 17);
+                        priority: 17,
+                        manipulationSpace: new EditorViewportManipulationSpace(
+                            Matrix.identity,
+                            Matrix.CreateScale(2f),
+                            isOrthographic: true));
                 }
 
                 public override void DrawToolbar(EditorViewportContext context)
@@ -4340,14 +4425,11 @@ public sealed class ScriptManagerTests : IDisposable
         }
 
         string libraryRoot = Path.Combine(m_projectRoot, "Library");
-        var archives = new PluginArchiveService(pluginRoot, libraryRoot);
-        PluginScanResult untrusted = archives.Scan(new HashSet<string>(StringComparer.Ordinal));
-        Assert.Empty(PluginArchiveService.GetActivatableCandidates(untrusted));
-        Assert.Contains(untrusted.diagnostics, static diagnostic =>
-            diagnostic.message.Contains("trust", StringComparison.OrdinalIgnoreCase));
-        PluginManager.Initialize(pluginRoot, libraryRoot, untrusted);
-        PluginManager.SetTrusted(pluginId, trusted: true);
-        Assert.True(PluginManager.hasPendingActivation);
+        var archives = new PluginSourceService(pluginRoot, libraryRoot);
+        PluginScanResult scan = archives.Scan();
+        Assert.Equal(pluginId, Assert.Single(scan.candidates).manifest.pluginId);
+        Assert.Empty(scan.diagnostics);
+        PluginManager.Initialize(pluginRoot, libraryRoot, scan);
     }
 
     private static void WritePluginEntry(ZipArchive archive, string path, byte[] bytes)

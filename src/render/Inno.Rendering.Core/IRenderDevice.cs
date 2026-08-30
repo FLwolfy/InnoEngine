@@ -43,6 +43,9 @@ public interface IRenderDevice : IDisposable
     /// <summary>Gets the non-zero device generation used to reject stale persistent handles.</summary>
     uint generation { get; }
 
+    /// <summary>Gets the current primary presentation extent in physical pixels.</summary>
+    RenderPresentationSize primaryPresentationSize => new(1, 1);
+
     /// <summary>
     /// Gets command counts recorded since the latest <see cref="BeginFrame"/> call.
     /// Backends that cannot provide command accounting return zero counters.

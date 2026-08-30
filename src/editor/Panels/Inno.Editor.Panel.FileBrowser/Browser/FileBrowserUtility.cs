@@ -234,11 +234,13 @@ internal static class FileBrowserUtility
     }
 
     private static string GetSourceRootLabel(AssetSourceId source)
-        => source == AssetSourceId.project ? "Assets" : $"Plugins/{source}";
+        => source == AssetSourceId.project ? "Assets" : source.value;
 
     private static string FormatSourcePath(AssetSourceId source, string localPath)
     {
-        string root = GetSourceRootLabel(source);
+        string root = source == AssetSourceId.project
+            ? GetSourceRootLabel(source)
+            : $"Plugins/{GetSourceRootLabel(source)}";
         return string.IsNullOrEmpty(localPath) ? root : $"{root}/{localPath}";
     }
 

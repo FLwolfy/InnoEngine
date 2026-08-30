@@ -1,8 +1,8 @@
 # Rendering API
 
-[返回 Wiki 首页](../README.md) · [Core Graphs](../core/Inno.Core.Graphs.md) · [ZIP Plugin](../assets/Inno.Assets.Plugins.md)
+[返回 Wiki 首页](../README.md) · [Core Graphs](../core/Inno.Core.Graphs.md) · [Plugin](../assets/Inno.Assets.Plugins.md)
 
-Rendering 位于 `src/render`。生产内核是可编程 GPU 基础设施，不包含 2D、3D、PBR、光照、阴影、相机、可渲染组件或固定后处理。项目脚本与 ZIP Plugin 通过开放协议从零定义世界数据、Shader Contract、Pass Role、Pipeline、Feature、Shader Node 和 Editor Viewport Provider。
+Rendering 位于 `src/render`。生产内核是可编程 GPU 基础设施，不包含 2D、3D、PBR、光照、阴影、相机、可渲染组件或固定后处理。项目脚本与 ZIP/Folder Plugin 通过开放协议从零定义世界数据、Shader Contract、Pass Role、Pipeline、Feature、Shader Node 和 Editor Viewport Provider。
 
 > Rendering Core 只提供机制。任何具体渲染策略都必须能在不修改引擎的前提下由项目或 Plugin 完整构建。
 
@@ -24,7 +24,7 @@ Rendering 位于 `src/render`。生产内核是可编程 GPU 基础设施，不�
 
 ```mermaid
 flowchart LR
-    Plugin["Project / ZIP Plugin"] --> Rendering["Inno.Rendering"]
+    Plugin["Project / ZIP or Folder Plugin"] --> Rendering["Inno.Rendering"]
     Plugin --> ShaderGraph["Rendering.ShaderGraph"]
     Runtime["Rendering.Runtime"] --> Rendering
     Rendering --> Core["Rendering.Core"]
@@ -46,4 +46,4 @@ flowchart LR
 - 无 Pipeline Plugin 时 Editor 与 ImGui 继续运行，Scene/Game 显示明确的 provider 缺失信息。
 - 手写和节点生成 Shader 使用同一 `ShaderIRModule`、验证、shaderc、反射、缓存与 last-good 链。
 - 同一 `.sc` 由注入的 `BgfxShadercToolchain` 为 Metal、D3D 或其他 BGFX 后端生成目标产物，不维护平台专用源文件副本；通用 Assets 与 Runtime 不知道 profile。
-- RenderGraph、BGFX Noop、原生资产、ShaderGraph、Source Mount 与 ZIP 安全测试均不依赖任何内建渲染模型。
+- RenderGraph、BGFX Noop、原生资产、ShaderGraph、Source Mount 与 ZIP/Folder 安全测试均不依赖任何内建渲染模型。

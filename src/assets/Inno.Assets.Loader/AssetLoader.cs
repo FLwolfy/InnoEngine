@@ -80,12 +80,23 @@ public sealed class AssetLoader : IDisposable
         IReadOnlyList<AssetSourceMount> mounts,
         string libraryRoot,
         AssetSourcePolicy? sourcePolicy = null)
+        : this(mounts, libraryRoot, libraryRoot, sourcePolicy)
+    {
+    }
+
+    internal AssetLoader(
+        IReadOnlyList<AssetSourceMount> mounts,
+        string libraryRoot,
+        string catalogLibraryRoot,
+        AssetSourcePolicy? sourcePolicy)
     {
         ArgumentNullException.ThrowIfNull(mounts);
         if (mounts.Count == 0)
             throw new ArgumentException("At least one asset source mount is required.", nameof(mounts));
         if (string.IsNullOrWhiteSpace(libraryRoot))
             throw new ArgumentException("Library root is required.", nameof(libraryRoot));
+        if (string.IsNullOrWhiteSpace(catalogLibraryRoot))
+            throw new ArgumentException("Catalog Library root is required.", nameof(catalogLibraryRoot));
         Dictionary<AssetSourceId, AssetSourceMount> byId = mounts.ToDictionary(static mount => mount.id);
         if (byId.Count != mounts.Count)
             throw new ArgumentException("Asset source mount IDs must be unique.", nameof(mounts));
@@ -111,7 +122,7 @@ public sealed class AssetLoader : IDisposable
         Directory.CreateDirectory(this.libraryRoot);
         m_sourcePolicy = sourcePolicy ?? AssetSourcePolicy.defaultPolicy;
         m_artifacts = new AssetArtifactStore(this.libraryRoot);
-        m_catalog = new AssetCatalogStore(this.libraryRoot);
+        m_catalog = new AssetCatalogStore(catalogLibraryRoot);
     }
 
     /// <summary>Gets the absolute source root.</summary>
@@ -125,6 +136,12 @@ public sealed class AssetLoader : IDisposable
 
     /// <summary>Occurs after a loaded canonical asset is updated in place.</summary>
     public event Action<AssetObject>? AssetReloaded;
+
+    internal void CopyCatalogTo(string destinationLibraryRoot)
+        => Execute(() => m_catalog.CopyLatestTo(destinationLibraryRoot));
+
+    internal void PromoteCatalogTo(string destinationLibraryRoot)
+        => Execute(() => m_catalog.PromoteTo(destinationLibraryRoot));
 
     /// <summary>Imports one isolated source file into metadata and a runtime artifact.</summary>
     /// <param name="path">The isolated source path.</param>
@@ -326,7 +343,8 @@ public sealed class AssetLoader : IDisposable
     internal IReadOnlySet<AssetImportFailureFingerprint> CaptureWritableImportFailures()
         => Execute(() => m_recordsByPath.Values
             .Where(record =>
-                !GetMount(record.relativePath).isReadOnly
+                IsMounted(record.relativePath)
+                && !GetMount(record.relativePath).isReadOnly
                 && record.meta.importStatus is (int)AssetImportStatus.Failed
                     or (int)AssetImportStatus.Conflict)
             .Select(static record => new AssetImportFailureFingerprint(
@@ -980,8 +998,22 @@ public sealed class AssetLoader : IDisposable
             if (!m_recordsById.TryGetValue(persistentId, out record))
                 return null;
         }
-        return record.meta.isTombstone && record.asset is null
-            ? null
+        if (record.meta.isTombstone)
+        {
+            return record.asset is null
+                ? null
+                : LoadRecordLocked(record, requestedAssetType);
+        }
+
+        // A source-side identity can be indexed before its body is imported. Route identity loads
+        // through the same freshness gate as path loads so pending records never hydrate an empty
+        // or stale artifact merely because their sidecar was discovered first. The sidecar check
+        // keeps a newly created asset at the same path from satisfying an older identity lookup.
+        bool ownsCurrentSource = IOFile.Exists(GetSourcePath(record.relativePath))
+            && TryReadSourceMeta(GetMetaPath(record.relativePath), out AssetSourceMeta sourceMeta)
+            && sourceMeta.persistentId == persistentId;
+        return ownsCurrentSource
+            ? LoadPathLocked(record.relativePath, requestedAssetType)
             : LoadRecordLocked(record, requestedAssetType);
     }
 
@@ -1133,13 +1165,17 @@ public sealed class AssetLoader : IDisposable
     private AssetDependency[] ResolveDeclaredDependenciesLocked(AssetImportContext context)
     {
         var result = context.runtimeDependencies.ToDictionary(static value => value.persistentId);
-        foreach (AssetDependency dependency in result.Values)
+        foreach (Guid persistentId in result.Keys.ToArray())
         {
+            AssetDependency dependency = result[persistentId];
             string dependencyPath = dependency.lastKnownPath;
-            if (string.IsNullOrWhiteSpace(dependencyPath)
-                && m_recordsById.TryGetValue(dependency.persistentId, out AssetRecord? record))
+            if (m_recordsById.TryGetValue(dependency.persistentId, out AssetRecord? record))
             {
                 dependencyPath = record.relativePath;
+                result[persistentId] = new AssetDependency(
+                    dependency.persistentId,
+                    dependency.type,
+                    dependencyPath);
             }
             if (!string.IsNullOrWhiteSpace(dependencyPath))
                 ValidateSourceReferenceLocked(context.assetPath.ToString(), NormalizeRelativePath(dependencyPath));
@@ -1453,6 +1489,10 @@ public sealed class AssetLoader : IDisposable
                             sourceMeta.persistentId = Guid.NewGuid();
                             WriteAtomic(metaPath, SerializationManager.Serialize(sourceMeta));
                         }
+                        // Index every source identity before importing source bodies. Runtime
+                        // dependencies are identity-first, so import order must not decide whether
+                        // a relocated asset can resolve another asset in the same mount snapshot.
+                        _ = FindRecordLocked(relative);
                         continue;
                     }
                 }

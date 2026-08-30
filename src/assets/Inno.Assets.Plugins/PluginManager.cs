@@ -12,7 +12,7 @@ using Inno.Core.Settings;
 namespace Inno.Assets.Plugins;
 
 /// <summary>
-/// Owns automatic installed ZIP discovery and atomically publishes Asset mounts, settings contributors,
+/// Owns automatic installed Plugin source discovery and atomically publishes Asset mounts, settings contributors,
 /// and the active Plugin catalog on the Asset Database owner thread.
 /// </summary>
 public static class PluginManager
@@ -20,7 +20,7 @@ public static class PluginManager
     private const long C_SCAN_INTERVAL_MILLISECONDS = 500;
 
     private static readonly object S_SYNC = new();
-    private static PluginArchiveService? s_archives;
+    private static PluginSourceService? s_sources;
     private static string s_pluginRoot = string.Empty;
     private static string s_directoryFingerprint = string.Empty;
     private static string s_activeFingerprint = string.Empty;
@@ -40,7 +40,7 @@ public static class PluginManager
         get
         {
             lock (S_SYNC)
-                return s_archives is not null;
+                return s_sources is not null;
         }
     }
 
@@ -61,10 +61,10 @@ public static class PluginManager
             throw new InvalidOperationException("PluginManager requires AssetManager to be initialized first.");
         lock (S_SYNC)
         {
-            if (s_archives is not null)
+            if (s_sources is not null)
                 throw new InvalidOperationException("PluginManager is already initialized.");
             s_pluginRoot = Path.GetFullPath(pluginRoot);
-            s_archives = new PluginArchiveService(s_pluginRoot, libraryRoot);
+            s_sources = new PluginSourceService(s_pluginRoot, libraryRoot);
             s_directoryFingerprint = ComputeDirectoryFingerprint(s_pluginRoot);
             s_lastScanTimestamp = Environment.TickCount64;
         }
@@ -74,17 +74,17 @@ public static class PluginManager
             s_activeFingerprint = ComputeActiveFingerprint(activeScan);
     }
 
-    /// <summary>Polls the sibling Plugins directory and refreshes only after its ZIP snapshot changes.</summary>
+    /// <summary>Polls the sibling Plugins directory and refreshes only after its source snapshot changes.</summary>
     [ScriptingApiIgnore]
     public static void Update()
     {
-        PluginArchiveService? archives;
+        PluginSourceService? sources;
         string pluginRoot;
         lock (S_SYNC)
         {
-            archives = s_archives;
+            sources = s_sources;
             pluginRoot = s_pluginRoot;
-            if (archives is null || Environment.TickCount64 - s_lastScanTimestamp < C_SCAN_INTERVAL_MILLISECONDS)
+            if (sources is null || Environment.TickCount64 - s_lastScanTimestamp < C_SCAN_INTERVAL_MILLISECONDS)
                 return;
             s_lastScanTimestamp = Environment.TickCount64;
         }
@@ -104,18 +104,17 @@ public static class PluginManager
     [ScriptingApiIgnore]
     public static bool Refresh()
     {
-        PluginArchiveService archives;
+        PluginSourceService sources;
         lock (S_SYNC)
-            archives = s_archives ?? throw new InvalidOperationException("PluginManager is not initialized.");
-        PluginTrustSettings trust = ProjectSettingsManager.Get<PluginTrustSettings>(PluginTrustSettings.id);
-        PluginScanResult scan = archives.Scan(trust.trustedPluginIds.ToHashSet(StringComparer.Ordinal));
+            sources = s_sources ?? throw new InvalidOperationException("PluginManager is not initialized.");
+        PluginScanResult scan = sources.Scan();
         PluginCatalog.PublishDiscovery(scan);
-        HashSet<string> activeArchivePaths = PluginCatalog.activePlugins
-            .Select(static candidate => Path.GetFullPath(candidate.archivePath))
+        HashSet<string> activeSourcePaths = PluginCatalog.activePlugins
+            .Select(static candidate => Path.GetFullPath(candidate.sourcePath))
             .ToHashSet(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         if (scan.diagnostics.Any(diagnostic =>
-                System.IO.File.Exists(diagnostic.archivePath)
-                && activeArchivePaths.Contains(Path.GetFullPath(diagnostic.archivePath))))
+                (System.IO.File.Exists(diagnostic.sourcePath) || Directory.Exists(diagnostic.sourcePath))
+                && activeSourcePaths.Contains(Path.GetFullPath(diagnostic.sourcePath))))
         {
             return false;
         }
@@ -133,7 +132,7 @@ public static class PluginManager
         AssetSourceMount project = AssetManager.sourceMounts.Single(
             static mount => mount.id == AssetSourceId.project);
         AssetSourceMountTransaction assets = AssetManager.PrepareSourceMounts(
-            [project, .. PluginArchiveService.GetActivatableMounts(scan)]);
+            [project, .. PluginSourceService.GetActivatableMounts(scan)]);
         bool pendingAssigned = false;
         try
         {
@@ -199,7 +198,7 @@ public static class PluginManager
 
     /// <summary>Gets the Plugin candidates visible to the next script compilation.</summary>
     [ScriptingApiIgnore]
-    public static IReadOnlyList<PluginArchiveCandidate> compilationPlugins
+    public static IReadOnlyList<PluginCandidate> compilationPlugins
     {
         get
         {
@@ -207,7 +206,7 @@ public static class PluginManager
             {
                 return s_pending is null
                     ? PluginCatalog.activePlugins
-                    : PluginArchiveService.GetActivatableCandidates(s_pending.candidateScan).ToArray();
+                    : PluginSourceService.GetActivatableCandidates(s_pending.candidateScan).ToArray();
             }
         }
     }
@@ -219,7 +218,7 @@ public static class PluginManager
     [ScriptingApiIgnore]
     public static bool TryGetCompilationPlugin(
         AssetSourceId source,
-        out PluginArchiveCandidate? plugin)
+        out PluginCandidate? plugin)
     {
         plugin = compilationPlugins.FirstOrDefault(candidate => candidate.sourceMount.id == source);
         return plugin is not null;
@@ -296,46 +295,14 @@ public static class PluginManager
             s_activeFingerprint = pending.previousFingerprint;
     }
 
-    /// <summary>Persists a project-local code trust decision and immediately refreshes Plugin activation.</summary>
-    /// <param name="pluginId">Stable installed Plugin ID.</param>
-    /// <param name="trusted">Whether this project's process may compile and execute its code.</param>
-    [ScriptingApiIgnore]
-    public static void SetTrusted(string pluginId, bool trusted)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
-        if (!PluginCatalog.discovery.candidates.Any(candidate =>
-                string.Equals(candidate.manifest.pluginId, pluginId, StringComparison.Ordinal)))
-        {
-            throw new ArgumentException($"Installed Plugin '{pluginId}' was not discovered.", nameof(pluginId));
-        }
-        if (!ProjectSettingsManager.TryClone(
-                PluginTrustSettings.id,
-                out Inno.Core.Serialization.ISerializable? cloned)
-            || cloned is not PluginTrustSettings settings)
-        {
-            throw new InvalidOperationException("Plugin trust settings are unavailable.");
-        }
-        var ids = settings.trustedPluginIds.ToHashSet(StringComparer.Ordinal);
-        bool changed = trusted ? ids.Add(pluginId) : ids.Remove(pluginId);
-        if (!changed)
-            return;
-        settings.trustedPluginIds = ids.Order(StringComparer.Ordinal).ToArray();
-        _ = ProjectSettingsManager.ApplyProjectOverrides(
-            new Dictionary<ProjectSettingId, Inno.Core.Serialization.ISerializable>
-            {
-                [PluginTrustSettings.id] = settings
-            });
-        _ = Refresh();
-    }
-
-    /// <summary>Stops automatic discovery without deleting ZIP files, trust, or rebuildable extraction caches.</summary>
+    /// <summary>Stops automatic discovery without deleting Plugin sources or rebuildable extraction caches.</summary>
     [ScriptingApiIgnore]
     public static void Shutdown()
     {
         RollbackPending();
         lock (S_SYNC)
         {
-            s_archives = null;
+            s_sources = null;
             s_pluginRoot = string.Empty;
             s_directoryFingerprint = string.Empty;
             s_activeFingerprint = string.Empty;
@@ -346,7 +313,7 @@ public static class PluginManager
 
     private static void PublishContributors(PluginScanResult scan)
         => ProjectSettingsManager.SetContributors(
-            PluginArchiveService.GetActivatableCandidates(scan)
+            PluginSourceService.GetActivatableCandidates(scan)
                 .Select(static candidate => new ProjectSettingsContributor(
                     candidate.manifest.pluginId,
                     candidate.manifest.dependencies,
@@ -379,7 +346,7 @@ public static class PluginManager
         try
         {
             AssetManager.ReplaceSourceMounts(
-                [project, .. PluginArchiveService.GetActivatableMounts(initialScan)]);
+                [project, .. PluginSourceService.GetActivatableMounts(initialScan)]);
             PluginCatalog.Activate(initialScan);
             PublishContributors(initialScan);
             ProjectSettingsManager.RebuildCurrent(allowUnresolvedContributions: true);
@@ -416,7 +383,7 @@ public static class PluginManager
                 initialScan.candidates,
                 [
                     .. initialScan.diagnostics,
-                    new PluginArchiveDiagnostic(
+                    new PluginDiagnostic(
                         s_pluginRoot,
                         $"Initial Plugin candidate activation failed and was isolated: {candidateFailure.Message}")
                 ]);
@@ -445,10 +412,10 @@ public static class PluginManager
 
     private static bool RequiresCodeReload(PluginScanResult previous, PluginScanResult candidate)
     {
-        Dictionary<string, string> oldCode = PluginArchiveService.GetActivatableCandidates(previous)
+        Dictionary<string, string> oldCode = PluginSourceService.GetActivatableCandidates(previous)
             .Where(static plugin => plugin.containsCode)
             .ToDictionary(static plugin => plugin.manifest.pluginId, static plugin => plugin.contentHash, StringComparer.Ordinal);
-        Dictionary<string, string> newCode = PluginArchiveService.GetActivatableCandidates(candidate)
+        Dictionary<string, string> newCode = PluginSourceService.GetActivatableCandidates(candidate)
             .Where(static plugin => plugin.containsCode)
             .ToDictionary(static plugin => plugin.manifest.pluginId, static plugin => plugin.contentHash, StringComparer.Ordinal);
         return oldCode.Count != newCode.Count
@@ -459,7 +426,7 @@ public static class PluginManager
     private static string ComputeActiveFingerprint(PluginScanResult scan)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        foreach (PluginArchiveCandidate candidate in PluginArchiveService.GetActivatableCandidates(scan))
+        foreach (PluginCandidate candidate in PluginSourceService.GetActivatableCandidates(scan))
         {
             hash.AppendData(Encoding.UTF8.GetBytes(candidate.manifest.pluginId));
             hash.AppendData(Encoding.UTF8.GetBytes(candidate.contentHash));
@@ -471,13 +438,38 @@ public static class PluginManager
     {
         Directory.CreateDirectory(pluginRoot);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        foreach (string path in Directory.GetFiles(pluginRoot, "*.zip", SearchOption.TopDirectoryOnly)
-                     .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase))
+        var paths = new List<string>();
+        var pending = new Stack<string>();
+        pending.Push(pluginRoot);
+        while (pending.Count > 0)
         {
-            FileInfo info = new(path);
-            hash.AppendData(Encoding.UTF8.GetBytes(Path.GetFileName(path)));
-            hash.AppendData(BitConverter.GetBytes(info.Length));
-            hash.AppendData(BitConverter.GetBytes(info.LastWriteTimeUtc.Ticks));
+            string directory = pending.Pop();
+            foreach (string path in Directory.EnumerateFileSystemEntries(directory))
+            {
+                paths.Add(path);
+                FileAttributes attributes = System.IO.File.GetAttributes(path);
+                if ((attributes & FileAttributes.Directory) != 0
+                    && (attributes & FileAttributes.ReparsePoint) == 0)
+                {
+                    pending.Push(path);
+                }
+            }
+        }
+        foreach (string path in paths.OrderBy(static value => value, StringComparer.OrdinalIgnoreCase))
+        {
+            FileAttributes attributes = System.IO.File.GetAttributes(path);
+            string relative = Path.GetRelativePath(pluginRoot, path).Replace('\\', '/');
+            hash.AppendData(Encoding.UTF8.GetBytes(relative));
+            hash.AppendData(BitConverter.GetBytes((int)attributes));
+            if ((attributes & FileAttributes.Directory) != 0)
+            {
+                DirectoryInfo directory = new(path);
+                hash.AppendData(BitConverter.GetBytes(directory.LastWriteTimeUtc.Ticks));
+                continue;
+            }
+            FileInfo file = new(path);
+            hash.AppendData(BitConverter.GetBytes(file.Length));
+            hash.AppendData(BitConverter.GetBytes(file.LastWriteTimeUtc.Ticks));
         }
         return Convert.ToHexString(hash.GetHashAndReset());
     }

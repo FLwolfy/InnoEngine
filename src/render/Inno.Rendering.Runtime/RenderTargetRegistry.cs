@@ -10,6 +10,8 @@ public sealed class RenderTargetRegistry : IDisposable
     private readonly IRenderDevice m_device;
     private readonly Dictionary<RenderTexture, TargetEntry> m_targets = [];
     private readonly HashSet<RenderTexture> m_pendingReleases = [];
+    private readonly List<PersistentTextureHandle> m_retireNextFrame = [];
+    private readonly List<PersistentTextureHandle> m_retireFollowingFrame = [];
     private bool m_disposed;
 
     /// <summary>Creates a target registry for one device generation.</summary>
@@ -36,7 +38,7 @@ public sealed class RenderTargetRegistry : IDisposable
         {
             PersistentTextureHandle next = m_device.CreateTexture(target.descriptor, target.name);
             if (entry is not null)
-                m_device.DestroyTexture(entry.handle);
+                Retire(entry.handle);
             entry = new TargetEntry(target.contentRevision, target.descriptor, next);
             m_targets[target] = entry;
         }
@@ -62,7 +64,7 @@ public sealed class RenderTargetRegistry : IDisposable
         return false;
     }
 
-    /// <summary>Queues one target for destruction at the next frame safety point.</summary>
+    /// <summary>Queues one target for frame-safe retirement.</summary>
     /// <param name="target">Target no longer used by request producers.</param>
     public void Release(RenderTexture target)
     {
@@ -71,14 +73,24 @@ public sealed class RenderTargetRegistry : IDisposable
         m_pendingReleases.Add(target);
     }
 
-    /// <summary>Applies queued target releases at a frame safety point.</summary>
+    /// <summary>Advances queued target releases at a frame safety point.</summary>
+    /// <remarks>
+    /// Retired textures remain active across one complete submitted frame so a
+    /// prepared UI or presentation packet cannot observe an invalidated handle.
+    /// </remarks>
     public void PrepareFrame()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
+        foreach (PersistentTextureHandle texture in m_retireFollowingFrame)
+            m_device.DestroyTexture(texture);
+        m_retireFollowingFrame.Clear();
+        m_retireFollowingFrame.AddRange(m_retireNextFrame);
+        m_retireNextFrame.Clear();
+
         foreach (RenderTexture target in m_pendingReleases)
         {
             if (m_targets.Remove(target, out TargetEntry? entry))
-                m_device.DestroyTexture(entry.handle);
+                Retire(entry.handle);
         }
         m_pendingReleases.Clear();
     }
@@ -90,9 +102,21 @@ public sealed class RenderTargetRegistry : IDisposable
             return;
         foreach (TargetEntry entry in m_targets.Values)
             m_device.DestroyTexture(entry.handle);
+        foreach (PersistentTextureHandle texture in m_retireNextFrame)
+            m_device.DestroyTexture(texture);
+        foreach (PersistentTextureHandle texture in m_retireFollowingFrame)
+            m_device.DestroyTexture(texture);
         m_targets.Clear();
         m_pendingReleases.Clear();
+        m_retireNextFrame.Clear();
+        m_retireFollowingFrame.Clear();
         m_disposed = true;
+    }
+
+    private void Retire(PersistentTextureHandle texture)
+    {
+        if (texture.isValid)
+            m_retireNextFrame.Add(texture);
     }
 
     private sealed record TargetEntry(

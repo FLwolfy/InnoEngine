@@ -3,6 +3,7 @@ using System.Runtime.Loader;
 using System.Threading;
 
 using Inno.Assets.Core;
+using Inno.Core.Scripting;
 
 namespace Inno.Assets.Serialization;
 
@@ -11,6 +12,7 @@ namespace Inno.Assets.Serialization;
 /// </summary>
 public static class AssetSerializationServices
 {
+    private static readonly AsyncLocal<Func<Guid, Guid, string, Type, string, AssetObject>?> S_SCOPED_RESOLVER = new();
     private static Func<Guid, Guid, string, Type, string, AssetObject>? s_referenceResolver;
 
     /// <summary>
@@ -23,20 +25,30 @@ public static class AssetSerializationServices
     public static void SetReferenceResolver(
         Func<Guid, Guid, string, Type, string, AssetObject>? referenceResolver)
     {
-        if (referenceResolver is not null)
-        {
-            foreach (Delegate handler in referenceResolver.GetInvocationList())
-            {
-                if (IsCollectible(handler.Method.DeclaringType) ||
-                    IsCollectible(handler.Target?.GetType()))
-                {
-                    throw new ArgumentException(
-                        "The process-wide asset reference resolver cannot retain a collectible target or method.",
-                        nameof(referenceResolver));
-                }
-            }
-        }
+        ValidateResolver(referenceResolver, nameof(referenceResolver));
         Volatile.Write(ref s_referenceResolver, referenceResolver);
+    }
+
+    /// <summary>
+    /// Temporarily selects an asset-reference resolver for the current asynchronous operation.
+    /// </summary>
+    /// <param name="referenceResolver">Resolver that owns the isolated asset generation being processed.</param>
+    /// <returns>A scope that restores the previous resolver when disposed.</returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="referenceResolver"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the resolver retains a collectible assembly generation.
+    /// </exception>
+    [ScriptingApiIgnore]
+    public static IDisposable PushReferenceResolver(
+        Func<Guid, Guid, string, Type, string, AssetObject> referenceResolver)
+    {
+        ArgumentNullException.ThrowIfNull(referenceResolver);
+        ValidateResolver(referenceResolver, nameof(referenceResolver));
+        Func<Guid, Guid, string, Type, string, AssetObject>? previous = S_SCOPED_RESOLVER.Value;
+        S_SCOPED_RESOLVER.Value = referenceResolver;
+        return new ReferenceResolverScope(referenceResolver, previous);
     }
 
     internal static AssetObject ResolveReference(
@@ -47,7 +59,7 @@ public static class AssetSerializationServices
         string propertyPath)
     {
         Func<Guid, Guid, string, Type, string, AssetObject>? referenceResolver =
-            Volatile.Read(ref s_referenceResolver);
+            S_SCOPED_RESOLVER.Value ?? Volatile.Read(ref s_referenceResolver);
         if (referenceResolver is null)
         {
             throw new InvalidOperationException(
@@ -65,4 +77,39 @@ public static class AssetSerializationServices
     private static bool IsCollectible(Type? type)
         => type is not null &&
            AssemblyLoadContext.GetLoadContext(type.Assembly) is { IsCollectible: true };
+
+    private static void ValidateResolver(
+        Func<Guid, Guid, string, Type, string, AssetObject>? referenceResolver,
+        string parameterName)
+    {
+        if (referenceResolver is null)
+            return;
+        foreach (Delegate handler in referenceResolver.GetInvocationList())
+        {
+            if (!IsCollectible(handler.Method.DeclaringType) && !IsCollectible(handler.Target?.GetType()))
+                continue;
+            throw new ArgumentException(
+                "An asset reference resolver cannot retain a collectible target or method.",
+                parameterName);
+        }
+    }
+
+    private sealed class ReferenceResolverScope(
+        Func<Guid, Guid, string, Type, string, AssetObject> current,
+        Func<Guid, Guid, string, Type, string, AssetObject>? previous) : IDisposable
+    {
+        private int m_disposed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref m_disposed, 1) != 0)
+                return;
+            if (!ReferenceEquals(S_SCOPED_RESOLVER.Value, current))
+            {
+                throw new InvalidOperationException(
+                    "Asset reference resolver scopes must be disposed in reverse creation order.");
+            }
+            S_SCOPED_RESOLVER.Value = previous;
+        }
+    }
 }

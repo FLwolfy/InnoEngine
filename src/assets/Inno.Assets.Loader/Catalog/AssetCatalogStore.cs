@@ -9,17 +9,17 @@ namespace Inno.Assets.Loader;
 
 internal sealed class AssetCatalogStore
 {
-    private readonly string m_snapshotPath;
-    private readonly string m_journalPath;
+    private string m_databaseRoot;
+    private string m_snapshotPath;
+    private string m_journalPath;
     private long m_revision;
 
     internal AssetCatalogStore(string libraryRoot)
     {
-        string root = Path.Combine(libraryRoot, "AssetDatabase");
-        Directory.CreateDirectory(root);
-        Directory.CreateDirectory(Path.Combine(root, "Diagnostics"));
-        m_snapshotPath = Path.Combine(root, "Catalog.snapshot");
-        m_journalPath = Path.Combine(root, "Catalog.journal");
+        m_databaseRoot = string.Empty;
+        m_snapshotPath = string.Empty;
+        m_journalPath = string.Empty;
+        Bind(libraryRoot);
     }
 
     internal AssetMeta[] Load()
@@ -55,6 +55,67 @@ internal sealed class AssetCatalogStore
         if (IOFile.Exists(m_journalPath))
             IOFile.Delete(m_journalPath);
     }
+
+    internal void CopyLatestTo(string destinationLibraryRoot)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationLibraryRoot);
+        string? sourcePath = LatestPathOrNull();
+        if (sourcePath is null)
+            return;
+        string destinationRoot = GetDatabaseRoot(destinationLibraryRoot);
+        Directory.CreateDirectory(destinationRoot);
+        AssetFileTransaction.WriteAtomic(
+            Path.Combine(destinationRoot, "Catalog.snapshot"),
+            IOFile.ReadAllBytes(sourcePath));
+    }
+
+    internal void PromoteTo(string destinationLibraryRoot)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationLibraryRoot);
+        string destinationRoot = GetDatabaseRoot(destinationLibraryRoot);
+        string destinationSnapshot = Path.Combine(destinationRoot, "Catalog.snapshot");
+        string destinationJournal = Path.Combine(destinationRoot, "Catalog.journal");
+        string? sourcePath = LatestPathOrNull();
+        Directory.CreateDirectory(destinationRoot);
+        if (sourcePath is null)
+        {
+            if (IOFile.Exists(destinationSnapshot))
+                IOFile.Delete(destinationSnapshot);
+            if (IOFile.Exists(destinationJournal))
+                IOFile.Delete(destinationJournal);
+        }
+        else
+        {
+            byte[] bytes = IOFile.ReadAllBytes(sourcePath);
+            AssetFileTransaction.WriteAtomic(destinationSnapshot, bytes);
+            if (IOFile.Exists(destinationJournal))
+                IOFile.Delete(destinationJournal);
+        }
+
+        m_databaseRoot = destinationRoot;
+        m_snapshotPath = destinationSnapshot;
+        m_journalPath = destinationJournal;
+    }
+
+    private void Bind(string libraryRoot)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(libraryRoot);
+        m_databaseRoot = GetDatabaseRoot(libraryRoot);
+        Directory.CreateDirectory(m_databaseRoot);
+        Directory.CreateDirectory(Path.Combine(m_databaseRoot, "Diagnostics"));
+        m_snapshotPath = Path.Combine(m_databaseRoot, "Catalog.snapshot");
+        m_journalPath = Path.Combine(m_databaseRoot, "Catalog.journal");
+    }
+
+    private string? LatestPathOrNull()
+    {
+        if (IOFile.Exists(m_journalPath))
+            return m_journalPath;
+        return IOFile.Exists(m_snapshotPath) ? m_snapshotPath : null;
+    }
+
+    private static string GetDatabaseRoot(string libraryRoot)
+        => Path.Combine(Path.GetFullPath(libraryRoot), "AssetDatabase");
 
     private static byte[][] SerializeEntries(AssetMeta[] entries)
     {

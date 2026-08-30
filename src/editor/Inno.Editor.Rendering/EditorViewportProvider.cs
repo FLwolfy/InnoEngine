@@ -1,5 +1,6 @@
 using System;
 
+using Inno.Core.Mathematics;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 using Inno.Rendering;
@@ -93,6 +94,36 @@ public sealed class EditorViewportContext
     public int pixelHeight { get; }
 }
 
+/// <summary>
+/// Describes the exact backend-neutral view and projection used to draw a viewport so host tools can manipulate
+/// selected scene transforms without knowing the provider's camera model.
+/// </summary>
+public readonly record struct EditorViewportManipulationSpace
+{
+    /// <summary>Creates a manipulation space matching one rendered viewport frame.</summary>
+    /// <param name="viewMatrix">World-to-view matrix used by the submitted frame.</param>
+    /// <param name="projectionMatrix">View-to-clip matrix used by the submitted frame.</param>
+    /// <param name="isOrthographic">Whether the projection is orthographic.</param>
+    public EditorViewportManipulationSpace(
+        Matrix viewMatrix,
+        Matrix projectionMatrix,
+        bool isOrthographic)
+    {
+        this.viewMatrix = viewMatrix;
+        this.projectionMatrix = projectionMatrix;
+        this.isOrthographic = isOrthographic;
+    }
+
+    /// <summary>Gets the world-to-view matrix used by the submitted frame.</summary>
+    public Matrix viewMatrix { get; }
+
+    /// <summary>Gets the view-to-clip matrix used by the submitted frame.</summary>
+    public Matrix projectionMatrix { get; }
+
+    /// <summary>Gets whether the submitted frame used an orthographic projection.</summary>
+    public bool isOrthographic { get; }
+}
+
 /// <summary>Returns provider-selected pipeline and frame data without exposing a GPU backend.</summary>
 public sealed class EditorViewportSubmission
 {
@@ -101,16 +132,21 @@ public sealed class EditorViewportSubmission
     /// <param name="pipeline">Provider-selected pipeline, or null for the project default.</param>
     /// <param name="targetFormat">Presentation target format expected by the pipeline.</param>
     /// <param name="priority">Ascending render scheduling priority.</param>
+    /// <param name="manipulationSpace">
+    /// Optional exact view/projection contract for host-owned transform manipulation tools.
+    /// </param>
     public EditorViewportSubmission(
         RenderFrameData data,
         RenderPipelineAsset? pipeline = null,
         RenderTextureFormat targetFormat = RenderTextureFormat.RGBA8Srgb,
-        int priority = 0)
+        int priority = 0,
+        EditorViewportManipulationSpace? manipulationSpace = null)
     {
         this.data = data ?? throw new ArgumentNullException(nameof(data));
         this.pipeline = pipeline;
         this.targetFormat = targetFormat;
         this.priority = priority;
+        this.manipulationSpace = manipulationSpace;
     }
 
     /// <summary>Gets pipeline-defined frame-only data.</summary>
@@ -124,6 +160,11 @@ public sealed class EditorViewportSubmission
 
     /// <summary>Gets ascending render scheduling priority.</summary>
     public int priority { get; }
+
+    /// <summary>
+    /// Gets the optional exact view/projection contract used by host-owned transform manipulation tools.
+    /// </summary>
+    public EditorViewportManipulationSpace? manipulationSpace { get; }
 }
 
 /// <summary>Supplies normalized pointer interaction over one rendered viewport.</summary>

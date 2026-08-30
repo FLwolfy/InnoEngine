@@ -9,9 +9,9 @@ using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
-[EditorAction(FileBrowserInteractionIds.C_EXPORT_PLUGIN, FileBrowserInteractionIds.C_AREA)]
-[EditorMenu(FileBrowserInteractionIds.C_AREA, "Export Plugin ZIP", order: 50)]
-internal sealed class ExportPluginCommand : EditorAction<AssetFileEntry>
+[EditorAction(FileBrowserInteractionIds.C_EXPORT_PLUGIN_DIRECTORY, FileBrowserInteractionIds.C_AREA)]
+[EditorMenu(FileBrowserInteractionIds.C_AREA, "Export Plugin Folder", order: 51)]
+internal sealed class ExportPluginDirectoryCommand : EditorAction<AssetFileEntry>
 {
     protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
     {
@@ -28,9 +28,9 @@ internal sealed class ExportPluginCommand : EditorAction<AssetFileEntry>
         PluginDefinitionAsset definition = AssetManager.Load<PluginDefinitionAsset>(context.target.assetPath);
         string projectRoot = Path.GetDirectoryName(AssetManager.assetRoot)
             ?? throw new InvalidOperationException("The project Assets root has no parent directory.");
-        string output = Path.Combine(projectRoot, "Plugins", definition.pluginId + ".zip");
-        string hash = PluginExportService.ExportZip(definition, output);
+        string output = Path.Combine(projectRoot, "Plugins", definition.pluginId);
+        string hash = PluginExportService.ExportDirectory(definition, output);
         _ = PluginManager.Refresh();
-        Log.Info("Exported Plugin '{0}' to '{1}' ({2}).", definition.pluginId, output, hash);
+        Log.Info("Exported editable Plugin '{0}' to '{1}' ({2}).", definition.pluginId, output, hash);
     }
 }
