@@ -9,6 +9,34 @@ namespace Inno.Core.Mathematics.Tests;
 public sealed class VectorMatrixTests
 {
     [Fact]
+    public void Vector2QuaternionTransform_PreservesLengthForZRotation()
+    {
+        Quaternion rotation = Quaternion.CreateFromAxisAngle(Vector3.FORWARD, MathF.PI * 0.5f);
+
+        Vector2 result = Vector2.Transform(Vector2.UNIT_X, rotation);
+
+        Assert.InRange(result.x, -0.00001f, 0.00001f);
+        Assert.InRange(result.y, 0.99999f, 1.00001f);
+        Assert.InRange(result.Length(), 0.99999f, 1.00001f);
+    }
+
+    [Fact]
+    public void EulerAnglesXYZ_RoundTripsCompoundRotation()
+    {
+        var source = new Vector3(0.31f, -0.47f, 0.83f);
+
+        Quaternion original = Quaternion.FromEulerAnglesXYZ(source).normalized;
+        Quaternion roundTrip = Quaternion.FromEulerAnglesXYZ(original.ToEulerAnglesXYZ()).normalized;
+
+        float alignment = MathF.Abs(
+            original.x * roundTrip.x
+            + original.y * roundTrip.y
+            + original.z * roundTrip.z
+            + original.w * roundTrip.w);
+        Assert.InRange(alignment, 0.99999f, 1.00001f);
+    }
+
+    [Fact]
     public void Vector2_LengthSquared_MatchesDot()
     {
         var v = new Vector2(3f, 4f);

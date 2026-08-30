@@ -14,6 +14,7 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
     private readonly object m_contributorLock = new();
     private readonly IRenderDevice m_device;
     private readonly IRenderDiagnosticSink m_diagnostics;
+    private readonly Func<RenderContentScope>? m_contentScopeProvider;
     private readonly RenderResourceService m_resourceService;
     private readonly RenderFrameUploadService m_uploads;
     private readonly RenderExtensionRegistry m_extensions = new();
@@ -34,16 +35,21 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
     /// <param name="contributors">Optional frame-final contributors such as an ImGui backend.</param>
     /// <param name="shaderCompiler">Optional backend-owned compiler for source Shader assets.</param>
     /// <param name="textureCompiler">Optional backend-owned compiler for artist texture sources.</param>
+    /// <param name="contentScopeProvider">
+    /// Optional host callback that supplies explicit current-frame content without coupling Rendering to Scene or documents.
+    /// </param>
     public RenderRuntimeLayer(
         IRenderDevice device,
         IRenderDiagnosticSink diagnostics,
         IEnumerable<IRenderFrameGraphContributor>? contributors = null,
         ShaderCompiler? shaderCompiler = null,
-        ITextureTargetCompiler? textureCompiler = null)
+        ITextureTargetCompiler? textureCompiler = null,
+        Func<RenderContentScope>? contentScopeProvider = null)
         : base("RenderRuntimeLayer")
     {
         m_device = device ?? throw new ArgumentNullException(nameof(device));
         m_diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
+        m_contentScopeProvider = contentScopeProvider;
         m_resourceService = new RenderResourceService(
             m_device,
             m_diagnostics,
@@ -165,8 +171,10 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
         if (!m_frameOpen || m_requestProviders is null)
             return;
 
+        RenderContentScope content = GetFrameContentScope();
         var context = new RenderRequestProviderContext(
             this,
+            content,
             m_device.capabilities,
             m_device.primaryPresentationSize,
             m_frameIndex,
@@ -185,6 +193,26 @@ public sealed class RenderRuntimeLayer : Layer, IRenderRequestSink
                     RenderDiagnosticSeverity.Error,
                     entry.id));
             }
+        }
+    }
+
+    private RenderContentScope GetFrameContentScope()
+    {
+        if (m_contentScopeProvider is null)
+            return RenderContentScope.empty;
+        try
+        {
+            return m_contentScopeProvider()
+                ?? throw new InvalidOperationException("The host content-scope provider returned null.");
+        }
+        catch (Exception exception)
+        {
+            m_diagnostics.Publish(new RenderDiagnostic(
+                "RENDER_CONTENT_SCOPE_FAILED",
+                $"The host content scope failed and an empty scope was used for this frame: {exception}",
+                RenderDiagnosticSeverity.Error,
+                "RenderRuntimeLayer"));
+            return RenderContentScope.empty;
         }
     }
 

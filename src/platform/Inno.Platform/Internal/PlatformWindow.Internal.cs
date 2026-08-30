@@ -14,6 +14,8 @@ public sealed partial class PlatformWindow
     private readonly bool m_ownsNativeWindow;
     private int m_width;
     private int m_height;
+    private int m_pixelWidth;
+    private int m_pixelHeight;
     private bool m_isClosed;
     private bool m_isFocused;
     private readonly PlatformNativeHandles m_nativeHandles;
@@ -37,6 +39,7 @@ public sealed partial class PlatformWindow
         SDL.GetWindowSize(m_window, ref currentWidth, ref currentHeight);
         m_width = currentWidth;
         m_height = currentHeight;
+        RefreshPixelSize();
         m_isFocused = ((SDLWindowFlags)SDL.GetWindowFlags(m_window) & SDLWindowFlags.InputFocus) != 0;
         m_nativeHandles = GetNativeHandles(m_window) with
         {
@@ -45,10 +48,17 @@ public sealed partial class PlatformWindow
         };
     }
 
-    internal void UpdateSize(int width, int height)
+    internal void UpdateLogicalSize(int width, int height)
     {
         m_width = width;
         m_height = height;
+        RefreshPixelSize();
+    }
+
+    internal void UpdatePixelSize(int width, int height)
+    {
+        m_pixelWidth = Math.Max(1, width);
+        m_pixelHeight = Math.Max(1, height);
     }
 
     internal void MarkClosed()
@@ -59,6 +69,15 @@ public sealed partial class PlatformWindow
     internal void UpdateFocus(bool isFocused)
     {
         m_isFocused = isFocused;
+    }
+
+    private void RefreshPixelSize()
+    {
+        var pixelWidth = 0;
+        var pixelHeight = 0;
+        SDL.GetWindowSizeInPixels(m_window, ref pixelWidth, ref pixelHeight);
+        m_pixelWidth = pixelWidth > 0 ? pixelWidth : Math.Max(1, m_width);
+        m_pixelHeight = pixelHeight > 0 ? pixelHeight : Math.Max(1, m_height);
     }
     
     public partial void RequestClose()

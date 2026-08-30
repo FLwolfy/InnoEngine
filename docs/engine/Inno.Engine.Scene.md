@@ -4,6 +4,8 @@
 
 `Inno.Engine.Scene` 提供 Scene、GameObject、Component、Transform hierarchy、GameBehavior 和 GameSystem 的运行时模型。
 
+`Transform` 除了便捷的 local/world TRS 外，还公开精确的 `localToWorldMatrix`、`worldToLocalMatrix`、`TransformPoint`、`InverseTransformPoint` 与原子 `SetWorldTransform`。`worldPosition` 与点变换统一由完整层级矩阵确定。旋转且非均匀缩放的多级层级可能包含不能由单一 world TRS 无损表示的 shear；渲染、包围盒和空间查询应优先使用矩阵/点变换 API，Inspector 与 Gizmo 的 TRS 编辑则使用原子 setter 避免三次中间重算。零缩放层级不可逆，世界到本地转换和保持世界值的重设父级会明确失败，不会静默使用 identity inverse。
+
 ## 多 Scene
 
 ```csharp

@@ -41,7 +41,7 @@ public sealed class TransformTests : IDisposable
 
         child.SetParent(parent);
 
-        Assert.Equal(worldPosition, child.worldPosition);
+        AssertEqualWithTolerance(worldPosition, child.worldPosition, 1e-5f);
         Assert.Equal(worldRotation, child.worldRotation);
         Assert.Equal(worldScale, child.worldScale);
 
@@ -81,7 +81,7 @@ public sealed class TransformTests : IDisposable
         Quaternion expectedLocalRotation = Quaternion.Inverse(parent.localRotation) * worldRotation;
         Quaternion normalizedExpectedRotation = expectedLocalRotation.normalized;
 
-        Assert.Equal(worldPosition, child.worldPosition);
+        AssertEqualWithTolerance(worldPosition, child.worldPosition, 1e-5f);
         AssertEqualWithTolerance(worldScale, child.worldScale, 1e-5f);
         Assert.Equal(Vector3.ONE, child.localScale);
         AssertEqualWithTolerance(expectedLocalPosition, child.localPosition, 1e-5f);
@@ -135,6 +135,62 @@ public sealed class TransformTests : IDisposable
 
         Assert.Same(root, child.parent);
         Assert.Same(child, grandChild.parent);
+    }
+
+    [Fact]
+    public void TransformPoint_UsesExactRotatedNonUniformParentHierarchy()
+    {
+        var scene = new GameScene("ExactHierarchy");
+        Transform parent = scene.CreateObject("Parent").GetComponent<Transform>();
+        Transform child = scene.CreateObject("Child").GetComponent<Transform>();
+        parent.localPosition = new Vector3(3f, -2f, 0f);
+        parent.localRotation = Quaternion.CreateFromAxisAngle(Vector3.FORWARD, 0.7f);
+        parent.localScale = new Vector3(3f, 0.5f, 1f);
+        child.SetParent(parent);
+        child.localPosition = new Vector3(1f, 2f, 0f);
+        child.localRotation = Quaternion.CreateFromAxisAngle(Vector3.FORWARD, -0.4f);
+        child.localScale = new Vector3(2f, 1.5f, 1f);
+        var localPoint = new Vector3(0.3f, -0.6f, 0f);
+
+        Vector3 expected = Vector3.Transform(localPoint, parent.localToWorldMatrix
+            * Matrix.CreateTranslation(child.localPosition)
+            * Matrix.CreateFromQuaternion(child.localRotation)
+            * Matrix.CreateScale(child.localScale));
+        Vector3 actual = child.TransformPoint(localPoint);
+
+        AssertEqualWithTolerance(expected, actual, 1e-5f);
+        AssertEqualWithTolerance(localPoint, child.InverseTransformPoint(actual), 1e-4f);
+    }
+
+    [Fact]
+    public void WorldPosition_UsesExactInverseUnderShearedAncestorHierarchy()
+    {
+        var scene = new GameScene("ExactWorldSetter");
+        Transform root = scene.CreateObject("Root").transform;
+        Transform parent = scene.CreateObject("Parent").transform;
+        Transform child = scene.CreateObject("Child").transform;
+        root.localRotation = Quaternion.CreateFromAxisAngle(Vector3.FORWARD, 0.65f);
+        root.localScale = new Vector3(3f, 0.4f, 1f);
+        parent.SetParent(root);
+        parent.localRotation = Quaternion.CreateFromAxisAngle(Vector3.FORWARD, -0.35f);
+        parent.localScale = new Vector3(0.8f, 2.1f, 1f);
+        child.SetParent(parent);
+        var requested = new Vector3(7f, -4f, 2f);
+
+        child.worldPosition = requested;
+
+        AssertEqualWithTolerance(requested, child.worldPosition, 1e-4f);
+        AssertEqualWithTolerance(requested, child.TransformPoint(Vector3.ZERO), 1e-4f);
+    }
+
+    [Fact]
+    public void WorldToLocal_RejectsNonInvertibleZeroScaleHierarchy()
+    {
+        var scene = new GameScene("SingularTransform");
+        Transform transform = scene.CreateObject("Zero Scale").transform;
+        transform.localScale = new Vector3(1f, 0f, 1f);
+
+        Assert.Throws<InvalidOperationException>(() => transform.InverseTransformPoint(Vector3.ONE));
     }
 
     private static void AssertEqualWithTolerance(Vector3 expected, Vector3 actual, float tolerance)

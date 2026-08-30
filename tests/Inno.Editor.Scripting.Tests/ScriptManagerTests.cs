@@ -582,6 +582,23 @@ public sealed class ScriptManagerTests : IDisposable
             try
             {
                 Assert.True(module.HasProvider(kind));
+                module.SetContentScope(
+                    "tests.viewport",
+                    new RenderContentScope(
+                    [
+                        new RenderContentReference(
+                            new RenderContentId(Guid.Parse("e331fa59-8eb7-4108-bf47-c66af6d93610")),
+                            context)
+                    ]));
+                Assert.True(module.TryConfigureNavigation(
+                    kind,
+                    "tests.viewport",
+                    320,
+                    180,
+                    out EditorViewportNavigationProfile navigationProfile),
+                    module.GetProviderError(kind));
+                Assert.Equal(EditorViewportNavigationMode.Orbit, navigationProfile.defaultMode);
+                Assert.Equal(1f, navigationProfile.focusBounds!.Value.radius);
                 Assert.True(module.TrySubmit(kind, "tests.viewport", 320, 180, out EditorViewportOutput output));
                 Assert.True(output.isReady);
                 Assert.NotNull(host.lastRequest);
@@ -603,6 +620,8 @@ public sealed class ScriptManagerTests : IDisposable
                 Assert.Equal(0f, GetStaticField<float>(providerType, "lastPointerX"));
                 Assert.Equal(1f, GetStaticField<float>(providerType, "lastPointerY"));
                 Assert.Equal(4, GetStaticField<int>(providerType, "lastPointerButton"));
+                Assert.Equal(1, GetStaticField<int>(providerType, "navigationConfigureCount"));
+                Assert.Equal(1, GetStaticField<int>(providerType, "contentCount"));
                 Assert.True(module.TryGetManipulationSpace(
                     "tests.viewport",
                     out EditorViewportManipulationSpace manipulationSpace));
@@ -4402,9 +4421,27 @@ public sealed class ScriptManagerTests : IDisposable
                     new("tests.fixture.viewport-size");
 
                 public static int toolbarDrawCount;
+                public static int navigationConfigureCount;
+                public static int contentCount;
                 public static float lastPointerX;
                 public static float lastPointerY;
                 public static int lastPointerButton;
+
+                public override EditorViewportNavigationProfile ConfigureNavigation(
+                    EditorViewportContext context)
+                {
+                    navigationConfigureCount++;
+                    contentCount = context.content.contents.Count;
+                    return new EditorViewportNavigationProfile(
+                        new EditorViewportNavigationProfileId("tests.fixture.navigation"),
+                        EditorViewportNavigationCapabilities.Orbit
+                            | EditorViewportNavigationCapabilities.Fly
+                            | EditorViewportNavigationCapabilities.FrameSelection,
+                        EditorViewportNavigationMode.Orbit)
+                    {
+                        focusBounds = new EditorViewportFocusBounds(Vector3.ZERO, 1f)
+                    };
+                }
 
                 public override EditorViewportSubmission Build(EditorViewportContext context)
                 {

@@ -74,7 +74,7 @@ public sealed unsafe partial class BgfxDevice
         resource.frameBuffer = replacement;
         resource.width = width;
         resource.height = height;
-        bgfx.destroy_frame_buffer(previous);
+        EnqueueDestroy(DeferredResource.ForFrameBuffer(previous));
     }
 
     /// <summary>Queues a detached-window presentation surface for GPU-safe destruction.</summary>
@@ -89,7 +89,7 @@ public sealed unsafe partial class BgfxDevice
             throw new ArgumentException("Presentation surface is not active on this device.", nameof(surface));
         }
 
-        bgfx.destroy_frame_buffer(resource.frameBuffer);
+        EnqueueDestroy(DeferredResource.ForFrameBuffer(resource.frameBuffer));
     }
 
     private static bgfx.FrameBufferHandle CreateNativeWindowSurface(

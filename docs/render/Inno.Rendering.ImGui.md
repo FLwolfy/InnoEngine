@@ -22,6 +22,8 @@ Editor 主 backbuffer 使用 sRGB 编码。ImGui packed vertex color 按显示�
 
 每帧先 `PrepareFrame` 捕获 draw packet，再由 `AddRenderPasses` 贡献主窗口与 viewport Pass；renderer 自身不调用 `bgfx.frame`。窗口 resize、texture token 和 framebuffer 的创建/替换/释放只在安全点发生。
 
+关闭时，Platform 先销毁 native ImGui viewport，`BgfxImGuiRenderer.Dispose()` 再标记 renderer-owned texture、vertex/index buffer、pipeline 与 surface；宿主随后开启一个 maintenance frame 执行 `PrepareFrame`，将这些资源送入设备延迟销毁队列，最后才允许 `BgfxDevice.Dispose()` 排空队列并关闭 BGFX。该顺序不依赖用户 Pipeline，也不会把 ImGui GPU 状态留给 Plugin generation。
+
 ## 相邻页面
 
 - [Inno.Rendering.Bgfx](Inno.Rendering.Bgfx.md)：设备、surface 与 Encoder 实现。

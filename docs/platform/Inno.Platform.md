@@ -27,7 +27,7 @@
 
 ## PlatformWindow 与 native handle
 
-窗口公开 `windowId`、`title`、`width`、`height`、`isClosed`、`isFocused`、`RequestClose()`、`Dispose()`。输入 focus 改变时，Platform 同时更新 `isFocused` 并产生 `WindowFocusChangedEvent`。`nativeHandles` 除操作系统窗口/display handle 外，还提供：
+窗口公开 `windowId`、`title`、`width`、`height`、`pixelWidth`、`pixelHeight`、`isClosed`、`isFocused`、`RequestClose()`、`Dispose()`。`width`/`height` 使用平台无关的逻辑单位，布局与输入坐标使用这组值；`pixelWidth`/`pixelHeight` 是 GPU backbuffer 和截图使用的物理 drawable 像素。Retina/HiDPI 下两组尺寸可以不同，Pixel Size 事件不会覆盖逻辑尺寸。输入 focus 改变时，Platform 同时更新 `isFocused` 并产生 `WindowFocusChangedEvent`。`nativeHandles` 除操作系统窗口/display handle 外，还提供：
 
 - `backendName`：当前窗口后端名。
 - `backendWindowHandle`：后端自己的不透明窗口 handle。

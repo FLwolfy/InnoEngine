@@ -1,9 +1,13 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 
 using Inno.Editor.Core;
 using Inno.Editor.Rendering;
+using Inno.Editor.Scene;
 using Inno.Editor.Settings;
+using Inno.Engine.Scene;
+using Inno.Rendering;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.GameView;
@@ -16,12 +20,17 @@ internal sealed class GameViewPanel : EditorPanel
     private static readonly EditorViewportKindId S_KIND = new("inno.editor.viewport.game");
 
     private readonly EditorRenderingModule m_rendering;
+    private readonly IEditorSceneWorkspace m_workspace;
     private readonly EditorSettings m_settings;
     private Vector4 m_backgroundColor;
 
-    internal GameViewPanel(EditorRenderingModule rendering, EditorSettings settings)
+    internal GameViewPanel(
+        EditorRenderingModule rendering,
+        IEditorSceneWorkspace workspace,
+        EditorSettings settings)
     {
         m_rendering = rendering ?? throw new ArgumentNullException(nameof(rendering));
+        m_workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         m_settings = settings ?? throw new ArgumentNullException(nameof(settings));
     }
 
@@ -42,6 +51,7 @@ internal sealed class GameViewPanel : EditorPanel
                 m_backgroundColor.Y,
                 m_backgroundColor.Z,
                 m_backgroundColor.W)));
+        m_rendering.SetContentScope(C_VIEWPORT_ID, CreateContentScope());
         if (!m_rendering.TrySubmit(S_KIND, C_VIEWPORT_ID, width, height, out EditorViewportOutput output))
         {
             DrawUnavailable(
@@ -75,6 +85,22 @@ internal sealed class GameViewPanel : EditorPanel
 
     private void ApplySettings(EditorSettings settings)
         => m_backgroundColor = GameViewBackgroundSetting.Read(settings);
+
+    private RenderContentScope CreateContentScope()
+    {
+        var contents = new List<RenderContentReference>(m_workspace.scenes.Count);
+        RenderContentId? activeContent = null;
+        foreach (GameScene scene in m_workspace.scenes)
+        {
+            if (scene.isDestroyed)
+                continue;
+            var contentId = new RenderContentId(scene.identity.persistentId);
+            contents.Add(new RenderContentReference(contentId, scene));
+            if (ReferenceEquals(scene, m_workspace.activeScene))
+                activeContent = contentId;
+        }
+        return new RenderContentScope(contents, activeContent);
+    }
 
     private void DrawUnavailable(Vector2 size, string message)
     {

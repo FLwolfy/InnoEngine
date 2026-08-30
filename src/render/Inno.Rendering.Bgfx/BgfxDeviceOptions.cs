@@ -19,19 +19,19 @@ public sealed class BgfxDeviceOptions
     /// <summary>Gets or sets the platform window used as the main swapchain surface.</summary>
     public PlatformWindow? window { get; set; }
 
-    /// <summary>Gets or sets initial backbuffer width when no window supplies one.</summary>
+    /// <summary>Gets or sets the initial backbuffer width in physical pixels when no window supplies one.</summary>
     public int backbufferWidth
     {
-        get => window?.width ?? m_backbufferWidth;
+        get => window?.pixelWidth ?? m_backbufferWidth;
         set => m_backbufferWidth = value > 0
             ? value
             : throw new ArgumentOutOfRangeException(nameof(value));
     }
 
-    /// <summary>Gets or sets initial backbuffer height when no window supplies one.</summary>
+    /// <summary>Gets or sets the initial backbuffer height in physical pixels when no window supplies one.</summary>
     public int backbufferHeight
     {
-        get => window?.height ?? m_backbufferHeight;
+        get => window?.pixelHeight ?? m_backbufferHeight;
         set => m_backbufferHeight = value > 0
             ? value
             : throw new ArgumentOutOfRangeException(nameof(value));

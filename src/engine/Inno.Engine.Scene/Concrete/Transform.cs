@@ -23,6 +23,7 @@ public sealed class Transform : GameComponent
     private Vector3 m_worldPosition = Vector3.ZERO;
     private Quaternion m_worldRotation = Quaternion.identity;
     private Vector3 m_worldScale = Vector3.ONE;
+    private Matrix m_localToWorldMatrix = Matrix.identity;
 
     /// <summary>
     /// Creates a transform with identity local values.
@@ -101,6 +102,20 @@ public sealed class Transform : GameComponent
         set => ApplyWorld(m_worldPosition, m_worldRotation, value);
     }
 
+    /// <summary>Gets the exact local-to-world matrix, including the complete parent hierarchy.</summary>
+    public Matrix localToWorldMatrix => m_localToWorldMatrix;
+
+    /// <summary>Gets the inverse of the exact local-to-world matrix.</summary>
+    /// <exception cref="InvalidOperationException">Thrown when a zero-scale hierarchy is not invertible.</exception>
+    public Matrix worldToLocalMatrix
+    {
+        get
+        {
+            EnsureInvertible(m_localToWorldMatrix);
+            return Matrix.Invert(m_localToWorldMatrix);
+        }
+    }
+
     /// <summary>
     /// Gets the parent transform, or <see langword="null"/> for a scene-level object.
     /// </summary>
@@ -124,6 +139,9 @@ public sealed class Transform : GameComponent
     /// Sets the parent while preserving this transform's world-space values.
     /// </summary>
     /// <param name="parent">New parent, or <see langword="null"/> to move to scene level.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown for hierarchy cycles, cross-scene parents, or a non-invertible parent hierarchy.
+    /// </exception>
     public void SetParent(Transform? parent)
         => gameObject.scene.SetParent(this, parent, worldPositionStays: true);
 
@@ -133,6 +151,25 @@ public sealed class Transform : GameComponent
     /// <param name="siblingIndex">Requested zero-based sibling index.</param>
     public void SetSiblingIndex(int siblingIndex)
         => gameObject.scene.SetSiblingIndex(this, siblingIndex);
+
+    /// <summary>Atomically applies world-space translation, rotation, and scale.</summary>
+    /// <param name="position">Requested world-space translation.</param>
+    /// <param name="rotation">Requested world-space rotation.</param>
+    /// <param name="scale">Requested world-space scale.</param>
+    public void SetWorldTransform(Vector3 position, Quaternion rotation, Vector3 scale)
+        => ApplyWorld(position, rotation.normalized, scale);
+
+    /// <summary>Transforms a local-space point through the complete parent hierarchy.</summary>
+    /// <param name="point">Point expressed in this transform's local space.</param>
+    /// <returns>The corresponding world-space point.</returns>
+    public Vector3 TransformPoint(Vector3 point)
+        => Vector3.Transform(point, m_localToWorldMatrix);
+
+    /// <summary>Transforms a world-space point into this transform's local space.</summary>
+    /// <param name="point">Point expressed in world space.</param>
+    /// <returns>The corresponding local-space point.</returns>
+    public Vector3 InverseTransformPoint(Vector3 point)
+        => Vector3.Transform(point, worldToLocalMatrix);
 
     /// <inheritdoc />
     protected override void Reset()
@@ -183,14 +220,10 @@ public sealed class Transform : GameComponent
         else
         {
             m_parent.RecomputeWorldFromLocal(notifyChildren: false);
+            Matrix parentWorldToLocal = m_parent.worldToLocalMatrix;
             Vector3 parentScale = m_parent.m_worldScale;
             Quaternion inverseParentRotation = Quaternion.Inverse(m_parent.m_worldRotation);
-            Vector3 delta = position - m_parent.m_worldPosition;
-            Vector3 localDelta = Vector3.Transform(delta, inverseParentRotation);
-            m_localPosition = new Vector3(
-                SafeDivide(localDelta.x, parentScale.x),
-                SafeDivide(localDelta.y, parentScale.y),
-                SafeDivide(localDelta.z, parentScale.z));
+            m_localPosition = Vector3.Transform(position, parentWorldToLocal);
             m_localRotation = (inverseParentRotation * rotation).normalized;
             m_localScale = new Vector3(
                 SafeDivide(scale.x, parentScale.x),
@@ -198,28 +231,19 @@ public sealed class Transform : GameComponent
                 SafeDivide(scale.z, parentScale.z));
         }
 
-        m_worldPosition = position;
-        m_worldRotation = rotation.normalized;
-        m_worldScale = scale;
-        NotifyChildrenWorldChanged();
+        RecomputeWorldFromLocal();
     }
 
     internal void RecomputeWorldFromLocal(bool notifyChildren = true)
     {
         if (m_parent is null)
         {
-            m_worldPosition = m_localPosition;
             m_worldRotation = m_localRotation.normalized;
             m_worldScale = m_localScale;
         }
         else
         {
             m_parent.RecomputeWorldFromLocal(notifyChildren: false);
-            Vector3 scaled = new(
-                m_localPosition.x * m_parent.m_worldScale.x,
-                m_localPosition.y * m_parent.m_worldScale.y,
-                m_localPosition.z * m_parent.m_worldScale.z);
-            m_worldPosition = m_parent.m_worldPosition + Vector3.Transform(scaled, m_parent.m_worldRotation);
             m_worldRotation = (m_parent.m_worldRotation * m_localRotation).normalized;
             m_worldScale = new Vector3(
                 m_localScale.x * m_parent.m_worldScale.x,
@@ -227,8 +251,24 @@ public sealed class Transform : GameComponent
                 m_localScale.z * m_parent.m_worldScale.z);
         }
 
+        RecomputeMatrixFromLocal();
+        m_worldPosition = new Vector3(
+            m_localToWorldMatrix.m14,
+            m_localToWorldMatrix.m24,
+            m_localToWorldMatrix.m34);
+
         if (notifyChildren)
             NotifyChildrenWorldChanged();
+    }
+
+    private void RecomputeMatrixFromLocal()
+    {
+        Matrix localMatrix = Matrix.CreateTranslation(m_localPosition)
+            * Matrix.CreateFromQuaternion(m_localRotation)
+            * Matrix.CreateScale(m_localScale);
+        m_localToWorldMatrix = m_parent is null
+            ? localMatrix
+            : m_parent.m_localToWorldMatrix * localMatrix;
     }
 
     private void NotifyChildrenWorldChanged()
@@ -239,4 +279,13 @@ public sealed class Transform : GameComponent
 
     private static float SafeDivide(float numerator, float denominator)
         => MathHelper.AlmostEquals(denominator, 0f) ? 0f : numerator / denominator;
+
+    private static void EnsureInvertible(Matrix matrix)
+    {
+        if (MathF.Abs(Matrix.Determinant(matrix)) < MathHelper.C_TOLERANCE)
+        {
+            throw new InvalidOperationException(
+                "A transform hierarchy with zero scale cannot be converted from world space.");
+        }
+    }
 }

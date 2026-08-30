@@ -5,6 +5,7 @@ using System.Numerics;
 using Inno.Core.Scripting;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
+using Inno.Rendering;
 using EngineColor = Inno.Core.Mathematics.Color;
 
 namespace Inno.Editor.Rendering;
@@ -13,7 +14,8 @@ namespace Inno.Editor.Rendering;
 [EditorModule("rendering.viewports", order: 175)]
 public sealed class EditorRenderingModule : EditorModule
 {
-    private readonly Dictionary<string, EditorViewportCamera> m_cameras = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, EditorViewportNavigationState> m_navigationStates = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, RenderContentScope> m_contentScopes = new(StringComparer.Ordinal);
     private readonly Dictionary<EditorViewportKindId, string> m_providerErrors = [];
     private readonly Dictionary<string, EditorViewportManipulationSpace> m_manipulationSpaces =
         new(StringComparer.Ordinal);
@@ -46,19 +48,65 @@ public sealed class EditorRenderingModule : EditorModule
     public string? GetProviderError(EditorViewportKindId kind)
         => m_providerErrors.GetValueOrDefault(kind);
 
-    /// <summary>Gets the host-owned camera state for one stable Editor viewport.</summary>
+    /// <summary>Gets the host-owned neutral navigation state for one stable Editor viewport.</summary>
     /// <param name="viewportId">Stable panel viewport identity.</param>
-    /// <returns>The reusable camera state owned by the Editor host.</returns>
+    /// <returns>The reusable navigation state owned by the Editor host.</returns>
     [ScriptingApiIgnore]
-    public EditorViewportCamera GetCamera(string viewportId)
+    public EditorViewportNavigationState GetNavigationState(string viewportId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(viewportId);
-        if (!m_cameras.TryGetValue(viewportId, out EditorViewportCamera? camera))
+        if (!m_navigationStates.TryGetValue(viewportId, out EditorViewportNavigationState? state))
         {
-            camera = new EditorViewportCamera();
-            m_cameras.Add(viewportId, camera);
+            state = new EditorViewportNavigationState();
+            m_navigationStates.Add(viewportId, state);
         }
-        return camera;
+        return state;
+    }
+
+    /// <summary>Sets the explicit ordered host content visible to one Editor viewport.</summary>
+    /// <param name="viewportId">Stable panel viewport identity.</param>
+    /// <param name="content">Current frame-safe content scope.</param>
+    [ScriptingApiIgnore]
+    public void SetContentScope(string viewportId, RenderContentScope content)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(viewportId);
+        m_contentScopes[viewportId] = content ?? throw new ArgumentNullException(nameof(content));
+    }
+
+    /// <summary>Queries the active provider's navigation contract before viewport input is processed.</summary>
+    /// <param name="kind">Open viewport purpose.</param>
+    /// <param name="viewportId">Stable panel viewport identity.</param>
+    /// <param name="pixelWidth">Positive target width.</param>
+    /// <param name="pixelHeight">Positive target height.</param>
+    /// <param name="profile">Receives the active provider profile.</param>
+    /// <returns>True when a provider returned a usable navigation profile.</returns>
+    public bool TryConfigureNavigation(
+        EditorViewportKindId kind,
+        string viewportId,
+        int pixelWidth,
+        int pixelHeight,
+        out EditorViewportNavigationProfile profile)
+    {
+        profile = EditorViewportNavigationProfile.disabled;
+        if (!TryCreateContext(kind, viewportId, pixelWidth, pixelHeight, out EditorViewportContext? context)
+            || !m_providers.providers.byKind.TryGetValue(kind, out EditorViewportProviderRegistry.Registration? registration))
+        {
+            return false;
+        }
+        try
+        {
+            profile = registration.provider.ConfigureNavigation(context!)
+                ?? throw new InvalidOperationException("Viewport provider returned a null navigation profile.");
+            m_providerErrors.Remove(kind);
+            return profile.id.isValid;
+        }
+        catch (Exception exception)
+        {
+            m_providerErrors[kind] =
+                $"Viewport provider '{registration.attribute.id}' navigation failed: {exception.Message}";
+            profile = EditorViewportNavigationProfile.disabled;
+            return false;
+        }
     }
 
     /// <summary>Sets presentation preferences supplied to the provider for one Editor viewport.</summary>
@@ -208,6 +256,7 @@ public sealed class EditorRenderingModule : EditorModule
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(viewportId);
         m_manipulationSpaces.Remove(viewportId);
+        m_contentScopes.Remove(viewportId);
         m_host.Release(viewportId);
     }
 
@@ -224,7 +273,8 @@ public sealed class EditorRenderingModule : EditorModule
         _ = context;
         m_context = null;
         m_host.ReleaseAll();
-        m_cameras.Clear();
+        m_navigationStates.Clear();
+        m_contentScopes.Clear();
         m_providerErrors.Clear();
         m_manipulationSpaces.Clear();
         m_presentations.Clear();
@@ -234,7 +284,8 @@ public sealed class EditorRenderingModule : EditorModule
     protected override void OnDispose()
     {
         m_providers.Dispose();
-        m_cameras.Clear();
+        m_navigationStates.Clear();
+        m_contentScopes.Clear();
         m_manipulationSpaces.Clear();
         m_presentations.Clear();
         m_host.ReleaseAll();
@@ -262,7 +313,8 @@ public sealed class EditorRenderingModule : EditorModule
             viewportId,
             pixelWidth,
             pixelHeight,
-            GetCamera(viewportId),
+            GetNavigationState(viewportId),
+            m_contentScopes.GetValueOrDefault(viewportId, RenderContentScope.empty),
             m_presentations.GetValueOrDefault(
                 viewportId,
                 new EditorViewportPresentation(EngineColor.DARKGRAY)));

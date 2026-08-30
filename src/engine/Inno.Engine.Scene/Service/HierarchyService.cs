@@ -44,6 +44,13 @@ internal sealed class HierarchyService
             throw new InvalidOperationException("Transforms from different scenes cannot share a hierarchy.");
         if (ReferenceEquals(transform.parent, parent))
             return;
+        if (worldPositionStays
+            && parent is not null
+            && MathF.Abs(Matrix.Determinant(parent.localToWorldMatrix)) < MathHelper.C_TOLERANCE)
+        {
+            throw new InvalidOperationException(
+                "A transform cannot preserve world space under a parent hierarchy with zero scale.");
+        }
 
         Vector3 worldPosition = transform.worldPosition;
         Quaternion worldRotation = transform.worldRotation;

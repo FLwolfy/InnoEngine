@@ -8,6 +8,7 @@ using Inno.Core.Events;
 using Inno.Core.Framework;
 using Inno.Core.Logging;
 using Inno.Editor.Core;
+using Inno.Engine.Scene;
 using Inno.Platform;
 using Inno.Platform.ImGui;
 using Inno.Rendering;
@@ -153,7 +154,8 @@ internal sealed class EditorHost : IDisposable
                 renderDiagnostics,
                 contributors: [bgfxImGui],
                 shaderCompiler,
-                textureCompiler);
+                textureCompiler,
+                CreateRenderContentScope);
             var renderingHost = resources.Acquire(
                 () => new EditorRenderingHostService(renderingLayer, bgfxImGui, imgui),
                 static service => service.Dispose());
@@ -208,6 +210,22 @@ internal sealed class EditorHost : IDisposable
             resources.Dispose();
             throw;
         }
+    }
+
+    private static RenderContentScope CreateRenderContentScope()
+    {
+        IReadOnlyList<GameScene> scenes = SceneManager.loadedScenes;
+        var contents = new RenderContentReference[scenes.Count];
+        RenderContentId? activeContent = null;
+        for (int index = 0; index < scenes.Count; index++)
+        {
+            GameScene scene = scenes[index];
+            var contentId = new RenderContentId(scene.identity.persistentId);
+            contents[index] = new RenderContentReference(contentId, scene);
+            if (ReferenceEquals(scene, SceneManager.activeScene))
+                activeContent = contentId;
+        }
+        return new RenderContentScope(contents, activeContent);
     }
 
     /// <summary>Gets the normalized project directory owned by this host.</summary>

@@ -11,12 +11,12 @@ public readonly struct PlatformWindowOptions()
     public string title { get; init; } = "Inno Window";
 
     /// <summary>
-    /// Gets the initial window width in pixels.
+    /// Gets the initial window width in platform-independent logical units.
     /// </summary>
     public int width { get; init; } = 1280;
 
     /// <summary>
-    /// Gets the initial window height in pixels.
+    /// Gets the initial window height in platform-independent logical units.
     /// </summary>
     public int height { get; init; } = 720;
 

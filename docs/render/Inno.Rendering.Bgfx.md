@@ -11,6 +11,7 @@
 ## 初始化顺序
 
 1. 在 BGFX API thread 创建 `BgfxDevice`；进程中同时只能存在一个实例。
+   传入 `PlatformWindow` 时，初始 backbuffer 直接使用其物理 `pixelWidth`/`pixelHeight`，避免 HiDPI 窗口在首帧进行一次逻辑尺寸到 drawable 尺寸的重复 reset。
 2. 每帧调用 `BeginFrame`，处理 resize 与到期资源释放。
 3. 编译一个或多个 RenderGraph 后调用 `Execute`。
 4. 所有 Encoder 结束后调用一次 `EndFrame`；该方法是唯一的 `bgfx.frame` 提交点。
@@ -55,9 +56,11 @@ Metal、D3D、Vulkan 等 BGFX renderer 不要求分别维护业务 Shader：同�
 
 - 非 API thread、未开启帧、嵌套 Graph/Encoder、跨 generation handle 和 frame 前未结束 Encoder 都会抛出明确异常。
 - GPU 资源不会在 finalizer 或 Asset 回调线程销毁；销毁请求按 BGFX 帧号延迟处理。
+- Detached window surface 的 resize 与 destroy 同样进入统一延迟销毁队列，不会在仍可能被 GPU 使用时直接销毁旧 framebuffer。
 
 双平台 Rendering CI 固定验证 Windows x64 与 macOS arm64 runner 架构，并在真实 Editor 冒烟日志中断言 D3D11/D3D12 或 Metal 后端、约定帧数和完整关闭；原生 BGFX 输出与 Editor boot log 会一同作为诊断 artifact 上传。
-- BGFX Debug Metal 后端当前可能在正常 shutdown 时输出 `RefCount` 警告；其上游问题 [bkaradzic/bgfx#3642](https://github.com/bkaradzic/bgfx/issues/3642) 仍处于开放状态。CI 不把该上游固定引用计数诊断误判为 Inno 资源泄漏，但仍要求进程成功、无 BGFX Fatal、无 Host teardown failure 且出现 `BGFX Shutdown complete`。
+- Inno 会在设备关闭前释放 ImGui、Render Runtime、offscreen target、detached surface 与全部托管 handle，并排空延迟销毁队列。HiDPI 主窗口从首个 native frame 起使用物理 drawable 尺寸，不再通过首次 resize 修正。
+- BGFX Debug Metal 后端当前仍可能在正常 shutdown 时对 Metal 自身持有的 Shader、Buffer、Layer 和 Device 输出 `RefCount` 警告；BGFX 官方示例可独立复现完全相同的行为，上游问题 [bkaradzic/bgfx#3642](https://github.com/bkaradzic/bgfx/issues/3642) 仍处于开放状态。CI 不把该上游诊断误判为 Inno 资源泄漏，但仍要求进程成功、无 BGFX Fatal、无 Host teardown failure 且出现 `BGFX Shutdown complete`。不得通过关闭 Debug 检查或过滤日志伪装修复。
 - Graph 执行异常仍由 Core 的 complete-unwind 契约依次结束 Encoder 与 Graph。
 
 ## 相邻页面

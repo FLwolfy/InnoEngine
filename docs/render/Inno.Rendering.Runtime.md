@@ -30,7 +30,7 @@ OnAfterRender
 | `RenderTargetRegistry` | 在帧安全点创建、resize、导入和释放离屏目标；被替换的目标会跨一个完整提交帧退役，避免已录制的 UI/呈现命令持有失效句柄。 |
 | `IRenderFrameGraphContributor` | 在用户请求后向同一帧贡献 Graph，例如 ImGui。 |
 
-Project/Plugin 不需要获得 Runtime 实例。实现 `[RenderRequestProviderExtension(id)]` 后，Provider 会随 TypeCache candidate 一起发现、排序、恢复和原子切换，并在 `OnRender` 通过公开 `RenderRequestProviderContext.requests` 提交零到多个请求。单个 Provider 抛异常只隔离该 Provider；其他请求和 Editor 合成继续运行。
+Project/Plugin 不需要获得 Runtime 实例。实现 `[RenderRequestProviderExtension(id)]` 后，Provider 会随 TypeCache candidate 一起发现、排序、恢复和原子切换，并在 `OnRender` 通过公开 `RenderRequestProviderContext.requests` 提交零到多个请求。应用组合根可给 Runtime 提供 `RenderContentScope` callback；Context 将同一个显式、frame-scoped 内容集合交给全部 Provider，Runtime 本身仍不知道 Scene 或 World。单个 Provider 抛异常只隔离该 Provider；其他请求和 Editor 合成继续运行。
 
 Runtime 通过活动 TypeCache 创建 Pipeline 和 Feature 候选。同一 TypeCache generation 内的候选构造、配置恢复或建图失败只产生诊断，不替换该资产的 last-good generation。Editor 脚本重载把 Runtime 注册为统一 reload participant：候选 TypeCache 与 Asset Catalog 准备完成后，Runtime 会先构造并恢复所有当前活动 Pipeline/Feature；只有全部成功才切换，后续任一 participant 失败时恢复旧实例，完整提交后才释放旧实例。这样 Pipeline、Feature、Asset 和 Assembly generation 不会出现部分发布。Host 直接重建 TypeCache 而未使用 Editor 协调器时，Runtime 仍会在下一帧清理退休 generation，避免固定 collectible ALC。无 Pipeline 时请求发布 `RENDER_PIPELINE_UNAVAILABLE`，Editor 和 ImGui 仍继续提交。
 

@@ -150,6 +150,30 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
     }
 
     [Fact]
+    public void RequestProviderReceivesExplicitHostContentScope()
+    {
+        IRenderDevice device = TestDeviceProxy.Create(out _);
+        var contentId = new RenderContentId(Guid.Parse("3aee0ced-b598-4366-ab45-a6ef8e0feb30"));
+        var content = new object();
+        var scope = new RenderContentScope([new RenderContentReference(contentId, content)], contentId);
+        TestRequestProvider.enabled = true;
+        var runtime = new RenderRuntimeLayer(
+            device,
+            new TestDiagnosticSink(),
+            contentScopeProvider: () => scope);
+        runtime.OnAttach();
+
+        runtime.OnBeforeRender(0f);
+        runtime.OnRender(0f);
+        runtime.OnAfterRender(0f);
+
+        Assert.Same(scope, TestRequestProvider.lastContent);
+        Assert.True(scope.TryGetValue(contentId, out object? resolved));
+        Assert.Same(content, resolved);
+        runtime.OnDetach();
+    }
+
+    [Fact]
     public void MultipleRequestsAndContributorsCompileAndExecuteAsOneFrameGraph()
     {
         IRenderDevice device = TestDeviceProxy.Create(out TestDeviceProxy proxy);
@@ -603,15 +627,19 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
         internal static bool enabled { get; set; }
         internal static RenderPipelineAsset? pipeline { get; set; }
         internal static int submitCount { get; private set; }
+        internal static RenderContentScope? lastContent { get; private set; }
 
         public override void Submit(RenderRequestProviderContext context)
         {
             if (!enabled)
                 return;
             submitCount++;
+            lastContent = context.content;
+            if (pipeline is null)
+                return;
             context.requests.Submit(CreateRequest(
                 "Provider Request",
-                pipeline ?? throw new InvalidOperationException("A provider pipeline is required.")));
+                pipeline));
         }
 
         internal static void Reset()
@@ -619,6 +647,7 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
             enabled = false;
             pipeline = null;
             submitCount = 0;
+            lastContent = null;
         }
     }
 

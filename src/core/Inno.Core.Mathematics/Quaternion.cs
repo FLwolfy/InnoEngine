@@ -183,43 +183,23 @@ public struct Quaternion : IEquatable<Quaternion>
 
     public Vector3 ToEulerAnglesXYZ()
     {
-        float sinrCosp = 2 * (w * x + y * z);
-        float cosrCosp = 1 - 2 * (x * x + y * y);
-        float roll = MathF.Atan2(sinrCosp, cosrCosp);
-
-        float sinp = 2 * (w * y - z * x);
-        float pitch = MathF.Abs(sinp) >= 1
-            ? MathF.CopySign(MathF.PI / 2, sinp)
-            : MathF.Asin(sinp);
-
-        float sinyCosp = 2 * (w * z + x * y);
-        float cosyCosp = 1 - 2 * (y * y + z * z);
-        float yaw = MathF.Atan2(sinyCosp, cosyCosp);
-
-        return new Vector3(roll, pitch, yaw);
+        Quaternion normalized = this.normalized;
+        float sinY = Math.Clamp(
+            2f * (normalized.x * normalized.z + normalized.w * normalized.y),
+            -1f,
+            1f);
+        float angleY = MathF.Asin(sinY);
+        float angleX = MathF.Atan2(
+            2f * (normalized.w * normalized.x - normalized.y * normalized.z),
+            1f - 2f * (normalized.x * normalized.x + normalized.y * normalized.y));
+        float angleZ = MathF.Atan2(
+            2f * (normalized.w * normalized.z - normalized.x * normalized.y),
+            1f - 2f * (normalized.y * normalized.y + normalized.z * normalized.z));
+        return new Vector3(angleX, angleY, angleZ);
     }
     
     public Vector3 ToEulerAnglesXYZDegrees()
-    {
-        float sinrCosp = 2 * (w * x + y * z);
-        float cosrCosp = 1 - 2 * (x * x + y * y);
-        float roll = MathF.Atan2(sinrCosp, cosrCosp);
-
-        float sinp = 2 * (w * y - z * x);
-        float pitch = MathF.Abs(sinp) >= 1
-            ? MathF.CopySign(MathF.PI / 2, sinp)
-            : MathF.Asin(sinp);
-
-        float sinyCosp = 2 * (w * z + x * y);
-        float cosyCosp = 1 - 2 * (y * y + z * z);
-        float yaw = MathF.Atan2(sinyCosp, cosyCosp);
-
-        return new Vector3(
-            roll * 180f / MathF.PI,
-            pitch * 180f / MathF.PI,
-            yaw * 180f / MathF.PI
-        );
-    }
+        => ToEulerAnglesXYZ() * (180f / MathF.PI);
 
     public Vector3 ToEulerAnglesZYX()
     {

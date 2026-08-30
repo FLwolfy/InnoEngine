@@ -111,13 +111,11 @@ public struct Vector2 : IEquatable<Vector2>
         float y = rotation.y;
         float z = rotation.z;
         float w = rotation.w;
-
-        float cos = 1f - 2f * (x * x + y * y);
-        float sin = 2f * (z * w);
-
         return new Vector2(
-            value.x * cos - value.y * sin,
-            value.x * sin + value.y * cos
+            value.x * (1f - 2f * (y * y + z * z))
+                + value.y * (2f * (x * y - z * w)),
+            value.x * (2f * (x * y + z * w))
+                + value.y * (1f - 2f * (x * x + z * z))
         );
     }
 

@@ -30,18 +30,21 @@ public sealed class RenderRequestProviderContext
 {
     /// <summary>Creates a frame-scoped provider context.</summary>
     /// <param name="requests">Sink accepting requests for the current frame.</param>
+    /// <param name="content">Host-selected content roots visible to request providers this frame.</param>
     /// <param name="capabilities">Active backend-neutral capability snapshot.</param>
     /// <param name="primaryPresentationSize">Current primary presentation extent in physical pixels.</param>
     /// <param name="frameIndex">Monotonic render frame index.</param>
     /// <param name="deltaTime">Elapsed frame time in seconds.</param>
     public RenderRequestProviderContext(
         IRenderRequestSink requests,
+        RenderContentScope content,
         GraphicsCapabilities capabilities,
         RenderPresentationSize primaryPresentationSize,
         ulong frameIndex,
         float deltaTime)
     {
         this.requests = requests ?? throw new ArgumentNullException(nameof(requests));
+        this.content = content ?? throw new ArgumentNullException(nameof(content));
         this.capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
         this.primaryPresentationSize = primaryPresentationSize;
         this.frameIndex = frameIndex;
@@ -50,6 +53,9 @@ public sealed class RenderRequestProviderContext
 
     /// <summary>Gets the sink accepting requests for the current frame.</summary>
     public IRenderRequestSink requests { get; }
+
+    /// <summary>Gets the explicit ordered host content visible to request providers this frame.</summary>
+    public RenderContentScope content { get; }
 
     /// <summary>Gets the active backend-neutral capability snapshot.</summary>
     public GraphicsCapabilities capabilities { get; }

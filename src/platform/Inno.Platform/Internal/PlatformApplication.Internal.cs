@@ -329,14 +329,27 @@ public sealed partial class PlatformApplication
                 return true;
 
             case SDLEventType.WindowResized:
-            case SDLEventType.WindowPixelSizeChanged:
                 if (m_windows.TryGetValue(sdlEvent.Window.WindowID, out var resizedWindow))
                 {
-                    resizedWindow.UpdateSize(sdlEvent.Window.Data1, sdlEvent.Window.Data2);
+                    resizedWindow.UpdateLogicalSize(sdlEvent.Window.Data1, sdlEvent.Window.Data2);
                 }
 
                 evnt = new WindowResizeEvent(sdlEvent.Window.WindowID, sdlEvent.Window.Data1, sdlEvent.Window.Data2);
                 return true;
+
+            case SDLEventType.WindowPixelSizeChanged:
+                if (m_windows.TryGetValue(sdlEvent.Window.WindowID, out var pixelResizedWindow))
+                {
+                    pixelResizedWindow.UpdatePixelSize(sdlEvent.Window.Data1, sdlEvent.Window.Data2);
+                    evnt = new WindowResizeEvent(
+                        sdlEvent.Window.WindowID,
+                        pixelResizedWindow.width,
+                        pixelResizedWindow.height);
+                    return true;
+                }
+
+                evnt = null;
+                return false;
 
             case SDLEventType.WindowCloseRequested:
                 if (m_windows.TryGetValue(sdlEvent.Window.WindowID, out var closingWindow))

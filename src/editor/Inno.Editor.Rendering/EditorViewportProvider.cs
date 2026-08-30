@@ -66,7 +66,8 @@ public sealed class EditorViewportContext
         string viewportId,
         int pixelWidth,
         int pixelHeight,
-        EditorViewportCamera camera,
+        EditorViewportNavigationState navigation,
+        RenderContentScope content,
         EditorViewportPresentation presentation)
     {
         this.editor = editor;
@@ -75,7 +76,8 @@ public sealed class EditorViewportContext
         this.viewportId = viewportId;
         this.pixelWidth = pixelWidth;
         this.pixelHeight = pixelHeight;
-        this.camera = camera;
+        this.navigation = navigation;
+        this.content = content;
         this.presentation = presentation;
     }
 
@@ -97,8 +99,11 @@ public sealed class EditorViewportContext
     /// <summary>Gets target height in physical pixels.</summary>
     public int pixelHeight { get; }
 
-    /// <summary>Gets host-owned navigation state that the provider can map to its camera model.</summary>
-    public EditorViewportCamera camera { get; }
+    /// <summary>Gets host-owned neutral navigation state that the provider can map to its camera model.</summary>
+    public EditorViewportNavigationState navigation { get; }
+
+    /// <summary>Gets the explicit ordered host content visible to this viewport.</summary>
+    public RenderContentScope content { get; }
 
     /// <summary>Gets host-selected presentation preferences for this viewport.</summary>
     public EditorViewportPresentation presentation { get; }
@@ -224,6 +229,12 @@ public abstract class EditorViewportProvider
     protected EditorViewportProvider()
     {
     }
+
+    /// <summary>Configures neutral host navigation before input is processed and a request is built.</summary>
+    /// <param name="context">Frame-only Editor, navigation, content, and viewport context.</param>
+    /// <returns>The provider's current navigation capabilities and optional selection focus bound.</returns>
+    public virtual EditorViewportNavigationProfile ConfigureNavigation(EditorViewportContext context)
+        => EditorViewportNavigationProfile.disabled;
 
     /// <summary>Builds one model-neutral render submission for the current frame.</summary>
     /// <param name="context">Frame-only Editor and viewport context.</param>

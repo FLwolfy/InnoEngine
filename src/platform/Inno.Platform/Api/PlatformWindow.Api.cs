@@ -18,14 +18,24 @@ public sealed partial class PlatformWindow : IDisposable
     public string title => m_title;
 
     /// <summary>
-    /// Gets the current window width in pixels.
+    /// Gets the current window width in platform-independent logical units.
     /// </summary>
     public int width => m_width;
 
     /// <summary>
-    /// Gets the current window height in pixels.
+    /// Gets the current window height in platform-independent logical units.
     /// </summary>
     public int height => m_height;
+
+    /// <summary>
+    /// Gets the current drawable width in physical pixels.
+    /// </summary>
+    public int pixelWidth => m_pixelWidth;
+
+    /// <summary>
+    /// Gets the current drawable height in physical pixels.
+    /// </summary>
+    public int pixelHeight => m_pixelHeight;
 
     /// <summary>
     /// Gets whether this window has been marked as closed.

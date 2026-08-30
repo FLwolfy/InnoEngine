@@ -9,7 +9,8 @@
 | 分类 | API | 语义 |
 | --- | --- | --- |
 | 请求 | `RenderRequest`, `RenderTarget`, `RenderViewport`, `RenderFrameData` | 将目标、尺寸、可选 Pipeline 与 Plugin 自有帧数据提交给 Runtime。 |
-| 请求生产 | `RenderRequestProvider`, `RenderRequestProviderContext`, `RenderRequestProviderExtensionAttribute` | Plugin 每帧自动产生请求的 reload-safe TypeRegistry 扩展入口；Context 提供 capability 与主呈现目标的物理像素尺寸，不预设 Camera。 |
+| 内容作用域 | `RenderContentId`, `RenderContentReference`, `RenderContentScope` | Host 显式选择的有序、frame-scoped 内容根；不预设 Scene、World 或 Document 类型。 |
+| 请求生产 | `RenderRequestProvider`, `RenderRequestProviderContext`, `RenderRequestProviderExtensionAttribute` | Plugin 每帧自动产生请求的 reload-safe TypeRegistry 扩展入口；Context 提供显式 content、capability 与主呈现目标的物理像素尺寸，不预设 Camera。 |
 | Pipeline | `RenderPipelineAsset`, `RenderPipeline`, `RenderPipelineContext` | Stable Type ID + 原生配置状态，以及每请求建图入口。 |
 | Feature | `RenderPipelineFeature`, `RenderFeatureContext`, `RenderFeatureConfiguration` | 有序、可重载的额外建图扩展。 |
 | 发现 | `RenderPipelineExtensionAttribute`, `RenderFeatureExtensionAttribute` | TypeCache 候选 generation 的稳定身份。 |
@@ -67,6 +68,7 @@ public sealed class SampleRequestProvider : RenderRequestProvider
 {
     public override void Submit(RenderRequestProviderContext context)
     {
+        IReadOnlyList<MyWorld> worlds = context.content.GetValues<MyWorld>();
         RenderPresentationSize size = context.primaryPresentationSize;
         context.requests.Submit(new RenderRequest(
             "Sample View",
@@ -75,6 +77,8 @@ public sealed class SampleRequestProvider : RenderRequestProvider
     }
 }
 ```
+
+`RenderContentScope` 由应用组合根在帧边界建立。Rendering Runtime 只调用 Host 提供的中立 callback，因此不引用 Scene；Plugin Provider 只消费 `context.content`，不扫描全局 Scene Manager。内容对象不得跨帧或跨 Plugin generation 保留，Provider 必须在提交前把需要的数据复制进 immutable frame snapshot。Host 没有提供内容或 callback 失败时使用空 scope，并产生结构化诊断而不破坏当前帧。
 
 逐帧 Sprite 顶点、粒子或实例数据使用 `context.uploads.UploadBuffer(...)`。它返回 opaque `RenderBufferSlice`，可直接交给 `RenderCommandEncoder.BindVertexBuffer`、`BindIndexBuffer`、`BindInstanceBuffer` 或 Storage `BindBuffer`，不暴露持久 Buffer handle，也不允许跨帧缓存。
 

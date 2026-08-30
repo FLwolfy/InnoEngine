@@ -47,7 +47,7 @@ Vector3 worldPoint = Vector3.Transform(localPoint, world);
 - 长度：`Length()`、`LengthSquared()`、`normalized`、`NormalizeSafe(value, epsilon)`。
 - 几何：`Dot`、`Angle`、`SignedAngle`、`Project`、`Reflect`。
 - 插值/边界：`Lerp`、`Min`、`Max`。
-- 变换：`Transform(Vector2, Matrix)`、`Transform(Vector2, Quaternion)`。
+- 变换：`Transform(Vector2, Matrix)`、`Transform(Vector2, Quaternion)`；Quaternion 路径使用完整 XY 投影旋转矩阵，纯 Z 旋转保持向量长度。
 - 运算：`+`、`-`、一元 `-`、float `*`/`/`、近似 `==`/`!=`。
 - 与 `System.Numerics.Vector2` 隐式互转；实现 `Equals`、`GetHashCode`、`ToString`。
 
@@ -100,6 +100,8 @@ Vector3 tangent = Vector3.Cross(Vector3.UP, direction);
 | Euler XYZ | `ToEulerAnglesXYZ`, `ToEulerAnglesXYZDegrees`, `FromEulerAnglesXYZ`, `FromEulerAnglesXYZDegrees` |
 | Euler ZYX | `ToEulerAnglesZYX`, `ToEulerAnglesZYXDegrees`, `FromEulerAnglesZYX`, `FromEulerAnglesZYXDegrees` |
 | 转换 | `ToMatrix()`；与 `System.Numerics.Quaternion` 隐式互转 |
+
+`FromEulerAnglesXYZ` 与 `ToEulerAnglesXYZ` 使用同一个 `Rx * Ry * Rz` 约定，复合角度可以稳定往返；`ZYX` API 保持独立且不应与 XYZ 配对混用。
 
 角度版本未带 `Degrees` 时使用弧度。
 
