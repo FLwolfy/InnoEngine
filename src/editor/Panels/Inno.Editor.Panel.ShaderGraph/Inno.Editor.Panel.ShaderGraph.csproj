@@ -14,6 +14,7 @@
     <ProjectReference Include="..\..\..\..\src\core\Inno.Core.Graphs\Inno.Core.Graphs.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\Inno.Editor.Core\Inno.Editor.Core.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\Inno.Editor.Graph\Inno.Editor.Graph.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\src\render\Inno.Rendering.ShaderGraph\Inno.Rendering.ShaderGraph.csproj" PrivateAssets="compile" />
   </ItemGroup>

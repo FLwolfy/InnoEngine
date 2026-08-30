@@ -612,6 +612,15 @@ public sealed class ScriptManagerTests : IDisposable
                     new RenderDataChannelId("tests.fixture.viewport-size"),
                     out string? viewportSize));
                 Assert.Equal("320x180", viewportSize);
+                IReadOnlyList<EditorStatistic> viewportStatistics = context.statistics.GetSnapshot();
+                Assert.Contains(viewportStatistics, static statistic =>
+                    statistic.id == new EditorStatisticId(
+                        "inno.rendering.viewport.tests.viewport.provider") &&
+                    statistic.value == "tests.fixture.viewport-provider");
+                Assert.Contains(viewportStatistics, static statistic =>
+                    statistic.id == new EditorStatisticId(
+                        "inno.rendering.viewport.tests.viewport.resolution") &&
+                    statistic.value == "320 x 180");
 
                 module.DrawProviderToolbar(kind, "tests.viewport", 320, 180);
                 module.HandlePointer(kind, "tests.viewport", 320, 180, -1f, 2f, 4);
@@ -1781,6 +1790,32 @@ public sealed class ScriptManagerTests : IDisposable
             public sealed class AssetBrowserRootProbe
             {
                 public AssetBrowserRoot root => AssetBrowserRoot.Plugins;
+            }
+            """);
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.True(result.success, FormatDiagnostics(result));
+    }
+
+    [Fact]
+    public void EditorScriptsCanPublishReloadSafeFrameStatistics()
+    {
+        Write("StatisticsProbe.editor.cs", """
+            using InnoEditor.Core;
+
+            [EditorModule("tests.statistics-probe")]
+            public sealed class StatisticsProbe : EditorModule
+            {
+                protected override void OnUpdate(EditorContext context)
+                {
+                    context.statistics.Publish(new EditorStatistic(
+                        new EditorStatisticId("tests.statistics-probe.value"),
+                        new EditorStatisticGroupId("tests.statistics-probe"),
+                        "Probe",
+                        "Value",
+                        "Ready"));
+                }
             }
             """);
 

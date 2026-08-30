@@ -21,6 +21,12 @@
 | `EditorViewportRequest`, `EditorViewportOutput` | Host 请求与 opaque `ImGuiTextureHandle` 输出。 |
 | `EditorRenderingModule` | Provider generation、Submit/Draw/Release 与异常隔离。 |
 
+`EditorRenderingModule` 还会通过 `EditorContext.statistics` 发布后端中立快照：最后完成的
+RenderFrame view/draw/dispatch/cull 数，以及每个已提交 viewport 的 kind、Provider Stable ID、
+状态、目标尺寸、Pipeline Stable ID、format 和 priority。统计只含稳定 ID 与字符串，不让
+Stats Panel 引用 Scene/Game Panel、具体 Pipeline 或 Plugin 类型；任何其他 Editor feature 也能
+使用同一 `EditorStatistics.Publish` 协议贡献自己的分组。
+
 Plugin 示例：
 
 ```csharp

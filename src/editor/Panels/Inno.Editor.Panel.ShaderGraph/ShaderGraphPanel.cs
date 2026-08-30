@@ -8,10 +8,12 @@ using Inno.Assets.Core;
 using Inno.Core.Graphs;
 using Inno.Editor.Core;
 using Inno.Editor.Graph;
+using Inno.Editor.ImGui.ImGuiWidget;
 using Inno.Editor.Interactions;
 using Inno.Native.ImGui;
 using Inno.Rendering;
 using Inno.Rendering.ShaderGraph;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.ShaderGraph;
@@ -144,7 +146,7 @@ internal sealed class ShaderGraphPanel : EditorPanel
     private void DrawNodePicker()
     {
         NativeImGui.SameLine();
-        if (!NativeImGui.BeginCombo("##shader_graph_add_node", "Add Node..."))
+        if (!EditorWidget.BeginBoundedCombo("##shader_graph_add_node", "Add Node..."))
             return;
         try
         {

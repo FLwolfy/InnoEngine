@@ -14,7 +14,7 @@ GameObject Header 的第二行包含 Active、项目 Tag picker 和 Layer picker
 
 定义在 `Edit/Settings... → Project/Scene/Tags` 与 `Project/Scene/Layers` 编辑，分别由 `ProjectSettingEditor<GameTagCatalog>` 与 `ProjectSettingEditor<GameLayerStack>` 暂存，并由 Settings 窗口右下角的单一 `Apply` 写入 `<ProjectRoot>/ProjectSettings.inno`。删除定义不会自动重写已加载或未加载 Scene；assignment 仍保存在 Scene/Prefab 中，并发布 `GAMEOBJECT-TAG-UNDEFINED` 或 `GAMEOBJECT-LAYER-UNDEFINED`，直到用户恢复定义或显式修改对象。这避免一次设置操作隐式制造大量 Scene dirty state。
 
-Layer 页面以紧凑表格显示 slot、globally stable ID、name 与 remove action；未使用 slot 收口到 `Add layer...`。Tag 页面提供统一 Add 与定义列表，并与 Layer 表格共享相同的 cell padding、plain-cell frame inset、header background、Action 列宽和 inner borders。GameObject Header 的 Layer/Tag selector 与 Layer 添加 selector 都使用共享 menu popup contract，具有与右键菜单一致的 padding、颜色和 auto-size/no-scroll 行为。Apply 时两者分别由协议 Composer 捕获 sparse layer/interaction operations 与 tag additions/removals，所以多个 Plugin 可以修改同一设置而不互相覆盖整个集合。两者只是普通强类型 Project Setting Drawer，不创建 Asset、metadata 或 feature 专属持久化通道。
+Layer 页面以紧凑表格显示 slot、globally stable ID、name 与 remove action；未使用 slot 收口到 `Add layer...`。Tag 页面提供统一 Add 与定义列表，并与 Layer 表格共享相同的 cell padding、plain-cell frame inset、header background、Action 列宽和 inner borders。GameObject Header 的 Layer/Tag selector 与 Layer 添加 selector 都使用共享 menu popup contract，具有与右键菜单一致的 padding、颜色和 work-area-bounded 滚动行为。Apply 时两者分别由协议 Composer 捕获 sparse layer/interaction operations 与 tag additions/removals，所以多个 Plugin 可以修改同一设置而不互相覆盖整个集合。两者只是普通强类型 Project Setting Drawer，不创建 Asset、metadata 或 feature 专属持久化通道。
 
 Inspector Panel 关闭根 window padding，使外层纵向 scrollbar 贴紧 Dock body 边缘；所有 Target Header、卡片和 Drawer 正文统一放在 `ConstrainedContent` 中，由容器准确恢复一层标准 window padding，不再出现零间距或 Panel/child 双层空隙。该 auto-resize child 的显式 content width 始终等于 viewport 扣除左右 padding 后的宽度，并禁用自身 scrollbar/scroll input；因此 Inspector 在所有 target（包括 Behavior/System）下都不会产生横向 scroll range，也不需要逐帧重置 `scrollX`。长卡片标题会在右侧操作区之前裁剪，属性 label 和多轴数值字段会按真实可用宽度收缩，任何 Drawer 都不能把纵向滚动父级撑宽。
 
@@ -77,6 +77,11 @@ Inspector 的可序列化属性、Component/System enabled、Add、Remove、Rese
 ## 引用拖放
 
 Asset reference handler 接受共享 `AssetInfo`；EngineObject handler 接受当前 Scene 中的 `EngineObject`。Drawer 只提交 property target 和 area，具体兼容检查及赋值在 typed Drop handler 中完成。兼容的 Asset payload 悬停在 property control 上时使用全局 `DragDropTarget` palette 绘制黄色目标框；不兼容 payload 不显示可接受反馈。
+
+Asset reference Combo 的可见身份固定为 `source-id:asset-name`，例如
+`inno.rendering.2d:DefaultSprite`；project mount 使用 `project:`。目录和扩展名不占用字段或菜单宽度，
+但每个候选 hover 会显示完整 canonical `AssetPath`，搜索同时匹配短身份与完整路径。
+Selectable 的内部 ImGui ID 使用 Persistent ID，因此两个目录中同名资产不会发生交互冲突。
 
 ## Scripting API
 

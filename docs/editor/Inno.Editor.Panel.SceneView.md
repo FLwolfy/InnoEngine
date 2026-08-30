@@ -15,6 +15,7 @@ Panel 本身只负责：
 - 把当前 Editor workspace 的有序 Scene 和 active Scene 作为显式 `RenderContentScope` 交给 Provider；
 - 将点击位置归一化后转发给 Provider；
 - 在 Provider 提供本帧 `EditorViewportManipulationSpace` 时，用 ImGuizmo 操作当前选择对象的 Transform；
+- 在左侧 overlay toolbar 中选择 Move、Rotate、Scale 和 Local/World coordinate space；
 - 将一次 Move/Rotate/Scale 连续拖拽记录成单个原子 Scene History transaction；
 - 从 `Editor/Appearance/Viewports/Scene Background` 读取背景色并作为呈现偏好传给 Provider；
 - 显示 provider 缺失或隔离错误；
@@ -22,4 +23,8 @@ Panel 本身只负责：
 
 Host 导航状态不是 Scene Component，也不规定 2D、3D、投影矩阵或坐标系。2D Provider 可以只声明 Planar，3D Provider 可以声明 Orbit/Fly/Perspective；两者复用同一 Host 交互而无需 Editor 为具体渲染模型增加分支。Provider 必须从显式 content scope 构建 Scene 数据，不能在收集器内部遍历进程全局 Loaded Scene。网格、坐标轴等具有渲染语义的辅助内容仍由 Provider 生成。
 
-顶部仅保留通用 Transform 操作模式，不再显示或编辑 Plugin Camera 的位置、尺寸等字段。导航状态通过 Panel 的 `Capture`/`Restore` 写入 `editor.ini`，但不会进入 Scene、Undo 或 Plugin 持久状态。
+Local/World 只改变操作轴基准，不改变 Transform 数据模型：World 轴保持世界方向，Local 轴跟随
+选择对象的最终 world rotation，所以未旋转的 2D 对象看起来相同；父节点或对象有旋转时 Move/Rotate
+会明显不同。Scale 按 ImGuizmo 与 Transform 的约定始终在 Local 空间执行，toolbar 会禁用该切换并
+显示说明，避免制造无效状态。导航状态通过 Panel 的 `Capture`/`Restore` 写入 `editor.ini`，但不会进入
+Scene、Undo 或 Plugin 持久状态。

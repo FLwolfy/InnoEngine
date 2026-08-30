@@ -625,19 +625,41 @@ internal sealed class SceneViewPanel : EditorPanel
                 NativeImGui.ColorConvertFloat4ToU32(EditorPalette.tableBorderLight),
                 EditorWidget.style.borderSize);
 
-            string modeIcon = m_mode == ImGuizmoMode.Local
-                ? ImGuiIcon.Cube
-                : ImGuiIcon.Globe;
-            string modeTooltip = m_mode == ImGuizmoMode.Local
-                ? "Coordinate Space: Local (click for World)"
-                : "Coordinate Space: World (click for Local)";
-            if (DrawManipulationTool(
+            bool supportsCoordinateSpace = m_operation != ImGuizmoOperation.Scale;
+            string modeIcon = supportsCoordinateSpace && m_mode == ImGuizmoMode.World
+                ? ImGuiIcon.Globe
+                : ImGuiIcon.Cube;
+            string modeTooltip = !supportsCoordinateSpace
+                ? "Coordinate Space: Local (Scale is always local)"
+                : m_mode == ImGuizmoMode.Local
+                    ? "Coordinate Space: Local (axes follow the selected transform)"
+                    : "Coordinate Space: World (axes follow the world)";
+            if (!supportsCoordinateSpace)
+                NativeImGui.BeginDisabled(true);
+            bool toggleCoordinateSpace;
+            try
+            {
+                toggleCoordinateSpace = DrawManipulationTool(
                     "coordinate_space",
                     modeIcon,
                     modeTooltip,
                     new Vector2(itemX, itemY),
                     layout.itemSize,
-                    selected: false))
+                    selected: false);
+            }
+            finally
+            {
+                if (!supportsCoordinateSpace)
+                    NativeImGui.EndDisabled();
+            }
+            if (!supportsCoordinateSpace &&
+                NativeImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled) &&
+                EditorWidget.BeginMenuTooltip())
+            {
+                NativeImGui.TextUnformatted(modeTooltip);
+                EditorWidget.EndMenuTooltip();
+            }
+            if (toggleCoordinateSpace && supportsCoordinateSpace)
             {
                 m_mode = m_mode == ImGuizmoMode.Local
                     ? ImGuizmoMode.World

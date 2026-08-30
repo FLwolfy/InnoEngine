@@ -11,6 +11,7 @@ Inno.Editor.Core/
 ├─ Runtime/
 │  ├─ EditorContext.cs
 │  ├─ EditorFrame.cs
+│  ├─ EditorStatistics.cs
 │  ├─ EditorRuntime.cs
 │  ├─ EditorState.cs
 │  └─ EditorLayoutSettings.cs
@@ -37,9 +38,12 @@ Inno.Editor.Core/
 
 | API | 说明 |
 | --- | --- |
-| `EditorContext` | 对扩展只公开只读项目根目录、最新 `EditorFrame` 与焦点等被动状态；不提供 service locator 或持久化写入口。 |
+| `EditorContext` | 对扩展公开只读项目根目录、最新 `EditorFrame`、焦点和窄作用域的帧统计交换；不提供 service locator 或持久化写入口。 |
 | `EditorLayoutSettings` | internal 实现；协调 `editor.ini` 中互不覆盖的 ImGui layout 与可读具名 section。它不会成为跨项目公开依赖。 |
 | `EditorFrame` | 一帧的 `deltaTime`、`totalTime`、`isFocused` 不可变快照。 |
+| `EditorStatisticId` / `EditorStatisticGroupId` | 跨 Panel、Module 和 Plugin 唯一的稳定统计项/分组标识。 |
+| `EditorStatistic` | 只保存 stable ID、显示顺序和字符串值的不可变贡献，不保留 Plugin 类型或实例。 |
+| `EditorStatistics` | 当前帧发布、同 ID 替换和上一完成帧 handoff 的顺序无关交换。 |
 | `EditorRuntime` | 表现无关的 `Start`、`Update(EditorFrame)`、`Dispose` 抽象。 |
 
 `EditorContext` 是由 Application host 创建并注入扩展的中立数据，不承担路由：
@@ -47,7 +51,19 @@ Inno.Editor.Core/
 ```csharp
 Console.WriteLine(context.projectDirectory);
 Console.WriteLine(context.frame.totalTime);
+context.statistics.Publish(new EditorStatistic(
+    new EditorStatisticId("sample.animation.playing-clips"),
+    new EditorStatisticGroupId("sample.animation"),
+    "Animation",
+    "Playing Clips",
+    playingClipCount.ToString()));
 ```
+
+Statistics 是唯一允许写入 Context 的帧数据通道，不是任意 service bag。每次 runtime
+推进 `EditorFrame` 时，当前贡献成为上一完成帧快照并开始新的 current frame；读取时 current
+覆盖同 ID 的 completed 值。因此 Stats Panel 先于或后于某个扩展绘制都不会丢数据，停止贡献
+后值最多保留一个 handoff frame。值已经是面向人的字符串，采样器、Profiler 历史和持久配置
+仍应由各自领域拥有。
 
 构造函数、`layoutPath`、`imguiLayout`、section 读写、ImGui layout 更新和 Save 是 CLR host 边界。由于 Application 与 Interactions 是独立程序集，这些成员是 public CLR API，但全部标记 `ScriptingApiIgnore`，不会进入 EditorScripts facade。测试若要验证未公开实现细节只能使用反射；Editor 项目不使用 `InternalsVisibleTo`。EditorScripts 不能创建第二个 Context、读取原始 section、覆盖其他扩展状态或主动写入 `editor.ini`。
 
@@ -169,7 +185,7 @@ Scripting 负责准备 assembly session 并调用协调器；Scene 独立注册�
 
 ## Scripting API
 
-EditorScripts 使用唯一逻辑命名空间 `InnoEditor.Core`。它导出 Context、Frame、Runtime、Module、Panel、Modal、`EditorState` 和 Panel Reload State 接口；不导出 assembly reload coordinator、layout reader/writer 或 JSON DOM。脚本 Module/Panel 只能实现 protected `OnStart/OnUpdate/OnStop`、`OnAttach/OnDetach/OnDraw` 与 `Capture/Restore` hooks，不能直接调用标记为 `ScriptingApiIgnore` 的 Start、Update、Stop、Attach、Detach 或 Draw；所有脚本必须显式写普通 `using`。
+EditorScripts 使用唯一逻辑命名空间 `InnoEditor.Core`。它导出 Context、Frame、frame-scoped Statistics、Runtime、Module、Panel、Modal、`EditorState` 和 Panel Reload State 接口；不导出 assembly reload coordinator、layout reader/writer 或 JSON DOM。脚本 Module/Panel 只能实现 protected `OnStart/OnUpdate/OnStop`、`OnAttach/OnDetach/OnDraw` 与 `Capture/Restore` hooks，不能直接调用标记为 `ScriptingApiIgnore` 的 Start、Update、Stop、Attach、Detach 或 Draw；所有脚本必须显式写普通 `using`。
 
 ## Module/Panel 项目状态
 

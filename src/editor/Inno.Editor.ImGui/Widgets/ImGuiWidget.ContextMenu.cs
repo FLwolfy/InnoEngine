@@ -12,7 +12,8 @@ public static partial class ImGuiWidget
 {
     /// <summary>
     /// Begins an explicitly opened popup using the editor context-menu presentation contract.
-    /// The popup sizes itself to its submitted content and never creates an implicit scroll range.
+    /// The popup stays in its parent viewport, sizes itself to submitted content, and scrolls when
+    /// its work-area bound is reached.
     /// </summary>
     /// <param name="id">The stable identifier previously passed to ImGui when opening the popup.</param>
     /// <returns>
@@ -26,9 +27,8 @@ public static partial class ImGuiWidget
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         PushContextMenuStyle();
+        NativeImGui.SetNextWindowViewport(NativeImGui.GetWindowViewport().ID);
         ImGuiWindowFlags flags = ImGuiWindowFlags.AlwaysAutoResize |
-                                 ImGuiWindowFlags.NoScrollbar |
-                                 ImGuiWindowFlags.NoScrollWithMouse |
                                  ImGuiWindowFlags.NoSavedSettings;
         if (NativeImGui.BeginPopup(id, flags))
             return true;
@@ -46,7 +46,7 @@ public static partial class ImGuiWidget
     }
 
     /// <summary>
-    /// Begins a tooltip using the same padding, colors, border, and spacing as editor menus.
+    /// Begins a parent-viewport tooltip using the same padding, colors, border, and spacing as editor menus.
     /// </summary>
     /// <returns>
     /// <see langword="true"/> when tooltip content should be submitted; otherwise,
@@ -55,6 +55,7 @@ public static partial class ImGuiWidget
     public static bool BeginMenuTooltip()
     {
         PushContextMenuStyle();
+        NativeImGui.SetNextWindowViewport(NativeImGui.GetWindowViewport().ID);
         if (NativeImGui.BeginTooltip())
             return true;
         PopContextMenuStyle();
@@ -71,7 +72,7 @@ public static partial class ImGuiWidget
     }
 
     /// <summary>
-    /// Begins a styled right-click context menu for the most recently submitted item.
+    /// Begins a parent-viewport styled right-click context menu for the most recently submitted item.
     /// </summary>
     /// <param name="id">The stable popup identifier in the current ImGui ID scope.</param>
     /// <returns><see langword="true"/> when context-menu content should be drawn; otherwise, <see langword="false"/>.</returns>
@@ -79,6 +80,7 @@ public static partial class ImGuiWidget
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         PushContextMenuStyle();
+        NativeImGui.SetNextWindowViewport(NativeImGui.GetWindowViewport().ID);
         if (NativeImGui.BeginPopupContextItem(id, ImGuiPopupFlags.MouseButtonRight))
             return true;
         PopContextMenuStyle();
@@ -86,7 +88,7 @@ public static partial class ImGuiWidget
     }
 
     /// <summary>
-    /// Begins a styled right-click context menu for the current window's unoccupied background.
+    /// Begins a parent-viewport styled right-click context menu for the current window's unoccupied background.
     /// </summary>
     /// <param name="id">The stable popup identifier in the current ImGui ID scope.</param>
     /// <returns><see langword="true"/> when context-menu content should be drawn; otherwise, <see langword="false"/>.</returns>
@@ -94,6 +96,7 @@ public static partial class ImGuiWidget
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         PushContextMenuStyle();
+        NativeImGui.SetNextWindowViewport(NativeImGui.GetWindowViewport().ID);
         if (NativeImGui.BeginPopupContextWindow(
                 id,
                 ImGuiPopupFlags.MouseButtonRight | ImGuiPopupFlags.NoOpenOverItems))

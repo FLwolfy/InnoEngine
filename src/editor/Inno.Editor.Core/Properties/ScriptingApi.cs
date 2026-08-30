@@ -5,6 +5,10 @@ using Inno.Editor.Core;
 
 [assembly: ScriptingApiExport(typeof(EditorContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorFrame), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorStatisticId), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorStatisticGroupId), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorStatistic), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorStatistics), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorRuntime), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorModule), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorModuleAttribute), ScriptingApiScope.Editor)]

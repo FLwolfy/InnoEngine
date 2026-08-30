@@ -186,6 +186,34 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void StatisticsUseStableReplacementAndOneFrameOrderHandoff()
+    {
+        EditorStatistics statistics = m_runtime.context.statistics;
+        var id = new EditorStatisticId("tests.statistics.frame-time");
+        var groupId = new EditorStatisticGroupId("tests.statistics");
+        statistics.Publish(new EditorStatistic(
+            id,
+            groupId,
+            "Tests",
+            "Frame Time",
+            "10 ms"));
+        statistics.Publish(new EditorStatistic(
+            id,
+            groupId,
+            "Tests",
+            "Frame Time",
+            "8 ms"));
+
+        Assert.Equal("8 ms", Assert.Single(statistics.GetSnapshot()).value);
+
+        m_runtime.Update(new EditorFrame(0.016f, 0.016f, isFocused: true));
+        Assert.Equal("8 ms", Assert.Single(statistics.GetSnapshot()).value);
+
+        m_runtime.Update(new EditorFrame(0.016f, 0.032f, isFocused: true));
+        Assert.Empty(statistics.GetSnapshot());
+    }
+
+    [Fact]
     public void BlockingModuleDefersOnlyModulesOrderedAfterIt()
     {
         UpdateBarrierModule.block = true;

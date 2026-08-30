@@ -14,6 +14,9 @@ namespace Inno.Editor.Rendering;
 [EditorModule("rendering.viewports", order: 175)]
 public sealed class EditorRenderingModule : EditorModule
 {
+    private const int C_RENDERING_STATISTICS_ORDER = 100;
+    private const int C_VIEWPORT_STATISTICS_ORDER = 200;
+
     private readonly Dictionary<string, EditorViewportNavigationState> m_navigationStates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, RenderContentScope> m_contentScopes = new(StringComparer.Ordinal);
     private readonly Dictionary<EditorViewportKindId, string> m_providerErrors = [];
@@ -175,9 +178,19 @@ public sealed class EditorRenderingModule : EditorModule
         out EditorViewportOutput output)
     {
         output = default;
-        if (!TryCreateContext(kind, viewportId, pixelWidth, pixelHeight, out EditorViewportContext? context)
-            || !m_providers.providers.byKind.TryGetValue(kind, out EditorViewportProviderRegistry.Registration? registration))
+        if (!TryCreateContext(kind, viewportId, pixelWidth, pixelHeight, out EditorViewportContext? context))
+            return false;
+        if (!m_providers.providers.byKind.TryGetValue(
+                kind,
+                out EditorViewportProviderRegistry.Registration? registration))
         {
+            PublishViewportStatistics(
+                kind,
+                viewportId,
+                pixelWidth,
+                pixelHeight,
+                "Unavailable",
+                providerId: "None");
             m_host.Release(viewportId);
             m_manipulationSpaces.Remove(viewportId);
             return false;
@@ -197,6 +210,14 @@ public sealed class EditorRenderingModule : EditorModule
                 m_manipulationSpaces[viewportId] = manipulationSpace;
             else
                 m_manipulationSpaces.Remove(viewportId);
+            PublishViewportStatistics(
+                kind,
+                viewportId,
+                pixelWidth,
+                pixelHeight,
+                output.isReady ? "Ready" : "Preparing",
+                registration.attribute.id,
+                submission);
             m_providerErrors.Remove(kind);
             return true;
         }
@@ -204,6 +225,13 @@ public sealed class EditorRenderingModule : EditorModule
         {
             m_providerErrors[kind] =
                 $"Viewport provider '{registration.attribute.id}' failed: {exception.Message}";
+            PublishViewportStatistics(
+                kind,
+                viewportId,
+                pixelWidth,
+                pixelHeight,
+                "Failed",
+                registration.attribute.id);
             m_host.Release(viewportId);
             m_manipulationSpaces.Remove(viewportId);
             return false;
@@ -268,6 +296,34 @@ public sealed class EditorRenderingModule : EditorModule
     }
 
     /// <inheritdoc />
+    protected override void OnUpdate(EditorContext context)
+    {
+        RenderFrameStatistics? statistics = GraphicsSettings.frameStatistics;
+        if (statistics is null)
+            return;
+        var groupId = new EditorStatisticGroupId("inno.rendering.frame");
+        context.statistics.Publish(new EditorStatistic[]
+        {
+            CreateStatistic("frame", "Frame", statistics.frameIndex.ToString(), 0),
+            CreateStatistic("views", "Views", statistics.viewCount.ToString(), 10),
+            CreateStatistic("draws", "Draws", statistics.drawCount.ToString(), 20),
+            CreateStatistic("dispatches", "Dispatches", statistics.dispatchCount.ToString(), 30),
+            CreateStatistic("culled-passes", "Culled Passes", statistics.culledPassCount.ToString(), 40)
+        });
+        return;
+
+        EditorStatistic CreateStatistic(string id, string label, string value, int order)
+            => new(
+                new EditorStatisticId($"inno.rendering.frame.{id}"),
+                groupId,
+                "Rendering",
+                label,
+                value,
+                C_RENDERING_STATISTICS_ORDER,
+                order);
+    }
+
+    /// <inheritdoc />
     protected override void OnStop(EditorContext context)
     {
         _ = context;
@@ -319,5 +375,72 @@ public sealed class EditorRenderingModule : EditorModule
                 viewportId,
                 new EditorViewportPresentation(EngineColor.DARKGRAY)));
         return true;
+    }
+
+    private void PublishViewportStatistics(
+        EditorViewportKindId kind,
+        string viewportId,
+        int pixelWidth,
+        int pixelHeight,
+        string state,
+        string providerId,
+        EditorViewportSubmission? submission = null)
+    {
+        if (m_context is null)
+            return;
+        string groupKey = $"inno.rendering.viewport.{viewportId}";
+        var groupId = new EditorStatisticGroupId(groupKey);
+        string groupName = GetDisplayName(viewportId);
+        var statistics = new List<EditorStatistic>
+        {
+            CreateStatistic("kind", "Kind", kind.value, 0),
+            CreateStatistic("provider", "Provider", providerId, 10),
+            CreateStatistic("state", "State", state, 20),
+            CreateStatistic("resolution", "Resolution", $"{pixelWidth} x {pixelHeight}", 30)
+        };
+        if (submission is not null)
+        {
+            string? pipeline = submission.pipeline?.pipelineTypeId;
+            if (string.IsNullOrWhiteSpace(pipeline))
+                pipeline = GraphicsSettings.defaultPipeline?.pipelineTypeId;
+            statistics.Add(CreateStatistic(
+                "pipeline",
+                "Pipeline",
+                string.IsNullOrWhiteSpace(pipeline) ? "Project Default" : pipeline,
+                40));
+            statistics.Add(CreateStatistic("format", "Target Format", submission.targetFormat.ToString(), 50));
+            statistics.Add(CreateStatistic("priority", "Priority", submission.priority.ToString(), 60));
+        }
+        m_context.statistics.Publish(statistics);
+        return;
+
+        EditorStatistic CreateStatistic(string id, string label, string value, int order)
+            => new(
+                new EditorStatisticId($"{groupKey}.{id}"),
+                groupId,
+                groupName,
+                label,
+                value,
+                C_VIEWPORT_STATISTICS_ORDER,
+                order);
+    }
+
+    private static string GetDisplayName(string identifier)
+    {
+        char[] characters = identifier.Replace('-', ' ').Replace('_', ' ').ToCharArray();
+        bool capitalize = true;
+        for (int i = 0; i < characters.Length; i++)
+        {
+            if (characters[i] == ' ')
+            {
+                capitalize = true;
+                continue;
+            }
+            if (!capitalize)
+                continue;
+            characters[i] = char.ToUpperInvariant(characters[i]);
+            capitalize = false;
+        }
+        return new string(characters);
     }
 }

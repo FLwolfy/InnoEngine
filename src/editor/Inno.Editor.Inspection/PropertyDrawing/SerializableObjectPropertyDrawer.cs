@@ -3,7 +3,9 @@ using System.Collections.Generic;
 
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
+using Inno.Editor.ImGui.ImGuiWidget;
 using Inno.Native.ImGui;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Inspection;
@@ -41,7 +43,9 @@ internal sealed class SerializableObjectPropertyDrawer : IPropertyDrawer
 
     private static void DrawTypeSelector(PropertyDrawContext context, Type runtimeType, object? value)
     {
-        if (!NativeImGui.BeginCombo($"##{context.path}_runtime_type", value is null ? "Null" : runtimeType.Name))
+        if (!EditorWidget.BeginBoundedCombo(
+                $"##{context.path}_runtime_type",
+                value is null ? "Null" : runtimeType.Name))
         {
             return;
         }

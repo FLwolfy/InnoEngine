@@ -485,7 +485,10 @@ internal sealed class FileBrowserPanel : EditorPanel
 
     private void DrawEntryFilterCombo()
     {
-        if (!NativeImGui.BeginCombo("##AssetEntryFilter", "Filter", ImGuiComboFlags.WidthFitPreview))
+        if (!EditorWidget.BeginBoundedCombo(
+                "##AssetEntryFilter",
+                "Filter",
+                ImGuiComboFlags.WidthFitPreview))
             return;
 
         DrawEntryTypeFilterOption("All", FileBrowserEntryTypeFilter.All);

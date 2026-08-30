@@ -8,6 +8,7 @@ using Inno.Editor.ImGui.ImGuiWidget;
 using Inno.Editor.Settings;
 using Inno.Native.ImGui;
 using Inno.Platform.ImGui;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Global;
@@ -43,7 +44,7 @@ internal abstract class IconSetting : EditorSetting
         float iconSlotWidth = GetIconSlotWidth();
         ImDrawListPtr comboDrawList = NativeImGui.GetWindowDrawList();
         NativeImGui.SetNextItemWidth(-1f);
-        bool isOpen = NativeImGui.BeginCombo("##icon", string.Empty);
+        bool isOpen = EditorWidget.BeginBoundedCombo("##icon", string.Empty);
         Vector2 comboMinimum = NativeImGui.GetItemRectMin();
         Vector2 comboMaximum = NativeImGui.GetItemRectMax();
         ImGuiStylePtr comboStyle = NativeImGui.GetStyle();

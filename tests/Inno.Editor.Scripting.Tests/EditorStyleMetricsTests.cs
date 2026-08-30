@@ -240,7 +240,7 @@ public sealed class EditorStyleMetricsTests
     }
 
     [Fact]
-    public void MenuSelectorPopupIsAutoSizedAndCannotScroll()
+    public void MenuSelectorPopupIsBoundedAndScrollsLongContent()
     {
         var context = NativeImGui.CreateContext();
         try
@@ -251,35 +251,110 @@ public sealed class EditorStyleMetricsTests
             io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
             io.Fonts.RendererHasTextures = true;
 
-            NativeImGui.NewFrame();
-            _ = NativeImGui.Begin("Menu Selector Test");
-            NativeImGui.OpenPopup("##menu_selector_popup_test");
-            Assert.True(EditorWidget.BeginMenuSelector("test", "Untagged", 180f, 240f));
-            ImGuiWindowFlags flags = ImGuiP.GetCurrentWindow().Flags;
-            Assert.True(flags.HasFlag(ImGuiWindowFlags.AlwaysAutoResize));
-            Assert.True(flags.HasFlag(ImGuiWindowFlags.NoScrollbar));
-            Assert.True(flags.HasFlag(ImGuiWindowFlags.NoScrollWithMouse));
-            Assert.True(flags.HasFlag(ImGuiWindowFlags.NoSavedSettings));
-            Assert.True(NativeImGui.GetWindowSize().X >= 240f);
-            string newTag = string.Empty;
-            NativeImGui.SetNextItemWidth(160f);
-            _ = NativeImGui.InputTextWithHint(
-                "##new_tag",
-                "Add tag...",
-                ref newTag,
-                (nuint)128);
-            float inputCenterY = (NativeImGui.GetItemRectMin().Y + NativeImGui.GetItemRectMax().Y) * 0.5f;
-            NativeImGui.SameLine();
-            _ = EditorWidget.ClickableText(
-                "add_tag",
-                "+",
-                new Vector2(EditorWidget.GetCompactIconSize().X, NativeImGui.GetFrameHeight()));
-            float actionCenterY = (NativeImGui.GetItemRectMin().Y + NativeImGui.GetItemRectMax().Y) * 0.5f;
-            Assert.Equal(inputCenterY, actionCenterY, 3);
-            NativeImGui.Selectable("Untagged");
-            EditorWidget.EndMenuSelector();
-            NativeImGui.End();
-            NativeImGui.Render();
+            for (int frame = 0; frame < 2; frame++)
+            {
+                NativeImGui.NewFrame();
+                _ = NativeImGui.Begin("Menu Selector Test");
+                if (frame == 0)
+                    NativeImGui.OpenPopup("##menu_selector_popup_test");
+                Assert.True(EditorWidget.BeginMenuSelector("test", "Untagged", 180f, 240f));
+                ImGuiWindowFlags flags = ImGuiP.GetCurrentWindow().Flags;
+                Assert.True(flags.HasFlag(ImGuiWindowFlags.AlwaysAutoResize));
+                Assert.False(flags.HasFlag(ImGuiWindowFlags.NoScrollbar));
+                Assert.False(flags.HasFlag(ImGuiWindowFlags.NoScrollWithMouse));
+                Assert.True(flags.HasFlag(ImGuiWindowFlags.NoSavedSettings));
+                Assert.True(NativeImGui.GetWindowSize().X >= 240f);
+                string newTag = string.Empty;
+                NativeImGui.SetNextItemWidth(160f);
+                _ = NativeImGui.InputTextWithHint(
+                    "##new_tag",
+                    "Add tag...",
+                    ref newTag,
+                    (nuint)128);
+                float inputCenterY = (NativeImGui.GetItemRectMin().Y + NativeImGui.GetItemRectMax().Y) * 0.5f;
+                NativeImGui.SameLine();
+                _ = EditorWidget.ClickableText(
+                    "add_tag",
+                    "+",
+                    new Vector2(EditorWidget.GetCompactIconSize().X, NativeImGui.GetFrameHeight()));
+                float actionCenterY = (NativeImGui.GetItemRectMin().Y + NativeImGui.GetItemRectMax().Y) * 0.5f;
+                Assert.Equal(inputCenterY, actionCenterY, 3);
+                for (int index = 0; index < 64; index++)
+                    NativeImGui.Selectable($"Entry {index:D2}");
+                if (frame == 1)
+                {
+                    Assert.True(NativeImGui.GetWindowSize().Y <= io.DisplaySize.Y * 0.70f + 1f);
+                    Assert.True(NativeImGui.GetScrollMaxY() > 0f);
+                }
+                EditorWidget.EndMenuSelector();
+                NativeImGui.End();
+                NativeImGui.Render();
+            }
+        }
+        finally
+        {
+            NativeImGui.DestroyContext(context);
+        }
+    }
+
+    [Fact]
+    public void NativeComboPopupUsesTheSharedBoundedScrollingContract()
+    {
+        var context = NativeImGui.CreateContext();
+        try
+        {
+            ImGuiIOPtr io = NativeImGui.GetIO();
+            io.DisplaySize = new Vector2(640f, 480f);
+            io.DeltaTime = 1f / 60f;
+            io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
+            io.Fonts.RendererHasTextures = true;
+
+            var popupWidths = new List<float>();
+            int openFrames = 0;
+            for (int frame = 0; frame < 5; frame++)
+            {
+                NativeImGui.NewFrame();
+                NativeImGui.SetNextWindowPos(new Vector2(400f, 340f), ImGuiCond.Always);
+                NativeImGui.SetNextWindowSize(new Vector2(220f, 120f), ImGuiCond.Always);
+                _ = NativeImGui.Begin("Bounded Combo Test");
+                uint parentViewportId = NativeImGui.GetWindowViewport().ID;
+                if (frame == 0)
+                {
+                    uint comboId = NativeImGui.GetID("##asset");
+                    uint popupId = ImGuiP.ImHashStr("##ComboPopup", comboId);
+                    ImGuiP.OpenPopupEx(popupId);
+                }
+                NativeImGui.SetNextItemWidth(180f);
+                bool open = EditorWidget.BeginBoundedCombo("##asset", "project:Material");
+                if (open)
+                {
+                    openFrames++;
+                    Assert.Equal(parentViewportId, NativeImGui.GetWindowViewport().ID);
+                    string search = string.Empty;
+                    _ = EditorWidget.SearchInput("assets", "Search assets...", ref search);
+                    for (int index = 0; index < 64; index++)
+                        NativeImGui.Selectable($"project:Material{index:D2}");
+                    popupWidths.Add(NativeImGui.GetWindowSize().X);
+                    if (openFrames >= 2)
+                    {
+                        Assert.InRange(NativeImGui.GetWindowSize().X, 179f, 181f);
+                        Assert.True(NativeImGui.GetWindowSize().Y <= io.DisplaySize.Y * 0.70f + 1f);
+                        Assert.True(NativeImGui.GetScrollMaxY() > 0f);
+                        ImGuiViewportPtr popupViewport = NativeImGui.GetWindowViewport();
+                        Vector2 popupMinimum = NativeImGui.GetWindowPos();
+                        Vector2 popupMaximum = popupMinimum + NativeImGui.GetWindowSize();
+                        Assert.True(popupMinimum.X >= popupViewport.WorkPos.X - 1f);
+                        Assert.True(popupMinimum.Y >= popupViewport.WorkPos.Y - 1f);
+                        Assert.True(popupMaximum.X <= popupViewport.WorkPos.X + popupViewport.WorkSize.X + 1f);
+                        Assert.True(popupMaximum.Y <= popupViewport.WorkPos.Y + popupViewport.WorkSize.Y + 1f);
+                    }
+                    NativeImGui.EndCombo();
+                }
+                NativeImGui.End();
+                NativeImGui.Render();
+            }
+            Assert.True(openFrames >= 2);
+            Assert.All(popupWidths, width => Assert.InRange(width, 179f, 181f));
         }
         finally
         {

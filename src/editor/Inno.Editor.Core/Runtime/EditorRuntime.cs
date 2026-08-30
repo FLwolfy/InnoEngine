@@ -27,9 +27,13 @@ public abstract class EditorRuntime : IDisposable
     /// <param name="frame">The immutable frame state.</param>
     public abstract void Update(EditorFrame frame);
 
-    /// <summary>Publishes the latest immutable frame to the shared context.</summary>
+    /// <summary>Advances frame-scoped data and publishes the latest immutable frame.</summary>
     /// <param name="frame">The frame to publish.</param>
-    protected void SetFrame(EditorFrame frame) => context.frame = frame;
+    protected void SetFrame(EditorFrame frame)
+    {
+        context.statistics.AdvanceFrame();
+        context.frame = frame;
+    }
 
     /// <summary>Stops the runtime and releases active extensions.</summary>
     public abstract void Dispose();

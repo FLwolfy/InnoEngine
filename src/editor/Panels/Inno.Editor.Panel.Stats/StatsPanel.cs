@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.Linq;
+
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
@@ -29,7 +32,20 @@ internal sealed class StatsPanel : EditorPanel
         NativeImGui.TextUnformatted($"Time: {context.frame.totalTime:F2}s");
         NativeImGui.TextUnformatted($"Delta: {m_statistics.deltaTime * 1000f:F2} ms");
         NativeImGui.TextUnformatted($"FPS: {m_statistics.framesPerSecond:F1}");
-        NativeImGui.Separator();
-        EditorWidget.Hint("No Scene/Game panel in this phase.");
+        IReadOnlyList<EditorStatistic> statistics = context.statistics.GetSnapshot();
+        if (statistics.Count == 0)
+        {
+            NativeImGui.Separator();
+            EditorWidget.Hint("No feature statistics were published for the current frame.");
+            return;
+        }
+
+        foreach (IGrouping<EditorStatisticGroupId, EditorStatistic> group in statistics.GroupBy(
+                     static statistic => statistic.groupId))
+        {
+            NativeImGui.SeparatorText(group.First().groupName);
+            foreach (EditorStatistic statistic in group)
+                NativeImGui.TextUnformatted($"{statistic.label}: {statistic.value}");
+        }
     }
 }

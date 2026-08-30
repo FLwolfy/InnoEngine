@@ -90,7 +90,10 @@ internal sealed class ConsolePanel : EditorPanel
 
     private bool DrawFilterCombo()
     {
-        if (!NativeImGui.BeginCombo("##ConsoleFilter", "Filter", ImGuiComboFlags.WidthFitPreview))
+        if (!EditorWidget.BeginBoundedCombo(
+                "##ConsoleFilter",
+                "Filter",
+                ImGuiComboFlags.WidthFitPreview))
         {
             return false;
         }

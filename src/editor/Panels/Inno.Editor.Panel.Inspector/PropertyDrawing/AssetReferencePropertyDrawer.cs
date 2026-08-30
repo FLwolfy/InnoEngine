@@ -1,6 +1,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Numerics;
@@ -53,63 +54,71 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
                 ? $"Missing {missing.GetType().Name} [{persistentId}]"
             : selected is null
                 ? $"Missing ({persistentId})"
-                : selected.assetPath.ToString();
+                : selected.displayName;
 
-        bool open = NativeImGui.BeginCombo($"##{context.path}", preview);
+        bool open = EditorWidget.BeginBoundedCombo($"##{context.path}", preview);
         Vector2 dropMinimum = NativeImGui.GetItemRectMin();
         Vector2 dropMaximum = NativeImGui.GetItemRectMax();
         EditorDropWidgetResult drop = EditorDragDropRenderer.Target(
             context.interactions.For(
                 InspectorInteractionIds.C_ASSET_REFERENCE_AREA,
                 new AssetReferenceDropTarget(
-                assetType,
-                persistentIdToAssign =>
-                {
-                    AssetCandidate? dropped = Array.Find(
-                        candidates,
-                        candidate => candidate.persistentId == persistentIdToAssign);
-                    if (dropped is not null)
-                        AssignAsset(context, assetType, dropped);
-                })));
+                    assetType,
+                    persistentIdToAssign =>
+                    {
+                        AssetCandidate? dropped = Array.Find(
+                            candidates,
+                            candidate => candidate.persistentId == persistentIdToAssign);
+                        if (dropped is not null)
+                            AssignAsset(context, assetType, dropped);
+                    })));
         if (drop.isPreviewing && drop.status.canDrop)
             EditorWidget.DropTargetHighlight(dropMinimum, dropMaximum);
 
         if (!open)
-        {
             return;
-        }
-
-        string search = s_searchByPath.TryGetValue(context.path, out string? existingSearch)
-            ? existingSearch
-            : string.Empty;
-        _ = EditorWidget.SearchInput(
-            context.path,
-            "Search assets...",
-            ref search,
-            C_SEARCH_BUFFER_SIZE);
-        s_searchByPath[context.path] = search;
-
-        if (NativeImGui.Selectable("None", persistentId == Guid.Empty))
+        try
         {
-            context.SetValue(null);
-        }
+            string search = s_searchByPath.TryGetValue(context.path, out string? existingSearch)
+                ? existingSearch
+                : string.Empty;
+            _ = EditorWidget.SearchInput(
+                context.path,
+                "Search assets...",
+                ref search,
+                C_SEARCH_BUFFER_SIZE);
+            s_searchByPath[context.path] = search;
 
-        for (int i = 0; i < candidates.Length; i++)
+            if (NativeImGui.Selectable("None", persistentId == Guid.Empty))
+                context.SetValue(null);
+
+            for (int i = 0; i < candidates.Length; i++)
+            {
+                AssetCandidate candidate = candidates[i];
+                if (!string.IsNullOrWhiteSpace(search) &&
+                    candidate.displayName.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0 &&
+                    candidate.fullPath.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    continue;
+                }
+
+                if (NativeImGui.Selectable(
+                        $"{candidate.displayName}##{candidate.persistentId:N}",
+                        candidate.persistentId == persistentId))
+                {
+                    AssignAsset(context, assetType, candidate);
+                }
+                if (NativeImGui.IsItemHovered() && EditorWidget.BeginMenuTooltip())
+                {
+                    NativeImGui.TextUnformatted(candidate.fullPath);
+                    EditorWidget.EndMenuTooltip();
+                }
+            }
+        }
+        finally
         {
-            AssetCandidate candidate = candidates[i];
-            if (!string.IsNullOrWhiteSpace(search) &&
-                candidate.assetPath.ToString().IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0)
-            {
-                continue;
-            }
-
-            if (NativeImGui.Selectable(candidate.assetPath.ToString(), candidate.persistentId == persistentId))
-            {
-                AssignAsset(context, assetType, candidate);
-            }
+            NativeImGui.EndCombo();
         }
-
-        NativeImGui.EndCombo();
     }
 
     private static AssetCandidate[] GetCandidates(Type targetAssetType)
@@ -133,14 +142,20 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
 
                 if (AssetManager.TryGetPersistentId(entry.assetPath, out Guid persistentId))
                 {
-                    candidates.Add(new AssetCandidate(entry.assetPath, persistentId));
+                    string name = Path.GetFileNameWithoutExtension(entry.assetPath.localPath);
+                    string displayName = $"{entry.assetPath.source.value}:{name}";
+                    candidates.Add(new AssetCandidate(
+                        entry.assetPath,
+                        persistentId,
+                        displayName,
+                        entry.assetPath.ToString()));
                 }
             }
 
             candidates.Sort(static (left, right) =>
                 string.Compare(
-                    left.assetPath.ToString(),
-                    right.assetPath.ToString(),
+                    left.displayName,
+                    right.displayName,
                     StringComparison.OrdinalIgnoreCase));
             AssetCandidate[] result = candidates.ToArray();
             s_candidatesByType.Add(targetAssetType, new CandidatesBox(result));
@@ -175,6 +190,10 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
         return method.MakeGenericMethod(assetType).Invoke(null, [assetPath])!;
     }
 
-    private sealed record AssetCandidate(AssetPath assetPath, Guid persistentId);
+    private sealed record AssetCandidate(
+        AssetPath assetPath,
+        Guid persistentId,
+        string displayName,
+        string fullPath);
     private sealed record CandidatesBox(AssetCandidate[] candidates);
 }

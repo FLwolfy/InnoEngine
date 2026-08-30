@@ -3,6 +3,7 @@ using System;
 using Inno.Editor.ImGui.ImGuiWidget;
 using Inno.Editor.Settings;
 using Inno.Native.ImGui;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Global;
@@ -36,7 +37,7 @@ internal sealed class ActualSizeSetting : EditorSetting
         float value = setting.GetAsSingle("value", 1f);
         string preview = GetLabel(value);
         NativeImGui.SetNextItemWidth(-1f);
-        if (!NativeImGui.BeginCombo("##actual_size", preview))
+        if (!EditorWidget.BeginBoundedCombo("##actual_size", preview))
             return;
         try
         {
