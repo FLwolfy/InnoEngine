@@ -46,6 +46,8 @@ ShaderGraph ───────┘       │
 
 Importer 声明 include、source、材质、纹理和几何外部 buffer 依赖。Shader 中的 `#include "path.sc"` 从当前 Asset Source Mount 解析并进入依赖图；跨 Plugin 使用 `#include "plugin.id::path.sc"`，且消费方清单必须声明该 Plugin 依赖。`#include <bgfx_shader.sh>` 这类不带 Source ID 的尖括号 include 保留给 shaderc 工具链处理，不会被当作项目资产。Importer 通过候选 Mount 快照读取依赖，禁止直接访问当前全局 Mount，因此尚未发布的 Plugin generation 可以被完整验证后再原子激活。
 
+`.ishader` 的 IR 会嵌入所引用 `.sc` 的当前内容，因此 Shader importer 同时登记 runtime dependency 与 artifact invalidation dependency。任意阶段源码重新导入后，只有受影响的 Shader IR、目标 Program 与其下游资源会重建；不会继续使用包含旧源码的 IR，也不需要清空整个 `Library`。
+
 Build fingerprint 包含 Processor MVID、目标 profile key、输入 artifact 与原生定义 bytes；成功候选才替换 last-good。Editor 注入可执行目标编译器；Player 可以改为注入只读取预编译 artifact 的实现，不需要在运行时携带 shaderc。
 
 Runtime 不会在 render thread 同步启动或等待 shaderc/texturec。源 Shader/Texture 的目标编译通过后台 prewarm job 执行，完成 artifact 只在后续帧安全点发布；同一资产内容更新会取消并退休旧 job，连续编辑不会无限积累编译任务。

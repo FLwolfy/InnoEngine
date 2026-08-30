@@ -171,10 +171,10 @@ public static class EditorPalette
     public static Vector4 collectionRowAlternate { get; } = new(0.215f, 0.215f, 0.215f, 1f);
 
     /// <summary>Gets the translucent primary background of a complete Settings field.</summary>
-    public static Vector4 settingsField { get; } = new(0.36f, 0.36f, 0.38f, 0.1f);
+    public static Vector4 settingsField { get; } = new(0.36f, 0.36f, 0.38f, 0.03f);
 
     /// <summary>Gets the translucent alternate background of a complete Settings field.</summary>
-    public static Vector4 settingsFieldAlternate { get; } = new(0.52f, 0.52f, 0.56f, 0.1f);
+    public static Vector4 settingsFieldAlternate { get; } = new(0.52f, 0.52f, 0.56f, 0.03f);
 
     /// <summary>Gets the asset browser field background.</summary>
     public static Vector4 assetField { get; } = new(0.235f, 0.22f, 0.27f, 1f);

@@ -65,7 +65,9 @@ public sealed class EditorViewportContext
         EditorViewportKindId kind,
         string viewportId,
         int pixelWidth,
-        int pixelHeight)
+        int pixelHeight,
+        EditorViewportCamera camera,
+        EditorViewportPresentation presentation)
     {
         this.editor = editor;
         this.interactions = interactions;
@@ -73,6 +75,8 @@ public sealed class EditorViewportContext
         this.viewportId = viewportId;
         this.pixelWidth = pixelWidth;
         this.pixelHeight = pixelHeight;
+        this.camera = camera;
+        this.presentation = presentation;
     }
 
     /// <summary>Gets the current Editor context.</summary>
@@ -92,6 +96,26 @@ public sealed class EditorViewportContext
 
     /// <summary>Gets target height in physical pixels.</summary>
     public int pixelHeight { get; }
+
+    /// <summary>Gets host-owned navigation state that the provider can map to its camera model.</summary>
+    public EditorViewportCamera camera { get; }
+
+    /// <summary>Gets host-selected presentation preferences for this viewport.</summary>
+    public EditorViewportPresentation presentation { get; }
+}
+
+/// <summary>Describes host-selected presentation preferences without prescribing rendering behavior.</summary>
+public readonly record struct EditorViewportPresentation
+{
+    /// <summary>Creates presentation preferences for one Editor viewport.</summary>
+    /// <param name="backgroundColor">Linear clear color preferred by the host panel.</param>
+    public EditorViewportPresentation(Color backgroundColor)
+    {
+        this.backgroundColor = backgroundColor;
+    }
+
+    /// <summary>Gets the linear clear color preferred by the host panel.</summary>
+    public Color backgroundColor { get; }
 }
 
 /// <summary>

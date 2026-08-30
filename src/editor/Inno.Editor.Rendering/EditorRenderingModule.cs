@@ -5,6 +5,7 @@ using System.Numerics;
 using Inno.Core.Scripting;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
+using EngineColor = Inno.Core.Mathematics.Color;
 
 namespace Inno.Editor.Rendering;
 
@@ -12,8 +13,11 @@ namespace Inno.Editor.Rendering;
 [EditorModule("rendering.viewports", order: 175)]
 public sealed class EditorRenderingModule : EditorModule
 {
+    private readonly Dictionary<string, EditorViewportCamera> m_cameras = new(StringComparer.Ordinal);
     private readonly Dictionary<EditorViewportKindId, string> m_providerErrors = [];
     private readonly Dictionary<string, EditorViewportManipulationSpace> m_manipulationSpaces =
+        new(StringComparer.Ordinal);
+    private readonly Dictionary<string, EditorViewportPresentation> m_presentations =
         new(StringComparer.Ordinal);
     private readonly IEditorRenderingHost m_host;
     private readonly EditorInteractions m_interactions;
@@ -41,6 +45,31 @@ public sealed class EditorRenderingModule : EditorModule
     /// <returns>The failure message, or null when no current failure exists.</returns>
     public string? GetProviderError(EditorViewportKindId kind)
         => m_providerErrors.GetValueOrDefault(kind);
+
+    /// <summary>Gets the host-owned camera state for one stable Editor viewport.</summary>
+    /// <param name="viewportId">Stable panel viewport identity.</param>
+    /// <returns>The reusable camera state owned by the Editor host.</returns>
+    [ScriptingApiIgnore]
+    public EditorViewportCamera GetCamera(string viewportId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(viewportId);
+        if (!m_cameras.TryGetValue(viewportId, out EditorViewportCamera? camera))
+        {
+            camera = new EditorViewportCamera();
+            m_cameras.Add(viewportId, camera);
+        }
+        return camera;
+    }
+
+    /// <summary>Sets presentation preferences supplied to the provider for one Editor viewport.</summary>
+    /// <param name="viewportId">Stable panel viewport identity.</param>
+    /// <param name="presentation">Current host-owned presentation preferences.</param>
+    [ScriptingApiIgnore]
+    public void SetPresentation(string viewportId, EditorViewportPresentation presentation)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(viewportId);
+        m_presentations[viewportId] = presentation;
+    }
 
     /// <summary>Tries to get the manipulation space from the latest accepted submission for one viewport.</summary>
     /// <param name="viewportId">Stable panel viewport identity.</param>
@@ -195,15 +224,19 @@ public sealed class EditorRenderingModule : EditorModule
         _ = context;
         m_context = null;
         m_host.ReleaseAll();
+        m_cameras.Clear();
         m_providerErrors.Clear();
         m_manipulationSpaces.Clear();
+        m_presentations.Clear();
     }
 
     /// <inheritdoc />
     protected override void OnDispose()
     {
         m_providers.Dispose();
+        m_cameras.Clear();
         m_manipulationSpaces.Clear();
+        m_presentations.Clear();
         m_host.ReleaseAll();
     }
 
@@ -228,7 +261,11 @@ public sealed class EditorRenderingModule : EditorModule
             kind,
             viewportId,
             pixelWidth,
-            pixelHeight);
+            pixelHeight,
+            GetCamera(viewportId),
+            m_presentations.GetValueOrDefault(
+                viewportId,
+                new EditorViewportPresentation(EngineColor.DARKGRAY)));
         return true;
     }
 }
