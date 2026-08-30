@@ -1,6 +1,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Inno.Assets;
 using Inno.Assets.Core;
 using Inno.Assets.File;
@@ -21,79 +22,113 @@ internal enum FileBrowserEntryScopeFilter
     Recursive
 }
 
+internal readonly record struct FileBrowserDisplayEntry(
+    AssetFileEntry entry,
+    string displayName,
+    bool isPluginRoot = false);
+
 internal sealed class FileBrowserData(AssetEditorModule assets)
 {
-    internal IReadOnlyList<AssetFileEntry> CollectVisibleEntries(
+    internal IReadOnlyList<FileBrowserDisplayEntry> CollectVisibleEntries(
         EditorContext context,
         FileBrowserEntryTypeFilter typeFilter,
         FileBrowserEntryScopeFilter scopeFilter,
         string searchFilter)
     {
-        List<AssetFileEntry> entries = [];
-        if (scopeFilter == FileBrowserEntryScopeFilter.CurrentOnly)
+        List<FileBrowserDisplayEntry> entries = [];
+        if (assets.browser.root == AssetBrowserRoot.Plugins &&
+            string.IsNullOrEmpty(assets.browser.currentDirectory))
+        {
+            CollectPluginRoots(entries, scopeFilter);
+        }
+        else if (scopeFilter == FileBrowserEntryScopeFilter.CurrentOnly)
         {
             IReadOnlyList<AssetFileEntry> children = GetVisibleChildren(assets.browser.currentDirectory);
             for (int i = 0; i < children.Count; i++)
-                entries.Add(children[i]);
+                entries.Add(new FileBrowserDisplayEntry(children[i], children[i].name));
         }
         else
-        {
             CollectEntriesRecursive(assets.browser.currentDirectory, entries);
-        }
 
         ApplyTypeFilter(entries, typeFilter);
         ApplySearchFilter(entries, searchFilter);
         entries.Sort(static (left, right) =>
         {
             int byName = string.Compare(
-                left.nameWithoutExtension,
-                right.nameWithoutExtension,
+                left.displayName,
+                right.displayName,
                 StringComparison.OrdinalIgnoreCase);
             if (byName != 0)
                 return byName;
             int byExtension = string.Compare(
-                left.extension,
-                right.extension,
+                left.entry.extension,
+                right.entry.extension,
                 StringComparison.OrdinalIgnoreCase);
             return byExtension != 0
                 ? byExtension
-                : string.CompareOrdinal(left.assetPath.ToString(), right.assetPath.ToString());
+                : string.CompareOrdinal(
+                    left.entry.assetPath.ToString(),
+                    right.entry.assetPath.ToString());
         });
         return entries;
     }
 
     private static void ApplyTypeFilter(
-        List<AssetFileEntry> entries,
+        List<FileBrowserDisplayEntry> entries,
         FileBrowserEntryTypeFilter typeFilter)
     {
         switch (typeFilter)
         {
             case FileBrowserEntryTypeFilter.FoldersOnly:
-                entries.RemoveAll(static entry => !entry.isDirectory);
+                entries.RemoveAll(static item => !item.entry.isDirectory);
                 break;
             case FileBrowserEntryTypeFilter.FilesOnly:
-                entries.RemoveAll(static entry => entry.isDirectory);
+                entries.RemoveAll(static item => item.entry.isDirectory);
                 break;
         }
     }
 
-    private static void ApplySearchFilter(List<AssetFileEntry> entries, string searchFilter)
+    private static void ApplySearchFilter(
+        List<FileBrowserDisplayEntry> entries,
+        string searchFilter)
     {
         string filter = searchFilter.Trim();
         if (!string.IsNullOrEmpty(filter))
         {
-            entries.RemoveAll(entry =>
-                !entry.name.Contains(filter, StringComparison.OrdinalIgnoreCase));
+            entries.RemoveAll(item =>
+                !item.displayName.Contains(filter, StringComparison.OrdinalIgnoreCase));
         }
     }
 
-    private void CollectEntriesRecursive(string directory, List<AssetFileEntry> entries)
+    private void CollectPluginRoots(
+        List<FileBrowserDisplayEntry> entries,
+        FileBrowserEntryScopeFilter scopeFilter)
+    {
+        AssetSourceMount[] mounts = AssetManager.sourceMounts
+            .Where(static mount => mount.id != AssetSourceId.project)
+            .OrderBy(static mount => mount.id.value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        for (int i = 0; i < mounts.Length; i++)
+        {
+            AssetSourceMount mount = mounts[i];
+            var rootPath = new AssetPath(mount.id, string.Empty);
+            if (!AssetManager.TryGetFileSystemEntry(rootPath, out AssetFileEntry root))
+                continue;
+            entries.Add(new FileBrowserDisplayEntry(root, mount.id.value, isPluginRoot: true));
+            if (scopeFilter == FileBrowserEntryScopeFilter.Recursive)
+                CollectEntriesRecursive(root.assetPath.ToString(), entries);
+        }
+    }
+
+    private void CollectEntriesRecursive(
+        string directory,
+        List<FileBrowserDisplayEntry> entries)
     {
         IReadOnlyList<AssetFileEntry> children = GetVisibleChildren(directory);
         for (int i = 0; i < children.Count; i++)
         {
             AssetFileEntry child = children[i];
-            entries.Add(child);
+            entries.Add(new FileBrowserDisplayEntry(child, child.name));
             if (child.isDirectory)
                 CollectEntriesRecursive(child.assetPath.ToString(), entries);
         }

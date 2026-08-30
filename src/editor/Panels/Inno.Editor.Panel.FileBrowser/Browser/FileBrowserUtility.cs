@@ -18,6 +18,11 @@ namespace Inno.Editor.Panel.FileBrowser;
 
 internal static class FileBrowserUtility
 {
+    internal readonly record struct BreadcrumbPart(
+        string label,
+        AssetBrowserRoot root,
+        string directory);
+
     internal static void PushBrowserStyle()
     {
         NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.assetText);
@@ -56,8 +61,12 @@ internal static class FileBrowserUtility
         => AssetManager.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry entry)
             && entry.isDirectory;
 
-    internal static string GetDirectoryLabel(string relativePath)
+    internal static string GetDirectoryLabel(
+        AssetBrowserRoot root,
+        string relativePath)
     {
+        if (root == AssetBrowserRoot.Plugins && string.IsNullOrEmpty(relativePath))
+            return "Plugins";
         AssetPath path = AssetPath.Parse(NormalizePath(relativePath));
         if (string.IsNullOrEmpty(path.localPath))
             return GetSourceRootLabel(path.source);
@@ -103,11 +112,30 @@ internal static class FileBrowserUtility
         return string.IsNullOrEmpty(extension) ? "FILE" : extension.TrimStart('.').ToUpperInvariant();
     }
 
-    internal static IReadOnlyList<(string Label, string Path)> BuildBreadcrumbParts(string relativePath)
+    internal static IReadOnlyList<BreadcrumbPart> BuildBreadcrumbParts(
+        AssetBrowserRoot root,
+        string relativePath)
     {
+        if (root == AssetBrowserRoot.Plugins && string.IsNullOrEmpty(relativePath))
+            return [new BreadcrumbPart("Plugins", AssetBrowserRoot.Plugins, string.Empty)];
         AssetPath sourcePath = AssetPath.Parse(NormalizePath(relativePath));
         string sourceRoot = new AssetPath(sourcePath.source, string.Empty).ToString();
-        List<(string Label, string Path)> parts = [(GetSourceRootLabel(sourcePath.source), sourceRoot)];
+        var parts = new List<BreadcrumbPart>();
+        if (root == AssetBrowserRoot.Plugins)
+        {
+            parts.Add(new BreadcrumbPart("Plugins", AssetBrowserRoot.Plugins, string.Empty));
+            parts.Add(new BreadcrumbPart(
+                GetSourceRootLabel(sourcePath.source),
+                AssetBrowserRoot.Plugins,
+                sourceRoot));
+        }
+        else
+        {
+            parts.Add(new BreadcrumbPart(
+                "Assets",
+                AssetBrowserRoot.Assets,
+                sourceRoot));
+        }
         if (string.IsNullOrEmpty(sourcePath.localPath))
             return parts;
         string[] segments = sourcePath.localPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
@@ -115,10 +143,17 @@ internal static class FileBrowserUtility
         for (int i = 0; i < segments.Length; i++)
         {
             path = string.IsNullOrEmpty(path) ? segments[i] : $"{path}/{segments[i]}";
-            parts.Add((segments[i], new AssetPath(sourcePath.source, path).ToString()));
+            parts.Add(new BreadcrumbPart(
+                segments[i],
+                root,
+                new AssetPath(sourcePath.source, path).ToString()));
         }
         return parts;
     }
+
+    internal static bool IsReadOnlyLocation(AssetBrowserState browser)
+        => browser.root == AssetBrowserRoot.Plugins ||
+           IsReadOnlySource(browser.currentDirectory);
 
     internal static string NormalizePath(string? path)
         => AssetPath.Parse(string.IsNullOrWhiteSpace(path) ? string.Empty : path.Replace('\\', '/').Trim()).ToString();

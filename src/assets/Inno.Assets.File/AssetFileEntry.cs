@@ -8,8 +8,14 @@ namespace Inno.Assets.File;
 /// </summary>
 public sealed class AssetFileEntry
 {
-    /// <summary>Gets the final source path segment, including its extension.</summary>
-    public string name => Path.GetFileName(assetPath.localPath);
+    /// <summary>
+    /// Gets the final source path segment, or the semantic mount-root label when this entry is a source root.
+    /// </summary>
+    public string name => string.IsNullOrEmpty(assetPath.localPath)
+        ? assetPath.source == AssetSourceId.project
+            ? "Assets"
+            : assetPath.source.value
+        : Path.GetFileName(assetPath.localPath);
 
     /// <summary>Gets the final source path segment without its last extension.</summary>
     public string nameWithoutExtension => isDirectory ? name : Path.GetFileNameWithoutExtension(name);

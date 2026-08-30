@@ -29,7 +29,7 @@ internal sealed class SaveCommand(
             {
                 _ = workspace.Save(
                     scenes[i],
-                    assets.browser.currentDirectory);
+                    assets.browser.projectDirectory);
             }
         }
         catch (Exception exception)

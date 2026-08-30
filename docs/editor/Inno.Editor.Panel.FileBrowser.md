@@ -6,20 +6,23 @@
 
 Scene、Prefab、Folder 和普通文件 icon declaration 可以直接保存完整 `Editor/...` Settings path；`AssetIconRegistry` 用 `EditorSettings.Get(path).GetAsString("value")` 读取 JSON property bag 中的 glyph。脚本声明仍可填写 literal glyph。
 
-## 多根与 ZIP/Folder Plugin
+## Assets / Plugins 双根与 ZIP/Folder Plugin
 
-Tree 同时显示可写 `Assets` 根和普通 `Plugins` 根；`Plugins` 下每个 Plugin ID 是独立可展开的只读目录，不再把 `Plugins/<id>` 合并成一个根 label。所有导航、搜索、selection 和 drag source 使用完整 `AssetPath(source, localPath)`，因此不同 mount 的同名文件不会碰撞。
+Tree 底部使用带水平分隔线、占满 pane 宽度的 `Switch to Assets` / `Switch to Plugins` 按钮，在可写 `Assets` 创作根与只读 `Plugins` 安装根之间切换。两边分别保存上次访问目录；`Plugins` overview 会在 Tree、List、Grid 中一致列出每个已激活 Plugin ID，进入后继续使用相同的导航、过滤、搜索、selection、打开和 drag source 逻辑。单击普通目录只选择，双击才进入；Tree 展开只响应 disclosure 或明确的目录导航，不因 content selection 持续强制展开。所有真实条目使用完整 `AssetPath(source, localPath)`，因此不同 mount 的同名文件不会碰撞。
 
-- Plugin 根和条目显示只读状态；Create、Rename、Move、Delete 与 drop target 会隐藏或明确拒绝。
+Plugin ID 条目对应合法的 Source Mount 根，而不是 Catalog Asset；它可以导航、选择和作为只读目录 drag source，但没有 `AssetInfo` 或 runtime asset type。FileBrowser 核心布局与 entry 绘制的 Child、Table、Tree、ID 和 Style scope 会在异常路径中完整 unwind，因此条目交互失败不会再把 ImGui window stack 留在半开启状态。
+
+- `Assets` 是唯一官方创作源；Plugin 源码、Shader、设置和资产先在这里开发，再由 `.iplugin` 导出。
+- ZIP 和 Folder 都是安装形态。Plugin 根和条目显示只读状态；Create、Rename、Move、Delete、Save 与 drop target 会隐藏或明确拒绝，Open、查看、导航、搜索与只读 drag source 保持可用。
 - File Browser 不提供 Plugin 管理或 trust 按钮；ZIP/Folder 的文件系统变化由 `PluginManager` 自动轮询并进入统一候选事务，错误通过 Diagnostics/Console 报告。
 - 放入带代码的 Plugin 即表示允许其以项目脚本相同的本机权限执行；File Browser 只展示 active Source Mount，不承担安全确认职责。
-- `Create/Plugin Definition` 创建原生 `.iplugin`；`Export Plugin ZIP` 生成确定性安装包，`Export Plugin Folder` 生成可继续编辑的目录。两者进入同一校验、content hash 与激活通道。
+- `Create/Plugin Definition` 创建原生 `.iplugin`；`Export Plugin ZIP` 生成压缩安装包，`Export Plugin Folder` 生成便于检查或无压缩部署的安装目录。统一阻塞式导出窗口要求用户明确目标位置，并拒绝写入当前创作项目的 `Assets/Plugins/Library`；导出不会自动安装或刷新当前项目。两者共享同一校验与 content hash 协议，均不成为新的创作源。
 
 ## 公共扩展 API
 
 | API | 作用 |
 | --- | --- |
-| `AssetBrowserState` | 按 persistent identity 保存当前目录与选择。 |
+| `AssetBrowserRoot` / `AssetBrowserState` | 区分 Assets/Plugins 根，分别保存导航位置，并始终保留最近的可写 Project 目录。 |
 | `AssetEditor` / `AssetEditorAttribute` | 为特定 Asset 类型声明 Open/Rename/Delete/Drag 行为。 |
 | `AssetEditorContext` | 当前 `EditorContext`、interactions、路径、Asset 信息和实例。 |
 | `AssetIconAttribute` | 按 imported Asset 类型或 source extension 配置 Tree/List/Grid 共用图标；glyph 使用 `InnoEditor.ImGui.ImGuiIcon`。 |
@@ -134,9 +137,9 @@ internal static class AnimationAssetIcons
 - 输入框失去焦点或 selection 切换到其他 target 时，Rename Action 会提交当前有效名称并结束；无效名称保留原值并结束。
 - Tree/List/Grid 的未占用背景收到左键点击时会清除当前 Asset selection。
 - SceneAsset 打开 Action 由 Hierarchy feature 实现，但使用全局 Open 语义和共享路径参数，不形成 Panel project 引用。
-- 全局 Save 保存尚无 source path 的 Scene 时，使用 File Browser 当前打开目录作为 fallback；已有 source 的 Scene 仍保存回自身路径。
+- 全局 Save 保存尚无 source path 的 Scene 时，始终使用 File Browser 最近访问的 `Assets` 目录作为 fallback；即使当前正在查看只读 Plugin，也不会尝试向 Plugin Mount 写入。已有 source 的 Scene 仍保存回自身路径。
 
-ID 为 `asset-browser` 的 Asset Browser Module 只保存完整当前 `AssetPath`；Asset selection 属于当前 Editor session，不写入 `editor.ini`。Plugin mount 消失时 Change Tracker 会退回 Project 根并清除无效 selection。ID 为 `asset.file-browser` 的 Panel 保存 List/Grid 模式、搜索过滤、scope/type filter、Tree/Content 分隔比例、grid scale，以及 List 分隔位置。
+ID 为 `asset-browser` 的 Asset Browser Module 保存 active root，以及 Assets/Plugins 各自的完整当前 `AssetPath`；Asset selection 属于当前 Editor session，不写入 `editor.ini`。Plugin mount 消失时 Plugins 视图退回只读 overview 并清除无效 selection，不会破坏 Assets 创作位置。ID 为 `asset.file-browser` 的 Panel 保存 List/Grid 模式、搜索过滤、scope/type filter、Tree/Content 分隔比例、grid scale，以及 List 分隔位置。
 
 List 的三个 column 使用同一个内容 inset，手动 splitter 只占用从 header 到最后一行的真实 table 高度，因此 header 与每一条内容 row 都能接收 resize 拖动，而下方空白区域不会继续接收 hover 或拖动。row Selectable 明确允许 splitter overlay 重叠，separator 不会吞掉 Name、Type 或 Source 的正常点击区域。Grid 图标和文件名使用 draw-list overlay 绘制，不通过 `SetCursorScreenPos` 移动布局 cursor；图标先从卡片中扣除顶部、水平和 label 间距，再按剩余区域等比缩小。最终位置使用 baked glyph 的 `X0/Y0/X1/Y1` 可见边界计算，所以 Font Awesome 中左右 bearing 不对称的 Cube、Folder 等图标也会把真实轮廓中心放在卡片水平中心线上，并且不会越过卡片上沿。Selectable 仍是唯一负责 cell 尺寸与输入的 ImGui item。Inline Rename 必须临时移动 cursor 时，会在恢复布局位置后提交零尺寸 item，避免扩展 parent boundary 的 ImGui assertion。
 

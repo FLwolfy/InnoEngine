@@ -1119,7 +1119,29 @@ public sealed class ScriptManagerTests : IDisposable
     }
 
     [Fact]
-    public void GlobalSaveCreatesUnsavedScenesInTheOpenAssetDirectory()
+    public void AssetBrowserKeepsAuthoringAndInstalledNavigationIndependent()
+    {
+        using var runtime = new EditorInteractionRuntime(new EditorContext(m_projectRoot));
+        var browser = new AssetBrowserState(runtime.interactions);
+
+        browser.SetCurrentDirectory("Authoring/Sprites");
+        Assert.Equal(AssetBrowserRoot.Assets, browser.root);
+        Assert.Equal("Authoring/Sprites", browser.currentDirectory);
+        Assert.Equal("Authoring/Sprites", browser.projectDirectory);
+
+        browser.SetRoot(AssetBrowserRoot.Plugins);
+        Assert.Equal(string.Empty, browser.currentDirectory);
+        browser.SetCurrentDirectory("tests.rendering::Samples");
+        Assert.Equal(AssetBrowserRoot.Plugins, browser.root);
+        Assert.Equal("tests.rendering::Samples", browser.currentDirectory);
+        Assert.Equal("Authoring/Sprites", browser.projectDirectory);
+
+        browser.SetRoot(AssetBrowserRoot.Assets);
+        Assert.Equal("Authoring/Sprites", browser.currentDirectory);
+    }
+
+    [Fact]
+    public void GlobalSaveUsesTheAuthoringDirectoryWhilePluginsAreDisplayed()
     {
         _ = Assembly.Load(typeof(HierarchyObjectDropTarget).Assembly.GetName());
         TypeCacheManager.Rebuild();
@@ -1129,7 +1151,9 @@ public sealed class ScriptManagerTests : IDisposable
             "Module.asset-browser",
             new System.Collections.Generic.Dictionary<string, string>
             {
-                ["currentDirectory"] = "\"Open Folder\""
+                ["root"] = "\"Plugins\"",
+                ["assetsDirectory"] = "\"Open Folder\"",
+                ["pluginsDirectory"] = "\"\""
             });
 
         using var runtime = new EditorInteractionRuntime(editorContext);
@@ -1727,6 +1751,23 @@ public sealed class ScriptManagerTests : IDisposable
         ScriptCompilationResult editorResult = Compile();
 
         Assert.True(editorResult.success, FormatDiagnostics(editorResult));
+    }
+
+    [Fact]
+    public void EditorScriptsCanUseTheAssetBrowserRootContract()
+    {
+        Write("AssetBrowserRootProbe.editor.cs", """
+            using InnoEditor.Assets;
+
+            public sealed class AssetBrowserRootProbe
+            {
+                public AssetBrowserRoot root => AssetBrowserRoot.Plugins;
+            }
+            """);
+
+        ScriptCompilationResult result = Compile();
+
+        Assert.True(result.success, FormatDiagnostics(result));
     }
 
     [Fact]

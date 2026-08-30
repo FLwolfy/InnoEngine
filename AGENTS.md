@@ -137,7 +137,8 @@
 - Shader、Technique、Material 与 Pipeline 通过开放 Stable ID 契约组合；内核不得维护封闭 Pass Tag、Render Path、资源语义或质量设置名单。
 
 ## 18. Plugin 与结构化内容强制边界
-- Project 根目录的 `Plugins` 与 `Assets` 平级。Plugin 可以是源码 ZIP，也可以是便于本地开发的源码目录；两者必须经过相同校验并作为只读 Asset Source Mount 进入现有 Asset Catalog、Importer、依赖图和 Artifact 流程，禁止建立 Plugin 专用资产数据库。
+- Project 根目录的 `Plugins` 与 `Assets` 平级。`Assets` 是唯一官方可写创作源；Plugin 必须先在 `Assets` 中通过 `PluginDefinitionAsset` 定义并导出。`Plugins/*.zip` 是压缩安装源，`Plugins/<folder>/` 是未压缩安装源而不是开发工作区；两者必须经过相同校验并作为只读 Asset Source Mount 进入现有 Asset Catalog、Importer、依赖图和 Artifact 流程，禁止建立 Plugin 专用资产数据库。
+- File Browser 与所有 Asset mutation API 必须把 ZIP/Folder Plugin 一致视为逻辑只读。外部替换 ZIP 或修改 Folder 只表示安装内容更新并触发候选事务，不授予 Editor 内写权限；`Library/Plugins` 始终是不可编辑、可完全重建的缓存。
 - Plugin ZIP/目录只是本地内容与代码容器，不得引入 Package Manager、远程仓库、语义版本解析或平台产物发布系统。Plugin 依赖使用稳定 Plugin ID；规范化 source content hash 只用于候选、变化检测与缓存身份。
 - Plugin 扩展必须复用现有 `AssemblyDomain.InnoPlugin`、collectible ALC、TypeCache、TypeRegistry 和候选事务。持久状态不得保存 Plugin `Type`、实例或 delegate。
 - 所有结构化资产、Graph、Plugin 清单和 Project Settings 必须使用 `ISerializable`、`SerializableProperty`、Serialization Converter 与 `SerializationManager`。只有 C#、Shader source/include 和普通文档等天然文本允许保持文本格式；禁止为 Rendering、Plugin 或 Settings 建立独立 JSON 持久化旁路。

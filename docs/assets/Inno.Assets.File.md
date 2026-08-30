@@ -47,6 +47,7 @@ IReadOnlyList<AssetChangedEvent> changes = files.PollChanges();
 | `isDirectory` | `false` |
 
 `nameWithoutExtension` 只去掉最后一层扩展名，正是 FileBrowser List 的显示语义。选择、拖拽、双击和保存始终使用完整 `assetPath`。
+Source root entry 没有 local segment，因此 `name`/`nameWithoutExtension` 使用语义标签：Project root 为 `Assets`，Plugin root 为稳定 Plugin ID。这让 Plugins overview 的 Tree、List、Grid 与 Inspector 共享同一条目身份，不需要伪造第二种文件节点。
 
 ## Rename/delete 规范化
 

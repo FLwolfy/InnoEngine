@@ -131,8 +131,12 @@ public sealed class AssetFileSystemTests
 
             Assert.True(fileSystem.TryGetEntry(AssetPath.Project("same.txt"), out AssetFileEntry projectEntry));
             Assert.True(fileSystem.TryGetEntry(new AssetPath(pluginId, "same.txt"), out AssetFileEntry pluginEntry));
+            Assert.True(fileSystem.TryGetEntry(AssetPath.Project(string.Empty), out AssetFileEntry projectRoot));
+            Assert.True(fileSystem.TryGetEntry(new AssetPath(pluginId, string.Empty), out AssetFileEntry pluginRoot));
             Assert.Equal("same.txt", projectEntry.name);
             Assert.Equal("same.txt", pluginEntry.name);
+            Assert.Equal("Assets", projectRoot.name);
+            Assert.Equal("tests.mount", pluginRoot.name);
             Assert.False(projectEntry.isReadOnly);
             Assert.True(pluginEntry.isReadOnly);
             Assert.Equal(AssetSourceId.project, projectEntry.source);

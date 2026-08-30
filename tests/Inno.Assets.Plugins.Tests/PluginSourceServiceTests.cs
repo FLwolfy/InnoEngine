@@ -78,9 +78,9 @@ public sealed class PluginSourceServiceTests : IDisposable
     }
 
     [Fact]
-    public void DirectoryPluginUsesTheSameValidationAndMountContractAsZip()
+    public void InstalledFolderPluginUsesTheSameReadOnlyMountContractAsZip()
     {
-        string directory = Path.Combine(m_plugins, "EditablePlugin");
+        string directory = Path.Combine(m_plugins, "InstalledPlugin");
         string assets = Path.Combine(directory, "Assets");
         Directory.CreateDirectory(assets);
         System.IO.File.WriteAllBytes(

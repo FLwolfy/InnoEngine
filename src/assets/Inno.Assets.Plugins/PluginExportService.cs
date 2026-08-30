@@ -68,9 +68,12 @@ public static class PluginExportService
         return plan.contentHash;
     }
 
-    /// <summary>Exports one definition to an unpacked, directly editable Plugin directory.</summary>
+    /// <summary>Exports one definition to an unpacked Plugin installation directory.</summary>
     /// <param name="definition">Project-owned Plugin definition.</param>
-    /// <param name="outputDirectory">Destination directory placed under a project's <c>Plugins</c> root.</param>
+    /// <param name="outputDirectory">
+    /// Destination directory for the complete installation image. A consumer installs the result by placing
+    /// this directory under its project-level <c>Plugins</c> root, where it is treated as read-only.
+    /// </param>
     /// <returns>Uppercase SHA-256 hash of the normalized logical Plugin content.</returns>
     /// <exception cref="InvalidOperationException">Thrown when content is missing or crosses an undeclared boundary.</exception>
     public static string ExportDirectory(PluginDefinitionAsset definition, string outputDirectory)

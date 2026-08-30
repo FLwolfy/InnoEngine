@@ -324,8 +324,16 @@ public sealed class AssetManagerContractTests : IDisposable
             new AssetSourceMount(pluginId, pluginRoot, isReadOnly: true)
         ]);
         AssetPath pluginPath = new(pluginId, "value.txt");
+        AssetPath projectSourceRoot = AssetPath.Project(string.Empty);
+        AssetPath pluginSourceRoot = new(pluginId, string.Empty);
 
         Assert.Equal("plugin", AssetManager.Load<TextAsset>(pluginPath).content);
+        Assert.True(AssetManager.TryGetFileSystemEntry(projectSourceRoot, out _));
+        Assert.True(AssetManager.TryGetFileSystemEntry(pluginSourceRoot, out _));
+        Assert.False(AssetManager.TryGetInfo(projectSourceRoot, out _));
+        Assert.False(AssetManager.TryGetInfo(pluginSourceRoot, out _));
+        Assert.False(AssetManager.TryGetPersistentId(pluginSourceRoot, out _));
+        Assert.False(AssetManager.TryGetAssetType(pluginSourceRoot, out _));
         Assert.Throws<InvalidOperationException>(() =>
             AssetManager.Save(pluginPath, new TextAsset("changed")));
         Assert.Throws<InvalidOperationException>(() => AssetManager.Move(pluginPath, AssetPath.Project("moved.txt")));

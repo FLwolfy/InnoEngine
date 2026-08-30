@@ -361,7 +361,11 @@ public sealed class AssetLoader : IDisposable
     /// <returns><see langword="true"/> when the source is cataloged.</returns>
     public bool TryGetInfo(AssetPath path, out AssetInfo? info)
     {
-        string normalized = NormalizeAssetPath(path);
+        if (!TryNormalizeCatalogPath(path, out string normalized))
+        {
+            info = null;
+            return false;
+        }
         AssetInfo? result = Execute(() => CreateInfo(FindRecordLocked(normalized)));
         info = result;
         return result is not null;
@@ -449,7 +453,11 @@ public sealed class AssetLoader : IDisposable
     /// <returns><see langword="true"/> when catalog metadata exists.</returns>
     public bool TryGetPersistentId(AssetPath path, out Guid persistentId)
     {
-        string normalized = NormalizeAssetPath(path);
+        if (!TryNormalizeCatalogPath(path, out string normalized))
+        {
+            persistentId = Guid.Empty;
+            return false;
+        }
         Guid result = Execute(() => FindRecordLocked(normalized)?.persistentId ?? Guid.Empty);
         persistentId = result;
         return result != Guid.Empty;
@@ -461,7 +469,11 @@ public sealed class AssetLoader : IDisposable
     /// <returns><see langword="true"/> when the type can be resolved.</returns>
     public bool TryGetAssetType(AssetPath path, out Type? assetType)
     {
-        string normalized = NormalizeAssetPath(path);
+        if (!TryNormalizeCatalogPath(path, out string normalized))
+        {
+            assetType = null;
+            return false;
+        }
         Type? result = Execute(() => ResolveRecordType(FindRecordLocked(normalized)));
         assetType = result;
         return result is not null;
@@ -2086,6 +2098,20 @@ public sealed class AssetLoader : IDisposable
             throw new ArgumentException("An isolated asset path is required.", nameof(path));
         _ = GetMount(path);
         return path.ToString();
+    }
+
+    private bool TryNormalizeCatalogPath(AssetPath path, out string normalized)
+    {
+        if (!path.isValid)
+            throw new ArgumentException("A valid isolated asset path is required.", nameof(path));
+        _ = GetMount(path);
+        if (string.IsNullOrWhiteSpace(path.localPath))
+        {
+            normalized = string.Empty;
+            return false;
+        }
+        normalized = path.ToString();
+        return true;
     }
 
     private AssetInfo? CreateInfo(AssetRecord? record)

@@ -49,29 +49,49 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
     /// <inheritdoc />
     protected override void Capture(EditorState state)
     {
-        state.Set("currentDirectory", browser.currentDirectory);
+        state.Set("root", browser.root.ToString());
+        state.Set("assetsDirectory", browser.GetDirectory(AssetBrowserRoot.Assets));
+        state.Set("pluginsDirectory", browser.GetDirectory(AssetBrowserRoot.Plugins));
     }
 
     /// <inheritdoc />
     protected override void Restore(EditorState state)
     {
-        string directory = NormalizePath(state.Get("currentDirectory", string.Empty));
+        AssetBrowserRoot restoredRoot = Enum.TryParse(
+            state.Get("root", string.Empty),
+            out AssetBrowserRoot parsedRoot)
+            ? parsedRoot
+            : AssetBrowserRoot.Assets;
+        string assetsDirectory = RestoreDirectory(
+            AssetBrowserRoot.Assets,
+            state.Get("assetsDirectory", string.Empty));
+        string pluginsDirectory = RestoreDirectory(
+            AssetBrowserRoot.Plugins,
+            state.Get("pluginsDirectory", string.Empty));
+        browser.Restore(restoredRoot, assetsDirectory, pluginsDirectory);
+    }
+
+    private static string RestoreDirectory(AssetBrowserRoot root, string path)
+    {
+        string directory = NormalizePath(path);
+        if (string.IsNullOrEmpty(directory))
+            return string.Empty;
+        AssetPath isolated = AssetPath.Parse(directory);
+        if ((root == AssetBrowserRoot.Assets) != (isolated.source == AssetSourceId.project))
+            return string.Empty;
         while (!IsAvailableDirectory(directory))
         {
             string parent = GetParentDirectory(directory);
             if (string.Equals(parent, directory, StringComparison.Ordinal))
-            {
-                directory = string.Empty;
-                break;
-            }
+                return string.Empty;
             directory = parent;
         }
-        browser.SetCurrentDirectory(directory);
+        return directory;
     }
 
     private static bool IsAvailableDirectory(string path)
         => AssetManager.TryGetFileSystemEntry(AssetPath.Parse(path), out AssetFileEntry entry)
-            && entry.isDirectory;
+           && entry.isDirectory;
 
     internal EditorInteractions interactions => m_interactions;
 
