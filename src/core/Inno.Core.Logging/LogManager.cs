@@ -15,7 +15,7 @@ public static class LogManager
 
     private static readonly List<ILogSink> SINKS = [];
     private static readonly Lock SINKS_LOCK = new();
-    private static readonly ConcurrentQueue<LogEntry> QUEUE = new();
+    private static readonly ConcurrentQueue<WorkItem> QUEUE = new();
     private static readonly SemaphoreSlim SIGNAL = new(0);
     private static readonly Lock LIFECYCLE_LOCK = new();
 
@@ -56,7 +56,7 @@ public static class LogManager
             SINKS.Add(sink);
         }
     }
-    
+
     /// <summary>
     /// Unregisters a sink so it no longer receives log entries.
     /// </summary>
@@ -93,8 +93,36 @@ public static class LogManager
         if (!IsEnabled(entry.level))
             return;
 
-        QUEUE.Enqueue(entry);
+        QUEUE.Enqueue(WorkItem.ForEntry(entry));
         SIGNAL.Release();
+    }
+
+    /// <summary>
+    /// Blocks until every log entry enqueued before this call has been delivered to the registered sinks.
+    /// </summary>
+    /// <remarks>
+    /// This synchronization boundary is intended for infrequent lifecycle transitions. Regular logging
+    /// remains asynchronous.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when called from the logging worker, where waiting for that same worker would deadlock.
+    /// </exception>
+    public static void Flush()
+    {
+        using var completion = new ManualResetEventSlim(initialState: false);
+        bool drainSynchronously;
+        lock (LIFECYCLE_LOCK)
+        {
+            if (ReferenceEquals(Thread.CurrentThread, s_workerThread))
+                throw new InvalidOperationException("The logging worker cannot wait for itself to flush.");
+            drainSynchronously = s_workerThread is null;
+            QUEUE.Enqueue(WorkItem.ForBarrier(completion));
+            SIGNAL.Release();
+        }
+
+        if (drainSynchronously)
+            DrainQueue();
+        completion.Wait();
     }
 
     private static void ProcessQueue()
@@ -117,20 +145,27 @@ public static class LogManager
         {
             if (SINKS.Count == 0)
             {
-                while (QUEUE.TryDequeue(out _)) { }
+                while (QUEUE.TryDequeue(out WorkItem item))
+                    item.completion?.Set();
                 return;
             }
 
             sinksSnapshot = SINKS.ToArray();
         }
 
-        while (QUEUE.TryDequeue(out var entry))
+        while (QUEUE.TryDequeue(out WorkItem item))
         {
-            foreach (var sink in sinksSnapshot)
+            if (item.completion is ManualResetEventSlim completion)
+            {
+                completion.Set();
+                continue;
+            }
+
+            foreach (ILogSink sink in sinksSnapshot)
             {
                 try
                 {
-                    sink.Receive(entry);
+                    sink.Receive(item.entry);
                 }
                 catch
                 {
@@ -138,6 +173,13 @@ public static class LogManager
                 }
             }
         }
+    }
+
+    private readonly record struct WorkItem(LogEntry entry, ManualResetEventSlim? completion)
+    {
+        internal static WorkItem ForEntry(LogEntry entry) => new(entry, null);
+
+        internal static WorkItem ForBarrier(ManualResetEventSlim completion) => new(default, completion);
     }
 
     /// <summary>

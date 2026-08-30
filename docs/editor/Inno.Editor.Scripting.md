@@ -133,6 +133,18 @@ Assembly reload 使用一组有顺序的 transaction participant，而不是提�
 
 成功 assembly artifact 同时保存完整的内部 `diagnostics.cache`。启动命中内容缓存时会重新发布同一组 warning，而不是只复用 DLL/PDB 后返回空 diagnostics；因此缓存命中与实际 Roslyn emit 对 Console Panel 具有一致的可观察结果。
 
+## Editor script readiness contract
+
+`IEditorScriptCompilation` 是 host feature 使用的最小只读门禁；internal `EditorScripting` module 实现它，[Play Mode](Inno.Editor.PlayMode.md) 不需要引用 `ScriptManager` 或编译调度实现。
+
+| 成员 | 语义 |
+| --- | --- |
+| `state` | `Initializing`、`Compiling`、`Ready` 或 `Failed`。 |
+| `status` | 当前 compiler/reload 阶段的可读说明。 |
+| `lastCompilation` | 最近完成的 `ScriptCompilationResult`，首次完成前为 `null`。 |
+
+`Ready` 只表示最近编译成功且 generation 已完成激活；编译、candidate activation 和旧 ALC unload verification 期间均为 `Compiling`。最近失败即为 `Failed`，即使仍保留 last-good runtime generation，新的 Play entry 也不会静默使用过期脚本。该 contract 是 Editor host API，不加入 EditorScripts 的逻辑 facade。
+
 ## Scripting API facade
 
 脚本只能引用各项目 `Properties/ScriptingApi.cs` 明确导出的逻辑 API：

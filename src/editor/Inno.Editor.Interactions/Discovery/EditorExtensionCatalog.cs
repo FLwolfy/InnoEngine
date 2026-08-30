@@ -187,6 +187,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             .ToArray();
         ValidateActions(actions);
         ValidateShortcuts(actions);
+        ValidateToolbars(actions);
 
         MenuSourceRegistration[] menuSources = types.GetTypesWithAttribute<EditorMenuSourceAttribute>()
             .Select(typeRef => typeRef.Resolve(types))
@@ -559,6 +560,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         EditorAction action = activator.CreateExtension<EditorAction>(type);
         EditorActionAttribute attribute = type.GetCustomAttribute<EditorActionAttribute>(false)!;
         EditorMenuAttribute[] menus = type.GetCustomAttributes<EditorMenuAttribute>(false).ToArray();
+        EditorToolbarItemAttribute[] toolbars = type.GetCustomAttributes<EditorToolbarItemAttribute>(false).ToArray();
         EditorShortcutAttribute[] shortcuts = type.GetCustomAttributes<EditorShortcutAttribute>(false).ToArray();
         return new ActionRegistration(
             attribute,
@@ -567,6 +569,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             action.targetType,
             action.argumentType,
             menus,
+            toolbars,
             shortcuts);
     }
 
@@ -721,6 +724,42 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         if (left is null || right is null)
             return false;
         return left.IsInterface || right.IsInterface;
+    }
+
+    private static void ValidateToolbars(IReadOnlyList<ActionRegistration> actions)
+    {
+        for (int actionIndex = 0; actionIndex < actions.Count; actionIndex++)
+        {
+            ActionRegistration registration = actions[actionIndex];
+            if (registration.toolbars.Length == 0)
+                continue;
+            if (registration.targetType is not null || registration.argumentType is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Editor toolbar action '{registration.id}' must not require a target or argument.");
+            }
+            for (int toolbarIndex = 0; toolbarIndex < registration.toolbars.Length; toolbarIndex++)
+            {
+                EditorToolbarItemAttribute toolbar = registration.toolbars[toolbarIndex];
+                if (!string.IsNullOrEmpty(registration.attribute.area) &&
+                    !string.Equals(registration.attribute.area, toolbar.area, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Editor toolbar placement on '{registration.id}' targets area '{toolbar.area}', " +
+                        $"outside its action area '{registration.attribute.area}'.");
+                }
+            }
+        }
+
+        IGrouping<(string id, string area), (string id, string area)>? duplicate = actions
+            .SelectMany(static registration => registration.toolbars.Select(toolbar => (
+                registration.id,
+                toolbar.area)))
+            .GroupBy(static placement => placement, EqualityComparer<(string id, string area)>.Default)
+            .FirstOrDefault(static group => group.Count() > 1);
+        if (duplicate is not null)
+            throw new InvalidOperationException(
+                $"Editor action '{duplicate.Key.id}' has duplicate toolbar placements.");
     }
 
     private static HotKeyGesture CreateShortcutGesture(EditorShortcutAttribute shortcut)
@@ -900,6 +939,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         Type? targetType,
         Type? argumentType,
         EditorMenuAttribute[] menus,
+        EditorToolbarItemAttribute[] toolbars,
         EditorShortcutAttribute[] shortcuts)
     {
         internal string id { get; } = attribute.action;

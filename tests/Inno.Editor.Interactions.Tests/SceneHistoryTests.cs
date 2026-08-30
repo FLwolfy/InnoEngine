@@ -90,7 +90,8 @@ public sealed class SceneHistoryTests : IDisposable
             "tests:component-value"));
         Assert.Equal(25, component.value);
 
-        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        EditorHistoryResult undo = m_runtime.interactions.history.Undo();
+        Assert.True(undo.succeeded, undo.message);
         Assert.Equal(10, component.value);
         Assert.Same(scene, IdentityManager.Get<GameScene>(sceneId));
         Assert.Same(gameObject, IdentityManager.Get<GameObject>(objectId));
@@ -496,7 +497,11 @@ public sealed class SceneHistoryTests : IDisposable
         Assert.True(m_edits.CloseScene(scene));
         Assert.Empty(SceneManager.loadedScenes);
         Assert.Null(IdentityManager.Get<GameScene>(sceneId));
-        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        Assert.True(
+            m_runtime.interactions.history.canUndo,
+            m_runtime.interactions.history.undoUnavailableReason);
+        EditorHistoryResult undo = m_runtime.interactions.history.Undo();
+        Assert.True(undo.succeeded, undo.message);
         GameScene restored = Assert.IsType<GameScene>(IdentityManager.Get<GameScene>(sceneId));
         Assert.True(restored.isLoaded);
         Assert.Equal("Persistent", Assert.Single(restored.GetObjects()).name);

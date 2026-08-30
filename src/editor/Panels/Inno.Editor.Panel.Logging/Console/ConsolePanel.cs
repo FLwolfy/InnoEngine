@@ -25,7 +25,7 @@ internal sealed class ConsolePanel : EditorPanel
     private readonly ConsolePanelContent m_content = new();
     private readonly HashSet<LogLevel> m_filterLevels = Enum.GetValues<LogLevel>().ToHashSet();
     private readonly LogLevel[] m_levels = Enum.GetValues<LogLevel>();
-    private readonly HashSet<long> m_openEntries = [];
+    private readonly HashSet<EditorConsoleEntryId> m_openEntries = [];
 
     private bool m_collapse = true;
     private long m_lastLogVersion = -1;
@@ -190,8 +190,8 @@ internal sealed class ConsolePanel : EditorPanel
 
             if (m_collapse)
             {
-                List<long> runEntryIds = m_content.CollectRunEntryIds(visibleEntries, start, end);
-                long latestEntryId = runEntryIds[^1];
+                List<EditorConsoleEntryId> runEntryIds = m_content.CollectRunEntryIds(visibleEntries, start, end);
+                EditorConsoleEntryId latestEntryId = runEntryIds[^1];
                 bool latestEntryOpen = m_openEntries.Contains(latestEntryId);
                 bool anyOpenInRun = m_content.ContainsAnyOpen(runEntryIds, m_openEntries);
 
@@ -216,7 +216,7 @@ internal sealed class ConsolePanel : EditorPanel
             {
                 for (int i = start; i <= end; i++)
                 {
-                    long entryId = visibleEntries[i].id;
+                    EditorConsoleEntryId entryId = visibleEntries[i].identity;
                     DrawConsoleEntry(visibleEntries[i], 1, [entryId], collapseView: false);
                 }
             }
@@ -230,14 +230,13 @@ internal sealed class ConsolePanel : EditorPanel
     private void DrawConsoleEntry(
         EditorConsoleEntry entry,
         int repeatCount,
-        IReadOnlyList<long> runEntryIds,
+        IReadOnlyList<EditorConsoleEntryId> runEntryIds,
         bool collapseView)
     {
         (Vector4 levelColor, string levelIcon) = m_content.GetLevelVisual(entry.level);
 
-        long entryId = entry.id;
-        int rowId = entryId.GetHashCode();
-        NativeImGui.PushID(rowId);
+        EditorConsoleEntryId entryId = entry.identity;
+        ConsoleEntryImGuiIdentity.Push(entryId);
         bool open = m_openEntries.Contains(entryId);
         if (!open)
         {
@@ -276,8 +275,7 @@ internal sealed class ConsolePanel : EditorPanel
             DrawEntryContextMenu(entry, repeatCount);
             NativeImGui.PopStyleVar(3);
             NativeImGui.PopStyleColor(2);
-            NativeImGui.Dummy(new Vector2(0f, EditorWidget.style.logCollapsedSpacing));
-            NativeImGui.PopID();
+            ConsoleEntryImGuiIdentity.Pop();
             return;
         }
 
@@ -321,8 +319,7 @@ internal sealed class ConsolePanel : EditorPanel
         DrawEntryContextMenu(entry, repeatCount);
         NativeImGui.PopStyleVar(3);
         NativeImGui.PopStyleColor(2);
-        NativeImGui.Dummy(new Vector2(0f, EditorWidget.style.logExpandedSpacing));
-        NativeImGui.PopID();
+        ConsoleEntryImGuiIdentity.Pop();
     }
     #endregion
 
@@ -460,7 +457,7 @@ internal sealed class ConsolePanel : EditorPanel
     {
         if (m_openEntries.Count == 0)
             return;
-        var activeIds = new HashSet<long>(entries.Select(static entry => entry.id));
+        var activeIds = new HashSet<EditorConsoleEntryId>(entries.Select(static entry => entry.identity));
         m_openEntries.RemoveWhere(id => !activeIds.Contains(id));
     }
 

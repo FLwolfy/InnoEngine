@@ -176,6 +176,52 @@ public sealed class EditorHistoryTests
     }
 
     [Fact]
+    public void IsolatedBranchIsDiscardedAndRestoresBothEditingStacks()
+    {
+        using var history = new ReflectedEditorHistory();
+        int value = 0;
+        Assert.True(history.Execute(
+            "Edit Value",
+            () =>
+            {
+                value = 1;
+                return EditorHistoryResult.Success();
+            },
+            () =>
+            {
+                value = 0;
+                return EditorHistoryResult.Success();
+            }).succeeded);
+        Assert.True(history.Undo().succeeded);
+        Assert.True(history.canRedo);
+
+        using (history.BeginIsolation())
+        {
+            Assert.False(history.canUndo);
+            Assert.False(history.canRedo);
+            Assert.True(history.Execute(
+                "Runtime Value",
+                () =>
+                {
+                    value = 2;
+                    return EditorHistoryResult.Success();
+                },
+                () =>
+                {
+                    value = 0;
+                    return EditorHistoryResult.Success();
+                }).succeeded);
+            Assert.Equal("Runtime Value", history.undoName);
+        }
+
+        Assert.False(history.canUndo);
+        Assert.True(history.canRedo);
+        Assert.Equal("Edit Value", history.redoName);
+        Assert.True(history.Redo().succeeded);
+        Assert.Equal(1, value);
+    }
+
+    [Fact]
     public void FailedTransactionRollbackRemainsOnStackAndCanBeRetried()
     {
         using var history = new ReflectedEditorHistory();
@@ -451,6 +497,9 @@ internal sealed class ReflectedEditorHistory : IDisposable
 
     internal EditorHistoryTransaction BeginTransaction(string name)
         => Invoke<EditorHistoryTransaction>(FindMethod("BeginTransaction", parameterCount: 1), name);
+
+    internal IDisposable BeginIsolation()
+        => Invoke<IDisposable>(FindMethod("BeginIsolation", parameterCount: 0));
 
     internal EditorHistoryResult Execute(
         string name,

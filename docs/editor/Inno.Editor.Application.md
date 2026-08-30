@@ -34,11 +34,11 @@ Module/Panel 状态只使用 `editor.ini` 中由 Attribute ID 确定的具名可
 
 ## EditorLayer 边界
 
-`EditorLayer` 只持有 `PlatformImGuiContext` 与 `ImGuiEditorRuntime`。它把 Layer 的 Attach/LateUpdate/Detach 和按键事件转交给 Runtime，不知道 Scene、Asset、Log、菜单或脚本编译状态。
+`EditorLayer` 持有 `PlatformImGuiContext`、`ImGuiEditorRuntime` 与稳定的 `EditorPlayModeLoop`。Play loop 作为 host service 注入 extension runtime；Layer 只在 fixed/update/late 三个对应 callback 转发时间，不知道 Play 状态机、Scene session、Asset、菜单或脚本编译状态。
 
 Editor 启动阶段在 Shell 日志系统可用之前产生的诊断写入 `<Project>/Logs/EditorBoot.log`；Shell 初始化后的轮转日志写入同一目录，并使用 `log_<timestamp>.log` 文件名。项目根目录不生成独立日志文件。
 
-每帧安全点顺序为：更新 `EditorFrame` 和 Module → 绘制统一主菜单与自动发现 Panel → flush deferred Action → 绘制统一 Modal。脚本编译弹窗位于 `Inno.Editor.Scripting`，由 internal `EditorScripting` module 驱动真实编译阶段进度；`EditorModalRenderer` 使用主 viewport work area 中心、固定 style width 和 `0.5/0.5` pivot 定位。Application 不包含 Scene action、Asset 类型判断、context menu 排列或 ScriptManager 状态机。
+每帧安全点顺序为：fixed Play callback → variable Play callback → 更新 `EditorFrame` 和 Module transition → late Play callback → 绘制统一主菜单/中央 Toolbar 与自动发现 Panel → flush deferred Action → 绘制统一 Modal。进入或退出状态由 Module transition 先提交，late callback 只在状态已经是 `Playing` 时执行；Exit Action 生效后下一帧 fixed/update 也不会继续模拟。脚本编译弹窗位于 `Inno.Editor.Scripting`，由 internal `EditorScripting` module 驱动真实编译阶段进度；Application 不包含 Scene action、恢复算法或 ScriptManager 状态机。
 
 internal `EditorRenderingHostService` 只负责组合通用 Render Runtime、BGFX 设备与 ImGui contributor，并作为 Scripting reload participant 协调 Pipeline/Feature generation。它不提供任何 Camera、Light、PBR 或固定 Scene 语义；没有活动 Viewport/Pipeline Plugin 时 Editor 仍正常运行，Scene/Game View 只显示无活动 rendering provider 的诊断。
 

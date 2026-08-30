@@ -5,6 +5,7 @@ using System.Runtime.Loader;
 
 using Inno.Core.Events;
 using Inno.Core.Identity;
+using Inno.Core.Scripting;
 using Inno.Editor.Core;
 
 namespace Inno.Editor.Interactions;
@@ -12,13 +13,14 @@ namespace Inno.Editor.Interactions;
 /// <summary>
 /// Provides the single presentation-independent entry point for editor actions, menus, selection, focus, and drag-and-drop.
 /// </summary>
-public sealed class EditorInteractions
+public sealed class EditorInteractions : IEditorSelectionCoordinator
 {
     private readonly EditorContext m_editor;
     private readonly EditorHistory m_history;
     private EditorActionRouter? m_actions;
     private EditorExtensionCatalog? m_catalog;
     private EditorMenuCatalog? m_menus;
+    private EditorToolbarCatalog? m_toolbars;
     private EditorDropRouter? m_drops;
     private string m_focusedArea = EditorBuiltInInteractionIds.C_GLOBAL_AREA;
     private object? m_focusedTarget;
@@ -42,10 +44,26 @@ public sealed class EditorInteractions
     /// </summary>
     public EditorSelectionState selection { get; } = new();
 
+    object? IEditorSelectionCoordinator.selectedTarget => selection.selectedTarget;
+
     /// <summary>
     /// Gets the transactional Undo and Redo history owned by this editor runtime.
     /// </summary>
     public IEditorHistory history => m_history;
+
+    /// <summary>
+    /// Starts an isolated temporary Undo and Redo branch while retaining the current editing branch.
+    /// </summary>
+    /// <remarks>
+    /// Disposing the returned scope releases every temporary operation and restores the retained branch.
+    /// This host-level boundary is intended for transient editor sessions such as Play Mode.
+    /// </remarks>
+    /// <returns>A scope that restores the retained history branch when disposed.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown during an Undo, Redo, transaction, or another isolated branch.
+    /// </exception>
+    [ScriptingApiIgnore]
+    public IDisposable BeginHistoryIsolation() => m_history.BeginIsolation();
 
     internal EditorHistory historyHost => m_history;
 
@@ -101,6 +119,7 @@ public sealed class EditorInteractions
         m_catalog = catalog;
         m_actions = new EditorActionRouter(catalog, m_editor, this);
         m_menus = new EditorMenuCatalog(catalog, m_actions);
+        m_toolbars = new EditorToolbarCatalog(catalog, m_actions);
         m_drops = new EditorDropRouter(catalog);
     }
 
@@ -209,6 +228,9 @@ public sealed class EditorInteractions
     internal EditorMenuModel BuildMenu(string area, object? target)
         => Menus.Build(new EditorMenuContext(m_editor, this, area, target));
 
+    internal EditorToolbarModel BuildToolbar(string area, object? target)
+        => Toolbars.Build(CreateActionContext(area, target, argument: null));
+
     internal bool TryGetShortcut(
         string action,
         string area,
@@ -269,6 +291,9 @@ public sealed class EditorInteractions
         ?? throw new InvalidOperationException("Editor interactions are not attached to a runtime.");
 
     private EditorDropRouter Drops => m_drops
+        ?? throw new InvalidOperationException("Editor interactions are not attached to a runtime.");
+
+    private EditorToolbarCatalog Toolbars => m_toolbars
         ?? throw new InvalidOperationException("Editor interactions are not attached to a runtime.");
 
     private EditorActionContext CreateActionContext(

@@ -21,7 +21,7 @@ internal sealed class SavePrefabAssetDropHandler
 
     protected override EditorDropStatus Query(
         EditorDropContext<GameObject, string> context)
-        => context.source.isRuntimeValid
+        => m_workspace.canPersist && context.source.isRuntimeValid
             ? EditorDropStatus.Accept()
             : EditorDropStatus.rejected;
 

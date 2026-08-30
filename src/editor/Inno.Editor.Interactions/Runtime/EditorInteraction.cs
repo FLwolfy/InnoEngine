@@ -79,6 +79,10 @@ public readonly struct EditorInteraction
     /// <returns>The immutable resolved menu model.</returns>
     public EditorMenuModel BuildMenu() => m_interactions.BuildMenu(area, target);
 
+    /// <summary>Builds the complete compact toolbar for this area and target.</summary>
+    /// <returns>The immutable resolved toolbar model.</returns>
+    public EditorToolbarModel BuildToolbar() => m_interactions.BuildToolbar(area, target);
+
     /// <summary>Resolves the shortcut displayed for an action in this area.</summary>
     /// <param name="action">The stable action name.</param>
     /// <param name="gesture">The resolved gesture when successful.</param>

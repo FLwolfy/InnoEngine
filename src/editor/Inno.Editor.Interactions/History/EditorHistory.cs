@@ -14,8 +14,8 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
 {
     private const int C_DEFAULT_CAPACITY = 256;
 
-    private readonly List<EditorHistoryOperation> m_undo = [];
-    private readonly List<EditorHistoryOperation> m_redo = [];
+    private List<EditorHistoryOperation> m_undo = [];
+    private List<EditorHistoryOperation> m_redo = [];
     private readonly Stack<TransactionOperation> m_transactions = [];
     private readonly EditorHistoryOptions m_options;
     private readonly EditorHistoryBlobStore m_blobStore;
@@ -23,6 +23,7 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
     private IReadOnlyDictionary<string, EditorHistoryHandler> m_handlers =
         new Dictionary<string, EditorHistoryHandler>(StringComparer.Ordinal);
     private EditorHistoryContext? m_context;
+    private IsolationState? m_isolation;
     private bool m_isTransitioning;
     private bool m_isFaulted;
     private string? m_faultReason;
@@ -104,13 +105,21 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
     /// Gets the estimated resident payload bytes retained by committed Undo and Redo entries.
     /// </summary>
     public long residentBytes => Sum(m_undo, static operation => operation.estimatedMemorySize) +
-                                 Sum(m_redo, static operation => operation.estimatedMemorySize);
+                                 Sum(m_redo, static operation => operation.estimatedMemorySize) +
+                                 (m_isolation is IsolationState isolation
+                                     ? Sum(isolation.undo, static operation => operation.estimatedMemorySize) +
+                                       Sum(isolation.redo, static operation => operation.estimatedMemorySize)
+                                     : 0L);
 
     /// <summary>
     /// Gets the estimated temporary disk payload bytes retained by committed Undo and Redo entries.
     /// </summary>
     public long diskBytes => Sum(m_undo, static operation => operation.estimatedDiskSize) +
-                             Sum(m_redo, static operation => operation.estimatedDiskSize);
+                             Sum(m_redo, static operation => operation.estimatedDiskSize) +
+                             (m_isolation is IsolationState isolation
+                                 ? Sum(isolation.undo, static operation => operation.estimatedDiskSize) +
+                                   Sum(isolation.redo, static operation => operation.estimatedDiskSize)
+                                 : 0L);
 
     /// <summary>
     /// Begins an atomic group whose child operations appear as one Undo entry.
@@ -262,6 +271,34 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
     public EditorHistoryResult Redo() => Transition(m_redo, m_undo, undo: false);
 
     /// <summary>
+    /// Starts a temporary empty history branch while retaining the current branch for restoration.
+    /// </summary>
+    /// <returns>A scope that discards the temporary branch and restores the retained branch.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown during an Undo, Redo, transaction, or another isolated branch.
+    /// </exception>
+    internal IDisposable BeginIsolation()
+    {
+        EnsureMutable();
+        if (m_transactions.Count != 0)
+            throw new InvalidOperationException("Editor history cannot be isolated during a transaction.");
+        if (m_isolation is not null)
+            throw new InvalidOperationException("Editor history already owns an isolated branch.");
+
+        var isolation = new IsolationState(
+            m_undo,
+            m_redo,
+            m_isFaulted,
+            m_faultReason);
+        m_isolation = isolation;
+        m_undo = [];
+        m_redo = [];
+        m_isFaulted = false;
+        m_faultReason = null;
+        return new Isolation(this, isolation);
+    }
+
+    /// <summary>
     /// Removes and disposes every Undo and Redo operation.
     /// </summary>
     internal void Clear()
@@ -272,6 +309,12 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
             throw new InvalidOperationException("Editor history cannot be cleared during Undo or Redo.");
         DisposeAll(m_undo);
         DisposeAll(m_redo);
+        if (m_isolation is IsolationState isolation)
+        {
+            DisposeAll(isolation.undo);
+            DisposeAll(isolation.redo);
+            m_isolation = null;
+        }
         while (m_transactions.TryPop(out TransactionOperation? transaction))
             transaction.Dispose();
         m_isFaulted = false;
@@ -337,7 +380,8 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
             return;
         }
         m_undo.Add(operation);
-        while (m_undo.Count > capacity)
+        int retainedUndoCount = m_isolation?.undo.Count ?? 0;
+        while (m_undo.Count > 0 && m_undo.Count + retainedUndoCount > capacity)
         {
             m_undo[0].Dispose();
             m_undo.RemoveAt(0);
@@ -506,15 +550,39 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
                 transaction.Dispose();
         }
 
-        int newestUnsafe = m_undo.FindLastIndex(static operation => !operation.isReloadSafe);
+        DiscardRuntimeBoundEntries(m_undo, m_redo);
+        if (m_isolation is IsolationState isolation)
+            DiscardRuntimeBoundEntries(isolation.undo, isolation.redo);
+    }
+
+    private static void DiscardRuntimeBoundEntries(
+        List<EditorHistoryOperation> undo,
+        List<EditorHistoryOperation> redo)
+    {
+        int newestUnsafe = undo.FindLastIndex(static operation => !operation.isReloadSafe);
         if (newestUnsafe >= 0)
         {
             for (int i = newestUnsafe; i >= 0; i--)
-                m_undo[i].Dispose();
-            m_undo.RemoveRange(0, newestUnsafe + 1);
+                undo[i].Dispose();
+            undo.RemoveRange(0, newestUnsafe + 1);
         }
-        if (m_redo.Exists(static operation => !operation.isReloadSafe))
-            DisposeAll(m_redo);
+        if (redo.Exists(static operation => !operation.isReloadSafe))
+            DisposeAll(redo);
+    }
+
+    private void EndIsolation(IsolationState isolation)
+    {
+        if (m_isDisposed || !ReferenceEquals(m_isolation, isolation))
+            return;
+        DisposeAll(m_undo);
+        DisposeAll(m_redo);
+        while (m_transactions.TryPop(out TransactionOperation? transaction))
+            transaction.Dispose();
+        m_undo = isolation.undo;
+        m_redo = isolation.redo;
+        m_isFaulted = isolation.isFaulted;
+        m_faultReason = isolation.faultReason;
+        m_isolation = null;
     }
 
     private string? GetUnavailableReason(
@@ -614,6 +682,26 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
             {
                 Log.Error("Editor history could not release reload-unsafe entries: {0}", exception);
             }
+        }
+    }
+
+    private sealed record IsolationState(
+        List<EditorHistoryOperation> undo,
+        List<EditorHistoryOperation> redo,
+        bool isFaulted,
+        string? faultReason);
+
+    private sealed class Isolation(EditorHistory owner, IsolationState state) : IDisposable
+    {
+        private EditorHistory? m_owner = owner;
+
+        public void Dispose()
+        {
+            EditorHistory? current = m_owner;
+            if (current is null)
+                return;
+            m_owner = null;
+            current.EndIsolation(state);
         }
     }
 

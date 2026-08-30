@@ -55,17 +55,20 @@ internal sealed class ConsolePanelContent
         return visibleEntries;
     }
 
-    internal List<long> CollectRunEntryIds(List<EditorConsoleEntry> visibleEntries, int start, int end)
+    internal List<EditorConsoleEntryId> CollectRunEntryIds(
+        List<EditorConsoleEntry> visibleEntries,
+        int start,
+        int end)
     {
-        List<long> runEntryIds = [];
+        List<EditorConsoleEntryId> runEntryIds = [];
         for (int i = start; i <= end; i++)
-            runEntryIds.Add(visibleEntries[i].id);
+            runEntryIds.Add(visibleEntries[i].identity);
         return runEntryIds;
     }
 
     internal bool ContainsAnyOpen(
-        IReadOnlyList<long> runEntryIds,
-        IReadOnlySet<long> openEntries)
+        IReadOnlyList<EditorConsoleEntryId> runEntryIds,
+        IReadOnlySet<EditorConsoleEntryId> openEntries)
     {
         for (int i = 0; i < runEntryIds.Count; i++)
         {
@@ -76,9 +79,9 @@ internal sealed class ConsolePanelContent
     }
 
     internal void KeepOnlyLatestOpen(
-        IReadOnlyList<long> runEntryIds,
-        long latestEntryId,
-        HashSet<long> openEntries)
+        IReadOnlyList<EditorConsoleEntryId> runEntryIds,
+        EditorConsoleEntryId latestEntryId,
+        HashSet<EditorConsoleEntryId> openEntries)
     {
         for (int i = 0; i < runEntryIds.Count; i++)
         {
@@ -87,7 +90,9 @@ internal sealed class ConsolePanelContent
         }
     }
 
-    internal void CloseAll(IReadOnlyList<long> runEntryIds, HashSet<long> openEntries)
+    internal void CloseAll(
+        IReadOnlyList<EditorConsoleEntryId> runEntryIds,
+        HashSet<EditorConsoleEntryId> openEntries)
     {
         for (int i = 0; i < runEntryIds.Count; i++)
             openEntries.Remove(runEntryIds[i]);

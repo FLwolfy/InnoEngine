@@ -68,6 +68,8 @@ Editor ImGui context 默认启用 Inno overlay scrollbar 扩展。纵横滚动�
 
 主菜单由同一模型生成，并包含 `File`、`Edit`、`View`、`Panel` 等顶层节点。全局缩放属于 `View`；当前 `EditorPanelRegistry` 中的窗口开关统一生成到 `Panel`，显示 checked 状态并调用内建 Toggle Panel Action。脚本代际新增或移除 Panel 时不需要修改菜单代码。标准 Panel window 不向原生 ImGui 提交 `p_open`，因此普通 Tab 完全不包含关闭按钮。当前可见 Panel 根据所属 Dock Node 的实际位置和尺寸，在 Dock Header 最右侧的原生 close slot 位置绘制一个独立关闭控件。控件会补偿图标在字体 slot 中的水平居中 inset，使 X 的可见右边缘与第一个 Tab 的可见左边缘使用相同的 `WindowBorderSize + FramePadding.X` 外边距。它不参与 Tab 排列、不绘制 Tab 背景，并与 Inspector card 删除按钮共用 `ImGuiIcon.Xmark`、文本颜色及 hover 颜色。点击只关闭当前选中的 Panel，不会关闭同一 Dock Node 内的其他 Tab。该实现不修改 cimgui 或 Dear ImGui 源码。
 
+同一个 MainMenu pass 还读取 `EditorToolbarModel`，按 MenuBar window 的实际宽度把紧凑 icon 组放到几何中心。Renderer 只负责把 `EditorToolbarIcon` 映射到 `ImGuiIcon`、绘制 checked/hover/disabled 状态、tooltip 与快捷键，然后把点击排回 Action queue；Play Mode ID、状态机与命令语义不进入 ImGui 项目。左侧菜单宽度异常接近中心时，toolbar 会向右避让而不覆盖菜单 item。
+
 `ContextMenu` 绑定最近提交的 ImGui item；`WindowContextMenu` 只响应当前 window 中没有 item 占用的背景区域。两者都会先构建菜单模型，模型没有可见条目时不会打开原生 popup，因此不会显示空的黑色菜单框。
 
 所有 context menu 在 `BeginContextMenu` / `EndContextMenu` 范围内应用同一组 `EditorPalette.menu*` 颜色和 `EditorStyleMetrics.menu*` padding、spacing、rounding 与 border。显式点击 Popup 使用 `BeginMenuPopup` / `EndMenuPopup`；hover tooltip 使用 `BeginMenuTooltip` / `EndMenuTooltip`，因此三种浮层共享同一个 presentation contract。短生命周期 Popup 显式继承调用窗口的 viewport，不会因为靠近平台窗口边缘而被提升为独立 OS viewport。Popup 先按内容 auto-size，达到 viewport work area 或调用方约束后转为纵向滚动，且不保存临时窗口尺寸；长菜单不会继续扩大 native window。Panel 的局部 Table/Tree style 不会再改变浮层外观。Popup 打开时，Tree、disclosure 等自绘控件会暂停其底层 hover feedback；原生 popup 本身接收鼠标事件，避免 hover 或点击继续影响菜单后面的 entry。

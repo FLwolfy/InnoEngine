@@ -47,6 +47,7 @@ internal readonly struct EditorConsoleEntry
     internal string file { get; }
     internal int line { get; }
     internal int column { get; }
+    internal EditorConsoleEntryId identity => new(kind, id);
     internal string displayMessage => string.IsNullOrWhiteSpace(code) ? message : $"{code}: {message}";
 
     internal static EditorConsoleEntry FromLog(BufferedLogEntry buffered)

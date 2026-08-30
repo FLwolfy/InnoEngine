@@ -18,7 +18,9 @@ internal sealed class SaveCommand(
     AssetEditorModule assets) : EditorAction
 {
     protected override EditorActionState Query(EditorActionContext context)
-        => SceneManager.hasActiveScene ? EditorActionState.enabled : EditorActionState.disabled;
+        => workspace.canPersist && SceneManager.hasActiveScene
+            ? EditorActionState.enabled
+            : EditorActionState.disabled;
 
     protected override void Execute(EditorActionContext context)
     {

@@ -28,6 +28,7 @@ flowchart LR
 | 成员 | 作用 |
 | --- | --- |
 | `scenes` / `activeScene` | 查询当前 Editor scene setup。 |
+| `canPersist` | 当前 Scene 是否是可保存的 Edit 文档；Play runtime copy 为 `false`。 |
 | `Open(path)` | additive 打开 Scene asset。 |
 | `Save(scene, directory)` | 保存到已有 source；未保存 Scene 在调用方提供的 fallback directory 创建 Asset。 |
 | `SaveToDirectory(scene, directory)` | 显式保存到目标 Asset directory。 |
@@ -46,6 +47,18 @@ dirty baseline 也不会把任意 Asset 引用的 `lastKnownPath` 当成 Scene �
 脚本 Component/System 在 reload 中进入或退出 Missing 同样不是用户数据编辑。Scene serializer 保持原逻辑类型与 property payload 的规范表示；Workspace reload participant 还会在迁移前强制判定每个文档原本是否 dirty，并在整次迁移成功后只为原本 clean 的文档重建保存基线。因此即使恢复后的脚本增加了带默认值的序列化属性，Hierarchy 也不会把 generation migration 显示成用户造成的 `*`。原本 dirty 的文档绝不会被 rebase 掩盖，Missing 期间对其他 Scene 数据的真实修改仍正常保持 dirty、可以保存，并且不会破坏未来的原位恢复。恢复是否完整由原子 reload 事务和精确 diagnostics 判断，而不复用 dirty 标记：构造、属性或引用恢复不兼容会报告对应问题；事务失败则恢复旧 generation 与旧 dirty baseline。
 
 Scene Missing 是当前状态诊断，而不是 Scripting 编译诊断。Workspace 启动、loaded Scene 集合变化或 TypeCache generation 变化后的下一次主线程更新，会完整替换 `Missing Scene Scripts` 诊断组；因此刚打开的 Scene 若含 Missing 会立即出现在 Console，类型恢复或 Scene 关闭后也会被清除。协调 reload 的成功、失败恢复与无变化 diagnostics refresh 由 Scene 自己响应，不要求 Scripting 理解 Scene。
+
+### IEditorScenePlayMode / IEditorScenePlayModeSession
+
+这两个公开接口是 [Play Mode](Inno.Editor.PlayMode.md) 的跨程序集基础设施，不是普通 Scene 编辑入口：
+
+| 成员 | 作用 |
+| --- | --- |
+| `IEditorScenePlayMode.BeginPlayMode()` | 捕获完整 Edit scene setup，并以同 persistent ID 的独立 runtime graph 原子替换。 |
+| `IEditorScenePlayModeSession.Restore()` | 丢弃 runtime Scene，恢复 bytes、顺序、active Scene、Selection、source 与 dirty baseline。 |
+| `IEditorScenePlayModeSession.Dispose()` | 与 `Restore()` 相同且幂等，适用于 host scope cleanup。 |
+
+Play session 活动期间，Workspace 不消费 Asset source change，不把 runtime graph 写入 `editor.ini`，`IsDirty`/`TryGetSourcePath` 返回捕获的 Edit baseline，所有 Scene/Prefab Save 抛出 `InvalidOperationException`。脚本 reload 只重新绑定 runtime Scene 实例，不修改冻结 baseline。退出后排队的 source change 才在 Edit workspace 应用。
 
 ### SceneEdits
 
@@ -105,4 +118,4 @@ public sealed class AddAnimationControllerAction(SceneEdits edits)
 
 ## Scripting API
 
-EditorScripts 显式 `using InnoEditor.Scene;` 后只看到 `IEditorSceneWorkspace` 与 `SceneEdits`。concrete Workspace、构造/关闭/清空/刷新 helper、History payload、引用扫描器和 Handler 不导出；工作流通过接口，所有可逆 Scene 数据修改通过 `SceneEdits`。
+EditorScripts 显式 `using InnoEditor.Scene;` 后只看到 `IEditorSceneWorkspace` 与 `SceneEdits`。`IEditorScenePlayMode`/session 是 host 协调接口，不在该脚本清单中；Play 控制使用 `InnoEditor.PlayMode.IEditorPlayMode`。concrete Workspace、构造/关闭/清空/刷新 helper、History payload、引用扫描器和 Handler 不导出；工作流通过接口，所有可逆 Scene 数据修改通过 `SceneEdits`。

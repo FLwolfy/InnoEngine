@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 
 using Inno.Editor.Interactions;
 using Inno.Editor.ImGui.ImGuiWidget;
+using Inno.Native.ImGui;
+using Inno.Platform.ImGui;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
@@ -86,12 +89,95 @@ public static class EditorMenuRenderer
         try
         {
             DrawItems(interaction, interaction.BuildMenu().items);
+            DrawCenteredToolbar(interaction, interaction.BuildToolbar().items);
         }
         finally
         {
             NativeImGui.EndMainMenuBar();
         }
     }
+
+    private static void DrawCenteredToolbar(
+        EditorInteraction interaction,
+        IReadOnlyList<EditorToolbarItem> items)
+    {
+        if (items.Count == 0)
+            return;
+        ImGuiStylePtr style = NativeImGui.GetStyle();
+        float extent = NativeImGui.GetFrameHeight();
+        float width = extent * items.Count + style.ItemSpacing.X * (items.Count - 1);
+        float centeredOffset = (NativeImGui.GetWindowWidth() - width) * 0.5f;
+        float minimumOffset = NativeImGui.GetCursorPosX() + style.ItemSpacing.X;
+        NativeImGui.SameLine(MathF.Max(centeredOffset, minimumOffset), 0f);
+
+        for (int i = 0; i < items.Count; i++)
+        {
+            if (i > 0)
+                NativeImGui.SameLine(0f, style.ItemSpacing.X);
+            DrawToolbarItem(interaction, items[i], new Vector2(extent, extent));
+        }
+    }
+
+    private static void DrawToolbarItem(
+        EditorInteraction interaction,
+        EditorToolbarItem item,
+        Vector2 size)
+    {
+        bool disabled = !item.status.isEnabled;
+        if (disabled)
+            NativeImGui.BeginDisabled(true);
+        Vector2 minimum = NativeImGui.GetCursorScreenPos();
+        bool pressed = NativeImGui.InvisibleButton($"##editor_toolbar_{item.actionId}", size);
+        bool hovered = NativeImGui.IsItemHovered();
+        bool active = NativeImGui.IsItemActive();
+        if (disabled)
+            NativeImGui.EndDisabled();
+
+        if (item.status.isChecked || hovered || active)
+        {
+            Vector4 background = active
+                ? EditorPalette.accentActive
+                : hovered
+                    ? EditorPalette.accentHovered
+                    : EditorPalette.accent;
+            NativeImGui.GetWindowDrawList().AddRectFilled(
+                minimum,
+                minimum + size,
+                NativeImGui.ColorConvertFloat4ToU32(background),
+                NativeImGui.GetStyle().FrameRounding);
+        }
+
+        uint color = NativeImGui.GetColorU32(disabled ? ImGuiCol.TextDisabled : ImGuiCol.Text);
+        EditorWidget.AddGlyphCentered(
+            NativeImGui.GetWindowDrawList(),
+            NativeImGui.GetFont(),
+            NativeImGui.GetFontSize(),
+            GetToolbarIcon(item.icon),
+            minimum + size * 0.5f,
+            color);
+
+        if (hovered && EditorWidget.BeginMenuTooltip())
+        {
+            string tooltip = interaction.TryGetShortcut(item.actionId, out HotKeyGesture shortcut)
+                ? $"{item.tooltip} ({shortcut})"
+                : item.tooltip;
+            NativeImGui.TextUnformatted(tooltip);
+            EditorWidget.EndMenuTooltip();
+        }
+        if (pressed && item.status.isEnabled)
+            interaction.Enqueue(item.actionId);
+    }
+
+    private static string GetToolbarIcon(EditorToolbarIcon icon)
+        => icon switch
+        {
+            EditorToolbarIcon.Play => ImGuiIcon.Play,
+            EditorToolbarIcon.Stop => ImGuiIcon.Stop,
+            EditorToolbarIcon.Pause => ImGuiIcon.Pause,
+            EditorToolbarIcon.Step => ImGuiIcon.ForwardStep,
+            EditorToolbarIcon.Edit => ImGuiIcon.Pen,
+            _ => string.Empty
+        };
 
     /// <summary>
     /// Recursively draws resolved menu nodes into the currently open popup or menu.

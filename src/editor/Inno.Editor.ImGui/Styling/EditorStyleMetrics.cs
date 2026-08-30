@@ -206,12 +206,6 @@ public sealed class EditorStyleMetrics
     /// <summary>Gets property label width ratio.</summary>
     public float propertyLabelRatio => 0.40f;
 
-    /// <summary>Gets collapsed log card spacing.</summary>
-    public float logCollapsedSpacing => Scale(1f);
-
-    /// <summary>Gets expanded log card spacing.</summary>
-    public float logExpandedSpacing => Scale(2f);
-
     /// <summary>Gets the distance from the bottom treated as auto-scroll.</summary>
     public float logAutoScrollTolerance => Scale(1f);
 

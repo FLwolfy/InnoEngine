@@ -15,6 +15,9 @@ public interface IEditorSceneWorkspace
     /// <summary>Gets the active scene, or <see langword="null"/> when no scene is active.</summary>
     GameScene? activeScene { get; }
 
+    /// <summary>Gets whether scene documents may currently be persisted to project assets.</summary>
+    bool canPersist { get; }
+
     /// <summary>Gets whether a scene contains unsaved serialized changes.</summary>
     /// <param name="scene">The scene to inspect.</param>
     /// <returns><see langword="true"/> when the scene differs from its saved baseline.</returns>
@@ -29,18 +32,27 @@ public interface IEditorSceneWorkspace
     /// <param name="scene">The scene to save.</param>
     /// <param name="currentDirectory">The fallback asset directory for an unsaved scene.</param>
     /// <returns>The saved source-relative path.</returns>
+    /// <exception cref="System.InvalidOperationException">
+    /// Thrown while Play Mode runtime copies are active or when the asset cannot be persisted.
+    /// </exception>
     string Save(GameScene scene, string currentDirectory);
 
     /// <summary>Saves a scene into the requested asset directory.</summary>
     /// <param name="scene">The scene to save.</param>
     /// <param name="currentDirectory">The target asset directory.</param>
     /// <returns>The saved source-relative path.</returns>
+    /// <exception cref="System.InvalidOperationException">
+    /// Thrown while Play Mode runtime copies are active or when the asset cannot be persisted.
+    /// </exception>
     string SaveToDirectory(GameScene scene, string currentDirectory);
 
     /// <summary>Captures a game object subtree as a prefab in the requested directory.</summary>
     /// <param name="gameObject">The prefab root.</param>
     /// <param name="currentDirectory">The target asset directory.</param>
     /// <returns>The saved source-relative path.</returns>
+    /// <exception cref="System.InvalidOperationException">
+    /// Thrown while Play Mode runtime copies are active or when the asset cannot be persisted.
+    /// </exception>
     string SavePrefab(GameObject gameObject, string currentDirectory);
 
     /// <summary>Tries to get the current source-relative asset path of a saved scene.</summary>

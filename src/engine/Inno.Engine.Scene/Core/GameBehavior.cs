@@ -3,7 +3,7 @@ using Inno.Core.Scripting;
 namespace Inno.Engine.Scene;
 
 /// <summary>
-/// Base component for user code driven by scene lifecycle callbacks.
+/// Base component for independently enabled scene functionality with optional lifecycle callbacks.
 /// </summary>
 [ScriptingAttachableType("GameBehavior")]
 public abstract class GameBehavior : GameComponent, ISceneLifecycleObject
@@ -11,7 +11,7 @@ public abstract class GameBehavior : GameComponent, ISceneLifecycleObject
     private bool m_enabled = true;
 
     /// <summary>
-    /// Gets or sets whether this behavior participates in lifecycle updates.
+    /// Gets or sets whether this behavior participates in scene processing and lifecycle callbacks.
     /// </summary>
     [Inno.Core.Serialization.SerializableProperty(Inno.Core.Serialization.PropertyVisibility.Hide)]
     public bool enabled

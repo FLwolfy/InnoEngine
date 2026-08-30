@@ -21,7 +21,7 @@ internal sealed class SaveSceneAssetDropHandler
 
     protected override EditorDropStatus Query(
         EditorDropContext<GameScene, string> context)
-        => context.source.isLoaded
+        => m_workspace.canPersist && context.source.isLoaded
             ? EditorDropStatus.Accept()
             : EditorDropStatus.rejected;
 

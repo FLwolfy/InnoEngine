@@ -53,6 +53,29 @@ public sealed class LoggingBehaviorTests : IDisposable
     }
 
     [Fact]
+    public void LogManagerFlushDeliversEveryPreviouslyQueuedEntry()
+    {
+        using var sink = new ProbeSink();
+        LogManager.RegisterSink(sink);
+
+        Log.Info("before-flush-1");
+        Log.Info("before-flush-2");
+        LogManager.Flush();
+
+        Assert.Contains(sink.entries, static entry => entry.message == "before-flush-1");
+        Assert.Contains(sink.entries, static entry => entry.message == "before-flush-2");
+        LogManager.UnregisterSink(sink);
+    }
+
+    [Fact]
+    public void LogManagerFlushCompletesWithoutRegisteredSinks()
+    {
+        Log.Info("discarded-before-flush");
+
+        LogManager.Flush();
+    }
+
+    [Fact]
     public void FileLogSink_WritesEntriesAndRotates()
     {
         var dir = Path.Combine(Path.GetTempPath(), "InnoLoggingTests", Guid.NewGuid().ToString("N"));

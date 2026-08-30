@@ -56,6 +56,8 @@ public sealed class EditorRuntimeTests : IDisposable
         FollowingUpdateModule.updateCount = 0;
         TestPanel.throwFromWindowPadding = false;
         MultiShortcutAction.executeCount = 0;
+        ToolbarAction.isChecked = false;
+        ToolbarAction.executeCount = 0;
         MetadataAction.targetTypeReadCount = 0;
         MetadataAction.throwWhenRead = false;
         ThrowAfterActivateAction.cancelCount = 0;
@@ -421,6 +423,28 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void ToolbarResolvesContextualIconTooltipStateAndDispatch()
+    {
+        EditorInteraction interaction = m_runtime.interactions.For("tests/toolbar");
+
+        EditorToolbarItem initial = Assert.Single(interaction.BuildToolbar().items);
+        Assert.Equal("tests.toolbar", initial.actionId);
+        Assert.Equal(EditorToolbarIcon.Play, initial.icon);
+        Assert.Equal("Start Runtime", initial.tooltip);
+        Assert.False(initial.status.isChecked);
+
+        ToolbarAction.isChecked = true;
+        EditorToolbarItem active = Assert.Single(interaction.BuildToolbar().items);
+        Assert.Equal(EditorToolbarIcon.Stop, active.icon);
+        Assert.Equal("Stop Runtime", active.tooltip);
+        Assert.True(active.status.isChecked);
+
+        interaction.Enqueue(active.actionId);
+        m_runtime.Update(new EditorFrame(0.016f, 1f, isFocused: true));
+        Assert.Equal(1, ToolbarAction.executeCount);
+    }
+
+    [Fact]
     public void MainMenuPlacesGeneratedPanelTogglesUnderPanel()
     {
         EditorMenuModel menu = m_runtime.interactions
@@ -503,6 +527,7 @@ public sealed class EditorRuntimeTests : IDisposable
             null,
             null,
             Array.Empty<EditorMenuAttribute>(),
+            Array.Empty<EditorToolbarItemAttribute>(),
             new[] { new EditorShortcutAttribute(KeyCode.F1) }],
             culture: null)!;
         object right = Activator.CreateInstance(
@@ -516,6 +541,7 @@ public sealed class EditorRuntimeTests : IDisposable
             null,
             null,
             Array.Empty<EditorMenuAttribute>(),
+            Array.Empty<EditorToolbarItemAttribute>(),
             new[] { new EditorShortcutAttribute(KeyCode.F1) }],
             culture: null)!;
         Array registrations = Array.CreateInstance(registrationType, 2);
@@ -1134,6 +1160,23 @@ public sealed class MetadataAction : EditorAction
 public sealed class MultiShortcutAction : EditorAction
 {
     public static int executeCount;
+
+    protected override void Execute(EditorActionContext context) => executeCount++;
+}
+
+[EditorAction("tests.toolbar", "tests/toolbar")]
+[EditorToolbarItem(
+    "tests/toolbar",
+    EditorToolbarIcon.Play,
+    "Start Runtime",
+    activeIcon: EditorToolbarIcon.Stop)]
+public sealed class ToolbarAction : EditorAction
+{
+    public static bool isChecked;
+    public static int executeCount;
+
+    protected override EditorActionState Query(EditorActionContext context)
+        => new(true, true, isChecked, isChecked ? "Stop Runtime" : "Start Runtime");
 
     protected override void Execute(EditorActionContext context) => executeCount++;
 }

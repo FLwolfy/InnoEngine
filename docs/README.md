@@ -12,7 +12,7 @@
 | [Assets](assets/README.md) | 多 Source Mount、统一资产链、本地 ZIP/Folder Plugin 与原子激活 | 已完成 |
 | [Rendering](render/README.md) | 空渲染内核、开放 Shader/Technique/Material/Pipeline、统一 Graph/IR、BGFX 与 Editor GPU 合成 | 当前工作树实现完成，双平台最终实机验收见项目 CI |
 | [Engine](engine/README.md) | Scene、Rendering 等运行时能力 | 部分完成 |
-| [Editor](editor/README.md) | 编辑器交互契约、[Global/Settings](editor/Inno.Editor.Panel.Global.md)、领域 feature、ImGui、Scripting 与宿主 | 已完成 |
+| [Editor](editor/README.md) | 编辑器交互契约、[Play Mode](editor/Inno.Editor.PlayMode.md)、Global/Settings、领域 feature、ImGui、Scripting 与宿主 | 已完成 |
 | [Platform](platform/README.md) / Native | 窗口、图形后端与原生集成 | 部分完成 |
 
 ## 推荐阅读路线

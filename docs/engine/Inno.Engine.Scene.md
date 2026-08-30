@@ -2,7 +2,7 @@
 
 [Engine 索引](README.md) · [Scene Assets](Inno.Engine.Scene.Assets.md) · [Wiki 首页](../README.md)
 
-`Inno.Engine.Scene` 提供 Scene、GameObject、Component、Transform hierarchy、GameBehavior 和 GameSystem 的运行时模型。
+`Inno.Engine.Scene` 提供 Scene、GameObject、Component、Transform hierarchy、GameBehavior 和 GameSystem 的运行时模型。`GameBehavior` 是所有可独立启停场景功能的统一基类：项目脚本可以重写生命周期回调，Renderer、Camera、Light 等内建或 Plugin 功能也可以只复用 `enabled`、`isActiveAndEnabled`、序列化和生命周期状态契约。
 
 `Transform` 除了便捷的 local/world TRS 外，还公开精确的 `localToWorldMatrix`、`worldToLocalMatrix`、`TransformPoint`、`InverseTransformPoint` 与原子 `SetWorldTransform`。`worldPosition` 与点变换统一由完整层级矩阵确定。旋转且非均匀缩放的多级层级可能包含不能由单一 world TRS 无损表示的 shear；渲染、包围盒和空间查询应优先使用矩阵/点变换 API，Inspector 与 Gizmo 的 TRS 编辑则使用原子 setter 避免三次中间重算。零缩放层级不可逆，世界到本地转换和保持世界值的重设父级会明确失败，不会静默使用 identity inverse。
 

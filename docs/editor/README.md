@@ -10,6 +10,7 @@ Editor 采用“被动核心 → 后端无关交互 → ImGui 表现 → 独立 
 | --- | --- |
 | [Inno.Editor.Core](Inno.Editor.Core.md) | `EditorContext`、frame/runtime、Module、Panel、Modal 与可选状态 hooks 的最小契约。 |
 | [Inno.Editor.Interactions](Inno.Editor.Interactions.md) | Action、area、menu、shortcut、selection、drag/drop、Undo/Redo、Module/Panel 状态存储与扩展代际。 |
+| [Inno.Editor.PlayMode](Inno.Editor.PlayMode.md) | 脚本门禁、Scene/History 隔离、游戏循环与 Play/Edit 原子切换。 |
 | [Inno.Editor.Scene](Inno.Editor.Scene.md) | Scene document workspace、细粒度 Scene 编辑门面与 reload-safe History 协议。 |
 | [Inno.Editor.Settings](Inno.Editor.Settings.md) | Editor JSON property bag 与强类型 Project Setting Drawer 的统一 frontend 协议。 |
 | [Inno.Editor.ImGui](Inno.Editor.ImGui.md) | ImGui runtime、pointer-free 脚本 facade、统一 Widget、Palette 与 Style metrics。 |
@@ -36,11 +37,13 @@ flowchart TD
     Core["Inno.Editor.Core"] --> Interactions["Inno.Editor.Interactions"]
     Core --> ImGui["Inno.Editor.ImGui"]
     Interactions --> ImGui
+    Interactions --> PlayMode["Inno.Editor.PlayMode"]
     Core --> Inspection["Inno.Editor.Inspection"]
     Interactions --> Inspection
     ImGui --> Inspection
     Core --> Scene["Inno.Editor.Scene"]
     Interactions --> Scene
+    Scene --> PlayMode
     Core --> Settings["Inno.Editor.Settings"]
     Settings --> ImGui
     Settings --> Panels
@@ -52,6 +55,8 @@ flowchart TD
     ImGui --> Panels
     Core --> Scripting["Inno.Editor.Scripting"]
     ImGui --> Scripting
+    Scripting --> PlayMode
+    PlayMode --> Application
     Panels --> Application["Inno.Editor.Application"]
     Scripting --> Application
     ImGui --> Application
@@ -72,6 +77,7 @@ flowchart TD
 - 新 Panel：继承 `EditorPanel` 并添加 `[EditorPanel]`。
 - 新操作：继承 `EditorAction`、`EditorAction<TTarget>` 或 `EditorAction<TTarget,TArgument>` 并添加 `[EditorAction]`；Attribute 与运行时调用都使用项目根目录 `*InteractionIds` 中的 `const string`。
 - 右键或主菜单：在 Action 上添加任意层级的 `[EditorMenu(area, "A/B/C")]`。
+- 紧凑工具栏：在 targetless Action 上添加 `[EditorToolbarItem(area, icon, tooltip)]`；同一 Action 的 `Query` 同时控制 icon、enabled、checked 与动态 tooltip。
 - 动态菜单：继承 `EditorMenuSource` 并添加 `[EditorMenuSource(area)]`。
 - 拖放：继承 `EditorDrop<TSource,TTarget>` 并添加 `[EditorDrop(area)]`。
 - 选择、焦点和打开等交互：通过 `interactions.For(areaId, target)` 获取轻量 `EditorInteraction`，其中 `areaId` 是非空 `string`。

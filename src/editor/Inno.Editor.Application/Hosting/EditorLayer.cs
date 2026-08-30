@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using Inno.Core.Events;
 using Inno.Core.Framework;
@@ -6,6 +7,7 @@ using Inno.Core.Logging;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
+using Inno.Editor.PlayMode;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Platform.ImGui;
 
@@ -17,6 +19,7 @@ internal sealed class EditorLayer : Layer
     private readonly PlatformImGuiContext m_imgui;
     private readonly EditorContext m_context;
     private readonly EditorProjectDiagnosticPublisher m_diagnostics = new();
+    private readonly EditorPlayModeLoop m_playModeLoop = new();
     private readonly ImGuiEditorRuntime m_runtime;
     private bool m_isShutdownPrepared;
     private double m_nextPersistenceRetryTime;
@@ -30,7 +33,7 @@ internal sealed class EditorLayer : Layer
         m_imgui = imgui;
         m_context = context;
         EditorWidget.SetupStyle();
-        m_runtime = new ImGuiEditorRuntime(context, hostServices ?? Array.Empty<object>());
+        m_runtime = new ImGuiEditorRuntime(context, CreateHostServices(hostServices, m_playModeLoop));
     }
 
     internal int panelCount => m_runtime.panelCount;
@@ -59,8 +62,18 @@ internal sealed class EditorLayer : Layer
     }
 
     /// <inheritdoc />
+    public override void OnFixedUpdate(float fixedDeltaTime)
+        => m_playModeLoop.FixedUpdate(fixedDeltaTime);
+
+    /// <inheritdoc />
+    public override void OnUpdate(float deltaTime)
+        => m_playModeLoop.Update(deltaTime);
+
+    /// <inheritdoc />
     public override void OnLateUpdate(float deltaTime)
     {
+        // Editor transitions run after every simulation phase so a new Play Mode session starts on a full frame.
+        m_playModeLoop.LateUpdate(deltaTime);
         m_runtime.Update(new EditorFrame(deltaTime, Time.time, isFocused));
         _ = m_imgui.RenderFrame(m_runtime.Draw);
         SaveLayoutIfChanged();
@@ -126,5 +139,14 @@ internal sealed class EditorLayer : Layer
             return false;
         m_context.SetImGuiLayout(layout);
         return true;
+    }
+
+    private static IEnumerable<object> CreateHostServices(
+        IEnumerable<object>? hostServices,
+        EditorPlayModeLoop playModeLoop)
+    {
+        List<object> services = hostServices is null ? [] : new List<object>(hostServices);
+        services.Add(playModeLoop);
+        return services;
     }
 }

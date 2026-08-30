@@ -51,9 +51,10 @@ Log.Warn("Health is low: {0}", health);
 | `UnregisterSink(ILogSink)` | 移除接收器，但不自动 Dispose。 |
 | `SetMinimumLevel(LogLevel)` | 设置最低分发等级。 |
 | `Dispatch(LogEntry)` | 直接投递构造好的日志项。 |
+| `Flush()` | 等待调用前已入队的日志全部送达 sink；只用于低频生命周期边界。 |
 | `Shutdown()` | 停 worker、flush、清空并释放 sink。 |
 
-单个 sink 的 `Receive` 异常会被隔离，不会阻止其他 sink。
+单个 sink 的 `Receive` 异常会被隔离，不会阻止其他 sink。`Flush()` 通过异步队列中的 barrier 保证先前日志已送达，不会把常规日志调用改成同步分发；从 logging worker 自身调用会抛出 `InvalidOperationException`，避免等待自身造成死锁。
 
 ## LogEntry 与 LogLevel
 

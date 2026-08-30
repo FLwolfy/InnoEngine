@@ -11,13 +11,14 @@ namespace Inno.Editor.Scripting;
 /// Owns script compilation and activation for one editor project.
 /// </summary>
 [EditorModule("editor-scripting", order: 100)]
-internal sealed class EditorScripting : EditorModule
+internal sealed class EditorScripting : EditorModule, IEditorScriptCompilation
 {
     private ScriptManager? m_manager;
     private Task<ScriptCompilationResult>? m_compilation;
     private bool m_blockFollowingUpdates;
     private bool m_hideCompilationOnNextUpdate;
     private bool m_showCompilation;
+    private string? m_activationFailure;
 
     /// <inheritdoc />
     public override bool blocksFollowingUpdates => m_blockFollowingUpdates;
@@ -34,6 +35,27 @@ internal sealed class EditorScripting : EditorModule
 
     internal bool isAvailable => m_manager is not null;
 
+    /// <inheritdoc />
+    public EditorScriptCompilationState state
+    {
+        get
+        {
+            ScriptManager? manager = m_manager;
+            if (manager is null)
+                return EditorScriptCompilationState.Initializing;
+            if (isCompiling)
+                return EditorScriptCompilationState.Compiling;
+            if (m_activationFailure is not null)
+                return EditorScriptCompilationState.Failed;
+            return manager.lastCompilation switch
+            {
+                { success: true } => EditorScriptCompilationState.Ready,
+                { success: false } => EditorScriptCompilationState.Failed,
+                _ => EditorScriptCompilationState.Initializing
+            };
+        }
+    }
+
     /// <summary>
     /// Gets the current compiler progress.
     /// </summary>
@@ -42,7 +64,11 @@ internal sealed class EditorScripting : EditorModule
     /// <summary>
     /// Gets the current compiler stage.
     /// </summary>
-    internal string status => m_manager?.compilationStatus ?? "Waiting for script changes.";
+    public string status
+        => m_activationFailure ?? m_manager?.compilationStatus ?? "Initializing project scripting.";
+
+    /// <inheritdoc />
+    public ScriptCompilationResult? lastCompilation => m_manager?.lastCompilation;
 
     internal void RecompileScripting()
         => QueueReload(static manager => manager.RecompileScripting());
@@ -118,6 +144,7 @@ internal sealed class EditorScripting : EditorModule
             {
                 m_blockFollowingUpdates = true;
                 _ = m_manager.ApplyPendingReload();
+                m_activationFailure = null;
             }
             else
                 PluginManager.RollbackPending();
@@ -130,6 +157,7 @@ internal sealed class EditorScripting : EditorModule
         catch (Exception exception)
         {
             PluginManager.RollbackPending();
+            m_activationFailure = $"Script generation activation failed: {exception.Message}";
             ScriptDiagnosticPublisher.PublishReloadFailure(exception);
             Log.Error("Script assembly reload failed: {0}", exception);
         }
@@ -177,6 +205,7 @@ internal sealed class EditorScripting : EditorModule
         m_hideCompilationOnNextUpdate = false;
         m_showCompilation = false;
         m_blockFollowingUpdates = false;
+        m_activationFailure = null;
         ScriptDiagnosticPublisher.ClearAll();
     }
 }

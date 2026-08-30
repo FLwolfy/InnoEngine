@@ -81,8 +81,7 @@ internal sealed class EditorExtensionActivator
         foreach (ParameterInfo parameter in constructors[0].GetParameters())
         {
             Type parameterType = parameter.ParameterType;
-            if (parameterType == typeof(EditorContext)
-                || parameterType == typeof(EditorInteractions))
+            if (parameterType == typeof(EditorContext) || IsInteractionContract(parameterType))
             {
                 continue;
             }
@@ -154,7 +153,7 @@ internal sealed class EditorExtensionActivator
     {
         if (parameterType == typeof(EditorContext))
             return m_context;
-        if (parameterType == typeof(EditorInteractions))
+        if (IsInteractionContract(parameterType))
             return m_interactions;
 
         object[] services = m_hostServices
@@ -199,6 +198,9 @@ internal sealed class EditorExtensionActivator
         }
         return constructors[0];
     }
+
+    private static bool IsInteractionContract(Type type)
+        => type != typeof(object) && type.IsAssignableFrom(typeof(EditorInteractions));
 
     private static InvalidOperationException CreateContractException(Type type, Type contract)
         => new($"Editor extension '{type.FullName}' must be a non-abstract '{contract.FullName}'.");

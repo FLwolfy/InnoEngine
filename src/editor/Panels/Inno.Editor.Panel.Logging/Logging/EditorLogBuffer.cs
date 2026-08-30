@@ -1,7 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 
+using Inno.Core.Assemblies;
 using Inno.Core.Logging;
 
 namespace Inno.Editor.Panel.Logging;
@@ -15,6 +17,7 @@ internal sealed class EditorLogBuffer : ILogSink
     private readonly object m_sync = new();
     private int m_capacity = 1024;
     private long m_nextId;
+    private long? m_playSessionStartId;
     private long m_version;
 
     /// <summary>
@@ -96,6 +99,52 @@ internal sealed class EditorLogBuffer : ILogSink
             m_version++;
         }
     }
+
+    internal void BeginPlaySession()
+    {
+        lock (m_sync)
+        {
+            if (m_playSessionStartId is not null)
+                throw new InvalidOperationException("The Console already owns an active Play Mode log session.");
+            m_playSessionStartId = m_nextId;
+        }
+    }
+
+    internal int CompletePlaySession()
+    {
+        lock (m_sync)
+        {
+            if (m_playSessionStartId is not long startId)
+                return 0;
+
+            int removed = 0;
+            int count = m_entries.Count;
+            for (int i = 0; i < count; i++)
+            {
+                BufferedLogEntry buffered = m_entries.Dequeue();
+                if (buffered.id > startId && IsTransientRuntimeEntry(buffered.entry))
+                {
+                    removed++;
+                    continue;
+                }
+                m_entries.Enqueue(buffered);
+            }
+
+            m_playSessionStartId = null;
+            if (removed != 0)
+                m_version++;
+            return removed;
+        }
+    }
+
+    internal void CancelPlaySession()
+    {
+        lock (m_sync)
+            m_playSessionStartId = null;
+    }
+
+    private static bool IsTransientRuntimeEntry(LogEntry entry)
+        => entry.scope == AssemblyScope.Runtime && entry.level < LogLevel.Warn;
 
     private void TrimExcessUnsafe()
     {

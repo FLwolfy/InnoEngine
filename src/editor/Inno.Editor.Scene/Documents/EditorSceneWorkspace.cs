@@ -10,6 +10,7 @@ using Inno.Assets;
 using Inno.Assets.Core;
 using Inno.Assets.Serialization;
 using Inno.Core.Assemblies;
+using Inno.Core.Identity;
 using Inno.Core.Logging;
 using Inno.Core.Reflection;
 using Inno.Core.Serialization;
@@ -25,7 +26,11 @@ namespace Inno.Editor.Scene;
 /// Tracks editor scene documents, their source paths, and serialized dirty state.
 /// </summary>
 [EditorModule("scene-workspace", order: 200)]
-internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace, IEditorReloadParticipant
+internal sealed class EditorSceneWorkspace :
+    EditorModule,
+    IEditorSceneWorkspace,
+    IEditorScenePlayMode,
+    IEditorReloadParticipant
 {
     private const double C_DIRTY_REFRESH_SECONDS = 0.1;
     private const string C_SCENE_EXTENSION = ".iscene";
@@ -34,10 +39,11 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     private readonly Dictionary<Guid, SceneDocument> m_documents = [];
     private readonly ConcurrentQueue<AssetChange> m_sourceChanges = new();
     private readonly EditorSceneDiagnosticPublisher m_diagnostics = new();
-    private readonly EditorInteractions? m_interactions;
+    private readonly IEditorSelectionCoordinator? m_selection;
     private readonly SceneStateDiagnosticTracker m_sceneStateDiagnostics = new();
 
     private bool m_isAttached;
+    private PlayModeSession? m_playModeSession;
     private IDisposable? m_reloadIntegration;
     private IDisposable? m_reloadRegistration;
     private string[]? m_pendingScenePaths;
@@ -48,13 +54,13 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     /// <summary>
     /// Creates a scene workspace and optionally enables editor selection coordination.
     /// </summary>
-    /// <param name="interactions">
-    /// The active editor interaction entry point. The extension runtime supplies this dependency automatically;
+    /// <param name="selection">
+    /// The active editor selection coordinator. The extension runtime supplies this dependency automatically;
     /// direct tooling callers may omit it when selection coordination is unnecessary.
     /// </param>
-    internal EditorSceneWorkspace(EditorInteractions? interactions = null)
+    internal EditorSceneWorkspace(IEditorSelectionCoordinator? selection = null)
     {
-        m_interactions = interactions;
+        m_selection = selection;
     }
 
     /// <summary>
@@ -66,6 +72,11 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     /// Gets the active scene, or <see langword="null"/> when the workspace contains no scenes.
     /// </summary>
     public GameScene? activeScene => SceneManager.activeScene;
+
+    /// <summary>
+    /// Gets whether the loaded scenes represent editable documents that may be persisted.
+    /// </summary>
+    public bool canPersist => m_playModeSession is null;
 
     /// <summary>
     /// Creates and loads a uniquely named unsaved scene alongside the currently loaded scenes.
@@ -121,6 +132,8 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     public bool IsDirty(GameScene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
+        if (m_playModeSession?.TryGetSnapshot(scene.identity.persistentId, out SceneDocumentSnapshot? snapshot) == true)
+            return snapshot!.isDirty;
         ApplyPendingSourceChanges();
         SceneDocument document = GetOrCreateDocument(scene);
         try
@@ -164,6 +177,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     public string Save(GameScene scene, string currentDirectory)
     {
         ArgumentNullException.ThrowIfNull(scene);
+        EnsureCanPersist();
         SceneDocument document = GetOrCreateDocument(scene);
         string relativePath;
         if (string.IsNullOrEmpty(document.sourcePath))
@@ -187,6 +201,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     public string SaveToDirectory(GameScene scene, string currentDirectory)
     {
         ArgumentNullException.ThrowIfNull(scene);
+        EnsureCanPersist();
         SceneDocument document = GetOrCreateDocument(scene);
         string currentPath = document.sourcePath;
         string currentParent = NormalizePath(Path.GetDirectoryName(currentPath));
@@ -214,6 +229,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     public string SavePrefab(GameObject gameObject, string currentDirectory)
     {
         ArgumentNullException.ThrowIfNull(gameObject);
+        EnsureCanPersist();
         string relativePath = CreateUniquePath(currentDirectory, gameObject.name, C_PREFAB_EXTENSION);
         if (!AssetManager.Save(AssetPath.Project(relativePath), PrefabAsset.Capture(gameObject)))
             throw new InvalidOperationException($"No asset importer could save prefab '{relativePath}'.");
@@ -279,6 +295,11 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     public bool TryGetSourcePath(GameScene scene, out string relativePath)
     {
         ArgumentNullException.ThrowIfNull(scene);
+        if (m_playModeSession?.TryGetSnapshot(scene.identity.persistentId, out SceneDocumentSnapshot? snapshot) == true)
+        {
+            relativePath = snapshot!.sourcePath;
+            return !string.IsNullOrEmpty(relativePath);
+        }
         SceneDocument document = GetOrCreateDocument(scene);
         try
         {
@@ -307,6 +328,11 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     /// <inheritdoc />
     protected override void Capture(EditorState state)
     {
+        if (m_playModeSession is PlayModeSession playModeSession)
+        {
+            playModeSession.Capture(state);
+            return;
+        }
         if (m_pendingScenePaths is not null)
         {
             state.Set("openScenes", m_pendingScenePaths);
@@ -363,6 +389,12 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     /// <param name="context">The shared editor context containing current frame state.</param>
     protected override void OnUpdate(EditorContext context)
     {
+        if (m_playModeSession is not null)
+        {
+            SynchronizeReplacedScenes();
+            m_sceneStateDiagnostics.Reconcile();
+            return;
+        }
         TryRestorePendingScenes();
         Refresh();
     }
@@ -375,15 +407,22 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     {
         if (!m_isAttached)
             return;
-        AssetManager.Changed -= OnAssetDatabaseChanged;
-        m_reloadRegistration?.Dispose();
-        m_reloadRegistration = null;
-        SceneManager.UnloadAllScenes();
-        m_sceneStateDiagnostics.Reconcile(force: true);
-        m_reloadIntegration?.Dispose();
-        m_reloadIntegration = null;
-        m_isAttached = false;
-        Clear();
+        try
+        {
+            m_playModeSession?.Restore();
+        }
+        finally
+        {
+            AssetManager.Changed -= OnAssetDatabaseChanged;
+            m_reloadRegistration?.Dispose();
+            m_reloadRegistration = null;
+            SceneManager.UnloadAllScenes();
+            m_sceneStateDiagnostics.Reconcile(force: true);
+            m_reloadIntegration?.Dispose();
+            m_reloadIntegration = null;
+            m_isAttached = false;
+            Clear();
+        }
     }
 
     /// <inheritdoc />
@@ -399,6 +438,13 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
     IEditorReloadTransaction IEditorReloadParticipant.Capture(AssemblyReloadContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
+        if (m_playModeSession is not null)
+        {
+            return new WorkspaceReloadTransaction(
+                this,
+                Array.Empty<ReloadDocumentState>(),
+                preserveDocumentBaselines: true);
+        }
         ApplyPendingSourceChanges();
         var documents = new List<ReloadDocumentState>(m_documents.Count);
         foreach ((Guid sceneId, SceneDocument document) in m_documents)
@@ -420,7 +466,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
                 document.nextRefreshTimestamp,
                 wasDirty));
         }
-        return new WorkspaceReloadTransaction(this, documents);
+        return new WorkspaceReloadTransaction(this, documents, preserveDocumentBaselines: false);
     }
 
     void IEditorReloadParticipant.RefreshDiagnostics()
@@ -710,8 +756,7 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
             string.Equals(document.sourcePath, m_pendingActivePath, StringComparison.OrdinalIgnoreCase));
         if (activeDocument is not null && activeDocument.scene.isLoaded)
             SceneManager.SetActiveScene(activeDocument.scene);
-        if (m_interactions is not null)
-            _ = m_interactions.For(m_interactions.focusedArea).Select();
+        m_selection?.SetSelection(null);
         m_pendingScenePaths = null;
         m_waitingTypeCatalogVersion = -1;
         m_diagnostics.ResolveRestore();
@@ -754,7 +799,8 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
             document.sourceAssetId,
             document.savedHash.ToArray(),
             document.isDirty,
-            SceneManager.GetSceneIndex(scene));
+            SceneManager.GetSceneIndex(scene),
+            document.nextRefreshTimestamp);
     }
 
     internal GameScene RestoreDocumentSnapshot(SceneDocumentSnapshot snapshot)
@@ -769,9 +815,48 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
             snapshot.sourceAssetId,
             snapshot.savedHash.ToArray())
         {
-            isDirty = snapshot.isDirty
+            isDirty = snapshot.isDirty,
+            nextRefreshTimestamp = snapshot.nextRefreshTimestamp
         };
         return scene;
+    }
+
+    IEditorScenePlayModeSession IEditorScenePlayMode.BeginPlayMode()
+    {
+        if (m_playModeSession is not null)
+            throw new InvalidOperationException("An editor Play Mode scene session is already active.");
+
+        Refresh();
+        SceneDocumentSnapshot[] snapshots = SceneManager.loadedScenes
+            .Select(CaptureDocumentSnapshot)
+            .OrderBy(static snapshot => snapshot.sceneIndex)
+            .ToArray();
+        Guid? activeSceneId = SceneManager.activeScene?.identity.persistentId;
+        Guid? selectedId = m_selection?.selectedTarget is IIdentityObject selected
+            ? selected.GetIdentity().persistentId
+            : null;
+        var session = new PlayModeSession(this, snapshots, activeSceneId, selectedId);
+        m_playModeSession = session;
+        try
+        {
+            ReplaceSceneSet(session);
+            return session;
+        }
+        catch (Exception enterFailure)
+        {
+            try
+            {
+                RestorePlayModeSession(session);
+            }
+            catch (Exception restoreFailure)
+            {
+                throw new AggregateException(
+                    "Editor Play Mode scene activation failed and the editing scene set could not be restored.",
+                    enterFailure,
+                    restoreFailure);
+            }
+            throw;
+        }
     }
 
     internal bool CloseDocumentForHistory(GameScene scene)
@@ -795,13 +880,14 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
             SceneManager.SetActiveScene(SceneManager.loadedScenes[0]);
     }
 
-    internal void RestoreSelection(Guid? selectedId)
+    internal void RestoreSelection(Guid? selectedId, bool selectActiveSceneWhenMissing = true)
     {
-        if (m_interactions is null)
+        if (m_selection is null)
             return;
         object? target = selectedId is Guid id ? FindEngineObject(id) : null;
-        target ??= SceneManager.activeScene;
-        _ = m_interactions.For(m_interactions.focusedArea, target).Select();
+        if (target is null && selectActiveSceneWhenMissing)
+            target = SceneManager.activeScene;
+        m_selection.SetSelection(target);
     }
 
     private static EngineObject? FindEngineObject(Guid id)
@@ -825,6 +911,63 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
                 return system;
         }
         return null;
+    }
+
+    private void RestorePlayModeSession(PlayModeSession session)
+    {
+        if (!ReferenceEquals(m_playModeSession, session) || session.isRestored)
+            return;
+        ReplaceSceneSet(session);
+        session.MarkRestored();
+        m_playModeSession = null;
+    }
+
+    private void ReplaceSceneSet(PlayModeSession session)
+    {
+        m_selection?.SetSelection(null);
+        try
+        {
+            SceneManager.UnloadAllScenes();
+        }
+        catch (Exception exception)
+        {
+            Log.Error("A scene teardown callback failed during the Play Mode scene swap: {0}", exception);
+        }
+
+        m_documents.Clear();
+        try
+        {
+            IReadOnlyList<SceneDocumentSnapshot> snapshots = session.snapshots;
+            for (int i = 0; i < snapshots.Count; i++)
+                _ = RestoreDocumentSnapshot(snapshots[i]);
+            RestoreActiveScene(session.activeSceneId);
+            RestoreSelection(session.selectedId, selectActiveSceneWhenMissing: false);
+        }
+        catch (Exception exception)
+        {
+            try
+            {
+                SceneManager.UnloadAllScenes();
+            }
+            catch (Exception cleanupFailure)
+            {
+                throw new AggregateException(
+                    "The Play Mode scene set could not be constructed and its partial state could not be released.",
+                    exception,
+                    cleanupFailure);
+            }
+            m_documents.Clear();
+            throw new InvalidOperationException("The Play Mode scene set could not be constructed.", exception);
+        }
+    }
+
+    private void EnsureCanPersist()
+    {
+        if (!canPersist)
+        {
+            throw new InvalidOperationException(
+                "Scene and prefab persistence is unavailable while Play Mode runtime copies are active.");
+        }
     }
 
     private static byte[] ComputeSceneHash(GameScene scene)
@@ -888,7 +1031,8 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
 
     private sealed class WorkspaceReloadTransaction(
         EditorSceneWorkspace workspace,
-        IReadOnlyList<ReloadDocumentState> documents) : IEditorReloadTransaction
+        IReadOnlyList<ReloadDocumentState> documents,
+        bool preserveDocumentBaselines) : IEditorReloadTransaction
     {
         /// <inheritdoc />
         public void PrepareForActivation()
@@ -899,6 +1043,8 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
         public void Apply()
         {
             workspace.SynchronizeReplacedScenes();
+            if (preserveDocumentBaselines)
+                return;
             foreach (ReloadDocumentState state in documents)
             {
                 if (!workspace.m_documents.TryGetValue(state.sceneId, out SceneDocument? document))
@@ -965,6 +1111,48 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
         public long nextRefreshTimestamp;
     }
 
+    private sealed class PlayModeSession(
+        EditorSceneWorkspace workspace,
+        SceneDocumentSnapshot[] sceneSnapshots,
+        Guid? activeScene,
+        Guid? selection) : IEditorScenePlayModeSession
+    {
+        private readonly Dictionary<Guid, SceneDocumentSnapshot> m_snapshotBySceneId =
+            sceneSnapshots.ToDictionary(static snapshot => snapshot.sceneId);
+
+        internal IReadOnlyList<SceneDocumentSnapshot> snapshots { get; } = sceneSnapshots;
+
+        internal Guid? activeSceneId { get; } = activeScene;
+
+        internal Guid? selectedId { get; } = selection;
+
+        internal bool isRestored { get; private set; }
+
+        public void Restore() => workspace.RestorePlayModeSession(this);
+
+        public void Dispose() => Restore();
+
+        internal bool TryGetSnapshot(Guid sceneId, out SceneDocumentSnapshot? snapshot)
+            => m_snapshotBySceneId.TryGetValue(sceneId, out snapshot);
+
+        internal void Capture(EditorState state)
+        {
+            state.Set(
+                "openScenes",
+                sceneSnapshots
+                    .Select(static snapshot => snapshot.sourcePath)
+                    .Where(static path => !string.IsNullOrEmpty(path))
+                    .ToArray());
+            string activePath = activeSceneId is Guid activeId &&
+                                m_snapshotBySceneId.TryGetValue(activeId, out SceneDocumentSnapshot? active)
+                ? active.sourcePath
+                : string.Empty;
+            state.Set("activeScene", activePath);
+        }
+
+        internal void MarkRestored() => isRestored = true;
+    }
+
     internal sealed record SceneDocumentSnapshot(
         Guid sceneId,
         byte[] payload,
@@ -972,5 +1160,6 @@ internal sealed class EditorSceneWorkspace : EditorModule, IEditorSceneWorkspace
         Guid sourceAssetId,
         byte[] savedHash,
         bool isDirty,
-        int sceneIndex);
+        int sceneIndex,
+        long nextRefreshTimestamp = 0);
 }
