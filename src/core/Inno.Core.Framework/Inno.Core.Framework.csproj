@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1573;CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Core.Job\Inno.Core.Job.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Core.Identity\Inno.Core.Identity.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Core.Coroutines\Inno.Core.Coroutines.csproj" />
+    <ProjectReference Include="..\Inno.Core.Events\Inno.Core.Events.csproj" />
+  </ItemGroup>
+</Project>

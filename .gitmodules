@@ -1,0 +1,18 @@
+[submodule "extern/bx"]
+	path = extern/bx
+	url = https://github.com/bkaradzic/bx.git
+[submodule "extern/bimg"]
+	path = extern/bimg
+	url = https://github.com/bkaradzic/bimg.git
+[submodule "extern/bgfx"]
+	path = extern/bgfx
+	url = https://github.com/bkaradzic/bgfx.git
+[submodule "extern/SDL"]
+	path = extern/SDL
+	url = https://github.com/libsdl-org/SDL.git
+[submodule "extern/cimgui"]
+	path = extern/cimgui
+	url = https://github.com/cimgui/cimgui.git
+[submodule "extern/cimguizmo"]
+	path = extern/cimguizmo
+	url = https://github.com/cimgui/cimguizmo.git

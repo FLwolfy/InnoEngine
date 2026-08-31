@@ -1,5 +1,11 @@
 <Project>
-  <PropertyGroup Condition="'$(InnoAssemblyGroup)' == ''">
-    <InnoAssemblyGroup>Core</InnoAssemblyGroup>
+  <PropertyGroup Condition="'$(InnoAssemblyDomain)' == ''">
+    <InnoAssemblyDomain>InnoInternal</InnoAssemblyDomain>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(InnoAssemblyScope)' == ''">
+    <InnoAssemblyScope>Runtime</InnoAssemblyScope>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(InnoScriptApi)' == ''">
+    <InnoScriptApi>None</InnoScriptApi>
   </PropertyGroup>
 </Project>

@@ -1,5 +1,6 @@
 <Project>
-  <ItemGroup Condition="'$(InnoAssemblyGroup)' != ''">
-    <AssemblyMetadata Include="Inno.AssemblyGroup" Value="$(InnoAssemblyGroup)" />
+  <ItemGroup Condition="'$(InnoAssemblyDomain)' != '' and '$(InnoAssemblyScope)' != ''">
+    <AssemblyMetadata Include="Inno.AssemblyDomain" Value="$(InnoAssemblyDomain)" />
+    <AssemblyMetadata Include="Inno.AssemblyScope" Value="$(InnoAssemblyScope)" />
   </ItemGroup>
 </Project>

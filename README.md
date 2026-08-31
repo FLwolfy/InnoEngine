@@ -33,6 +33,21 @@ A few principles I want to keep pushing toward:
 
 The repository is split into several major areas such as engine/runtime code, editor code, tools, samples, tests, native interop, and documentation. The following is an example of an **IDEAL** repo structure. This will **NOT** be exactly the same as the real one.
 
+For the current source-level project map and public APIs, use the [InnoEngine Wiki](docs/README.md). In particular, the active architectures are documented in [Assets](docs/assets/README.md), [Editor](docs/editor/README.md), and [Editor Scripting](docs/editor/Inno.Editor.Scripting.md); the large tree below remains an aspirational layout, not a list of projects that currently exist.
+
+The implemented asset dependency direction is:
+
+```mermaid
+flowchart LR
+    Core["Inno.Assets.Core"] --> Loader["Inno.Assets.Loader"]
+    File["Inno.Assets.File"] --> Loader
+    Loader --> Manager["Inno.Assets"]
+    Serialization["Inno.Assets.Serialization"] --> Manager
+    Manager --> Scene["Inno.Engine.Scene.Assets"]
+    Manager --> Scripting["Inno.Editor.Scripting"]
+    Assemblies["Inno.Core.Assemblies"] --> Scripting
+```
+
 ```
 Inno/
 ├─ global.json
@@ -224,10 +239,9 @@ Inno/
 │  └─ scripts/
 │
 ├─ src/
-│  ├─ Core/
+│  ├─ core/
 │  │  ├─ Inno.Core/
 │  │  │  ├─ Inno.Core.csproj
-│  │  │  ├─ GlobalUsings.cs
 │  │  │  ├─ Diagnostics/
 │  │  │  │  ├─ Guard.cs
 │  │  │  │  ├─ ThrowHelper.cs
@@ -251,6 +265,18 @@ Inno/
 │  │  │  │  ├─ StringUtility.cs
 │  │  │  │  └─ PathUtility.cs
 │  │  │  └─ Internals/
+│  │  │
+│  │  ├─ Inno.Core.Diagnose/
+│  │  │  ├─ Inno.Core.Diagnose.csproj
+│  │  │  ├─ Diagnostic.cs
+│  │  │  ├─ DiagnosticCallerResolver.cs
+│  │  │  ├─ Diagnostics.cs
+│  │  │  ├─ DiagnosticLocation.cs
+│  │  │  ├─ DiagnosticManager.cs
+│  │  │  ├─ DiagnosticReport.cs
+│  │  │  ├─ DiagnosticSeverity.cs
+│  │  │  ├─ DiagnosticSource.cs
+│  │  │  └─ IDiagnosticSink.cs
 │  │  │
 │  │  ├─ Inno.Core.Logging/
 │  │  │  ├─ Inno.Core.Logging.csproj
@@ -312,6 +338,17 @@ Inno/
 │  │  │  ├─ Metadata/
 │  │  │  └─ Caching/
 │  │  │
+│  │  ├─ Inno.Core.Assemblies/
+│  │  │  ├─ Inno.Core.Assemblies.csproj
+│  │  │  ├─ Loading/
+│  │  │  ├─ Registry/
+│  │  │  └─ Internal/
+│  │  │
+│  │  ├─ Inno.Core.Scripting/
+│  │  │  ├─ Inno.Core.Scripting.csproj
+│  │  │  ├─ ScriptingApiExportAttribute.cs
+│  │  │  └─ ScriptingApiNamespaceAttribute.cs
+│  │  │
 │  │  └─ Inno.Core.Threading/
 │  │     ├─ Inno.Core.Threading.csproj
 │  │     ├─ Jobs/
@@ -319,7 +356,7 @@ Inno/
 │  │     ├─ Synchronization/
 │  │     └─ Collections/
 │  │
-│  ├─ Platform/
+│  ├─ platform/
 │  │  ├─ Inno.Platform/
 │  │  │  ├─ Inno.Platform.csproj
 │  │  │  ├─ Abstractions/
@@ -351,7 +388,7 @@ Inno/
 │  │     ├─ Clipboard/
 │  │     └─ Internal/
 │  │
-│  ├─ Graphics/
+│  ├─ graphics/
 │  │  ├─ Inno.Graphics/
 │  │  │  ├─ Inno.Graphics.csproj
 │  │  │  ├─ Abstractions/
@@ -406,7 +443,7 @@ Inno/
 │  │     ├─ Commands/
 │  │     └─ Internal/
 │  │
-│  ├─ Assets/
+│  ├─ assets/
 │  │  ├─ Inno.Assets/
 │  │  │  ├─ Inno.Assets.csproj
 │  │  │  ├─ Database/
@@ -427,14 +464,12 @@ Inno/
 │  │  │  ├─ Dependencies/
 │  │  │  └─ Runtime/
 │  │  │
-│  │  ├─ Inno.Assets.Importers/
-│  │  │  ├─ Inno.Assets.Importers.csproj
-│  │  │  ├─ Textures/
-│  │  │  ├─ Meshes/
-│  │  │  ├─ Materials/
-│  │  │  ├─ Scenes/
-│  │  │  ├─ Shaders/
-│  │  │  └─ Audio/
+│  │  ├─ Inno.Assets.Loader/
+│  │  │  ├─ Inno.Assets.Loader.csproj
+│  │  │  ├─ Importers/
+│  │  │  │  ├─ TextAssetImporter.cs
+│  │  │  │  └─ BinaryAssetImporter.cs
+│  │  │  └─ Internal/
 │  │  │
 │  │  ├─ Inno.Assets.Pipeline/
 │  │  │  ├─ Inno.Assets.Pipeline.csproj
@@ -446,10 +481,7 @@ Inno/
 │  │  │
 │  │  ├─ Inno.Assets.Serialization/
 │  │  │  ├─ Inno.Assets.Serialization.csproj
-│  │  │  ├─ Metadata/
-│  │  │  ├─ Binary/
-│  │  │  ├─ Yaml/
-│  │  │  └─ State/
+│  │  │  └─ Asset converters and dependency collection
 │  │  │
 │  │  └─ Inno.Assets.Runtime/
 │  │     ├─ Inno.Assets.Runtime.csproj
@@ -458,7 +490,7 @@ Inno/
 │  │     ├─ GpuUpload/
 │  │     └─ Caches/
 │  │
-│  ├─ Content/
+│  ├─ content/
 │  │  ├─ Inno.Content/
 │  │  │  ├─ Inno.Content.csproj
 │  │  │  ├─ Common/
@@ -504,7 +536,7 @@ Inno/
 │  │     ├─ Runtime/
 │  │     └─ Serialization/
 │  │
-│  ├─ ECS/
+│  ├─ ecs/
 │  │  ├─ Inno.ECS/
 │  │  │  ├─ Inno.ECS.csproj
 │  │  │  ├─ Entities/
@@ -527,7 +559,7 @@ Inno/
 │  │     ├─ Systems/
 │  │     └─ Utilities/
 │  │
-│  ├─ Scene/
+│  ├─ scene/
 │  │  ├─ Inno.Scene/
 │  │  │  ├─ Inno.Scene.csproj
 │  │  │  ├─ Nodes/
@@ -549,7 +581,7 @@ Inno/
 │  │     ├─ Authoring/
 │  │     └─ Validation/
 │  │
-│  ├─ Rendering/
+│  ├─ rendering/
 │  │  ├─ Inno.Rendering/
 │  │  │  ├─ Inno.Rendering.csproj
 │  │  │  ├─ Cameras/
@@ -583,7 +615,19 @@ Inno/
 │  │     ├─ Shapes/
 │  │     └─ Overlay/
 │  │
-│  ├─ Engine/
+│  ├─ engine/
+│  │  ├─ Inno.Engine.Scene/
+│  │  │  ├─ Inno.Engine.Scene.csproj
+│  │  │  ├─ Core/
+│  │  │  ├─ Internal/
+│  │  │  └─ Prefabs/
+│  │  │
+│  │  ├─ Inno.Engine.Scene.Assets/
+│  │  │  ├─ Inno.Engine.Scene.Assets.csproj
+│  │  │  ├─ AssetTypes/
+│  │  │  ├─ Importers/
+│  │  │  └─ Serialization/
+│  │  │
 │  │  ├─ Inno.Engine/
 │  │  │  ├─ Inno.Engine.csproj
 │  │  │  ├─ Host/
@@ -609,7 +653,7 @@ Inno/
 │  │  │  │  └─ GameStartup.cs
 │  │  │  └─ Runtime/
 │  │  │
-│  │  ├─ Inno.Engine.GameFramework/
+│  │  └─ Inno.Engine.GameFramework/
 │  │  │  ├─ Inno.Engine.GameFramework.csproj
 │  │  │  ├─ Components/
 │  │  │  ├─ Gameplay/
@@ -617,13 +661,12 @@ Inno/
 │  │  │  ├─ UI/
 │  │  │  └─ Common/
 │  │  │
-│  │  └─ Inno.Engine.Scripting/
-│  │     ├─ Inno.Engine.Scripting.csproj
-│  │     ├─ Runtime/
-│  │     ├─ Host/
-│  │     └─ Binding/
-│  │
-│  ├─ Editor/
+│  ├─ editor/
+│  │  ├─ Inno.Editor.Scripting/
+│  │  │  ├─ Inno.Editor.Scripting.csproj
+│  │  │  ├─ Compilation/
+│  │  │  └─ ProjectGeneration/
+│  │  │
 │  │  ├─ Inno.Editor.Framework/
 │  │  │  ├─ Inno.Editor.Framework.csproj
 │  │  │  ├─ Docking/
@@ -665,7 +708,7 @@ Inno/
 │  │     ├─ Themes/
 │  │     └─ BuiltinAssets/
 │  │
-│  └─ Launcher/
+│  └─ launcher/
 │     ├─ Inno.Launcher/
 │     │  ├─ Inno.Launcher.csproj
 │     │  ├─ Program.cs
@@ -685,7 +728,7 @@ Inno/
 │        └─ Bootstrap/
 │
 ├─ tests/
-│  ├─ Core/
+│  ├─ core/
 │  │  ├─ Inno.Core.Tests/
 │  │  │  ├─ Inno.Core.Tests.csproj
 │  │  │  ├─ Diagnostics/
@@ -702,35 +745,35 @@ Inno/
 │  │     ├─ Yaml/
 │  │     └─ Json/
 │  │
-│  ├─ Assets/
+│  ├─ assets/
 │  │  ├─ Inno.Assets.Tests/
 │  │  ├─ Inno.Assets.Pipeline.Tests/
 │  │  └─ Inno.Assets.Runtime.Tests/
 │  │
-│  ├─ ECS/
+│  ├─ ecs/
 │  │  ├─ Inno.ECS.Tests/
 │  │  ├─ Inno.ECS.Systems.Tests/
 │  │  └─ Inno.ECS.Transforms.Tests/
 │  │
-│  ├─ Scene/
+│  ├─ scene/
 │  │  ├─ Inno.Scene.Tests/
 │  │  └─ Inno.Scene.Serialization.Tests/
 │  │
-│  ├─ Rendering/
+│  ├─ rendering/
 │  │  ├─ Inno.Rendering.Tests/
 │  │  ├─ Inno.Rendering.RenderGraph.Tests/
 │  │  └─ Inno.Rendering.Passes.Tests/
 │  │
-│  ├─ Editor/
+│  ├─ editor/
 │  │  ├─ Inno.Editor.Framework.Tests/
 │  │  └─ Inno.Editor.Tests/
 │  │
-│  ├─ Integration/
+│  ├─ integration/
 │  │  ├─ Inno.Integration.Tests/
 │  │  ├─ Inno.PlayMode.Tests/
 │  │  └─ Inno.AssetImport.Tests/
 │  │
-│  └─ Golden/
+│  └─ golden/
 │     ├─ Inno.Golden.Serialization.Tests/
 │     ├─ Inno.Golden.Scene.Tests/
 │     └─ Inno.Golden.Shader.Tests/
@@ -761,7 +804,7 @@ Inno/
 │     └─ Assets/
 │
 └─ games/
-   ├─ Sandbox/
+   ├─ sandbox/
    │  ├─ Sandbox/
    │  │  ├─ Sandbox.csproj
    │  │  ├─ Game/
@@ -780,7 +823,7 @@ Inno/
    │     ├─ Gizmos/
    │     └─ Menus/
    │
-   └─ DemoGame/
+   └─ demoGame/
       ├─ DemoGame/
       │  ├─ DemoGame.csproj
       │  ├─ Game/

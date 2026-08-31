@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\core\Inno.Core.Diagnose\Inno.Core.Diagnose.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Storage\Inno.Core.Storage.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Assets.Loader\Inno.Assets.Loader.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Assets.Serialization\Inno.Assets.Serialization.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Identity\Inno.Core.Identity.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Assets.Types\Inno.Assets.Types.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Assets.Core\Inno.Assets.Core.csproj" />
+    <ProjectReference Include="..\Inno.Assets.File\Inno.Assets.File.csproj" />
+  </ItemGroup>
+</Project>
