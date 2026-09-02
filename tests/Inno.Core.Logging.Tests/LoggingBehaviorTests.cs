@@ -116,24 +116,15 @@ public sealed class LoggingBehaviorTests : IDisposable
         for (var i = 0; i < 80; i++)
             Log.Warn("line-{0}", i);
 
-        var timeout = DateTime.UtcNow.AddSeconds(5);
-        while (DateTime.UtcNow < timeout)
-        {
-            var files = Directory.GetFiles(dir, FileLogSink.C_LOG_FILE_PREFIX + "*.log");
-            var combined = string.Join(Environment.NewLine, files.Select(File.ReadAllText));
-            if (combined.Contains("line-79"))
-            {
-                Assert.True(files.Length <= 3);
-                Assert.All(files, static file => Assert.Equal(".log", Path.GetExtension(file)));
-                m_router.UnregisterSink(sink);
-                return;
-            }
-
-            Thread.Sleep(20);
-        }
-
+        m_router.Flush();
         m_router.UnregisterSink(sink);
-        throw new TimeoutException("Timed out waiting for file sink output.");
+        sink.Dispose();
+
+        var files = Directory.GetFiles(dir, FileLogSink.C_LOG_FILE_PREFIX + "*.log");
+        var combined = string.Join(Environment.NewLine, files.Select(File.ReadAllText));
+        Assert.Contains("line-79", combined);
+        Assert.True(files.Length <= 3);
+        Assert.All(files, static file => Assert.Equal(".log", Path.GetExtension(file)));
     }
 
     public void Dispose()

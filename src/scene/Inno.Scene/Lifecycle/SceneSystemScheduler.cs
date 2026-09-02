@@ -238,6 +238,8 @@ internal sealed class SceneSystemScheduler
 
     internal void DestroyGameBehavior(GameBehavior behavior) => m_behaviors.Destroy(behavior);
 
+    internal void NotifyGameBehaviorStructureChanged() => m_behaviors.Invalidate();
+
     internal void FixedUpdate()
     {
         using IDisposable iteration = m_scene.BeginExecutionPhase();

@@ -17,6 +17,12 @@
 4. 所有 Encoder 结束后调用一次 `EndFrame`；该方法是唯一的 `bgfx.frame` 提交点。
 5. 在相同 API thread 调用 `Dispose`，释放存活资源并执行 `bgfx.shutdown`。
 
+`BgfxDevice` 通过进程设备 lease 明确表达 BGFX 的真实平台约束：一个进程同一时间只能拥有一个
+活动图形设备。第二次并发创建会在进入 native API 前失败；前一个设备完成 shutdown 后可以创建
+下一个普通设备。Dear ImGui 的 viewport/window/renderer 路由则按 `ImGuiContext` 分区，不再依赖
+一个可被后创建 Host 覆盖的全局 backend map。因此当前能力是“多个 Runtime/Host 可隔离，但同一
+进程只允许一个活动图形 Host”，而不是虚假声明同进程多 GPU device 支持。
+
 Noop 测试可启用 `forceSingleThreaded`。BGFX 的该模式是进程级一次性配置，同一进程 shutdown 后不能创建第二个单线程设备；实现会明确抛出异常，避免原生 fatal 或挂起。生产窗口后端不应开启此测试选项。
 
 ## 公开 API
@@ -57,11 +63,13 @@ Metal、D3D、Vulkan 等 BGFX renderer 不要求分别维护业务 Shader：同�
 - 非 API thread、未开启帧、嵌套 Graph/Encoder、跨 generation handle 和 frame 前未结束 Encoder 都会抛出明确异常。
 - GPU 资源不会在 finalizer 或 Asset 回调线程销毁；销毁请求按 BGFX 帧号延迟处理。
 - Detached window surface 的 resize 与 destroy 同样进入统一延迟销毁队列，不会在仍可能被 GPU 使用时直接销毁旧 framebuffer。
+- `BgfxDevice.Dispose` 在调用 native shutdown 前采集 managed texture、buffer、pipeline、surface、graph 与 deferred queue 的闭包状态；即使发现遗漏也始终完成 native shutdown、readback buffer 清理和 process lease 释放，随后把遗漏作为 Inno 所有权错误明确报告。诊断不能把设备留在半关闭状态。
+- 开发环境的 native loader 会按 SHA-256 内容身份把 `.lib` 当前产物同步到应用输出目录后再加载，避免重新构建 BGFX 后仍运行旧 dylib；已部署 Player 没有源码 checkout 时继续只使用 Support Pack 内的冻结产物。
 
 双平台 Rendering CI 固定验证 Windows x64 与 macOS arm64 runner 架构，并在真实 Editor 冒烟日志中断言 D3D11/D3D12 或 Metal 后端、约定帧数和完整关闭；原生 BGFX 输出与 Editor boot log 会一同作为诊断 artifact 上传。
 
 - Inno 会在设备关闭前释放 ImGui、Render Runtime、offscreen target、detached surface 与全部托管 handle，并排空延迟销毁队列。HiDPI 主窗口从首个 native frame 起使用物理 drawable 尺寸，不再通过首次 resize 修正。
-- BGFX Debug Metal 后端当前仍可能在正常 shutdown 时对 Metal 自身持有的 Shader、Buffer、Layer 和 Device 输出 `RefCount` 警告；BGFX 官方示例可独立复现完全相同的行为，上游问题 [bkaradzic/bgfx#3642](https://github.com/bkaradzic/bgfx/issues/3642) 仍处于开放状态。CI 不把该上游诊断误判为 Inno 资源泄漏，但仍要求进程成功、无 BGFX Fatal、无 Host teardown failure 且出现 `BGFX Shutdown complete`。不得通过关闭 Debug 检查或过滤日志伪装修复。
+- Objective-C `retainCount` 不能区分 Inno/BGFX 所有权与 Metal framework/driver 的内部 retain；BGFX 官方示例也能复现原检查的误报，见 [bkaradzic/bgfx#3642](https://github.com/bkaradzic/bgfx/issues/3642)。当前 vendor patch 保留真实 `release()`，移除这一不可证明的计数断言，并以 Inno 的确定性 managed resource closure、BGFX handle 销毁顺序和完整 native shutdown 作为可验证不变量。这不是日志过滤：真实资源表未清空会在关闭前被记录，并在 native runtime 与 process lease 已安全释放后明确抛出。macOS ARM64 Debug Editor 的 120-frame smoke 已验证无 `RefCount is`、无 BGFX Fatal 且出现 `BGFX Shutdown complete`。
 - Graph 执行异常仍由 Core 的 complete-unwind 契约依次结束 Encoder 与 Graph。
 
 ## 相邻页面

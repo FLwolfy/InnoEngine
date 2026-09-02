@@ -99,6 +99,7 @@ public abstract class GameBehavior : GameComponent, ISceneLifecycleObject
     internal bool lifecycleStartCalled { get; set; }
     internal bool lifecycleWasEnabled { get; set; }
     internal bool lifecycleDestroyCalled { get; set; }
+    internal GameBehaviorLifecyclePhase lifecyclePhases { get; set; }
 
     internal void DispatchAwake() => Awake();
     internal void DispatchStart() => Start();

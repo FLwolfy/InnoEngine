@@ -199,6 +199,44 @@ public sealed class SceneFacadeTests : IDisposable
     }
 
     [Fact]
+    public void GameBehaviorLifecycle_ReindexesAfterStructuralChanges()
+    {
+        var scene = new GameScene("Dynamic Behaviors");
+        SceneManager.LoadScene(scene);
+        SceneManager.Update(0.016f);
+
+        GameObject gameObject = scene.CreateObject("Dynamic Actor");
+        TestBehaviour behaviour = gameObject.AddComponent<TestBehaviour>();
+        SceneManager.Update(0.016f);
+
+        Assert.Equal(1, behaviour.awakeCount);
+        Assert.Equal(1, behaviour.startCount);
+        Assert.Equal(1, behaviour.enableCount);
+        Assert.Equal(1, behaviour.updateCount);
+
+        Assert.True(gameObject.RemoveComponent(behaviour));
+        SceneManager.Update(0.016f);
+
+        Assert.Equal(1, behaviour.updateCount);
+        Assert.Equal(1, behaviour.disableCount);
+    }
+
+    [Fact]
+    public void GameBehaviorLifecycle_StartsLateOnlyBehaviorWithoutDispatchingUpdate()
+    {
+        var scene = new GameScene("Phase-indexed Behaviors");
+        GameObject gameObject = scene.CreateObject("Late Actor");
+        LateOnlyBehaviour behaviour = gameObject.AddComponent<LateOnlyBehaviour>();
+        SceneManager.LoadScene(scene);
+
+        SceneManager.Update(0.016f);
+        SceneManager.LateUpdate(0.016f);
+
+        Assert.Equal(1, behaviour.startCount);
+        Assert.Equal(1, behaviour.lateUpdateCount);
+    }
+
+    [Fact]
     public void ResetComponent_UsesVirtualDispatchAndExplicitBaseCall()
     {
         var scene = new GameScene("Test");
@@ -257,6 +295,16 @@ public sealed class SceneFacadeTests : IDisposable
             enableCount = 0;
             disableCount = 0;
         }
+    }
+
+    private sealed class LateOnlyBehaviour : GameBehavior
+    {
+        public int startCount;
+        public int lateUpdateCount;
+
+        protected override void Start() => startCount++;
+
+        protected override void LateUpdate() => lateUpdateCount++;
     }
 
     private class BaseResetComponent : GameComponent

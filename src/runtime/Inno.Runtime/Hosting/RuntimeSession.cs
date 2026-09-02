@@ -23,7 +23,7 @@ public sealed class RuntimeSession : IDisposable
     private readonly JobScheduler m_jobs;
     private readonly CoroutineScheduler m_coroutines;
     private readonly RuntimeClock m_clock = new();
-    private readonly SerializationGeneration m_serialization;
+    private readonly SerializationGeneration? m_serialization;
     private readonly SessionFileLogSink m_fileLog;
     private readonly AssetDatabase? m_assets;
     private float m_fixedAccumulator;
@@ -50,7 +50,6 @@ public sealed class RuntimeSession : IDisposable
                 workerCount = options.jobWorkerCount
             });
         m_coroutines = new CoroutineScheduler();
-        m_serialization = host.serialization.CaptureGeneration();
         events = new EventDispatcher();
         scenes = new SceneWorld(m_identities, host.types);
         Directory.CreateDirectory(this.options.persistentDataDirectory);
@@ -63,6 +62,7 @@ public sealed class RuntimeSession : IDisposable
             using IDisposable scope = EnterExecutionScope();
             if (!string.IsNullOrWhiteSpace(this.options.runtimeContentDirectory))
             {
+                m_serialization = host.serialization.CaptureGeneration();
                 m_assets = new AssetDatabase(
                     this.options.runtimeContentDirectory,
                     m_serialization,
@@ -75,7 +75,7 @@ public sealed class RuntimeSession : IDisposable
             m_host.logs.UnregisterSink(m_fileLog);
             m_fileLog.Dispose();
             scenes.Dispose();
-            m_serialization.Dispose();
+            m_serialization?.Dispose();
             m_coroutines.Dispose();
             m_jobs.Dispose();
             throw;
@@ -255,7 +255,8 @@ public sealed class RuntimeSession : IDisposable
         m_disposed = true;
         DisposeStage(m_coroutines, ref failures);
         DisposeStage(m_jobs, ref failures);
-        DisposeStage(m_serialization, ref failures);
+        if (m_serialization is not null)
+            DisposeStage(m_serialization, ref failures);
         m_host.logs.UnregisterSink(m_fileLog);
         DisposeStage(m_fileLog, ref failures);
         if (failures is not null)

@@ -656,29 +656,21 @@ public sealed class ModuleHost : IDisposable
         IEnumerable<AssemblyModuleEntry> effectiveModules = m_modules.Values
             .Where(active => stagedCandidates.All(candidate => candidate.handle != active.handle))
             .Concat(stagedCandidates);
-        if (request.upstreamModuleNames.Count != 0)
-        {
-            Dictionary<string, AssemblyModuleEntry> byName = effectiveModules.ToDictionary(
-                static module => module.moduleName,
-                StringComparer.Ordinal);
-            return request.upstreamModuleNames.Select(name =>
-            {
-                if (!byName.TryGetValue(name, out AssemblyModuleEntry? module))
-                {
-                    throw new InvalidOperationException(
-                        $"Module '{request.moduleName}' requires unavailable upstream module '{name}'.");
-                }
-                return module;
-            }).ToArray();
-        }
-        if (request.domain == AssemblyDomain.InnoPlugin)
+        if (request.upstreamModuleNames.Count == 0)
             return [];
-        return request.scope == AssemblyScope.Runtime
-            ? effectiveModules.Where(static module => module.domain == AssemblyDomain.InnoPlugin).ToArray()
-            : effectiveModules.Where(static module =>
-                    module.domain == AssemblyDomain.InnoPlugin ||
-                    module.domain == AssemblyDomain.InnoScripting && module.scope == AssemblyScope.Runtime)
-                .ToArray();
+
+        Dictionary<string, AssemblyModuleEntry> byName = effectiveModules.ToDictionary(
+            static module => module.moduleName,
+            StringComparer.Ordinal);
+        return request.upstreamModuleNames.Select(name =>
+        {
+            if (!byName.TryGetValue(name, out AssemblyModuleEntry? module))
+            {
+                throw new InvalidOperationException(
+                    $"Module '{request.moduleName}' requires unavailable upstream module '{name}'.");
+            }
+            return module;
+        }).ToArray();
     }
 
     private int GetReloadOrder(AssemblyLoadRequest request)

@@ -10,4 +10,6 @@
 
 Reload 不重新编译源文件。普通 Project 编译失败没有 candidate，active generation 保持不变；但 active Plugin 被删除、结构失效或更新失败时，安装集合变化本身是有效事实，不能因为依赖脚本编译失败而保留旧 Plugin。Host 会以 active/candidate Plugin ID 与 content hash 计算 retired Plugin modules，再沿 `upstreamModuleNames` 取得完整反向依赖闭包，原子移除 Plugin、Runtime Scripts 和 Editor Scripts。Scene participant 在同一事务内把已退休类型变成保留 Stable ID 与状态的 Missing，并在类型返回时恢复。
 
+Plugin 文件系统删除触发的第一次自动 reload 就必须完成上述切换，不要求用户再次执行 Reload Plugins。成功编译出的每个 replacement request 使用编译快照给出的显式依赖清单；空清单不会重新绑定仍处于 previous generation 的 Plugin。提交后 unload verification 按帧协作式等待 CLR 完成 collectible ALC 回收。只有超时后仍真实可达时才发布唯一的 `INNO-ALC-UNLOAD` Diagnostic；Console 不再额外写入一条内容重复的普通 Error log。后续成功卸载会清除此 Diagnostic。
+
 只有 participant Prepare/Activate、Scene 状态迁移或外部 generation 同步本身失败时，事务才 rollback 到仍完整存在的 immutable previous snapshot。Complete 清理失败被诊断但不会撤销已经提交的 generation。调用者负责 Dispose host，释放 catalog registrations 与 retiring generation lease。

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
@@ -132,6 +133,48 @@ public sealed class InspectionPipelineTests : IDisposable
         }
     }
 
+    [Fact]
+    public void TextEditStateIsScopedByRendererOwnerAndPropertyPath()
+    {
+        EditorContext editor = m_runtime.context;
+        using var drawers = new PropertyDrawerRegistry(
+            m_runtime.interactions,
+            m_types,
+            m_serialization,
+            []);
+        var firstRenderer = new SerializedPropertyRenderer(
+            drawers,
+            m_runtime.interactions,
+            new NoopEditService(),
+            m_logs);
+        var secondRenderer = new SerializedPropertyRenderer(
+            drawers,
+            m_runtime.interactions,
+            new NoopEditService(),
+            m_logs);
+        var firstOwner = new TextStateOwner { value = new TextStateValue("First") };
+        var secondOwner = new TextStateOwner { value = new TextStateValue("Second") };
+        SerializedProperty firstProperty = Assert.Single(m_serialization.GetProperties(firstOwner));
+        SerializedProperty secondProperty = Assert.Single(m_serialization.GetProperties(secondOwner));
+        TextStateDrawer.observations.Clear();
+        var nativeContext = NativeImGui.CreateContext();
+        try
+        {
+            DrawPropertyFrame(firstRenderer, editor, firstOwner, firstProperty);
+            DrawPropertyFrame(firstRenderer, editor, firstOwner, firstProperty);
+            DrawPropertyFrame(firstRenderer, editor, secondOwner, secondProperty);
+            DrawPropertyFrame(secondRenderer, editor, firstOwner, firstProperty);
+        }
+        finally
+        {
+            NativeImGui.DestroyContext(nativeContext);
+        }
+
+        Assert.Equal(
+            ["First:<new>", "First:First", "Second:<new>", "First:<new>"],
+            TextStateDrawer.observations);
+    }
+
     private static void PrepareNativeFrame()
     {
         Inno.Native.ImGui.ImGuiIOPtr io = NativeImGui.GetIO();
@@ -140,6 +183,25 @@ public sealed class InspectionPipelineTests : IDisposable
         io.BackendFlags |= Inno.Native.ImGui.ImGuiBackendFlags.RendererHasTextures;
         io.Fonts.RendererHasTextures = true;
         NativeImGui.NewFrame();
+    }
+
+    private static void DrawPropertyFrame(
+        SerializedPropertyRenderer renderer,
+        EditorContext editor,
+        object owner,
+        SerializedProperty property)
+    {
+        PrepareNativeFrame();
+        _ = NativeImGui.Begin("Text State Test");
+        try
+        {
+            renderer.Draw(editor, owner, "owner", property);
+        }
+        finally
+        {
+            NativeImGui.End();
+        }
+        NativeImGui.Render();
     }
 
     private sealed class NoopEditService : IInspectionPropertyEditService
@@ -168,6 +230,28 @@ internal sealed class InlineParent
 }
 
 internal sealed class InlineFailure;
+
+internal sealed class TextStateOwner : ISerializable
+{
+    [SerializableProperty]
+    public TextStateValue value { get; set; } = new("Unset");
+}
+
+internal sealed record TextStateValue(string id);
+
+[PropertyDrawer(typeof(TextStateValue), priority: 10_000)]
+internal sealed class TextStateDrawer : IPropertyDrawer
+{
+    internal static List<string> observations { get; } = [];
+
+    public void Draw(PropertyDrawContext context)
+    {
+        var value = (TextStateValue)context.GetValue()!;
+        bool hasState = context.TryGetTextState("editing", out string? state);
+        observations.Add($"{value.id}:{(hasState ? state : "<new>")}");
+        context.SetTextState("editing", value.id);
+    }
+}
 
 [PropertyDrawer(typeof(InlineParent), priority: 10_000)]
 internal sealed class InlineParentDrawer : IPropertyDrawer

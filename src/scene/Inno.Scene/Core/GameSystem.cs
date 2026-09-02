@@ -127,6 +127,15 @@ public abstract class GameSystem : EngineObject, ISerializable, ISceneLifecycleO
         => scene.GetComponents<TComponent>();
 
     /// <summary>
+    /// Gets all committed live game objects in deterministic scene storage order.
+    /// </summary>
+    /// <returns>
+    /// The immutable structure snapshot retained by the scene until its object or component structure changes.
+    /// </returns>
+    protected IReadOnlyList<GameObject> GetObjects()
+        => scene.GetObjects();
+
+    /// <summary>
     /// Queries game objects containing one required component type.
     /// </summary>
     /// <typeparam name="T1">

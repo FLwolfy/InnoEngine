@@ -27,8 +27,8 @@ public sealed class AssemblyLoadRequest
     /// Gets stable module names whose exported assemblies may satisfy this module's managed dependencies.
     /// </summary>
     /// <remarks>
-    /// Dependencies are explicit for Plugin modules. Scripting modules may also declare them to make
-    /// reload closure and load ordering independent from process-wide discovery.
+    /// Dependencies are explicit for every module. An empty collection declares that the module has no
+    /// upstream module dependencies; the host never infers dependencies from process-wide active state.
     /// </remarks>
     public IReadOnlyList<string> upstreamModuleNames { get; init; } = Array.Empty<string>();
 

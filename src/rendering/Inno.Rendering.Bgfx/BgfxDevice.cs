@@ -15,11 +15,9 @@ namespace Inno.Rendering.Bgfx;
 /// </summary>
 public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRenderGraphBackend
 {
-    private static readonly object S_DEVICE_LOCK = new();
     private static int s_nextGeneration;
-    private static bool s_deviceActive;
-    private static bool s_singleThreadedDeviceInitialized;
 
+    private readonly BgfxProcessDeviceLease m_processLease;
     private readonly int m_apiThreadId;
     private readonly int m_deferredDestroyFrames;
     private readonly Dictionary<ulong, bgfx.TextureHandle> m_persistentTextures = [];
@@ -59,21 +57,7 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
     public BgfxDevice(BgfxDeviceOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        lock (S_DEVICE_LOCK)
-        {
-            if (s_deviceActive)
-            {
-                throw new InvalidOperationException("Only one BGFX device may be active in a process.");
-            }
-
-            if (options.forceSingleThreaded && s_singleThreadedDeviceInitialized)
-            {
-                throw new InvalidOperationException(
-                    "BGFX single-threaded mode cannot be initialized again after device shutdown in the same process.");
-            }
-
-            s_deviceActive = true;
-        }
+        m_processLease = BgfxProcessDeviceLease.Acquire(options.forceSingleThreaded);
 
         m_apiThreadId = Environment.CurrentManagedThreadId;
         m_deferredDestroyFrames = options.deferredDestroyFrames;
@@ -83,6 +67,7 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
             (options.verticalSync ? bgfx.ResetFlags.Vsync : bgfx.ResetFlags.None)
             | (options.sRgbBackbuffer ? bgfx.ResetFlags.SrgbBackbuffer : bgfx.ResetFlags.None));
 
+        bool nativeInitialized = false;
         try
         {
             if (options.forceSingleThreaded)
@@ -105,6 +90,8 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
             {
                 throw new InvalidOperationException("BGFX device initialization failed.");
             }
+            nativeInitialized = true;
+            m_processLease.MarkInitialized();
 
             generation = unchecked((uint)Interlocked.Increment(ref s_nextGeneration));
             if (generation == 0)
@@ -113,18 +100,12 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
             }
 
             capabilities = BgfxCapabilityMapper.FromNative(bgfx.get_caps());
-            if (options.forceSingleThreaded)
-            {
-                s_singleThreadedDeviceInitialized = true;
-            }
         }
         catch
         {
-            lock (S_DEVICE_LOCK)
-            {
-                s_deviceActive = false;
-            }
-
+            if (nativeInitialized)
+                bgfx.shutdown();
+            m_processLease.Dispose();
             throw;
         }
     }
@@ -920,16 +901,23 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
         m_computePipelines.Clear();
         m_windowSurfaces.Clear();
         DrainDeferredResourcesForShutdown();
-        bgfx.shutdown();
-        foreach (PendingTextureReadback pending in m_textureReadbacks.Values)
-            NativeMemory.Free((void*)pending.data);
-        m_textureReadbacks.Clear();
-        m_disposed = true;
-        generation = 0;
-        lock (S_DEVICE_LOCK)
+        string? closureFailure = GetManagedResourceClosureFailure();
+        try
         {
-            s_deviceActive = false;
+            bgfx.shutdown();
         }
+        finally
+        {
+            foreach (PendingTextureReadback pending in m_textureReadbacks.Values)
+                NativeMemory.Free((void*)pending.data);
+            m_textureReadbacks.Clear();
+            m_disposed = true;
+            generation = 0;
+            m_processLease.Dispose();
+        }
+
+        if (closureFailure is not null)
+            throw new InvalidOperationException(closureFailure);
     }
 
     internal bgfx.TextureHandle ResolveTexture(RenderTextureHandle texture)
@@ -1320,6 +1308,29 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
             bgfx.touch(0);
             m_backendFrame = bgfx.frame((byte)bgfx.FrameFlags.None);
         }
+    }
+
+    private string? GetManagedResourceClosureFailure()
+    {
+        if (m_activeEncoder is not null
+            || m_activeGraph is not null
+            || m_graphFrameBuffers.Count != 0
+            || m_graphTextures.Count != 0
+            || m_transientTextureSlots.Count != 0
+            || m_graphBuffers.Count != 0
+            || m_transientBufferSlots.Count != 0
+            || m_persistentTextures.Count != 0
+            || m_persistentTextureDescriptors.Count != 0
+            || m_persistentBuffers.Count != 0
+            || m_graphicsPipelines.Count != 0
+            || m_computePipelines.Count != 0
+            || m_windowSurfaces.Count != 0
+            || m_deferredResources.Count != 0)
+        {
+            return "BGFX shutdown detected a non-empty managed resource ownership graph.";
+        }
+
+        return null;
     }
 
     private void ResetPreviousViews()

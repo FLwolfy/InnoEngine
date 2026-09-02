@@ -26,7 +26,8 @@ public sealed class ScriptReloadHost : IDisposable
     private const float C_STAGING_PROGRESS = 0.86f;
     private const float C_MIGRATION_PROGRESS = 0.94f;
     private const float C_UNLOAD_VERIFICATION_PROGRESS = 0.97f;
-    private const int C_MAX_UNLOAD_VERIFICATION_ATTEMPTS = 10;
+    private const long C_UNLOAD_COLLECTION_INTERVAL_MILLISECONDS = 250;
+    private const long C_UNLOAD_VERIFICATION_TIMEOUT_MILLISECONDS = 3_000;
 
     private readonly object m_sync = new();
     private readonly AssetPipeline m_assets;
@@ -58,6 +59,8 @@ public sealed class ScriptReloadHost : IDisposable
     private TimeSpan m_lastCompilationElapsed;
     private float m_compilationProgress;
     private int m_unloadVerificationAttempt;
+    private long m_unloadVerificationStartedTimestamp;
+    private long m_nextUnloadCollectionTimestamp;
     private ScriptReloadRequest m_requestedReload;
     private bool m_initialCompileRequested;
     private int m_disposeStarted;
@@ -518,10 +521,17 @@ public sealed class ScriptReloadHost : IDisposable
         {
             lock (m_sync)
             {
+                bool beginsVerification = m_unloadObservations.Count == 0;
                 m_unloadObservations.Add(new UnloadObservation(
                     unload,
                     retiringModules));
-                m_unloadVerificationAttempt = 0;
+                if (beginsVerification)
+                {
+                    long now = Environment.TickCount64;
+                    m_unloadVerificationAttempt = 0;
+                    m_unloadVerificationStartedTimestamp = now;
+                    m_nextUnloadCollectionTimestamp = now;
+                }
             }
         }
         m_activeCompilationDirectory = pending.unavailability is null
@@ -651,22 +661,38 @@ public sealed class ScriptReloadHost : IDisposable
     {
         failure = null;
         int attempt;
+        long now;
+        bool collect;
         lock (m_sync)
         {
             if (m_disposed)
                 return true;
             if (m_unloadObservations.Count == 0)
                 return true;
-            attempt = ++m_unloadVerificationAttempt;
+            now = Environment.TickCount64;
+            collect = now >= m_nextUnloadCollectionTimestamp;
+            if (collect)
+            {
+                attempt = ++m_unloadVerificationAttempt;
+                m_nextUnloadCollectionTimestamp = now + C_UNLOAD_COLLECTION_INTERVAL_MILLISECONDS;
+            }
+            else
+            {
+                attempt = m_unloadVerificationAttempt;
+            }
         }
 
-        SetCompilationProgress(
-            C_UNLOAD_VERIFICATION_PROGRESS,
-            $"Script reload committed. Forcing garbage collection to verify retired assemblies " +
-            $"({attempt}/{C_MAX_UNLOAD_VERIFICATION_ATTEMPTS})...");
-        ForceUnloadCollection();
+        if (collect)
+        {
+            SetCompilationProgress(
+                C_UNLOAD_VERIFICATION_PROGRESS,
+                $"Script reload committed. Verifying retired assembly unload " +
+                $"(collection {attempt})...");
+            ForceUnloadCollection();
+        }
 
         AssemblyModuleInfo[]? retainedModules = null;
+        long elapsed = 0;
         lock (m_sync)
         {
             for (int i = m_unloadObservations.Count - 1; i >= 0; i--)
@@ -677,10 +703,11 @@ public sealed class ScriptReloadHost : IDisposable
 
             if (m_unloadObservations.Count == 0)
             {
-                m_unloadVerificationAttempt = 0;
+                ResetUnloadVerificationLocked();
                 SetCompilationProgress(1f, "Script reload and retired assembly unload completed.");
             }
-            else if (attempt >= C_MAX_UNLOAD_VERIFICATION_ATTEMPTS)
+            else if ((elapsed = now - m_unloadVerificationStartedTimestamp) >=
+                     C_UNLOAD_VERIFICATION_TIMEOUT_MILLISECONDS)
             {
                 retainedModules = m_unloadObservations
                     .SelectMany(static observation => observation.modules)
@@ -693,7 +720,7 @@ public sealed class ScriptReloadHost : IDisposable
                     .ThenBy(static module => module.generation)
                     .ToArray();
                 m_unloadObservations.Clear();
-                m_unloadVerificationAttempt = 0;
+                ResetUnloadVerificationLocked();
             }
             else
             {
@@ -706,7 +733,7 @@ public sealed class ScriptReloadHost : IDisposable
             return true;
         }
 
-        failure = CreateUnloadVerificationFailure(retainedModules);
+        failure = CreateUnloadVerificationFailure(retainedModules, attempt, elapsed);
         SetCompilationProgress(
             1f,
             "Script reload committed, but retired assembly unload verification failed.");
@@ -977,7 +1004,9 @@ public sealed class ScriptReloadHost : IDisposable
     }
 
     private static InvalidOperationException CreateUnloadVerificationFailure(
-        IReadOnlyList<AssemblyModuleInfo> modules)
+        IReadOnlyList<AssemblyModuleInfo> modules,
+        int collectionAttempts,
+        long elapsedMilliseconds)
     {
         string retained = string.Join(
             ", ",
@@ -985,9 +1014,17 @@ public sealed class ScriptReloadHost : IDisposable
                 $"{module.moduleName} ({module.domain}/{module.scope}, generation {module.generation})"));
         return new InvalidOperationException(
             $"Script reload was committed, but the following retired assembly contexts remained reachable " +
-            $"after {C_MAX_UNLOAD_VERIFICATION_ATTEMPTS} forced garbage-collection attempts: {retained}. " +
+            $"for {elapsedMilliseconds / 1000d:F1} seconds across {collectionAttempts} forced " +
+            $"garbage-collection attempts: {retained}. " +
             "A retained Type, object, delegate, extension, task, subscription, or thread is preventing " +
             "collectible AssemblyLoadContext unload. The active generation remains committed.");
+    }
+
+    private void ResetUnloadVerificationLocked()
+    {
+        m_unloadVerificationAttempt = 0;
+        m_unloadVerificationStartedTimestamp = 0;
+        m_nextUnloadCollectionTimestamp = 0;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

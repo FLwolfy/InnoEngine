@@ -27,6 +27,7 @@ OnAfterRender
 | API | 说明 |
 | --- | --- |
 | `RenderRuntimeLayer` | 唯一设备帧拥有者与 `IRenderRequestSink` 实现。 |
+| `RenderRuntimeLayer.EnterExecutionScope()` | 把当前 Runtime 的 Graphics 脚本门面绑定到当前异步执行流；返回的 scope 必须按嵌套顺序释放。 |
 | `RenderTargetRegistry` | 在帧安全点创建、resize、导入和释放离屏目标；被替换的目标会跨一个完整提交帧退役，避免已录制的 UI/呈现命令持有失效句柄。 |
 | `IRenderFrameGraphContributor` | 在用户请求后向同一帧贡献 Graph，例如 ImGui。 |
 
@@ -51,3 +52,16 @@ Runtime 通过活动 TypeCache 创建 Pipeline 和 Feature 候选。同一 TypeC
 - 多请求共享一个设备帧和一个 Graph；请求/Contributor 通过 name scope 隔离同名 Pass，单个建图失败由 mutation scope 回滚。累计 Pass 超过 `maxViews` 时拒绝新增候选并给出明确诊断。
 - 显式调用 `AllowParallelRecording` 的独立 Pass callback 可在 worker 上并行生成中立 command list；Runtime/后端仍按全帧 Graph 拓扑串行回放并只调用一次 `EndFrame`。
 - `GraphicsSettings.frameStatistics` 汇总全帧 Graph 的实际 View、后端报告的 draw/dispatch 与真实裁剪 Pass 数。
+
+## Graphics execution context
+
+`GraphicsSettings` 保留面向 Project/Plugin Script 的 Unity 风格静态调用形式，但不再保存任何
+process-global 可变状态。每个 `RenderRuntimeLayer` 拥有独立的 capabilities、default pipeline 和
+last-frame statistics；`EnterExecutionScope()` 只把该实例状态绑定到当前 `AsyncLocal` 执行流。
+Editor/Player 组合根在本帧 authoring、simulation、request collection 与 render 期间进入 scope，
+退出后立即释放。两个 Runtime 可以嵌套或并行存在而不会覆盖对方；没有活动 scope 时只读属性
+返回 `null`，写入 default pipeline 会明确失败。引擎内部仍直接使用实例状态，不反向依赖脚本门面。
+
+Reload transaction 在提交后会清空 previous pipeline、request provider 和 pending/current request
+快照。完成的 transaction 即使被外部诊断对象暂时保留，也不再包含旧 generation 的 `Type`、
+实例或 delegate；这条约束与 Scene Missing 占位共同保证退休 Plugin ALC 可回收。

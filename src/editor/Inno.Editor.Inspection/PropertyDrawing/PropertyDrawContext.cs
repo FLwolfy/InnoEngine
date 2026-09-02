@@ -52,6 +52,8 @@ public sealed class PropertyDrawContext
     /// </summary>
     public bool isReadOnly => (visibility & PropertyVisibility.RuntimeSet) == 0;
 
+    internal object owner => m_owner;
+
     internal PropertyDrawContext(
         EditorContext editorContext,
         EditorInteractions interactions,
@@ -89,6 +91,42 @@ public sealed class PropertyDrawContext
     /// The latest value returned by the serialized property's getter.
     /// </returns>
     public object? GetValue() => m_getter();
+
+    /// <summary>
+    /// Tries to read text-edit state scoped to this renderer, inspected owner, and property path.
+    /// </summary>
+    /// <param name="key">
+    /// Drawer-local state identity within the current property path.
+    /// </param>
+    /// <param name="value">
+    /// Receives the stored text when the state exists.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when text state exists for the exact owner and property path.
+    /// </returns>
+    public bool TryGetTextState(string key, out string? value)
+        => m_renderer.TryGetTextState(m_owner, path, key, out value);
+
+    /// <summary>
+    /// Stores text-edit state scoped to this renderer, inspected owner, and property path.
+    /// </summary>
+    /// <param name="key">
+    /// Drawer-local state identity within the current property path.
+    /// </param>
+    /// <param name="value">
+    /// Current neutral text state to retain between frames.
+    /// </param>
+    public void SetTextState(string key, string value)
+        => m_renderer.SetTextState(m_owner, path, key, value);
+
+    /// <summary>
+    /// Removes text-edit state for this renderer, inspected owner, and property path.
+    /// </summary>
+    /// <param name="key">
+    /// Drawer-local state identity within the current property path.
+    /// </param>
+    public void ClearTextState(string key)
+        => m_renderer.ClearTextState(m_owner, path, key);
 
     /// <summary>
     /// Assigns a value when the property is writable.

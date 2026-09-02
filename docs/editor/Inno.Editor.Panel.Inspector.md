@@ -72,6 +72,8 @@ Component、System、EngineObject reference 和 Asset reference 分别使用 `pa
 
 Component card 的上/下按钮改变附加顺序，Transform 保持置顶且不可移除。Project Script 以及 Plugin 提供的 Renderer、Camera、Light 都直接继承唯一的 `GameBehavior`，并在 card header 使用同一个 enabled checkbox；继承的隐藏序列化属性不会再次出现在 body。GameSystem 也可以上下移动和删除，但运行顺序仍由显式 `order` 决定。`enabled=false` 时 header 与 body 使用统一 dimmed 样式，body 保持可辨识但不可编辑。
 
+展开的 GameBehavior/GameSystem 只有在存在可显示序列化属性或 Missing 状态说明时才创建 `CardBody`。没有正文的类型只绘制 Header，正文高度严格为零，不保留空背景、边框或 padding；卡片之间的标准外部间距保持不变。
+
 Inspector 的可序列化属性、Component/System enabled、Add、Remove、Reset 与显示顺序全部通过 `SceneEdits` 记录中立历史。属性修改只编码对应 root property；元素操作保存 Stable Type ID、persistent ID、index 和该元素的属性数据。Undo 不会销毁并重建无关 Scene 对象，连续属性编辑才允许按 property merge key 合并。
 
 Play Scene 提交后，Selection 会按 persistent ID 从 Edit 对象映射到 runtime copy，Inspector 因而直接展示并编辑正在运行的 Component、System 与 Transform。所有修改仍走同一个 `SceneEdits` API，但 History owner 已切换到隔离 Play 分支；停止时 runtime 修改和该分支一并释放，Edit 对象与 Edit Undo/Redo 原样恢复。

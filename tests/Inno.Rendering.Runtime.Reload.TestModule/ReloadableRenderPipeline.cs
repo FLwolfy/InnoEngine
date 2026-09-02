@@ -3,6 +3,11 @@ using Inno.Rendering;
 namespace Inno.Rendering.Runtime.Reload.TestModule;
 
 /// <summary>
+/// Provides a collectible value used to verify that frame-data queues release retired plugins.
+/// </summary>
+public sealed class ReloadableFramePayload;
+
+/// <summary>
 /// Supplies a collectible Plugin-owned pipeline for rendering generation removal tests.
 /// </summary>
 [RenderPipelineExtension(extensionId)]

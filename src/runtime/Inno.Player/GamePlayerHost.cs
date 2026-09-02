@@ -182,6 +182,7 @@ internal sealed class GamePlayerHost : IDisposable
             double now = timer.Elapsed.TotalSeconds;
             float delta = Math.Max(0f, (float)(now - previous));
             using (m_settings.EnterExecutionScope())
+            using (m_rendering.EnterExecutionScope())
             {
                 m_session.Tick((float)now, delta);
                 using (m_session.EnterExecutionScope())
@@ -214,6 +215,7 @@ internal sealed class GamePlayerHost : IDisposable
             return;
         m_disposed = true;
         using (m_settings.EnterExecutionScope())
+        using (m_rendering.EnterExecutionScope())
         using (m_session.EnterExecutionScope())
             m_rendering.OnDetach();
         m_session.Dispose();

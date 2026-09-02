@@ -1,5 +1,5 @@
 using System;
-using Inno.Rendering;
+using System.Threading;
 
 namespace Inno.Rendering;
 
@@ -75,73 +75,118 @@ public sealed class RenderFrameStatistics
 /// </summary>
 public static class GraphicsSettings
 {
-    private static readonly object S_LOCK = new();
-    private static GraphicsCapabilities? s_capabilities;
-    private static RenderPipelineAsset? s_defaultPipeline;
-    private static RenderFrameStatistics? s_statistics;
-
     /// <summary>
     /// Gets current device capabilities, or <see langword="null"/> before device initialization.
     /// </summary>
     public static GraphicsCapabilities? capabilities
-    {
-        get
-        {
-            lock (S_LOCK)
-            {
-                return s_capabilities;
-            }
-        }
-    }
+        => GraphicsSettingsExecutionContext.currentOrNull?.capabilities;
 
     /// <summary>
     /// Gets or sets the project default pipeline used by requests without an override.
     /// </summary>
     public static RenderPipelineAsset? defaultPipeline
     {
-        get
-        {
-            lock (S_LOCK)
-            {
-                return s_defaultPipeline;
-            }
-        }
-        set
-        {
-            lock (S_LOCK)
-            {
-                s_defaultPipeline = value;
-            }
-        }
+        get => GraphicsSettingsExecutionContext.currentOrNull?.defaultPipeline;
+        set => GraphicsSettingsExecutionContext.current.defaultPipeline = value;
     }
 
     /// <summary>
     /// Gets statistics for the last completed frame, or <see langword="null"/> before the first frame.
     /// </summary>
     public static RenderFrameStatistics? frameStatistics
+        => GraphicsSettingsExecutionContext.currentOrNull?.frameStatistics;
+}
+
+internal sealed class GraphicsSettingsState
+{
+    private readonly object m_sync = new();
+    private RenderPipelineAsset? m_defaultPipeline;
+    private RenderFrameStatistics? m_frameStatistics;
+
+    internal GraphicsSettingsState(GraphicsCapabilities capabilities)
+    {
+        this.capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
+    }
+
+    internal GraphicsCapabilities capabilities { get; }
+
+    internal RenderPipelineAsset? defaultPipeline
     {
         get
         {
-            lock (S_LOCK)
+            lock (m_sync)
+                return m_defaultPipeline;
+        }
+        set
+        {
+            lock (m_sync)
+                m_defaultPipeline = value;
+        }
+    }
+
+    internal RenderFrameStatistics? frameStatistics
+    {
+        get
+        {
+            lock (m_sync)
+                return m_frameStatistics;
+        }
+        set
+        {
+            lock (m_sync)
+                m_frameStatistics = value;
+        }
+    }
+
+    internal void Clear()
+    {
+        lock (m_sync)
+        {
+            m_defaultPipeline = null;
+            m_frameStatistics = null;
+        }
+    }
+}
+
+internal static class GraphicsSettingsExecutionContext
+{
+    private static readonly AsyncLocal<Scope?> S_CURRENT = new();
+
+    internal static GraphicsSettingsState current
+        => currentOrNull
+            ?? throw new InvalidOperationException(
+                "No rendering runtime is bound to the current execution context.");
+
+    internal static GraphicsSettingsState? currentOrNull => S_CURRENT.Value?.state;
+
+    internal static IDisposable Enter(GraphicsSettingsState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        var scope = new Scope(state, S_CURRENT.Value);
+        S_CURRENT.Value = scope;
+        return scope;
+    }
+
+    private sealed class Scope(GraphicsSettingsState state, Scope? parent) : IDisposable
+    {
+        private bool m_disposed;
+
+        internal GraphicsSettingsState state { get; } = state;
+
+        /// <summary>
+        /// Restores the parent rendering execution scope in last-in-first-out order.
+        /// </summary>
+        public void Dispose()
+        {
+            if (m_disposed)
+                return;
+            if (!ReferenceEquals(S_CURRENT.Value, this))
             {
-                return s_statistics;
+                throw new InvalidOperationException(
+                    "Rendering execution scopes must be disposed in last-in-first-out order.");
             }
-        }
-    }
-
-    internal static void SetDevice(GraphicsCapabilities? capabilities)
-    {
-        lock (S_LOCK)
-        {
-            s_capabilities = capabilities;
-        }
-    }
-
-    internal static void SetStatistics(RenderFrameStatistics? statistics)
-    {
-        lock (S_LOCK)
-        {
-            s_statistics = statistics;
+            m_disposed = true;
+            S_CURRENT.Value = parent;
         }
     }
 }

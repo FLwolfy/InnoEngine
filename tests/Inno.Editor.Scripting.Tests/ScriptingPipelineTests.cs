@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -558,6 +559,38 @@ public sealed class ScriptingPipelineTests : IDisposable
     }
 
     [Fact]
+    public void PluginRemovalUnloadsTheCommittedMissingGenerationWithoutASecondReload()
+    {
+        using var fixture = new ScriptingFixture(WriteUnavailableGenerationPlugin);
+        var reloads = new EditorReloadCoordinator();
+        using ScriptReloadHost reload = fixture.CreateReloadHost(reloads);
+        reload.Start();
+        ScriptCompilationResult initial = fixture.CompilePending(reload);
+        Assert.True(initial.success, FormatDiagnostics(initial));
+        Assert.True(reload.ApplyPendingReload());
+
+        RuntimeSession session = fixture.CreateEditorSession();
+        using IDisposable executionScope = session.EnterExecutionScope();
+        var sceneReload = new SceneReloadService(session.scenes, fixture.host.serialization);
+        using IDisposable registration = reloads.Register(new TestSceneReloadParticipant(sceneReload));
+        MissingGenerationExpectation expectation = CommitPluginRemoval(fixture, reload, session);
+
+        Exception? failure = null;
+        while (!reload.AdvanceUnloadVerification(out failure))
+            Thread.Yield();
+
+        Assert.Null(failure);
+        Assert.False(expectation.retiredComponent.IsAlive, "The retired Plugin component remained strongly reachable.");
+        Assert.False(expectation.retiredType.IsAlive, "The retired Plugin runtime Type remained strongly reachable.");
+        Assert.DoesNotContain(fixture.host.modules.modules, static module =>
+            module.domain == AssemblyDomain.InnoPlugin);
+        MissingGameComponent missing = Assert.IsType<MissingGameComponent>(
+            expectation.owner.GetComponents().Single(component => component is not Transform));
+        Assert.Equal(expectation.componentId, missing.identity.persistentId);
+        Assert.Equal("UnavailabilityPlugin.PluginBehavior", missing.missingTypeName);
+    }
+
+    [Fact]
     public void PluginReloadQuiescesPlaySessionBeforeRetiringItsAssemblyGeneration()
     {
         using var fixture = new ScriptingFixture(WriteUnavailableGenerationPlugin);
@@ -647,12 +680,53 @@ public sealed class ScriptingPipelineTests : IDisposable
     private static int ReadVersion(Type type)
         => (int)type.GetProperty("version")!.GetValue(Activator.CreateInstance(type))!;
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static MissingGenerationExpectation CommitPluginRemoval(
+        ScriptingFixture fixture,
+        ScriptReloadHost reload,
+        RuntimeSession session)
+    {
+        GameScene scene = session.scenes.LoadNewScene("Plugin Removal");
+        GameObject owner = scene.CreateObject("Plugin Owner");
+        Type pluginType = fixture.ResolveActiveType("PluginBehavior");
+        GameComponent component = owner.AddComponent(pluginType);
+        Guid componentId = component.identity.persistentId;
+        string installedPlugin = Path.Combine(fixture.projectRoot, "Plugins", "UnavailabilityPlugin");
+        string detachedPlugin = Path.Combine(fixture.projectRoot, "UnavailabilityPlugin.detached");
+        Directory.Move(installedPlugin, detachedPlugin);
+        Assert.True(fixture.RefreshPlugins());
+        ScriptCompilationResult unavailable = fixture.CompilePendingPluginReload(reload);
+        Assert.True(unavailable.success, FormatDiagnostics(unavailable));
+        Assert.DoesNotContain(unavailable.activationRequests, static request =>
+            request.domain == AssemblyDomain.InnoPlugin);
+        Assert.DoesNotContain(unavailable.activationRequests.SelectMany(static request => request.upstreamModuleNames),
+            static moduleName => string.Equals(
+                moduleName,
+                "Plugin.tests.unavailability",
+                StringComparison.Ordinal));
+        Assert.True(reload.ApplyPendingReload());
+        Assert.DoesNotContain(fixture.host.modules.modules, static module =>
+            module.domain == AssemblyDomain.InnoPlugin ||
+            module.upstreamModuleNames.Contains("Plugin.tests.unavailability", StringComparer.Ordinal));
+        return new MissingGenerationExpectation(
+            owner,
+            componentId,
+            new WeakReference(component),
+            new WeakReference(pluginType));
+    }
+
     private static void ForceFullCollection()
     {
         GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
         GC.WaitForPendingFinalizers();
         GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
     }
+
+    private readonly record struct MissingGenerationExpectation(
+        GameObject owner,
+        Guid componentId,
+        WeakReference retiredComponent,
+        WeakReference retiredType);
 
     private static void WriteProjectionPlugin(
         string projectRoot,

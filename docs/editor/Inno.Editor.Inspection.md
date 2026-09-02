@@ -69,6 +69,12 @@ PropertyDrawer 通过 declared property type 匹配。`PropertyDrawContext.SetVa
 
 `PropertyDrawContext.DrawInlineChild` 同样进入 `SerializedPropertyRenderer.DrawInline`，不会自行 Resolve 或直接调用 Drawer。Inline 与普通属性共用 drawer resolution、readonly disabled scope、按完整 child path 去重的异常日志和错误呈现，但不创建额外 `PropertyRow`；Drawer 异常在当前 child 被消费，父属性与后续 Inspector 内容继续绘制。本次契约不改变 `SetValue` 的返回或 readonly 行为。
 
+需要跨帧保留尚未提交的数字、Guid 或集合文本时，Drawer 使用 `TryGetTextState`、`SetTextState` 和
+`ClearTextState`。状态由 `SerializedPropertyRenderer` 实例拥有，并以 inspected owner 弱引用、
+完整 property path 和 drawer-local key 三层隔离；不同 Inspector/Editor Host、相同路径的两个对象
+以及同一对象的两个 renderer 都不会串值。缓存只保存中立字符串，owner 消失后整组状态可自动
+回收，不会通过静态字典固定 Scene 对象或 Plugin ALC。
+
 ## Feature 间 presentation 契约
 
 `IInspectionIconProvider<TTarget>` 用于共享目标所属 feature 的图标规则，而不引入 Panel→Panel 引用。例如 FileBrowser 的 `AssetEditorModule` 实现 `IInspectionIconProvider<AssetFileEntry>`，它自己的 `AssetSelectionInspectionDrawer` 因而可以复用同一个 Asset icon registry。Inspector 组合根只依赖该接口，不引用 FileBrowser 项目。Scene/GameObject Drawer 直接注入 `EditorSettings`，通过原始完整路径读取与 Hierarchy、Asset Browser 一致的 icon object；Settings 项目不提供 icon resolver。

@@ -19,6 +19,7 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
     private readonly RenderResourceService m_resourceService;
     private readonly RenderFrameUploadService m_uploads;
     private readonly RenderExtensionRegistry m_extensions;
+    private readonly GraphicsSettingsState m_graphicsSettings;
     private readonly Dictionary<RenderPipelineAsset, GenerationCacheEntry> m_generations = [];
     private readonly List<RenderRequest> m_pendingRequests = [];
     private readonly List<RenderRequest> m_currentRequests = [];
@@ -66,6 +67,7 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
         m_diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
         m_contentScopeProvider = contentScopeProvider;
         m_extensions = new RenderExtensionRegistry(types);
+        m_graphicsSettings = new GraphicsSettingsState(m_device.capabilities);
         m_resourceService = new RenderResourceService(
             m_device,
             m_diagnostics,
@@ -80,6 +82,21 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
     /// Gets persistent offscreen target services for viewport presentation.
     /// </summary>
     public RenderTargetRegistry targets { get; }
+
+    /// <summary>
+    /// Binds this rendering runtime to script-facing graphics APIs for the current asynchronous execution flow.
+    /// </summary>
+    /// <returns>
+    /// A strict last-in-first-out execution scope owned by the caller.
+    /// </returns>
+    /// <exception cref="ObjectDisposedException">
+    /// Thrown when this rendering runtime has been disposed.
+    /// </exception>
+    public IDisposable EnterExecutionScope()
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        return GraphicsSettingsExecutionContext.Enter(m_graphicsSettings);
+    }
 
     /// <summary>
     /// Registers frame-final work without transferring frame ownership.
@@ -153,7 +170,7 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
             throw new InvalidOperationException("A default pipeline can only change at a frame boundary.");
         if (TryGetGeneration(pipelineAsset, out _))
         {
-            GraphicsSettings.defaultPipeline = pipelineAsset;
+            m_graphicsSettings.defaultPipeline = pipelineAsset;
             return true;
         }
         return false;
@@ -185,7 +202,6 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
     public void OnAttach()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
-        GraphicsSettings.SetDevice(m_device.capabilities);
     }
 
     /// <summary>
@@ -239,6 +255,7 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
         if (!m_frameOpen || m_requestProviders is null)
             return;
 
+        using IDisposable executionScope = EnterExecutionScope();
         RenderContentScope content = GetFrameContentScope();
         var context = new RenderRequestProviderContext(
             this,
@@ -339,12 +356,12 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
                 m_uploads.EndFrame();
                 m_currentRequests.Clear();
                 m_frameIndex++;
-                GraphicsSettings.SetStatistics(new RenderFrameStatistics(
+                m_graphicsSettings.frameStatistics = new RenderFrameStatistics(
                     m_frameIndex,
                     executedViewCount,
                     counters.drawCount,
                     counters.dispatchCount,
-                    culledPassCount));
+                    culledPassCount);
             }
         }
     }
@@ -358,9 +375,7 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
             return;
         m_disposed = true;
         m_reloadSession?.Rollback();
-        GraphicsSettings.SetStatistics(null);
-        GraphicsSettings.SetDevice(null);
-        GraphicsSettings.defaultPipeline = null;
+        m_graphicsSettings.Clear();
         foreach (GenerationCacheEntry entry in m_generations.Values)
             entry.lastGood?.Dispose();
         m_generations.Clear();
@@ -408,7 +423,7 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
         RenderRequest request,
         int requestIndex)
     {
-        RenderPipelineAsset? asset = request.pipeline ?? GraphicsSettings.defaultPipeline;
+        RenderPipelineAsset? asset = request.pipeline ?? m_graphicsSettings.defaultPipeline;
         if (asset is null)
         {
             m_diagnostics.Publish(new RenderDiagnostic(
@@ -759,8 +774,10 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
     internal sealed class RenderRuntimeReloadSession : IRenderRuntimeReloadTransaction
     {
         private readonly RenderRuntimeLayer m_owner;
-        private readonly IReadOnlyDictionary<RenderPipelineAsset, GenerationState> m_previous;
-        private readonly RenderExtensionRegistry.RequestProviderGeneration? m_previousRequestProviders;
+        private IReadOnlyDictionary<RenderPipelineAsset, GenerationState>? m_previous;
+        private RenderExtensionRegistry.RequestProviderGeneration? m_previousRequestProviders;
+        private RenderRequest[]? m_previousPendingRequests;
+        private RenderRequest[]? m_previousCurrentRequests;
         private readonly Dictionary<RenderPipelineAsset, GenerationState> m_candidates = [];
         private RenderExtensionRegistry.RequestProviderGeneration? m_candidateRequestProviders;
         private bool m_prepared;
@@ -770,11 +787,15 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
         private RenderRuntimeReloadSession(
             RenderRuntimeLayer owner,
             IReadOnlyDictionary<RenderPipelineAsset, GenerationState> previous,
-            RenderExtensionRegistry.RequestProviderGeneration? previousRequestProviders)
+            RenderExtensionRegistry.RequestProviderGeneration? previousRequestProviders,
+            RenderRequest[] previousPendingRequests,
+            RenderRequest[] previousCurrentRequests)
         {
             m_owner = owner;
             m_previous = previous;
             m_previousRequestProviders = previousRequestProviders;
+            m_previousPendingRequests = previousPendingRequests;
+            m_previousCurrentRequests = previousCurrentRequests;
         }
 
         internal static RenderRuntimeReloadSession Create(RenderRuntimeLayer owner)
@@ -787,7 +808,15 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
                     entry.attemptedFingerprint,
                     entry.lastGood));
             }
-            return new RenderRuntimeReloadSession(owner, previous, owner.m_requestProviders);
+            lock (owner.m_requestLock)
+            {
+                return new RenderRuntimeReloadSession(
+                    owner,
+                    previous,
+                    owner.m_requestProviders,
+                    [.. owner.m_pendingRequests],
+                    [.. owner.m_currentRequests]);
+            }
         }
 
         internal void PrepareCandidate()
@@ -800,7 +829,7 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
             try
             {
                 m_candidateRequestProviders = snapshot.CreateRequestProviders();
-                foreach (RenderPipelineAsset asset in m_previous.Keys)
+                foreach (RenderPipelineAsset asset in m_previous!.Keys)
                 {
                     string fingerprint = RenderExtensionRegistry.GetConfigurationFingerprint(asset);
                     _ = TryCreateGeneration(snapshot, asset, out ActiveGeneration? candidate);
@@ -846,6 +875,12 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
                 entry.lastGood = candidate.lastGood;
             }
             m_owner.m_requestProviders = m_candidateRequestProviders;
+            lock (m_owner.m_requestLock)
+            {
+                m_owner.m_acceptingCurrentFrame = false;
+                m_owner.m_pendingRequests.Clear();
+                m_owner.m_currentRequests.Clear();
+            }
             m_activated = true;
         }
 
@@ -854,7 +889,7 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
             EnsureNotFinished();
             if (!m_activated)
                 throw new InvalidOperationException("Rendering extension candidates have not been activated.");
-            foreach (GenerationState previous in m_previous.Values)
+            foreach (GenerationState previous in m_previous!.Values)
                 previous.lastGood?.Dispose();
             m_previousRequestProviders?.Dispose();
             Finish();
@@ -867,7 +902,7 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
 
             if (m_activated)
             {
-                foreach ((RenderPipelineAsset asset, GenerationState previous) in m_previous)
+                foreach ((RenderPipelineAsset asset, GenerationState previous) in m_previous!)
                 {
                     if (!m_owner.m_generations.TryGetValue(asset, out GenerationCacheEntry? entry))
                         continue;
@@ -876,6 +911,13 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
                     entry.lastGood = previous.lastGood;
                 }
                 m_owner.m_requestProviders = m_previousRequestProviders;
+                lock (m_owner.m_requestLock)
+                {
+                    m_owner.m_pendingRequests.Clear();
+                    m_owner.m_pendingRequests.AddRange(m_previousPendingRequests!);
+                    m_owner.m_currentRequests.Clear();
+                    m_owner.m_currentRequests.AddRange(m_previousCurrentRequests!);
+                }
             }
             DisposeCandidates();
             Finish();
@@ -902,6 +944,10 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
         {
             m_candidates.Clear();
             m_candidateRequestProviders = null;
+            m_previous = null;
+            m_previousRequestProviders = null;
+            m_previousPendingRequests = null;
+            m_previousCurrentRequests = null;
             m_finished = true;
             m_owner.EndReloadSession(this);
         }

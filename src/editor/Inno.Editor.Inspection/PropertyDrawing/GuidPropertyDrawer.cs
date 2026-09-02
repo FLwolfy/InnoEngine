@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
@@ -10,7 +8,7 @@ namespace Inno.Editor.Inspection;
 internal sealed class GuidPropertyDrawer : IPropertyDrawer
 {
     private const nuint C_BUFFER_SIZE = 64;
-    private static readonly Dictionary<string, string> s_editBuffers = new(StringComparer.Ordinal);
+    private const string C_TEXT_STATE = "guid";
 
     /// <summary>
     /// Renders the value presentation for the current editor frame.
@@ -21,8 +19,8 @@ internal sealed class GuidPropertyDrawer : IPropertyDrawer
     public void Draw(PropertyDrawContext context)
     {
         Guid value = context.GetValue() is Guid current ? current : Guid.Empty;
-        string text = s_editBuffers.TryGetValue(context.path, out string? editing)
-            ? editing
+        string text = context.TryGetTextState(C_TEXT_STATE, out string? editing)
+            ? editing!
             : value.ToString("D");
         if (NativeImGui.InputText(
                 $"##{context.path}",
@@ -32,10 +30,10 @@ internal sealed class GuidPropertyDrawer : IPropertyDrawer
             Guid.TryParse(text, out Guid parsed))
         {
             context.SetValue(parsed);
-            s_editBuffers.Remove(context.path);
+            context.ClearTextState(C_TEXT_STATE);
             return;
         }
 
-        s_editBuffers[context.path] = text;
+        context.SetTextState(C_TEXT_STATE, text);
     }
 }

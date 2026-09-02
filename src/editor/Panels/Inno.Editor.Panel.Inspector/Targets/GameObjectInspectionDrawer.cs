@@ -192,6 +192,10 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
             GameComponent component = components[i];
             Type componentType = component.GetType();
             MissingGameComponent? missing = component as MissingGameComponent;
+            IReadOnlyList<SerializedProperty> properties = missing is null
+                ? m_serialization.GetProperties(component)
+                : Array.Empty<SerializedProperty>();
+            bool hasBody = missing is not null || properties.Count > 0;
             string componentId = component.identity.persistentId.ToString("N");
             GameBehavior? behavior = component as GameBehavior;
             var editorTarget = new ComponentEditorTarget(gameObject, component);
@@ -239,33 +243,35 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
                 continue;
             }
 
-            NativeImGui.Unindent();
-            EditorWidget.CardBody(
-                componentId,
-                () =>
-                {
-                    if (missing is not null)
+            if (hasBody)
+            {
+                NativeImGui.Unindent();
+                EditorWidget.CardBody(
+                    componentId,
+                    () =>
                     {
-                        NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.error);
-                        ImGuiWidget.WrappedText(
-                            $"Missing component script ({missing.missingType.stableId:D}). " +
-                            "Its serialized state is preserved and will recover automatically when the type returns.");
-                        NativeImGui.PopStyleColor();
-                        return;
-                    }
-                    IReadOnlyList<SerializedProperty> properties = m_serialization.GetProperties(component);
-                    for (int propertyIndex = 0; propertyIndex < properties.Count; propertyIndex++)
-                    {
-                        context.properties.Draw(
-                            context.editorContext,
-                            component,
-                            $"gameObject.{gameObject.identity.persistentId:N}.{componentId}",
-                            properties[propertyIndex]);
-                    }
-                },
-                dimmed: behavior is { enabled: false });
+                        if (missing is not null)
+                        {
+                            NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.error);
+                            ImGuiWidget.WrappedText(
+                                $"Missing component script ({missing.missingType.stableId:D}). " +
+                                "Its serialized state is preserved and will recover automatically when the type returns.");
+                            NativeImGui.PopStyleColor();
+                            return;
+                        }
+                        for (int propertyIndex = 0; propertyIndex < properties.Count; propertyIndex++)
+                        {
+                            context.properties.Draw(
+                                context.editorContext,
+                                component,
+                                $"gameObject.{gameObject.identity.persistentId:N}.{componentId}",
+                                properties[propertyIndex]);
+                        }
+                    },
+                    dimmed: behavior is { enabled: false });
 
-            NativeImGui.Indent();
+                NativeImGui.Indent();
+            }
             NativeImGui.TreePop();
             NativeImGui.Dummy(new Vector2(0f, EditorWidget.style.inspectorCardSpacing));
         }

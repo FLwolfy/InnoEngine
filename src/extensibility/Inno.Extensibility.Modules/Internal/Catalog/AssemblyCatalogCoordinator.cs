@@ -138,6 +138,7 @@ internal sealed class AssemblyCatalogRefreshSet(IReadOnlyList<IAssemblyCatalogTr
         for (int i = 0; i < transactions.Count; i++)
             TryCleanup(transactions[i].Complete, "transaction completion");
         m_finished = true;
+        transactions = Array.Empty<IAssemblyCatalogTransaction>();
     }
 
     internal void Rollback()
@@ -147,6 +148,7 @@ internal sealed class AssemblyCatalogRefreshSet(IReadOnlyList<IAssemblyCatalogTr
         for (int i = transactions.Count - 1; i >= 0; i--)
             TryCleanup(transactions[i].Rollback, "transaction rollback");
         m_finished = true;
+        transactions = Array.Empty<IAssemblyCatalogTransaction>();
     }
 
     private static void TryCleanup(Action cleanup, string phase)

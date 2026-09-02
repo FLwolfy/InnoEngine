@@ -489,11 +489,9 @@ public sealed unsafe partial class BgfxDevice
             IReadOnlyDictionary<string, BgfxShaderBindingResource> bindings =
                 ValidateReflectedBindings(descriptor.bindings, reflected);
 
-            program = bgfx.create_program(vertexShader, fragmentShader, false);
+            program = bgfx.create_program(vertexShader, fragmentShader, true);
             EnsureValid(program.Valid, name);
-            bgfx.destroy_shader(vertexShader);
             vertexShader = InvalidShader();
-            bgfx.destroy_shader(fragmentShader);
             fragmentShader = InvalidShader();
             if (descriptor.vertexLayout is not null)
             {
@@ -573,9 +571,8 @@ public sealed unsafe partial class BgfxDevice
             Dictionary<string, ReflectedUniform> reflected = ReflectShaders(computeShader);
             IReadOnlyDictionary<string, BgfxShaderBindingResource> bindings =
                 ValidateReflectedBindings(descriptor.bindings, reflected);
-            program = bgfx.create_compute_program(computeShader, false);
+            program = bgfx.create_compute_program(computeShader, true);
             EnsureValid(program.Valid, name);
-            bgfx.destroy_shader(computeShader);
             computeShader = InvalidShader();
             return new BgfxPipelineResource(
                 program,

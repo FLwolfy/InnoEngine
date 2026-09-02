@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Threading;
 
 namespace Inno.Native.LibraryLoading;
@@ -110,12 +111,12 @@ public static class NativeDllLoader
     private static string EnsureNativeFile(string fileName, bool throwIfMissing)
     {
         string? deployed = FindNativeOutputFile(fileName);
-        if (deployed is not null)
-            return deployed;
-
         var repoRoot = FindRepoRoot(AppContext.BaseDirectory);
         if (repoRoot == null)
         {
+            if (deployed is not null)
+                return deployed;
+
             if (throwIfMissing)
             {
                 throw new DirectoryNotFoundException("Repo root not found. Cannot resolve lib path.");
@@ -127,6 +128,9 @@ public static class NativeDllLoader
         var libRoot = Path.Combine(repoRoot, NativeDllConstants.LIB_DIR_NAME);
         if (!Directory.Exists(libRoot))
         {
+            if (deployed is not null)
+                return deployed;
+
             if (throwIfMissing)
             {
                 throw new DirectoryNotFoundException($"Lib directory not found: {libRoot}");
@@ -141,6 +145,9 @@ public static class NativeDllLoader
         var srcFile = Directory.EnumerateFiles(libRoot, fileName, SearchOption.AllDirectories).FirstOrDefault();
         if (srcFile == null)
         {
+            if (deployed is not null)
+                return deployed;
+
             if (throwIfMissing)
             {
                 throw new FileNotFoundException($"Native file not found in repo lib: {fileName}");
@@ -150,15 +157,35 @@ public static class NativeDllLoader
         }
 
         var relative = Path.GetRelativePath(libRoot, srcFile);
-        var dest = Path.Combine(nativeRoot, relative);
+        var dest = deployed ?? Path.Combine(nativeRoot, relative);
         var destDir = Path.GetDirectoryName(dest);
         if (!string.IsNullOrEmpty(destDir))
         {
             Directory.CreateDirectory(destDir);
         }
 
-        File.Copy(srcFile, dest, overwrite: true);
+        var sourceInfo = new FileInfo(srcFile);
+        if (!File.Exists(dest) || !FileContentsMatch(srcFile, dest))
+        {
+            File.Copy(srcFile, dest, overwrite: true);
+            File.SetLastWriteTimeUtc(dest, sourceInfo.LastWriteTimeUtc);
+        }
+
         return dest;
+    }
+
+    private static bool FileContentsMatch(string firstPath, string secondPath)
+    {
+        var firstInfo = new FileInfo(firstPath);
+        var secondInfo = new FileInfo(secondPath);
+        if (firstInfo.Length != secondInfo.Length)
+            return false;
+
+        using FileStream first = File.OpenRead(firstPath);
+        using FileStream second = File.OpenRead(secondPath);
+        byte[] firstHash = SHA256.HashData(first);
+        byte[] secondHash = SHA256.HashData(second);
+        return firstHash.AsSpan().SequenceEqual(secondHash);
     }
 
     private static string? FindNativeOutputFile(string fileName)

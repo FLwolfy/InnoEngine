@@ -180,6 +180,7 @@ internal sealed class TypeRegistryRefreshSet(IReadOnlyList<ITypeRegistryTransact
         for (int i = 0; i < transactions.Count; i++)
             TryCleanup(transactions[i].Complete, "transaction completion");
         m_finished = true;
+        transactions = Array.Empty<ITypeRegistryTransaction>();
     }
 
     internal void Rollback()
@@ -189,6 +190,7 @@ internal sealed class TypeRegistryRefreshSet(IReadOnlyList<ITypeRegistryTransact
         for (int i = transactions.Count - 1; i >= 0; i--)
             TryCleanup(transactions[i].Rollback, "transaction rollback");
         m_finished = true;
+        transactions = Array.Empty<ITypeRegistryTransaction>();
     }
 
     private static void TryCleanup(Action cleanup, string phase)

@@ -132,6 +132,20 @@ Inspector header 提供 Move Up、Move Down 和 Remove，但不允许拖拽。�
 
 生命周期调度缓存 loaded Scene、GameBehavior 与 GameSystem 的稳定数组，只在 Scene 结构、System 显示顺序或类型 generation 变化时重建。两种类型的 `enabled` 变化都会在 loaded Scene 中立即协调 `OnEnable`/`OnDisable`，不等待下一帧。`GameSystem.order` 仍会在每个阶段开始前读取；值变化时复用现有数组原地排序。`GameSystem.Query<T...>()` 内部使用最多三个规范排序的当前 generation runtime type ID 组成值类型 key，缓存命中时也不再创建 `Type[]`、规范化数组或字符串 key。因此正常 FixedUpdate、Update 与 LateUpdate 不再为这些 traversal 分配新数组。
 
+`SceneTypeCatalog` 在 candidate generation 构建时一次性判断每个 `GameBehavior` 是否实际 override
+Awake/Start/Enable/Disable/Update/Fixed/Late/Destroy，并把结果压缩为 lifecycle phase mask。
+Runner 按 mask 维护 activation、一次性 Start、Update、FixedUpdate 与 LateUpdate 的独立索引。
+Awake/Enable/Disable 通过结构或 enabled/hierarchy 变化事件进入一次性同步队列，Start 成功后立即退出
+启动队列；没有覆盖帧 callback 的 Renderer 不会进入对应逐帧数组。结构 replacement/removal 会立即
+清空旧索引引用，普通结构 revision 或类型 generation 变化才重建索引。因此仍然只有唯一
+`GameBehavior` 基类，不需要用第二个 Renderer/Behavior 层级换取性能或牺牲 ALC 卸载。
+
+Scene 级增量 extraction cache 直接继承 `GameSystem`。其 protected `GetObjects()` 返回由 Scene
+持有的不可变结构快照；对象或 Component attachment 变化会使快照 identity 和 structure revision
+一起失效，普通 Transform/材质/颜色数值变化不会触发全量重新索引。具体 Rendering Plugin 可据此
+缓存 Camera/Drawable/Light 引用，在每帧读取当前值；设备、RenderGraph 和 Runtime 仍不属于
+`GameSystem`，不会产生 Rendering Core → Scene 的反向依赖。
+
 ## 内部索引与类型身份
 
 以下是当前内部实现细节，不属于额外公开 API：

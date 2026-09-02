@@ -350,6 +350,94 @@
 - 测试：`PluginReloadQuiescesPlaySessionBeforeRetiringItsAssemblyGeneration` 使用真实 collectible Plugin Component 进入 Play，执行完整 Plugin/Runtime/Editor reload，验证回到 Editing、Scene/History lease 各释放一次且所有 retirement monitor 成功；`RegistryRetiredAfterCandidatePreparationIsExcludedFromActivation` 验证 candidate preparation 与 activation 之间 Dispose registry 不会激活已销毁 owner，并释放前后两个 snapshot；`Inno.Editor.PlayMode.Tests` 全量验证既有状态机和 Scene 隔离行为不回归。
 - 关闭标准：Play 中触发 Plugin/Scripting reload 必须先恢复 Edit，不发生 `ObjectDisposedException`，旧 Play 世界、Inspector 锁定目标及 prepared registry 均不固定 collectible generation，`INNO-ALC-UNLOAD` 不再出现。已满足。
 
+### ARCH-038：GraphicsSettings 保存进程级静态可变状态
+
+- 历史证据：default pipeline、capabilities 和 frame statistics 由静态字段持有；第二个 Runtime 会覆盖第一个 Runtime 的脚本观察值。
+- 根因与影响：Unity 风格调用形式被错误地等同于 process-global owner，破坏多 `RuntimeSession` 隔离并让测试顺序影响状态。
+- 当前实现：`GraphicsSettings` 只作为脚本 façade，通过 `AsyncLocal` 解析当前 `RenderRuntimeLayer` 私有的 `GraphicsSettingsState`。Editor/Player composition root 只在当前帧执行边界进入 `EnterExecutionScope()`，引擎内部直接使用实例状态；无 scope 时读取为 null、写入明确失败。
+- 测试：`GraphicsFacadeResolvesTheCurrentlyBoundRenderingRuntime` 验证两个 Runtime 的嵌套 scope、统计与 default pipeline 完全隔离，并验证退出 scope 后不残留状态。
+- 关闭标准：静态 façade 不拥有状态，多个 Runtime 不互相覆盖。已满足。
+
+### ARCH-039：Rendering2D 按 Camera 重复全 Scene 扫描并分配
+
+- 历史证据：每个 Camera、每帧分别遍历全部 GameObject，重复查找 Sprite、Tilemap、Light 并创建 List/Array。
+- 根因与影响：Scene extraction 没有 Scene owner；成本近似 `camera count × object count`，大场景产生稳定 GC 压力。
+- 当前实现：官方 2D Plugin 提供唯一 `Rendering2DSceneSystem : GameSystem`。它用 Scene 不可变结构快照 identity 做失效键，只在对象或 Component 结构变化时重建 Camera/Drawable/Light 索引；所有 Camera 共享同一快照并读取 Component 当前值。Disable/Destroy 会清空全部 Plugin 引用。
+- 测试与验收：Scene 的 `GameBehaviorLifecycle_ReindexesAfterStructuralChanges` 验证结构 revision；2D Plugin 由真实 Editor 120-frame Metal smoke 验证一个 SceneSystem 为全部 Camera 提供 frame snapshot，且退出无 retained Plugin/GPU owner。
+- 关闭标准：稳定场景不再按 Camera 扫 Scene 或创建 extraction List/Array，结构变化后下一次 capture 准确重建。已满足。
+
+### ARCH-040：无帧回调 Renderer 仍进入全部生命周期遍历
+
+- 历史证据：Renderer 与脚本统一为 `GameBehavior` 后，即使没有 override Update/Fixed/Late，也会进入同一逐帧 traversal。
+- 根因与影响：类型能力在运行时每帧才通过虚调用自然落空；组件规模增大时产生无意义 dispatch。
+- 当前实现：Scene type candidate 构建阶段一次反射生成 lifecycle phase mask；Runner 为 activation、一次性 Start、Update、FixedUpdate、LateUpdate 维护独立索引。activation 只在结构或 enabled/hierarchy 变化时同步，Start 成功后立即退队；没有覆盖对应帧 callback 的 GameBehavior 不进入该数组。replacement/removal 会立即释放旧索引引用，未引入第二基类或隐藏接口。
+- 测试：`GameBehaviorLifecycle_DispatchesLifecycleCallbacks` 与 `GameBehaviorLifecycle_ReindexesAfterStructuralChanges` 覆盖阶段分派和增删后的索引重建。
+- 关闭标准：唯一 `GameBehavior` API 保持不变，逐帧 dispatch 只包含真实参与者。已满足。
+
+### ARCH-041：BGFX 与 ImGui backend 的进程单实例状态边界不明确
+
+- 历史证据：第二个 BGFX Device 或 ImGui context 会共享/覆盖静态 native routing 状态。
+- 根因与影响：实现实际上只支持一个图形设备，却允许调用方构造出不受控的第二 owner；ImGui callback 无法确定 viewport 属于哪个 context。
+- 当前实现：BGFX 用 process device lease 在 native init 前拒绝第二个活动设备，并正确处理 init 失败与 shutdown 后释放；single-threaded 模式的进程一次性限制也显式建模。ImGui 只保留不可变 native callbacks，按当前 `ImGuiContext` 路由到 context-owned viewport/window/renderer map，Dispose 精确注销 owner。
+- 测试：`SecondDeviceIsRejectedWhileTheProcessRuntimeIsOwned` 与完整 Editor native smoke 覆盖并发拒绝、真实 context/backend 组合和 teardown。
+- 关闭标准：平台约束被 API 主动执行，不存在 last-writer-wins 全局 backend 状态。已满足。
+
+### ARCH-042：GPU shutdown 所有权闭包与 native 产物不确定
+
+- 历史证据：Editor 正常退出时 DefaultSprite/ImGui Shader 与 Metal resource 输出 `RefCount` mismatch；重新编译 BGFX 后 Editor 仍可能加载输出目录中的旧 dylib。
+- 根因与影响：Shader 同时由托管层和 Program 分别销毁；native loader 把“已部署”误当作“当前”；BGFX Metal Debug 使用 Objective-C `retainCount` 猜测应用所有权，而 Metal framework/driver 也会内部 retain。
+- 当前实现：Program 创建时原子接管阶段 Shader，托管层只销毁 Program；Device shutdown 前采集所有 managed resource table 与 deferred queue 的闭包状态，即使失败也保证 native shutdown、readback buffer 和 process lease 完整释放后再报告。开发启动按 SHA-256 内容身份同步 `.lib` 当前 native 产物。Metal vendor 层保留真实 release，删除无法证明所有权的 `retainCount` 断言，以确定性的 Inno/BGFX handle closure 代替。
+- 测试与验收：BGFX 21 项设备测试全部通过；macOS ARM64 Debug Editor 120-frame Metal smoke 退出包含 `BGFX Shutdown complete`，且无 `RefCount is`、BGFX Fatal、resource closure 或未处理异常。
+- 关闭标准：真实资源遗漏会被明确报告且不会把 native runtime 留在半关闭状态；正常完整关闭不再输出伪泄漏警告，也不会运行陈旧 native 产物。已满足。
+
+### ARCH-043：Inspector Drawer 使用静态 path 文本缓冲
+
+- 历史证据：数字、Guid 和集合 Drawer 以 property path 索引静态字典。
+- 根因与影响：不同对象、窗口、Editor Host 的同名路径串状态；静态 key/value 生命周期无法随 inspected owner 释放。
+- 当前实现：状态由 `SerializedPropertyRenderer` 实例拥有，以 owner 的 `ConditionalWeakTable`、完整 path 和 drawer-local key 隔离。`PropertyDrawContext` 提供中立字符串状态 API；Drawer 不再维护静态 buffer，owner 回收即释放整组状态。
+- 测试：`TextEditStateIsScopedByRendererOwnerAndPropertyPath` 验证相同 path 的不同 owner 以及同一 owner 的不同 renderer 不共享状态。
+- 关闭标准：不存在 Drawer 静态编辑 buffer，多窗口/多 Host 不串值且不固定 collectible target。已满足。
+
+### ARCH-044：已完成 Rendering reload transaction 保留旧 generation
+
+- 复现证据：Plugin 移除已经成功提交 Missing/unavailable 状态，但 retirement monitor 仍报告 Plugin、RuntimeScripts 和 EditorScripts ALC 在十次 GC 后可达；纯脚本 reload 通常不复现。
+- 根因与影响：`RenderRuntimeReloadSession` 为 rollback 捕获 previous Pipeline、Request Provider、pending/current request；`Finish()` 只 Dispose old instance，却没有清空 transaction 字段。统一 reload coordinator 或诊断链暂时保留已完成 transaction 时，其中的 Plugin 对象、frame payload 或 delegate 会固定 Plugin ALC；Runtime/Editor Scripts 引用 Plugin API，因此依赖 closure 一起存活。Rendering2D 还会把 Plugin 类型放入 SceneSystem extraction 和 viewport resource，扩大可达图，这正是纯脚本 reload 没有相同现象的原因。
+- 当前实现：activation 前先释放 viewport/render resources 和当前请求；Scene 进入 host-owned Missing；Rendering transaction 在 Finish 后清空 previous/current/pending 与 provider/pipeline 引用，完成对象变成 generation-neutral。失败 rollback 仍在 Finish 前拥有完整 previous snapshot，原子性没有削弱。
+- 测试：`RemovingAndRestoringPluginRenderingCommitsTheSameUnavailableStateAsColdStart` 在 request 中注入真实 collectible Plugin payload，并故意继续持有已完成 transaction，强制 compacting GC 后验证 retirement monitor 已完成；`RemovingUnusedRenderingPluginReleasesItsAssemblyContext` 覆盖无资源基线。真实临时 Project 运行中移除 Plugin 不崩溃，退出 GPU closure 正常。
+- 关闭标准：提交后显示与冷启动相同的 Missing/unavailable；完成 transaction、Inspector、Scene cache、viewport 和 request queue 均不固定旧 ALC；相同 Stable ID 回归可重建。已满足。
+
+### ARCH-045：Tree guide 为追求连续而穿过 disclosure row
+
+- 复现证据：Hierarchy 的纵线与同层横线重叠，且 disclosure triangle 下方纵线过长，形成穿过行内容的视觉连接。
+- 根因与影响：guide 起点被改为父行中心，并根据提交后的完整 content bounds 延伸；连续性目标覆盖了原本用于分离结构层级的行间空隙。
+- 当前实现：恢复按当前帧 `TreeNode` 起点、文本行高和 item spacing 计算的 gapped geometry；child connector 从父行底部与子行顶部之间开始，绝不触碰父行中心，同时不改变原生 entry 高度。
+- 测试：`TreeGuideSegmentsRemainVisibleAcrossCompactRows` 与 `ChildGuideRetainsAVisualGapBelowTheParentWithoutChangingCompactRowHeight` 验证连接线仍可见、父行中心无重叠且行高保持不变。
+- 关闭标准：Tree line 不覆盖 triangle 或横线，不为修线增加 entry 高度。已满足。
+
+### ARCH-046：无属性 GameBehavior/GameSystem 仍绘制空 Card body
+
+- 复现证据：`Rendering2DSceneSystem` 只有 header，但下方仍出现一条空黑色正文区域。
+- 根因与影响：Inspector 在 card 展开时无条件创建 `CardBody`；即使序列化属性集合为空，body 的 padding、background 和 border 仍占据高度。
+- 当前实现：Component/System drawer 在创建 body 前一次取得属性快照；仅当存在属性或 Missing 状态说明时绘制 `CardBody`。Header、折叠状态、enabled 和外部卡片间距不变。
+- 验收：空类型 body 高度为零；Missing 类型仍显示状态说明；有属性类型维持现有布局。
+- 关闭标准：空 GameBehavior/GameSystem 不出现正文背景或内部 padding。已满足。
+
+### ARCH-047：Rendering2D extraction 触发 nullable 泛型约束警告
+
+- 复现证据：脚本编译对 `Camera2D?`、`SpriteRenderer2D?`、`TilemapRenderer2D?`、`Light2D?` 推断 `TComponent`，产生四条 `CS8631`。
+- 根因与影响：`out T?` 与 nullable 局部变量共同参与泛型推断时，编译器可能把 `TComponent` 推断为 nullable annotated type，而 `TryGetComponent<TComponent>` 的约束要求非 nullable `GameComponent`。
+- 当前实现：官方 2D Plugin 在四个调用点显式指定非 nullable泛型参数，例如 `TryGetComponent<Camera2D>(out Camera2D? camera)`；输出变量仍准确表达查找失败时为 null。
+- 验收：真实 Project Plugin 编译不再包含对应 `CS8631`，行为与缓存索引不变。
+- 关闭标准：不通过 suppression 或放宽泛型约束消除警告。已满足。
+
+### ARCH-048：空显式依赖被推断为全部活动 Plugin，导致第一次卸载失败与重复错误
+
+- 复现证据：运行中从文件系统删除 Plugin 后，场景已尝试切换 Missing，但 `INNO-ALC-UNLOAD` 报告 Plugin、RuntimeScripts、EditorScripts 仍可达；再次手动 Reload Plugins 后才恢复。Console 同时出现 coded Diagnostic 与内容重复的普通 Error log。
+- 根因与影响：dump 的 GC root 证明旧 Plugin `Type` 由活动 `RuntimeScripts` 的 `ModuleLoadContext.m_sharedAssemblies` 持有。`AssemblyLoadRequest.upstreamModuleNames=[]` 本应表示无依赖，但 `ModuleHost.GetUpstreamModules` 将它解释为自动附加所有活动 Plugin；因此同一移除事务 stage 的新 RuntimeScripts 又抓住 previous Plugin assembly。重复错误来自 Editor 同时调用 Diagnostic publisher 和 Logger。
+- 当前实现：所有 module domain 只接受显式 upstream dependency snapshot，空集合严格返回空；编译器仍负责生成完整 Plugin → Runtime Scripts → Editor Scripts DAG。reload 以 250 ms 间隔、3 秒上限按帧协作式验证 CLR unload，避免在单帧连续执行完整 GC。Editor 只发布唯一 `INNO-ALC-UNLOAD` Diagnostic，不再复制普通 Error。
+- 测试：`PluginRemovalUnloadsTheCommittedMissingGenerationWithoutASecondReload` 使用带 Generated Serialization Converter 的真实 collectible Plugin，执行一次 refresh/compile/apply，验证活动图不含 Plugin 或指向其 Stable module name 的 upstream、Scene 转为保留 identity 的 Missing、旧 Component/Type 弱引用死亡且 unload verification 成功。
+- 关闭标准：第一次自动 reload 即得到与缺失 Plugin 后冷启动一致的 Missing 状态；不需要第二次手动 reload；真实 retain 才产生单一 Diagnostic。已满足。
+
 ## 已确认优势
 
 本次整改保留并强化了以下正确基础，而不是推倒重来：
@@ -392,6 +480,27 @@ Windows x64 的最后一条 E2E 必须在 Windows runner 执行；CI 定义位�
 - 全仓测试复跑：590 passed、0 failed、0 skipped。
 - `PluginReloadQuiescesPlaySessionBeforeRetiringItsAssemblyGeneration`：真实 collectible Plugin Component、Play Session、Plugin/Runtime/Editor generation reload 与 ALC unload verification 全部通过。
 - `RegistryRetiredAfterCandidatePreparationIsExcludedFromActivation`：candidate preparation 后退休的 session registry 不再被激活，previous/candidate snapshots 均释放。
+
+## 2026-09-02 Rendering、生命周期与 ALC 最终验收记录
+
+- `InnoEngine.sln` Debug 全量构建：0 warnings、0 errors。
+- `Inno.Tooling.Architecture`：通过；`git diff --check`：通过。
+- 全仓测试：598 passed、0 failed、0 skipped。
+- `GraphicsFacadeResolvesTheCurrentlyBoundRenderingRuntime`：两个 Render Runtime 的 façade、统计与 pipeline scope 完全隔离。
+- `GameBehaviorLifecycle_ReindexesAfterStructuralChanges` 与 `GameBehaviorLifecycle_StartsLateOnlyBehaviorWithoutDispatchingUpdate`：结构索引和精确 phase mask 通过。
+- `TextEditStateIsScopedByRendererOwnerAndPropertyPath`：Inspector 编辑状态按 renderer、owner 和 path 隔离。
+- Rendering reload 测试故意继续持有已完成 transaction 并注入真实 collectible Plugin payload；compacting GC 后 Plugin ALC retirement monitor 完成。
+- 当前 Project Scene 与官方 Plugin Sample Scene 均包含唯一 `Rendering2DSceneSystem`，稳定帧不再按 Camera 重扫 Scene。
+- macOS ARM64 Debug Editor 真实 Metal 120-frame smoke：exit code 0，日志包含 `BGFX Shutdown complete`，且不包含 `RefCount is`、`INNO-ALC-UNLOAD`、BGFX Fatal、managed resource closure 或未处理异常。
+
+## 2026-09-02 Tree、Inspector、Plugin warning 与单次卸载验收记录
+
+- `InnoEngine.sln` Debug 全量构建：0 warnings、0 errors；`Inno.Tooling.Architecture` 与 `git diff --check` 通过。
+- 全仓测试：599 passed、0 failed、0 skipped。
+- Tree 两项几何回归验证 disclosure row 保留空隙且 entry 高度不变。
+- `PluginRemovalUnloadsTheCommittedMissingGenerationWithoutASecondReload` 验证一次 refresh/compile/apply 后场景进入 Missing、活动依赖图不再包含被移除 Plugin，旧 Component/Type 与三层 collectible ALC closure 均可回收。
+- 真实 InnoProject Plugin 编译产物的 `diagnostics.cache` 仅包含 8-byte 空诊断文档，不再产生四条 `CS8631`。
+- macOS ARM64 Debug Editor 完成 600-frame baseline、运行中移除 Plugin 的 1800-frame smoke 以及恢复后的 600-frame smoke；三次均 exit code 0、最新 session log 为 0 byte、BGFX 正常 shutdown，无 `INNO-ALC-UNLOAD` 或重复普通 Error。
 
 ## 台账维护规则
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using Inno.Core.Logging;
 using Inno.Scripting.Api;
 using Inno.Core.Serialization;
@@ -17,7 +18,8 @@ namespace Inno.Editor.Inspection;
 /// </summary>
 public sealed class SerializedPropertyRenderer
 {
-    private readonly Dictionary<string, string> m_failureStates = new(StringComparer.Ordinal);
+    private readonly ConditionalWeakTable<object, Dictionary<string, string>> m_failureStates = new();
+    private readonly ConditionalWeakTable<object, Dictionary<string, string>> m_textStates = new();
     private readonly PropertyDrawerRegistry m_drawers;
     private readonly EditorInteractions m_interactions;
     private readonly IInspectionPropertyEditService m_edits;
@@ -150,25 +152,55 @@ public sealed class SerializedPropertyRenderer
 
     private void DrawContent(PropertyDrawContext context)
     {
+        Dictionary<string, string> failureStates = m_failureStates.GetOrCreateValue(context.owner);
         try
         {
             IPropertyDrawer drawer = m_drawers.Resolve(context.propertyType);
             EditorWidget.Disabled(context.isReadOnly, () => drawer.Draw(context));
-            m_failureStates.Remove(context.path);
+            failureStates.Remove(context.path);
         }
         catch (Exception exception)
         {
             EditorWidget.ColoredText(EditorPalette.error, $"Error: {exception.Message}");
             string failureState = $"{exception.GetType().FullName}|{exception.Message}";
-            if (!m_failureStates.TryGetValue(context.path, out string? previous) ||
+            if (!failureStates.TryGetValue(context.path, out string? previous) ||
                 !string.Equals(previous, failureState, StringComparison.Ordinal))
             {
                 m_logger.Write(
                     LogLevel.Error,
                     "Inspector failed to draw property '{0}': {1}",
                     [context.path, exception]);
-                m_failureStates[context.path] = failureState;
+                failureStates[context.path] = failureState;
             }
         }
+    }
+
+    internal bool TryGetTextState(object owner, string path, string key, out string? value)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        value = null;
+        return m_textStates.TryGetValue(owner, out Dictionary<string, string>? states)
+            && states.TryGetValue(CreateStateKey(path, key), out value);
+    }
+
+    internal void SetTextState(object owner, string path, string key, string value)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(value);
+        m_textStates.GetOrCreateValue(owner)[CreateStateKey(path, key)] = value;
+    }
+
+    internal void ClearTextState(object owner, string path, string key)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        if (m_textStates.TryGetValue(owner, out Dictionary<string, string>? states))
+            states.Remove(CreateStateKey(path, key));
+    }
+
+    private static string CreateStateKey(string path, string key)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        return string.Concat(path, "\n", key);
     }
 }

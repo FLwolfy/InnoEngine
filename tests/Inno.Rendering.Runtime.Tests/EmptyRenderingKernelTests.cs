@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Inno.Assets;
@@ -118,18 +119,15 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
         runtime.OnBeforeRender(0f);
         runtime.OnAfterRender(0f);
         Assert.Equal(1, proxy.executeCount);
+        proxy.ReleaseRecordedGraph();
 
-        IRenderRuntimeReloadTransaction renderingRemoval = runtime.BeginExtensionReload();
-        using (AssemblyReloadSession removal = m_modules.BeginReload(
-                   Array.Empty<AssemblyLoadRequest>(),
-                   [plugin.moduleName]))
-        {
-            removal.Activate();
-            renderingRemoval.Prepare();
-            renderingRemoval.Activate();
-            _ = removal.Complete();
-            renderingRemoval.Complete();
-        }
+        QueueCollectiblePayload(runtime, m_types, asset);
+        (AssemblyUnloadMonitor removalMonitor, IRenderRuntimeReloadTransaction renderingRemoval) =
+            RemoveRenderingPlugin(runtime, m_modules, plugin);
+
+        ForceCollection();
+        Assert.True(removalMonitor.isCompleted);
+        GC.KeepAlive(renderingRemoval);
 
         runtime.Submit(CreateRequest("While Unavailable", asset));
         runtime.Submit(CreateRequest("Feature While Unavailable", featureAsset));
@@ -162,11 +160,24 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
     }
 
     [Fact]
+    public void RemovingUnusedRenderingPluginReleasesItsAssemblyContext()
+    {
+        AssemblyLoadRequest plugin = CreateRenderingPluginRequest();
+        _ = m_modules.Load(plugin);
+        AssemblyUnloadMonitor monitor = RemoveUnusedPlugin(m_modules, plugin);
+
+        ForceCollection();
+
+        Assert.True(monitor.isCompleted);
+    }
+
+    [Fact]
     public void FrameStatisticsReportBackendCommandsAndGraphCulling()
     {
         IRenderDevice device = TestDeviceProxy.Create(out TestDeviceProxy proxy);
         proxy.frameCounters = new RenderDeviceFrameCounters(3, 2);
         var runtime = new RenderRuntimeLayer(m_types, device, new TestDiagnosticSink());
+        using IDisposable executionScope = runtime.EnterExecutionScope();
         var asset = new RenderPipelineAsset { pipelineTypeId = StatisticsPipeline.extensionId };
         runtime.OnAttach();
         Assert.True(runtime.TryActivateDefaultPipeline(asset));
@@ -185,6 +196,45 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
         Assert.Equal(2, statistics.dispatchCount);
         Assert.Equal(1, statistics.culledPassCount);
         runtime.OnDetach();
+    }
+
+    [Fact]
+    public void GraphicsFacadeResolvesTheCurrentlyBoundRenderingRuntime()
+    {
+        IRenderDevice firstDevice = TestDeviceProxy.Create(out TestDeviceProxy firstProxy);
+        IRenderDevice secondDevice = TestDeviceProxy.Create(out TestDeviceProxy secondProxy);
+        firstProxy.frameCounters = new RenderDeviceFrameCounters(2, 0);
+        secondProxy.frameCounters = new RenderDeviceFrameCounters(7, 1);
+        using var first = new RenderRuntimeLayer(m_types, firstDevice, new TestDiagnosticSink());
+        using var second = new RenderRuntimeLayer(m_types, secondDevice, new TestDiagnosticSink());
+        var asset = new RenderPipelineAsset { pipelineTypeId = StatisticsPipeline.extensionId };
+
+        using (first.EnterExecutionScope())
+        {
+            first.OnAttach();
+            Assert.True(first.TryActivateDefaultPipeline(asset));
+            first.Submit(CreateRequest("First Runtime", asset));
+            first.OnBeforeRender(0f);
+            first.OnAfterRender(0f);
+            Assert.Equal(2, Assert.IsType<RenderFrameStatistics>(GraphicsSettings.frameStatistics).drawCount);
+
+            using (second.EnterExecutionScope())
+            {
+                second.OnAttach();
+                Assert.True(second.TryActivateDefaultPipeline(asset));
+                second.Submit(CreateRequest("Second Runtime", asset));
+                second.OnBeforeRender(0f);
+                second.OnAfterRender(0f);
+                Assert.Equal(7, Assert.IsType<RenderFrameStatistics>(GraphicsSettings.frameStatistics).drawCount);
+            }
+
+            Assert.Equal(2, Assert.IsType<RenderFrameStatistics>(GraphicsSettings.frameStatistics).drawCount);
+        }
+
+        Assert.Null(GraphicsSettings.frameStatistics);
+        Assert.Throws<InvalidOperationException>(() => GraphicsSettings.defaultPipeline = asset);
+        second.OnDetach();
+        first.OnDetach();
     }
 
     [Fact]
@@ -545,6 +595,72 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
             scope = AssemblyScope.Runtime
         };
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (
+        AssemblyUnloadMonitor monitor,
+        IRenderRuntimeReloadTransaction transaction) RemoveRenderingPlugin(
+        RenderRuntimeLayer runtime,
+        ModuleHost modules,
+        AssemblyLoadRequest plugin)
+    {
+        IRenderRuntimeReloadTransaction rendering = runtime.BeginExtensionReload();
+        using AssemblyReloadSession removal = modules.BeginReload(
+            Array.Empty<AssemblyLoadRequest>(),
+            [plugin.moduleName]);
+        removal.Activate();
+        rendering.Prepare();
+        rendering.Activate();
+        AssemblyUnloadMonitor monitor = removal.Complete();
+        rendering.Complete();
+        return (monitor, rendering);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static AssemblyUnloadMonitor RemoveUnusedPlugin(
+        ModuleHost modules,
+        AssemblyLoadRequest plugin)
+    {
+        using AssemblyReloadSession removal = modules.BeginReload(
+            Array.Empty<AssemblyLoadRequest>(),
+            [plugin.moduleName]);
+        removal.Activate();
+        return removal.Complete();
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void QueueCollectiblePayload(
+        RenderRuntimeLayer runtime,
+        TypeCatalog types,
+        RenderPipelineAsset pipeline)
+    {
+        Type payloadType = types.current.types
+            .Select(type => type.Resolve(types))
+            .Single(type => string.Equals(
+                type.FullName,
+                "Inno.Rendering.Runtime.Reload.TestModule.ReloadableFramePayload",
+                StringComparison.Ordinal));
+        object payload = Activator.CreateInstance(payloadType)
+            ?? throw new InvalidOperationException("The collectible frame payload could not be created.");
+        var data = new RenderFrameData();
+        data.Set(new RenderDataChannelId("tests.runtime.collectible-payload"), payload);
+        runtime.Submit(new RenderRequest(
+            "Collectible Pending Request",
+            RenderTarget.backbuffer,
+            new RenderViewport(0, 0, 64, 64),
+            pipeline,
+            data));
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ForceCollection()
+    {
+        for (int attempt = 0; attempt < 8; attempt++)
+        {
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+        }
+    }
+
     [RenderPipelineExtension(extensionId)]
     private sealed class DisposablePipeline : RenderPipeline
     {
@@ -853,6 +969,8 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
             proxy = new TestDeviceProxy();
             return proxy;
         }
+
+        internal void ReleaseRecordedGraph() => lastGraph = null;
 
         public GraphicsCapabilities capabilities => S_CAPABILITIES;
         public uint generation => 1;

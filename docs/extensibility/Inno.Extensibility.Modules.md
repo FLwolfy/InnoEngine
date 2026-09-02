@@ -86,7 +86,7 @@ Shadow generation 是可再生缓存，不是序列化状态。collectible ALC �
 | `required moduleName` | 跨代际稳定的逻辑名称；Reload 时必须与旧模块一致。 |
 | `required mainAssemblyPath` | 主 DLL 路径。 |
 | `preloadAssemblyPaths` | 在同一 ALC 中预加载的 DLL 列表。 |
-| `upstreamModuleNames` | 可满足本模块 AssemblyRef 的稳定上游模块名；也用于拓扑排序和反向依赖 closure。 |
+| `upstreamModuleNames` | 可满足本模块 AssemblyRef 的稳定上游模块名；也用于拓扑排序和反向依赖 closure。该清单对所有 domain 都是显式且完整的；空清单严格表示没有上游，Host 不从当前活动模块推断依赖。 |
 | `collectible` | 是否允许协作式 unload，默认 `true`。 |
 | `domain` | `InnoPlugin` 或 `InnoScripting`；`InnoInternal` 不能进入 collectible module。 |
 | `scope` | 模块的 `Runtime`/`Editor` 依赖边界。 |
@@ -151,7 +151,7 @@ sequenceDiagram
 
 多模块 session 使用 [Core Storage](../core/Inno.Core.Storage.md) 的 `DependencyGraph<string>` 对 `upstreamModuleNames` 做确定性拓扑排序；Project Scripting 自然位于其 Plugin 依赖之后，Editor Scripts 位于 Runtime Scripts 之后。下游 `ModuleLoadContext` 显式复用同一事务上游 candidate 中的精确 `Assembly` 实例，不复制并二次加载依赖 DLL。发布时一次切换 module map、Assembly catalog、TypeCache 与全部 Registry candidate；任一 stage、participant、Scene 或 extension 激活失败都恢复完整 previous 集合并逆序卸载 candidate。`Complete` 仅释放 previous snapshot 并按反向拓扑请求协作式卸载，不执行可失败的发现或刷新。
 
-依赖闭包是强制约束：Runtime Scripts reload 或 removal 必须包含 Editor Scripts；某个 Plugin reload/unload 必须包含依赖它的 Plugin 与 Project Scripting。Closure validation 对 replacement request 与 explicit removed module 使用完全相同的 domain/scope 语义，因此允许在没有替代 DLL 时原子退休完整闭包，同时仍拒绝遗漏任一活动下游。Plugin module 数量不封闭，通常每个稳定 Plugin ID 对应独立 collectible ALC；Runtime Scripting 和 Editor Scripting 各保持一个模块。每个事务会在加载前建立完整 module/simple-name/domain/scope 图，并在加载后校验实际 AssemblyRef；重复 simple name、Runtime → Editor、Plugin → Scripting、模块依赖 cycle、未声明的自定义依赖以及非 `InnoInternal` 的 Default ALC 共享依赖都会在发布前拒绝。只有受信任的平台程序集与具有当前 `InnoInternal` metadata 的 Host contract 可以从 Default ALC 共享。
+依赖闭包是强制约束：Runtime Scripts reload 或 removal 必须包含 Editor Scripts；某个 Plugin reload/unload 必须包含依赖它的 Plugin 与 Project Scripting。Closure validation 对 replacement request 与 explicit removed module 使用完全相同的 domain/scope 语义，因此允许在没有替代 DLL 时原子退休完整闭包，同时仍拒绝遗漏任一活动下游。`upstreamModuleNames` 的空值语义不可被活动进程状态改写；否则删除 Plugin 的同一事务会让新的 Runtime Scripts 再次引用正在退休的 Plugin ALC。Plugin module 数量不封闭，通常每个稳定 Plugin ID 对应独立 collectible ALC；Runtime Scripting 和 Editor Scripting 各保持一个模块。每个事务会在加载前建立完整 module/simple-name/domain/scope 图，并在加载后校验实际 AssemblyRef；重复 simple name、Runtime → Editor、Plugin → Scripting、模块依赖 cycle、未声明的自定义依赖以及非 `InnoInternal` 的 Default ALC 共享依赖都会在发布前拒绝。只有受信任的平台程序集与具有当前 `InnoInternal` metadata 的 Host contract 可以从 Default ALC 共享。
 
 ### AssemblyReloadContext
 

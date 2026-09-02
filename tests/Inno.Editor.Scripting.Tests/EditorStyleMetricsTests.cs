@@ -406,7 +406,7 @@ public sealed class EditorStyleMetricsTests
     }
 
     [Fact]
-    public void TreeGuideSegmentsRemainContinuousAcrossCompactRows()
+    public void TreeGuideSegmentsRemainVisibleAcrossCompactRows()
     {
         var context = NativeImGui.CreateContext();
         try
@@ -428,7 +428,7 @@ public sealed class EditorStyleMetricsTests
     }
 
     [Fact]
-    public void ChildGuideStartsAtTheParentCenterWithoutChangingCompactRowHeight()
+    public void ChildGuideRetainsAVisualGapBelowTheParentWithoutChangingCompactRowHeight()
     {
         var context = NativeImGui.CreateContext();
         try
@@ -442,7 +442,7 @@ public sealed class EditorStyleMetricsTests
 
             NativeImGui.NewFrame();
             NativeImGui.SetNextWindowSize(new Vector2(480f, 320f), ImGuiCond.Always);
-            _ = NativeImGui.Begin("Connected Parent Guide Test");
+            _ = NativeImGui.Begin("Gapped Parent Guide Test");
             float expectedHeight = NativeImGui.GetTextLineHeight();
             EditorWidget.SetNextTreeNodeOpen(true);
             TreeNodeResult parent = EditorWidget.TreeNode(
@@ -458,7 +458,7 @@ public sealed class EditorStyleMetricsTests
 
             Assert.Equal(expectedHeight, parent.max.Y - parent.min.Y, 3);
             Assert.Equal(expectedHeight, child.max.Y - child.min.Y, 3);
-            AssertCurrentTreeGuideTouchesY((parent.min.Y + parent.max.Y) * 0.5f);
+            AssertCurrentTreeGuideDoesNotTouchY((parent.min.Y + parent.max.Y) * 0.5f);
             NativeImGui.End();
             NativeImGui.Render();
         }
@@ -834,18 +834,17 @@ public sealed class EditorStyleMetricsTests
             "The current drag frame did not submit any tree-guide vertices.");
     }
 
-    private static void AssertCurrentTreeGuideTouchesY(float expectedY)
+    private static void AssertCurrentTreeGuideDoesNotTouchY(float excludedY)
     {
         ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
         uint guideColor = NativeImGui.ColorConvertFloat4ToU32(EditorPalette.treeGuide);
         for (int i = 0; i < drawList.VtxBuffer.Size; i++)
         {
             ImDrawVert vertex = drawList.VtxBuffer[i];
-            if (vertex.Col == guideColor && MathF.Abs(vertex.Pos.Y - expectedY) <= 1f)
-                return;
+            Assert.False(
+                vertex.Col == guideColor && MathF.Abs(vertex.Pos.Y - excludedY) <= 1f,
+                "The child guide overlapped the parent disclosure row instead of retaining its visual gap.");
         }
-
-        Assert.Fail("The child guide did not connect to the parent row's vertical center.");
     }
 
     private static void DrawCurrentTreeBackgroundFrame(Vector2 position, Vector2 size)

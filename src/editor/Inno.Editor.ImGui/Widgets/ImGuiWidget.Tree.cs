@@ -94,6 +94,8 @@ public static partial class ImGuiWidget
         int depth = Math.Max(0, ImGuiP.GetCurrentWindow().DC.TreeDepth);
         PruneTreeNodeStack(depth);
         bool hasNextSibling = TrackSiblingState(id, depth);
+        if (!options.hideGuideLines)
+            DrawTreeGuideLines(nodeCursor, hasNextSibling, !isLeaf);
         PushTransparentTreeNodeHeaderColors();
         bool isOpen;
         try
@@ -117,14 +119,6 @@ public static partial class ImGuiWidget
                 onDraw,
                 options.drawViewportOverlay,
                 out Vector2 interactionMin);
-            if (!options.hideGuideLines)
-            {
-                DrawTreeGuideLines(
-                    nodeCursor,
-                    contentRect.max.Y,
-                    hasNextSibling,
-                    !isLeaf);
-            }
             bool hovered = NativeImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenOverlappedByItem);
             bool clicked = hovered && NativeImGui.IsItemClicked(ImGuiMouseButton.Left);
             bool doubleClicked = hovered && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
@@ -150,7 +144,7 @@ public static partial class ImGuiWidget
                 {
                     id = id,
                     cursor = nodeCursor,
-                    connectorStartY = (contentRect.min.Y + contentRect.max.Y) * 0.5f,
+                    rowMaxY = contentRect.max.Y,
                     hasNextSibling = hasNextSibling
                 });
             }
@@ -316,7 +310,6 @@ public static partial class ImGuiWidget
 
     private static void DrawTreeGuideLines(
         Vector2 nodeCursor,
-        float contentMaxY,
         bool hasNextSibling,
         bool hasDisclosureArrow)
     {
@@ -324,10 +317,10 @@ public static partial class ImGuiWidget
             return;
 
         ImGuiStylePtr style = NativeImGui.GetStyle();
+        float textLineHeight = NativeImGui.GetTextLineHeight();
         float lineOverlap = ImGuiWidget.style.treeGuideLineOverlap;
-        float rowBottomY = MathF.Max(nodeCursor.Y + 1f, contentMaxY);
-        float rowMaxY = rowBottomY + style.ItemSpacing.Y + lineOverlap;
-        float rowCenterY = (nodeCursor.Y + rowBottomY) * 0.5f;
+        float rowMaxY = nodeCursor.Y + textLineHeight + style.ItemSpacing.Y + lineOverlap;
+        float rowCenterY = nodeCursor.Y + textLineHeight * 0.5f;
         float nodeToLabel = NativeImGui.GetTreeNodeToLabelSpacing();
         float guideOffset = nodeToLabel * 0.5f - ImGuiWidget.style.treeGuideLeftOffset;
         float labelStartX = nodeCursor.X + nodeToLabel;
@@ -345,14 +338,14 @@ public static partial class ImGuiWidget
             if (pathChildState.hasNextSibling)
             {
                 float ancestorX = ancestorState.cursor.X + guideOffset;
-                float ancestorStartY = ancestorState.connectorStartY;
+                float ancestorStartY = MathF.Max(nodeCursor.Y, ancestorState.rowMaxY);
                 AddTreeLine(new Vector2(ancestorX, ancestorStartY), new Vector2(ancestorX, rowMaxY));
             }
         }
 
         TreeWidgetNodeState parentState = s_treeNodeStack[^1];
         float branchX = parentState.cursor.X + guideOffset;
-        float branchStartY = parentState.connectorStartY;
+        float branchStartY = MathF.Max(parentState.rowMaxY, nodeCursor.Y);
         AddTreeLine(new Vector2(branchX, branchStartY), new Vector2(branchX, hasNextSibling ? rowMaxY : rowCenterY));
         if (targetX > branchX)
             AddTreeLine(new Vector2(branchX, rowCenterY), new Vector2(targetX, rowCenterY));
@@ -522,7 +515,7 @@ internal struct TreeWidgetNodeState
 {
     internal string id;
     internal Vector2 cursor;
-    internal float connectorStartY;
+    internal float rowMaxY;
     internal bool hasNextSibling;
 }
 

@@ -66,6 +66,7 @@ public sealed class GameScene : EngineObject, ISerializable
     public bool isLoaded => m_isLoaded;
 
     internal SceneTypeCatalog typeCatalog => m_types;
+    internal long structureRevision => m_store.structureRevision;
 
     /// <summary>
     /// Creates a game object with a mandatory transform component.
@@ -129,6 +130,7 @@ public sealed class GameScene : EngineObject, ISerializable
                     component.Detach();
             }
         }
+        m_systems.NotifyGameBehaviorStructureChanged();
 
         gameObject.DestroyDirect();
         if (firstException is not null)
@@ -419,6 +421,8 @@ public sealed class GameScene : EngineObject, ISerializable
 
         bool allowsMultiple = descriptor.allowsMultiple;
         GameComponent component = ComponentFactory.Create(componentType);
+        if (component is GameBehavior createdBehavior)
+            createdBehavior.lifecyclePhases = descriptor.behaviorPhases;
         component.Attach(owner);
         bool addedToStore = false;
         bool registeredHierarchy = false;
@@ -473,6 +477,7 @@ public sealed class GameScene : EngineObject, ISerializable
         {
             if (!component.isDestroyed)
                 component.Detach();
+            m_systems.NotifyGameBehaviorStructureChanged();
         }
         return true;
     }
@@ -616,9 +621,15 @@ public sealed class GameScene : EngineObject, ISerializable
         Guid persistentId = previous.identity.persistentId;
         try
         {
+            if (replacement is GameBehavior replacementBehavior &&
+                m_types.TryGetComponent(replacement.GetType(), out SceneComponentTypeDescriptor? replacementDescriptor))
+            {
+                replacementBehavior.lifecyclePhases = replacementDescriptor!.behaviorPhases;
+            }
             _ = previous.ReleaseIdentityForReplacement();
             replacement.RegisterIdentity(persistentId);
             m_store.ReplaceComponent(previous, replacement, replacementRuntimeTypeId);
+            m_systems.NotifyGameBehaviorStructureChanged();
         }
         catch (Exception exception)
         {

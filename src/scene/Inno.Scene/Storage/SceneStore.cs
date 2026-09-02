@@ -62,6 +62,7 @@ internal sealed class SceneStore
     private readonly Dictionary<ComponentQueryKey, ReadOnlyCollection<GameObject>> m_objectQueryCache = [];
     private GameObject[]? m_objectSnapshotCache;
     private long m_nextObjectOrder;
+    private long m_structureRevision;
     private int m_executionDepth;
     private bool m_clearRequested;
 
@@ -95,6 +96,7 @@ internal sealed class SceneStore
     }
 
     internal bool isExecuting => m_executionDepth != 0;
+    internal long structureRevision => m_structureRevision;
     internal bool hasPendingChanges =>
         m_pendingObjectAdditions.Count != 0 ||
         m_pendingObjectRemovals.Count != 0 ||
@@ -752,6 +754,7 @@ internal sealed class SceneStore
 
     private void InvalidateStructureCaches()
     {
+        m_structureRevision = unchecked(m_structureRevision + 1);
         m_objectSnapshotCache = null;
         InvalidateTypeCaches();
     }

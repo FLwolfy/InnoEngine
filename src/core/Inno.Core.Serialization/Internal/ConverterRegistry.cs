@@ -310,7 +310,7 @@ internal sealed class ConverterRegistry : IDisposable
         internal readonly object sync = new();
         internal readonly Dictionary<Type, ConverterInvoker?> cache = [];
         internal readonly Dictionary<Type, object> converterInstances = [];
-        internal readonly IReadOnlyList<Type> registrations = registrations;
+        internal IReadOnlyList<Type> registrations = registrations;
         private int m_referenceCount = 1;
 
         internal bool TryAcquire()
@@ -358,6 +358,7 @@ internal sealed class ConverterRegistry : IDisposable
             {
                 cache.Clear();
                 converterInstances.Clear();
+                registrations = Array.Empty<Type>();
             }
         }
     }

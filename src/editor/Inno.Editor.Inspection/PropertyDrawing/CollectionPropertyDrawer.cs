@@ -16,8 +16,6 @@ namespace Inno.Editor.Inspection;
 [PropertyDrawer(typeof(IReadOnlyDictionary<,>), useForChildren: true, priority: 20)]
 internal sealed class CollectionPropertyDrawer : IPropertyDrawer
 {
-    private static readonly Dictionary<string, string> s_mapErrors = new(StringComparer.Ordinal);
-
     /// <summary>
     /// Renders the value presentation for the current editor frame.
     /// </summary>
@@ -143,7 +141,7 @@ internal sealed class CollectionPropertyDrawer : IPropertyDrawer
         for (int i = 0; i < entries.Count; i++)
         {
             int index = i;
-            string errorPath = $"{context.path}.{index}";
+            string errorKey = $"map-error-{index}";
             context.DrawChild(
                 $"Key {index}",
                 keyType,
@@ -155,11 +153,11 @@ internal sealed class CollectionPropertyDrawer : IPropertyDrawer
                         .Any(entry => Equals(entry.Key, key));
                     if (duplicate)
                     {
-                        s_mapErrors[errorPath] = "Duplicate map keys are not allowed.";
+                        context.SetTextState(errorKey, "Duplicate map keys are not allowed.");
                         return;
                     }
 
-                    s_mapErrors.Remove(errorPath);
+                    context.ClearTextState(errorKey);
                     updated[index] = new KeyValuePair<object?, object?>(key, updated[index].Value);
                     context.SetValue(EditorCollectionUtility.BuildMap(
                         context.propertyType,
@@ -167,9 +165,9 @@ internal sealed class CollectionPropertyDrawer : IPropertyDrawer
                         valueType,
                         updated));
                 });
-            if (s_mapErrors.TryGetValue(errorPath, out string? error))
+            if (context.TryGetTextState(errorKey, out string? error))
             {
-                EditorWidget.ColoredText(EditorPalette.error, error);
+                EditorWidget.ColoredText(EditorPalette.error, error!);
             }
 
             context.DrawChild(
@@ -191,7 +189,7 @@ internal sealed class CollectionPropertyDrawer : IPropertyDrawer
             {
                 List<KeyValuePair<object?, object?>> updated = EnumerateMap(context);
                 updated.RemoveAt(index);
-                s_mapErrors.Remove(errorPath);
+                context.ClearTextState(errorKey);
                 context.SetValue(EditorCollectionUtility.BuildMap(
                     context.propertyType,
                     keyType,

@@ -13,6 +13,7 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
 {
     private sealed class ViewportWindowData
     {
+        internal required PlatformImGuiViewportBackend owner;
         internal SDLWindowPtr window;
         internal SDLRendererPtr renderer;
         internal IPlatformImGuiRenderer? externalRenderer;
@@ -47,11 +48,14 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
     private static readonly ImGuiPlatformIoNative.PlatformGetWindowPosCallback s_platformGetWindowPos = PlatformGetWindowPosOutCallback;
     private static readonly ImGuiPlatformIoNative.PlatformGetWindowSizeCallback s_platformGetWindowSize = PlatformGetWindowSizeOutCallback;
 
-    private static readonly Dictionary<uint, ViewportWindowData> s_viewportsById = [];
-    private static readonly Dictionary<uint, uint> s_windowToViewport = [];
-    private static IPlatformImGuiRenderer? s_activeRenderer;
+    private static readonly object S_CONTEXT_SYNC = new();
+    private static readonly Dictionary<nuint, PlatformImGuiViewportBackend> S_BACKENDS_BY_CONTEXT = [];
 
     private readonly SDLWindowPtr m_mainWindow;
+    private readonly IPlatformImGuiRenderer m_renderer;
+    private readonly nuint m_contextKey;
+    private readonly Dictionary<uint, ViewportWindowData> m_viewportsById = [];
+    private readonly Dictionary<uint, uint> m_windowToViewport = [];
     private bool m_disposed;
 
     internal PlatformImGuiViewportBackend(
@@ -59,12 +63,16 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
         IPlatformImGuiRenderer renderer)
     {
         ArgumentNullException.ThrowIfNull(renderer);
-        if (s_activeRenderer is not null)
+        ImGuiContextPtr context = ImGuiNative.GetCurrentContext();
+        if (context.IsNull)
+            throw new InvalidOperationException("An active ImGui context is required for viewport routing.");
+        m_contextKey = (nuint)context.Handle;
+        lock (S_CONTEXT_SYNC)
         {
-            throw new InvalidOperationException("Only one multi-viewport ImGui renderer can be active.");
+            if (S_BACKENDS_BY_CONTEXT.ContainsKey(m_contextKey))
+                throw new InvalidOperationException("The current ImGui context already owns a viewport backend.");
         }
-
-        s_activeRenderer = renderer;
+        m_renderer = renderer;
         _ = SDL.SetHint(SDL.SDL_HINT_WINDOW_ACTIVATE_WHEN_RAISED, "1");
         m_mainWindow = mainWindow.GetSdlWindow();
 
@@ -91,21 +99,23 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
         mainViewport.PlatformHandleRaw = (void*)mainSdlWindow.Handle;
 
         RefreshMonitors(mainSdlWindow);
+        lock (S_CONTEXT_SYNC)
+            S_BACKENDS_BY_CONTEXT.Add(m_contextKey, this);
     }
 
     internal bool OwnsWindow(uint windowId)
     {
-        return s_windowToViewport.ContainsKey(windowId);
+        return m_windowToViewport.ContainsKey(windowId);
     }
 
     internal void ProcessEvent(ref SDLEvent sdlEvent, uint windowId)
     {
-        if (!s_windowToViewport.TryGetValue(windowId, out var viewportId))
+        if (!m_windowToViewport.TryGetValue(windowId, out var viewportId))
         {
             return;
         }
 
-        if (!s_viewportsById.TryGetValue(viewportId, out var viewportData))
+        if (!m_viewportsById.TryGetValue(viewportId, out var viewportData))
         {
             return;
         }
@@ -157,7 +167,7 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
     /// </param>
     internal void SynchronizeWindow(uint windowId)
     {
-        if (!s_windowToViewport.TryGetValue(windowId, out var viewportId))
+        if (!m_windowToViewport.TryGetValue(windowId, out var viewportId))
         {
             return;
         }
@@ -241,13 +251,13 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
             return;
         }
 
-        foreach (var kv in s_viewportsById)
+        foreach (var kv in m_viewportsById)
         {
             DestroyViewportWindow(kv.Value);
         }
 
-        s_viewportsById.Clear();
-        s_windowToViewport.Clear();
+        m_viewportsById.Clear();
+        m_windowToViewport.Clear();
 
         var platformIo = ImGuiNative.GetPlatformIO();
         platformIo.ClearPlatformHandlers();
@@ -260,7 +270,14 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
             mainViewport.PlatformHandleRaw = null;
         }
 
-        s_activeRenderer = null;
+        lock (S_CONTEXT_SYNC)
+        {
+            if (S_BACKENDS_BY_CONTEXT.TryGetValue(m_contextKey, out PlatformImGuiViewportBackend? registered)
+                && ReferenceEquals(registered, this))
+            {
+                S_BACKENDS_BY_CONTEXT.Remove(m_contextKey);
+            }
+        }
         m_disposed = true;
     }
 
@@ -297,8 +314,8 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
 
         _ = SDL.SetWindowPosition(window, (int)viewport->Pos.X, (int)viewport->Pos.Y);
 
-        IPlatformImGuiRenderer rendererBackend = s_activeRenderer
-            ?? throw new InvalidOperationException("The ImGui viewport renderer is unavailable.");
+        PlatformImGuiViewportBackend backend = GetCurrentBackend();
+        IPlatformImGuiRenderer rendererBackend = backend.m_renderer;
         SDLRendererPtr renderer = SDLRendererPtr.Null;
         if (!rendererBackend.supportsViewports)
         {
@@ -314,6 +331,7 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
 
         var data = new ViewportWindowData
         {
+            owner = backend,
             window = window,
             renderer = renderer,
             windowId = SDL.GetWindowID(window)
@@ -348,8 +366,8 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
         viewport->PlatformHandle = (void*)window.Handle;
         viewport->PlatformHandleRaw = (void*)window.Handle;
 
-        s_viewportsById[viewport->ID] = data;
-        s_windowToViewport[data.windowId] = viewport->ID;
+        backend.m_viewportsById[viewport->ID] = data;
+        backend.m_windowToViewport[data.windowId] = viewport->ID;
     }
 
     private static void PlatformDestroyWindowCallback(ImGuiViewport* viewport)
@@ -361,8 +379,8 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
 
         if (TryGetViewportData(viewport, out var data))
         {
-            s_viewportsById.Remove(viewport->ID);
-            s_windowToViewport.Remove(data.windowId);
+            data.owner.m_viewportsById.Remove(viewport->ID);
+            data.owner.m_windowToViewport.Remove(data.windowId);
             DestroyViewportWindow(data);
         }
 
@@ -939,9 +957,9 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
         return targetWindow;
     }
 
-    private static bool HasNoInputsViewport(uint windowId)
+    private bool HasNoInputsViewport(uint windowId)
     {
-        if (!s_windowToViewport.TryGetValue(windowId, out uint viewportId))
+        if (!m_windowToViewport.TryGetValue(windowId, out uint viewportId))
         {
             return false;
         }
@@ -958,7 +976,24 @@ internal sealed unsafe class PlatformImGuiViewportBackend : IDisposable
         }
 
         uint windowId = SDL.GetWindowID(window);
-        return windowId == SDL.GetWindowID(m_mainWindow) || s_windowToViewport.ContainsKey(windowId);
+        return windowId == SDL.GetWindowID(m_mainWindow) || m_windowToViewport.ContainsKey(windowId);
+    }
+
+    private static PlatformImGuiViewportBackend GetCurrentBackend()
+    {
+        ImGuiContextPtr context = ImGuiNative.GetCurrentContext();
+        if (context.IsNull)
+            throw new InvalidOperationException("No ImGui context is active for a viewport callback.");
+        lock (S_CONTEXT_SYNC)
+        {
+            if (S_BACKENDS_BY_CONTEXT.TryGetValue(
+                    (nuint)context.Handle,
+                    out PlatformImGuiViewportBackend? backend))
+            {
+                return backend;
+            }
+        }
+        throw new InvalidOperationException("The active ImGui context has no viewport backend.");
     }
 
     private static bool ContainsPoint(SDLWindowPtr window, Vector2 point)

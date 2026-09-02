@@ -151,7 +151,7 @@ internal sealed class EditorRenderingHostService :
     IEditorReloadTransaction IEditorReloadParticipant.Capture(AssemblyReloadContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        return new RenderingReloadTransaction(m_runtime.BeginExtensionReload());
+        return new RenderingReloadTransaction(this, m_runtime.BeginExtensionReload());
     }
 
     void IEditorReloadParticipant.RefreshDiagnostics()
@@ -181,6 +181,7 @@ internal sealed class EditorRenderingHostService :
     }
 
     private sealed class RenderingReloadTransaction(
+        EditorRenderingHostService owner,
         IRenderRuntimeReloadTransaction session) : IEditorReloadTransaction
     {
         /// <summary>
@@ -188,6 +189,7 @@ internal sealed class EditorRenderingHostService :
         /// </summary>
         public void PrepareForActivation()
         {
+            owner.ReleaseAll();
         }
 
         /// <summary>

@@ -303,6 +303,25 @@ public sealed class BgfxDeviceTests
         m_device.BeginFrame();
         m_device.EndFrame();
     }
+
+    [Fact]
+    public void SecondDeviceIsRejectedWhileTheProcessRuntimeIsOwned()
+    {
+        var options = new BgfxDeviceOptions
+        {
+            preferredBackend = GraphicsBackend.Noop,
+            backbufferWidth = 1,
+            backbufferHeight = 1,
+            verticalSync = false,
+            sRgbBackbuffer = false,
+            forceSingleThreaded = false
+        };
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => new BgfxDevice(options));
+
+        Assert.Contains("Only one BGFX device", exception.Message, StringComparison.Ordinal);
+    }
 }
 
 [CollectionDefinition(name, DisableParallelization = true)]

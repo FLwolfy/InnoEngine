@@ -2,6 +2,7 @@ using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 
 using Inno.Extensibility.Types;
 
@@ -65,6 +66,8 @@ internal sealed class SceneTypeCatalog : IDisposable
 
     internal Type Resolve(TypeRef typeRef) => m_types.Resolve(typeRef);
 
+    internal long generation => m_registry.snapshot.generation;
+
     /// <summary>
     /// Releases the resources owned by this instance.
     /// </summary>
@@ -113,6 +116,7 @@ internal sealed class SceneTypeCatalog : IDisposable
                     componentType.FullName ?? componentType.Name,
                     componentType.IsClass && !componentType.IsAbstract,
                     componentType.IsDefined(typeof(AllowMultipleComponentAttribute), inherit: true),
+                    GetBehaviorPhases(componentType),
                     assignableConcreteRuntimeTypeIds,
                     assignableConcreteRuntimeTypeIds.ToFrozenSet());
                 componentsByRuntimeId.Add(descriptor.runtimeTypeId, descriptor);
@@ -164,6 +168,39 @@ internal sealed class SceneTypeCatalog : IDisposable
         protected override void OnActivationRolledBack(SceneTypeSnapshot? previous, SceneTypeSnapshot candidate)
             => SceneStore.InvalidateAllTypeCaches();
 
+        private static GameBehaviorLifecyclePhase GetBehaviorPhases(Type componentType)
+        {
+            if (!typeof(GameBehavior).IsAssignableFrom(componentType))
+                return GameBehaviorLifecyclePhase.None;
+
+            GameBehaviorLifecyclePhase phases = GameBehaviorLifecyclePhase.None;
+            AddOverride("Awake", GameBehaviorLifecyclePhase.Awake);
+            AddOverride("Start", GameBehaviorLifecyclePhase.Start);
+            AddOverride("OnEnable", GameBehaviorLifecyclePhase.Enable);
+            AddOverride("OnDisable", GameBehaviorLifecyclePhase.Disable);
+            AddOverride("Update", GameBehaviorLifecyclePhase.Update);
+            AddOverride("FixedUpdate", GameBehaviorLifecyclePhase.FixedUpdate);
+            AddOverride("LateUpdate", GameBehaviorLifecyclePhase.LateUpdate);
+            AddOverride("OnDestroy", GameBehaviorLifecyclePhase.Destroy);
+            return phases;
+
+            void AddOverride(string callbackName, GameBehaviorLifecyclePhase phase)
+            {
+                MethodInfo? callback = componentType.GetMethod(
+                    callbackName,
+                    BindingFlags.Instance | BindingFlags.NonPublic,
+                    binder: null,
+                    Type.EmptyTypes,
+                    modifiers: null);
+                if (callback is not null &&
+                    callback.DeclaringType != typeof(GameBehavior) &&
+                    callback.GetBaseDefinition().DeclaringType == typeof(GameBehavior))
+                {
+                    phases |= phase;
+                }
+            }
+        }
+
     }
 }
 
@@ -177,11 +214,29 @@ internal sealed record SceneComponentTypeDescriptor(
     string displayName,
     bool isConcrete,
     bool allowsMultiple,
+    GameBehaviorLifecyclePhase behaviorPhases,
     int[] assignableConcreteRuntimeTypeIds,
     FrozenSet<int> assignableConcreteRuntimeTypeIdSet)
 {
     internal bool IsAssignableFrom(int concreteRuntimeTypeId)
         => assignableConcreteRuntimeTypeIdSet.Contains(concreteRuntimeTypeId);
+}
+
+[Flags]
+internal enum GameBehaviorLifecyclePhase
+{
+    None = 0,
+    Awake = 1 << 0,
+    Start = 1 << 1,
+    Enable = 1 << 2,
+    Disable = 1 << 3,
+    Update = 1 << 4,
+    FixedUpdate = 1 << 5,
+    LateUpdate = 1 << 6,
+    Destroy = 1 << 7,
+    Activation = Awake | Enable | Disable | Destroy,
+    VariableFrame = Start | Update | LateUpdate,
+    Any = Activation | VariableFrame | FixedUpdate
 }
 
 internal sealed record SceneSystemTypeDescriptor(

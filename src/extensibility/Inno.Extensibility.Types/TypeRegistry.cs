@@ -454,6 +454,8 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
             }
             if (releaseCandidate)
                 owner.ReleaseSnapshot(candidate);
+            previous = null;
+            candidate = null!;
         }
 
         /// <summary>
@@ -486,6 +488,8 @@ public abstract class TypeRegistry<TSnapshot> : IDisposable
             owner.ReleaseSnapshot(candidate);
             if (ownerWasDisposed && previous is not null)
                 owner.ReleaseSnapshot(previous);
+            previous = null;
+            candidate = null!;
         }
 
         private void EnsureNotFinished()

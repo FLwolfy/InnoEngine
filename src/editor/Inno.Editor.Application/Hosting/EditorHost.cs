@@ -41,6 +41,7 @@ internal sealed class EditorHost : IDisposable
     private readonly HashSet<uint> m_focusedWindowIds = [];
     private readonly RuntimeSession m_editSession;
     private readonly EditorAuthoringServices m_authoring;
+    private readonly RenderRuntimeLayer m_rendering;
     private readonly EditorHostLayerStack m_layers;
     private readonly EditorLayer m_editorLayer;
     private readonly EditorHostResourceStack m_resources;
@@ -58,6 +59,7 @@ internal sealed class EditorHost : IDisposable
         Sdl3PlatformWindow window,
         RuntimeSession editSession,
         EditorAuthoringServices authoring,
+        RenderRuntimeLayer rendering,
         EditorHostLayerStack layers,
         EditorLayer editorLayer,
         EditorHostResourceStack resources)
@@ -68,6 +70,7 @@ internal sealed class EditorHost : IDisposable
         m_window = window;
         m_editSession = editSession;
         m_authoring = authoring;
+        m_rendering = rendering;
         m_layers = layers;
         m_editorLayer = editorLayer;
         m_resources = resources;
@@ -291,6 +294,7 @@ internal sealed class EditorHost : IDisposable
                 window,
                 editSession,
                 authoring,
+                renderingLayer,
                 layers,
                 layer,
                 resources);
@@ -375,15 +379,18 @@ internal sealed class EditorHost : IDisposable
             if (m_frameCount == 0)
                 BootLog("About to execute first editor frame.");
 
-            m_editorLayer.isFocused = HasEditorFocus();
-            m_editorLayer.totalTime = (float)now;
-            m_authoring.Update();
-            m_editSession.Tick((float)now, delta);
-            using (m_editSession.EnterExecutionScope())
+            using (m_rendering.EnterExecutionScope())
             {
-                m_layers.Update(delta);
-                m_layers.LateUpdate(delta);
-                m_layers.RenderFrame(delta);
+                m_editorLayer.isFocused = HasEditorFocus();
+                m_editorLayer.totalTime = (float)now;
+                m_authoring.Update();
+                m_editSession.Tick((float)now, delta);
+                using (m_editSession.EnterExecutionScope())
+                {
+                    m_layers.Update(delta);
+                    m_layers.LateUpdate(delta);
+                    m_layers.RenderFrame(delta);
+                }
             }
 
             if (m_frameCount == 0)

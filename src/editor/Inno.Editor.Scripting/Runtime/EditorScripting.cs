@@ -238,6 +238,7 @@ internal sealed class EditorScripting : EditorModule, IEditorScriptCompilation
                 m_blockFollowingUpdates = true;
                 _ = m_manager.ApplyPendingReload();
                 m_activationFailure = null;
+                ScriptDiagnosticPublisher.ClearReload();
                 string completionStatus = GenerateIdeProjection()
                     ? "Script generation compiled and activated successfully."
                     : "Script generation activated, but IDE project generation failed.";
@@ -250,6 +251,7 @@ internal sealed class EditorScripting : EditorModule, IEditorScriptCompilation
                 {
                     m_blockFollowingUpdates = true;
                     m_activationFailure = null;
+                    ScriptDiagnosticPublisher.ClearReload();
                     _ = GenerateIdeProjection();
                     ticket?.MarkFailed(
                         result,
@@ -296,17 +298,9 @@ internal sealed class EditorScripting : EditorModule, IEditorScriptCompilation
         if (manager is null || !manager.AdvanceUnloadVerification(out Exception? failure))
             return;
         if (failure is not null)
-        {
             ScriptDiagnosticPublisher.PublishUnloadFailure(failure);
-            m_log.Write(
-                LogLevel.Error,
-                "Script reload committed, but retired assembly unload verification failed: {0}",
-                [failure]);
-        }
         else
-        {
             ScriptDiagnosticPublisher.ClearUnload();
-        }
         m_hideCompilationOnNextUpdate = true;
     }
 
