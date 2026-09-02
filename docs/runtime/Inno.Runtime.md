@@ -37,6 +37,7 @@ play.Tick(totalTime, deltaTime);
 | `GameRuntimeManifest` | 描述当前 Player 的应用 ID、产品名、启动 Scene、窗口、Plugin 设置贡献和冻结模块 generation。 |
 | `GameRuntimePlugin` | 保存依赖有序的中立 Plugin 设置贡献，不保存 Plugin `Type`、实例或 delegate。 |
 | `GameRuntimeModule` | 保存依赖有序的 runtime module 名称、domain 与部署 DLL 文件名，不保存运行时 `Assembly`。 |
+| `GamePresentationSettings`, `GamePresentationViewport` | 定义 Game View 与 Player 共用的参考帧、aspect-preserving 策略及确定性居中内容区域。 |
 
 ## 脚本执行上下文
 

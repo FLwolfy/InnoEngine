@@ -42,7 +42,7 @@ public enum EditorViewportNavigationMode
 }
 
 /// <summary>
-/// Declares navigation operations supported by one viewport provider.
+/// Declares navigation operations supported by one viewport interaction controller.
 /// </summary>
 [Flags]
 public enum EditorViewportNavigationCapabilities

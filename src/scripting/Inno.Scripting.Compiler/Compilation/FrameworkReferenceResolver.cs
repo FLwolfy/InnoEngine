@@ -10,18 +10,6 @@ namespace Inno.Scripting.Compiler;
 
 internal static class FrameworkReferenceResolver
 {
-    internal static IReadOnlyList<MetadataReference> CreateRuntimeReferences()
-    {
-        string? trustedPlatformAssemblies = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string;
-        if (string.IsNullOrWhiteSpace(trustedPlatformAssemblies))
-            throw new InvalidOperationException("Trusted platform assembly metadata is unavailable.");
-        return trustedPlatformAssemblies
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(static path => MetadataReference.CreateFromFile(path))
-            .ToArray();
-    }
-
     internal static IReadOnlyList<MetadataReference> CreateReferencePackReferences()
     {
         string referenceDirectory = FindReferenceDirectory();

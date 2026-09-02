@@ -55,7 +55,7 @@ internal sealed class FileBrowserTree
             m_data.GetVisibleChildren(relativePath));
         bool isDirectory = isRoot || IsDirectoryPath(m_assets.pipeline, relativePath);
         bool selected = string.Equals(m_assets.browser.GetSelectedPath(context), relativePath, StringComparison.Ordinal);
-        bool isLeaf = !isDirectory || sorted.Count == 0;
+        bool isLeaf = !isDirectory || (!isRoot && sorted.Count == 0);
         bool isCurrentDirectory = isDirectory &&
                                   string.Equals(m_assets.browser.currentDirectory, relativePath, StringComparison.Ordinal) &&
                                   (m_assets.browser.root == AssetBrowserRoot.Assets) ==
@@ -165,7 +165,7 @@ internal sealed class FileBrowserTree
             new TreeNodeOptions
             {
                 selected = false,
-                isLeaf = plugins.Length == 0
+                isLeaf = false
             });
         if (result.isClicked || result.isDoubleClicked)
         {

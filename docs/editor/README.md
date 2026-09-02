@@ -15,7 +15,7 @@ Editor 采用“被动核心 → 后端无关交互 → ImGui 表现 → 独立 
 | [Inno.Editor.Settings](Inno.Editor.Settings.md) | Editor 结构化值与强类型 Project Setting Drawer 的统一 frontend 协议。 |
 | [Inno.Editor.ImGui](Inno.Editor.ImGui.md) | ImGui runtime、pointer-free 脚本 facade、统一 Widget、Palette 与 Style metrics。 |
 | [Inno.Editor.Graph](Inno.Editor.Graph.md) | 后端无关 Graph document controller、画布状态、复制粘贴与中立 History。 |
-| [Inno.Editor.Rendering](Inno.Editor.Rendering.md) | Plugin viewport provider、通用 RenderRequest、RenderTexture 输出与 opaque ImGui texture 桥接。 |
+| [Inno.Editor.Rendering](Inno.Editor.Rendering.md) | Plugin viewport contributor、多模型 composition、通用 RenderRequest 与 opaque ImGui texture 桥接。 |
 | [Inno.Editor.Inspection](Inno.Editor.Inspection.md) | InspectionDrawer、PropertyDrawer、Registry 与 serialized property renderer。 |
 | [Inno.Editor.Scripting](Inno.Editor.Scripting.md) | Asset-backed Roslyn 编译、facade、IDE 工程与热重载。 |
 | [Inno.Editor.Exporting](Inno.Editor.Exporting.md) | File 菜单 Plugin/Game 导出、编译门禁、平台 Player 发布与原子输出。 |

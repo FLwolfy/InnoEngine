@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using Inno.Platform.Sdl3.ImGui;
 using Inno.Rendering;
@@ -72,15 +74,15 @@ public readonly record struct EditorViewportOutput
 public interface IEditorRenderingHost
 {
     /// <summary>
-    /// Submits or updates one offscreen editor viewport.
+    /// Submits or updates one composed offscreen editor viewport.
     /// </summary>
-    /// <param name="request">
-    /// Complete frame request.
+    /// <param name="composition">
+    /// Complete ordered model composition for the current frame.
     /// </param>
     /// <returns>
     /// The current presentation output, which can be warming up for one frame.
     /// </returns>
-    EditorViewportOutput Submit(EditorViewportRequest request);
+    EditorViewportOutput Submit(EditorViewportComposition composition);
 
     /// <summary>
     /// Draws a ready viewport output inside the current ImGui window.
@@ -108,12 +110,69 @@ public interface IEditorRenderingHost
 }
 
 /// <summary>
-/// Describes one model-neutral offscreen request prepared by an Editor viewport provider.
+/// Describes one model-neutral layer in an Editor viewport composition.
 /// </summary>
-public sealed class EditorViewportRequest
+public sealed class EditorViewportLayer
 {
     /// <summary>
-    /// Creates one immutable model-neutral viewport request.
+    /// Creates one immutable model-neutral viewport layer.
+    /// </summary>
+    /// <param name="contributorId">
+    /// Stable identity of the rendering-model contributor that produced the layer.
+    /// </param>
+    /// <param name="pipeline">
+    /// Contributor-selected pipeline, or null for the project default.
+    /// </param>
+    /// <param name="data">
+    /// Contributor-defined frame-only data.
+    /// </param>
+    /// <param name="order">
+    /// Ascending model-composition order.
+    /// </param>
+    public EditorViewportLayer(
+        string contributorId,
+        RenderPipelineAsset? pipeline,
+        RenderFrameData data,
+        int order)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(contributorId);
+        ArgumentNullException.ThrowIfNull(data);
+        this.contributorId = contributorId;
+        this.pipeline = pipeline;
+        this.data = data;
+        this.order = order;
+    }
+
+    /// <summary>
+    /// Gets the stable identity of the rendering-model contributor.
+    /// </summary>
+    public string contributorId { get; }
+
+    /// <summary>
+    /// Gets the contributor-selected pipeline, or null for the project default.
+    /// </summary>
+    public RenderPipelineAsset? pipeline { get; }
+
+    /// <summary>
+    /// Gets contributor-defined frame-only data.
+    /// </summary>
+    public RenderFrameData data { get; }
+
+    /// <summary>
+    /// Gets ascending model-composition order.
+    /// </summary>
+    public int order { get; }
+}
+
+/// <summary>
+/// Describes a complete ordered set of rendering-model layers targeting one Editor viewport.
+/// </summary>
+public sealed class EditorViewportComposition
+{
+    private readonly IReadOnlyList<EditorViewportLayer> m_layers;
+
+    /// <summary>
+    /// Creates an immutable viewport composition.
     /// </summary>
     /// <param name="viewportId">
     /// Stable panel viewport identity.
@@ -124,38 +183,41 @@ public sealed class EditorViewportRequest
     /// <param name="pixelHeight">
     /// Positive target height.
     /// </param>
-    /// <param name="pipeline">
-    /// Provider-selected pipeline, or null for the project default.
-    /// </param>
-    /// <param name="data">
-    /// Provider-defined frame-only data.
-    /// </param>
     /// <param name="targetFormat">
-    /// Provider-selected presentation target format.
+    /// Shared presentation target format required by every layer.
     /// </param>
-    /// <param name="priority">
-    /// Ascending render scheduling priority.
+    /// <param name="layers">
+    /// Ordered non-empty rendering-model layer collection.
     /// </param>
-    public EditorViewportRequest(
+    public EditorViewportComposition(
         string viewportId,
         int pixelWidth,
         int pixelHeight,
-        RenderPipelineAsset? pipeline,
-        RenderFrameData data,
-        RenderTextureFormat targetFormat = RenderTextureFormat.RGBA8Srgb,
-        int priority = 0)
+        RenderTextureFormat targetFormat,
+        IEnumerable<EditorViewportLayer> layers)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(viewportId);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelWidth);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelHeight);
-        ArgumentNullException.ThrowIfNull(data);
+        ArgumentNullException.ThrowIfNull(layers);
+        EditorViewportLayer[] materializedLayers = layers.ToArray();
+        if (materializedLayers.Length == 0)
+            throw new ArgumentException("A viewport composition requires at least one model layer.", nameof(layers));
+        if (materializedLayers.Any(static layer => layer is null))
+            throw new ArgumentException("A viewport composition cannot contain null model layers.", nameof(layers));
+        if (materializedLayers.Select(static layer => layer.contributorId).Distinct(StringComparer.Ordinal).Count()
+            != materializedLayers.Length)
+        {
+            throw new ArgumentException("Viewport contributor identities must be unique.", nameof(layers));
+        }
+        m_layers = Array.AsReadOnly(materializedLayers
+            .OrderBy(static layer => layer.order)
+            .ThenBy(static layer => layer.contributorId, StringComparer.Ordinal)
+            .ToArray());
         this.viewportId = viewportId;
         this.pixelWidth = pixelWidth;
         this.pixelHeight = pixelHeight;
-        this.pipeline = pipeline;
-        this.data = data;
         this.targetFormat = targetFormat;
-        this.priority = priority;
     }
 
     /// <summary>
@@ -174,22 +236,12 @@ public sealed class EditorViewportRequest
     public int pixelHeight { get; }
 
     /// <summary>
-    /// Gets the provider-selected pipeline, or null for the project default.
-    /// </summary>
-    public RenderPipelineAsset? pipeline { get; }
-
-    /// <summary>
-    /// Gets provider-defined frame-only data.
-    /// </summary>
-    public RenderFrameData data { get; }
-
-    /// <summary>
-    /// Gets the provider-selected presentation target format.
+    /// Gets the shared presentation target format.
     /// </summary>
     public RenderTextureFormat targetFormat { get; }
 
     /// <summary>
-    /// Gets ascending render scheduling priority.
+    /// Gets the ordered rendering-model layers.
     /// </summary>
-    public int priority { get; }
+    public IReadOnlyList<EditorViewportLayer> layers => m_layers;
 }

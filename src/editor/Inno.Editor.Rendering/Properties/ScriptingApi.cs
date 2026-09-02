@@ -7,7 +7,7 @@ using Inno.Editor.Rendering;
     ScriptingApiScope.Editor)]
 
 [assembly: ScriptingApiExport(typeof(EditorViewportKindId), ScriptingApiScope.Editor)]
-[assembly: ScriptingApiExport(typeof(EditorViewportProviderExtensionAttribute), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorViewportContributorExtensionAttribute), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorViewportContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorViewportProjection), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorViewportNavigationMode), ScriptingApiScope.Editor)]
@@ -19,5 +19,5 @@ using Inno.Editor.Rendering;
 [assembly: ScriptingApiExport(typeof(EditorViewportPresentation), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorViewportManipulationSpace), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorViewportPointerContext), ScriptingApiScope.Editor)]
-[assembly: ScriptingApiExport(typeof(EditorViewportSubmission), ScriptingApiScope.Editor)]
-[assembly: ScriptingApiExport(typeof(EditorViewportProvider), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorViewportContribution), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorViewportContributor), ScriptingApiScope.Editor)]

@@ -44,50 +44,63 @@ public readonly record struct EditorViewportKindId
 }
 
 /// <summary>
-/// Marks a reloadable Plugin adapter that can build one kind of Editor viewport.
+/// Marks a reloadable rendering-model contributor for one Editor viewport purpose.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-public sealed class EditorViewportProviderExtensionAttribute : Attribute
+public sealed class EditorViewportContributorExtensionAttribute : Attribute
 {
     /// <summary>
-    /// Creates a viewport provider declaration.
+    /// Creates a viewport contributor declaration.
     /// </summary>
     /// <param name="id">
-    /// Globally stable provider identity.
+    /// Globally stable contributor identity.
     /// </param>
     /// <param name="kind">
-    /// Open viewport purpose handled by the provider.
+    /// Open viewport purpose handled by the contributor.
     /// </param>
-    /// <param name="priority">
-    /// Selection priority when several providers handle the same purpose.
+    /// <param name="order">
+    /// Ascending model-composition order within the viewport.
     /// </param>
-    public EditorViewportProviderExtensionAttribute(string id, string kind, int priority = 0)
+    /// <param name="controllerPriority">
+    /// Priority used to select the contributor that owns navigation, tools, and pointer interaction.
+    /// </param>
+    public EditorViewportContributorExtensionAttribute(
+        string id,
+        string kind,
+        int order = 0,
+        int controllerPriority = 0)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         ArgumentException.ThrowIfNullOrWhiteSpace(kind);
         this.id = id.Trim();
         this.kind = new EditorViewportKindId(kind);
-        this.priority = priority;
+        this.order = order;
+        this.controllerPriority = controllerPriority;
     }
 
     /// <summary>
-    /// Gets the globally stable provider identity.
+    /// Gets the globally stable contributor identity.
     /// </summary>
     public string id { get; }
 
     /// <summary>
-    /// Gets the open viewport purpose handled by the provider.
+    /// Gets the open viewport purpose handled by the contributor.
     /// </summary>
     public EditorViewportKindId kind { get; }
 
     /// <summary>
-    /// Gets provider selection priority.
+    /// Gets ascending model-composition order.
     /// </summary>
-    public int priority { get; }
+    public int order { get; }
+
+    /// <summary>
+    /// Gets the priority used to select the viewport interaction controller.
+    /// </summary>
+    public int controllerPriority { get; }
 }
 
 /// <summary>
-/// Supplies frame-only Editor interaction and output dimensions to a provider.
+/// Supplies frame-only Editor interaction and output dimensions to a contributor.
 /// </summary>
 public sealed class EditorViewportContext
 {
@@ -144,7 +157,7 @@ public sealed class EditorViewportContext
     public int pixelHeight { get; }
 
     /// <summary>
-    /// Gets host-owned neutral navigation state that the provider can map to its camera model.
+    /// Gets host-owned neutral navigation state that the selected controller can map to its camera model.
     /// </summary>
     public EditorViewportNavigationState navigation { get; }
 
@@ -183,7 +196,7 @@ public readonly record struct EditorViewportPresentation
 
 /// <summary>
 /// Describes the exact backend-neutral view and projection used to draw a viewport so host tools can manipulate
-/// selected scene transforms without knowing the provider's camera model.
+/// selected scene transforms without knowing the controller's camera model.
 /// </summary>
 public readonly record struct EditorViewportManipulationSpace
 {
@@ -226,39 +239,34 @@ public readonly record struct EditorViewportManipulationSpace
 }
 
 /// <summary>
-/// Returns provider-selected pipeline and frame data without exposing a GPU backend.
+/// Returns one rendering-model contribution without exposing a GPU backend.
 /// </summary>
-public sealed class EditorViewportSubmission
+public sealed class EditorViewportContribution
 {
     /// <summary>
-    /// Creates a viewport submission.
+    /// Creates a viewport model contribution.
     /// </summary>
     /// <param name="data">
     /// Pipeline-defined frame-only data.
     /// </param>
     /// <param name="pipeline">
-    /// Provider-selected pipeline, or null for the project default.
+    /// Contributor-selected pipeline, or null for the project default.
     /// </param>
     /// <param name="targetFormat">
     /// Presentation target format expected by the pipeline.
     /// </param>
-    /// <param name="priority">
-    /// Ascending render scheduling priority.
-    /// </param>
     /// <param name="manipulationSpace">
     /// Optional exact view/projection contract for host-owned transform manipulation tools.
     /// </param>
-    public EditorViewportSubmission(
+    public EditorViewportContribution(
         RenderFrameData data,
         RenderPipelineAsset? pipeline = null,
         RenderTextureFormat targetFormat = RenderTextureFormat.RGBA8Srgb,
-        int priority = 0,
         EditorViewportManipulationSpace? manipulationSpace = null)
     {
         this.data = data ?? throw new ArgumentNullException(nameof(data));
         this.pipeline = pipeline;
         this.targetFormat = targetFormat;
-        this.priority = priority;
         this.manipulationSpace = manipulationSpace;
     }
 
@@ -276,11 +284,6 @@ public sealed class EditorViewportSubmission
     /// Gets the presentation target format expected by the pipeline.
     /// </summary>
     public RenderTextureFormat targetFormat { get; }
-
-    /// <summary>
-    /// Gets ascending render scheduling priority.
-    /// </summary>
-    public int priority { get; }
 
     /// <summary>
     /// Gets the optional exact view/projection contract used by host-owned transform manipulation tools.
@@ -323,16 +326,27 @@ public sealed class EditorViewportPointerContext
 }
 
 /// <summary>
-/// Builds rendering-model-specific Editor requests while the host owns targets and presentation.
+/// Contributes one rendering model while the host owns viewport composition, targets, and presentation.
 /// </summary>
-public abstract class EditorViewportProvider
+public abstract class EditorViewportContributor
 {
     /// <summary>
-    /// Creates a parameterless reloadable viewport provider.
+    /// Creates a parameterless reloadable viewport contributor.
     /// </summary>
-    protected EditorViewportProvider()
+    protected EditorViewportContributor()
     {
     }
+
+    /// <summary>
+    /// Determines whether this rendering model participates in the supplied viewport content.
+    /// </summary>
+    /// <param name="context">
+    /// Frame-only Editor, navigation, content, and viewport context.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when this contributor can build a valid model contribution.
+    /// </returns>
+    public abstract bool CanContribute(EditorViewportContext context);
 
     /// <summary>
     /// Configures neutral host navigation before input is processed and a request is built.
@@ -341,24 +355,24 @@ public abstract class EditorViewportProvider
     /// Frame-only Editor, navigation, content, and viewport context.
     /// </param>
     /// <returns>
-    /// The provider's current navigation capabilities and optional selection focus bound.
+    /// The controller's current navigation capabilities and optional selection focus bound.
     /// </returns>
     public virtual EditorViewportNavigationProfile ConfigureNavigation(EditorViewportContext context)
         => EditorViewportNavigationProfile.disabled;
 
     /// <summary>
-    /// Builds one model-neutral render submission for the current frame.
+    /// Builds one model-neutral render contribution for the current frame.
     /// </summary>
     /// <param name="context">
     /// Frame-only Editor and viewport context.
     /// </param>
     /// <returns>
-    /// Provider-selected pipeline and frame data.
+    /// Contributor-selected pipeline and frame data.
     /// </returns>
-    public abstract EditorViewportSubmission Build(EditorViewportContext context);
+    public abstract EditorViewportContribution Build(EditorViewportContext context);
 
     /// <summary>
-    /// Draws optional provider-specific toolbar controls.
+    /// Draws optional controller-specific toolbar controls when this contributor owns viewport interaction.
     /// </summary>
     /// <param name="context">
     /// Frame-only Editor and viewport context.
@@ -368,7 +382,7 @@ public abstract class EditorViewportProvider
     }
 
     /// <summary>
-    /// Handles one pointer click after the viewport image has been presented.
+    /// Handles one pointer click when this contributor owns viewport interaction.
     /// </summary>
     /// <param name="context">
     /// Normalized frame-only pointer context.

@@ -57,6 +57,9 @@ public sealed class RenderRequestProviderContext
     /// <param name="primaryPresentationSize">
     /// Current primary presentation extent in physical pixels.
     /// </param>
+    /// <param name="primaryPresentationViewport">
+    /// Host-selected content region within the primary presentation surface.
+    /// </param>
     /// <param name="frameIndex">
     /// Monotonic render frame index.
     /// </param>
@@ -68,6 +71,7 @@ public sealed class RenderRequestProviderContext
         RenderContentScope content,
         GraphicsCapabilities capabilities,
         RenderPresentationSize primaryPresentationSize,
+        RenderViewport primaryPresentationViewport,
         ulong frameIndex,
         float deltaTime)
     {
@@ -75,6 +79,14 @@ public sealed class RenderRequestProviderContext
         this.content = content ?? throw new ArgumentNullException(nameof(content));
         this.capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
         this.primaryPresentationSize = primaryPresentationSize;
+        if ((long)primaryPresentationViewport.x + primaryPresentationViewport.width > primaryPresentationSize.width
+            || (long)primaryPresentationViewport.y + primaryPresentationViewport.height > primaryPresentationSize.height)
+        {
+            throw new ArgumentException(
+                "The primary presentation viewport must fit inside the primary presentation surface.",
+                nameof(primaryPresentationViewport));
+        }
+        this.primaryPresentationViewport = primaryPresentationViewport;
         this.frameIndex = frameIndex;
         this.deltaTime = deltaTime;
     }
@@ -98,6 +110,11 @@ public sealed class RenderRequestProviderContext
     /// Gets the current primary presentation extent in physical pixels.
     /// </summary>
     public RenderPresentationSize primaryPresentationSize { get; }
+
+    /// <summary>
+    /// Gets the host-selected content region within the primary presentation surface.
+    /// </summary>
+    public RenderViewport primaryPresentationViewport { get; }
 
     /// <summary>
     /// Gets the monotonic render frame index.

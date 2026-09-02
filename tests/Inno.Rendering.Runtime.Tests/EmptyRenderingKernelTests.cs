@@ -66,6 +66,7 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
         TexturePrewarmPipeline.texture = null;
         PendingShaderPipeline.Reset();
         ReadbackPipeline.Reset();
+        PresentationPipeline.Reset();
     }
 
     public void Dispose()
@@ -284,6 +285,35 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
     }
 
     [Fact]
+    public void PrimaryPresentationViewportIsSharedAndLetterboxSurfaceIsCleared()
+    {
+        IRenderDevice device = TestDeviceProxy.Create(out TestDeviceProxy proxy);
+        proxy.presentationSize = new RenderPresentationSize(1000, 1000);
+        TestRequestProvider.enabled = true;
+        var runtime = new RenderRuntimeLayer(
+            m_types,
+            device,
+            new TestDiagnosticSink(),
+            primaryPresentationViewportProvider: static size => new RenderViewport(
+                0,
+                (size.height - 562) / 2,
+                size.width,
+                562));
+        runtime.OnAttach();
+
+        runtime.OnBeforeRender(0f);
+        runtime.OnRender(0f);
+        runtime.OnAfterRender(0f);
+
+        Assert.Equal(new RenderViewport(0, 219, 1000, 562), TestRequestProvider.lastPresentationViewport);
+        CompiledRenderPass pass = Assert.Single(Assert.IsType<CompiledRenderGraph>(proxy.lastGraph).passes);
+        Assert.Equal("Primary Presentation Background", pass.name);
+        Assert.True(pass.clearsPresentationTarget);
+        Assert.Equal(new RenderClearColor(0f, 0f, 0f, 1f), pass.presentationClearColor);
+        runtime.OnDetach();
+    }
+
+    [Fact]
     public void MultipleRequestsAndContributorsCompileAndExecuteAsOneFrameGraph()
     {
         IRenderDevice device = TestDeviceProxy.Create(out TestDeviceProxy proxy);
@@ -307,6 +337,78 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
             "Contributor[0] SideEffectContributor/Overlay"
         ];
         Assert.Equal(expectedNames, names);
+        runtime.OnDetach();
+    }
+
+    [Fact]
+    public void OverlappingRequestsPreserveEarlierPresentationLayersInSchedulingOrder()
+    {
+        IRenderDevice device = TestDeviceProxy.Create(out TestDeviceProxy proxy);
+        var asset = new RenderPipelineAsset { pipelineTypeId = PresentationPipeline.extensionId };
+        var runtime = new RenderRuntimeLayer(m_types, device, new TestDiagnosticSink());
+        runtime.Submit(CreateRequest("Overlay", asset, priority: 100));
+        runtime.Submit(CreateRequest("Base", asset, priority: 0));
+
+        runtime.OnBeforeRender(0f);
+        runtime.OnAfterRender(0f);
+
+        Assert.Equal(
+            new[]
+            {
+                new PresentationObservation("Base", false),
+                new PresentationObservation("Overlay", true)
+            },
+            PresentationPipeline.observations);
+        Assert.Equal(1, proxy.executeCount);
+        runtime.OnDetach();
+    }
+
+    [Fact]
+    public void DisjointViewportsCanInitializeTheSamePresentationTargetIndependently()
+    {
+        IRenderDevice device = TestDeviceProxy.Create(out _);
+        var asset = new RenderPipelineAsset { pipelineTypeId = PresentationPipeline.extensionId };
+        var runtime = new RenderRuntimeLayer(m_types, device, new TestDiagnosticSink());
+        runtime.Submit(new RenderRequest(
+            "Left",
+            RenderTarget.backbuffer,
+            new RenderViewport(0, 0, 32, 64),
+            asset));
+        runtime.Submit(new RenderRequest(
+            "Right",
+            RenderTarget.backbuffer,
+            new RenderViewport(32, 0, 32, 64),
+            asset));
+
+        runtime.OnBeforeRender(0f);
+        runtime.OnAfterRender(0f);
+
+        Assert.Equal(
+            new[]
+            {
+                new PresentationObservation("Left", false),
+                new PresentationObservation("Right", false)
+            },
+            PresentationPipeline.observations);
+        runtime.OnDetach();
+    }
+
+    [Fact]
+    public void FailedRequestDoesNotClaimThePresentationTarget()
+    {
+        IRenderDevice device = TestDeviceProxy.Create(out _);
+        var failed = new RenderPipelineAsset { pipelineTypeId = ThrowingPipeline.extensionId };
+        var valid = new RenderPipelineAsset { pipelineTypeId = PresentationPipeline.extensionId };
+        var runtime = new RenderRuntimeLayer(m_types, device, new TestDiagnosticSink());
+        runtime.Submit(CreateRequest("Failed", failed, priority: 0));
+        runtime.Submit(CreateRequest("Recovery", valid, priority: 100));
+
+        runtime.OnBeforeRender(0f);
+        runtime.OnAfterRender(0f);
+
+        Assert.Equal(
+            new[] { new PresentationObservation("Recovery", false) },
+            PresentationPipeline.observations);
         runtime.OnDetach();
     }
 
@@ -735,6 +837,30 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
     }
 
     [RenderPipelineExtension(extensionId)]
+    private sealed class PresentationPipeline : RenderPipeline
+    {
+        internal const string extensionId = "tests.runtime.presentation";
+
+        internal static List<PresentationObservation> observations { get; } = [];
+
+        public override void Build(RenderPipelineContext context)
+        {
+            observations.Add(new PresentationObservation(
+                context.request.name,
+                context.preservePresentationTarget));
+            context.graph
+                .AddRasterPass(
+                    "Presentation",
+                    new RenderPhaseId("tests.runtime.presentation"),
+                    0,
+                    static (_, _) => { })
+                .HasSideEffect();
+        }
+
+        internal static void Reset() => observations.Clear();
+    }
+
+    [RenderPipelineExtension(extensionId)]
     private sealed class ThrowingPipeline : RenderPipeline
     {
         internal const string extensionId = "tests.runtime.throwing";
@@ -751,6 +877,10 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
             throw new InvalidOperationException("Expected request failure.");
         }
     }
+
+    private readonly record struct PresentationObservation(
+        string requestName,
+        bool preserveTarget);
 
     [RenderPipelineExtension(extensionId)]
     private sealed class UploadPipeline : RenderPipeline
@@ -892,6 +1022,7 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
         internal static RenderPipelineAsset? pipeline { get; set; }
         internal static int submitCount { get; private set; }
         internal static RenderContentScope? lastContent { get; private set; }
+        internal static RenderViewport lastPresentationViewport { get; private set; }
 
         public override void Submit(RenderRequestProviderContext context)
         {
@@ -899,6 +1030,7 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
                 return;
             submitCount++;
             lastContent = context.content;
+            lastPresentationViewport = context.primaryPresentationViewport;
             if (pipeline is null)
                 return;
             context.requests.Submit(CreateRequest(
@@ -912,6 +1044,7 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
             pipeline = null;
             submitCount = 0;
             lastContent = null;
+            lastPresentationViewport = default;
         }
     }
 
@@ -974,6 +1107,8 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
 
         public GraphicsCapabilities capabilities => S_CAPABILITIES;
         public uint generation => 1;
+        public RenderPresentationSize presentationSize { get; set; } = new(1, 1);
+        public RenderPresentationSize primaryPresentationSize => presentationSize;
 
         public void BeginFrame()
         {

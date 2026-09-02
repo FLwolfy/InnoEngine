@@ -71,6 +71,7 @@
 | ARCH-053 | P1 | 已关闭 | Inno.Rendering.2D Plugin | 5 |
 | ARCH-054 | P0 | 已关闭 | Build.Cli / Build.SupportPacks / Assets.Pipeline | 6 |
 | ARCH-055 | P0 | 已关闭 | Player / Runtime Module Generation | 6 |
+| ARCH-056 | P0 | 已关闭 | Editor.Rendering / Rendering.Runtime / Rendering Plugins | 5、7 |
 
 ## 逐项证据、根因与关闭标准
 
@@ -361,7 +362,7 @@
 - 根因与影响：`RenderRuntimeReloadSession` 对每个已跟踪 `RenderPipelineAsset` 无条件调用严格的 generation constructor。候选 TypeCache 已移除 Plugin Pipeline/Feature Stable ID 时，缺席被错误地转成异常，统一 Editor reload coordinator 因而回滚 Assembly、TypeCache、Scene、Rendering 和 Plugin generation。运行时行为与冷启动不一致，collectible ALC 仍被旧 Pipeline/Feature/Request Provider 固定。
 - 当前实现：Rendering registry 在实例化前分别验证资产结构与扩展可用性。空 Stable ID、重复 Feature、构造或配置失败仍是拒绝候选的真实错误；候选目录中不存在被引用 Pipeline/Feature Stable ID 则产生合法 unavailable generation。事务会原子发布空 generation、空 Request Provider generation，并在提交后释放旧实例；被跟踪但当前 unavailable 的资产仍参与后续候选准备，同 Stable ID 回归时在事务内恢复。Scene 与 Editor Provider registry 因同一 TypeCache commit 同步进入 Missing/无 Provider 状态。
 - 测试：`RemovingAndRestoringPluginRenderingCommitsTheSameUnavailableStateAsColdStart` 使用真实 collectible Plugin module，同时覆盖 Plugin-owned Pipeline 缺席和 host Pipeline 引用 Plugin-owned Feature 缺席；验证卸载不产生 `RENDER_EXTENSION_RELOAD_REJECTED`、不可用期间不再执行旧 Graph、恢复后重新执行。`RemovedOrBrokenUpdatedPluginCommitsUnavailableGenerationAndRecovers` 与 `RemovingAndRestoringAPluginGenerationPreservesItsComponentAsMissingState` 覆盖同一事务中的代码 closure 退休、Scene Missing 和 Stable ID 恢复。
-- 关闭标准：运行中移除 Rendering Plugin 与缺失 Plugin 后冷启动得到相同可观察状态；旧 Pipeline、Feature、Request Provider、Viewport Provider 和 Scene runtime 类型全部退休；相同 Stable ID 回归后自动恢复。已满足。
+- 关闭标准：运行中移除 Rendering Plugin 与缺失 Plugin 后冷启动得到相同可观察状态；旧 Pipeline、Feature、Request Provider、Viewport Contributor 和 Scene runtime 类型全部退休；相同 Stable ID 回归后自动恢复。已满足。
 
 ### ARCH-037：Play Session 与 Inspector 锁定对象固定退休 ALC
 
@@ -515,6 +516,14 @@
 - 测试：Build tests 验证 RuntimeScripts module/domain/main assembly；Player E2E 要求 `INNO-SMOKE frames=3` render-loop 证据；真实项目重新生成 Support Pack 和 `.app` 后报告 `frames=120 views=1 draws=1`，出现 2D uniform、vertex layout、shader program 与 texture 创建并正常 shutdown。
 - 关闭标准：导出 Player 的插件组件、脚本类型和渲染扩展属于同一显式 active generation；部署 DLL 与清单不一致时启动即失败；有效 2D 场景不再停留在后端空帧颜色。已满足。
 
+### ARCH-056：Viewport 单模型排他使 2D 与未来 3D 无法同屏组合
+
+- 复现证据：旧 Editor registry 对一个 viewport kind 只选取一个 Provider；2D Provider 又要求 content scope 中每个 Scene 都存在 `Rendering2DSceneSystem`。加入未来 3D Provider 后两者会争夺 Scene/Game View，纯 3D Scene 还会让整个 2D scope 失败。
+- 根因与影响：Viewport 用途、渲染模型、交互控制者和 presentation target 所有权被压缩成一个对象。架构只能在 2D/3D 中二选一，无法表达 3D 底层、2D overlay、混合 Scene 或同一 scope 中不同模型 Scene。
+- 当前实现：用 Attribute 驱动的 `EditorViewportContributor` generation 取代单 Provider。Host 收集所有适用 Contributor，按 order/Stable ID 冻结 `EditorViewportComposition`，每层提交到同一离屏 target；`controllerPriority` 独立选择唯一导航/工具控制者。Runtime 仅在成功建图后记录 target/viewport 覆盖区，后续重叠请求通过 `RenderPipelineContext.preservePresentationTarget` 使用 Load/Preserve；不相交区域仍可独立初始化。2D scope 跳过未选择 2D system 的 Scene，并以 order 1000 作为可叠加模型层。
+- 测试：`OverlappingRequestsPreserveEarlierPresentationLayersInSchedulingOrder`、`DisjointViewportsCanInitializeTheSamePresentationTargetIndependently`、`FailedRequestDoesNotClaimThePresentationTarget` 覆盖运行时 presentation 所有权；`CompositionCanonicalizesModelLayersByOrderAndStableIdentity`、`CompositionSnapshotsTheCallerCollection`、`CompositionRejectsEmptyNullAndDuplicateModelLayers` 覆盖 Editor composition 稳定性；真实官方 2D Plugin 编译与 Metal Editor smoke 验证 Contributor 发现、target 提交和现有 2D 行为。
+- 关闭标准：同一 viewport kind 可同时接受多个独立渲染模型；纯 3D、纯 2D 和选择多个模型的 Scene 可共存；失败层不破坏健康层；Editor/Rendering Core 不引入 2D/3D 世界观；旧 Provider API、转发和兼容包装为零。已满足。
+
 ## 2026-09-02 Viewport、Inspector、2D Settings 与 Game Export 验收
 
 - `InnoEngine.sln` 完整构建：0 warnings、0 errors。
@@ -590,6 +599,16 @@ Windows x64 的最后一条 E2E 必须在 Windows runner 执行；CI 定义位�
 - `PluginRemovalUnloadsTheCommittedMissingGenerationWithoutASecondReload` 验证一次 refresh/compile/apply 后场景进入 Missing、活动依赖图不再包含被移除 Plugin，旧 Component/Type 与三层 collectible ALC closure 均可回收。
 - 真实 InnoProject Plugin 编译产物的 `diagnostics.cache` 仅包含 8-byte 空诊断文档，不再产生四条 `CS8631`。
 - macOS ARM64 Debug Editor 完成 600-frame baseline、运行中移除 Plugin 的 1800-frame smoke 以及恢复后的 600-frame smoke；三次均 exit code 0、最新 session log 为 0 byte、BGFX 正常 shutdown，无 `INNO-ALC-UNLOAD` 或重复普通 Error。
+
+## 2026-09-02 多渲染模型 Viewport Composition 验收记录
+
+- `Inno.Tooling.Architecture` 通过；`InnoEngine.sln` Debug 全量构建 0 warnings、0 errors；`git diff --check` 通过。
+- 全仓测试：606 passed、0 failed、0 skipped；其中 Runtime 三项测试覆盖重叠层、非重叠区域和失败请求，Editor 三项测试覆盖稳定排序、调用方集合快照与非法 composition 拒绝。
+- 删除派生 Plugin source cache 后启动真实 `InnoProject`，只生成一个当前 content-hash cache；新的 Game/Scene Contributor 均进入缓存，最新三层脚本诊断文档均为空。
+- `InnoProject.sln` 只包含 `Inno.GameScripts` 与 `Inno.EditorScripts`，构建 0 warnings、0 errors；Project 根目录不生成 Plugin `.csproj`。
+- macOS ARM64 Metal Editor 运行 120 frames，完成两个离屏 target、首帧和 BGFX shutdown，进程 exit code 0；本次启动区段无 reload、RefCount、Fatal 或未处理异常。
+- 从当前源码重新生成 macOS ARM64 Support Pack；Player E2E 完成确定性 Content、forbidden closure、原子提交和真实 3-frame Metal 进程验证。
+- Windows x64 仍按 ARCH-030 由 Windows CI runner 做平台进程验收；本次中立 composition 契约、构建和测试不包含平台分支。
 
 ## 台账维护规则
 

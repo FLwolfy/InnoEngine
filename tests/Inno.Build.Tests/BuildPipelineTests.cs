@@ -505,6 +505,12 @@ public sealed class BuildPipelineTests : IDisposable
     {
         string directory = Path.Combine(m_supportPackRoot, target.value);
         Directory.CreateDirectory(directory);
+        foreach (string assembly in Directory
+                     .EnumerateFiles(AppContext.BaseDirectory, "Inno.*.dll", SearchOption.TopDirectoryOnly)
+                     .Where(static path => !IsAuthoringAssembly(Path.GetFileName(path))))
+        {
+            File.Copy(assembly, Path.Combine(directory, Path.GetFileName(assembly)));
+        }
         File.WriteAllBytes(Path.Combine(directory, executable), [0x49, 0x4E, 0x4E, 0x4F]);
         string native = Path.Combine(directory, "native");
         Directory.CreateDirectory(native);
@@ -514,6 +520,13 @@ public sealed class BuildPipelineTests : IDisposable
         foreach (string file in required)
             File.WriteAllBytes(Path.Combine(native, file), [0x49, 0x4E, 0x4E, 0x4F]);
     }
+
+    private static bool IsAuthoringAssembly(string name)
+        => name.Contains("Inno.Editor", StringComparison.OrdinalIgnoreCase)
+           || name.Contains("Inno.Build", StringComparison.OrdinalIgnoreCase)
+           || name.Contains("Inno.Scripting.Compiler", StringComparison.OrdinalIgnoreCase)
+           || name.Contains("Inno.Assets.Pipeline", StringComparison.OrdinalIgnoreCase)
+           || name.Contains("Inno.Plugins.Authoring", StringComparison.OrdinalIgnoreCase);
 
     private sealed class BlockingBuildTarget : IGameBuildTarget
     {

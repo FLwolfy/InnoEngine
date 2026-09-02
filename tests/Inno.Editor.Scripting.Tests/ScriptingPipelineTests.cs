@@ -135,6 +135,30 @@ public sealed class ScriptingPipelineTests : IDisposable
     }
 
     [Fact]
+    public void RuntimeDeploymentBindsToTargetPlayerAssembliesAndInvalidatesItsCache()
+    {
+        m_fixture.Write("TargetBoundBehavior.cs", """
+            using InnoEngine.Scene;
+
+            public sealed class TargetBoundBehavior : GameBehavior
+            {
+            }
+            """);
+        string targetRuntime = m_fixture.CreateDeploymentRuntime();
+
+        ScriptCompilationResult first = m_fixture.CompileRuntimeDeployment(targetRuntime);
+
+        Assert.True(first.success, FormatDiagnostics(first));
+        File.Delete(Path.Combine(targetRuntime, "Inno.Scene.dll"));
+
+        ScriptCompilationResult second = m_fixture.CompileRuntimeDeployment(targetRuntime);
+
+        Assert.False(second.success);
+        Assert.Contains(second.diagnostics, static diagnostic =>
+            diagnostic.severity == ScriptDiagnosticSeverity.Error);
+    }
+
+    [Fact]
     public void CompilationWideUsingDirectiveIsRejected()
     {
         m_fixture.Write("ForbiddenUsing.cs", """
@@ -1037,11 +1061,31 @@ internal sealed class ScriptingFixture : IDisposable
     }
 
     internal ScriptCompilationResult CompileRuntimeDeployment(
+        string? targetRuntimeDirectory = null,
         IProgress<ScriptCompilationProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
         Rescan();
-        return compiler.CompileRuntimeDeploymentAsync(progress, cancellationToken).GetAwaiter().GetResult();
+        return compiler.CompileRuntimeDeploymentAsync(
+                targetRuntimeDirectory ?? AppContext.BaseDirectory,
+                progress,
+                cancellationToken)
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    internal string CreateDeploymentRuntime()
+    {
+        string directory = Path.Combine(projectRoot, "TargetRuntime");
+        Directory.CreateDirectory(directory);
+        foreach (string source in Directory.EnumerateFiles(
+                     AppContext.BaseDirectory,
+                     "Inno.*.dll",
+                     SearchOption.TopDirectoryOnly))
+        {
+            File.Copy(source, Path.Combine(directory, Path.GetFileName(source)), overwrite: true);
+        }
+        return directory;
     }
 
     internal ScriptReloadHost CreateReloadHost(EditorReloadCoordinator? reloads = null)

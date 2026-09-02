@@ -113,7 +113,7 @@ internal sealed class SceneViewPanel : EditorPanel
         {
             DrawUnavailable(
                 available,
-                m_rendering.GetProviderError(S_KIND) ?? "No active rendering provider for Scene View.");
+                m_rendering.GetCompositionError(C_VIEWPORT_ID) ?? "No rendering model contributes to Scene View.");
             _ = DrawManipulationToolbar(toolbar);
             return;
         }

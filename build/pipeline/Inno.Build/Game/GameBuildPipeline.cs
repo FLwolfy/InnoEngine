@@ -93,6 +93,7 @@ internal sealed class GameBuildPipeline
                 .AsTask();
 
             ScriptCompilationResult compilation = await m_compiler.CompileRuntimeDeploymentAsync(
+                    supportPack,
                     new ScriptBuildProgress(progress),
                     stagingToken)
                 .ConfigureAwait(false);

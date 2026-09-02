@@ -48,6 +48,7 @@ internal sealed class GameExportModal(ExportWindowModule window) : EditorModal
             DrawText("Application ID", "game_id", window.gameApplicationId, value => window.gameApplicationId = value);
             DrawText("Product Name", "game_name", window.gameProductName, value => window.gameProductName = value);
             DrawText("Startup Scene", "game_scene", window.gameStartupScene, value => window.gameStartupScene = value);
+            DrawWindowSize();
             DrawTarget();
             DrawText("Output Directory", "game_output", window.gameOutputDirectory, value => window.gameOutputDirectory = value);
         }
@@ -57,6 +58,20 @@ internal sealed class GameExportModal(ExportWindowModule window) : EditorModal
         }
         DrawOutcome();
         DrawButtons();
+    }
+
+    private void DrawWindowSize()
+    {
+        int width = window.gameWindowWidth;
+        int height = window.gameWindowHeight;
+        NativeImGui.TextUnformatted("Initial Window Width");
+        NativeImGui.SetNextItemWidth(-1f);
+        if (NativeImGui.InputInt("##game_window_width", ref width))
+            window.gameWindowWidth = Math.Max(1, width);
+        NativeImGui.TextUnformatted("Initial Window Height");
+        NativeImGui.SetNextItemWidth(-1f);
+        if (NativeImGui.InputInt("##game_window_height", ref height))
+            window.gameWindowHeight = Math.Max(1, height);
     }
 
     private void DrawTarget()

@@ -9,6 +9,7 @@ using Inno.Assets.Pipeline;
 using Inno.Build;
 using Inno.Core.Logging;
 using Inno.Editor.Core;
+using Inno.Editor.Scene;
 using Inno.Editor.Settings;
 using Inno.Scene;
 
@@ -20,6 +21,7 @@ internal sealed class ExportWindowModule : EditorModule
     private readonly EditorContext m_editor;
     private readonly AssetPipeline m_assets;
     private readonly EditorSettings m_settings;
+    private readonly IEditorSceneWorkspace m_scenes;
     private readonly BuildPipeline m_buildPipeline;
     private readonly BuildProfileStore m_buildProfiles;
     private readonly Logger m_log;
@@ -32,6 +34,7 @@ internal sealed class ExportWindowModule : EditorModule
         EditorContext editor,
         AssetPipeline assets,
         EditorSettings settings,
+        IEditorSceneWorkspace scenes,
         BuildPipeline buildPipeline,
         BuildProfileStore buildProfiles,
         LogRouter logs)
@@ -39,6 +42,7 @@ internal sealed class ExportWindowModule : EditorModule
         m_editor = editor ?? throw new ArgumentNullException(nameof(editor));
         m_assets = assets ?? throw new ArgumentNullException(nameof(assets));
         m_settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        m_scenes = scenes ?? throw new ArgumentNullException(nameof(scenes));
         m_buildPipeline = buildPipeline ?? throw new ArgumentNullException(nameof(buildPipeline));
         m_buildProfiles = buildProfiles ?? throw new ArgumentNullException(nameof(buildProfiles));
         ArgumentNullException.ThrowIfNull(logs);
@@ -66,6 +70,10 @@ internal sealed class ExportWindowModule : EditorModule
     internal string gameStartupScene { get; set; } = string.Empty;
 
     internal string gameOutputDirectory { get; set; } = string.Empty;
+
+    internal int gameWindowWidth { get; set; } = 1280;
+
+    internal int gameWindowHeight { get; set; } = 720;
 
     internal BuildTargetId gameTarget { get; set; } = BuildTargetId.macOSArm64;
 
@@ -95,6 +103,8 @@ internal sealed class ExportWindowModule : EditorModule
         gameProductName = projectName;
         gameStartupScene = FindDefaultStartupScene();
         gameOutputDirectory = Path.Combine(m_editor.projectDirectory, "Builds");
+        gameWindowWidth = 1280;
+        gameWindowHeight = 720;
         gameTarget = OperatingSystem.IsWindows()
             ? BuildTargetId.windowsX64
             : BuildTargetId.macOSArm64;
@@ -109,6 +119,8 @@ internal sealed class ExportWindowModule : EditorModule
                 gameProductName = profile.productName;
                 gameStartupScene = profile.startupScene;
                 gameTarget = profile.target;
+                gameWindowWidth = profile.windowWidth;
+                gameWindowHeight = profile.windowHeight;
             }
             catch (Exception exception)
             {
@@ -154,7 +166,9 @@ internal sealed class ExportWindowModule : EditorModule
             applicationId = gameApplicationId,
             productName = gameProductName,
             startupScene = gameStartupScene,
-            target = gameTarget
+            target = gameTarget,
+            windowWidth = gameWindowWidth,
+            windowHeight = gameWindowHeight
         };
         try
         {
@@ -337,6 +351,12 @@ internal sealed class ExportWindowModule : EditorModule
 
     private string FindDefaultStartupScene()
     {
+        if (m_scenes.activeScene is GameScene activeScene
+            && m_scenes.TryGetSourcePath(activeScene, out string activePath))
+        {
+            return activePath;
+        }
+
         foreach (var entry in m_assets.GetFileSystemEntries(includeDirectories: false)
                      .Where(static entry => entry.source == AssetSourceId.project)
                      .OrderBy(static entry => entry.assetPath.localPath, StringComparer.Ordinal))

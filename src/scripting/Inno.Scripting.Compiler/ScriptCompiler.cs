@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -105,14 +106,18 @@ public sealed class ScriptCompiler
             m_assets,
             m_plugins,
             includeEditor: true,
+            targetRuntimeDirectory: null,
             progress is null
                 ? null
                 : (fraction, stage) => progress.Report(new ScriptCompilationProgress(fraction, stage)),
             cancellationToken);
 
     /// <summary>
-    /// Compiles only the runtime assembly closure required by a deployed Player.
+    /// Compiles only the runtime assembly closure required by a deployed Player and binds it to that Player runtime.
     /// </summary>
+    /// <param name="targetRuntimeDirectory">
+    /// The verified Player Support Pack directory whose runtime assemblies will execute the emitted scripts.
+    /// </param>
     /// <param name="progress">
     /// Optional observer for monotonic compiler progress.
     /// </param>
@@ -125,18 +130,32 @@ public sealed class ScriptCompiler
     /// <exception cref="OperationCanceledException">
     /// Thrown when <paramref name="cancellationToken"/> is canceled.
     /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="targetRuntimeDirectory"/> is empty.
+    /// </exception>
+    /// <exception cref="DirectoryNotFoundException">
+    /// Thrown when <paramref name="targetRuntimeDirectory"/> does not exist.
+    /// </exception>
+    /// <exception cref="InvalidDataException">
+    /// Thrown when the target runtime has no valid Inno runtime assembly closure.
+    /// </exception>
     public ValueTask<ScriptCompilationResult> CompileRuntimeDeploymentAsync(
+        string targetRuntimeDirectory,
         IProgress<ScriptCompilationProgress>? progress = null,
         CancellationToken cancellationToken = default)
-        => ScriptCompilerEngine.CompileAsync(
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetRuntimeDirectory);
+        return ScriptCompilerEngine.CompileAsync(
             m_options,
             m_assets,
             m_plugins,
             includeEditor: false,
+            targetRuntimeDirectory: targetRuntimeDirectory,
             progress is null
                 ? null
                 : (fraction, stage) => progress.Report(new ScriptCompilationProgress(fraction, stage)),
             cancellationToken);
+    }
 
     /// <summary>
     /// Removes unreferenced compiler generations while retaining the supplied active directories.

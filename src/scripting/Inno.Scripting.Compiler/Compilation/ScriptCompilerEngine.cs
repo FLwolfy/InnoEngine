@@ -35,9 +35,18 @@ internal static class ScriptCompilerEngine
         AssetPipeline assets,
         PluginEnvironment plugins,
         bool includeEditor,
+        string? targetRuntimeDirectory,
         Action<float, string>? reportProgress,
         CancellationToken cancellationToken)
     {
+        if (includeEditor == (targetRuntimeDirectory is not null))
+        {
+            throw new ArgumentException(
+                includeEditor
+                    ? "Authoring compilation cannot bind to a Player runtime."
+                    : "Runtime deployment compilation requires a target Player runtime directory.",
+                nameof(targetRuntimeDirectory));
+        }
         cancellationToken.ThrowIfCancellationRequested();
         reportProgress?.Invoke(0f, "Discovering project scripts...");
         ScriptSourceSet sources = ScriptSourceSet.Discover(assets, plugins, includeEditor);
@@ -65,6 +74,13 @@ internal static class ScriptCompilerEngine
                 runtimeApi,
                 runtimeApiReferences);
         progress.Complete("Script references resolved.");
+        ScriptDeploymentReferenceSet? deploymentReferences = null;
+        if (!includeEditor)
+        {
+            progress.Begin("Resolving target Player runtime references...");
+            deploymentReferences = ScriptDeploymentReferenceResolver.Resolve(targetRuntimeDirectory!);
+            progress.Complete("Target Player runtime references resolved.");
+        }
         var assemblyKeys = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (ScriptAssemblyInput assembly in sources.assemblies)
         {
@@ -74,7 +90,11 @@ internal static class ScriptCompilerEngine
                 : runtimeApiReferences;
             assemblyKeys.Add(
                 assembly.name,
-                ComputeAssemblyBuildKey(assembly, api, assemblyKeys));
+                ComputeAssemblyBuildKey(
+                    assembly,
+                    api,
+                    deploymentReferences?.fingerprint,
+                    assemblyKeys));
         }
         string buildKey = ComputeGenerationBuildKey(sources, assemblyKeys);
         string outputDirectory = Path.Combine(options.outputDirectory, buildKey);
@@ -94,7 +114,7 @@ internal static class ScriptCompilerEngine
                 stageTimings: progress.Snapshot());
         }
 
-        IReadOnlyList<MetadataReference> platformReferences = FrameworkReferenceResolver.CreateRuntimeReferences();
+        IReadOnlyList<MetadataReference> platformReferences = FrameworkReferenceResolver.CreateReferencePackReferences();
 
         string stagingRoot = Path.Combine(options.outputDirectory, ".staging");
         using var generationStaging = new TemporaryDirectory(stagingRoot);
@@ -148,6 +168,7 @@ internal static class ScriptCompilerEngine
                 api,
                 apiReferences,
                 platformReferences.Concat(dependencyReferences).ToArray(),
+                editor ? null : deploymentReferences,
                 assemblyStagingPath,
                 assembly.scope,
                 assembly.domain,
@@ -214,6 +235,7 @@ internal static class ScriptCompilerEngine
         ScriptApiProfile api,
         ScriptApiReferenceSet apiReferences,
         IReadOnlyList<MetadataReference> platformReferences,
+        ScriptDeploymentReferenceSet? deploymentReferences,
         string outputPath,
         ScriptAssemblyScope scope,
         AssemblyDomain domain,
@@ -258,19 +280,19 @@ internal static class ScriptCompilerEngine
             cancellationToken));
         progress.Complete($"Prepared generated {assemblyName} sources.");
 
-        var references = new Dictionary<string, MetadataReference>(StringComparer.OrdinalIgnoreCase);
+        var validationReferences = new Dictionary<string, MetadataReference>(StringComparer.OrdinalIgnoreCase);
         foreach (MetadataReference reference in platformReferences)
         {
             if (!string.IsNullOrWhiteSpace(reference.Display))
-                references[reference.Display!] = reference;
+                validationReferences[reference.Display!] = reference;
         }
         foreach (string referencePath in apiReferences.runtimeReferencePaths)
-            references[referencePath] = MetadataReference.CreateFromFile(referencePath);
+            validationReferences[referencePath] = MetadataReference.CreateFromFile(referencePath);
 
         var validationCompilation = CSharpCompilation.Create(
             assemblyName,
             syntaxTrees,
-            references.Values,
+            validationReferences.Values,
             new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
                 optimizationLevel: OptimizationLevel.Debug,
@@ -312,10 +334,27 @@ internal static class ScriptCompilerEngine
                 tree.FilePath,
                 Encoding.UTF8))
             .ToArray();
+        IReadOnlyCollection<MetadataReference> runtimeReferences;
+        if (deploymentReferences is null)
+        {
+            runtimeReferences = validationReferences.Values;
+        }
+        else
+        {
+            var targetReferences = new Dictionary<string, MetadataReference>(StringComparer.OrdinalIgnoreCase);
+            foreach (MetadataReference reference in platformReferences)
+            {
+                if (!string.IsNullOrWhiteSpace(reference.Display))
+                    targetReferences[reference.Display!] = reference;
+            }
+            foreach (string referencePath in deploymentReferences.paths)
+                targetReferences[referencePath] = MetadataReference.CreateFromFile(referencePath);
+            runtimeReferences = targetReferences.Values;
+        }
         var runtimeCompilation = CSharpCompilation.Create(
             assemblyName,
             runtimeTrees,
-            references.Values,
+            runtimeReferences,
             validationCompilation.Options);
         progress.Begin($"Resolving {assemblyName} script type identities...");
         ScriptTypeAnalysisResult typeAnalysis = ScriptTypeAnalyzer.Analyze(
@@ -443,6 +482,7 @@ internal static class ScriptCompilerEngine
     private static string ComputeAssemblyBuildKey(
         ScriptAssemblyInput assembly,
         ScriptApiReferenceSet api,
+        string? deploymentReferenceFingerprint,
         IReadOnlyDictionary<string, string> dependencyKeys)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
@@ -469,6 +509,7 @@ internal static class ScriptCompilerEngine
             AppendHash(hash, dependencyKeys[reference]);
         }
         AppendHash(hash, api.contractFingerprint);
+        AppendHash(hash, deploymentReferenceFingerprint ?? "Authoring");
         return Convert.ToHexString(hash.GetHashAndReset());
     }
 

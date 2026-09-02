@@ -76,6 +76,8 @@ internal sealed class GamePlayerHost : IDisposable
                 engine.serialization);
             settings.SetContributors(manifest.CreateSettingContributors());
             settings.RebuildCurrent();
+            GamePresentationSettings presentation = settings.Get<GamePresentationSettings>(
+                GamePresentationSettings.settingId);
             RuntimeSession session = engine.CreateSession(new RuntimeSessionOptions
             {
                 kind = RuntimeSessionKind.Player,
@@ -111,7 +113,10 @@ internal sealed class GamePlayerHost : IDisposable
                             device,
                             diagnostics,
                             targetArtifacts: new FileRenderTargetArtifactProvider(runtimeContentRoot),
-                            contentScopeProvider: () => SceneRenderContent.CreateScope(session.scenes));
+                            contentScopeProvider: () => SceneRenderContent.CreateScope(session.scenes),
+                            primaryPresentationViewportProvider: size => CreatePresentationViewport(
+                                presentation,
+                                size));
                         using (settings.EnterExecutionScope())
                         using (session.EnterExecutionScope())
                         {
@@ -155,6 +160,14 @@ internal sealed class GamePlayerHost : IDisposable
             engine.Dispose();
             throw;
         }
+    }
+
+    private static RenderViewport CreatePresentationViewport(
+        GamePresentationSettings presentation,
+        RenderPresentationSize size)
+    {
+        GamePresentationViewport viewport = presentation.CalculateViewport(size.width, size.height);
+        return new RenderViewport(viewport.x, viewport.y, viewport.width, viewport.height);
     }
 
     internal int Run(int? smokeFrameLimit = null)

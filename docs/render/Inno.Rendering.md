@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | 请求 | `RenderRequest`, `RenderTarget`, `RenderViewport`, `RenderFrameData` | 将目标、尺寸、可选 Pipeline 与 Plugin 自有帧数据提交给 Runtime。 |
 | 内容作用域 | `RenderContentId`, `RenderContentReference`, `RenderContentScope` | Host 显式选择的有序、frame-scoped 内容根；不预设 Scene、World 或 Document 类型。 |
-| 请求生产 | `RenderRequestProvider`, `RenderRequestProviderContext`, `RenderRequestProviderExtensionAttribute` | Plugin 每帧自动产生请求的 reload-safe TypeRegistry 扩展入口；Context 提供显式 content、capability 与主呈现目标的物理像素尺寸，不预设 Camera。 |
+| 请求生产 | `RenderRequestProvider`, `RenderRequestProviderContext`, `RenderRequestProviderExtensionAttribute` | Plugin 每帧自动产生请求的 reload-safe TypeRegistry 扩展入口；Context 提供显式 content、capability、完整主表面尺寸与 Host 选定的主呈现 viewport，不预设 Camera。 |
 | Pipeline | `RenderPipelineAsset`, `RenderPipeline`, `RenderPipelineContext` | Stable Type ID + 原生配置状态，以及每请求建图入口。 |
 | Feature | `RenderPipelineFeature`, `RenderFeatureContext`, `RenderFeatureConfiguration` | 有序、可重载的额外建图扩展。 |
 | 发现 | `RenderPipelineExtensionAttribute`, `RenderFeatureExtensionAttribute` | TypeCache 候选 generation 的稳定身份。 |
@@ -62,6 +62,8 @@ public sealed class SamplePipeline : RenderPipeline
 
 `SampleFrameData` 可以描述 Canvas、tile map、Scene 快照、体素、光线追踪输入或其他任意模型。它只在当前帧和当前 Plugin generation 有效；持久资产仅保存 Stable ID、Persistent ID 与 Inno 序列化属性 bytes。
 
+`RenderPipelineContext.preservePresentationTarget` 是跨模型颜色合成契约。同一 target 的首个成功请求或互不重叠区域可以初始化自己的颜色；后续覆盖相同像素的请求必须 Load/Preserve 已有颜色。它不指定 alpha、2D、3D 或 UI 语义，具体混合状态仍由 Pipeline 决定。请求只有在建图成功后才占据 presentation region，因此一个坏 Plugin 层不会迫使后续健康层读取未初始化输出。
+
 Plugin 的生产入口不依赖 Host Service Locator：
 
 ```csharp
@@ -71,16 +73,15 @@ public sealed class SampleRequestProvider : RenderRequestProvider
     public override void Submit(RenderRequestProviderContext context)
     {
         IReadOnlyList<MyWorld> worlds = context.content.GetValues<MyWorld>();
-        RenderPresentationSize size = context.primaryPresentationSize;
         context.requests.Submit(new RenderRequest(
             "Sample View",
             RenderTarget.backbuffer,
-            new RenderViewport(0, 0, size.width, size.height)));
+            context.primaryPresentationViewport));
     }
 }
 ```
 
-`RenderContentScope` 由应用组合根在帧边界建立。Rendering Runtime 只调用 Host 提供的中立 callback，因此不引用 Scene；Plugin Provider 只消费 `context.content`，不扫描全局 Scene Manager。内容对象不得跨帧或跨 Plugin generation 保留，Provider 必须在提交前把需要的数据复制进 immutable frame snapshot。Host 没有提供内容或 callback 失败时使用空 scope，并产生结构化诊断而不破坏当前帧。
+`RenderContentScope` 由应用组合根在帧边界建立。Rendering Runtime 只调用 Host 提供的中立 callback，因此不引用 Scene；Plugin Provider 只消费 `context.content`，不扫描全局 Scene Manager。`primaryPresentationSize` 表示完整物理表面，`primaryPresentationViewport` 表示实际游戏内容区域；面向 Player backbuffer 的模型应使用后者，才能统一支持 letterbox、pillarbox 与未来的显示适配策略。内容对象不得跨帧或跨 Plugin generation 保留，Provider 必须在提交前把需要的数据复制进 immutable frame snapshot。Host 没有提供内容或 callback 失败时使用空 scope，并产生结构化诊断而不破坏当前帧。
 
 逐帧 Sprite 顶点、粒子或实例数据使用 `context.uploads.UploadBuffer(...)`。它返回 opaque `RenderBufferSlice`，可直接交给 `RenderCommandEncoder.BindVertexBuffer`、`BindIndexBuffer`、`BindInstanceBuffer` 或 Storage `BindBuffer`，不暴露持久 Buffer handle，也不允许跨帧缓存。
 
@@ -112,9 +113,9 @@ SceneWorld
 
 `Rendering2DSceneSystem` 是每个 Scene 的 2D extraction owner，而不是 GPU renderer。它持有 Camera、Drawable 与 Light 的结构索引：Scene 对象或 Component 结构没有变化时，所有 Camera 复用同一不可变对象列表对应的索引；Transform、颜色、材质等普通属性仍在构建当前帧快照时读取，所以属性修改不要求重扫 Scene。这个 Scene-owned cache 使 Plugin 不需要每个 Camera、每帧遍历全部 GameObject，也保证 Plugin disable、移除或 generation retirement 时有一个明确位置释放所有 Plugin Component 引用。
 
-`Rendering2DSceneScope` 要求每个参与 2D 输出的 Scene 恰好有一个 `Rendering2DSceneSystem`。没有该系统表示 Scene 没有选择 2D extraction 模型，因此 scope 构建失败，通用 Editor viewport 会报告 Provider 不可用，而 Rendering Runtime 和其他 Provider 仍继续工作。系统存在但 `enabled=false` 时，`Capture` 立即清空并返回空 snapshot：Scene View 仍可由自己的 Editor Camera 绘制网格/坐标轴，但不会提取 Scene 中的 Camera、Sprite、Tilemap 或 Light；Game View 与 Player backbuffer 因没有可用 Base Camera 而不提交 2D request。重新启用后下一次 `Capture` 从当前 Scene 结构重建索引。
+`Rendering2DSceneScope` 只收集显式包含 `Rendering2DSceneSystem` 的 Scene，并跳过没有选择 2D 模型的 Scene；同一 Host scope 因而可以并存纯 3D、纯 2D 和混合 Scene。一个 Scene 中出现多个 2D system 仍是所有权错误，会被明确拒绝。系统存在但 `enabled=false` 时，`Capture` 立即清空并返回空 snapshot：Scene View 仍把它视为已安装的 2D authoring model，由自己的 Editor Camera 保留网格、导航和重新启用后的连续编辑位置，但不会提取 Scene 中的 Camera、Sprite、Tilemap 或 Light；Game View contributor 不参与，Player backbuffer 也不提交 2D request。Remove 则表示 Scene 完全退出 2D 模型，Scene View 也不再获得 2D contributor。重新启用后下一次 `Capture` 从当前 Scene 结构重建索引。
 
-`Rendering2DFrameCollector` 读取 scope、Camera 和项目 2D Settings，计算正交 view/projection、camera bounds、layer/culling、Light 快照、Sprite/Tilemap quad、排序键、batch、CPU picking 数据与诊断，并把结果冻结在 Plugin-owned `RenderFrameData` channel 中。Scene View Provider 使用独立 Editor Camera，并在同一个 frame snapshot 中返回 view/projection 和 picking；Game View Provider 使用 Scene 的 Base/Overlay Camera stack；Player 的 `Rendering2DRequestProvider` 则按主呈现尺寸自动提交 backbuffer request。
+`Rendering2DFrameCollector` 读取 scope、Camera 和项目 2D Settings，计算正交 view/projection、camera bounds、layer/culling、Light 快照、Sprite/Tilemap quad、排序键、batch、CPU picking 数据与诊断，并把结果冻结在 Plugin-owned `RenderFrameData` channel 中。Scene View Contributor 使用独立 Editor Camera，并在同一个 frame snapshot 中返回 view/projection 和 picking；Game View Contributor 使用 Scene 的 Base/Overlay Camera stack；Player 的 `Rendering2DRequestProvider` 则直接使用 Host 计算好的 `primaryPresentationViewport` 提交 backbuffer request。2D Editor 层使用稳定 order `1000`，会叠加在未来低 order 的 3D 底层之上；Pipeline 在 `preservePresentationTarget` 为 true 时加载已有 presentation color。
 
 `Rendering2DPipeline.Build` 只消费 immutable frame data。它通过 `IRenderResourceService` 解析开放的 shader contract/material role，通过 `IRenderFrameUploadService` 上传当前帧 vertex/index slices，再用 `RenderGraphBuilder.AddRasterPass` 声明 attachment、load/store、view/projection 和 side effect。真正的资源创建、依赖排序、pass culling、command replay 与 platform backend 都由引擎完成；2D Plugin 从未引用 `Inno.Native.Bgfx`。因此未来 3D、矢量、UI 或自定义渲染 Plugin 可以复用同一底座，却不需要继承或修改 2D 世界观。
 

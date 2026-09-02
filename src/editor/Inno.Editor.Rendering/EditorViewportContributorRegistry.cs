@@ -7,15 +7,15 @@ using Inno.Extensibility.Types;
 
 namespace Inno.Editor.Rendering;
 
-internal sealed class EditorViewportProviderRegistry
-    : TypeRegistry<EditorViewportProviderRegistry.Snapshot>
+internal sealed class EditorViewportContributorRegistry
+    : TypeRegistry<EditorViewportContributorRegistry.Snapshot>
 {
-    internal EditorViewportProviderRegistry(TypeCatalog types)
+    internal EditorViewportContributorRegistry(TypeCatalog types)
         : base(types)
     {
     }
 
-    internal Snapshot providers => current;
+    internal Snapshot contributors => current;
 
     /// <summary>
     /// Builds a validated result from the current immutable input snapshot.
@@ -29,22 +29,22 @@ internal sealed class EditorViewportProviderRegistry
     protected override Snapshot Build(TypeCacheSnapshot types)
     {
         Registration[] registrations = types
-            .GetTypesWithAttribute<EditorViewportProviderExtensionAttribute>()
+            .GetTypesWithAttribute<EditorViewportContributorExtensionAttribute>()
             .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
             .Select(CreateRegistration)
-            .OrderByDescending(static registration => registration.attribute.priority)
+            .OrderBy(static registration => registration.attribute.order)
             .ThenBy(static registration => registration.attribute.id, StringComparer.Ordinal)
             .ToArray();
         string? duplicateId = registrations
             .GroupBy(static registration => registration.attribute.id, StringComparer.Ordinal)
             .FirstOrDefault(static group => group.Count() > 1)?.Key;
         if (duplicateId is not null)
-            throw new InvalidOperationException($"Editor viewport provider ID '{duplicateId}' is duplicated.");
-        var selected = registrations
+            throw new InvalidOperationException($"Editor viewport contributor ID '{duplicateId}' is duplicated.");
+        IReadOnlyDictionary<EditorViewportKindId, Registration[]> byKind = registrations
             .GroupBy(static registration => registration.attribute.kind)
-            .ToDictionary(static group => group.Key, static group => group.First());
-        return new Snapshot(types.version, registrations, selected);
+            .ToDictionary(static group => group.Key, static group => group.ToArray());
+        return new Snapshot(types.version, registrations, byKind);
     }
 
     /// <summary>
@@ -57,22 +57,22 @@ internal sealed class EditorViewportProviderRegistry
     {
         for (int i = snapshot.registrations.Length - 1; i >= 0; i--)
         {
-            if (snapshot.registrations[i].provider is IDisposable disposable)
+            if (snapshot.registrations[i].contributor is IDisposable disposable)
                 disposable.Dispose();
         }
     }
 
     private static Registration CreateRegistration(Type type)
         => new(
-            type.GetCustomAttribute<EditorViewportProviderExtensionAttribute>(inherit: false)!,
-            CreateExtension<EditorViewportProvider>(type));
+            type.GetCustomAttribute<EditorViewportContributorExtensionAttribute>(inherit: false)!,
+            CreateExtension<EditorViewportContributor>(type));
 
     internal sealed record Snapshot(
         long revision,
         Registration[] registrations,
-        IReadOnlyDictionary<EditorViewportKindId, Registration> byKind);
+        IReadOnlyDictionary<EditorViewportKindId, Registration[]> byKind);
 
     internal sealed record Registration(
-        EditorViewportProviderExtensionAttribute attribute,
-        EditorViewportProvider provider);
+        EditorViewportContributorExtensionAttribute attribute,
+        EditorViewportContributor contributor);
 }

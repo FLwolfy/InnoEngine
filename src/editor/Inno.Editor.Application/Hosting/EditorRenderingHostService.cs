@@ -40,21 +40,21 @@ internal sealed class EditorRenderingHostService :
     /// <summary>
     /// Submits validated work to the active backend for ordered processing.
     /// </summary>
-    /// <param name="request">
-    /// The validated immutable request that defines this operation.
+    /// <param name="composition">
+    /// The validated ordered viewport composition submitted for the current frame.
     /// </param>
     /// <returns>
     /// The validated editor viewport output that represents the completed operation.
     /// </returns>
-    public EditorViewportOutput Submit(EditorViewportRequest request)
+    public EditorViewportOutput Submit(EditorViewportComposition composition)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
-        ArgumentNullException.ThrowIfNull(request);
-        RenderTextureDescriptor descriptor = CreateDescriptor(request);
-        if (!m_viewports.TryGetValue(request.viewportId, out ViewportState? state))
+        ArgumentNullException.ThrowIfNull(composition);
+        RenderTextureDescriptor descriptor = CreateDescriptor(composition);
+        if (!m_viewports.TryGetValue(composition.viewportId, out ViewportState? state))
         {
-            state = new ViewportState(new RenderTexture($"Editor/{request.viewportId}", descriptor));
-            m_viewports.Add(request.viewportId, state);
+            state = new ViewportState(new RenderTexture($"Editor/{composition.viewportId}", descriptor));
+            m_viewports.Add(composition.viewportId, state);
         }
         else if (!state.target.descriptor.Equals(descriptor))
         {
@@ -62,13 +62,18 @@ internal sealed class EditorRenderingHostService :
             Unregister(state);
         }
 
-        m_runtime.Submit(new RenderRequest(
-            $"Editor:{request.viewportId}",
-            RenderTarget.FromTexture(state.target),
-            new RenderViewport(0, 0, request.pixelWidth, request.pixelHeight),
-            request.pipeline,
-            request.data,
-            request.priority));
+        RenderTarget target = RenderTarget.FromTexture(state.target);
+        var viewport = new RenderViewport(0, 0, composition.pixelWidth, composition.pixelHeight);
+        foreach (EditorViewportLayer layer in composition.layers)
+        {
+            m_runtime.Submit(new RenderRequest(
+                $"Editor:{composition.viewportId}:{layer.contributorId}",
+                target,
+                viewport,
+                layer.pipeline,
+                layer.data,
+                layer.order));
+        }
 
         if (m_runtime.targets.TryGetTexture(state.target, out PersistentTextureHandle resident)
             && resident != state.residentTexture)
@@ -79,10 +84,10 @@ internal sealed class EditorRenderingHostService :
         }
 
         return new EditorViewportOutput(
-            request.viewportId,
+            composition.viewportId,
             state.presentationTexture,
-            request.pixelWidth,
-            request.pixelHeight);
+            composition.pixelWidth,
+            composition.pixelHeight);
     }
 
     /// <summary>
@@ -158,11 +163,11 @@ internal sealed class EditorRenderingHostService :
     {
     }
 
-    private static RenderTextureDescriptor CreateDescriptor(EditorViewportRequest request)
+    private static RenderTextureDescriptor CreateDescriptor(EditorViewportComposition composition)
         => new(
-            request.pixelWidth,
-            request.pixelHeight,
-            request.targetFormat,
+            composition.pixelWidth,
+            composition.pixelHeight,
+            composition.targetFormat,
             RenderTextureUsage.ColorAttachment | RenderTextureUsage.Sampled);
 
     private void Unregister(ViewportState state)

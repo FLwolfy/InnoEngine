@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 
+using Inno.Core.Settings;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
 using Inno.Editor.Rendering;
@@ -9,6 +10,7 @@ using Inno.Editor.Scene;
 using Inno.Editor.Settings;
 using Inno.Scene;
 using Inno.Rendering;
+using Inno.Runtime;
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
@@ -27,18 +29,22 @@ internal sealed class GameViewPanel : EditorPanel
 
     private readonly EditorRenderingModule m_rendering;
     private readonly IEditorGameScenePresentation m_scenePresentation;
-    private readonly EditorSettings m_settings;
+    private readonly EditorSettings m_editorSettings;
+    private readonly ProjectSettingsStore m_projectSettings;
     private Vector4 m_backgroundColor;
-    private GameViewFraming m_framing;
+    private GamePresentationSettings m_presentation = new();
+    private long m_presentationRevision = -1;
 
     internal GameViewPanel(
         EditorRenderingModule rendering,
         IEditorGameScenePresentation scenePresentation,
-        EditorSettings settings)
+        EditorSettings editorSettings,
+        ProjectSettingsStore projectSettings)
     {
         m_rendering = rendering ?? throw new ArgumentNullException(nameof(rendering));
         m_scenePresentation = scenePresentation ?? throw new ArgumentNullException(nameof(scenePresentation));
-        m_settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        m_editorSettings = editorSettings ?? throw new ArgumentNullException(nameof(editorSettings));
+        m_projectSettings = projectSettings ?? throw new ArgumentNullException(nameof(projectSettings));
     }
 
     /// <summary>
@@ -63,7 +69,8 @@ internal sealed class GameViewPanel : EditorPanel
         Vector2 available = NativeImGui.GetContentRegionAvail();
         if (available.X <= 0f || available.Y <= 0f)
             return;
-        GameViewportLayout layout = CalculateLayout(available, m_framing);
+        RefreshPresentationSettings();
+        GameViewportLayout layout = CalculateLayout(available, m_presentation);
         m_rendering.SetPresentation(
             C_VIEWPORT_ID,
             new EditorViewportPresentation(new Inno.Core.Mathematics.Color(
@@ -81,7 +88,7 @@ internal sealed class GameViewPanel : EditorPanel
         {
             DrawUnavailable(
                 available,
-                m_rendering.GetProviderError(S_KIND) ?? "No active rendering provider for Game View.");
+                m_rendering.GetCompositionError(C_VIEWPORT_ID) ?? "No rendering model contributes to Game View.");
             return;
         }
         if (!output.isReady)
@@ -91,12 +98,12 @@ internal sealed class GameViewPanel : EditorPanel
         }
 
         Vector2 origin = NativeImGui.GetCursorScreenPos();
-        if (m_framing.preserveAspectRatio)
+        if (m_presentation.preserveAspectRatio)
         {
             NativeImGui.GetWindowDrawList().AddRectFilled(
                 origin,
                 origin + available,
-                NativeImGui.ColorConvertFloat4ToU32(Vector4.Zero));
+                NativeImGui.ColorConvertFloat4ToU32(new Vector4(0f, 0f, 0f, 1f)));
         }
         NativeImGui.SetCursorScreenPos(origin + layout.offset);
         m_rendering.Draw(output, layout.size);
@@ -113,8 +120,9 @@ internal sealed class GameViewPanel : EditorPanel
     protected override void OnAttach(EditorContext context)
     {
         _ = context;
-        ApplySettings(m_settings);
-        m_settings.changed += ApplySettings;
+        ApplyEditorSettings(m_editorSettings);
+        RefreshPresentationSettings();
+        m_editorSettings.changed += ApplyEditorSettings;
     }
 
     /// <summary>
@@ -126,37 +134,36 @@ internal sealed class GameViewPanel : EditorPanel
     protected override void OnDetach(EditorContext context)
     {
         _ = context;
-        m_settings.changed -= ApplySettings;
+        m_editorSettings.changed -= ApplyEditorSettings;
         m_rendering.Release(C_VIEWPORT_ID);
+        m_presentationRevision = -1;
     }
 
-    private void ApplySettings(EditorSettings settings)
+    private void ApplyEditorSettings(EditorSettings settings)
+        => m_backgroundColor = GameViewBackgroundSetting.Read(settings);
+
+    private void RefreshPresentationSettings()
     {
-        m_backgroundColor = GameViewBackgroundSetting.Read(settings);
-        m_framing = GameViewFramingSetting.Read(settings);
+        if (m_presentationRevision == m_projectSettings.revision)
+            return;
+        m_presentation = m_projectSettings.Get<GamePresentationSettings>(GamePresentationSettings.settingId);
+        m_presentationRevision = m_projectSettings.revision;
     }
 
-    private static GameViewportLayout CalculateLayout(Vector2 available, GameViewFraming framing)
+    private static GameViewportLayout CalculateLayout(
+        Vector2 available,
+        GamePresentationSettings presentation)
     {
         int availableWidth = Math.Max(1, (int)MathF.Floor(available.X));
         int availableHeight = Math.Max(1, (int)MathF.Floor(available.Y));
-        if (!framing.preserveAspectRatio)
-        {
-            var fullSize = new Vector2(availableWidth, availableHeight);
-            return new GameViewportLayout(Vector2.Zero, fullSize, availableWidth, availableHeight);
-        }
-
-        float targetAspect = framing.aspectWidth / (float)framing.aspectHeight;
-        int width = availableWidth;
-        int height = Math.Max(1, (int)MathF.Floor(width / targetAspect));
-        if (height > availableHeight)
-        {
-            height = availableHeight;
-            width = Math.Max(1, (int)MathF.Floor(height * targetAspect));
-        }
-
-        var size = new Vector2(width, height);
-        return new GameViewportLayout((available - size) * 0.5f, size, width, height);
+        GamePresentationViewport viewport = presentation.CalculateViewport(
+            availableWidth,
+            availableHeight);
+        return new GameViewportLayout(
+            new Vector2(viewport.x, viewport.y),
+            new Vector2(viewport.width, viewport.height),
+            viewport.width,
+            viewport.height);
     }
 
     private RenderContentScope CreateContentScope()

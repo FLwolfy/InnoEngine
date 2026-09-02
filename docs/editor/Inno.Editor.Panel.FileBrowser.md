@@ -8,7 +8,7 @@ Scene、Prefab、Folder 和普通文件 icon declaration 可以直接保存完�
 
 ## Assets / Plugins 双根与 ZIP/Folder Plugin
 
-Tree 底部使用带水平分隔线、占满 pane 宽度的 `Switch to Assets` / `Switch to Plugins` 按钮，在可写 `Assets` 创作根与只读 `Plugins` 安装根之间切换。两边分别保存上次访问目录；`Plugins` overview 会在 Tree、List、Grid 中一致列出每个已激活 Plugin ID，进入后继续使用相同的导航、过滤、搜索、selection、打开和 drag source 逻辑。虚拟 `Assets` 与 `Plugins` 根只用 icon/text 表示当前目录，不进入普通 Asset selection，也不绘制 selected row highlight；Plugin mount 与其后代才是可选择条目。单击普通目录只选择，双击才进入；Tree 展开只响应 disclosure 或明确的目录导航，不因 content selection 持续强制展开。所有真实条目使用完整 `AssetPath(source, localPath)`，因此不同 mount 的同名文件不会碰撞。
+Tree 底部使用带水平分隔线、占满 pane 宽度的 `Switch to Assets` / `Switch to Plugins` 按钮，在可写 `Assets` 创作根与只读 `Plugins` 安装根之间切换。两边分别保存上次访问目录；`Plugins` overview 会在 Tree、List、Grid 中一致列出每个已激活 Plugin ID，进入后继续使用相同的导航、过滤、搜索、selection、打开和 drag source 逻辑。虚拟 `Assets` 与 `Plugins` 根是稳定容器节点，即使当前没有任何子项也始终保留 disclosure，并允许展开或收起；它们只用 icon/text 表示当前目录，不进入普通 Asset selection，也不绘制 selected row highlight。Plugin mount 与其后代才是可选择条目。单击普通目录只选择，双击才进入；Tree 展开只响应 disclosure 或明确的目录导航，不因 content selection 持续强制展开。所有真实条目使用完整 `AssetPath(source, localPath)`，因此不同 mount 的同名文件不会碰撞。
 
 Plugin ID 条目对应 active Plugin catalog 明确拥有的 Source Mount 根，而不是普通 Directory 或 Catalog Asset；它可以导航、选择和作为只读目录 drag source，但没有 `AssetInfo` 或 runtime asset type。FileBrowser 不再用“非 Project mount”猜测 Plugin 身份，因此以后增加其他 source kind 也不会误显示为 Plugin。List 将它显示为 `IPLUGIN` 且 Source 为当前层级 `~`，Inspector 也显示 `IPlugin`，安装容器内部的目录才继续显示 Directory/FOLDER。这里的 `IPlugin` 只是 source mount 的 Editor 语义，不创建 `.iplugin` companion asset。FileBrowser 核心布局与 entry 绘制的 Child、Table、Tree、ID 和 Style scope 会在异常路径中完整 unwind，因此条目交互失败不会再把 ImGui window stack 留在半开启状态。
 

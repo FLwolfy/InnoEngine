@@ -11,11 +11,16 @@ namespace Inno.Rendering.Runtime;
 /// </summary>
 public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
 {
+    private static readonly RenderPhaseId S_PRESENTATION_BACKGROUND_PHASE = new(
+        "inno.runtime.presentation-background");
+    private static readonly RenderClearColor S_PRESENTATION_BACKGROUND_COLOR = new(0f, 0f, 0f, 1f);
+
     private readonly object m_requestLock = new();
     private readonly object m_contributorLock = new();
     private readonly IRenderDevice m_device;
     private readonly IRenderDiagnosticSink m_diagnostics;
     private readonly Func<RenderContentScope>? m_contentScopeProvider;
+    private readonly Func<RenderPresentationSize, RenderViewport>? m_primaryPresentationViewportProvider;
     private readonly RenderResourceService m_resourceService;
     private readonly RenderFrameUploadService m_uploads;
     private readonly RenderExtensionRegistry m_extensions;
@@ -31,6 +36,8 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
     private bool m_disposed;
     private bool m_frameOpen;
     private RenderRuntimeReloadSession? m_reloadSession;
+    private RenderPresentationSize m_primaryPresentationSize = new(1, 1);
+    private RenderViewport m_primaryPresentationViewport = new(0, 0, 1, 1);
 
     /// <summary>
     /// Creates a render runtime without installing any concrete pipeline.
@@ -54,18 +61,24 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
     /// <param name="contentScopeProvider">
     /// Optional host callback that supplies explicit current-frame content without coupling Rendering to Scene or documents.
     /// </param>
+    /// <param name="primaryPresentationViewportProvider">
+    /// Optional host callback that selects the content region within the primary presentation surface.
+    /// The complete surface is used when omitted.
+    /// </param>
     public RenderRuntimeLayer(
         TypeCatalog types,
         IRenderDevice device,
         IRenderDiagnosticSink diagnostics,
         IEnumerable<IRenderFrameGraphContributor>? contributors = null,
         IRenderTargetArtifactProvider? targetArtifacts = null,
-        Func<RenderContentScope>? contentScopeProvider = null)
+        Func<RenderContentScope>? contentScopeProvider = null,
+        Func<RenderPresentationSize, RenderViewport>? primaryPresentationViewportProvider = null)
     {
         ArgumentNullException.ThrowIfNull(types);
         m_device = device ?? throw new ArgumentNullException(nameof(device));
         m_diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
         m_contentScopeProvider = contentScopeProvider;
+        m_primaryPresentationViewportProvider = primaryPresentationViewportProvider;
         m_extensions = new RenderExtensionRegistry(types);
         m_graphicsSettings = new GraphicsSettingsState(m_device.capabilities);
         m_resourceService = new RenderResourceService(
@@ -222,6 +235,8 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
             m_resourceService.BeginFrame(m_frameIndex);
             m_uploads.BeginFrame(m_frameIndex);
             targets.PrepareFrame();
+            m_primaryPresentationSize = m_device.primaryPresentationSize;
+            m_primaryPresentationViewport = ResolvePrimaryPresentationViewport(m_primaryPresentationSize);
             lock (m_requestLock)
             {
                 m_currentRequests.Clear();
@@ -261,7 +276,8 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
             this,
             content,
             m_device.capabilities,
-            m_device.primaryPresentationSize,
+            m_primaryPresentationSize,
+            m_primaryPresentationViewport,
             m_frameIndex,
             deltaTime);
         foreach (RenderExtensionRegistry.RequestProviderEntry entry in m_requestProviders.providers)
@@ -301,6 +317,52 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
         }
     }
 
+    private RenderViewport ResolvePrimaryPresentationViewport(RenderPresentationSize size)
+    {
+        var fullViewport = new RenderViewport(0, 0, size.width, size.height);
+        if (m_primaryPresentationViewportProvider is null)
+            return fullViewport;
+        try
+        {
+            RenderViewport viewport = m_primaryPresentationViewportProvider(size);
+            if ((long)viewport.x + viewport.width > size.width
+                || (long)viewport.y + viewport.height > size.height)
+            {
+                throw new InvalidOperationException(
+                    "The configured viewport extends beyond the primary presentation surface.");
+            }
+            return viewport;
+        }
+        catch (Exception exception)
+        {
+            m_diagnostics.Publish(new RenderDiagnostic(
+                "RENDER_PRESENTATION_VIEWPORT_FAILED",
+                $"The primary presentation viewport was invalid and the complete surface was used: {exception.Message}",
+                RenderDiagnosticSeverity.Error,
+                "RenderRuntimeLayer"));
+            return fullViewport;
+        }
+    }
+
+    private void AddPrimaryPresentationBackground(RenderGraphBuilder graph)
+    {
+        if (m_primaryPresentationViewport.x == 0
+            && m_primaryPresentationViewport.y == 0
+            && m_primaryPresentationViewport.width == m_primaryPresentationSize.width
+            && m_primaryPresentationViewport.height == m_primaryPresentationSize.height)
+        {
+            return;
+        }
+
+        graph.AddRasterPass(
+                "Primary Presentation Background",
+                S_PRESENTATION_BACKGROUND_PHASE,
+                0,
+                static (_, _) => { })
+            .ClearPresentationTarget(S_PRESENTATION_BACKGROUND_COLOR)
+            .HasSideEffect();
+    }
+
     /// <summary>
     /// Completes the current render frame and releases frame-scoped state.
     /// </summary>
@@ -321,13 +383,23 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
                 m_acceptingCurrentFrame = false;
 
             RenderGraphBuilder graph = CreateGraph();
+            AddPrimaryPresentationBackground(graph);
             IReadOnlyList<IRenderFrameGraphContributor> preparedContributors = PrepareContributors();
             int requestIndex = 0;
+            var presentation = new RenderPresentationComposer();
             foreach (RenderRequest request in m_currentRequests
                          .OrderBy(static value => value.priority)
                          .ThenBy(static value => value.name, StringComparer.Ordinal))
             {
-                TryBuildRequest(graph, request, requestIndex++);
+                bool preservePresentationTarget = presentation.MustPreserve(request);
+                if (TryBuildRequest(
+                        graph,
+                        request,
+                        requestIndex++,
+                        preservePresentationTarget))
+                {
+                    presentation.Commit(request);
+                }
             }
 
             AddContributors(graph, preparedContributors);
@@ -421,7 +493,8 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
     private bool TryBuildRequest(
         RenderGraphBuilder graph,
         RenderRequest request,
-        int requestIndex)
+        int requestIndex,
+        bool preservePresentationTarget)
     {
         RenderPipelineAsset? asset = request.pipeline ?? m_graphicsSettings.defaultPipeline;
         if (asset is null)
@@ -461,6 +534,7 @@ public sealed class RenderRuntimeLayer : IRenderRequestSink, IDisposable
                 m_resourceService,
                 m_uploads,
                 m_frameIndex,
+                preservePresentationTarget,
                 outputTexture);
             generation!.pipeline.Build(context);
             AddFeatures(asset, generation.features, context);

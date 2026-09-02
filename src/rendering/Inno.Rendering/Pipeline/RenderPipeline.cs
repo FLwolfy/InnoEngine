@@ -265,6 +265,9 @@ public sealed class RenderPipelineContext
     /// <param name="frameIndex">
     /// Monotonic render frame index.
     /// </param>
+    /// <param name="preservePresentationTarget">
+    /// Whether an earlier successful model contribution already initialized the same presentation target.
+    /// </param>
     /// <param name="outputTexture">
     /// Imported offscreen target, or an invalid handle for the backbuffer.
     /// </param>
@@ -278,6 +281,7 @@ public sealed class RenderPipelineContext
         IRenderResourceService resourceService,
         IRenderFrameUploadService uploads,
         ulong frameIndex,
+        bool preservePresentationTarget,
         RenderTextureHandle outputTexture = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -297,6 +301,7 @@ public sealed class RenderPipelineContext
         this.resourceService = resourceService;
         this.uploads = uploads;
         this.frameIndex = frameIndex;
+        this.preservePresentationTarget = preservePresentationTarget;
         this.outputTexture = outputTexture;
     }
 
@@ -344,6 +349,14 @@ public sealed class RenderPipelineContext
     /// Gets the monotonic render frame index.
     /// </summary>
     public ulong frameIndex { get; }
+
+    /// <summary>
+    /// Gets whether this model contribution must load and preserve an earlier contribution to the same target.
+    /// </summary>
+    /// <remarks>
+    /// A pipeline must not clear its presentation color target when this value is <see langword="true"/>.
+    /// </remarks>
+    public bool preservePresentationTarget { get; }
 
     /// <summary>
     /// Gets the imported offscreen target, or an invalid handle for the backbuffer.
