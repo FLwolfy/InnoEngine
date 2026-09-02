@@ -1,6 +1,6 @@
 # Inno.Editor.Scripting
 
-[Editor 索引](README.md) · [Core Scripting](../core/Inno.Core.Scripting.md) · [Assets](../assets/README.md) · [Assemblies](../core/Inno.Core.Assemblies.md)
+[Editor 索引](README.md) · [Scripting API](../scripting/Inno.Scripting.Api.md) · [Assets](../assets/README.md) · [Modules](../extensibility/Inno.Extensibility.Modules.md)
 
 `Inno.Editor.Scripting` 把 Project 与已激活 ZIP/Folder Plugin Mount 中的 C# source、assembly definition 当成正式资产，再把它们编译为可回滚的 collectible Script Module。文件发现和变化来源是统一 Asset Database；该项目没有自己的 `FileSystemWatcher`，也不递归扫描 Project 目录。
 
@@ -10,6 +10,8 @@
 | --- | --- | --- | --- |
 | `*.cs` | `ScriptSourceAsset` | `CSharpScriptImporter` | `source`, `diagnostics`, `type-manifest`, `asset-state` |
 | `*.iasmdef` | `ScriptAssemblyDefinitionAsset` | `ScriptAssemblyDefinitionImporter` | `source`, `asset-state` |
+
+两个 Importer 都显式声明 `AssetDeploymentScope.AuthoringOnly`：这些 Asset 在 Editor 中保留 persistent identity、编译输入和诊断，但 Game 导出只部署编译后的 Runtime DLL，不复制 `.cs`、`.iasmdef` 或它们的 source artifact。
 
 每个受支持 source 都有 `.imeta` 和 persistent ID。`type-manifest` 保存该 source 的声明、位置和 partial 信息；聚合编译后还会生成 assembly 级 `*.types.cache`，记录可附加类型最终使用的 source identity、Stable Type ID、类型种类和 canonical source。该文件和 `diagnostics.cache` 都是可丢弃、严格校验的内部编译缓存，不是项目结构化资产。C# 语法错误不会取消 source identity；parse diagnostics 进入 source asset，聚合 assembly build 可以失败并继续运行旧程序集。
 
@@ -23,10 +25,10 @@ var definition = new ScriptAssemblyDefinitionAsset(
     ScriptAssemblyScope.Runtime,
     references: ["Project.Common"],
     defines: ["GAMEPLAY_DEBUG"]);
-AssetManager.Save("Scripts/Gameplay/Gameplay.iasmdef", definition);
+AssetPipeline.Save("Scripts/Gameplay/Gameplay.iasmdef", definition);
 ```
 
-`.iasmdef` 是 Inno Serialization 原生资产，不是 JSON 文档。Editor 与工具通过 `AssetManager.Save` 和对应 Importer 共用同一序列化、metadata 与依赖通道。
+`.iasmdef` 是 Inno Serialization 原生资产，不是 JSON 文档。Editor 与工具通过 `AssetPipeline.Save` 和对应 Importer 共用同一序列化、metadata 与依赖通道。
 
 最近父目录的 `.iasmdef` 决定脚本归属。没有 definition 时：
 
@@ -68,11 +70,13 @@ AssetManager.Save("Scripts/Gameplay/Gameplay.iasmdef", definition);
 └─ InnoProject.sln
 ```
 
+Project 根目录和 `InnoProject.sln` 只投影用户可编辑的 Project assembly。安装在 `Plugins` 中的代码由同一编译图构建并参与原子 generation，但其 source 与内部 assembly topology 不作为 Rider/IDE 项目暴露；`Inno.GameScripts`、`Inno.EditorScripts` 和 Project `.iasmdef` 工程只引用当前成功 generation 中的 Plugin DLL。每次成功激活都会删除历史遗留的 `Inno.Plugin.*.csproj` 与对应 API map。
+
 `ScriptAssemblies` 不再出现 `1/2/3...` 数字 generation。每个 asmdef/builtin assembly 的 key 覆盖脚本内容 hash、规范化 asmdef 配置、scope/options、公开 Script API contract fingerprint、所属 Source Mount 及直接 dependency key；它不使用无关 Importer 实现 MVID。依赖 key 变化会自然传播到反向依赖，而无关 assembly 直接复用 `.assemblies` 中的 DLL/PDB/XML/type manifest/diagnostics。完整 generation key 组合有序 assembly key 与 Plugin content key，并在成功后一次性形成 load staging。Script assembly cache 使用 7 天 grace period 与 4 GiB 上限；`Library/ScriptApi` reference artifact cache 独立使用 7 天与 512 MiB 上限，并保护当前 Runtime/Editor contract 目录。
 
 增量同时作用于 artifact 与 ALC closure。每个已激活 Plugin 使用独立 `Plugin.<id>` collectible ALC，并通过 manifest 依赖形成显式拓扑；Project Runtime 与 Editor Scripts 各使用一个 ALC。Editor-only 变化只替换 Editor；Runtime 变化替换 Runtime + Editor；某个 Plugin 变化只替换该 Plugin、依赖它的 Plugin 及 Project Scripting。未重编译 assembly 可以复用不可变字节产物，但每个被纳入 closure 的目标 ALC 都是新 generation，下游绑定同一事务中的精确上游 Assembly 实例。
 
-AssemblyManager 自己的 runtime generation 仍存在于 assembly shadow cache，用于区分 collectible ALC；它不写入 `.imeta`、Scene、Prefab 或 artifact identity。
+ModuleHost 自己的 runtime generation 仍存在于 assembly shadow cache，用于区分 collectible ALC；它不写入 `.imeta`、Scene、Prefab 或 artifact identity。
 
 ## ScriptManagerOptions
 
@@ -115,15 +119,17 @@ scripts.ReloadScripting();
 scripts.ReloadPlugins();
 ```
 
-三个 public 操作只排队；内部 scheduler 在 Editor 主线程 focus safe point 捕获已提交 snapshot，后台以串行 Roslyn assembly emit 编译，并仅在候选原子激活的短安全点暂停后续 Module 更新。请求强度为 Recompile < ReloadScripting < ReloadPlugins，并发请求合并为最强项，同时只允许一个 compiler/reload transaction。若新请求在编译期间到达，本次结果会被标记为 superseded 而不发布中间 generation，随后以合并后的最强请求重新取得 source/plugin snapshot。后台编译不调用全局 AssetManager，也不冻结 Editor 输入、绘制或普通 Panel 更新。
+三个 public 操作只排队；内部 scheduler 在 Editor 主线程 focus safe point 捕获已提交 snapshot，后台以串行 Roslyn assembly emit 编译，并仅在候选原子激活的短安全点暂停后续 Module 更新。请求强度为 Recompile < ReloadScripting < ReloadPlugins，并发请求合并为最强项，同时只允许一个 compiler/reload transaction。若新请求在编译期间到达，本次结果会被标记为 superseded 而不发布中间 generation，随后以合并后的最强请求重新取得 source/plugin snapshot。后台编译不调用全局 AssetPipeline，也不冻结 Editor 输入、绘制或普通 Panel 更新。
 
-Assembly reload 使用一组有顺序的 transaction participant，而不是提交后再通知：TypeRegistry 激活候选 snapshot 后，AssetManager 在候选 generation 下完成 Source Catalog 对账；若存在 Plugin source 候选，再临时激活其隔离 Mount/Catalog/Settings；Scene 随后迁移对象，Rendering Runtime 预构造所有活动 Pipeline/Feature。只有全部 participant 与外部 generation 同步成功才提交；后续失败会逆序 Rollback，恢复旧 Mount、Settings、Pipeline/Feature、Scene、TypeCache 和 Asset Catalog。完整提交后才通知 Source Mount 观察者、释放旧 Loader/渲染实例并开始旧 ALC 卸载验证。
+Assembly reload 使用一组有顺序的 transaction participant，而不是提交后再通知：Play Mode 首先在 candidate 激活前退出并释放瞬态 Runtime Session；TypeRegistry 随后激活候选 snapshot，AssetPipeline 在候选 generation 下完成 Source Catalog 对账；若存在 Plugin source 候选，再临时激活其隔离 Mount/Catalog/Settings；Edit Scene 随后迁移对象，Rendering Runtime 预构造所有活动 Pipeline/Feature。只有全部 participant 与外部 generation 同步成功才提交；后续失败会逆序 Rollback，恢复旧 Mount、Settings、Pipeline/Feature、Scene、TypeCache 和 Asset Catalog。Play simulation 属于一次性运行状态，quiesce 后即使 candidate 回滚也保持 Edit，不从旧 generation 重建。完整提交后才通知 Source Mount 观察者、释放旧 Loader/渲染实例并开始旧 ALC 卸载验证。
 
-这套事务会释放旧脚本 Asset 的 canonical 实例、修复仍存活 host Asset 的引用，并移除已退休脚本代际留在静态事件上的 observer。场景替换任一步失败时会逐项尝试结构、assembly generation、Asset 和旧属性/生命周期补偿；identity observer 在转移期间失败也必须恢复旧对象的注册与附着状态。失败编译不会清除上一个尚未应用的成功 candidate。`Dispose` 返回后不会再有活动或排队编译写入状态。
+Type Registry candidate 在 assembly stage 时可能已经包含 Play Session 等短生命周期 owner。若该 owner 在 participant preparation 中退出，Registry registration 会在 candidate activation 前被撤销；对应 prepared transaction 必须释放 previous/candidate snapshot 并从本次 activation 排除，而不是对已 Dispose 的 registry 调用 `Activate`。这保证“先准备 generation、再 quiesce transient owner”的事务顺序不会产生 `ObjectDisposedException`，也不会让候选 snapshot 反向固定旧 ALC。
+
+这套事务会释放旧脚本 Asset 的 canonical 实例、修复仍存活 host Asset 的引用，并移除已退休脚本代际留在静态事件上的 observer。场景替换任一步失败时会逐项尝试结构、assembly generation、Asset 和旧属性/生命周期补偿；identity observer 在转移期间失败也必须恢复旧对象的注册与附着状态。普通 Project 编译失败不会清除上一个尚未应用的成功 candidate，也不会改变 active generation。唯一不同的是 Plugin availability 已经改变且替代 generation 无法编译：Editor 仍把编译结果报告为 `Failed` 并阻止 Play，但会提交显式 unavailable generation，退休变化 Plugin 与反向依赖脚本 modules，让 Scene 显示可恢复的 Missing，而不是继续运行已从安装集合消失的旧代码。`Dispose` 返回后不会再有活动或排队编译写入状态。
 
 `compilationStatus` 描述 queued、compiling、staged、migrating、committed、unload-verifying、completed 或 failed 阶段。Scripting reload 提交后不会在旧 ALC 仍为 `Pending` 时关闭进度窗口：Editor 在独立后续帧执行有界的 Full GC、finalizer 和第二次 Full GC，并通过只持有弱引用的 monitor 验证退休 context。验证期间进度保持 97%，Editor 仍可操作；新的编译候选消费等待验证完成，避免重叠两个 Assembly transaction。全部 context 不可达后才显示 100% 并关闭窗口。
 
-验证达到十次仍有 context 存活时，modal 显示“reload 已提交但卸载验证失败”，并向 Console 的 `Script Unload` 来源发布 `INNO-ALC-UNLOAD` Error，逐项列出 module、domain/scope 与 generation。这个错误是 post-commit 资源回收失败：新 generation 已经可用且不会伪回滚；外部保存的旧 `Type`、object、delegate、extension、task、subscription 或 thread 仍必须由持有方释放，GC 不能强行破坏可达引用。
+验证达到十次仍有 context 存活时，modal 显示“reload 已提交但卸载验证失败”，并向 Console 的 `Script Unload` 来源发布 `INNO-ALC-UNLOAD` Error，逐项列出 module、domain/scope 与 generation。这个错误是 post-commit 资源回收失败：新 generation 已经可用且不会伪回滚；外部保存的旧 `Type`、object、delegate、extension、task、subscription 或 thread 仍必须由持有方释放，GC 不能强行破坏可达引用。Host Play Mode 会在 commit 前释放整个 Play Session；Inspector lock 对 Scene identity 只保存 persistent ID，对其他 collectible target 只保存弱引用，因此两类 Editor-owned 长期引用不会固定退休 generation。
 
 ## 编译进度 modal
 
@@ -131,7 +137,7 @@ Assembly reload 使用一组有顺序的 transaction participant，而不是提�
 
 进度由 project generation、source parse、API analysis、diagnostics、emit 和 reload preparation 等真实工作项推进。`ScriptCompilationResult.stageTimings` 按执行顺序保留每个完成阶段的 wall time。编译阶段占 0–80%，candidate staging 推进到 86%，Scene/extension 原子迁移推进到 94%，事务提交后进入 97% 的强制卸载验证，只有验证成功、验证确定失败或无需 reload 时才显示 100%。Roslyn 单次 Emit 没有内部百分比 callback，因此执行某个工作项时进度会停留，完成后跳到下一个比例；不会用计时器伪造连续进度。
 
-成功 assembly artifact 同时保存完整的内部 `diagnostics.cache`。启动命中内容缓存时会重新发布同一组 warning，而不是只复用 DLL/PDB 后返回空 diagnostics；因此缓存命中与实际 Roslyn emit 对 Console Panel 具有一致的可观察结果。
+成功 assembly artifact 同时保存完整的内部 `diagnostics.cache`。启动命中内容缓存时会重新发布同一组 warning，而不是只复用 DLL/PDB 后返回空 diagnostics；因此缓存命中与实际 Roslyn emit 对 Console Panel 具有一致的可观察结果。IDE 投影在 generation 激活之后独立执行，其失败只影响代码编辑体验，并通过 `Script IDE Projection` 诊断来源报告 Warning；它不会把已经成功的脚本候选伪装成编译或激活失败。
 
 ## Editor script readiness contract
 
@@ -139,11 +145,14 @@ Assembly reload 使用一组有顺序的 transaction participant，而不是提�
 
 | 成员 | 语义 |
 | --- | --- |
+| `RequestCompilation()` | 为 Play/Export 等宿主工作流排队一次新的 cache-aware 编译。 |
 | `state` | `Initializing`、`Compiling`、`Ready` 或 `Failed`。 |
 | `status` | 当前 compiler/reload 阶段的可读说明。 |
 | `lastCompilation` | 最近完成的 `ScriptCompilationResult`，首次完成前为 `null`。 |
 
-`Ready` 只表示最近编译成功且 generation 已完成激活；编译、candidate activation 和旧 ALC unload verification 期间均为 `Compiling`。最近失败即为 `Failed`，即使仍保留 last-good runtime generation，新的 Play entry 也不会静默使用过期脚本。该 contract 是 Editor host API，不加入 EditorScripts 的逻辑 facade。
+`Ready` 只表示最近编译成功且 generation 已完成激活；编译、candidate activation 和旧 ALC unload verification 期间均为 `Compiling`。最近失败即为 `Failed`，新的 Play entry 不会静默使用过期脚本。普通编译失败时 active generation 保持不变；Plugin availability 失败时 active generation 已明确退休不可成立的 module closure，场景状态以 Missing 保留。该 contract 是 Editor host API，不加入 EditorScripts 的逻辑 facade。
+
+成功结果的 `runtimeAssemblyPaths` 是本 generation 中所有 runtime-scope main/preload assembly 的去重绝对路径。Game Export 只消费这组路径，因此不会凭输出目录猜测 DLL，也不会把 Editor assembly 部署进 Player；路径对应的 generation 必须在导出开始时仍是最新成功结果。
 
 ## Scripting API facade
 
@@ -175,8 +184,8 @@ public sealed class PlayerController : GameBehavior
 - 裁剪 reference 只保留其实现成员同样可见的接口；只由 private 显式成员实现的基础设施接口不会出现在 facade base list，因此不会泄漏 `EditorModule` 的 internal Dispose adapter，也不会产生缺失接口成员的 reference assembly。Module/Panel 项目状态直接由 protected `EditorState` hooks 提供，facade 不导出 Workspace interface、reader/writer 或 JSON DOM。
 - 所有脚本文件必须显式声明自己使用的 `InnoEngine.*` / `InnoEditor.*` namespace。
 - 编译范围导入、MSBuild `Using` item、隐式导入和 plugin metadata 注入均不受支持。
-- Script API fingerprint 来自规范化 public/protected contract、逻辑 namespace/type mapping 与可附加类型身份；实现方法体或实现程序集 MVID 单独变化不会使 reference artifact 失效。XML documentation 每次写入当前内容，不作为二进制公开契约。
-- `AssetManagerOptions` 等 host initialization 类型不导出；脚本只看到查询、加载、Importer writer 与 Build Processor 所需契约。
+- Script API fingerprint 来自规范化 public/protected contract、逻辑 namespace/type mapping 与可附加类型身份；实现方法体或实现程序集 MVID 单独变化不会使 reference artifact 失效。XML documentation 与该 fingerprint 的不可变 reference artifact 一起生成并复用，不作为独立的二进制公开契约输入。
+- `AssetPipelineOptions` 等 host initialization 类型不导出；脚本只看到查询、加载、Importer writer 与 Build Processor 所需契约。
 
 Editor facade 按 feature 分布：
 
@@ -189,6 +198,7 @@ Editor facade 按 feature 分布：
 | `InnoEditor.Hierarchy` | `Inno.Editor.Panel.Hierarchy` area/action/drop contracts |
 | `InnoEditor.Inspection` | `Inno.Editor.Inspection` drawer contracts，以及 `Inno.Editor.Panel.Inspector` 的 area/action/drop contracts |
 | `InnoEditor.ImGui` | `ImGuiIcon`、pointer-free `NativeImGui`、`EditorPalette`、`EditorStyleMetrics` 与 widgets |
+| `InnoEditor.Settings` | `EditorSetting`、`ProjectSettingEditor<T>` 与对应 placement attributes |
 
 菜单直接声明在 Action 上，不需要 package class 或集中注册：
 
@@ -240,7 +250,7 @@ Plugin 只能引用 Host API 与清单声明的依赖 Plugin，不能引用项�
 
 ## Reload coordination 与领域状态
 
-成功 build 通过一个多模块 `AssemblyManager.BeginReload` 准备完整候选 Assembly catalog、TypeCache 与 Registry。Scripting 随后只把 prepared session 交给 [Inno.Editor.Core](Inno.Editor.Core.md) 的 `EditorReloadCoordinator`；它不知道 Scene、Component/System、Missing 或任何 Panel。Scene 等独立 feature 通过 Core 的中立 participant contract 捕获自己的 generation-bound live state。旧 extension 的 Stop/Detach、交互瞬态清理、候选 Start/Attach 与各 feature 状态恢复都在发布回调返回前完成；全部迁移成功才进入 cleanup-only Complete。
+成功 build 通过一个多模块 `ModuleHost.BeginReload` 准备完整候选 Assembly catalog、TypeCache 与 Registry。Scripting 随后只把 prepared session 交给 [Inno.Editor.Core](Inno.Editor.Core.md) 的 `EditorReloadCoordinator`；它不知道 Scene、Component/System、Missing 或任何 Panel。Scene 等独立 feature 通过 Core 的中立 participant contract 捕获自己的 generation-bound live state。旧 extension 的 Stop/Detach、交互瞬态清理、候选 Start/Attach 与各 feature 状态恢复都在发布回调返回前完成；全部迁移成功才进入 cleanup-only Complete。
 
 内部 safe-point apply 在成功前只读取 candidate，不提前消费。Plugin/Runtime/Editor 任一 stage、Registry、Asset rescan、Scene restore 或 extension activation 失败都逆序恢复 Scene、extensions、TypeCache、Registry 与全部 previous modules，不发布部分 generation；同一 pending candidate 保留以便显式重试，后续成功编译可原子替换它。
 

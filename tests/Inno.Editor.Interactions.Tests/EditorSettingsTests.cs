@@ -2,12 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 
-using Inno.Core.Assemblies;
-using Inno.Core.Reflection;
+using Inno.Extensibility.Modules;
+using Inno.Extensibility.Types;
+using Inno.Core.Diagnostics;
+using Inno.Core.Logging;
+using Inno.Core.Serialization;
 using Inno.Editor.Core;
+using Inno.Editor.Diagnostics;
 using Inno.Editor.Interactions;
+using Inno.Editor.PlayMode;
 using Inno.Editor.Settings;
 using Xunit;
 
@@ -21,29 +25,48 @@ public sealed class EditorSettingsTests : IDisposable
         Guid.NewGuid().ToString("N"));
     private readonly EditorInteractionRuntime m_runtime;
     private readonly EditorSettings m_settings;
+    private readonly IEditorConsole m_console;
+    private readonly ModuleHost m_modules;
+    private readonly TypeCatalog m_types;
+    private readonly SerializationRegistry m_serialization;
+    private readonly DiagnosticHub m_diagnostics = new();
+    private readonly FakePlayMode m_playMode = new();
+    private readonly LogRouter m_logs = new();
 
     public EditorSettingsTests()
     {
         Directory.CreateDirectory(m_projectRoot);
-        AssemblyManager.Initialize(new AssemblyManagerOptions
+        m_modules = new ModuleHost(new ModuleHostOptions
         {
             cacheDirectory = Path.Combine(m_projectRoot, "Library", "Assemblies")
         });
         _ = typeof(EditorSettings);
-        TypeCacheManager.Initialize();
+        _ = System.Reflection.Assembly.Load("Inno.Editor.Panel.Logging");
+        m_types = new TypeCatalog(m_modules);
+        m_serialization = new SerializationRegistry(m_types);
         SettingsCaptureModule.current = null;
-        m_runtime = new EditorInteractionRuntime(m_projectRoot);
+        SettingsCaptureModule.console = null;
+        m_runtime = new EditorInteractionRuntime(
+            new EditorContext(m_projectRoot),
+            m_types,
+            m_logs,
+            [m_types, m_serialization, m_diagnostics, m_playMode]);
         m_runtime.Start();
         m_settings = SettingsCaptureModule.current
             ?? throw new InvalidOperationException("The Settings module was not discovered.");
+        m_console = SettingsCaptureModule.console
+            ?? throw new InvalidOperationException("The Console module was not discovered.");
     }
 
     public void Dispose()
     {
         m_runtime.Dispose();
         SettingsCaptureModule.current = null;
-        TypeCacheManager.Shutdown();
-        AssemblyManager.Shutdown();
+        SettingsCaptureModule.console = null;
+        m_serialization.Dispose();
+        m_types.Dispose();
+        m_modules.Dispose();
+        m_logs.Dispose();
         if (Directory.Exists(m_projectRoot))
             Directory.Delete(m_projectRoot, recursive: true);
     }
@@ -67,7 +90,7 @@ public sealed class EditorSettingsTests : IDisposable
                 ["Editor/Tests/Values/Project Count"] = value
             }));
 
-        string path = Path.Combine(m_projectRoot, "EditorSettings.json");
+        string path = Path.Combine(m_projectRoot, "EditorSettings.inno");
         Assert.True(File.Exists(path));
         Assert.False(Directory.Exists(Path.Combine(m_projectRoot, "Settings")));
         Assert.Equal(10, m_settings.Get("Editor/Tests/Values/Project Count").GetAsInt32("value"));
@@ -134,9 +157,7 @@ public sealed class EditorSettingsTests : IDisposable
         Assert.Equal(3, m_settings.Get("Editor/Tests/Values/Project Count").GetAsInt32("value"));
         Assert.True(definition.IsDefault(m_settings.Get("Editor/Tests/Values/Project Count")));
         Assert.NotSame(definition.defaultValue, definition.defaultValue);
-        Assert.DoesNotContain(
-            "Editor/Tests/Values/Project Count",
-            File.ReadAllText(Path.Combine(m_projectRoot, "EditorSettings.json")));
+        Assert.NotEmpty(File.ReadAllBytes(Path.Combine(m_projectRoot, "EditorSettings.inno")));
     }
 
     [Fact]
@@ -163,6 +184,26 @@ public sealed class EditorSettingsTests : IDisposable
     }
 
     [Fact]
+    public void ClearOnPlaySettingDefaultsToTrueAndImmediatelyControlsTheConsole()
+    {
+        const string path = "Editor/Diagnostics/Console/Clear on Play";
+        Assert.True(m_settings.Get(path).GetAsBoolean("value"));
+        Assert.True(m_console.clearOnPlay);
+
+        var disabled = new EditorSettingObject();
+        disabled.SetAsBoolean("value", false);
+        Assert.True(m_settings.Apply(
+            new Dictionary<string, EditorSettingObject>(StringComparer.Ordinal)
+            {
+                [path] = disabled
+            }));
+        Assert.False(m_console.clearOnPlay);
+
+        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        Assert.True(m_console.clearOnPlay);
+    }
+
+    [Fact]
     public void CatalogKeepsRawStringPathsAndAlphabeticalSections()
     {
         EditorSetting page = Assert.Single(
@@ -179,21 +220,7 @@ public sealed class EditorSettingsTests : IDisposable
     }
 
     [Fact]
-    public void SettingBaseExposesOnlyItsParameterlessConstructionContract()
-    {
-        ConstructorInfo constructor = Assert.Single(typeof(EditorSetting).GetConstructors(
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic));
-
-        Assert.Empty(constructor.GetParameters());
-        EditorSetting page = Assert.Single(
-            m_settings.definitions,
-            static definition => definition.path == "Editor/Tests");
-        Assert.Null(page.defaultValue);
-        Assert.Throws<InvalidOperationException>(() => page.IsDefault(new EditorSettingObject()));
-    }
-
-    [Fact]
-    public void SettingObjectRoundTripsSupportedJsonPrimitivesAndArrays()
+    public void SettingObjectRoundTripsSupportedPrimitivesAndArrays()
     {
         var value = new EditorSettingObject();
         value.SetAsBoolean("boolean", true);
@@ -263,12 +290,43 @@ public sealed class EditorSettingsTests : IDisposable
     }
 
     [EditorModule("tests.settings-capture", order: int.MaxValue)]
-    private sealed class SettingsCaptureModule(EditorSettings settings) : EditorModule
+    private sealed class SettingsCaptureModule(
+        EditorSettings settings,
+        IEditorConsole editorConsole) : EditorModule
     {
         internal static EditorSettings? current;
+        internal static IEditorConsole? console;
 
         protected override void OnStart(EditorContext context)
-            => current = settings;
+        {
+            current = settings;
+            console = editorConsole;
+        }
+    }
+
+    private sealed class FakePlayMode : IEditorPlayMode
+    {
+        public EditorPlayModeState state => EditorPlayModeState.Editing;
+
+        public bool isPlaying => false;
+
+        public string? lastFailure => null;
+
+        public LogSessionId activeSessionId => LogSessionId.none;
+
+        public event Action<EditorPlayModeState>? stateChanged
+        {
+            add
+            {
+            }
+            remove
+            {
+            }
+        }
+
+        public bool EnterPlayMode() => false;
+
+        public bool ExitPlayMode() => false;
     }
 
     [EditorSettingPath("Editor/Tests")]

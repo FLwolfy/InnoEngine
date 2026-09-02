@@ -14,8 +14,12 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Gets the layout size of a compact colored label chip using the centralized editor style.
     /// </summary>
-    /// <param name="label">Visible label text.</param>
-    /// <returns>The size reserved by <see cref="LabelChip"/> for the supplied text.</returns>
+    /// <param name="label">
+    /// Visible label text.
+    /// </param>
+    /// <returns>
+    /// The size reserved by <see cref="LabelChip"/> for the supplied text.
+    /// </returns>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="label"/> is <see langword="null"/>.
     /// </exception>
@@ -33,8 +37,12 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws non-interactive text centered on a compact, softly rounded colored background.
     /// </summary>
-    /// <param name="label">Visible label text.</param>
-    /// <param name="background">Background color drawn behind the label.</param>
+    /// <param name="label">
+    /// Visible label text.
+    /// </param>
+    /// <param name="background">
+    /// Background color drawn behind the label.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="label"/> is <see langword="null"/>.
     /// </exception>
@@ -60,10 +68,18 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws a compact checkbox whose checked fill uses the current text color.
     /// </summary>
-    /// <param name="id">Stable control identifier.</param>
-    /// <param name="value">Mutable checked state.</param>
-    /// <param name="size">Visual square size in pixels.</param>
-    /// <returns><see langword="true"/> when the value changed.</returns>
+    /// <param name="id">
+    /// Stable control identifier.
+    /// </param>
+    /// <param name="value">
+    /// Mutable checked state.
+    /// </param>
+    /// <param name="size">
+    /// Visual square size in pixels.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the value changed.
+    /// </returns>
     public static bool CompactCheckbox(string id, ref bool value, float size = -1f)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -126,9 +142,15 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws a horizontally centered button with optional space above it.
     /// </summary>
-    /// <param name="label">Visible label and optional ImGui identifier suffix.</param>
-    /// <param name="topPadding">Additional vertical space above the button.</param>
-    /// <returns><see langword="true"/> when the button is pressed.</returns>
+    /// <param name="label">
+    /// Visible label and optional ImGui identifier suffix.
+    /// </param>
+    /// <param name="topPadding">
+    /// Additional vertical space above the button.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the button is pressed.
+    /// </returns>
     public static bool CenteredButton(string label, float topPadding = 0f)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(label);
@@ -151,9 +173,15 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws a progress bar whose overlay remains centered over the complete bar.
     /// </summary>
-    /// <param name="fraction">The completed fraction rendered by the progress bar.</param>
-    /// <param name="size">The requested ImGui progress-bar size.</param>
-    /// <param name="overlay">The text drawn at the geometric center of the complete progress bar.</param>
+    /// <param name="fraction">
+    /// The completed fraction rendered by the progress bar.
+    /// </param>
+    /// <param name="size">
+    /// The requested ImGui progress-bar size.
+    /// </param>
+    /// <param name="overlay">
+    /// The text drawn at the geometric center of the complete progress bar.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="overlay"/> is <see langword="null"/>.
     /// </exception>

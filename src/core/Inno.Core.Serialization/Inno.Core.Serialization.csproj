@@ -7,7 +7,7 @@
     <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj" PrivateAssets="compile" />
   </ItemGroup>
 </Project>

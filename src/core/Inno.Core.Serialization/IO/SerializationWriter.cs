@@ -41,11 +41,21 @@ public sealed class SerializationWriter
     /// <summary>
     /// Writes a named value through the unified value pipeline.
     /// </summary>
-    /// <typeparam name="TValue">The declared value type.</typeparam>
-    /// <param name="name">The unique non-empty member name.</param>
-    /// <param name="value">The value to write.</param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is empty.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the name is duplicated or the value is unsupported.</exception>
+    /// <typeparam name="TValue">
+    /// The declared value type.
+    /// </typeparam>
+    /// <param name="name">
+    /// The unique non-empty member name.
+    /// </param>
+    /// <param name="value">
+    /// The value to write.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="name"/> is empty.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the name is duplicated or the value is unsupported.
+    /// </exception>
     public void Write<TValue>(string name, TValue value)
     {
         ValidateName(name);
@@ -55,9 +65,15 @@ public sealed class SerializationWriter
     /// <summary>
     /// Writes a named structured object.
     /// </summary>
-    /// <param name="name">The unique non-empty member name.</param>
-    /// <param name="write">The callback that fills the child object.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="write"/> is null.</exception>
+    /// <param name="name">
+    /// The unique non-empty member name.
+    /// </param>
+    /// <param name="write">
+    /// The callback that fills the child object.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="write"/> is null.
+    /// </exception>
     public void WriteObject(string name, Action<SerializationWriter> write)
     {
         ArgumentNullException.ThrowIfNull(write);
@@ -70,11 +86,21 @@ public sealed class SerializationWriter
     /// <summary>
     /// Writes an ordered array of structured objects.
     /// </summary>
-    /// <typeparam name="TValue">The source element type.</typeparam>
-    /// <param name="name">The unique non-empty member name.</param>
-    /// <param name="values">The elements to write.</param>
-    /// <param name="writeElement">The callback that fills each element object.</param>
-    /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+    /// <typeparam name="TValue">
+    /// The source element type.
+    /// </typeparam>
+    /// <param name="name">
+    /// The unique non-empty member name.
+    /// </param>
+    /// <param name="values">
+    /// The elements to write.
+    /// </param>
+    /// <param name="writeElement">
+    /// The callback that fills each element object.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when an argument is null.
+    /// </exception>
     public void WriteObjectArray<TValue>(
         string name,
         IEnumerable<TValue> values,
@@ -101,8 +127,12 @@ public sealed class SerializationWriter
     /// <summary>
     /// Writes annotated properties from a serializable object into the current structured object.
     /// </summary>
-    /// <param name="value">The object whose annotated properties should be written.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is null.</exception>
+    /// <param name="value">
+    /// The object whose annotated properties should be written.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="value"/> is null.
+    /// </exception>
     public void WriteProperties(ISerializable value)
     {
         ArgumentNullException.ThrowIfNull(value);

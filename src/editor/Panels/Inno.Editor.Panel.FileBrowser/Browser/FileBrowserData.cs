@@ -3,8 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Inno.Assets;
-using Inno.Assets.Core;
-using Inno.Assets.File;
+using Inno.Assets.Pipeline;
 using Inno.Editor.Core;
 
 namespace Inno.Editor.Panel.FileBrowser;
@@ -104,15 +103,15 @@ internal sealed class FileBrowserData(AssetEditorModule assets)
         List<FileBrowserDisplayEntry> entries,
         FileBrowserEntryScopeFilter scopeFilter)
     {
-        AssetSourceMount[] mounts = AssetManager.sourceMounts
-            .Where(static mount => mount.id != AssetSourceId.project)
+        AssetSourceMount[] mounts = assets.pipeline.sourceMounts
+            .Where(mount => assets.IsPluginSource(mount.id))
             .OrderBy(static mount => mount.id.value, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         for (int i = 0; i < mounts.Length; i++)
         {
             AssetSourceMount mount = mounts[i];
             var rootPath = new AssetPath(mount.id, string.Empty);
-            if (!AssetManager.TryGetFileSystemEntry(rootPath, out AssetFileEntry root))
+            if (!assets.pipeline.TryGetFileSystemEntry(rootPath, out AssetFileEntry root))
                 continue;
             entries.Add(new FileBrowserDisplayEntry(root, mount.id.value, isPluginRoot: true));
             if (scopeFilter == FileBrowserEntryScopeFilter.Recursive)
@@ -152,7 +151,7 @@ internal sealed class FileBrowserData(AssetEditorModule assets)
     internal IReadOnlyList<AssetFileEntry> GetVisibleChildren(string relativePath)
     {
         AssetSourceId source = AssetPath.Parse(relativePath).source;
-        IReadOnlyList<AssetFileEntry> children = AssetManager.GetFileSystemChildren(AssetPath.Parse(relativePath));
+        IReadOnlyList<AssetFileEntry> children = assets.pipeline.GetFileSystemChildren(AssetPath.Parse(relativePath));
         if (children.Count == 0)
             return children;
         List<AssetFileEntry> isolated = [];

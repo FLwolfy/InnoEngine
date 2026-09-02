@@ -7,15 +7,16 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\render\Inno.Rendering.Assets\Inno.Rendering.Assets.csproj" />
-    <ProjectReference Include="..\..\src\render\Inno.Rendering.ShaderGraph\Inno.Rendering.ShaderGraph.csproj" />
+    <ProjectReference Include="..\..\src\rendering\Inno.Rendering.Assets\Inno.Rendering.Assets.csproj" />
+    <ProjectReference Include="..\..\src\rendering\Inno.Rendering.ShaderGraph\Inno.Rendering.ShaderGraph.csproj" />
     <ProjectReference Include="..\..\src\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
-    <ProjectReference Include="..\..\src\core\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" />
-    <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" />
+    <ProjectReference Include="..\..\src\extensibility\Inno.Extensibility.Modules\Inno.Extensibility.Modules.csproj" />
+    <ProjectReference Include="..\..\src\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" />
     <ProjectReference Include="..\..\src\core\Inno.Core.Identity\Inno.Core.Identity.csproj" />
-    <ProjectReference Include="..\..\src\assets\Inno.Assets.Loader\Inno.Assets.Loader.csproj" />
-    <ProjectReference Include="..\..\src\assets\Inno.Assets.File\Inno.Assets.File.csproj" />
-    <ProjectReference Include="..\..\src\assets\Inno.Assets.Serialization\Inno.Assets.Serialization.csproj" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Diagnostics\Inno.Core.Diagnostics.csproj" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Logging\Inno.Core.Logging.csproj" />
+    <ProjectReference Include="..\..\src\assets\Inno.Assets.Pipeline\Inno.Assets.Pipeline.csproj" />
+    <ProjectReference Include="..\..\src\assets\Inno.Assets\Inno.Assets.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

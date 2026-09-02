@@ -1,15 +1,39 @@
 using System;
 
-using Inno.Core.Identity;
 using Inno.Core.Logging;
 using Inno.Editor.Interactions;
-using Inno.Engine.Scene;
+using Inno.Scene;
 
 namespace Inno.Editor.Scene;
 
 [EditorHistoryHandler(SceneHistoryKinds.Document)]
-internal sealed class SceneDocumentHistoryHandler(EditorSceneWorkspace workspace) : EditorHistoryHandler
+internal sealed class SceneDocumentHistoryHandler : EditorHistoryHandler
 {
+    private readonly Logger m_log;
+    private readonly EditorSceneWorkspace m_workspace;
+
+    internal SceneDocumentHistoryHandler(EditorSceneWorkspace workspace, LogRouter logs)
+    {
+        m_workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
+        ArgumentNullException.ThrowIfNull(logs);
+        m_log = logs.CreateLogger<SceneDocumentHistoryHandler>();
+    }
+
+    /// <summary>
+    /// Evaluates whether the requested change can be applied to the current generation.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="change">
+    /// The neutral change payload to query or apply.
+    /// </param>
+    /// <param name="direction">
+    /// The history direction that determines which state is applied.
+    /// </param>
+    /// <returns>
+    /// The validated editor history availability that represents the completed operation.
+    /// </returns>
     protected override EditorHistoryAvailability Query(
         EditorHistoryContext context,
         EditorHistoryChange change,
@@ -21,7 +45,7 @@ internal sealed class SceneDocumentHistoryHandler(EditorSceneWorkspace workspace
             bool shouldExist = direction == EditorHistoryDirection.Undo
                 ? data.existsBefore
                 : data.existsAfter;
-            GameScene? current = IdentityManager.Get<GameScene>(data.snapshot.sceneId);
+            GameScene? current = m_workspace.Find<GameScene>(data.snapshot.sceneId);
             if (shouldExist)
             {
                 return current is null || current is { isLoaded: true, isDestroyed: false }
@@ -43,6 +67,21 @@ internal sealed class SceneDocumentHistoryHandler(EditorSceneWorkspace workspace
         }
     }
 
+    /// <summary>
+    /// Applies a validated change atomically at the caller-controlled commit point.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="change">
+    /// The neutral change payload to query or apply.
+    /// </param>
+    /// <param name="direction">
+    /// The history direction that determines which state is applied.
+    /// </param>
+    /// <returns>
+    /// The validated editor history result that represents the completed operation.
+    /// </returns>
     protected override EditorHistoryResult Apply(
         EditorHistoryContext context,
         EditorHistoryChange change,
@@ -67,12 +106,12 @@ internal sealed class SceneDocumentHistoryHandler(EditorSceneWorkspace workspace
         Guid? selected = direction == EditorHistoryDirection.Undo
             ? data.selectedBefore
             : data.selectedAfter;
-        GameScene? current = IdentityManager.Get<GameScene>(data.snapshot.sceneId);
+        GameScene? current = m_workspace.Find<GameScene>(data.snapshot.sceneId);
         bool existed = current is { isLoaded: true, isDestroyed: false };
         EditorSceneWorkspace.SceneDocumentSnapshot? original = existed
-            ? workspace.CaptureDocumentSnapshot(current!)
+            ? m_workspace.CaptureDocumentSnapshot(current!)
             : null;
-        Guid? originalActive = SceneManager.activeScene?.identity.persistentId;
+        Guid? originalActive = m_workspace.activeScene?.identity.persistentId;
         DocumentMutation mutation = DocumentMutation.None;
 
         try
@@ -81,7 +120,7 @@ internal sealed class SceneDocumentHistoryHandler(EditorSceneWorkspace workspace
             {
                 if (current is null)
                 {
-                    current = workspace.RestoreDocumentSnapshot(data.snapshot);
+                    current = m_workspace.RestoreDocumentSnapshot(data.snapshot);
                     mutation = DocumentMutation.Restored;
                 }
                 else if (current is not { isLoaded: true, isDestroyed: false })
@@ -92,19 +131,19 @@ internal sealed class SceneDocumentHistoryHandler(EditorSceneWorkspace workspace
             }
             else if (current is not null)
             {
-                if (!workspace.CloseDocumentForHistory(current))
+                if (!m_workspace.CloseDocumentForHistory(current))
                     return EditorHistoryResult.Failure($"Scene '{data.snapshot.sceneId}' could not be closed.");
                 mutation = DocumentMutation.Closed;
             }
 
-            workspace.RestoreActiveScene(active);
+            m_workspace.RestoreActiveScene(active);
         }
         catch (Exception exception)
         {
             try
             {
-                RollbackDocument(workspace, data.snapshot.sceneId, mutation, original);
-                workspace.RestoreActiveScene(originalActive);
+                RollbackDocument(m_workspace, data.snapshot.sceneId, mutation, original);
+                m_workspace.RestoreActiveScene(originalActive);
             }
             catch (Exception rollbackException)
             {
@@ -117,11 +156,11 @@ internal sealed class SceneDocumentHistoryHandler(EditorSceneWorkspace workspace
 
         try
         {
-            workspace.RestoreSelection(selected);
+            m_workspace.RestoreSelection(selected);
         }
         catch (Exception exception)
         {
-            Log.Error("Scene document selection notification failed: {0}", exception);
+            m_log.Write(LogLevel.Error, "Scene document selection notification failed: {0}", [exception]);
         }
         return EditorHistoryResult.Success();
     }
@@ -134,7 +173,7 @@ internal sealed class SceneDocumentHistoryHandler(EditorSceneWorkspace workspace
     {
         if (mutation == DocumentMutation.Restored)
         {
-            GameScene? restored = IdentityManager.Get<GameScene>(sceneId);
+            GameScene? restored = workspace.Find<GameScene>(sceneId);
             if (restored is { isLoaded: true, isDestroyed: false } &&
                 !workspace.CloseDocumentForHistory(restored))
             {

@@ -1,38 +1,60 @@
 
 using System;
 
-using Inno.Assets.Core;
+using Inno.Assets;
+using Inno.Assets.Pipeline;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
-/// <summary>Identifies the authoring or installed-content root displayed by the Asset Browser.</summary>
+/// <summary>
+/// Identifies the authoring or installed-content root displayed by the Asset Browser.
+/// </summary>
 public enum AssetBrowserRoot
 {
-    /// <summary>The writable project <c>Assets</c> authoring root.</summary>
+    /// <summary>
+    /// The writable project <c>Assets</c> authoring root.
+    /// </summary>
     Assets,
 
-    /// <summary>The read-only <c>Plugins</c> installation root.</summary>
+    /// <summary>
+    /// The read-only <c>Plugins</c> installation root.
+    /// </summary>
     Plugins
 }
 
-/// <summary>Stores asset browser navigation independently from global object selection.</summary>
+/// <summary>
+/// Stores asset browser navigation independently from global object selection.
+/// </summary>
 public sealed class AssetBrowserState
 {
     private readonly EditorInteractions m_interactions;
+    private readonly AssetPipeline m_assets;
     private string m_assetsDirectory = string.Empty;
     private string m_pluginsDirectory = string.Empty;
 
-    /// <summary>Creates Asset Browser navigation state.</summary>
-    /// <param name="interactions">The active editor interaction entry point.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="interactions"/> is <see langword="null"/>.</exception>
-    public AssetBrowserState(EditorInteractions interactions)
+    /// <summary>
+    /// Creates Asset Browser navigation state.
+    /// </summary>
+    /// <param name="interactions">
+    /// The active editor interaction entry point.
+    /// </param>
+    /// <param name="assets">
+    /// The isolated authoring asset pipeline resolved by selections.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="interactions"/> is <see langword="null"/>.
+    /// </exception>
+    internal AssetBrowserState(EditorInteractions interactions, AssetPipeline assets)
     {
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
+        m_assets = assets ?? throw new ArgumentNullException(nameof(assets));
     }
 
-    /// <summary>Gets the root currently displayed by the Asset Browser.</summary>
+    /// <summary>
+    /// Gets the root currently displayed by the Asset Browser.
+    /// </summary>
     public AssetBrowserRoot root { get; private set; }
 
     /// <summary>
@@ -50,19 +72,27 @@ public sealed class AssetBrowserState
     /// <summary>
     /// Gets the selected asset path when the editor-wide target belongs to the Asset Browser.
     /// </summary>
-    /// <param name="context">The shared editor context containing the global selection.</param>
-    /// <returns>The normalized source-relative path, or <see langword="null"/> when another target type is selected.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="context"/> is <see langword="null"/>.</exception>
+    /// <param name="context">
+    /// The shared editor context containing the global selection.
+    /// </param>
+    /// <returns>
+    /// The normalized source-relative path, or <see langword="null"/> when another target type is selected.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="context"/> is <see langword="null"/>.
+    /// </exception>
     public string? GetSelectedPath(EditorContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        return (m_interactions.selection.selectedTarget as Inno.Assets.File.AssetFileEntry)?.assetPath.ToString();
+        return (m_interactions.selection.selectedTarget as Inno.Assets.Pipeline.AssetFileEntry)?.assetPath.ToString();
     }
 
     /// <summary>
     /// Switches the displayed root while preserving the last directory visited in each root.
     /// </summary>
-    /// <param name="value">The authoring or installed-content root to display.</param>
+    /// <param name="value">
+    /// The authoring or installed-content root to display.
+    /// </param>
     public void SetRoot(AssetBrowserRoot value)
         => root = value;
 
@@ -92,18 +122,24 @@ public sealed class AssetBrowserState
     /// <summary>
     /// Selects an asset path through the editor-wide selection state, or clears Asset selection.
     /// </summary>
-    /// <param name="context">The shared editor context whose selection should be updated.</param>
-    /// <param name="relativePath">The source-relative path to select, or an empty value to clear selection.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="context"/> is <see langword="null"/>.</exception>
+    /// <param name="context">
+    /// The shared editor context whose selection should be updated.
+    /// </param>
+    /// <param name="relativePath">
+    /// The source-relative path to select, or an empty value to clear selection.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="context"/> is <see langword="null"/>.
+    /// </exception>
     public void Select(EditorContext context, string? relativePath)
     {
         ArgumentNullException.ThrowIfNull(context);
         object? target = null;
         if (!string.IsNullOrWhiteSpace(relativePath))
         {
-            if (Inno.Assets.AssetManager.TryGetFileSystemEntry(
-                    Inno.Assets.Core.AssetPath.Parse(Normalize(relativePath)),
-                    out Inno.Assets.File.AssetFileEntry entry))
+            if (m_assets.TryGetFileSystemEntry(
+                    Inno.Assets.AssetPath.Parse(Normalize(relativePath)),
+                    out Inno.Assets.Pipeline.AssetFileEntry entry))
             {
                 target = entry;
             }

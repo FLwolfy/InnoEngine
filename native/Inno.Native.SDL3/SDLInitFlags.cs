@@ -10,7 +10,7 @@
 using System;
 using BGCS.Runtime;
 
-namespace Inno.Native.SDL3
+namespace Inno.Native.Sdl3
 {
     [Flags]
     public enum SDLInitFlags : uint

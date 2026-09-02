@@ -8,9 +8,10 @@
     <InnoAssemblyScope>Editor</InnoAssemblyScope>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\scripting\Inno.Scripting.Reload\Inno.Scripting.Reload.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\core\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" />
+    <ProjectReference Include="..\..\extensibility\Inno.Extensibility.Modules\Inno.Extensibility.Modules.csproj" />
   </ItemGroup>
 </Project>

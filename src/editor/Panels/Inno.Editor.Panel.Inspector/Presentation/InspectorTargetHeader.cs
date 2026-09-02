@@ -6,7 +6,7 @@ using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Native.ImGui;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Inspector;
@@ -23,15 +23,23 @@ internal sealed class InspectorTargetHeader
     /// <summary>
     /// Resolves the target that should be presented after applying Inspector lock state.
     /// </summary>
-    /// <param name="selectedTarget">The current global editor selection.</param>
-    /// <returns>The current valid Inspector target, or <see langword="null"/> when none is available.</returns>
+    /// <returns>
+    /// The current valid Inspector target, or <see langword="null"/> when none is available.
+    /// </returns>
+    /// <param name="selectedTarget">
+    /// The current inspection target used to render the header.
+    /// </param>
     internal object? Resolve(object? selectedTarget) => m_lock.Resolve(selectedTarget);
 
     /// <summary>
     /// Draws the common framed header for a resolved Inspector target.
     /// </summary>
-    /// <param name="drawer">The resolved target-specific Inspector drawer.</param>
-    /// <param name="context">The drawing context for the current target.</param>
+    /// <param name="drawer">
+    /// The resolved target-specific Inspector drawer.
+    /// </param>
+    /// <param name="context">
+    /// The drawing context for the current target.
+    /// </param>
     internal void Draw(IInspectionDrawer drawer, InspectionDrawContext context)
     {
         ArgumentNullException.ThrowIfNull(drawer);

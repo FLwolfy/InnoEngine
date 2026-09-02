@@ -4,16 +4,30 @@ using Inno.Core.Serialization;
 
 namespace Inno.Core.Graphs;
 
-/// <summary>Persists neutral graph documents through the common Inno serialization pipeline.</summary>
+/// <summary>
+/// Persists neutral graph documents through the common Inno serialization pipeline.
+/// </summary>
 public static class GraphDocumentCodec
 {
-    /// <summary>Encodes a graph document into deterministic native bytes.</summary>
-    /// <param name="document">Document to encode.</param>
-    /// <returns>Native graph bytes containing stable IDs and neutral values only.</returns>
-    public static byte[] Encode(GraphDocument document)
+    /// <summary>
+    /// Encodes a graph document into deterministic native bytes.
+    /// </summary>
+    /// <param name="document">
+    /// Document to encode.
+    /// </param>
+    /// <param name="serialization">
+    /// The serialization registry that owns the converter generation for this operation.
+    /// </param>
+    /// <returns>
+    /// Native graph bytes containing stable IDs and neutral values only.
+    /// </returns>
+    public static byte[] Encode(
+        GraphDocument document,
+        SerializationRegistry serialization)
     {
         ArgumentNullException.ThrowIfNull(document);
-        return SerializationManager.Encode(writer =>
+        ArgumentNullException.ThrowIfNull(serialization);
+        return serialization.Encode(writer =>
         {
             writer.WriteObjectArray("nodes", document.nodes, static (nodeWriter, node) =>
             {
@@ -49,11 +63,24 @@ public static class GraphDocumentCodec
         });
     }
 
-    /// <summary>Decodes one current native graph document.</summary>
-    /// <param name="bytes">Complete native graph payload.</param>
-    /// <returns>A detached mutable neutral graph document.</returns>
-    public static GraphDocument Decode(ReadOnlySpan<byte> bytes)
-        => SerializationManager.Decode(bytes, reader =>
+    /// <summary>
+    /// Decodes one current native graph document.
+    /// </summary>
+    /// <param name="bytes">
+    /// Complete native graph payload.
+    /// </param>
+    /// <param name="serialization">
+    /// The serialization registry that owns the converter generation for this operation.
+    /// </param>
+    /// <returns>
+    /// A detached mutable neutral graph document.
+    /// </returns>
+    public static GraphDocument Decode(
+        ReadOnlySpan<byte> bytes,
+        SerializationRegistry serialization)
+    {
+        ArgumentNullException.ThrowIfNull(serialization);
+        return serialization.Decode(bytes, reader =>
         {
             var document = new GraphDocument();
             foreach (SerializationReader nodeReader in reader.ReadObjectArray("nodes"))
@@ -93,4 +120,5 @@ public static class GraphDocumentCodec
             }
             return document;
         });
+    }
 }

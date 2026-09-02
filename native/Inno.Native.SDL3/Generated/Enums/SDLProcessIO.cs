@@ -10,7 +10,7 @@
 using System;
 using BGCS.Runtime;
 
-namespace Inno.Native.SDL3
+namespace Inno.Native.Sdl3
 {
 	/// <summary>
 	/// Description of where standard I/O should be directed when creating a<br/>

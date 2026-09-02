@@ -6,13 +6,14 @@
 
 ```text
 Settings
-├─ Editor/...   → EditorSettings.json
+├─ Editor/...   → EditorSettings.inno
 └─ Project/...  → ProjectSettings.inno
 ```
 
 ## 窗口行为
 
 - 主菜单 `Edit/Settings...` 打开可移动、可缩放但不可 Dock/Collapse 的 Modal。
+- 搜索框左侧提供 Back/Forward 导航按钮。两个按钮使用与搜索输入框相同的当前 `GetFrameHeight()`，方形 hit area、上下边界与垂直中心完全一致；Tree 点击、页面内链接与开始搜索都会形成页面历史，连续输入搜索词只替换当前搜索结果，不会为每个字符制造历史项。
 - 左侧 Tree 合并 `EditorSetting` 与 `ProjectSettingEditor` 的 placement；搜索匹配 page、path、label、section 与 description。
 - 右侧每个完整字段使用自动内容行高；label/content/reset 保持对齐，连续行之间没有空隙。Field Table 严格使用 page 的真实 content width，不通过负 cursor 或扩大 table width 穿透 padding，因此不会污染 `CursorMaxPos` 或产生虚假水平滚动范围。左右 gutter 背景作为不参与 layout 的 draw-list geometry 延伸至内容窗口边缘，文字与控件继续使用正常 window/cell inset。两种背景使用轻微明度差和固定 `0.005` alpha，只辅助辨认连续字段而不形成明显色块。
 - 合成页面不需要中央 page 注册；frontend 根据 slash-delimited path 自动补齐祖先。
@@ -20,10 +21,11 @@ Settings
 
 ## 单一 Apply 操作
 
-底部只显示右对齐的 `Cancel` 与 `Apply`，其中 `Cancel` 在左、`Apply` 在右：
+底部根据 staged state 使用两种互斥状态：没有变化时只显示右对齐的 `OK`；存在变化时显示右对齐的 `Cancel` 与 `Apply`，其中 `Cancel` 在左、`Apply` 在右：
 
-- `Apply` 一次提交所有 dirty scope；Editor 部分原子写入 `EditorSettings.json` 并形成 `Apply Settings` History entry，Project 部分原子写入 `ProjectSettings.inno` 并形成 `Apply Project Settings` History entry。
+- `Apply` 一次提交所有 dirty scope；Editor 部分通过 SerializationRegistry 原子写入 `EditorSettings.inno` 并形成 `Apply Settings` History entry，Project 部分原子写入 `ProjectSettings.inno` 并形成 `Apply Project Settings` History entry。
 - `Cancel` 同时丢弃两个域尚未 Apply 的隔离 staged 值并关闭窗口。
+- `OK` 仅在 session clean 时关闭窗口，不执行无意义的持久化。
 - `Apply` 仅在 staged effective value 相对窗口打开或上次 Apply 的基线真正变化时启用。把一次未提交修改 Reset 回原始默认值不会留下虚假的 reset intent。
 - 两个持久化域仍分别保证各自的原子写入与 History；单一按钮不把两个文件伪装成一个跨文件事务。
 

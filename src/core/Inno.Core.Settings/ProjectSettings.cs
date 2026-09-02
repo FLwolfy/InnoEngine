@@ -3,41 +3,75 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
+using Inno.Extensibility.Types;
 using Inno.Core.Serialization;
 using Inno.Core.Storage;
 
 namespace Inno.Core.Settings;
 
-/// <summary>Composes setting defaults, Plugin contributions, and project overrides atomically.</summary>
+/// <summary>
+/// Composes setting defaults, Plugin contributions, and project overrides atomically.
+/// </summary>
 public sealed class ProjectSettings : IDisposable
 {
     private readonly string m_documentPath;
-    private readonly ProjectSettingsRegistry m_registry = new();
+    private readonly SerializationRegistry m_serialization;
+    private readonly ProjectSettingsRegistry m_registry;
     private readonly Dictionary<ProjectSettingId, ISerializable> m_effective = [];
     private ProjectSettingsDocument m_document;
     private bool m_disposed;
 
-    /// <summary>Loads one project settings document and builds the initial effective snapshot.</summary>
-    /// <param name="documentPath">ProjectSettings.inno path.</param>
-    /// <param name="contributors">Dependency-ordered default contributors.</param>
+    /// <summary>
+    /// Loads one project settings document and builds the initial effective snapshot.
+    /// </summary>
+    /// <param name="documentPath">
+    /// ProjectSettings.inno path.
+    /// </param>
+    /// <param name="types">
+    /// The type catalog that owns project setting definitions and composers.
+    /// </param>
+    /// <param name="serialization">
+    /// The serialization registry used for settings documents and contribution payloads.
+    /// </param>
+    /// <param name="contributors">
+    /// Dependency-ordered default contributors.
+    /// </param>
     public ProjectSettings(
         string documentPath,
+        TypeCatalog types,
+        SerializationRegistry serialization,
         IReadOnlyList<ProjectSettingsContributor>? contributors = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(documentPath);
+        ArgumentNullException.ThrowIfNull(types);
+        ArgumentNullException.ThrowIfNull(serialization);
+        m_serialization = serialization;
+        m_registry = new ProjectSettingsRegistry(types);
         m_documentPath = Path.GetFullPath(documentPath);
         m_document = File.Exists(m_documentPath)
-            ? SerializationManager.Deserialize<ProjectSettingsDocument>(File.ReadAllBytes(m_documentPath))
+            ? m_serialization.Deserialize<ProjectSettingsDocument>(File.ReadAllBytes(m_documentPath))
             : new ProjectSettingsDocument();
         Rebuild(contributors ?? [], allowUnresolvedContributions: true);
     }
 
-    /// <summary>Gets an isolated snapshot of a current-generation setting.</summary>
-    /// <typeparam name="TSetting">Expected settings contract.</typeparam>
-    /// <param name="id">Stable setting identifier.</param>
-    /// <returns>An independently owned snapshot of the effective current-generation value.</returns>
-    /// <exception cref="KeyNotFoundException">Thrown when no definition exists.</exception>
-    /// <exception cref="InvalidCastException">Thrown when the definition does not implement the requested contract.</exception>
+    /// <summary>
+    /// Gets an isolated snapshot of a current-generation setting.
+    /// </summary>
+    /// <typeparam name="TSetting">
+    /// Expected settings contract.
+    /// </typeparam>
+    /// <param name="id">
+    /// Stable setting identifier.
+    /// </param>
+    /// <returns>
+    /// An independently owned snapshot of the effective current-generation value.
+    /// </returns>
+    /// <exception cref="KeyNotFoundException">
+    /// Thrown when no definition exists.
+    /// </exception>
+    /// <exception cref="InvalidCastException">
+    /// Thrown when the definition does not implement the requested contract.
+    /// </exception>
     public TSetting Get<TSetting>(ProjectSettingId id) where TSetting : class, ISerializable
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -47,11 +81,21 @@ public sealed class ProjectSettings : IDisposable
             $"Project setting '{id}' is '{value.GetType().FullName}', not '{typeof(TSetting).FullName}'.");
     }
 
-    /// <summary>Tries to get an isolated snapshot of a current-generation setting.</summary>
-    /// <typeparam name="TSetting">Expected settings contract.</typeparam>
-    /// <param name="id">Stable setting identifier.</param>
-    /// <param name="setting">Receives an independently owned effective snapshot.</param>
-    /// <returns><see langword="true"/> when a compatible definition exists.</returns>
+    /// <summary>
+    /// Tries to get an isolated snapshot of a current-generation setting.
+    /// </summary>
+    /// <typeparam name="TSetting">
+    /// Expected settings contract.
+    /// </typeparam>
+    /// <param name="id">
+    /// Stable setting identifier.
+    /// </param>
+    /// <param name="setting">
+    /// Receives an independently owned effective snapshot.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when a compatible definition exists.
+    /// </returns>
     public bool TryGet<TSetting>(ProjectSettingId id, out TSetting? setting)
         where TSetting : class, ISerializable
     {
@@ -68,13 +112,27 @@ public sealed class ProjectSettings : IDisposable
     /// <summary>
     /// Captures and validates the project-authored delta as one prospective Plugin contribution.
     /// </summary>
-    /// <param name="id">Stable setting identifier.</param>
-    /// <param name="contributorId">Stable identity of the Plugin being exported.</param>
-    /// <param name="declaredDependencies">Direct dependency Plugin IDs declared by the exported Plugin.</param>
-    /// <param name="declaredOverrides">Dependency Plugin IDs whose owned values may be replaced.</param>
-    /// <param name="contributors">All currently active dependency-ordered contributors.</param>
-    /// <param name="record">Receives the normalized semantic Plugin contribution.</param>
-    /// <returns><see langword="true"/> when the project document contains an effective semantic delta.</returns>
+    /// <param name="id">
+    /// Stable setting identifier.
+    /// </param>
+    /// <param name="contributorId">
+    /// Stable identity of the Plugin being exported.
+    /// </param>
+    /// <param name="declaredDependencies">
+    /// Direct dependency Plugin IDs declared by the exported Plugin.
+    /// </param>
+    /// <param name="declaredOverrides">
+    /// Dependency Plugin IDs whose owned values may be replaced.
+    /// </param>
+    /// <param name="contributors">
+    /// All currently active dependency-ordered contributors.
+    /// </param>
+    /// <param name="record">
+    /// Receives the normalized semantic Plugin contribution.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the project document contains an effective semantic delta.
+    /// </returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown when a replacement setting depends on an undeclared contributor, or when the authored delta is not
     /// permitted by the declared dependency and override ownership.
@@ -136,19 +194,33 @@ public sealed class ProjectSettings : IDisposable
         return TryCreateRecord(id, definition, baseline, candidate, out record);
     }
 
-    /// <summary>Gets whether the project document explicitly contributes to one setting protocol.</summary>
-    /// <param name="id">Stable setting identifier.</param>
-    /// <returns><see langword="true"/> when a project contribution record exists.</returns>
+    /// <summary>
+    /// Gets whether the project document explicitly contributes to one setting protocol.
+    /// </summary>
+    /// <param name="id">
+    /// Stable setting identifier.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when a project contribution record exists.
+    /// </returns>
     public bool HasProjectOverride(ProjectSettingId id)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
         return m_document.overrides.Any(candidate => candidate.id == id);
     }
 
-    /// <summary>Creates an isolated editable copy of one effective setting.</summary>
-    /// <param name="id">Stable setting identifier.</param>
-    /// <param name="setting">Receives a generation-local editable copy.</param>
-    /// <returns><see langword="true"/> when the setting is defined.</returns>
+    /// <summary>
+    /// Creates an isolated editable copy of one effective setting.
+    /// </summary>
+    /// <param name="id">
+    /// Stable setting identifier.
+    /// </param>
+    /// <param name="setting">
+    /// Receives a generation-local editable copy.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the setting is defined.
+    /// </returns>
     public bool TryClone(ProjectSettingId id, out ISerializable? setting)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -162,11 +234,21 @@ public sealed class ProjectSettings : IDisposable
         return true;
     }
 
-    /// <summary>Creates an isolated copy composed without the project-authored contribution.</summary>
-    /// <param name="id">Stable setting identifier.</param>
-    /// <param name="contributors">Dependency-ordered Plugin default contributors.</param>
-    /// <param name="setting">Receives the composed default value.</param>
-    /// <returns><see langword="true"/> when the setting is defined.</returns>
+    /// <summary>
+    /// Creates an isolated copy composed without the project-authored contribution.
+    /// </summary>
+    /// <param name="id">
+    /// Stable setting identifier.
+    /// </param>
+    /// <param name="contributors">
+    /// Dependency-ordered Plugin default contributors.
+    /// </param>
+    /// <param name="setting">
+    /// Receives the composed default value.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the setting is defined.
+    /// </returns>
     public bool TryCloneComposedDefault(
         ProjectSettingId id,
         IReadOnlyList<ProjectSettingsContributor> contributors,
@@ -184,17 +266,27 @@ public sealed class ProjectSettings : IDisposable
         return true;
     }
 
-    /// <summary>Captures the native project contribution document.</summary>
-    /// <returns>A newly owned native document payload.</returns>
+    /// <summary>
+    /// Captures the native project contribution document.
+    /// </summary>
+    /// <returns>
+    /// A newly owned native document payload.
+    /// </returns>
     public byte[] CaptureDocument()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
-        return SerializationManager.Serialize(m_document);
+        return m_serialization.Serialize(m_document);
     }
 
-    /// <summary>Atomically rebuilds effective settings for a new extension generation.</summary>
-    /// <param name="contributors">Dependency-ordered default contributors.</param>
-    /// <param name="allowUnresolvedContributions">Whether contributions awaiting Plugin type activation are retained but skipped.</param>
+    /// <summary>
+    /// Atomically rebuilds effective settings for a new extension generation.
+    /// </summary>
+    /// <param name="contributors">
+    /// Dependency-ordered default contributors.
+    /// </param>
+    /// <param name="allowUnresolvedContributions">
+    /// Whether contributions awaiting Plugin type activation are retained but skipped.
+    /// </param>
     public void Rebuild(
         IReadOnlyList<ProjectSettingsContributor> contributors,
         bool allowUnresolvedContributions = false)
@@ -224,10 +316,18 @@ public sealed class ProjectSettings : IDisposable
             m_effective.Add(id, value);
     }
 
-    /// <summary>Persists one project-authored semantic contribution and rebuilds the effective value.</summary>
-    /// <param name="id">Stable setting identifier.</param>
-    /// <param name="value">Current generation setting value.</param>
-    /// <param name="contributors">Dependency-ordered defaults used to rebuild.</param>
+    /// <summary>
+    /// Persists one project-authored semantic contribution and rebuilds the effective value.
+    /// </summary>
+    /// <param name="id">
+    /// Stable setting identifier.
+    /// </param>
+    /// <param name="value">
+    /// Current generation setting value.
+    /// </param>
+    /// <param name="contributors">
+    /// Dependency-ordered defaults used to rebuild.
+    /// </param>
     public void SetProjectOverride(
         ProjectSettingId id,
         ISerializable value,
@@ -239,11 +339,21 @@ public sealed class ProjectSettings : IDisposable
             contributors);
     }
 
-    /// <summary>Applies multiple project contributions and removals as one atomic document update.</summary>
-    /// <param name="values">Complete authored values keyed by stable setting identity.</param>
-    /// <param name="resets">Setting identities whose project-authored contributions are removed.</param>
-    /// <param name="contributors">Dependency-ordered defaults used to rebuild effective values.</param>
-    /// <returns><see langword="true"/> when the project document changed.</returns>
+    /// <summary>
+    /// Applies multiple project contributions and removals as one atomic document update.
+    /// </summary>
+    /// <param name="values">
+    /// Complete authored values keyed by stable setting identity.
+    /// </param>
+    /// <param name="resets">
+    /// Setting identities whose project-authored contributions are removed.
+    /// </param>
+    /// <param name="contributors">
+    /// Dependency-ordered defaults used to rebuild effective values.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the project document changed.
+    /// </returns>
     public bool ApplyProjectOverrides(
         IReadOnlyDictionary<ProjectSettingId, ISerializable> values,
         IReadOnlySet<ProjectSettingId>? resets,
@@ -299,20 +409,28 @@ public sealed class ProjectSettings : IDisposable
         return true;
     }
 
-    /// <summary>Atomically restores a native project settings document.</summary>
-    /// <param name="document">Native document bytes.</param>
-    /// <param name="contributors">Dependency-ordered defaults used to rebuild effective values.</param>
+    /// <summary>
+    /// Atomically restores a native project settings document.
+    /// </summary>
+    /// <param name="document">
+    /// Native document bytes.
+    /// </param>
+    /// <param name="contributors">
+    /// Dependency-ordered defaults used to rebuild effective values.
+    /// </param>
     public void RestoreDocument(
         ReadOnlySpan<byte> document,
         IReadOnlyList<ProjectSettingsContributor> contributors)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
         ArgumentNullException.ThrowIfNull(contributors);
-        ProjectSettingsDocument candidate = SerializationManager.Deserialize<ProjectSettingsDocument>(document);
+        ProjectSettingsDocument candidate = m_serialization.Deserialize<ProjectSettingsDocument>(document);
         ReplaceDocument(candidate, contributors);
     }
 
-    /// <summary>Releases registry snapshots and generation-local setting objects.</summary>
+    /// <summary>
+    /// Releases registry snapshots and generation-local setting objects.
+    /// </summary>
     public void Dispose()
     {
         if (m_disposed)
@@ -322,14 +440,14 @@ public sealed class ProjectSettings : IDisposable
         m_disposed = true;
     }
 
-    private static ISerializable Clone(
+    private ISerializable Clone(
         ProjectSettingsRegistry.Definition definition,
         ISerializable value)
     {
         ISerializable result = definition.Create();
-        _ = SerializationManager.RestorePropertiesData(
+        _ = m_serialization.RestorePropertiesData(
             result,
-            SerializationManager.CapturePropertiesData(value));
+            m_serialization.CapturePropertiesData(value));
         return result;
     }
 
@@ -464,10 +582,10 @@ public sealed class ProjectSettings : IDisposable
                     new HashSet<string>(StringComparer.Ordinal)),
                 project.propertyData));
         }
-        return definition.composer.Compose(definition.Create(), entries);
+        return definition.composer.Compose(m_serialization, definition.Create(), entries);
     }
 
-    private static ISerializable ComposeReplacement(
+    private ISerializable ComposeReplacement(
         ProjectSettingId id,
         ProjectSettingsRegistry.Definition definition,
         IReadOnlyList<ProjectSettingsContributor> contributors,
@@ -499,11 +617,11 @@ public sealed class ProjectSettings : IDisposable
 
         ISerializable result = definition.Create();
         if (selected is ProjectSettingRecord value)
-            _ = SerializationManager.RestorePropertiesData(result, value.propertyData);
+            _ = m_serialization.RestorePropertiesData(result, value.propertyData);
         return result;
     }
 
-    private static bool TryCreateRecord(
+    private bool TryCreateRecord(
         ProjectSettingId id,
         ProjectSettingsRegistry.Definition definition,
         ISerializable baseline,
@@ -516,15 +634,15 @@ public sealed class ProjectSettings : IDisposable
         byte[] payload;
         if (definition.composer is null)
         {
-            byte[] baselineData = SerializationManager.CapturePropertiesData(baseline);
-            payload = SerializationManager.CapturePropertiesData(value);
+            byte[] baselineData = m_serialization.CapturePropertiesData(baseline);
+            payload = m_serialization.CapturePropertiesData(value);
             if (baselineData.AsSpan().SequenceEqual(payload))
             {
                 record = default;
                 return false;
             }
         }
-        else if (!definition.composer.TryCapture(baseline, value, out payload))
+        else if (!definition.composer.TryCapture(m_serialization, baseline, value, out payload))
         {
             record = default;
             return false;
@@ -547,8 +665,8 @@ public sealed class ProjectSettings : IDisposable
     {
         ArgumentNullException.ThrowIfNull(candidate);
         ProjectSettingsDocument previous = m_document;
-        byte[] previousBytes = SerializationManager.Serialize(previous);
-        byte[] candidateBytes = SerializationManager.Serialize(candidate);
+        byte[] previousBytes = m_serialization.Serialize(previous);
+        byte[] candidateBytes = m_serialization.Serialize(candidate);
         WriteAtomic(m_documentPath, candidateBytes);
         m_document = candidate;
         try

@@ -9,7 +9,8 @@ namespace Inno.Editor.Interactions;
 
 internal sealed class EditorMenuCatalog(
     EditorExtensionCatalog catalog,
-    EditorActionRouter actions)
+    EditorActionRouter actions,
+    Logger log)
 {
     private readonly HashSet<string> m_sourceFailures = new(StringComparer.Ordinal);
 
@@ -28,7 +29,8 @@ internal sealed class EditorMenuCatalog(
                     registration.id,
                     menu.order,
                     menu.separatorBefore,
-                    argument: null));
+                    argument: null,
+                    status: null));
             }
         }
 
@@ -47,17 +49,18 @@ internal sealed class EditorMenuCatalog(
                     item.actionId,
                     item.order,
                     item.separatorBefore,
-                    item.argument)));
+                    item.argument,
+                    status: null)));
             }
             catch (Exception exception)
             {
                 string sourceName = registration.type.FullName ?? registration.type.Name;
                 if (m_sourceFailures.Add(sourceName))
                 {
-                    Log.Error(
+                    log.Write(
+                        LogLevel.Error,
                         "Editor menu source '{0}' failed: {1}",
-                        sourceName,
-                        exception);
+                        [sourceName, exception]);
                 }
             }
         }
@@ -77,7 +80,11 @@ internal sealed class EditorMenuCatalog(
                     EditorBuiltInInteractionIds.C_TOGGLE_PANEL,
                     panel.attribute.order,
                     panel.attribute.separatorBefore,
-                    panel.attribute.id));
+                    panel.attribute.id,
+                    new EditorActionState(
+                        isVisible: true,
+                        isEnabled: true,
+                        isChecked: panel.panel.isOpen)));
             }
         }
 
@@ -94,7 +101,7 @@ internal sealed class EditorMenuCatalog(
     private void AddPlacement(MutableNode root, Placement placement, EditorMenuContext context)
     {
         EditorActionContext actionContext = context.CreateActionContext(placement.argument);
-        EditorActionState state = actions.Query(placement.actionId, actionContext);
+        EditorActionState state = placement.status ?? actions.Query(placement.actionId, actionContext);
         if (!state.isVisible)
             return;
 
@@ -163,7 +170,8 @@ internal sealed class EditorMenuCatalog(
         string actionId,
         int order,
         bool separatorBefore,
-        object? argument);
+        object? argument,
+        EditorActionState? status);
 
     private sealed class MutableNode(string label, int order, bool separatorBefore)
     {

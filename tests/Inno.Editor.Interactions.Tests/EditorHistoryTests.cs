@@ -1,11 +1,10 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Reflection;
-using System.Runtime.ExceptionServices;
 
+using Inno.Extensibility.Modules;
+using Inno.Extensibility.Types;
+using Inno.Core.Logging;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 using Xunit;
@@ -15,590 +14,370 @@ namespace Inno.Editor.Interactions.Tests;
 public sealed class EditorHistoryTests
 {
     [Fact]
-    public void ExecuteUndoAndRedoMoveOperationBetweenStacks()
+    public void ExecuteUndoAndRedoMoveNeutralChangeBetweenStacks()
     {
-        using var history = new ReflectedEditorHistory();
-        int value = 0;
+        using var fixture = new HistoryFixture();
 
-        EditorHistoryResult applied = history.Execute(
+        EditorHistoryResult applied = fixture.history.Execute(
             "Change Value",
-            () =>
-            {
-                value = 10;
-                return EditorHistoryResult.Success();
-            },
-            () =>
-            {
-                value = 0;
-                return EditorHistoryResult.Success();
-            });
+            NeutralValueHistoryHandler.CreateChange(slot: 1, before: 0, after: 10));
 
         Assert.True(applied.succeeded);
-        Assert.Equal(10, value);
-        Assert.Equal("Change Value", history.undoName);
-        Assert.True(history.Undo().succeeded);
-        Assert.Equal(0, value);
-        Assert.Equal("Change Value", history.redoName);
-        Assert.True(history.Redo().succeeded);
-        Assert.Equal(10, value);
+        Assert.Equal(10, NeutralValueHistoryHandler.GetValue(1));
+        Assert.Equal("Change Value", fixture.history.undoName);
+        Assert.True(fixture.history.Undo().succeeded);
+        Assert.Equal(0, NeutralValueHistoryHandler.GetValue(1));
+        Assert.Equal("Change Value", fixture.history.redoName);
+        Assert.True(fixture.history.Redo().succeeded);
+        Assert.Equal(10, NeutralValueHistoryHandler.GetValue(1));
     }
 
     [Fact]
-    public void FailedRedoRemainsAvailableForRetry()
+    public void FailedTransitionRemainsAvailableForRetry()
     {
-        using var history = new ReflectedEditorHistory();
-        bool allowRedo = true;
-        int value = 0;
-        Assert.True(history.Execute(
+        using var fixture = new HistoryFixture();
+        Assert.True(fixture.history.Execute(
             "Conditional",
-            () =>
-            {
-                if (!allowRedo)
-                    return EditorHistoryResult.Failure("Blocked");
-                value = 1;
-                return EditorHistoryResult.Success();
-            },
-            () =>
-            {
-                value = 0;
-                return EditorHistoryResult.Success();
-            }).succeeded);
-        Assert.True(history.Undo().succeeded);
+            NeutralValueHistoryHandler.CreateChange(slot: 1, before: 0, after: 1)).succeeded);
 
-        allowRedo = false;
-        Assert.False(history.Redo().succeeded);
-        Assert.True(history.canRedo);
-        Assert.Equal(0, value);
+        NeutralValueHistoryHandler.Block(slot: 1, EditorHistoryDirection.Undo);
+        Assert.False(fixture.history.Undo().succeeded);
+        Assert.True(fixture.history.canUndo);
+        Assert.Equal("Conditional", fixture.history.undoName);
+        Assert.Equal(1, NeutralValueHistoryHandler.GetValue(1));
 
-        allowRedo = true;
-        Assert.True(history.Redo().succeeded);
-        Assert.Equal(1, value);
+        NeutralValueHistoryHandler.Unblock(slot: 1, EditorHistoryDirection.Undo);
+        Assert.True(fixture.history.Undo().succeeded);
+        NeutralValueHistoryHandler.Block(slot: 1, EditorHistoryDirection.Redo);
+        Assert.False(fixture.history.Redo().succeeded);
+        Assert.True(fixture.history.canRedo);
+        Assert.Equal(0, NeutralValueHistoryHandler.GetValue(1));
+
+        NeutralValueHistoryHandler.Unblock(slot: 1, EditorHistoryDirection.Redo);
+        Assert.True(fixture.history.Redo().succeeded);
+        Assert.Equal(1, NeutralValueHistoryHandler.GetValue(1));
     }
 
     [Fact]
-    public void AdjacentValueEditsWithSameKeyCoalesce()
+    public void AdjacentChangesWithTheSameStableMergeKeyCoalesce()
     {
-        using var history = new ReflectedEditorHistory();
-        int value = 1;
-        object key = new();
+        using var fixture = new HistoryFixture();
+        NeutralValueHistoryHandler.SetValue(slot: 1, value: 2);
+        fixture.history.RecordApplied(
+            "Change Value",
+            NeutralValueHistoryHandler.CreateChange(1, 1, 2, mergeKey: "value/1"));
+        NeutralValueHistoryHandler.SetValue(slot: 1, value: 3);
+        fixture.history.RecordApplied(
+            "Change Value",
+            NeutralValueHistoryHandler.CreateChange(1, 2, 3, mergeKey: "value/1"));
 
-        value = 2;
-        history.RecordValue("Change Value", 1, 2, updated => value = updated, key);
-        value = 3;
-        history.RecordValue("Change Value", 2, 3, updated => value = updated, key);
-
-        Assert.True(history.Undo().succeeded);
-        Assert.Equal(1, value);
-        Assert.False(history.canUndo);
-        Assert.True(history.Redo().succeeded);
-        Assert.Equal(3, value);
+        Assert.True(fixture.history.Undo().succeeded);
+        Assert.Equal(1, NeutralValueHistoryHandler.GetValue(1));
+        Assert.False(fixture.history.canUndo);
+        Assert.True(fixture.history.Redo().succeeded);
+        Assert.Equal(3, NeutralValueHistoryHandler.GetValue(1));
     }
 
     [Fact]
     public void TransactionCommitsAndRevertsAtomically()
     {
-        using var history = new ReflectedEditorHistory();
-        int first = 0;
-        int second = 0;
-        using (EditorHistoryTransaction transaction = history.BeginTransaction("Batch"))
+        using var fixture = new HistoryFixture();
+        using (EditorHistoryTransaction transaction = fixture.history.BeginTransaction("Batch"))
         {
-            Assert.True(history.Execute(
+            Assert.True(fixture.history.Execute(
                 "First",
-                () =>
-                {
-                    first = 1;
-                    return EditorHistoryResult.Success();
-                },
-                () =>
-                {
-                    first = 0;
-                    return EditorHistoryResult.Success();
-                }).succeeded);
-            Assert.True(history.Execute(
+                NeutralValueHistoryHandler.CreateChange(1, 0, 1)).succeeded);
+            Assert.True(fixture.history.Execute(
                 "Second",
-                () =>
-                {
-                    second = 1;
-                    return EditorHistoryResult.Success();
-                },
-                () =>
-                {
-                    second = 0;
-                    return EditorHistoryResult.Success();
-                }).succeeded);
+                NeutralValueHistoryHandler.CreateChange(2, 0, 1)).succeeded);
             transaction.Commit();
         }
 
-        Assert.Equal("Batch", history.undoName);
-        Assert.True(history.Undo().succeeded);
-        Assert.Equal(0, first);
-        Assert.Equal(0, second);
-        Assert.True(history.Redo().succeeded);
-        Assert.Equal(1, first);
-        Assert.Equal(1, second);
+        Assert.Equal("Batch", fixture.history.undoName);
+        Assert.True(fixture.history.Undo().succeeded);
+        Assert.Equal(0, NeutralValueHistoryHandler.GetValue(1));
+        Assert.Equal(0, NeutralValueHistoryHandler.GetValue(2));
+        Assert.True(fixture.history.Redo().succeeded);
+        Assert.Equal(1, NeutralValueHistoryHandler.GetValue(1));
+        Assert.Equal(1, NeutralValueHistoryHandler.GetValue(2));
     }
 
     [Fact]
-    public void RecordingANewMutationDisposesTheRedoBranch()
+    public void RecordingANewMutationReleasesTheRedoBranch()
     {
-        using var history = new ReflectedEditorHistory();
-        int value = 0;
-        Assert.True(history.Execute(
+        using var fixture = new HistoryFixture();
+        Assert.True(fixture.history.Execute(
             "First",
-            () =>
-            {
-                value = 1;
-                return EditorHistoryResult.Success();
-            },
-            () =>
-            {
-                value = 0;
-                return EditorHistoryResult.Success();
-            }).succeeded);
-        Assert.True(history.Undo().succeeded);
-        Assert.True(history.canRedo);
+            NeutralValueHistoryHandler.CreateChange(1, 0, 1)).succeeded);
+        Assert.True(fixture.history.Undo().succeeded);
+        Assert.True(fixture.history.canRedo);
 
-        Assert.True(history.Execute(
+        Assert.True(fixture.history.Execute(
             "Replacement",
-            () =>
-            {
-                value = 2;
-                return EditorHistoryResult.Success();
-            },
-            () =>
-            {
-                value = 0;
-                return EditorHistoryResult.Success();
-            }).succeeded);
+            NeutralValueHistoryHandler.CreateChange(1, 0, 2)).succeeded);
 
-        Assert.False(history.canRedo);
-        Assert.Equal(2, value);
+        Assert.False(fixture.history.canRedo);
+        Assert.Equal(2, NeutralValueHistoryHandler.GetValue(1));
     }
 
     [Fact]
-    public void IsolatedBranchIsDiscardedAndRestoresBothEditingStacks()
+    public void IsolatedBranchIsReleasedAndRestoresTheEditingStacks()
     {
-        using var history = new ReflectedEditorHistory();
-        int value = 0;
-        Assert.True(history.Execute(
+        using var fixture = new HistoryFixture();
+        Assert.True(fixture.history.Execute(
             "Edit Value",
-            () =>
-            {
-                value = 1;
-                return EditorHistoryResult.Success();
-            },
-            () =>
-            {
-                value = 0;
-                return EditorHistoryResult.Success();
-            }).succeeded);
-        Assert.True(history.Undo().succeeded);
-        Assert.True(history.canRedo);
+            NeutralValueHistoryHandler.CreateChange(1, 0, 1)).succeeded);
+        Assert.True(fixture.history.Undo().succeeded);
 
-        using (history.BeginIsolation())
+        using (fixture.runtime.interactions.BeginHistoryIsolation())
         {
-            Assert.False(history.canUndo);
-            Assert.False(history.canRedo);
-            Assert.True(history.Execute(
+            Assert.False(fixture.history.canUndo);
+            Assert.False(fixture.history.canRedo);
+            Assert.True(fixture.history.Execute(
                 "Runtime Value",
-                () =>
-                {
-                    value = 2;
-                    return EditorHistoryResult.Success();
-                },
-                () =>
-                {
-                    value = 0;
-                    return EditorHistoryResult.Success();
-                }).succeeded);
-            Assert.Equal("Runtime Value", history.undoName);
+                NeutralValueHistoryHandler.CreateChange(1, 0, 2)).succeeded);
+            Assert.Equal("Runtime Value", fixture.history.undoName);
         }
 
-        Assert.False(history.canUndo);
-        Assert.True(history.canRedo);
-        Assert.Equal("Edit Value", history.redoName);
-        Assert.True(history.Redo().succeeded);
-        Assert.Equal(1, value);
+        Assert.False(fixture.history.canUndo);
+        Assert.True(fixture.history.canRedo);
+        Assert.Equal("Edit Value", fixture.history.redoName);
+        Assert.True(fixture.history.Redo().succeeded);
+        Assert.Equal(1, NeutralValueHistoryHandler.GetValue(1));
     }
 
     [Fact]
-    public void FailedTransactionRollbackRemainsOnStackAndCanBeRetried()
+    public void FailedTransactionRollbackCanBeRetriedWithoutPartialState()
     {
-        using var history = new ReflectedEditorHistory();
-        int first = 0;
-        int second = 0;
-        bool allowFirstUndo = false;
-        EditorHistoryTransaction transaction = history.BeginTransaction("Batch");
-        Assert.True(history.Execute(
+        using var fixture = new HistoryFixture();
+        EditorHistoryTransaction transaction = fixture.history.BeginTransaction("Batch");
+        Assert.True(fixture.history.Execute(
             "First",
-            () =>
-            {
-                first = 1;
-                return EditorHistoryResult.Success();
-            },
-            () =>
-            {
-                if (!allowFirstUndo)
-                    return EditorHistoryResult.Failure("First is busy.");
-                first = 0;
-                return EditorHistoryResult.Success();
-            }).succeeded);
-        Assert.True(history.Execute(
+            NeutralValueHistoryHandler.CreateChange(1, 0, 1)).succeeded);
+        Assert.True(fixture.history.Execute(
             "Second",
-            () =>
-            {
-                second = 1;
-                return EditorHistoryResult.Success();
-            },
-            () =>
-            {
-                second = 0;
-                return EditorHistoryResult.Success();
-            }).succeeded);
+            NeutralValueHistoryHandler.CreateChange(2, 0, 1)).succeeded);
+        NeutralValueHistoryHandler.Block(slot: 1, EditorHistoryDirection.Undo);
 
         EditorHistoryResult firstAttempt = transaction.Rollback();
 
         Assert.False(firstAttempt.succeeded);
         Assert.True(firstAttempt.statePreserved);
-        Assert.Equal(1, first);
-        Assert.Equal(1, second);
-        allowFirstUndo = true;
+        Assert.Equal(1, NeutralValueHistoryHandler.GetValue(1));
+        Assert.Equal(1, NeutralValueHistoryHandler.GetValue(2));
+        NeutralValueHistoryHandler.Unblock(slot: 1, EditorHistoryDirection.Undo);
         Assert.True(transaction.Rollback().succeeded);
-        Assert.Equal(0, first);
-        Assert.Equal(0, second);
-        Assert.False(history.canUndo);
+        Assert.Equal(0, NeutralValueHistoryHandler.GetValue(1));
+        Assert.Equal(0, NeutralValueHistoryHandler.GetValue(2));
+        Assert.False(fixture.history.canUndo);
     }
 
     [Fact]
-    public void DisposeCommitsAppliedTransactionWhenRollbackFailsSafely()
+    public void CompensationFailureFaultsHistoryAndRejectsFurtherTransactions()
     {
-        using var history = new ReflectedEditorHistory();
-        int value = 0;
-        bool allowUndo = false;
-        EditorHistoryTransaction transaction = history.BeginTransaction("Batch");
-        Assert.True(history.Execute(
-            "Value",
-            () =>
-            {
-                value = 1;
-                return EditorHistoryResult.Success();
-            },
-            () =>
-            {
-                if (!allowUndo)
-                    return EditorHistoryResult.Failure("Value is busy.");
-                value = 0;
-                return EditorHistoryResult.Success();
-            }).succeeded);
-
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(transaction.Dispose);
-
-        Assert.Contains("committed to Undo", exception.Message, StringComparison.Ordinal);
-        Assert.Equal(1, value);
-        Assert.Equal("Batch", history.undoName);
-        allowUndo = true;
-        Assert.True(history.Undo().succeeded);
-        Assert.Equal(0, value);
-    }
-
-    [Fact]
-    public void CompensationFailureFaultsHistoryAndPreventsFurtherTransitions()
-    {
-        using var history = new ReflectedEditorHistory();
-        int first = 0;
-        int second = 0;
-        bool initialSecondApply = true;
-        EditorHistoryTransaction transaction = history.BeginTransaction("Batch");
-        Assert.True(history.Execute(
+        using var fixture = new HistoryFixture();
+        EditorHistoryTransaction transaction = fixture.history.BeginTransaction("Batch");
+        Assert.True(fixture.history.Execute(
             "First",
-            () =>
-            {
-                first = 1;
-                return EditorHistoryResult.Success();
-            },
-            () => EditorHistoryResult.Failure("First cannot undo.")).succeeded);
-        Assert.True(history.Execute(
+            NeutralValueHistoryHandler.CreateChange(1, 0, 1)).succeeded);
+        Assert.True(fixture.history.Execute(
             "Second",
-            () =>
-            {
-                if (!initialSecondApply)
-                    return EditorHistoryResult.Failure("Second cannot compensate.");
-                initialSecondApply = false;
-                second = 1;
-                return EditorHistoryResult.Success();
-            },
-            () =>
-            {
-                second = 0;
-                return EditorHistoryResult.Success();
-            }).succeeded);
+            NeutralValueHistoryHandler.CreateChange(2, 0, 1)).succeeded);
+        NeutralValueHistoryHandler.Block(slot: 1, EditorHistoryDirection.Undo);
+        NeutralValueHistoryHandler.Block(slot: 2, EditorHistoryDirection.Redo);
 
         EditorHistoryResult result = transaction.Rollback();
 
         Assert.False(result.succeeded);
         Assert.False(result.statePreserved);
-        Assert.True(history.isFaulted);
-        Assert.Equal(1, first);
-        Assert.Equal(0, second);
-        Assert.Throws<InvalidOperationException>(() => history.BeginTransaction("Rejected"));
+        Assert.True(fixture.history.isFaulted);
+        Assert.Equal(1, NeutralValueHistoryHandler.GetValue(1));
+        Assert.Equal(0, NeutralValueHistoryHandler.GetValue(2));
+        Assert.Throws<InvalidOperationException>(() => fixture.history.BeginTransaction("Rejected"));
         transaction.Dispose();
     }
 
     [Fact]
-    public void FaultedTransactionRetainsChildrenUntilHistoryIsCleared()
+    public void MissingHandlerCreatesAnExplicitAvailabilityBarrier()
     {
-        using var history = new ReflectedEditorHistory();
-        int secondRedoCount = 0;
-        EditorHistoryTransaction transaction = history.BeginTransaction("Batch");
-        Assert.True(history.Execute(
-            "First",
-            EditorHistoryResult.Success,
-            () => EditorHistoryResult.Failure("First cannot undo.")).succeeded);
-        Assert.True(history.Execute(
-            "Second",
-            () => ++secondRedoCount == 1
-                ? EditorHistoryResult.Success()
-                : EditorHistoryResult.Failure("Second cannot compensate."),
-            EditorHistoryResult.Success).succeeded);
-        object[] children = GetActiveTransactionChildren(history);
-
-        EditorHistoryResult result = transaction.Rollback();
-
-        Assert.False(result.statePreserved);
-        Assert.All(children, child => Assert.False(IsHistoryOperationDisposed(child)));
-        history.Clear();
-        Assert.All(children, child => Assert.True(IsHistoryOperationDisposed(child)));
-    }
-
-    [Fact]
-    public void FailedUndoDoesNotMoveTheOperationBetweenStacks()
-    {
-        using var history = new ReflectedEditorHistory();
-        bool allowUndo = false;
-        int value = 0;
-        Assert.True(history.Execute(
-            "Conditional",
-            () =>
-            {
-                value = 1;
-                return EditorHistoryResult.Success();
-            },
-            () =>
-            {
-                if (!allowUndo)
-                    return EditorHistoryResult.Failure("Blocked");
-                value = 0;
-                return EditorHistoryResult.Success();
-            }).succeeded);
-
-        Assert.False(history.Undo().succeeded);
-        Assert.Equal("Conditional", history.undoName);
-        Assert.Null(history.redoName);
-        Assert.Equal(1, value);
-
-        allowUndo = true;
-        Assert.True(history.Undo().succeeded);
-        Assert.Equal(0, value);
-    }
-
-    [Fact]
-    public void HandlerMapRollbackRestoresThePreviousGenerationWithoutDiscardingHistory()
-    {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "InnoHistoryHandlerTests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(projectRoot);
-        var context = new EditorContext(projectRoot);
-        var interactions = (EditorInteractions)EditorTestReflection.Create(
-            typeof(EditorInteractions).Assembly,
-            "Inno.Editor.Interactions.EditorInteractions",
-            context);
-        using var history = new ReflectedEditorHistory();
-        history.Attach(context, interactions);
-        var handler = new TestNeutralHistoryHandler();
-        ReflectedHistoryUpdate initial = history.PrepareHandlerUpdate(
-            new Dictionary<string, EditorHistoryHandler>(StringComparer.Ordinal)
-            {
-                [TestNeutralHistoryHandler.C_KIND] = handler
-            });
-        initial.Activate();
-        initial.Complete();
-        TestNeutralHistoryHandler.value = 1;
-        history.RecordApplied(
-            "Neutral",
+        using var fixture = new HistoryFixture();
+        fixture.history.RecordApplied(
+            "Unavailable Change",
             new EditorHistoryChange(
-                TestNeutralHistoryHandler.C_KIND,
-                EditorHistoryPayload.FromBytes([])));
-        ReflectedHistoryUpdate candidate = history.PrepareHandlerUpdate(
-            new Dictionary<string, EditorHistoryHandler>(StringComparer.Ordinal));
-        candidate.Activate();
-        candidate.Rollback();
+                "tests/missing-history-handler",
+                EditorHistoryPayload.FromBytes([1, 2, 3])));
 
-        Assert.True(history.Undo().succeeded);
-        Assert.Equal(0, TestNeutralHistoryHandler.value);
-
-        PropertyInfo historyHostProperty = typeof(EditorInteractions).GetProperty(
-            "historyHost",
-            BindingFlags.Instance | BindingFlags.NonPublic)!;
-        ((IDisposable)historyHostProperty.GetValue(interactions)!).Dispose();
-        Directory.Delete(projectRoot, recursive: true);
+        Assert.False(fixture.history.canUndo);
+        Assert.Contains("tests/missing-history-handler", fixture.history.undoUnavailableReason);
+        Assert.False(fixture.history.Undo().succeeded);
+        Assert.Equal("Unavailable Change", fixture.history.undoName);
     }
 
-    private static object[] GetActiveTransactionChildren(ReflectedEditorHistory history)
+    [Fact]
+    public void LargePayloadUsesTheBoundedSessionDiskStore()
     {
-        FieldInfo transactionsField = history.instance.GetType().GetField(
-            "m_transactions",
-            BindingFlags.Instance | BindingFlags.NonPublic)!;
-        var transactions = (IEnumerable)transactionsField.GetValue(history.instance)!;
-        object transaction = Assert.Single(transactions.Cast<object>());
-        FieldInfo childrenField = transaction.GetType().GetField(
-            "m_children",
-            BindingFlags.Instance | BindingFlags.NonPublic)!;
-        return ((IEnumerable)childrenField.GetValue(transaction)!).Cast<object>().ToArray();
+        using var fixture = new HistoryFixture();
+        byte[] payload = new byte[128 * 1024];
+        BitConverter.GetBytes(1).CopyTo(payload, 0);
+        BitConverter.GetBytes(9).CopyTo(payload, sizeof(int));
+        BitConverter.GetBytes(32).CopyTo(payload, sizeof(int) * 2);
+        NeutralValueHistoryHandler.SetValue(slot: 1, value: 32);
+        fixture.history.RecordApplied(
+            "Large Neutral Change",
+            new EditorHistoryChange(
+                NeutralValueHistoryHandler.KIND,
+                EditorHistoryPayload.FromBytes(payload)));
+
+        Assert.Equal(0, fixture.history.residentBytes);
+        Assert.Equal(payload.LongLength, fixture.history.diskBytes);
+        Assert.True(fixture.history.Undo().succeeded);
+        Assert.Equal(9, NeutralValueHistoryHandler.GetValue(1));
     }
 
-    private static bool IsHistoryOperationDisposed(object operation)
+    [Fact]
+    public void NeutralHistorySurvivesATypeCatalogGenerationChange()
     {
-        Type operationType = typeof(EditorInteractions).Assembly.GetType(
-            "Inno.Editor.Interactions.EditorHistoryOperation",
-            throwOnError: true)!;
-        FieldInfo disposedField = operationType.GetField(
-            "m_isDisposed",
-            BindingFlags.Instance | BindingFlags.NonPublic)!;
-        return (bool)disposedField.GetValue(operation)!;
-    }
-}
+        using var fixture = new HistoryFixture();
+        NeutralValueHistoryHandler.SetValue(slot: 1, value: 14);
+        fixture.history.RecordApplied(
+            "Change Neutral Value",
+            NeutralValueHistoryHandler.CreateChange(1, 3, 14));
 
-internal sealed class ReflectedEditorHistory : IDisposable
-{
-    private static readonly Type S_HISTORY_TYPE = typeof(EditorInteractions).Assembly.GetType(
-        "Inno.Editor.Interactions.EditorHistory",
-        throwOnError: true)!;
+        fixture.types.Rebuild();
+        _ = fixture.runtime.panelCount;
 
-    internal ReflectedEditorHistory()
-    {
-        instance = Activator.CreateInstance(
-            S_HISTORY_TYPE,
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-            binder: null,
-            args: [256],
-            culture: null)!;
+        Assert.True(fixture.history.Undo().succeeded);
+        Assert.Equal(3, NeutralValueHistoryHandler.GetValue(1));
+        Assert.True(fixture.history.Redo().succeeded);
+        Assert.Equal(14, NeutralValueHistoryHandler.GetValue(1));
     }
 
-    internal object instance { get; }
-
-    internal bool canUndo => GetProperty<bool>("canUndo");
-
-    internal bool canRedo => GetProperty<bool>("canRedo");
-
-    internal bool isFaulted => GetProperty<bool>("isFaulted");
-
-    internal string? undoName => GetProperty<string?>("undoName");
-
-    internal string? redoName => GetProperty<string?>("redoName");
-
-    internal EditorHistoryTransaction BeginTransaction(string name)
-        => Invoke<EditorHistoryTransaction>(FindMethod("BeginTransaction", parameterCount: 1), name);
-
-    internal IDisposable BeginIsolation()
-        => Invoke<IDisposable>(FindMethod("BeginIsolation", parameterCount: 0));
-
-    internal EditorHistoryResult Execute(
-        string name,
-        Func<EditorHistoryResult> execute,
-        Func<EditorHistoryResult> undo)
-        => Invoke<EditorHistoryResult>(FindMethod("Execute", parameterCount: 4), name, execute, undo, null);
-
-    internal void RecordValue<T>(string name, T before, T after, Action<T> apply, object mergeKey)
+    private sealed class HistoryFixture : IDisposable
     {
-        MethodInfo method = FindMethod("RecordValue", parameterCount: 5).MakeGenericMethod(typeof(T));
-        _ = Invoke<object?>(method, name, before, after, apply, mergeKey);
-    }
+        private readonly string m_projectRoot = Path.Combine(
+            Path.GetTempPath(),
+            "InnoEditorHistoryTests",
+            Guid.NewGuid().ToString("N"));
+        private readonly ModuleHost m_modules;
+        private readonly LogRouter m_logs = new();
 
-    internal void RecordApplied(string name, EditorHistoryChange change)
-        => _ = Invoke<object?>(FindMethod("RecordApplied", parameterCount: 2), name, change);
-
-    internal EditorHistoryResult Undo()
-        => Invoke<EditorHistoryResult>(FindMethod("Undo", parameterCount: 0));
-
-    internal EditorHistoryResult Redo()
-        => Invoke<EditorHistoryResult>(FindMethod("Redo", parameterCount: 0));
-
-    internal void Clear()
-        => _ = Invoke<object?>(FindMethod("Clear", parameterCount: 0));
-
-    internal void Attach(EditorContext context, EditorInteractions interactions)
-        => _ = Invoke<object?>(FindMethod("Attach", parameterCount: 2), context, interactions);
-
-    internal ReflectedHistoryUpdate PrepareHandlerUpdate(
-        IReadOnlyDictionary<string, EditorHistoryHandler> handlers)
-        => new(Invoke<object>(FindMethod("PrepareHandlerUpdate", parameterCount: 1), handlers));
-
-    public void Dispose() => ((IDisposable)instance).Dispose();
-
-    private T GetProperty<T>(string name)
-        => (T)S_HISTORY_TYPE.GetProperty(
-            name,
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.GetValue(instance)!;
-
-    private static MethodInfo FindMethod(string name, int parameterCount)
-        => S_HISTORY_TYPE.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            .Single(method => method.Name == name && method.GetParameters().Length == parameterCount);
-
-    private T Invoke<T>(MethodInfo method, params object?[]? arguments)
-    {
-        try
+        internal HistoryFixture()
         {
-            return (T)method.Invoke(instance, arguments)!;
+            Directory.CreateDirectory(Path.Combine(m_projectRoot, "Assets"));
+            NeutralValueHistoryHandler.Reset();
+            m_modules = new ModuleHost(new ModuleHostOptions
+            {
+                cacheDirectory = Path.Combine(m_projectRoot, "Library", "Assemblies")
+            });
+            types = new TypeCatalog(m_modules);
+            runtime = new EditorInteractionRuntime(
+                new EditorContext(m_projectRoot),
+                types,
+                m_logs,
+                [types]);
+            runtime.Start();
         }
-        catch (TargetInvocationException exception) when (exception.InnerException is not null)
+
+        internal TypeCatalog types { get; }
+
+        internal EditorInteractionRuntime runtime { get; }
+
+        internal IEditorHistory history => runtime.interactions.history;
+
+        public void Dispose()
         {
-            ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
-            throw;
+            runtime.Dispose();
+            types.Dispose();
+            m_modules.Dispose();
+            m_logs.Dispose();
+            if (Directory.Exists(m_projectRoot))
+                Directory.Delete(m_projectRoot, recursive: true);
         }
     }
 }
 
-internal sealed class ReflectedHistoryUpdate(object instance)
+[EditorHistoryHandler(NeutralValueHistoryHandler.KIND)]
+public sealed class NeutralValueHistoryHandler : EditorHistoryHandler
 {
-    internal void Activate() => Invoke("Activate");
+    public const string KIND = "tests/neutral-values";
 
-    internal void Rollback() => Invoke("Rollback");
+    private static readonly HashSet<(int Slot, EditorHistoryDirection Direction)> S_BLOCKED = [];
+    private static readonly Dictionary<int, int> S_VALUES = [];
 
-    internal void Complete() => Invoke("Complete");
-
-    private void Invoke(string name)
+    public static EditorHistoryChange CreateChange(
+        int slot,
+        int before,
+        int after,
+        string? mergeKey = null)
     {
-        try
-        {
-            _ = instance.GetType().GetMethod(
-                name,
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.Invoke(
-                    instance,
-                    parameters: null);
-        }
-        catch (TargetInvocationException exception) when (exception.InnerException is not null)
-        {
-            ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
-        }
+        byte[] bytes = new byte[sizeof(int) * 3];
+        BitConverter.GetBytes(slot).CopyTo(bytes, 0);
+        BitConverter.GetBytes(before).CopyTo(bytes, sizeof(int));
+        BitConverter.GetBytes(after).CopyTo(bytes, sizeof(int) * 2);
+        return new EditorHistoryChange(KIND, EditorHistoryPayload.FromBytes(bytes), mergeKey);
     }
-}
 
-internal sealed class TestNeutralHistoryHandler : EditorHistoryHandler
-{
-    internal const string C_KIND = "tests.neutral-handler-map";
-    internal static int value;
+    public static int GetValue(int slot)
+        => S_VALUES.TryGetValue(slot, out int value) ? value : 0;
+
+    public static void SetValue(int slot, int value)
+        => S_VALUES[slot] = value;
+
+    public static void Block(int slot, EditorHistoryDirection direction)
+        => S_BLOCKED.Add((slot, direction));
+
+    public static void Unblock(int slot, EditorHistoryDirection direction)
+        => S_BLOCKED.Remove((slot, direction));
+
+    public static void Reset()
+    {
+        S_BLOCKED.Clear();
+        S_VALUES.Clear();
+    }
 
     protected override EditorHistoryAvailability Query(
         EditorHistoryContext context,
         EditorHistoryChange change,
         EditorHistoryDirection direction)
-        => EditorHistoryAvailability.Available();
+        => change.payload.length >= sizeof(int) * 3
+            ? EditorHistoryAvailability.Available()
+            : EditorHistoryAvailability.Unavailable("The neutral value payload is truncated.");
 
     protected override EditorHistoryResult Apply(
         EditorHistoryContext context,
         EditorHistoryChange change,
         EditorHistoryDirection direction)
     {
-        value = direction == EditorHistoryDirection.Undo ? 0 : 1;
+        byte[] bytes = change.payload.ReadBytes();
+        int slot = BitConverter.ToInt32(bytes, 0);
+        if (S_BLOCKED.Contains((slot, direction)))
+            return EditorHistoryResult.Failure($"Slot {slot} is blocked for {direction}.");
+        int offset = direction == EditorHistoryDirection.Undo
+            ? sizeof(int)
+            : sizeof(int) * 2;
+        S_VALUES[slot] = BitConverter.ToInt32(bytes, offset);
         return EditorHistoryResult.Success();
+    }
+
+    protected override bool TryMerge(
+        EditorHistoryChange older,
+        EditorHistoryChange newer,
+        out EditorHistoryChange? merged)
+    {
+        byte[] olderBytes = older.payload.ReadBytes();
+        byte[] newerBytes = newer.payload.ReadBytes();
+        int slot = BitConverter.ToInt32(olderBytes, 0);
+        if (slot != BitConverter.ToInt32(newerBytes, 0))
+        {
+            merged = null;
+            return false;
+        }
+
+        merged = CreateChange(
+            slot,
+            BitConverter.ToInt32(olderBytes, sizeof(int)),
+            BitConverter.ToInt32(newerBytes, sizeof(int) * 2),
+            older.mergeKey);
+        return true;
     }
 }

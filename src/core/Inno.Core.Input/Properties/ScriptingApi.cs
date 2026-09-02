@@ -1,5 +1,5 @@
 using Inno.Core.Input;
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
 
 [assembly: ScriptingApiNamespace(
     "InnoEngine.Input",

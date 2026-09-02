@@ -15,7 +15,7 @@
 | `.png/.jpg/.jpeg/.tga/.hdr` | 验证源并生成后端可上传纹理候选。 |
 | `.obj/.gltf/.glb` | 生成通用 `GeometryData`、section、vertex layout 和 bounds。glTF JSON 仅是外部标准格式解析，不是 Inno 持久化旁路。 |
 
-所有 Inno 自有结构化渲染资产都经过 `SerializationManager`、`ISerializable`、`[SerializableProperty]` 和 Asset reference converter；不再使用自定义 JSON reader。
+所有 Inno 自有结构化渲染资产都经过 `SerializationRegistry`、`ISerializable`、`[SerializableProperty]` 和 Asset reference converter；不再使用自定义 JSON reader。
 
 ## 统一 Shader 链
 

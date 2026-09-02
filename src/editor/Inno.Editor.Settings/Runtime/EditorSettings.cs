@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 
 using Inno.Core.Logging;
+using Inno.Core.Serialization;
+using Inno.Extensibility.Types;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 
@@ -14,16 +16,21 @@ namespace Inno.Editor.Settings;
 [EditorModule("editor-settings", order: int.MinValue)]
 public sealed class EditorSettings : EditorModule
 {
-    private readonly EditorSettingsCatalog m_catalog = new();
+    private readonly EditorSettingsCatalog m_catalog;
     private readonly IEditorHistory m_history;
+    private readonly Logger m_log;
     private readonly object m_sync = new();
     private readonly EditorSettingsStore m_store;
 
     /// <summary>
     /// Creates the Settings service for one project and its shared editor history.
     /// </summary>
-    /// <param name="context">The context that supplies the project root.</param>
-    /// <param name="interactions">The runtime that owns the shared Undo and Redo history.</param>
+    /// <param name="context">
+    /// The context that supplies the project root.
+    /// </param>
+    /// <param name="interactions">
+    /// The runtime that owns the shared Undo and Redo history.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="context"/> or <paramref name="interactions"/> is
     /// <see langword="null"/>.
@@ -31,12 +38,31 @@ public sealed class EditorSettings : EditorModule
     /// <exception cref="InvalidDataException">
     /// Thrown when the project-root Settings document is malformed.
     /// </exception>
-    internal EditorSettings(EditorContext context, EditorInteractions interactions)
+    /// <param name="types">
+    /// The host-owned type catalog used to discover setting presentations.
+    /// </param>
+    /// <param name="logs">
+    /// The host-owned logging router used for observer-failure diagnostics.
+    /// </param>
+    /// <param name="serialization">
+    /// The host-owned current-generation serialization registry used for the project document.
+    /// </param>
+    internal EditorSettings(
+        EditorContext context,
+        EditorInteractions interactions,
+        TypeCatalog types,
+        LogRouter logs,
+        SerializationRegistry serialization)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(interactions);
-        m_store = new EditorSettingsStore(context.projectDirectory);
+        ArgumentNullException.ThrowIfNull(types);
+        ArgumentNullException.ThrowIfNull(logs);
+        ArgumentNullException.ThrowIfNull(serialization);
+        m_catalog = new EditorSettingsCatalog(types);
+        m_store = new EditorSettingsStore(context.projectDirectory, serialization);
         m_history = interactions.history;
+        m_log = logs.CreateLogger<EditorSettings>();
     }
 
     /// <summary>
@@ -58,8 +84,12 @@ public sealed class EditorSettings : EditorModule
     /// <summary>
     /// Reads an isolated effective object from one complete Settings path.
     /// </summary>
-    /// <param name="path">The slash-delimited Settings field path.</param>
-    /// <returns>The stored object, or an isolated copy of the field's default object.</returns>
+    /// <param name="path">
+    /// The slash-delimited Settings field path.
+    /// </param>
+    /// <returns>
+    /// The stored object, or an isolated copy of the field's default object.
+    /// </returns>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="path"/> is invalid, missing, or describes a page.
     /// </exception>
@@ -173,7 +203,9 @@ public sealed class EditorSettings : EditorModule
         return true;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Releases resources retained by this feature after it has stopped.
+    /// </summary>
     protected override void OnDispose()
         => m_catalog.Dispose();
 
@@ -189,6 +221,12 @@ public sealed class EditorSettings : EditorModule
             return m_store.GetDocument();
     }
 
+    internal void ValidateDocument(ReadOnlySpan<byte> document)
+    {
+        lock (m_sync)
+            m_store.ValidateDocument(document);
+    }
+
     internal void NotifyChanged()
     {
         Action<EditorSettings>? handlers = changed;
@@ -202,7 +240,10 @@ public sealed class EditorSettings : EditorModule
             }
             catch (Exception exception)
             {
-                Log.Error("Editor Settings changed subscriber failed: {0}", exception);
+                m_log.Write(
+                    LogLevel.Error,
+                    "Editor Settings changed subscriber failed: {0}",
+                    [exception]);
             }
         }
     }

@@ -15,7 +15,9 @@ public static partial class ImGuiWidget
     /// The popup stays in its parent viewport, sizes itself to submitted content, and scrolls when
     /// its work-area bound is reached.
     /// </summary>
-    /// <param name="id">The stable identifier previously passed to ImGui when opening the popup.</param>
+    /// <param name="id">
+    /// The stable identifier previously passed to ImGui when opening the popup.
+    /// </param>
     /// <returns>
     /// <see langword="true"/> when popup content should be submitted; otherwise,
     /// <see langword="false"/>.
@@ -74,8 +76,12 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Begins a parent-viewport styled right-click context menu for the most recently submitted item.
     /// </summary>
-    /// <param name="id">The stable popup identifier in the current ImGui ID scope.</param>
-    /// <returns><see langword="true"/> when context-menu content should be drawn; otherwise, <see langword="false"/>.</returns>
+    /// <param name="id">
+    /// The stable popup identifier in the current ImGui ID scope.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when context-menu content should be drawn; otherwise, <see langword="false"/>.
+    /// </returns>
     public static bool BeginContextMenu(string id)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -90,8 +96,12 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Begins a parent-viewport styled right-click context menu for the current window's unoccupied background.
     /// </summary>
-    /// <param name="id">The stable popup identifier in the current ImGui ID scope.</param>
-    /// <returns><see langword="true"/> when context-menu content should be drawn; otherwise, <see langword="false"/>.</returns>
+    /// <param name="id">
+    /// The stable popup identifier in the current ImGui ID scope.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when context-menu content should be drawn; otherwise, <see langword="false"/>.
+    /// </returns>
     public static bool BeginWindowContextMenu(string id)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);

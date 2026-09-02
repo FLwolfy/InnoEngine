@@ -4,17 +4,13 @@ namespace Inno.Editor.Panel.Logging;
 
 internal static class ConsoleEntryImGuiIdentity
 {
-    internal static void Push(EditorConsoleEntryId identity)
+    internal static void Push(string identity)
     {
-        NativeImGui.PushID((int)identity.kind);
-        NativeImGui.PushID(unchecked((int)(identity.value >> 32)));
-        NativeImGui.PushID(unchecked((int)identity.value));
+        NativeImGui.PushID(identity);
     }
 
     internal static void Pop()
     {
-        NativeImGui.PopID();
-        NativeImGui.PopID();
         NativeImGui.PopID();
     }
 }

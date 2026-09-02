@@ -10,6 +10,9 @@ namespace Inno.Editor.Panel.Global;
 /// <summary>
 /// Applies the configured actual UI size and manages transient zoom multiples around it.
 /// </summary>
+/// <param name="settings">
+/// The validated configuration that controls this operation.
+/// </param>
 [EditorModule("editor-zoom", order: 10)]
 internal sealed class EditorZoomModule(EditorSettings settings) : EditorModule
 {
@@ -35,14 +38,24 @@ internal sealed class EditorZoomModule(EditorSettings settings) : EditorModule
     internal bool UseActualSize()
         => SetStep(0);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Initializes this feature when its owning runtime becomes active.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnStart(EditorContext context)
     {
         ApplyActualSize(settings);
         settings.changed += ApplyActualSize;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Stops this feature before its owning runtime releases the active generation.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnStop(EditorContext context)
     {
         settings.changed -= ApplyActualSize;

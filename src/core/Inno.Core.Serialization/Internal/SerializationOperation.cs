@@ -6,18 +6,29 @@ namespace Inno.Core.Serialization;
 
 internal sealed class SerializationOperation
 {
+    private readonly ConverterRegistryLease m_converters;
     private readonly List<Action> m_completionCallbacks = [];
     private readonly HashSet<object> m_scheduledObjects = new(ReferenceComparer.instance);
     private readonly List<object> m_scheduledObjectOrder = [];
     private readonly Dictionary<object, string> m_capturePaths = new(ReferenceComparer.instance);
     private bool m_isActive = true;
 
-    internal SerializationOperation(SerializationContext context)
+    internal SerializationOperation(
+        SerializationContext context,
+        ConverterRegistryLease converters)
     {
+        ArgumentNullException.ThrowIfNull(converters);
         this.context = context;
+        m_converters = converters;
     }
 
     internal SerializationContext context { get; }
+
+    internal ConverterInvoker? ResolveConverter(Type valueType)
+    {
+        EnsureActive();
+        return m_converters.Resolve(valueType);
+    }
 
     internal void EnsureActive()
     {
@@ -39,7 +50,7 @@ internal sealed class SerializationOperation
             return;
         m_scheduledObjectOrder.Add(value);
 
-        Action? callback = ReflectionMetadata.CreateRestoreCallback(value);
+        Action? callback = ReflectionMetadata.CreateRestoreCallback(value, context);
         if (callback is not null)
             m_completionCallbacks.Add(callback);
     }
@@ -128,8 +139,29 @@ internal sealed class SerializationOperation
     {
         internal static ReferenceComparer instance { get; } = new();
 
+        /// <summary>
+        /// Determines whether this value and the supplied value represent the same logical state.
+        /// </summary>
+        /// <param name="x">
+        /// The horizontal or first component.
+        /// </param>
+        /// <param name="y">
+        /// The vertical or second component.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the requested condition is satisfied; otherwise, <see langword="false"/>.
+        /// </returns>
         public new bool Equals(object? x, object? y) => ReferenceEquals(x, y);
 
+        /// <summary>
+        /// Computes a hash code consistent with the implemented equality contract.
+        /// </summary>
+        /// <param name="obj">
+        /// The object compared with this value.
+        /// </param>
+        /// <returns>
+        /// The scalar result calculated from the supplied inputs.
+        /// </returns>
         public int GetHashCode(object obj) => RuntimeHelpers.GetHashCode(obj);
     }
 }

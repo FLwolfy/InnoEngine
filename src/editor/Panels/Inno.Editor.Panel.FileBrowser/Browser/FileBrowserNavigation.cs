@@ -3,8 +3,8 @@
 using System;
 using System.Collections.Generic;
 
-using Inno.Assets.Core;
-using Inno.Assets.File;
+using Inno.Assets;
+using Inno.Assets.Pipeline;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 using static Inno.Editor.Panel.FileBrowser.FileBrowserUtility;

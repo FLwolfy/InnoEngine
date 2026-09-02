@@ -3,14 +3,13 @@ using System.Collections.Generic;
 using System.Runtime.ExceptionServices;
 using System.Linq;
 
-using Inno.Core.Reflection;
+using Inno.Extensibility.Types;
 using Inno.Core.Serialization;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
-using Inno.Engine.Scene;
-using Inno.Engine.Scene.Assets;
-using Inno.Engine.Scene.Components;
-using Inno.Engine.Scene.Layers;
+using Inno.Scene;
+using Inno.Scene.Components;
+using Inno.Scene.Layers;
 
 namespace Inno.Editor.Scene;
 
@@ -26,8 +25,12 @@ public sealed class SceneEdits : EditorModule
     /// <summary>
     /// Creates the scene editing service used by editor actions and drag handlers.
     /// </summary>
-    /// <param name="workspace">The current scene document workspace.</param>
-    /// <param name="interactions">The current editor interaction runtime.</param>
+    /// <param name="workspace">
+    /// The current scene document workspace.
+    /// </param>
+    /// <param name="interactions">
+    /// The current editor interaction runtime.
+    /// </param>
     internal SceneEdits(EditorSceneWorkspace workspace, EditorInteractions interactions)
     {
         m_workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
@@ -37,11 +40,16 @@ public sealed class SceneEdits : EditorModule
     /// <summary>
     /// Creates an additive scene and records a reversible document change.
     /// </summary>
-    /// <param name="historyName">The user-facing history entry name.</param>
-    /// <returns>The newly created active scene.</returns>
+    /// <param name="historyName">
+    /// The user-facing history entry name.
+    /// </param>
+    /// <returns>
+    /// The newly created active scene.
+    /// </returns>
     public GameScene CreateScene(string historyName = "Create Scene")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         Guid? activeBefore = GetActiveSceneId();
         Guid? selectedBefore = GetSelectionId();
         GameScene scene = m_workspace.CreateScene();
@@ -72,10 +80,18 @@ public sealed class SceneEdits : EditorModule
     /// <summary>
     /// Creates a GameObject, optionally parents it, and records only the new subtree state.
     /// </summary>
-    /// <param name="scene">The loaded scene that will own the object.</param>
-    /// <param name="parent">The optional parent transform.</param>
-    /// <param name="historyName">The user-facing history entry name.</param>
-    /// <returns>The newly created GameObject.</returns>
+    /// <param name="scene">
+    /// The loaded scene that will own the object.
+    /// </param>
+    /// <param name="parent">
+    /// The optional parent transform.
+    /// </param>
+    /// <param name="historyName">
+    /// The user-facing history entry name.
+    /// </param>
+    /// <returns>
+    /// The newly created GameObject.
+    /// </returns>
     public GameObject CreateGameObject(
         GameScene scene,
         Transform? parent = null,
@@ -83,6 +99,7 @@ public sealed class SceneEdits : EditorModule
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         if (parent is not null && !ReferenceEquals(parent.gameObject.scene, scene))
             throw new ArgumentException("The parent belongs to another scene.", nameof(parent));
         Guid? selectedBefore = GetSelectionId();
@@ -92,7 +109,10 @@ public sealed class SceneEdits : EditorModule
             {
                 if (parent is not null)
                     gameObject.transform.SetParent(parent);
-                byte[] subtree = SceneSubtreeSerialization.Capture(gameObject);
+                byte[] subtree = SceneSubtreeSerialization.Capture(
+                    gameObject,
+                    m_workspace.serialization,
+                    m_workspace.assets);
                 RecordSubtree(
                     historyName,
                     gameObject,
@@ -114,18 +134,30 @@ public sealed class SceneEdits : EditorModule
     /// <summary>
     /// Deletes a GameObject subtree and records only that subtree plus incoming serialized references.
     /// </summary>
-    /// <param name="gameObject">The live subtree root to delete.</param>
-    /// <param name="historyName">The user-facing history entry name.</param>
-    /// <returns><see langword="true"/> when the subtree was deleted and recorded.</returns>
+    /// <param name="gameObject">
+    /// The live subtree root to delete.
+    /// </param>
+    /// <param name="historyName">
+    /// The user-facing history entry name.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the subtree was deleted and recorded.
+    /// </returns>
     public bool DeleteGameObject(GameObject gameObject, string historyName = "Delete GameObject")
     {
         ArgumentNullException.ThrowIfNull(gameObject);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         if (!gameObject.isRuntimeValid)
             return false;
         GameScene scene = gameObject.scene;
-        byte[] subtree = SceneSubtreeSerialization.Capture(gameObject);
-        SceneIncomingReferenceState[] incoming = SceneReferenceIndex.CaptureIncoming(gameObject);
+        byte[] subtree = SceneSubtreeSerialization.Capture(
+            gameObject,
+            m_workspace.serialization,
+            m_workspace.assets);
+        SceneIncomingReferenceState[] incoming = SceneReferenceIndex.CaptureIncoming(
+            gameObject,
+            m_workspace);
         Guid? parentId = gameObject.transform.parent?.gameObject.identity.persistentId;
         int siblingIndex = gameObject.transform.siblingIndex;
         Guid rootId = gameObject.identity.persistentId;
@@ -149,17 +181,23 @@ public sealed class SceneEdits : EditorModule
         }
         catch (Exception exception)
         {
-            if (Inno.Core.Identity.IdentityManager.Get<GameObject>(rootId) is not null)
+            if (m_workspace.Find<GameObject>(rootId) is not null)
             {
                 ExceptionDispatchInfo.Capture(exception).Throw();
             }
             RollbackAndRethrow(exception, () =>
             {
                 Transform? parent = parentId is Guid id
-                    ? Inno.Core.Identity.IdentityManager.Get<GameObject>(id)?.transform
+                    ? m_workspace.Find<GameObject>(id)?.transform
                     : null;
-                _ = SceneSubtreeSerialization.Restore(scene, subtree, parent, siblingIndex);
-                RequireReferenceRestore(SceneReferenceIndex.RestoreIncoming(incoming));
+                _ = SceneSubtreeSerialization.Restore(
+                    scene,
+                    subtree,
+                    m_workspace.serialization,
+                    m_workspace.assets,
+                    parent,
+                    siblingIndex);
+                RequireReferenceRestore(SceneReferenceIndex.RestoreIncoming(incoming, m_workspace));
             });
         }
         return true;
@@ -168,10 +206,18 @@ public sealed class SceneEdits : EditorModule
     /// <summary>
     /// Adds one component and records its identity, stable type, index, and persistent properties.
     /// </summary>
-    /// <param name="owner">The live GameObject receiving the component.</param>
-    /// <param name="componentType">The concrete component type to create.</param>
-    /// <param name="historyName">An optional user-facing history entry name.</param>
-    /// <returns>The newly attached component.</returns>
+    /// <param name="owner">
+    /// The live GameObject receiving the component.
+    /// </param>
+    /// <param name="componentType">
+    /// The concrete component type to create.
+    /// </param>
+    /// <param name="historyName">
+    /// An optional user-facing history entry name.
+    /// </param>
+    /// <returns>
+    /// The newly attached component.
+    /// </returns>
     public GameComponent AddComponent(
         GameObject owner,
         Type componentType,
@@ -179,11 +225,14 @@ public sealed class SceneEdits : EditorModule
     {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(componentType);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         GameComponent component = owner.AddComponent(componentType);
         try
         {
             TypeRef typeRef = GetTypeRef(componentType);
-            byte[] state = ScenePropertySerialization.CaptureProperties(component);
+            byte[] state = ScenePropertySerialization.CaptureProperties(
+                component,
+                m_workspace.serialization);
             RecordElement(
                 historyName ?? $"Add {componentType.Name}",
                 new SceneElementHistoryData(
@@ -213,21 +262,31 @@ public sealed class SceneEdits : EditorModule
     }
 
     /// <summary>
-    /// Removes one component and records the state required to recreate the same logical instance.
+    /// Removes the component from its scene owner and records a reversible serialized history change.
     /// </summary>
-    /// <param name="component">The attached non-Transform component to remove.</param>
-    /// <param name="historyName">An optional user-facing history entry name.</param>
-    /// <returns><see langword="true"/> when the component was removed and recorded.</returns>
+    /// <param name="component">
+    /// The attached non-Transform component to remove.
+    /// </param>
+    /// <param name="historyName">
+    /// An optional user-facing history entry name.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the component was removed and recorded.
+    /// </returns>
     public bool RemoveComponent(GameComponent component, string? historyName = null)
     {
         ArgumentNullException.ThrowIfNull(component);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         if (component.isDestroyed)
             return false;
         GameObject owner = component.gameObject;
         GameScene scene = owner.scene;
         TypeRef typeRef = GetTypeRef(component.GetType());
-        byte[] state = ScenePropertySerialization.CaptureProperties(component);
-        SceneIncomingReferenceState[] incoming = SceneReferenceIndex.CaptureIncoming(component, scene);
+        byte[] state = ScenePropertySerialization.CaptureProperties(component, m_workspace.serialization);
+        SceneIncomingReferenceState[] incoming = SceneReferenceIndex.CaptureIncoming(
+            component,
+            scene,
+            m_workspace);
         int index = owner.GetComponentIndex(component);
         Guid componentId = component.identity.persistentId;
         Type componentType = component.GetType();
@@ -253,7 +312,7 @@ public sealed class SceneEdits : EditorModule
         }
         catch (Exception exception)
         {
-            if (Inno.Core.Identity.IdentityManager.Get<GameComponent>(componentId) is not null)
+            if (m_workspace.Find<GameComponent>(componentId) is not null)
             {
                 ExceptionDispatchInfo.Capture(exception).Throw();
             }
@@ -264,9 +323,10 @@ public sealed class SceneEdits : EditorModule
                     typeRef,
                     componentId,
                     index,
-                    state);
+                    state,
+                    m_workspace.serialization);
                 RequirePropertyRestore(restored, state);
-                RequireReferenceRestore(SceneReferenceIndex.RestoreIncoming(incoming));
+                RequireReferenceRestore(SceneReferenceIndex.RestoreIncoming(incoming, m_workspace));
             });
         }
         return true;
@@ -275,18 +335,23 @@ public sealed class SceneEdits : EditorModule
     /// <summary>
     /// Resets one component and records its compact property state before and after Reset.
     /// </summary>
-    /// <param name="component">The attached component to reset.</param>
-    /// <param name="historyName">An optional user-facing history entry name.</param>
+    /// <param name="component">
+    /// The attached component to reset.
+    /// </param>
+    /// <param name="historyName">
+    /// An optional user-facing history entry name.
+    /// </param>
     public void ResetComponent(GameComponent component, string? historyName = null)
     {
         ArgumentNullException.ThrowIfNull(component);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         GameObject owner = component.gameObject;
-        byte[] before = ScenePropertySerialization.CaptureProperties(component);
+        byte[] before = ScenePropertySerialization.CaptureProperties(component, m_workspace.serialization);
         byte[] after;
         try
         {
             owner.ResetComponent(component);
-            after = ScenePropertySerialization.CaptureProperties(component);
+            after = ScenePropertySerialization.CaptureProperties(component, m_workspace.serialization);
         }
         catch (Exception exception)
         {
@@ -318,9 +383,15 @@ public sealed class SceneEdits : EditorModule
     /// <summary>
     /// Moves an attached component and records only its two attachment indices.
     /// </summary>
-    /// <param name="component">The attached non-Transform component to move.</param>
-    /// <param name="componentIndex">The requested attachment index.</param>
-    /// <param name="historyName">The user-facing history entry name.</param>
+    /// <param name="component">
+    /// The attached non-Transform component to move.
+    /// </param>
+    /// <param name="componentIndex">
+    /// The requested attachment index.
+    /// </param>
+    /// <param name="historyName">
+    /// The user-facing history entry name.
+    /// </param>
     public void SetComponentIndex(
         GameComponent component,
         int componentIndex,
@@ -328,6 +399,7 @@ public sealed class SceneEdits : EditorModule
     {
         ArgumentNullException.ThrowIfNull(component);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         GameObject owner = component.gameObject;
         int beforeIndex = owner.GetComponentIndex(component);
         int afterIndex;
@@ -365,14 +437,23 @@ public sealed class SceneEdits : EditorModule
     /// <summary>
     /// Adds one scene system and records its identity, stable type, index, and persistent properties.
     /// </summary>
-    /// <param name="scene">The loaded scene receiving the system.</param>
-    /// <param name="systemType">The concrete system type to create.</param>
-    /// <param name="historyName">An optional user-facing history entry name.</param>
-    /// <returns>The newly registered system.</returns>
+    /// <param name="scene">
+    /// The loaded scene receiving the system.
+    /// </param>
+    /// <param name="systemType">
+    /// The concrete system type to create.
+    /// </param>
+    /// <param name="historyName">
+    /// An optional user-facing history entry name.
+    /// </param>
+    /// <returns>
+    /// The newly registered system.
+    /// </returns>
     public GameSystem AddSystem(GameScene scene, Type systemType, string? historyName = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(systemType);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         GameSystem system = scene.AddSystem(systemType);
         try
         {
@@ -389,7 +470,9 @@ public sealed class SceneEdits : EditorModule
                     existsBefore: false,
                     existsAfter: true,
                     beforeState: [],
-                    afterState: ScenePropertySerialization.CaptureProperties(system),
+                    afterState: ScenePropertySerialization.CaptureProperties(
+                        system,
+                        m_workspace.serialization),
                     incomingReferences: []));
             return system;
         }
@@ -405,20 +488,32 @@ public sealed class SceneEdits : EditorModule
     }
 
     /// <summary>
-    /// Removes one scene system and records the state required to recreate the same logical instance.
+    /// Removes the system from its scene and records a reversible serialized history change.
     /// </summary>
-    /// <param name="scene">The scene currently owning the system.</param>
-    /// <param name="system">The registered system to remove.</param>
-    /// <param name="historyName">An optional user-facing history entry name.</param>
-    /// <returns><see langword="true"/> when the system was removed and recorded.</returns>
+    /// <param name="scene">
+    /// The scene currently owning the system.
+    /// </param>
+    /// <param name="system">
+    /// The registered system to remove.
+    /// </param>
+    /// <param name="historyName">
+    /// An optional user-facing history entry name.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the system was removed and recorded.
+    /// </returns>
     public bool RemoveSystem(GameScene scene, GameSystem system, string? historyName = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(system);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         if (system.isDestroyed)
             return false;
-        byte[] state = ScenePropertySerialization.CaptureProperties(system);
-        SceneIncomingReferenceState[] incoming = SceneReferenceIndex.CaptureIncoming(system, scene);
+        byte[] state = ScenePropertySerialization.CaptureProperties(system, m_workspace.serialization);
+        SceneIncomingReferenceState[] incoming = SceneReferenceIndex.CaptureIncoming(
+            system,
+            scene,
+            m_workspace);
         int index = scene.GetSystemIndex(system);
         Guid systemId = system.identity.persistentId;
         TypeRef typeRef = GetTypeRef(system.GetType());
@@ -445,7 +540,7 @@ public sealed class SceneEdits : EditorModule
         }
         catch (Exception exception)
         {
-            if (Inno.Core.Identity.IdentityManager.Get<GameSystem>(systemId) is not null)
+            if (m_workspace.Find<GameSystem>(systemId) is not null)
             {
                 ExceptionDispatchInfo.Capture(exception).Throw();
             }
@@ -456,9 +551,10 @@ public sealed class SceneEdits : EditorModule
                     typeRef,
                     systemId,
                     index,
-                    state);
+                    state,
+                    m_workspace.serialization);
                 RequirePropertyRestore(restored, state);
-                RequireReferenceRestore(SceneReferenceIndex.RestoreIncoming(incoming));
+                RequireReferenceRestore(SceneReferenceIndex.RestoreIncoming(incoming, m_workspace));
             });
         }
         return true;
@@ -467,19 +563,26 @@ public sealed class SceneEdits : EditorModule
     /// <summary>
     /// Resets one scene system and records its compact property state before and after Reset.
     /// </summary>
-    /// <param name="scene">The scene currently owning the system.</param>
-    /// <param name="system">The registered system to reset.</param>
-    /// <param name="historyName">An optional user-facing history entry name.</param>
+    /// <param name="scene">
+    /// The scene currently owning the system.
+    /// </param>
+    /// <param name="system">
+    /// The registered system to reset.
+    /// </param>
+    /// <param name="historyName">
+    /// An optional user-facing history entry name.
+    /// </param>
     public void ResetSystem(GameScene scene, GameSystem system, string? historyName = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(system);
-        byte[] before = ScenePropertySerialization.CaptureProperties(system);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        byte[] before = ScenePropertySerialization.CaptureProperties(system, m_workspace.serialization);
         byte[] after;
         try
         {
             scene.ResetSystem(system);
-            after = ScenePropertySerialization.CaptureProperties(system);
+            after = ScenePropertySerialization.CaptureProperties(system, m_workspace.serialization);
         }
         catch (Exception exception)
         {
@@ -511,10 +614,18 @@ public sealed class SceneEdits : EditorModule
     /// <summary>
     /// Moves a registered system and records only its two display indices.
     /// </summary>
-    /// <param name="scene">The scene currently owning the system.</param>
-    /// <param name="system">The registered system to move.</param>
-    /// <param name="systemIndex">The requested display index.</param>
-    /// <param name="historyName">The user-facing history entry name.</param>
+    /// <param name="scene">
+    /// The scene currently owning the system.
+    /// </param>
+    /// <param name="system">
+    /// The registered system to move.
+    /// </param>
+    /// <param name="systemIndex">
+    /// The requested display index.
+    /// </param>
+    /// <param name="historyName">
+    /// The user-facing history entry name.
+    /// </param>
     public void SetSystemIndex(
         GameScene scene,
         GameSystem system,
@@ -524,6 +635,7 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(system);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         int beforeIndex = scene.GetSystemIndex(system);
         int afterIndex;
         try
@@ -560,13 +672,20 @@ public sealed class SceneEdits : EditorModule
     /// <summary>
     /// Closes one loaded scene without deleting its source asset and records a reversible document change.
     /// </summary>
-    /// <param name="scene">The loaded scene to close.</param>
-    /// <param name="historyName">The user-facing history entry name.</param>
-    /// <returns><see langword="true"/> when the scene was closed and recorded.</returns>
+    /// <param name="scene">
+    /// The loaded scene to close.
+    /// </param>
+    /// <param name="historyName">
+    /// The user-facing history entry name.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the scene was closed and recorded.
+    /// </returns>
     public bool CloseScene(GameScene scene, string historyName = "Close Scene")
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         EditorSceneWorkspace.SceneDocumentSnapshot snapshot = m_workspace.CaptureDocumentSnapshot(scene);
         Guid? activeBefore = GetActiveSceneId();
         Guid? selectedBefore = GetSelectionId();
@@ -593,23 +712,30 @@ public sealed class SceneEdits : EditorModule
     /// <summary>
     /// Moves a loaded scene to a hierarchy index and records the two integer positions.
     /// </summary>
-    /// <param name="scene">The loaded scene to reorder.</param>
-    /// <param name="sceneIndex">The requested hierarchy index.</param>
-    /// <param name="historyName">The user-facing history entry name.</param>
+    /// <param name="scene">
+    /// The loaded scene to reorder.
+    /// </param>
+    /// <param name="sceneIndex">
+    /// The requested hierarchy index.
+    /// </param>
+    /// <param name="historyName">
+    /// The user-facing history entry name.
+    /// </param>
     public void SetSceneIndex(GameScene scene, int sceneIndex, string historyName = "Reorder Scene")
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
-        int beforeIndex = SceneManager.GetSceneIndex(scene);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        int beforeIndex = m_workspace.world.GetSceneIndex(scene);
         int afterIndex;
         try
         {
-            SceneManager.SetSceneIndex(scene, sceneIndex);
-            afterIndex = SceneManager.GetSceneIndex(scene);
+            m_workspace.world.SetSceneIndex(scene, sceneIndex);
+            afterIndex = m_workspace.world.GetSceneIndex(scene);
         }
         catch (Exception exception)
         {
-            RollbackAndRethrow(exception, () => SceneManager.SetSceneIndex(scene, beforeIndex));
+            RollbackAndRethrow(exception, () => m_workspace.world.SetSceneIndex(scene, beforeIndex));
             throw;
         }
         if (beforeIndex == afterIndex)
@@ -621,19 +747,26 @@ public sealed class SceneEdits : EditorModule
                 new EditorHistoryChange(
                     SceneHistoryKinds.Order,
                     EditorHistoryPayload.FromBytes(data.Encode()))),
-            () => SceneManager.SetSceneIndex(scene, beforeIndex));
+            () => m_workspace.world.SetSceneIndex(scene, beforeIndex));
     }
 
     /// <summary>
     /// Renames a loaded scene and records the two display strings.
     /// </summary>
-    /// <param name="scene">The loaded scene to rename.</param>
-    /// <param name="name">The new display name.</param>
-    /// <param name="historyName">The user-facing history entry name.</param>
+    /// <param name="scene">
+    /// The loaded scene to rename.
+    /// </param>
+    /// <param name="name">
+    /// The new display name.
+    /// </param>
+    /// <param name="historyName">
+    /// The user-facing history entry name.
+    /// </param>
     public void RenameScene(GameScene scene, string name, string historyName = "Rename Scene")
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(name);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         ChangeScalar(
             scene,
             SceneScalarKind.SceneName,
@@ -647,9 +780,15 @@ public sealed class SceneEdits : EditorModule
     /// <summary>
     /// Renames a live GameObject and records the two display strings.
     /// </summary>
-    /// <param name="gameObject">The live GameObject to rename.</param>
-    /// <param name="name">The new display name.</param>
-    /// <param name="historyName">The user-facing history entry name.</param>
+    /// <param name="gameObject">
+    /// The live GameObject to rename.
+    /// </param>
+    /// <param name="name">
+    /// The new display name.
+    /// </param>
+    /// <param name="historyName">
+    /// The user-facing history entry name.
+    /// </param>
     public void RenameGameObject(
         GameObject gameObject,
         string name,
@@ -657,6 +796,7 @@ public sealed class SceneEdits : EditorModule
     {
         ArgumentNullException.ThrowIfNull(gameObject);
         ArgumentNullException.ThrowIfNull(name);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         ChangeScalar(
             gameObject,
             SceneScalarKind.GameObjectName,
@@ -670,15 +810,22 @@ public sealed class SceneEdits : EditorModule
     /// <summary>
     /// Changes the explicit active state of a GameObject and records the two Boolean values.
     /// </summary>
-    /// <param name="gameObject">The live GameObject whose active state should change.</param>
-    /// <param name="active">The requested explicit active state.</param>
-    /// <param name="historyName">An optional user-facing history entry name.</param>
+    /// <param name="gameObject">
+    /// The live GameObject whose active state should change.
+    /// </param>
+    /// <param name="active">
+    /// The requested explicit active state.
+    /// </param>
+    /// <param name="historyName">
+    /// An optional user-facing history entry name.
+    /// </param>
     public void SetGameObjectActive(
         GameObject gameObject,
         bool active,
         string? historyName = null)
     {
         ArgumentNullException.ThrowIfNull(gameObject);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         string before = gameObject.activeSelf ? "1" : "0";
         string after = active ? "1" : "0";
         ChangeScalar(
@@ -694,9 +841,15 @@ public sealed class SceneEdits : EditorModule
     /// <summary>
     /// Changes the tag of a live GameObject and records the two ordinal tag strings.
     /// </summary>
-    /// <param name="gameObject">The live GameObject whose tag should change.</param>
-    /// <param name="tag">The requested non-empty tag.</param>
-    /// <param name="historyName">The user-facing history entry name.</param>
+    /// <param name="gameObject">
+    /// The live GameObject whose tag should change.
+    /// </param>
+    /// <param name="tag">
+    /// The requested non-empty tag.
+    /// </param>
+    /// <param name="historyName">
+    /// The user-facing history entry name.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="gameObject"/> is <see langword="null"/>.
     /// </exception>
@@ -711,6 +864,7 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(gameObject);
         ArgumentException.ThrowIfNullOrWhiteSpace(tag);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         string requestedTag = tag.Trim();
         ChangeScalar(
             gameObject,
@@ -725,9 +879,15 @@ public sealed class SceneEdits : EditorModule
     /// <summary>
     /// Changes the layer of a live GameObject and records the two stable numeric layer slots.
     /// </summary>
-    /// <param name="gameObject">The live GameObject whose layer should change.</param>
-    /// <param name="layer">The requested project layer slot.</param>
-    /// <param name="historyName">The user-facing history entry name.</param>
+    /// <param name="gameObject">
+    /// The live GameObject whose layer should change.
+    /// </param>
+    /// <param name="layer">
+    /// The requested project layer slot.
+    /// </param>
+    /// <param name="historyName">
+    /// The user-facing history entry name.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="gameObject"/> is <see langword="null"/>.
     /// </exception>
@@ -741,6 +901,7 @@ public sealed class SceneEdits : EditorModule
     {
         ArgumentNullException.ThrowIfNull(gameObject);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         ChangeScalar(
             gameObject,
             SceneScalarKind.GameObjectLayer,
@@ -755,12 +916,24 @@ public sealed class SceneEdits : EditorModule
     /// <summary>
     /// Applies a mutation to one serializable scene property and records only its before and after values.
     /// </summary>
-    /// <param name="target">The live scene object containing the root serialized property.</param>
-    /// <param name="propertyName">The exact root serialized member key.</param>
-    /// <param name="mutation">The mutation that assigns the new value.</param>
-    /// <param name="historyName">The user-facing history entry name.</param>
-    /// <param name="mergeKey">An optional stable key for coalescing adjacent continuous edits.</param>
-    /// <returns><see langword="true"/> when the property value changed and a history entry was recorded.</returns>
+    /// <param name="target">
+    /// The live scene object containing the root serialized property.
+    /// </param>
+    /// <param name="propertyName">
+    /// The exact root serialized member key.
+    /// </param>
+    /// <param name="mutation">
+    /// The mutation that assigns the new value.
+    /// </param>
+    /// <param name="historyName">
+    /// The user-facing history entry name.
+    /// </param>
+    /// <param name="mergeKey">
+    /// An optional stable key for coalescing adjacent continuous edits.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the property value changed and a history entry was recorded.
+    /// </returns>
     public bool ChangeProperty(
         EngineObject target,
         string propertyName,
@@ -772,12 +945,19 @@ public sealed class SceneEdits : EditorModule
         ArgumentException.ThrowIfNullOrWhiteSpace(propertyName);
         ArgumentNullException.ThrowIfNull(mutation);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
-        byte[] before = ScenePropertySerialization.CaptureProperty(target, propertyName);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
+        byte[] before = ScenePropertySerialization.CaptureProperty(
+            target,
+            propertyName,
+            m_workspace.serialization);
         byte[] after;
         try
         {
             mutation();
-            after = ScenePropertySerialization.CaptureProperty(target, propertyName);
+            after = ScenePropertySerialization.CaptureProperty(
+                target,
+                propertyName,
+                m_workspace.serialization);
         }
         catch (Exception exception)
         {
@@ -805,22 +985,31 @@ public sealed class SceneEdits : EditorModule
     /// <summary>
     /// Applies a hierarchy mutation and records only the affected parent and sibling-index tuples.
     /// </summary>
-    /// <param name="gameObject">The primary GameObject being moved.</param>
-    /// <param name="mutation">The hierarchy mutation to execute.</param>
-    /// <param name="historyName">The user-facing history entry name.</param>
+    /// <param name="gameObject">
+    /// The primary GameObject being moved.
+    /// </param>
+    /// <param name="mutation">
+    /// The hierarchy mutation to execute through the world-owned operation context.
+    /// </param>
+    /// <param name="historyName">
+    /// The user-facing history entry name.
+    /// </param>
     /// <param name="relatedObjects">
     /// Additional objects whose placements the mutation may change, such as promoted children.
     /// </param>
-    /// <returns><see langword="true"/> when at least one placement changed.</returns>
+    /// <returns>
+    /// <see langword="true"/> when at least one placement changed.
+    /// </returns>
     public bool ChangeHierarchy(
         GameObject gameObject,
-        Action mutation,
+        Action<SceneHierarchyEdit> mutation,
         string historyName = "Move GameObject",
         IReadOnlyCollection<GameObject>? relatedObjects = null)
     {
         ArgumentNullException.ThrowIfNull(gameObject);
         ArgumentNullException.ThrowIfNull(mutation);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
+        using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         GameObject[] affected = (relatedObjects ?? Array.Empty<GameObject>())
             .Prepend(gameObject)
             .DistinctBy(static candidate => candidate.identity.persistentId)
@@ -829,7 +1018,7 @@ public sealed class SceneEdits : EditorModule
         SceneObjectPlacement[] after;
         try
         {
-            mutation();
+            mutation(new SceneHierarchyEdit(m_workspace.world));
             after = CapturePlacements(affected);
         }
         catch (Exception exception)
@@ -935,7 +1124,7 @@ public sealed class SceneEdits : EditorModule
     }
 
     private Guid? GetActiveSceneId()
-        => SceneManager.activeScene is { isDestroyed: false } scene
+        => m_workspace.activeScene is { isDestroyed: false } scene
             ? scene.identity.persistentId
             : null;
 
@@ -959,37 +1148,40 @@ public sealed class SceneEdits : EditorModule
         return placements;
     }
 
-    private static void RestorePlacements(IReadOnlyList<SceneObjectPlacement> placements)
+    private void RestorePlacements(IReadOnlyList<SceneObjectPlacement> placements)
     {
         for (int i = 0; i < placements.Count; i++)
         {
             SceneObjectPlacement placement = placements[i];
-            GameObject gameObject = Inno.Core.Identity.IdentityManager.Get<GameObject>(placement.objectId)
+            GameObject gameObject = m_workspace.Find<GameObject>(placement.objectId)
                 ?? throw new InvalidOperationException($"GameObject '{placement.objectId}' is unavailable.");
-            GameScene destination = Inno.Core.Identity.IdentityManager.Get<GameScene>(placement.sceneId)
+            GameScene destination = m_workspace.Find<GameScene>(placement.sceneId)
                 ?? throw new InvalidOperationException($"Scene '{placement.sceneId}' is unavailable.");
             if (!ReferenceEquals(gameObject.scene, destination))
-                SceneManager.MoveGameObjectToScene(gameObject, destination);
+                m_workspace.world.MoveGameObjectToScene(gameObject, destination);
         }
         for (int i = 0; i < placements.Count; i++)
         {
             SceneObjectPlacement placement = placements[i];
-            GameObject gameObject = Inno.Core.Identity.IdentityManager.Get<GameObject>(placement.objectId)!;
+            GameObject gameObject = m_workspace.Find<GameObject>(placement.objectId)!;
             Transform? parent = placement.parentId is Guid parentId
-                ? Inno.Core.Identity.IdentityManager.Get<GameObject>(parentId)?.transform
+                ? m_workspace.Find<GameObject>(parentId)?.transform
                 : null;
             gameObject.transform.SetParent(parent);
         }
         foreach (SceneObjectPlacement placement in placements.OrderBy(static value => value.siblingIndex))
         {
-            Inno.Core.Identity.IdentityManager.Get<GameObject>(placement.objectId)!
+            m_workspace.Find<GameObject>(placement.objectId)!
                 .transform.SetSiblingIndex(placement.siblingIndex);
         }
     }
 
-    private static void RequirePropertyRestore(EngineObject target, ReadOnlySpan<byte> data)
+    private void RequirePropertyRestore(EngineObject target, ReadOnlySpan<byte> data)
     {
-        SerializationPropertyRestoreResult result = ScenePropertySerialization.RestoreProperties(target, data);
+        SerializationPropertyRestoreResult result = ScenePropertySerialization.RestoreProperties(
+            target,
+            data,
+            m_workspace.serialization);
         if (!result.success || result.ignoredCount != 0 || result.restoredCount == 0)
             throw new InvalidOperationException("Scene property compensation was incomplete.");
     }
@@ -1028,8 +1220,8 @@ public sealed class SceneEdits : EditorModule
         ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
-    private static TypeRef GetTypeRef(Type type)
-        => TypeCacheManager.TryGetTypeRef(type, out TypeRef typeRef)
+    private TypeRef GetTypeRef(Type type)
+        => m_workspace.types.TryGetTypeRef(type, out TypeRef typeRef)
             ? typeRef
             : throw new InvalidOperationException(
                 $"Scene element type '{type.FullName}' does not have an active StableTypeId.");

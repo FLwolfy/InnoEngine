@@ -2,9 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using Inno.Core.Diagnose;
-using Inno.Engine.Scene;
-using Inno.Engine.Scene.Assets;
+using Inno.Core.Diagnostics;
+using Inno.Scene;
 
 namespace Inno.Editor.Scene;
 
@@ -13,10 +12,11 @@ internal static class SceneStateDiagnosticPublisher
     private const string C_MISSING_ELEMENTS = "Missing Scene Scripts";
     private const string C_RELOAD = "Scene Reload";
 
-    internal static void PublishMissingElements()
+    internal static void PublishMissingElements(IReadOnlyList<GameScene> scenes)
     {
+        ArgumentNullException.ThrowIfNull(scenes);
         var diagnostics = new List<Diagnostic>();
-        foreach (GameScene scene in SceneManager.loadedScenes)
+        foreach (GameScene scene in scenes)
         {
             foreach (GameObject gameObject in scene.GetObjects())
             {

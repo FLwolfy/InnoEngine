@@ -2,15 +2,27 @@ using System;
 
 namespace Inno.Editor.Interactions;
 
-/// <summary>Places an editor action on a compact toolbar surface.</summary>
+/// <summary>
+/// Places an editor action on a compact toolbar surface.
+/// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class EditorToolbarItemAttribute : Attribute
 {
-    /// <summary>Creates a toolbar placement for the annotated targetless action.</summary>
-    /// <param name="area">The exact interaction area whose toolbar receives the action.</param>
-    /// <param name="icon">The symbol shown while the action is not checked.</param>
-    /// <param name="tooltip">The fallback tooltip shown when the action has no contextual display name.</param>
-    /// <param name="order">The stable ordering value within the toolbar.</param>
+    /// <summary>
+    /// Creates a toolbar placement for the annotated targetless action.
+    /// </summary>
+    /// <param name="area">
+    /// The exact interaction area whose toolbar receives the action.
+    /// </param>
+    /// <param name="icon">
+    /// The symbol shown while the action is not checked.
+    /// </param>
+    /// <param name="tooltip">
+    /// The fallback tooltip shown when the action has no contextual display name.
+    /// </param>
+    /// <param name="order">
+    /// The stable ordering value within the toolbar.
+    /// </param>
     /// <param name="activeIcon">
     /// The symbol shown while the action is checked, or <see cref="EditorToolbarIcon.None"/> to retain
     /// <paramref name="icon"/>.
@@ -47,18 +59,28 @@ public sealed class EditorToolbarItemAttribute : Attribute
         this.activeIcon = activeIcon;
     }
 
-    /// <summary>Gets the exact toolbar interaction area.</summary>
+    /// <summary>
+    /// Gets the exact toolbar interaction area.
+    /// </summary>
     public string area { get; }
 
-    /// <summary>Gets the symbol shown while the action is not checked.</summary>
+    /// <summary>
+    /// Gets the symbol shown while the action is not checked.
+    /// </summary>
     public EditorToolbarIcon icon { get; }
 
-    /// <summary>Gets the optional replacement symbol shown while the action is checked.</summary>
+    /// <summary>
+    /// Gets the optional replacement symbol shown while the action is checked.
+    /// </summary>
     public EditorToolbarIcon activeIcon { get; }
 
-    /// <summary>Gets the fallback tooltip.</summary>
+    /// <summary>
+    /// Gets the fallback tooltip.
+    /// </summary>
     public string tooltip { get; }
 
-    /// <summary>Gets the stable ordering value.</summary>
+    /// <summary>
+    /// Gets the stable ordering value.
+    /// </summary>
     public int order { get; }
 }

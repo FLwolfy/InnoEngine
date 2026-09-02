@@ -5,13 +5,12 @@ using System.IO;
 using System.Numerics;
 
 using Inno.Assets;
-using Inno.Assets.Core;
-using Inno.Assets.File;
+using Inno.Assets.Pipeline;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Native.ImGui;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.FileBrowser;
@@ -57,8 +56,8 @@ internal static class FileBrowserUtility
         NativeImGui.PushStyleColor(ImGuiCol.ButtonActive, EditorPalette.GetActive(color));
     }
 
-    internal static bool IsDirectoryPath(string relativePath)
-        => AssetManager.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry entry)
+    internal static bool IsDirectoryPath(AssetPipeline assets, string relativePath)
+        => assets.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry entry)
             && entry.isDirectory;
 
     internal static string GetDirectoryLabel(
@@ -151,9 +150,9 @@ internal static class FileBrowserUtility
         return parts;
     }
 
-    internal static bool IsReadOnlyLocation(AssetBrowserState browser)
+    internal static bool IsReadOnlyLocation(AssetPipeline assets, AssetBrowserState browser)
         => browser.root == AssetBrowserRoot.Plugins ||
-           IsReadOnlySource(browser.currentDirectory);
+           IsReadOnlySource(assets, browser.currentDirectory);
 
     internal static string NormalizePath(string? path)
         => AssetPath.Parse(string.IsNullOrWhiteSpace(path) ? string.Empty : path.Replace('\\', '/').Trim()).ToString();
@@ -164,12 +163,12 @@ internal static class FileBrowserUtility
         return new AssetPath(path.source, GetLocalParent(path.localPath)).ToString();
     }
 
-    internal static bool IsReadOnlySource(string relativePath)
+    internal static bool IsReadOnlySource(AssetPipeline assets, string relativePath)
     {
         AssetSourceId source = AssetPath.Parse(NormalizePath(relativePath)).source;
-        for (int i = 0; i < AssetManager.sourceMounts.Count; i++)
+        for (int i = 0; i < assets.sourceMounts.Count; i++)
         {
-            AssetSourceMount mount = AssetManager.sourceMounts[i];
+            AssetSourceMount mount = assets.sourceMounts[i];
             if (mount.id == source)
                 return mount.isReadOnly;
         }
@@ -179,8 +178,12 @@ internal static class FileBrowserUtility
     /// <summary>
     /// Gets the editable entry name while excluding a file's final extension.
     /// </summary>
-    /// <param name="name">The final source path segment.</param>
-    /// <param name="isDirectory">Whether the entry is a directory.</param>
+    /// <param name="name">
+    /// The final source path segment.
+    /// </param>
+    /// <param name="isDirectory">
+    /// Whether the entry is a directory.
+    /// </param>
     /// <returns>
     /// The complete directory name, or the file name without its final extension.
     /// </returns>
@@ -197,9 +200,15 @@ internal static class FileBrowserUtility
     /// <summary>
     /// Combines an edited entry name with the original file's final extension.
     /// </summary>
-    /// <param name="sourcePath">The current normalized source-relative path.</param>
-    /// <param name="editedName">The user-edited name that excludes the protected extension.</param>
-    /// <param name="isDirectory">Whether the entry is a directory.</param>
+    /// <param name="sourcePath">
+    /// The current normalized source-relative path.
+    /// </param>
+    /// <param name="editedName">
+    /// The user-edited name that excludes the protected extension.
+    /// </param>
+    /// <param name="isDirectory">
+    /// Whether the entry is a directory.
+    /// </param>
     /// <returns>
     /// The renamed final path segment with the original final extension preserved for files.
     /// </returns>

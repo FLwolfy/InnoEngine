@@ -72,7 +72,9 @@ public abstract class EditorSetting
     /// <summary>
     /// Draws this field inside the frontend-managed content container.
     /// </summary>
-    /// <param name="setting">The isolated mutable object being edited.</param>
+    /// <param name="setting">
+    /// The isolated mutable object being edited.
+    /// </param>
     /// <returns>
     /// <see langword="true"/> when the staged object differs from the value it held when this
     /// frontend first drew that object.
@@ -93,7 +95,9 @@ public abstract class EditorSetting
     /// <summary>
     /// Determines whether a staged field object equals this definition's bound default value.
     /// </summary>
-    /// <param name="setting">The isolated staged object to compare.</param>
+    /// <param name="setting">
+    /// The isolated staged object to compare.
+    /// </param>
     /// <returns>
     /// <see langword="true"/> when every stored property equals the field default.
     /// </returns>
@@ -116,7 +120,9 @@ public abstract class EditorSetting
     /// Draws the field using the staged JSON object owned by the Settings frontend.
     /// A type that does not override this method describes a page.
     /// </summary>
-    /// <param name="setting">The isolated mutable object being edited.</param>
+    /// <param name="setting">
+    /// The isolated mutable object being edited.
+    /// </param>
     protected virtual void OnDraw(EditorSettingObject setting)
     {
     }

@@ -9,11 +9,11 @@ using Inno.Editor.Interactions;
 using Inno.Editor.Rendering;
 using Inno.Editor.Scene;
 using Inno.Editor.Settings;
-using Inno.Engine.Scene;
-using Inno.Engine.Scene.Components;
+using Inno.Scene;
+using Inno.Scene.Components;
 using Inno.Native.ImGui;
 using Inno.Native.ImGuizmo;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using Inno.Rendering;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 using NativeImGuizmo = Inno.Native.ImGuizmo.ImGuizmo;
@@ -24,7 +24,9 @@ using EngineVector3 = Inno.Core.Mathematics.Vector3;
 
 namespace Inno.Editor.Panel.SceneView;
 
-/// <summary>Presents the active Plugin provider and host-owned transform manipulation for the Scene viewport.</summary>
+/// <summary>
+/// Presents the active Plugin provider and host-owned transform manipulation for the Scene viewport.
+/// </summary>
 [EditorPanel("rendering.scene-view", "Scene", order: 210, menuPath: "Viewports")]
 internal sealed class SceneViewPanel : EditorPanel
 {
@@ -35,7 +37,7 @@ internal sealed class SceneViewPanel : EditorPanel
     private readonly EditorRenderingModule m_rendering;
     private readonly EditorInteractions m_interactions;
     private readonly SceneEdits m_sceneEdits;
-    private readonly IEditorSceneWorkspace m_workspace;
+    private readonly IEditorGameScenePresentation m_scenePresentation;
     private readonly EditorSettings m_settings;
     private Vector4 m_backgroundColor;
     private NavigationDrag m_navigationDrag;
@@ -49,23 +51,32 @@ internal sealed class SceneViewPanel : EditorPanel
         EditorRenderingModule rendering,
         EditorInteractions interactions,
         SceneEdits sceneEdits,
-        IEditorSceneWorkspace workspace,
+        IEditorGameScenePresentation scenePresentation,
         EditorSettings settings)
     {
         m_rendering = rendering ?? throw new ArgumentNullException(nameof(rendering));
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
         m_sceneEdits = sceneEdits ?? throw new ArgumentNullException(nameof(sceneEdits));
-        m_workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
+        m_scenePresentation = scenePresentation ?? throw new ArgumentNullException(nameof(scenePresentation));
         m_settings = settings ?? throw new ArgumentNullException(nameof(settings));
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets whether use window padding is enabled for this implementation.
+    /// </summary>
     public override bool useWindowPadding => false;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets whether allow scrolling is enabled for this implementation.
+    /// </summary>
     public override bool allowScrolling => false;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Draws this feature using the current editor presentation context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnDraw(EditorContext context)
     {
         _ = context;
@@ -132,7 +143,12 @@ internal sealed class SceneViewPanel : EditorPanel
         m_rendering.HandlePointer(S_KIND, C_VIEWPORT_ID, width, height, x, y, button: 0);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Attaches this feature to its owning runtime generation.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnAttach(EditorContext context)
     {
         _ = context;
@@ -140,7 +156,12 @@ internal sealed class SceneViewPanel : EditorPanel
         m_settings.changed += ApplySettings;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Detaches this feature and releases generation-scoped state.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnDetach(EditorContext context)
     {
         _ = context;
@@ -150,7 +171,12 @@ internal sealed class SceneViewPanel : EditorPanel
         m_rendering.Release(C_VIEWPORT_ID);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Captures an immutable snapshot of the current observable state.
+    /// </summary>
+    /// <param name="state">
+    /// The lifecycle or domain state applied by this operation.
+    /// </param>
     protected override void Capture(EditorState state)
     {
         EditorViewportNavigationState navigation = m_rendering.GetNavigationState(C_VIEWPORT_ID);
@@ -177,7 +203,12 @@ internal sealed class SceneViewPanel : EditorPanel
         state.Set("navigation.movementSpeed", navigation.movementSpeed);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Restores the supplied snapshot while preserving current invariants.
+    /// </summary>
+    /// <param name="state">
+    /// The lifecycle or domain state applied by this operation.
+    /// </param>
     protected override void Restore(EditorState state)
     {
         if (!state.Get("navigation.initialized", false))
@@ -235,15 +266,14 @@ internal sealed class SceneViewPanel : EditorPanel
 
     private RenderContentScope CreateContentScope()
     {
-        var contents = new List<RenderContentReference>(m_workspace.scenes.Count);
+        EditorScenePresentationSnapshot presentation = m_scenePresentation.Capture();
+        var contents = new List<RenderContentReference>(presentation.scenes.Count);
         RenderContentId? activeContent = null;
-        foreach (GameScene scene in m_workspace.scenes)
+        foreach (GameScene scene in presentation.scenes)
         {
-            if (scene.isDestroyed)
-                continue;
             var contentId = new RenderContentId(scene.identity.persistentId);
             contents.Add(new RenderContentReference(contentId, scene));
-            if (ReferenceEquals(scene, m_workspace.activeScene))
+            if (ReferenceEquals(scene, presentation.activeScene))
                 activeContent = contentId;
         }
         return new RenderContentScope(contents, activeContent);

@@ -3,50 +3,88 @@ using System.IO;
 using System.Runtime.ExceptionServices;
 
 using Inno.Assets;
-using Inno.Assets.Core;
-using Inno.Assets.File;
+using Inno.Assets.Pipeline;
 using Inno.Core.Logging;
+using Inno.Extensibility.Types;
 using Inno.Editor.Core;
 using Inno.Editor.Inspection;
 using Inno.Editor.Interactions;
 using Inno.Editor.Settings;
+using Inno.Plugins.Authoring;
 using static Inno.Editor.Panel.FileBrowser.FileBrowserUtility;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
-/// <summary>Owns shared Asset Browser state and asset-type extension dispatch.</summary>
+/// <summary>
+/// Owns shared Asset Browser state and asset-type extension dispatch.
+/// </summary>
 [EditorModule("asset-browser", order: 100)]
 public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<AssetFileEntry>
 {
-    private readonly AssetEditorRegistry m_editors = new();
+    private readonly AssetPipeline m_pipeline;
+    private readonly AssetEditorRegistry m_editors;
     private readonly AssetIconRegistry m_icons;
     private readonly EditorSettings m_settings;
     private readonly EditorInteractions m_interactions;
+    private readonly Logger m_log;
+    private readonly PluginEnvironment m_plugins;
     private EditorContext? m_context;
 
-    /// <summary>Creates the Asset Browser feature module.</summary>
-    /// <param name="interactions">The active editor interaction entry point.</param>
+    /// <summary>
+    /// Creates the Asset Browser feature module.
+    /// </summary>
+    /// <param name="interactions">
+    /// The active editor interaction entry point.
+    /// </param>
     /// <param name="settings">
     /// The project Settings service that owns semantic icon values.
     /// </param>
+    /// <param name="pipeline">
+    /// The isolated authoring asset pipeline used by browser operations.
+    /// </param>
+    /// <param name="plugins">
+    /// The active Plugin catalog that authoritatively identifies Plugin-owned source mounts.
+    /// </param>
+    /// <param name="types">
+    /// The active type catalog used to build extension registry snapshots.
+    /// </param>
+    /// <param name="logs">
+    /// The application log router used for Asset Browser operation diagnostics.
+    /// </param>
     /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="interactions"/> or <paramref name="settings"/> is
-    /// <see langword="null"/>.
+    /// Thrown when any required service is <see langword="null"/>.
     /// </exception>
     public AssetEditorModule(
         EditorInteractions interactions,
-        EditorSettings settings)
+        EditorSettings settings,
+        AssetPipeline pipeline,
+        PluginEnvironment plugins,
+        TypeCatalog types,
+        LogRouter logs)
     {
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
         m_settings = settings ?? throw new ArgumentNullException(nameof(settings));
-        m_icons = new AssetIconRegistry(m_settings);
-        browser = new AssetBrowserState(interactions);
+        m_pipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
+        m_plugins = plugins ?? throw new ArgumentNullException(nameof(plugins));
+        ArgumentNullException.ThrowIfNull(types);
+        ArgumentNullException.ThrowIfNull(logs);
+        m_log = logs.CreateLogger<AssetEditorModule>();
+        m_editors = new AssetEditorRegistry(types);
+        m_icons = new AssetIconRegistry(m_settings, types);
+        browser = new AssetBrowserState(interactions, pipeline);
     }
 
-    /// <summary>Gets shared Asset Browser navigation and selection state.</summary>
+    /// <summary>
+    /// Gets shared Asset Browser navigation and selection state.
+    /// </summary>
     public AssetBrowserState browser { get; }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Captures an immutable snapshot of the current observable state.
+    /// </summary>
+    /// <param name="state">
+    /// The lifecycle or domain state applied by this operation.
+    /// </param>
     protected override void Capture(EditorState state)
     {
         state.Set("root", browser.root.ToString());
@@ -54,7 +92,12 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
         state.Set("pluginsDirectory", browser.GetDirectory(AssetBrowserRoot.Plugins));
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Restores the supplied snapshot while preserving current invariants.
+    /// </summary>
+    /// <param name="state">
+    /// The lifecycle or domain state applied by this operation.
+    /// </param>
     protected override void Restore(EditorState state)
     {
         AssetBrowserRoot restoredRoot = Enum.TryParse(
@@ -71,7 +114,7 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
         browser.Restore(restoredRoot, assetsDirectory, pluginsDirectory);
     }
 
-    private static string RestoreDirectory(AssetBrowserRoot root, string path)
+    private string RestoreDirectory(AssetBrowserRoot root, string path)
     {
         string directory = NormalizePath(path);
         if (string.IsNullOrEmpty(directory))
@@ -89,28 +132,39 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
         return directory;
     }
 
-    private static bool IsAvailableDirectory(string path)
-        => AssetManager.TryGetFileSystemEntry(AssetPath.Parse(path), out AssetFileEntry entry)
+    private bool IsAvailableDirectory(string path)
+        => m_pipeline.TryGetFileSystemEntry(AssetPath.Parse(path), out AssetFileEntry entry)
            && entry.isDirectory;
 
     internal EditorInteractions interactions => m_interactions;
 
+    internal AssetPipeline pipeline => m_pipeline;
+
+    internal bool IsPluginSource(AssetSourceId source)
+        => m_plugins.TryGet(source, out _);
+
+    internal bool IsPluginRoot(AssetFileEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        return string.IsNullOrEmpty(entry.assetPath.localPath) && IsPluginSource(entry.source);
+    }
+
     internal string folderIcon => m_settings
         .Get("Editor/Appearance/Icons/Folder")
-        .GetAsString("value", Inno.Platform.ImGui.ImGuiIcon.Folder)!;
+        .GetAsString("value", Inno.Platform.Sdl3.ImGui.ImGuiIcon.Folder)!;
 
     internal bool TryCreateContext(
         EditorContext editor,
         string relativePath,
         out AssetEditorContext? context)
     {
-        if (!AssetManager.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry entry))
+        if (!m_pipeline.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry entry))
         {
             context = null;
             return false;
         }
-        _ = AssetManager.TryGetInfo(AssetPath.Parse(relativePath), out AssetInfo? info);
-        _ = AssetManager.TryGetAssetType(AssetPath.Parse(relativePath), out Type? assetType);
+        _ = m_pipeline.TryGetInfo(AssetPath.Parse(relativePath), out AssetInfo? info);
+        _ = m_pipeline.TryGetAssetType(AssetPath.Parse(relativePath), out Type? assetType);
         context = new AssetEditorContext(
             editor,
             m_interactions,
@@ -118,7 +172,8 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
             entry.name,
             entry.isDirectory,
             info,
-            assetType);
+            assetType,
+            () => CreateDefaultDragData(entry, info));
         return true;
     }
 
@@ -134,7 +189,10 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
         }
         catch (Exception exception)
         {
-            Log.Error("Failed to open asset '{0}': {1}", context.relativePath, exception);
+            m_log.Write(
+                LogLevel.Error,
+                "Failed to open asset '{0}': {1}",
+                [context.relativePath, exception]);
             return false;
         }
     }
@@ -194,9 +252,15 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
     /// <summary>
     /// Determines whether an asset source can move into a target directory without conflicts.
     /// </summary>
-    /// <param name="sourcePath">The current source-relative asset path.</param>
-    /// <param name="targetDirectory">The destination source-relative directory, or an empty string for the root.</param>
-    /// <returns><see langword="true"/> when the requested move is valid.</returns>
+    /// <param name="sourcePath">
+    /// The current source-relative asset path.
+    /// </param>
+    /// <param name="targetDirectory">
+    /// The destination source-relative directory, or an empty string for the root.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the requested move is valid.
+    /// </returns>
     internal bool CanMoveToDirectory(string sourcePath, string targetDirectory)
         => TryPrepareMove(
             sourcePath,
@@ -209,12 +273,24 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
     /// <summary>
     /// Moves an asset into a directory and records the committed path transaction in Editor history.
     /// </summary>
-    /// <param name="sourcePath">The current source-relative asset path.</param>
-    /// <param name="targetDirectory">The destination source-relative directory, or an empty string for the root.</param>
-    /// <param name="history">The active history that receives the committed move.</param>
-    /// <returns>The source entry at its committed destination path.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="history"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when validation or the Asset transaction fails.</exception>
+    /// <param name="sourcePath">
+    /// The current source-relative asset path.
+    /// </param>
+    /// <param name="targetDirectory">
+    /// The destination source-relative directory, or an empty string for the root.
+    /// </param>
+    /// <param name="history">
+    /// The active history that receives the committed move.
+    /// </param>
+    /// <returns>
+    /// The source entry at its committed destination path.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="history"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when validation or the Asset transaction fails.
+    /// </exception>
     internal AssetFileEntry MoveToDirectoryWithHistory(
         string sourcePath,
         string targetDirectory,
@@ -261,7 +337,7 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
                 () => RequireMove(editor, context, targetPath, normalizedSource));
         }
 
-        return AssetManager.TryGetFileSystemEntry(AssetPath.Parse(targetPath), out AssetFileEntry moved)
+        return m_pipeline.TryGetFileSystemEntry(AssetPath.Parse(targetPath), out AssetFileEntry moved)
             ? moved
             : throw new InvalidOperationException(
                 $"Moved asset '{targetPath}' is unavailable after the transaction.");
@@ -273,18 +349,24 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
         AssetOperationValidation validation = editor.ValidateDelete(context);
         if (!validation.isValid)
         {
-            Log.Warn("Asset delete was rejected for '{0}': {1}", context.relativePath, validation.message);
+            m_log.Write(
+                LogLevel.Warn,
+                "Asset delete was rejected for '{0}': {1}",
+                [context.relativePath, validation.message]);
             return false;
         }
         string path = context.relativePath;
-        AssetManager.Delete(AssetPath.Parse(path));
+        m_pipeline.Delete(AssetPath.Parse(path));
         try
         {
             editor.OnDeleted(context);
         }
         catch (Exception exception)
         {
-            Log.Error("Asset editor delete hook failed for '{0}': {1}", path, exception);
+            m_log.Write(
+                LogLevel.Error,
+                "Asset editor delete hook failed for '{0}': {1}",
+                [path, exception]);
         }
         return true;
     }
@@ -293,7 +375,7 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(asset);
-        byte[] archive = AssetSourceArchive.Capture(asset.relativePath, out bool isDirectory);
+        byte[] archive = AssetSourceArchive.Capture(m_pipeline, asset.relativePath, out bool isDirectory);
         if (!Delete(asset))
             return false;
         var data = new AssetHistoryData(
@@ -315,6 +397,7 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
             RollbackAndRethrow(
                 exception,
                 () => AssetSourceArchive.Restore(
+                    m_pipeline,
                     Normalize(asset.relativePath),
                     isDirectory,
                     archive));
@@ -346,7 +429,7 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
 
     internal void SelectPath(string relativePath)
     {
-        object? target = AssetManager.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry entry)
+        object? target = m_pipeline.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry entry)
             ? entry
             : null;
         _ = m_interactions.For(FileBrowserInteractionIds.C_AREA, target).Select();
@@ -367,7 +450,9 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
     /// <summary>
     /// Resolves the presentation icon registered for an asset type or source extension.
     /// </summary>
-    /// <param name="entry">The source entry whose presentation icon should be resolved.</param>
+    /// <param name="entry">
+    /// The source entry whose presentation icon should be resolved.
+    /// </param>
     /// <returns>
     /// The most specific registered icon, or the built-in directory or file icon when no
     /// registration matches the entry.
@@ -380,36 +465,48 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
         ArgumentNullException.ThrowIfNull(entry);
         if (entry.isDirectory)
             return folderIcon;
-        _ = AssetManager.TryGetAssetType(entry.assetPath, out Type? assetType);
+        _ = m_pipeline.TryGetAssetType(entry.assetPath, out Type? assetType);
         if (m_icons.TryResolve(assetType, entry.assetPath.ToString(), out string icon))
         {
             return icon;
         }
         return m_settings
             .Get("Editor/Appearance/Icons/File")
-            .GetAsString("value", Inno.Platform.ImGui.ImGuiIcon.File)!;
+            .GetAsString("value", Inno.Platform.Sdl3.ImGui.ImGuiIcon.File)!;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Initializes this feature when its owning runtime becomes active.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnStart(EditorContext context)
     {
         m_context = context ?? throw new ArgumentNullException(nameof(context));
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Stops this feature before its owning runtime releases the active generation.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnStop(EditorContext context)
     {
         m_context = null;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Releases resources retained by this feature after it has stopped.
+    /// </summary>
     protected override void OnDispose()
     {
         m_editors.Dispose();
         m_icons.Dispose();
     }
 
-    private static AssetOperationValidation ValidateRename(
+    private AssetOperationValidation ValidateRename(
         AssetEditor editor,
         AssetEditorContext context,
         string sourcePath,
@@ -432,7 +529,7 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
         string parent = Normalize(Path.GetDirectoryName(sourcePath));
         targetPath = string.IsNullOrEmpty(parent) ? renamedEntry : $"{parent}/{renamedEntry}";
         if (!string.Equals(sourcePath, targetPath, StringComparison.OrdinalIgnoreCase) &&
-            AssetManager.TryGetFileSystemEntry(AssetPath.Parse(targetPath), out _))
+            m_pipeline.TryGetFileSystemEntry(AssetPath.Parse(targetPath), out _))
         {
             return AssetOperationValidation.Invalid($"Asset '{targetPath}' already exists.");
         }
@@ -470,7 +567,7 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
             return false;
         }
         if (!string.IsNullOrEmpty(directory) &&
-            (!AssetManager.TryGetFileSystemEntry(AssetPath.Parse(directory), out AssetFileEntry destination) ||
+            (!m_pipeline.TryGetFileSystemEntry(AssetPath.Parse(directory), out AssetFileEntry destination) ||
              !destination.isDirectory))
         {
             return false;
@@ -488,32 +585,35 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
 
         string name = Path.GetFileName(source);
         targetPath = string.IsNullOrEmpty(directory) ? name : $"{directory}/{name}";
-        if (AssetManager.TryGetFileSystemEntry(AssetPath.Parse(targetPath), out _))
+        if (m_pipeline.TryGetFileSystemEntry(AssetPath.Parse(targetPath), out _))
             return false;
 
         editor = m_editors.Resolve(context.assetType);
         return !validateEditor || editor.ValidateRename(context, targetPath).isValid;
     }
 
-    private static EditorHistoryResult MoveAsset(
+    private EditorHistoryResult MoveAsset(
         AssetEditor editor,
         AssetEditorContext context,
         string sourcePath,
         string targetPath)
     {
-        AssetManager.Move(AssetPath.Parse(sourcePath), AssetPath.Parse(targetPath));
+        m_pipeline.Move(AssetPath.Parse(sourcePath), AssetPath.Parse(targetPath));
         try
         {
             editor.OnRenamed(context, sourcePath, targetPath);
         }
         catch (Exception exception)
         {
-            Log.Error("Asset editor rename hook failed for '{0}': {1}", targetPath, exception);
+            m_log.Write(
+                LogLevel.Error,
+                "Asset editor rename hook failed for '{0}': {1}",
+                [targetPath, exception]);
         }
         return EditorHistoryResult.Success();
     }
 
-    private static void RequireMove(
+    private void RequireMove(
         AssetEditor editor,
         AssetEditorContext context,
         string sourcePath,
@@ -547,4 +647,24 @@ public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<As
         => string.IsNullOrWhiteSpace(path)
             ? string.Empty
             : path.Replace('\\', '/').Trim('/');
+
+    private EditorDragData CreateDefaultDragData(AssetFileEntry entry, AssetInfo? info)
+    {
+        if (entry.isDirectory)
+        {
+            return new EditorDragData(
+                entry,
+                entry.name,
+                () => m_pipeline.TryGetFileSystemEntry(entry.assetPath, out AssetFileEntry current) &&
+                      current.isDirectory);
+        }
+
+        return new EditorDragData(
+            info ?? (object)entry,
+            entry.name,
+            () => info is { persistentId: var id } &&
+                  id != Guid.Empty &&
+                  m_pipeline.TryGetInfo(id, out AssetInfo? current) &&
+                  current?.status is not AssetImportStatus.Missing and not AssetImportStatus.Conflict);
+    }
 }

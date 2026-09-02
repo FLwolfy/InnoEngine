@@ -4,8 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Numerics;
 using Inno.Assets;
-using Inno.Assets.Core;
+using Inno.Assets.Pipeline;
 using Inno.Core.Graphs;
+using Inno.Core.Serialization;
 using Inno.Editor.Core;
 using Inno.Editor.Graph;
 using Inno.Editor.ImGui.ImGuiWidget;
@@ -18,7 +19,9 @@ using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.ShaderGraph;
 
-/// <summary>Edits neutral raster and compute shader graphs through the shared Graph and Shader IR contracts.</summary>
+/// <summary>
+/// Edits neutral raster and compute shader graphs through the shared Graph and Shader IR contracts.
+/// </summary>
 [EditorPanel("rendering.shader-graph", "Shader Graph", order: 230, menuPath: "Authoring")]
 internal sealed class ShaderGraphPanel : EditorPanel
 {
@@ -29,6 +32,8 @@ internal sealed class ShaderGraphPanel : EditorPanel
     private const float C_PORT_RADIUS = 6f;
 
     private readonly GraphEditorModule m_graphs;
+    private readonly AssetPipeline m_assets;
+    private readonly SerializationRegistry m_serialization;
     private readonly EditorInteractions m_interactions;
     private readonly GraphCanvasState m_canvas = new();
     private readonly ShaderNodeRegistry m_nodes;
@@ -40,21 +45,34 @@ internal sealed class ShaderGraphPanel : EditorPanel
     private ulong m_lastNodeGeneration = ulong.MaxValue;
     private bool m_draggingSelection;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets whether use window padding is enabled for this implementation.
+    /// </summary>
     public override bool useWindowPadding => false;
 
-    /// <summary>Creates the Shader Graph panel around shared Graph and History services.</summary>
+    /// <summary>
+    /// Creates the Shader Graph panel around shared Graph and History services.
+    /// </summary>
     internal ShaderGraphPanel(
         GraphEditorModule graphs,
         EditorInteractions interactions,
-        ShaderNodeRegistry nodes)
+        ShaderNodeRegistry nodes,
+        AssetPipeline assets,
+        SerializationRegistry serialization)
     {
         m_graphs = graphs ?? throw new ArgumentNullException(nameof(graphs));
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
         m_nodes = nodes ?? throw new ArgumentNullException(nameof(nodes));
+        m_assets = assets ?? throw new ArgumentNullException(nameof(assets));
+        m_serialization = serialization ?? throw new ArgumentNullException(nameof(serialization));
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Draws this feature using the current editor presentation context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnDraw(EditorContext context)
     {
         EnsureDocument(context);
@@ -64,7 +82,12 @@ internal sealed class ShaderGraphPanel : EditorPanel
         DrawCanvas();
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Detaches this feature and releases generation-scoped state.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnDetach(EditorContext context)
     {
         _ = context;
@@ -75,7 +98,12 @@ internal sealed class ShaderGraphPanel : EditorPanel
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Captures an immutable snapshot of the current observable state.
+    /// </summary>
+    /// <param name="state">
+    /// The lifecycle or domain state applied by this operation.
+    /// </param>
     protected override void Capture(EditorState state)
     {
         state.Set("document", m_documentPath);
@@ -84,7 +112,12 @@ internal sealed class ShaderGraphPanel : EditorPanel
         state.Set("zoom", m_canvas.zoom);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Restores the supplied snapshot while preserving current invariants.
+    /// </summary>
+    /// <param name="state">
+    /// The lifecycle or domain state applied by this operation.
+    /// </param>
     protected override void Restore(EditorState state)
     {
         m_documentPath = NormalizeDocumentPath(state.Get("document", C_DEFAULT_PATH));
@@ -105,7 +138,7 @@ internal sealed class ShaderGraphPanel : EditorPanel
 
         m_documentPath = NormalizeDocumentPath(m_documentPath);
         GraphDocument document;
-        if (AssetManager.TryLoad(AssetPath.Parse(m_documentPath), out ShaderGraphAsset? asset)
+        if (m_assets.TryLoad(AssetPath.Parse(m_documentPath), out ShaderGraphAsset? asset)
             && asset?.document is not null)
         {
             m_asset = asset;
@@ -471,7 +504,8 @@ internal sealed class ShaderGraphPanel : EditorPanel
             m_documentPath,
             Path.GetFileNameWithoutExtension(m_documentPath),
             m_controller.document,
-            m_nodes);
+            m_nodes,
+            m_serialization);
         m_lastCompiledRevision = m_controller.revision;
         m_lastNodeGeneration = nodeGeneration;
     }
@@ -480,8 +514,8 @@ internal sealed class ShaderGraphPanel : EditorPanel
     {
         _ = context;
         m_asset ??= new ShaderGraphAsset();
-        m_asset.SetDocument(m_controller!.document);
-        if (!AssetManager.Save(AssetPath.Parse(m_documentPath), m_asset))
+        m_asset.SetDocument(m_controller!.document, m_serialization);
+        if (!m_assets.Save(AssetPath.Parse(m_documentPath), m_asset))
             throw new InvalidOperationException($"No Shader Graph importer can save '{m_documentPath}'.");
         m_controller.MarkSaved();
     }

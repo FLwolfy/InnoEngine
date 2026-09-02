@@ -3,34 +3,52 @@ using System;
 namespace Inno.Editor.PlayMode;
 
 /// <summary>
-/// Bridges the host layer's fixed, variable, and late callbacks to the active Play Mode session.
+/// Bridges the editor host frame clock to the active Play Mode session.
 /// </summary>
 public sealed class EditorPlayModeLoop
 {
-    private EditorPlayModeModule? m_owner;
+    private static readonly IDisposable S_EMPTY_SCOPE = new EmptyScope();
 
-    /// <summary>Advances the active simulation by one fixed timestep when Play Mode is running.</summary>
-    /// <param name="fixedDeltaTime">The fixed timestep in seconds.</param>
-    public void FixedUpdate(float fixedDeltaTime) => m_owner?.FixedUpdate(fixedDeltaTime);
+    private EditorPlayModeController? m_owner;
 
-    /// <summary>Advances the active simulation by one variable timestep when Play Mode is running.</summary>
-    /// <param name="deltaTime">The frame timestep in seconds.</param>
-    public void Update(float deltaTime) => m_owner?.UpdateSimulation(deltaTime);
+    /// <summary>
+    /// Advances the active simulation by one complete frame when Play Mode is running.
+    /// </summary>
+    /// <param name="deltaTime">
+    /// The elapsed frame time in seconds.
+    /// </param>
+    public void Tick(float deltaTime) => m_owner?.Tick(deltaTime);
 
-    /// <summary>Advances the active simulation's late phase when Play Mode is running.</summary>
-    /// <param name="deltaTime">The frame timestep in seconds.</param>
-    public void LateUpdate(float deltaTime) => m_owner?.LateUpdate(deltaTime);
+    /// <summary>
+    /// Binds editor presentation and interaction work to the isolated Play session while simulation is
+    /// active, or returns an inert scope while the editor is not presenting runtime copies.
+    /// </summary>
+    /// <returns>
+    /// A scope that must be disposed after the current editor presentation phase completes.
+    /// </returns>
+    public IDisposable EnterPresentationScope()
+        => m_owner?.EnterPresentationScope() ?? S_EMPTY_SCOPE;
 
-    internal void Attach(EditorPlayModeModule owner)
+    internal void Attach(EditorPlayModeController owner)
     {
         if (m_owner is not null && !ReferenceEquals(m_owner, owner))
             throw new InvalidOperationException("The editor host already owns an active Play Mode module.");
         m_owner = owner;
     }
 
-    internal void Detach(EditorPlayModeModule owner)
+    internal void Detach(EditorPlayModeController owner)
     {
         if (ReferenceEquals(m_owner, owner))
             m_owner = null;
+    }
+
+    private sealed class EmptyScope : IDisposable
+    {
+        /// <summary>
+        /// Completes the inert presentation scope.
+        /// </summary>
+        public void Dispose()
+        {
+        }
     }
 }

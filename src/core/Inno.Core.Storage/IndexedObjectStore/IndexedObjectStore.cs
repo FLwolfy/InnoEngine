@@ -10,13 +10,27 @@ namespace Inno.Core.Storage;
 /// </summary>
 internal interface IIndexedObjectStore
 {
+    /// <summary>
+    /// Determines whether the key belongs to a live slot in the current storage generation.
+    /// </summary>
+    /// <param name="id">
+    /// The stable identity used to locate the requested value.
+    /// </param>
+    /// <param name="keyType">
+    /// The key type consumed by is valid key; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the requested condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     bool IsValidKey(int id, Type keyType);
 }
 
 /// <summary>
 /// Thread-safe object store with optional query keys over stored items.
 /// </summary>
-/// <typeparam name="T">The stored reference type.</typeparam>
+/// <typeparam name="T">
+/// The stored reference type.
+/// </typeparam>
 public sealed class IndexedObjectStore<T> : IIndexedObjectStore where T : class
 {
     private readonly WeakReference<IIndexedObjectStore> m_storeRef;
@@ -125,11 +139,21 @@ public sealed class IndexedObjectStore<T> : IIndexedObjectStore where T : class
     /// <summary>
     /// Defines a query key over stored items.
     /// </summary>
-    /// <typeparam name="TKey">Key type.</typeparam>
-    /// <param name="name">Unique key name.</param>
-    /// <param name="flags">Key behavior flags.</param>
-    /// <param name="orderComparer">Optional order comparer. Required when <see cref="IndexedObjectKeyFlags.Ordered"/> is set.</param>
-    /// <returns>The created key handle.</returns>
+    /// <typeparam name="TKey">
+    /// Key type.
+    /// </typeparam>
+    /// <param name="name">
+    /// Unique key name.
+    /// </param>
+    /// <param name="flags">
+    /// Key behavior flags.
+    /// </param>
+    /// <param name="orderComparer">
+    /// Optional order comparer. Required when <see cref="IndexedObjectKeyFlags.Ordered"/> is set.
+    /// </param>
+    /// <returns>
+    /// The created key handle.
+    /// </returns>
     public IndexedObjectKey<TKey> DefineKey<TKey>(
         string name,
         IndexedObjectKeyFlags flags = IndexedObjectKeyFlags.Unordered,
@@ -164,9 +188,15 @@ public sealed class IndexedObjectStore<T> : IIndexedObjectStore where T : class
     /// <summary>
     /// Removes a key previously defined on the store.
     /// </summary>
-    /// <typeparam name="TKey">Key type.</typeparam>
-    /// <param name="key">The key handle to remove.</param>
-    /// <returns>True if removed.</returns>
+    /// <typeparam name="TKey">
+    /// Key type.
+    /// </typeparam>
+    /// <param name="key">
+    /// The key handle to remove.
+    /// </param>
+    /// <returns>
+    /// True if removed.
+    /// </returns>
     public bool RemoveKey<TKey>(IndexedObjectKey<TKey> key)
     {
         m_lock.EnterWriteLock();
@@ -188,10 +218,18 @@ public sealed class IndexedObjectStore<T> : IIndexedObjectStore where T : class
     /// <summary>
     /// Gets a previously defined key by name.
     /// </summary>
-    /// <typeparam name="TKey">Key type.</typeparam>
-    /// <param name="name">Key name.</param>
-    /// <param name="key">The resolved key handle.</param>
-    /// <returns>True if found and type matches.</returns>
+    /// <typeparam name="TKey">
+    /// Key type.
+    /// </typeparam>
+    /// <param name="name">
+    /// Key name.
+    /// </param>
+    /// <param name="key">
+    /// The resolved key handle.
+    /// </param>
+    /// <returns>
+    /// True if found and type matches.
+    /// </returns>
     public bool TryGetKey<TKey>(string name, out IndexedObjectKey<TKey> key) where TKey : notnull
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -240,7 +278,9 @@ public sealed class IndexedObjectStore<T> : IIndexedObjectStore where T : class
     /// <remarks>
     /// Enumeration is fail-fast and throws if the store is modified during iteration.
     /// </remarks>
-    /// <returns>Lazy enumerable of key names.</returns>
+    /// <returns>
+    /// Lazy enumerable of key names.
+    /// </returns>
     public IEnumerable<string> GetAllKeys()
         => EnumerateKeys();
 
@@ -257,7 +297,12 @@ public sealed class IndexedObjectStore<T> : IIndexedObjectStore where T : class
     /// <summary>
     /// Adds an item to the store without indexing.
     /// </summary>
-    /// <param name="item">The item to add.</param>
+    /// <param name="item">
+    /// The item to add.
+    /// </param>
+    /// <returns>
+    /// The validated indexed object entryt that represents the completed operation.
+    /// </returns>
     public IndexedObjectEntry<T> Add(T item)
     {
         if (item == null) throw new ArgumentNullException(nameof(item));
@@ -288,8 +333,12 @@ public sealed class IndexedObjectStore<T> : IIndexedObjectStore where T : class
     /// <summary>
     /// Removes an item from the store and all keys.
     /// </summary>
-    /// <param name="item">The item to remove.</param>
-    /// <returns>True if removed.</returns>
+    /// <param name="item">
+    /// The item to remove.
+    /// </param>
+    /// <returns>
+    /// True if removed.
+    /// </returns>
     public bool Remove(T item)
     {
         if (item == null) throw new ArgumentNullException(nameof(item));
@@ -349,9 +398,15 @@ public sealed class IndexedObjectStore<T> : IIndexedObjectStore where T : class
     /// <summary>
     /// Tries to get the runtime handle for an item currently stored in the store.
     /// </summary>
-    /// <param name="item">Item to resolve.</param>
-    /// <param name="handle">Resolved runtime handle when successful.</param>
-    /// <returns>True when the item is currently stored in this store.</returns>
+    /// <param name="item">
+    /// Item to resolve.
+    /// </param>
+    /// <param name="handle">
+    /// Resolved runtime handle when successful.
+    /// </param>
+    /// <returns>
+    /// True when the item is currently stored in this store.
+    /// </returns>
     internal bool TryGetHandle(T item, out IndexedObjectRuntimeHandle handle)
     {
         if (item == null)
@@ -374,6 +429,12 @@ public sealed class IndexedObjectStore<T> : IIndexedObjectStore where T : class
     /// <summary>
     /// Returns true when the provided runtime handle still points to a live item in this store.
     /// </summary>
+    /// <param name="handle">
+    /// The opaque handle validated by this operation.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the operation succeeds or its condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     internal bool IsHandleValid(IndexedObjectRuntimeHandle handle)
     {
         m_lock.EnterReadLock();
@@ -390,6 +451,15 @@ public sealed class IndexedObjectStore<T> : IIndexedObjectStore where T : class
     /// <summary>
     /// Tries to resolve an item by runtime handle.
     /// </summary>
+    /// <param name="handle">
+    /// The opaque handle validated by this operation.
+    /// </param>
+    /// <param name="item">
+    /// The stored item associated with the validated handle.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the operation succeeds or its condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     internal bool TryGetByHandle(IndexedObjectRuntimeHandle handle, out T? item)
     {
         m_lock.EnterReadLock();
@@ -417,10 +487,18 @@ public sealed class IndexedObjectStore<T> : IIndexedObjectStore where T : class
     /// <remarks>
     /// Enumeration throws if the store is modified during iteration.
     /// </remarks>
-    /// <typeparam name="TKey">Key type.</typeparam>
-    /// <param name="key">The key handle to query.</param>
-    /// <param name="value">The key value to look up.</param>
-    /// <returns>Lazy fail-fast enumerable of matching items.</returns>
+    /// <typeparam name="TKey">
+    /// Key type.
+    /// </typeparam>
+    /// <param name="key">
+    /// The key handle to query.
+    /// </param>
+    /// <param name="value">
+    /// The key value to look up.
+    /// </param>
+    /// <returns>
+    /// Lazy fail-fast enumerable of matching items.
+    /// </returns>
     public IEnumerable<T> FindFast<TKey>(IndexedObjectKey<TKey> key, TKey value) where TKey : notnull
     {
         var index = GetIndex(key);
@@ -433,10 +511,18 @@ public sealed class IndexedObjectStore<T> : IIndexedObjectStore where T : class
     /// <remarks>
     /// The returned list is detached from subsequent store mutations.
     /// </remarks>
-    /// <typeparam name="TKey">Key type.</typeparam>
-    /// <param name="key">The key handle to query.</param>
-    /// <param name="value">The key value to look up.</param>
-    /// <returns>A stable snapshot list of matching items.</returns>
+    /// <typeparam name="TKey">
+    /// Key type.
+    /// </typeparam>
+    /// <param name="key">
+    /// The key handle to query.
+    /// </param>
+    /// <param name="value">
+    /// The key value to look up.
+    /// </param>
+    /// <returns>
+    /// A stable snapshot list of matching items.
+    /// </returns>
     public IReadOnlyList<T> Find<TKey>(IndexedObjectKey<TKey> key, TKey value) where TKey : notnull
     {
         m_lock.EnterReadLock();
@@ -498,10 +584,18 @@ public sealed class IndexedObjectStore<T> : IIndexedObjectStore where T : class
     /// <summary>
     /// Returns the first item by key or null if none exists.
     /// </summary>
-    /// <typeparam name="TKey">Key type.</typeparam>
-    /// <param name="key">The key handle to query.</param>
-    /// <param name="value">The key value to look up.</param>
-    /// <returns>The first matching item or null.</returns>
+    /// <typeparam name="TKey">
+    /// Key type.
+    /// </typeparam>
+    /// <param name="key">
+    /// The key handle to query.
+    /// </param>
+    /// <param name="value">
+    /// The key value to look up.
+    /// </param>
+    /// <returns>
+    /// The first matching item or null.
+    /// </returns>
     public T? First<TKey>(IndexedObjectKey<TKey> key, TKey value) where TKey : notnull
     {
         m_lock.EnterReadLock();
@@ -523,7 +617,9 @@ public sealed class IndexedObjectStore<T> : IIndexedObjectStore where T : class
     /// <remarks>
     /// The returned list is detached from subsequent store mutations.
     /// </remarks>
-    /// <returns>A snapshot list of all stored items.</returns>
+    /// <returns>
+    /// A snapshot list of all stored items.
+    /// </returns>
     public IReadOnlyList<T> All()
     {
         m_lock.EnterReadLock();
@@ -545,7 +641,9 @@ public sealed class IndexedObjectStore<T> : IIndexedObjectStore where T : class
     /// <remarks>
     /// Enumeration throws if the store is modified during iteration.
     /// </remarks>
-    /// <returns>Lazy fail-fast enumerable of all stored items.</returns>
+    /// <returns>
+    /// Lazy fail-fast enumerable of all stored items.
+    /// </returns>
     public IEnumerable<T> AllFast()
     {
         var version = Volatile.Read(ref m_version);
@@ -559,7 +657,9 @@ public sealed class IndexedObjectStore<T> : IIndexedObjectStore where T : class
     /// <summary>
     /// Starts a query over stored items.
     /// </summary>
-    /// <returns>A query builder.</returns>
+    /// <returns>
+    /// A query builder.
+    /// </returns>
     public IndexedObjectQuery<T> Query()
         => new(this);
 
@@ -1236,10 +1336,34 @@ public sealed class IndexedObjectStore<T> : IIndexedObjectStore where T : class
 
     internal sealed class ReferenceEqualityComparer<TItem> : IEqualityComparer<TItem> where TItem : class
     {
+        /// <summary>
+        /// The instance value used as part of this type's public representation.
+        /// </summary>
         public static readonly ReferenceEqualityComparer<TItem> INSTANCE = new();
 
+        /// <summary>
+        /// Determines whether this value and the supplied value represent the same logical state.
+        /// </summary>
+        /// <param name="x">
+        /// The horizontal or first component.
+        /// </param>
+        /// <param name="y">
+        /// The vertical or second component.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the requested condition is satisfied; otherwise, <see langword="false"/>.
+        /// </returns>
         public bool Equals(TItem? x, TItem? y) => ReferenceEquals(x, y);
 
+        /// <summary>
+        /// Computes a hash code consistent with the implemented equality contract.
+        /// </summary>
+        /// <param name="obj">
+        /// The object compared with this value.
+        /// </param>
+        /// <returns>
+        /// The scalar result calculated from the supplied inputs.
+        /// </returns>
         public int GetHashCode(TItem obj) => RuntimeHelpers.GetHashCode(obj);
     }
 }

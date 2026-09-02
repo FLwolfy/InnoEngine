@@ -2,17 +2,27 @@ using System;
 
 namespace Inno.Editor.Core;
 
-/// <summary>Registers an editor panel for automatic discovery.</summary>
+/// <summary>
+/// Registers an editor panel for automatic discovery.
+/// </summary>
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class EditorPanelAttribute : Attribute
 {
     /// <summary>
     /// Creates a dockable panel registration with stable identity and presentation metadata.
     /// </summary>
-    /// <param name="id">The stable identity used for Panel-menu routing and reload-state retention.</param>
-    /// <param name="title">The visible dockable-window title.</param>
-    /// <param name="order">The stable panel and generated Panel-menu ordering value.</param>
-    /// <param name="defaultOpen">Whether a newly discovered panel is visible before retained state is available.</param>
+    /// <param name="id">
+    /// The stable identity used for Panel-menu routing and reload-state retention.
+    /// </param>
+    /// <param name="title">
+    /// The visible dockable-window title.
+    /// </param>
+    /// <param name="order">
+    /// The stable panel and generated Panel-menu ordering value.
+    /// </param>
+    /// <param name="defaultOpen">
+    /// Whether a newly discovered panel is visible before retained state is available.
+    /// </param>
     /// <param name="menuPath">
     /// The optional slash-delimited category path under the generated <c>Panel</c> menu.
     /// </param>
@@ -43,22 +53,34 @@ public sealed class EditorPanelAttribute : Attribute
         this.separatorBefore = separatorBefore;
     }
 
-    /// <summary>Gets the stable panel identifier.</summary>
+    /// <summary>
+    /// Gets the stable panel identifier.
+    /// </summary>
     public string id { get; }
 
-    /// <summary>Gets the visible panel title.</summary>
+    /// <summary>
+    /// Gets the visible panel title.
+    /// </summary>
     public string title { get; }
 
-    /// <summary>Gets the stable panel ordering value.</summary>
+    /// <summary>
+    /// Gets the stable panel ordering value.
+    /// </summary>
     public int order { get; }
 
-    /// <summary>Gets whether a newly discovered panel is open by default.</summary>
+    /// <summary>
+    /// Gets whether a newly discovered panel is open by default.
+    /// </summary>
     public bool defaultOpen { get; }
 
-    /// <summary>Gets the optional category path under the generated <c>Panel</c> menu.</summary>
+    /// <summary>
+    /// Gets the optional category path under the generated <c>Panel</c> menu.
+    /// </summary>
     public string menuPath { get; }
 
-    /// <summary>Gets whether the generated panel toggle begins a new visual group.</summary>
+    /// <summary>
+    /// Gets whether the generated panel toggle begins a new visual group.
+    /// </summary>
     public bool separatorBefore { get; }
 
     private static string NormalizeMenuPath(string path)

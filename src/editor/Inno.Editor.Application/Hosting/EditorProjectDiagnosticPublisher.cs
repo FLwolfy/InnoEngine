@@ -1,6 +1,6 @@
 using System;
 
-using Inno.Core.Diagnose;
+using Inno.Core.Diagnostics;
 
 namespace Inno.Editor.Application;
 
@@ -33,6 +33,9 @@ internal sealed class EditorProjectDiagnosticPublisher : IDisposable
         m_state = string.Empty;
     }
 
+    /// <summary>
+    /// Releases the resources owned by this instance.
+    /// </summary>
     public void Dispose()
         => ResolvePersistence();
 }

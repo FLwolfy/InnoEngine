@@ -10,8 +10,12 @@ public readonly record struct GraphNodeId
     /// <summary>
     /// Creates a stable graph node identifier.
     /// </summary>
-    /// <param name="value">Non-empty identifier value.</param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="value"/> is empty.</exception>
+    /// <param name="value">
+    /// Non-empty identifier value.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="value"/> is empty.
+    /// </exception>
     public GraphNodeId(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
@@ -23,7 +27,12 @@ public readonly record struct GraphNodeId
     /// </summary>
     public string value { get; }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Formats this value as a human-readable representation.
+    /// </summary>
+    /// <returns>
+    /// The human-readable representation of this value.
+    /// </returns>
     public override string ToString() => value;
 }
 
@@ -35,8 +44,12 @@ public readonly record struct GraphEdgeId
     /// <summary>
     /// Creates a stable graph edge identifier.
     /// </summary>
-    /// <param name="value">Non-empty identifier value.</param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="value"/> is empty.</exception>
+    /// <param name="value">
+    /// Non-empty identifier value.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="value"/> is empty.
+    /// </exception>
     public GraphEdgeId(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
@@ -48,7 +61,12 @@ public readonly record struct GraphEdgeId
     /// </summary>
     public string value { get; }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Formats this value as a human-readable representation.
+    /// </summary>
+    /// <returns>
+    /// The human-readable representation of this value.
+    /// </returns>
     public override string ToString() => value;
 }
 
@@ -60,8 +78,12 @@ public readonly record struct GraphPortId
     /// <summary>
     /// Creates a stable graph port identifier.
     /// </summary>
-    /// <param name="value">Non-empty identifier value.</param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="value"/> is empty.</exception>
+    /// <param name="value">
+    /// Non-empty identifier value.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="value"/> is empty.
+    /// </exception>
     public GraphPortId(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
@@ -73,7 +95,12 @@ public readonly record struct GraphPortId
     /// </summary>
     public string value { get; }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Formats this value as a human-readable representation.
+    /// </summary>
+    /// <returns>
+    /// The human-readable representation of this value.
+    /// </returns>
     public override string ToString() => value;
 }
 
@@ -85,8 +112,12 @@ public readonly record struct GraphPosition
     /// <summary>
     /// Creates a graph-space position.
     /// </summary>
-    /// <param name="x">Horizontal graph-space coordinate.</param>
-    /// <param name="y">Vertical graph-space coordinate.</param>
+    /// <param name="x">
+    /// Horizontal graph-space coordinate.
+    /// </param>
+    /// <param name="y">
+    /// Vertical graph-space coordinate.
+    /// </param>
     public GraphPosition(float x, float y)
     {
         this.x = x;

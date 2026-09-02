@@ -4,84 +4,141 @@ using Inno.Core.Mathematics;
 
 namespace Inno.Editor.Rendering;
 
-/// <summary>Identifies the projection family represented by neutral Editor viewport navigation state.</summary>
+/// <summary>
+/// Identifies the projection family represented by neutral Editor viewport navigation state.
+/// </summary>
 public enum EditorViewportProjection
 {
-    /// <summary>Uses a parallel projection controlled by an orthographic half-height.</summary>
+    /// <summary>
+    /// Uses a parallel projection controlled by an orthographic half-height.
+    /// </summary>
     Orthographic,
 
-    /// <summary>Uses a perspective projection controlled by a vertical field of view.</summary>
+    /// <summary>
+    /// Uses a perspective projection controlled by a vertical field of view.
+    /// </summary>
     Perspective
 }
 
-/// <summary>Identifies the active interaction model without prescribing a rendering camera type.</summary>
+/// <summary>
+/// Identifies the active interaction model without prescribing a rendering camera type.
+/// </summary>
 public enum EditorViewportNavigationMode
 {
-    /// <summary>Pans and zooms over a provider-defined plane.</summary>
+    /// <summary>
+    /// Pans and zooms over a provider-defined plane.
+    /// </summary>
     Planar,
 
-    /// <summary>Rotates around a focus pivot and dollies along the view direction.</summary>
+    /// <summary>
+    /// Rotates around a focus pivot and dollies along the view direction.
+    /// </summary>
     Orbit,
 
-    /// <summary>Moves and looks freely from the current view position.</summary>
+    /// <summary>
+    /// Moves and looks freely from the current view position.
+    /// </summary>
     Fly
 }
 
-/// <summary>Declares navigation operations supported by one viewport provider.</summary>
+/// <summary>
+/// Declares navigation operations supported by one viewport provider.
+/// </summary>
 [Flags]
 public enum EditorViewportNavigationCapabilities
 {
-    /// <summary>Disables host-owned navigation.</summary>
+    /// <summary>
+    /// Disables host-owned navigation.
+    /// </summary>
     None = 0,
 
-    /// <summary>Allows translating the view parallel to its image plane.</summary>
+    /// <summary>
+    /// Allows translating the view parallel to its image plane.
+    /// </summary>
     Pan = 1 << 0,
 
-    /// <summary>Allows changing orthographic size or perspective focus distance.</summary>
+    /// <summary>
+    /// Allows changing orthographic size or perspective focus distance.
+    /// </summary>
     Zoom = 1 << 1,
 
-    /// <summary>Allows the complete plane-oriented pan and zoom interaction model.</summary>
+    /// <summary>
+    /// Allows the complete plane-oriented pan and zoom interaction model.
+    /// </summary>
     Planar = Pan | Zoom,
 
-    /// <summary>Allows pivot-oriented orbit and dolly.</summary>
+    /// <summary>
+    /// Allows pivot-oriented orbit and dolly.
+    /// </summary>
     Orbit = 1 << 2,
 
-    /// <summary>Allows free-look movement.</summary>
+    /// <summary>
+    /// Allows free-look movement.
+    /// </summary>
     Fly = 1 << 3,
 
-    /// <summary>Allows framing a provider-supplied or host-derived selection bound.</summary>
+    /// <summary>
+    /// Allows framing a provider-supplied or host-derived selection bound.
+    /// </summary>
     FrameSelection = 1 << 4
 }
 
-/// <summary>Identifies a provider-defined navigation profile across reload generations.</summary>
+/// <summary>
+/// Identifies a provider-defined navigation profile across reload generations.
+/// </summary>
 public readonly record struct EditorViewportNavigationProfileId
 {
-    /// <summary>Creates a stable profile identifier.</summary>
-    /// <param name="value">Globally stable profile identity.</param>
+    /// <summary>
+    /// Creates a stable profile identifier.
+    /// </summary>
+    /// <param name="value">
+    /// Globally stable profile identity.
+    /// </param>
     public EditorViewportNavigationProfileId(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
         this.value = value.Trim();
     }
 
-    /// <summary>Gets the stable profile identity.</summary>
+    /// <summary>
+    /// Gets the stable profile identity.
+    /// </summary>
     public string value { get; }
 
-    /// <summary>Gets whether this identifier contains a usable value.</summary>
+    /// <summary>
+    /// Gets whether this identifier contains a usable value.
+    /// </summary>
     public bool isValid => !string.IsNullOrWhiteSpace(value);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Formats this value as a human-readable representation.
+    /// </summary>
+    /// <returns>
+    /// The human-readable representation of this value.
+    /// </returns>
     public override string ToString() => value ?? string.Empty;
 }
 
-/// <summary>Describes a world-space sphere that can be framed by host navigation.</summary>
+/// <summary>
+/// Describes a world-space sphere that can be framed by host navigation.
+/// </summary>
 public readonly record struct EditorViewportFocusBounds
 {
-    /// <summary>Creates a finite focus bound.</summary>
-    /// <param name="center">World-space focus center.</param>
-    /// <param name="radius">Non-negative world-space radius.</param>
-    /// <exception cref="ArgumentException">Thrown when the center contains a non-finite value.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when the radius is negative or non-finite.</exception>
+    /// <summary>
+    /// Creates a finite focus bound.
+    /// </summary>
+    /// <param name="center">
+    /// World-space focus center.
+    /// </param>
+    /// <param name="radius">
+    /// Non-negative world-space radius.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the center contains a non-finite value.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when the radius is negative or non-finite.
+    /// </exception>
     public EditorViewportFocusBounds(Vector3 center, float radius)
     {
         if (!IsFinite(center))
@@ -92,10 +149,14 @@ public readonly record struct EditorViewportFocusBounds
         this.radius = radius;
     }
 
-    /// <summary>Gets the world-space focus center.</summary>
+    /// <summary>
+    /// Gets the world-space focus center.
+    /// </summary>
     public Vector3 center { get; }
 
-    /// <summary>Gets the non-negative world-space radius.</summary>
+    /// <summary>
+    /// Gets the non-negative world-space radius.
+    /// </summary>
     public float radius { get; }
 
     private static bool IsFinite(Vector3 value)
@@ -107,10 +168,18 @@ public readonly record struct EditorViewportFocusBounds
 /// </summary>
 public sealed class EditorViewportNavigationProfile
 {
-    /// <summary>Creates a provider-defined navigation profile.</summary>
-    /// <param name="id">Stable profile identity.</param>
-    /// <param name="capabilities">Operations accepted by the provider.</param>
-    /// <param name="defaultMode">Preferred mode when current state is unsupported.</param>
+    /// <summary>
+    /// Creates a provider-defined navigation profile.
+    /// </summary>
+    /// <param name="id">
+    /// Stable profile identity.
+    /// </param>
+    /// <param name="capabilities">
+    /// Operations accepted by the provider.
+    /// </param>
+    /// <param name="defaultMode">
+    /// Preferred mode when current state is unsupported.
+    /// </param>
     public EditorViewportNavigationProfile(
         EditorViewportNavigationProfileId id,
         EditorViewportNavigationCapabilities capabilities,
@@ -138,46 +207,74 @@ public sealed class EditorViewportNavigationProfile
         this.defaultMode = defaultMode;
     }
 
-    /// <summary>Gets the stable profile identity.</summary>
+    /// <summary>
+    /// Gets the stable profile identity.
+    /// </summary>
     public EditorViewportNavigationProfileId id { get; }
 
-    /// <summary>Gets the operations accepted by this provider.</summary>
+    /// <summary>
+    /// Gets the operations accepted by this provider.
+    /// </summary>
     public EditorViewportNavigationCapabilities capabilities { get; }
 
-    /// <summary>Gets the mode selected when current state is not supported.</summary>
+    /// <summary>
+    /// Gets the mode selected when current state is not supported.
+    /// </summary>
     public EditorViewportNavigationMode defaultMode { get; }
 
-    /// <summary>Gets or sets the provider-defined world-up direction.</summary>
+    /// <summary>
+    /// Gets or sets the provider-defined world-up direction.
+    /// </summary>
     public Vector3 worldUp { get; set; } = Vector3.UP;
 
-    /// <summary>Gets or sets the optional current selection bound.</summary>
+    /// <summary>
+    /// Gets or sets the optional current selection bound.
+    /// </summary>
     public EditorViewportFocusBounds? focusBounds { get; set; }
 
-    /// <summary>Gets or sets pointer rotation sensitivity in radians per pixel.</summary>
+    /// <summary>
+    /// Gets or sets pointer rotation sensitivity in radians per pixel.
+    /// </summary>
     public float rotationSensitivity { get; set; } = 0.005f;
 
-    /// <summary>Gets or sets exponential wheel zoom sensitivity.</summary>
+    /// <summary>
+    /// Gets or sets exponential wheel zoom sensitivity.
+    /// </summary>
     public float zoomSensitivity { get; set; } = 0.16f;
 
-    /// <summary>Gets or sets minimum orthographic half-height.</summary>
+    /// <summary>
+    /// Gets or sets minimum orthographic half-height.
+    /// </summary>
     public float minimumOrthographicSize { get; set; } = 0.001f;
 
-    /// <summary>Gets or sets maximum orthographic half-height.</summary>
+    /// <summary>
+    /// Gets or sets maximum orthographic half-height.
+    /// </summary>
     public float maximumOrthographicSize { get; set; } = 100000f;
 
-    /// <summary>Gets or sets minimum orbit or framing distance.</summary>
+    /// <summary>
+    /// Gets or sets minimum orbit or framing distance.
+    /// </summary>
     public float minimumFocusDistance { get; set; } = 0.01f;
 
-    /// <summary>Gets or sets maximum orbit or framing distance.</summary>
+    /// <summary>
+    /// Gets or sets maximum orbit or framing distance.
+    /// </summary>
     public float maximumFocusDistance { get; set; } = 1000000f;
 
-    /// <summary>Gets or sets the multiplier used while fast fly movement is requested.</summary>
+    /// <summary>
+    /// Gets or sets the multiplier used while fast fly movement is requested.
+    /// </summary>
     public float fastMovementMultiplier { get; set; } = 4f;
 
-    /// <summary>Gets or sets additional framing space around selection bounds.</summary>
+    /// <summary>
+    /// Gets or sets additional framing space around selection bounds.
+    /// </summary>
     public float framePadding { get; set; } = 1.25f;
 
-    /// <summary>Gets a disabled fallback profile used when no provider navigation contract exists.</summary>
+    /// <summary>
+    /// Gets a disabled fallback profile used when no provider navigation contract exists.
+    /// </summary>
     public static EditorViewportNavigationProfile disabled { get; } = new(
         new EditorViewportNavigationProfileId("inno.editor.navigation.disabled"),
         EditorViewportNavigationCapabilities.None,
@@ -219,10 +316,14 @@ public sealed class EditorViewportNavigationState
     private float m_focusDistance = 10f;
     private float m_movementSpeed = 5f;
 
-    /// <summary>Gets whether a provider or restored panel state initialized this state.</summary>
+    /// <summary>
+    /// Gets whether a provider or restored panel state initialized this state.
+    /// </summary>
     public bool isInitialized { get; private set; }
 
-    /// <summary>Gets or sets the current projection family.</summary>
+    /// <summary>
+    /// Gets or sets the current projection family.
+    /// </summary>
     public EditorViewportProjection projection
     {
         get => m_projection;
@@ -235,7 +336,9 @@ public sealed class EditorViewportNavigationState
         }
     }
 
-    /// <summary>Gets or sets the active host navigation mode.</summary>
+    /// <summary>
+    /// Gets or sets the active host navigation mode.
+    /// </summary>
     public EditorViewportNavigationMode mode
     {
         get => m_mode;
@@ -248,7 +351,9 @@ public sealed class EditorViewportNavigationState
         }
     }
 
-    /// <summary>Gets or sets the provider-defined world-space view position.</summary>
+    /// <summary>
+    /// Gets or sets the provider-defined world-space view position.
+    /// </summary>
     public Vector3 position
     {
         get => m_position;
@@ -260,7 +365,9 @@ public sealed class EditorViewportNavigationState
         }
     }
 
-    /// <summary>Gets or sets the normalized provider-defined world-space view rotation.</summary>
+    /// <summary>
+    /// Gets or sets the normalized provider-defined world-space view rotation.
+    /// </summary>
     public Quaternion rotation
     {
         get => m_rotation;
@@ -274,7 +381,9 @@ public sealed class EditorViewportNavigationState
         }
     }
 
-    /// <summary>Gets or sets the world-space orbit and framing pivot.</summary>
+    /// <summary>
+    /// Gets or sets the world-space orbit and framing pivot.
+    /// </summary>
     public Vector3 pivot
     {
         get => m_pivot;
@@ -286,7 +395,9 @@ public sealed class EditorViewportNavigationState
         }
     }
 
-    /// <summary>Gets or sets the positive orthographic half-height in provider world units.</summary>
+    /// <summary>
+    /// Gets or sets the positive orthographic half-height in provider world units.
+    /// </summary>
     public float orthographicSize
     {
         get => m_orthographicSize;
@@ -299,7 +410,9 @@ public sealed class EditorViewportNavigationState
         }
     }
 
-    /// <summary>Gets or sets the perspective vertical field of view in degrees.</summary>
+    /// <summary>
+    /// Gets or sets the perspective vertical field of view in degrees.
+    /// </summary>
     public float fieldOfView
     {
         get => m_fieldOfView;
@@ -312,7 +425,9 @@ public sealed class EditorViewportNavigationState
         }
     }
 
-    /// <summary>Gets or sets the positive near clipping distance.</summary>
+    /// <summary>
+    /// Gets or sets the positive near clipping distance.
+    /// </summary>
     public float nearClip
     {
         get => m_nearClip;
@@ -325,7 +440,9 @@ public sealed class EditorViewportNavigationState
         }
     }
 
-    /// <summary>Gets or sets the far clipping distance greater than the near distance.</summary>
+    /// <summary>
+    /// Gets or sets the far clipping distance greater than the near distance.
+    /// </summary>
     public float farClip
     {
         get => m_farClip;
@@ -338,7 +455,9 @@ public sealed class EditorViewportNavigationState
         }
     }
 
-    /// <summary>Gets or sets the positive orbit and framing distance.</summary>
+    /// <summary>
+    /// Gets or sets the positive orbit and framing distance.
+    /// </summary>
     public float focusDistance
     {
         get => m_focusDistance;
@@ -351,7 +470,9 @@ public sealed class EditorViewportNavigationState
         }
     }
 
-    /// <summary>Gets or sets the positive base movement speed in world units per second.</summary>
+    /// <summary>
+    /// Gets or sets the positive base movement speed in world units per second.
+    /// </summary>
     public float movementSpeed
     {
         get => m_movementSpeed;
@@ -363,10 +484,18 @@ public sealed class EditorViewportNavigationState
         }
     }
 
-    /// <summary>Atomically initializes an orthographic navigation view.</summary>
-    /// <param name="position">Provider-defined world-space position.</param>
-    /// <param name="rotation">Provider-defined world-space rotation.</param>
-    /// <param name="orthographicSize">Positive orthographic half-height.</param>
+    /// <summary>
+    /// Atomically initializes an orthographic navigation view.
+    /// </summary>
+    /// <param name="position">
+    /// Provider-defined world-space position.
+    /// </param>
+    /// <param name="rotation">
+    /// Provider-defined world-space rotation.
+    /// </param>
+    /// <param name="orthographicSize">
+    /// Positive orthographic half-height.
+    /// </param>
     public void ConfigureOrthographic(Vector3 position, Quaternion rotation, float orthographicSize)
     {
         ValidateFinite(position, nameof(position));
@@ -383,12 +512,24 @@ public sealed class EditorViewportNavigationState
         isInitialized = true;
     }
 
-    /// <summary>Atomically initializes a perspective navigation view.</summary>
-    /// <param name="position">Provider-defined world-space position.</param>
-    /// <param name="rotation">Provider-defined world-space rotation.</param>
-    /// <param name="fieldOfView">Perspective vertical field of view in degrees.</param>
-    /// <param name="nearClip">Positive near clipping distance.</param>
-    /// <param name="farClip">Far clipping distance greater than <paramref name="nearClip"/>.</param>
+    /// <summary>
+    /// Atomically initializes a perspective navigation view.
+    /// </summary>
+    /// <param name="position">
+    /// Provider-defined world-space position.
+    /// </param>
+    /// <param name="rotation">
+    /// Provider-defined world-space rotation.
+    /// </param>
+    /// <param name="fieldOfView">
+    /// Perspective vertical field of view in degrees.
+    /// </param>
+    /// <param name="nearClip">
+    /// Positive near clipping distance.
+    /// </param>
+    /// <param name="farClip">
+    /// Far clipping distance greater than <paramref name="nearClip"/>.
+    /// </param>
     public void ConfigurePerspective(
         Vector3 position,
         Quaternion rotation,

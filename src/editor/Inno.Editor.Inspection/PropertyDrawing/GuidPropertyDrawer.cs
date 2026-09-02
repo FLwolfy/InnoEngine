@@ -12,7 +12,12 @@ internal sealed class GuidPropertyDrawer : IPropertyDrawer
     private const nuint C_BUFFER_SIZE = 64;
     private static readonly Dictionary<string, string> s_editBuffers = new(StringComparer.Ordinal);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     public void Draw(PropertyDrawContext context)
     {
         Guid value = context.GetValue() is Guid current ? current : Guid.Empty;

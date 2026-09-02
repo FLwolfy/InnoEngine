@@ -1,119 +1,79 @@
 using System;
 
-using Inno.Core.Diagnose;
+using Inno.Core.Diagnostics;
 using Inno.Core.Logging;
 using Inno.Editor.Core;
+using Inno.Editor.Diagnostics;
 using Inno.Editor.PlayMode;
+using Inno.Editor.Settings;
 
 namespace Inno.Editor.Panel.Logging;
 
-/// <summary>
-/// Connects the editor Console to the independent logging and diagnostics cores.
-/// </summary>
 [EditorModule("diagnostics-logging", order: int.MinValue)]
-internal sealed class LoggingModule : EditorModule
+internal sealed class LoggingModule : EditorModule, IEditorConsole
 {
-    private readonly IEditorPlayMode m_playMode;
-    private readonly EditorDiagnosticBuffer m_diagnostics = new();
+    private readonly EditorConsole m_console;
+    private readonly EditorSettings m_settings;
 
-    private bool m_playSessionActive;
-    private bool m_playSessionReachedPlaying;
-    private bool m_started;
-
-    internal LoggingModule(IEditorPlayMode playMode)
+    internal LoggingModule(
+        LogRouter logRouter,
+        DiagnosticHub diagnosticHub,
+        IEditorPlayMode playMode,
+        EditorSettings settings)
     {
-        m_playMode = playMode ?? throw new ArgumentNullException(nameof(playMode));
+        m_settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        m_console = new EditorConsole(logRouter, diagnosticHub, playMode);
     }
 
     /// <summary>
-    /// Gets the rolling editor log buffer.
+    /// Initializes this feature after its owning runtime has activated all required services.
     /// </summary>
-    internal EditorLogBuffer logs { get; } = new();
-
-    internal EditorDiagnosticBuffer diagnostics => m_diagnostics;
-
-    /// <inheritdoc />
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
     protected override void OnStart(EditorContext context)
     {
-        if (m_started)
-            return;
-        LogManager.RegisterSink(logs);
-        DiagnosticManager.RegisterSink(m_diagnostics);
-        m_playMode.stateChanged += OnPlayModeStateChanged;
-        m_started = true;
-        if (m_playMode.state != EditorPlayModeState.Editing)
-            BeginPlaySession(m_playMode.state == EditorPlayModeState.Playing);
+        ApplySettings(m_settings);
+        m_settings.changed += ApplySettings;
+        m_console.Start();
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Stops this feature before its owning runtime releases generation-scoped services.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
     protected override void OnStop(EditorContext context)
     {
-        if (!m_started)
-            return;
-        Detach();
+        m_settings.changed -= ApplySettings;
+        m_console.Dispose();
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Releases resources retained by this feature after it has stopped.
+    /// </summary>
     protected override void OnDispose()
+        => m_console.Dispose();
+
+    private void ApplySettings(EditorSettings settings)
+        => m_console.clearOnPlay = ClearConsoleOnPlaySetting.Read(settings);
+
+    int IEditorConsole.capacity
     {
-        if (m_started)
-            Detach();
+        get => m_console.capacity;
+        set => m_console.capacity = value;
     }
 
-    private void OnPlayModeStateChanged(EditorPlayModeState state)
+    bool IEditorConsole.clearOnPlay
     {
-        switch (state)
-        {
-            case EditorPlayModeState.EnteringPlay:
-                BeginPlaySession(reachedPlaying: false);
-                break;
-            case EditorPlayModeState.Playing:
-                m_playSessionReachedPlaying = true;
-                break;
-            case EditorPlayModeState.Editing:
-                CompletePlaySession();
-                break;
-        }
+        get => m_console.clearOnPlay;
+        set => m_console.clearOnPlay = value;
     }
 
-    private void BeginPlaySession(bool reachedPlaying)
-    {
-        if (m_playSessionActive)
-        {
-            m_playSessionReachedPlaying |= reachedPlaying;
-            return;
-        }
-        LogManager.Flush();
-        logs.BeginPlaySession();
-        m_playSessionActive = true;
-        m_playSessionReachedPlaying = reachedPlaying;
-    }
+    EditorConsoleSnapshot IEditorConsole.Capture()
+        => m_console.Capture();
 
-    private void CompletePlaySession()
-    {
-        if (!m_playSessionActive)
-            return;
-        LogManager.Flush();
-        if (m_playSessionReachedPlaying)
-            _ = logs.CompletePlaySession();
-        else
-            logs.CancelPlaySession();
-        m_playSessionActive = false;
-        m_playSessionReachedPlaying = false;
-    }
-
-    private void Detach()
-    {
-        m_playMode.stateChanged -= OnPlayModeStateChanged;
-        try
-        {
-            CompletePlaySession();
-        }
-        finally
-        {
-            LogManager.UnregisterSink(logs);
-            DiagnosticManager.UnregisterSink(m_diagnostics);
-            m_started = false;
-        }
-    }
+    void IEditorConsole.Clear()
+        => m_console.Clear();
 }

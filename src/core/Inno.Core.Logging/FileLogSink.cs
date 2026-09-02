@@ -35,9 +35,15 @@ public class FileLogSink : ILogSink, IDisposable
     /// <summary>
     /// Initializes a file sink.
     /// </summary>
-    /// <param name="logDirectory">Directory where log files are stored.</param>
-    /// <param name="maxFileSizeBytes">Maximum file size before rotation.</param>
-    /// <param name="maxFiles">Maximum number of retained files.</param>
+    /// <param name="logDirectory">
+    /// Directory where log files are stored.
+    /// </param>
+    /// <param name="maxFileSizeBytes">
+    /// Maximum file size before rotation.
+    /// </param>
+    /// <param name="maxFiles">
+    /// Maximum number of retained files.
+    /// </param>
     public FileLogSink(string logDirectory, long maxFileSizeBytes = 10 * 1024 * 1024, int maxFiles = 10)
     {
         m_logDirectory = logDirectory;
@@ -58,7 +64,9 @@ public class FileLogSink : ILogSink, IDisposable
     /// <summary>
     /// Queues a log entry for asynchronous file writing.
     /// </summary>
-    /// <param name="entry">The entry to persist.</param>
+    /// <param name="entry">
+    /// The entry to persist.
+    /// </param>
     public void Receive(LogEntry entry)
     {
         m_queue.Enqueue(entry);

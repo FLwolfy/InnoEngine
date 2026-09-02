@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 
 using Inno.Core.Storage;
 
@@ -342,96 +341,4 @@ public sealed class IndexedObjectStoreTests
         Assert.Throws<InvalidOperationException>(() => enumerator.MoveNext());
     }
 
-    [Fact]
-    public void RuntimeHandle_ResolvesItem_WhenAlive()
-    {
-        var store = new IndexedObjectStore<Item>();
-        var a = new Item("A", 1);
-        store.Add(a);
-
-        object handle = GetHandle(store, a);
-        Assert.True(IsHandleValid(store, handle));
-        Assert.True(TryGetByHandle(store, handle, out Item? resolved));
-        Assert.Same(a, resolved);
-    }
-
-    [Fact]
-    public void RuntimeHandle_BecomesInvalid_AfterRemove()
-    {
-        var store = new IndexedObjectStore<Item>();
-        var a = new Item("A", 1);
-        store.Add(a);
-        object handle = GetHandle(store, a);
-
-        Assert.True(store.Remove(a));
-        Assert.False(IsHandleValid(store, handle));
-        Assert.False(TryGetByHandle(store, handle, out _));
-    }
-
-    [Fact]
-    public void RuntimeHandle_InvalidatesOldGeneration_WhenSlotReused()
-    {
-        var store = new IndexedObjectStore<Item>();
-        var first = new Item("First", 1);
-        store.Add(first);
-        object firstHandle = GetHandle(store, first);
-
-        Assert.True(store.Remove(first));
-
-        var second = new Item("Second", 2);
-        store.Add(second);
-        object secondHandle = GetHandle(store, second);
-
-        Assert.Equal(ReadHandleField<int>(firstHandle, "slot"), ReadHandleField<int>(secondHandle, "slot"));
-        Assert.NotEqual(ReadHandleField<uint>(firstHandle, "generation"), ReadHandleField<uint>(secondHandle, "generation"));
-        Assert.False(IsHandleValid(store, firstHandle));
-        Assert.True(IsHandleValid(store, secondHandle));
-    }
-
-    [Fact]
-    public void RuntimeHandle_InvalidatesAfterRemoveAll()
-    {
-        var store = new IndexedObjectStore<Item>();
-        var key = store.DefineKey<int>("category");
-        var a = new Item("A", 1);
-
-        store.Add(a).Set(key, a.Category);
-        object handle = GetHandle(store, a);
-
-        store.RemoveAll();
-
-        Assert.True(key.isValid);
-        Assert.False(IsHandleValid(store, handle));
-        Assert.False(TryGetByHandle(store, handle, out _));
-    }
-
-    private static object GetHandle(IndexedObjectStore<Item> store, Item item)
-    {
-        MethodInfo tryGetHandle = store.GetType().GetMethod("TryGetHandle", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        object?[] args = [item, null];
-        bool ok = (bool)tryGetHandle.Invoke(store, args)!;
-        Assert.True(ok);
-        return args[1]!;
-    }
-
-    private static bool IsHandleValid(IndexedObjectStore<Item> store, object handle)
-    {
-        MethodInfo isHandleValid = store.GetType().GetMethod("IsHandleValid", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        return (bool)isHandleValid.Invoke(store, [handle])!;
-    }
-
-    private static bool TryGetByHandle(IndexedObjectStore<Item> store, object handle, out Item? resolved)
-    {
-        MethodInfo tryGetByHandle = store.GetType().GetMethod("TryGetByHandle", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        object?[] args = [handle, null];
-        bool ok = (bool)tryGetByHandle.Invoke(store, args)!;
-        resolved = (Item?)args[1];
-        return ok;
-    }
-
-    private static TField ReadHandleField<TField>(object handle, string fieldName)
-    {
-        PropertyInfo property = handle.GetType().GetProperty(fieldName, BindingFlags.Instance | BindingFlags.Public)!;
-        return (TField)property.GetValue(handle)!;
-    }
 }

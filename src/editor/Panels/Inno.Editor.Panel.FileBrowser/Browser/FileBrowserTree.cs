@@ -3,14 +3,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Inno.Assets;
-using Inno.Assets.Core;
-using Inno.Assets.File;
+using Inno.Assets.Pipeline;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Native.ImGui;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using static Inno.Editor.Panel.FileBrowser.FileBrowserUtility;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
@@ -54,7 +53,7 @@ internal sealed class FileBrowserTree
     {
         List<AssetFileEntry> sorted = m_data.SortTreeEntries(
             m_data.GetVisibleChildren(relativePath));
-        bool isDirectory = isRoot || IsDirectoryPath(relativePath);
+        bool isDirectory = isRoot || IsDirectoryPath(m_assets.pipeline, relativePath);
         bool selected = string.Equals(m_assets.browser.GetSelectedPath(context), relativePath, StringComparison.Ordinal);
         bool isLeaf = !isDirectory || sorted.Count == 0;
         bool isCurrentDirectory = isDirectory &&
@@ -63,7 +62,7 @@ internal sealed class FileBrowserTree
                                   (AssetPath.Parse(relativePath).source == AssetSourceId.project);
         string icon = m_assets.folderIcon;
         if (!isDirectory
-            && AssetManager.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry iconEntry))
+            && m_assets.pipeline.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry iconEntry))
             icon = m_assets.GetIcon(iconEntry);
         bool editing = !isRoot && m_rename.IsEditing(
             context,
@@ -88,7 +87,7 @@ internal sealed class FileBrowserTree
 
         AssetFileEntry? treeEntry = null;
         if (!isRoot
-            && AssetManager.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry resolvedEntry))
+            && m_assets.pipeline.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry resolvedEntry))
             treeEntry = resolvedEntry;
         if (treeEntry is not null && result.isDoubleClicked)
         {
@@ -149,11 +148,12 @@ internal sealed class FileBrowserTree
         IReadOnlyList<AssetSourceMount> sourceMounts)
     {
         AssetSourceMount[] plugins = sourceMounts
-            .Where(static mount => mount.id != AssetSourceId.project)
+            .Where(mount => m_assets.IsPluginSource(mount.id))
             .OrderBy(static mount => mount.id.value, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         bool hasPluginDirectoryOpenRequest = m_currentDirectoryOpenRequest &&
-                                             AssetPath.Parse(m_currentDirectoryOpenTarget).source != AssetSourceId.project;
+                                             m_assets.IsPluginSource(
+                                                 AssetPath.Parse(m_currentDirectoryOpenTarget).source);
         if (m_rootOpenRequest || hasPluginDirectoryOpenRequest)
             EditorWidget.SetNextTreeNodeOpen(true);
         bool isCurrentDirectory = m_assets.browser.root == AssetBrowserRoot.Plugins &&
@@ -164,7 +164,7 @@ internal sealed class FileBrowserTree
             _ => EditorWidget.IconText(m_assets.folderIcon, "Plugins", isCurrentDirectory),
             new TreeNodeOptions
             {
-                selected = isCurrentDirectory,
+                selected = false,
                 isLeaf = plugins.Length == 0
             });
         if (result.isClicked || result.isDoubleClicked)
@@ -242,7 +242,9 @@ internal sealed class FileBrowserTree
     internal void RequestOpenTreeToPath(string path)
     {
         string normalizedPath = NormalizePath(path);
-        string treePath = IsDirectoryPath(normalizedPath) ? normalizedPath : GetParentDirectory(normalizedPath);
+        string treePath = IsDirectoryPath(m_assets.pipeline, normalizedPath)
+            ? normalizedPath
+            : GetParentDirectory(normalizedPath);
         m_currentDirectoryOpenTarget = treePath;
         m_currentDirectoryOpenRequest = true;
         m_lastCurrentDirectoryOpenTarget = treePath;

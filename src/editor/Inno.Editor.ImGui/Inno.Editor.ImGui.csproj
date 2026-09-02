@@ -9,13 +9,15 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\platform\Inno.Platform.Sdl3.ImGui\Inno.Platform.Sdl3.ImGui.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" />
     <ProjectReference Include="..\Inno.Editor.Core\Inno.Editor.Core.csproj" />
     <ProjectReference Include="..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" />
     <ProjectReference Include="..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" />
     <ProjectReference Include="..\..\core\Inno.Core.Events\Inno.Core.Events.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" />
   </ItemGroup>
 </Project>

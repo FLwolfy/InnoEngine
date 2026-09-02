@@ -5,6 +5,9 @@ namespace Inno.Core.Events;
 /// <summary>
 /// Base class for mouse events.
 /// </summary>
+/// <param name="windowId">
+/// The window id used to initialize this instance.
+/// </param>
 public abstract class MouseEvent(uint windowId) : Event
 {
     /// <summary>
@@ -17,6 +20,15 @@ public abstract class MouseEvent(uint windowId) : Event
 /// <summary>
 /// Raised when the cursor moves.
 /// </summary>
+/// <param name="windowId">
+/// The window id used to initialize this instance.
+/// </param>
+/// <param name="x">
+/// The horizontal or first component.
+/// </param>
+/// <param name="y">
+/// The vertical or second component.
+/// </param>
 public class MouseMovedEvent(uint windowId, float x, float y) : MouseEvent(windowId)
 {
     /// <summary>
@@ -33,6 +45,15 @@ public class MouseMovedEvent(uint windowId, float x, float y) : MouseEvent(windo
 /// <summary>
 /// Raised when mouse wheel scrolls.
 /// </summary>
+/// <param name="windowId">
+/// The window id used to initialize this instance.
+/// </param>
+/// <param name="offsetX">
+/// The offset x used to initialize this instance.
+/// </param>
+/// <param name="offsetY">
+/// The offset y used to initialize this instance.
+/// </param>
 public class MouseScrolledEvent(uint windowId, float offsetX, float offsetY) : MouseEvent(windowId)
 {
     /// <summary>
@@ -49,6 +70,12 @@ public class MouseScrolledEvent(uint windowId, float offsetX, float offsetY) : M
 /// <summary>
 /// Base class for mouse button events.
 /// </summary>
+/// <param name="windowId">
+/// The window id used to initialize this instance.
+/// </param>
+/// <param name="button">
+/// The button used to initialize this instance.
+/// </param>
 public abstract class MouseButtonEvent(uint windowId, MouseButton button) : MouseEvent(windowId)
 {
     /// <summary>
@@ -60,6 +87,12 @@ public abstract class MouseButtonEvent(uint windowId, MouseButton button) : Mous
 /// <summary>
 /// Raised when a mouse button is pressed.
 /// </summary>
+/// <param name="windowId">
+/// The window id used to initialize this instance.
+/// </param>
+/// <param name="button">
+/// The button used to initialize this instance.
+/// </param>
 public class MouseButtonPressedEvent(uint windowId, MouseButton button) : MouseButtonEvent(windowId, button)
 {
 }
@@ -67,6 +100,12 @@ public class MouseButtonPressedEvent(uint windowId, MouseButton button) : MouseB
 /// <summary>
 /// Raised when a mouse button is released.
 /// </summary>
+/// <param name="windowId">
+/// The window id used to initialize this instance.
+/// </param>
+/// <param name="button">
+/// The button used to initialize this instance.
+/// </param>
 public class MouseButtonReleasedEvent(uint windowId, MouseButton button) : MouseButtonEvent(windowId, button)
 {
 }

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\native\Inno.Native.Sdl3\Inno.Native.Sdl3.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Input\Inno.Core.Input.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Platform\Inno.Platform.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Events\Inno.Core.Events.csproj" />
+  </ItemGroup>
+</Project>

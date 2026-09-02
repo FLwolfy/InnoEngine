@@ -3,12 +3,12 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using Inno.Assets.Serialization;
-using Inno.Core.Assemblies;
+using Inno.Assets;
+using Inno.Extensibility.Modules;
 using Inno.Core.Mathematics;
-using Inno.Core.Reflection;
+using Inno.Extensibility.Types;
 using Inno.Core.Serialization;
-using Inno.Rendering.Core;
+using Inno.Rendering;
 using Xunit;
 
 namespace Inno.Rendering.Assets.Tests;
@@ -16,21 +16,25 @@ namespace Inno.Rendering.Assets.Tests;
 [Collection("Rendering assets serialization")]
 public sealed class MeshAndStateTests : IDisposable
 {
+    private readonly ModuleHost m_modules;
+    private readonly TypeCatalog m_types;
+    private readonly SerializationRegistry m_serialization;
+
     public MeshAndStateTests()
     {
-        AssemblyManager.Initialize(new AssemblyManagerOptions
+        m_modules = new ModuleHost(new ModuleHostOptions
         {
             cacheDirectory = Path.Combine(Path.GetTempPath(), "InnoRenderingAssetsTests", "Assemblies")
         });
-        TypeCacheManager.Initialize();
-        SerializationManager.Initialize();
+        m_types = new TypeCatalog(m_modules);
+        m_serialization = new SerializationRegistry(m_types);
     }
 
     public void Dispose()
     {
-        SerializationManager.Shutdown();
-        TypeCacheManager.Shutdown();
-        AssemblyManager.Shutdown();
+        m_serialization.Dispose();
+        m_types.Dispose();
+        m_modules.Dispose();
     }
 
     [Fact]
@@ -52,9 +56,9 @@ public sealed class MeshAndStateTests : IDisposable
             });
         material.SetKeyword("Cutout", enabled: true);
         material.SetMetadata("tests.sort", "2450");
-        byte[] materialState = SerializationManager.Encode(writer => writer.WriteProperties(material));
+        byte[] materialState = m_serialization.Encode(writer => writer.WriteProperties(material));
         var restoredMaterial = new MaterialAsset();
-        SerializationManager.Decode(materialState, reader =>
+        m_serialization.Decode(materialState, reader =>
         {
             reader.RestoreProperties(restoredMaterial);
             return 0;
@@ -81,9 +85,9 @@ public sealed class MeshAndStateTests : IDisposable
                 new SerializedRenderExtensionState(Guid.Empty, [4, 5]),
                 enabled: true)
         ]);
-        byte[] pipelineState = SerializationManager.Encode(writer => writer.WriteProperties(pipeline));
+        byte[] pipelineState = m_serialization.Encode(writer => writer.WriteProperties(pipeline));
         var restoredPipeline = new RenderPipelineAsset();
-        SerializationManager.Decode(pipelineState, reader =>
+        m_serialization.Decode(pipelineState, reader =>
         {
             reader.RestoreProperties(restoredPipeline);
             return 0;
@@ -120,7 +124,7 @@ public sealed class MeshAndStateTests : IDisposable
                     new ShaderTechniqueId("basic"),
                     new ShaderContractId("example.2d.sprite"),
                     [new ShaderTechniquePass(new ShaderPassRoleId("draw"), basicPass.name)])
-            ]));
+            ]), m_serialization);
         var material = new MaterialAsset { shader = shader };
         GraphicsCapabilities basicCapabilities = CreateCapabilities(GraphicsFeature.None);
         GraphicsCapabilities computeCapabilities = CreateCapabilities(GraphicsFeature.Compute);
@@ -165,11 +169,11 @@ public sealed class MeshAndStateTests : IDisposable
                     "wire",
                     ShaderProgramKind.Raster,
                     renderState: sourceState)
-            ]));
+            ]), m_serialization);
 
-        byte[] state = SerializationManager.Encode(writer => writer.WriteProperties(source));
+        byte[] state = m_serialization.Encode(writer => writer.WriteProperties(source));
         var restored = new ShaderAsset();
-        SerializationManager.Decode(state, reader =>
+        m_serialization.Decode(state, reader =>
         {
             reader.RestoreProperties(restored);
             return 0;
@@ -188,9 +192,9 @@ public sealed class MeshAndStateTests : IDisposable
         var source = new MaterialAsset();
         source.SetMetadata("sprite.order", "17");
         source.SetMetadata("raytracing.mask", "opaque");
-        byte[] state = SerializationManager.Encode(writer => writer.WriteProperties(source));
+        byte[] state = m_serialization.Encode(writer => writer.WriteProperties(source));
         var restored = new MaterialAsset();
-        SerializationManager.Decode(state, reader =>
+        m_serialization.Decode(state, reader =>
         {
             reader.RestoreProperties(restored);
             return 0;

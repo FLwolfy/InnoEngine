@@ -1,20 +1,20 @@
 # Inno.Core.Serialization
 
-[上一页：Reflection](Inno.Core.Reflection.md) · [Core 索引](README.md) · [下一页：Framework](Inno.Core.Framework.md)
+[上一页：Identity](Inno.Core.Identity.md) · [Core 索引](README.md) · [Extensibility](../extensibility/Inno.Extensibility.Types.md)
 
 `Inno.Core.Serialization` 提供确定性的二进制对象图格式、基于 attribute 的属性持久化，以及通过 TypeRegistry 自动发现的 Converter。它既支持“序列化完整 `ISerializable` 根对象”，也支持用 Writer/Reader 显式定义 schema。
 
 ## 初始化
 
-`SerializationManager.Initialize()` 必须在 `AssemblyManager` 与 `TypeCacheManager` 之后调用。Converter Registry 会跟随 TypeCache 的事务刷新；热重载新增/替换 Converter 不需要业务层手动订阅事件。
+`SerializationRegistry.Initialize()` 必须在 `ModuleHost` 与 `TypeCatalog` 之后调用。Converter Registry 会跟随 TypeCache 的事务刷新；热重载新增/替换 Converter 不需要业务层手动订阅事件。
 
 ```csharp
-AssemblyManager.Initialize(assemblyOptions);
-TypeCacheManager.Initialize();
-SerializationManager.Initialize();
+ModuleHost.Initialize(assemblyOptions);
+TypeCatalog.Initialize();
+SerializationRegistry.Initialize();
 ```
 
-| SerializationManager 成员 | 说明 |
+| SerializationRegistry 成员 | 说明 |
 | --- | --- |
 | `isInitialized` | Converter catalog 是否可用。 |
 | `Initialize()` / `Shutdown()` | 创建或清空 Converter Registry。 |
@@ -85,7 +85,7 @@ public sealed class PlayerState : ISerializable
 `name`、`propertyType`、`visibility`、`canRead`、`canWrite` 描述成员；`GetValue()` / `SetValue(object?)` 执行运行时访问，不符合 visibility 时抛 `InvalidOperationException`。
 
 ```csharp
-foreach (SerializedProperty property in SerializationManager.GetProperties(state))
+foreach (SerializedProperty property in SerializationRegistry.GetProperties(state))
 {
     object? value = property.GetValue();
     if (property.canWrite)
@@ -115,9 +115,9 @@ public int secondField;
 
 ```csharp
 IReadOnlyList<SerializationPropertySnapshot> snapshots =
-    SerializationManager.CaptureProperties(previous);
+    SerializationRegistry.CaptureProperties(previous);
 
-SerializationPropertyRestoreResult result = SerializationManager.RestoreProperties(
+SerializationPropertyRestoreResult result = SerializationRegistry.RestoreProperties(
     current,
     snapshots,
     SerializationPropertyRestoreMode.Compatible);
@@ -143,7 +143,7 @@ Context 是不可变的、按“精确契约类型”索引的操作依赖容器
 ```csharp
 SerializationContext context = SerializationContext.empty
     .With<IAssetReferenceResolver>(resolver);
-byte[] bytes = SerializationManager.Serialize(state, context);
+byte[] bytes = SerializationRegistry.Serialize(state, context);
 ```
 
 ## 自定义 Converter
@@ -199,7 +199,7 @@ Reader 同样公开 `context`、`path`、`valueType`，仅在当前 decode/resto
 ## 手写 Schema 示例
 
 ```csharp
-byte[] bytes = SerializationManager.Encode(writer =>
+byte[] bytes = SerializationRegistry.Encode(writer =>
 {
     writer.WriteObjectArray("points", points, (item, point) =>
     {
@@ -208,7 +208,7 @@ byte[] bytes = SerializationManager.Encode(writer =>
     });
 });
 
-Vector2[] decoded = SerializationManager.Decode(bytes, reader =>
+Vector2[] decoded = SerializationRegistry.Decode(bytes, reader =>
     reader.ReadObjectArray("points")
         .Select(item => new Vector2(item.Read<float>("x"), item.Read<float>("y")))
         .ToArray());

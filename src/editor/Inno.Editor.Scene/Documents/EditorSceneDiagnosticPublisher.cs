@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using Inno.Core.Diagnose;
-using Inno.Engine.Scene;
+using Inno.Core.Diagnostics;
+using Inno.Scene;
 
 namespace Inno.Editor.Scene;
 
@@ -72,6 +72,9 @@ internal sealed class EditorSceneDiagnosticPublisher : IDisposable
             ResolveSynchronization(removed[i]);
     }
 
+    /// <summary>
+    /// Releases the resources owned by this instance.
+    /// </summary>
     public void Dispose()
     {
         ResolveRestore();

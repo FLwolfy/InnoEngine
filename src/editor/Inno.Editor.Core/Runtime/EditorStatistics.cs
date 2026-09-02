@@ -4,47 +4,81 @@ using System.Linq;
 
 namespace Inno.Editor.Core;
 
-/// <summary>Identifies one editor statistic across panels, modules, and reloadable extensions.</summary>
+/// <summary>
+/// Identifies one editor statistic across panels, modules, and reloadable extensions.
+/// </summary>
 public readonly record struct EditorStatisticId
 {
-    /// <summary>Creates a globally stable statistic identifier.</summary>
-    /// <param name="value">Non-empty globally stable identity.</param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="value"/> is empty.</exception>
+    /// <summary>
+    /// Creates a globally stable statistic identifier.
+    /// </summary>
+    /// <param name="value">
+    /// Non-empty globally stable identity.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="value"/> is empty.
+    /// </exception>
     public EditorStatisticId(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
         this.value = value.Trim();
     }
 
-    /// <summary>Gets the globally stable identity.</summary>
+    /// <summary>
+    /// Gets the globally stable identity.
+    /// </summary>
     public string value { get; }
 
-    /// <summary>Gets whether this identifier contains a usable value.</summary>
+    /// <summary>
+    /// Gets whether this identifier contains a usable value.
+    /// </summary>
     public bool isValid => !string.IsNullOrWhiteSpace(value);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Formats this value as a human-readable representation.
+    /// </summary>
+    /// <returns>
+    /// The human-readable representation of this value.
+    /// </returns>
     public override string ToString() => value ?? string.Empty;
 }
 
-/// <summary>Identifies one visual group in the editor statistics presentation.</summary>
+/// <summary>
+/// Identifies one visual group in the editor statistics presentation.
+/// </summary>
 public readonly record struct EditorStatisticGroupId
 {
-    /// <summary>Creates a globally stable statistic-group identifier.</summary>
-    /// <param name="value">Non-empty globally stable identity.</param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="value"/> is empty.</exception>
+    /// <summary>
+    /// Creates a globally stable statistic-group identifier.
+    /// </summary>
+    /// <param name="value">
+    /// Non-empty globally stable identity.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="value"/> is empty.
+    /// </exception>
     public EditorStatisticGroupId(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
         this.value = value.Trim();
     }
 
-    /// <summary>Gets the globally stable identity.</summary>
+    /// <summary>
+    /// Gets the globally stable identity.
+    /// </summary>
     public string value { get; }
 
-    /// <summary>Gets whether this identifier contains a usable value.</summary>
+    /// <summary>
+    /// Gets whether this identifier contains a usable value.
+    /// </summary>
     public bool isValid => !string.IsNullOrWhiteSpace(value);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Formats this value as a human-readable representation.
+    /// </summary>
+    /// <returns>
+    /// The human-readable representation of this value.
+    /// </returns>
     public override string ToString() => value ?? string.Empty;
 }
 
@@ -53,14 +87,30 @@ public readonly record struct EditorStatisticGroupId
 /// </summary>
 public sealed class EditorStatistic
 {
-    /// <summary>Creates one statistic contribution.</summary>
-    /// <param name="id">Globally stable statistic identity used for replacement within a frame.</param>
-    /// <param name="groupId">Stable visual group identity.</param>
-    /// <param name="groupName">User-facing group heading.</param>
-    /// <param name="label">User-facing metric label.</param>
-    /// <param name="value">Already formatted user-facing value.</param>
-    /// <param name="groupOrder">Ascending group presentation order.</param>
-    /// <param name="order">Ascending metric order within the group.</param>
+    /// <summary>
+    /// Creates one statistic contribution.
+    /// </summary>
+    /// <param name="id">
+    /// Globally stable statistic identity used for replacement within a frame.
+    /// </param>
+    /// <param name="groupId">
+    /// Stable visual group identity.
+    /// </param>
+    /// <param name="groupName">
+    /// User-facing group heading.
+    /// </param>
+    /// <param name="label">
+    /// User-facing metric label.
+    /// </param>
+    /// <param name="value">
+    /// Already formatted user-facing value.
+    /// </param>
+    /// <param name="groupOrder">
+    /// Ascending group presentation order.
+    /// </param>
+    /// <param name="order">
+    /// Ascending metric order within the group.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when an identifier, group name, label, or value is empty.
     /// </exception>
@@ -89,25 +139,39 @@ public sealed class EditorStatistic
         this.order = order;
     }
 
-    /// <summary>Gets the globally stable statistic identity.</summary>
+    /// <summary>
+    /// Gets the globally stable statistic identity.
+    /// </summary>
     public EditorStatisticId id { get; }
 
-    /// <summary>Gets the stable visual group identity.</summary>
+    /// <summary>
+    /// Gets the stable visual group identity.
+    /// </summary>
     public EditorStatisticGroupId groupId { get; }
 
-    /// <summary>Gets the user-facing group heading.</summary>
+    /// <summary>
+    /// Gets the user-facing group heading.
+    /// </summary>
     public string groupName { get; }
 
-    /// <summary>Gets the user-facing metric label.</summary>
+    /// <summary>
+    /// Gets the user-facing metric label.
+    /// </summary>
     public string label { get; }
 
-    /// <summary>Gets the presentation-ready value.</summary>
+    /// <summary>
+    /// Gets the presentation-ready value.
+    /// </summary>
     public string value { get; }
 
-    /// <summary>Gets ascending group presentation order.</summary>
+    /// <summary>
+    /// Gets ascending group presentation order.
+    /// </summary>
     public int groupOrder { get; }
 
-    /// <summary>Gets ascending metric order within the group.</summary>
+    /// <summary>
+    /// Gets ascending metric order within the group.
+    /// </summary>
     public int order { get; }
 }
 
@@ -124,8 +188,12 @@ public sealed class EditorStatistics
     private readonly Dictionary<EditorStatisticId, EditorStatistic> m_current = [];
     private Dictionary<EditorStatisticId, EditorStatistic> m_completed = [];
 
-    /// <summary>Publishes or replaces one statistic for the current editor frame.</summary>
-    /// <param name="statistic">Immutable contribution containing no runtime provider references.</param>
+    /// <summary>
+    /// Publishes or replaces one statistic for the current editor frame.
+    /// </summary>
+    /// <param name="statistic">
+    /// Immutable contribution containing no runtime provider references.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="statistic"/> is <see langword="null"/>.
     /// </exception>
@@ -136,8 +204,12 @@ public sealed class EditorStatistics
             m_current[statistic.id] = statistic;
     }
 
-    /// <summary>Publishes or replaces several statistics for the current editor frame.</summary>
-    /// <param name="statistics">Contributions to publish in enumeration order.</param>
+    /// <summary>
+    /// Publishes or replaces several statistics for the current editor frame.
+    /// </summary>
+    /// <param name="statistics">
+    /// Contributions to publish in enumeration order.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="statistics"/> or one of its values is null.
     /// </exception>
@@ -152,7 +224,9 @@ public sealed class EditorStatistics
     /// Gets a deterministic snapshot combining current contributions with the previous completed
     /// frame for providers that draw after their consumer.
     /// </summary>
-    /// <returns>A detached, sorted snapshot containing at most one value for each stable statistic ID.</returns>
+    /// <returns>
+    /// A detached, sorted snapshot containing at most one value for each stable statistic ID.
+    /// </returns>
     public IReadOnlyList<EditorStatistic> GetSnapshot()
     {
         lock (m_sync)

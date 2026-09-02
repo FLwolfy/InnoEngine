@@ -82,3 +82,9 @@ Host 创建或 resize `RenderTexture`，提交普通 `RenderRequest`，再将 GP
 `RenderContentScope` 是类型擦除但带稳定 ID 的当前帧边界。Provider 可用 `GetValues<T>()` 取得它理解的 Scene/Document 类型；`RenderContentReference.value` 不得跨帧或跨 generation 保存。Scene/Game 的默认背景色属于 `Editor/Appearance/Viewports`，通过 `context.presentation` 传入 Provider。Provider 可以将它用作 clear color，也可以在自己的语义确实需要时选择其他合成方式。
 
 `manipulationSpace` 完全可选，也不引入 Camera/2D/3D 概念。Scene View 只在 Provider 提供它时绘制 ImGuizmo；矩阵必须来自同一个 immutable frame snapshot，避免视口画面、Picking 与 Gizmo 使用不同相机状态。一次连续拖拽只在释放时通过 `SceneEdits` 的三个最小 Transform property payload 组成一个 History transaction，因此 Undo/Redo 原子恢复 position、rotation 与 scale，并且不捕获 Plugin delegate 或 runtime `Type`。
+
+## Editor 目标产物编译
+
+`EditorRenderTargetArtifactProvider` 是 authoring 边界：它根据 Asset `contentVersion` 异步编译 Shader 与 Texture，并只向 Rendering Runtime 暴露无源码目标产物。首次请求会返回 `RenderTargetArtifactStatus.Pending`；这表示工作已排队，不是产物丢失，因此启动 Editor 时不会产生 `RENDER_SHADER_TARGET_UNAVAILABLE`。只有不可变部署中确实没有文件时才返回 `Unavailable`，编译器明确失败时则返回 `Failed` 并发布精确工具链诊断。
+
+每个缓存项保留 last-good artifact。新候选编译期间继续返回 `Ready` 和 last-good；候选失败时也不破坏已工作的 GPU 资源。诊断按完整 code/source/message/severity 去重，并以 code/source 作为可恢复状态范围进入 `DiagnosticHub`；同一文件的多条编译诊断不会互相覆盖，成功重编译、资源恢复或 Provider Dispose 时会显式解析并清除。Console 因而显示 `Diagnostic` 的真实 Asset 位置，不再显示 `EditorRenderDiagnosticSink.Publish` 之类没有排障价值的 Log 调用栈。

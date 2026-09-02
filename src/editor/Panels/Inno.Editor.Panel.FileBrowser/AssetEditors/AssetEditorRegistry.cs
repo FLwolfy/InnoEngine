@@ -3,13 +3,18 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
-using Inno.Core.Reflection;
+using Inno.Extensibility.Types;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
 internal sealed class AssetEditorRegistry : TypeRegistry<AssetEditorRegistry.Snapshot>
 {
     private static readonly AssetEditor S_DEFAULT_EDITOR = new DefaultAssetEditor();
+
+    internal AssetEditorRegistry(TypeCatalog types)
+        : base(types)
+    {
+    }
 
     internal AssetEditor Resolve(Type? assetType)
     {
@@ -33,6 +38,15 @@ internal sealed class AssetEditorRegistry : TypeRegistry<AssetEditorRegistry.Sna
         return best?.editor ?? S_DEFAULT_EDITOR;
     }
 
+    /// <summary>
+    /// Builds a validated result from the current immutable input snapshot.
+    /// </summary>
+    /// <param name="types">
+    /// The active type catalog generation used for extension resolution.
+    /// </param>
+    /// <returns>
+    /// The validated snapshot that represents the completed operation.
+    /// </returns>
     protected override Snapshot Build(TypeCacheSnapshot types)
     {
         var instances = new Dictionary<Type, AssetEditor>();
@@ -67,6 +81,12 @@ internal sealed class AssetEditorRegistry : TypeRegistry<AssetEditorRegistry.Sna
         return new Snapshot(registrations.ToArray());
     }
 
+    /// <summary>
+    /// Releases the generation lease retained by an immutable registry snapshot.
+    /// </summary>
+    /// <param name="snapshot">
+    /// The immutable state snapshot consumed by this operation.
+    /// </param>
     protected override void DisposeSnapshot(Snapshot snapshot)
     {
         foreach (AssetEditor editor in snapshot.registrations

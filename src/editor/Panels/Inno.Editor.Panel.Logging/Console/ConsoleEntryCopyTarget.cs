@@ -1,11 +1,13 @@
 using System;
 using System.Text;
 
+using Inno.Editor.Diagnostics;
+
 namespace Inno.Editor.Panel.Logging;
 
 internal sealed class ConsoleEntryCopyTarget
 {
-    internal ConsoleEntryCopyTarget(EditorConsoleEntry entry, int repeatCount)
+    internal ConsoleEntryCopyTarget(EditorConsoleOccurrence entry, int repeatCount)
     {
         message = entry.displayMessage;
         fullText = FormatFullText(entry, repeatCount);
@@ -14,7 +16,7 @@ internal sealed class ConsoleEntryCopyTarget
     internal string message { get; }
     internal string fullText { get; }
 
-    private static string FormatFullText(EditorConsoleEntry entry, int repeatCount)
+    private static string FormatFullText(EditorConsoleOccurrence entry, int repeatCount)
     {
         var builder = new StringBuilder();
         builder.Append('[')

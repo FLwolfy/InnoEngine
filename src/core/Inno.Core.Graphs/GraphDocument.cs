@@ -13,8 +13,12 @@ public sealed class GraphNodeRecord
     /// <summary>
     /// Creates a graph node record.
     /// </summary>
-    /// <param name="id">Stable identifier within the document.</param>
-    /// <param name="definitionId">Stable node definition identifier.</param>
+    /// <param name="id">
+    /// Stable identifier within the document.
+    /// </param>
+    /// <param name="definitionId">
+    /// Stable node definition identifier.
+    /// </param>
     public GraphNodeRecord(GraphNodeId id, string definitionId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(definitionId);
@@ -45,8 +49,12 @@ public sealed class GraphNodeRecord
     /// <summary>
     /// Creates or replaces a neutral serialized property value.
     /// </summary>
-    /// <param name="propertyId">Stable property identifier.</param>
-    /// <param name="value">Serialized value.</param>
+    /// <param name="propertyId">
+    /// Stable property identifier.
+    /// </param>
+    /// <param name="value">
+    /// Serialized value.
+    /// </param>
     public void SetValue(string propertyId, GraphSerializedValue value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(propertyId);
@@ -57,9 +65,15 @@ public sealed class GraphNodeRecord
     /// <summary>
     /// Tries to read a neutral serialized property value.
     /// </summary>
-    /// <param name="propertyId">Stable property identifier.</param>
-    /// <param name="value">Receives the value when present.</param>
-    /// <returns><see langword="true"/> when the property exists; otherwise <see langword="false"/>.</returns>
+    /// <param name="propertyId">
+    /// Stable property identifier.
+    /// </param>
+    /// <param name="value">
+    /// Receives the value when present.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the property exists; otherwise <see langword="false"/>.
+    /// </returns>
     public bool TryGetValue(string propertyId, out GraphSerializedValue? value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(propertyId);
@@ -69,8 +83,12 @@ public sealed class GraphNodeRecord
     /// <summary>
     /// Removes a neutral serialized property value.
     /// </summary>
-    /// <param name="propertyId">Stable property identifier.</param>
-    /// <returns><see langword="true"/> when a property was removed; otherwise <see langword="false"/>.</returns>
+    /// <param name="propertyId">
+    /// Stable property identifier.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when a property was removed; otherwise <see langword="false"/>.
+    /// </returns>
     public bool RemoveValue(string propertyId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(propertyId);
@@ -86,8 +104,12 @@ public readonly record struct GraphEndpoint
     /// <summary>
     /// Creates a graph edge endpoint.
     /// </summary>
-    /// <param name="nodeId">Owning node identifier.</param>
-    /// <param name="portId">Port identifier within the node definition.</param>
+    /// <param name="nodeId">
+    /// Owning node identifier.
+    /// </param>
+    /// <param name="portId">
+    /// Port identifier within the node definition.
+    /// </param>
     public GraphEndpoint(GraphNodeId nodeId, GraphPortId portId)
     {
         this.nodeId = nodeId;
@@ -113,9 +135,15 @@ public sealed class GraphEdgeRecord
     /// <summary>
     /// Creates a graph edge record.
     /// </summary>
-    /// <param name="id">Stable edge identifier within the document.</param>
-    /// <param name="output">Source endpoint.</param>
-    /// <param name="input">Destination endpoint.</param>
+    /// <param name="id">
+    /// Stable edge identifier within the document.
+    /// </param>
+    /// <param name="output">
+    /// Source endpoint.
+    /// </param>
+    /// <param name="input">
+    /// Destination endpoint.
+    /// </param>
     public GraphEdgeRecord(GraphEdgeId id, GraphEndpoint output, GraphEndpoint input)
     {
         this.id = id;
@@ -163,8 +191,12 @@ public sealed class GraphDocument
     /// </summary>
     public IReadOnlyDictionary<string, GraphSerializedValue> metadata => m_metadata;
 
-    /// <summary>Creates a deep neutral copy that shares no mutable node, edge, value, or metadata records.</summary>
-    /// <returns>An independently mutable graph document with identical stable identifiers and order.</returns>
+    /// <summary>
+    /// Creates a deep neutral copy that shares no mutable node, edge, value, or metadata records.
+    /// </summary>
+    /// <returns>
+    /// An independently mutable graph document with identical stable identifiers and order.
+    /// </returns>
     public GraphDocument Clone()
     {
         var clone = new GraphDocument();
@@ -172,9 +204,15 @@ public sealed class GraphDocument
         return clone;
     }
 
-    /// <summary>Atomically replaces all records with deep copies from another neutral document.</summary>
-    /// <param name="source">Complete source state.</param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="source"/> is this document.</exception>
+    /// <summary>
+    /// Atomically replaces all records with deep copies from another neutral document.
+    /// </summary>
+    /// <param name="source">
+    /// Complete source state.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="source"/> is this document.
+    /// </exception>
     public void ReplaceContents(GraphDocument source)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -224,8 +262,12 @@ public sealed class GraphDocument
     /// <summary>
     /// Adds a node while preserving document order.
     /// </summary>
-    /// <param name="node">Node record to add.</param>
-    /// <exception cref="ArgumentException">Thrown when the node identifier already exists.</exception>
+    /// <param name="node">
+    /// Node record to add.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the node identifier already exists.
+    /// </exception>
     public void AddNode(GraphNodeRecord node)
     {
         ArgumentNullException.ThrowIfNull(node);
@@ -240,8 +282,12 @@ public sealed class GraphDocument
     /// <summary>
     /// Removes a node and every edge connected to it.
     /// </summary>
-    /// <param name="nodeId">Node identifier to remove.</param>
-    /// <returns><see langword="true"/> when the node existed; otherwise <see langword="false"/>.</returns>
+    /// <param name="nodeId">
+    /// Node identifier to remove.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the node existed; otherwise <see langword="false"/>.
+    /// </returns>
     public bool RemoveNode(GraphNodeId nodeId)
     {
         int index = m_nodes.FindIndex(node => node.id == nodeId);
@@ -258,16 +304,24 @@ public sealed class GraphDocument
     /// <summary>
     /// Finds a node by stable identifier.
     /// </summary>
-    /// <param name="nodeId">Node identifier to find.</param>
-    /// <returns>The node record, or <see langword="null"/> when absent.</returns>
+    /// <param name="nodeId">
+    /// Node identifier to find.
+    /// </param>
+    /// <returns>
+    /// The node record, or <see langword="null"/> when absent.
+    /// </returns>
     public GraphNodeRecord? FindNode(GraphNodeId nodeId)
         => m_nodes.Find(node => node.id == nodeId);
 
     /// <summary>
     /// Adds an edge while preserving document order.
     /// </summary>
-    /// <param name="edge">Edge record to add.</param>
-    /// <exception cref="ArgumentException">Thrown when the edge identifier already exists.</exception>
+    /// <param name="edge">
+    /// Edge record to add.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the edge identifier already exists.
+    /// </exception>
     public void AddEdge(GraphEdgeRecord edge)
     {
         ArgumentNullException.ThrowIfNull(edge);
@@ -282,8 +336,12 @@ public sealed class GraphDocument
     /// <summary>
     /// Removes an edge by stable identifier.
     /// </summary>
-    /// <param name="edgeId">Edge identifier to remove.</param>
-    /// <returns><see langword="true"/> when the edge existed; otherwise <see langword="false"/>.</returns>
+    /// <param name="edgeId">
+    /// Edge identifier to remove.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the edge existed; otherwise <see langword="false"/>.
+    /// </returns>
     public bool RemoveEdge(GraphEdgeId edgeId)
     {
         int index = m_edges.FindIndex(edge => edge.id == edgeId);
@@ -299,8 +357,12 @@ public sealed class GraphDocument
     /// <summary>
     /// Creates or replaces graph-level neutral metadata.
     /// </summary>
-    /// <param name="key">Stable metadata key.</param>
-    /// <param name="value">Serialized metadata value.</param>
+    /// <param name="key">
+    /// Stable metadata key.
+    /// </param>
+    /// <param name="value">
+    /// Serialized metadata value.
+    /// </param>
     public void SetMetadata(string key, GraphSerializedValue value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
@@ -308,9 +370,15 @@ public sealed class GraphDocument
         m_metadata[key] = value;
     }
 
-    /// <summary>Removes graph-level metadata by stable key.</summary>
-    /// <param name="key">Stable metadata key.</param>
-    /// <returns><see langword="true"/> when metadata existed and was removed.</returns>
+    /// <summary>
+    /// Removes graph-level metadata by stable key.
+    /// </summary>
+    /// <param name="key">
+    /// Stable metadata key.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when metadata existed and was removed.
+    /// </returns>
     public bool RemoveMetadata(string key)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);

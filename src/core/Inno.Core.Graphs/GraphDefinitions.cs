@@ -8,9 +8,13 @@ namespace Inno.Core.Graphs;
 /// </summary>
 public enum GraphPortDirection
 {
-    /// <summary>Receives a value from another node.</summary>
+    /// <summary>
+    /// Receives a value from another node.
+    /// </summary>
     Input,
-    /// <summary>Produces a value for another node.</summary>
+    /// <summary>
+    /// Produces a value for another node.
+    /// </summary>
     Output
 }
 
@@ -19,9 +23,13 @@ public enum GraphPortDirection
 /// </summary>
 public enum GraphPortCapacity
 {
-    /// <summary>At most one edge may connect to the port.</summary>
+    /// <summary>
+    /// At most one edge may connect to the port.
+    /// </summary>
     Single,
-    /// <summary>Any number of edges may connect to the port.</summary>
+    /// <summary>
+    /// Any number of edges may connect to the port.
+    /// </summary>
     Multiple
 }
 
@@ -33,12 +41,24 @@ public sealed class GraphPortDefinition
     /// <summary>
     /// Creates a graph port definition.
     /// </summary>
-    /// <param name="id">Stable node-local port identifier.</param>
-    /// <param name="displayName">Artist-facing display name.</param>
-    /// <param name="valueTypeId">Stable value type identifier.</param>
-    /// <param name="direction">Value-flow direction.</param>
-    /// <param name="capacity">Allowed edge capacity.</param>
-    /// <param name="required">Whether an input must be connected.</param>
+    /// <param name="id">
+    /// Stable node-local port identifier.
+    /// </param>
+    /// <param name="displayName">
+    /// Artist-facing display name.
+    /// </param>
+    /// <param name="valueTypeId">
+    /// Stable value type identifier.
+    /// </param>
+    /// <param name="direction">
+    /// Value-flow direction.
+    /// </param>
+    /// <param name="capacity">
+    /// Allowed edge capacity.
+    /// </param>
+    /// <param name="required">
+    /// Whether an input must be connected.
+    /// </param>
     public GraphPortDefinition(
         GraphPortId id,
         string displayName,
@@ -57,22 +77,34 @@ public sealed class GraphPortDefinition
         this.required = required;
     }
 
-    /// <summary>Gets the stable node-local port identifier.</summary>
+    /// <summary>
+    /// Gets the stable node-local port identifier.
+    /// </summary>
     public GraphPortId id { get; }
 
-    /// <summary>Gets the artist-facing display name.</summary>
+    /// <summary>
+    /// Gets the artist-facing display name.
+    /// </summary>
     public string displayName { get; }
 
-    /// <summary>Gets the stable value type identifier.</summary>
+    /// <summary>
+    /// Gets the stable value type identifier.
+    /// </summary>
     public string valueTypeId { get; }
 
-    /// <summary>Gets the value-flow direction.</summary>
+    /// <summary>
+    /// Gets the value-flow direction.
+    /// </summary>
     public GraphPortDirection direction { get; }
 
-    /// <summary>Gets the allowed edge capacity.</summary>
+    /// <summary>
+    /// Gets the allowed edge capacity.
+    /// </summary>
     public GraphPortCapacity capacity { get; }
 
-    /// <summary>Gets whether an input must be connected.</summary>
+    /// <summary>
+    /// Gets whether an input must be connected.
+    /// </summary>
     public bool required { get; }
 }
 
@@ -85,14 +117,18 @@ public sealed class GraphNodeExtensionAttribute : Attribute
     /// <summary>
     /// Creates a graph node extension declaration.
     /// </summary>
-    /// <param name="id">Globally stable extension identifier.</param>
+    /// <param name="id">
+    /// Globally stable extension identifier.
+    /// </param>
     public GraphNodeExtensionAttribute(string id)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         this.id = id;
     }
 
-    /// <summary>Gets the globally stable extension identifier.</summary>
+    /// <summary>
+    /// Gets the globally stable extension identifier.
+    /// </summary>
     public string id { get; }
 }
 
@@ -104,9 +140,15 @@ public abstract class GraphNodeDefinition
     /// <summary>
     /// Creates a graph node definition.
     /// </summary>
-    /// <param name="id">Globally stable definition identifier.</param>
-    /// <param name="displayName">Artist-facing display name.</param>
-    /// <param name="category">Search-menu category path.</param>
+    /// <param name="id">
+    /// Globally stable definition identifier.
+    /// </param>
+    /// <param name="displayName">
+    /// Artist-facing display name.
+    /// </param>
+    /// <param name="category">
+    /// Search-menu category path.
+    /// </param>
     protected GraphNodeDefinition(string id, string displayName, string category)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -117,20 +159,30 @@ public abstract class GraphNodeDefinition
         this.category = category;
     }
 
-    /// <summary>Gets the globally stable definition identifier.</summary>
+    /// <summary>
+    /// Gets the globally stable definition identifier.
+    /// </summary>
     public string id { get; }
 
-    /// <summary>Gets the artist-facing display name.</summary>
+    /// <summary>
+    /// Gets the artist-facing display name.
+    /// </summary>
     public string displayName { get; }
 
-    /// <summary>Gets the search-menu category path.</summary>
+    /// <summary>
+    /// Gets the search-menu category path.
+    /// </summary>
     public string category { get; }
 
     /// <summary>
     /// Resolves ports for one node record, including any data-driven dynamic ports.
     /// </summary>
-    /// <param name="node">Neutral node record to inspect.</param>
-    /// <returns>The complete port definitions for the current node state.</returns>
+    /// <param name="node">
+    /// Neutral node record to inspect.
+    /// </param>
+    /// <returns>
+    /// The complete port definitions for the current node state.
+    /// </returns>
     public abstract IReadOnlyList<GraphPortDefinition> GetPorts(GraphNodeRecord node);
 }
 
@@ -142,9 +194,15 @@ public interface IGraphNodeDefinitionResolver
     /// <summary>
     /// Tries to resolve an active node definition.
     /// </summary>
-    /// <param name="definitionId">Stable definition identifier.</param>
-    /// <param name="definition">Receives the generation-scoped definition.</param>
-    /// <returns><see langword="true"/> when active; otherwise <see langword="false"/>.</returns>
+    /// <param name="definitionId">
+    /// Stable definition identifier.
+    /// </param>
+    /// <param name="definition">
+    /// Receives the generation-scoped definition.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when active; otherwise <see langword="false"/>.
+    /// </returns>
     bool TryResolve(string definitionId, out GraphNodeDefinition? definition);
 }
 
@@ -156,8 +214,14 @@ public interface IGraphTypeConversion
     /// <summary>
     /// Tests a directed value conversion.
     /// </summary>
-    /// <param name="sourceTypeId">Source value type identifier.</param>
-    /// <param name="destinationTypeId">Destination value type identifier.</param>
-    /// <returns><see langword="true"/> when the conversion is valid; otherwise <see langword="false"/>.</returns>
+    /// <param name="sourceTypeId">
+    /// Source value type identifier.
+    /// </param>
+    /// <param name="destinationTypeId">
+    /// Destination value type identifier.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the conversion is valid; otherwise <see langword="false"/>.
+    /// </returns>
     bool CanConvert(string sourceTypeId, string destinationTypeId);
 }

@@ -12,7 +12,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using BGCS.Runtime;
 
-namespace Inno.Native.SDL3
+namespace Inno.Native.Sdl3
 {
 	public static unsafe partial class Extensions
 	{

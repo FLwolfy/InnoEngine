@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Inno.Core.Logging;
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
 using Inno.Core.Serialization;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
@@ -21,13 +21,23 @@ public sealed class SerializedPropertyRenderer
     private readonly PropertyDrawerRegistry m_drawers;
     private readonly EditorInteractions m_interactions;
     private readonly IInspectionPropertyEditService m_edits;
+    private readonly Logger m_logger;
 
     /// <summary>
     /// Creates a serialized property renderer over one drawer registry and feature-owned edit service.
     /// </summary>
-    /// <param name="drawers">The property drawer registry used for runtime type resolution.</param>
-    /// <param name="interactions">The active editor interaction entry point.</param>
-    /// <param name="edits">The feature-owned service used to apply and record property changes.</param>
+    /// <param name="drawers">
+    /// The property drawer registry used for runtime type resolution.
+    /// </param>
+    /// <param name="interactions">
+    /// The active editor interaction entry point.
+    /// </param>
+    /// <param name="edits">
+    /// The feature-owned service used to apply and record property changes.
+    /// </param>
+    /// <param name="logs">
+    /// The host-owned log router used to report isolated drawer failures.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="drawers"/>, <paramref name="interactions"/>, or
     /// <paramref name="edits"/> is <see langword="null"/>.
@@ -36,20 +46,31 @@ public sealed class SerializedPropertyRenderer
     public SerializedPropertyRenderer(
         PropertyDrawerRegistry drawers,
         EditorInteractions interactions,
-        IInspectionPropertyEditService edits)
+        IInspectionPropertyEditService edits,
+        LogRouter logs)
     {
         m_drawers = drawers ?? throw new ArgumentNullException(nameof(drawers));
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
         m_edits = edits ?? throw new ArgumentNullException(nameof(edits));
+        ArgumentNullException.ThrowIfNull(logs);
+        m_logger = logs.CreateLogger<SerializedPropertyRenderer>();
     }
 
     /// <summary>
     /// Draws a root serialized property.
     /// </summary>
-    /// <param name="editorContext">Shared editor context.</param>
-    /// <param name="owner">The live domain object that owns the root property.</param>
-    /// <param name="ownerPath">Stable owner path.</param>
-    /// <param name="property">Serialized property.</param>
+    /// <param name="editorContext">
+    /// Shared editor context.
+    /// </param>
+    /// <param name="owner">
+    /// The live domain object that owns the root property.
+    /// </param>
+    /// <param name="ownerPath">
+    /// Stable owner path.
+    /// </param>
+    /// <param name="property">
+    /// Serialized property.
+    /// </param>
     public void Draw(
         EditorContext editorContext,
         object owner,
@@ -142,7 +163,10 @@ public sealed class SerializedPropertyRenderer
             if (!m_failureStates.TryGetValue(context.path, out string? previous) ||
                 !string.Equals(previous, failureState, StringComparison.Ordinal))
             {
-                Log.Error("Inspector failed to draw property '{0}': {1}", context.path, exception);
+                m_logger.Write(
+                    LogLevel.Error,
+                    "Inspector failed to draw property '{0}': {1}",
+                    [context.path, exception]);
                 m_failureStates[context.path] = failureState;
             }
         }

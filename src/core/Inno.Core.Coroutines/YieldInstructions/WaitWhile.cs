@@ -5,6 +5,9 @@ namespace Inno.Core.Coroutines;
 /// <summary>
 /// Waits while the predicate returns <see langword="true"/>.
 /// </summary>
+/// <param name="predicate">
+/// The predicate used to initialize this instance.
+/// </param>
 public sealed class WaitWhile(Func<bool> predicate) : YieldInstruction
 {
     /// <summary>

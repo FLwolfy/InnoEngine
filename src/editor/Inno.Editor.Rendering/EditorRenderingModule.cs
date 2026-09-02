@@ -2,7 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
+using Inno.Extensibility.Types;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 using Inno.Rendering;
@@ -10,7 +11,9 @@ using EngineColor = Inno.Core.Mathematics.Color;
 
 namespace Inno.Editor.Rendering;
 
-/// <summary>Hosts reloadable viewport providers while retaining only opaque presentation outputs.</summary>
+/// <summary>
+/// Hosts reloadable viewport providers while retaining only opaque presentation outputs.
+/// </summary>
 [EditorModule("rendering.viewports", order: 175)]
 public sealed class EditorRenderingModule : EditorModule
 {
@@ -26,34 +29,66 @@ public sealed class EditorRenderingModule : EditorModule
         new(StringComparer.Ordinal);
     private readonly IEditorRenderingHost m_host;
     private readonly EditorInteractions m_interactions;
-    private readonly EditorViewportProviderRegistry m_providers = new();
+    private readonly EditorViewportProviderRegistry m_providers;
     private EditorContext? m_context;
 
-    /// <summary>Creates the provider host around stable rendering and interaction services.</summary>
-    /// <param name="host">Host-owned target and opaque texture bridge.</param>
-    /// <param name="interactions">Shared Editor interaction and selection service.</param>
+    /// <summary>
+    /// Creates the provider host around stable rendering and interaction services.
+    /// </summary>
+    /// <param name="host">
+    /// Host-owned target and opaque texture bridge.
+    /// </param>
+    /// <param name="interactions">
+    /// Shared Editor interaction and selection service.
+    /// </param>
+    /// <param name="types">
+    /// The type catalog that owns viewport provider generations.
+    /// </param>
     [ScriptingApiIgnore]
-    public EditorRenderingModule(IEditorRenderingHost host, EditorInteractions interactions)
+    public EditorRenderingModule(
+        IEditorRenderingHost host,
+        EditorInteractions interactions,
+        TypeCatalog types)
     {
         m_host = host ?? throw new ArgumentNullException(nameof(host));
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
+        m_providers = new EditorViewportProviderRegistry(
+            types ?? throw new ArgumentNullException(nameof(types)));
     }
 
-    /// <summary>Gets whether the current extension generation provides one viewport purpose.</summary>
-    /// <param name="kind">Open viewport purpose.</param>
-    /// <returns><see langword="true"/> when an active provider is available.</returns>
+    /// <summary>
+    /// Gets whether the current extension generation provides one viewport purpose.
+    /// </summary>
+    /// <param name="kind">
+    /// Open viewport purpose.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when an active provider is available.
+    /// </returns>
     public bool HasProvider(EditorViewportKindId kind)
         => kind.isValid && m_providers.providers.byKind.ContainsKey(kind);
 
-    /// <summary>Gets the most recent isolated provider failure for a viewport purpose.</summary>
-    /// <param name="kind">Open viewport purpose.</param>
-    /// <returns>The failure message, or null when no current failure exists.</returns>
+    /// <summary>
+    /// Gets the most recent isolated provider failure for a viewport purpose.
+    /// </summary>
+    /// <param name="kind">
+    /// Open viewport purpose.
+    /// </param>
+    /// <returns>
+    /// The failure message, or null when no current failure exists.
+    /// </returns>
     public string? GetProviderError(EditorViewportKindId kind)
         => m_providerErrors.GetValueOrDefault(kind);
 
-    /// <summary>Gets the host-owned neutral navigation state for one stable Editor viewport.</summary>
-    /// <param name="viewportId">Stable panel viewport identity.</param>
-    /// <returns>The reusable navigation state owned by the Editor host.</returns>
+    /// <summary>
+    /// Gets the host-owned neutral navigation state for one stable Editor viewport.
+    /// </summary>
+    /// <param name="viewportId">
+    /// Stable panel viewport identity.
+    /// </param>
+    /// <returns>
+    /// The reusable navigation state owned by the Editor host.
+    /// </returns>
     [ScriptingApiIgnore]
     public EditorViewportNavigationState GetNavigationState(string viewportId)
     {
@@ -66,9 +101,15 @@ public sealed class EditorRenderingModule : EditorModule
         return state;
     }
 
-    /// <summary>Sets the explicit ordered host content visible to one Editor viewport.</summary>
-    /// <param name="viewportId">Stable panel viewport identity.</param>
-    /// <param name="content">Current frame-safe content scope.</param>
+    /// <summary>
+    /// Sets the explicit ordered host content visible to one Editor viewport.
+    /// </summary>
+    /// <param name="viewportId">
+    /// Stable panel viewport identity.
+    /// </param>
+    /// <param name="content">
+    /// Current frame-safe content scope.
+    /// </param>
     [ScriptingApiIgnore]
     public void SetContentScope(string viewportId, RenderContentScope content)
     {
@@ -76,13 +117,27 @@ public sealed class EditorRenderingModule : EditorModule
         m_contentScopes[viewportId] = content ?? throw new ArgumentNullException(nameof(content));
     }
 
-    /// <summary>Queries the active provider's navigation contract before viewport input is processed.</summary>
-    /// <param name="kind">Open viewport purpose.</param>
-    /// <param name="viewportId">Stable panel viewport identity.</param>
-    /// <param name="pixelWidth">Positive target width.</param>
-    /// <param name="pixelHeight">Positive target height.</param>
-    /// <param name="profile">Receives the active provider profile.</param>
-    /// <returns>True when a provider returned a usable navigation profile.</returns>
+    /// <summary>
+    /// Queries the active provider's navigation contract before viewport input is processed.
+    /// </summary>
+    /// <param name="kind">
+    /// Open viewport purpose.
+    /// </param>
+    /// <param name="viewportId">
+    /// Stable panel viewport identity.
+    /// </param>
+    /// <param name="pixelWidth">
+    /// Positive target width.
+    /// </param>
+    /// <param name="pixelHeight">
+    /// Positive target height.
+    /// </param>
+    /// <param name="profile">
+    /// Receives the active provider profile.
+    /// </param>
+    /// <returns>
+    /// True when a provider returned a usable navigation profile.
+    /// </returns>
     public bool TryConfigureNavigation(
         EditorViewportKindId kind,
         string viewportId,
@@ -112,9 +167,15 @@ public sealed class EditorRenderingModule : EditorModule
         }
     }
 
-    /// <summary>Sets presentation preferences supplied to the provider for one Editor viewport.</summary>
-    /// <param name="viewportId">Stable panel viewport identity.</param>
-    /// <param name="presentation">Current host-owned presentation preferences.</param>
+    /// <summary>
+    /// Sets presentation preferences supplied to the provider for one Editor viewport.
+    /// </summary>
+    /// <param name="viewportId">
+    /// Stable panel viewport identity.
+    /// </param>
+    /// <param name="presentation">
+    /// Current host-owned presentation preferences.
+    /// </param>
     [ScriptingApiIgnore]
     public void SetPresentation(string viewportId, EditorViewportPresentation presentation)
     {
@@ -122,10 +183,18 @@ public sealed class EditorRenderingModule : EditorModule
         m_presentations[viewportId] = presentation;
     }
 
-    /// <summary>Tries to get the manipulation space from the latest accepted submission for one viewport.</summary>
-    /// <param name="viewportId">Stable panel viewport identity.</param>
-    /// <param name="space">Receives the latest exact view/projection contract.</param>
-    /// <returns><see langword="true"/> when the active provider supplied a manipulation space.</returns>
+    /// <summary>
+    /// Tries to get the manipulation space from the latest accepted submission for one viewport.
+    /// </summary>
+    /// <param name="viewportId">
+    /// Stable panel viewport identity.
+    /// </param>
+    /// <param name="space">
+    /// Receives the latest exact view/projection contract.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the active provider supplied a manipulation space.
+    /// </returns>
     [ScriptingApiIgnore]
     public bool TryGetManipulationSpace(
         string viewportId,
@@ -135,11 +204,21 @@ public sealed class EditorRenderingModule : EditorModule
         return m_manipulationSpaces.TryGetValue(viewportId, out space);
     }
 
-    /// <summary>Draws toolbar controls owned by the selected Plugin provider.</summary>
-    /// <param name="kind">Open viewport purpose.</param>
-    /// <param name="viewportId">Stable panel viewport identity.</param>
-    /// <param name="pixelWidth">Current target width.</param>
-    /// <param name="pixelHeight">Current target height.</param>
+    /// <summary>
+    /// Draws toolbar controls owned by the selected Plugin provider.
+    /// </summary>
+    /// <param name="kind">
+    /// Open viewport purpose.
+    /// </param>
+    /// <param name="viewportId">
+    /// Stable panel viewport identity.
+    /// </param>
+    /// <param name="pixelWidth">
+    /// Current target width.
+    /// </param>
+    /// <param name="pixelHeight">
+    /// Current target height.
+    /// </param>
     public void DrawProviderToolbar(
         EditorViewportKindId kind,
         string viewportId,
@@ -163,13 +242,27 @@ public sealed class EditorRenderingModule : EditorModule
         }
     }
 
-    /// <summary>Builds, submits, and returns one provider-owned offscreen viewport.</summary>
-    /// <param name="kind">Open viewport purpose.</param>
-    /// <param name="viewportId">Stable panel viewport identity.</param>
-    /// <param name="pixelWidth">Positive target width.</param>
-    /// <param name="pixelHeight">Positive target height.</param>
-    /// <param name="output">Receives the opaque viewport output.</param>
-    /// <returns><see langword="true"/> when a provider submission was accepted.</returns>
+    /// <summary>
+    /// Builds, submits, and returns one provider-owned offscreen viewport.
+    /// </summary>
+    /// <param name="kind">
+    /// Open viewport purpose.
+    /// </param>
+    /// <param name="viewportId">
+    /// Stable panel viewport identity.
+    /// </param>
+    /// <param name="pixelWidth">
+    /// Positive target width.
+    /// </param>
+    /// <param name="pixelHeight">
+    /// Positive target height.
+    /// </param>
+    /// <param name="output">
+    /// Receives the opaque viewport output.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when a provider submission was accepted.
+    /// </returns>
     public bool TrySubmit(
         EditorViewportKindId kind,
         string viewportId,
@@ -238,14 +331,30 @@ public sealed class EditorRenderingModule : EditorModule
         }
     }
 
-    /// <summary>Forwards a normalized click to the selected Plugin provider.</summary>
-    /// <param name="kind">Open viewport purpose.</param>
-    /// <param name="viewportId">Stable panel viewport identity.</param>
-    /// <param name="pixelWidth">Current target width.</param>
-    /// <param name="pixelHeight">Current target height.</param>
-    /// <param name="x">Normalized horizontal position.</param>
-    /// <param name="y">Normalized vertical position.</param>
-    /// <param name="button">Platform-independent pointer button index.</param>
+    /// <summary>
+    /// Forwards a normalized click to the selected Plugin provider.
+    /// </summary>
+    /// <param name="kind">
+    /// Open viewport purpose.
+    /// </param>
+    /// <param name="viewportId">
+    /// Stable panel viewport identity.
+    /// </param>
+    /// <param name="pixelWidth">
+    /// Current target width.
+    /// </param>
+    /// <param name="pixelHeight">
+    /// Current target height.
+    /// </param>
+    /// <param name="x">
+    /// Normalized horizontal position.
+    /// </param>
+    /// <param name="y">
+    /// Normalized vertical position.
+    /// </param>
+    /// <param name="button">
+    /// Platform-independent pointer button index.
+    /// </param>
     public void HandlePointer(
         EditorViewportKindId kind,
         string viewportId,
@@ -272,14 +381,24 @@ public sealed class EditorRenderingModule : EditorModule
         }
     }
 
-    /// <summary>Draws a ready output in the current panel.</summary>
-    /// <param name="output">Opaque output returned by <see cref="TrySubmit"/>.</param>
-    /// <param name="logicalSize">Destination size in logical UI pixels.</param>
+    /// <summary>
+    /// Draws a ready output in the current panel.
+    /// </summary>
+    /// <param name="output">
+    /// Opaque output returned by <see cref="TrySubmit"/>.
+    /// </param>
+    /// <param name="logicalSize">
+    /// Destination size in logical UI pixels.
+    /// </param>
     public void Draw(EditorViewportOutput output, Vector2 logicalSize)
         => m_host.Draw(output, logicalSize);
 
-    /// <summary>Stops retaining one viewport target.</summary>
-    /// <param name="viewportId">Stable viewport identity.</param>
+    /// <summary>
+    /// Stops retaining one viewport target.
+    /// </summary>
+    /// <param name="viewportId">
+    /// Stable viewport identity.
+    /// </param>
     public void Release(string viewportId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(viewportId);
@@ -288,14 +407,24 @@ public sealed class EditorRenderingModule : EditorModule
         m_host.Release(viewportId);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Initializes this feature when its owning runtime becomes active.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnStart(EditorContext context)
     {
         m_context = context;
         _ = m_providers.providers;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Advances this feature using the current runtime state.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnUpdate(EditorContext context)
     {
         RenderFrameStatistics? statistics = GraphicsSettings.frameStatistics;
@@ -323,7 +452,12 @@ public sealed class EditorRenderingModule : EditorModule
                 order);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Stops this feature before its owning runtime releases the active generation.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnStop(EditorContext context)
     {
         _ = context;
@@ -336,7 +470,9 @@ public sealed class EditorRenderingModule : EditorModule
         m_presentations.Clear();
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Releases resources retained by this feature after it has stopped.
+    /// </summary>
     protected override void OnDispose()
     {
         m_providers.Dispose();

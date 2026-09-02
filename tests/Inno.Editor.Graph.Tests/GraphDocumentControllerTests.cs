@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Inno.Core.Assemblies;
+using Inno.Extensibility.Modules;
 using Inno.Core.Graphs;
-using Inno.Core.Reflection;
+using Inno.Core.Logging;
+using Inno.Extensibility.Types;
 using Inno.Core.Serialization;
+using Inno.Editor.Core;
 using Inno.Editor.Graph;
 using Inno.Editor.Interactions;
 using Xunit;
@@ -17,22 +19,37 @@ public sealed class GraphDocumentControllerTests : IDisposable
         Path.GetTempPath(),
         "InnoEditorGraphTests",
         Guid.NewGuid().ToString("N"));
+    private readonly ModuleHost m_modules;
+    private readonly TypeCatalog m_types;
+    private readonly SerializationRegistry m_serialization;
+    private readonly EditorInteractionRuntime m_runtime;
+    private readonly LogRouter m_logs = new();
+    private readonly GraphModuleSink m_sink = new();
 
     public GraphDocumentControllerTests()
     {
-        AssemblyManager.Initialize(new AssemblyManagerOptions
+        _ = typeof(GraphEditorModule);
+        m_modules = new ModuleHost(new ModuleHostOptions
         {
             cacheDirectory = Path.Combine(m_testRoot, "Assemblies")
         });
-        TypeCacheManager.Initialize();
-        SerializationManager.Initialize();
+        m_types = new TypeCatalog(m_modules);
+        m_serialization = new SerializationRegistry(m_types);
+        m_runtime = new EditorInteractionRuntime(
+            new EditorContext(m_testRoot),
+            m_types,
+            m_logs,
+            [m_serialization, m_sink]);
+        m_runtime.Start();
     }
 
     public void Dispose()
     {
-        SerializationManager.Shutdown();
-        TypeCacheManager.Shutdown();
-        AssemblyManager.Shutdown();
+        m_runtime.Dispose();
+        m_serialization.Dispose();
+        m_types.Dispose();
+        m_modules.Dispose();
+        m_logs.Dispose();
         if (Directory.Exists(m_testRoot))
             Directory.Delete(m_testRoot, recursive: true);
     }
@@ -40,7 +57,7 @@ public sealed class GraphDocumentControllerTests : IDisposable
     [Fact]
     public void AddNode_RecordsNeutralHistoryPayload()
     {
-        var module = new GraphEditorModule();
+        GraphEditorModule module = Assert.IsType<GraphEditorModule>(m_sink.module);
         var history = new RecordingHistory();
         var document = new GraphDocument();
         GraphDocumentController controller = module.OpenDocument("Assets/Test.ishadergraph", document, history);
@@ -56,7 +73,7 @@ public sealed class GraphDocumentControllerTests : IDisposable
     [Fact]
     public void CopyPaste_RemapsNodesAndPreservesInternalConnections()
     {
-        var module = new GraphEditorModule();
+        GraphEditorModule module = Assert.IsType<GraphEditorModule>(m_sink.module);
         var history = new RecordingHistory();
         var document = new GraphDocument();
         GraphDocumentController controller = module.OpenDocument("Assets/Copy.graph", document, history);
@@ -121,6 +138,30 @@ public sealed class GraphDocumentControllerTests : IDisposable
             }
 
             changes.Clear();
+        }
+    }
+
+    private sealed class GraphModuleSink
+    {
+        internal GraphEditorModule? module { get; set; }
+    }
+
+    [EditorModule("tests.graph.module-probe")]
+    private sealed class GraphModuleProbe : EditorModule
+    {
+        private readonly GraphEditorModule m_graphs;
+        private readonly GraphModuleSink m_sink;
+
+        private GraphModuleProbe(GraphEditorModule graphs, GraphModuleSink sink)
+        {
+            m_graphs = graphs;
+            m_sink = sink;
+        }
+
+        protected override void OnStart(EditorContext context)
+        {
+            _ = context;
+            m_sink.module = m_graphs;
         }
     }
 }

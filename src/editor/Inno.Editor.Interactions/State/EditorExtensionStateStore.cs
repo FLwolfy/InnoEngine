@@ -17,14 +17,16 @@ internal sealed class EditorExtensionStateStore
 
     private readonly EditorContext m_context;
     private readonly EditorExtensionStateDiagnosticPublisher m_diagnostics = new();
+    private readonly Logger m_log;
     private readonly ConditionalWeakTable<object, RestoredOwner> m_restoredOwners = new();
     private double m_nextSaveTime;
     private bool m_isShutdownPrepared;
 
-    internal EditorExtensionStateStore(EditorContext context)
+    internal EditorExtensionStateStore(EditorContext context, Logger log)
     {
         ArgumentNullException.ThrowIfNull(context);
         m_context = context;
+        m_log = log ?? throw new ArgumentNullException(nameof(log));
     }
 
     internal bool TryGetPanelOpen(string panelId, out bool isOpen)
@@ -71,7 +73,10 @@ internal sealed class EditorExtensionStateStore
         if (m_diagnostics.PublishCapture(failures.Select(static failure => failure.Message).ToArray()))
         {
             for (int i = 0; i < failures.Count; i++)
-                Log.Error("{0} Full exception: {1}", failures[i].Message, failures[i].Exception);
+                m_log.Write(
+                    LogLevel.Error,
+                    "{0} Full exception: {1}",
+                    [failures[i].Message, failures[i].Exception]);
         }
 
         var panelValues = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -112,7 +117,10 @@ internal sealed class EditorExtensionStateStore
         if (m_diagnostics.PublishRestore(failures.Select(static failure => failure.Message).ToArray()))
         {
             for (int i = 0; i < failures.Count; i++)
-                Log.Error("{0} Full exception: {1}", failures[i].Message, failures[i].Exception);
+                m_log.Write(
+                    LogLevel.Error,
+                    "{0} Full exception: {1}",
+                    [failures[i].Message, failures[i].Exception]);
         }
         SaveIfChanged();
     }
@@ -179,10 +187,10 @@ internal sealed class EditorExtensionStateStore
         {
             if (m_diagnostics.PublishSave(exception))
             {
-                Log.Error(
+                m_log.Write(
+                    LogLevel.Error,
                     "Editor extension state could not be saved to '{0}': {1}",
-                    m_context.layoutPath,
-                    exception);
+                    [m_context.layoutPath, exception]);
             }
         }
     }

@@ -13,7 +13,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using BGCS.Runtime;
 
-namespace Inno.Native.SDL3
+namespace Inno.Native.Sdl3
 {
 	/// <summary>
 	/// An SDL_GUID is a 128-bit identifier for an input device that identifies<br/>

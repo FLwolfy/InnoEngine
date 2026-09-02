@@ -12,25 +12,37 @@ namespace Inno.Core.Settings;
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class ProjectSettingComposerAttribute : Attribute
 {
-    /// <summary>Creates a composer declaration for one stable setting protocol.</summary>
-    /// <param name="settingId">The setting protocol composed by the attributed type.</param>
+    /// <summary>
+    /// Creates a composer declaration for one stable setting protocol.
+    /// </summary>
+    /// <param name="settingId">
+    /// The setting protocol composed by the attributed type.
+    /// </param>
     public ProjectSettingComposerAttribute(string settingId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(settingId);
         this.settingId = new ProjectSettingId(settingId);
     }
 
-    /// <summary>Gets the stable setting protocol composed by the attributed type.</summary>
+    /// <summary>
+    /// Gets the stable setting protocol composed by the attributed type.
+    /// </summary>
     public ProjectSettingId settingId { get; }
 }
 
-/// <summary>Identifies where one setting contribution originated.</summary>
+/// <summary>
+/// Identifies where one setting contribution originated.
+/// </summary>
 public enum ProjectSettingContributionSource
 {
-    /// <summary>The contribution is a default supplied by an activated Plugin.</summary>
+    /// <summary>
+    /// The contribution is a default supplied by an activated Plugin.
+    /// </summary>
     Plugin,
 
-    /// <summary>The contribution is the project-authored delta with highest precedence.</summary>
+    /// <summary>
+    /// The contribution is the project-authored delta with highest precedence.
+    /// </summary>
     Project
 }
 
@@ -54,17 +66,27 @@ public sealed class ProjectSettingContributionContext
         m_overrides = overrides;
     }
 
-    /// <summary>Gets the stable Plugin ID, or <c>project</c> for the project-authored contribution.</summary>
+    /// <summary>
+    /// Gets the stable Plugin ID, or <c>project</c> for the project-authored contribution.
+    /// </summary>
     public string contributorId { get; }
 
-    /// <summary>Gets the contribution source.</summary>
+    /// <summary>
+    /// Gets the contribution source.
+    /// </summary>
     public ProjectSettingContributionSource source { get; }
 
-    /// <summary>Gets whether this is the project-authored highest-precedence contribution.</summary>
+    /// <summary>
+    /// Gets whether this is the project-authored highest-precedence contribution.
+    /// </summary>
     public bool isProject => source == ProjectSettingContributionSource.Project;
 
-    /// <summary>Gets whether this contribution may explicitly replace data owned by another contributor.</summary>
-    /// <param name="ownerId">The stable owner whose data would be replaced.</param>
+    /// <summary>
+    /// Gets whether this contribution may explicitly replace data owned by another contributor.
+    /// </summary>
+    /// <param name="ownerId">
+    /// The stable owner whose data would be replaced.
+    /// </param>
     /// <returns>
     /// <see langword="true"/> for project data, or when the Plugin both depends on and explicitly overrides
     /// <paramref name="ownerId"/>.
@@ -78,8 +100,12 @@ public sealed class ProjectSettingContributionContext
     }
 }
 
-/// <summary>Provides one decoded contribution and its immutable composition context.</summary>
-/// <typeparam name="TContribution">The protocol-owned neutral contribution type.</typeparam>
+/// <summary>
+/// Provides one decoded contribution and its immutable composition context.
+/// </summary>
+/// <typeparam name="TContribution">
+/// The protocol-owned neutral contribution type.
+/// </typeparam>
 public sealed class ProjectSettingContribution<TContribution>
     where TContribution : class, ISerializable
 {
@@ -91,24 +117,32 @@ public sealed class ProjectSettingContribution<TContribution>
         this.value = value;
     }
 
-    /// <summary>Gets the ownership and dependency context for this contribution.</summary>
+    /// <summary>
+    /// Gets the ownership and dependency context for this contribution.
+    /// </summary>
     public ProjectSettingContributionContext context { get; }
 
-    /// <summary>Gets the decoded protocol-owned contribution value.</summary>
+    /// <summary>
+    /// Gets the decoded protocol-owned contribution value.
+    /// </summary>
     public TContribution value { get; }
 }
 
-/// <summary>Defines the non-generic base for a protocol-owned project setting composer.</summary>
+/// <summary>
+/// Defines the non-generic base for a protocol-owned project setting composer.
+/// </summary>
 public abstract class ProjectSettingComposer
 {
     internal abstract Type settingType { get; }
 
     internal abstract bool TryCapture(
+        SerializationRegistry serialization,
         ISerializable baseline,
         ISerializable value,
         out byte[] contributionData);
 
     internal abstract ISerializable Compose(
+        SerializationRegistry serialization,
         ISerializable hostDefault,
         IReadOnlyList<ProjectSettingCompositionEntry> contributions);
 }
@@ -116,26 +150,50 @@ public abstract class ProjectSettingComposer
 /// <summary>
 /// Lets one setting protocol define deterministic delta capture and multi-contributor composition.
 /// </summary>
-/// <typeparam name="TSetting">The exact effective setting type.</typeparam>
-/// <typeparam name="TContribution">The exact serializable delta type stored in Plugin and project records.</typeparam>
+/// <typeparam name="TSetting">
+/// The exact effective setting type.
+/// </typeparam>
+/// <typeparam name="TContribution">
+/// The exact serializable delta type stored in Plugin and project records.
+/// </typeparam>
 public abstract class ProjectSettingComposer<TSetting, TContribution> : ProjectSettingComposer
     where TSetting : class, ISerializable
     where TContribution : class, ISerializable
 {
-    /// <summary>Captures the semantic delta required to transform a composed baseline into an authored value.</summary>
-    /// <param name="baseline">The value composed from lower-precedence contributors.</param>
-    /// <param name="value">The complete authored value.</param>
-    /// <returns>A detached neutral contribution.</returns>
+    /// <summary>
+    /// Captures the contribution introduced by the supplied project setting value.
+    /// </summary>
+    /// <param name="baseline">
+    /// The value composed from lower-precedence contributors.
+    /// </param>
+    /// <param name="value">
+    /// The complete authored value.
+    /// </param>
+    /// <returns>
+    /// A detached neutral contribution.
+    /// </returns>
     protected abstract TContribution CaptureContribution(TSetting baseline, TSetting value);
 
-    /// <summary>Gets whether a captured contribution contains no semantic operation.</summary>
-    /// <param name="contribution">The contribution to inspect.</param>
-    /// <returns><see langword="true"/> when the record should be omitted.</returns>
+    /// <summary>
+    /// Gets whether a captured contribution contains no semantic operation.
+    /// </summary>
+    /// <param name="contribution">
+    /// The contribution to inspect.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the record should be omitted.
+    /// </returns>
     protected abstract bool IsEmpty(TContribution contribution);
 
-    /// <summary>Composes dependency-ordered Plugin deltas and the optional final project delta into a host default.</summary>
-    /// <param name="target">The newly created host default to mutate into the effective value.</param>
-    /// <param name="contributions">Decoded contributions in deterministic precedence order.</param>
+    /// <summary>
+    /// Composes dependency-ordered Plugin deltas and the optional final project delta into a host default.
+    /// </summary>
+    /// <param name="target">
+    /// The newly created host default to mutate into the effective value.
+    /// </param>
+    /// <param name="contributions">
+    /// Decoded contributions in deterministic precedence order.
+    /// </param>
     protected abstract void Compose(
         TSetting target,
         IReadOnlyList<ProjectSettingContribution<TContribution>> contributions);
@@ -143,6 +201,7 @@ public abstract class ProjectSettingComposer<TSetting, TContribution> : ProjectS
     internal sealed override Type settingType => typeof(TSetting);
 
     internal sealed override bool TryCapture(
+        SerializationRegistry serialization,
         ISerializable baseline,
         ISerializable value,
         out byte[] contributionData)
@@ -160,11 +219,12 @@ public abstract class ProjectSettingComposer<TSetting, TContribution> : ProjectS
             contributionData = [];
             return false;
         }
-        contributionData = SerializationManager.Serialize(contribution);
+        contributionData = serialization.Serialize(contribution);
         return true;
     }
 
     internal sealed override ISerializable Compose(
+        SerializationRegistry serialization,
         ISerializable hostDefault,
         IReadOnlyList<ProjectSettingCompositionEntry> contributions)
     {
@@ -177,7 +237,7 @@ public abstract class ProjectSettingComposer<TSetting, TContribution> : ProjectS
         var decoded = new List<ProjectSettingContribution<TContribution>>(contributions.Count);
         foreach (ProjectSettingCompositionEntry contribution in contributions)
         {
-            TContribution value = SerializationManager.Deserialize<TContribution>(contribution.data);
+            TContribution value = serialization.Deserialize<TContribution>(contribution.data);
             if (IsEmpty(value))
             {
                 throw new InvalidOperationException(

@@ -8,9 +8,13 @@
     <InnoAssemblyScope>Editor</InnoAssemblyScope>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference
+      Include="..\..\core\Inno.Core.Serialization.Generators\Inno.Core.Serialization.Generators.csproj"
+      OutputItemType="Analyzer"
+      ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>

@@ -23,10 +23,18 @@ public sealed class SerializationContext
     /// <summary>
     /// Returns a new context containing the supplied value under its declared context type.
     /// </summary>
-    /// <typeparam name="TContext">The exact context contract type.</typeparam>
-    /// <param name="value">The context value to register.</param>
-    /// <returns>A new context containing the registered value.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is null.</exception>
+    /// <typeparam name="TContext">
+    /// The exact context contract type.
+    /// </typeparam>
+    /// <param name="value">
+    /// The context value to register.
+    /// </param>
+    /// <returns>
+    /// A new context containing the registered value.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="value"/> is null.
+    /// </exception>
     public SerializationContext With<TContext>(TContext value) where TContext : class
     {
         ArgumentNullException.ThrowIfNull(value);
@@ -40,9 +48,15 @@ public sealed class SerializationContext
     /// <summary>
     /// Attempts to resolve a value registered under the exact context contract type.
     /// </summary>
-    /// <typeparam name="TContext">The exact context contract type.</typeparam>
-    /// <param name="value">The registered value when available.</param>
-    /// <returns><see langword="true"/> when a value is registered; otherwise, <see langword="false"/>.</returns>
+    /// <typeparam name="TContext">
+    /// The exact context contract type.
+    /// </typeparam>
+    /// <param name="value">
+    /// The registered value when available.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when a value is registered; otherwise, <see langword="false"/>.
+    /// </returns>
     public bool TryGet<TContext>(out TContext? value) where TContext : class
     {
         if (m_values.TryGetValue(typeof(TContext), out object? candidate) && candidate is TContext typed)
@@ -58,9 +72,15 @@ public sealed class SerializationContext
     /// <summary>
     /// Resolves a value registered under the exact context contract type.
     /// </summary>
-    /// <typeparam name="TContext">The exact context contract type.</typeparam>
-    /// <returns>The registered context value.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the requested context was not registered.</exception>
+    /// <typeparam name="TContext">
+    /// The exact context contract type.
+    /// </typeparam>
+    /// <returns>
+    /// The registered context value.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the requested context was not registered.
+    /// </exception>
     public TContext GetRequired<TContext>() where TContext : class
         => TryGet<TContext>(out TContext? value) && value is not null
             ? value

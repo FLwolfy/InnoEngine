@@ -11,10 +11,14 @@ public abstract class EditorAction : IDisposable
     private bool m_isActive;
     private bool m_isDisposed;
 
-    /// <summary>Gets whether the action currently owns an active multi-frame operation.</summary>
+    /// <summary>
+    /// Gets whether the action currently owns an active multi-frame operation.
+    /// </summary>
     public bool isActive => m_isActive;
 
-    /// <summary>Gets the required target type, or <see langword="null"/> for a targetless action.</summary>
+    /// <summary>
+    /// Gets the required target type, or <see langword="null"/> for a targetless action.
+    /// </summary>
     public virtual Type? targetType => null;
 
     internal virtual Type? argumentType => null;
@@ -60,8 +64,12 @@ public abstract class EditorAction : IDisposable
     /// <summary>
     /// Activates this action for a target and cancels any operation it previously owned.
     /// </summary>
-    /// <param name="context">The contextual request that starts the operation.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="context"/> is <see langword="null"/>.</exception>
+    /// <param name="context">
+    /// The contextual request that starts the operation.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="context"/> is <see langword="null"/>.
+    /// </exception>
     protected void Activate(EditorActionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -70,7 +78,9 @@ public abstract class EditorAction : IDisposable
         m_isActive = true;
     }
 
-    /// <summary>Completes the current operation and returns the action to its idle state.</summary>
+    /// <summary>
+    /// Completes the current operation and returns the action to its idle state.
+    /// </summary>
     protected void Complete()
     {
         if (!m_isActive)
@@ -80,7 +90,9 @@ public abstract class EditorAction : IDisposable
         OnCompleted();
     }
 
-    /// <summary>Cancels the current operation and returns the action to its idle state.</summary>
+    /// <summary>
+    /// Cancels the current operation and returns the action to its idle state.
+    /// </summary>
     protected void Cancel()
     {
         if (!m_isActive)
@@ -90,27 +102,47 @@ public abstract class EditorAction : IDisposable
         OnCancelled();
     }
 
-    /// <summary>Evaluates the action for the supplied context.</summary>
-    /// <param name="context">The editor, area, target, and optional argument for the query.</param>
-    /// <returns>The current presentation and availability state.</returns>
+    /// <summary>
+    /// Evaluates the action for the supplied context.
+    /// </summary>
+    /// <param name="context">
+    /// The editor, area, target, and optional argument for the query.
+    /// </param>
+    /// <returns>
+    /// The current presentation and availability state.
+    /// </returns>
     protected virtual EditorActionState Query(EditorActionContext context)
         => EditorActionState.enabled;
 
-    /// <summary>Executes the action for the supplied context.</summary>
-    /// <param name="context">The editor, area, target, and optional argument for the operation.</param>
+    /// <summary>
+    /// Executes the action for the supplied context.
+    /// </summary>
+    /// <param name="context">
+    /// The editor, area, target, and optional argument for the operation.
+    /// </param>
     protected abstract void Execute(EditorActionContext context);
 
-    /// <summary>Presents an active action at the current target location.</summary>
-    /// <param name="context">The current presentation area and target.</param>
-    /// <returns><see langword="true"/> when the action replaced the target's normal content; otherwise, <see langword="false"/>.</returns>
+    /// <summary>
+    /// Presents an active action at the current target location.
+    /// </summary>
+    /// <param name="context">
+    /// The current presentation area and target.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the action replaced the target's normal content; otherwise, <see langword="false"/>.
+    /// </returns>
     protected virtual bool Present(EditorActionContext context) => false;
 
-    /// <summary>Runs after an active operation completes successfully.</summary>
+    /// <summary>
+    /// Runs after an active operation completes successfully.
+    /// </summary>
     protected virtual void OnCompleted()
     {
     }
 
-    /// <summary>Runs after an active operation is cancelled.</summary>
+    /// <summary>
+    /// Runs after an active operation is cancelled.
+    /// </summary>
     protected virtual void OnCancelled()
     {
     }
@@ -125,7 +157,9 @@ public abstract class EditorAction : IDisposable
     /// </remarks>
     protected virtual void OnPresentationLost() => Cancel();
 
-    /// <summary>Cancels active work and releases this action instance.</summary>
+    /// <summary>
+    /// Cancels active work and releases this action instance.
+    /// </summary>
     public void Dispose()
     {
         if (m_isDisposed)
@@ -136,24 +170,45 @@ public abstract class EditorAction : IDisposable
     }
 }
 
-/// <summary>Defines a target action that requires one strongly typed command argument.</summary>
-/// <typeparam name="TTarget">The target type accepted by the action.</typeparam>
-/// <typeparam name="TArgument">The command argument type accepted by the action.</typeparam>
+/// <summary>
+/// Defines a target action that requires one strongly typed command argument.
+/// </summary>
+/// <typeparam name="TTarget">
+/// The target type accepted by the action.
+/// </typeparam>
+/// <typeparam name="TArgument">
+/// The command argument type accepted by the action.
+/// </typeparam>
 public abstract class EditorAction<TTarget, TArgument> : EditorAction
     where TTarget : class
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the concrete type handled by this extension implementation.
+    /// </summary>
     public sealed override Type targetType => typeof(TTarget);
 
     internal sealed override Type argumentType => typeof(TArgument);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Evaluates the operation's current availability and presentation state.
+    /// </summary>
+    /// <returns>
+    /// The validated editor action state that represents the completed operation.
+    /// </returns>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected sealed override EditorActionState Query(EditorActionContext context)
         => TryCreate(context, out EditorActionContext<TTarget, TArgument> typed)
             ? Query(typed)
             : EditorActionState.hidden;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Applies the editor action to the supplied interaction context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected sealed override void Execute(EditorActionContext context)
     {
         if (!TryCreate(context, out EditorActionContext<TTarget, TArgument> typed))
@@ -165,23 +220,47 @@ public abstract class EditorAction<TTarget, TArgument> : EditorAction
         Execute(typed);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Presents this action through the current editor interaction surface.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> when the operation succeeds or its condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected sealed override bool Present(EditorActionContext context)
         => TryCreate(context, out EditorActionContext<TTarget, TArgument> typed) && Present(typed);
 
-    /// <summary>Evaluates the action for a typed target and argument.</summary>
-    /// <param name="context">The typed contextual request.</param>
-    /// <returns>The current presentation and availability state.</returns>
+    /// <summary>
+    /// Evaluates the action for a typed target and argument.
+    /// </summary>
+    /// <param name="context">
+    /// The typed contextual request.
+    /// </param>
+    /// <returns>
+    /// The current presentation and availability state.
+    /// </returns>
     protected virtual EditorActionState Query(EditorActionContext<TTarget, TArgument> context)
         => EditorActionState.enabled;
 
-    /// <summary>Executes the action for a typed target and argument.</summary>
-    /// <param name="context">The typed contextual request.</param>
+    /// <summary>
+    /// Executes the action for a typed target and argument.
+    /// </summary>
+    /// <param name="context">
+    /// The typed contextual request.
+    /// </param>
     protected abstract void Execute(EditorActionContext<TTarget, TArgument> context);
 
-    /// <summary>Presents an active action for a typed target and argument.</summary>
-    /// <param name="context">The typed presentation request.</param>
-    /// <returns><see langword="true"/> when content was presented.</returns>
+    /// <summary>
+    /// Presents an active action for a typed target and argument.
+    /// </summary>
+    /// <param name="context">
+    /// The typed presentation request.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when content was presented.
+    /// </returns>
     protected virtual bool Present(EditorActionContext<TTarget, TArgument> context) => false;
 
     private static bool TryCreate(
@@ -198,19 +277,36 @@ public abstract class EditorAction<TTarget, TArgument> : EditorAction
     }
 }
 
-/// <summary>Defines a targetless editor action that requires one strongly typed command argument.</summary>
-/// <typeparam name="TArgument">The command argument type accepted by the action.</typeparam>
+/// <summary>
+/// Defines a targetless editor action that requires one strongly typed command argument.
+/// </summary>
+/// <typeparam name="TArgument">
+/// The command argument type accepted by the action.
+/// </typeparam>
 public abstract class EditorArgumentAction<TArgument> : EditorAction
 {
     internal sealed override Type argumentType => typeof(TArgument);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Evaluates the operation's current availability and presentation state.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <returns>
+    /// The validated editor action state that represents the completed operation.
+    /// </returns>
     protected sealed override EditorActionState Query(EditorActionContext context)
         => context.target is null && context.argument is TArgument argument
             ? Query(new EditorActionArgumentContext<TArgument>(context, argument))
             : EditorActionState.hidden;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Applies the editor action to the supplied interaction context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected sealed override void Execute(EditorActionContext context)
     {
         if (context.target is not null || context.argument is not TArgument argument)
@@ -221,45 +317,87 @@ public abstract class EditorArgumentAction<TArgument> : EditorAction
         Execute(new EditorActionArgumentContext<TArgument>(context, argument));
     }
 
-    /// <summary>Evaluates the action for a typed argument.</summary>
-    /// <param name="context">The typed contextual request.</param>
-    /// <returns>The current presentation and availability state.</returns>
+    /// <summary>
+    /// Evaluates the action for a typed argument.
+    /// </summary>
+    /// <param name="context">
+    /// The typed contextual request.
+    /// </param>
+    /// <returns>
+    /// The current presentation and availability state.
+    /// </returns>
     protected virtual EditorActionState Query(EditorActionArgumentContext<TArgument> context)
         => EditorActionState.enabled;
 
-    /// <summary>Executes the action for a typed argument.</summary>
-    /// <param name="context">The typed contextual request.</param>
+    /// <summary>
+    /// Executes the action for a typed argument.
+    /// </summary>
+    /// <param name="context">
+    /// The typed contextual request.
+    /// </param>
     protected abstract void Execute(EditorActionArgumentContext<TArgument> context);
 }
 
-/// <summary>Defines a target action with a typed presentation-only argument.</summary>
-/// <typeparam name="TTarget">The target type accepted by the action.</typeparam>
-/// <typeparam name="TPresentation">The presentation data type.</typeparam>
+/// <summary>
+/// Defines a target action with a typed presentation-only argument.
+/// </summary>
+/// <typeparam name="TTarget">
+/// The target type accepted by the action.
+/// </typeparam>
+/// <typeparam name="TPresentation">
+/// The presentation data type.
+/// </typeparam>
 public abstract class EditorPresentationAction<TTarget, TPresentation> : EditorAction<TTarget>
     where TTarget : class
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Presents this action through the current editor interaction surface.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the operation succeeds or its condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     protected sealed override bool Present(EditorActionContext<TTarget> context)
         => context.argument is TPresentation presentation && Present(
             new EditorActionContext<TTarget, TPresentation>(context, context.target, presentation));
 
-    /// <summary>Presents active content using strongly typed presentation data.</summary>
-    /// <param name="context">The typed presentation request.</param>
-    /// <returns><see langword="true"/> when content was presented.</returns>
+    /// <summary>
+    /// Presents active content using strongly typed presentation data.
+    /// </summary>
+    /// <param name="context">
+    /// The typed presentation request.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when content was presented.
+    /// </returns>
     protected abstract bool Present(EditorActionContext<TTarget, TPresentation> context);
 }
 
 /// <summary>
 /// Defines a discoverable action whose target must be assignable to a specific reference type.
 /// </summary>
-/// <typeparam name="TTarget">The target type accepted by the action.</typeparam>
+/// <typeparam name="TTarget">
+/// The target type accepted by the action.
+/// </typeparam>
 public abstract class EditorAction<TTarget> : EditorAction
     where TTarget : class
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the concrete type handled by this extension implementation.
+    /// </summary>
     public sealed override Type targetType => typeof(TTarget);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Evaluates the operation's current availability and presentation state.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <returns>
+    /// The validated editor action state that represents the completed operation.
+    /// </returns>
     protected sealed override EditorActionState Query(EditorActionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -268,7 +406,12 @@ public abstract class EditorAction<TTarget> : EditorAction
             : EditorActionState.hidden;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Applies the editor action to the supplied interaction context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected sealed override void Execute(EditorActionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -280,7 +423,15 @@ public abstract class EditorAction<TTarget> : EditorAction
         Execute(new EditorActionContext<TTarget>(context, target));
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Presents this action through the current editor interaction surface.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the operation succeeds or its condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     protected sealed override bool Present(EditorActionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -288,18 +439,34 @@ public abstract class EditorAction<TTarget> : EditorAction
                Present(new EditorActionContext<TTarget>(context, target));
     }
 
-    /// <summary>Evaluates the action for a strongly typed target.</summary>
-    /// <param name="context">The contextual request containing the typed target.</param>
-    /// <returns>The current presentation and availability state.</returns>
+    /// <summary>
+    /// Evaluates the action for a strongly typed target.
+    /// </summary>
+    /// <param name="context">
+    /// The contextual request containing the typed target.
+    /// </param>
+    /// <returns>
+    /// The current presentation and availability state.
+    /// </returns>
     protected virtual EditorActionState Query(EditorActionContext<TTarget> context)
         => EditorActionState.enabled;
 
-    /// <summary>Executes the action for a strongly typed target.</summary>
-    /// <param name="context">The contextual request containing the typed target.</param>
+    /// <summary>
+    /// Executes the action for a strongly typed target.
+    /// </summary>
+    /// <param name="context">
+    /// The contextual request containing the typed target.
+    /// </param>
     protected abstract void Execute(EditorActionContext<TTarget> context);
 
-    /// <summary>Presents an active action for a strongly typed target.</summary>
-    /// <param name="context">The current presentation request containing the typed target.</param>
-    /// <returns><see langword="true"/> when content was presented; otherwise, <see langword="false"/>.</returns>
+    /// <summary>
+    /// Presents an active action for a strongly typed target.
+    /// </summary>
+    /// <param name="context">
+    /// The current presentation request containing the typed target.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when content was presented; otherwise, <see langword="false"/>.
+    /// </returns>
     protected virtual bool Present(EditorActionContext<TTarget> context) => false;
 }

@@ -1,6 +1,6 @@
 # Inno.Rendering
 
-[Rendering 索引](README.md) · [后端中立核心](Inno.Rendering.Core.md) · [Runtime](Inno.Rendering.Runtime.md) · [ShaderGraph](Inno.Rendering.ShaderGraph.md)
+[Rendering 索引](README.md) · [Runtime](Inno.Rendering.Runtime.md) · [ShaderGraph](Inno.Rendering.ShaderGraph.md)
 
 `Inno.Rendering` 是 Project/Plugin 脚本面对的通用渲染 API。它不引用 Scene，也不定义 Camera、Light、MeshRenderer、PBR 参数、Render Queue 或固定 Pass Tag。
 
@@ -17,6 +17,8 @@
 | Shader | `ShaderAsset`, `ShaderDefinition`, `ShaderPassDefinition`, `ShaderTechniqueDefinition` | 通用 GPU Program、开放 Contract 与 Role 映射。 |
 | 材质 | `MaterialAsset`, `MaterialValue`, `MaterialPropertyBlock`, `MaterialPassResolver` | 稳定属性、Keyword、Metadata 与能力感知 Technique 解析。 |
 | 资源 | `TextureAsset`, `GeometryAsset`, `RenderTexture`, `IRenderResourceService`, `IRenderFrameUploadService` | 后端无关资产、持久资源、异步预热与当前帧流式 Buffer。 |
+| 目标产物 | `IRenderTargetArtifactProvider`, `RenderTargetArtifactStatus` | 以 `Ready`、`Pending`、`Unavailable`、`Failed` 精确表达无源码 Shader/Texture 目标产物状态。 |
+| 诊断 | `IRenderDiagnosticSink`, `RenderDiagnostic` | 发布并在条件恢复后解析当前 Rendering 问题，不把状态诊断伪装成带调用栈的普通 Log。 |
 | 全局 | `GraphicsSettings`, `RenderFrameStatistics` | 当前 capability、默认 Pipeline 与只读统计。 |
 
 ## Shader → Technique → Material → Pipeline
@@ -87,6 +89,8 @@ public sealed class SampleRequestProvider : RenderRequestProvider
 ## 热重载与失败隔离
 
 - Pipeline/Feature 候选只在帧边界发布，失败保留 last-good generation。
+- `IRenderTargetArtifactProvider` 不使用布尔值混合“正在编译”和“部署缺失”。`Pending` 是 Editor 首次异步编译的正常状态，不发布 Error；`Unavailable` 表示当前部署确实没有请求产物；`Failed` 表示生产已失败且 Provider 已发布具体诊断；`Ready` 保证返回值可立即使用。
+- Runtime 在 `Pending`/`Failed` 时继续使用 last-good GPU Program 或 Texture；恢复成功后通过 `IRenderDiagnosticSink.Resolve` 清理旧状态，不让已修复问题永久残留在 Console。
 - `RenderFrameData`、Graph handle、回调和 `RenderPipelineContext` 不得跨帧缓存。
 - 普通艺术参数使用 Material value；只有接口、控制流或状态变化才应成为静态 Keyword 变体。
 - Project/Plugin API 中不存在 BGFX 类型。需要的后端能力通过 `GraphicsCapabilities` 查询。

@@ -24,7 +24,12 @@ internal sealed class StatsPanel : EditorPanel
     {
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Draws this feature using the current editor presentation context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnDraw(EditorContext context)
     {
         m_statistics.Update(context.frame.totalTime, context.frame.deltaTime);

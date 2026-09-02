@@ -22,7 +22,9 @@ public sealed class EventDispatcher
     /// <param name="order">
     /// Hub dispatch order. Higher values run earlier.
     /// </param>
-    /// <returns>The created valid hub.</returns>
+    /// <returns>
+    /// The created valid hub.
+    /// </returns>
     public EventHub CreateHub(int order = 0)
     {
         lock (m_hubsGate)
@@ -38,7 +40,9 @@ public sealed class EventDispatcher
     /// <summary>
     /// Enqueues an event for later processing via <see cref="Flush"/>.
     /// </summary>
-    /// <param name="e">The event instance to enqueue.</param>
+    /// <param name="e">
+    /// The event instance to enqueue.
+    /// </param>
     public void Enqueue(Event e)
     {
         ArgumentNullException.ThrowIfNull(e);
@@ -62,7 +66,9 @@ public sealed class EventDispatcher
     /// <remarks>
     /// Dispatch stops when the event is marked globally handled.
     /// </remarks>
-    /// <param name="e">The event instance to dispatch.</param>
+    /// <param name="e">
+    /// The event instance to dispatch.
+    /// </param>
     public void Emit(Event e)
     {
         ArgumentNullException.ThrowIfNull(e);

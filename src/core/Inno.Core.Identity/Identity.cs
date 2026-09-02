@@ -7,7 +7,17 @@ namespace Inno.Core.Identity;
 /// </summary>
 public struct Identity
 {
+    /// <summary>
+    /// Gets the stable identifier preserved by serialization and runtime reconstruction.
+    /// </summary>
     public Guid persistentId { get; private set; }
+
+    /// <summary>
+    /// Gets the identifier assigned by the currently bound runtime registry.
+    /// </summary>
+    /// <remarks>
+    /// The value is <see langword="null"/> while this identity is not bound to a live registry.
+    /// </remarks>
     public int? runtimeId
     {
         get
@@ -22,6 +32,12 @@ public struct Identity
     private int m_runtimeId;
     private WeakReference<IdentityRegistry>? m_registryRef;
 
+    /// <summary>
+    /// Creates an unbound identity with the supplied persistent identifier.
+    /// </summary>
+    /// <param name="persistentId">
+    /// The stable identifier to preserve across serialization boundaries.
+    /// </param>
     public Identity(Guid persistentId)
     {
         this.persistentId = persistentId;

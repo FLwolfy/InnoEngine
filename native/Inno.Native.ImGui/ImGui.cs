@@ -3,15 +3,24 @@
 namespace Inno.Native.ImGui
 {
     using BGCS.Runtime;
-    using Inno.Native.Dll;
+    using Inno.Native.LibraryLoading;
     using System.Diagnostics;
 
-    public static class ImGuiConfig
+    /// <summary>
+    /// Provides the generated native Dear ImGui ABI surface used exclusively by the platform adapter.
+    /// </summary>
+public static class ImGuiConfig
     {
-        public static bool AotStaticLink;
+        /// <summary>
+        /// The aot static link value used as part of this type's public representation.
+        /// </summary>
+public static bool AotStaticLink;
     }
 
-    public static partial class ImGui
+    /// <summary>
+    /// Provides the generated native Dear ImGui ABI surface used exclusively by the platform adapter.
+    /// </summary>
+public static partial class ImGui
     {
 #if DEBUG
         private const string DLL_NAME = "libcimgui-debug";
@@ -32,11 +41,20 @@ namespace Inno.Native.ImGui
             InitApi(new NativeLibraryContext(handle));
         }
 
-        public static string GetLibraryName()
+        /// <summary>
+        /// Retrieves the requested library name value from current authoritative state.
+        /// </summary>
+        /// <returns>
+        /// The validated text representation owned by the caller.
+        /// </returns>
+public static string GetLibraryName()
         {
             return "cimgui";
         }
 
-        public const nint ImDrawCallbackResetRenderState = -8;
+        /// <summary>
+        /// The im draw callback reset render state value used as part of this type's public representation.
+        /// </summary>
+public const nint ImDrawCallbackResetRenderState = -8;
     }
 }

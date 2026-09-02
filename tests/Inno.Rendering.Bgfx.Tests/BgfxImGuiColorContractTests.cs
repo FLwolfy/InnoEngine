@@ -1,5 +1,5 @@
 using Inno.Rendering.Bgfx;
-using Inno.Rendering.ImGui;
+using Inno.Rendering.Bgfx.ImGui;
 using Xunit;
 
 namespace Inno.Rendering.Bgfx.Tests;

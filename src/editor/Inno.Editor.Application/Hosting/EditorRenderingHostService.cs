@@ -2,13 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 
-using Inno.Core.Assemblies;
+using Inno.Extensibility.Modules;
 using Inno.Editor.Core;
 using Inno.Editor.Rendering;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using Inno.Rendering;
-using Inno.Rendering.Core;
-using Inno.Rendering.ImGui;
+using Inno.Rendering.Bgfx.ImGui;
 using Inno.Rendering.Runtime;
 
 namespace Inno.Editor.Application;
@@ -28,15 +27,25 @@ internal sealed class EditorRenderingHostService :
     internal EditorRenderingHostService(
         RenderRuntimeLayer runtime,
         BgfxImGuiRenderer renderer,
-        PlatformImGuiContext imgui)
+        PlatformImGuiContext imgui,
+        EditorReloadCoordinator reloads)
     {
         m_runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
         m_renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
         m_imgui = imgui ?? throw new ArgumentNullException(nameof(imgui));
-        m_reloadRegistration = EditorReloadCoordinator.Register(this);
+        ArgumentNullException.ThrowIfNull(reloads);
+        m_reloadRegistration = reloads.Register(this);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Submits validated work to the active backend for ordered processing.
+    /// </summary>
+    /// <param name="request">
+    /// The validated immutable request that defines this operation.
+    /// </param>
+    /// <returns>
+    /// The validated editor viewport output that represents the completed operation.
+    /// </returns>
     public EditorViewportOutput Submit(EditorViewportRequest request)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -76,7 +85,15 @@ internal sealed class EditorRenderingHostService :
             request.pixelHeight);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="output">
+    /// The import output writer that receives runtime data and dependency declarations.
+    /// </param>
+    /// <param name="logicalSize">
+    /// The logical size consumed by draw; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     public void Draw(EditorViewportOutput output, Vector2 logicalSize)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -88,7 +105,12 @@ internal sealed class EditorRenderingHostService :
         m_imgui.DrawImage(output.texture, logicalSize);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Releases the caller-owned value lifetime and its retained resources.
+    /// </summary>
+    /// <param name="viewportId">
+    /// The viewport id text validated by the release operation.
+    /// </param>
     public void Release(string viewportId)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -99,7 +121,9 @@ internal sealed class EditorRenderingHostService :
         m_runtime.targets.Release(state.target);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Releases the caller-owned all lifetime and its retained resources.
+    /// </summary>
     public void ReleaseAll()
     {
         if (m_disposed)
@@ -112,7 +136,9 @@ internal sealed class EditorRenderingHostService :
         m_viewports.Clear();
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Releases the resources owned by this implementation.
+    /// </summary>
     public void Dispose()
     {
         if (m_disposed)
@@ -155,22 +181,37 @@ internal sealed class EditorRenderingHostService :
     }
 
     private sealed class RenderingReloadTransaction(
-        RenderRuntimeLayer.RenderRuntimeReloadSession session) : IEditorReloadTransaction
+        IRenderRuntimeReloadTransaction session) : IEditorReloadTransaction
     {
+        /// <summary>
+        /// Builds and validates candidate state without changing the active generation.
+        /// </summary>
         public void PrepareForActivation()
         {
         }
 
+        /// <summary>
+        /// Applies a validated change atomically at the caller-controlled commit point.
+        /// </summary>
         public void Apply()
         {
-            session.PrepareCandidate();
+            session.Prepare();
             session.Activate();
         }
 
+        /// <summary>
+        /// Finalizes candidate activation and releases temporary transaction state.
+        /// </summary>
         public void Complete() => session.Complete();
 
+        /// <summary>
+        /// Restores the state captured before the current transaction began.
+        /// </summary>
         public void RollbackStructure() => session.Rollback();
 
+        /// <summary>
+        /// Restores the state captured before the current transaction began.
+        /// </summary>
         public void RestorePreviousState()
         {
         }

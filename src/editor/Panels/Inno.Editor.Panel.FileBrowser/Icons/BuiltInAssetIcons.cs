@@ -1,4 +1,4 @@
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using Inno.Editor.Settings;
 
 namespace Inno.Editor.Panel.FileBrowser;
@@ -14,7 +14,6 @@ namespace Inno.Editor.Panel.FileBrowser;
 [AssetIcon(".dat", ImGuiIcon.File)]
 [AssetIcon(".iscene", "Editor/Appearance/Icons/Scene")]
 [AssetIcon(".iprefab", "Editor/Appearance/Icons/Prefab")]
-[AssetIcon(".iplugin", ImGuiIcon.Plug)]
 [AssetIcon(".cs", ImGuiIcon.FileCode)]
 [AssetIcon(".iasmdef", ImGuiIcon.Gears)]
 internal static class BuiltInAssetIcons;

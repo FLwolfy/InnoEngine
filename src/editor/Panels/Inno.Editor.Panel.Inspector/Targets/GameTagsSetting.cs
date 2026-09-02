@@ -7,9 +7,9 @@ using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Editor.Settings;
-using Inno.Engine.Scene;
+using Inno.Scene;
 using Inno.Native.ImGui;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Inspector;
@@ -22,17 +22,28 @@ internal sealed class GameTagsSetting : ProjectSettingEditor<GameTagCatalog>
     private string m_error = string.Empty;
     private string m_newTag = string.Empty;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the stable project-setting identity used for discovery and persistence.
+    /// </summary>
     public override ProjectSettingId settingId => GameTagCatalog.settingId;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the presentation section that groups this setting.
+    /// </summary>
     public override string section => "Definitions";
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the user-facing explanation of this feature or setting.
+    /// </summary>
     public override string description
         => "Define the project-wide runtime tags that scenes and Plugins may assign to GameObjects.";
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Draws this feature using the current editor presentation context.
+    /// </summary>
+    /// <param name="setting">
+    /// The mutable editor setting value currently being presented.
+    /// </param>
     protected override void OnDraw(GameTagCatalog setting)
     {
         DrawAddRow(setting);

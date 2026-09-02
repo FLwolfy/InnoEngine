@@ -23,13 +23,19 @@ public abstract class EditorState
     /// <summary>
     /// Reads a compatible value or returns the caller-provided fallback.
     /// </summary>
-    /// <typeparam name="T">The neutral value type expected by the caller.</typeparam>
-    /// <param name="key">The stable key local to the owning module or panel.</param>
+    /// <typeparam name="T">
+    /// The neutral value type expected by the caller.
+    /// </typeparam>
+    /// <param name="key">
+    /// The stable key local to the owning module or panel.
+    /// </param>
     /// <param name="fallback">
     /// The value returned when the key is absent, malformed, or incompatible with
     /// <typeparamref name="T"/>.
     /// </param>
-    /// <returns>The stored compatible value, or <paramref name="fallback"/>.</returns>
+    /// <returns>
+    /// The stored compatible value, or <paramref name="fallback"/>.
+    /// </returns>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="key"/> is empty.
     /// </exception>
@@ -38,9 +44,15 @@ public abstract class EditorState
     /// <summary>
     /// Writes one neutral value under a stable extension-local key.
     /// </summary>
-    /// <typeparam name="T">The neutral value type supplied by the caller.</typeparam>
-    /// <param name="key">The stable key local to the owning module or panel.</param>
-    /// <param name="value">The value to persist.</param>
+    /// <typeparam name="T">
+    /// The neutral value type supplied by the caller.
+    /// </typeparam>
+    /// <param name="key">
+    /// The stable key local to the owning module or panel.
+    /// </param>
+    /// <param name="value">
+    /// The value to persist.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="key"/> is empty.
     /// </exception>

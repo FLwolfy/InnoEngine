@@ -14,15 +14,33 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws a component-style collapsible card header.
     /// </summary>
-    /// <param name="id">The stable card identifier.</param>
-    /// <param name="title">The visible card title.</param>
-    /// <param name="drawLeadingControl">An optional control drawn before the title.</param>
-    /// <param name="drawTrailingControl">An optional control aligned to the right edge.</param>
-    /// <param name="defaultOpen">Whether the card starts expanded.</param>
-    /// <param name="dimmed">Whether header controls and title use the inactive text color.</param>
-    /// <param name="trailingControlWidth">The optional width reserved for the trailing control group.</param>
-    /// <param name="drawContextMenu">An optional callback that binds a context menu to the complete header item.</param>
-    /// <returns><see langword="true"/> when card content should be drawn; otherwise, <see langword="false"/>.</returns>
+    /// <param name="id">
+    /// The stable card identifier.
+    /// </param>
+    /// <param name="title">
+    /// The visible card title.
+    /// </param>
+    /// <param name="drawLeadingControl">
+    /// An optional control drawn before the title.
+    /// </param>
+    /// <param name="drawTrailingControl">
+    /// An optional control aligned to the right edge.
+    /// </param>
+    /// <param name="defaultOpen">
+    /// Whether the card starts expanded.
+    /// </param>
+    /// <param name="dimmed">
+    /// Whether header controls and title use the inactive text color.
+    /// </param>
+    /// <param name="trailingControlWidth">
+    /// The optional width reserved for the trailing control group.
+    /// </param>
+    /// <param name="drawContextMenu">
+    /// An optional callback that binds a context menu to the complete header item.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when card content should be drawn; otherwise, <see langword="false"/>.
+    /// </returns>
     public static bool CollapsingCard(
         string id,
         string title,
@@ -167,10 +185,18 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws a vertically centered disclosure triangle with button-style hover feedback.
     /// </summary>
-    /// <param name="min">The minimum screen coordinate of the indicator area.</param>
-    /// <param name="max">The maximum screen coordinate of the indicator area.</param>
-    /// <param name="open">Whether the represented content is expanded.</param>
-    /// <param name="dimmed">Whether the indicator uses the inactive text color.</param>
+    /// <param name="min">
+    /// The minimum screen coordinate of the indicator area.
+    /// </param>
+    /// <param name="max">
+    /// The maximum screen coordinate of the indicator area.
+    /// </param>
+    /// <param name="open">
+    /// Whether the represented content is expanded.
+    /// </param>
+    /// <param name="dimmed">
+    /// Whether the indicator uses the inactive text color.
+    /// </param>
     public static void DrawDisclosureIndicator(
         Vector2 min,
         Vector2 max,
@@ -207,9 +233,15 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws expanded collapsible-card content inside a framed body.
     /// </summary>
-    /// <param name="id">The stable card identifier.</param>
-    /// <param name="drawContent">The callback that draws card content.</param>
-    /// <param name="dimmed">Whether content is visually disabled and non-interactive.</param>
+    /// <param name="id">
+    /// The stable card identifier.
+    /// </param>
+    /// <param name="drawContent">
+    /// The callback that draws card content.
+    /// </param>
+    /// <param name="dimmed">
+    /// Whether content is visually disabled and non-interactive.
+    /// </param>
     public static void CardBody(string id, Action drawContent, bool dimmed = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);

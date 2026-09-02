@@ -5,7 +5,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading;
 
-using Inno.Core.Assemblies;
+using Inno.Extensibility.Modules;
 
 namespace Inno.Core.Logging;
 
@@ -18,14 +18,29 @@ public static class Log
 
     private sealed class TypeInfo
     {
+        /// <summary>
+        /// Gets the assembly domain that produced this script log call.
+        /// </summary>
         public required AssemblyDomain domain { get; init; }
+        /// <summary>
+        /// Gets the assembly scope captured for this script log call.
+        /// </summary>
         public required AssemblyScope scope { get; init; }
+        /// <summary>
+        /// Gets text used for stable identity, presentation, or diagnostics by this contract.
+        /// </summary>
         public required string category { get; init; }
     }
 
     private sealed class AssemblySource
     {
+        /// <summary>
+        /// Gets the assembly domain that produced this script log call.
+        /// </summary>
         public required AssemblyDomain domain { get; init; }
+        /// <summary>
+        /// Gets the assembly scope captured for this script log call.
+        /// </summary>
         public required AssemblyScope scope { get; init; }
     }
 
@@ -35,7 +50,9 @@ public static class Log
     /// <summary>
     /// Writes a debug-level message using the object's string representation.
     /// </summary>
-    /// <param name="obj">The object to log.</param>
+    /// <param name="obj">
+    /// The object to log.
+    /// </param>
     [Conditional("DEBUG")]
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Debug(object? obj)
@@ -44,8 +61,12 @@ public static class Log
     /// <summary>
     /// Writes a formatted debug-level message.
     /// </summary>
-    /// <param name="message">The composite format string.</param>
-    /// <param name="args">The format arguments.</param>
+    /// <param name="message">
+    /// The composite format string.
+    /// </param>
+    /// <param name="args">
+    /// The format arguments.
+    /// </param>
     [Conditional("DEBUG")]
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Debug(string message, params object[]? args)
@@ -54,7 +75,9 @@ public static class Log
     /// <summary>
     /// Writes an info-level message using the object's string representation.
     /// </summary>
-    /// <param name="obj">The object to log.</param>
+    /// <param name="obj">
+    /// The object to log.
+    /// </param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Info(object? obj)
         => Write(LogLevel.Info, $"{obj}", null);
@@ -62,8 +85,12 @@ public static class Log
     /// <summary>
     /// Writes a formatted info-level message.
     /// </summary>
-    /// <param name="message">The composite format string.</param>
-    /// <param name="args">The format arguments.</param>
+    /// <param name="message">
+    /// The composite format string.
+    /// </param>
+    /// <param name="args">
+    /// The format arguments.
+    /// </param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Info(string message, params object[]? args)
         => Write(LogLevel.Info, message, args);
@@ -71,7 +98,9 @@ public static class Log
     /// <summary>
     /// Writes a warning-level message using the object's string representation.
     /// </summary>
-    /// <param name="obj">The object to log.</param>
+    /// <param name="obj">
+    /// The object to log.
+    /// </param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Warn(object? obj)
         => Write(LogLevel.Warn, $"{obj}", null);
@@ -79,8 +108,12 @@ public static class Log
     /// <summary>
     /// Writes a formatted warning-level message.
     /// </summary>
-    /// <param name="message">The composite format string.</param>
-    /// <param name="args">The format arguments.</param>
+    /// <param name="message">
+    /// The composite format string.
+    /// </param>
+    /// <param name="args">
+    /// The format arguments.
+    /// </param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Warn(string message, params object[]? args)
         => Write(LogLevel.Warn, message, args);
@@ -88,7 +121,9 @@ public static class Log
     /// <summary>
     /// Writes an error-level message using the object's string representation.
     /// </summary>
-    /// <param name="obj">The object to log.</param>
+    /// <param name="obj">
+    /// The object to log.
+    /// </param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Error(object? obj)
         => Write(LogLevel.Error, $"{obj}", null);
@@ -96,8 +131,12 @@ public static class Log
     /// <summary>
     /// Writes a formatted error-level message.
     /// </summary>
-    /// <param name="message">The composite format string.</param>
-    /// <param name="args">The format arguments.</param>
+    /// <param name="message">
+    /// The composite format string.
+    /// </param>
+    /// <param name="args">
+    /// The format arguments.
+    /// </param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Error(string message, params object[]? args)
         => Write(LogLevel.Error, message, args);
@@ -105,7 +144,9 @@ public static class Log
     /// <summary>
     /// Writes a fatal-level message using the object's string representation.
     /// </summary>
-    /// <param name="obj">The object to log.</param>
+    /// <param name="obj">
+    /// The object to log.
+    /// </param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Fatal(object? obj)
         => Write(LogLevel.Fatal, $"{obj}", null);
@@ -113,8 +154,12 @@ public static class Log
     /// <summary>
     /// Writes a formatted fatal-level message.
     /// </summary>
-    /// <param name="message">The composite format string.</param>
-    /// <param name="args">The format arguments.</param>
+    /// <param name="message">
+    /// The composite format string.
+    /// </param>
+    /// <param name="args">
+    /// The format arguments.
+    /// </param>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Fatal(string message, params object[]? args)
         => Write(LogLevel.Fatal, message, args);
@@ -122,10 +167,13 @@ public static class Log
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void Write(LogLevel level, string message, params object[]? args)
     {
-        if (!LogManager.IsEnabled(level)) return;
+        LogRouter router = LogRouter.current;
+        if (!router.IsEnabled(level))
+            return;
 
-        var sf = new StackFrame(2, true);
-        var method = sf.GetMethod();
+        var stackTrace = new StackTrace(2, true);
+        StackFrame? sf = stackTrace.GetFrame(0);
+        var method = sf?.GetMethod();
         var callerType = method?.DeclaringType;
 
         AssemblyDomain domain = AssemblyDomain.InnoInternal;
@@ -159,11 +207,20 @@ public static class Log
 
         var file = C_DEFAULT_CATEGORY;
         var line = 0;
-        var filePath = sf.GetFileName();
+        var filePath = sf?.GetFileName();
         file = string.IsNullOrWhiteSpace(filePath) ? C_DEFAULT_CATEGORY : filePath;
-        line = sf.GetFileLineNumber();
+        line = sf?.GetFileLineNumber() ?? 0;
         
-        LogManager.Dispatch(new LogEntry(level, domain, scope, category, msg, file, line));
+        router.Dispatch(new LogEntry(
+            level,
+            domain,
+            scope,
+            category,
+            msg,
+            file,
+            line,
+            stackTrace.ToString(),
+            LogSessionContext.current));
     }
 
 }

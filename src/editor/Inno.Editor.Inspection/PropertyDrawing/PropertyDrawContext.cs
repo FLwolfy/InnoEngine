@@ -22,7 +22,9 @@ public sealed class PropertyDrawContext
     /// </summary>
     public EditorContext editorContext { get; }
 
-    /// <summary>Gets the active editor interaction entry point.</summary>
+    /// <summary>
+    /// Gets the active editor interaction entry point.
+    /// </summary>
     public EditorInteractions interactions { get; }
 
     /// <summary>
@@ -83,13 +85,17 @@ public sealed class PropertyDrawContext
     /// <summary>
     /// Gets the latest value.
     /// </summary>
-    /// <returns>The latest value returned by the serialized property's getter.</returns>
+    /// <returns>
+    /// The latest value returned by the serialized property's getter.
+    /// </returns>
     public object? GetValue() => m_getter();
 
     /// <summary>
     /// Assigns a value when the property is writable.
     /// </summary>
-    /// <param name="value">New value.</param>
+    /// <param name="value">
+    /// New value.
+    /// </param>
     public void SetValue(object? value)
     {
         if (isReadOnly)
@@ -106,11 +112,21 @@ public sealed class PropertyDrawContext
     /// <summary>
     /// Draws a nested value whose setter writes through this property path.
     /// </summary>
-    /// <param name="childName">The stable child member name appended to this property path.</param>
-    /// <param name="childType">The declared type used to resolve a property drawer.</param>
-    /// <param name="getter">The callback that reads the latest child value.</param>
-    /// <param name="setter">The callback that writes an edited child value.</param>
-    /// <param name="readOnly">Whether the child should be presented without assignment support.</param>
+    /// <param name="childName">
+    /// The stable child member name appended to this property path.
+    /// </param>
+    /// <param name="childType">
+    /// The declared type used to resolve a property drawer.
+    /// </param>
+    /// <param name="getter">
+    /// The callback that reads the latest child value.
+    /// </param>
+    /// <param name="setter">
+    /// The callback that writes an edited child value.
+    /// </param>
+    /// <param name="readOnly">
+    /// Whether the child should be presented without assignment support.
+    /// </param>
     public void DrawChild(
         string childName,
         Type childType,
@@ -136,7 +152,9 @@ public sealed class PropertyDrawContext
     /// <summary>
     /// Draws a nested serialized property.
     /// </summary>
-    /// <param name="property">Nested property.</param>
+    /// <param name="property">
+    /// Nested property.
+    /// </param>
     public void DrawChild(SerializedProperty property)
     {
         ArgumentNullException.ThrowIfNull(property);
@@ -155,11 +173,21 @@ public sealed class PropertyDrawContext
     /// <summary>
     /// Draws a nested value inline without adding another label row.
     /// </summary>
-    /// <param name="childName">The stable child member name appended to this property path.</param>
-    /// <param name="childType">The declared type used to resolve a property drawer.</param>
-    /// <param name="getter">The callback that reads the latest child value.</param>
-    /// <param name="setter">The callback that writes an edited child value.</param>
-    /// <param name="readOnly">Whether the child should be presented without assignment support.</param>
+    /// <param name="childName">
+    /// The stable child member name appended to this property path.
+    /// </param>
+    /// <param name="childType">
+    /// The declared type used to resolve a property drawer.
+    /// </param>
+    /// <param name="getter">
+    /// The callback that reads the latest child value.
+    /// </param>
+    /// <param name="setter">
+    /// The callback that writes an edited child value.
+    /// </param>
+    /// <param name="readOnly">
+    /// Whether the child should be presented without assignment support.
+    /// </param>
     public void DrawInlineChild(
         string childName,
         Type childType,

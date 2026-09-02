@@ -8,13 +8,17 @@
     <InnoAssemblyScope>Editor</InnoAssemblyScope>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Inno.Editor.Core\Inno.Editor.Core.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\scripting\Inno.Scripting.Compiler\Inno.Scripting.Compiler.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Editor.Scene\Inno.Editor.Scene.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Editor.Scripting\Inno.Editor.Scripting.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Input\Inno.Core.Input.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\scene\Inno.Scene\Inno.Scene.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Editor.Core\Inno.Editor.Core.csproj" />
+    <ProjectReference Include="..\..\runtime\Inno.Runtime\Inno.Runtime.csproj" />
   </ItemGroup>
 </Project>

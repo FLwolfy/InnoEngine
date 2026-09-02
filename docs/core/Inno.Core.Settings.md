@@ -1,6 +1,6 @@
 # Inno.Core.Settings
 
-[Core 索引](README.md) · [Wiki 首页](../README.md) · [Plugin](../assets/Inno.Assets.Plugins.md) · [Editor Settings](../editor/Inno.Editor.Settings.md)
+[Core 索引](README.md) · [Wiki 首页](../README.md) · [Plugin](../plugins/Inno.Plugins.Authoring.md) · [Editor Settings](../editor/Inno.Editor.Settings.md)
 
 `Inno.Core.Settings` 提供宿主中立、强类型、可热重载的 runtime/Plugin 项目设置。它不依赖 Editor、Rendering、Scene 或 Plugin Loader；Game Layers、Tags、渲染质量、输入映射及任意 Plugin 协议都只是普通设置定义。
 
@@ -22,12 +22,12 @@ public sealed class SampleRenderingSettings : ISerializable
 }
 
 SampleRenderingSettings settings =
-    ProjectSettingsManager.Get<SampleRenderingSettings>(SampleRenderingSettings.settingId);
+    ProjectSettingsStore.Get<SampleRenderingSettings>(SampleRenderingSettings.settingId);
 ```
 
 设置类型必须是带无参构造函数的非抽象 `ISerializable` class，并拥有 `StableTypeId`。`Get`/`TryGet` 每次返回隔离快照，调用方不能通过修改返回对象绕过 Apply，也不会把 Plugin generation 实例固定在 Host cache 中。
 
-`ProjectSettingsManager.revision` 是单调递增的有效设置快照编号。需要长期观察变化的 Host/Plugin runtime 可以比较 revision 后重新 `Get`；核心不提供会把 collectible ALC subscriber 固定住的静态 change event。
+`ProjectSettingsStore.revision` 是单调递增的有效设置快照编号。需要长期观察变化的 Host/Plugin runtime 可以比较 revision 后重新 `Get`；核心不提供会把 collectible ALC subscriber 固定住的静态 change event。
 
 ## 持久化、增量与合成
 
@@ -103,13 +103,20 @@ internal sealed class SampleComposer
 | `ProjectSettingsContributor` | 依赖有序的 Plugin 默认贡献。 |
 | `ProjectSettingsDocument` | 项目最高优先级 contribution 的原生序列化文档。 |
 | `ProjectSettings` | Host 使用的实例服务：clone、合成、批量 Apply、恢复与原子写入。 |
-| `ProjectSettingsManager` | 项目级唯一读取入口与 Host transaction 边界。 |
+| `ProjectSettingsStore` | 项目级唯一读取入口与 Host transaction 边界。 |
+| `IProjectSettingsLookup` | Editor 与 Player 共用的最小只读有效设置边界。 |
+| `Settings` | 项目脚本使用的无状态读取门面，只解析当前异步执行作用域。 |
+| `ProjectSettingsExecutionContext` | Composition Root 使用的严格 LIFO Session 绑定边界。 |
 
-面向项目脚本的常用 API 是 `ProjectSettingId`、`ProjectSettingDefinitionAttribute` 和 `ProjectSettingsManager.Get/TryGet/revision`。记录、Contributor、文档替换与初始化由 Plugin/Host 基础设施拥有。
+面向项目脚本的常用 API 是 `ProjectSettingId`、`ProjectSettingDefinitionAttribute` 和
+`Settings.Get/TryGet/revision`。`Settings` 不保存静态可变数据；Editor 与 Player Host 使用
+`ProjectSettingsExecutionContext.EnterScope(IProjectSettingsLookup)` 绑定当前 Session，并通过
+`AsyncLocal` 隔离并行异步流。记录、Contributor、文档替换、初始化和 Store 生命周期仍由
+Plugin/Host 基础设施拥有。
 
 ## Layer 与 Tag 的位置
 
-`GameLayerStack` 与 `GameTagCatalog` 是 `Inno.Engine.Scene` 提供的两个普通 Project Setting：
+`GameLayerStack` 与 `GameTagCatalog` 是 `Inno.Scene` 提供的两个普通 Project Setting：
 
 - Project Settings 保存可用 Layer/Tag 的定义。
 - Scene/Prefab 保存每个 GameObject 的 `layer` slot 与 `tag` value；Layer definition 另外拥有跨 Plugin 稳定的 `GameLayerId`。

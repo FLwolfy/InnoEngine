@@ -5,218 +5,147 @@ using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 using Inno.Editor.Scene;
 using Inno.Editor.Scripting;
-using Inno.Engine.Scene;
+using Inno.Runtime;
 
 namespace Inno.Editor.PlayMode;
 
-/// <summary>Coordinates script readiness, scene isolation, history isolation, and game simulation.</summary>
 [EditorModule("play-mode", order: 220)]
 internal sealed class EditorPlayModeModule : EditorModule, IEditorPlayMode
 {
-    private readonly EditorInteractions m_interactions;
+    private readonly EditorPlayModeController m_controller;
     private readonly EditorPlayModeLoop m_loop;
-    private readonly IEditorScenePlayMode m_scenes;
-    private readonly IEditorScriptCompilation m_scripting;
+    private readonly EditorReloadCoordinator m_reloads;
 
-    private IDisposable? m_historyIsolation;
-    private IEditorScenePlayModeSession? m_sceneSession;
-    private EditorPlayModeState m_state;
-    private string? m_lastFailure;
+    private IDisposable? m_reloadRegistration;
 
     internal EditorPlayModeModule(
         EditorPlayModeLoop loop,
+        EngineHost engineHost,
+        RuntimeSessionOptions runtimeOptions,
         IEditorScenePlayMode scenes,
         IEditorScriptCompilation scripting,
-        EditorInteractions interactions)
+        EditorInteractions interactions,
+        EditorReloadCoordinator reloads)
     {
         m_loop = loop ?? throw new ArgumentNullException(nameof(loop));
-        m_scenes = scenes ?? throw new ArgumentNullException(nameof(scenes));
-        m_scripting = scripting ?? throw new ArgumentNullException(nameof(scripting));
-        m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
+        m_reloads = reloads ?? throw new ArgumentNullException(nameof(reloads));
+        m_controller = new EditorPlayModeController(
+            engineHost,
+            runtimeOptions,
+            scenes,
+            scripting,
+            interactions,
+            engineHost.logs);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets whether the current transition must prevent lower-priority editor updates.
+    /// </summary>
     public override bool blocksFollowingUpdates
-        => m_state is EditorPlayModeState.EnteringPlay or EditorPlayModeState.ExitingPlay;
+        => state is EditorPlayModeState.Compiling or EditorPlayModeState.Preparing or EditorPlayModeState.Stopping;
 
-    /// <inheritdoc />
-    public EditorPlayModeState state => m_state;
+    /// <summary>
+    /// Gets the current lifecycle state observed by callers.
+    /// </summary>
+    public EditorPlayModeState state => m_controller.state;
 
-    /// <inheritdoc />
-    public bool isPlaying => m_state == EditorPlayModeState.Playing;
+    /// <summary>
+    /// Gets whether an isolated runtime session is actively simulating.
+    /// </summary>
+    public bool isPlaying => m_controller.isPlaying;
 
-    /// <inheritdoc />
-    public string? lastFailure => m_lastFailure;
+    /// <summary>
+    /// Gets the most recent transition failure, or <see langword="null"/> when no failure is active.
+    /// </summary>
+    public string? lastFailure => m_controller.lastFailure;
 
-    /// <inheritdoc />
-    public event Action<EditorPlayModeState>? stateChanged;
+    /// <summary>
+    /// Gets the isolated log session that owns the current Play Mode request.
+    /// </summary>
+    public LogSessionId activeSessionId => m_controller.activeSessionId;
 
-    /// <inheritdoc />
-    public bool EnterPlayMode()
+    /// <summary>
+    /// Occurs after the Play Mode transition state changes.
+    /// </summary>
+    public event Action<EditorPlayModeState>? stateChanged
     {
-        if (m_state != EditorPlayModeState.Editing)
-            return false;
-        m_lastFailure = null;
-        SetState(EditorPlayModeState.EnteringPlay);
-        return true;
+        add => m_controller.stateChanged += value;
+        remove => m_controller.stateChanged -= value;
     }
 
-    /// <inheritdoc />
-    public bool ExitPlayMode()
+    /// <summary>
+    /// Requests entry after the active script generation becomes ready.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> when a new entry request was accepted; otherwise, <see langword="false"/>.
+    /// </returns>
+    public bool EnterPlayMode() => m_controller.EnterPlayMode();
+
+    /// <summary>
+    /// Requests disposal of the active runtime session or dismisses a failed transition.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> when entry was cancelled or a new exit request was accepted; otherwise, <see langword="false"/>.
+    /// </returns>
+    public bool ExitPlayMode() => m_controller.ExitPlayMode();
+
+    /// <summary>
+    /// Initializes this feature after its owning runtime has activated all required services.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    protected override void OnStart(EditorContext context)
     {
-        switch (m_state)
+        m_reloadRegistration = m_reloads.Register(m_controller);
+        try
         {
-            case EditorPlayModeState.EnteringPlay when m_sceneSession is null:
-                SetState(EditorPlayModeState.Editing);
-                return true;
-            case EditorPlayModeState.Playing:
-                SetState(EditorPlayModeState.ExitingPlay);
-                return true;
-            default:
-                return false;
+            m_loop.Attach(m_controller);
+        }
+        catch
+        {
+            m_reloadRegistration.Dispose();
+            m_reloadRegistration = null;
+            throw;
         }
     }
 
-    /// <inheritdoc />
-    protected override void OnStart(EditorContext context) => m_loop.Attach(this);
-
-    /// <inheritdoc />
+    /// <summary>
+    /// Advances this feature once using the current editor or runtime frame state.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
     protected override void OnUpdate(EditorContext context)
-    {
-        if (m_state == EditorPlayModeState.EnteringPlay)
-            TryEnterPlayMode();
-        else if (m_state == EditorPlayModeState.ExitingPlay)
-            TryExitPlayMode();
-    }
+        => m_controller.AdvanceTransition();
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Stops this feature before its owning runtime releases generation-scoped services.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
     protected override void OnStop(EditorContext context)
     {
         try
         {
-            RestoreEditingState();
+            m_loop.Detach(m_controller);
+            m_controller.Dispose();
         }
         finally
         {
-            m_loop.Detach(this);
-            SetState(EditorPlayModeState.Editing);
+            m_reloadRegistration?.Dispose();
+            m_reloadRegistration = null;
         }
     }
 
-    internal void FixedUpdate(float fixedDeltaTime)
-        => RunSimulation(() => SceneManager.FixedUpdate(fixedDeltaTime), "fixed update");
-
-    internal void UpdateSimulation(float deltaTime)
-        => RunSimulation(() => SceneManager.Update(deltaTime), "update");
-
-    internal void LateUpdate(float deltaTime)
-        => RunSimulation(() => SceneManager.LateUpdate(deltaTime), "late update");
-
-    private void TryEnterPlayMode()
+    /// <summary>
+    /// Releases resources retained by this feature after it has stopped.
+    /// </summary>
+    protected override void OnDispose()
     {
-        switch (m_scripting.state)
-        {
-            case EditorScriptCompilationState.Initializing:
-            case EditorScriptCompilationState.Compiling:
-                return;
-            case EditorScriptCompilationState.Failed:
-                m_lastFailure = CreateCompilationFailure();
-                SetState(EditorPlayModeState.Editing);
-                return;
-            case EditorScriptCompilationState.Ready:
-                break;
-            default:
-                throw new ArgumentOutOfRangeException();
-        }
-
-        IDisposable? historyIsolation = null;
-        try
-        {
-            historyIsolation = m_interactions.BeginHistoryIsolation();
-            IEditorScenePlayModeSession sceneSession = m_scenes.BeginPlayMode();
-            m_historyIsolation = historyIsolation;
-            m_sceneSession = sceneSession;
-            SetState(EditorPlayModeState.Playing);
-        }
-        catch (Exception exception)
-        {
-            historyIsolation?.Dispose();
-            m_lastFailure = $"Play Mode could not start: {exception.Message}";
-            Log.Error("Play Mode entry failed: {0}", exception);
-            SetState(EditorPlayModeState.Editing);
-        }
-    }
-
-    private void TryExitPlayMode()
-    {
-        try
-        {
-            RestoreEditingState();
-            SetState(EditorPlayModeState.Editing);
-        }
-        catch (Exception exception)
-        {
-            m_lastFailure = $"Edit Mode could not be restored: {exception.Message}";
-            Log.Error("Play Mode exit failed and will be retried: {0}", exception);
-        }
-    }
-
-    private void RestoreEditingState()
-    {
-        m_sceneSession?.Restore();
-        m_sceneSession = null;
-        m_historyIsolation?.Dispose();
-        m_historyIsolation = null;
-    }
-
-    private void RunSimulation(Action callback, string phase)
-    {
-        if (m_state != EditorPlayModeState.Playing)
-            return;
-        try
-        {
-            callback();
-        }
-        catch (Exception exception)
-        {
-            m_lastFailure = $"Play Mode {phase} failed: {exception.Message}";
-            Log.Error("Play Mode {0} failed; Edit Mode restoration was requested: {1}", phase, exception);
-            SetState(EditorPlayModeState.ExitingPlay);
-        }
-    }
-
-    private string CreateCompilationFailure()
-    {
-        ScriptCompilationResult? compilation = m_scripting.lastCompilation;
-        if (compilation is null)
-            return $"Play Mode requires a valid script generation. {m_scripting.status}";
-        for (int i = 0; i < compilation.diagnostics.Count; i++)
-        {
-            ScriptDiagnostic diagnostic = compilation.diagnostics[i];
-            if (diagnostic.severity == ScriptDiagnosticSeverity.Error)
-                return $"Play Mode is unavailable because scripts did not compile: {diagnostic.message}";
-        }
-        return "Play Mode is unavailable because the active script compilation failed.";
-    }
-
-    private void SetState(EditorPlayModeState value)
-    {
-        if (m_state == value)
-            return;
-        m_state = value;
-        Action<EditorPlayModeState>? handlers = stateChanged;
-        if (handlers is null)
-            return;
-        foreach (Action<EditorPlayModeState> handler in handlers.GetInvocationList())
-        {
-            try
-            {
-                handler(value);
-            }
-            catch (Exception exception)
-            {
-                Log.Error("A Play Mode state subscriber failed: {0}", exception);
-            }
-        }
+        m_reloadRegistration?.Dispose();
+        m_reloadRegistration = null;
+        m_controller.Dispose();
     }
 }

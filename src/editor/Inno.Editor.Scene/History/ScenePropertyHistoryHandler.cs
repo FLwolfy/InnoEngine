@@ -2,11 +2,9 @@ using System;
 using System.Diagnostics;
 using System.Linq;
 
-using Inno.Core.Identity;
 using Inno.Core.Serialization;
 using Inno.Editor.Interactions;
-using Inno.Engine.Scene;
-using Inno.Engine.Scene.Assets;
+using Inno.Scene;
 
 namespace Inno.Editor.Scene;
 
@@ -14,7 +12,28 @@ namespace Inno.Editor.Scene;
 internal sealed class ScenePropertyHistoryHandler : EditorHistoryHandler
 {
     private const double C_MERGE_WINDOW_SECONDS = 1.0;
+    private readonly EditorSceneWorkspace m_workspace;
 
+    internal ScenePropertyHistoryHandler(EditorSceneWorkspace workspace)
+    {
+        m_workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
+    }
+
+    /// <summary>
+    /// Evaluates whether the requested change can be applied to the current generation.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="change">
+    /// The neutral change payload to query or apply.
+    /// </param>
+    /// <param name="direction">
+    /// The history direction that determines which state is applied.
+    /// </param>
+    /// <returns>
+    /// The validated editor history availability that represents the completed operation.
+    /// </returns>
     protected override EditorHistoryAvailability Query(
         EditorHistoryContext context,
         EditorHistoryChange change,
@@ -23,7 +42,7 @@ internal sealed class ScenePropertyHistoryHandler : EditorHistoryHandler
         try
         {
             ScenePropertyHistoryData data = ScenePropertyHistoryData.Decode(change.payload.ReadBytes());
-            EngineObject? target = IdentityManager.Get<EngineObject>(data.targetId);
+            EngineObject? target = m_workspace.Find<EngineObject>(data.targetId);
             if (target is null || target.isDestroyed)
                 return EditorHistoryAvailability.Unavailable($"Scene object '{data.targetId}' is no longer available.");
             if (target is not ISerializable serializable)
@@ -31,7 +50,7 @@ internal sealed class ScenePropertyHistoryHandler : EditorHistoryHandler
                 return EditorHistoryAvailability.Unavailable(
                     $"Scene object '{data.targetId}' is not serializable in the current generation.");
             }
-            bool propertyExists = SerializationManager.GetProperties(serializable).Any(property =>
+            bool propertyExists = m_workspace.serialization.GetProperties(serializable).Any(property =>
                 string.Equals(property.name, data.propertyName, StringComparison.Ordinal));
             return propertyExists
                 ? EditorHistoryAvailability.Available()
@@ -44,6 +63,21 @@ internal sealed class ScenePropertyHistoryHandler : EditorHistoryHandler
         }
     }
 
+    /// <summary>
+    /// Applies a validated change atomically at the caller-controlled commit point.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="change">
+    /// The neutral change payload to query or apply.
+    /// </param>
+    /// <param name="direction">
+    /// The history direction that determines which state is applied.
+    /// </param>
+    /// <returns>
+    /// The validated editor history result that represents the completed operation.
+    /// </returns>
     protected override EditorHistoryResult Apply(
         EditorHistoryContext context,
         EditorHistoryChange change,
@@ -54,7 +88,7 @@ internal sealed class ScenePropertyHistoryHandler : EditorHistoryHandler
         try
         {
             data = ScenePropertyHistoryData.Decode(change.payload.ReadBytes());
-            target = IdentityManager.Get<EngineObject>(data.targetId);
+            target = m_workspace.Find<EngineObject>(data.targetId);
             if (target is null || target.isDestroyed)
                 return EditorHistoryResult.Failure($"Scene object '{data.targetId}' is no longer available.");
         }
@@ -66,7 +100,10 @@ internal sealed class ScenePropertyHistoryHandler : EditorHistoryHandler
         byte[] rollback;
         try
         {
-            rollback = ScenePropertySerialization.CaptureProperty(target, data.propertyName);
+            rollback = ScenePropertySerialization.CaptureProperty(
+                target,
+                data.propertyName,
+                m_workspace.serialization);
         }
         catch (Exception exception)
         {
@@ -77,7 +114,8 @@ internal sealed class ScenePropertyHistoryHandler : EditorHistoryHandler
         {
             SerializationPropertyRestoreResult result = ScenePropertySerialization.RestoreProperties(
                 target,
-                direction == EditorHistoryDirection.Undo ? data.before : data.after);
+                direction == EditorHistoryDirection.Undo ? data.before : data.after,
+                m_workspace.serialization);
             if (!IsComplete(result))
                 throw new InvalidOperationException("The scene property restore was incomplete.");
             return EditorHistoryResult.Success();
@@ -87,7 +125,10 @@ internal sealed class ScenePropertyHistoryHandler : EditorHistoryHandler
             try
             {
                 SerializationPropertyRestoreResult rollbackResult =
-                    ScenePropertySerialization.RestoreProperties(target, rollback);
+                    ScenePropertySerialization.RestoreProperties(
+                        target,
+                        rollback,
+                        m_workspace.serialization);
                 if (!IsComplete(rollbackResult))
                     throw new InvalidOperationException("The scene property rollback was incomplete.");
             }
@@ -103,6 +144,21 @@ internal sealed class ScenePropertyHistoryHandler : EditorHistoryHandler
     private static bool IsComplete(SerializationPropertyRestoreResult result)
         => result.success && result.ignoredCount == 0 && result.restoredCount > 0;
 
+    /// <summary>
+    /// Attempts to merge without changing state when the operation cannot complete.
+    /// </summary>
+    /// <param name="older">
+    /// The earlier history payload considered for coalescing.
+    /// </param>
+    /// <param name="newer">
+    /// The later history payload considered for coalescing.
+    /// </param>
+    /// <param name="merged">
+    /// Receives the neutral coalesced payload when merging succeeds.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the requested condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     protected override bool TryMerge(
         EditorHistoryChange older,
         EditorHistoryChange newer,

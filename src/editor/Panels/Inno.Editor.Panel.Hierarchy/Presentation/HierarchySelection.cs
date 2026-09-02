@@ -10,8 +10,8 @@ using Inno.Editor.Settings;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
-using Inno.Engine.Scene;
-using Inno.Platform.ImGui;
+using Inno.Scene;
+using Inno.Platform.Sdl3.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Hierarchy;
@@ -36,7 +36,7 @@ internal sealed class HierarchySelection(
 
     internal bool DeleteObject(EditorContext context, Guid persistentId)
     {
-        GameObject? gameObject = IdentityManager.Get<GameObject>(persistentId);
+        GameObject? gameObject = IdentityAllocator.current.Get<GameObject>(persistentId);
         if (gameObject is null || !gameObject.isRuntimeValid || !ContainsScene(workspace.scenes, gameObject.scene))
             return false;
 
@@ -76,7 +76,7 @@ internal sealed class HierarchySelection(
                 .Get("Editor/Appearance/Icons/Scene")
                 .GetAsString("value", ImGuiIcon.Cubes)!,
             scene.name,
-            ReferenceEquals(scene, SceneManager.activeScene));
+            ReferenceEquals(scene, workspace.activeScene));
         if (!workspace.IsDirty(scene))
             return;
         NativeImGui.SameLine(0f, 0f);

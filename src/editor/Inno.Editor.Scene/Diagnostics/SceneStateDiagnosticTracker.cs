@@ -1,21 +1,29 @@
 using System;
 using System.Collections.Generic;
 
-using Inno.Core.Reflection;
-using Inno.Engine.Scene;
+using Inno.Extensibility.Types;
+using Inno.Scene;
 
 namespace Inno.Editor.Scene;
 
 internal sealed class SceneStateDiagnosticTracker
 {
+    private readonly SceneWorld m_world;
+    private readonly TypeCatalog m_types;
     private WeakReference<GameScene>[] m_scenes = [];
     private long m_typeCacheVersion = -1;
 
+    internal SceneStateDiagnosticTracker(SceneWorld world, TypeCatalog types)
+    {
+        m_world = world ?? throw new ArgumentNullException(nameof(world));
+        m_types = types ?? throw new ArgumentNullException(nameof(types));
+    }
+
     internal void Reconcile(bool force = false)
     {
-        IReadOnlyList<GameScene> scenes = SceneManager.loadedScenes;
-        long typeCacheVersion = TypeCacheManager.isInitialized
-            ? TypeCacheManager.current.version
+        IReadOnlyList<GameScene> scenes = m_world.loadedScenes;
+        long typeCacheVersion = m_types.isInitialized
+            ? m_types.current.version
             : -1;
         bool scenesChanged = scenes.Count != m_scenes.Length;
         if (!scenesChanged)
@@ -34,7 +42,7 @@ internal sealed class SceneStateDiagnosticTracker
         if (!force && !scenesChanged && typeCacheVersion == m_typeCacheVersion)
             return;
 
-        SceneStateDiagnosticPublisher.PublishMissingElements();
+        SceneStateDiagnosticPublisher.PublishMissingElements(scenes);
         var references = new WeakReference<GameScene>[scenes.Count];
         for (int i = 0; i < scenes.Count; i++)
             references[i] = new WeakReference<GameScene>(scenes[i]);

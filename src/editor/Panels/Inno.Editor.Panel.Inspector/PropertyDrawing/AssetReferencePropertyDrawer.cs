@@ -2,13 +2,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Numerics;
 
 using Inno.Assets;
-using Inno.Assets.Core;
-using Inno.Assets.File;
+using Inno.Assets.Pipeline;
 using Inno.Editor.Core;
 using Inno.Editor.Inspection;
 using Inno.Editor.Interactions;
@@ -21,26 +19,40 @@ using NativeImGui = Inno.Native.ImGui.ImGui;
 namespace Inno.Editor.Panel.Inspector;
 
 [PropertyDrawer(typeof(AssetObject), useForChildren: true, priority: 100)]
-internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
+internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer, IDisposable
 {
     private const nuint C_SEARCH_BUFFER_SIZE = 256;
 
-    private static readonly object C_SYNC = new();
-    private static ConditionalWeakTable<Type, CandidatesBox> s_candidatesByType = new();
-    private static readonly Dictionary<string, string> s_searchByPath = new(StringComparer.Ordinal);
+    private readonly object m_sync = new();
+    private readonly AssetPipeline m_assets;
+    private ConditionalWeakTable<Type, CandidatesBox> m_candidatesByType = new();
+    private readonly Dictionary<string, string> m_searchByPath = new(StringComparer.Ordinal);
 
-    static AssetReferencePropertyDrawer()
+    internal AssetReferencePropertyDrawer(AssetPipeline assets)
     {
-        AssetManager.Changed += static _ =>
-        {
-            lock (C_SYNC)
-            {
-                s_candidatesByType = new ConditionalWeakTable<Type, CandidatesBox>();
-            }
-        };
+        m_assets = assets ?? throw new ArgumentNullException(nameof(assets));
+        m_assets.Changed += OnAssetsChanged;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Unsubscribes from the owning asset pipeline and releases generation-bound candidate caches.
+    /// </summary>
+    public void Dispose()
+    {
+        m_assets.Changed -= OnAssetsChanged;
+        lock (m_sync)
+        {
+            m_candidatesByType = new ConditionalWeakTable<Type, CandidatesBox>();
+            m_searchByPath.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     public void Draw(PropertyDrawContext context)
     {
         Type assetType = context.propertyType;
@@ -79,7 +91,7 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
             return;
         try
         {
-            string search = s_searchByPath.TryGetValue(context.path, out string? existingSearch)
+            string search = m_searchByPath.TryGetValue(context.path, out string? existingSearch)
                 ? existingSearch
                 : string.Empty;
             _ = EditorWidget.SearchInput(
@@ -87,7 +99,7 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
                 "Search assets...",
                 ref search,
                 C_SEARCH_BUFFER_SIZE);
-            s_searchByPath[context.path] = search;
+            m_searchByPath[context.path] = search;
 
             if (NativeImGui.Selectable("None", persistentId == Guid.Empty))
                 context.SetValue(null);
@@ -121,26 +133,26 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
         }
     }
 
-    private static AssetCandidate[] GetCandidates(Type targetAssetType)
+    private AssetCandidate[] GetCandidates(Type targetAssetType)
     {
-        lock (C_SYNC)
+        lock (m_sync)
         {
-            if (s_candidatesByType.TryGetValue(targetAssetType, out CandidatesBox? cached))
+            if (m_candidatesByType.TryGetValue(targetAssetType, out CandidatesBox? cached))
                 return cached.candidates;
 
-            IReadOnlyList<AssetFileEntry> entries = AssetManager.GetFileSystemEntries(includeDirectories: false);
+            IReadOnlyList<AssetFileEntry> entries = m_assets.GetFileSystemEntries(includeDirectories: false);
             var candidates = new List<AssetCandidate>(entries.Count);
             for (int i = 0; i < entries.Count; i++)
             {
                 AssetFileEntry entry = entries[i];
-                if (!AssetManager.TryGetAssetType(entry.assetPath, out Type? assetType) ||
+                if (!m_assets.TryGetAssetType(entry.assetPath, out Type? assetType) ||
                     assetType is null ||
                     !targetAssetType.IsAssignableFrom(assetType))
                 {
                     continue;
                 }
 
-                if (AssetManager.TryGetPersistentId(entry.assetPath, out Guid persistentId))
+                if (m_assets.TryGetPersistentId(entry.assetPath, out Guid persistentId))
                 {
                     string name = Path.GetFileNameWithoutExtension(entry.assetPath.localPath);
                     string displayName = $"{entry.assetPath.source.value}:{name}";
@@ -158,7 +170,7 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
                     right.displayName,
                     StringComparison.OrdinalIgnoreCase));
             AssetCandidate[] result = candidates.ToArray();
-            s_candidatesByType.Add(targetAssetType, new CandidatesBox(result));
+            m_candidatesByType.Add(targetAssetType, new CandidatesBox(result));
             return result;
         }
     }
@@ -166,28 +178,21 @@ internal sealed class AssetReferencePropertyDrawer : IPropertyDrawer
     private static Guid ReadPersistentId(object? reference)
         => reference is AssetObject asset ? asset.identity.persistentId : Guid.Empty;
 
-    private static void AssignAsset(
+    private void AssignAsset(
         PropertyDrawContext context,
         Type assetType,
         AssetCandidate candidate)
     {
         if (ReadPersistentId(context.GetValue()) == candidate.persistentId)
             return;
-        object asset = LoadAsset(assetType, candidate.assetPath);
+        object asset = m_assets.Load(candidate.assetPath, assetType);
         context.SetValue(asset);
     }
 
-    private static object LoadAsset(Type assetType, AssetPath assetPath)
+    private void OnAssetsChanged(AssetChangeSet changes)
     {
-        MethodInfo method = Array.Find(
-            typeof(AssetManager).GetMethods(BindingFlags.Public | BindingFlags.Static),
-            candidate =>
-                candidate.Name == nameof(AssetManager.Load) &&
-                candidate.IsGenericMethodDefinition &&
-                candidate.GetParameters().Length == 1 &&
-                candidate.GetParameters()[0].ParameterType == typeof(AssetPath))
-            ?? throw new MissingMethodException(nameof(AssetManager), nameof(AssetManager.Load));
-        return method.MakeGenericMethod(assetType).Invoke(null, [assetPath])!;
+        lock (m_sync)
+            m_candidatesByType = new ConditionalWeakTable<Type, CandidatesBox>();
     }
 
     private sealed record AssetCandidate(

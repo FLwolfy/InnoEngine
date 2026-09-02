@@ -11,16 +11,27 @@ internal sealed class GameViewBackgroundSetting : EditorSetting
     internal const string C_PATH = "Editor/Appearance/Viewports/Game Background";
     private static readonly float[] S_DEFAULT = [0.035f, 0.04f, 0.05f, 1f];
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets a new value initialized to this setting's canonical default state.
+    /// </summary>
     public override EditorSettingObject defaultValue => CreateDefault();
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the presentation section that groups this setting.
+    /// </summary>
     public override string section => "Viewport Backgrounds";
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the user-facing explanation of this feature or setting.
+    /// </summary>
     public override string description => "Choose the default clear color supplied to the Game View provider.";
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Draws this feature using the current editor presentation context.
+    /// </summary>
+    /// <param name="setting">
+    /// The mutable editor setting value currently being presented.
+    /// </param>
     protected override void OnDraw(EditorSettingObject setting)
     {
         Vector4 value = ReadVector(setting);

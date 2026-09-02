@@ -8,11 +8,11 @@
     <InnoAssemblyScope>Editor</InnoAssemblyScope>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\core\Inno.Core.Diagnose\Inno.Core.Diagnose.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Diagnostics\Inno.Core.Diagnostics.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Identity\Inno.Core.Identity.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Inno.Editor.Core\Inno.Editor.Core.csproj" />

@@ -1,20 +1,32 @@
 namespace Inno.Editor.Interactions;
 
-/// <summary>Defines the standard visual used for a compatible drop target.</summary>
+/// <summary>
+/// Defines the standard visual used for a compatible drop target.
+/// </summary>
 public enum EditorDropVisual
 {
-    /// <summary>No visual is drawn.</summary>
+    /// <summary>
+    /// No visual is drawn.
+    /// </summary>
     None,
 
-    /// <summary>Draw a content highlight.</summary>
+    /// <summary>
+    /// Draw a content highlight.
+    /// </summary>
     Highlight,
 
-    /// <summary>Draw an insertion line before the target.</summary>
+    /// <summary>
+    /// Draw an insertion line before the target.
+    /// </summary>
     InsertBefore,
 
-    /// <summary>Draw an insertion line after the target.</summary>
+    /// <summary>
+    /// Draw an insertion line after the target.
+    /// </summary>
     InsertAfter,
 
-    /// <summary>Draw a disabled target visual.</summary>
+    /// <summary>
+    /// Draw a disabled target visual.
+    /// </summary>
     Disabled
 }

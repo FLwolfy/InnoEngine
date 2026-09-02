@@ -16,7 +16,9 @@ internal sealed class InspectionDrawerActivator
     /// <summary>
     /// Creates an activator over the dependencies available to built-in and extension drawers.
     /// </summary>
-    /// <param name="dependencies">The non-null dependency instances available for constructor injection.</param>
+    /// <param name="dependencies">
+    /// The non-null dependency instances available for constructor injection.
+    /// </param>
     internal InspectionDrawerActivator(params object[] dependencies)
     {
         ArgumentNullException.ThrowIfNull(dependencies);
@@ -28,8 +30,12 @@ internal sealed class InspectionDrawerActivator
     /// <summary>
     /// Creates one drawer by resolving its single constructor from the available dependencies.
     /// </summary>
-    /// <param name="drawerType">The concrete inspection drawer type to construct.</param>
-    /// <returns>The constructed inspection drawer.</returns>
+    /// <param name="drawerType">
+    /// The concrete inspection drawer type to construct.
+    /// </param>
+    /// <returns>
+    /// The constructed inspection drawer.
+    /// </returns>
     internal IInspectionDrawer Create(Type drawerType)
     {
         ArgumentNullException.ThrowIfNull(drawerType);

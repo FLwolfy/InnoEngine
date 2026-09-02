@@ -7,6 +7,18 @@ namespace Inno.Core.Mathematics;
 
 internal static class SimdMath
 {
+    /// <summary>
+    /// Calculates a four-component scalar dot product.
+    /// </summary>
+    /// <param name="a">
+    /// The first operand or interpolation endpoint.
+    /// </param>
+    /// <param name="b">
+    /// The second operand or interpolation endpoint.
+    /// </param>
+    /// <returns>
+    /// The scalar result calculated from the supplied inputs.
+    /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static float Dot4(Vector128<float> a, Vector128<float> b)
     {
@@ -28,6 +40,24 @@ internal static class SimdMath
             + a.GetElement(3) * b.GetElement(3);
     }
 
+    /// <summary>
+    /// Calculates a two-component scalar dot product.
+    /// </summary>
+    /// <param name="ax">
+    /// The ax consumed by dot2; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="ay">
+    /// The ay consumed by dot2; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="bx">
+    /// The bx consumed by dot2; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="by">
+    /// The by consumed by dot2; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// The scalar result calculated from the supplied inputs.
+    /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static float Dot2(float ax, float ay, float bx, float by)
     {
@@ -50,6 +80,30 @@ internal static class SimdMath
         return (ax * bx) + (ay * by);
     }
 
+    /// <summary>
+    /// Calculates a three-component scalar dot product.
+    /// </summary>
+    /// <param name="ax">
+    /// The ax consumed by dot3; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="ay">
+    /// The ay consumed by dot3; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="az">
+    /// The az consumed by dot3; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="bx">
+    /// The bx consumed by dot3; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="by">
+    /// The by consumed by dot3; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="bz">
+    /// The bz consumed by dot3; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// The scalar result calculated from the supplied inputs.
+    /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static float Dot3(float ax, float ay, float az, float bx, float by, float bz)
     {
@@ -72,6 +126,36 @@ internal static class SimdMath
         return (ax * bx) + (ay * by) + (az * bz);
     }
 
+    /// <summary>
+    /// Calculates a four-component scalar dot product.
+    /// </summary>
+    /// <param name="ax">
+    /// The ax consumed by dot4; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="ay">
+    /// The ay consumed by dot4; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="az">
+    /// The az consumed by dot4; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="aw">
+    /// The aw consumed by dot4; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="bx">
+    /// The bx consumed by dot4; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="by">
+    /// The by consumed by dot4; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="bz">
+    /// The bz consumed by dot4; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="bw">
+    /// The bw consumed by dot4; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// The scalar result calculated from the supplied inputs.
+    /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static float Dot4(float ax, float ay, float az, float aw, float bx, float by, float bz, float bw)
     {

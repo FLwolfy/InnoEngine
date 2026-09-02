@@ -2,7 +2,7 @@ using System;
 using System.Numerics;
 
 using Inno.Native.ImGui;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.ImGui.ImGuiWidget;
@@ -19,16 +19,28 @@ public static partial class ImGuiWidget
     /// Begins a combo whose popup retains a stable trigger-derived width, remains in the parent
     /// viewport, and becomes vertically scrollable when its submitted content exceeds its bound.
     /// </summary>
-    /// <param name="id">Stable combo identifier in the current ImGui scope.</param>
-    /// <param name="preview">Text displayed by the closed combo.</param>
-    /// <param name="flags">Native combo presentation flags.</param>
-    /// <param name="maximumVisibleItems">Preferred maximum number of ordinary rows before scrolling.</param>
+    /// <param name="id">
+    /// Stable combo identifier in the current ImGui scope.
+    /// </param>
+    /// <param name="preview">
+    /// Text displayed by the closed combo.
+    /// </param>
+    /// <param name="flags">
+    /// Native combo presentation flags.
+    /// </param>
+    /// <param name="maximumVisibleItems">
+    /// Preferred maximum number of ordinary rows before scrolling.
+    /// </param>
     /// <returns>
     /// <see langword="true"/> when the combo popup is open and its contents should be submitted;
     /// otherwise, <see langword="false"/>.
     /// </returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="id"/> is empty.</exception>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="preview"/> is null.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="id"/> is empty.
+    /// </exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="preview"/> is null.
+    /// </exception>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when <paramref name="maximumVisibleItems"/> is not positive.
     /// </exception>
@@ -60,9 +72,15 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws a compact selector control and begins a work-area-bounded menu popup.
     /// </summary>
-    /// <param name="id">Stable selector identifier in the current ImGui scope.</param>
-    /// <param name="preview">Text displayed by the closed selector.</param>
-    /// <param name="width">Width reserved for the selector control.</param>
+    /// <param name="id">
+    /// Stable selector identifier in the current ImGui scope.
+    /// </param>
+    /// <param name="preview">
+    /// Text displayed by the closed selector.
+    /// </param>
+    /// <param name="width">
+    /// Width reserved for the selector control.
+    /// </param>
     /// <param name="minimumPopupWidth">
     /// Minimum outer width of the popup, including its window padding.
     /// </param>

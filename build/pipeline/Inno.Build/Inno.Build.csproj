@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference
+      Include="..\..\..\src\core\Inno.Core.Serialization.Generators\Inno.Core.Serialization.Generators.csproj"
+      OutputItemType="Analyzer"
+      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\src\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\src\plugins\Inno.Plugins.Authoring\Inno.Plugins.Authoring.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\src\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\src\core\Inno.Core.Settings\Inno.Core.Settings.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\src\runtime\Inno.Runtime\Inno.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\src\scene\Inno.Scene.Assets\Inno.Scene.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\src\scripting\Inno.Scripting.Compiler\Inno.Scripting.Compiler.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
+    <ProjectReference Include="..\..\..\src\assets\Inno.Assets.Pipeline\Inno.Assets.Pipeline.csproj" />
+    <ProjectReference Include="..\..\..\src\plugins\Inno.Plugins\Inno.Plugins.csproj" />
+  </ItemGroup>
+</Project>

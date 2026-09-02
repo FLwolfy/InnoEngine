@@ -8,8 +8,7 @@ namespace Inno.Core.Serialization;
 
 internal static class BinarySerializationFormat
 {
-    private const string C_MAGIC = "INNO";
-    private const int C_VERSION = 2;
+    private const string C_MAGIC = "INNO-BINARY-CURRENT";
     private const int C_MAX_COLLECTION_COUNT = 16_777_216;
 
     internal static byte[] Encode(SerializationNode root)
@@ -17,7 +16,6 @@ internal static class BinarySerializationFormat
         using var stream = new MemoryStream(16 * 1024);
         using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
         writer.Write(C_MAGIC);
-        writer.Write(C_VERSION);
         WriteNode(writer, root);
         writer.Flush();
         return stream.ToArray();
@@ -32,9 +30,6 @@ internal static class BinarySerializationFormat
             string magic = reader.ReadString();
             if (!string.Equals(magic, C_MAGIC, StringComparison.Ordinal))
                 throw new InvalidDataException($"Invalid serialization magic '{magic}'.");
-            int version = reader.ReadInt32();
-            if (version != C_VERSION)
-                throw new InvalidDataException($"Unsupported serialization version {version}; expected {C_VERSION}.");
 
             SerializationNode root = ReadNode(reader, "$");
             if (stream.Position != stream.Length)

@@ -1,4 +1,4 @@
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
 using Inno.Core.Settings;
 
 [assembly: ScriptingApiNamespace(
@@ -14,4 +14,4 @@ using Inno.Core.Settings;
 [assembly: ScriptingApiExport(typeof(ProjectSettingContribution<>), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(ProjectSettingComposer), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(ProjectSettingComposer<,>), ScriptingApiScope.Runtime)]
-[assembly: ScriptingApiExport(typeof(ProjectSettingsManager), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(Settings), ScriptingApiScope.Runtime)]

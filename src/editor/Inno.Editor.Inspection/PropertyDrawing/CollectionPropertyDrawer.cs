@@ -18,7 +18,12 @@ internal sealed class CollectionPropertyDrawer : IPropertyDrawer
 {
     private static readonly Dictionary<string, string> s_mapErrors = new(StringComparer.Ordinal);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     public void Draw(PropertyDrawContext context)
     {
         if (EditorCollectionUtility.TryGetMapTypes(context.propertyType, out Type keyType, out Type valueType))

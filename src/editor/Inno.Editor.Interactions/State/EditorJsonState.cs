@@ -22,7 +22,21 @@ internal sealed class EditorJsonState : EditorState
         m_values = values ?? new Dictionary<string, string>(StringComparer.Ordinal);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets a value required by the implemented contract.
+    /// </summary>
+    /// <typeparam name="T">
+    /// The neutral value type requested by the state owner.
+    /// </typeparam>
+    /// <param name="key">
+    /// The backend-neutral physical key associated with this event.
+    /// </param>
+    /// <param name="fallback">
+    /// The fallback consumed by get; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// The validated t that represents the completed operation.
+    /// </returns>
     public override T Get<T>(string key, T fallback)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
@@ -43,7 +57,18 @@ internal sealed class EditorJsonState : EditorState
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Updates the value state and applies the resulting invariants.
+    /// </summary>
+    /// <typeparam name="T">
+    /// The neutral value type written by the state owner.
+    /// </typeparam>
+    /// <param name="key">
+    /// The backend-neutral physical key associated with this event.
+    /// </param>
+    /// <param name="value">
+    /// The concrete value read or transformed by this operation.
+    /// </param>
     public override void Set<T>(string key, T value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);

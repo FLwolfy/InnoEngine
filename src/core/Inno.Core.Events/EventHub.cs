@@ -70,8 +70,12 @@ public sealed class EventHub : IDisposable
     /// <summary>
     /// Subscribes a listener for the specified event type.
     /// </summary>
-    /// <typeparam name="TEvent">Event type to listen for.</typeparam>
-    /// <param name="handler">Listener callback.</param>
+    /// <typeparam name="TEvent">
+    /// Event type to listen for.
+    /// </typeparam>
+    /// <param name="handler">
+    /// Listener callback.
+    /// </param>
     /// <param name="priority">
     /// Listener priority within this hub. Higher values run earlier.
     /// </param>
@@ -107,8 +111,12 @@ public sealed class EventHub : IDisposable
     /// <summary>
     /// Subscribes a one-shot listener for the specified event type.
     /// </summary>
-    /// <typeparam name="TEvent">Event type to listen for.</typeparam>
-    /// <param name="handler">Listener callback.</param>
+    /// <typeparam name="TEvent">
+    /// Event type to listen for.
+    /// </typeparam>
+    /// <param name="handler">
+    /// Listener callback.
+    /// </param>
     /// <param name="priority">
     /// Listener priority within this hub. Higher values run earlier.
     /// </param>
@@ -134,7 +142,9 @@ public sealed class EventHub : IDisposable
     /// This does not route through the dispatcher hub chain.
     /// Only listeners registered on this hub are invoked.
     /// </remarks>
-    /// <param name="e">The event instance to dispatch locally.</param>
+    /// <param name="e">
+    /// The event instance to dispatch locally.
+    /// </param>
     public void Announce(Event e)
     {
         ThrowIfInvalid();
@@ -258,6 +268,9 @@ public sealed class EventHub : IDisposable
     {
         private EventHub? m_hub = hub;
 
+        /// <summary>
+        /// Releases the resources owned by this instance.
+        /// </summary>
         public void Dispose()
         {
             EventHub? hub = Interlocked.Exchange(ref m_hub, null);
@@ -272,9 +285,21 @@ public sealed class EventHub : IDisposable
 
     private sealed class Listener(Action<Event> callback, int priority, long order)
     {
+        /// <summary>
+        /// Gets the scalar measurement or identity associated with the current state.
+        /// </summary>
         public int priority { get; } = priority;
+        /// <summary>
+        /// Gets the scalar measurement or identity associated with the current state.
+        /// </summary>
         public long order { get; } = order;
 
+        /// <summary>
+        /// Invokes the configured callback within this instance's ownership boundary.
+        /// </summary>
+        /// <param name="e">
+        /// The e consumed by invoke; ownership remains with the caller unless explicitly stated otherwise.
+        /// </param>
         public void Invoke(Event e) => callback.Invoke(e);
     }
 
@@ -285,6 +310,12 @@ public sealed class EventHub : IDisposable
         private IDisposable? m_subscription;
         private int m_completed;
 
+        /// <summary>
+        /// Retains the supplied subscription until this owner is stopped or disposed.
+        /// </summary>
+        /// <param name="subscription">
+        /// The subscription consumed by bind; ownership remains with the caller unless explicitly stated otherwise.
+        /// </param>
         public void Bind(IDisposable subscription)
         {
             if (Interlocked.CompareExchange(ref m_completed, 0, 0) != 0)
@@ -305,6 +336,12 @@ public sealed class EventHub : IDisposable
             }
         }
 
+        /// <summary>
+        /// Invokes the configured callback within this instance's ownership boundary.
+        /// </summary>
+        /// <param name="e">
+        /// The e consumed by invoke; ownership remains with the caller unless explicitly stated otherwise.
+        /// </param>
         public void Invoke(TEvent e)
         {
             if (Interlocked.Exchange(ref m_completed, 1) != 0)
@@ -316,6 +353,9 @@ public sealed class EventHub : IDisposable
             m_handler.Invoke(e);
         }
 
+        /// <summary>
+        /// Releases the resources owned by this instance.
+        /// </summary>
         public void Dispose()
         {
             if (Interlocked.Exchange(ref m_completed, 1) != 0)
@@ -335,6 +375,18 @@ public sealed class EventHub : IDisposable
 
     private sealed class ListenerBucket
     {
+        /// <summary>
+        /// Inserts a listener into the array while preserving deterministic priority order.
+        /// </summary>
+        /// <param name="source">
+        /// The source value or location read by this operation.
+        /// </param>
+        /// <param name="listener">
+        /// The listener consumed by insert sorted; ownership remains with the caller unless explicitly stated otherwise.
+        /// </param>
+        /// <returns>
+        /// An immutable snapshot of the values selected by the operation.
+        /// </returns>
         public static Listener[] InsertSorted(Listener[] source, Listener listener)
         {
             Listener[] result = new Listener[source.Length + 1];
@@ -370,6 +422,18 @@ public sealed class EventHub : IDisposable
             return result;
         }
 
+        /// <summary>
+        /// Removes the listener with the requested registration order from the immutable array.
+        /// </summary>
+        /// <param name="source">
+        /// The source value or location read by this operation.
+        /// </param>
+        /// <param name="listenerOrder">
+        /// The listener order consumed by remove by order; ownership remains with the caller unless explicitly stated otherwise.
+        /// </param>
+        /// <returns>
+        /// An immutable snapshot of the values selected by the operation.
+        /// </returns>
         public static Listener[] RemoveByOrder(Listener[] source, long listenerOrder)
         {
             int index = -1;
@@ -411,7 +475,13 @@ public sealed class EventHub : IDisposable
 
     private sealed class HubState(Dictionary<Type, Listener[]> buckets)
     {
+        /// <summary>
+        /// The empty value used as part of this type's public representation.
+        /// </summary>
         public static readonly HubState Empty = new(new Dictionary<Type, Listener[]>());
+        /// <summary>
+        /// Gets the immutable listener buckets captured for one dispatch operation.
+        /// </summary>
         public Dictionary<Type, Listener[]> buckets { get; } = buckets;
     }
 }

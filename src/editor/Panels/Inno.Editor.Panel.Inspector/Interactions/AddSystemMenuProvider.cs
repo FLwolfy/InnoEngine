@@ -2,22 +2,32 @@ using System;
 using System.Linq;
 using System.Reflection;
 
-using Inno.Core.Reflection;
+using Inno.Extensibility.Types;
 using Inno.Editor.Interactions;
-using Inno.Engine.Scene;
+using Inno.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
 
 [EditorMenuSource(InspectorInteractionIds.C_SYSTEM_AREA)]
-internal sealed class AddSystemMenuProvider : EditorMenuSource
+internal sealed class AddSystemMenuProvider(TypeCatalog types) : EditorMenuSource
 {
+    /// <summary>
+    /// Builds a validated result from the current immutable input snapshot.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="builder">
+    /// The builder consumed by build; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     public override void Build(EditorMenuContext context, EditorMenuBuilder builder)
     {
         if (context.target is not GameScene scene)
             return;
-        foreach (TypeRef typeRef in TypeCacheManager.GetSubTypesOf<GameSystem>())
+        TypeCacheSnapshot snapshot = types.current;
+        foreach (TypeRef typeRef in snapshot.GetSubTypesOf<GameSystem>())
         {
-            Type type = typeRef.Resolve();
+            Type type = typeRef.Resolve(snapshot);
             if (!IsAddable(type, scene))
                 continue;
             builder.Add(type.Name, InspectorInteractionIds.C_ADD_SYSTEM, argument: typeRef);

@@ -15,10 +15,18 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws a two-column property row with a stable internal identifier.
     /// </summary>
-    /// <param name="id">Stable row identifier.</param>
-    /// <param name="label">Human-readable property label.</param>
-    /// <param name="drawValue">Value control callback.</param>
-    /// <param name="labelWidth">Optional fixed label column width.</param>
+    /// <param name="id">
+    /// Stable row identifier.
+    /// </param>
+    /// <param name="label">
+    /// Human-readable property label.
+    /// </param>
+    /// <param name="drawValue">
+    /// Value control callback.
+    /// </param>
+    /// <param name="labelWidth">
+    /// Optional fixed label column width.
+    /// </param>
     public static void PropertyRow(
         string id,
         string label,
@@ -68,12 +76,24 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws a float drag field with a compact colored axis prefix.
     /// </summary>
-    /// <param name="id">Stable control identifier.</param>
-    /// <param name="axis">Axis label such as X, Y, Z, or W.</param>
-    /// <param name="value">Mutable numeric value.</param>
-    /// <param name="width">Total width including the axis prefix.</param>
-    /// <param name="speed">Drag speed.</param>
-    /// <returns><see langword="true"/> when the value changed.</returns>
+    /// <param name="id">
+    /// Stable control identifier.
+    /// </param>
+    /// <param name="axis">
+    /// Axis label such as X, Y, Z, or W.
+    /// </param>
+    /// <param name="value">
+    /// Mutable numeric value.
+    /// </param>
+    /// <param name="width">
+    /// Total width including the axis prefix.
+    /// </param>
+    /// <param name="speed">
+    /// Drag speed.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the value changed.
+    /// </returns>
     public static bool AxisDragFloat(string id, string axis, ref float value, float width, float speed = 0.1f)
     {
         DrawAxisPrefix(id, axis, width);
@@ -83,12 +103,24 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws an integer drag field with a compact colored axis prefix.
     /// </summary>
-    /// <param name="id">Stable control identifier.</param>
-    /// <param name="axis">Axis label such as X, Y, Z, or W.</param>
-    /// <param name="value">Mutable numeric value.</param>
-    /// <param name="width">Total width including the axis prefix.</param>
-    /// <param name="speed">Drag speed.</param>
-    /// <returns><see langword="true"/> when the value changed.</returns>
+    /// <param name="id">
+    /// Stable control identifier.
+    /// </param>
+    /// <param name="axis">
+    /// Axis label such as X, Y, Z, or W.
+    /// </param>
+    /// <param name="value">
+    /// Mutable numeric value.
+    /// </param>
+    /// <param name="width">
+    /// Total width including the axis prefix.
+    /// </param>
+    /// <param name="speed">
+    /// Drag speed.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the value changed.
+    /// </returns>
     public static bool AxisDragInt(string id, string axis, ref int value, float width, float speed = 1f)
     {
         DrawAxisPrefix(id, axis, width);
@@ -98,8 +130,12 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws content inside an ImGui disabled scope when requested.
     /// </summary>
-    /// <param name="disabled">Whether interaction is disabled.</param>
-    /// <param name="draw">Drawing callback.</param>
+    /// <param name="disabled">
+    /// Whether interaction is disabled.
+    /// </param>
+    /// <param name="draw">
+    /// Drawing callback.
+    /// </param>
     public static void Disabled(bool disabled, Action draw)
     {
         ArgumentNullException.ThrowIfNull(draw);
@@ -117,9 +153,15 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws a horizontal insertion marker above normal window content in screen coordinates.
     /// </summary>
-    /// <param name="fromX">Marker start X coordinate.</param>
-    /// <param name="toX">Marker end X coordinate.</param>
-    /// <param name="y">Marker Y coordinate.</param>
+    /// <param name="fromX">
+    /// Marker start X coordinate.
+    /// </param>
+    /// <param name="toX">
+    /// Marker end X coordinate.
+    /// </param>
+    /// <param name="y">
+    /// Marker Y coordinate.
+    /// </param>
     public static void InsertionLine(float fromX, float toX, float y)
     {
         uint color = NativeImGui.GetColorU32(ImGuiCol.DragDropTarget);
@@ -134,8 +176,12 @@ public static partial class ImGuiWidget
     /// Draws the standard yellow rectangular drag-and-drop target highlight above all normal
     /// window content in screen coordinates.
     /// </summary>
-    /// <param name="min">Minimum target coordinate.</param>
-    /// <param name="max">Maximum target coordinate.</param>
+    /// <param name="min">
+    /// Minimum target coordinate.
+    /// </param>
+    /// <param name="max">
+    /// Maximum target coordinate.
+    /// </param>
     public static void DropTargetHighlight(Vector2 min, Vector2 max)
     {
         NativeImGui.GetForegroundDrawList().AddRect(
@@ -150,8 +196,12 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Converts an identifier into a readable editor label.
     /// </summary>
-    /// <param name="name">Source identifier.</param>
-    /// <returns>A label with separators and title casing.</returns>
+    /// <param name="name">
+    /// Source identifier.
+    /// </param>
+    /// <returns>
+    /// A label with separators and title casing.
+    /// </returns>
     public static string NicifyName(string name)
     {
         if (string.IsNullOrWhiteSpace(name))

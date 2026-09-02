@@ -10,7 +10,12 @@ namespace Inno.Editor.Inspection;
 [PropertyDrawer(typeof(Enum), useForChildren: true, priority: 100)]
 internal sealed class EnumPropertyDrawer : IPropertyDrawer
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     public void Draw(PropertyDrawContext context)
     {
         Type enumType = context.propertyType;

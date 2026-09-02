@@ -14,7 +14,7 @@
     <ProjectReference Include="..\..\Inno.Editor.Settings\Inno.Editor.Settings.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\core\Inno.Core.Settings\Inno.Core.Settings.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\..\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\platform\Inno.Platform.Sdl3.ImGui\Inno.Platform.Sdl3.ImGui.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" PrivateAssets="compile" />
   </ItemGroup>
 </Project>

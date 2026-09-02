@@ -19,8 +19,8 @@
     <ProjectReference Include="..\..\Inno.Editor.Settings\Inno.Editor.Settings.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\src\core\Inno.Core.Identity\Inno.Core.Identity.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\src\core\Inno.Core.Mathematics\Inno.Core.Mathematics.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\..\..\src\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\..\..\src\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\..\..\src\render\Inno.Rendering\Inno.Rendering.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\src\scene\Inno.Scene\Inno.Scene.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\src\platform\Inno.Platform.Sdl3.ImGui\Inno.Platform.Sdl3.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\src\rendering\Inno.Rendering\Inno.Rendering.csproj" PrivateAssets="compile" />
   </ItemGroup>
 </Project>

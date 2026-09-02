@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Inno.Rendering.Core;
+using Inno.Rendering;
 using Xunit;
 
 namespace Inno.Rendering.Assets.Tests;
@@ -21,12 +21,12 @@ public sealed class ShaderCompilerTests
         ShaderCompilationResult handwritten = await compiler.CompileAsync(
             HandwrittenShaderParserTests.CreateModule("void main() {}", ShaderIRSourceKind.Handwritten),
             target,
-            ShaderVariantKey.empty,
+            RenderShaderVariant.empty,
             "/project/Assets");
         ShaderCompilationResult generated = await compiler.CompileAsync(
             HandwrittenShaderParserTests.CreateModule("void main() {}", ShaderIRSourceKind.Generated),
             target,
-            ShaderVariantKey.empty,
+            RenderShaderVariant.empty,
             "/project/Assets");
 
         Assert.True(handwritten.succeeded);
@@ -47,7 +47,7 @@ public sealed class ShaderCompilerTests
         ShaderCompilationResult result = await compiler.CompileAsync(
             module,
             CreateTarget(GraphicsFeature.None),
-            ShaderVariantKey.empty,
+            RenderShaderVariant.empty,
             "/project/Assets");
 
         Assert.False(result.succeeded);
@@ -91,7 +91,7 @@ public sealed class ShaderCompilerTests
         ShaderCompilationResult result = await compiler.CompileAsync(
             module,
             CreateTarget(GraphicsFeature.None),
-            ShaderVariantKey.empty,
+            RenderShaderVariant.empty,
             "/project/Assets");
 
         Assert.True(result.succeeded);
@@ -116,12 +116,12 @@ public sealed class ShaderCompilerTests
         ShaderArtifactSelection first = store.Select(
             shaderId,
             artifact.targetKey,
-            ShaderVariantKey.empty,
+            RenderShaderVariant.empty,
             success);
         ShaderArtifactSelection second = store.Select(
             shaderId,
             artifact.targetKey,
-            ShaderVariantKey.empty,
+            RenderShaderVariant.empty,
             failure);
 
         Assert.True(first.candidateSucceeded);
@@ -160,7 +160,7 @@ public sealed class ShaderCompilerTests
         return new CompiledShaderArtifact(
             module.definition.name,
             "target",
-            ShaderVariantKey.empty,
+            RenderShaderVariant.empty,
             ShaderInterface.FromModule(module),
             []);
     }

@@ -15,7 +15,9 @@ public sealed class InspectionDrawContext
     /// </summary>
     public EditorContext editorContext { get; }
 
-    /// <summary>Gets the active editor interaction entry point.</summary>
+    /// <summary>
+    /// Gets the active editor interaction entry point.
+    /// </summary>
     public EditorInteractions interactions { get; }
 
     /// <summary>

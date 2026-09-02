@@ -1,8 +1,8 @@
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using Inno.Native.ImGui;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 
 [assembly: ScriptingApiNamespace(
@@ -19,7 +19,7 @@ using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
     ScriptingApiScope.Editor)]
 [assembly: ScriptingApiNamespace(
     "InnoEditor.ImGui",
-    "Inno.Platform.ImGui",
+    "Inno.Platform.Sdl3.ImGui",
     ScriptingApiScope.Editor)]
 
 [assembly: ScriptingApiExport(typeof(EditorPalette), ScriptingApiScope.Editor)]

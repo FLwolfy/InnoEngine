@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
 
 namespace Inno.Editor.Core;
 
@@ -15,7 +15,9 @@ public sealed class EditorContext
     /// <summary>
     /// Creates a passive editor context for one project.
     /// </summary>
-    /// <param name="projectDirectory">The project root containing Assets and Library.</param>
+    /// <param name="projectDirectory">
+    /// The project root containing Assets and Library.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="projectDirectory"/> is empty.
     /// </exception>

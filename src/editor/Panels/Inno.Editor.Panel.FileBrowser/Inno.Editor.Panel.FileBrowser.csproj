@@ -10,11 +10,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\..\assets\Inno.Assets.Plugins\Inno.Assets.Plugins.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\..\platform\Inno.Platform.ImGui\Inno.Platform.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\platform\Inno.Platform.Sdl3.ImGui\Inno.Platform.Sdl3.ImGui.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
@@ -22,7 +21,8 @@
     <ProjectReference Include="..\..\Inno.Editor.Inspection\Inno.Editor.Inspection.csproj" />
     <ProjectReference Include="..\..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" />
     <ProjectReference Include="..\..\Inno.Editor.Settings\Inno.Editor.Settings.csproj" />
-    <ProjectReference Include="..\..\..\assets\Inno.Assets.Core\Inno.Assets.Core.csproj" />
-    <ProjectReference Include="..\..\..\assets\Inno.Assets.File\Inno.Assets.File.csproj" />
+    <ProjectReference Include="..\..\..\assets\Inno.Assets\Inno.Assets.csproj" />
+    <ProjectReference Include="..\..\..\assets\Inno.Assets.Pipeline\Inno.Assets.Pipeline.csproj" />
+    <ProjectReference Include="..\..\..\plugins\Inno.Plugins.Authoring\Inno.Plugins.Authoring.csproj" />
   </ItemGroup>
 </Project>

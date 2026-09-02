@@ -11,8 +11,12 @@ public sealed class ProjectSettingPathAttribute : Attribute
     /// <summary>
     /// Creates a project setting placement.
     /// </summary>
-    /// <param name="path">The slash-delimited field path beginning with <c>Project/</c>.</param>
-    /// <param name="order">The stable order among fields in the same section.</param>
+    /// <param name="path">
+    /// The slash-delimited field path beginning with <c>Project/</c>.
+    /// </param>
+    /// <param name="order">
+    /// The stable order among fields in the same section.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="path"/> is outside the Project root or contains an empty segment.
     /// </exception>
@@ -29,9 +33,13 @@ public sealed class ProjectSettingPathAttribute : Attribute
         this.order = order;
     }
 
-    /// <summary>Gets the normalized complete placement path.</summary>
+    /// <summary>
+    /// Gets the normalized complete placement path.
+    /// </summary>
     public string path { get; }
 
-    /// <summary>Gets the stable order among fields in the same section.</summary>
+    /// <summary>
+    /// Gets the stable order among fields in the same section.
+    /// </summary>
     public int order { get; }
 }

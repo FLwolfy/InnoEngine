@@ -1,28 +1,31 @@
 using System;
 
+using Inno.Runtime;
+
 namespace Inno.Editor.Scene;
 
-/// <summary>Creates isolated runtime scene sessions from the current editable scene set.</summary>
+/// <summary>
+/// Creates isolated runtime scene sessions from the current editable scene set.
+/// </summary>
 public interface IEditorScenePlayMode
 {
     /// <summary>
-    /// Captures every editable scene and replaces the loaded set with independent runtime copies.
+    /// Captures the editable scene set and materializes independent runtime copies in the supplied session.
     /// </summary>
-    /// <returns>A session that restores the complete captured editing state.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when another runtime scene session is active or the scene set cannot be replaced atomically.
+    /// <param name="runtimeSession">
+    /// The isolated Play Mode session that receives the immutable start snapshot and owns editor-side
+    /// operations performed against the runtime copies.
+    /// </param>
+    /// <returns>
+    /// A lease that presents the runtime copies to editor features, prevents their persistence, and
+    /// restores the Edit presentation when disposed.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="runtimeSession"/> is null.
     /// </exception>
-    IEditorScenePlayModeSession BeginPlayMode();
-}
-
-/// <summary>Owns one captured editing scene set while its runtime copies are active.</summary>
-public interface IEditorScenePlayModeSession : IDisposable
-{
-    /// <summary>
-    /// Discards every runtime scene and restores the captured editable scenes, active scene, and selection.
-    /// </summary>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when the captured editing scene set cannot be restored completely.
+    /// Thrown when another Play Mode lease is active, the target world is not empty, or the snapshot
+    /// cannot be materialized atomically.
     /// </exception>
-    void Restore();
+    IDisposable BeginPlayMode(RuntimeSession runtimeSession);
 }

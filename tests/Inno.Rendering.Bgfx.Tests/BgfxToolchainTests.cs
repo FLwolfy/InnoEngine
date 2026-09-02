@@ -2,8 +2,9 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Inno.Build.Toolchains.Bgfx.Tools;
 using Inno.Rendering.Assets;
-using Inno.Rendering.Core;
+using Inno.Rendering;
 using Xunit;
 
 namespace Inno.Rendering.Bgfx.Tests;
@@ -92,7 +93,7 @@ public sealed class BgfxToolchainTests : IDisposable
         ShaderCompilationResult result = await compiler.CompileAsync(
             module,
             compiler.CreateTarget(CreateCapabilities(GraphicsBackend.Direct3D11, GraphicsFeature.None)),
-            ShaderVariantKey.empty,
+            RenderShaderVariant.empty,
             m_root);
 
         Assert.True(result.succeeded, string.Join(

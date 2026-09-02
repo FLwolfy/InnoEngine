@@ -9,23 +9,23 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\assets\Inno.Assets.Core\Inno.Assets.Core.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\assets\Inno.Assets.File\Inno.Assets.File.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\assets\Inno.Assets.Serialization\Inno.Assets.Serialization.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\assets\Inno.Assets.Pipeline\Inno.Assets.Pipeline.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\extensibility\Inno.Extensibility.Modules\Inno.Extensibility.Modules.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Coroutines\Inno.Core.Coroutines.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Diagnose\Inno.Core.Diagnose.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Framework\Inno.Core.Framework.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Diagnostics\Inno.Core.Diagnostics.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Identity\Inno.Core.Identity.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\engine\Inno.Engine.Scene.Assets\Inno.Engine.Scene.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\scene\Inno.Scene.Assets\Inno.Scene.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Inno.Editor.Core\Inno.Editor.Core.csproj" />
-    <ProjectReference Include="..\..\engine\Inno.Engine.Scene\Inno.Engine.Scene.csproj" />
+    <ProjectReference Include="..\..\scene\Inno.Scene\Inno.Scene.csproj" />
+    <ProjectReference Include="..\..\runtime\Inno.Runtime\Inno.Runtime.csproj" />
   </ItemGroup>
 </Project>

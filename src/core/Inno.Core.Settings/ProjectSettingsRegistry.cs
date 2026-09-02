@@ -2,15 +2,29 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Frozen;
 using System.Reflection;
-using Inno.Core.Reflection;
+using Inno.Extensibility.Types;
 using Inno.Core.Serialization;
 
 namespace Inno.Core.Settings;
 
 internal sealed class ProjectSettingsRegistry : TypeRegistry<ProjectSettingsRegistry.Snapshot>
 {
+    internal ProjectSettingsRegistry(TypeCatalog types)
+        : base(types)
+    {
+    }
+
     internal Snapshot settings => current;
 
+    /// <summary>
+    /// Builds a validated result from the current immutable input snapshot.
+    /// </summary>
+    /// <param name="types">
+    /// The active type catalog generation used for extension resolution.
+    /// </param>
+    /// <returns>
+    /// The validated snapshot that represents the completed operation.
+    /// </returns>
     protected override Snapshot Build(TypeCacheSnapshot types)
     {
         var settingTypes = new Dictionary<ProjectSettingId, (Guid stableTypeId, Type runtimeType)>();

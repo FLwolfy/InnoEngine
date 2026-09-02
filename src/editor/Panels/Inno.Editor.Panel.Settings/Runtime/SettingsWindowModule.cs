@@ -32,7 +32,12 @@ internal sealed class SettingsWindowModule(
         m_session = new SettingsEditSession(editorSettings, projectSettings);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Stops this feature before its owning runtime releases the active generation.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnStop(EditorContext context)
         => Close();
 }

@@ -1,6 +1,6 @@
 # Inno.Core.Coroutines
 
-[上一页：Events](Inno.Core.Events.md) · [Core 索引](README.md) · [下一页：Job](Inno.Core.Job.md)
+[上一页：Events](Inno.Core.Events.md) · [Core 索引](README.md) · [下一页：Job](Inno.Core.Jobs.md)
 
 `CoroutineScheduler` 执行 `IEnumerator` 协程，支持嵌套 enumerator、帧/时间/Task/条件等待以及 owner 级批量停止。普通 Start/Stop 请求通过线程安全命令队列进入 Scheduler，实际状态变化在 `Tick` 安全点应用；owner 级停止会取得 Tick gate，并在返回前立即移除匹配状态。
 

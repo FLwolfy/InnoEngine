@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Inno.Core.Assemblies;
+using Inno.Extensibility.Modules;
 using Inno.Core.Mathematics;
-using Inno.Core.Reflection;
+using Inno.Extensibility.Types;
 using Inno.Core.Serialization;
-using Inno.Rendering.Core;
+using Inno.Rendering;
 using Xunit;
 
 namespace Inno.Rendering.Assets.Tests;
@@ -13,21 +13,25 @@ namespace Inno.Rendering.Assets.Tests;
 [Collection("Rendering assets serialization")]
 public sealed class HandwrittenShaderParserTests : IDisposable
 {
+    private readonly ModuleHost m_modules;
+    private readonly TypeCatalog m_types;
+    private readonly SerializationRegistry m_serialization;
+
     public HandwrittenShaderParserTests()
     {
-        AssemblyManager.Initialize(new AssemblyManagerOptions
+        m_modules = new ModuleHost(new ModuleHostOptions
         {
             cacheDirectory = Path.Combine(Path.GetTempPath(), "InnoShaderIrTests", Guid.NewGuid().ToString("N"))
         });
-        TypeCacheManager.Initialize();
-        SerializationManager.Initialize();
+        m_types = new TypeCatalog(m_modules);
+        m_serialization = new SerializationRegistry(m_types);
     }
 
     public void Dispose()
     {
-        SerializationManager.Shutdown();
-        TypeCacheManager.Shutdown();
-        AssemblyManager.Shutdown();
+        m_serialization.Dispose();
+        m_types.Dispose();
+        m_modules.Dispose();
     }
 
     [Fact]
@@ -51,7 +55,8 @@ public sealed class HandwrittenShaderParserTests : IDisposable
         ShaderIRModule module = CreateModule("void main() {}", ShaderIRSourceKind.Generated);
 
         ShaderIRModule restored = ShaderIRArtifactSerialization.Decode(
-            ShaderIRArtifactSerialization.Encode(module));
+            ShaderIRArtifactSerialization.Encode(module, m_serialization),
+            m_serialization);
 
         Assert.Equal(module.definition.name, restored.definition.name);
         Assert.Equal(module.definition.techniques[0].contract, restored.definition.techniques[0].contract);
@@ -91,7 +96,8 @@ public sealed class HandwrittenShaderParserTests : IDisposable
         ShaderIRValidationResult validation = ShaderIRValidator.Validate(module);
         ShaderInterface shaderInterface = ShaderInterface.FromPass(module, module.passes[0]);
         ShaderIRModule restored = ShaderIRArtifactSerialization.Decode(
-            ShaderIRArtifactSerialization.Encode(module));
+            ShaderIRArtifactSerialization.Encode(module, m_serialization),
+            m_serialization);
 
         Assert.True(validation.succeeded);
         ShaderInterfaceBinding binding = Assert.Single(shaderInterface.bindings);

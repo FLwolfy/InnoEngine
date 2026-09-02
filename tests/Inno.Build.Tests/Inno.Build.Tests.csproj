@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\build\pipeline\Inno.Build\Inno.Build.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\build\pipeline\Inno.Build.Platform.MacOS\Inno.Build.Platform.MacOS.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\build\pipeline\Inno.Build.Platform.Windows\Inno.Build.Platform.Windows.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\assets\Inno.Assets.Pipeline\Inno.Assets.Pipeline.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\plugins\Inno.Plugins.Authoring\Inno.Plugins.Authoring.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Identity\Inno.Core.Identity.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Settings\Inno.Core.Settings.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\extensibility\Inno.Extensibility.Modules\Inno.Extensibility.Modules.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\plugins\Inno.Plugins\Inno.Plugins.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\runtime\Inno.Runtime\Inno.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\scene\Inno.Scene\Inno.Scene.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\scene\Inno.Scene.Assets\Inno.Scene.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\scripting\Inno.Scripting.Compiler\Inno.Scripting.Compiler.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.6.6" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.6">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>

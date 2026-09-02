@@ -67,7 +67,7 @@ Statistics 是唯一允许写入 Context 的帧数据通道，不是任意 servi
 
 构造函数、`layoutPath`、`imguiLayout`、section 读写、ImGui layout 更新和 Save 是 CLR host 边界。由于 Application 与 Interactions 是独立程序集，这些成员是 public CLR API，但全部标记 `ScriptingApiIgnore`，不会进入 EditorScripts facade。测试若要验证未公开实现细节只能使用反射；Editor 项目不使用 `InternalsVisibleTo`。EditorScripts 不能创建第二个 Context、读取原始 section、覆盖其他扩展状态或主动写入 `editor.ini`。
 
-这些 API 只处理 Module/Panel 项目状态与 Dear ImGui 使用的 `editor.ini`。业务设置由 [Inno.Editor.Settings](Inno.Editor.Settings.md) 独立写入项目根 `EditorSettings.json`。业务扩展若需要 Settings、Action/Menu/Selection，仍应在构造函数中接收 `EditorSettings` 或 `EditorInteractions`，而不是向 `EditorContext` 添加新服务属性。
+这些 API 只处理 Module/Panel 项目状态与 Dear ImGui 使用的 `editor.ini`。业务设置由 [Inno.Editor.Settings](Inno.Editor.Settings.md) 通过 SerializationRegistry 写入项目根 `EditorSettings.inno`。业务扩展通过构造注入接收正式服务，不向 `EditorContext` 添加全局 service locator。
 
 ## Module
 
@@ -168,13 +168,13 @@ public sealed class AnimationBakeModal(AnimationModule animation) : EditorModal
 
 ## Reload coordination
 
-`EditorReloadCoordinator` 是 Core 中唯一的跨 feature reload 协调入口。`Register(IEditorReloadParticipant)` 只弱持有参与者；registration 被释放或参与者被回收后不会残留领域实例。Core 不知道 Scene、Missing、Panel 或脚本编译，仅编排中立事务。
+`EditorReloadCoordinator` 是 Core 中唯一的跨 feature reload 协调入口。Coordinator 的索引只弱持有参与者；`Register(IEditorReloadParticipant)` 返回的 registration lease 则强持有参与者，调用方必须在 feature 生命周期内保存该 lease。释放 lease 会先注销再解除强引用；如果整个 feature 与 lease 一起失去所有权，弱索引也不会阻止它们被回收。Core 不知道 Scene、Missing、Panel 或脚本编译，仅编排中立事务。
 
 协调顺序固定为：全部 `PrepareForActivation` → Assembly candidate `Activate` → 可选外部状态同步 → 全部 `Apply` → Assembly `Complete` → 各 participant cleanup-only `Complete`。提交前任一步失败时，按反序恢复 feature 结构、Assembly generation、外部状态和 previous feature state。Assembly `Complete` 后的 participant cleanup 异常只能被隔离记录，因为发布已经不可回滚。
 
 | API | 说明 |
 | --- | --- |
-| `EditorReloadCoordinator.Register` | 弱注册一个拥有 generation-bound live state 的领域参与者。 |
+| `EditorReloadCoordinator.Register` | 在 Coordinator 中弱注册领域参与者，并返回负责强生命周期所有权的 registration lease。 |
 | `EditorReloadCoordinator.Execute` | 把 prepared `AssemblyReloadSession` 与所有领域事务作为一次原子切换执行。 |
 | `EditorReloadCoordinator.RefreshDiagnostics` | 请求所有存活领域按当前状态重新发布诊断。 |
 | `IEditorReloadParticipant.Capture` | 只捕获事务，不在 capture 阶段修改 live state。 |

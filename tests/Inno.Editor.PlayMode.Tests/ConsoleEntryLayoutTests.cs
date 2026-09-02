@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Numerics;
 
-using Inno.Editor.Panel.Logging;
 using Inno.Native.ImGui;
 
 using NativeImGui = Inno.Native.ImGui.ImGui;
@@ -24,8 +23,8 @@ public sealed class ConsoleEntryLayoutTests
             NativeImGui.NewFrame();
             _ = NativeImGui.Begin("Console identity test");
 
-            uint logCardId = GetCardId(new EditorConsoleEntryId(EditorConsoleEntryKind.Log, 1));
-            uint diagnosticCardId = GetCardId(new EditorConsoleEntryId(EditorConsoleEntryKind.Diagnostic, -2));
+            uint logCardId = GetCardId("occurrence/log/1");
+            uint diagnosticCardId = GetCardId("occurrence/diagnostic/1");
 
             Assert.NotEqual(logCardId, diagnosticCardId);
             NativeImGui.End();
@@ -53,11 +52,11 @@ public sealed class ConsoleEntryLayoutTests
         }
     }
 
-    private static uint GetCardId(EditorConsoleEntryId identity)
+    private static uint GetCardId(string identity)
     {
-        ConsoleEntryImGuiIdentity.Push(identity);
+        NativeImGui.PushID(identity);
         uint result = NativeImGui.GetID("##ConsoleEntryCard");
-        ConsoleEntryImGuiIdentity.Pop();
+        NativeImGui.PopID();
         return result;
     }
 
@@ -67,16 +66,16 @@ public sealed class ConsoleEntryLayoutTests
         NativeImGui.SetNextWindowSize(new Vector2(480f, 320f), ImGuiCond.Always);
         _ = NativeImGui.Begin("Console spacing test");
 
-        EditorConsoleEntryId[] identities =
+        string[] identities =
         [
-            new(EditorConsoleEntryKind.Log, 1),
-            new(EditorConsoleEntryKind.Diagnostic, -2),
-            new(EditorConsoleEntryKind.Log, 2)
+            "occurrence/log/1",
+            "occurrence/diagnostic/1",
+            "occurrence/log/2"
         ];
         var bounds = new List<(Vector2 minimum, Vector2 maximum)>();
         for (int i = 0; i < identities.Length; i++)
         {
-            ConsoleEntryImGuiIdentity.Push(identities[i]);
+            NativeImGui.PushID(identities[i]);
             if (NativeImGui.BeginChild(
                     "##ConsoleEntryCard",
                     Vector2.Zero,
@@ -89,7 +88,7 @@ public sealed class ConsoleEntryLayoutTests
             }
             NativeImGui.EndChild();
             bounds.Add((NativeImGui.GetItemRectMin(), NativeImGui.GetItemRectMax()));
-            ConsoleEntryImGuiIdentity.Pop();
+            NativeImGui.PopID();
         }
 
         if (assertSpacing)

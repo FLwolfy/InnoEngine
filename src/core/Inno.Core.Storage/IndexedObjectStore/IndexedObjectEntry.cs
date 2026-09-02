@@ -5,7 +5,9 @@ namespace Inno.Core.Storage;
 /// <summary>
 /// Entry wrapper for setting key values on a stored item.
 /// </summary>
-/// <typeparam name="T">Item type.</typeparam>
+/// <typeparam name="T">
+/// Item type.
+/// </typeparam>
 public readonly struct IndexedObjectEntry<T> where T : class
 {
     private readonly IndexedObjectStore<T> m_store;
@@ -25,10 +27,18 @@ public readonly struct IndexedObjectEntry<T> where T : class
     /// <summary>
     /// Sets a key value for the stored item.
     /// </summary>
-    /// <typeparam name="TKey">Key type.</typeparam>
-    /// <param name="key">Key handle.</param>
-    /// <param name="value">Key value.</param>
-    /// <returns>The same entry for chaining.</returns>
+    /// <typeparam name="TKey">
+    /// Key type.
+    /// </typeparam>
+    /// <param name="key">
+    /// Key handle.
+    /// </param>
+    /// <param name="value">
+    /// Key value.
+    /// </param>
+    /// <returns>
+    /// The same entry for chaining.
+    /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IndexedObjectEntry<T> Set<TKey>(IndexedObjectKey<TKey> key, TKey value) where TKey : notnull
     {

@@ -1,4 +1,4 @@
-using Inno.Core.Assemblies;
+using Inno.Extensibility.Modules;
 
 namespace Inno.Editor.Core;
 

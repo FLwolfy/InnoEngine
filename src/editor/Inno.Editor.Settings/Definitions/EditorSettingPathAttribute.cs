@@ -12,8 +12,12 @@ public sealed class EditorSettingPathAttribute : Attribute
     /// Creates a path placement. A definition that overrides its drawing method becomes a field;
     /// a definition that keeps the default drawing method describes the page at the complete path.
     /// </summary>
-    /// <param name="path">The slash-delimited page and field path.</param>
-    /// <param name="order">The stable order among fields with the same section and label.</param>
+    /// <param name="path">
+    /// The slash-delimited page and field path.
+    /// </param>
+    /// <param name="order">
+    /// The stable order among fields with the same section and label.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="path"/> contains an empty segment or is outside the <c>Editor</c> root.
     /// </exception>

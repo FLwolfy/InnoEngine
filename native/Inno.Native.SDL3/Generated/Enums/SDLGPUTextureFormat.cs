@@ -10,7 +10,7 @@
 using System;
 using BGCS.Runtime;
 
-namespace Inno.Native.SDL3
+namespace Inno.Native.Sdl3
 {
 	/// <summary>
 	/// Specifies the pixel format of a texture.<br/>

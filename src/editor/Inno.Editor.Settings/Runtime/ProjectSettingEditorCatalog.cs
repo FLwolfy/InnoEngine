@@ -2,15 +2,36 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using Inno.Core.Reflection;
+using Inno.Extensibility.Types;
+using Inno.Core.Serialization;
 using Inno.Core.Settings;
 
 namespace Inno.Editor.Settings;
 
 internal sealed class ProjectSettingEditorCatalog : TypeRegistry<ProjectSettingEditorCatalog.Snapshot>
 {
+    private readonly SerializationRegistry m_serialization;
+
+    internal ProjectSettingEditorCatalog(
+        TypeCatalog types,
+        SerializationRegistry serialization)
+        : base(types)
+    {
+        ArgumentNullException.ThrowIfNull(serialization);
+        m_serialization = serialization;
+    }
+
     internal Snapshot snapshot => current;
 
+    /// <summary>
+    /// Builds a validated result from the current immutable input snapshot.
+    /// </summary>
+    /// <param name="types">
+    /// The active type catalog generation used for extension resolution.
+    /// </param>
+    /// <returns>
+    /// The validated snapshot that represents the completed operation.
+    /// </returns>
     protected override Snapshot Build(TypeCacheSnapshot types)
     {
         ProjectSettingEditor[] definitions = types.GetTypesWithAttribute<ProjectSettingPathAttribute>()
@@ -44,6 +65,12 @@ internal sealed class ProjectSettingEditorCatalog : TypeRegistry<ProjectSettingE
         return new Snapshot(types.version, definitions);
     }
 
+    /// <summary>
+    /// Releases the generation lease retained by an immutable registry snapshot.
+    /// </summary>
+    /// <param name="snapshot">
+    /// The immutable state snapshot consumed by this operation.
+    /// </param>
     protected override void DisposeSnapshot(Snapshot snapshot)
     {
         for (int i = snapshot.definitions.Length - 1; i >= 0; i--)
@@ -60,6 +87,7 @@ internal sealed class ProjectSettingEditorCatalog : TypeRegistry<ProjectSettingE
             .Cast<ProjectSettingPathAttribute>()
             .Single();
         ProjectSettingEditor definition = CreateExtension<ProjectSettingEditor>(type);
+        definition.BindSerialization(m_serialization);
         definition.BindPlacement(attribute.path, attribute.order);
         return definition;
     }

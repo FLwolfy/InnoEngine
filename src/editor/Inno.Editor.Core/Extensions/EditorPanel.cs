@@ -1,7 +1,7 @@
 
 using System;
 
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
 
 namespace Inno.Editor.Core;
 
@@ -35,7 +35,9 @@ public abstract class EditorPanel
     /// <summary>
     /// Attaches the panel after its extension generation becomes active.
     /// </summary>
-    /// <param name="context">The shared editor context for the active runtime.</param>
+    /// <param name="context">
+    /// The shared editor context for the active runtime.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="context"/> is <see langword="null"/>.
     /// </exception>
@@ -55,7 +57,9 @@ public abstract class EditorPanel
     /// <summary>
     /// Detaches the panel before its extension generation is released.
     /// </summary>
-    /// <param name="context">The shared editor context for the runtime being detached.</param>
+    /// <param name="context">
+    /// The shared editor context for the runtime being detached.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="context"/> is <see langword="null"/>.
     /// </exception>
@@ -96,13 +100,17 @@ public abstract class EditorPanel
     /// <summary>
     /// Draws the complete dockable contents of this panel for the current frame.
     /// </summary>
-    /// <param name="context">The shared editor context containing current selection, focus, and frame state.</param>
+    /// <param name="context">
+    /// The shared editor context containing current selection, focus, and frame state.
+    /// </param>
     protected abstract void OnDraw(EditorContext context);
 
     /// <summary>
     /// Runs after the panel is attached to an active extension generation.
     /// </summary>
-    /// <param name="context">The shared editor context for the active runtime.</param>
+    /// <param name="context">
+    /// The shared editor context for the active runtime.
+    /// </param>
     protected virtual void OnAttach(EditorContext context)
     {
     }
@@ -110,7 +118,9 @@ public abstract class EditorPanel
     /// <summary>
     /// Runs before the panel is detached from its active extension generation.
     /// </summary>
-    /// <param name="context">The shared editor context for the runtime being detached.</param>
+    /// <param name="context">
+    /// The shared editor context for the runtime being detached.
+    /// </param>
     protected virtual void OnDetach(EditorContext context)
     {
     }

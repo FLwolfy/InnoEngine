@@ -1,4 +1,4 @@
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
 using Inno.Editor.Scene;
 
 [assembly: ScriptingApiNamespace(
@@ -8,3 +8,4 @@ using Inno.Editor.Scene;
 
 [assembly: ScriptingApiExport(typeof(IEditorSceneWorkspace), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(SceneEdits), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(SceneHierarchyEdit), ScriptingApiScope.Editor)]

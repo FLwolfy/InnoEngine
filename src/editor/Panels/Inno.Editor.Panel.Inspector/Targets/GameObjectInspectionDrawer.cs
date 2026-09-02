@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Numerics;
 
 using Inno.Core.Serialization;
+using Inno.Core.Logging;
 using Inno.Editor.Core;
 using Inno.Editor.Inspection;
 using Inno.Editor.Interactions;
@@ -12,10 +13,10 @@ using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Editor.Scene;
 using Inno.Editor.Settings;
-using Inno.Engine.Scene;
-using Inno.Engine.Scene.Components;
+using Inno.Scene;
+using Inno.Scene.Components;
 using Inno.Native.ImGui;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Inspector;
@@ -25,8 +26,9 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
 {
     private const nuint C_SEARCH_BUFFER_SIZE = 256;
 
-    private readonly InspectorCardControls m_cardControls = new();
+    private readonly InspectorCardControls m_cardControls;
     private readonly SceneEdits m_edits;
+    private readonly SerializationRegistry m_serialization;
     private readonly GameObjectTagSelector m_tagSelector;
     private readonly GameObjectLayerSelector m_layerSelector;
     private readonly EditorSettings m_settings;
@@ -44,6 +46,12 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
     /// <param name="settings">
     /// The project Settings service that owns semantic icon values.
     /// </param>
+    /// <param name="serialization">
+    /// The serialization registry that describes component properties in the active generation.
+    /// </param>
+    /// <param name="logs">
+    /// The application log router used by component card controls.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="edits"/>, <paramref name="classificationSettings"/>, or
     /// <paramref name="settings"/> is <see langword="null"/>.
@@ -51,7 +59,9 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
     internal GameObjectInspectionDrawer(
         SceneEdits edits,
         SceneProjectSettingsModule classificationSettings,
-        EditorSettings settings)
+        EditorSettings settings,
+        SerializationRegistry serialization,
+        LogRouter logs)
     {
         m_edits = edits ?? throw new ArgumentNullException(nameof(edits));
         ArgumentNullException.ThrowIfNull(classificationSettings);
@@ -62,18 +72,43 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
             classificationSettings,
             edits);
         m_settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        m_serialization = serialization ?? throw new ArgumentNullException(nameof(serialization));
+        m_cardControls = new InspectorCardControls(logs);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the icon glyph used to represent this item in the editor.
+    /// </summary>
     public override string icon => m_settings
         .Get("Editor/Appearance/Icons/GameObject")
         .GetAsString("value", ImGuiIcon.Cube)!;
 
+    /// <summary>
+    /// Binds a caller-visible label to the current inspection target.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+    /// <returns>
+    /// The validated (string name, actionstring? setter) that represents the completed operation.
+    /// </returns>
     protected override (string name, Action<string>? setter) BindName(
         InspectionDrawContext context,
         GameObject target)
         => (target.name, name => m_edits.RenameGameObject(target, name));
 
+    /// <summary>
+    /// Renders the header presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
     protected override void DrawHeader(InspectionDrawContext context, GameObject target)
     {
         bool active = target.activeSelf;
@@ -98,6 +133,15 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
         m_layerSelector.Draw(target, controlWidth);
     }
 
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="gameObject">
+    /// The scene object captured by this structural snapshot.
+    /// </param>
     protected override void Draw(InspectionDrawContext context, GameObject gameObject)
     {
         if (!gameObject.isRuntimeValid || !gameObject.scene.isLoaded)
@@ -209,7 +253,7 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
                         NativeImGui.PopStyleColor();
                         return;
                     }
-                    IReadOnlyList<SerializedProperty> properties = SerializationManager.GetProperties(component);
+                    IReadOnlyList<SerializedProperty> properties = m_serialization.GetProperties(component);
                     for (int propertyIndex = 0; propertyIndex < properties.Count; propertyIndex++)
                     {
                         context.properties.Draw(

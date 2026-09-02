@@ -7,7 +7,7 @@
     <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Core.Storage\Inno.Core.Storage.csproj" PrivateAssets="compile" />
   </ItemGroup>

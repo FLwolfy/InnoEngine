@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using Inno.Core.Diagnose;
+using Inno.Core.Diagnostics;
 
 namespace Inno.Editor.Interactions;
 
@@ -29,6 +29,9 @@ internal sealed class EditorExtensionStateDiagnosticPublisher : IDisposable
     internal void ResolveSave()
         => Resolve(C_SAVE_GROUP);
 
+    /// <summary>
+    /// Releases the resources owned by this instance.
+    /// </summary>
     public void Dispose()
     {
         foreach (string group in m_states.Keys.ToArray())

@@ -5,14 +5,13 @@ using System.Linq;
 using System.Numerics;
 
 using Inno.Assets;
-using Inno.Assets.Core;
-using Inno.Assets.File;
+using Inno.Assets.Pipeline;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Native.ImGui;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using static Inno.Editor.Panel.FileBrowser.FileBrowserUtility;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
@@ -59,7 +58,12 @@ internal sealed class FileBrowserPanel : EditorPanel
 
     #endregion
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Captures an immutable snapshot of the current observable state.
+    /// </summary>
+    /// <param name="state">
+    /// The lifecycle or domain state applied by this operation.
+    /// </param>
     protected override void Capture(EditorState state)
     {
         state.Set("viewMode", m_viewMode.ToString());
@@ -72,7 +76,12 @@ internal sealed class FileBrowserPanel : EditorPanel
         state.Set("listTypeSeparator", m_listTypeSeparatorPosition);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Restores the supplied snapshot while preserving current invariants.
+    /// </summary>
+    /// <param name="state">
+    /// The lifecycle or domain state applied by this operation.
+    /// </param>
     protected override void Restore(EditorState state)
     {
         if (Enum.TryParse(state.Get("viewMode", string.Empty), out ViewMode viewMode))
@@ -125,19 +134,34 @@ internal sealed class FileBrowserPanel : EditorPanel
             assets);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Attaches this feature to its owning runtime generation.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnAttach(EditorContext context)
     {
         m_changeTracker.Attach(context);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Detaches this feature and releases generation-scoped state.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnDetach(EditorContext context)
     {
         m_changeTracker.Detach();
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Draws this feature using the current editor presentation context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnDraw(EditorContext context)
     {
         m_rename.Update(context);
@@ -336,7 +360,7 @@ internal sealed class FileBrowserPanel : EditorPanel
                                 if (m_assets.browser.root == AssetBrowserRoot.Assets)
                                     m_tree.DrawEntry(context, string.Empty, "Assets", true);
                                 else
-                                    m_tree.DrawPluginRoot(context, AssetManager.sourceMounts);
+                                    m_tree.DrawPluginRoot(context, m_assets.pipeline.sourceMounts);
                             }
                             finally
                             {
@@ -360,7 +384,7 @@ internal sealed class FileBrowserPanel : EditorPanel
             {
                 NativeImGui.EndChild();
             }
-            if (!IsReadOnlyLocation(m_assets.browser))
+            if (!IsReadOnlyLocation(m_assets.pipeline, m_assets.browser))
                 m_dragDrop.DrawDirectoryTarget(context, m_assets.browser.currentDirectory);
         }
         finally
@@ -414,7 +438,7 @@ internal sealed class FileBrowserPanel : EditorPanel
             {
                 NativeImGui.EndChild();
             }
-            if (!IsReadOnlyLocation(m_assets.browser))
+            if (!IsReadOnlyLocation(m_assets.pipeline, m_assets.browser))
                 m_dragDrop.DrawDirectoryTarget(context, m_assets.browser.currentDirectory);
         }
         finally
@@ -693,10 +717,10 @@ internal sealed class FileBrowserPanel : EditorPanel
                         i % 2 == 0 ? rowBg : rowAltBg);
 
                     DrawNameCell(context, item);
-                    DrawTextCell(item.isPluginRoot ? "PLUGIN" : GetTypeText(entry), EditorPalette.assetText);
+                    DrawTextCell(item.isPluginRoot ? "IPLUGIN" : GetTypeText(entry), EditorPalette.assetText);
                     DrawTextCell(
                         item.isPluginRoot
-                            ? "Plugins (read-only)"
+                            ? "~"
                             : GetSourceText(entry, currentDirectory),
                         EditorPalette.assetText);
                 }

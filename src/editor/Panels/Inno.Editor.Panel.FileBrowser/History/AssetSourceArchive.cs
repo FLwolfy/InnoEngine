@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 
 using Inno.Assets;
+using Inno.Assets.Pipeline;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
@@ -11,9 +12,13 @@ internal static class AssetSourceArchive
     private const string C_SOURCE_ENTRY = "source";
     private const string C_META_ENTRY = "source.imeta";
 
-    internal static byte[] Capture(string relativePath, out bool isDirectory)
+    internal static byte[] Capture(
+        AssetPipeline assets,
+        string relativePath,
+        out bool isDirectory)
     {
-        string source = GetSourcePath(relativePath);
+        ArgumentNullException.ThrowIfNull(assets);
+        string source = GetSourcePath(assets, relativePath);
         isDirectory = Directory.Exists(source);
         if (!isDirectory && !File.Exists(source))
             throw new FileNotFoundException($"Asset source '{relativePath}' does not exist.", source);
@@ -54,9 +59,14 @@ internal static class AssetSourceArchive
         return stream.ToArray();
     }
 
-    internal static void Restore(string relativePath, bool isDirectory, ReadOnlySpan<byte> data)
+    internal static void Restore(
+        AssetPipeline assets,
+        string relativePath,
+        bool isDirectory,
+        ReadOnlySpan<byte> data)
     {
-        string target = GetSourcePath(relativePath);
+        ArgumentNullException.ThrowIfNull(assets);
+        string target = GetSourcePath(assets, relativePath);
         if (File.Exists(target) || Directory.Exists(target))
             throw new IOException($"Asset source '{relativePath}' already exists.");
         string? parent = Path.GetDirectoryName(target);
@@ -110,8 +120,8 @@ internal static class AssetSourceArchive
                 File.Move(stagingMeta, target + ".imeta");
                 metaCommitted = true;
             }
-            AssetManager.Rescan();
-            AssetManager.WaitForIdle();
+            assets.Rescan();
+            assets.WaitForIdle();
         }
         catch
         {
@@ -123,8 +133,8 @@ internal static class AssetSourceArchive
             {
                 try
                 {
-                    AssetManager.Rescan();
-                    AssetManager.WaitForIdle();
+                    assets.Rescan();
+                    assets.WaitForIdle();
                 }
                 catch
                 {
@@ -159,11 +169,11 @@ internal static class AssetSourceArchive
         throw new InvalidDataException($"Unknown asset history archive entry '{entryName}'.");
     }
 
-    private static string GetSourcePath(string relativePath)
+    private static string GetSourcePath(AssetPipeline assets, string relativePath)
     {
-        string root = Path.GetFullPath(AssetManager.assetRoot) + Path.DirectorySeparatorChar;
+        string root = Path.GetFullPath(assets.assetRoot) + Path.DirectorySeparatorChar;
         string result = Path.GetFullPath(Path.Combine(
-            AssetManager.assetRoot,
+            assets.assetRoot,
             relativePath.Replace('/', Path.DirectorySeparatorChar)));
         if (!result.StartsWith(root, StringComparison.Ordinal))
             throw new InvalidDataException($"Asset history path '{relativePath}' escapes the asset root.");

@@ -67,8 +67,8 @@
 
 ## 11. Wiki 文档维护
 - API Wiki 统一位于根目录 `docs/`，入口为 `docs/README.md`。
-- Wiki 目录优先映射源码分层：`docs/core`、`docs/assets`、`docs/engine`、`docs/render`、`docs/editor`、`docs/platform`；每个分类必须有 `README.md` 索引。
-- 默认每个 `.csproj` 对应一个独立 Markdown 项目页，文件名使用完整项目名，例如 `docs/core/Inno.Core.Reflection.md`。
+- Wiki 目录优先映射源码分层：`docs/core`、`docs/assets`、`docs/engine`、`docs/rendering`、`docs/editor`、`docs/platform`；每个分类必须有 `README.md` 索引。
+- 默认每个 `.csproj` 对应一个独立 Markdown 项目页，文件名使用完整项目名，例如 `docs/core/Inno.Extensibility.Types.md`。
 - 项目页至少包含：职责与边界、依赖/初始化顺序、所有 `public` API、面向派生实现者的重要 `protected` 扩展点、常见工作流、可编译风格示例、错误/生命周期/热重载注意事项、相邻页面导航。
 - API 表格与示例必须以当前源码为依据；不得把 `internal` 实现描述成稳定公开契约。若解释内部机制，应明确标注其非公开性质。
 - 新增、删除、重命名或改变公开 API 行为时，在同一变更中同步对应项目页和分类索引。新增项目时同步创建项目页并加入 `docs/README.md` 的覆盖状态。
@@ -137,9 +137,16 @@
 - Shader、Technique、Material 与 Pipeline 通过开放 Stable ID 契约组合；内核不得维护封闭 Pass Tag、Render Path、资源语义或质量设置名单。
 
 ## 18. Plugin 与结构化内容强制边界
-- Project 根目录的 `Plugins` 与 `Assets` 平级。`Assets` 是唯一官方可写创作源；Plugin 必须先在 `Assets` 中通过 `PluginDefinitionAsset` 定义并导出。`Plugins/*.zip` 是压缩安装源，`Plugins/<folder>/` 是未压缩安装源而不是开发工作区；两者必须经过相同校验并作为只读 Asset Source Mount 进入现有 Asset Catalog、Importer、依赖图和 Artifact 流程，禁止建立 Plugin 专用资产数据库。
+- Project 根目录的 `Plugins` 与 `Assets` 平级。`Assets` 是唯一官方可写创作源；完整 Project 通过 File 菜单的 `Export as Plugin` 直接导出，不创建 `.iplugin`、`PluginDefinitionAsset` 或第二套 package authoring asset。`Plugins/*.zip` 是正式压缩安装源，`Plugins/<folder>/` 是未压缩安装源而不是开发工作区；两者必须经过相同校验并作为只读 Asset Source Mount 进入现有 Asset Catalog、Importer、依赖图和 Artifact 流程，禁止建立 Plugin 专用资产数据库。
 - File Browser 与所有 Asset mutation API 必须把 ZIP/Folder Plugin 一致视为逻辑只读。外部替换 ZIP 或修改 Folder 只表示安装内容更新并触发候选事务，不授予 Editor 内写权限；`Library/Plugins` 始终是不可编辑、可完全重建的缓存。
-- Plugin ZIP/目录只是本地内容与代码容器，不得引入 Package Manager、远程仓库、语义版本解析或平台产物发布系统。Plugin 依赖使用稳定 Plugin ID；规范化 source content hash 只用于候选、变化检测与缓存身份。
+- Plugin ZIP/目录只是本地内容与代码容器，不得引入 Package Manager、远程仓库、语义版本解析或平台产物发布系统。Plugin 依赖使用稳定 Plugin ID；导出器根据当前 active Plugin generation 自动声明依赖，并只在明确的 Editor Setting 开启时内嵌扁平、完整、确定性的依赖 ZIP。规范化 source content hash 只用于候选、变化检测与缓存身份。
 - Plugin 扩展必须复用现有 `AssemblyDomain.InnoPlugin`、collectible ALC、TypeCache、TypeRegistry 和候选事务。持久状态不得保存 Plugin `Type`、实例或 delegate。
 - 所有结构化资产、Graph、Plugin 清单和 Project Settings 必须使用 `ISerializable`、`SerializableProperty`、Serialization Converter 与 `SerializationManager`。只有 C#、Shader source/include 和普通文档等天然文本允许保持文本格式；禁止为 Rendering、Plugin 或 Settings 建立独立 JSON 持久化旁路。
 - Plugin 可以同时贡献资产、Shader、Pipeline、Importer、Component、Editor 扩展、设置和玩法代码。Manifest 不得维护各领域类型名单；具体扩展继续由稳定 attribute 和 TypeRegistry 自动发现。
+
+## 19. 新系统完成标准
+- 新功能必须先定义清晰的程序集/领域边界与最小公开入口，再实现具体 UI 或平台适配；平台、存储、编译器和 presentation 通过可替换契约隔离，禁止把临时流程堆入 Panel、Application 或静态工具类。
+- 默认一次完成源码、调用方、项目引用、解决方案归类、公开 XML、Wiki、成功/失败/边界测试与必要构建验证。不得留下占位实现、静默 fallback、重复协议或“以后再重构”的妥协路径。
+- 公开 API 必须少而完整；能由引擎可靠推导的信息不得要求用户创建 companion asset、重复填写清单或修改无关调用方。新增公开 API 时必须在交付说明中列出其必要性与稳定语义。
+- 绝对禁止使用 `InternalsVisibleTo`、测试专用后门、反射穿透或扩大 `internal` 成员可见性来简化测试。测试只能通过真实公开契约和可替换 public boundary 验证行为。
+- 新项目和功能文件必须按职责归类，文件名与主类型一致；一个文件只承载紧密相关的契约或实现，不使用含义模糊的 helper/internal 目录，也不把互不相关的类型收进巨型文件。

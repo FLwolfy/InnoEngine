@@ -1,8 +1,11 @@
 namespace Inno.Platform;
 
 /// <summary>
-/// Options used when creating a <see cref="PlatformWindow"/>.
+/// Defines backend-neutral properties used to create a platform window.
 /// </summary>
+/// <returns>
+/// A validated immutable window description.
+/// </returns>
 public readonly struct PlatformWindowOptions()
 {
     /// <summary>

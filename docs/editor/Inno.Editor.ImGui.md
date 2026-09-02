@@ -1,10 +1,10 @@
 # Inno.Editor.ImGui
 
-[Editor 索引](README.md) · [Platform ImGui](../platform/Inno.Platform.ImGui.md) · [Wiki 首页](../README.md)
+[Editor 索引](README.md) · [Platform ImGui](../platform/Inno.Platform.Sdl3.ImGui.md) · [Wiki 首页](../README.md)
 
 `Inno.Editor.ImGui` 提供编辑器统一控件、菜单/拖放渲染桥和视觉配置。它只包装可复用的 UI 原语，不持有 Scene、Selection 或 Panel 业务状态。
 
-EditorScripts 使用逻辑 namespace `InnoEditor.ImGui`。该项目的唯一 `Properties/ScriptingApi.cs` 同时导出 `ImGuiIcon`、Editor widgets、常用 Dear ImGui flags 与 pointer-free `ImGui` facade；`Inno.Platform.ImGui` 不声明脚本 API。Facade 覆盖常用 input、layout、table、combo、tab、popup、style、item query 与当前 window draw-list primitive，同时不暴露 `ImDrawListPtr`、`ImGuiStylePtr`、native pointer、callback userdata 或 Renderer texture ID。脚本只能在 Panel/Modal/Drawer 的绘制回调期间调用这些方法。
+EditorScripts 使用逻辑 namespace `InnoEditor.ImGui`。该项目的唯一 `Properties/ScriptingApi.cs` 导出 Editor widgets、常用 Dear ImGui flags 与 pointer-free `ImGui` facade；`Inno.Platform.Sdl3.ImGui` 不声明脚本 API。Facade 不暴露 native pointer、callback userdata 或 backend texture ID，只能在 Panel/Modal/Drawer 绘制回调期间调用。
 
 ```text
 Inno.Editor.ImGui/
@@ -54,7 +54,7 @@ Editor ImGui context 默认启用 Inno overlay scrollbar 扩展。纵横滚动�
 | `View/Zoom Out` | Command/Ctrl + `-` | 在 actual size 基础上减少一个 `0.10` 倍率步长。 |
 | `View/Actual Size` | Command/Ctrl + `0` | 恢复 Settings 中配置的 actual size。 |
 
-有效范围固定为 `0.75..1.50`；到达边界后对应菜单项禁用。持久值使用完整路径 `Editor/Appearance/Accessibility/Actual Size`，只由 Settings Apply 写入 `<ProjectRoot>/EditorSettings.json`。Zoom In/Out 是 session 内的临时倍率：有效值按 `actualSize × (1 + step × 0.10)` 计算，Actual Size 把 step 恢复为零，不改持久设置，也不制造 History。`EditorZoomModule` 与三个 Action 均属于 `Inno.Editor.Panel.Global`；ImGui 项目只保留 style metric 和表现基础设施，不拥有全局 zoom feature。
+有效范围固定为 `0.75..1.50`；持久值使用完整路径 `Editor/Appearance/Accessibility/Actual Size`，只由 Settings Apply 写入 `<ProjectRoot>/EditorSettings.inno`。Zoom In/Out 是 session 内的临时倍率，不改持久设置，也不制造 History。
 
 ## Modal renderer
 
@@ -109,7 +109,7 @@ if (open)
 }
 ```
 
-`CardBody` 提供统一的背景、边框与内边距；`dimmed` 为 `true` 时，正文整体灰化且不可编辑，但 header 中的 enabled checkbox 仍可用于重新启用对象。Card 的 full-width bounds 使用当前 window 的实际 padding，而不是全局默认值，因此零 padding Panel 不会被误判为横向溢出。Header title 在 leading/trailing 控件之间裁剪并提交固定可用宽度，长 Behavior/System 类型名不会扩大 window content size。相邻卡片之间的外部间距由调用方控制。
+`CardBody` 提供统一的背景、边框与内边距；`dimmed` 为 `true` 时，正文整体灰化且不可编辑，但 header 中的 enabled checkbox 仍可用于重新启用对象。Card 的 full-width bounds 使用当前 window 的实际 padding，而不是全局默认值，因此零 padding Panel 不会被误判为横向溢出。Header title 在 leading/trailing 控件之间裁剪并提交固定可用宽度，长 GameBehavior/GameSystem 类型名不会扩大 window content size。相邻卡片之间的外部间距由调用方控制。
 
 `PropertyRow` 会按当前可用宽度限制 label column，并保证 value column 仍有可用区域；向量属性的每个 axis field 同样按实际列宽收缩，不用全局最小宽度反向撑大 Inspector。这些控件在宽窗口保持原有比例，在窄窗口只压缩自身布局，不创建人工 `ScrollMaxX`。
 
@@ -117,13 +117,13 @@ if (open)
 
 ## Tree 与拖拽反馈
 
-`TreeNode` 统一负责整行 hit area、hover/selection 背景和树连接线。内容回调会收到 `TreeNodeDrawContext`，其中的 `rowHeight` 来自当前原生 TreeNode 的实际几何，可用于在任意 zoom 下精确对齐行内控件。有子节点的行既可单击 disclosure arrow 展开，也可双击文字/图标所在的 content hit area 切换展开状态；双击内容不会同时命中箭头，leaf 也不会产生虚假展开状态。状态在下一帧应用，以保持当前帧 native TreePush/TreePop 完整对称。`TreeNodeResult.min/max` 表示整行几何，`contentMin` 表示排除层级缩进与箭头后的真实内容起点；行右边界使用当前 window 的 `WorkRect.Max.X`，不会因为外部 padding 人为制造 `ScrollMaxX`。Tree 内容 offset 从未滚动的 window/group 坐标计算，ImGui 只会应用一次 `ScrollX`，因此文字、图标和交互区始终保持同一坐标系。整行 invisible hit area 不参与 `CursorMaxPos/IdealMaxPos`；固定到可视区域右侧的控件应通过 `TreeNodeOptions.drawViewportOverlay` 绘制，它同样不扩大内容边界。Panel 从宽变窄后，水平范围因此会重新收敛到名称和层级缩进的真实最小容纳宽度，不会保留旧 viewport 宽度。Tree guide 使用 ImGui window 的真实 `TreeDepth` 建立 parent stack，不通过缩放后的 X 坐标猜测层级；guide 在当前节点提交前直接使用当前帧坐标绘制。每个 Tree row 使用两个 draw-list channel：guide、文字、图标和交互控件进入前景 channel，等本行 hover/selection/自定义背景状态确定后，背景矩形以同一帧的最终几何进入后景 channel；合并后仍保持背景在内容下面。Tree 因此不保存上一帧的 guide 或背景矩形，drag/drop、scroll、zoom、窗口移动或尺寸变化都不会产生被丢弃几何造成的空白帧和闪烁。纵向 guide 的每个 sibling segment 按紧凑行的真实底边、item spacing 和 overlap 延伸，端点统一 snap 到半像素，线条连续不依赖增加行高。Hierarchy 的 child-target 框使用 `contentMin..max`，因此不会覆盖左侧 Tree guide/indent 区域。拖拽期间普通 hover 背景会暂停，调用方可用 `InsertionLine` 表示同级插入，或用 `DropTargetHighlight` 表示成为目标的 child。
+`TreeNode` 统一负责整行 hit area、hover/selection 背景和树连接线。内容回调会收到 `TreeNodeDrawContext`，其中的 `rowHeight` 来自当前原生 TreeNode 的实际几何，可用于在任意 zoom 下精确对齐行内控件。有子节点的行既可单击 disclosure arrow 展开，也可双击文字/图标所在的 content hit area 切换展开状态；双击内容不会同时命中箭头，leaf 也不会产生虚假展开状态。状态在下一帧应用，以保持当前帧 native TreePush/TreePop 完整对称。`TreeNodeResult.min/max` 表示整行几何，`contentMin` 表示排除层级缩进与箭头后的真实内容起点；行右边界使用当前 window 的 `WorkRect.Max.X`，不会因为外部 padding 人为制造 `ScrollMaxX`。Tree 内容 offset 从未滚动的 window/group 坐标计算，ImGui 只会应用一次 `ScrollX`，因此文字、图标和交互区始终保持同一坐标系。整行 invisible hit area 不参与 `CursorMaxPos/IdealMaxPos`；固定到可视区域右侧的控件应通过 `TreeNodeOptions.drawViewportOverlay` 绘制，它同样不扩大内容边界。Panel 从宽变窄后，水平范围因此会重新收敛到名称和层级缩进的真实最小容纳宽度，不会保留旧 viewport 宽度。Tree guide 使用 ImGui window 的真实 `TreeDepth` 建立 parent stack，不通过缩放后的 X 坐标猜测层级；guide 在当前节点内容提交并得到最终实际高度后立即使用当前帧坐标绘制。每个 Tree row 使用两个 draw-list channel：guide、文字、图标和交互控件进入前景 channel，等本行 hover/selection/自定义背景状态确定后，背景矩形以同一帧的最终几何进入后景 channel；合并后仍保持背景在内容下面。Tree 因此不保存上一帧的 guide 或背景矩形，drag/drop、scroll、zoom、窗口移动或尺寸变化都不会产生被丢弃几何造成的空白帧和闪烁。父节点 connector 从父行真实垂直中心开始，纵向 sibling segment 延伸到当前行真实底边、item spacing 和 overlap；端点统一 snap 到半像素，因此父子线和相邻行之间都连续，同时完全不增加 entry 高度。Hierarchy 的 child-target 框使用 `contentMin..max`，因此不会覆盖左侧 Tree guide/indent 区域。拖拽期间普通 hover 背景会暂停，调用方可用 `InsertionLine` 表示同级插入，或用 `DropTargetHighlight` 表示成为目标的 child。
 
 Tree 行高采用紧凑的原生 `TreeNode` 内容高度；Hierarchy 通过可缩放的 `hierarchyItemSpacing` 控制 Scene/GameObject 行距，不以额外 frame padding 增高栏目。`DropTargetHighlight` 绘制到当前 viewport 的 foreground draw list，因此目标框不会被发起它的 Panel clip rect 截断。
 
 Scripting facade 同时导出 `TreeNodeDrawContext`、`TreeNodeOptions`、`TreeNodeResult` 与可调用的 `TreeNode` 入口；content callback 必须接收 draw context。native 指针/内部布局 helper 通过显式 member-level ignore 留在 host，不会因为 signature closure 被误导出。
 
-`IconText` 使用 baked glyph 的可见边界而不是 advance rectangle，把 icon 的真实轮廓放在 slot 中心；slot 以标准文字行高为最小宽度，并会为 Cubes 等超宽 glyph 自动扩展，避免轮廓挤入后方 label。`IconText(..., highlight: true)` 保留下划线，并在 scope 内自动切换为 `Bold | Italic`；当前用于 active Scene 与 File Browser 当前目录。字体注册与自定义方式见 [Platform ImGui](../platform/Inno.Platform.ImGui.md#字体样式)。
+`IconText` 使用 baked glyph 的可见边界把 icon 轮廓放在 slot 中心。字体注册与自定义方式见 [Platform ImGui](../platform/Inno.Platform.Sdl3.ImGui.md)。
 
 `DragDropTarget(..., drawDefaultHighlight: false)` 可关闭 ImGui 默认目标框，适合需要按鼠标在行内位置绘制互斥反馈的复合目标。
 

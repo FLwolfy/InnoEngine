@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 
 using Inno.Core.Events;
+using Inno.Core.Logging;
+using Inno.Extensibility.Types;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
@@ -23,42 +25,60 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
     private bool m_disposed;
 
     /// <summary>
-    /// Creates an ImGui editor runtime over an existing project context.
+    /// Creates an ImGui editor runtime with stable host-owned extension services.
     /// </summary>
-    /// <param name="context">The shared editor context that owns project settings and frame state.</param>
+    /// <param name="context">
+    /// The shared editor context that owns project settings and frame state.
+    /// </param>
+    /// <param name="types">
+    /// The host-owned type catalog that coordinates extension generations.
+    /// </param>
+    /// <param name="logs">
+    /// The host-owned logging router used by editor infrastructure.
+    /// </param>
+    /// <param name="hostServices">
+    /// Services available to discovered extension constructors.
+    /// </param>
     /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="context"/> is <see langword="null"/>.
+    /// Thrown when <paramref name="context"/>, <paramref name="types"/>, or
+    /// <paramref name="hostServices"/> is <see langword="null"/>.
     /// </exception>
-    public ImGuiEditorRuntime(EditorContext context)
-        : this(context, Array.Empty<object>())
-    {
-    }
-
-    /// <summary>Creates an ImGui editor runtime with stable host-owned extension services.</summary>
-    /// <param name="context">The shared editor context that owns project settings and frame state.</param>
-    /// <param name="hostServices">Services available to discovered extension constructors.</param>
-    /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="context"/> or <paramref name="hostServices"/> is <see langword="null"/>.
-    /// </exception>
-    public ImGuiEditorRuntime(EditorContext context, IEnumerable<object> hostServices)
+    public ImGuiEditorRuntime(
+        EditorContext context,
+        TypeCatalog types,
+        LogRouter logs,
+        IEnumerable<object> hostServices)
         : base(context ?? throw new ArgumentNullException(nameof(context)))
     {
+        ArgumentNullException.ThrowIfNull(types);
+        ArgumentNullException.ThrowIfNull(logs);
         ArgumentNullException.ThrowIfNull(hostServices);
         ImGuiIOPtr io = NativeImGui.GetIO();
         io.ConfigFlags |= ImGuiConfigFlags.InnoOverlayScrollbars;
-        m_runtime = new EditorInteractionRuntime(context, hostServices);
+        m_runtime = new EditorInteractionRuntime(context, types, logs, hostServices);
     }
 
-    /// <summary>Gets the active presentation-independent interaction entry point.</summary>
+    /// <summary>
+    /// Gets the active presentation-independent interaction entry point.
+    /// </summary>
     public EditorInteractions interactions => m_runtime.interactions;
 
-    /// <summary>Gets the number of active dockable panels.</summary>
+    /// <summary>
+    /// Gets the number of active dockable panels.
+    /// </summary>
     public int panelCount => m_runtime.panelCount;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Starts value processing after validating the current state.
+    /// </summary>
     public override void Start() => m_runtime.Start();
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Recomputes owned state from the current validated inputs.
+    /// </summary>
+    /// <param name="frame">
+    /// The frame consumed by update; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     public override void Update(EditorFrame frame) => m_runtime.Update(frame);
 
     /// <summary>
@@ -90,7 +110,9 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
         m_runtime.PrepareShutdown();
     }
 
-    /// <summary>Draws the complete editor frame through ImGui.</summary>
+    /// <summary>
+    /// Draws the complete editor frame through ImGui.
+    /// </summary>
     public void Draw()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -134,8 +156,12 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
         }
     }
 
-    /// <summary>Dispatches an unhandled keyboard event through contextual shortcuts.</summary>
-    /// <param name="keyEvent">The keyboard event received from the application event stream.</param>
+    /// <summary>
+    /// Dispatches an unhandled keyboard event through contextual shortcuts.
+    /// </summary>
+    /// <param name="keyEvent">
+    /// The keyboard event received from the application event stream.
+    /// </param>
     public void HandleKeyPressed(KeyPressedEvent keyEvent)
     {
         ArgumentNullException.ThrowIfNull(keyEvent);
@@ -144,7 +170,9 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
         m_runtime.HandleKeyPressed(keyEvent);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Releases the resources owned by this implementation.
+    /// </summary>
     public override void Dispose()
     {
         if (m_disposed)

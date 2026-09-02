@@ -2,22 +2,21 @@
 
 [Platform 索引](README.md) · [Wiki 首页](../README.md)
 
-`Inno.Platform` 提供窗口与事件循环，并通过一个窄的公开扩展契约连接 ImGui 等可选后端。`Inno.Platform.ImGui` 不再依赖 `InternalsVisibleTo` 或 Platform 的 internal SDL hook。
+`Inno.Platform` 只定义后端中立窗口与应用契约。SDL3 事件循环和原生事件扩展属于 `Inno.Platform.Sdl3`，Dear ImGui 集成属于 `Inno.Platform.Sdl3.ImGui`；上层不接触 SDL enum、pointer 或 window 类型。
 
-## PlatformApplication
+## IPlatformApplication
 
 | 成员 | 说明 |
 | --- | --- |
-| 构造函数 | 初始化 SDL3 Video/Events。 |
-| `CreateWindow(options)` | 创建并拥有一个窗口。 |
-| `PollEvent(out Event?)` | 轮询、合并并返回下一个引擎事件。 |
+| `CreateWindow(options)` | 创建并拥有一个后端中立窗口。 |
+| `PollEvent(out Event?)` | 轮询并返回下一个引擎事件。 |
 | `GetWindows()` | 返回当前有效窗口，包括集成创建的 viewport window。 |
 | `RegisterExtension(extension)` | 注册当前 application 的后端扩展，返回可释放 registration。 |
 | `Dispose()` | 通知扩展、释放窗口并关闭平台后端。 |
 
-## IPlatformApplicationExtension
+## SDL3 Adapter 扩展
 
-该接口用于平台实现集成，不属于游戏脚本 API：
+`ISdl3ApplicationExtension` 用于 SDL3 Adapter 集成，不属于 `Inno.Platform` 或游戏脚本 API：
 
 - `ProcessNativeEvent(...)`：引擎翻译事件前接收短生命周期 native event。
 - `RenderLiveResizeWindow(...)`：macOS 等 live-resize 循环中重绘集成窗口。
@@ -36,7 +35,7 @@
 
 ## ImGui layout 文件
 
-`Inno.Platform.ImGui.PlatformImGuiContext.SetIniFile(string?)` 在首帧之前设置 Dear ImGui 的 layout 持久化文件。相对路径会转换为绝对路径，父目录会按需创建；传入 `null` 或空白字符串会关闭 ini 持久化。首帧开始后再调用会抛出 `InvalidOperationException`。
+`Inno.Platform.Sdl3.ImGui.PlatformImGuiContext.SetIniFile(string?)` 在首帧之前设置 Dear ImGui 的 layout 持久化文件。相对路径会转换为绝对路径，父目录会按需创建；传入 `null` 或空白字符串会关闭 ini 持久化。首帧开始后再调用会抛出 `InvalidOperationException`。
 
 Editor Host 当前在创建 ImGui context 后立即配置：
 
@@ -49,7 +48,7 @@ imgui.SetIniFile(Path.Combine(projectRoot, "editor.ini"));
 ## 注册示例
 
 ```csharp
-sealed class BackendExtension : IPlatformApplicationExtension
+sealed class BackendExtension : ISdl3ApplicationExtension
 {
     public void ProcessNativeEvent(
         PlatformApplication application,

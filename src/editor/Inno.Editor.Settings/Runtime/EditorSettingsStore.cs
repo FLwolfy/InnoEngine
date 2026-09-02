@@ -1,23 +1,25 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Nodes;
+
+using Inno.Core.Serialization;
 
 namespace Inno.Editor.Settings;
 
 internal sealed class EditorSettingsStore
 {
-    internal const string C_FILE_NAME = "EditorSettings.json";
+    internal const string C_FILE_NAME = "EditorSettings.inno";
 
     private readonly string m_path;
+    private readonly SerializationRegistry m_serialization;
     private Dictionary<string, EditorSettingObject> m_values;
 
-    internal EditorSettingsStore(string projectDirectory)
+    internal EditorSettingsStore(string projectDirectory, SerializationRegistry serialization)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectDirectory);
+        ArgumentNullException.ThrowIfNull(serialization);
         m_path = Path.Combine(Path.GetFullPath(projectDirectory), C_FILE_NAME);
+        m_serialization = serialization;
         m_values = ReadValues(m_path);
     }
 
@@ -36,21 +38,17 @@ internal sealed class EditorSettingsStore
         => m_values.ContainsKey(path);
 
     internal Dictionary<string, EditorSettingObject> GetSnapshot()
-    {
-        var result = new Dictionary<string, EditorSettingObject>(m_values.Count, StringComparer.Ordinal);
-        foreach ((string path, EditorSettingObject value) in m_values)
-            result.Add(path, value.Copy());
-        return result;
-    }
+        => Copy(m_values);
 
     internal byte[] GetDocument()
         => Serialize(m_values);
 
     internal void Replace(IReadOnlyDictionary<string, EditorSettingObject> values)
     {
-        byte[] document = Serialize(values);
+        Dictionary<string, EditorSettingObject> candidate = ValidateAndCopy(values);
+        byte[] document = Serialize(candidate);
         Write(document);
-        m_values = Copy(values);
+        m_values = candidate;
     }
 
     internal void ReplaceDocument(ReadOnlySpan<byte> document)
@@ -61,8 +59,58 @@ internal sealed class EditorSettingsStore
         m_values = values;
     }
 
-    internal static void ValidateDocument(ReadOnlySpan<byte> document)
+    internal void ValidateDocument(ReadOnlySpan<byte> document)
         => _ = ReadValues(document);
+
+    private Dictionary<string, EditorSettingObject> ReadValues(string path)
+        => File.Exists(path) ? ReadValues(File.ReadAllBytes(path)) : [];
+
+    private Dictionary<string, EditorSettingObject> ReadValues(ReadOnlySpan<byte> document)
+    {
+        try
+        {
+            EditorSettingsDocument parsed = m_serialization.Deserialize<EditorSettingsDocument>(document);
+            return ValidateAndCopy(parsed.values);
+        }
+        catch (Exception exception) when (exception is ArgumentException
+            or InvalidDataException
+            or InvalidOperationException
+            or NotSupportedException)
+        {
+            throw new InvalidDataException(
+                "The editor Settings document is not a valid current-format document.",
+                exception);
+        }
+    }
+
+    private byte[] Serialize(IReadOnlyDictionary<string, EditorSettingObject> values)
+        => m_serialization.Serialize(new EditorSettingsDocument { values = Copy(values) });
+
+    private static Dictionary<string, EditorSettingObject> ValidateAndCopy(
+        IReadOnlyDictionary<string, EditorSettingObject> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        var result = new Dictionary<string, EditorSettingObject>(values.Count, StringComparer.Ordinal);
+        foreach ((string path, EditorSettingObject value) in values)
+        {
+            string normalized;
+            try
+            {
+                normalized = EditorSettingsPathUtility.Normalize(path);
+            }
+            catch (ArgumentException exception)
+            {
+                throw new InvalidDataException("The editor Settings document contains an invalid path.", exception);
+            }
+            if (!string.Equals(path, normalized, StringComparison.Ordinal))
+                throw new InvalidDataException($"Settings path '{path}' is not normalized.");
+            if (value is null)
+                throw new InvalidDataException($"Settings path '{path}' has a null object.");
+            value.Validate(path);
+            result.Add(path, value.Copy());
+        }
+        return result;
+    }
 
     private static Dictionary<string, EditorSettingObject> Copy(
         IReadOnlyDictionary<string, EditorSettingObject> values)
@@ -73,66 +121,28 @@ internal sealed class EditorSettingsStore
         return result;
     }
 
-    private static byte[] Serialize(IReadOnlyDictionary<string, EditorSettingObject> values)
-    {
-        var root = new JsonObject();
-        string[] paths = new string[values.Count];
-        int pathIndex = 0;
-        foreach (string path in values.Keys)
-            paths[pathIndex++] = path;
-        Array.Sort(paths, StringComparer.Ordinal);
-        for (int i = 0; i < paths.Length; i++)
-            root[paths[i]] = JsonNode.Parse(values[paths[i]].Serialize());
-        string json = root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
-        return Encoding.UTF8.GetBytes(json);
-    }
-
-    private static Dictionary<string, EditorSettingObject> ReadValues(string path)
-        => File.Exists(path) ? ReadValues(File.ReadAllBytes(path)) : [];
-
-    private static Dictionary<string, EditorSettingObject> ReadValues(ReadOnlySpan<byte> document)
-    {
-        var result = new Dictionary<string, EditorSettingObject>(StringComparer.Ordinal);
-        try
-        {
-            JsonNode? parsed = JsonNode.Parse(document);
-            if (parsed is not JsonObject root)
-                throw new InvalidDataException("The editor Settings document must contain a JSON object.");
-            foreach ((string path, JsonNode? value) in root)
-            {
-                string normalized = EditorSettingsPathUtility.Normalize(path);
-                if (!string.Equals(path, normalized, StringComparison.Ordinal))
-                    throw new InvalidDataException($"Settings path '{path}' is not normalized.");
-                if (value is not JsonObject objectValue)
-                    throw new InvalidDataException($"Settings path '{path}' must contain a JSON object.");
-                result.Add(path, EditorSettingObject.Deserialize(objectValue.ToJsonString()));
-            }
-            return result;
-        }
-        catch (JsonException exception)
-        {
-            throw new InvalidDataException("The editor Settings document is not valid JSON.", exception);
-        }
-        catch (ArgumentException exception)
-        {
-            throw new InvalidDataException("The editor Settings document contains an invalid path.", exception);
-        }
-    }
-
     private void Write(byte[] document)
     {
-        string temporaryPath = m_path + ".tmp";
-        using (var stream = new FileStream(
-                   temporaryPath,
-                   FileMode.Create,
-                   FileAccess.Write,
-                   FileShare.None,
-                   4096,
-                   FileOptions.WriteThrough))
+        string candidate = m_path + ".staging-" + Guid.NewGuid().ToString("N");
+        try
         {
-            stream.Write(document);
-            stream.Flush(flushToDisk: true);
+            using (var stream = new FileStream(
+                       candidate,
+                       FileMode.CreateNew,
+                       FileAccess.Write,
+                       FileShare.None,
+                       4096,
+                       FileOptions.WriteThrough))
+            {
+                stream.Write(document);
+                stream.Flush(flushToDisk: true);
+            }
+            File.Move(candidate, m_path, overwrite: true);
         }
-        File.Move(temporaryPath, m_path, overwrite: true);
+        finally
+        {
+            if (File.Exists(candidate))
+                File.Delete(candidate);
+        }
     }
 }

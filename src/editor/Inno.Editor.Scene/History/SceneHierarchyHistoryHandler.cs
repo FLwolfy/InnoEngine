@@ -2,17 +2,41 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using Inno.Core.Identity;
 using Inno.Core.Logging;
 using Inno.Editor.Interactions;
-using Inno.Engine.Scene;
-using Inno.Engine.Scene.Components;
+using Inno.Scene;
+using Inno.Scene.Components;
 
 namespace Inno.Editor.Scene;
 
 [EditorHistoryHandler(SceneHistoryKinds.Hierarchy)]
 internal sealed class SceneHierarchyHistoryHandler : EditorHistoryHandler
 {
+    private readonly EditorSceneWorkspace m_workspace;
+    private readonly Logger m_log;
+
+    internal SceneHierarchyHistoryHandler(EditorSceneWorkspace workspace, LogRouter logs)
+    {
+        m_workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
+        ArgumentNullException.ThrowIfNull(logs);
+        m_log = logs.CreateLogger<SceneHierarchyHistoryHandler>();
+    }
+
+    /// <summary>
+    /// Evaluates whether the requested change can be applied to the current generation.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="change">
+    /// The neutral change payload to query or apply.
+    /// </param>
+    /// <param name="direction">
+    /// The history direction that determines which state is applied.
+    /// </param>
+    /// <returns>
+    /// The validated editor history availability that represents the completed operation.
+    /// </returns>
     protected override EditorHistoryAvailability Query(
         EditorHistoryContext context,
         EditorHistoryChange change,
@@ -35,7 +59,7 @@ internal sealed class SceneHierarchyHistoryHandler : EditorHistoryHandler
                     return EditorHistoryAvailability.Unavailable(
                         $"Scene '{placement.sceneId}' is no longer loaded.");
                 }
-                if (IdentityManager.Get<GameObject>(placement.objectId) is not { isRuntimeValid: true })
+                if (m_workspace.Find<GameObject>(placement.objectId) is not { isRuntimeValid: true })
                 {
                     return EditorHistoryAvailability.Unavailable(
                         $"GameObject '{placement.objectId}' is no longer available.");
@@ -43,7 +67,7 @@ internal sealed class SceneHierarchyHistoryHandler : EditorHistoryHandler
                 GameObject? parent = null;
                 if (placement.parentId is Guid parentId)
                 {
-                    parent = IdentityManager.Get<GameObject>(parentId);
+                    parent = m_workspace.Find<GameObject>(parentId);
                     if (parent is not { isRuntimeValid: true })
                     {
                         return EditorHistoryAvailability.Unavailable(
@@ -67,6 +91,21 @@ internal sealed class SceneHierarchyHistoryHandler : EditorHistoryHandler
         }
     }
 
+    /// <summary>
+    /// Applies a validated change atomically at the caller-controlled commit point.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="change">
+    /// The neutral change payload to query or apply.
+    /// </param>
+    /// <param name="direction">
+    /// The history direction that determines which state is applied.
+    /// </param>
+    /// <returns>
+    /// The validated editor history result that represents the completed operation.
+    /// </returns>
     protected override EditorHistoryResult Apply(
         EditorHistoryContext context,
         EditorHistoryChange change,
@@ -97,14 +136,17 @@ internal sealed class SceneHierarchyHistoryHandler : EditorHistoryHandler
                 }
                 return EditorHistoryResult.Failure(exception.Message);
             }
-            GameObject? selected = IdentityManager.Get<GameObject>(data.selectedId);
+            GameObject? selected = m_workspace.Find<GameObject>(data.selectedId);
             try
             {
                 _ = context.interactions.For(context.interactions.focusedArea, selected).Select();
             }
             catch (Exception exception)
             {
-                Log.Error("Scene hierarchy selection notification failed: {0}", exception);
+                m_log.Write(
+                    LogLevel.Error,
+                    "Scene hierarchy selection notification failed: {0}",
+                    [exception]);
             }
             return EditorHistoryResult.Success();
         }
@@ -114,10 +156,10 @@ internal sealed class SceneHierarchyHistoryHandler : EditorHistoryHandler
         }
     }
 
-    private static SceneObjectPlacement[] Capture(IEnumerable<SceneObjectPlacement> placements)
-        => placements.Select(static placement =>
+    private SceneObjectPlacement[] Capture(IEnumerable<SceneObjectPlacement> placements)
+        => placements.Select(placement =>
         {
-            GameObject gameObject = IdentityManager.Get<GameObject>(placement.objectId)
+            GameObject gameObject = m_workspace.Find<GameObject>(placement.objectId)
                 ?? throw new InvalidOperationException($"GameObject '{placement.objectId}' is no longer available.");
             return new SceneObjectPlacement(
                 gameObject.scene.identity.persistentId,
@@ -126,16 +168,16 @@ internal sealed class SceneHierarchyHistoryHandler : EditorHistoryHandler
                 gameObject.transform.siblingIndex);
         }).ToArray();
 
-    private static void ApplyPlacements(IReadOnlyCollection<SceneObjectPlacement> placements)
+    private void ApplyPlacements(IReadOnlyCollection<SceneObjectPlacement> placements)
     {
-        foreach (SceneObjectPlacement placement in placements.OrderBy(static placement =>
+        foreach (SceneObjectPlacement placement in placements.OrderBy(placement =>
                      GetHierarchyDepth(ResolveObject(placement.objectId).transform)))
         {
             GameObject gameObject = ResolveObject(placement.objectId);
             GameScene destination = ResolveScene(placement.sceneId)
                 ?? throw new InvalidOperationException($"Scene '{placement.sceneId}' is no longer loaded.");
             if (!ReferenceEquals(gameObject.scene, destination))
-                SceneManager.MoveGameObjectToScene(gameObject, destination);
+                m_workspace.world.MoveGameObjectToScene(gameObject, destination);
         }
 
         var pending = new List<SceneObjectPlacement>(placements);
@@ -181,13 +223,13 @@ internal sealed class SceneHierarchyHistoryHandler : EditorHistoryHandler
         return depth;
     }
 
-    private static GameObject ResolveObject(Guid objectId)
-        => IdentityManager.Get<GameObject>(objectId) is { isRuntimeValid: true } gameObject
+    private GameObject ResolveObject(Guid objectId)
+        => m_workspace.Find<GameObject>(objectId) is { isRuntimeValid: true } gameObject
             ? gameObject
             : throw new InvalidOperationException($"GameObject '{objectId}' is no longer available.");
 
-    private static GameScene? ResolveScene(Guid sceneId)
-        => IdentityManager.Get<GameScene>(sceneId) is { isLoaded: true, isDestroyed: false } scene
+    private GameScene? ResolveScene(Guid sceneId)
+        => m_workspace.Find<GameScene>(sceneId) is { isLoaded: true, isDestroyed: false } scene
             ? scene
             : null;
 }

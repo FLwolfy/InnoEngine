@@ -10,11 +10,17 @@ namespace Inno.Core.Graphs;
 /// </summary>
 public enum GraphDiagnosticSeverity
 {
-    /// <summary>Provides non-blocking information.</summary>
+    /// <summary>
+    /// Provides non-blocking information.
+    /// </summary>
     Info,
-    /// <summary>Preserves the graph but may reduce functionality.</summary>
+    /// <summary>
+    /// Preserves the graph but may reduce functionality.
+    /// </summary>
     Warning,
-    /// <summary>Prevents graph compilation or execution.</summary>
+    /// <summary>
+    /// Prevents graph compilation or execution.
+    /// </summary>
     Error
 }
 
@@ -26,11 +32,21 @@ public sealed class GraphDiagnostic
     /// <summary>
     /// Creates a graph diagnostic.
     /// </summary>
-    /// <param name="code">Stable machine-readable diagnostic code.</param>
-    /// <param name="message">Artist-facing diagnostic text.</param>
-    /// <param name="severity">Diagnostic impact.</param>
-    /// <param name="nodeId">Optional related node identifier.</param>
-    /// <param name="edgeId">Optional related edge identifier.</param>
+    /// <param name="code">
+    /// Stable machine-readable diagnostic code.
+    /// </param>
+    /// <param name="message">
+    /// Artist-facing diagnostic text.
+    /// </param>
+    /// <param name="severity">
+    /// Diagnostic impact.
+    /// </param>
+    /// <param name="nodeId">
+    /// Optional related node identifier.
+    /// </param>
+    /// <param name="edgeId">
+    /// Optional related edge identifier.
+    /// </param>
     public GraphDiagnostic(
         string code,
         string message,
@@ -47,19 +63,29 @@ public sealed class GraphDiagnostic
         this.edgeId = edgeId;
     }
 
-    /// <summary>Gets the stable machine-readable diagnostic code.</summary>
+    /// <summary>
+    /// Gets the stable machine-readable diagnostic code.
+    /// </summary>
     public string code { get; }
 
-    /// <summary>Gets the artist-facing diagnostic text.</summary>
+    /// <summary>
+    /// Gets the artist-facing diagnostic text.
+    /// </summary>
     public string message { get; }
 
-    /// <summary>Gets the diagnostic impact.</summary>
+    /// <summary>
+    /// Gets the diagnostic impact.
+    /// </summary>
     public GraphDiagnosticSeverity severity { get; }
 
-    /// <summary>Gets the related node identifier, if any.</summary>
+    /// <summary>
+    /// Gets the related node identifier, if any.
+    /// </summary>
     public GraphNodeId? nodeId { get; }
 
-    /// <summary>Gets the related edge identifier, if any.</summary>
+    /// <summary>
+    /// Gets the related edge identifier, if any.
+    /// </summary>
     public GraphEdgeId? edgeId { get; }
 }
 
@@ -73,17 +99,23 @@ public sealed class GraphValidationResult
     /// <summary>
     /// Creates a graph validation result.
     /// </summary>
-    /// <param name="diagnostics">Diagnostics in deterministic validation order.</param>
+    /// <param name="diagnostics">
+    /// Diagnostics in deterministic validation order.
+    /// </param>
     public GraphValidationResult(IReadOnlyList<GraphDiagnostic> diagnostics)
     {
         ArgumentNullException.ThrowIfNull(diagnostics);
         m_diagnostics = diagnostics;
     }
 
-    /// <summary>Gets diagnostics in deterministic validation order.</summary>
+    /// <summary>
+    /// Gets diagnostics in deterministic validation order.
+    /// </summary>
     public IReadOnlyList<GraphDiagnostic> diagnostics => m_diagnostics;
 
-    /// <summary>Gets whether no error diagnostic is present.</summary>
+    /// <summary>
+    /// Gets whether no error diagnostic is present.
+    /// </summary>
     public bool isValid
     {
         get
@@ -109,11 +141,21 @@ public static class GraphValidator
     /// <summary>
     /// Validates node availability, ports, edge types, capacity, required inputs and cycles.
     /// </summary>
-    /// <param name="document">Graph document to validate without modifying it.</param>
-    /// <param name="resolver">Active node definition resolver.</param>
-    /// <param name="conversion">Optional directed type conversion policy.</param>
-    /// <param name="allowCycles">Whether directed cycles are permitted.</param>
-    /// <returns>A deterministic validation result. Missing definitions remain warnings so documents stay editable.</returns>
+    /// <param name="document">
+    /// Graph document to validate without modifying it.
+    /// </param>
+    /// <param name="resolver">
+    /// Active node definition resolver.
+    /// </param>
+    /// <param name="conversion">
+    /// Optional directed type conversion policy.
+    /// </param>
+    /// <param name="allowCycles">
+    /// Whether directed cycles are permitted.
+    /// </param>
+    /// <returns>
+    /// A deterministic validation result. Missing definitions remain warnings so documents stay editable.
+    /// </returns>
     public static GraphValidationResult Validate(
         GraphDocument document,
         IGraphNodeDefinitionResolver resolver,

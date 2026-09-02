@@ -3,7 +3,7 @@ using System;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 using Inno.Editor.Scene;
-using Inno.Engine.Scene;
+using Inno.Scene;
 
 namespace Inno.Editor.Panel.Hierarchy;
 
@@ -11,6 +11,15 @@ namespace Inno.Editor.Panel.Hierarchy;
 internal sealed class MoveGameObjectToSceneDropHandler(SceneEdits edits)
     : EditorDrop<GameObject, HierarchySceneDropTarget>
 {
+    /// <summary>
+    /// Evaluates whether the requested change can be applied to the current generation.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <returns>
+    /// The validated editor drop status that represents the completed operation.
+    /// </returns>
     protected override EditorDropStatus Query(
         EditorDropContext<GameObject, HierarchySceneDropTarget> context)
     {
@@ -21,6 +30,15 @@ internal sealed class MoveGameObjectToSceneDropHandler(SceneEdits edits)
             : EditorDropStatus.rejected;
     }
 
+    /// <summary>
+    /// Validates and applies the current editor drag-and-drop interaction atomically.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <returns>
+    /// The validated editor drop result that represents the completed operation.
+    /// </returns>
     protected override EditorDropResult Drop(
         EditorDropContext<GameObject, HierarchySceneDropTarget> context)
     {
@@ -28,10 +46,10 @@ internal sealed class MoveGameObjectToSceneDropHandler(SceneEdits edits)
         GameScene target = context.target.scene;
         _ = edits.ChangeHierarchy(
             source,
-            () =>
+            hierarchy =>
             {
                 if (!ReferenceEquals(source.scene, target))
-                    SceneManager.MoveGameObjectToScene(source, target);
+                    hierarchy.MoveToScene(source, target);
                 else
                     source.transform.SetParent(null);
                 source.transform.SetSiblingIndex(GetRootCount(target) - 1);

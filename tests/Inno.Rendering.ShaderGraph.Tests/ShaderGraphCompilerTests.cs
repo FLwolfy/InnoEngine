@@ -4,13 +4,13 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Inno.Core.Assemblies;
+using Inno.Build.Toolchains.Bgfx.Tools;
+using Inno.Extensibility.Modules;
 using Inno.Core.Graphs;
-using Inno.Core.Reflection;
+using Inno.Extensibility.Types;
 using Inno.Core.Serialization;
 using Inno.Rendering.Assets;
-using Inno.Rendering.Bgfx;
-using Inno.Rendering.Core;
+using Inno.Rendering;
 using Xunit;
 
 namespace Inno.Rendering.ShaderGraph.Tests;
@@ -22,19 +22,22 @@ public sealed class ShaderGraphCompilerTests : IDisposable
         Path.GetTempPath(),
         "InnoShaderGraphCompilerTests",
         Guid.NewGuid().ToString("N"));
+    private readonly ModuleHost m_modules;
+    private readonly TypeCatalog m_types;
+    private readonly SerializationRegistry m_serialization;
 
     public ShaderGraphCompilerTests()
     {
-        AssemblyManager.Initialize(new AssemblyManagerOptions { cacheDirectory = m_cacheDirectory });
-        TypeCacheManager.Initialize();
-        SerializationManager.Initialize();
+        m_modules = new ModuleHost(new ModuleHostOptions { cacheDirectory = m_cacheDirectory });
+        m_types = new TypeCatalog(m_modules);
+        m_serialization = new SerializationRegistry(m_types);
     }
 
     public void Dispose()
     {
-        SerializationManager.Shutdown();
-        TypeCacheManager.Shutdown();
-        AssemblyManager.Shutdown();
+        m_serialization.Dispose();
+        m_types.Dispose();
+        m_modules.Dispose();
         if (Directory.Exists(m_cacheDirectory))
         {
             Directory.Delete(m_cacheDirectory, recursive: true);
@@ -48,7 +51,8 @@ public sealed class ShaderGraphCompilerTests : IDisposable
             "Shaders/PluginRaster.ishadergraph",
             "Plugin Raster",
             RasterGraph(),
-            Registry());
+            Registry(),
+            m_serialization);
 
         Assert.True(result.succeeded, Format(result));
         ShaderIRModule module = Assert.IsType<ShaderIRModule>(result.module);
@@ -77,7 +81,8 @@ public sealed class ShaderGraphCompilerTests : IDisposable
             "Shaders/PluginCompute.ishadergraph",
             "Plugin Compute",
             document,
-            Registry());
+            Registry(),
+            m_serialization);
 
         Assert.True(result.succeeded, Format(result));
         ShaderIRPass pass = Assert.Single(result.module!.passes);
@@ -112,7 +117,8 @@ public sealed class ShaderGraphCompilerTests : IDisposable
             "Shaders/PluginRaster.ishadergraph",
             "Plugin Raster",
             RasterGraph(),
-            Registry());
+            Registry(),
+            m_serialization);
         Assert.True(graphResult.succeeded, Format(graphResult));
         GraphicsCapabilities capabilities = new(
             backend,
@@ -133,7 +139,7 @@ public sealed class ShaderGraphCompilerTests : IDisposable
         ShaderCompilationResult result = await shaderCompiler.CompileAsync(
             graphResult.module!,
             target,
-            ShaderVariantKey.empty,
+            RenderShaderVariant.empty,
             Path.GetTempPath());
 
         Assert.True(result.succeeded, string.Join(
@@ -148,17 +154,18 @@ public sealed class ShaderGraphCompilerTests : IDisposable
     {
         var document = new GraphDocument();
         document.AddNode(Node("missing", "project.shader.missing"));
-        byte[] before = ShaderGraphDocumentCodec.Encode(document);
+        byte[] before = ShaderGraphDocumentCodec.Encode(document, m_serialization);
 
         ShaderGraphCompileResult result = ShaderGraphCompiler.Compile(
             "Shaders/Missing.ishadergraph",
             "Missing",
             document,
-            Registry());
+            Registry(),
+            m_serialization);
 
         Assert.False(result.succeeded);
         Assert.Contains(result.diagnostics, static value => value.code == "SHADER_GRAPH_MISSING_NODE");
-        Assert.Equal(before, ShaderGraphDocumentCodec.Encode(document));
+        Assert.Equal(before, ShaderGraphDocumentCodec.Encode(document, m_serialization));
     }
 
     [Fact]
@@ -183,7 +190,8 @@ public sealed class ShaderGraphCompilerTests : IDisposable
             "Shaders/Illegal.ishadergraph",
             "Illegal",
             document,
-            registry);
+            registry,
+            m_serialization);
 
         ShaderDiagnostic diagnostic = Assert.Single(
             result.diagnostics.Where(static value => value.code == "SHADER_GRAPH_STAGE_ILLEGAL"));
@@ -200,7 +208,8 @@ public sealed class ShaderGraphCompilerTests : IDisposable
             "Shaders/NoProgram.ishadergraph",
             "No Program",
             document,
-            Registry());
+            Registry(),
+            m_serialization);
 
         Assert.False(result.succeeded);
         Assert.Contains(result.diagnostics, static value => value.code == "SHADER_GRAPH_PROGRAM_OUTPUT_COUNT");
@@ -226,17 +235,19 @@ public sealed class ShaderGraphCompilerTests : IDisposable
     public void Codec_RoundTripsNativeNeutralDocumentAndRejectsCorruptPayload()
     {
         GraphDocument document = RasterGraph();
-        document.SetMetadata("tests.preview", GraphSerializedValue.From("sphere"));
+        document.SetMetadata("tests.preview", GraphSerializedValue.From("sphere", m_serialization));
 
-        byte[] bytes = ShaderGraphDocumentCodec.Encode(document);
-        ShaderGraphDocumentData decoded = ShaderGraphDocumentCodec.Decode(bytes);
+        byte[] bytes = ShaderGraphDocumentCodec.Encode(document, m_serialization);
+        ShaderGraphDocumentData decoded = ShaderGraphDocumentCodec.Decode(bytes, m_serialization);
 
         Assert.Equal(2, decoded.document.nodes.Count);
-        Assert.Equal("sphere", decoded.document.metadata["tests.preview"].Deserialize<string>());
-        Assert.ThrowsAny<Exception>(() => ShaderGraphDocumentCodec.Decode([1, 2, 3]));
+        Assert.Equal(
+            "sphere",
+            decoded.document.metadata["tests.preview"].Deserialize<string>(m_serialization));
+        Assert.ThrowsAny<Exception>(() => ShaderGraphDocumentCodec.Decode([1, 2, 3], m_serialization));
     }
 
-    private static GraphDocument RasterGraph()
+    private GraphDocument RasterGraph()
     {
         var document = new GraphDocument();
         GraphNodeRecord color = ColorNode("color", 0.8f, 0.2f, 0.1f, 1f);
@@ -259,7 +270,7 @@ public sealed class ShaderGraphCompilerTests : IDisposable
         return registry;
     }
 
-    private static GraphNodeRecord ColorNode(
+    private GraphNodeRecord ColorNode(
         string id,
         float x,
         float y,
@@ -267,7 +278,9 @@ public sealed class ShaderGraphCompilerTests : IDisposable
         float w)
     {
         GraphNodeRecord node = Node(id, ConstantColorDefinition.ID);
-        node.SetValue("value", GraphSerializedValue.From(new[] { x, y, z, w }));
+        node.SetValue(
+            "value",
+            GraphSerializedValue.From(new[] { x, y, z, w }, m_serialization));
         return node;
     }
 
@@ -313,9 +326,7 @@ public sealed class ShaderGraphCompilerTests : IDisposable
 
         public override void Emit(ShaderNodeEmitContext context)
         {
-            float[] value = context.node.TryGetValue("value", out GraphSerializedValue? serialized)
-                ? serialized!.Deserialize<float[]>()
-                : [1f, 1f, 1f, 1f];
+            float[] value = context.ReadValue("value", new[] { 1f, 1f, 1f, 1f });
             string expression = string.Create(
                 CultureInfo.InvariantCulture,
                 $"vec4({value[0]:0.########}, {value[1]:0.########}, {value[2]:0.########}, {value[3]:0.########})");

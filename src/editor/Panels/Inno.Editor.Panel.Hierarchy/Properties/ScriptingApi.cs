@@ -1,4 +1,4 @@
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
 using Inno.Editor.Panel.Hierarchy;
 
 [assembly: ScriptingApiNamespace(

@@ -2,9 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 
-using Inno.Core.Assemblies;
-using Inno.Core.Reflection;
+using Inno.Extensibility.Modules;
+using Inno.Extensibility.Types;
 using Inno.Core.Serialization.Converters;
 
 using Xunit;
@@ -13,21 +14,31 @@ namespace Inno.Core.Serialization.Tests;
 
 public sealed class SerializationBehaviorTests : IDisposable
 {
+    private readonly string m_testRoot = Path.Combine(
+        Path.GetTempPath(),
+        "InnoSerializationTests",
+        Guid.NewGuid().ToString("N"));
+    private ModuleHost m_modules;
+    private TypeCatalog m_types;
+    private SerializationRegistry m_serialization;
+
     public SerializationBehaviorTests()
     {
-        AssemblyManager.Initialize(new AssemblyManagerOptions
+        m_modules = new ModuleHost(new ModuleHostOptions
         {
-            cacheDirectory = Path.Combine(Path.GetTempPath(), "InnoSerializationTests", "Assemblies")
+            cacheDirectory = Path.Combine(m_testRoot, "Assemblies")
         });
-        TypeCacheManager.Initialize();
-        SerializationManager.Initialize();
+        m_types = new TypeCatalog(m_modules);
+        m_serialization = new SerializationRegistry(m_types);
     }
 
     public void Dispose()
     {
-        SerializationManager.Shutdown();
-        TypeCacheManager.Shutdown();
-        AssemblyManager.Shutdown();
+        m_serialization.Dispose();
+        m_types.Dispose();
+        m_modules.Dispose();
+        if (Directory.Exists(m_testRoot))
+            Directory.Delete(m_testRoot, recursive: true);
     }
 
     [Fact]
@@ -38,30 +49,48 @@ public sealed class SerializationBehaviorTests : IDisposable
     }
 
     [Fact]
-    public void PublicOperations_RequireExplicitInitialization()
+    public void PublicOperations_RejectDisposedRegistry()
     {
-        SerializationManager.Shutdown();
+        m_serialization.Dispose();
 
-        Assert.Throws<InvalidOperationException>(
-            () => SerializationManager.Serialize(new DefaultSample()));
+        Assert.Throws<ObjectDisposedException>(
+            () => m_serialization.Serialize(new DefaultSample()));
 
-        SerializationManager.Initialize();
-        Assert.NotEmpty(SerializationManager.Serialize(new DefaultSample()));
+        m_serialization = new SerializationRegistry(m_types);
+        Assert.NotEmpty(m_serialization.Serialize(new DefaultSample()));
     }
 
     [Fact]
-    public void Initialize_RequiresAssemblyManager()
+    public async Task CapturedGeneration_RemainsUsableAcrossRefreshAndWorkerContinuation()
     {
-        SerializationManager.Shutdown();
-        AssemblyManager.Shutdown();
+        var source = new DefaultSample { count = 73, name = "Pinned" };
+        SerializationGeneration generation = m_serialization.CaptureGeneration();
 
-        Assert.Throws<InvalidOperationException>(SerializationManager.Initialize);
+        m_types.Rebuild();
+        byte[] bytes = await Task.Run(() => generation.Serialize(source));
+        DefaultSample restored = await Task.Run(() => generation.Deserialize<DefaultSample>(bytes));
 
-        AssemblyManager.Initialize(new AssemblyManagerOptions
+        Assert.Equal(73, restored.count);
+        Assert.Equal("Pinned", restored.name);
+        generation.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => generation.Serialize(source));
+    }
+
+    [Fact]
+    public void TypeCatalogConstructor_RequiresActiveModuleHost()
+    {
+        m_serialization.Dispose();
+        m_types.Dispose();
+        m_modules.Dispose();
+
+        Assert.Throws<InvalidOperationException>(() => new TypeCatalog(m_modules));
+
+        m_modules = new ModuleHost(new ModuleHostOptions
         {
-            cacheDirectory = Path.Combine(Path.GetTempPath(), "InnoSerializationTests", "Assemblies")
+            cacheDirectory = Path.Combine(m_testRoot, "ReplacementAssemblies")
         });
-        SerializationManager.Initialize();
+        m_types = new TypeCatalog(m_modules);
+        m_serialization = new SerializationRegistry(m_types);
     }
 
     [Fact]
@@ -84,8 +113,8 @@ public sealed class SerializationBehaviorTests : IDisposable
             data = StructSample.Create(11, 12, 13)
         };
 
-        byte[] bytes = SerializationManager.Serialize(source);
-        DefaultSample restored = SerializationManager.Deserialize<DefaultSample>(bytes);
+        byte[] bytes = m_serialization.Serialize(source);
+        DefaultSample restored = m_serialization.Deserialize<DefaultSample>(bytes);
 
         Assert.True(restored.enabled);
         Assert.Equal(42, restored.count);
@@ -110,10 +139,10 @@ public sealed class SerializationBehaviorTests : IDisposable
     [Fact]
     public void TypeRefSerializationPersistsOnlyStableIdentity()
     {
-        TypeRef active = TypeCacheManager.GetTypeRef(typeof(DefaultSample));
+        TypeRef active = m_types.GetTypeRef(typeof(DefaultSample));
 
-        byte[] bytes = SerializationManager.Encode(writer => writer.Write("type", active));
-        TypeRef restored = SerializationManager.Decode(bytes, reader =>
+        byte[] bytes = m_serialization.Encode(writer => writer.Write("type", active));
+        TypeRef restored = m_serialization.Decode(bytes, reader =>
         {
             SerializationReader type = reader.ReadObject("type");
             Assert.True(type.Contains("stableId"));
@@ -124,7 +153,7 @@ public sealed class SerializationBehaviorTests : IDisposable
 
         Assert.Equal(active, restored);
         Assert.Equal(0, restored.runtimeId);
-        Assert.Equal(active.Resolve(), restored.Resolve());
+        Assert.Equal(active.Resolve(m_types), restored.Resolve(m_types));
     }
 
     [Fact]
@@ -133,14 +162,14 @@ public sealed class SerializationBehaviorTests : IDisposable
         var source = new DefaultSample { count = 77, name = "Restored" };
         var target = new DefaultSample { count = 1, name = "Old" };
 
-        SerializationManager.Restore(target, SerializationManager.Serialize(source));
+        m_serialization.Restore(target, m_serialization.Serialize(source));
 
         Assert.Equal(77, target.count);
         Assert.Equal("Restored", target.name);
     }
 
     [Fact]
-    public void CompatiblePropertyRestore_SkipsIncompatibleMembersAndPreservesDefaults()
+    public void CollectingPropertyRestore_CollectsInvalidMembersAndPreservesDefaults()
     {
         var previous = new PreviousSchemaSample
         {
@@ -149,13 +178,13 @@ public sealed class SerializationBehaviorTests : IDisposable
             removed = 9
         };
         IReadOnlyList<SerializationPropertySnapshot> snapshots =
-            SerializationManager.CaptureProperties(previous);
+            m_serialization.CaptureProperties(previous);
         var current = new CurrentSchemaSample();
 
-        SerializationPropertyRestoreResult result = SerializationManager.RestoreProperties(
+        SerializationPropertyRestoreResult result = m_serialization.RestoreProperties(
             current,
             snapshots,
-            SerializationPropertyRestoreMode.Compatible);
+            SerializationPropertyRestoreMode.CollectFailures);
 
         Assert.False(result.success);
         Assert.Equal(1, result.restoredCount);
@@ -174,10 +203,10 @@ public sealed class SerializationBehaviorTests : IDisposable
     public void StrictPropertyRestore_ThrowsForAnIncompatibleMember()
     {
         IReadOnlyList<SerializationPropertySnapshot> snapshots =
-            SerializationManager.CaptureProperties(new PreviousSchemaSample { changed = 42 });
+            m_serialization.CaptureProperties(new PreviousSchemaSample { changed = 42 });
         var current = new CurrentSchemaSample();
 
-        Assert.Throws<InvalidOperationException>(() => SerializationManager.RestoreProperties(
+        Assert.Throws<InvalidOperationException>(() => m_serialization.RestoreProperties(
             current,
             snapshots,
             SerializationPropertyRestoreMode.Strict));
@@ -194,14 +223,14 @@ public sealed class SerializationBehaviorTests : IDisposable
             count = 81,
             name = "Captured"
         };
-        byte[] data = SerializationManager.CapturePropertyData(source, nameof(DefaultSample.count));
+        byte[] data = m_serialization.CapturePropertyData(source, nameof(DefaultSample.count));
         var target = new DefaultSample
         {
             count = 3,
             name = "Preserved"
         };
 
-        SerializationPropertyRestoreResult result = SerializationManager.RestorePropertiesData(target, data);
+        SerializationPropertyRestoreResult result = m_serialization.RestorePropertiesData(target, data);
 
         Assert.True(result.success);
         Assert.Equal(1, result.restoredCount);
@@ -218,10 +247,10 @@ public sealed class SerializationBehaviorTests : IDisposable
             compatible = "Value",
             removed = 27
         };
-        byte[] data = SerializationManager.CapturePropertiesData(source);
+        byte[] data = m_serialization.CapturePropertiesData(source);
         var target = new PreviousSchemaSample();
 
-        SerializationPropertyRestoreResult result = SerializationManager.RestorePropertiesData(target, data);
+        SerializationPropertyRestoreResult result = m_serialization.RestorePropertiesData(target, data);
 
         Assert.True(result.success);
         Assert.Equal(3, result.restoredCount);
@@ -233,16 +262,16 @@ public sealed class SerializationBehaviorTests : IDisposable
     [Fact]
     public void PropertyData_RejectsMalformedOrTrailingBytes()
     {
-        byte[] data = SerializationManager.CapturePropertyData(
+        byte[] data = m_serialization.CapturePropertyData(
             new DefaultSample { count = 12 },
             nameof(DefaultSample.count));
         byte[] trailing = new byte[data.Length + 1];
         data.CopyTo(trailing, 0);
 
-        Assert.Throws<InvalidDataException>(() => SerializationManager.RestorePropertiesData(
+        Assert.Throws<InvalidDataException>(() => m_serialization.RestorePropertiesData(
             new DefaultSample(),
             trailing));
-        Assert.ThrowsAny<Exception>(() => SerializationManager.RestorePropertiesData(
+        Assert.ThrowsAny<Exception>(() => m_serialization.RestorePropertiesData(
             new DefaultSample(),
             new byte[] { 1, 2, 3 }));
     }
@@ -250,9 +279,9 @@ public sealed class SerializationBehaviorTests : IDisposable
     [Fact]
     public void Deserialize_UsesNonPublicParameterlessConstructor()
     {
-        byte[] bytes = SerializationManager.Encode(static writer => writer.Write("value", 9));
+        byte[] bytes = m_serialization.Encode(static writer => writer.Write("value", 9));
 
-        PrivateConstructorSample restored = SerializationManager.Deserialize<PrivateConstructorSample>(bytes);
+        PrivateConstructorSample restored = m_serialization.Deserialize<PrivateConstructorSample>(bytes);
 
         Assert.True(restored.wasConstructed);
         Assert.Equal(9, restored.value);
@@ -261,10 +290,10 @@ public sealed class SerializationBehaviorTests : IDisposable
     [Fact]
     public void Deserialize_WithoutParameterlessConstructor_RequiresConverter()
     {
-        byte[] bytes = SerializationManager.Encode(static writer => writer.Write("value", 5));
+        byte[] bytes = m_serialization.Encode(static writer => writer.Write("value", 5));
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => SerializationManager.Deserialize<MissingConstructorSample>(bytes));
+            () => m_serialization.Deserialize<MissingConstructorSample>(bytes));
 
         Assert.Contains(typeof(MissingConstructorSample).FullName!, exception.Message);
         Assert.Contains("parameterless constructor", exception.Message);
@@ -275,8 +304,8 @@ public sealed class SerializationBehaviorTests : IDisposable
     {
         var source = new ConvertedConstructorSample(31);
 
-        ConvertedConstructorSample restored = SerializationManager.Deserialize<ConvertedConstructorSample>(
-            SerializationManager.Serialize(source));
+        ConvertedConstructorSample restored = m_serialization.Deserialize<ConvertedConstructorSample>(
+            m_serialization.Serialize(source));
 
         Assert.Equal(31, restored.value);
     }
@@ -284,10 +313,10 @@ public sealed class SerializationBehaviorTests : IDisposable
     [Fact]
     public void Deserialize_PreservesConstructorFailureAsInnerException()
     {
-        byte[] bytes = SerializationManager.Encode(static _ => { });
+        byte[] bytes = m_serialization.Encode(static _ => { });
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => SerializationManager.Deserialize<ThrowingConstructorSample>(bytes));
+            () => m_serialization.Deserialize<ThrowingConstructorSample>(bytes));
 
         Assert.IsType<ApplicationException>(exception.InnerException);
         Assert.Equal("constructor failure", exception.InnerException!.Message);
@@ -297,7 +326,7 @@ public sealed class SerializationBehaviorTests : IDisposable
     public void RequiredConverter_Missing_ThrowsClearError()
     {
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => SerializationManager.Serialize(new MissingRequiredConverterSample()));
+            () => m_serialization.Serialize(new MissingRequiredConverterSample()));
 
         Assert.Contains(typeof(MissingRequiredConverterSample).FullName!, exception.Message);
         Assert.Contains("requires an explicit serialization converter", exception.Message);
@@ -316,7 +345,7 @@ public sealed class SerializationBehaviorTests : IDisposable
             deserializeOnly = 6
         };
 
-        VisibilitySample restored = SerializationManager.Deserialize<VisibilitySample>(SerializationManager.Serialize(source));
+        VisibilitySample restored = m_serialization.Deserialize<VisibilitySample>(m_serialization.Serialize(source));
         Assert.Equal(1, restored.shown);
         Assert.Equal(2, restored.hidden);
         Assert.Equal(3, restored.readOnly);
@@ -324,7 +353,7 @@ public sealed class SerializationBehaviorTests : IDisposable
         Assert.Equal(0, restored.serializeOnly);
         Assert.Equal(0, restored.deserializeOnly);
 
-        IReadOnlyList<SerializedProperty> properties = SerializationManager.GetProperties(source);
+        IReadOnlyList<SerializedProperty> properties = m_serialization.GetProperties(source);
         Assert.DoesNotContain(properties, property => property.name == nameof(VisibilitySample.hidden));
         SerializedProperty shown = properties.Single(property => property.name == nameof(VisibilitySample.shown));
         Assert.True(shown.canRead);
@@ -337,12 +366,12 @@ public sealed class SerializationBehaviorTests : IDisposable
         Assert.False(readOnly.canWrite);
         Assert.Throws<InvalidOperationException>(() => readOnly.SetValue(12));
 
-        byte[] manual = SerializationManager.Encode(static writer =>
+        byte[] manual = m_serialization.Encode(static writer =>
         {
             writer.Write(nameof(VisibilitySample.deserializeOnly), 99);
             writer.Write(nameof(VisibilitySample.serializeOnly), 98);
         });
-        _ = SerializationManager.Decode(manual, reader =>
+        _ = m_serialization.Decode(manual, reader =>
         {
             reader.RestoreProperties(source);
             return true;
@@ -355,9 +384,9 @@ public sealed class SerializationBehaviorTests : IDisposable
     public void MetadataValidation_RejectsInvalidMembersAndDuplicateKeys()
     {
         Assert.Throws<InvalidOperationException>(
-            () => SerializationManager.GetProperties(new MissingSetterSample()));
+            () => m_serialization.GetProperties(new MissingSetterSample()));
         Assert.Throws<InvalidOperationException>(
-            () => SerializationManager.GetProperties(new DuplicateKeyDerivedSample()));
+            () => m_serialization.GetProperties(new DuplicateKeyDerivedSample()));
     }
 
     [Fact]
@@ -366,7 +395,7 @@ public sealed class SerializationBehaviorTests : IDisposable
         var source = new MissingClassHost { child = new MissingChild { value = 1 } };
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => SerializationManager.Serialize(source));
+            () => m_serialization.Serialize(source));
 
         Assert.Contains("$.child", exception.Message);
         Assert.Contains("SerializationConverter", exception.Message);
@@ -381,7 +410,7 @@ public sealed class SerializationBehaviorTests : IDisposable
         };
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => SerializationManager.Serialize(source));
+            () => m_serialization.Serialize(source));
 
         Assert.Contains("$.children[0]", exception.Message);
     }
@@ -394,8 +423,8 @@ public sealed class SerializationBehaviorTests : IDisposable
             child = new ConvertedChild { value = 14 }
         };
 
-        ConvertedChildHost restored = SerializationManager.Deserialize<ConvertedChildHost>(
-            SerializationManager.Serialize(source));
+        ConvertedChildHost restored = m_serialization.Deserialize<ConvertedChildHost>(
+            m_serialization.Serialize(source));
 
         Assert.NotNull(restored.child);
         Assert.Equal(14, restored.child!.value);
@@ -409,7 +438,7 @@ public sealed class SerializationBehaviorTests : IDisposable
         var source = new CycleHost { value = cycle };
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => SerializationManager.Serialize(source));
+            () => m_serialization.Serialize(source));
 
         Assert.Contains("Serialization cycle detected", exception.Message);
         Assert.Contains("$.value", exception.Message);
@@ -420,12 +449,12 @@ public sealed class SerializationBehaviorTests : IDisposable
     public void ConverterSelection_PrefersNearestBaseThenExactType()
     {
         var nearestSource = new NearestHost { item = new NearestLeaf { value = 21 } };
-        NearestHost nearest = SerializationManager.Deserialize<NearestHost>(SerializationManager.Serialize(nearestSource));
+        NearestHost nearest = m_serialization.Deserialize<NearestHost>(m_serialization.Serialize(nearestSource));
         Assert.Equal("mid", nearest.item!.selectedBy);
         Assert.Equal(21, nearest.item.value);
 
         var exactSource = new ExactHost { item = new ExactLeaf { value = 22 } };
-        ExactHost exact = SerializationManager.Deserialize<ExactHost>(SerializationManager.Serialize(exactSource));
+        ExactHost exact = m_serialization.Deserialize<ExactHost>(m_serialization.Serialize(exactSource));
         Assert.Equal("exact", exact.item!.selectedBy);
         Assert.Equal(22, exact.item.value);
     }
@@ -436,7 +465,7 @@ public sealed class SerializationBehaviorTests : IDisposable
         var source = new AmbiguousHost { item = new AmbiguousValue() };
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => SerializationManager.Serialize(source));
+            () => m_serialization.Serialize(source));
 
         Assert.Contains("ambiguous converters", exception.Message);
         Assert.Contains(typeof(AmbiguousValue).FullName!, exception.Message);
@@ -447,7 +476,7 @@ public sealed class SerializationBehaviorTests : IDisposable
     {
         var source = new GenericBoxHost { box = new GenericBox<int>(45) };
 
-        GenericBoxHost restored = SerializationManager.Deserialize<GenericBoxHost>(SerializationManager.Serialize(source));
+        GenericBoxHost restored = m_serialization.Deserialize<GenericBoxHost>(m_serialization.Serialize(source));
 
         Assert.NotNull(restored.box);
         Assert.Equal(45, restored.box!.value);
@@ -472,7 +501,7 @@ public sealed class SerializationBehaviorTests : IDisposable
     public void ReaderWriter_ReportDuplicateMissingAndTypePaths()
     {
         InvalidOperationException duplicate = Assert.Throws<InvalidOperationException>(() =>
-            SerializationManager.Encode(writer =>
+            m_serialization.Encode(writer =>
             {
                 writer.Write("value", 1);
                 writer.Write("value", 2);
@@ -480,34 +509,34 @@ public sealed class SerializationBehaviorTests : IDisposable
         Assert.Contains("$", duplicate.Message);
         Assert.Contains("value", duplicate.Message);
 
-        byte[] arrayBytes = SerializationManager.Encode(writer =>
+        byte[] arrayBytes = m_serialization.Encode(writer =>
             writer.WriteObjectArray("items", new[] { 1 }, static (_, _) => { }));
         InvalidOperationException missing = Assert.Throws<InvalidOperationException>(() =>
-            SerializationManager.Decode(arrayBytes, static reader =>
+            m_serialization.Decode(arrayBytes, static reader =>
                 reader.ReadObjectArray("items")[0].Read<int>("missing")));
         Assert.Contains("$.items[0].missing", missing.Message);
 
-        byte[] valueBytes = SerializationManager.Encode(static writer => writer.Write("value", "text"));
+        byte[] valueBytes = m_serialization.Encode(static writer => writer.Write("value", "text"));
         InvalidOperationException mismatch = Assert.Throws<InvalidOperationException>(() =>
-            SerializationManager.Decode(valueBytes, static reader => reader.Read<int>("value")));
+            m_serialization.Decode(valueBytes, static reader => reader.Read<int>("value")));
         Assert.Contains("$.value", mismatch.Message);
 
         InvalidOperationException tryReadMismatch = Assert.Throws<InvalidOperationException>(() =>
-            SerializationManager.Decode(valueBytes, static reader => reader.TryRead<int>("value", out _)));
+            m_serialization.Decode(valueBytes, static reader => reader.TryRead<int>("value", out _)));
         Assert.Contains("$.value", tryReadMismatch.Message);
-        Assert.False(SerializationManager.Decode(valueBytes, static reader => reader.TryRead<int>("missing", out _)));
+        Assert.False(m_serialization.Decode(valueBytes, static reader => reader.TryRead<int>("missing", out _)));
     }
 
     [Fact]
     public void ReaderWriter_AreInvalidOutsideTheirOperation()
     {
         SerializationWriter? capturedWriter = null;
-        _ = SerializationManager.Encode(writer => capturedWriter = writer);
+        _ = m_serialization.Encode(writer => capturedWriter = writer);
         Assert.Throws<InvalidOperationException>(() => capturedWriter!.Write("late", 1));
 
-        byte[] bytes = SerializationManager.Encode(static writer => writer.Write("value", 1));
+        byte[] bytes = m_serialization.Encode(static writer => writer.Write("value", 1));
         SerializationReader? capturedReader = null;
-        _ = SerializationManager.Decode(bytes, reader =>
+        _ = m_serialization.Decode(bytes, reader =>
         {
             capturedReader = reader;
             return true;
@@ -518,9 +547,9 @@ public sealed class SerializationBehaviorTests : IDisposable
     [Fact]
     public void RestoreHooks_RunOnceBaseToDerivedForDefaultAndConverterPaths()
     {
-        byte[] bytes = SerializationManager.Encode(static writer => writer.Write("value", 3));
+        byte[] bytes = m_serialization.Encode(static writer => writer.Write("value", 3));
         var target = new HookDerivedSample();
-        _ = SerializationManager.Decode(bytes, reader =>
+        _ = m_serialization.Decode(bytes, reader =>
         {
             reader.RestoreProperties(target);
             reader.RestoreProperties(target);
@@ -529,12 +558,12 @@ public sealed class SerializationBehaviorTests : IDisposable
         Assert.Equal(new[] { "base", "derived" }, target.calls);
 
         var converted = new ConvertedHookSample { value = 8 };
-        ConvertedHookSample restored = SerializationManager.Deserialize<ConvertedHookSample>(
-            SerializationManager.Serialize(converted));
+        ConvertedHookSample restored = m_serialization.Deserialize<ConvertedHookSample>(
+            m_serialization.Serialize(converted));
         Assert.Equal(1, restored.hookCount);
 
         var existing = new ConvertedHookSample();
-        SerializationManager.Restore(existing, SerializationManager.Serialize(converted));
+        m_serialization.Restore(existing, m_serialization.Serialize(converted));
         Assert.Equal(8, existing.value);
         Assert.Equal(1, existing.hookCount);
     }
@@ -542,9 +571,9 @@ public sealed class SerializationBehaviorTests : IDisposable
     [Fact]
     public void CompletionCallbacks_RunOnlyAfterSuccessfulDecode()
     {
-        byte[] bytes = SerializationManager.Encode(static writer => writer.Write("value", 1));
+        byte[] bytes = m_serialization.Encode(static writer => writer.Write("value", 1));
         var calls = new List<string>();
-        int value = SerializationManager.Decode(bytes, reader =>
+        int value = m_serialization.Decode(bytes, reader =>
         {
             reader.OnCompleted(() => calls.Add("completed"));
             Assert.Empty(calls);
@@ -554,7 +583,7 @@ public sealed class SerializationBehaviorTests : IDisposable
         Assert.Equal(new[] { "completed" }, calls);
 
         calls.Clear();
-        Assert.Throws<InvalidOperationException>(() => SerializationManager.Decode(bytes, reader =>
+        Assert.Throws<InvalidOperationException>(() => m_serialization.Decode(bytes, reader =>
         {
             reader.OnCompleted(() => calls.Add("should-not-run"));
             return reader.Read<int>("missing");
@@ -568,22 +597,19 @@ public sealed class SerializationBehaviorTests : IDisposable
         var left = new MapHost { values = new Dictionary<int, string> { [9] = "nine", [1] = "one" } };
         var right = new MapHost { values = new Dictionary<int, string> { [1] = "one", [9] = "nine" } };
 
-        Assert.Equal(SerializationManager.Serialize(left), SerializationManager.Serialize(right));
+        Assert.Equal(m_serialization.Serialize(left), m_serialization.Serialize(right));
     }
 
     [Fact]
-    public void VersionOnePayload_IsRejected()
+    public void ForeignFormatHeader_IsRejected()
     {
         using var stream = new MemoryStream();
         using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
-        {
-            writer.Write("INNO");
-            writer.Write(1);
-        }
+            writer.Write("FOREIGN");
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(
-            () => SerializationManager.Decode(stream.ToArray(), static _ => true));
-        Assert.Contains("Unsupported serialization version 1", exception.Message);
+            () => m_serialization.Decode(stream.ToArray(), static _ => true));
+        Assert.Contains("Invalid serialization magic", exception.Message);
     }
 }
 

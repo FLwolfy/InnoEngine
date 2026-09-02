@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-using Inno.Core.Reflection;
+using Inno.Extensibility.Types;
 using Inno.Core.Serialization;
 using Inno.Editor.ImGui.ImGuiWidget;
 using Inno.Native.ImGui;
@@ -13,7 +13,23 @@ namespace Inno.Editor.Inspection;
 [PropertyDrawer(typeof(ISerializable), useForChildren: true, priority: 20)]
 internal sealed class SerializableObjectPropertyDrawer : IPropertyDrawer
 {
-    /// <inheritdoc />
+    private readonly SerializationRegistry m_serialization;
+    private readonly TypeCacheSnapshot m_types;
+
+    internal SerializableObjectPropertyDrawer(
+        TypeCacheSnapshot types,
+        SerializationRegistry serialization)
+    {
+        m_types = types ?? throw new ArgumentNullException(nameof(types));
+        m_serialization = serialization ?? throw new ArgumentNullException(nameof(serialization));
+    }
+
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     public void Draw(PropertyDrawContext context)
     {
         object? value = context.GetValue();
@@ -32,7 +48,7 @@ internal sealed class SerializableObjectPropertyDrawer : IPropertyDrawer
             return;
         }
 
-        IReadOnlyList<SerializedProperty> properties = SerializationManager.GetProperties(serializable);
+        IReadOnlyList<SerializedProperty> properties = m_serialization.GetProperties(serializable);
         for (int i = 0; i < properties.Count; i++)
         {
             context.DrawChild(properties[i]);
@@ -41,7 +57,7 @@ internal sealed class SerializableObjectPropertyDrawer : IPropertyDrawer
         NativeImGui.TreePop();
     }
 
-    private static void DrawTypeSelector(PropertyDrawContext context, Type runtimeType, object? value)
+    private void DrawTypeSelector(PropertyDrawContext context, Type runtimeType, object? value)
     {
         if (!EditorWidget.BeginBoundedCombo(
                 $"##{context.path}_runtime_type",
@@ -55,10 +71,10 @@ internal sealed class SerializableObjectPropertyDrawer : IPropertyDrawer
             context.SetValue(null);
         }
 
-        IReadOnlyList<TypeRef> candidates = TypeCacheManager.GetTypesImplementing<ISerializable>();
+        IReadOnlyList<TypeRef> candidates = m_types.GetTypesImplementing<ISerializable>();
         for (int i = 0; i < candidates.Count; i++)
         {
-            Type candidate = candidates[i].Resolve();
+            Type candidate = candidates[i].Resolve(m_types);
             if (!context.propertyType.IsAssignableFrom(candidate))
             {
                 continue;

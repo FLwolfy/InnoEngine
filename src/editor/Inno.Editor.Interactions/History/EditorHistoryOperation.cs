@@ -65,20 +65,28 @@ internal abstract class EditorHistoryOperation : IDisposable
     /// <summary>
     /// Restores the state that existed before this operation was applied.
     /// </summary>
-    /// <returns>The result of the attempted transition.</returns>
+    /// <returns>
+    /// The result of the attempted transition.
+    /// </returns>
     protected abstract EditorHistoryResult Undo();
 
     /// <summary>
     /// Restores the state produced when this operation was originally applied.
     /// </summary>
-    /// <returns>The result of the attempted transition.</returns>
+    /// <returns>
+    /// The result of the attempted transition.
+    /// </returns>
     protected abstract EditorHistoryResult Redo();
 
     /// <summary>
     /// Attempts to absorb a newer adjacent operation into this operation.
     /// </summary>
-    /// <param name="newer">The operation recorded immediately after this operation.</param>
-    /// <returns><see langword="true"/> when this operation now represents both mutations.</returns>
+    /// <param name="newer">
+    /// The operation recorded immediately after this operation.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when this operation now represents both mutations.
+    /// </returns>
     protected virtual bool TryMerge(EditorHistoryOperation newer) => false;
 
     /// <summary>
@@ -96,7 +104,9 @@ internal abstract class EditorHistoryOperation : IDisposable
     /// <summary>
     /// Releases resources owned by a derived history operation.
     /// </summary>
-    /// <param name="disposing">Whether managed resources may be released.</param>
+    /// <param name="disposing">
+    /// Whether managed resources may be released.
+    /// </param>
     protected virtual void Dispose(bool disposing)
     {
     }

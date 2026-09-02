@@ -2,7 +2,7 @@
 
 [Editor 索引](README.md) · [Editor Scripting](Inno.Editor.Scripting.md) · [Wiki 首页](../README.md)
 
-`Inno.Editor.Application` 是 Editor 可执行入口。它只组合 Platform、Shell、ImGui runtime、Scripting、Global feature 和六个独立 Panel feature；Panel/Module/Action/Setting 等实例仍由 Attribute 自动发现。
+`Inno.Editor.Application` 是 Editor 可执行入口。它只组合 Platform、EngineHost/Edit RuntimeSession、ImGui runtime、Scripting、Build 和 Editor features；Panel/Module/Action/Setting 等实例仍由 Attribute 自动发现。
 
 ## 启动参数
 
@@ -15,16 +15,16 @@ Inno.Editor.Application /path/to/InnoProject
 Editor 当前不需要额外的 InnoEngine project descriptor。目录本身就是当前项目边界：
 
 - 已有目录会原位打开，不会覆盖 Assets。
-- 不存在或空目录会被创建，Shell 和 ScriptManager 再创建所需的 `Assets` / `Library` 结构与 IDE 工程。
+- 不存在或空目录会被创建，Application Composition Root 再创建所需的 `Assets` / `Library` 结构并启动实例化 authoring 与 scripting services。
 - 如果传入路径指向普通文件，构造会抛出 `IOException`。
 
 未来如果需要引擎版本、Package 列表或 Project GUID，可在目录内增加独立 descriptor；不应让 Editor 解析 InnoEngine 自身的 `.csproj` 作为游戏项目格式。
 
 ## internal EditorHost
 
-`EditorHost` 是 Application 内部的启动实现，不属于公开 API。`EditorHost.Create(projectDirectory)` 依次构造 Platform、Window、Shell、ImGui context、EditorContext 与 EditorLayer；每个成功阶段立即登记清理动作，全部验证通过后才返回 host。启动失败与正常 `Dispose` 共用同一个幂等资源栈，严格按 Layer/overlay → ImGui → Shell → Window → Platform 的逆序释放；单项清理异常会记录到 boot log，但不会遮蔽原始启动异常或阻止后续清理。
+`EditorHost` 是 Application 内部的启动实现，不属于公开 API。它依次构造 Platform、Window、EngineHost、Edit RuntimeSession、authoring services、ImGui context 与 Editor runtime；启动失败与正常 `Dispose` 共用幂等资源栈，并按 Editor → ImGui → Session → EngineHost → Window → Platform 的逆序释放。
 
-`editor.ini`、`EditorSettings.json`、`ProjectSettings.inno`、Editor boot log、Assets、Plugins 与脚本产物都以 `projectDirectory` 为根目录。`editor.ini` 只保存 ImGui layout 与 Module/Panel 状态；Editor 外观、图标与缩放由 `Inno.Editor.Settings` 写入 `EditorSettings.json`；Layer、Tag 与 Plugin/runtime 的强类型项目协议由 `Inno.Core.Settings` 写入 `ProjectSettings.inno`。三个文档各有单一所有者。
+`editor.ini`、`EditorSettings.inno`、`ProjectSettings.inno`、`BuildProfile.inno`、Editor boot log、Assets、Plugins 与脚本产物都以 `projectDirectory` 为根目录。`editor.ini` 只保存 ImGui layout 与 Module/Panel 状态；Editor 设置通过 SerializationRegistry 写入 `EditorSettings.inno`；runtime 项目协议与 Build 输入分别写入 `ProjectSettings.inno` 和 `BuildProfile.inno`。
 
 Module/Panel 状态只使用 `editor.ini` 中由 Attribute ID 确定的具名可读 section，没有独立 Workspace 文档或第二个状态 ID。
 
@@ -34,11 +34,11 @@ Module/Panel 状态只使用 `editor.ini` 中由 Attribute ID 确定的具名可
 
 ## EditorLayer 边界
 
-`EditorLayer` 持有 `PlatformImGuiContext`、`ImGuiEditorRuntime` 与稳定的 `EditorPlayModeLoop`。Play loop 作为 host service 注入 extension runtime；Layer 只在 fixed/update/late 三个对应 callback 转发时间，不知道 Play 状态机、Scene session、Asset、菜单或脚本编译状态。
+`EditorLayer` 持有 `PlatformImGuiContext`、`ImGuiEditorRuntime` 与稳定的 `EditorPlayModeLoop`。Play loop 作为 host service 注入 extension runtime；Layer 每帧推进一次完整 Play `RuntimeSession.Tick`，并为 Editor update、draw 与快捷键建立当前 presentation execution scope，但不知道 Play 状态机、Scene session、Asset、菜单或脚本编译状态。
 
-Editor 启动阶段在 Shell 日志系统可用之前产生的诊断写入 `<Project>/Logs/EditorBoot.log`；Shell 初始化后的轮转日志写入同一目录，并使用 `log_<timestamp>.log` 文件名。项目根目录不生成独立日志文件。
+Editor 启动阶段在 LogRouter 可用之前产生的诊断写入 `<Project>/Logs/EditorBoot.log`；EngineHost 初始化后的轮转日志写入同一目录。项目根目录不生成独立日志文件。
 
-每帧安全点顺序为：fixed Play callback → variable Play callback → 更新 `EditorFrame` 和 Module transition → late Play callback → 绘制统一主菜单/中央 Toolbar 与自动发现 Panel → flush deferred Action → 绘制统一 Modal。进入或退出状态由 Module transition 先提交，late callback 只在状态已经是 `Playing` 时执行；Exit Action 生效后下一帧 fixed/update 也不会继续模拟。脚本编译弹窗位于 `Inno.Editor.Scripting`，由 internal `EditorScripting` module 驱动真实编译阶段进度；Application 不包含 Scene action、恢复算法或 ScriptManager 状态机。
+每帧安全点顺序为：推进完整 Play Session tick → 在当前 Edit/Play execution scope 中更新 `EditorFrame` 与 Module transition → 重新解析 transition 后的 scope 并绘制统一主菜单、中央 Toolbar、自动发现 Panel 与 Modal → 执行 Rendering frame。Update 与 Draw 分别获取 scope，因此 Preparing 在 Update 中提交为 Playing 后，同一帧 Draw 已经指向 Play world，不会出现一帧 Edit/Play 混合。Exit Action 生效后下一帧不再模拟，并在 transition 安全点释放 Play Scene、Session 与 History。脚本编译弹窗位于 `Inno.Editor.Scripting`，由 internal `EditorScripting` module 驱动真实编译阶段进度；Application 不包含 Scene action、恢复算法或 ScriptManager 状态机。
 
 internal `EditorRenderingHostService` 只负责组合通用 Render Runtime、BGFX 设备与 ImGui contributor，并作为 Scripting reload participant 协调 Pipeline/Feature generation。它不提供任何 Camera、Light、PBR 或固定 Scene 语义；没有活动 Viewport/Pipeline Plugin 时 Editor 仍正常运行，Scene/Game View 只显示无活动 rendering provider 的诊断。
 

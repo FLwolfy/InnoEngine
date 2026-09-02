@@ -9,13 +9,13 @@ Editor/...                                      Project/...
 EditorSetting + EditorSettingObject             ProjectSettingEditor<TSetting>
              │                                               │
              ▼                                               ▼
-EditorSettings.json（JSON property bag）         ProjectSettings.inno（Inno Serialization）
+EditorSettings.inno（Inno Serialization）        ProjectSettings.inno（Inno Serialization）
 Editor-only、不会进入 Player                     Runtime/Plugin 可读取并进入构建
 ```
 
 ## Editor Settings
 
-Editor Settings 用于主题、图标、缩放、面板行为等只影响 Editor 的偏好。路径必须为 `Editor` 或以 `Editor/` 开头；完整路径同时是注册身份、读取地址和 JSON key。
+Editor Settings 用于主题、图标、缩放、面板行为等只影响 Editor 的偏好。路径必须为 `Editor` 或以 `Editor/` 开头；完整路径同时是注册身份、读取地址和 Inno Serialization property key。
 
 ```csharp
 using InnoEditor.ImGui;
@@ -54,7 +54,9 @@ EditorSettingObject value = editorSettings.Get("Editor/Appearance/Grid/Visible")
 bool visible = value.GetAsBoolean("value", true);
 ```
 
-返回对象始终隔离；只有 `EditorSettings.Apply(values, resets)` 才原子更新 `EditorSettings.json` 并写入统一 Editor History。`EditorSettings.changed` 用于刷新 Editor-only 消费者。
+返回对象始终隔离；只有 `EditorSettings.Apply(values, resets)` 才通过 `SerializationRegistry` 原子更新 `EditorSettings.inno` 并写入统一 Editor History。`EditorSettings.changed` 用于刷新 Editor-only 消费者。
+
+例如 Console 的保留策略只在 `Editor/Diagnostics/Console/Clear on Play` 注册和持久化，默认值为 `true`。Console backend 订阅 `EditorSettings.changed` 并在 Apply、Undo、Redo 后读取当前有效值；Console Panel 不再使用 `editor.ini` 或 toolbar 维护同名状态。
 
 ## Project Settings 的 Editor 表现
 
@@ -94,17 +96,17 @@ History 事务；这允许一个较大的运行时设置协议在 UI 中拆成�
 | --- | --- |
 | `EditorSettingPathAttribute` | 把 Editor-only page/field 放入 `Editor/...`。 |
 | `EditorSetting` | Editor-only page/field 定义，`OnDraw(EditorSettingObject)` 是绘制扩展点。 |
-| `EditorSettingObject` | JSON property bag 的隔离值对象。 |
-| `EditorSettings` | `EditorSettings.json` 的读取、Apply、Reset、History 与变更通知。 |
+| `EditorSettingObject` | 使用当前 Inno Serialization 的隔离结构化值对象。 |
+| `EditorSettings` | `EditorSettings.inno` 的读取、Apply、Reset、History 与变更通知。 |
 | `ProjectSettingPathAttribute` | 把强类型 Project Setting Drawer 放入 `Project/...`。 |
 | `ProjectSettingEditor` | frontend 使用的非泛型定义与 placement metadata。 |
 | `ProjectSettingEditor<TSetting>` | Plugin/Host 实现的强类型 `OnDraw(TSetting)` 扩展点。 |
-| `ProjectSettingsEditor` | Host-owned Project contribution staging、Apply 与 History 服务；普通业务脚本读取设置时应使用 `ProjectSettingsManager`。 |
+| `ProjectSettingsEditor` | Host-owned Project contribution staging、Apply 与 History 服务；普通业务脚本读取设置时应使用 `ProjectSettingsStore`。 |
 
 ## 生命周期与约束
 
 - 两个域共享窗口、搜索、页面树、控件布局与一个 Apply 按钮，但仍拥有独立文档和 History entry，不伪装成跨文件原子事务。
-- `Editor/...` 不参与 Plugin 默认贡献，也不进入 Player；`Project/...` 不使用 JSON property bag。
+- `Editor/...` 不参与 Plugin 默认贡献，也不进入 Player；`Project/...` 使用强类型 Setting 协议而不是 Editor property bag。
 - Project setting 的长期身份是 `ProjectSettingId` 与 Stable Type ID，UI 路径只决定 Editor 中的位置。
 - Catalog generation 先完整构建候选再原子切换；Drawer 不应订阅静态事件或长期保存传入的 setting 实例。
 - 删除或移动路径时同步当前项目数据、调用方与 Wiki，不保留旧 key alias。

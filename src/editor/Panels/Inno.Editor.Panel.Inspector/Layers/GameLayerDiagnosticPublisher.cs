@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using Inno.Core.Diagnose;
-using Inno.Engine.Scene;
-using Inno.Engine.Scene.Layers;
+using Inno.Core.Diagnostics;
+using Inno.Scene;
+using Inno.Scene.Layers;
 
 namespace Inno.Editor.Panel.Inspector;
 
@@ -15,17 +15,27 @@ internal sealed class GameLayerDiagnosticPublisher
 {
     private const string C_DIAGNOSTIC_GROUP = "GameObject Layer Assignment";
 
+    private readonly SceneWorld m_world;
+    private readonly DiagnosticHub m_diagnostics;
     private readonly HashSet<Guid> m_activeTargets = [];
+
+    internal GameLayerDiagnosticPublisher(SceneWorld world, DiagnosticHub diagnostics)
+    {
+        m_world = world ?? throw new ArgumentNullException(nameof(world));
+        m_diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
+    }
 
     /// <summary>
     /// Reconciles diagnostics against every GameObject in the loaded Scene setup.
     /// </summary>
-    /// <param name="stack">The active project layer catalog.</param>
+    /// <param name="stack">
+    /// The active project layer catalog.
+    /// </param>
     internal void Refresh(GameLayerStack stack)
     {
         ArgumentNullException.ThrowIfNull(stack);
         var currentTargets = new HashSet<Guid>();
-        IReadOnlyList<GameScene> scenes = SceneManager.loadedScenes;
+        IReadOnlyList<GameScene> scenes = m_world.loadedScenes;
         for (int sceneIndex = 0; sceneIndex < scenes.Count; sceneIndex++)
         {
             IReadOnlyList<GameObject> objects = scenes[sceneIndex].GetObjects();
@@ -38,18 +48,16 @@ internal sealed class GameLayerDiagnosticPublisher
                 currentTargets.Add(targetId);
                 if (m_activeTargets.Contains(targetId))
                     continue;
-                Diagnostics.Set(
-                    targetId,
-                    C_DIAGNOSTIC_GROUP,
-                    Diagnostic.Error(
+                m_diagnostics.Set(
+                    CreateSource(targetId, gameObject.name),
+                    [Diagnostic.Error(
                         "GAMEOBJECT-LAYER-UNDEFINED",
-                        $"GameObject '{gameObject.name}' uses undefined layer slot {gameObject.layer.index}."),
-                    gameObject.name);
+                        $"GameObject '{gameObject.name}' uses undefined layer slot {gameObject.layer.index}.")]);
             }
         }
 
         foreach (Guid targetId in m_activeTargets.Where(id => !currentTargets.Contains(id)).ToArray())
-            Diagnostics.Clear(targetId, C_DIAGNOSTIC_GROUP);
+            m_diagnostics.Clear(CreateSource(targetId, targetId.ToString("D")));
         m_activeTargets.Clear();
         m_activeTargets.UnionWith(currentTargets);
     }
@@ -60,7 +68,10 @@ internal sealed class GameLayerDiagnosticPublisher
     internal void Clear()
     {
         foreach (Guid targetId in m_activeTargets)
-            Diagnostics.Clear(targetId, C_DIAGNOSTIC_GROUP);
+            m_diagnostics.Clear(CreateSource(targetId, targetId.ToString("D")));
         m_activeTargets.Clear();
     }
+
+    private static DiagnosticSource CreateSource(Guid targetId, string displayName)
+        => new($"editor.scene.layer:{targetId:N}", $"{C_DIAGNOSTIC_GROUP}: {displayName}");
 }

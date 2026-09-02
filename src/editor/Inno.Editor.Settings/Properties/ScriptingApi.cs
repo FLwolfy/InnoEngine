@@ -1,4 +1,4 @@
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
 using Inno.Editor.Settings;
 
 [assembly: ScriptingApiNamespace("InnoEditor.Settings", "Inno.Editor.Settings", ScriptingApiScope.Editor)]

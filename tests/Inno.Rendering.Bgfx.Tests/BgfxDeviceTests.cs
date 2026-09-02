@@ -1,5 +1,5 @@
 using System;
-using Inno.Rendering.Core;
+using Inno.Rendering;
 using Inno.Platform;
 using Xunit;
 

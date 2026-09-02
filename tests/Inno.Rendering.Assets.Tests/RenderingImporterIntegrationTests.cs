@@ -1,14 +1,15 @@
 using System;
 using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using Inno.Assets.Core;
-using Inno.Assets.File;
-using Inno.Assets.Loader;
-using Inno.Assets.Serialization;
-using Inno.Core.Assemblies;
+using Inno.Assets;
+using Inno.Assets.Pipeline;
+using Inno.Core.Diagnostics;
+using Inno.Extensibility.Modules;
 using Inno.Core.Identity;
-using Inno.Core.Reflection;
+using Inno.Core.Logging;
+using Inno.Extensibility.Types;
 using Inno.Core.Serialization;
 using Xunit;
 
@@ -17,9 +18,16 @@ namespace Inno.Rendering.Assets.Tests;
 [Collection("Rendering assets serialization")]
 public sealed class RenderingImporterIntegrationTests : IDisposable
 {
+    private readonly IdentityAllocator m_identities = new();
+    private readonly IDisposable m_identityScope;
     private readonly string m_root;
     private readonly string m_assets;
     private readonly string m_library;
+    private readonly ModuleHost m_modules;
+    private readonly TypeCatalog m_types;
+    private readonly SerializationRegistry m_serialization;
+    private readonly DiagnosticHub m_diagnostics = new();
+    private readonly LogRouter m_logs = new();
 
     public RenderingImporterIntegrationTests()
     {
@@ -27,24 +35,25 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
         m_assets = Path.Combine(m_root, "Assets");
         m_library = Path.Combine(m_root, "Library");
         Directory.CreateDirectory(m_assets);
-        IdentityManager.Initialize();
-        AssemblyManager.Initialize(new AssemblyManagerOptions
+        m_identityScope = m_identities.EnterScope();
+        m_modules = new ModuleHost(new ModuleHostOptions
         {
             cacheDirectory = Path.Combine(m_root, "Assemblies")
         });
         _ = typeof(AssetSerializationServices);
-        TypeCacheManager.Initialize();
-        SerializationManager.Initialize();
+        m_types = new TypeCatalog(m_modules);
+        m_serialization = new SerializationRegistry(m_types);
         _ = typeof(ShaderCompiler);
+        m_types.Rebuild();
     }
 
     public void Dispose()
     {
-        AssetSerializationServices.SetReferenceResolver(null);
-        SerializationManager.Shutdown();
-        TypeCacheManager.Shutdown();
-        AssemblyManager.Shutdown();
-        IdentityManager.Shutdown();
+        m_serialization.Dispose();
+        m_types.Dispose();
+        m_modules.Dispose();
+        m_logs.Dispose();
+        m_identityScope.Dispose();
         if (Directory.Exists(m_root))
             Directory.Delete(m_root, recursive: true);
     }
@@ -62,9 +71,8 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
         BinaryPrimitives.WriteUInt32BigEndian(png.AsSpan(20, 4), 4);
         WriteBytes("Textures/color.png", png);
 
-        using (var writer = new AssetLoader(m_assets, m_library))
+        using (var writer = CreateLoader(m_assets, m_library))
         {
-            SetReferenceResolver(writer);
             ShaderSourceAsset vertex = Assert.IsType<ShaderSourceAsset>(writer.Load(
                 AssetPath.Project("Shaders/v.sc"),
                 typeof(ShaderSourceAsset)));
@@ -94,7 +102,8 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
                 [new ShaderTechniqueDefinition(
                     new ShaderTechniqueId("default"),
                     new ShaderContractId("tests.surface"),
-                    [new ShaderTechniquePass(new ShaderPassRoleId("draw"), pass.name)])]));
+                    [new ShaderTechniquePass(new ShaderPassRoleId("draw"), pass.name)])]),
+                m_serialization);
             Assert.True(writer.Save(AssetPath.Project("Shaders/basic.ishader"), shader));
 
             var material = new MaterialAsset { shader = shader };
@@ -111,9 +120,7 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
             Assert.True(writer.Save(AssetPath.Project("Pipelines/default.irenderpipeline"), pipeline));
         }
 
-        AssetSerializationServices.SetReferenceResolver(null);
-        using var loader = new AssetLoader(m_assets, m_library);
-        SetReferenceResolver(loader);
+        using var loader = CreateLoader(m_assets, m_library);
         ShaderAsset loadedShader = Assert.IsType<ShaderAsset>(loader.Load(
             AssetPath.Project("Shaders/basic.ishader"),
             typeof(ShaderAsset)));
@@ -131,7 +138,7 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
             typeof(TextureAsset)));
 
         Assert.Equal("Tests/Basic", loadedShader.definition!.name);
-        Assert.Single(ShaderAssetRuntime.GetModule(loadedShader).passes);
+        Assert.Single(ShaderAssetRuntime.GetModule(loadedShader, m_serialization).passes);
         Assert.Same(loadedShader, loadedMaterial.shader);
         Assert.True(loadedMaterial.TryGet(new ShaderPropertyId("roughness"), out MaterialValue roughness));
         Assert.Equal(0.25f, roughness.vector.x);
@@ -175,7 +182,7 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
         AssetSourceMount provider = new(providerId, providerRoot, isReadOnly: true);
         AssetSourceMount undeclaredConsumer = new(consumerId, consumerRoot, isReadOnly: true);
 
-        using (var undeclared = new AssetLoader(
+        using (var undeclared = CreateLoader(
                    [project, provider, undeclaredConsumer],
                    Path.Combine(m_root, "UndeclaredLibrary")))
         {
@@ -188,7 +195,7 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
             consumerRoot,
             isReadOnly: true,
             dependencies: [providerId]);
-        using var loader = new AssetLoader(
+        using var loader = CreateLoader(
             [project, provider, declaredConsumer],
             Path.Combine(m_root, "DeclaredLibrary"));
         loader.Rescan();
@@ -208,17 +215,27 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
         ], loader.GetImportDependencies(shader));
     }
 
-    private static void SetReferenceResolver(AssetLoader loader)
-        => AssetSerializationServices.SetReferenceResolver((
-            persistentId,
-            stableTypeId,
-            lastKnownPath,
-            expectedType,
-            _) => loader.ResolveReference(
-                persistentId,
-                stableTypeId,
-                lastKnownPath,
-                expectedType));
+    private AssetLoader CreateLoader(string assetRoot, string libraryRoot)
+        => new(
+            m_types,
+            m_serialization,
+            m_identities,
+            m_diagnostics,
+            m_logs,
+            assetRoot,
+            libraryRoot);
+
+    private AssetLoader CreateLoader(
+        IReadOnlyList<AssetSourceMount> mounts,
+        string libraryRoot)
+        => new(
+            m_types,
+            m_serialization,
+            m_identities,
+            m_diagnostics,
+            m_logs,
+            mounts,
+            libraryRoot);
 
     private void WriteText(string relativePath, string value)
         => WriteBytes(relativePath, Encoding.UTF8.GetBytes(value));
@@ -230,12 +247,12 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
         System.IO.File.WriteAllBytes(path, bytes);
     }
 
-    private static void WriteReadOnlyShaderSource(string root, string localPath, string content)
+    private void WriteReadOnlyShaderSource(string root, string localPath, string content)
     {
         string path = Path.Combine(root, localPath.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         System.IO.File.WriteAllText(path, content, Encoding.UTF8);
-        System.IO.File.WriteAllBytes(path + ".imeta", SerializationManager.Serialize(
+        System.IO.File.WriteAllBytes(path + ".imeta", m_serialization.Serialize(
             new RenderingAssetSourceMeta
             {
                 persistentId = Guid.NewGuid(),

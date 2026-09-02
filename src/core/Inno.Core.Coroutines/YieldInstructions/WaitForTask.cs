@@ -6,6 +6,9 @@ namespace Inno.Core.Coroutines;
 /// <summary>
 /// Waits until a task is completed.
 /// </summary>
+/// <param name="task">
+/// The task used to initialize this instance.
+/// </param>
 public sealed class WaitForTask(Task task) : YieldInstruction
 {
     /// <summary>

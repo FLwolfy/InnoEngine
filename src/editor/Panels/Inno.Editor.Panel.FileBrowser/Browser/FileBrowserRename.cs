@@ -1,6 +1,6 @@
 using System;
 
-using Inno.Assets.File;
+using Inno.Assets.Pipeline;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 using Inno.Editor.ImGui.ImGuiWidget;

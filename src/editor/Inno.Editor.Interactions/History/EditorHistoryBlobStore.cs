@@ -66,6 +66,9 @@ internal sealed class EditorHistoryBlobStore : IDisposable
         }
     }
 
+    /// <summary>
+    /// Releases the resources owned by this instance.
+    /// </summary>
     public void Dispose()
     {
         if (m_disposed)

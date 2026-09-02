@@ -1,10 +1,9 @@
 using System;
 using System.Diagnostics;
 
-using Inno.Core.Identity;
 using Inno.Editor.Interactions;
-using Inno.Engine.Scene;
-using Inno.Engine.Scene.Layers;
+using Inno.Scene;
+using Inno.Scene.Layers;
 
 namespace Inno.Editor.Scene;
 
@@ -12,7 +11,28 @@ namespace Inno.Editor.Scene;
 internal sealed class SceneScalarHistoryHandler : EditorHistoryHandler
 {
     private const double C_MERGE_WINDOW_SECONDS = 1.0;
+    private readonly EditorSceneWorkspace m_workspace;
 
+    internal SceneScalarHistoryHandler(EditorSceneWorkspace workspace)
+    {
+        m_workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
+    }
+
+    /// <summary>
+    /// Evaluates whether the requested change can be applied to the current generation.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="change">
+    /// The neutral change payload to query or apply.
+    /// </param>
+    /// <param name="direction">
+    /// The history direction that determines which state is applied.
+    /// </param>
+    /// <returns>
+    /// The validated editor history availability that represents the completed operation.
+    /// </returns>
     protected override EditorHistoryAvailability Query(
         EditorHistoryContext context,
         EditorHistoryChange change,
@@ -32,6 +52,21 @@ internal sealed class SceneScalarHistoryHandler : EditorHistoryHandler
         }
     }
 
+    /// <summary>
+    /// Applies a validated change atomically at the caller-controlled commit point.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <param name="change">
+    /// The neutral change payload to query or apply.
+    /// </param>
+    /// <param name="direction">
+    /// The history direction that determines which state is applied.
+    /// </param>
+    /// <returns>
+    /// The validated editor history result that represents the completed operation.
+    /// </returns>
     protected override EditorHistoryResult Apply(
         EditorHistoryContext context,
         EditorHistoryChange change,
@@ -69,6 +104,21 @@ internal sealed class SceneScalarHistoryHandler : EditorHistoryHandler
         }
     }
 
+    /// <summary>
+    /// Attempts to merge without changing state when the operation cannot complete.
+    /// </summary>
+    /// <param name="older">
+    /// The earlier history payload considered for coalescing.
+    /// </param>
+    /// <param name="newer">
+    /// The later history payload considered for coalescing.
+    /// </param>
+    /// <param name="merged">
+    /// Receives the neutral coalesced payload when merging succeeds.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the requested condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     protected override bool TryMerge(
         EditorHistoryChange older,
         EditorHistoryChange newer,
@@ -105,16 +155,16 @@ internal sealed class SceneScalarHistoryHandler : EditorHistoryHandler
         }
     }
 
-    private static EngineObject? Resolve(SceneScalarHistoryData data)
+    private EngineObject? Resolve(SceneScalarHistoryData data)
         => data.scalarKind switch
         {
-            SceneScalarKind.SceneName => IdentityManager.Get<GameScene>(data.targetId) is
+            SceneScalarKind.SceneName => m_workspace.Find<GameScene>(data.targetId) is
                 { isLoaded: true, isDestroyed: false } scene ? scene : null,
             SceneScalarKind.GameObjectName or
                 SceneScalarKind.GameObjectActive or
                 SceneScalarKind.GameObjectTag or
                 SceneScalarKind.GameObjectLayer =>
-                IdentityManager.Get<GameObject>(data.targetId) is { isRuntimeValid: true } gameObject
+                m_workspace.Find<GameObject>(data.targetId) is { isRuntimeValid: true } gameObject
                     ? gameObject
                     : null,
             _ => null

@@ -3,7 +3,7 @@ using System;
 using Inno.Core.Input;
 using Inno.Editor.Interactions;
 using Inno.Editor.Scene;
-using Inno.Engine.Scene;
+using Inno.Scene;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 
@@ -20,11 +20,26 @@ internal sealed class RenameHierarchyTargetCommand(SceneEdits edits) :
     private bool m_requestFocus;
     private string m_originalName = string.Empty;
 
+    /// <summary>
+    /// Evaluates whether the requested change can be applied to the current generation.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <returns>
+    /// The validated editor action state that represents the completed operation.
+    /// </returns>
     protected override EditorActionState Query(EditorActionContext<EngineObject> context)
         => IsAvailable(context.target)
             ? EditorActionState.enabled
             : EditorActionState.hidden;
 
+    /// <summary>
+    /// Executes the prepared operation and publishes only a completed result.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
     protected override void Execute(EditorActionContext<EngineObject> context)
     {
         if (!TryGetName(context.target, out string name))
@@ -36,6 +51,15 @@ internal sealed class RenameHierarchyTargetCommand(SceneEdits edits) :
         m_requestFocus = true;
     }
 
+    /// <summary>
+    /// Presents this action through the current editor interaction surface.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the requested condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     protected override bool Present(EditorActionContext<EngineObject, InlineRenamePresentation> context)
     {
         if (m_target is null)
@@ -58,10 +82,19 @@ internal sealed class RenameHierarchyTargetCommand(SceneEdits edits) :
         return true;
     }
 
+    /// <summary>
+    /// Commits the interaction after editing completes successfully.
+    /// </summary>
     protected override void OnCompleted() => ClearState();
 
+    /// <summary>
+    /// Cancels the interaction without committing its pending value.
+    /// </summary>
     protected override void OnCancelled() => ClearState();
 
+    /// <summary>
+    /// Cancels pending presentation state when its editor surface disappears.
+    /// </summary>
     protected override void OnPresentationLost()
     {
         if (m_target is null || !IsAvailable(m_target))

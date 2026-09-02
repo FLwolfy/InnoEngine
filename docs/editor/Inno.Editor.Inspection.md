@@ -12,7 +12,7 @@
 using System;
 
 using Inno.Editor.Inspection;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 
 [InspectionDrawer(typeof(AnimationController))]
 internal sealed class AnimationControllerInspectionDrawer
@@ -45,7 +45,7 @@ internal sealed class AnimationControllerInspectionDrawer
 - 当前 target。
 - `SerializedPropertyRenderer`。
 
-通用 context 不包含 `SceneEdits`、AssetManager 或其他 feature service。具体 Drawer 需要领域能力时，由宿主组合根通过构造函数注入。例如 GameObject/Scene Drawer 在 Inspector Panel 内部取得 `SceneEdits`，而资产 Drawer 只取得资产 icon provider。
+通用 context 不包含 `SceneEdits`、AssetPipeline 或其他 feature service。具体 Drawer 需要领域能力时，由宿主组合根通过构造函数注入。例如 GameObject/Scene Drawer 在 Inspector Panel 内部取得 `SceneEdits`，而资产 Drawer 只取得资产 icon provider。
 
 ## PropertyDrawer
 

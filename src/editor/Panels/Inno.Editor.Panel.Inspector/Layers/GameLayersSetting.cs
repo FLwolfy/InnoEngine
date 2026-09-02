@@ -8,7 +8,7 @@ using Inno.Core.Settings;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using Inno.Editor.Settings;
-using Inno.Engine.Scene.Layers;
+using Inno.Scene.Layers;
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
@@ -26,17 +26,28 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
     private string?[]? m_observedIds;
     private string?[]? m_observedNames;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the stable project-setting identity used for discovery and persistence.
+    /// </summary>
     public override ProjectSettingId settingId => GameLayerStack.settingId;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the presentation section that groups this setting.
+    /// </summary>
     public override string section => "Definitions";
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the user-facing explanation of this feature or setting.
+    /// </summary>
     public override string description
         => "Assign globally stable IDs, display names, and runtime slots to project and Plugin layers.";
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Draws this feature using the current editor presentation context.
+    /// </summary>
+    /// <param name="setting">
+    /// The mutable editor setting value currently being presented.
+    /// </param>
     protected override void OnDraw(GameLayerStack setting)
     {
         string?[] ids = CaptureIds(setting);

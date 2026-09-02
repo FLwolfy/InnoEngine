@@ -8,8 +8,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\render\Inno.Rendering.Bgfx\Inno.Rendering.Bgfx.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\src\render\Inno.Rendering.ImGui\Inno.Rendering.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\build\toolchains\Inno.Build.Toolchains.Bgfx.Tools\Inno.Build.Toolchains.Bgfx.Tools.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\rendering\Inno.Rendering.Bgfx\Inno.Rendering.Bgfx.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\rendering\Inno.Rendering.Bgfx.ImGui\Inno.Rendering.Bgfx.ImGui.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

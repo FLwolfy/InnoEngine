@@ -6,7 +6,7 @@ using Inno.Core.Input;
 using Inno.Editor.Interactions;
 using Inno.Editor.Panel.FileBrowser;
 using Inno.Editor.Scene;
-using Inno.Engine.Scene;
+using Inno.Scene;
 
 namespace Inno.Editor.Panel.Hierarchy;
 
@@ -15,18 +15,37 @@ namespace Inno.Editor.Panel.Hierarchy;
 [EditorShortcut(KeyCode.S, primary: true)]
 internal sealed class SaveCommand(
     IEditorSceneWorkspace workspace,
-    AssetEditorModule assets) : EditorAction
+    AssetEditorModule assets,
+    LogRouter logs) : EditorAction
 {
+    private readonly Logger m_log = (logs ?? throw new ArgumentNullException(nameof(logs)))
+        .CreateLogger<SaveCommand>();
+
+    /// <summary>
+    /// Evaluates whether the requested change can be applied to the current generation.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <returns>
+    /// The validated editor action state that represents the completed operation.
+    /// </returns>
     protected override EditorActionState Query(EditorActionContext context)
-        => workspace.canPersist && SceneManager.hasActiveScene
+        => workspace.canPersist && workspace.activeScene is not null
             ? EditorActionState.enabled
             : EditorActionState.disabled;
 
+    /// <summary>
+    /// Executes the prepared operation and publishes only a completed result.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
     protected override void Execute(EditorActionContext context)
     {
         try
         {
-            IReadOnlyList<GameScene> scenes = SceneManager.loadedScenes;
+            IReadOnlyList<GameScene> scenes = workspace.scenes;
             for (int i = 0; i < scenes.Count; i++)
             {
                 _ = workspace.Save(
@@ -36,7 +55,7 @@ internal sealed class SaveCommand(
         }
         catch (Exception exception)
         {
-            Log.Error("Failed to save open scenes: {0}", exception);
+            m_log.Write(LogLevel.Error, "Failed to save open scenes: {0}", [exception]);
         }
     }
 }

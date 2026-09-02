@@ -23,7 +23,9 @@ public sealed class EditorSelectionState
     /// <summary>
     /// Selects a target object.
     /// </summary>
-    /// <param name="target">Target to select.</param>
+    /// <param name="target">
+    /// Target to select.
+    /// </param>
     internal void Select(object target)
     {
         ArgumentNullException.ThrowIfNull(target);
@@ -53,9 +55,15 @@ public sealed class EditorSelectionState
     /// <summary>
     /// Tries to read the current target as a requested type.
     /// </summary>
-    /// <typeparam name="TTarget">Requested target type.</typeparam>
-    /// <param name="target">Typed target when successful.</param>
-    /// <returns><see langword="true"/> when the current target is compatible.</returns>
+    /// <typeparam name="TTarget">
+    /// Requested target type.
+    /// </typeparam>
+    /// <param name="target">
+    /// Typed target when successful.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the current target is compatible.
+    /// </returns>
     public bool TryGet<TTarget>([NotNullWhen(true)] out TTarget? target)
     {
         if (m_selectedTarget is TTarget typedTarget)

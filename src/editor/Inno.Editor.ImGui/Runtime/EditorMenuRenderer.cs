@@ -5,21 +5,29 @@ using System.Numerics;
 using Inno.Editor.Interactions;
 using Inno.Editor.ImGui.ImGuiWidget;
 using Inno.Native.ImGui;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.ImGui;
 
-/// <summary>Renders immutable editor menu models through ImGui.</summary>
+/// <summary>
+/// Renders immutable editor menu models through ImGui.
+/// </summary>
 public static class EditorMenuRenderer
 {
     /// <summary>
     /// Draws a resolved right-click menu for the most recently submitted ImGui item.
     /// </summary>
-    /// <param name="id">The stable popup identifier in the current ImGui ID scope.</param>
-    /// <param name="interaction">The interaction area and optional operation target.</param>
-    /// <returns><see langword="true"/> while the context popup is open and its items were drawn.</returns>
+    /// <param name="id">
+    /// The stable popup identifier in the current ImGui ID scope.
+    /// </param>
+    /// <param name="interaction">
+    /// The interaction area and optional operation target.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> while the context popup is open and its items were drawn.
+    /// </returns>
     public static bool ContextMenu(string id, EditorInteraction interaction)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -44,9 +52,15 @@ public static class EditorMenuRenderer
     /// <summary>
     /// Draws a resolved right-click menu when the current ImGui window's unoccupied background is clicked.
     /// </summary>
-    /// <param name="id">The stable popup identifier in the current ImGui ID scope.</param>
-    /// <param name="interaction">The interaction area and directory target for the background operation.</param>
-    /// <returns><see langword="true"/> while the background context popup is open and its items were drawn.</returns>
+    /// <param name="id">
+    /// The stable popup identifier in the current ImGui ID scope.
+    /// </param>
+    /// <param name="interaction">
+    /// The interaction area and directory target for the background operation.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> while the background context popup is open and its items were drawn.
+    /// </returns>
     public static bool WindowContextMenu(string id, EditorInteraction interaction)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -81,7 +95,9 @@ public static class EditorMenuRenderer
     /// <summary>
     /// Draws the complete editor main menu bar for the supplied menu context.
     /// </summary>
-    /// <param name="interaction">The main-menu interaction area.</param>
+    /// <param name="interaction">
+    /// The main-menu interaction area.
+    /// </param>
     public static void MainMenu(EditorInteraction interaction)
     {
         if (!NativeImGui.BeginMainMenuBar())
@@ -182,8 +198,12 @@ public static class EditorMenuRenderer
     /// <summary>
     /// Recursively draws resolved menu nodes into the currently open popup or menu.
     /// </summary>
-    /// <param name="interaction">The interaction used to resolve shortcuts and enqueue selected actions.</param>
-    /// <param name="items">The immutable menu nodes to draw in display order.</param>
+    /// <param name="interaction">
+    /// The interaction used to resolve shortcuts and enqueue selected actions.
+    /// </param>
+    /// <param name="items">
+    /// The immutable menu nodes to draw in display order.
+    /// </param>
     public static void DrawItems(EditorInteraction interaction, IReadOnlyList<EditorMenuItem> items)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -221,11 +241,21 @@ public static class EditorMenuRenderer
         }
     }
 
-    /// <summary>Draws matching leaf commands as a flat searchable list.</summary>
-    /// <param name="interaction">The interaction used to enqueue selected actions.</param>
-    /// <param name="items">The immutable menu tree whose leaves should be searched.</param>
-    /// <param name="search">The case-insensitive text matched against each slash-delimited leaf path.</param>
-    /// <returns><see langword="true"/> when a command was selected.</returns>
+    /// <summary>
+    /// Draws matching leaf commands as a flat searchable list.
+    /// </summary>
+    /// <param name="interaction">
+    /// The interaction used to enqueue selected actions.
+    /// </param>
+    /// <param name="items">
+    /// The immutable menu tree whose leaves should be searched.
+    /// </param>
+    /// <param name="search">
+    /// The case-insensitive text matched against each slash-delimited leaf path.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when a command was selected.
+    /// </returns>
     public static bool DrawSearchItems(
         EditorInteraction interaction,
         IReadOnlyList<EditorMenuItem> items,

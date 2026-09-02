@@ -7,6 +7,12 @@ namespace Inno.Editor.Panel.Logging;
 [EditorMenu(LoggingInteractionIds.C_ENTRY_AREA, "Copy Full Entry", order: 110)]
 internal sealed class CopyConsoleDetailsCommand : EditorAction<ConsoleEntryCopyTarget>
 {
+    /// <summary>
+    /// Executes the prepared operation and publishes only a completed result.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
     protected override void Execute(EditorActionContext<ConsoleEntryCopyTarget> context)
         => NativeImGui.SetClipboardText(context.target.fullText);
 }

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Reflection;
 
 using Inno.Core.Logging;
-using Inno.Core.Reflection;
+using Inno.Extensibility.Types;
 using Inno.Editor.Core;
 
 namespace Inno.Editor.Interactions;
@@ -15,6 +15,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
     private readonly Action m_extensionsChanged;
     private readonly EditorExtensionDiagnosticPublisher m_diagnostics = new();
     private readonly EditorInteractions m_interactions;
+    private readonly Logger m_log;
     private readonly object[] m_hostServices;
     private readonly EditorExtensionStateStore m_state;
     private readonly Dictionary<string, PanelState> m_panelStates = new(StringComparer.Ordinal);
@@ -23,19 +24,23 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
     private Snapshot? m_staging;
 
     internal EditorExtensionCatalog(
+        TypeCatalog types,
         EditorContext context,
         EditorInteractions interactions,
+        Logger log,
         IEnumerable<object> hostServices,
         Action extensionsChanged)
+        : base(types)
     {
         m_context = context ?? throw new ArgumentNullException(nameof(context));
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
+        m_log = log ?? throw new ArgumentNullException(nameof(log));
         ArgumentNullException.ThrowIfNull(hostServices);
         m_hostServices = hostServices.Select(static service =>
             service ?? throw new ArgumentException("Host services cannot contain null.", nameof(hostServices)))
             .ToArray();
         m_extensionsChanged = extensionsChanged ?? throw new ArgumentNullException(nameof(extensionsChanged));
-        m_state = new EditorExtensionStateStore(context);
+        m_state = new EditorExtensionStateStore(context, log);
     }
 
     internal Snapshot extensions
@@ -66,7 +71,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             catch (Exception exception)
             {
                 snapshot.quarantinedModules.Add(registration.module);
-                Log.Error("Editor module '{0}' failed to update and was quarantined: {1}",
+                LogError("Editor module '{0}' failed to update and was quarantined: {1}",
                     registration.attribute.id,
                     exception);
                 continue;
@@ -118,7 +123,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         registration.panel.isOpen = false;
         m_diagnostics.ReportPanelFailure(registration.attribute.id, exception);
         m_diagnostics.Commit();
-        Log.Error("Editor panel '{0}' failed to draw and was quarantined: {1}",
+        LogError("Editor panel '{0}' failed to draw and was quarantined: {1}",
             registration.attribute.id,
             exception);
     }
@@ -130,7 +135,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         ArgumentNullException.ThrowIfNull(exception);
         if (!ReferenceEquals(snapshot, m_active) || !snapshot.quarantinedModals.Add(registration.modal))
             return;
-        Log.Error("Editor modal '{0}' failed and was quarantined: {1}", registration.attribute.id, exception);
+        LogError("Editor modal '{0}' failed and was quarantined: {1}", registration.attribute.id, exception);
     }
 
     internal void Shutdown(bool saveState = true)
@@ -154,6 +159,15 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         m_state.ClearDiagnostics();
     }
 
+    /// <summary>
+    /// Builds a validated result from the current immutable input snapshot.
+    /// </summary>
+    /// <param name="types">
+    /// The active type catalog generation used for extension resolution.
+    /// </param>
+    /// <returns>
+    /// The validated snapshot that represents the completed operation.
+    /// </returns>
     protected override Snapshot Build(TypeCacheSnapshot types)
     {
         CapturePanelStates();
@@ -252,6 +266,15 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             activator.instances.ToArray());
     }
 
+    /// <summary>
+    /// Validates and prepares a candidate snapshot before it can become active.
+    /// </summary>
+    /// <param name="previous">
+    /// The previous consumed by on activating; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="candidate">
+    /// The candidate consumed by on activating; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     protected override void OnActivating(Snapshot? previous, Snapshot candidate)
     {
         if (m_activation is not null)
@@ -324,7 +347,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
                 registration.panel.isOpen = false;
                 TryDetach(registration, "failed activation cleanup");
                 m_diagnostics.ReportPanelFailure(registration.attribute.id, exception);
-                Log.Error("Editor panel '{0}' failed to attach: {1}", registration.attribute.id, exception);
+                LogError("Editor panel '{0}' failed to attach: {1}", registration.attribute.id, exception);
             }
         }
         m_diagnostics.Commit();
@@ -332,6 +355,15 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         m_active = candidate;
     }
 
+    /// <summary>
+    /// Restores state retained for the previous snapshot after candidate activation fails.
+    /// </summary>
+    /// <param name="previous">
+    /// The previous consumed by on activation rolled back; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="candidate">
+    /// The candidate consumed by on activation rolled back; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     protected override void OnActivationRolledBack(Snapshot? previous, Snapshot candidate)
     {
         ActivationState? activation = m_activation;
@@ -358,6 +390,15 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         m_diagnostics.Commit();
     }
 
+    /// <summary>
+    /// Releases previous-generation state after the candidate becomes active.
+    /// </summary>
+    /// <param name="previous">
+    /// The previous consumed by on activation completed; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="currentSnapshot">
+    /// The current snapshot consumed by on activation completed; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     protected override void OnActivationCompleted(Snapshot? previous, Snapshot currentSnapshot)
     {
         ActivationState? activation = m_activation;
@@ -371,6 +412,12 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         m_activation = null;
     }
 
+    /// <summary>
+    /// Releases the generation lease retained by an immutable registry snapshot.
+    /// </summary>
+    /// <param name="snapshot">
+    /// The immutable state snapshot consumed by this operation.
+    /// </param>
     protected override void DisposeSnapshot(Snapshot snapshot)
     {
         HashSet<object>? retained = m_active is null
@@ -388,7 +435,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
                 }
                 catch (Exception exception)
                 {
-                    Log.Error(
+                    LogError(
                         "Editor extension '{0}' failed while being disposed: {1}",
                         instance.GetType().FullName ?? instance.GetType().Name,
                         exception);
@@ -457,7 +504,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             catch (Exception exception)
             {
                 previous.quarantinedModules.Add(registration.module);
-                Log.Error(
+                LogError(
                     "Editor module '{0}' failed while restoring the previous generation: {1}",
                     registration.attribute.id,
                     exception);
@@ -475,7 +522,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
                 previous.quarantinedPanels.Add(registration.panel);
                 registration.panel.isOpen = false;
                 m_diagnostics.ReportPanelFailure(registration.attribute.id, exception);
-                Log.Error(
+                LogError(
                     "Editor panel '{0}' failed while restoring the previous generation: {1}",
                     registration.attribute.id,
                     exception);
@@ -524,7 +571,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         }
         catch (Exception exception)
         {
-            Log.Error("Editor module '{0}' failed during {1}: {2}", registration.attribute.id, phase, exception);
+            LogError("Editor module '{0}' failed during {1}: {2}", registration.attribute.id, phase, exception);
             return false;
         }
     }
@@ -538,7 +585,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         }
         catch (Exception exception)
         {
-            Log.Error("Editor panel '{0}' failed during {1}: {2}", registration.attribute.id, phase, exception);
+            LogError("Editor panel '{0}' failed during {1}: {2}", registration.attribute.id, phase, exception);
             return false;
         }
     }
@@ -551,7 +598,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         }
         catch (Exception exception)
         {
-            Log.Error("Editor extension description invalidation failed: {0}", exception);
+            LogError("Editor extension description invalidation failed: {0}", exception);
         }
     }
 
@@ -572,6 +619,9 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
             toolbars,
             shortcuts);
     }
+
+    private void LogError(string message, params object?[] arguments)
+        => m_log.Write(LogLevel.Error, message, arguments);
 
     private static IEnumerable<MenuSourceRegistration> CreateMenuSourceRegistrations(
         Type type,

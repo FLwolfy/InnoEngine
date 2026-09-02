@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Inno.Core.Assemblies;
+using Inno.Extensibility.Modules;
 using Inno.Core.Graphs;
-using Inno.Core.Reflection;
-using Inno.Rendering.Core;
+using Inno.Extensibility.Types;
+using Inno.Rendering;
 using Xunit;
 
 namespace Inno.Rendering.ShaderGraph.Tests;
@@ -16,18 +16,20 @@ public sealed class ShaderNodeRegistryExtensionTests : IDisposable
         Path.GetTempPath(),
         "InnoShaderNodeRegistryTests",
         Guid.NewGuid().ToString("N"));
+    private readonly ModuleHost m_modules;
+    private readonly TypeCatalog m_types;
 
     public ShaderNodeRegistryExtensionTests()
     {
         DisposableShaderNodeDefinition.disposeCount = 0;
-        AssemblyManager.Initialize(new AssemblyManagerOptions { cacheDirectory = m_cacheDirectory });
-        TypeCacheManager.Initialize();
+        m_modules = new ModuleHost(new ModuleHostOptions { cacheDirectory = m_cacheDirectory });
+        m_types = new TypeCatalog(m_modules);
     }
 
     public void Dispose()
     {
-        TypeCacheManager.Shutdown();
-        AssemblyManager.Shutdown();
+        m_types.Dispose();
+        m_modules.Dispose();
         if (Directory.Exists(m_cacheDirectory))
         {
             Directory.Delete(m_cacheDirectory, recursive: true);
@@ -37,12 +39,12 @@ public sealed class ShaderNodeRegistryExtensionTests : IDisposable
     [Fact]
     public void TypeCacheRebuildAtomicallyReplacesAndDisposesNodeGeneration()
     {
-        using var registry = new ShaderNodeRegistry(discoverExtensions: true);
+        using var registry = new ShaderNodeRegistry(m_types);
         registry.RefreshExtensions();
         ulong firstGeneration = registry.generation;
         Assert.True(registry.TryResolveShader(DisposableShaderNodeDefinition.ID, out ShaderNodeDefinition? first));
 
-        TypeCacheManager.Rebuild();
+        m_types.Rebuild();
 
         Assert.True(registry.generation > firstGeneration);
         Assert.True(registry.TryResolveShader(DisposableShaderNodeDefinition.ID, out ShaderNodeDefinition? second));

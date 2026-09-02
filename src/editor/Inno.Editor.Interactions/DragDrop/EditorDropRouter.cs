@@ -5,7 +5,7 @@ using Inno.Core.Logging;
 
 namespace Inno.Editor.Interactions;
 
-internal sealed class EditorDropRouter(EditorExtensionCatalog catalog)
+internal sealed class EditorDropRouter(EditorExtensionCatalog catalog, Logger log)
 {
     private readonly HashSet<string> m_queryFailures = new(StringComparer.Ordinal);
     private Guid m_token;
@@ -31,7 +31,7 @@ internal sealed class EditorDropRouter(EditorExtensionCatalog catalog)
         }
         catch (Exception exception)
         {
-            Log.Error("Editor drag validation failed: {0}", exception);
+            log.Write(LogLevel.Error, "Editor drag validation failed: {0}", [exception]);
         }
         Cancel();
         data = null;
@@ -54,7 +54,7 @@ internal sealed class EditorDropRouter(EditorExtensionCatalog catalog)
         {
             string dropName = registration.type.FullName ?? registration.type.Name;
             if (m_queryFailures.Add(dropName))
-                Log.Error("Editor drop query failed: {0}", exception);
+                log.Write(LogLevel.Error, "Editor drop query failed: {0}", [exception]);
             return EditorDropStatus.rejected;
         }
     }
@@ -75,7 +75,7 @@ internal sealed class EditorDropRouter(EditorExtensionCatalog catalog)
         }
         catch (Exception exception)
         {
-            Log.Error("Editor drop failed: {0}", exception);
+            log.Write(LogLevel.Error, "Editor drop failed: {0}", [exception]);
             return EditorDropResult.rejected;
         }
     }

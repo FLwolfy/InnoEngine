@@ -12,12 +12,13 @@ Editor 采用“被动核心 → 后端无关交互 → ImGui 表现 → 独立 
 | [Inno.Editor.Interactions](Inno.Editor.Interactions.md) | Action、area、menu、shortcut、selection、drag/drop、Undo/Redo、Module/Panel 状态存储与扩展代际。 |
 | [Inno.Editor.PlayMode](Inno.Editor.PlayMode.md) | 脚本门禁、Scene/History 隔离、游戏循环与 Play/Edit 原子切换。 |
 | [Inno.Editor.Scene](Inno.Editor.Scene.md) | Scene document workspace、细粒度 Scene 编辑门面与 reload-safe History 协议。 |
-| [Inno.Editor.Settings](Inno.Editor.Settings.md) | Editor JSON property bag 与强类型 Project Setting Drawer 的统一 frontend 协议。 |
+| [Inno.Editor.Settings](Inno.Editor.Settings.md) | Editor 结构化值与强类型 Project Setting Drawer 的统一 frontend 协议。 |
 | [Inno.Editor.ImGui](Inno.Editor.ImGui.md) | ImGui runtime、pointer-free 脚本 facade、统一 Widget、Palette 与 Style metrics。 |
 | [Inno.Editor.Graph](Inno.Editor.Graph.md) | 后端无关 Graph document controller、画布状态、复制粘贴与中立 History。 |
 | [Inno.Editor.Rendering](Inno.Editor.Rendering.md) | Plugin viewport provider、通用 RenderRequest、RenderTexture 输出与 opaque ImGui texture 桥接。 |
 | [Inno.Editor.Inspection](Inno.Editor.Inspection.md) | InspectionDrawer、PropertyDrawer、Registry 与 serialized property renderer。 |
 | [Inno.Editor.Scripting](Inno.Editor.Scripting.md) | Asset-backed Roslyn 编译、facade、IDE 工程与热重载。 |
+| [Inno.Editor.Exporting](Inno.Editor.Exporting.md) | File 菜单 Plugin/Game 导出、编译门禁、平台 Player 发布与原子输出。 |
 | [Inno.Editor.Panel.FileBrowser](Inno.Editor.Panel.FileBrowser.md) | AssetEditor、文件浏览、Asset 操作与 Asset-side drag/drop。 |
 | [Inno.Editor.Panel.Global](Inno.Editor.Panel.Global.md) | internal 全局 Action、Editor/Appearance 页面、Icon 与 Zoom setting definitions。 |
 | [Inno.Editor.Panel.Hierarchy](Inno.Editor.Panel.Hierarchy.md) | Scene workspace、Hierarchy、Scene/GameObject 操作与排序。 |
@@ -28,7 +29,7 @@ Editor 采用“被动核心 → 后端无关交互 → ImGui 表现 → 独立 
 | [Inno.Editor.Panel.SceneView](Inno.Editor.Panel.SceneView.md) | 不含 Camera/Picking 假设的 Plugin 驱动 Scene viewport host。 |
 | [Inno.Editor.Panel.GameView](Inno.Editor.Panel.GameView.md) | 不含运行时世界观的 Plugin 驱动 Game viewport host。 |
 | [Inno.Editor.Panel.ShaderGraph](Inno.Editor.Panel.ShaderGraph.md) | ShaderGraph 画布、编辑、预览、诊断与状态恢复。 |
-| [Inno.Editor.Application](Inno.Editor.Application.md) | Platform、Shell、ImGui 和全部 feature 的组合根。 |
+| [Inno.Editor.Application](Inno.Editor.Application.md) | Platform、EngineHost/Edit Session、Build、ImGui 和全部 feature 的组合根。 |
 
 ## 依赖方向
 
@@ -56,6 +57,9 @@ flowchart TD
     Core --> Scripting["Inno.Editor.Scripting"]
     ImGui --> Scripting
     Scripting --> PlayMode
+    Scripting --> Exporting["Inno.Editor.Exporting"]
+    Settings --> Exporting
+    Exporting --> Application
     PlayMode --> Application
     Panels --> Application["Inno.Editor.Application"]
     Scripting --> Application

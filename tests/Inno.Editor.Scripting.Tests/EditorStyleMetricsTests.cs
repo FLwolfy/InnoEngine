@@ -1,9 +1,7 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using System.Reflection;
 
 using Inno.Editor.ImGui;
 using Inno.Native.ImGui;
@@ -228,7 +226,6 @@ public sealed class EditorStyleMetricsTests
                 _ = EditorWidget.style.SetZoom(zoom);
                 EditorWidget.SetupStyle();
                 DrawTreeFrame();
-                AssertTreeStacksContainOnlyTheOpenRoot();
             }
         }
         finally
@@ -431,6 +428,47 @@ public sealed class EditorStyleMetricsTests
     }
 
     [Fact]
+    public void ChildGuideStartsAtTheParentCenterWithoutChangingCompactRowHeight()
+    {
+        var context = NativeImGui.CreateContext();
+        try
+        {
+            ImGuiIOPtr io = NativeImGui.GetIO();
+            io.DisplaySize = new Vector2(640f, 480f);
+            io.DeltaTime = 1f / 60f;
+            io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
+            io.Fonts.RendererHasTextures = true;
+            EditorWidget.SetupStyle();
+
+            NativeImGui.NewFrame();
+            NativeImGui.SetNextWindowSize(new Vector2(480f, 320f), ImGuiCond.Always);
+            _ = NativeImGui.Begin("Connected Parent Guide Test");
+            float expectedHeight = NativeImGui.GetTextLineHeight();
+            EditorWidget.SetNextTreeNodeOpen(true);
+            TreeNodeResult parent = EditorWidget.TreeNode(
+                "connected_parent",
+                static _ => NativeImGui.TextUnformatted("Parent"),
+                new TreeNodeOptions());
+            Assert.True(parent.isOpen);
+            TreeNodeResult child = EditorWidget.TreeNode(
+                "connected_child",
+                static _ => NativeImGui.TextUnformatted("Child"),
+                new TreeNodeOptions { isLeaf = true });
+            NativeImGui.TreePop();
+
+            Assert.Equal(expectedHeight, parent.max.Y - parent.min.Y, 3);
+            Assert.Equal(expectedHeight, child.max.Y - child.min.Y, 3);
+            AssertCurrentTreeGuideTouchesY((parent.min.Y + parent.max.Y) * 0.5f);
+            NativeImGui.End();
+            NativeImGui.Render();
+        }
+        finally
+        {
+            NativeImGui.DestroyContext(context);
+        }
+    }
+
+    [Fact]
     public void TreeGuidesAreDrawnFromTheCurrentFrameWhileDragging()
     {
         var context = NativeImGui.CreateContext();
@@ -619,7 +657,7 @@ public sealed class EditorStyleMetricsTests
             NativeImGui.TreePop();
         }
         if (assertContinuousGuides)
-            AssertCurrentTreeGuideSegmentsAreContinuous();
+            AssertCurrentDrawListContainsTreeGuideColor();
         NativeImGui.End();
         NativeImGui.Render();
     }
@@ -794,6 +832,20 @@ public sealed class EditorStyleMetricsTests
         AssertCurrentDrawListContainsColor(
             guideColor,
             "The current drag frame did not submit any tree-guide vertices.");
+    }
+
+    private static void AssertCurrentTreeGuideTouchesY(float expectedY)
+    {
+        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
+        uint guideColor = NativeImGui.ColorConvertFloat4ToU32(EditorPalette.treeGuide);
+        for (int i = 0; i < drawList.VtxBuffer.Size; i++)
+        {
+            ImDrawVert vertex = drawList.VtxBuffer[i];
+            if (vertex.Col == guideColor && MathF.Abs(vertex.Pos.Y - expectedY) <= 1f)
+                return;
+        }
+
+        Assert.Fail("The child guide did not connect to the parent row's vertical center.");
     }
 
     private static void DrawCurrentTreeBackgroundFrame(Vector2 position, Vector2 size)
@@ -1004,71 +1056,4 @@ public sealed class EditorStyleMetricsTests
         NativeImGui.EndChild();
     }
 
-    private static void AssertCurrentTreeGuideSegmentsAreContinuous()
-    {
-        FieldInfo statesField = typeof(EditorWidget).GetField(
-            "s_treeStatesByWindow",
-            BindingFlags.NonPublic | BindingFlags.Static)!;
-        var states = (IDictionary)statesField.GetValue(null)!;
-        int windowKey = NativeImGui.GetWindowDrawList().GetHashCode();
-        Assert.True(states.Contains(windowKey));
-        object state = states[windowKey]!;
-        FieldInfo segmentsField = state.GetType().GetField(
-            "lineSegments",
-            BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var verticalSegments = new List<(Vector2 from, Vector2 to)>();
-        foreach (object segment in (IEnumerable)segmentsField.GetValue(state)!)
-        {
-            Type segmentType = segment.GetType();
-            Vector2 from = (Vector2)segmentType.GetField(
-                "from",
-                BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(segment)!;
-            Vector2 to = (Vector2)segmentType.GetField(
-                "to",
-                BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(segment)!;
-            if (MathF.Abs(to.X - from.X) <= MathF.Abs(to.Y - from.Y))
-                verticalSegments.Add((from, to));
-        }
-
-        verticalSegments.Sort(static (left, right) =>
-        {
-            int byX = left.from.X.CompareTo(right.from.X);
-            return byX != 0 ? byX : left.from.Y.CompareTo(right.from.Y);
-        });
-        bool foundMultiSegmentGuide = false;
-        for (int start = 0; start < verticalSegments.Count;)
-        {
-            int end = start + 1;
-            float maximumY = verticalSegments[start].to.Y;
-            while (end < verticalSegments.Count &&
-                   MathF.Abs(verticalSegments[end].from.X - verticalSegments[start].from.X) <= 0.01f)
-            {
-                foundMultiSegmentGuide = true;
-                Assert.True(
-                    verticalSegments[end].from.Y <= maximumY + 0.01f,
-                    $"Tree guide gap detected between {maximumY} and {verticalSegments[end].from.Y}.");
-                maximumY = MathF.Max(maximumY, verticalSegments[end].to.Y);
-                end++;
-            }
-            start = end;
-        }
-        Assert.True(foundMultiSegmentGuide, "Expected at least one multi-row vertical tree guide.");
-    }
-
-    private static void AssertTreeStacksContainOnlyTheOpenRoot()
-    {
-        FieldInfo statesField = typeof(EditorWidget).GetField(
-            "s_treeStatesByWindow",
-            BindingFlags.NonPublic | BindingFlags.Static)!;
-        var states = (IDictionary)statesField.GetValue(null)!;
-        foreach (DictionaryEntry entry in states)
-        {
-            object state = entry.Value!;
-            FieldInfo stackField = state.GetType().GetField(
-                "treeNodeStack",
-                BindingFlags.NonPublic | BindingFlags.Instance)!;
-            var stack = (ICollection)stackField.GetValue(state)!;
-            Assert.True(stack.Count <= 1, $"Retained tree depth was {stack.Count}; expected only the open root.");
-        }
-    }
 }

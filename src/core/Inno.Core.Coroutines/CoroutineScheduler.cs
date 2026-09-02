@@ -23,6 +23,9 @@ public sealed class CoroutineScheduler : IDisposable
     private double m_now;
     private ulong m_frame;
 
+    /// <summary>
+    /// Creates an empty scheduler whose lifetime is owned by the caller.
+    /// </summary>
     public CoroutineScheduler()
     {
         m_selfRef = new WeakReference<CoroutineScheduler>(this);
@@ -31,8 +34,12 @@ public sealed class CoroutineScheduler : IDisposable
     /// <summary>
     /// Starts a coroutine.
     /// </summary>
-    /// <param name="routine">Coroutine enumerator.</param>
-    /// <returns>Coroutine handle.</returns>
+    /// <param name="routine">
+    /// Coroutine enumerator.
+    /// </param>
+    /// <returns>
+    /// Coroutine handle.
+    /// </returns>
     public CoroutineHandle StartCoroutine(IEnumerator routine)
     {
         return StartCoroutine(null, routine);
@@ -41,9 +48,15 @@ public sealed class CoroutineScheduler : IDisposable
     /// <summary>
     /// Starts a coroutine with an owner token.
     /// </summary>
-    /// <param name="owner">Owner key used by <see cref="StopAllCoroutines(object)"/>.</param>
-    /// <param name="routine">Coroutine enumerator.</param>
-    /// <returns>Coroutine handle.</returns>
+    /// <param name="owner">
+    /// Owner key used by <see cref="StopAllCoroutines(object)"/>.
+    /// </param>
+    /// <param name="routine">
+    /// Coroutine enumerator.
+    /// </param>
+    /// <returns>
+    /// Coroutine handle.
+    /// </returns>
     public CoroutineHandle StartCoroutine(object? owner, IEnumerator routine)
     {
         ArgumentNullException.ThrowIfNull(routine);
@@ -62,8 +75,12 @@ public sealed class CoroutineScheduler : IDisposable
     /// <summary>
     /// Requests stopping a coroutine by handle.
     /// </summary>
-    /// <param name="handle">Target coroutine handle.</param>
-    /// <returns><see langword="true"/> if the handle is valid.</returns>
+    /// <param name="handle">
+    /// Target coroutine handle.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> if the handle is valid.
+    /// </returns>
     public bool StopCoroutine(CoroutineHandle handle)
     {
         if (!handle.IsOwnedBy(this) || !handle.isValid || Volatile.Read(ref m_disposed) != 0)
@@ -78,7 +95,9 @@ public sealed class CoroutineScheduler : IDisposable
     /// <summary>
     /// Stops all coroutines owned by the specified owner token before this method returns.
     /// </summary>
-    /// <param name="owner">Owner key used when starting coroutines.</param>
+    /// <param name="owner">
+    /// Owner key used when starting coroutines.
+    /// </param>
     public void StopAllCoroutines(object owner)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref m_disposed) != 0, this);
@@ -132,7 +151,9 @@ public sealed class CoroutineScheduler : IDisposable
     /// <summary>
     /// Advances coroutine execution by one frame.
     /// </summary>
-    /// <param name="deltaTime">Frame delta time in seconds.</param>
+    /// <param name="deltaTime">
+    /// Frame delta time in seconds.
+    /// </param>
     public void Tick(float deltaTime)
     {
         if (deltaTime < 0f)
@@ -353,29 +374,92 @@ public sealed class CoroutineScheduler : IDisposable
         object? owner,
         IEnumerator? routine)
     {
+        /// <summary>
+        /// Gets the operation kind that determines how this value is interpreted.
+        /// </summary>
         public CommandKind kind { get; } = kind;
+        /// <summary>
+        /// Gets the stable identity used to reference this value across subsystem boundaries.
+        /// </summary>
         public long id { get; } = id;
+        /// <summary>
+        /// Gets the object that owns the coroutine lifetime.
+        /// </summary>
         public object? owner { get; } = owner;
+        /// <summary>
+        /// Gets the root enumerator advanced by this coroutine.
+        /// </summary>
         public IEnumerator? routine { get; } = routine;
 
+        /// <summary>
+        /// Starts value processing after validating the current state.
+        /// </summary>
+        /// <param name="id">
+        /// The stable identity used to locate the requested value.
+        /// </param>
+        /// <param name="owner">
+        /// The object that owns the resulting lifetime and state.
+        /// </param>
+        /// <param name="routine">
+        /// The routine consumed by start; ownership remains with the caller unless explicitly stated otherwise.
+        /// </param>
+        /// <returns>
+        /// The validated command that represents the completed operation.
+        /// </returns>
         public static Command Start(long id, object? owner, IEnumerator routine)
             => new(CommandKind.Start, id, owner, routine);
 
+        /// <summary>
+        /// Stops value processing and releases operation-scoped resources.
+        /// </summary>
+        /// <param name="id">
+        /// The stable identity used to locate the requested value.
+        /// </param>
+        /// <returns>
+        /// The validated command that represents the completed operation.
+        /// </returns>
         public static Command Stop(long id)
             => new(CommandKind.Stop, id, null, null);
 
+        /// <summary>
+        /// Stops by owner processing and releases operation-scoped resources.
+        /// </summary>
+        /// <param name="owner">
+        /// The object that owns the resulting lifetime and state.
+        /// </param>
+        /// <returns>
+        /// The validated command that represents the completed operation.
+        /// </returns>
         public static Command StopByOwner(object owner)
             => new(CommandKind.StopByOwner, 0, owner, null);
 
+        /// <summary>
+        /// Stops all processing and releases operation-scoped resources.
+        /// </summary>
+        /// <returns>
+        /// The validated command that represents the completed operation.
+        /// </returns>
         public static Command StopAll()
             => new(CommandKind.StopAll, 0, null, null);
     }
 
     private sealed class CoroutineState(long id, object? owner, IEnumerator routine)
     {
+        /// <summary>
+        /// Gets the stable identity used to reference this value across subsystem boundaries.
+        /// </summary>
         public long id { get; } = id;
+        /// <summary>
+        /// Gets the object that owns the coroutine lifetime.
+        /// </summary>
         public object? owner { get; } = owner;
+        /// <summary>
+        /// Gets the nested enumerator stack retained by this coroutine.
+        /// </summary>
         public Stack<IEnumerator> stack { get; } = new([routine]);
+        /// <summary>
+        /// Gets the current continuation predicate, or null when the coroutine can advance.
+        /// </summary>
         public CoroutineWaitDelegate? waiter { get; set; }
     }
 }

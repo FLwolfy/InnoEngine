@@ -13,7 +13,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using BGCS.Runtime;
 
-namespace Inno.Native.SDL3
+namespace Inno.Native.Sdl3
 {
 	[NativeName(NativeNameType.StructOrClass, "EGLClientPixmapHI")]
 	[StructLayout(LayoutKind.Sequential)]

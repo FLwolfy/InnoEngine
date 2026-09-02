@@ -3,15 +3,29 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
-using Inno.Core.Reflection;
+using Inno.Extensibility.Types;
 
 namespace Inno.Editor.Rendering;
 
 internal sealed class EditorViewportProviderRegistry
     : TypeRegistry<EditorViewportProviderRegistry.Snapshot>
 {
+    internal EditorViewportProviderRegistry(TypeCatalog types)
+        : base(types)
+    {
+    }
+
     internal Snapshot providers => current;
 
+    /// <summary>
+    /// Builds a validated result from the current immutable input snapshot.
+    /// </summary>
+    /// <param name="types">
+    /// The active type catalog generation used for extension resolution.
+    /// </param>
+    /// <returns>
+    /// The validated snapshot that represents the completed operation.
+    /// </returns>
     protected override Snapshot Build(TypeCacheSnapshot types)
     {
         Registration[] registrations = types
@@ -33,6 +47,12 @@ internal sealed class EditorViewportProviderRegistry
         return new Snapshot(types.version, registrations, selected);
     }
 
+    /// <summary>
+    /// Releases the generation lease retained by an immutable registry snapshot.
+    /// </summary>
+    /// <param name="snapshot">
+    /// The immutable state snapshot consumed by this operation.
+    /// </param>
     protected override void DisposeSnapshot(Snapshot snapshot)
     {
         for (int i = snapshot.registrations.Length - 1; i >= 0; i--)

@@ -5,7 +5,9 @@ namespace Inno.Editor.Inspection;
 /// <summary>
 /// Provides the target-specific header presentation and body drawing behavior for an inspected target.
 /// </summary>
-/// <typeparam name="TTarget">The target type inspected by the drawer.</typeparam>
+/// <typeparam name="TTarget">
+/// The target type inspected by the drawer.
+/// </typeparam>
 public abstract class InspectionDrawer<TTarget> : IInspectionDrawer
     where TTarget : class
 {
@@ -17,8 +19,12 @@ public abstract class InspectionDrawer<TTarget> : IInspectionDrawer
     /// <summary>
     /// Binds the name displayed in the first row of the Inspector target header.
     /// </summary>
-    /// <param name="context">The active Inspector drawing context.</param>
-    /// <param name="target">The strongly typed target being inspected.</param>
+    /// <param name="context">
+    /// The active Inspector drawing context.
+    /// </param>
+    /// <param name="target">
+    /// The strongly typed target being inspected.
+    /// </param>
     /// <returns>
     /// The current target name and a callback that accepts a requested replacement name, or
     /// <see langword="null"/> for the callback when the name is read-only.
@@ -30,8 +36,12 @@ public abstract class InspectionDrawer<TTarget> : IInspectionDrawer
     /// <summary>
     /// Resolves the icon glyph displayed for the current target.
     /// </summary>
-    /// <param name="context">The active Inspector drawing context.</param>
-    /// <param name="target">The strongly typed target being inspected.</param>
+    /// <param name="context">
+    /// The active Inspector drawing context.
+    /// </param>
+    /// <param name="target">
+    /// The strongly typed target being inspected.
+    /// </param>
     /// <returns>
     /// The target-specific icon glyph. The default implementation returns <see cref="icon"/>.
     /// </returns>
@@ -41,8 +51,12 @@ public abstract class InspectionDrawer<TTarget> : IInspectionDrawer
     /// <summary>
     /// Draws target-specific controls in the second row of the Inspector target header.
     /// </summary>
-    /// <param name="context">The active Inspector drawing context.</param>
-    /// <param name="target">The strongly typed target being inspected.</param>
+    /// <param name="context">
+    /// The active Inspector drawing context.
+    /// </param>
+    /// <param name="target">
+    /// The strongly typed target being inspected.
+    /// </param>
     /// <remarks>
     /// The callback is clipped to one header row. Implementations should keep all controls on the
     /// current line and must not begin another window, child, table, or popup.
@@ -54,8 +68,12 @@ public abstract class InspectionDrawer<TTarget> : IInspectionDrawer
     /// <summary>
     /// Draws the target-specific Inspector body below the shared target header.
     /// </summary>
-    /// <param name="context">The active Inspector drawing context.</param>
-    /// <param name="target">The strongly typed target being inspected.</param>
+    /// <param name="context">
+    /// The active Inspector drawing context.
+    /// </param>
+    /// <param name="target">
+    /// The strongly typed target being inspected.
+    /// </param>
     protected abstract void Draw(InspectionDrawContext context, TTarget target);
 
     string IInspectionDrawer.GetIcon(InspectionDrawContext context)
@@ -88,14 +106,20 @@ public interface IInspectionDrawer
     /// <summary>
     /// Gets the icon glyph displayed in the Inspector target header.
     /// </summary>
-    /// <param name="context">The active Inspector drawing context.</param>
-    /// <returns>The icon glyph for the current target.</returns>
+    /// <param name="context">
+    /// The active Inspector drawing context.
+    /// </param>
+    /// <returns>
+    /// The icon glyph for the current target.
+    /// </returns>
     string GetIcon(InspectionDrawContext context);
 
     /// <summary>
     /// Binds the target name displayed by the Inspector target header.
     /// </summary>
-    /// <param name="context">The active Inspector drawing context.</param>
+    /// <param name="context">
+    /// The active Inspector drawing context.
+    /// </param>
     /// <returns>
     /// The current target name and a callback that accepts a requested replacement name, or
     /// <see langword="null"/> for the callback when the name is read-only.
@@ -105,12 +129,16 @@ public interface IInspectionDrawer
     /// <summary>
     /// Draws the target-specific second header row.
     /// </summary>
-    /// <param name="context">The active Inspector drawing context.</param>
+    /// <param name="context">
+    /// The active Inspector drawing context.
+    /// </param>
     void DrawHeader(InspectionDrawContext context);
 
     /// <summary>
     /// Draws the target-specific Inspector body.
     /// </summary>
-    /// <param name="context">The active Inspector drawing context.</param>
+    /// <param name="context">
+    /// The active Inspector drawing context.
+    /// </param>
     void Draw(InspectionDrawContext context);
 }

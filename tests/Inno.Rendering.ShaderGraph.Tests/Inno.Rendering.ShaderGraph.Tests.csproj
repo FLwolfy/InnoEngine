@@ -7,13 +7,14 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\core\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\build\toolchains\Inno.Build.Toolchains.Bgfx.Tools\Inno.Build.Toolchains.Bgfx.Tools.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\extensibility\Inno.Extensibility.Modules\Inno.Extensibility.Modules.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\src\core\Inno.Core.Graphs\Inno.Core.Graphs.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\src\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\src\render\Inno.Rendering\Inno.Rendering.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\src\render\Inno.Rendering.Assets\Inno.Rendering.Assets.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\src\render\Inno.Rendering.Bgfx\Inno.Rendering.Bgfx.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\src\render\Inno.Rendering.ShaderGraph\Inno.Rendering.ShaderGraph.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\rendering\Inno.Rendering\Inno.Rendering.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\rendering\Inno.Rendering.Assets\Inno.Rendering.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\rendering\Inno.Rendering.Bgfx\Inno.Rendering.Bgfx.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\rendering\Inno.Rendering.ShaderGraph\Inno.Rendering.ShaderGraph.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

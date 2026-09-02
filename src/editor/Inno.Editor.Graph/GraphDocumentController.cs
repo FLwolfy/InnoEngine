@@ -2,21 +2,28 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Inno.Core.Graphs;
+using Inno.Core.Serialization;
 using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Graph;
 
-/// <summary>Contains a neutral copied node fragment suitable for graph clipboard operations.</summary>
+/// <summary>
+/// Contains a neutral copied node fragment suitable for graph clipboard operations.
+/// </summary>
 public sealed class GraphClipboardData
 {
     internal GraphClipboardData(GraphDocument fragment) => m_fragment = fragment;
 
     private readonly GraphDocument m_fragment;
 
-    /// <summary>Gets the copied node count.</summary>
+    /// <summary>
+    /// Gets the copied node count.
+    /// </summary>
     public int nodeCount => m_fragment.nodes.Count;
 
-    /// <summary>Gets the copied connection count whose endpoints both belong to the fragment.</summary>
+    /// <summary>
+    /// Gets the copied connection count whose endpoints both belong to the fragment.
+    /// </summary>
     public int edgeCount => m_fragment.edges.Count;
 
     internal GraphDocument CloneFragment() => m_fragment.Clone();
@@ -29,33 +36,58 @@ public sealed class GraphDocumentController
 {
     private readonly GraphDocumentSession m_session;
     private readonly IEditorHistory m_history;
+    private readonly SerializationRegistry m_serialization;
 
-    internal GraphDocumentController(GraphDocumentSession session, IEditorHistory history)
+    internal GraphDocumentController(
+        GraphDocumentSession session,
+        IEditorHistory history,
+        SerializationRegistry serialization)
     {
         m_session = session;
         m_history = history;
+        m_serialization = serialization;
     }
 
-    /// <summary>Gets the stable project-relative document identity.</summary>
+    /// <summary>
+    /// Gets the stable project-relative document identity.
+    /// </summary>
     public string documentId => m_session.documentId;
 
-    /// <summary>Gets the mutable neutral document used by the current asset generation.</summary>
+    /// <summary>
+    /// Gets the mutable neutral document used by the current asset generation.
+    /// </summary>
     public GraphDocument document => m_session.document;
 
-    /// <summary>Gets the monotonic in-session content revision.</summary>
+    /// <summary>
+    /// Gets the monotonic in-session content revision.
+    /// </summary>
     public ulong revision => m_session.revision;
 
-    /// <summary>Gets whether content changed after its last explicit saved marker.</summary>
+    /// <summary>
+    /// Gets whether content changed after its last explicit saved marker.
+    /// </summary>
     public bool isDirty => m_session.isDirty;
 
-    /// <summary>Marks the current revision as saved without creating a data History entry.</summary>
+    /// <summary>
+    /// Marks the current revision as saved without creating a data History entry.
+    /// </summary>
     public void MarkSaved() => m_session.isDirty = false;
 
-    /// <summary>Adds a node with a generated stable identity.</summary>
-    /// <param name="definitionId">Stable node definition ID.</param>
-    /// <param name="position">Initial graph-space position.</param>
-    /// <param name="values">Optional neutral property values.</param>
-    /// <returns>The new stable node identity.</returns>
+    /// <summary>
+    /// Adds a node with a generated stable identity.
+    /// </summary>
+    /// <param name="definitionId">
+    /// Stable node definition ID.
+    /// </param>
+    /// <param name="position">
+    /// Initial graph-space position.
+    /// </param>
+    /// <param name="values">
+    /// Optional neutral property values.
+    /// </param>
+    /// <returns>
+    /// The new stable node identity.
+    /// </returns>
     public GraphNodeId AddNode(
         string definitionId,
         GraphPosition position,
@@ -79,8 +111,12 @@ public sealed class GraphDocumentController
         return id;
     }
 
-    /// <summary>Removes nodes and all incident connections as one structural edit.</summary>
-    /// <param name="nodeIds">Nodes to remove.</param>
+    /// <summary>
+    /// Removes nodes and all incident connections as one structural edit.
+    /// </summary>
+    /// <param name="nodeIds">
+    /// Nodes to remove.
+    /// </param>
     public void RemoveNodes(IEnumerable<GraphNodeId> nodeIds)
     {
         ArgumentNullException.ThrowIfNull(nodeIds);
@@ -104,8 +140,12 @@ public sealed class GraphDocumentController
         });
     }
 
-    /// <summary>Moves one or more nodes and merges adjacent drag samples for the same stable selection.</summary>
-    /// <param name="positions">Complete destination positions keyed by node identity.</param>
+    /// <summary>
+    /// Moves one or more nodes and merges adjacent drag samples for the same stable selection.
+    /// </summary>
+    /// <param name="positions">
+    /// Complete destination positions keyed by node identity.
+    /// </param>
     public void MoveNodes(IReadOnlyDictionary<GraphNodeId, GraphPosition> positions)
     {
         ArgumentNullException.ThrowIfNull(positions);
@@ -132,10 +172,18 @@ public sealed class GraphDocumentController
             });
     }
 
-    /// <summary>Creates or reconnects one input endpoint to an output endpoint.</summary>
-    /// <param name="output">Source endpoint.</param>
-    /// <param name="input">Destination endpoint.</param>
-    /// <returns>The generated connection identity.</returns>
+    /// <summary>
+    /// Creates or reconnects one input endpoint to an output endpoint.
+    /// </summary>
+    /// <param name="output">
+    /// Source endpoint.
+    /// </param>
+    /// <param name="input">
+    /// Destination endpoint.
+    /// </param>
+    /// <returns>
+    /// The generated connection identity.
+    /// </returns>
     public GraphEdgeId Connect(GraphEndpoint output, GraphEndpoint input)
     {
         RequireNode(output.nodeId);
@@ -162,9 +210,15 @@ public sealed class GraphDocumentController
         return edgeId;
     }
 
-    /// <summary>Removes one stable connection.</summary>
-    /// <param name="edgeId">Connection to remove.</param>
-    /// <returns><see langword="true"/> after a connection was removed.</returns>
+    /// <summary>
+    /// Removes one stable connection.
+    /// </summary>
+    /// <param name="edgeId">
+    /// Connection to remove.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> after a connection was removed.
+    /// </returns>
     public bool Disconnect(GraphEdgeId edgeId)
     {
         if (!document.edges.Any(edge => edge.id == edgeId))
@@ -176,10 +230,18 @@ public sealed class GraphDocumentController
         return true;
     }
 
-    /// <summary>Creates or replaces one neutral node property and merges adjacent edits to that value.</summary>
-    /// <param name="nodeId">Owning node.</param>
-    /// <param name="propertyId">Stable property ID.</param>
-    /// <param name="value">New neutral value.</param>
+    /// <summary>
+    /// Creates or replaces one neutral node property and merges adjacent edits to that value.
+    /// </summary>
+    /// <param name="nodeId">
+    /// Owning node.
+    /// </param>
+    /// <param name="propertyId">
+    /// Stable property ID.
+    /// </param>
+    /// <param name="value">
+    /// New neutral value.
+    /// </param>
     public void SetNodeValue(GraphNodeId nodeId, string propertyId, GraphSerializedValue value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(propertyId);
@@ -191,10 +253,18 @@ public sealed class GraphDocumentController
             () => node.SetValue(propertyId, value.Clone()));
     }
 
-    /// <summary>Removes one neutral node property as a structural edit.</summary>
-    /// <param name="nodeId">Owning node.</param>
-    /// <param name="propertyId">Stable property ID.</param>
-    /// <returns><see langword="true"/> when the property existed.</returns>
+    /// <summary>
+    /// Removes one neutral node property as a structural edit.
+    /// </summary>
+    /// <param name="nodeId">
+    /// Owning node.
+    /// </param>
+    /// <param name="propertyId">
+    /// Stable property ID.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the property existed.
+    /// </returns>
     public bool RemoveNodeValue(GraphNodeId nodeId, string propertyId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(propertyId);
@@ -208,9 +278,15 @@ public sealed class GraphDocumentController
         return true;
     }
 
-    /// <summary>Copies selected nodes and only their internal connections.</summary>
-    /// <param name="nodeIds">Nodes to copy.</param>
-    /// <returns>A detached neutral clipboard fragment.</returns>
+    /// <summary>
+    /// Copies selected nodes and only their internal connections.
+    /// </summary>
+    /// <param name="nodeIds">
+    /// Nodes to copy.
+    /// </param>
+    /// <returns>
+    /// A detached neutral clipboard fragment.
+    /// </returns>
     public GraphClipboardData Copy(IEnumerable<GraphNodeId> nodeIds)
     {
         ArgumentNullException.ThrowIfNull(nodeIds);
@@ -230,10 +306,18 @@ public sealed class GraphDocumentController
         return new GraphClipboardData(fragment);
     }
 
-    /// <summary>Pastes a clipboard fragment with new stable identities and a graph-space offset.</summary>
-    /// <param name="clipboard">Detached neutral fragment.</param>
-    /// <param name="offset">Offset added to every copied node position.</param>
-    /// <returns>New node identities in clipboard document order.</returns>
+    /// <summary>
+    /// Pastes a clipboard fragment with new stable identities and a graph-space offset.
+    /// </summary>
+    /// <param name="clipboard">
+    /// Detached neutral fragment.
+    /// </param>
+    /// <param name="offset">
+    /// Offset added to every copied node position.
+    /// </param>
+    /// <returns>
+    /// New node identities in clipboard document order.
+    /// </returns>
     public IReadOnlyList<GraphNodeId> Paste(GraphClipboardData clipboard, GraphPosition offset)
     {
         ArgumentNullException.ThrowIfNull(clipboard);
@@ -272,11 +356,11 @@ public sealed class GraphDocumentController
             throw new InvalidOperationException($"Graph document '{documentId}' is closed.");
         }
 
-        byte[] before = GraphHistoryDocumentCodec.Encode(document);
+        byte[] before = GraphHistoryDocumentCodec.Encode(document, m_serialization);
         try
         {
             mutation();
-            byte[] after = GraphHistoryDocumentCodec.Encode(document);
+            byte[] after = GraphHistoryDocumentCodec.Encode(document, m_serialization);
             if (before.AsSpan().SequenceEqual(after))
             {
                 return;
@@ -298,7 +382,7 @@ public sealed class GraphDocumentController
         }
         catch
         {
-            document.ReplaceContents(GraphHistoryDocumentCodec.Decode(before));
+            document.ReplaceContents(GraphHistoryDocumentCodec.Decode(before, m_serialization));
             throw;
         }
     }

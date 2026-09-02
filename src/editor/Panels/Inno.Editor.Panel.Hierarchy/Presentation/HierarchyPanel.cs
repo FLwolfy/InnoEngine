@@ -10,10 +10,10 @@ using Inno.Editor.Settings;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
-using Inno.Engine.Scene;
-using Inno.Engine.Scene.Components;
+using Inno.Scene;
+using Inno.Scene.Components;
 using Inno.Native.ImGui;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Hierarchy;
@@ -39,7 +39,9 @@ internal sealed class HierarchyPanel : EditorPanel
     private ulong m_lastRevealedSelectionVersion = ulong.MaxValue;
     private int m_visibleRowIndex;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets whether use window padding is enabled for this implementation.
+    /// </summary>
     public override bool useWindowPadding => false;
 
     /// <summary>
@@ -58,7 +60,12 @@ internal sealed class HierarchyPanel : EditorPanel
         m_selection = new HierarchySelection(workspace, interactions, m_settings);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Draws this feature using the current editor presentation context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnDraw(EditorContext context)
     {
         bool visible = NativeImGui.BeginChild(
@@ -112,7 +119,7 @@ internal sealed class HierarchyPanel : EditorPanel
 
     private void DrawScene(EditorContext context, GameScene scene)
     {
-        Guid sceneId = ((IIdentityObject)scene).GetIdentity().persistentId;
+        Guid sceneId = ((IdentityObject)scene).identity.persistentId;
         string id = sceneId.ToString("N");
         bool shouldOpen = m_initializedSceneIds.Add(sceneId);
         shouldOpen |= m_forceOpenSceneIds.Remove(sceneId);
@@ -334,7 +341,7 @@ internal sealed class HierarchyPanel : EditorPanel
                 .Get("Editor/Appearance/Icons/Scene")
                 .GetAsString("value", ImGuiIcon.Cubes)!,
             string.Empty,
-            ReferenceEquals(scene, SceneManager.activeScene));
+            ReferenceEquals(scene, m_workspace.activeScene));
         NativeImGui.SameLine(0f, 0f);
         float renameWidth = MathF.Max(
             EditorWidget.style.hierarchyRenameMinimumWidth,

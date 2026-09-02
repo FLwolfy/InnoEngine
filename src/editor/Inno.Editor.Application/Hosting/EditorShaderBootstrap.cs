@@ -4,8 +4,7 @@ using System.Linq;
 
 using Inno.Rendering;
 using Inno.Rendering.Assets;
-using Inno.Rendering.Core;
-using Inno.Rendering.ImGui;
+using Inno.Rendering.Bgfx.ImGui;
 
 namespace Inno.Editor.Application;
 
@@ -27,7 +26,7 @@ internal static class EditorShaderBootstrap
         ShaderCompilationResult result = shaderCompiler.CompileAsync(
                 CreateImGuiModule(),
                 target,
-                ShaderVariantKey.empty,
+                RenderShaderVariant.empty,
                 assetsDirectory)
             .AsTask()
             .GetAwaiter()

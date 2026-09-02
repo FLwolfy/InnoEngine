@@ -16,16 +16,28 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws a compact single-line rename editor inside an existing row.
     /// </summary>
-    /// <param name="id">The stable control identifier.</param>
-    /// <param name="text">The mutable text buffer.</param>
+    /// <param name="id">
+    /// The stable control identifier.
+    /// </param>
+    /// <param name="text">
+    /// The mutable text buffer.
+    /// </param>
     /// <param name="requestFocus">
     /// Whether keyboard focus and complete-value selection should be requested. The value remains
     /// <see langword="true"/> until the input becomes active and its current contents are selected.
     /// </param>
-    /// <param name="rowHeight">The height of the row area in which the field is centered.</param>
-    /// <param name="capacity">The maximum UTF-8 buffer capacity.</param>
-    /// <param name="width">The control width, or a negative value to fill the available space.</param>
-    /// <returns>The current rename outcome.</returns>
+    /// <param name="rowHeight">
+    /// The height of the row area in which the field is centered.
+    /// </param>
+    /// <param name="capacity">
+    /// The maximum UTF-8 buffer capacity.
+    /// </param>
+    /// <param name="width">
+    /// The control width, or a negative value to fill the available space.
+    /// </param>
+    /// <returns>
+    /// The current rename outcome.
+    /// </returns>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="id"/> is empty.
     /// </exception>
@@ -131,10 +143,18 @@ public sealed class InlineRenamePresentation
     /// <summary>
     /// Creates inline rename presentation data.
     /// </summary>
-    /// <param name="id">The stable ImGui identifier used by the input field.</param>
-    /// <param name="width">The requested input width in logical pixels.</param>
-    /// <param name="rowHeight">The height of the row area in which the field is centered.</param>
-    /// <param name="bufferSize">The maximum UTF-8 buffer size accepted by the input.</param>
+    /// <param name="id">
+    /// The stable ImGui identifier used by the input field.
+    /// </param>
+    /// <param name="width">
+    /// The requested input width in logical pixels.
+    /// </param>
+    /// <param name="rowHeight">
+    /// The height of the row area in which the field is centered.
+    /// </param>
+    /// <param name="bufferSize">
+    /// The maximum UTF-8 buffer size accepted by the input.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="id"/> is empty.
     /// </exception>
@@ -198,18 +218,28 @@ public sealed class InlineRenamePresentation
     public nuint bufferSize { get; }
 }
 
-/// <summary>Describes the outcome of an inline rename control.</summary>
+/// <summary>
+/// Describes the outcome of an inline rename control.
+/// </summary>
 public enum InlineRenameResult
 {
-    /// <summary>Indicates that the interaction remains active.</summary>
+    /// <summary>
+    /// Indicates that the interaction remains active.
+    /// </summary>
     None,
 
-    /// <summary>Indicates that the edited text should be committed.</summary>
+    /// <summary>
+    /// Indicates that the edited text should be committed.
+    /// </summary>
     Commit,
 
-    /// <summary>Indicates that the input lost focus and its valid value should be committed before closing.</summary>
+    /// <summary>
+    /// Indicates that the input lost focus and its valid value should be committed before closing.
+    /// </summary>
     FocusLost,
 
-    /// <summary>Indicates that the edited text should be discarded.</summary>
+    /// <summary>
+    /// Indicates that the edited text should be discarded.
+    /// </summary>
     Cancel
 }

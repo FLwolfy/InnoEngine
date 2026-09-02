@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\extensibility\Inno.Extensibility.Modules\Inno.Extensibility.Modules.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Extensibility.Modules.TestModule.V1\Inno.Extensibility.Modules.TestModule.V1.csproj" ReferenceOutputAssembly="false" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Extensibility.Modules.TestModule.V2\Inno.Extensibility.Modules.TestModule.V2.csproj" ReferenceOutputAssembly="false" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Extensibility.Modules.TestModule.Invalid\Inno.Extensibility.Modules.TestModule.Invalid.csproj" ReferenceOutputAssembly="false" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.6.6" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.6">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+  <Target Name="CopyAssemblyTestModules" AfterTargets="Build">
+    <ItemGroup>
+      <TestModuleV1 Include="..\Inno.Extensibility.Modules.TestModule.V1\bin\$(Configuration)\net9.0\Inno.Extensibility.Modules.TestModule.dll" />
+      <TestModuleV2 Include="..\Inno.Extensibility.Modules.TestModule.V2\bin\$(Configuration)\net9.0\Inno.Extensibility.Modules.TestModule.dll" />
+      <TestModuleInvalid Include="..\Inno.Extensibility.Modules.TestModule.Invalid\bin\$(Configuration)\net9.0\Inno.Extensibility.Modules.TestModule.dll" />
+      <TestModuleDependency Include="..\Inno.Extensibility.Modules.TestDependency\bin\$(Configuration)\net9.0\Reloadable.PrivateDependency.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(TestModuleV1)" DestinationFolder="$(OutDir)Modules\V1" />
+    <Copy SourceFiles="@(TestModuleV2)" DestinationFolder="$(OutDir)Modules\V2" />
+    <Copy SourceFiles="@(TestModuleInvalid)" DestinationFolder="$(OutDir)Modules\Invalid" />
+    <Copy SourceFiles="@(TestModuleDependency)" DestinationFolder="$(OutDir)Modules\V1" />
+    <Copy SourceFiles="@(TestModuleDependency)" DestinationFolder="$(OutDir)Modules\V2" />
+  </Target>
+</Project>
