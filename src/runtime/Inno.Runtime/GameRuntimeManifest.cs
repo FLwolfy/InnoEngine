@@ -49,6 +49,12 @@ public sealed class GameRuntimeManifest : ISerializable
     public GameRuntimePlugin[] plugins { get; set; } = [];
 
     /// <summary>
+    /// Gets or sets the dependency-ordered managed modules in the frozen Player generation.
+    /// </summary>
+    [SerializableProperty]
+    public GameRuntimeModule[] modules { get; set; } = [];
+
+    /// <summary>
     /// Validates startup identity, dimensions, scene, and Plugin ordering.
     /// </summary>
     /// <exception cref="InvalidDataException">
@@ -70,8 +76,8 @@ public sealed class GameRuntimeManifest : ISerializable
             throw new InvalidDataException("A game startup scene is required.");
         if (windowWidth <= 0 || windowHeight <= 0)
             throw new InvalidDataException("Game window dimensions must be positive.");
-        if (plugins is null)
-            throw new InvalidDataException("Game Plugin contributions cannot be null.");
+        if (plugins is null || modules is null)
+            throw new InvalidDataException("Game Plugin contributions and runtime modules cannot be null.");
 
         var accepted = new HashSet<string>(StringComparer.Ordinal);
         foreach (GameRuntimePlugin plugin in plugins)
@@ -84,6 +90,22 @@ public sealed class GameRuntimeManifest : ISerializable
             {
                 throw new InvalidDataException(
                     $"Game Plugin '{plugin.id}' appears before dependency '{missing}'.");
+            }
+        }
+
+        if (modules.Length == 0)
+            throw new InvalidDataException("A game runtime manifest requires a managed module generation.");
+        accepted.Clear();
+        foreach (GameRuntimeModule module in modules)
+        {
+            module.Validate();
+            if (!accepted.Add(module.name))
+                throw new InvalidDataException($"Runtime module '{module.name}' is declared more than once.");
+            string? missing = module.dependencies.FirstOrDefault(dependency => !accepted.Contains(dependency));
+            if (missing is not null)
+            {
+                throw new InvalidDataException(
+                    $"Runtime module '{module.name}' appears before dependency '{missing}'.");
             }
         }
     }

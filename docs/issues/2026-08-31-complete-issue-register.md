@@ -50,6 +50,27 @@
 | ARCH-032 | P0 | 已关闭 | Tooling.Architecture | 8 |
 | ARCH-033 | P0 | 已关闭 | 全仓 / Tooling.Architecture | 1—8 |
 | ARCH-034 | P0 | 已关闭 | Extensibility.Types / Modules | 2 |
+| ARCH-035 | P0 | 已关闭 | Plugins.Authoring | 3 |
+| ARCH-036 | P0 | 已关闭 | Rendering.Runtime / Editor.Scripting | 5、7 |
+| ARCH-037 | P0 | 已关闭 | Editor.PlayMode / Editor.Inspection | 4、7 |
+| ARCH-038 | P1 | 已关闭 | Rendering.Runtime | 5 |
+| ARCH-039 | P1 | 已关闭 | Inno.Rendering.2D Plugin | 5 |
+| ARCH-040 | P1 | 已关闭 | Scene | 4 |
+| ARCH-041 | P1 | 已关闭 | Rendering.Bgfx / Platform.Sdl3.ImGui | 5 |
+| ARCH-042 | P0 | 已关闭 | Rendering.Bgfx / Native toolchains | 5 |
+| ARCH-043 | P1 | 已关闭 | Editor.Inspection | 7 |
+| ARCH-044 | P0 | 已关闭 | Rendering.Runtime | 5 |
+| ARCH-045 | P2 | 已关闭 | Editor.ImGui | 7 |
+| ARCH-046 | P2 | 已关闭 | Editor.Panel.Inspector | 7 |
+| ARCH-047 | P1 | 已关闭 | Inno.Rendering.2D Plugin | 5 |
+| ARCH-048 | P0 | 已关闭 | Extensibility.Modules / Scripting.Reload | 2、3 |
+| ARCH-049 | P2 | 已关闭 | Editor.ImGui / Editor.Panel.Inspector | 7 |
+| ARCH-050 | P1 | 已关闭 | Inno.Rendering.2D Plugin | 5 |
+| ARCH-051 | P2 | 已关闭 | Editor.ImGui / SceneView / GameView | 7 |
+| ARCH-052 | P1 | 已关闭 | Editor.Panel.GameView / Editor.Settings | 7 |
+| ARCH-053 | P1 | 已关闭 | Inno.Rendering.2D Plugin | 5 |
+| ARCH-054 | P0 | 已关闭 | Build.Cli / Build.SupportPacks / Assets.Pipeline | 6 |
+| ARCH-055 | P0 | 已关闭 | Player / Runtime Module Generation | 6 |
 
 ## 逐项证据、根因与关闭标准
 
@@ -418,9 +439,9 @@
 
 - 复现证据：`Rendering2DSceneSystem` 只有 header，但下方仍出现一条空黑色正文区域。
 - 根因与影响：Inspector 在 card 展开时无条件创建 `CardBody`；即使序列化属性集合为空，body 的 padding、background 和 border 仍占据高度。
-- 当前实现：Component/System drawer 在创建 body 前一次取得属性快照；仅当存在属性或 Missing 状态说明时绘制 `CardBody`。Header、折叠状态、enabled 和外部卡片间距不变。
-- 验收：空类型 body 高度为零；Missing 类型仍显示状态说明；有属性类型维持现有布局。
-- 关闭标准：空 GameBehavior/GameSystem 不出现正文背景或内部 padding。已满足。
+- 当前实现：Component/System drawer 一次取得属性快照。Missing 类型显示状态说明；有属性类型绘制属性；无属性类型在标准 body 内显示淡色 assembly origin，避免没有信息的空黑区域。Header、折叠状态、enabled 和外部卡片间距始终一致。
+- 验收：空类型只显示单行来源，不产生无内容留白；Missing 类型仍显示状态说明；有属性类型维持现有布局。
+- 关闭标准：GameBehavior/GameSystem card 的正文必须包含可解释内容，不能只占据空白高度。已满足。
 
 ### ARCH-047：Rendering2D extraction 触发 nullable 泛型约束警告
 
@@ -437,6 +458,74 @@
 - 当前实现：所有 module domain 只接受显式 upstream dependency snapshot，空集合严格返回空；编译器仍负责生成完整 Plugin → Runtime Scripts → Editor Scripts DAG。reload 以 250 ms 间隔、3 秒上限按帧协作式验证 CLR unload，避免在单帧连续执行完整 GC。Editor 只发布唯一 `INNO-ALC-UNLOAD` Diagnostic，不再复制普通 Error。
 - 测试：`PluginRemovalUnloadsTheCommittedMissingGenerationWithoutASecondReload` 使用带 Generated Serialization Converter 的真实 collectible Plugin，执行一次 refresh/compile/apply，验证活动图不含 Plugin 或指向其 Stable module name 的 upstream、Scene 转为保留 identity 的 Missing、旧 Component/Type 弱引用死亡且 unload verification 成功。
 - 关闭标准：第一次自动 reload 即得到与缺失 Plugin 后冷启动一致的 Missing 状态；不需要第二次手动 reload；真实 retain 才产生单一 Diagnostic。已满足。
+
+### ARCH-049：Inspector card 因属性数量改变交互模型
+
+- 复现证据：无序列化属性的 `Rendering2DSceneSystem` 曾被特判为 leaf，三角与可展开正文消失；同一个类型新增属性后 card 才突然变为可展开。
+- 根因与影响：把“当前没有属性”等同于“类型没有可解释正文”，使 card 交互受瞬时反射结果控制，也无法说明 System 来自内建程序集、Project Scripts 还是 Plugin generation。
+- 当前实现：删除 content-free leaf 分支，所有 GameBehavior/GameSystem 都使用相同 `CollapsingCard` 契约。无属性正文显示 generation-neutral 的 domain、scope 与 assembly name；不缓存 collectible `Type` 或 delegate。
+- 验收：无属性、有属性与 Missing card 都有同一 disclosure、缩进和 native tree scope；无属性来源采用 File Browser breadcrumb 的淡色样式。
+- 关闭标准：card 交互不再随属性数量变化，且空类型有可验证的来源信息。已满足。
+
+### ARCH-050：禁用 Rendering2DSceneSystem 后 scope 绕过生命周期重新填充缓存
+
+- 复现证据：Inspector 将 `Rendering2DSceneSystem.enabled` 关闭后 `OnDisable` 已清空 extraction cache，但 Scene/Game View 仍继续显示 Sprite。
+- 根因与影响：viewport/request provider 随后直接调用 internal `Capture()`；该方法无 activation guard，会立即从 Scene 重新建立 Camera、Drawable 与 Light 索引，实际绕过 `GameSystem.isActiveAndEnabled` 契约。
+- 当前实现：extraction owner 自身在 `Capture()` 入口执行 `isActiveAndEnabled` 门禁；inactive 时幂等清空所有 Plugin Component 引用并返回共享空 snapshot。所有 Editor、Player 与显式 viewport 路径仍通过同一个 scope/capture 入口，不增加 UI 特判或第二套状态。
+- 验收：禁用后 Scene View 只保留 Editor-owned grid/axes，Game View/Player 不再得到 Base Camera request；重新启用后按当前 Scene 结构重建；Plugin source 由真实 Editor scripting compilation 验证。
+- 关闭标准：任何调用者都不能从 disabled/detached/destroyed system 取得可渲染 Scene 数据，且无需重建 Scene 或重启 Editor。已满足。
+
+### ARCH-051：Viewport 失败文字越界且停留在左上角
+
+- 复现证据：Scene/Game Provider 错误包含完整 Scene 名称或异常时，文字从左上角单行绘制并越过 Panel 右边界。
+- 根因与影响：两个 Panel 各自直接调用 `AddText`/`TextUnformatted`，没有共享可用区域、padding、换行宽度或垂直布局语义。
+- 当前实现：`ImGuiWidget.CenteredWrappedText` 在完整区域内计算 padded wrap width，将文本块整体居中并裁剪；Scene/Game unavailable 状态统一使用淡色文本和 `48 × 32` logical padding。
+- 测试：`CenteredWrappedTextStaysInsidePaddingAndUsesMultipleLines` 检查 widget 占满区域、文字顶点位于 padding 内且确实生成多行。
+- 关闭标准：任意长度状态文本不贴边、不越界，并在 Scene/Game View 中保持相同布局。已满足。
+
+### ARCH-052：Game View 无法完整预览固定画幅
+
+- 复现证据：Game Panel 改变宽高时直接改变 render target aspect，无法选择完整画面加黑边的预览模式。
+- 根因与影响：Panel 尺寸被直接当成游戏画幅；若只在输出后遮罩，投影与 picking 仍使用错误 aspect。
+- 当前实现：新增 Editor setting `Editor/Appearance/Viewports/Game Framing`，默认开启 `16:9`。Panel 计算最大内接矩形，以该矩形的真实像素尺寸提交 Provider，再居中显示并绘制纯黑 letterbox/pillarbox；关闭后使用完整 Panel。
+- 验收：宽屏和竖向 Panel 都显示完整 target，不拉伸、不裁剪；Camera、Scene、Build Profile 与 Player 数据中不新增 Editor 预览字段。
+- 关闭标准：画幅开关和比例由 Editor Settings 持有，render target 与最终显示 aspect 一致。已满足。
+
+### ARCH-053：Camera2D 重复持有 Pixels Per Unit
+
+- 复现证据：Project 2D Settings 与每个 `Camera2D` 同时保存 PPU，pixel-perfect 投影可能因 Camera 值不同而与 Sprite 默认密度分裂。
+- 根因与影响：项目 authoring density 被误建模成 Camera 实例属性，产生两个 owner 和不明确优先级。
+- 当前实现：移除 Camera 的 serialized PPU；pixel-perfect camera 和没有资源级覆盖的 Sprite 统一读取 `Rendering2DProjectSettings.defaultPixelsPerUnit`。Sprite 的 PPU 保留为不同图集密度的显式资源级覆盖。
+- 验收：官方 Plugin runtime/editor scripts 均通过编译；Camera Inspector 不再出现 PPU；当前 Project Scene 与 Plugin Sample Scene 已由当前 writer 重存，Camera payload 不再含旧 key；项目 Settings 是 pixel-perfect Camera 默认密度的唯一 owner。
+- 关闭标准：同一项目默认密度只有一个持久化来源，不添加旧字段读取或双路径。已满足。
+
+### ARCH-054：Game Export 缺少 Support Pack 且 CLI 部署闭包不完整
+
+- 复现证据：源码运行的 Editor 在 `AppContext.BaseDirectory/SupportPacks/macos-arm64` 找不到发行资产；生成 Pack 后，独立 Build CLI 又可能把已存在的 Startup Scene 判定为未导入。
+- 根因与影响：Support Pack 尚未由引擎发行阶段安装；同时 `Inno.Scene.Assets` 只是 `Inno.Build` 的 implementation reference，不会自动成为 CLI 输出的传递 deployment closure。Build 还在等待 pending import 前验证 Scene type，存在竞态。
+- 当前实现：Support Pack 继续由独立发行工具生成，Game Export 只消费 Pack、不运行 `dotnet`。Build CLI composition root 直接部署 `Inno.Scene.Assets`；Build 在验证 Startup Scene 前等待 Asset Pipeline idle，再捕获组合 snapshot。
+- 测试：`GameBuildWaitsForPendingStartupSceneImportBeforeValidation` 覆盖 rescan 后立即构建；真实 `InnoProject` 使用 macOS ARM64 Pack 完成原子导出，并从 `.app` 内运行 Player。
+- 关闭标准：预生成 Pack 安装后 Export 不访问源码或编译器，独立 CLI 可发现 Scene importer，pending source 不被提前判为无效。已满足。
+
+### ARCH-055：导出 Player 未激活 Plugin/Scripting generation 导致紫屏
+
+- 复现证据：真实 `InnoProject.app` 能初始化 Metal/BGFX 并正常运行 120 帧，但窗口保持整屏紫色；日志中没有 `s_spriteTexture`、2D vertex layout 或目标 shader program，也没有 rendering diagnostic。
+- 根因与影响：Player 直接把 `Managed/*.dll` 加载到默认 ALC，却没有登记到 `ModuleHost`。默认 Host Catalog 按设计只发现 `InnoInternal`，因此 Plugin 与 Game Scripts 虽已进入进程，仍对 TypeCache、Serialization Registry 和 `RenderExtensionRegistry` 不可见；没有 request provider 时 BGFX 只提交空帧。
+- 当前实现：Build 将 `ScriptCompilationResult.activationRequests` 的 runtime-only 模块拓扑写入 `GameRuntimeManifest`。Player 严格校验 Managed closure 后，通过 `ModuleHost.BeginReload` 依赖排序、collectible ALC 候选加载并原子激活整个冻结 generation，随后才创建 Settings、Session、Rendering 并反序列化 Scene。不扩大 Host 扫描、不使用默认 ALC fallback。
+- 测试：Build tests 验证 RuntimeScripts module/domain/main assembly；Player E2E 要求 `INNO-SMOKE frames=3` render-loop 证据；真实项目重新生成 Support Pack 和 `.app` 后报告 `frames=120 views=1 draws=1`，出现 2D uniform、vertex layout、shader program 与 texture 创建并正常 shutdown。
+- 关闭标准：导出 Player 的插件组件、脚本类型和渲染扩展属于同一显式 active generation；部署 DLL 与清单不一致时启动即失败；有效 2D 场景不再停留在后端空帧颜色。已满足。
+
+## 2026-09-02 Viewport、Inspector、2D Settings 与 Game Export 验收
+
+- `InnoEngine.sln` 完整构建：0 warnings、0 errors。
+- `InnoEngine.sln` 完整测试：600 passed、0 failed、0 skipped。
+- `Inno.Editor.Scripting.Tests` 定向测试：51 passed、0 failed，其中包含 viewport 居中换行与 padding 回归测试。
+- `Inno.Tooling.Architecture`：通过，无依赖方向、可见性、XML 或禁止模式违规。
+- 官方 `Inno.Rendering.2D` Plugin：当前 runtime/editor scripting diagnostics 均为空，不存在新增编译 warning 或 error。
+- macOS Metal Editor 实机 smoke：运行 120 frames；完成 2D vertex layout、Sprite shader/resource 创建及 BGFX shutdown，进程正常退出，未出现 reload、RefCount 或 BGFX fatal diagnostic。
+- 真实 `InnoProject` macOS ARM64 Export：重建 Release BGFX 与 Support Pack 后原子导出；Content 仅包含 catalog、content-addressed pack 与 runtime manifest；导出 Player 运行 120 frames 并干净退出，无 RefCount warning。
+- macOS ARM64 Player E2E：创建独立 Project、验证 deployment forbidden closure、原子导出并实际启动 Player，完整通过。
+- diff whitespace 校验：通过。
 
 ## 已确认优势
 

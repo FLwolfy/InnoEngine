@@ -3,13 +3,12 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Reflection;
-using System.Runtime.Loader;
 using Inno.Assets;
 using Inno.Core.Events;
 using Inno.Core.Logging;
 using Inno.Core.Serialization;
 using Inno.Core.Settings;
+using Inno.Extensibility.Modules;
 using Inno.Runtime;
 using Inno.Scene;
 using Inno.Platform;
@@ -59,7 +58,6 @@ internal sealed class GamePlayerHost : IDisposable
         string runtimeContentRoot = RuntimeContentDeployment.Materialize(
             packagedContentRoot,
             persistentRoot);
-        LoadRuntimeAssemblies(Path.Combine(runtimeContentRoot, "Managed"));
         EngineHost engine = new EngineHostBuilder()
             .UseMetadataCache(Path.Combine(persistentRoot, "Library", "RuntimeMetadata"))
             .Build();
@@ -68,6 +66,10 @@ internal sealed class GamePlayerHost : IDisposable
         {
             using SerializationGeneration serialization = engine.serialization.CaptureGeneration();
             GameRuntimeManifest manifest = RuntimeManifestEnvelope.Decode(manifestEnvelope, serialization);
+            ActivateRuntimeModules(
+                engine.modules,
+                manifest.modules,
+                Path.Combine(runtimeContentRoot, "Managed"));
             settings = new ProjectSettingsStore(
                 Path.Combine(runtimeContentRoot, "ProjectSettings.inno"),
                 engine.types,
@@ -203,6 +205,17 @@ internal sealed class GamePlayerHost : IDisposable
             if (renderedFrameCount >= smokeFrameLimit)
                 running = false;
         }
+        if (smokeFrameLimit.HasValue)
+        {
+            RenderFrameStatistics? statistics;
+            using (m_rendering.EnterExecutionScope())
+                statistics = GraphicsSettings.frameStatistics;
+            Console.WriteLine(
+                $"INNO-SMOKE frames={renderedFrameCount} "
+                + $"views={statistics?.viewCount ?? 0} "
+                + $"draws={statistics?.drawCount ?? 0} "
+                + $"dispatches={statistics?.dispatchCount ?? 0}");
+        }
         return 0;
     }
 
@@ -245,30 +258,58 @@ internal sealed class GamePlayerHost : IDisposable
             applicationId);
     }
 
-    private static void LoadRuntimeAssemblies(string managedRoot)
+    private static void ActivateRuntimeModules(
+        ModuleHost modules,
+        IReadOnlyList<GameRuntimeModule> deployedModules,
+        string managedRoot)
     {
-        if (!Directory.Exists(managedRoot))
-            return;
-        Dictionary<string, string> assemblies = Directory
-            .EnumerateFiles(managedRoot, "*.dll", SearchOption.TopDirectoryOnly)
-            .ToDictionary(
-                static path => AssemblyName.GetAssemblyName(path).Name!,
-                static path => Path.GetFullPath(path),
-                StringComparer.OrdinalIgnoreCase);
-        AssemblyLoadContext.Default.Resolving += (_, name) =>
-            name.Name is not null && assemblies.TryGetValue(name.Name, out string? path)
-                ? AssemblyLoadContext.Default.LoadFromAssemblyPath(path)
-                : null;
-        foreach (string path in assemblies.Values.Order(StringComparer.Ordinal))
+        ArgumentNullException.ThrowIfNull(modules);
+        ArgumentNullException.ThrowIfNull(deployedModules);
+        string root = Path.GetFullPath(managedRoot);
+        if (!Directory.Exists(root))
+            throw new DirectoryNotFoundException($"Deployed managed content root '{root}' does not exist.");
+
+        string[] declaredFiles = deployedModules
+            .SelectMany(static module => module.preloadAssemblies.Prepend(module.mainAssembly))
+            .ToArray();
+        string[] actualFiles = Directory.EnumerateFiles(root, "*.dll", SearchOption.TopDirectoryOnly)
+            .Select(Path.GetFileName)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray()!;
+        if (!declaredFiles.Order(StringComparer.OrdinalIgnoreCase).SequenceEqual(
+                actualFiles,
+                StringComparer.OrdinalIgnoreCase))
         {
-            string name = AssemblyName.GetAssemblyName(path).Name!;
-            if (AppDomain.CurrentDomain.GetAssemblies().Any(assembly =>
-                    string.Equals(assembly.GetName().Name, name, StringComparison.OrdinalIgnoreCase)))
-            {
-                continue;
-            }
-            _ = AssemblyLoadContext.Default.LoadFromAssemblyPath(path);
+            throw new InvalidDataException(
+                "Deployed managed assemblies do not exactly match the frozen runtime module manifest.");
         }
+
+        AssemblyLoadRequest[] requests = deployedModules.Select(module => new AssemblyLoadRequest
+        {
+            moduleName = module.name,
+            mainAssemblyPath = Path.Combine(root, module.mainAssembly),
+            preloadAssemblyPaths = module.preloadAssemblies
+                .Select(fileName => Path.Combine(root, fileName))
+                .ToArray(),
+            upstreamModuleNames = module.dependencies,
+            collectible = true,
+            domain = module.domain,
+            scope = AssemblyScope.Runtime
+        }).ToArray();
+        using AssemblyReloadSession activation = modules.BeginReload(requests);
+        activation.Activate();
+        _ = activation.Complete();
+
+        string[] activeNames = modules.modules
+            .Select(static module => module.moduleName)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        string[] expectedNames = deployedModules
+            .Select(static module => module.name)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        if (!activeNames.SequenceEqual(expectedNames, StringComparer.Ordinal))
+            throw new InvalidOperationException("The frozen runtime module generation was not activated completely.");
     }
 
     private sealed class PlayerRenderDiagnosticSink : IRenderDiagnosticSink

@@ -14,6 +14,7 @@
     <ProjectReference Include="..\..\..\src\core\Inno.Core.Settings\Inno.Core.Settings.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\src\plugins\Inno.Plugins.Authoring\Inno.Plugins.Authoring.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\src\runtime\Inno.Runtime\Inno.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\src\scene\Inno.Scene.Assets\Inno.Scene.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\src\scripting\Inno.Scripting.Compiler\Inno.Scripting.Compiler.csproj" PrivateAssets="compile" />
   </ItemGroup>
 </Project>

@@ -33,6 +33,7 @@ internal sealed class SceneViewPanel : EditorPanel
     private const string C_VIEWPORT_ID = "scene-view";
     private const int C_MANIPULATION_TOOL_COUNT = 4;
     private static readonly EditorViewportKindId S_KIND = new("inno.editor.viewport.scene");
+    private static readonly Vector2 S_UNAVAILABLE_PADDING = new(48f, 32f);
 
     private readonly EditorRenderingModule m_rendering;
     private readonly EditorInteractions m_interactions;
@@ -84,6 +85,8 @@ internal sealed class SceneViewPanel : EditorPanel
             CommitGesture();
 
         Vector2 available = NativeImGui.GetContentRegionAvail();
+        if (available.X <= 0f || available.Y <= 0f)
+            return;
         int width = Math.Max(1, (int)MathF.Floor(available.X));
         int height = Math.Max(1, (int)MathF.Floor(available.Y));
         m_rendering.SetPresentation(
@@ -587,11 +590,15 @@ internal sealed class SceneViewPanel : EditorPanel
             minimum,
             maximum,
             NativeImGui.ColorConvertFloat4ToU32(m_backgroundColor));
-        drawList.AddText(
-            minimum + NativeImGui.GetStyle().WindowPadding,
-            NativeImGui.GetColorU32(ImGuiCol.TextDisabled),
-            message);
-        NativeImGui.Dummy(size);
+        NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.textDisabled);
+        try
+        {
+            EditorWidget.CenteredWrappedText(message, size, S_UNAVAILABLE_PADDING);
+        }
+        finally
+        {
+            NativeImGui.PopStyleColor();
+        }
     }
 
     private static Inno.Core.Mathematics.Color ToEngineColor(Vector4 value)

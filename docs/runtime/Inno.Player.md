@@ -8,12 +8,13 @@
 
 1. 在 Windows executable 旁或 macOS `.app/Contents/Resources` 中定位 `Content`。
 2. 从 `runtime.manifest` 读取并验证 Application ID，再将 content-addressed packs 物化到该应用的持久目录。
-3. 加载 `Content/Managed/*.dll`，创建 `EngineHost`，并使用当前 Serialization generation 解码 `GameRuntimeManifest`。
-4. 创建 `ProjectSettingsStore`，应用依赖有序的 Plugin setting contributions。
-5. 创建 `RuntimeSessionKind.Player` Session；它只通过部署 `AssetDatabase` 加载 Artifact。
-6. 创建 SDL3 窗口、BGFX device 与 `RenderRuntimeLayer`。
-7. 从只读 Catalog 加载 startup `SceneAsset`，实例化到该 Session 的 `SceneWorld`。
-8. 轮询平台事件并调用 `RuntimeSession.Tick`；关闭时逆序释放 Rendering、Session、Settings、Host、GPU、Window 和 Platform。
+3. 创建 `EngineHost`，并使用宿主 Serialization generation 解码 `GameRuntimeManifest`。
+4. 验证 `Content/Managed/*.dll` 与清单完全一致，通过 `ModuleHost` 在 collectible ALC 中候选加载、依赖排序并原子激活冻结的 Plugin/Game Scripts generation。
+5. 创建 `ProjectSettingsStore`，应用依赖有序的 Plugin setting contributions。
+6. 创建 `RuntimeSessionKind.Player` Session；它只通过部署 `AssetDatabase` 加载 Artifact。
+7. 创建 SDL3 窗口、BGFX device 与 `RenderRuntimeLayer`。
+8. 从只读 Catalog 加载 startup `SceneAsset`，实例化到该 Session 的 `SceneWorld`。
+9. 轮询平台事件并调用 `RuntimeSession.Tick`；关闭时逆序释放 Rendering、Session、Settings、Host、GPU、Window 和 Platform。
 
 Player 不扫描 `Plugins/`，不运行 Importer，不启动 watcher，也不尝试从源文件重建缺失 Artifact。部署内容不完整时启动失败，避免在用户机器上生成与导出 generation 不一致的内容。
 
@@ -43,9 +44,10 @@ Content/
 ## 生命周期与诊断
 
 - 可写数据严格位于 `LocalApplicationData/InnoEngine/<applicationId>`，不使用产品名或进程名代替稳定 Application ID。
-- runtime assembly 与宿主 assembly 冲突时保留 Host assembly；其余依赖从部署 Managed 目录解析。
+- Managed closure 与清单缺失、多余或重复时拒绝启动；Plugin/Scripting 不会被误归类成默认上下文的 Host assembly。
 - 窗口 resize 调整 backbuffer；quit/close event 结束主循环。
 - Render diagnostics 映射到 Host 的实例 `LogRouter`；启动异常写入标准错误并返回非零退出码。
-- Player 不参与 Editor hot reload；每次启动只消费一个完整、不可变的导出 generation。
+- Player 不参与 Editor hot reload；每次启动只消费一个完整、不可变的导出 generation，但仍使用 collectible ALC 保持统一生命周期和干净释放。
+- `--smoke-frames` 验收模式会报告实际完成的 frame/view/draw/dispatch 数，不再只依赖进程退出码判断启动成功。
 
 [上一页：Runtime](Inno.Runtime.md)

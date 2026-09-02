@@ -315,6 +315,74 @@ public static partial class ImGuiWidget
     }
 
     /// <summary>
+    /// Draws wrapped non-interactive text as a centered block inside a padded layout area.
+    /// </summary>
+    /// <param name="text">
+    /// The literal text to wrap and draw.
+    /// </param>
+    /// <param name="areaSize">
+    /// The complete area reserved by the widget.
+    /// </param>
+    /// <param name="padding">
+    /// The minimum horizontal and vertical distance retained from the area edges whenever space permits.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="text"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when an area component is not positive or a padding component is negative.
+    /// </exception>
+    public static void CenteredWrappedText(string text, Vector2 areaSize, Vector2 padding)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        if (areaSize.X <= 0f || areaSize.Y <= 0f)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(areaSize),
+                areaSize,
+                "Centered wrapped text area size must be positive.");
+        }
+        if (padding.X < 0f || padding.Y < 0f)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(padding),
+                padding,
+                "Centered wrapped text padding cannot be negative.");
+        }
+
+        Vector2 origin = NativeImGui.GetCursorScreenPos();
+        Vector2 effectivePadding = new(
+            MathF.Min(padding.X, MathF.Max(0f, (areaSize.X - 1f) * 0.5f)),
+            MathF.Min(padding.Y, MathF.Max(0f, (areaSize.Y - 1f) * 0.5f)));
+        float wrapWidth = MathF.Max(1f, areaSize.X - effectivePadding.X * 2f);
+        Vector2 textSize = NativeImGui.CalcTextSize(text, hideTextAfterDoubleHash: false, wrapWidth);
+        Vector2 textPosition = origin + new Vector2(
+            MathF.Max(effectivePadding.X, (areaSize.X - textSize.X) * 0.5f),
+            MathF.Max(effectivePadding.Y, (areaSize.Y - textSize.Y) * 0.5f));
+        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
+        drawList.PushClipRect(
+            origin + effectivePadding,
+            origin + areaSize - effectivePadding,
+            intersectWithCurrentClipRect: true);
+        try
+        {
+            NativeImGui.AddText(
+                drawList,
+                NativeImGui.GetFont(),
+                NativeImGui.GetFontSize(),
+                textPosition,
+                NativeImGui.GetColorU32(ImGuiCol.Text),
+                text,
+                wrapWidth);
+        }
+        finally
+        {
+            drawList.PopClipRect();
+        }
+        NativeImGui.Dummy(areaSize);
+    }
+
+    /// <summary>
     /// Draws unformatted text with a temporary foreground color.
     /// </summary>
     /// <param name="color">

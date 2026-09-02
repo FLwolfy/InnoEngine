@@ -96,6 +96,8 @@ Header 的 disclosure triangle 由 `DrawDisclosureIndicator` 统一绘制：保�
 
 `drawContextMenu` 在完整 Header TreeNode 仍是当前 ImGui item 时执行，因此右键命中覆盖整个 Header，而不会错误绑定到 enabled checkbox、标题或末尾按钮。Component、Transform 与 System 都使用相同入口。
 
+`CenteredWrappedText` 在调用方提供的完整区域内按水平/垂直 padding 计算换行宽度，将整个文本块居中，并以同一 padded rectangle 裁剪。Scene View 与 Game View 的 Provider 缺失、隔离失败和 GPU target 准备提示统一使用该 primitive，因此长诊断不会贴边、越界或只停留在左上角。
+
 展开内容使用配套的 `CardBody` 绘制：
 
 ```csharp

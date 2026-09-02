@@ -34,8 +34,9 @@ play.Tick(totalTime, deltaTime);
 | `RuntimeSessionOptions` | 定义 Session 角色、持久目录、运行内容、固定步长与 Job 策略。 |
 | `RuntimeSession` | 暴露只读 Session 状态、SceneWorld、EventDispatcher、可选 AssetDatabase、执行作用域与 `Tick`。 |
 | `RuntimeSessionKind` | 区分 `Edit`、`Play` 和 `Player` 所有权语义。 |
-| `GameRuntimeManifest` | 描述当前 Player 的应用 ID、产品名、启动 Scene、窗口和 Plugin 设置贡献。 |
+| `GameRuntimeManifest` | 描述当前 Player 的应用 ID、产品名、启动 Scene、窗口、Plugin 设置贡献和冻结模块 generation。 |
 | `GameRuntimePlugin` | 保存依赖有序的中立 Plugin 设置贡献，不保存 Plugin `Type`、实例或 delegate。 |
+| `GameRuntimeModule` | 保存依赖有序的 runtime module 名称、domain 与部署 DLL 文件名，不保存运行时 `Assembly`。 |
 
 ## 脚本执行上下文
 
@@ -47,7 +48,7 @@ Session 的执行作用域。`RuntimeSession.EnterExecutionScope()` 绑定 Runti
 
 ## 部署内容
 
-Player 的 Runtime Session 使用 `AssetDatabase` 读取物化后的 Catalog 和 Artifact Bundle，不扫描 Source Mount、不运行 Importer，也不从源码补建缺失内容。`RuntimeManifestEnvelope` 对当前格式执行严格 magic 和内容校验；不存在旧格式 fallback 或 schema migration。
+Player 的 Runtime Session 使用 `AssetDatabase` 读取物化后的 Catalog 和 Artifact Bundle，不扫描 Source Mount、不运行 Importer，也不从源码补建缺失内容。Build 将编译器产生的 runtime-only `AssemblyLoadRequest` 拓扑固化为 `GameRuntimeModule`；Player 对 Managed closure 做精确匹配后，通过同一个 `ModuleHost` 候选事务原子激活 Plugin 与 Game Scripts，使 TypeCache、Serialization 和 Rendering Registry 共享同一 generation。`RuntimeManifestEnvelope` 对当前格式执行严格 magic 和内容校验；不存在旧格式 fallback 或 schema migration。
 
 `FileRenderTargetArtifactProvider` 只读取部署内容，返回 `Ready` 或 `Unavailable`，不会伪造 Editor 的异步 `Pending` 状态。损坏的 Shader envelope 或空 Texture artifact 会抛出严格数据异常；Player 不调用编译器进行运行时补救。
 

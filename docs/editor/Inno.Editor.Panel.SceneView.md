@@ -18,7 +18,7 @@ Panel 本身只负责：
 - 在左侧 overlay toolbar 中选择 Move、Rotate、Scale 和 Local/World coordinate space；
 - 将一次 Move/Rotate/Scale 连续拖拽记录成单个原子 Scene History transaction；
 - 从 `Editor/Appearance/Viewports/Scene Background` 读取背景色并作为呈现偏好传给 Provider；
-- 显示 provider 缺失或隔离错误；
+- 在完整 viewport 中以居中、可换行且带 padding 的淡色文本显示 Provider 缺失、隔离错误或 target 准备状态；
 - 关闭时释放 viewport target。
 
 Editing、Compiling 与尚未提交完成的 Preparing 阶段，presentation 指向 Edit SceneWorld；Play Scene 完整物化后，Scene View、Game View、Hierarchy、Inspector 与 Selection 在同一个安全点切换到隔离 Runtime Session，退出时再共同切回 Edit SceneWorld。Scene View 因而会显示脚本驱动的 Transform、Component 与层级变化，也允许 Gizmo 临时修改当前 runtime Transform。修改通过 `SceneEdits` 进入 Play 专用 History 分支，既不会进入 Edit History，也不会改变 Edit 对象；Play workspace 的 persistence gate 同时禁止 Save 并让 `IsDirty` 恒为 false。停止后 runtime 变化和 Play History 一起释放，原 Edit Scene 与选择状态重新显示。

@@ -138,7 +138,6 @@ internal sealed class GameSceneInspectionDrawer : InspectionDrawer<GameScene>
             IReadOnlyList<SerializedProperty> properties = missing is null
                 ? m_serialization.GetProperties(system)
                 : Array.Empty<SerializedProperty>();
-            bool hasBody = missing is not null || properties.Count > 0;
             string systemId = system.identity.persistentId.ToString("N");
             var editorTarget = new SystemEditorTarget(scene, system);
             bool open = EditorWidget.CollapsingCard(
@@ -179,34 +178,36 @@ internal sealed class GameSceneInspectionDrawer : InspectionDrawer<GameScene>
                 continue;
             }
 
-            if (hasBody)
-            {
-                NativeImGui.Unindent();
-                EditorWidget.CardBody(
-                    systemId,
-                    () =>
+            NativeImGui.Unindent();
+            EditorWidget.CardBody(
+                systemId,
+                () =>
+                {
+                    if (missing is not null)
                     {
-                        if (missing is not null)
-                        {
-                            NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.error);
-                            ImGuiWidget.WrappedText(
-                                $"Missing system script ({missing.missingType.stableId:D}). " +
-                                "Its serialized state is preserved and will recover automatically when the type returns.");
-                            NativeImGui.PopStyleColor();
-                            return;
-                        }
-                        for (int propertyIndex = 0; propertyIndex < properties.Count; propertyIndex++)
-                        {
-                            context.properties.Draw(
-                                context.editorContext,
-                                system,
-                                $"scene.{scene.identity.persistentId:N}.{systemId}",
-                                properties[propertyIndex]);
-                        }
-                    },
-                    dimmed: !system.enabled);
-                NativeImGui.Indent();
-            }
+                        NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.error);
+                        ImGuiWidget.WrappedText(
+                            $"Missing system script ({missing.missingType.stableId:D}). " +
+                            "Its serialized state is preserved and will recover automatically when the type returns.");
+                        NativeImGui.PopStyleColor();
+                        return;
+                    }
+                    if (properties.Count == 0)
+                    {
+                        InspectorTypeOrigin.Draw(system.GetType());
+                        return;
+                    }
+                    for (int propertyIndex = 0; propertyIndex < properties.Count; propertyIndex++)
+                    {
+                        context.properties.Draw(
+                            context.editorContext,
+                            system,
+                            $"scene.{scene.identity.persistentId:N}.{systemId}",
+                            properties[propertyIndex]);
+                    }
+                },
+                dimmed: !system.enabled);
+            NativeImGui.Indent();
             NativeImGui.TreePop();
             NativeImGui.Dummy(new Vector2(0f, EditorWidget.style.inspectorCardSpacing));
         }

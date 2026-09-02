@@ -86,6 +86,38 @@ public sealed class SampleRequestProvider : RenderRequestProvider
 
 长期存在的动态图集、画布或 simulation texture 可通过 `IRenderResourceService.UpdateTexture(texture, region, data)` 原位更新局部矩形，不需要重建资源。通用 GPU→CPU 结果通过 `ReadTextureAsync` 返回不可变 `RenderTextureReadbackResult`；调用取消只停止该等待并安全回收 pending transfer。Readback texture 必须以 `RenderTextureUsage.Readback` 创建，Pipeline 自己决定何时 Copy/Blit 生产结果，因此 API 不内建 Picking、截图或任何领域语义。
 
+## 官方 2D Plugin 如何组合内置 API
+
+引擎本体没有隐藏的 2D Renderer。`Inno.Rendering.2D` 完全以 Plugin 身份组合 Scene、Asset、Settings、Mathematics、Editor Viewport 与本项目公开的 backend-neutral Rendering API：
+
+```text
+SceneWorld
+  → SceneRenderContent.CreateScope
+  → RenderContentScope<GameScene>
+  → Rendering2DSceneScope
+  → Rendering2DSceneSystem.Capture
+  → Rendering2DFrameCollector
+  → RenderFrameData
+  → RenderRequest
+  → Rendering2DPipeline.Build
+  → RenderGraph raster pass
+  → RenderCommandEncoder
+  → IRenderDevice
+  → BGFX/Metal、BGFX/D3D 等具体后端
+```
+
+`Camera2D`、`SpriteRenderer2D`、`TilemapRenderer2D` 与 `Light2D` 都是普通 `GameBehavior`。它们只保存 Scene 可序列化数据及统一的 `enabled` 生命周期，不接触 BGFX handle、View ID、native pointer 或 Editor service。
+
+像素密度只有一个项目级 owner：`Rendering2DProjectSettings.defaultPixelsPerUnit`。Pixel-perfect Camera 与未显式覆盖密度的 Sprite 都读取该设置；Camera 不再重复保存 PPU。`SpriteRenderer2D.pixelsPerUnit` 仍是合理的资源级覆盖，因为不同图集可能采用不同的 authoring density，它不属于 Camera 投影设置。
+
+`Rendering2DSceneSystem` 是每个 Scene 的 2D extraction owner，而不是 GPU renderer。它持有 Camera、Drawable 与 Light 的结构索引：Scene 对象或 Component 结构没有变化时，所有 Camera 复用同一不可变对象列表对应的索引；Transform、颜色、材质等普通属性仍在构建当前帧快照时读取，所以属性修改不要求重扫 Scene。这个 Scene-owned cache 使 Plugin 不需要每个 Camera、每帧遍历全部 GameObject，也保证 Plugin disable、移除或 generation retirement 时有一个明确位置释放所有 Plugin Component 引用。
+
+`Rendering2DSceneScope` 要求每个参与 2D 输出的 Scene 恰好有一个 `Rendering2DSceneSystem`。没有该系统表示 Scene 没有选择 2D extraction 模型，因此 scope 构建失败，通用 Editor viewport 会报告 Provider 不可用，而 Rendering Runtime 和其他 Provider 仍继续工作。系统存在但 `enabled=false` 时，`Capture` 立即清空并返回空 snapshot：Scene View 仍可由自己的 Editor Camera 绘制网格/坐标轴，但不会提取 Scene 中的 Camera、Sprite、Tilemap 或 Light；Game View 与 Player backbuffer 因没有可用 Base Camera 而不提交 2D request。重新启用后下一次 `Capture` 从当前 Scene 结构重建索引。
+
+`Rendering2DFrameCollector` 读取 scope、Camera 和项目 2D Settings，计算正交 view/projection、camera bounds、layer/culling、Light 快照、Sprite/Tilemap quad、排序键、batch、CPU picking 数据与诊断，并把结果冻结在 Plugin-owned `RenderFrameData` channel 中。Scene View Provider 使用独立 Editor Camera，并在同一个 frame snapshot 中返回 view/projection 和 picking；Game View Provider 使用 Scene 的 Base/Overlay Camera stack；Player 的 `Rendering2DRequestProvider` 则按主呈现尺寸自动提交 backbuffer request。
+
+`Rendering2DPipeline.Build` 只消费 immutable frame data。它通过 `IRenderResourceService` 解析开放的 shader contract/material role，通过 `IRenderFrameUploadService` 上传当前帧 vertex/index slices，再用 `RenderGraphBuilder.AddRasterPass` 声明 attachment、load/store、view/projection 和 side effect。真正的资源创建、依赖排序、pass culling、command replay 与 platform backend 都由引擎完成；2D Plugin 从未引用 `Inno.Native.Bgfx`。因此未来 3D、矢量、UI 或自定义渲染 Plugin 可以复用同一底座，却不需要继承或修改 2D 世界观。
+
 ## 热重载与失败隔离
 
 - Pipeline/Feature 候选只在帧边界发布，失败保留 last-good generation。

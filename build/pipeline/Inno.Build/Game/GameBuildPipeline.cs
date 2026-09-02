@@ -9,6 +9,7 @@ using Inno.Assets.Pipeline;
 using Inno.Plugins.Authoring;
 using Inno.Core.Serialization;
 using Inno.Core.Settings;
+using Inno.Extensibility.Modules;
 using Inno.Runtime;
 using Inno.Scene;
 using Inno.Scripting.Compiler;
@@ -57,20 +58,17 @@ internal sealed class GameBuildPipeline
         string outputRoot = Path.GetFullPath(request.outputDirectory);
         ValidateOutputRoot(outputRoot);
         string supportPack = m_supportPacks.Resolve(request.profile.target);
+        m_assets.WaitForIdle();
         AssetPath startupPath = AssetPath.Parse(request.profile.startupScene);
         if (!m_assets.TryGetAssetType(startupPath, out Type? sceneType) || sceneType != typeof(SceneAsset))
             throw new InvalidOperationException($"Startup scene '{startupPath}' is not an imported Scene asset.");
 
-        m_assets.WaitForIdle();
         long assetRevision = m_assets.revision;
         long pluginRevision = m_plugins.revision;
         long settingsRevision = m_settings.revision;
         PluginCandidate[] plugins = m_plugins.activePlugins.ToArray();
         byte[] settings = m_settings.CaptureDocument();
         using SerializationGeneration serialization = m_serialization.CaptureGeneration();
-        byte[] runtimeManifest = RuntimeManifestEnvelope.Encode(
-            CreateManifest(request.profile, plugins),
-            serialization);
         progress?.Report(new BuildProgress("snapshot", 0.05d, "Captured the combined authoring generation."));
 
         Directory.CreateDirectory(outputRoot);
@@ -120,6 +118,10 @@ internal sealed class GameBuildPipeline
                         "INNOBUILD1001",
                         "Runtime script compilation did not produce a complete assembly generation.")]);
             }
+            GameRuntimeModule[] runtimeModules = CreateRuntimeModules(compilation.activationRequests);
+            byte[] runtimeManifest = RuntimeManifestEnvelope.Encode(
+                CreateManifest(request.profile, plugins, runtimeModules),
+                serialization);
             EnsureGenerationUnchanged(assetRevision, pluginRevision, settingsRevision);
             progress?.Report(new BuildProgress("prepare", 0.28d, "Prepared the runtime script and manifest generation."));
 
@@ -253,7 +255,8 @@ internal sealed class GameBuildPipeline
 
     private static GameRuntimeManifest CreateManifest(
         BuildProfile profile,
-        IReadOnlyList<PluginCandidate> plugins)
+        IReadOnlyList<PluginCandidate> plugins,
+        GameRuntimeModule[] modules)
     {
         var manifest = new GameRuntimeManifest
         {
@@ -262,6 +265,7 @@ internal sealed class GameBuildPipeline
             startupScene = AssetPath.Parse(profile.startupScene).ToString(),
             windowWidth = profile.windowWidth,
             windowHeight = profile.windowHeight,
+            modules = modules,
             plugins = plugins.Select(static plugin => new GameRuntimePlugin
             {
                 id = plugin.manifest.pluginId,
@@ -272,6 +276,66 @@ internal sealed class GameBuildPipeline
         };
         manifest.Validate();
         return manifest;
+    }
+
+    private static GameRuntimeModule[] CreateRuntimeModules(
+        IReadOnlyList<AssemblyLoadRequest> requests)
+    {
+        var selected = requests
+            .Select(request => new
+            {
+                request,
+                assemblies = new[] { request.mainAssemblyPath }
+                    .Concat(request.preloadAssemblyPaths)
+                    .Where(path => request.assemblyScopes.TryGetValue(
+                            Path.GetFileNameWithoutExtension(path),
+                            out AssemblyScope scope)
+                        ? scope == AssemblyScope.Runtime
+                        : request.scope == AssemblyScope.Runtime)
+                    .ToArray()
+            })
+            .Where(static candidate => candidate.assemblies.Length > 0)
+            .ToArray();
+        var includedNames = selected
+            .Select(static candidate => candidate.request.moduleName)
+            .ToHashSet(StringComparer.Ordinal);
+        GameRuntimeModule[] candidates = selected.Select(candidate => new GameRuntimeModule
+        {
+            name = candidate.request.moduleName,
+            domain = candidate.request.domain,
+            mainAssembly = Path.GetFileName(candidate.assemblies[0]),
+            preloadAssemblies = candidate.assemblies.Skip(1).Select(Path.GetFileName).ToArray()!,
+            dependencies = candidate.request.upstreamModuleNames
+                .Where(includedNames.Contains)
+                .ToArray()
+        }).ToArray();
+        var byName = candidates.ToDictionary(static module => module.name, StringComparer.Ordinal);
+        var visiting = new HashSet<string>(StringComparer.Ordinal);
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        var ordered = new List<GameRuntimeModule>(candidates.Length);
+        foreach (GameRuntimeModule module in candidates.OrderBy(static module => module.name, StringComparer.Ordinal))
+            Visit(module);
+        return ordered.ToArray();
+
+        void Visit(GameRuntimeModule module)
+        {
+            if (visited.Contains(module.name))
+                return;
+            if (!visiting.Add(module.name))
+                throw new InvalidOperationException($"Runtime module dependency cycle contains '{module.name}'.");
+            foreach (string dependencyName in module.dependencies.Order(StringComparer.Ordinal))
+            {
+                if (!byName.TryGetValue(dependencyName, out GameRuntimeModule? dependency))
+                {
+                    throw new InvalidOperationException(
+                        $"Runtime module '{module.name}' depends on missing module '{dependencyName}'.");
+                }
+                Visit(dependency);
+            }
+            visiting.Remove(module.name);
+            visited.Add(module.name);
+            ordered.Add(module);
+        }
     }
 
     private void EnsureGenerationUnchanged(

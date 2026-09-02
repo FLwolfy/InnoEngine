@@ -149,6 +149,10 @@ public sealed class BuildPipelineTests : IDisposable
         Assert.Equal("tests.game", RuntimeManifestEnvelope.ReadApplicationId(envelope));
         GameRuntimeManifest manifest = RuntimeManifestEnvelope.Decode(envelope, serialization);
         Assert.Equal("Scenes/Startup.iscene", manifest.startupScene);
+        GameRuntimeModule runtimeModule = Assert.Single(manifest.modules);
+        Assert.Equal("RuntimeScripts", runtimeModule.name);
+        Assert.Equal("Inno.GameScripts.dll", runtimeModule.mainAssembly);
+        Assert.Equal(Inno.Extensibility.Modules.AssemblyDomain.InnoScripting, runtimeModule.domain);
 
         string persistentRoot = Path.Combine(m_root, "Persistent", manifest.applicationId);
         string materialized = RuntimeContentDeployment.Materialize(packagedContent, persistentRoot);
@@ -167,6 +171,33 @@ public sealed class BuildPipelineTests : IDisposable
                            || path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(1, result.assetCount);
         Assert.Equal(1, result.runtimeAssemblyCount);
+    }
+
+    [Fact]
+    public async Task GameBuildWaitsForPendingStartupSceneImportBeforeValidation()
+    {
+        AssetPath stagedPath = AssetPath.Project("Staged/Startup.iscene");
+        var scene = new GameScene("Startup");
+        scene.CreateObject("Player");
+        Assert.True(m_assets.Save(
+            stagedPath,
+            SceneAsset.Capture(scene, m_engine.serialization, m_assets)));
+        string stagedSource = Path.Combine(m_projectRoot, "Assets", "Staged", "Startup.iscene");
+        string destinationDirectory = Path.Combine(m_projectRoot, "Assets", "Scenes");
+        string destinationSource = Path.Combine(destinationDirectory, "Startup.iscene");
+        Directory.CreateDirectory(destinationDirectory);
+        File.Move(stagedSource, destinationSource);
+        File.Move(stagedSource + ".imeta", destinationSource + ".imeta");
+        m_assets.Rescan();
+
+        BuildResult result = await m_pipeline.BuildGameAsync(new GameBuildRequest
+        {
+            profile = CreateProfile(BuildTargetId.macOSArm64),
+            outputDirectory = Path.Combine(m_root, "Builds", "PendingImport")
+        });
+
+        Assert.True(result.succeeded);
+        Assert.NotNull(result.outputPath);
     }
 
     [Fact]

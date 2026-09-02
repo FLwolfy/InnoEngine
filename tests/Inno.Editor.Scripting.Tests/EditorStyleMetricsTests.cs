@@ -86,6 +86,62 @@ public sealed class EditorStyleMetricsTests
     }
 
     [Fact]
+    public void CenteredWrappedTextStaysInsidePaddingAndUsesMultipleLines()
+    {
+        var context = NativeImGui.CreateContext();
+        try
+        {
+            ImGuiIOPtr io = NativeImGui.GetIO();
+            io.DisplaySize = new Vector2(640f, 480f);
+            io.DeltaTime = 1f / 60f;
+            io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
+            io.Fonts.RendererHasTextures = true;
+
+            NativeImGui.NewFrame();
+            NativeImGui.SetNextWindowSize(new Vector2(420f, 260f), ImGuiCond.Always);
+            _ = NativeImGui.Begin("Centered Wrapped Text Test");
+            Vector2 origin = NativeImGui.GetCursorScreenPos();
+            var area = new Vector2(320f, 180f);
+            var padding = new Vector2(36f, 24f);
+            ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
+            int vertexStart = drawList.VtxBuffer.Size;
+            uint textColor = NativeImGui.GetColorU32(ImGuiCol.Text);
+
+            EditorWidget.CenteredWrappedText(
+                "A deliberately long viewport diagnostic wraps into several centered lines " +
+                "without touching either horizontal edge of the presentation area.",
+                area,
+                padding);
+
+            Assert.Equal(area, NativeImGui.GetItemRectSize());
+            Vector2 minimum = new(float.MaxValue);
+            Vector2 maximum = new(float.MinValue);
+            for (int i = vertexStart; i < drawList.VtxBuffer.Size; i++)
+            {
+                ImDrawVert vertex = drawList.VtxBuffer[i];
+                if (vertex.Col != textColor)
+                    continue;
+
+                minimum = Vector2.Min(minimum, vertex.Pos);
+                maximum = Vector2.Max(maximum, vertex.Pos);
+            }
+
+            Assert.NotEqual(float.MaxValue, minimum.X);
+            Assert.True(minimum.X >= origin.X + padding.X - 1f);
+            Assert.True(maximum.X <= origin.X + area.X - padding.X + 1f);
+            Assert.True(minimum.Y >= origin.Y + padding.Y - 1f);
+            Assert.True(maximum.Y <= origin.Y + area.Y - padding.Y + 1f);
+            Assert.True(maximum.Y - minimum.Y > NativeImGui.GetTextLineHeight());
+            NativeImGui.End();
+            NativeImGui.Render();
+        }
+        finally
+        {
+            NativeImGui.DestroyContext(context);
+        }
+    }
+
+    [Fact]
     public void InlineRenameIsCenteredAndSelectsTheCompleteValueWhenFocused()
     {
         var context = NativeImGui.CreateContext();
