@@ -172,6 +172,9 @@ internal static class ScriptCompilerEngine
                 assemblyStagingPath,
                 assembly.scope,
                 assembly.domain,
+                string.IsNullOrEmpty(assembly.ownerPluginId)
+                    ? AssetSourceId.project.value
+                    : assembly.ownerPluginId,
                 assembly.defines,
                 assembly.nullable,
                 assembly.allowUnsafe,
@@ -239,6 +242,7 @@ internal static class ScriptCompilerEngine
         string outputPath,
         ScriptAssemblyScope scope,
         AssemblyDomain domain,
+        string assetSourceId,
         IReadOnlyList<string> defines,
         bool nullable,
         bool allowUnsafe,
@@ -273,7 +277,8 @@ internal static class ScriptCompilerEngine
                 CreateGeneratedSource(
                     assemblyName,
                     scope == ScriptAssemblyScope.Editor,
-                    domain),
+                    domain,
+                    assetSourceId),
                 Encoding.UTF8),
             parseOptions,
             $"<{assemblyName}.Generated.g.cs>",
@@ -486,7 +491,7 @@ internal static class ScriptCompilerEngine
         IReadOnlyDictionary<string, string> dependencyKeys)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        AppendHash(hash, "Inno.ScriptAssemblyArtifact.Incremental");
+        AppendHash(hash, "Inno.ScriptAssemblyArtifact.SourceOwned");
         AppendHash(hash, System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription);
         AppendHash(hash, Environment.Version.ToString());
         AppendHash(hash, assembly.name);
@@ -773,7 +778,8 @@ internal static class ScriptCompilerEngine
     private static string CreateGeneratedSource(
         string assemblyName,
         bool isEditorAssembly,
-        AssemblyDomain domain)
+        AssemblyDomain domain,
+        string assetSourceId)
     {
         string assemblyScope = isEditorAssembly ? "Editor" : "Runtime";
         return $"""
@@ -781,6 +787,7 @@ internal static class ScriptCompilerEngine
             [assembly: System.Reflection.AssemblyMetadata("Inno.AssemblyDomain", "{domain}")]
             [assembly: System.Reflection.AssemblyMetadata("Inno.AssemblyScope", "{assemblyScope}")]
             [assembly: System.Reflection.AssemblyMetadata("Inno.ScriptAssembly", "{assemblyName}")]
+            [assembly: System.Reflection.AssemblyMetadata("Inno.AssetSource", "{assetSourceId}")]
             """;
     }
 

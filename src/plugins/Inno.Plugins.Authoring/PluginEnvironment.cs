@@ -124,7 +124,7 @@ public sealed class PluginEnvironment : IDisposable
         {
             m_pluginRoot = Path.GetFullPath(pluginRoot);
             m_sources = new PluginSourceService(serialization, m_pluginRoot, libraryRoot);
-            m_reconciledFingerprint = ComputeDirectoryFingerprint(m_pluginRoot);
+            m_reconciledFingerprint = ComputeInstallationFingerprint(m_pluginRoot);
             m_lastReconciliationTimestamp = Environment.TickCount64;
             m_watcher = CreateWatcher(m_pluginRoot);
         }
@@ -439,7 +439,7 @@ public sealed class PluginEnvironment : IDisposable
     {
         var watcher = new FileSystemWatcher(pluginRoot)
         {
-            IncludeSubdirectories = true,
+            IncludeSubdirectories = false,
             NotifyFilter = NotifyFilters.FileName
                 | NotifyFilters.DirectoryName
                 | NotifyFilters.LastWrite
@@ -491,7 +491,7 @@ public sealed class PluginEnvironment : IDisposable
         }
         string pluginRoot = m_pluginRoot;
         m_lastReconciliationTimestamp = now;
-        m_reconciliation = Task.Run(() => ComputeDirectoryFingerprint(pluginRoot));
+        m_reconciliation = Task.Run(() => ComputeInstallationFingerprint(pluginRoot));
     }
 
     private void CompleteReconciliation()
@@ -666,27 +666,15 @@ public sealed class PluginEnvironment : IDisposable
         return Convert.ToHexString(hash.GetHashAndReset());
     }
 
-    private string ComputeDirectoryFingerprint(string pluginRoot)
+    private static string ComputeInstallationFingerprint(string pluginRoot)
     {
         Directory.CreateDirectory(pluginRoot);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        var paths = new List<string>();
-        var pending = new Stack<string>();
-        pending.Push(pluginRoot);
-        while (pending.Count > 0)
-        {
-            string directory = pending.Pop();
-            foreach (string path in Directory.EnumerateFileSystemEntries(directory))
-            {
-                paths.Add(path);
-                FileAttributes attributes = System.IO.File.GetAttributes(path);
-                if ((attributes & FileAttributes.Directory) != 0
-                    && (attributes & FileAttributes.ReparsePoint) == 0)
-                {
-                    pending.Push(path);
-                }
-            }
-        }
+        string[] paths = Directory.EnumerateFileSystemEntries(
+                pluginRoot,
+                "*",
+                SearchOption.TopDirectoryOnly)
+            .ToArray();
         foreach (string path in paths.OrderBy(static value => value, StringComparer.OrdinalIgnoreCase))
         {
             FileAttributes attributes = System.IO.File.GetAttributes(path);

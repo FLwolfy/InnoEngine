@@ -12,12 +12,10 @@ using Inno.Assets.Pipeline;
 using Inno.Core.Serialization;
 using Inno.Core.Storage;
 
-using IOFile = System.IO.File;
-
 namespace Inno.Plugins.Authoring;
 
 /// <summary>
-/// Discovers, validates, mounts, and dependency-orders local Plugin ZIPs and source directories.
+/// Discovers, validates, mounts, and dependency-orders local <c>.iplugin</c> packages.
 /// </summary>
 public sealed class PluginSourceService
 {
@@ -42,7 +40,7 @@ public sealed class PluginSourceService
     /// The serialization registry used to read the current Plugin manifest contract.
     /// </param>
     /// <param name="pluginRoot">
-    /// Project Plugins directory containing ZIPs and unpacked Plugin directories.
+    /// Project Plugins directory containing <c>.iplugin</c> packages.
     /// </param>
     /// <param name="libraryRoot">
     /// Project rebuildable Library directory.
@@ -68,7 +66,7 @@ public sealed class PluginSourceService
     }
 
     /// <summary>
-    /// Scans every installed ZIP and directory into one isolated candidate snapshot.
+    /// Scans every installed <c>.iplugin</c> package into one isolated candidate snapshot.
     /// </summary>
     /// <returns>
     /// Dependency-ordered candidates plus isolated diagnostics.
@@ -77,21 +75,22 @@ public sealed class PluginSourceService
     {
         var candidates = new List<PluginCandidate>();
         var diagnostics = new List<PluginDiagnostic>();
-        foreach (PluginSource source in DiscoverSources())
+        foreach (string unsupported in DiscoverUnsupportedSources())
+        {
+            diagnostics.Add(new PluginDiagnostic(
+                unsupported,
+                "Plugin installations must be .iplugin package files; directories and other file extensions are not supported."));
+        }
+        foreach (string packagePath in DiscoverPackages())
         {
             try
             {
-                candidates.AddRange(source.kind switch
-                {
-                    PluginSourceKind.Zip => ValidateZip(source.path),
-                    PluginSourceKind.Directory => [ValidateDirectory(source.path)],
-                    _ => throw new InvalidDataException("Unknown Plugin source kind.")
-                });
+                candidates.AddRange(ValidatePackage(packagePath));
             }
             catch (Exception exception) when (
                 exception is InvalidDataException or IOException or UnauthorizedAccessException)
             {
-                diagnostics.Add(new PluginDiagnostic(source.path, exception.Message));
+                diagnostics.Add(new PluginDiagnostic(packagePath, exception.Message));
             }
         }
 
@@ -126,43 +125,55 @@ public sealed class PluginSourceService
         return result.candidates;
     }
 
-    private IEnumerable<PluginSource> DiscoverSources()
+    private IEnumerable<string> DiscoverPackages()
     {
-        IEnumerable<PluginSource> zipSources = Directory
-            .EnumerateFiles(m_pluginRoot, "*.zip", SearchOption.TopDirectoryOnly)
-            .Select(static path => new PluginSource(path, PluginSourceKind.Zip));
-        IEnumerable<PluginSource> directorySources = Directory
-            .EnumerateDirectories(m_pluginRoot, "*", SearchOption.TopDirectoryOnly)
-            .Where(static path => !Path.GetFileName(path).StartsWith(".", StringComparison.Ordinal))
-            .Select(static path => new PluginSource(path, PluginSourceKind.Directory));
-        return zipSources.Concat(directorySources)
-            .OrderBy(static source => source.path, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static source => source.kind);
+        return Directory
+            .EnumerateFiles(m_pluginRoot, "*", SearchOption.TopDirectoryOnly)
+            .Where(static path => string.Equals(
+                Path.GetExtension(path),
+                ".iplugin",
+                StringComparison.OrdinalIgnoreCase))
+            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase);
     }
 
-    private IReadOnlyList<PluginCandidate> ValidateZip(string zipPath)
+    private IEnumerable<string> DiscoverUnsupportedSources()
+    {
+        return Directory
+            .EnumerateFileSystemEntries(m_pluginRoot, "*", SearchOption.TopDirectoryOnly)
+            .Where(path =>
+            {
+                string name = Path.GetFileName(path);
+                if (name.StartsWith(".", StringComparison.Ordinal) || S_IGNORED_SYSTEM_FILE_NAMES.Contains(name))
+                    return false;
+                return Directory.Exists(path)
+                    || !string.Equals(Path.GetExtension(path), ".iplugin", StringComparison.OrdinalIgnoreCase);
+            })
+            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private IReadOnlyList<PluginCandidate> ValidatePackage(string packagePath)
     {
         int embeddedCount = 0;
-        return ValidateZip(zipPath, PluginSourceKind.Zip, depth: 0, ref embeddedCount);
+        return ValidatePackage(packagePath, PluginSourceKind.Package, depth: 0, ref embeddedCount);
     }
 
-    private IReadOnlyList<PluginCandidate> ValidateZip(
-        string zipPath,
+    private IReadOnlyList<PluginCandidate> ValidatePackage(
+        string packagePath,
         PluginSourceKind sourceKind,
         int depth,
         ref int embeddedCount)
     {
         if (depth > m_limits.maximumEmbeddedDepth)
             throw new InvalidDataException("Plugin dependency packages exceed the configured nesting limit.");
-        using ZipArchive archive = ZipFile.OpenRead(zipPath);
-        ValidatedZipEntry[] entries = ValidateZipEntries(archive).ToArray();
-        ValidatedZipEntry manifestEntry = entries.SingleOrDefault(static value => value.path == "Plugin.inno")
-            ?? throw new InvalidDataException("A Plugin ZIP requires exactly one root Plugin.inno manifest.");
+        using ZipArchive archive = ZipFile.OpenRead(packagePath);
+        ValidatedPackageEntry[] entries = ValidatePackageEntries(archive).ToArray();
+        ValidatedPackageEntry manifestEntry = entries.SingleOrDefault(static value => value.path == "Plugin.inno")
+            ?? throw new InvalidDataException("An .iplugin package requires exactly one root Plugin.inno manifest.");
         PluginManifest manifest = ReadManifest(manifestEntry.entry);
         manifest.Validate();
-        ValidateContent(entries.Select(static entry => entry.path).ToArray(), "ZIP", allowDependencies: true);
+        ValidateContent(entries.Select(static entry => entry.path).ToArray());
 
-        string contentHash = ComputeZipContentHash(entries);
+        string contentHash = ComputePackageContentHash(entries);
         string destinationRoot = Path.Combine(m_cacheRoot, manifest.pluginId, contentHash);
         string contentRoot = Path.Combine(destinationRoot, "Assets");
         if (!Directory.Exists(contentRoot))
@@ -172,16 +183,16 @@ public sealed class PluginSourceService
         var candidates = new List<PluginCandidate>
         {
             CreateCandidate(
-                zipPath,
+                packagePath,
                 sourceKind,
                 contentHash,
                 manifest,
                 contentRoot,
                 containsCode)
         };
-        foreach (ValidatedZipEntry dependency in entries.Where(static entry =>
+        foreach (ValidatedPackageEntry dependency in entries.Where(static entry =>
                      entry.path.StartsWith("Dependencies/", StringComparison.Ordinal)
-                     && entry.path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)))
+                     && entry.path.EndsWith(".iplugin", StringComparison.OrdinalIgnoreCase)))
         {
             embeddedCount++;
             if (embeddedCount > m_limits.maximumEmbeddedPluginCount)
@@ -189,9 +200,9 @@ public sealed class PluginSourceService
             string extractedPath = Path.Combine(
                 destinationRoot,
                 dependency.path.Replace('/', Path.DirectorySeparatorChar));
-            IReadOnlyList<PluginCandidate> embedded = ValidateZip(
+            IReadOnlyList<PluginCandidate> embedded = ValidatePackage(
                 extractedPath,
-                PluginSourceKind.EmbeddedZip,
+                PluginSourceKind.EmbeddedPackage,
                 depth + 1,
                 ref embeddedCount);
             PluginCandidate direct = embedded[0];
@@ -203,44 +214,6 @@ public sealed class PluginSourceService
             candidates.AddRange(embedded);
         }
         return candidates;
-    }
-
-    private PluginCandidate ValidateDirectory(string directoryPath)
-    {
-        FileAttributes rootAttributes = IOFile.GetAttributes(directoryPath);
-        if ((rootAttributes & FileAttributes.ReparsePoint) != 0)
-            throw new InvalidDataException("A Plugin directory cannot be a symbolic link or reparse point.");
-
-        string stagingRoot = Path.Combine(m_cacheRoot, ".staging", Guid.NewGuid().ToString("N"));
-        try
-        {
-            CopyDirectorySnapshot(directoryPath, stagingRoot);
-            ValidatedDirectoryEntry[] entries = ValidateDirectoryEntries(stagingRoot).ToArray();
-            ValidatedDirectoryEntry manifestEntry = entries.SingleOrDefault(
-                static value => value.path == "Plugin.inno")
-                ?? throw new InvalidDataException(
-                    "A Plugin directory requires exactly one root Plugin.inno manifest.");
-            PluginManifest manifest = ReadManifest(manifestEntry.physicalPath);
-            manifest.Validate();
-            string[] paths = entries.Select(static entry => entry.path).ToArray();
-            ValidateContent(paths, "directory", allowDependencies: false);
-
-            string contentHash = ComputeDirectoryContentHash(entries);
-            string destinationRoot = Path.Combine(m_cacheRoot, manifest.pluginId, contentHash);
-            CommitStagedDirectory(stagingRoot, destinationRoot);
-            return CreateCandidate(
-                directoryPath,
-                PluginSourceKind.Directory,
-                contentHash,
-                manifest,
-                Path.Combine(destinationRoot, "Assets"),
-                ContainsCode(paths));
-        }
-        finally
-        {
-            if (Directory.Exists(stagingRoot))
-                Directory.Delete(stagingRoot, recursive: true);
-        }
     }
 
     private PluginCandidate CreateCandidate(
@@ -262,18 +235,18 @@ public sealed class PluginSourceService
                 manifest.dependencies.Select(static dependency => new AssetSourceId(dependency))),
             containsCode);
 
-    private IEnumerable<ValidatedZipEntry> ValidateZipEntries(ZipArchive archive)
+    private IEnumerable<ValidatedPackageEntry> ValidatePackageEntries(ZipArchive archive)
     {
         if (archive.Entries.Count > m_limits.maximumEntryCount)
-            throw new InvalidDataException("Plugin ZIP exceeds the configured entry-count limit.");
+            throw new InvalidDataException("The .iplugin package exceeds the configured entry-count limit.");
 
-        var paths = new PortablePathSet("ZIP");
+        var paths = new PortablePathSet(".iplugin package");
         long totalBytes = 0;
         foreach (ZipArchiveEntry entry in archive.Entries)
         {
             string path = ValidatePortablePath(entry.FullName);
             if (IsSymbolicLink(entry))
-                throw new InvalidDataException($"Plugin ZIP entry '{path}' is a symbolic link.");
+                throw new InvalidDataException($"Plugin package entry '{path}' is a symbolic link.");
             if (IsIgnoredSystemFile(path))
                 continue;
             paths.Add(path);
@@ -284,50 +257,10 @@ public sealed class PluginSourceService
                     ? double.PositiveInfinity
                     : (double)entry.Length / entry.CompressedLength;
                 if (ratio > m_limits.maximumCompressionRatio)
-                    throw new InvalidDataException($"Plugin ZIP entry '{path}' exceeds the compression-ratio limit.");
+                    throw new InvalidDataException($"Plugin package entry '{path}' exceeds the compression-ratio limit.");
             }
             ValidateSourceExtension(path);
-            yield return new ValidatedZipEntry(path, entry);
-        }
-    }
-
-    private IEnumerable<ValidatedDirectoryEntry> ValidateDirectoryEntries(string directoryPath)
-    {
-        var paths = new PortablePathSet("directory");
-        var pending = new Stack<string>();
-        pending.Push(directoryPath);
-        int entryCount = 0;
-        long totalBytes = 0;
-        while (pending.Count > 0)
-        {
-            string current = pending.Pop();
-            foreach (string child in Directory.EnumerateFileSystemEntries(current)
-                         .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase))
-            {
-                FileAttributes attributes = IOFile.GetAttributes(child);
-                string relative = Path.GetRelativePath(directoryPath, child).Replace('\\', '/');
-                bool isDirectory = (attributes & FileAttributes.Directory) != 0;
-                string path = ValidatePortablePath(isDirectory ? relative + "/" : relative);
-                if ((attributes & FileAttributes.ReparsePoint) != 0)
-                    throw new InvalidDataException($"Plugin directory entry '{path}' is a symbolic link or reparse point.");
-                if (!isDirectory && IsIgnoredSystemFile(path))
-                    continue;
-                entryCount++;
-                if (entryCount > m_limits.maximumEntryCount)
-                    throw new InvalidDataException("Plugin directory exceeds the configured entry-count limit.");
-                paths.Add(path);
-                if (isDirectory)
-                {
-                    pending.Push(child);
-                    yield return new ValidatedDirectoryEntry(path, child);
-                    continue;
-                }
-
-                long length = new FileInfo(child).Length;
-                ValidateFileSize(path, length, ref totalBytes);
-                ValidateSourceExtension(path);
-                yield return new ValidatedDirectoryEntry(path, child);
-            }
+            yield return new ValidatedPackageEntry(path, entry);
         }
     }
 
@@ -349,15 +282,12 @@ public sealed class PluginSourceService
         }
     }
 
-    private static void ValidateContent(
-        IReadOnlyList<string> entries,
-        string sourceDescription,
-        bool allowDependencies)
+    private static void ValidateContent(IReadOnlyList<string> entries)
     {
         HashSet<string> paths = entries.ToHashSet(StringComparer.Ordinal);
         if (!paths.Any(static value => value.StartsWith("Assets/", StringComparison.Ordinal)))
         {
-            throw new InvalidDataException($"Plugin {sourceDescription} contains no Assets content root.");
+            throw new InvalidDataException("The .iplugin package contains no Assets content root.");
         }
 
         foreach (string path in paths)
@@ -367,22 +297,17 @@ public sealed class PluginSourceService
                 continue;
             if (path.StartsWith("Dependencies/", StringComparison.Ordinal))
             {
-                if (!allowDependencies)
-                {
-                    throw new InvalidDataException(
-                        "Embedded dependency packages are supported only by ZIP installations.");
-                }
                 string local = path["Dependencies/".Length..];
                 if (local.Contains('/')
-                    || !local.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                    || !local.EndsWith(".iplugin", StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidDataException(
-                        $"Plugin {sourceDescription} dependency entry '{path}' must be one direct ZIP.");
+                        $"Plugin dependency entry '{path}' must be one direct .iplugin package.");
                 }
                 continue;
             }
             if (!path.StartsWith("Assets/", StringComparison.Ordinal))
-                throw new InvalidDataException($"Unexpected root Plugin source entry '{path}'.");
+                throw new InvalidDataException($"Unexpected root .iplugin package entry '{path}'.");
             if (path.EndsWith(".imeta", StringComparison.OrdinalIgnoreCase))
                 continue;
             if (!paths.Contains(path + ".imeta"))
@@ -499,18 +424,6 @@ public sealed class PluginSourceService
         }
     }
 
-    private PluginManifest ReadManifest(string path)
-    {
-        try
-        {
-            return m_serialization.Deserialize<PluginManifest>(IOFile.ReadAllBytes(path));
-        }
-        catch (Exception exception) when (IsManifestDataFailure(exception))
-        {
-            throw new InvalidDataException("Plugin.inno is malformed or incompatible with the current contract.", exception);
-        }
-    }
-
     private static bool IsManifestDataFailure(Exception exception)
         => exception is InvalidDataException
             or InvalidOperationException
@@ -569,13 +482,13 @@ public sealed class PluginSourceService
 
     private void ExtractAtomically(
         ZipArchive archive,
-        IReadOnlyList<ValidatedZipEntry> entries,
+        IReadOnlyList<ValidatedPackageEntry> entries,
         string destinationRoot)
     {
         string stagingRoot = Path.Combine(m_cacheRoot, ".staging", Guid.NewGuid().ToString("N"));
         try
         {
-            foreach (ValidatedZipEntry item in entries)
+            foreach (ValidatedPackageEntry item in entries)
             {
                 string target = ResolveContainedPath(stagingRoot, item.path.TrimEnd('/'));
                 if (item.path.EndsWith("/", StringComparison.Ordinal))
@@ -600,51 +513,6 @@ public sealed class PluginSourceService
         }
     }
 
-    private void CopyDirectorySnapshot(string sourceRoot, string stagingRoot)
-    {
-        ValidatedDirectoryEntry[] entries = ValidateDirectoryEntries(sourceRoot).ToArray();
-        Directory.CreateDirectory(stagingRoot);
-        foreach (ValidatedDirectoryEntry entry in entries)
-        {
-            string target = ResolveContainedPath(stagingRoot, entry.path.TrimEnd('/'));
-            if (entry.path.EndsWith("/", StringComparison.Ordinal))
-            {
-                Directory.CreateDirectory(target);
-                continue;
-            }
-
-            FileAttributes attributes = IOFile.GetAttributes(entry.physicalPath);
-            if ((attributes & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0)
-            {
-                throw new InvalidDataException(
-                    $"Plugin directory entry '{entry.path}' changed kind while its generation snapshot was captured.");
-            }
-            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            using FileStream input = new(
-                entry.physicalPath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read);
-            using FileStream output = new(target, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-            input.CopyTo(output);
-        }
-    }
-
-    private static void CommitStagedDirectory(string stagingRoot, string destinationRoot)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(destinationRoot)!);
-        if (Directory.Exists(destinationRoot))
-            return;
-        try
-        {
-            Directory.Move(stagingRoot, destinationRoot);
-        }
-        catch (IOException) when (Directory.Exists(destinationRoot))
-        {
-            // Another complete scan committed the same content-addressed snapshot first.
-        }
-    }
-
     private static string ResolveContainedPath(string root, string relativePath)
     {
         string fullRoot = Path.GetFullPath(root);
@@ -660,29 +528,15 @@ public sealed class PluginSourceService
         return result;
     }
 
-    private static string ComputeZipContentHash(IReadOnlyList<ValidatedZipEntry> entries)
+    private static string ComputePackageContentHash(IReadOnlyList<ValidatedPackageEntry> entries)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        foreach (ValidatedZipEntry item in entries.OrderBy(static entry => entry.path, StringComparer.Ordinal))
+        foreach (ValidatedPackageEntry item in entries.OrderBy(static entry => entry.path, StringComparer.Ordinal))
         {
             AppendPath(hash, item.path);
             if (item.path.EndsWith("/", StringComparison.Ordinal))
                 continue;
             using Stream stream = item.entry.Open();
-            AppendStream(hash, stream);
-        }
-        return Convert.ToHexString(hash.GetHashAndReset());
-    }
-
-    private static string ComputeDirectoryContentHash(IReadOnlyList<ValidatedDirectoryEntry> entries)
-    {
-        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        foreach (ValidatedDirectoryEntry item in entries.OrderBy(static entry => entry.path, StringComparer.Ordinal))
-        {
-            AppendPath(hash, item.path);
-            if (item.path.EndsWith("/", StringComparison.Ordinal))
-                continue;
-            using FileStream stream = IOFile.OpenRead(item.physicalPath);
             AppendStream(hash, stream);
         }
         return Convert.ToHexString(hash.GetHashAndReset());
@@ -723,7 +577,5 @@ public sealed class PluginSourceService
         }
     }
 
-    private readonly record struct PluginSource(string path, PluginSourceKind kind);
-    private sealed record ValidatedZipEntry(string path, ZipArchiveEntry entry);
-    private sealed record ValidatedDirectoryEntry(string path, string physicalPath);
+    private sealed record ValidatedPackageEntry(string path, ZipArchiveEntry entry);
 }

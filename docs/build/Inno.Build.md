@@ -20,7 +20,7 @@ Game Build 在内容打包前把已验证 Support Pack 作为目标运行时交�
 | `GameBuildContentContext`, `GameBuildPackageContext` | 平台目标获得的隔离 staging context |
 | `PlayerSupportPackCatalog` | 验证并解析部署 closure |
 
-Content writer、Plugin ZIP writer、snapshot fingerprint、script stage、staging transaction 与 player composer 全部 internal。
+Content writer、`.iplugin` archive writer、snapshot fingerprint、script stage、staging transaction 与 player composer 全部 internal。
 
 ## 工作流
 

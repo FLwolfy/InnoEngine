@@ -11,7 +11,7 @@ Assets 分成真实部署边界：Player-safe runtime contract 与 authoring pip
 
 ```text
 Assets/ (writable authoring source)
-Plugins/ (read-only ZIP/folder mounts)
+Plugins/ (read-only .iplugin mounts)
        ↓ shared AssetPipeline
 Library/AssetDatabase + Library/Artifacts
        ↓ Build runtime closure

@@ -50,7 +50,7 @@ internal sealed class EmbedPluginDependenciesSetting : EditorSetting
     /// Gets the user-facing explanation of this feature or setting.
     /// </summary>
     public override string description
-        => "Embed complete installed dependency packages so the exported ZIP can be installed by itself.";
+        => "Embed complete installed dependency packages so the exported .iplugin can be installed by itself.";
 
     /// <summary>
     /// Draws this feature using the current editor presentation context.

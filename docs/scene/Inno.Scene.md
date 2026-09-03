@@ -54,7 +54,7 @@ if (tags.IsDefined("Player"))
 
 | 类型 | 职责 |
 | --- | --- |
-| `GameLayerId` | 跨 Project、ZIP 与 Plugin generation 稳定的逻辑 Layer ID。 |
+| `GameLayerId` | 跨 Project、`.iplugin` 与 Plugin generation 稳定的逻辑 Layer ID。 |
 | `GameLayer` | 0–31 的紧凑运行时 slot。`GameObject.layer` 始终只保存一个值。 |
 | `GameLayerMask` | 32 位多层集合，用于渲染、物理和 Scene 查询过滤。 |
 | `GameLayerDefinition` | 逻辑 ID、当前 slot 与显示名称的只读快照。 |

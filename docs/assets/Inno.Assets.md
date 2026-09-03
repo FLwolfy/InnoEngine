@@ -83,6 +83,7 @@ Observer 按订阅顺序在 owner thread 调用。某个 observer 抛异常会�
 | --- | --- |
 | `IAssetLookup` | Authoring `AssetPipeline` 与 Player `AssetDatabase` 共同实现的最小只读查询边界。 |
 | `Assets.Load/TryLoad` | 项目脚本使用的无状态门面；只解析当前异步执行作用域，不拥有 Catalog、缓存或 Session 状态。 |
+| `Assets.LocalPath(localPath)` | 根据调用脚本 assembly 的 `Inno.AssetSource` metadata 创建 source-local 路径；同一代码在 Project 开发态与 `.iplugin` 安装态自动指向各自 Assets 根。 |
 | `Load<T>(AssetPath/id)` | 返回跨 mount canonical instance；缺失或类型不兼容时抛异常。字符串重载表示 Project mount。 |
 | `TryLoad<T>(path/id,out asset)` | 安全失败。 |
 | `LoadAsync<T>(path/id,token)` | 在 worker 上执行真实加载/导入等待；相同 path 或 ID 的并发请求共享任务并返回同一 canonical instance。取消只终止当前调用者的等待，不取消其他调用者共享的加载。 |
@@ -107,7 +108,7 @@ Scope 时，脚本 `Assets` 门面明确抛出 `InvalidOperationException`。引
 
 `AssetPipeline` 还是统一 Assembly Catalog transaction participant。候选 TypeCache 与 Importer/Build Processor Registry 激活后、Assembly Catalog 对外发布前，它会在 owner thread 对全部 Source Mount 重新对账；兼容的 host canonical asset 原位更新，退休的 Plugin 类型退出当前缓存。激活前会按 source path、状态、source hash、Importer ID 与结构化诊断记录可写 Project Mount 已有的失败指纹；候选 Importer 新制造或改变任何 Project Asset 导入失败时，整个 Assembly/Plugin 候选都会被拒绝。仅因无关脚本重编译而变化的程序集 MVID 不属于失败语义，所以完全相同的既有失败会继续作为诊断而不会阻塞 reload。Plugin 只读 Mount 的导入失败或 Persistent ID 冲突始终直接拒绝 Source Mount 候选。
 
-若本 transaction 或后续 participant 失败，ModuleHost 先恢复旧 TypeCache，AssetPipeline 再在下一次 owner-thread `Update`/访问时用旧 generation 自动恢复目录快照。Plugin 的 ZIP 与 Folder mount 都指向 `Library/Plugins/<pluginId>/<contentHash>` 中完整且不可变的 generation snapshot，因此即使原安装目录在 reload 中途被删除或覆盖，旧 Loader 的恢复、查询与关闭也不会访问失效路径。外部观察者不会看到“新 Registry + 旧 Asset Catalog”的半切换状态。
+若本 transaction 或后续 participant 失败，ModuleHost 先恢复旧 TypeCache，AssetPipeline 再在下一次 owner-thread `Update`/访问时用旧 generation 自动恢复目录快照。Plugin mount 指向 `Library/Plugins/<pluginId>/<contentHash>` 中完整且不可变的 `.iplugin` generation snapshot，因此即使原安装包在 reload 中途被删除或覆盖，旧 Loader 的恢复、查询与关闭也不会访问失效路径。外部观察者不会看到“新 Registry + 旧 Asset Catalog”的半切换状态。
 
 ## Catalog 与 artifact 查询
 
@@ -141,7 +142,7 @@ if (AssetPipeline.TryGetInfo(AssetPath.Project("Scripts/Player.cs"), out AssetIn
 
 `PrepareSourceMounts` 返回隔离的 `AssetSourceMountTransaction`。候选拥有自己的 Loader、FileSystem、Catalog 暂存文件与查询入口；在 `Activate` 前不会改变 `AssetPipeline.sourceMounts`、普通加载结果或正式 `Library/AssetDatabase/Catalog.snapshot`。内容寻址 Artifact 可以安全复用正式缓存，但 Catalog 只有 `Complete` 时才执行单次 atomic replace；`Rollback` 删除暂存 Catalog，进程异常遗留的候选目录会在下次初始化清理。`Activate` 只做安全点内的临时切换，不释放旧 generation，也不通知观察者；`Complete` 才发布 `SourceMountsChanged` 并退休旧 generation。`ReplaceSourceMounts` 是立即执行 Prepare → Activate → Complete 的便利入口。
 
-Plugin mount 必须只读；这个限制同样适用于物理上未压缩的 Folder 安装。Folder 安装目录只是变化输入，验证后复制到内容寻址缓存；运行时和 Editor 无法绕过 source transaction 直接写入安装源或活动 snapshot。外部文件变化只会触发 Plugin 候选事务。跨 mount 依赖必须由 mount 的 `dependencySourceIds` 明确授权。任何 Persistent ID 冲突或未声明依赖都会拒绝候选并保留旧 snapshot。该两阶段协议也允许 ZIP/Folder Plugin 脚本从隔离候选 artifact 编译，而 File Browser、运行时资产与当前 Plugin Catalog 始终只观察 last-good generation。
+Plugin mount 必须只读，且只能来自完整 `.iplugin` 文件；Folder 和 `.zip` 安装不会创建 Mount。运行时和 Editor 无法绕过 source transaction 直接写入安装源或活动 snapshot。外部 package 变化只会触发 Plugin 候选事务。跨 mount 依赖必须由 mount 的 `dependencySourceIds` 明确授权。任何 Persistent ID 冲突或未声明依赖都会拒绝候选并保留旧 snapshot。该两阶段协议也允许 `.iplugin` 脚本从隔离候选 artifact 编译，而 File Browser、运行时资产与当前 Plugin Catalog 始终只观察 last-good generation。
 
 FileBrowser List 使用 `AssetFileEntry.nameWithoutExtension` 显示名字，Grid 保持完整 `name`。所有实际命令始终使用完整 `assetPath`；公开 Manager/Loader/FileSystem 寻址 API 不再接受裸字符串路径。
 

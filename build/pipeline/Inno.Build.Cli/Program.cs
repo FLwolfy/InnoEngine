@@ -286,6 +286,6 @@ internal sealed class BuildCommand
     private static string Usage()
         => "Usage:\n"
            + "  Inno.Build.Cli game --project <dir> --support-packs <dir> --output <dir> [--profile <BuildProfile.inno>]\n"
-           + "  Inno.Build.Cli plugin --project <dir> --output <zip> --plugin-id <id> "
+           + "  Inno.Build.Cli plugin --project <dir> --output <package.iplugin> --plugin-id <id> "
            + "--display-name <name> [--include-dependencies]";
 }

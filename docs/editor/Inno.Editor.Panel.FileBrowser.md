@@ -6,19 +6,19 @@
 
 Scene、Prefab、Folder 和普通文件 icon declaration 可以直接保存完整 `Editor/...` Settings path；`AssetIconRegistry` 用 `EditorSettings.Get(path).GetAsString("value")` 读取当前 Inno Serialization 值对象中的 glyph。脚本声明仍可填写 literal glyph。
 
-## Assets / Plugins 双根与 ZIP/Folder Plugin
+## Assets / Plugins 双根与 `.iplugin`
 
 Tree 底部使用带水平分隔线、占满 pane 宽度的 `Switch to Assets` / `Switch to Plugins` 按钮，在可写 `Assets` 创作根与只读 `Plugins` 安装根之间切换。两边分别保存上次访问目录；`Plugins` overview 会在 Tree、List、Grid 中一致列出每个已激活 Plugin ID，进入后继续使用相同的导航、过滤、搜索、selection、打开和 drag source 逻辑。虚拟 `Assets` 与 `Plugins` 根是稳定容器节点，即使当前没有任何子项也始终保留 disclosure，并允许展开或收起；它们只用 icon/text 表示当前目录，不进入普通 Asset selection，也不绘制 selected row highlight。Plugin mount 与其后代才是可选择条目。单击普通目录只选择，双击才进入；Tree 展开只响应 disclosure 或明确的目录导航，不因 content selection 持续强制展开。所有真实条目使用完整 `AssetPath(source, localPath)`，因此不同 mount 的同名文件不会碰撞。
 
-Plugin ID 条目对应 active Plugin catalog 明确拥有的 Source Mount 根，而不是普通 Directory 或 Catalog Asset；它可以导航、选择和作为只读目录 drag source，但没有 `AssetInfo` 或 runtime asset type。FileBrowser 不再用“非 Project mount”猜测 Plugin 身份，因此以后增加其他 source kind 也不会误显示为 Plugin。List 将它显示为 `IPLUGIN` 且 Source 为当前层级 `~`，Inspector 也显示 `IPlugin`，安装容器内部的目录才继续显示 Directory/FOLDER。这里的 `IPlugin` 只是 source mount 的 Editor 语义，不创建 `.iplugin` companion asset。FileBrowser 核心布局与 entry 绘制的 Child、Table、Tree、ID 和 Style scope 会在异常路径中完整 unwind，因此条目交互失败不会再把 ImGui window stack 留在半开启状态。
+Plugin ID 条目对应 active Plugin catalog 明确拥有的 Source Mount 根，而不是普通 Directory 或 Catalog Asset；它可以导航、选择和作为只读目录 drag source，但没有 `AssetInfo` 或 runtime asset type。FileBrowser 不再用“非 Project mount”猜测 Plugin 身份，因此以后增加其他 source kind 也不会误显示为 Plugin。List 将它显示为 `IPLUGIN` 且 Source 为当前层级 `~`，Inspector 也显示 `IPlugin`，安装容器内部的目录才继续显示 Directory/FOLDER。这里的 `IPlugin` 是 `.iplugin` package 激活后的 source mount 语义，不创建 companion asset。FileBrowser 核心布局与 entry 绘制的 Child、Table、Tree、ID 和 Style scope 会在异常路径中完整 unwind，因此条目交互失败不会再把 ImGui window stack 留在半开启状态。
 
 - `Assets` 是唯一官方创作源；Plugin 源码、Shader、设置和资产先在这里开发，再由 File 菜单的 `Export as Plugin...` 直接导出完整 Project。
-- ZIP 和 Folder 都是安装形态。Plugin 根和条目显示只读状态；Create、Rename、Move、Delete、Save 与 drop target 会隐藏或明确拒绝，Open、查看、导航、搜索与只读 drag source 保持可用。
-- File Browser 不提供 Plugin 管理或 trust 按钮；ZIP/Folder 的文件系统变化由 `PluginEnvironment` 自动轮询并进入统一候选事务，错误通过 Diagnostics/Console 报告。
+- 只有放在 `Plugins/` 根下的 `.iplugin` 文件是安装形态；Folder、`.zip` 和其他扩展名不会激活。Plugin 根和条目显示只读状态；Create、Rename、Move、Delete、Save 与 drop target 会隐藏或明确拒绝，Open、查看、导航、搜索与只读 drag source 保持可用。
+- File Browser 不提供 Plugin 管理或 trust 按钮；`.iplugin` 文件系统变化由 `PluginEnvironment` 自动监听、轮询并进入统一候选事务，错误通过 Diagnostics/Console 报告。
 - 放入带代码的 Plugin 即表示允许其以项目脚本相同的本机权限执行；File Browser 只展示 active Source Mount，不承担安全确认职责。
-- File Browser 不创建导出定义，也不拥有打包 UI。Plugin ZIP 与 Game Player 的统一入口属于 [Inno.Editor.Exporting](Inno.Editor.Exporting.md)；导出不会自动安装或刷新当前项目。
+- File Browser 不创建导出定义，也不拥有打包 UI。`.iplugin` 与 Game Player 的统一入口属于 [Inno.Editor.Exporting](Inno.Editor.Exporting.md)；导出不会自动安装或刷新当前项目。
 
-名称以 `~` 开头的目录在 Tree/List/Grid 中显示为 `ISAMPLE`。它仍可展开、搜索、选择和浏览，但自身及后代不属于已导入 Asset，也不会进入 Player。右键该目录的 `Import Sample` 会把一个稳定快照直接导入到 `Assets/<去掉前导~的名称>`；目标已存在时命令禁用。导入结果是普通可编辑 Assets，保留 Sample 内部 `.imeta` 引用，并作为一个完整目录操作进入共享 Undo/Redo。
+Project `Assets` 中名称以 `~` 开头的目录仍显示并运行为普通 Folder，正常导入、编译和参与 Editor 开发，但不会进入 Player。相同目录导出并安装为 `.iplugin` 后，在只读 Plugin 根下显示为 `ISAMPLE`：它仍可展开、搜索、选择和浏览，但自身及后代不会直接导入或编译。右键该目录的 `Import Sample` 会把一个稳定快照直接导入到 `Assets/<原始~目录名>`，完整保留所有前导 `~`；目标已存在时命令禁用。导入结果是普通可编辑 Assets，保留 Sample 内部 `.imeta` 引用，并作为一个完整目录操作进入共享 Undo/Redo。
 
 ## 公共扩展 API
 

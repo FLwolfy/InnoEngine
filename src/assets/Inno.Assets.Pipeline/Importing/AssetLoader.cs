@@ -1791,7 +1791,7 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
                 .Select(path => new AssetPath(
                     mount.id,
                     Path.GetRelativePath(mount.rootPath, path).Replace('\\', '/'))))
-            .Where(path => !IsSourceIgnored(path.localPath, isDirectory: false))
+            .Where(path => !IsSourceIgnored(path, isDirectory: false))
             .ToArray();
         foreach (AssetPath sourceFile in sourceFiles)
         {
@@ -1860,7 +1860,7 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
             .Where(static record =>
                 !record.meta.isDirectory
                 && !record.meta.isTombstone
-                && !AssetSample.Contains(AssetPath.Parse(record.relativePath), isDirectory: false)
+                && !AssetSample.IsRuntimeExcluded(AssetPath.Parse(record.relativePath), isDirectory: false)
                 && record.meta.importStatus == (int)AssetImportStatus.Imported)
             .OrderBy(static record => record.relativePath, StringComparer.Ordinal)
             .ToArray();
@@ -2945,51 +2945,51 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
                          "*",
                          SearchOption.AllDirectories))
             {
-            string localPath = Path.GetRelativePath(mount.rootPath, directoryPath).Replace('\\', '/');
-            string relativePath = new AssetPath(mount.id, localPath).ToString();
-            if (IsSourceIgnored(localPath, isDirectory: true))
-                continue;
-            string metaPath = GetMetaPath(relativePath);
-            AssetSourceMeta sourceMeta;
-            if (!TryReadSourceMeta(metaPath, out sourceMeta!))
-            {
-                if (mount.isReadOnly)
+                string localPath = Path.GetRelativePath(mount.rootPath, directoryPath).Replace('\\', '/');
+                string relativePath = new AssetPath(mount.id, localPath).ToString();
+                if (IsSourceIgnored(new AssetPath(mount.id, localPath), isDirectory: true))
+                    continue;
+                string metaPath = GetMetaPath(relativePath);
+                AssetSourceMeta sourceMeta;
+                if (!TryReadSourceMeta(metaPath, out sourceMeta!))
                 {
-                    throw new InvalidDataException(
-                        $"Read-only source directory '{relativePath}' requires a valid '{C_META_POSTFIX}' sidecar.");
+                    if (mount.isReadOnly)
+                    {
+                        throw new InvalidDataException(
+                            $"Read-only source directory '{relativePath}' requires a valid '{C_META_POSTFIX}' sidecar.");
+                    }
+                    sourceMeta = new AssetSourceMeta
+                    {
+                        persistentId = Guid.NewGuid(),
+                        sourceKind = (int)AssetSourceKind.Directory
+                    };
+                    WriteAtomic(metaPath, m_serialization.Serialize(sourceMeta));
                 }
-                sourceMeta = new AssetSourceMeta
-                {
-                    persistentId = Guid.NewGuid(),
-                    sourceKind = (int)AssetSourceKind.Directory
-                };
-                WriteAtomic(metaPath, m_serialization.Serialize(sourceMeta));
-            }
 
-            AssetRecord? record = FindRecordByIdWithoutLoading(sourceMeta.persistentId);
-            if (record is not null &&
-                !string.Equals(record.relativePath, relativePath, StringComparison.OrdinalIgnoreCase) &&
-                Directory.Exists(GetSourcePath(record.relativePath)))
-            {
-                if (mount.isReadOnly)
+                AssetRecord? record = FindRecordByIdWithoutLoading(sourceMeta.persistentId);
+                if (record is not null &&
+                    !string.Equals(record.relativePath, relativePath, StringComparison.OrdinalIgnoreCase) &&
+                    Directory.Exists(GetSourcePath(record.relativePath)))
                 {
-                    throw new InvalidDataException(
-                        $"Read-only source directory '{relativePath}' duplicates persistent ID '{sourceMeta.persistentId}'.");
+                    if (mount.isReadOnly)
+                    {
+                        throw new InvalidDataException(
+                            $"Read-only source directory '{relativePath}' duplicates persistent ID '{sourceMeta.persistentId}'.");
+                    }
+                    sourceMeta.persistentId = Guid.NewGuid();
+                    WriteAtomic(metaPath, m_serialization.Serialize(sourceMeta));
+                    record = null;
                 }
-                sourceMeta.persistentId = Guid.NewGuid();
-                WriteAtomic(metaPath, m_serialization.Serialize(sourceMeta));
-                record = null;
-            }
-            record ??= new AssetRecord();
-            record.relativePath = relativePath;
-            record.persistentId = sourceMeta.persistentId;
-            record.meta.relativePath = relativePath;
-            record.meta.persistentId = sourceMeta.persistentId;
-            record.meta.isDirectory = true;
-            record.meta.isTombstone = false;
-            record.meta.importStatus = (int)AssetImportStatus.Imported;
-            record.meta.diagnostics = [];
-            AddOrReplaceRecordLocked(record);
+                record ??= new AssetRecord();
+                record.relativePath = relativePath;
+                record.persistentId = sourceMeta.persistentId;
+                record.meta.relativePath = relativePath;
+                record.meta.persistentId = sourceMeta.persistentId;
+                record.meta.isDirectory = true;
+                record.meta.isTombstone = false;
+                record.meta.importStatus = (int)AssetImportStatus.Imported;
+                record.meta.diagnostics = [];
+                AddOrReplaceRecordLocked(record);
             }
         }
     }
@@ -3207,8 +3207,10 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
     private string GetMetaPath(string relativePath) => GetSourcePath(relativePath) + C_META_POSTFIX;
 
     private bool IsSourceIgnored(string relativePath, bool isDirectory)
+        => IsSourceIgnored(AssetPath.Parse(relativePath), isDirectory);
+
+    private bool IsSourceIgnored(AssetPath assetPath, bool isDirectory)
     {
-        AssetPath assetPath = AssetPath.Parse(relativePath);
         if (AssetSample.Contains(assetPath, isDirectory))
             return true;
         string localPath = assetPath.localPath;

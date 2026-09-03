@@ -8,7 +8,7 @@
 
 File 菜单提供：
 
-- `Export as Plugin...`：把当前完整 Project 直接打包成确定性 ZIP；无需 `.iplugin`。
+- `Export as Plugin...`：把当前完整 Project 直接打包成确定性的 `.iplugin`；其容器格式是 ZIP，但 `.zip` 不是可安装扩展名。
 - `Export as Game...`：先请求一个新的 runtime script generation，再组合只含 Artifact 的平台 Player。
 
 Plugin 是否内嵌依赖由 `Editor/Export/Plugin/Embed Dependencies` 控制，默认关闭。两个 modal 都保持输入、状态与错误在同一 feature module 中；Game 构建进行时可以取消，且不会留下半成品。
@@ -87,7 +87,7 @@ GameExportResult result = await exporter.ExportAsync(
 
 - Game 导出必须从 `IEditorScriptCompilation.RequestCompilation()` 开始；失败或尚未激活的 generation 不能打包。
 - 启动 Scene 必须已导入为 `SceneAsset`，runtime assembly 必须存在且文件名唯一。
-- Plugin/Game 输出都拒绝写入当前 `Assets`、`Plugins`、`Library` 或 active mount，防止 watcher 把 staging/ZIP 当作新的项目输入。
+- Plugin/Game 输出都拒绝写入当前 `Assets`、`Plugins`、`Library` 或 active mount，防止 watcher 把 staging/package 当作新的项目输入。
 - 取消会终止 `dotnet publish` 进程树，并清理 staging；已安装的旧 build 不受影响。
 - 导出期间捕获的是 active Asset/Plugin/Settings generation。Plugin 候选仍在准备时不会混入半个新 generation。
 - Player project 不可定位、SDK 缺少目标 runtime pack、跨平台 native bundle 尚未准备、目标不可写或产物结构不完整都会作为明确失败返回。

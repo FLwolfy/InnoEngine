@@ -93,7 +93,7 @@ internal sealed class SampleComposer
 
 | API | 说明 |
 | --- | --- |
-| `ProjectSettingId` | 跨路径、ZIP 和 generation 稳定的设置协议 ID。 |
+| `ProjectSettingId` | 跨路径、`.iplugin` 和 generation 稳定的设置协议 ID。 |
 | `ProjectSettingDefinitionAttribute` | 向 TypeCache 声明设置类型。 |
 | `ProjectSettingComposerAttribute` | 为一个 Setting ID 声明唯一的协议 Composer。 |
 | `ProjectSettingComposer<TSetting, TContribution>` | 定义语义 delta capture、empty 判断与确定性组合。 |

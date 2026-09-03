@@ -2,7 +2,7 @@
 
 [Editor 索引](README.md) · [Scripting API](../scripting/Inno.Scripting.Api.md) · [Assets](../assets/README.md) · [Modules](../extensibility/Inno.Extensibility.Modules.md)
 
-`Inno.Editor.Scripting` 把 Project 与已激活 ZIP/Folder Plugin Mount 中的 C# source、assembly definition 当成正式资产，再把它们编译为可回滚的 collectible Script Module。文件发现和变化来源是统一 Asset Database；该项目没有自己的 `FileSystemWatcher`，也不递归扫描 Project 目录。
+`Inno.Editor.Scripting` 把 Project 与已激活 `.iplugin` Mount 中的 C# source、assembly definition 当成正式资产，再把它们编译为可回滚的 collectible Script Module。文件发现和变化来源是统一 Asset Database；该项目没有自己的 `FileSystemWatcher`，也不递归扫描 Project 目录。
 
 ## Source 资产
 
@@ -16,6 +16,10 @@
 每个受支持 source 都有 `.imeta` 和 persistent ID。`type-manifest` 保存该 source 的声明、位置和 partial 信息；聚合编译后还会生成 assembly 级 `*.types.cache`，记录可附加类型最终使用的 source identity、Stable Type ID、类型种类和 canonical source。该文件和 `diagnostics.cache` 都是可丢弃、严格校验的内部编译缓存，不是项目结构化资产。C# 语法错误不会取消 source identity；parse diagnostics 进入 source asset，聚合 assembly build 可以失败并继续运行旧程序集。
 
 Compiler 读取不可变 artifact snapshot，不直接读取正在被外部编辑器写入的 source 文件。普通 Project 编译使用已提交 Asset Catalog；Plugin 安装/更新使用隔离 `AssetSourceMountTransaction` 的候选 Catalog。两者都保证一次 build 的 fingerprint、语法树和 Plugin source 来自同一 revision，但候选 Plugin 在成功前不会出现在 active Asset/Plugin API 中。
+
+每个脚本 assembly 还会生成 `Inno.AssetSource` metadata：Project assembly 的值是 `project`，安装包 assembly 的值是所属 Plugin ID。业务脚本使用 `Assets.LocalPath("Materials/Default.imaterial")` 建立 source-local 引用，因此同一份完整 Project 源码在直接开发时读取 Project Assets，导出并安装为 `.iplugin` 后读取自己的只读 Mount。业务代码不声明、探测或硬编码 Plugin source ID；这项能力属于所有脚本系统，不是 Rendering 专用适配。
+
+Project `Assets` 中的 `~` 目录仍作为普通 source 导入并参与 assembly discovery，开发工程可以直接运行其中代码。相同目录被打入 `.iplugin` 后，在安装态 Mount 中成为待 Import sample，不参与 Plugin assembly；任何 `~` 子树都不会进入 Player runtime closure。
 
 ## Assembly Definition
 
@@ -47,8 +51,7 @@ AssetPipeline.Save("Scripts/Gameplay/Gameplay.iasmdef", definition);
 │  ├─ Scripts/**/*.cs
 │  └─ **/*.iasmdef
 ├─ Plugins/
-│  ├─ *.zip
-│  └─ <Plugin folder>/
+│  └─ *.iplugin
 ├─ Library/
 │  ├─ AssetDatabase/
 │  ├─ Plugins/<id>/<contentHash>/Assets/
@@ -83,7 +86,7 @@ ModuleHost 自己的 runtime generation 仍存在于 assembly shadow cache，用
 | 属性 | 默认 | 说明 |
 | --- | --- | --- |
 | `projectRootDirectory` | required | 包含 Assets/Library 的 Project root。 |
-| `autoCompile` | `true` | 启动与后续 Asset change 是否产生自动编译请求。启动先探测 pending Plugin candidate 与活动 Scripting 状态：只有待激活 ZIP/Folder source 才请求 `ReloadPlugins`，否则走可命中内容缓存的 Scripting 请求，不做无条件 Plugin reload。 |
+| `autoCompile` | `true` | 启动与后续 Asset change 是否产生自动编译请求。启动先探测 pending Plugin candidate 与活动 Scripting 状态：只有待激活 `.iplugin` source 才请求 `ReloadPlugins`，否则走可命中内容缓存的 Scripting 请求，不做无条件 Plugin reload。 |
 | `debounceMilliseconds` | `250` | 后续 change request 可消费前的 quiet period；首次编译不受影响。 |
 | `compilationWarningTimeout` | `10s` | 超过该时长时状态显示 long-running warning；`Timeout.InfiniteTimeSpan` 关闭警告，不会自动取消。 |
 
@@ -244,7 +247,7 @@ IDE 工程是补全和诊断模型；Editor 实际热编译仍使用进程内 Ro
 
 ## Plugin
 
-Plugin 只能来自项目根 `Plugins/*.zip` 或 `Plugins/<folder>/`，两种容器都必须通过 `Plugin.inno`、路径安全、依赖图与 `.imeta` 完整性校验，再进入隔离只读 `AssetSourceMount` 候选；编译与迁移全部成功后才进入统一 active Asset Database。预编译 DLL 和“路径里含 Plugins 就视为插件”的协议不存在。无 `.iasmdef` 时，每个 Plugin ID 自动获得 Runtime 与 Editor 默认程序集；`*.editor.cs` 进入 Editor scope，其余 `.cs` 进入 Runtime scope。显式 `.iasmdef` 必须列在清单 `assemblyDefinitions` 中。
+Plugin 只能来自项目根 `Plugins/*.iplugin`，并通过 `Plugin.inno`、archive 路径安全、依赖图与 `.imeta` 完整性校验，再进入隔离只读 `AssetSourceMount` 候选；编译与迁移全部成功后才进入统一 active Asset Database。Folder Plugin、`.zip` Plugin、预编译 DLL 和“路径里含 Plugins 就视为插件”的协议不存在。无 `.iasmdef` 时，每个 Plugin ID 自动获得 Runtime 与 Editor 默认程序集；`*.editor.cs` 进入 Editor scope，其余 `.cs` 进入 Runtime scope。显式 `.iasmdef` 必须列在清单 `assemblyDefinitions` 中。
 
 Plugin 只能引用 Host API 与清单声明的依赖 Plugin，不能引用项目脚本；Runtime Scripts 能看到 runtime-scope Plugin，Editor Scripts 可看到 Runtime Scripts 与 Plugin Editor API。每个 Plugin ID 对应独立 `Plugin.<id>` collectible ALC，清单依赖成为 `upstreamModuleNames`，更新/移除只影响反向依赖 closure。错误方向、scope 泄漏、程序集名称冲突、缺失依赖、cycle 或 Roslyn 编译错误会在 stage/publish 前失败；Editor host 会丢弃隔离候选，旧模块 generation、Mount、Catalog、Type/Registry、资产和设置保持活动。ALC 是卸载隔离，不是安全沙箱；把带代码容器放入 `Plugins/` 就表示允许它以项目脚本相同的本机权限执行。
 

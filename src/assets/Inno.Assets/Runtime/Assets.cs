@@ -1,4 +1,7 @@
 using System;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace Inno.Assets;
 
@@ -11,6 +14,49 @@ namespace Inno.Assets;
 /// </remarks>
 public static class Assets
 {
+    private const string C_ASSET_SOURCE_KEY = "Inno.AssetSource";
+
+    /// <summary>
+    /// Creates a path relative to the Asset source that owns the calling script assembly.
+    /// </summary>
+    /// <param name="localPath">
+    /// The normalized path relative to the caller's Project or installed Plugin Assets root.
+    /// </param>
+    /// <returns>
+    /// A mount-qualified path that follows the script from Project development into an installed Plugin.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the calling assembly was not produced by the Inno scripting compiler or has invalid
+    /// Asset source ownership metadata.
+    /// </exception>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static AssetPath LocalPath(string localPath)
+    {
+        Assembly caller = Assembly.GetCallingAssembly();
+        AssemblyMetadataAttribute? metadata = caller
+            .GetCustomAttributes<AssemblyMetadataAttribute>()
+            .SingleOrDefault(static value => string.Equals(
+                value.Key,
+                C_ASSET_SOURCE_KEY,
+                StringComparison.Ordinal));
+        if (metadata is null || string.IsNullOrWhiteSpace(metadata.Value))
+        {
+            throw new InvalidOperationException(
+                $"Assembly '{caller.GetName().Name}' has no {C_ASSET_SOURCE_KEY} ownership metadata.");
+        }
+
+        try
+        {
+            return new AssetPath(new AssetSourceId(metadata.Value), localPath);
+        }
+        catch (ArgumentException exception)
+        {
+            throw new InvalidOperationException(
+                $"Assembly '{caller.GetName().Name}' has invalid {C_ASSET_SOURCE_KEY} ownership metadata.",
+                exception);
+        }
+    }
+
     /// <summary>
     /// Loads the canonical asset at a logical catalog path in the current session.
     /// </summary>

@@ -858,13 +858,13 @@ public sealed class AssetPipeline : IDisposable, IAssetLookup, IAssetReferenceRe
     }
 
     /// <summary>
-    /// Imports an authoring-only sample directory into the writable Assets root.
+    /// Imports an installed Plugin sample directory into the writable Assets root.
     /// </summary>
     /// <param name="source">
-    /// An indexed sample directory whose final segment starts with <c>~</c>.
+    /// An indexed read-only Plugin sample directory whose final segment starts with <c>~</c>.
     /// </param>
     /// <returns>
-    /// The new writable project path with the sample prefix removed.
+    /// The new writable project path with the original sample directory name preserved.
     /// </returns>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="source"/> is not an indexed sample directory.
@@ -884,7 +884,7 @@ public sealed class AssetPipeline : IDisposable, IAssetLookup, IAssetReferenceRe
             !entry.isSample)
         {
             throw new ArgumentException(
-                $"Asset source '{source}' is not an authoring-only sample directory.",
+                $"Asset source '{source}' is not an installed Plugin sample directory.",
                 nameof(source));
         }
 

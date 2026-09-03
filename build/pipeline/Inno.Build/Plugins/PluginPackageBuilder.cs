@@ -88,7 +88,7 @@ internal sealed class PluginPackageBuilder
                 {
                     PluginDependencyPlan dependency = plan.dependencies[index];
                     ZipArchiveEntry packageEntry = archive.CreateEntry(
-                        $"Dependencies/{dependency.pluginId}.zip",
+                        $"Dependencies/{dependency.pluginId}.iplugin",
                         CompressionLevel.Optimal);
                     packageEntry.LastWriteTime = S_ARCHIVE_TIME;
                     await using Stream packageStream = packageEntry.Open();

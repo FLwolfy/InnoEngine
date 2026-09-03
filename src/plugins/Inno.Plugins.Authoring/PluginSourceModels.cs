@@ -6,28 +6,23 @@ using Inno.Plugins;
 namespace Inno.Plugins.Authoring;
 
 /// <summary>
-/// Identifies the physical container used to install a local Plugin.
+/// Identifies how an <c>.iplugin</c> package participates in one installation.
 /// </summary>
 public enum PluginSourceKind
 {
     /// <summary>
-    /// The Plugin is installed as one source ZIP.
+    /// The Plugin is installed as one top-level <c>.iplugin</c> package.
     /// </summary>
-    Zip,
+    Package,
 
     /// <summary>
-    /// The Plugin is installed as an unpacked source directory.
+    /// The Plugin is embedded as one complete <c>.iplugin</c> dependency package.
     /// </summary>
-    Directory,
-
-    /// <summary>
-    /// The Plugin is embedded as a complete ZIP inside another installed Plugin package.
-    /// </summary>
-    EmbeddedZip
+    EmbeddedPackage
 }
 
 /// <summary>
-/// Controls bounded validation and ZIP extraction for installed Plugin sources.
+/// Controls bounded validation and archive extraction for installed Plugin packages.
 /// </summary>
 public sealed class PluginSourceLimits
 {
@@ -52,7 +47,7 @@ public sealed class PluginSourceLimits
     public long maximumTotalBytes { get; init; } = 1024L * 1024 * 1024;
 
     /// <summary>
-    /// Gets or initializes the maximum accepted ZIP uncompressed-to-compressed ratio.
+    /// Gets or initializes the maximum accepted archive uncompressed-to-compressed ratio.
     /// </summary>
     public double maximumCompressionRatio { get; init; } = 200d;
 
@@ -89,7 +84,7 @@ public sealed class PluginCandidate
     }
 
     /// <summary>
-    /// Gets the installed ZIP or directory path.
+    /// Gets the installed <c>.iplugin</c> package path.
     /// </summary>
     public string sourcePath { get; }
 
@@ -129,7 +124,7 @@ public sealed class PluginDiagnostic
     /// Creates a Plugin source diagnostic.
     /// </summary>
     /// <param name="sourcePath">
-    /// Related ZIP or directory path.
+    /// Related <c>.iplugin</c> package path or invalid installation entry.
     /// </param>
     /// <param name="message">
     /// Actionable problem description.
@@ -141,7 +136,7 @@ public sealed class PluginDiagnostic
     }
 
     /// <summary>
-    /// Gets the related ZIP or directory path.
+    /// Gets the related <c>.iplugin</c> package path or invalid installation entry.
     /// </summary>
     public string sourcePath { get; }
 

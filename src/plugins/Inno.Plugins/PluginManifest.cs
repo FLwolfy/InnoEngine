@@ -7,7 +7,7 @@ using Inno.Core.Serialization;
 namespace Inno.Plugins;
 
 /// <summary>
-/// Describes one local ZIP or directory Plugin without listing discovered extension types.
+/// Describes one local <c>.iplugin</c> package without listing discovered extension types.
 /// </summary>
 public sealed class PluginManifest : ISerializable
 {

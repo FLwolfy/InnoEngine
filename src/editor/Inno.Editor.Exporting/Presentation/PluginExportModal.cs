@@ -45,7 +45,7 @@ internal sealed class PluginExportModal(ExportWindowModule window) : EditorModal
         {
             DrawText("Plugin ID", "plugin_id", window.pluginId, value => window.pluginId = value);
             DrawText("Display Name", "plugin_name", window.pluginDisplayName, value => window.pluginDisplayName = value);
-            DrawText("Destination ZIP", "plugin_output", window.pluginOutputPath, value => window.pluginOutputPath = value);
+            DrawText("Destination IPlugin", "plugin_output", window.pluginOutputPath, value => window.pluginOutputPath = value);
         }
         finally
         {

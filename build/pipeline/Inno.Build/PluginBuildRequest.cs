@@ -20,7 +20,7 @@ public sealed class PluginBuildRequest
     public required string displayName { get; init; }
 
     /// <summary>
-    /// Gets or initializes the destination ZIP path.
+    /// Gets or initializes the destination <c>.iplugin</c> package path.
     /// </summary>
     public required string outputPath { get; init; }
 
@@ -49,9 +49,9 @@ public sealed class PluginBuildRequest
         if (string.IsNullOrWhiteSpace(displayName))
             throw new InvalidDataException("A Plugin display name is required.");
         if (string.IsNullOrWhiteSpace(outputPath)
-            || !string.Equals(Path.GetExtension(outputPath), ".zip", StringComparison.OrdinalIgnoreCase))
+            || !string.Equals(Path.GetExtension(outputPath), ".iplugin", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidDataException("Plugin destination must use the .zip extension.");
+            throw new InvalidDataException("Plugin destination must use the .iplugin extension.");
         }
     }
 }

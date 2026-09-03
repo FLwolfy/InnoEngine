@@ -89,7 +89,7 @@ internal sealed class ExportWindowModule : EditorModule
         string projectName = GetProjectName();
         pluginId = ToPortableId(projectName);
         pluginDisplayName = projectName;
-        pluginOutputPath = Path.Combine(m_editor.projectDirectory, "Builds", pluginId + ".zip");
+        pluginOutputPath = Path.Combine(m_editor.projectDirectory, "Builds", pluginId + ".iplugin");
         status = string.Empty;
         error = string.Empty;
         isPluginVisible = true;
