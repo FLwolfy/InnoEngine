@@ -1049,6 +1049,8 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
     {
         if (m_activeImports.Contains(relativePath))
             return true;
+        if (IsSourceIgnored(relativePath, isDirectory: false))
+            return false;
         string sourcePath = GetSourcePath(relativePath);
         if (!IOFile.Exists(sourcePath))
             return false;
@@ -1073,12 +1075,20 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
             if (sameId is not null &&
                 !string.Equals(sameId.relativePath, relativePath, StringComparison.OrdinalIgnoreCase))
             {
-                if (sourceMount.isReadOnly)
+                if (sameId.meta.isTombstone)
+                {
+                    RebindTombstoneLocked(sameId, relativePath);
+                    existingRecord = sameId;
+                }
+                else if (sourceMount.isReadOnly)
                 {
                     throw new InvalidDataException(
                         $"Read-only source '{relativePath}' duplicates persistent ID '{persistentId}'.");
                 }
-                persistentId = Guid.NewGuid();
+                else
+                {
+                    persistentId = Guid.NewGuid();
+                }
             }
         }
         if (persistentId == Guid.Empty)
@@ -1815,6 +1825,12 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
                 continue;
             }
 
+            if (AssetSample.Contains(AssetPath.Parse(record.relativePath), record.meta.isDirectory))
+            {
+                RetireSampleRecordLocked(record);
+                continue;
+            }
+
             if (IOFile.Exists(GetSourcePath(record.relativePath)) ||
                 Directory.Exists(GetSourcePath(record.relativePath)))
                 continue;
@@ -1844,6 +1860,7 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
             .Where(static record =>
                 !record.meta.isDirectory
                 && !record.meta.isTombstone
+                && !AssetSample.Contains(AssetPath.Parse(record.relativePath), isDirectory: false)
                 && record.meta.importStatus == (int)AssetImportStatus.Imported)
             .OrderBy(static record => record.relativePath, StringComparer.Ordinal)
             .ToArray();
@@ -2006,6 +2023,38 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
         => m_mounts.ContainsKey(AssetPath.Parse(canonicalPath).source);
 
     private void RetireUnmountedRecordLocked(AssetRecord record)
+        => RetireRecordLocked(
+            record,
+            $"Asset source mount for '{record.relativePath}' is not active.");
+
+    private void RetireSampleRecordLocked(AssetRecord record)
+    {
+        AssetObject? asset = record.asset;
+        RemoveRecordLocked(record, removeGeneratedFiles: false);
+        if (asset is not null)
+        {
+            m_dependencyRetention.Remove(asset);
+            AssetRuntimeHost.Release(asset);
+            try
+            {
+                _ = m_identities.Unregister(asset);
+            }
+            catch (Exception exception)
+            {
+                m_log.Write(
+                    LogLevel.Error,
+                    "Authoring-only sample asset '{0}' was released, but an identity observer failed: {1}",
+                    [record.relativePath, exception]);
+            }
+            finally
+            {
+                record.asset = null;
+                PublishReloaded(asset);
+            }
+        }
+    }
+
+    private void RetireRecordLocked(AssetRecord record, string diagnostic)
     {
         string recordPath = record.relativePath;
         m_recordsByPath.Remove(recordPath);
@@ -2017,7 +2066,7 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
 
         record.meta.isTombstone = true;
         record.meta.importStatus = (int)AssetImportStatus.Missing;
-        record.meta.diagnostics = [$"Asset source mount for '{recordPath}' is not active."];
+        record.meta.diagnostics = [diagnostic];
         record.meta.artifactKey = string.Empty;
         record.meta.lastSuccessfulArtifactKey = string.Empty;
         record.meta.assetStateBytes = [];
@@ -2135,7 +2184,14 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
                 string relative = new AssetPath(
                     mount.id,
                     localMeta[..^C_META_POSTFIX.Length]).ToString();
-                if (Directory.Exists(GetSourcePath(relative)))
+                string sourcePath = GetSourcePath(relative);
+                if (AssetSample.Contains(
+                        AssetPath.Parse(relative),
+                        Directory.Exists(sourcePath)))
+                {
+                    continue;
+                }
+                if (Directory.Exists(sourcePath))
                     continue;
                 try
                 {
@@ -2173,6 +2229,13 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
 
     private void ApplySourceChangesLocked(IReadOnlyList<AssetChangedEvent> changes)
     {
+        if (changes.Any(change =>
+                IsSampleChangePath(change.relativePath) ||
+                IsSampleChangePath(change.oldRelativePath)))
+        {
+            RescanLocked();
+            return;
+        }
         IReadOnlyDictionary<string, int> ambiguousRenames = AssociateUntrackedRenamesLocked(changes);
         foreach (AssetChangedEvent change in changes)
         {
@@ -2508,6 +2571,15 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
         }
         m_recordsByPath[record.relativePath] = record;
         m_recordsById[record.persistentId] = record;
+    }
+
+    private void RebindTombstoneLocked(AssetRecord record, string relativePath)
+    {
+        m_recordsByPath.Remove(record.relativePath);
+        m_importGraph.RemoveNode(record.relativePath);
+        record.relativePath = relativePath;
+        record.meta.relativePath = relativePath;
+        m_recordsByPath[relativePath] = record;
     }
 
     private void RemoveRecordLocked(AssetRecord record, bool removeGeneratedFiles = true)
@@ -3136,7 +3208,10 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
 
     private bool IsSourceIgnored(string relativePath, bool isDirectory)
     {
-        string localPath = AssetPath.Parse(relativePath).localPath;
+        AssetPath assetPath = AssetPath.Parse(relativePath);
+        if (AssetSample.Contains(assetPath, isDirectory))
+            return true;
+        string localPath = assetPath.localPath;
         string[] segments = localPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
         for (int i = 0; i < segments.Length - (isDirectory ? 0 : 1); i++)
         {
@@ -3144,6 +3219,14 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
                 return true;
         }
         return m_sourcePolicy.IsIgnored(localPath, isDirectory);
+    }
+
+    private static bool IsSampleChangePath(string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+            return false;
+        AssetPath path = AssetPath.Parse(relativePath);
+        return AssetSample.IsRoot(path) || AssetSample.Contains(path, isDirectory: false);
     }
 
     private static byte[] ReadStableSourceBytes(

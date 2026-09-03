@@ -318,6 +318,78 @@ public sealed class ScriptingPipelineTests : IDisposable
     }
 
     [Fact]
+    public void SampleDirectoriesRemainBrowsableButAreExcludedFromCompilationAndIdeProjects()
+    {
+        m_fixture.Write(
+            "Runtime.cs",
+            "using InnoEngine.Scene; public sealed class RuntimeScript : GameBehavior { }");
+        m_fixture.Write("~Examples/Broken.cs", "this source must never compile");
+        m_fixture.Rescan();
+
+        Assert.True(m_fixture.assets.TryGetFileSystemEntry(
+            AssetPath.Project("~Examples"),
+            out AssetFileEntry sample));
+        Assert.True(sample.isSample);
+        Assert.True(m_fixture.assets.TryGetFileSystemEntry(
+            AssetPath.Project("~Examples/Broken.cs"),
+            out AssetFileEntry sampleSource));
+        Assert.True(sampleSource.isSampleContent);
+        Assert.False(m_fixture.assets.TryGetInfo(
+            AssetPath.Project("~Examples/Broken.cs"),
+            out _));
+
+        ScriptCompilationResult compilation = m_fixture.Compile();
+        Assert.True(compilation.success, FormatDiagnostics(compilation));
+
+        m_fixture.compiler.GenerateProjectFiles();
+        string gameProject = File.ReadAllText(
+            Path.Combine(m_fixture.projectRoot, "Inno.GameScripts.csproj"));
+        Assert.Contains("Compile Include=\"Assets/Runtime.cs\"", gameProject);
+        Assert.DoesNotContain("~Examples", gameProject);
+    }
+
+    [Fact]
+    public void ImportSampleCreatesAnImmediatelyCompilableWritableCopy()
+    {
+        m_fixture.Write(
+            "Template/StarterBehavior.cs",
+            "using InnoEngine.Scene; public sealed class StarterBehavior : GameBehavior { }");
+        m_fixture.Rescan();
+        Assert.True(m_fixture.assets.TryGetInfo(
+            AssetPath.Project("Template/StarterBehavior.cs"),
+            out AssetInfo? templateInfo));
+        Guid sourcePersistentId = Assert.IsType<AssetInfo>(templateInfo).persistentId;
+        string sourceRoot = Path.Combine(m_fixture.projectRoot, "Assets", "Template");
+        string sampleRoot = Path.Combine(m_fixture.projectRoot, "Assets", "~Starter");
+        string sourceFileMeta = Path.Combine(sourceRoot, "StarterBehavior.cs.imeta");
+        byte[] sourceFileMetaBytes = File.ReadAllBytes(sourceFileMeta);
+        Directory.Move(sourceRoot, sampleRoot);
+        File.Move(sourceRoot + ".imeta", sampleRoot + ".imeta");
+        m_fixture.Rescan();
+        Assert.Equal(
+            sourceFileMetaBytes,
+            File.ReadAllBytes(Path.Combine(sampleRoot, "StarterBehavior.cs.imeta")));
+
+        AssetPath imported = m_fixture.assets.ImportSample(AssetPath.Project("~Starter"));
+
+        Assert.Equal(AssetPath.Project("Starter"), imported);
+        Assert.True(File.Exists(Path.Combine(
+            m_fixture.projectRoot,
+            "Assets",
+            "Starter",
+            "StarterBehavior.cs")));
+        Assert.True(m_fixture.assets.TryGetInfo(
+            AssetPath.Project("Starter/StarterBehavior.cs"),
+            out AssetInfo? importedInfo));
+        Assert.Equal(sourcePersistentId, Assert.IsType<AssetInfo>(importedInfo).persistentId);
+        Assert.True(m_fixture.assets.TryGetFileSystemEntry(imported, out AssetFileEntry importedDirectory));
+        Assert.False(importedDirectory.isReadOnly);
+        Assert.False(importedDirectory.isSampleContent);
+        ScriptCompilationResult compilation = m_fixture.Compile();
+        Assert.True(compilation.success, FormatDiagnostics(compilation));
+    }
+
+    [Fact]
     public void IdeProjectionHidesPluginProjectsAndReferencesTheirCompiledArtifacts()
     {
         using var fixture = new ScriptingFixture(WriteProjectionPlugin);

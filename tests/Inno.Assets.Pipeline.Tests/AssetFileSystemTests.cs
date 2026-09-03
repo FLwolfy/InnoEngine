@@ -110,6 +110,40 @@ public sealed class AssetFileSystemTests
     }
 
     [Fact]
+    public void Refresh_ClassifiesSampleRootsAndTheirContentsWithoutHidingThem()
+    {
+        string root = CreateRoot();
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "~Starter", "Scenes"));
+            System.IO.File.WriteAllText(
+                Path.Combine(root, "~Starter", "Scenes", "Game.cs"),
+                "public sealed class Game { }");
+            System.IO.File.WriteAllText(Path.Combine(root, "~Standalone.cs"), "sample-like file");
+
+            using var fileSystem = new AssetFileSystem(root, autoStart: false);
+
+            Assert.True(fileSystem.TryGetEntry(AssetPath.Project("~Starter"), out AssetFileEntry sample));
+            Assert.True(sample.isSample);
+            Assert.True(sample.isSampleContent);
+            Assert.True(fileSystem.TryGetEntry(
+                AssetPath.Project("~Starter/Scenes/Game.cs"),
+                out AssetFileEntry sampleContent));
+            Assert.False(sampleContent.isSample);
+            Assert.True(sampleContent.isSampleContent);
+            Assert.True(fileSystem.TryGetEntry(
+                AssetPath.Project("~Standalone.cs"),
+                out AssetFileEntry ordinaryFile));
+            Assert.False(ordinaryFile.isSample);
+            Assert.False(ordinaryFile.isSampleContent);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Fact]
     public void MultipleSourcesKeepCanonicalPathsNamesAndReadOnlyStateIsolated()
     {
         string root = CreateRoot();

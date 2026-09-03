@@ -95,6 +95,8 @@ internal sealed class AssetSelectionInspectionDrawer : InspectionDrawer<AssetFil
             "Type",
             m_assets.IsPluginRoot(entry)
                 ? "IPlugin"
+                : entry.isSample
+                    ? "ISample"
                 : entry.isDirectory
                     ? "Directory"
                     : "File");

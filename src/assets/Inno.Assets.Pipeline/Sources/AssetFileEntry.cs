@@ -38,9 +38,20 @@ public sealed class AssetFileEntry
     public bool isReadOnly { get; internal set; }
 
     /// <summary>
+    /// Gets whether this entry is an authoring-only sample directory.
+    /// </summary>
+    public bool isSample { get; internal set; }
+
+    /// <summary>
+    /// Gets whether this entry is an authoring-only sample directory or is contained by one.
+    /// </summary>
+    public bool isSampleContent { get; internal set; }
+
+    /// <summary>
     /// Gets the isolated parent directory path.
     /// </summary>
     public AssetPath parentAssetPath { get; internal set; } = AssetPath.Project(string.Empty);
+
     /// <summary>
     /// Gets whether the entry represents a directory.
     /// </summary>

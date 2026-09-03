@@ -35,6 +35,7 @@ internal sealed record ScriptSourceSet(
         AssetSourceMountTransaction? candidateAssets = plugins.compilationAssets;
         AssetFileEntry[] entries = (candidateAssets?.GetFileSystemEntries(includeDirectories: false)
                 ?? assets.GetFileSystemEntries(includeDirectories: false))
+            .Where(static entry => !entry.isSampleContent)
             .OrderBy(static entry => entry.assetPath.source.value, StringComparer.Ordinal)
             .ThenBy(static entry => entry.assetPath.localPath, StringComparer.Ordinal)
             .ToArray();

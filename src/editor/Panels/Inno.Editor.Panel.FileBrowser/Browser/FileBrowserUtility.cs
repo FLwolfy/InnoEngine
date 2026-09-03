@@ -103,6 +103,8 @@ internal static class FileBrowserUtility
 
     internal static string GetTypeText(AssetFileEntry entry)
     {
+        if (entry.isSample)
+            return AssetSample.fileType.TrimStart('.').ToUpperInvariant();
         if (entry.isDirectory)
             return "FOLDER";
         string extension = string.IsNullOrEmpty(entry.extension)

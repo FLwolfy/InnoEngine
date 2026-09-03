@@ -858,6 +858,111 @@ public sealed class AssetPipeline : IDisposable, IAssetLookup, IAssetReferenceRe
     }
 
     /// <summary>
+    /// Imports an authoring-only sample directory into the writable Assets root.
+    /// </summary>
+    /// <param name="source">
+    /// An indexed sample directory whose final segment starts with <c>~</c>.
+    /// </param>
+    /// <returns>
+    /// The new writable project path with the sample prefix removed.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="source"/> is not an indexed sample directory.
+    /// </exception>
+    /// <exception cref="IOException">
+    /// Thrown when the destination exists, the source contains symbolic links, or the source changes
+    /// while its stable import snapshot is being copied.
+    /// </exception>
+    public AssetPath ImportSample(AssetPath source)
+    {
+        EnsureOwnerThread();
+        AssetFileSystem fileSystem = GetFileSystem();
+        AssetLoader loader = GetLoader();
+        DrainPendingChanges(fileSystem);
+        if (!fileSystem.TryGetEntry(source, out AssetFileEntry entry) ||
+            !entry.isDirectory ||
+            !entry.isSample)
+        {
+            throw new ArgumentException(
+                $"Asset source '{source}' is not an authoring-only sample directory.",
+                nameof(source));
+        }
+
+        AssetSourceMount sourceMount = sourceMounts.Single(mount => mount.id == source.source);
+        string absoluteSource = sourceMount.Resolve(source.localPath);
+        AssetPath target = AssetPath.Project(AssetSample.GetImportName(source));
+        string absoluteTarget = Path.Combine(assetRoot, target.localPath);
+        string targetMeta = absoluteTarget + ".imeta";
+        if (Directory.Exists(absoluteTarget) || System.IO.File.Exists(absoluteTarget) || System.IO.File.Exists(targetMeta))
+            throw new IOException($"Sample import target '{target}' already exists.");
+
+        string transactionRoot = Path.Combine(
+            libraryRoot,
+            "AssetDatabase",
+            "Transactions",
+            Guid.NewGuid().ToString("N"));
+        string stagedSource = Path.Combine(transactionRoot, "sample");
+        string stagedMeta = stagedSource + ".imeta";
+        AssetSourcePolicy sourcePolicy = m_options.sourcePolicy ?? AssetSourcePolicy.defaultPolicy;
+        bool restartWatcher = fileSystem.isWatching;
+        bool sourceCommitted = false;
+        bool metaCommitted = false;
+        fileSystem.Stop();
+        Directory.CreateDirectory(transactionRoot);
+        try
+        {
+            List<string> copiedEntries = AssetSampleSnapshot.Capture(
+                absoluteSource,
+                stagedSource,
+                target.localPath,
+                sourcePolicy);
+
+            Directory.Move(stagedSource, absoluteTarget);
+            sourceCommitted = true;
+            if (System.IO.File.Exists(stagedMeta))
+            {
+                System.IO.File.Move(stagedMeta, targetMeta);
+                metaCommitted = true;
+            }
+
+            var changes = new List<AssetChangedEvent>(copiedEntries.Count + 1)
+            {
+                new(target.localPath, WatcherChangeTypes.Created)
+            };
+            changes.AddRange(copiedEntries.Select(static path =>
+                new AssetChangedEvent(path, WatcherChangeTypes.Created)));
+            loader.Rescan();
+            fileSystem.Refresh();
+            AssetChange[] committed = CreateCommittedChanges(
+                loader,
+                changes,
+                new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase),
+                requiresFullRescan: false);
+            InvokeObservers(
+                Changed,
+                new AssetChangeSet(Interlocked.Increment(ref m_revision), committed));
+            CollectArtifactsIfDue(loader, force: true);
+            return target;
+        }
+        catch
+        {
+            if (metaCommitted && System.IO.File.Exists(targetMeta))
+                System.IO.File.Delete(targetMeta);
+            if (sourceCommitted && Directory.Exists(absoluteTarget))
+                Directory.Delete(absoluteTarget, recursive: true);
+            loader.Rescan();
+            fileSystem.Refresh();
+            throw;
+        }
+        finally
+        {
+            DeleteTransactionDirectorySafely(transactionRoot);
+            if (restartWatcher)
+                fileSystem.Start();
+        }
+    }
+
+    /// <summary>
     /// Reconciles source files, generated files and the persistent catalog.
     /// </summary>
     public void Rescan()

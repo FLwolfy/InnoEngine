@@ -395,6 +395,8 @@ public sealed class AssetFileSystem : IDisposable
 
         existing.assetPath = assetPath;
         existing.isReadOnly = isReadOnly;
+        existing.isSample = isDirectory && AssetSample.IsRoot(assetPath);
+        existing.isSampleContent = AssetSample.Contains(assetPath, isDirectory);
         existing.parentAssetPath = AssetPath.Parse(GetParentPath(path));
         existing.isDirectory = isDirectory;
         existing.extension = isDirectory

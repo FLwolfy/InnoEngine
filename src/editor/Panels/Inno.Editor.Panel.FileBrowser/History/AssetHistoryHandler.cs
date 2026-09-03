@@ -224,7 +224,7 @@ internal sealed class AssetHistoryHandler(AssetEditorModule assets, LogRouter lo
         try
         {
             if (shouldExist)
-                AssetSourceArchive.Restore(assets.pipeline, data.sourcePath, isDirectory: false, data.archive);
+                AssetSourceArchive.Restore(assets.pipeline, data.sourcePath, data.isDirectory, data.archive);
             else
                 assets.DeleteFromHistory(data.sourcePath);
             bool exists = assets.pipeline.TryGetFileSystemEntry(AssetPath.Parse(data.sourcePath), out _);
@@ -240,7 +240,7 @@ internal sealed class AssetHistoryHandler(AssetEditorModule assets, LogRouter lo
                 if (shouldExist && exists)
                     assets.DeleteFromHistory(data.sourcePath);
                 else if (!shouldExist && !exists)
-                    AssetSourceArchive.Restore(assets.pipeline, data.sourcePath, isDirectory: false, data.archive);
+                    AssetSourceArchive.Restore(assets.pipeline, data.sourcePath, data.isDirectory, data.archive);
             }
             catch (Exception rollbackException)
             {

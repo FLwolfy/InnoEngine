@@ -18,6 +18,8 @@ Plugin ID 条目对应 active Plugin catalog 明确拥有的 Source Mount 根，
 - 放入带代码的 Plugin 即表示允许其以项目脚本相同的本机权限执行；File Browser 只展示 active Source Mount，不承担安全确认职责。
 - File Browser 不创建导出定义，也不拥有打包 UI。Plugin ZIP 与 Game Player 的统一入口属于 [Inno.Editor.Exporting](Inno.Editor.Exporting.md)；导出不会自动安装或刷新当前项目。
 
+名称以 `~` 开头的目录在 Tree/List/Grid 中显示为 `ISAMPLE`。它仍可展开、搜索、选择和浏览，但自身及后代不属于已导入 Asset，也不会进入 Player。右键该目录的 `Import Sample` 会把一个稳定快照直接导入到 `Assets/<去掉前导~的名称>`；目标已存在时命令禁用。导入结果是普通可编辑 Assets，保留 Sample 内部 `.imeta` 引用，并作为一个完整目录操作进入共享 Undo/Redo。
+
 ## 公共扩展 API
 
 | API | 作用 |
@@ -54,7 +56,7 @@ public sealed class AnimationClipEditor : AssetEditor
 
 Asset Rename/Delete 的物理事务始终由 `AssetPipeline` 执行。AssetEditor 只能验证以及接收提交后的通知，不能自行移动 source/meta/artifact，因此外部文件变化与 Editor 操作拥有同一身份规则。
 
-Create Folder、Rename、Move 与 Delete 都接入共享中立 Undo/Redo。Rename/Move 只记录 source/target path；Delete 把 source、目录结构和 `.imeta` 编码进 History payload。大 payload 自动落到 `<Project>/Library/Editor/History`，Undo 先在临时目录完整验证 archive，再提交回 Asset root 并 `Rescan`，因此恢复失败不会留下半个目录。原 `.imeta` 会恢复相同 persistent ID；Redo 再走 `AssetPipeline.Delete`。目标发生外部冲突时操作失败并留在原栈，绝不覆盖新文件。Asset Browser selection 仅在文件系统事务成功后 best-effort 更新，通知异常不改变 History 结果。
+Create Folder、Import Sample、Rename、Move 与 Delete 都接入共享中立 Undo/Redo。Rename/Move 只记录 source/target path；Delete 与 Sample Import 把 source、目录结构和 `.imeta` 编码进 History payload。大 payload 自动落到 `<Project>/Library/Editor/History`，Undo 先在临时目录完整验证 archive，再提交回 Asset root 并 `Rescan`，因此恢复失败不会留下半个目录。原 `.imeta` 会恢复相同 persistent ID；Redo 再走 `AssetPipeline.Delete` 或恢复同一 Sample 快照。目标发生外部冲突时操作失败并留在原栈，绝不覆盖新文件。Asset Browser selection 仅在文件系统事务成功后 best-effort 更新，通知异常不改变 History 结果。
 
 ## 文件与目录移动
 
