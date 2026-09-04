@@ -43,19 +43,20 @@ internal sealed class PluginExportModal(ExportWindowModule window) : EditorModal
         NativeImGui.BeginDisabled(window.isPluginBusy);
         try
         {
-            DrawText("Plugin ID", "plugin_id", window.pluginId, value => window.pluginId = value);
+            NativeImGui.TextUnformatted("Plugin ID");
+            NativeImGui.TextDisabled($"{window.pluginId} (from Project ID)");
             DrawText("Display Name", "plugin_name", window.pluginDisplayName, value => window.pluginDisplayName = value);
             DrawText("Destination IPlugin", "plugin_output", window.pluginOutputPath, value => window.pluginOutputPath = value);
+            bool includeDependencies = window.includePluginDependencies;
+            if (NativeImGui.Checkbox("Include dependency Plugin packages", ref includeDependencies))
+                window.includePluginDependencies = includeDependencies;
         }
         finally
         {
             NativeImGui.EndDisabled();
         }
         NativeImGui.TextDisabled(
-            window.includePluginDependencies
-                ? "Dependency packages: embedded (Editor > Export > Plugin)."
-                : "Dependency packages: declared only (Editor > Export > Plugin)."
-        );
+            "Identity comes from Settings > Project > Identity. Other defaults come from Build > Plugin.");
         DrawOutcome();
         DrawButtons();
     }

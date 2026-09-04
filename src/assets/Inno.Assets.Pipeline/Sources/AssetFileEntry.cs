@@ -38,12 +38,12 @@ public sealed class AssetFileEntry
     public bool isReadOnly { get; internal set; }
 
     /// <summary>
-    /// Gets whether this entry is an installed Plugin sample directory awaiting Project import.
+    /// Gets whether this entry is the root of an installed Plugin sample awaiting Project import.
     /// </summary>
     public bool isSample { get; internal set; }
 
     /// <summary>
-    /// Gets whether this entry is an installed Plugin sample directory or is contained by one.
+    /// Gets whether this entry belongs to an installed Plugin sample subtree awaiting Project import.
     /// </summary>
     public bool isSampleContent { get; internal set; }
 

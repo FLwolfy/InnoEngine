@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 
 using Inno.Assets;
 using Inno.Assets.Pipeline;
@@ -153,9 +154,17 @@ internal sealed class EditorHost : IDisposable
                     new MacOSArm64GameBuildTarget(authoring.assets, engineHost.serialization),
                     new WindowsX64GameBuildTarget(authoring.assets, engineHost.serialization)
                 ]);
-            var buildProfiles = new BuildProfileStore(
-                Path.Combine(normalizedProject, "BuildProfile.inno"),
-                engineHost.serialization);
+            BuildTargetId defaultBuildTarget = OperatingSystem.IsWindows()
+                ? BuildTargetId.windowsX64
+                : BuildTargetId.macOSArm64;
+            BuildSettings defaultBuildSettings = BuildSettings.CreateDefault(
+                Path.GetFileName(Path.TrimEndingDirectorySeparator(normalizedProject)),
+                FindDefaultStartupScene(authoring.assets),
+                defaultBuildTarget);
+            var buildSettings = new BuildSettingsStore(
+                Path.Combine(normalizedProject, SettingsFileNames.build),
+                engineHost.serialization,
+                defaultBuildSettings);
             EditorHostLayerStack layers = resources.Acquire(
                 () => new EditorHostLayerStack(() => editSession.events.CreateHub()),
                 static stack => stack.Dispose());
@@ -262,7 +271,7 @@ internal sealed class EditorHost : IDisposable
                     authoring.settings,
                     authoring.compiler,
                     buildPipeline,
-                    buildProfiles,
+                    buildSettings,
                     engineHost.types,
                     engineHost.serialization
                 ])
@@ -450,6 +459,19 @@ internal sealed class EditorHost : IDisposable
             throw new IOException($"Project directory '{normalizedPath}' points to a file.");
         Directory.CreateDirectory(normalizedPath);
         return normalizedPath;
+    }
+
+    private static string FindDefaultStartupScene(AssetPipeline assets)
+    {
+        foreach (AssetFileEntry entry in assets.GetFileSystemEntries(includeDirectories: false)
+                     .Where(static entry => entry.source == AssetSourceId.project)
+                     .Where(static entry => !AssetSample.IsRuntimeExcluded(entry.assetPath, isDirectory: false))
+                     .OrderBy(static entry => entry.assetPath.localPath, StringComparer.Ordinal))
+        {
+            if (assets.TryGetAssetType(entry.assetPath, out Type? type) && type == typeof(SceneAsset))
+                return entry.assetPath.ToString();
+        }
+        return string.Empty;
     }
 
     private bool HasEditorFocus()

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 
+using Inno.Core.IO;
 using Inno.Core.Serialization;
 
 namespace Inno.Build;
@@ -97,32 +98,6 @@ public sealed class BuildProfileStore
     {
         ArgumentNullException.ThrowIfNull(profile);
         profile.Validate();
-        byte[] data = m_serialization.Serialize(profile);
-        string? directory = Path.GetDirectoryName(m_path);
-        if (string.IsNullOrEmpty(directory))
-            throw new IOException($"Build profile path '{m_path}' has no owning directory.");
-
-        Directory.CreateDirectory(directory);
-        string candidate = m_path + ".staging-" + Guid.NewGuid().ToString("N");
-        try
-        {
-            using (var stream = new FileStream(
-                       candidate,
-                       FileMode.CreateNew,
-                       FileAccess.Write,
-                       FileShare.None,
-                       32 * 1024,
-                       FileOptions.WriteThrough))
-            {
-                stream.Write(data);
-                stream.Flush(flushToDisk: true);
-            }
-            BuildFileSystem.InstallFileAtomically(candidate, m_path);
-        }
-        finally
-        {
-            if (File.Exists(candidate))
-                File.Delete(candidate);
-        }
+        AtomicFile.WriteAllBytes(m_path, m_serialization.Serialize(profile));
     }
 }

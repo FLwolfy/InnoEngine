@@ -9,6 +9,7 @@ using System.Text;
 using Inno.Assets;
 using Inno.Plugins;
 using Inno.Assets.Pipeline;
+using Inno.Core.IO;
 using Inno.Core.Serialization;
 using Inno.Core.Storage;
 
@@ -515,17 +516,16 @@ public sealed class PluginSourceService
 
     private static string ResolveContainedPath(string root, string relativePath)
     {
-        string fullRoot = Path.GetFullPath(root);
-        string result = Path.GetFullPath(Path.Combine(fullRoot, relativePath));
-        string prefix = fullRoot.EndsWith(Path.DirectorySeparatorChar)
-            ? fullRoot
-            : fullRoot + Path.DirectorySeparatorChar;
-        StringComparison comparison = OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-        if (!result.StartsWith(prefix, comparison))
-            throw new InvalidDataException("Plugin source entry escaped its generation snapshot root.");
-        return result;
+        try
+        {
+            return PathBoundary.Resolve(root, relativePath);
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException)
+        {
+            throw new InvalidDataException(
+                "Plugin source entry escaped its generation snapshot root.",
+                exception);
+        }
     }
 
     private static string ComputePackageContentHash(IReadOnlyList<ValidatedPackageEntry> entries)

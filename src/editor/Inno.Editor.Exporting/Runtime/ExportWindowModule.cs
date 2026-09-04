@@ -4,14 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Inno.Assets;
-using Inno.Assets.Pipeline;
 using Inno.Build;
 using Inno.Core.Logging;
+using Inno.Core.Settings;
 using Inno.Editor.Core;
-using Inno.Editor.Scene;
-using Inno.Editor.Settings;
-using Inno.Scene;
 
 namespace Inno.Editor.Exporting;
 
@@ -19,11 +15,9 @@ namespace Inno.Editor.Exporting;
 internal sealed class ExportWindowModule : EditorModule
 {
     private readonly EditorContext m_editor;
-    private readonly AssetPipeline m_assets;
-    private readonly EditorSettings m_settings;
-    private readonly IEditorSceneWorkspace m_scenes;
     private readonly BuildPipeline m_buildPipeline;
-    private readonly BuildProfileStore m_buildProfiles;
+    private readonly BuildSettingsStore m_buildSettings;
+    private readonly ProjectSettingsStore m_projectSettings;
     private readonly Logger m_log;
     private readonly ConcurrentQueue<BuildProgress> m_progress = new();
     private CancellationTokenSource? m_cancellation;
@@ -32,19 +26,15 @@ internal sealed class ExportWindowModule : EditorModule
 
     internal ExportWindowModule(
         EditorContext editor,
-        AssetPipeline assets,
-        EditorSettings settings,
-        IEditorSceneWorkspace scenes,
         BuildPipeline buildPipeline,
-        BuildProfileStore buildProfiles,
+        BuildSettingsStore buildSettings,
+        ProjectSettingsStore projectSettings,
         LogRouter logs)
     {
         m_editor = editor ?? throw new ArgumentNullException(nameof(editor));
-        m_assets = assets ?? throw new ArgumentNullException(nameof(assets));
-        m_settings = settings ?? throw new ArgumentNullException(nameof(settings));
-        m_scenes = scenes ?? throw new ArgumentNullException(nameof(scenes));
         m_buildPipeline = buildPipeline ?? throw new ArgumentNullException(nameof(buildPipeline));
-        m_buildProfiles = buildProfiles ?? throw new ArgumentNullException(nameof(buildProfiles));
+        m_buildSettings = buildSettings ?? throw new ArgumentNullException(nameof(buildSettings));
+        m_projectSettings = projectSettings ?? throw new ArgumentNullException(nameof(projectSettings));
         ArgumentNullException.ThrowIfNull(logs);
         m_log = logs.CreateLogger<ExportWindowModule>();
     }
@@ -57,13 +47,13 @@ internal sealed class ExportWindowModule : EditorModule
 
     internal bool isGameBusy => m_gameExport is not null;
 
-    internal string pluginId { get; set; } = string.Empty;
+    internal string pluginId => m_projectSettings.projectId.value;
 
     internal string pluginDisplayName { get; set; } = string.Empty;
 
     internal string pluginOutputPath { get; set; } = string.Empty;
 
-    internal string gameApplicationId { get; set; } = string.Empty;
+    internal string gameApplicationId => m_projectSettings.projectId.value;
 
     internal string gameProductName { get; set; } = string.Empty;
 
@@ -81,52 +71,32 @@ internal sealed class ExportWindowModule : EditorModule
 
     internal string error { get; private set; } = string.Empty;
 
-    internal bool includePluginDependencies => EmbedPluginDependenciesSetting.Read(m_settings);
+    internal bool includePluginDependencies { get; set; }
 
     internal void OpenPlugin()
     {
         CloseGame();
-        string projectName = GetProjectName();
-        pluginId = ToPortableId(projectName);
-        pluginDisplayName = projectName;
-        pluginOutputPath = Path.Combine(m_editor.projectDirectory, "Builds", pluginId + ".iplugin");
         status = string.Empty;
         error = string.Empty;
+        BuildSettings defaults = LoadBuildSettings();
+        pluginDisplayName = defaults.pluginDisplayName;
+        pluginOutputPath = defaults.pluginOutputPath;
+        includePluginDependencies = defaults.includePluginDependencies;
         isPluginVisible = true;
     }
 
     internal void OpenGame()
     {
         ClosePlugin();
-        string projectName = GetProjectName();
-        gameApplicationId = ToPortableId(projectName);
-        gameProductName = projectName;
-        gameStartupScene = FindDefaultStartupScene();
-        gameOutputDirectory = Path.Combine(m_editor.projectDirectory, "Builds");
-        gameWindowWidth = 1280;
-        gameWindowHeight = 720;
-        gameTarget = OperatingSystem.IsWindows()
-            ? BuildTargetId.windowsX64
-            : BuildTargetId.macOSArm64;
         status = string.Empty;
         error = string.Empty;
-        if (m_buildProfiles.exists)
-        {
-            try
-            {
-                BuildProfile profile = m_buildProfiles.Load();
-                gameApplicationId = profile.applicationId;
-                gameProductName = profile.productName;
-                gameStartupScene = profile.startupScene;
-                gameTarget = profile.target;
-                gameWindowWidth = profile.windowWidth;
-                gameWindowHeight = profile.windowHeight;
-            }
-            catch (Exception exception)
-            {
-                error = exception.Message;
-            }
-        }
+        BuildSettings defaults = LoadBuildSettings();
+        gameProductName = defaults.gameProductName;
+        gameStartupScene = defaults.gameStartupScene;
+        gameOutputDirectory = defaults.gameOutputDirectory;
+        gameWindowWidth = defaults.gameWindowWidth;
+        gameWindowHeight = defaults.gameWindowHeight;
+        gameTarget = defaults.gameTarget;
         isGameVisible = true;
     }
 
@@ -142,7 +112,7 @@ internal sealed class ExportWindowModule : EditorModule
             {
                 pluginId = pluginId,
                 displayName = pluginDisplayName,
-                outputPath = pluginOutputPath,
+                outputPath = ResolveOutputPath(pluginOutputPath),
                 includeDependencies = includePluginDependencies
             },
             new BuildProgressSink(m_progress),
@@ -170,16 +140,6 @@ internal sealed class ExportWindowModule : EditorModule
             windowWidth = gameWindowWidth,
             windowHeight = gameWindowHeight
         };
-        try
-        {
-            m_buildProfiles.Save(profile);
-        }
-        catch (Exception exception)
-        {
-            status = string.Empty;
-            error = exception.Message;
-            return;
-        }
         StartCancellation();
         status = "Capturing the authoring generation and compiling runtime scripts...";
         error = string.Empty;
@@ -187,7 +147,7 @@ internal sealed class ExportWindowModule : EditorModule
             new GameBuildRequest
             {
                 profile = profile,
-                outputDirectory = gameOutputDirectory
+                outputDirectory = ResolveOutputPath(gameOutputDirectory)
             },
             new BuildProgressSink(m_progress),
             m_cancellation!.Token).AsTask();
@@ -349,26 +309,30 @@ internal sealed class ExportWindowModule : EditorModule
         }
     }
 
-    private string FindDefaultStartupScene()
+    private BuildSettings LoadBuildSettings()
     {
-        if (m_scenes.activeScene is GameScene activeScene
-            && m_scenes.TryGetSourcePath(activeScene, out string activePath))
+        try
         {
-            return activePath;
+            return m_buildSettings.Load();
         }
-
-        foreach (var entry in m_assets.GetFileSystemEntries(includeDirectories: false)
-                     .Where(static entry => entry.source == AssetSourceId.project)
-                     .OrderBy(static entry => entry.assetPath.localPath, StringComparer.Ordinal))
+        catch (Exception exception) when (exception is IOException
+            or InvalidDataException
+            or InvalidOperationException
+            or UnauthorizedAccessException)
         {
-            if (m_assets.TryGetAssetType(entry.assetPath, out Type? type) && type == typeof(SceneAsset))
-                return entry.assetPath.ToString();
+            error = exception.Message;
+            return m_buildSettings.defaultSettings;
         }
-        return string.Empty;
     }
 
-    private string GetProjectName()
-        => Path.GetFileName(Path.TrimEndingDirectorySeparator(m_editor.projectDirectory));
+    private string ResolveOutputPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return path;
+        return Path.IsPathFullyQualified(path)
+            ? Path.GetFullPath(path)
+            : Path.GetFullPath(path, m_editor.projectDirectory);
+    }
 
     private void StartCancellation()
     {
@@ -393,17 +357,6 @@ internal sealed class ExportWindowModule : EditorModule
             LogLevel.Error,
             "{0} failed:{1}{2}",
             [operation, Environment.NewLine, message]);
-    }
-
-    private static string ToPortableId(string value)
-    {
-        string normalized = new(value
-            .Trim()
-            .ToLowerInvariant()
-            .Select(static character => char.IsAsciiLetterOrDigit(character) ? character : '.')
-            .ToArray());
-        string[] segments = normalized.Split('.', StringSplitOptions.RemoveEmptyEntries);
-        return segments.Length == 0 ? "inno.project" : string.Join('.', segments);
     }
 
     private sealed class BuildProgressSink(ConcurrentQueue<BuildProgress> progress) : IProgress<BuildProgress>

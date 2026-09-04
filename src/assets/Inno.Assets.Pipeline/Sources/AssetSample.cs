@@ -6,7 +6,7 @@ using Inno.Assets;
 namespace Inno.Assets.Pipeline;
 
 /// <summary>
-/// Defines installed Plugin sample directories that remain browsable until imported into the Project.
+/// Defines authoring sample directories and their installed Plugin behavior.
 /// </summary>
 public static class AssetSample
 {
@@ -16,22 +16,36 @@ public static class AssetSample
     public const string fileType = ".isample";
 
     /// <summary>
+    /// Determines whether the final path segment uses the sample-directory naming convention.
+    /// </summary>
+    /// <param name="path">
+    /// The isolated source path to inspect.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the final segment starts with <c>~</c>, regardless of whether
+    /// the path belongs to the writable Project source or an installed Plugin source.
+    /// </returns>
+    public static bool HasSampleDirectoryName(AssetPath path)
+    {
+        if (!path.isValid || string.IsNullOrEmpty(path.localPath))
+            return false;
+        return Path.GetFileName(path.localPath).StartsWith('~');
+    }
+
+    /// <summary>
     /// Determines whether the final segment identifies a sample directory.
     /// </summary>
-    /// <param name="path">The isolated source path to inspect.</param>
+    /// <param name="path">
+    /// The isolated source path to inspect.
+    /// </param>
     /// <returns>
-    /// <see langword="true"/> when the path belongs to an installed Plugin and its final segment starts
-    /// with <c>~</c>. Project directories use normal authoring semantics even when their names start with
-    /// <c>~</c>.
+    /// <see langword="true"/> when the path belongs to an installed Plugin source and its final
+    /// segment starts with <c>~</c>. A Project directory with the same name remains normal writable
+    /// authoring content.
     /// </returns>
     public static bool IsRoot(AssetPath path)
     {
-        if (!path.isValid
-            || path.source == AssetSourceId.project
-            || string.IsNullOrEmpty(path.localPath))
-            return false;
-        string name = Path.GetFileName(path.localPath);
-        return name.StartsWith('~');
+        return path.source != AssetSourceId.project && HasSampleDirectoryName(path);
     }
 
     /// <summary>
@@ -44,8 +58,8 @@ public static class AssetSample
     /// Whether the path itself represents a directory.
     /// </param>
     /// <returns>
-    /// <see langword="true"/> when the path belongs to an installed Plugin and any directory segment
-    /// starts with <c>~</c>.
+    /// <see langword="true"/> when the path belongs to an installed Plugin source and any directory
+    /// segment starts with <c>~</c>. Project content is never hidden from authoring import by this method.
     /// </returns>
     public static bool Contains(AssetPath path, bool isDirectory)
     {
@@ -75,7 +89,21 @@ public static class AssetSample
         return name;
     }
 
-    internal static bool IsRuntimeExcluded(AssetPath path, bool isDirectory)
+    /// <summary>
+    /// Determines whether a path belongs to an authoring-only sample subtree that must not enter a
+    /// Player runtime closure.
+    /// </summary>
+    /// <param name="path">
+    /// The isolated source path to inspect.
+    /// </param>
+    /// <param name="isDirectory">
+    /// Whether the path itself represents a directory.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when any directory segment starts with <c>~</c>, including in the
+    /// writable Project source.
+    /// </returns>
+    public static bool IsRuntimeExcluded(AssetPath path, bool isDirectory)
         => ContainsTildeDirectory(path, isDirectory);
 
     private static bool ContainsTildeDirectory(AssetPath path, bool isDirectory)

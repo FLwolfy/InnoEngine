@@ -12,6 +12,7 @@
     <ProjectReference Include="..\Inno.Core.Storage\Inno.Core.Storage.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Inno.Core.IO\Inno.Core.IO.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
   </ItemGroup>
 </Project>

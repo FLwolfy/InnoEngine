@@ -56,9 +56,10 @@ public sealed class GamePresentationSettingsTests
                 .UseMetadataCache(Path.Combine(directory, "Metadata"))
                 .Build();
             using var settings = new ProjectSettingsStore(
-                Path.Combine(directory, "ProjectSettings.inno"),
+                Path.Combine(directory, "Settings.Project.inno"),
                 host.types,
-                host.serialization);
+                host.serialization,
+                new ProjectId("tests.runtime"));
             settings.RebuildCurrent();
 
             GamePresentationSettings presentation = settings.Get<GamePresentationSettings>(

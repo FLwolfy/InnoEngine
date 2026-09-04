@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 
+using Inno.Core.IO;
 using Inno.Core.Serialization;
 
 using IOFile = System.IO.File;
@@ -64,8 +65,8 @@ internal sealed class AssetCatalogStore
             entries = SerializeEntries(entries)
         };
         byte[] bytes = Serialize(snapshot);
-        AssetFileTransaction.WriteAtomic(m_journalPath, bytes);
-        AssetFileTransaction.WriteAtomic(m_snapshotPath, bytes);
+        AtomicFile.WriteAllBytes(m_journalPath, bytes);
+        AtomicFile.WriteAllBytes(m_snapshotPath, bytes);
         if (IOFile.Exists(m_journalPath))
             IOFile.Delete(m_journalPath);
     }
@@ -78,7 +79,7 @@ internal sealed class AssetCatalogStore
             return;
         string destinationRoot = GetDatabaseRoot(destinationLibraryRoot);
         Directory.CreateDirectory(destinationRoot);
-        AssetFileTransaction.WriteAtomic(
+        AtomicFile.WriteAllBytes(
             Path.Combine(destinationRoot, "Catalog.snapshot"),
             IOFile.ReadAllBytes(sourcePath));
     }
@@ -101,7 +102,7 @@ internal sealed class AssetCatalogStore
         else
         {
             byte[] bytes = IOFile.ReadAllBytes(sourcePath);
-            AssetFileTransaction.WriteAtomic(destinationSnapshot, bytes);
+            AtomicFile.WriteAllBytes(destinationSnapshot, bytes);
             if (IOFile.Exists(destinationJournal))
                 IOFile.Delete(destinationJournal);
         }

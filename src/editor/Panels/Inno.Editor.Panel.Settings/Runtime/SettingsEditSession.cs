@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+using Inno.Build;
 using Inno.Core.Serialization;
 using Inno.Core.Settings;
+using Inno.Editor.Interactions;
 using Inno.Editor.Settings;
 
 namespace Inno.Editor.Panel.Settings;
@@ -11,11 +13,13 @@ namespace Inno.Editor.Panel.Settings;
 internal enum SettingsScope
 {
     Editor,
-    Project
+    Project,
+    Build
 }
 
 internal sealed class SettingsField
 {
+    private readonly BuildSettingsField? m_build;
     private readonly EditorSetting? m_editor;
     private readonly ProjectSettingEditor? m_project;
 
@@ -43,6 +47,18 @@ internal sealed class SettingsField
         description = definition.description;
     }
 
+    internal SettingsField(BuildSettingsField definition)
+    {
+        m_build = definition;
+        scope = SettingsScope.Build;
+        path = definition.path;
+        pagePath = definition.pagePath;
+        label = definition.label;
+        order = 0;
+        section = definition.section;
+        description = definition.description;
+    }
+
     internal SettingsScope scope { get; }
     internal string path { get; }
     internal string pagePath { get; }
@@ -52,6 +68,7 @@ internal sealed class SettingsField
     internal string description { get; }
     internal EditorSetting? editor => m_editor;
     internal ProjectSettingEditor? project => m_project;
+    internal BuildSettingsField? build => m_build;
 }
 
 internal sealed class SettingsEditSession
@@ -69,15 +86,27 @@ internal sealed class SettingsEditSession
     private readonly HashSet<ProjectSettingId> m_projectResets = [];
     private readonly Dictionary<ProjectSettingId, ISerializable> m_projectOriginalValues = [];
     private readonly Dictionary<ProjectSettingId, ISerializable> m_projectValues = [];
+    private readonly BuildSettingsStore m_buildSettings;
+    private readonly IEditorHistory m_history;
+    private BuildSettings m_buildDefault;
+    private BuildSettings m_buildOriginal;
+    private BuildSettings m_buildValue;
 
     internal SettingsEditSession(
         EditorSettings editorSettings,
-        ProjectSettingsEditor projectSettings)
+        ProjectSettingsEditor projectSettings,
+        BuildSettingsStore buildSettings,
+        IEditorHistory history)
     {
         m_editorSettings = editorSettings ?? throw new ArgumentNullException(nameof(editorSettings));
         m_projectSettings = projectSettings ?? throw new ArgumentNullException(nameof(projectSettings));
+        m_buildSettings = buildSettings ?? throw new ArgumentNullException(nameof(buildSettings));
+        m_history = history ?? throw new ArgumentNullException(nameof(history));
         editorCatalogRevision = editorSettings.catalogRevision;
         projectCatalogRevision = projectSettings.catalogRevision;
+        m_buildDefault = buildSettings.defaultSettings;
+        m_buildOriginal = buildSettings.Load();
+        m_buildValue = m_buildOriginal.Copy();
 
         var fields = new List<SettingsField>();
         foreach (EditorSetting definition in editorSettings.definitions)
@@ -101,6 +130,8 @@ internal sealed class SettingsEditSession
             if (!definition.ValuesEqual(value, projectSettings.GetComposedDefault(definition)))
                 m_projectInitiallyNonDefault.Add(definition.settingId);
         }
+        foreach (BuildSettingsField definition in BuildSettingsPresentation.fields)
+            fields.Add(new SettingsField(definition));
 
         string? duplicatePath = fields
             .GroupBy(static field => field.path, StringComparer.Ordinal)
@@ -121,21 +152,26 @@ internal sealed class SettingsEditSession
     internal IReadOnlyList<SettingsPage> pages { get; }
     internal bool isEditorDirty => m_editorModified.Count > 0 || m_editorResets.Count > 0;
     internal bool isProjectDirty => m_projectModified.Count > 0 || m_projectResets.Count > 0;
-    internal bool isDirty => isEditorDirty || isProjectDirty;
+    internal bool isBuildDirty => !BuildSettingsField.ValuesEqual(m_buildValue, m_buildOriginal);
+    internal bool isDirty => isEditorDirty || isProjectDirty || isBuildDirty;
 
     internal bool Draw(SettingsField field)
     {
         if (field.editor is EditorSetting editor)
             return editor.Draw(m_editorValues[editor.path]);
-        ProjectSettingEditor project = field.project
-            ?? throw new InvalidOperationException($"Settings field '{field.path}' has no owner.");
-        return project.Draw(m_projectValues[project.settingId]);
+        if (field.project is ProjectSettingEditor project)
+            return project.Draw(m_projectValues[project.settingId]);
+        if (field.build is BuildSettingsField build)
+            return build.Draw(m_buildValue);
+        throw new InvalidOperationException($"Settings field '{field.path}' has no owner.");
     }
 
     internal bool CanReset(SettingsField field)
     {
         if (field.editor is EditorSetting editor)
             return !editor.IsDefault(m_editorValues[editor.path]);
+        if (field.build is BuildSettingsField build)
+            return !build.IsDefault(m_buildValue, m_buildDefault);
         ProjectSettingEditor project = field.project
             ?? throw new InvalidOperationException($"Settings field '{field.path}' has no owner.");
         bool differsFromDefault = !project.ValuesEqual(
@@ -174,6 +210,11 @@ internal sealed class SettingsEditSession
             _ = m_editorModified.Remove(editor.path);
             return;
         }
+        if (field.build is BuildSettingsField build)
+        {
+            build.Reset(m_buildValue, m_buildDefault);
+            return;
+        }
         ProjectSettingEditor project = field.project
             ?? throw new InvalidOperationException($"Settings field '{field.path}' has no owner.");
         m_projectValues[project.settingId] = m_projectSettings.GetComposedDefault(project);
@@ -195,6 +236,8 @@ internal sealed class SettingsEditSession
 
     internal void UpdateDirty(SettingsField field, bool differsFromDrawBaseline)
     {
+        if (field.build is not null)
+            return;
         if (field.editor is EditorSetting editor)
         {
             UpdateDirty(
@@ -235,6 +278,8 @@ internal sealed class SettingsEditSession
             changed |= ApplyEditor();
         if (isProjectDirty)
             changed |= ApplyProject();
+        if (isBuildDirty)
+            changed |= ApplyBuild();
         return changed;
     }
 
@@ -281,6 +326,28 @@ internal sealed class SettingsEditSession
                 m_projectInitiallyNonDefault.Add(definition.settingId);
         }
         return changed;
+    }
+
+    private bool ApplyBuild()
+    {
+        byte[] before = m_buildSettings.CaptureDocument();
+        m_buildSettings.Save(m_buildValue);
+        byte[] after = m_buildSettings.CaptureDocument();
+        try
+        {
+            using EditorHistoryChange change = BuildSettingsHistory.CreateChange(before, after);
+            m_history.RecordApplied("Apply Build Settings", change);
+        }
+        catch
+        {
+            m_buildSettings.RestoreDocument(before);
+            throw;
+        }
+
+        m_buildDefault = m_buildSettings.defaultSettings;
+        m_buildOriginal = m_buildSettings.Load();
+        m_buildValue = m_buildOriginal.Copy();
+        return true;
     }
 
     private static void UpdateDirty<T>(
@@ -393,6 +460,7 @@ internal sealed class SettingsEditSession
             {
                 "Editor" => "Configure Editor-only appearance, tools, and authoring preferences.",
                 "Project" => "Configure runtime-facing project behavior and Plugin-provided protocols.",
+                "Build" => "Configure project-owned defaults copied into temporary export requests.",
                 _ => $"Browse {label} settings and related options."
             };
             return new SettingsPage(

@@ -59,9 +59,10 @@ public sealed class BuildPipelineTests : IDisposable
         m_sceneWorld = new SceneWorld(m_identities, m_engine.types);
         m_sceneWorldScope = m_sceneWorld.EnterScope();
         m_settings = new ProjectSettingsStore(
-            Path.Combine(m_projectRoot, "ProjectSettings.inno"),
+            Path.Combine(m_projectRoot, "Settings.Project.inno"),
             m_engine.types,
-            m_engine.serialization);
+            m_engine.serialization,
+            new ProjectId("tests.build"));
         var sources = new PluginSourceService(m_engine.serialization, pluginRoot, libraryRoot);
         PluginScanResult scan = sources.Scan();
         m_assets = new AssetPipeline(
@@ -112,6 +113,13 @@ public sealed class BuildPipelineTests : IDisposable
         m_engine.Dispose();
         if (Directory.Exists(m_root))
             Directory.Delete(m_root, recursive: true);
+    }
+
+    [Fact]
+    public void ProjectSettingsUseTheHostSuppliedInitialIdentity()
+    {
+        Assert.Equal("tests.build", m_settings.projectId.value);
+        Assert.False(m_settings.HasProjectOverride(ProjectIdentitySettings.settingId));
     }
 
     [Theory]
@@ -416,8 +424,8 @@ public sealed class BuildPipelineTests : IDisposable
         Assert.True(m_assets.Save(
             AssetPath.Project("Content/value.txt"),
             new TextAsset("deterministic")));
-        string firstPath = Path.Combine(m_root, "first.zip");
-        string secondPath = Path.Combine(m_root, "second.zip");
+        string firstPath = Path.Combine(m_root, "first.iplugin");
+        string secondPath = Path.Combine(m_root, "second.iplugin");
 
         ValueTask<BuildResult> firstBuild = m_pipeline.BuildPluginAsync(new PluginBuildRequest
         {
@@ -450,7 +458,7 @@ public sealed class BuildPipelineTests : IDisposable
 
         string installRoot = Path.Combine(m_root, "Install");
         Directory.CreateDirectory(installRoot);
-        File.Copy(firstPath, Path.Combine(installRoot, "export.zip"));
+        File.Copy(firstPath, Path.Combine(installRoot, "export.iplugin"));
         PluginScanResult scan = new PluginSourceService(
             m_engine.serialization,
             installRoot,
@@ -458,14 +466,14 @@ public sealed class BuildPipelineTests : IDisposable
         Assert.Empty(scan.diagnostics);
         PluginCandidate candidate = Assert.Single(scan.candidates);
         Assert.Equal("tests.export", candidate.manifest.pluginId);
-        Assert.Equal(PluginSourceKind.Zip, candidate.sourceKind);
+        Assert.Equal(PluginSourceKind.Package, candidate.sourceKind);
     }
 
     [Fact]
     public async Task CanceledPluginBuildLeavesNoPackageOrStagingFile()
     {
         Assert.True(m_assets.Save(AssetPath.Project("value.txt"), new TextAsset("content")));
-        string output = Path.Combine(m_root, "Canceled.zip");
+        string output = Path.Combine(m_root, "Canceled.iplugin");
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
@@ -480,7 +488,7 @@ public sealed class BuildPipelineTests : IDisposable
                 cancellationToken: cancellation.Token).AsTask());
 
         Assert.False(File.Exists(output));
-        Assert.Empty(Directory.EnumerateFiles(m_root, "Canceled.zip.staging-*", SearchOption.TopDirectoryOnly));
+        Assert.Empty(Directory.EnumerateFiles(m_root, "Canceled.iplugin.staging-*", SearchOption.TopDirectoryOnly));
     }
 
     private static BuildProfile CreateProfile(BuildTargetId target, string productName = "Test Game")

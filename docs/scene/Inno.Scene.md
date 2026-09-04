@@ -54,43 +54,33 @@ if (tags.IsDefined("Player"))
 
 | 类型 | 职责 |
 | --- | --- |
-| `GameLayerId` | 跨 Project、`.iplugin` 与 Plugin generation 稳定的逻辑 Layer ID。 |
-| `GameLayer` | 0–31 的紧凑运行时 slot。`GameObject.layer` 始终只保存一个值。 |
-| `GameLayerMask` | 32 位多层集合，用于渲染、物理和 Scene 查询过滤。 |
-| `GameLayerDefinition` | 逻辑 ID、当前 slot 与显示名称的只读快照。 |
-| `GameLayerStack` | 最多 32 个 ID/name 映射及对称 interaction matrix。 |
+| 类型 | 职责 |
+| --- | --- |
+| `GameLayerId` | 当前 `ProjectId` 与 layer local key 组合出的 `projectId.name` 身份。 |
+| `GameLayer` | 0–31 的紧凑运行时 slot；Scene/Prefab 只保存这个值。 |
+| `GameLayerMask` | 32 位多层集合，用于渲染、物理和查询过滤。 |
+| `GameLayerDefinition` | 自动 local key、当前 slot 与显示名称的只读快照。 |
+| `GameLayerStack` | 最多 32 个自动 local key/name 映射及对称 interaction matrix。 |
 
-层 ID 与名称不写入 Scene 或 Prefab。对象只序列化数值 slot，因此重命名配置不会重写资产，也不会破坏引用；移除定义后对象仍保留原 slot，重新定义同一 slot 即可恢复显示语义。`GameLayerId` 用于 Plugin 合并、脚本查找和跨来源身份，`GameLayer` 用于当前项目中的 bit mask 与高频运行时查询；两者不能混为同一种身份。
+用户只编辑 Layer 名称和 slot，不输入 ID。新 slot 自动得到稳定 local key（例如 `layer.01`）；完整 ID 只在需要时由当前 Project ID 解析。Project ID 改名不会触碰 Layer setting、Scene 或 Prefab；Layer 显示名改名也不会改变已经生成的 local key。
 
 ```csharp
 using InnoEngine.Scene;
 using InnoEngine.Settings;
 
-GameLayerStack layers = ProjectSettingsStore.Get<GameLayerStack>(GameLayerStack.settingId);
-var playerId = new GameLayerId("sample.gameplay.player");
-var enemyId = new GameLayerId("sample.gameplay.enemy");
-GameLayer player = layers.GetLayer(playerId);
-GameLayer enemy = layers.GetLayer(enemyId);
-GameLayerMask visible = layers.GetMask([playerId, enemyId]);
+GameLayerStack layers = Settings.Get<GameLayerStack>(GameLayerStack.settingId);
+GameLayer player = layers.GetLayer("Player");
+GameLayer enemy = layers.GetLayer("Enemy");
+GameLayerId playerId = layers.GetId(Settings.projectId, player)!.Value;
+GameLayerMask visible = layers.GetMask(["Player", "Enemy"]);
 
 gameObject.layer = player;
-GameObject? firstPlayer = scene.FindObjectWithLayer(player);
-IReadOnlyList<GameObject> visibleObjects = scene.FindObjectsWithLayers(visible);
-
 layers.SetInteraction(player, enemy, canInteract: false);
-bool canCollide = layers.CanInteract(player, enemy); // false in both directions
 ```
 
-`GameLayer.defaultLayer` 固定为 slot 0，对应 `GameLayerId.defaultLayer`（`inno.default`）和名称 `Default`，不能删除。自定义 ID 使用 portable lowercase namespaced 字符串，ID 与名称分别按 ordinal 规则唯一。`GameLayerId`、`GameLayer` 与 `GameLayerMask` 都有显式 SerializationConverter，可以安全用于 `[SerializableProperty]`。
+`GameLayer.defaultLayer` 固定为 slot 0、local key `default` 和名称 `Default`。其完整 ID 会随项目身份解析为 `projectId.default`。Plugin contribution 同样只携带 local key/slot/name 和 interaction operation，不携带导出项目的 Project ID；导入后自然落在消费项目命名空间下。
 
-`GameLayerStack` 是普通 Project Setting，并声明自己的 Composer。每个 Plugin 导出的是稀疏 layer upsert/remove 与 interaction operation，而不是 32-slot 整体快照：
-
-- 不同 ID 且不同 slot：直接合并；
-- 相同 ID、slot、name：视为同一声明并去重；
-- 相同 ID 被放入不同 slot、同一 slot 被不同 ID 占用、同一 interaction pair 写入不同值：产生明确冲突；
-- 后置 Plugin 只有依赖原 owner 且在 manifest 中显式 override 才能替换；Project contribution 始终拥有最高优先级。
-
-因此“重复 ID”不是无条件覆盖：完全一致才合并，不一致必须显式表达所有权。32 个 slot 是 Layer mask 的真实有限资源，Composer 不会悄悄重排 slot 或改写 Scene assignment。
+Composer 对相同 local key、slot、name 的声明去重；同一 slot/key 或 interaction pair 的不兼容声明仍要求显式依赖与 override。32 个 slot 是 Layer mask 的真实有限资源，Composer 不会重排 slot 或改写 Scene assignment。
 
 ## Component 顺序
 

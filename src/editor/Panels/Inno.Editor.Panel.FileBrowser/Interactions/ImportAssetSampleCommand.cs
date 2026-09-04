@@ -10,7 +10,15 @@ namespace Inno.Editor.Panel.FileBrowser;
 [EditorMenu(FileBrowserInteractionIds.C_AREA, "Import Sample", order: 120)]
 internal sealed class ImportAssetSampleCommand(AssetEditorModule assets) : EditorAction<AssetFileEntry>
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Determines whether the selected asset sample can be imported into the Project source.
+    /// </summary>
+    /// <param name="context">
+    /// The action context containing the selected indexed asset entry.
+    /// </param>
+    /// <returns>
+    /// The visibility and availability state for importing the selected sample.
+    /// </returns>
     protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
     {
         if (!context.target.isSample)
@@ -28,7 +36,12 @@ internal sealed class ImportAssetSampleCommand(AssetEditorModule assets) : Edito
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Imports the selected sample into the Project source and records the operation in editor history.
+    /// </summary>
+    /// <param name="context">
+    /// The action context containing the selected sample and history transaction.
+    /// </param>
     protected override void Execute(EditorActionContext<AssetFileEntry> context)
     {
         AssetPath imported = assets.pipeline.ImportSample(context.target.assetPath);

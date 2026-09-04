@@ -14,7 +14,8 @@ namespace Inno.Core.Settings;
 /// </summary>
 public sealed class ProjectSettings : IDisposable
 {
-    private readonly string m_documentPath;
+    private readonly SettingsDocumentStore<ProjectSettingsDocument> m_documents;
+    private readonly ProjectId m_defaultProjectId;
     private readonly SerializationRegistry m_serialization;
     private readonly ProjectSettingsRegistry m_registry;
     private readonly Dictionary<ProjectSettingId, ISerializable> m_effective = [];
@@ -25,13 +26,16 @@ public sealed class ProjectSettings : IDisposable
     /// Loads one project settings document and builds the initial effective snapshot.
     /// </summary>
     /// <param name="documentPath">
-    /// ProjectSettings.inno path.
+    /// Settings.Project.inno path.
     /// </param>
     /// <param name="types">
     /// The type catalog that owns project setting definitions and composers.
     /// </param>
     /// <param name="serialization">
     /// The serialization registry used for settings documents and contribution payloads.
+    /// </param>
+    /// <param name="defaultProjectId">
+    /// The project namespace used when the document has no authored identity override.
     /// </param>
     /// <param name="contributors">
     /// Dependency-ordered default contributors.
@@ -40,17 +44,23 @@ public sealed class ProjectSettings : IDisposable
         string documentPath,
         TypeCatalog types,
         SerializationRegistry serialization,
+        ProjectId defaultProjectId,
         IReadOnlyList<ProjectSettingsContributor>? contributors = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(documentPath);
         ArgumentNullException.ThrowIfNull(types);
+        if (!defaultProjectId.isValid)
+            throw new ArgumentException("A default Project ID is required.", nameof(defaultProjectId));
         ArgumentNullException.ThrowIfNull(serialization);
         m_serialization = serialization;
+        m_defaultProjectId = defaultProjectId;
         m_registry = new ProjectSettingsRegistry(types);
-        m_documentPath = Path.GetFullPath(documentPath);
-        m_document = File.Exists(m_documentPath)
-            ? m_serialization.Deserialize<ProjectSettingsDocument>(File.ReadAllBytes(m_documentPath))
-            : new ProjectSettingsDocument();
+        m_documents = new SettingsDocumentStore<ProjectSettingsDocument>(
+            documentPath,
+            serialization,
+            static () => new ProjectSettingsDocument(),
+            ValidateDocument);
+        m_document = m_documents.Load();
         Rebuild(contributors ?? [], allowUnresolvedContributions: true);
     }
 
@@ -155,6 +165,11 @@ public sealed class ProjectSettings : IDisposable
         ValidateContributorOrder(contributors);
         ProjectSettingsRegistry.Snapshot registry = m_registry.settings;
         if (!registry.TryGet(id, out ProjectSettingsRegistry.Definition? definition))
+        {
+            record = default;
+            return false;
+        }
+        if (!definition.allowPluginContributions)
         {
             record = default;
             return false;
@@ -275,7 +290,7 @@ public sealed class ProjectSettings : IDisposable
     public byte[] CaptureDocument()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
-        return m_serialization.Serialize(m_document);
+        return m_documents.Capture(m_document);
     }
 
     /// <summary>
@@ -299,8 +314,17 @@ public sealed class ProjectSettings : IDisposable
         {
             foreach (ProjectSettingRecord setting in contributor.settings)
             {
-                if (!registry.TryGet(setting.id, out _) && !allowUnresolvedContributions)
-                    throw new InvalidOperationException($"Project setting '{setting.id}' has no active definition.");
+                if (!registry.TryGet(setting.id, out ProjectSettingsRegistry.Definition? definition))
+                {
+                    if (!allowUnresolvedContributions)
+                        throw new InvalidOperationException($"Project setting '{setting.id}' has no active definition.");
+                    continue;
+                }
+                if (!definition.allowPluginContributions)
+                {
+                    throw new InvalidOperationException(
+                        $"Project setting '{setting.id}' does not accept Plugin contributions.");
+                }
             }
         }
 
@@ -424,7 +448,7 @@ public sealed class ProjectSettings : IDisposable
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
         ArgumentNullException.ThrowIfNull(contributors);
-        ProjectSettingsDocument candidate = m_serialization.Deserialize<ProjectSettingsDocument>(document);
+        ProjectSettingsDocument candidate = m_documents.Deserialize(document);
         ReplaceDocument(candidate, contributors);
     }
 
@@ -582,7 +606,17 @@ public sealed class ProjectSettings : IDisposable
                     new HashSet<string>(StringComparer.Ordinal)),
                 project.propertyData));
         }
-        return definition.composer.Compose(m_serialization, definition.Create(), entries);
+        return definition.composer.Compose(m_serialization, CreateHostDefault(id, definition), entries);
+    }
+
+    private ISerializable CreateHostDefault(
+        ProjectSettingId id,
+        ProjectSettingsRegistry.Definition definition)
+    {
+        ISerializable value = definition.Create();
+        if (id == ProjectIdentitySettings.settingId && value is ProjectIdentitySettings identity)
+            identity.projectId = m_defaultProjectId.value;
+        return value;
     }
 
     private ISerializable ComposeReplacement(
@@ -615,7 +649,7 @@ public sealed class ProjectSettings : IDisposable
             selected = project;
         }
 
-        ISerializable result = definition.Create();
+        ISerializable result = CreateHostDefault(id, definition);
         if (selected is ProjectSettingRecord value)
             _ = m_serialization.RestorePropertiesData(result, value.propertyData);
         return result;
@@ -651,12 +685,11 @@ public sealed class ProjectSettings : IDisposable
         return true;
     }
 
-    private static void WriteAtomic(string path, byte[] data)
+    private static void ValidateDocument(ProjectSettingsDocument document)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        string temporaryPath = path + ".tmp-" + Guid.NewGuid().ToString("N");
-        File.WriteAllBytes(temporaryPath, data);
-        File.Move(temporaryPath, path, overwrite: true);
+        ArgumentNullException.ThrowIfNull(document);
+        if (document.overrides is null)
+            throw new InvalidDataException("A project Settings document requires an override collection.");
     }
 
     private void ReplaceDocument(
@@ -665,9 +698,8 @@ public sealed class ProjectSettings : IDisposable
     {
         ArgumentNullException.ThrowIfNull(candidate);
         ProjectSettingsDocument previous = m_document;
-        byte[] previousBytes = m_serialization.Serialize(previous);
-        byte[] candidateBytes = m_serialization.Serialize(candidate);
-        WriteAtomic(m_documentPath, candidateBytes);
+        byte[] previousBytes = m_documents.Capture(previous);
+        m_documents.Save(candidate);
         m_document = candidate;
         try
         {
@@ -676,7 +708,7 @@ public sealed class ProjectSettings : IDisposable
         catch
         {
             m_document = previous;
-            WriteAtomic(m_documentPath, previousBytes);
+            m_documents.Restore(previousBytes);
             Rebuild(contributors);
             throw;
         }

@@ -1046,9 +1046,10 @@ internal sealed class ScriptingFixture : IDisposable
         m_diagnosticScope = host.diagnostics.EnterScope();
         configureProject?.Invoke(projectRoot, host.serialization);
         m_settings = new ProjectSettingsStore(
-            Path.Combine(projectRoot, "ProjectSettings.inno"),
+            Path.Combine(projectRoot, "Settings.Project.inno"),
             host.types,
-            host.serialization);
+            host.serialization,
+            new ProjectId("tests.scripting"));
         var pluginSources = new PluginSourceService(host.serialization, pluginRoot, libraryRoot);
         PluginScanResult scan = pluginSources.Scan();
         AssetPipelineOptions options = AssetPipelineOptions.Create(assetRoot, libraryRoot);

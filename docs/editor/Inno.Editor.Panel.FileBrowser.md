@@ -18,7 +18,7 @@ Plugin ID 条目对应 active Plugin catalog 明确拥有的 Source Mount 根，
 - 放入带代码的 Plugin 即表示允许其以项目脚本相同的本机权限执行；File Browser 只展示 active Source Mount，不承担安全确认职责。
 - File Browser 不创建导出定义，也不拥有打包 UI。`.iplugin` 与 Game Player 的统一入口属于 [Inno.Editor.Exporting](Inno.Editor.Exporting.md)；导出不会自动安装或刷新当前项目。
 
-Project `Assets` 中名称以 `~` 开头的目录仍显示并运行为普通 Folder，正常导入、编译和参与 Editor 开发，但不会进入 Player。相同目录导出并安装为 `.iplugin` 后，在只读 Plugin 根下显示为 `ISAMPLE`：它仍可展开、搜索、选择和浏览，但自身及后代不会直接导入或编译。右键该目录的 `Import Sample` 会把一个稳定快照直接导入到 `Assets/<原始~目录名>`，完整保留所有前导 `~`；目标已存在时命令禁用。导入结果是普通可编辑 Assets，保留 Sample 内部 `.imeta` 引用，并作为一个完整目录操作进入共享 Undo/Redo。
+Project `Assets` 中名称以 `~` 开头的目录显示为 `ISAMPLE`，但仍按普通可写 authoring Folder 运行：正常导入、编译并参与 Editor 与 Play Mode，只在 Player deployment 中排除。相同目录导出并安装为 `.iplugin` 后，在只读 Plugin 根下才切换为待导入 Sample：它仍可展开、搜索、选择和浏览，但自身及后代不会直接导入或编译。右键该目录的 `Import Sample` 会把一个稳定快照直接导入到 `Assets/<原始~目录名>`，完整保留所有前导 `~`；目标已存在时命令禁用。导入结果是普通可编辑 Assets，保留 Sample 内部 `.imeta` 引用，并作为一个完整目录操作进入共享 Undo/Redo。
 
 ## 公共扩展 API
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Inno.Assets;
+using Inno.Core.IO;
 
 namespace Inno.Assets.Pipeline;
 
@@ -75,18 +76,13 @@ public sealed class AssetSourceMount
     public string Resolve(string localPath)
     {
         AssetPath path = new(id, localPath);
-        string result = Path.GetFullPath(Path.Combine(rootPath, path.localPath));
-        string prefix = rootPath.EndsWith(Path.DirectorySeparatorChar)
-            ? rootPath
-            : rootPath + Path.DirectorySeparatorChar;
-        StringComparison comparison = OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-        if (!string.Equals(result, rootPath, comparison)
-            && !result.StartsWith(prefix, comparison))
+        try
         {
-            throw new InvalidOperationException("An asset source path escaped its mount root.");
+            return PathBoundary.Resolve(rootPath, path.localPath);
         }
-        return result;
+        catch (IOException exception)
+        {
+            throw new InvalidOperationException("An asset source path escaped its mount root.", exception);
+        }
     }
 }

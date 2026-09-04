@@ -36,6 +36,38 @@ public sealed class GameTagCatalog : ISerializable
     }
 
     /// <summary>
+    /// Gets the stable project-independent identity of a defined tag.
+    /// </summary>
+    /// <param name="tag">
+    /// The configured tag name.
+    /// </param>
+    /// <returns>
+    /// The deterministic local identity.
+    /// </returns>
+    public ProjectLocalId GetLocalId(string tag)
+    {
+        string normalized = Normalize(tag);
+        if (!IsDefined(normalized))
+            throw new KeyNotFoundException($"Game tag '{normalized}' is not defined.");
+        return ProjectLocalId.FromName(normalized);
+    }
+
+    /// <summary>
+    /// Gets the complete project-scoped identity of a defined tag.
+    /// </summary>
+    /// <param name="projectId">
+    /// The current project namespace.
+    /// </param>
+    /// <param name="tag">
+    /// The configured tag name.
+    /// </param>
+    /// <returns>
+    /// The canonical <c>projectId.name</c> identity.
+    /// </returns>
+    public ProjectScopedId GetId(ProjectId projectId, string tag)
+        => projectId.Qualify(GetLocalId(tag));
+
+    /// <summary>
     /// Determines whether an ordinal tag is defined by the project.
     /// </summary>
     /// <param name="tag">
@@ -145,6 +177,11 @@ public sealed class GameTagCatalog : ISerializable
             throw new InvalidOperationException("The built-in default tag must be the first project tag.");
         if (normalized.Distinct(StringComparer.Ordinal).Count() != normalized.Length)
             throw new InvalidOperationException("Project tag definitions must be unique.");
+        if (normalized.Select(ProjectLocalId.FromName).Distinct().Count() != normalized.Length)
+        {
+            throw new InvalidOperationException(
+                "Project tag names must produce unique project-local identities.");
+        }
         if (!normalized.SequenceEqual(m_tags, StringComparer.Ordinal))
             throw new InvalidOperationException("Project tag definitions are not normalized and deterministically ordered.");
     }

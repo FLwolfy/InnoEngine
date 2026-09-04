@@ -42,7 +42,7 @@ Prefab root 名称同样跟随 `.iprefab` 文件名；child 名称保持捕获�
 
 Importer 使用统一 async writer，输出 `runtime`，Loader 自动追加 `asset-state`，并把 Scene graph 中的 `AssetObject` 引用登记为 runtime dependencies。
 
-Game Layer 与 Tag 定义不属于本项目。它们是普通的强类型 `ProjectSettingDefinition`，由 [Inno.Core.Settings](../core/Inno.Core.Settings.md) 以稳定 `ProjectSettingId` 写入项目根 `ProjectSettings.inno`；[Inno.Editor.Settings](../editor/Inno.Editor.Settings.md) 只提供对应 Drawer，不经过 AssetPipeline 或 Source Database，也没有 Scene 分类专用持久化通道。
+Game Layer 与 Tag 定义不属于本项目。它们是普通的强类型 `ProjectSettingDefinition`，由 [Inno.Core.Settings](../core/Inno.Core.Settings.md) 以稳定 `ProjectSettingId` 写入项目根 `Settings.Project.inno`；[Inno.Editor.Settings](../editor/Inno.Editor.Settings.md) 只提供对应 Drawer，不经过 AssetPipeline 或 Source Database，也没有 Scene 分类专用持久化通道。
 
 ## 外部 rename/delete
 

@@ -12,7 +12,8 @@ Game Build 在内容打包前把已验证 Support Pack 作为目标运行时交�
 
 | API | 语义 |
 | --- | --- |
-| `BuildProfile`, `BuildProfileStore`, `BuildTargetId` | 当前格式、可验证的构建配置与目标身份；窗口宽高只定义 Player 初始窗口，不定义内容 aspect |
+| `BuildSettings`, `BuildSettingsStore` | 项目拥有的 Game/Plugin 导出默认值；使用当前 Inno Serialization 原子保存为 `Settings.Build.inno` |
+| `BuildProfile`, `BuildProfileStore`, `BuildTargetId` | 一次 Game 构建所需的可验证 profile 与目标身份；显式 profile 文件可供 headless one-off 构建使用 |
 | `GameBuildRequest`, `PluginBuildRequest` | 一次不可变构建请求 |
 | `BuildProgress`, `BuildDiagnostic`, `BuildDiagnosticSeverity`, `BuildResult` | 进度、结构化诊断与最终结果 |
 | `BuildPipeline` | Game/Plugin 的最小异步入口 |
@@ -37,8 +38,10 @@ BuildResult result = await pipeline.BuildGameAsync(
 
 构建开始后会捕获 Assets/Plugins/Settings revision 与 Serialization generation。任一代际变化、取消或 stage 失败都会清理 staging，不覆盖已提交产品。
 
-Editor 第一次创建 Build Profile 时优先使用当前 active 且已有源路径的 Scene；没有可用 active Scene 时才回退到按路径排序的第一个已导入 Scene。此后启动 Scene、目标与初始窗口尺寸都以保存的 Build Profile 为准，不会在每次打开导出窗口时被默认值覆盖。游戏内容的参考分辨率与保持比例策略属于项目 `GamePresentationSettings`，由 Game View 和 Player 共用。
+`Settings.Build.inno` 保存团队可版本控制的导出默认值；文件不存在时，composition root 以项目名、host target 和按路径排序的第一个已导入且可部署 Scene 建立隔离默认值，`~` authoring sample 中的 Scene 不会被自动选为 Startup Scene。Editor 的 Settings Apply 才会持久化该文件。每次打开导出 modal 都重新复制这些默认值，modal 内修改只属于本次请求，绝不回写 `Settings.Build.inno`。Game Application ID 与 Plugin ID 不是 Build 默认值，而是直接取 `Settings.Project.inno` 中的当前 Project ID；`BuildProfile` 仅保存 one-off 构建参数，加载后也会绑定当前 Project ID。
+
+`Settings.Editor.inno`、`Settings.Project.inno` 和 `Settings.Build.inno` 不合并：它们分别属于本机 Editor 偏好、runtime 项目协议和 authoring/build 默认值。只有 `Settings.Project.inno` 进入 Player；Build Settings 和 Editor Settings 都不会进入 runtime closure。游戏内容的参考分辨率与保持比例策略属于项目 `GamePresentationSettings`，由 Game View 和 Player 共用。
 
 ## 错误与生命周期
 
-调用者拥有 cancellation 和 progress；`BuildPipeline` 使用注入服务但不拥有其生命周期。输出不能位于 Assets、Plugins 或 Library。损坏 Artifact、缺失 Support Pack、无 runtime assembly、目标返回越界路径都会在提交前失败。
+调用者拥有 cancellation 和 progress；`BuildPipeline` 使用注入服务但不拥有其生命周期。输出不能位于 Assets、Plugins 或 Library。损坏 Artifact、缺失 Support Pack、无 runtime assembly、目标返回越界路径都会在提交前失败。Startup Scene 必须是已导入且可部署的 `SceneAsset`；位于任意 `~` 目录时会以 authoring-only 错误明确拒绝。

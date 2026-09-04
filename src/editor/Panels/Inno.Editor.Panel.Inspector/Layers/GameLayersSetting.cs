@@ -17,48 +17,44 @@ namespace Inno.Editor.Panel.Inspector;
 [ProjectSettingPath("Project/Scene/Layers")]
 internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
 {
-    private const nuint C_LAYER_ID_BUFFER_SIZE = 129;
     private const nuint C_LAYER_NAME_BUFFER_SIZE = 128;
 
-    private readonly string[] m_idBuffers = new string[GameLayer.C_MAX_COUNT];
     private readonly string[] m_nameBuffers = new string[GameLayer.C_MAX_COUNT];
     private string m_error = string.Empty;
-    private string?[]? m_observedIds;
     private string?[]? m_observedNames;
 
     /// <summary>
-    /// Gets the stable project-setting identity used for discovery and persistence.
+    /// Gets or sets the setting id exposed by this implementation.
     /// </summary>
     public override ProjectSettingId settingId => GameLayerStack.settingId;
 
     /// <summary>
-    /// Gets the presentation section that groups this setting.
+    /// Gets the section exposed by this implementation.
     /// </summary>
     public override string section => "Definitions";
 
     /// <summary>
-    /// Gets the user-facing explanation of this feature or setting.
+    /// Gets the description exposed by this implementation.
     /// </summary>
     public override string description
-        => "Assign globally stable IDs, display names, and runtime slots to project and Plugin layers.";
+        => "Define layer names and slots. Stable IDs are generated as projectId.name and are never authored manually.";
 
     /// <summary>
     /// Draws this feature using the current editor presentation context.
     /// </summary>
     /// <param name="setting">
-    /// The mutable editor setting value currently being presented.
+    /// The setting supplied to this operation.
     /// </param>
     protected override void OnDraw(GameLayerStack setting)
     {
-        string?[] ids = CaptureIds(setting);
         string?[] names = CaptureNames(setting);
-        SynchronizeBuffers(ids, names);
-        DrawLayerRows(setting, ids, names);
+        SynchronizeBuffers(names);
+        DrawLayerRows(setting, names);
         if (!string.IsNullOrEmpty(m_error))
             ImGuiWidget.ColoredText(EditorPalette.error, m_error);
     }
 
-    private void DrawLayerRows(GameLayerStack setting, string?[] ids, string?[] names)
+    private void DrawLayerRows(GameLayerStack setting, string?[] names)
     {
         int definedCount = names.Count(static name => !string.IsNullOrWhiteSpace(name));
         DrawLayerToolbar(setting, names, definedCount);
@@ -71,7 +67,7 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
                                 ImGuiTableFlags.NoPadOuterX |
                                 ImGuiTableFlags.NoSavedSettings;
         NativeImGui.PushStyleVar(ImGuiStyleVar.CellPadding, ImGuiWidget.style.cellPadding);
-        if (!NativeImGui.BeginTable("##game_layer_definitions", 4, flags))
+        if (!NativeImGui.BeginTable("##game_layer_definitions", 3, flags))
         {
             NativeImGui.PopStyleVar();
             return;
@@ -83,13 +79,8 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
                 ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize,
                 48f * ImGuiWidget.style.zoom);
             NativeImGui.TableSetupColumn(
-                "Stable ID",
-                ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoResize,
-                1.2f);
-            NativeImGui.TableSetupColumn(
                 "Name",
-                ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoResize,
-                0.8f);
+                ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoResize);
             NativeImGui.TableSetupColumn(
                 "Action",
                 ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize,
@@ -97,9 +88,8 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
             DrawLayerTableHeader();
             for (int index = 0; index < GameLayer.C_MAX_COUNT; index++)
             {
-                if (string.IsNullOrWhiteSpace(names[index]))
-                    continue;
-                DrawLayerRow(setting, ids, names, index);
+                if (!string.IsNullOrWhiteSpace(names[index]))
+                    DrawLayerRow(setting, names, index);
             }
         }
         finally
@@ -111,7 +101,6 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
 
     private void DrawLayerRow(
         GameLayerStack setting,
-        IReadOnlyList<string?> ids,
         IReadOnlyList<string?> names,
         int index)
     {
@@ -125,11 +114,8 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
         if (layer == GameLayer.defaultLayer)
         {
             InsetPlainCell();
-            NativeImGui.TextUnformatted(ids[index] ?? GameLayerId.defaultLayer.value);
-            _ = NativeImGui.TableSetColumnIndex(2);
-            InsetPlainCell();
             NativeImGui.TextUnformatted(names[index] ?? "Default");
-            _ = NativeImGui.TableSetColumnIndex(3);
+            _ = NativeImGui.TableSetColumnIndex(2);
             InsetPlainCell();
             ImGuiWidget.ColoredText(EditorPalette.textDisabled, "Fixed");
             return;
@@ -138,20 +124,13 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
         NativeImGui.PushID(index);
         try
         {
-            string id = m_idBuffers[index];
-            bool idCommitted = DrawTextField("##layer_id", "plugin.layer-id", ref id, C_LAYER_ID_BUFFER_SIZE);
-            m_idBuffers[index] = id;
-            if (idCommitted)
-                CommitDefinition(setting, layer, id, m_nameBuffers[index]);
+            string name = m_nameBuffers[index];
+            bool committed = DrawTextField("##layer_name", "Layer name", ref name);
+            m_nameBuffers[index] = name;
+            if (committed)
+                CommitDefinition(setting, layer, name);
 
             _ = NativeImGui.TableSetColumnIndex(2);
-            string name = m_nameBuffers[index];
-            bool nameCommitted = DrawTextField("##layer_name", "Layer name", ref name, C_LAYER_NAME_BUFFER_SIZE);
-            m_nameBuffers[index] = name;
-            if (nameCommitted)
-                CommitDefinition(setting, layer, m_idBuffers[index], name);
-
-            _ = NativeImGui.TableSetColumnIndex(3);
             InsetPlainCell();
             Vector2 removeSize = new(
                 NativeImGui.CalcTextSize("Remove").X,
@@ -160,9 +139,11 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
                     $"remove_layer_{index}",
                     "Remove",
                     removeSize,
-                    "Remove this project contribution while preserving Scene slot assignments."))
+                    "Remove this definition while preserving Scene slot assignments."))
             {
-                RemoveDefinition(setting, layer);
+                _ = setting.Remove(layer);
+                SynchronizeSlot(setting, layer);
+                m_error = string.Empty;
             }
         }
         finally
@@ -171,11 +152,7 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
         }
     }
 
-    private static bool DrawTextField(
-        string id,
-        string hint,
-        ref string value,
-        nuint capacity)
+    private static bool DrawTextField(string id, string hint, ref string value)
     {
         NativeImGui.SetNextItemWidth(-1f);
         NativeImGui.PushStyleColor(ImGuiCol.FrameBg, EditorPalette.transparent);
@@ -187,7 +164,7 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
                 id,
                 hint,
                 ref value,
-                capacity,
+                C_LAYER_NAME_BUFFER_SIZE,
                 ImGuiInputTextFlags.EnterReturnsTrue);
             return submitted || NativeImGui.IsItemDeactivatedAfterEdit();
         }
@@ -202,9 +179,7 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
         float spacing = NativeImGui.GetStyle().ItemSpacing.X;
         ImGuiWidget.LabelChip("Defined", EditorPalette.collectionRowAlternate);
         NativeImGui.SameLine(0f, 0f);
-        DrawReadOnlyCount(
-            $"{definedCount} / {GameLayer.C_MAX_COUNT}",
-            78f * ImGuiWidget.style.zoom);
+        DrawReadOnlyCount($"{definedCount} / {GameLayer.C_MAX_COUNT}", 78f * ImGuiWidget.style.zoom);
         NativeImGui.SameLine(0f, spacing);
         DrawAddLayer(setting, names, definedCount);
     }
@@ -217,11 +192,7 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
         NativeImGui.Dummy(size);
         Vector2 maximum = minimum + size;
         ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
-        drawList.AddRectFilled(
-            minimum,
-            maximum,
-            NativeImGui.GetColorU32(ImGuiCol.FrameBg),
-            style.FrameRounding);
+        drawList.AddRectFilled(minimum, maximum, NativeImGui.GetColorU32(ImGuiCol.FrameBg), style.FrameRounding);
         drawList.AddRect(
             minimum,
             maximum,
@@ -229,10 +200,7 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
             style.FrameRounding,
             ImGuiWidget.style.borderSize);
         Vector2 textSize = NativeImGui.CalcTextSize(value);
-        drawList.AddText(
-            minimum + (size - textSize) * 0.5f,
-            NativeImGui.GetColorU32(ImGuiCol.Text),
-            value);
+        drawList.AddText(minimum + (size - textSize) * 0.5f, NativeImGui.GetColorU32(ImGuiCol.Text), value);
     }
 
     private static void DrawLayerTableHeader()
@@ -242,9 +210,8 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
         NativeImGui.TableSetBgColor(ImGuiTableBgTarget.RowBg0, background);
         NativeImGui.TableSetBgColor(ImGuiTableBgTarget.RowBg1, background);
         DrawHeaderCell(0, "Slot");
-        DrawHeaderCell(1, "Stable ID");
-        DrawHeaderCell(2, "Name");
-        DrawHeaderCell(3, "Action");
+        DrawHeaderCell(1, "Name");
+        DrawHeaderCell(2, "Action");
     }
 
     private static void DrawHeaderCell(int column, string label)
@@ -264,33 +231,28 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
         try
         {
             float selectorWidth = MathF.Max(1f, NativeImGui.GetContentRegionAvail().X);
-            if (ImGuiWidget.BeginMenuSelector(
+            if (!ImGuiWidget.BeginMenuSelector(
                     "add_game_layer",
                     "Add layer...",
                     selectorWidth,
                     selectorWidth))
             {
-                try
+                return;
+            }
+            try
+            {
+                for (int index = 1; index < GameLayer.C_MAX_COUNT; index++)
                 {
-                    for (int index = 1; index < GameLayer.C_MAX_COUNT; index++)
-                    {
-                        if (!string.IsNullOrWhiteSpace(names[index]))
-                            continue;
-                        string slot = index.ToString("00", CultureInfo.InvariantCulture);
-                        if (!NativeImGui.Selectable($"{slot}  Layer {index}"))
-                            continue;
-                        var layer = new GameLayer(index);
-                        CommitDefinition(
-                            setting,
-                            layer,
-                            $"project.layer.{slot}",
-                            $"Layer {index}");
-                    }
+                    if (!string.IsNullOrWhiteSpace(names[index]))
+                        continue;
+                    string slot = index.ToString("00", CultureInfo.InvariantCulture);
+                    if (NativeImGui.Selectable($"{slot}  Layer {index}"))
+                        CommitDefinition(setting, new GameLayer(index), $"Layer {index}");
                 }
-                finally
-                {
-                    ImGuiWidget.EndMenuSelector();
-                }
+            }
+            finally
+            {
+                ImGuiWidget.EndMenuSelector();
             }
         }
         finally
@@ -299,15 +261,11 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
         }
     }
 
-    private void CommitDefinition(
-        GameLayerStack setting,
-        GameLayer layer,
-        string id,
-        string name)
+    private void CommitDefinition(GameLayerStack setting, GameLayer layer, string name)
     {
         try
         {
-            setting.Define(layer, new GameLayerId(id), name);
+            setting.Define(layer, name);
             SynchronizeSlot(setting, layer);
             m_error = string.Empty;
         }
@@ -318,47 +276,22 @@ internal sealed class GameLayersSetting : ProjectSettingEditor<GameLayerStack>
         }
     }
 
-    private void RemoveDefinition(GameLayerStack setting, GameLayer layer)
+    private void SynchronizeBuffers(IReadOnlyList<string?> names)
     {
-        _ = setting.Remove(layer);
-        SynchronizeSlot(setting, layer);
-        m_error = string.Empty;
-    }
-
-    private void SynchronizeBuffers(
-        IReadOnlyList<string?> ids,
-        IReadOnlyList<string?> names)
-    {
-        if (m_observedIds is not null
-            && m_observedNames is not null
-            && m_observedIds.SequenceEqual(ids, StringComparer.Ordinal)
+        if (m_observedNames is not null
             && m_observedNames.SequenceEqual(names, StringComparer.Ordinal))
         {
             return;
         }
         for (int index = 0; index < GameLayer.C_MAX_COUNT; index++)
-        {
-            m_idBuffers[index] = ids[index] ?? string.Empty;
             m_nameBuffers[index] = names[index] ?? string.Empty;
-        }
-        m_observedIds = ids.ToArray();
         m_observedNames = names.ToArray();
     }
 
     private void SynchronizeSlot(GameLayerStack setting, GameLayer layer)
     {
-        m_idBuffers[layer.index] = setting.GetId(layer)?.value ?? string.Empty;
         m_nameBuffers[layer.index] = setting.GetName(layer) ?? string.Empty;
-        m_observedIds = CaptureIds(setting);
         m_observedNames = CaptureNames(setting);
-    }
-
-    private static string?[] CaptureIds(GameLayerStack stack)
-    {
-        var result = new string?[GameLayer.C_MAX_COUNT];
-        for (int index = 0; index < GameLayer.C_MAX_COUNT; index++)
-            result[index] = stack.GetId(new GameLayer(index))?.value;
-        return result;
     }
 
     private static string?[] CaptureNames(GameLayerStack stack)

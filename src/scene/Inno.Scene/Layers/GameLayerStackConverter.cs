@@ -8,7 +8,7 @@ using Inno.Core.Serialization.Converters;
 namespace Inno.Scene.Layers;
 
 /// <summary>
-/// Converts a layer stack to and from its fixed-width neutral serialization state.
+/// Converts a layer stack to and from its fixed-width project-local serialization state.
 /// </summary>
 [SerializationExtension]
 internal sealed class GameLayerStackConverter : SerializationConverter<GameLayerStack>
@@ -20,15 +20,15 @@ internal sealed class GameLayerStackConverter : SerializationConverter<GameLayer
     /// The writer that receives the serialized representation.
     /// </param>
     /// <param name="value">
-    /// The concrete value read or transformed by this operation.
+    /// The value processed by this operation.
     /// </param>
     public override void Write(SerializationWriter writer, GameLayerStack value)
     {
         ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(value);
         writer.Write(
-            "ids",
-            value.CaptureIds().Select(static id => id ?? string.Empty).ToArray());
+            "localIds",
+            value.CaptureLocalIds().Select(static id => id ?? string.Empty).ToArray());
         writer.Write(
             "names",
             value.CaptureNames().Select(static name => name ?? string.Empty).ToArray());
@@ -42,19 +42,17 @@ internal sealed class GameLayerStackConverter : SerializationConverter<GameLayer
     /// The reader that supplies the serialized representation.
     /// </param>
     /// <returns>
-    /// The validated game layer stack that represents the completed operation.
+    /// The value produced by this implementation of the contract.
     /// </returns>
     public override GameLayerStack Read(SerializationReader reader)
     {
         ArgumentNullException.ThrowIfNull(reader);
-        string[] serializedIds = reader.Read<string[]>("ids");
-        string?[] ids = serializedIds
+        string?[] localIds = reader.Read<string[]>("localIds")
             .Select(static id => string.IsNullOrEmpty(id) ? null : id)
             .ToArray();
-        string[] serializedNames = reader.Read<string[]>("names");
-        string?[] names = serializedNames
+        string?[] names = reader.Read<string[]>("names")
             .Select(static name => string.IsNullOrEmpty(name) ? null : name)
             .ToArray();
-        return GameLayerStack.Restore(ids, names, reader.Read<uint[]>("interactionMasks"));
+        return GameLayerStack.Restore(localIds, names, reader.Read<uint[]>("interactionMasks"));
     }
 }

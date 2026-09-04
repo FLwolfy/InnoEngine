@@ -14,6 +14,7 @@ Core 只提供不依赖 Assets、Scene、Rendering、Editor、Build 或具体 Na
 | [Inno.Core.Serialization.Generators](Inno.Core.Serialization.Generators.md) | 普通 DTO converter source generation |
 | [Inno.Core.Storage](Inno.Core.Storage.md) | 索引对象存储与依赖图 |
 | [Inno.Core.Events](Inno.Core.Events.md) | 有序同步/排队事件分发 |
+| [Inno.Core.IO](Inno.Core.IO.md) | 原子文件/目录提交与路径边界 |
 | [Inno.Core.Input](Inno.Core.Input.md) | 后端中立输入枚举 |
 | [Inno.Core.Jobs](Inno.Core.Jobs.md) | 单线程/工作窃取 JobScheduler |
 | [Inno.Core.Coroutines](Inno.Core.Coroutines.md) | session-owned 协程调度 |

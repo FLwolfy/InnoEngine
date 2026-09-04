@@ -12,6 +12,7 @@ using Inno.Assets;
 using Inno.Assets.Pipeline;
 using Inno.Core.Diagnostics;
 using Inno.Core.Identity;
+using Inno.Core.IO;
 using Inno.Core.Logging;
 using Inno.Extensibility.Types;
 using Inno.Core.Serialization;
@@ -3319,7 +3320,7 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
         => AssetSourcePolicy.IsGeneratedPath(relativePath);
 
     private static void WriteAtomic(string targetPath, byte[] bytes)
-        => AssetFileTransaction.WriteAtomic(targetPath, bytes);
+        => AtomicFile.WriteAllBytes(targetPath, bytes);
 
     private static FileSnapshot CaptureFile(string path)
         => IOFile.Exists(path)

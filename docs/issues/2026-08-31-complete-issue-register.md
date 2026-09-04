@@ -200,9 +200,9 @@
 
 - 历史证据：旧实现把 active Plugin 当作扁平列表，缺少完整传递闭包、循环和冲突约束。
 - 根因与影响：安装后依赖缺失、重复 ID 或顺序不确定。
-- 当前实现：稳定 Plugin ID 图进行确定性拓扑排序；可选内嵌输出扁平完整 ZIP 闭包，安装侧验证声明、循环、重复 ID、路径和 archive limits。
+- 当前实现：稳定 Plugin ID 图进行确定性拓扑排序；可选内嵌输出扁平完整 `.iplugin` 闭包，安装侧验证声明、循环、重复 ID、路径和 archive limits。
 - 测试：`DependencyGraphUsesDeterministicTopologicalOrderAndRejectsCycles`、`MissingDependenciesDuplicateIdsAndInvalidOverridesRejectTheCandidateGeneration`、确定性 Plugin Build 测试。
-- 关闭标准：相同输入得到字节相同 ZIP，缺失/循环/冲突在候选阶段失败。已满足。
+- 关闭标准：相同输入得到字节相同 `.iplugin`，缺失/循环/冲突在候选阶段失败。已满足。
 
 ### ARCH-017：Plugin 主线程高频全目录扫描
 
@@ -352,8 +352,8 @@
 
 - 历史证据：运行中删除或原地更新 `Plugins/<folder>` 后，旧 AssetLoader 在 activation、rollback、FileBrowser draw、shutdown 和下一帧 `Update` 中继续枚举已不存在的 `Plugins/<folder>/Assets`，最终形成 `DirectoryNotFoundException`、reload rollback failure 和进程级未处理异常。
 - 根因与影响：ZIP Plugin 使用 `Library/Plugins/<pluginId>/<contentHash>` 解压 snapshot，但 Folder Plugin 的 active Source Mount 直接指向安装目录；所谓 active generation 并不不可变，外部文件操作能够同时破坏候选和 last-good。
-- 当前实现：ZIP 与 Folder 在 Scan 阶段统一物化为内容寻址、原子提交的 Library generation snapshot；Folder 的 manifest、内容校验和 hash 基于已复制 snapshot，active/candidate mount 都只读取 snapshot。外部源删除或更新只改变下一候选，不会破坏事务 previous snapshot。安装集合中的删除、结构失效、Asset metadata 候选失败或代码更新编译失败会提交 unavailable generation，而不是用 rollback 继续伪装旧 Plugin 有效；Scripting 根据 Plugin ID/content hash 退休变化 module 及完整反向依赖闭包，Scene 使用 Missing Component/System 保存 Stable ID、persistent ID、状态和顺序。只有 reload participant/状态迁移本身失败才 rollback。
-- 测试：`InstalledFolderPluginUsesTheSameReadOnlyMountContractAsZip` 验证更新前后 snapshot 路径和内容隔离；`RemovingAnActiveCodeFolderKeepsTheLastGoodSnapshotUntilAtomicRemovalCommits` 验证 source 删除期间 previous snapshot 始终可读；`StructurallyInvalidActivePluginStagesAnUnavailableGeneration` 与 `InvalidAssetMetadataUpdateStagesAnUnavailableGenerationWithoutThrowing` 验证安装结构和 Asset 候选失败被隔离为 unavailable generation；`RemovedOrBrokenUpdatedPluginCommitsUnavailableGenerationAndRecovers` 使用真实 Plugin/Project Roslyn 编译、ModuleHost closure 和 Scene reload 验证物理删除及原地坏更新即使令 Project Scripts 编译失败也会退休 Plugin + Runtime/Editor Scripts、显示 Missing，并在同 Stable ID 回归后恢复类型、persistent ID 和序列化状态；`RemovingAndRestoringAPluginGenerationPreservesItsComponentAsMissingState` 继续覆盖底层 collectible Plugin Scene 迁移协议。
+- 当前实现：安装只接受项目根 `Plugins/*.iplugin`。每个包在 Scan 阶段通过 archive、manifest、路径、`.imeta` 与依赖验证后物化为内容寻址的不可变 Library generation snapshot；Folder、`.zip` 和其他形态仅产生安装诊断，不形成候选或 Mount。外部包删除或替换只改变下一候选，不会破坏事务 previous snapshot。安装集合中的删除、结构失效、Asset metadata 候选失败或代码更新编译失败会提交 unavailable generation，而不是用 rollback 继续伪装旧 Plugin 有效；Scripting 根据 Plugin ID/content hash 退休变化 module 及完整反向依赖闭包，Scene 使用 Missing Component/System 保存 Stable ID、persistent ID、状态和顺序。只有 reload participant/状态迁移本身失败才 rollback。
+- 测试：`FolderPluginIsRejectedAsANonPackageInstallation` 与 `FolderManifestCannotConflictWithAValidPackageIdentity` 固定 `.iplugin`-only 安装边界；`RemovingAnActiveCodePackageKeepsTheLastGoodSnapshotUntilAtomicRemovalCommits` 验证 package 删除期间 previous snapshot 始终可读；`StructurallyInvalidActivePluginStagesAnUnavailableGeneration` 与 `InvalidAssetMetadataUpdateStagesAnUnavailableGenerationWithoutThrowing` 验证安装结构和 Asset 候选失败被隔离为 unavailable generation；`RemovedOrBrokenUpdatedPluginCommitsUnavailableGenerationAndRecovers` 使用真实 Plugin/Project Roslyn 编译、ModuleHost closure 和 Scene reload 验证物理删除及原地坏更新即使令 Project Scripts 编译失败也会退休 Plugin + Runtime/Editor Scripts、显示 Missing，并在同 Stable ID 回归后恢复类型、persistent ID 和序列化状态；`RemovingAndRestoringAPluginGenerationPreservesItsComponentAsMissingState` 继续覆盖底层 collectible Plugin Scene 迁移协议。
 - 关闭标准：外部删除、结构损坏、Asset metadata 损坏或原地代码更新不会破坏 active/rollback snapshot，也不会从 Refresh、File Browser、reload、shutdown 抛出失效路径异常；当前不可成立的代码 closure 不会继续运行，Scene 显示可恢复 Missing，恢复有效内容后自动重建。已满足。
 
 ### ARCH-036：Rendering participant 拒绝 Plugin 缺席代际并回滚卸载

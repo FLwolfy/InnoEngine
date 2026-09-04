@@ -49,9 +49,10 @@ public sealed class AssetHistoryTests : IDisposable
         m_types = new TypeCatalog(m_modules);
         m_serialization = new SerializationRegistry(m_types);
         m_settings = new ProjectSettingsStore(
-            Path.Combine(m_projectRoot, "ProjectSettings.inno"),
+            Path.Combine(m_projectRoot, "Settings.Project.inno"),
             m_types,
-            m_serialization);
+            m_serialization,
+            new ProjectId("tests.editor"));
         string libraryRoot = Path.Combine(m_projectRoot, "Library");
         string pluginRoot = Path.Combine(m_projectRoot, "Plugins");
         var pluginSources = new PluginSourceService(

@@ -10,6 +10,7 @@ using Inno.Assets;
 using Inno.Assets.Pipeline;
 using Inno.Plugins.Authoring;
 using Inno.Plugins;
+using Inno.Core.IO;
 using Inno.Core.Serialization;
 using Inno.Core.Settings;
 
@@ -116,7 +117,7 @@ internal sealed class PluginPackageBuilder
             {
                 contentHash = Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false));
             }
-            BuildFileSystem.InstallFileAtomically(temporary, destination);
+            AtomicFile.Install(temporary, destination);
             progress?.Report(new BuildProgress("commit", 1d, "Plugin package committed atomically."));
             return BuildResult.Success(
                 destination,

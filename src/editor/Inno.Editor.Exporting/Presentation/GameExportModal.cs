@@ -45,12 +45,15 @@ internal sealed class GameExportModal(ExportWindowModule window) : EditorModal
         NativeImGui.BeginDisabled(!enabled);
         try
         {
-            DrawText("Application ID", "game_id", window.gameApplicationId, value => window.gameApplicationId = value);
+            NativeImGui.TextUnformatted("Application ID");
+            NativeImGui.TextDisabled($"{window.gameApplicationId} (from Project ID)");
             DrawText("Product Name", "game_name", window.gameProductName, value => window.gameProductName = value);
             DrawText("Startup Scene", "game_scene", window.gameStartupScene, value => window.gameStartupScene = value);
             DrawWindowSize();
             DrawTarget();
             DrawText("Output Directory", "game_output", window.gameOutputDirectory, value => window.gameOutputDirectory = value);
+            NativeImGui.TextDisabled(
+                "Identity comes from Settings > Project > Identity. Other defaults come from Build > Game.");
         }
         finally
         {

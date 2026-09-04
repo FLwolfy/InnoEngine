@@ -1,4 +1,6 @@
+using Inno.Build;
 using Inno.Editor.Core;
+using Inno.Editor.Interactions;
 using Inno.Editor.Settings;
 
 namespace Inno.Editor.Panel.Settings;
@@ -6,7 +8,9 @@ namespace Inno.Editor.Panel.Settings;
 [EditorModule("settings-window", order: 20)]
 internal sealed class SettingsWindowModule(
     EditorSettings editorSettings,
-    ProjectSettingsEditor projectSettings) : EditorModule
+    ProjectSettingsEditor projectSettings,
+    BuildSettingsStore buildSettings,
+    EditorInteractions interactions) : EditorModule
 {
     private SettingsEditSession? m_session;
 
@@ -17,7 +21,11 @@ internal sealed class SettingsWindowModule(
     internal void Open()
     {
         if (!isVisible)
-            m_session = new SettingsEditSession(editorSettings, projectSettings);
+            m_session = new SettingsEditSession(
+                editorSettings,
+                projectSettings,
+                buildSettings,
+                interactions.history);
         isVisible = true;
     }
 
@@ -29,7 +37,11 @@ internal sealed class SettingsWindowModule(
 
     internal void Refresh()
     {
-        m_session = new SettingsEditSession(editorSettings, projectSettings);
+        m_session = new SettingsEditSession(
+            editorSettings,
+            projectSettings,
+            buildSettings,
+            interactions.history);
     }
 
     /// <summary>

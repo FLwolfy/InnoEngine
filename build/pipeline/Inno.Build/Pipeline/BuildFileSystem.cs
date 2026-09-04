@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+
+using Inno.Core.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -79,47 +81,6 @@ internal static class BuildFileSystem
     }
 
     internal static void InstallDirectoryAtomically(string source, string destination)
-    {
-        string backup = destination + ".backup-" + Guid.NewGuid().ToString("N");
-        bool replaced = Directory.Exists(destination);
-        if (replaced)
-            Directory.Move(destination, backup);
-        try
-        {
-            Directory.Move(source, destination);
-            if (Directory.Exists(backup))
-                Directory.Delete(backup, recursive: true);
-        }
-        catch
-        {
-            if (Directory.Exists(destination))
-                Directory.Delete(destination, recursive: true);
-            if (Directory.Exists(backup))
-                Directory.Move(backup, destination);
-            throw;
-        }
-    }
+        => AtomicDirectory.Install(source, destination);
 
-    internal static void InstallFileAtomically(string source, string destination)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-        string backup = destination + ".backup-" + Guid.NewGuid().ToString("N");
-        bool replaced = File.Exists(destination);
-        if (replaced)
-            File.Move(destination, backup);
-        try
-        {
-            File.Move(source, destination);
-            if (File.Exists(backup))
-                File.Delete(backup);
-        }
-        catch
-        {
-            if (File.Exists(destination))
-                File.Delete(destination);
-            if (File.Exists(backup))
-                File.Move(backup, destination);
-            throw;
-        }
-    }
 }

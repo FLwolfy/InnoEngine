@@ -9,9 +9,11 @@ Editor/...                                      Project/...
 EditorSetting + EditorSettingObject             ProjectSettingEditor<TSetting>
              │                                               │
              ▼                                               ▼
-EditorSettings.inno（Inno Serialization）        ProjectSettings.inno（Inno Serialization）
+Settings.Editor.inno（Inno Serialization）        Settings.Project.inno（Inno Serialization）
 Editor-only、不会进入 Player                     Runtime/Plugin 可读取并进入构建
 ```
+
+统一 frontend 还提供内置 `Build/...` 根。它直接编辑 [Inno.Build](../build/Inno.Build.md) 的强类型 `BuildSettings` 并写入 `Settings.Build.inno`；该文件是团队共享的 authoring/build 默认值，不进入 Player，也不是 Plugin 可贡献的 runtime Setting 协议。
 
 ## Editor Settings
 
@@ -54,7 +56,7 @@ EditorSettingObject value = editorSettings.Get("Editor/Appearance/Grid/Visible")
 bool visible = value.GetAsBoolean("value", true);
 ```
 
-返回对象始终隔离；只有 `EditorSettings.Apply(values, resets)` 才通过 `SerializationRegistry` 原子更新 `EditorSettings.inno` 并写入统一 Editor History。`EditorSettings.changed` 用于刷新 Editor-only 消费者。
+返回对象始终隔离；只有 `EditorSettings.Apply(values, resets)` 才通过 `SerializationRegistry` 原子更新 `Settings.Editor.inno` 并写入统一 Editor History。`EditorSettings.changed` 用于刷新 Editor-only 消费者。
 
 例如 Console 的保留策略只在 `Editor/Diagnostics/Console/Clear on Play` 注册和持久化，默认值为 `true`。Console backend 订阅 `EditorSettings.changed` 并在 Apply、Undo、Redo 后读取当前有效值；Console Panel 不再使用 `editor.ini` 或 toolbar 维护同名状态。
 
@@ -83,6 +85,8 @@ public sealed class RenderingSettingEditor : ProjectSettingEditor<MyRenderingSet
 }
 ```
 
+`Project/Identity/Project ID` 是内置的 `ProjectIdentitySettings` drawer；它只接受 portable lowercase namespace。Layer、Tag、Sorting Layer 等 Project-owned 定义不再让用户输入完整 ID，而是保存 local key 并在运行时组合为 `projectId.name`。Game/Plugin 导出身份也直接读取这个 Project ID，不在 Build Settings 或导出 modal 中维护第二份可编辑 ID。
+
 `ProjectSettingEditor<TSetting>` 收到的是当前 generation 的隔离暂存副本。它只能修改该副本；统一 Apply 中的 Project scope 以“Host + Plugin 合成结果”为 baseline：有 Composer 的协议只写语义 delta，没有 Composer 的协议写完整 replacement。Reset Project 删除项目 contribution，随后重新使用 Host 默认值与 Plugin 默认贡献的合成结果。如果编辑结果等于 baseline，Apply 会自动移除已有 project record，不留下空 override。
 
 同一个 `ProjectSettingId` 可以注册多个不同 placement 的 Editor 表现，只要它们的
@@ -97,7 +101,7 @@ History 事务；这允许一个较大的运行时设置协议在 UI 中拆成�
 | `EditorSettingPathAttribute` | 把 Editor-only page/field 放入 `Editor/...`。 |
 | `EditorSetting` | Editor-only page/field 定义，`OnDraw(EditorSettingObject)` 是绘制扩展点。 |
 | `EditorSettingObject` | 使用当前 Inno Serialization 的隔离结构化值对象。 |
-| `EditorSettings` | `EditorSettings.inno` 的读取、Apply、Reset、History 与变更通知。 |
+| `EditorSettings` | `Settings.Editor.inno` 的读取、Apply、Reset、History 与变更通知。 |
 | `ProjectSettingPathAttribute` | 把强类型 Project Setting Drawer 放入 `Project/...`。 |
 | `ProjectSettingEditor` | frontend 使用的非泛型定义与 placement metadata。 |
 | `ProjectSettingEditor<TSetting>` | Plugin/Host 实现的强类型 `OnDraw(TSetting)` 扩展点。 |
@@ -105,8 +109,10 @@ History 事务；这允许一个较大的运行时设置协议在 UI 中拆成�
 
 ## 生命周期与约束
 
-- 两个域共享窗口、搜索、页面树、控件布局与一个 Apply 按钮，但仍拥有独立文档和 History entry，不伪装成跨文件原子事务。
+- Editor、Project、Build 三个域共享窗口、搜索、页面树、控件布局与一个 Apply 按钮，但仍拥有独立文档和 History entry，不伪装成跨文件原子事务。
 - `Editor/...` 不参与 Plugin 默认贡献，也不进入 Player；`Project/...` 使用强类型 Setting 协议而不是 Editor property bag。
+- `Build/...` 是 Host 内置编辑面，不提供 Plugin contribution；导出 modal 只复制默认值作为临时 draft。
+- `SettingsDocumentStore<T>` 统一三个域的 current-format 验证、capture/restore 与原子写入；`EditorSettings`、`ProjectSettingsStore`、`BuildSettingsStore` 继续拥有不同生命周期和 History。
 - Project setting 的长期身份是 `ProjectSettingId` 与 Stable Type ID，UI 路径只决定 Editor 中的位置。
 - Catalog generation 先完整构建候选再原子切换；Drawer 不应订阅静态事件或长期保存传入的 setting 实例。
 - 删除或移动路径时同步当前项目数据、调用方与 Wiki，不保留旧 key alias。

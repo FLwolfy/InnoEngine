@@ -27,7 +27,7 @@ internal sealed class ProjectSettingsRegistry : TypeRegistry<ProjectSettingsRegi
     /// </returns>
     protected override Snapshot Build(TypeCacheSnapshot types)
     {
-        var settingTypes = new Dictionary<ProjectSettingId, (Guid stableTypeId, Type runtimeType)>();
+        var settingTypes = new Dictionary<ProjectSettingId, (Guid stableTypeId, Type runtimeType, bool allowPluginContributions)>();
         foreach (TypeRef typeRef in types.GetTypesWithAttribute<ProjectSettingDefinitionAttribute>())
         {
             Type type = typeRef.Resolve(types);
@@ -50,7 +50,7 @@ internal sealed class ProjectSettingsRegistry : TypeRegistry<ProjectSettingsRegi
             ProjectSettingDefinitionAttribute attribute =
                 type.GetCustomAttribute<ProjectSettingDefinitionAttribute>(inherit: false)!;
             var id = new ProjectSettingId(attribute.id);
-            if (!settingTypes.TryAdd(id, (stableType.stableId, type)))
+            if (!settingTypes.TryAdd(id, (stableType.stableId, type, attribute.allowPluginContributions)))
                 throw new InvalidOperationException($"Project setting ID '{id}' is declared more than once.");
         }
 
@@ -96,10 +96,10 @@ internal sealed class ProjectSettingsRegistry : TypeRegistry<ProjectSettingsRegi
         }
 
         var definitions = new Dictionary<ProjectSettingId, Definition>();
-        foreach ((ProjectSettingId id, (Guid stableTypeId, Type runtimeType)) in settingTypes)
+        foreach ((ProjectSettingId id, (Guid stableTypeId, Type runtimeType, bool allowPluginContributions)) in settingTypes)
         {
             composers.TryGetValue(id, out ProjectSettingComposer? composer);
-            definitions.Add(id, new Definition(stableTypeId, runtimeType, composer));
+            definitions.Add(id, new Definition(stableTypeId, runtimeType, composer, allowPluginContributions));
         }
         return new Snapshot(types.version, definitions.ToFrozenDictionary());
     }
@@ -125,7 +125,8 @@ internal sealed class ProjectSettingsRegistry : TypeRegistry<ProjectSettingsRegi
     internal sealed record Definition(
         Guid stableTypeId,
         Type runtimeType,
-        ProjectSettingComposer? composer)
+        ProjectSettingComposer? composer,
+        bool allowPluginContributions)
     {
         internal ISerializable Create()
             => (ISerializable)(Activator.CreateInstance(runtimeType, nonPublic: true)

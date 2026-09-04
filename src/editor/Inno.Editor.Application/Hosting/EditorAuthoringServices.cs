@@ -62,9 +62,10 @@ internal sealed class EditorAuthoringServices : IDisposable
         try
         {
             settings = new ProjectSettingsStore(
-                Path.Combine(projectRoot, "ProjectSettings.inno"),
+                Path.Combine(projectRoot, SettingsFileNames.project),
                 engineHost.types,
-                engineHost.serialization);
+                engineHost.serialization,
+                ProjectId.FromName(Path.GetFileName(projectRoot)));
             var pluginSources = new PluginSourceService(
                 engineHost.serialization,
                 pluginRoot,

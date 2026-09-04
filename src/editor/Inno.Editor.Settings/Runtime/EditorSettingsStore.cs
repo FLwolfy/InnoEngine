@@ -3,24 +3,28 @@ using System.Collections.Generic;
 using System.IO;
 
 using Inno.Core.Serialization;
+using Inno.Core.Settings;
 
 namespace Inno.Editor.Settings;
 
 internal sealed class EditorSettingsStore
 {
-    internal const string C_FILE_NAME = "EditorSettings.inno";
+    internal const string C_FILE_NAME = SettingsFileNames.editor;
 
-    private readonly string m_path;
-    private readonly SerializationRegistry m_serialization;
+    private readonly SettingsDocumentStore<EditorSettingsDocument> m_documents;
     private Dictionary<string, EditorSettingObject> m_values;
 
     internal EditorSettingsStore(string projectDirectory, SerializationRegistry serialization)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectDirectory);
         ArgumentNullException.ThrowIfNull(serialization);
-        m_path = Path.Combine(Path.GetFullPath(projectDirectory), C_FILE_NAME);
-        m_serialization = serialization;
-        m_values = ReadValues(m_path);
+        string path = Path.Combine(Path.GetFullPath(projectDirectory), C_FILE_NAME);
+        m_documents = new SettingsDocumentStore<EditorSettingsDocument>(
+            path,
+            serialization,
+            static () => new EditorSettingsDocument(),
+            ValidateDocumentValue);
+        m_values = ValidateAndCopy(m_documents.Load().values);
     }
 
     internal bool TryGet(string path, out EditorSettingObject? value)
@@ -62,14 +66,11 @@ internal sealed class EditorSettingsStore
     internal void ValidateDocument(ReadOnlySpan<byte> document)
         => _ = ReadValues(document);
 
-    private Dictionary<string, EditorSettingObject> ReadValues(string path)
-        => File.Exists(path) ? ReadValues(File.ReadAllBytes(path)) : [];
-
     private Dictionary<string, EditorSettingObject> ReadValues(ReadOnlySpan<byte> document)
     {
         try
         {
-            EditorSettingsDocument parsed = m_serialization.Deserialize<EditorSettingsDocument>(document);
+            EditorSettingsDocument parsed = m_documents.Deserialize(document);
             return ValidateAndCopy(parsed.values);
         }
         catch (Exception exception) when (exception is ArgumentException
@@ -84,7 +85,7 @@ internal sealed class EditorSettingsStore
     }
 
     private byte[] Serialize(IReadOnlyDictionary<string, EditorSettingObject> values)
-        => m_serialization.Serialize(new EditorSettingsDocument { values = Copy(values) });
+        => m_documents.Capture(new EditorSettingsDocument { values = Copy(values) });
 
     private static Dictionary<string, EditorSettingObject> ValidateAndCopy(
         IReadOnlyDictionary<string, EditorSettingObject> values)
@@ -121,28 +122,12 @@ internal sealed class EditorSettingsStore
         return result;
     }
 
-    private void Write(byte[] document)
+    private void Write(ReadOnlySpan<byte> document)
+        => m_documents.Restore(document);
+
+    private static void ValidateDocumentValue(EditorSettingsDocument document)
     {
-        string candidate = m_path + ".staging-" + Guid.NewGuid().ToString("N");
-        try
-        {
-            using (var stream = new FileStream(
-                       candidate,
-                       FileMode.CreateNew,
-                       FileAccess.Write,
-                       FileShare.None,
-                       4096,
-                       FileOptions.WriteThrough))
-            {
-                stream.Write(document);
-                stream.Flush(flushToDisk: true);
-            }
-            File.Move(candidate, m_path, overwrite: true);
-        }
-        finally
-        {
-            if (File.Exists(candidate))
-                File.Delete(candidate);
-        }
+        ArgumentNullException.ThrowIfNull(document);
+        _ = ValidateAndCopy(document.values);
     }
 }

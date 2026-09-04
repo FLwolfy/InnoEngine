@@ -588,8 +588,8 @@ Attribute 和 Registry 自动发现具体扩展，不在 Manifest 中维护类�
 - 默认声明稳定 Plugin ID。
 - Editor Setting 控制是否内嵌。
 - 内嵌时生成完整、扁平、确定性依赖闭包。
-- ZIP 流式生成。
-- ZIP 与 Folder 使用同一验证。
+- `.iplugin` 容器流式生成。
+- 安装只接受 `.iplugin`；Folder、`.zip` 和其他形态在候选前拒绝。
 - 安装内容一律只读。
 - 修改通过外部替换触发候选 generation。
 

@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 
 using Inno.Assets;
+using Inno.Core.IO;
 using Inno.Core.Serialization;
 
 using IOFile = System.IO.File;
@@ -58,7 +59,7 @@ internal sealed class AssetArtifactStore
                 key = key.value,
                 outputs = entries
             };
-            AssetFileTransaction.WriteAtomic(
+            AtomicFile.WriteAllBytes(
                 Path.Combine(stagingPath, "manifest"),
                 m_serialization.Serialize(manifest));
 

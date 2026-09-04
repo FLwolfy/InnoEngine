@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 
+using Inno.Core.Settings;
 using Inno.Scene;
 using Inno.Scene.Layers;
 
@@ -82,6 +83,37 @@ public sealed class GameLayerTests : IDisposable
         copy.SetInteraction(player, enemy, canInteract: true);
         Assert.False(stack.CanInteract(player, enemy));
         Assert.True(copy.CanInteract(player, enemy));
+    }
+
+    /// <summary>
+    /// Verifies that project-scoped identities are resolved from stable local keys at the read boundary.
+    /// </summary>
+    [Fact]
+    public void ProjectScopedIds_FollowProjectIdentityWithoutRewritingDefinitions()
+    {
+        var firstProject = new ProjectId("studio.first");
+        Assert.Equal("innoengine-rendering2d", ProjectId.FromName("InnoEngine.Rendering2D").value);
+        Assert.Equal("inno.project", ProjectId.FromName("项目").value);
+
+        var secondProject = new ProjectId("studio.second");
+        var layer = new GameLayer(1);
+        var layers = new GameLayerStack();
+        layers.Define(layer, "Player");
+
+        Assert.Equal("layer.01", layers.GetLocalId(layer)?.value);
+        Assert.Equal("studio.first.layer.01", layers.GetId(firstProject, layer)?.value);
+        Assert.Equal("studio.second.layer.01", layers.GetId(secondProject, layer)?.value);
+
+        layers.Define(layer, "Hero");
+
+        Assert.Equal("layer.01", layers.GetLocalId(layer)?.value);
+        Assert.Equal("studio.second.layer.01", layers.GetId(secondProject, layer)?.value);
+
+        var tags = new GameTagCatalog();
+        Assert.True(tags.Add("Enemy Boss"));
+        Assert.Equal("enemy-boss", tags.GetLocalId("Enemy Boss").value);
+        Assert.Equal("studio.first.enemy-boss", tags.GetId(firstProject, "Enemy Boss").value);
+        Assert.Equal("studio.second.enemy-boss", tags.GetId(secondProject, "Enemy Boss").value);
     }
 
     /// <summary>

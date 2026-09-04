@@ -13,6 +13,7 @@ using Inno.Core.Identity;
 using Inno.Core.Settings;
 using Inno.Plugins.Authoring;
 using Inno.Runtime;
+using Inno.Scene;
 using Inno.Scripting.Compiler;
 
 namespace Inno.Build.Cli;
@@ -36,11 +37,11 @@ internal static class Program
             BuildResult result = command.kind switch
             {
                 BuildCommandKind.Game => await workspace.pipeline.BuildGameAsync(
-                    command.CreateGameRequest(workspace.LoadBuildProfile(command.profilePath)),
+                    command.CreateGameRequest(workspace.LoadGameProfile(command.profilePath)),
                     new ConsoleBuildProgress(),
                     cancellation.Token),
                 BuildCommandKind.Plugin => await workspace.pipeline.BuildPluginAsync(
-                    command.CreatePluginRequest(),
+                    command.CreatePluginRequest(workspace.projectId),
                     new ConsoleBuildProgress(),
                     cancellation.Token),
                 _ => throw new InvalidOperationException("Unknown build command kind.")
@@ -102,6 +103,8 @@ internal sealed class BuildWorkspace : IDisposable
     }
 
     internal BuildPipeline pipeline { get; }
+    internal ProjectId projectId => m_settings.projectId;
+
 
     internal static BuildWorkspace Open(string projectDirectory, string supportPackRoot)
     {
@@ -124,9 +127,10 @@ internal sealed class BuildWorkspace : IDisposable
                 .UseMetadataCache(Path.Combine(libraryRoot, "Build", "Metadata"))
                 .Build();
             settings = new ProjectSettingsStore(
-                Path.Combine(projectRoot, "ProjectSettings.inno"),
+                Path.Combine(projectRoot, SettingsFileNames.project),
                 engine.types,
-                engine.serialization);
+                engine.serialization,
+                ProjectId.FromName(Path.GetFileName(projectRoot)));
             var sources = new PluginSourceService(engine.serialization, pluginsRoot, libraryRoot);
             PluginScanResult scan = sources.Scan();
             AssetPipelineOptions options = AssetPipelineOptions.Create(assetsRoot, libraryRoot);
@@ -196,12 +200,41 @@ internal sealed class BuildWorkspace : IDisposable
         m_engine.Dispose();
     }
 
-    internal BuildProfile LoadBuildProfile(string? path)
+    internal BuildProfile LoadGameProfile(string? path)
     {
-        string profilePath = string.IsNullOrWhiteSpace(path)
-            ? Path.Combine(m_projectDirectory, "BuildProfile.inno")
-            : Path.GetFullPath(path, m_projectDirectory);
-        return new BuildProfileStore(profilePath, m_engine.serialization).Load();
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            string profilePath = Path.GetFullPath(path, m_projectDirectory);
+            BuildProfile profile = new BuildProfileStore(profilePath, m_engine.serialization).Load();
+            profile.applicationId = projectId.value;
+            return profile;
+        }
+
+        BuildTargetId defaultTarget = OperatingSystem.IsWindows()
+            ? BuildTargetId.windowsX64
+            : BuildTargetId.macOSArm64;
+        BuildSettings defaults = BuildSettings.CreateDefault(
+            Path.GetFileName(Path.TrimEndingDirectorySeparator(m_projectDirectory)),
+            FindDefaultStartupScene(),
+            defaultTarget);
+        var settings = new BuildSettingsStore(
+            Path.Combine(m_projectDirectory, SettingsFileNames.build),
+            m_engine.serialization,
+            defaults);
+        return settings.Load().CreateGameProfile(projectId);
+    }
+
+    private string FindDefaultStartupScene()
+    {
+        foreach (AssetFileEntry entry in m_assets.GetFileSystemEntries(includeDirectories: false)
+                     .Where(static entry => entry.source == AssetSourceId.project)
+                     .Where(static entry => !AssetSample.IsRuntimeExcluded(entry.assetPath, isDirectory: false))
+                     .OrderBy(static entry => entry.assetPath.localPath, StringComparer.Ordinal))
+        {
+            if (m_assets.TryGetAssetType(entry.assetPath, out Type? type) && type == typeof(SceneAsset))
+                return entry.assetPath.ToString();
+        }
+        return string.Empty;
     }
 }
 
@@ -269,10 +302,10 @@ internal sealed class BuildCommand
             outputDirectory = Require(m_values, "output")
         };
 
-    internal PluginBuildRequest CreatePluginRequest()
+    internal PluginBuildRequest CreatePluginRequest(ProjectId projectId)
         => new()
         {
-            pluginId = Require(m_values, "plugin-id"),
+            pluginId = projectId.value,
             displayName = Require(m_values, "display-name"),
             outputPath = Require(m_values, "output"),
             includeDependencies = m_values.ContainsKey("include-dependencies")
@@ -286,6 +319,5 @@ internal sealed class BuildCommand
     private static string Usage()
         => "Usage:\n"
            + "  Inno.Build.Cli game --project <dir> --support-packs <dir> --output <dir> [--profile <BuildProfile.inno>]\n"
-           + "  Inno.Build.Cli plugin --project <dir> --output <package.iplugin> --plugin-id <id> "
-           + "--display-name <name> [--include-dependencies]";
+           + "  Inno.Build.Cli plugin --project <dir> --output <package.iplugin> --display-name <name> [--include-dependencies]";
 }

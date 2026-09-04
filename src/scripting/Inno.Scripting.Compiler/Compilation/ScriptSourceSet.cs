@@ -36,6 +36,7 @@ internal sealed record ScriptSourceSet(
         AssetFileEntry[] entries = (candidateAssets?.GetFileSystemEntries(includeDirectories: false)
                 ?? assets.GetFileSystemEntries(includeDirectories: false))
             .Where(static entry => !entry.isSampleContent)
+            .Where(entry => includeEditor || !AssetSample.IsRuntimeExcluded(entry.assetPath, isDirectory: false))
             .OrderBy(static entry => entry.assetPath.source.value, StringComparer.Ordinal)
             .ThenBy(static entry => entry.assetPath.localPath, StringComparer.Ordinal)
             .ToArray();

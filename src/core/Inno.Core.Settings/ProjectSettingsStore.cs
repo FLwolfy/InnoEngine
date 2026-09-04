@@ -30,6 +30,9 @@ public sealed class ProjectSettingsStore : IDisposable, IProjectSettingsLookup
     /// <param name="serialization">
     /// The serialization registry used for documents and contribution payloads.
     /// </param>
+    /// <param name="defaultProjectId">
+    /// The project namespace used until an authored identity override is saved.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="documentPath"/> is empty.
     /// </exception>
@@ -39,15 +42,34 @@ public sealed class ProjectSettingsStore : IDisposable, IProjectSettingsLookup
     public ProjectSettingsStore(
         string documentPath,
         TypeCatalog types,
-        SerializationRegistry serialization)
+        SerializationRegistry serialization,
+        ProjectId defaultProjectId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(documentPath);
         ArgumentNullException.ThrowIfNull(types);
         ArgumentNullException.ThrowIfNull(serialization);
         m_serialization = serialization;
-        m_current = new ProjectSettings(documentPath, types, serialization);
+        m_current = new ProjectSettings(documentPath, types, serialization, defaultProjectId);
         m_revision = 1;
     }
+
+    /// <summary>
+    /// Gets the current project namespace.
+    /// </summary>
+    public ProjectId projectId
+        => Get<ProjectIdentitySettings>(ProjectIdentitySettings.settingId).id;
+
+    /// <summary>
+    /// Qualifies one local name under the current project namespace.
+    /// </summary>
+    /// <param name="name">
+    /// The local display name.
+    /// </param>
+    /// <returns>
+    /// The canonical <c>projectId.name</c> identity.
+    /// </returns>
+    public ProjectScopedId QualifyId(string name)
+        => projectId.Qualify(ProjectLocalId.FromName(name));
 
     /// <summary>
     /// Gets whether project settings are initialized.

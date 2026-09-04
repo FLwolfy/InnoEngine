@@ -62,6 +62,12 @@ internal sealed class GameBuildPipeline
         AssetPath startupPath = AssetPath.Parse(request.profile.startupScene);
         if (!m_assets.TryGetAssetType(startupPath, out Type? sceneType) || sceneType != typeof(SceneAsset))
             throw new InvalidOperationException($"Startup scene '{startupPath}' is not an imported Scene asset.");
+        if (AssetSample.IsRuntimeExcluded(startupPath, isDirectory: false))
+        {
+            throw new InvalidOperationException(
+                $"Startup scene '{startupPath}' belongs to an authoring-only '~' sample directory " +
+                "and cannot be included in a Player build.");
+        }
 
         long assetRevision = m_assets.revision;
         long pluginRevision = m_plugins.revision;
@@ -133,7 +139,7 @@ internal sealed class GameBuildPipeline
             EnsureGenerationUnchanged(assetRevision, pluginRevision, settingsRevision);
 
             await File.WriteAllBytesAsync(
-                    Path.Combine(rawContent, "ProjectSettings.inno"),
+                    Path.Combine(rawContent, SettingsFileNames.project),
                     settings,
                     stagingToken)
                 .ConfigureAwait(false);

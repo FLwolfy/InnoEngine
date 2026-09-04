@@ -10,9 +10,9 @@ Target Header 右上角提供 lock/unlock 控件，其交互面积、图标居�
 
 Asset target Drawer 由 FileBrowser 项目自身提供，并通过 `IInspectionIconProvider<AssetFileEntry>` 复用 `AssetEditorModule` 的 type/extension icon registry；因此 File Browser Tree/List/Grid 与 Inspector Header 始终一致，EditorScripts 热重载图标声明后两处会同时更新。第二行 source path 使用与 File Browser 底部 breadcrumb 相同的半透明 palette color。Plugin Source Mount 根使用 `IPlugin` 类型，不伪装成普通 Directory，也不创建 `.iplugin` companion asset。
 
-GameObject Header 的第二行包含 Active、项目 Tag picker 和 Layer picker。`SceneProjectSettingsModule` 按 `ProjectSettingsStore.revision` 刷新隔离的 `GameTagCatalog` 与 `GameLayerStack` 快照；Inspector 不从 `editor.ini` 或 `EditorSettings.inno` 建立第二份 catalog。对象修改通过 `SceneEdits` 进入 Scene History。
+GameObject Header 的第二行包含 Active、项目 Tag picker 和 Layer picker。`SceneProjectSettingsModule` 按 `ProjectSettingsStore.revision` 刷新隔离的 `GameTagCatalog` 与 `GameLayerStack` 快照；Inspector 不从 `editor.ini` 或 `Settings.Editor.inno` 建立第二份 catalog。对象修改通过 `SceneEdits` 进入 Scene History。
 
-定义在 `Edit/Settings... → Project/Scene/Tags` 与 `Project/Scene/Layers` 编辑，分别由 `ProjectSettingEditor<GameTagCatalog>` 与 `ProjectSettingEditor<GameLayerStack>` 暂存，并由 Settings 窗口右下角的单一 `Apply` 写入 `<ProjectRoot>/ProjectSettings.inno`。删除定义不会自动重写已加载或未加载 Scene；assignment 仍保存在 Scene/Prefab 中，并发布 `GAMEOBJECT-TAG-UNDEFINED` 或 `GAMEOBJECT-LAYER-UNDEFINED`，直到用户恢复定义或显式修改对象。这避免一次设置操作隐式制造大量 Scene dirty state。
+定义在 `Edit/Settings... → Project/Scene/Tags` 与 `Project/Scene/Layers` 编辑，分别由 `ProjectSettingEditor<GameTagCatalog>` 与 `ProjectSettingEditor<GameLayerStack>` 暂存，并由 Settings 窗口右下角的单一 `Apply` 写入 `<ProjectRoot>/Settings.Project.inno`。删除定义不会自动重写已加载或未加载 Scene；assignment 仍保存在 Scene/Prefab 中，并发布 `GAMEOBJECT-TAG-UNDEFINED` 或 `GAMEOBJECT-LAYER-UNDEFINED`，直到用户恢复定义或显式修改对象。这避免一次设置操作隐式制造大量 Scene dirty state。
 
 Layer 页面以紧凑表格显示 slot、globally stable ID、name 与 remove action；未使用 slot 收口到 `Add layer...`。Tag 页面提供统一 Add 与定义列表，并与 Layer 表格共享相同的 cell padding、plain-cell frame inset、header background、Action 列宽和 inner borders。GameObject Header 的 Layer/Tag selector 与 Layer 添加 selector 都使用共享 menu popup contract，具有与右键菜单一致的 padding、颜色和 work-area-bounded 滚动行为。Apply 时两者分别由协议 Composer 捕获 sparse layer/interaction operations 与 tag additions/removals，所以多个 Plugin 可以修改同一设置而不互相覆盖整个集合。两者只是普通强类型 Project Setting Drawer，不创建 Asset、metadata 或 feature 专属持久化通道。
 

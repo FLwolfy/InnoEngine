@@ -43,7 +43,7 @@ TextAsset value = assets.Load<TextAsset>(AssetPath.Project("Config/value.txt"));
 
 ## `~` 开发目录与安装态 `.isample`
 
-Project Source Mount 中，名称以 `~` 开头的目录使用普通创作语义：Asset Import、Catalog、Artifact、脚本编译和 Editor 运行都会正常处理，完整 Project 导出为 `.iplugin` 时也会携带这些源文件。Game runtime closure 则始终剔除任何 Source 下的 `~` 子树；普通 runtime Asset 若依赖其中内容，导出会因闭包不完整而明确失败。
+Project Source Mount 中，名称以 `~` 开头的目录在 File Browser 中显示为 `ISAMPLE`，但仍使用普通创作语义：Asset Import、Catalog、Artifact、authoring 脚本编译、Editor 运行和 Play Mode 都会正常处理，完整 Project 导出为 `.iplugin` 时也会携带这些源文件。`AssetSample.HasSampleDirectoryName(path)` 只表达这个与 Source 无关的命名/显示分类，不表示该目录需要导入。`AssetSample.IsRuntimeExcluded(path, isDirectory)` 则统一表达 deployment 边界：Game 的 runtime Asset 与 runtime script closure 始终剔除任何 Source 下的 `~` 子树；普通 runtime Asset 若依赖其中内容，导出会因闭包不完整而明确失败，Startup Scene 位于其中时也会被明确拒绝。
 
 只读 Plugin Source Mount 中，名称以 `~` 开头的目录才是逻辑 `.isample`。`AssetFileSystem` 仍索引目录及后代，`AssetFileEntry.isSample` 标记该目录本身，`isSampleContent` 标记完整子树；Editor 可以浏览它们，但 Asset Import/Catalog、Artifact 与 Plugin 脚本编译不会处理该子树。
 

@@ -71,11 +71,15 @@ internal sealed class GamePlayerHost : IDisposable
                 manifest.modules,
                 Path.Combine(runtimeContentRoot, "Managed"));
             settings = new ProjectSettingsStore(
-                Path.Combine(runtimeContentRoot, "ProjectSettings.inno"),
+                Path.Combine(runtimeContentRoot, SettingsFileNames.project),
                 engine.types,
-                engine.serialization);
+                engine.serialization,
+                new ProjectId(applicationId));
             settings.SetContributors(manifest.CreateSettingContributors());
             settings.RebuildCurrent();
+            if (!string.Equals(settings.projectId.value, applicationId, StringComparison.Ordinal))
+                throw new InvalidDataException("Runtime manifest and Project Settings identities do not match.");
+
             GamePresentationSettings presentation = settings.Get<GamePresentationSettings>(
                 GamePresentationSettings.settingId);
             RuntimeSession session = engine.CreateSession(new RuntimeSessionOptions

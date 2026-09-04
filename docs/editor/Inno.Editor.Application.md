@@ -24,7 +24,7 @@ Editor 当前不需要额外的 InnoEngine project descriptor。目录本身就�
 
 `EditorHost` 是 Application 内部的启动实现，不属于公开 API。它依次构造 Platform、Window、EngineHost、Edit RuntimeSession、authoring services、ImGui context 与 Editor runtime；启动失败与正常 `Dispose` 共用幂等资源栈，并按 Editor → ImGui → Session → EngineHost → Window → Platform 的逆序释放。
 
-`editor.ini`、`EditorSettings.inno`、`ProjectSettings.inno`、`BuildProfile.inno`、Editor boot log、Assets、Plugins 与脚本产物都以 `projectDirectory` 为根目录。`editor.ini` 只保存 ImGui layout 与 Module/Panel 状态；Editor 设置通过 SerializationRegistry 写入 `EditorSettings.inno`；runtime 项目协议与 Build 输入分别写入 `ProjectSettings.inno` 和 `BuildProfile.inno`。
+`editor.ini`、`Settings.Editor.inno`、`Settings.Project.inno`、`Settings.Build.inno`、Editor boot log、Assets、Plugins 与脚本产物都以 `projectDirectory` 为根目录。`editor.ini` 只保存 ImGui layout 与 Module/Panel 状态；Editor 偏好通过 SerializationRegistry 写入 `Settings.Editor.inno`；runtime 项目协议和团队共享的导出默认值分别写入 `Settings.Project.inno` 与 `Settings.Build.inno`。三个设置文档共享一个 Settings frontend，但保持独立的生命周期和部署边界。
 
 Module/Panel 状态只使用 `editor.ini` 中由 Attribute ID 确定的具名可读 section，没有独立 Workspace 文档或第二个状态 ID。
 

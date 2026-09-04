@@ -7,51 +7,51 @@ using Inno.Core.Settings;
 namespace Inno.Scene.Layers;
 
 /// <summary>
-/// Composes sparse logical layer and interaction contributions into one compact runtime stack.
+/// Composes sparse project-local layer and interaction contributions into one compact runtime stack.
 /// </summary>
 [ProjectSettingComposer("inno.scene.layers")]
 internal sealed class GameLayerSettingsComposer
     : ProjectSettingComposer<GameLayerStack, GameLayerSettingContribution>
 {
     /// <summary>
-    /// Captures the contribution introduced by the supplied project setting value.
+    /// Captures project-local layer and interaction changes relative to the baseline stack.
     /// </summary>
     /// <param name="baseline">
-    /// The baseline consumed by capture contribution; ownership remains with the caller unless explicitly stated otherwise.
+    /// The baseline stack before the contributor's changes.
     /// </param>
     /// <param name="value">
-    /// The concrete value read or transformed by this operation.
+    /// The authored stack whose changes are captured.
     /// </param>
     /// <returns>
-    /// The validated game layer setting contribution that represents the completed operation.
+    /// A sparse contribution containing only values changed from the baseline.
     /// </returns>
     protected override GameLayerSettingContribution CaptureContribution(
         GameLayerStack baseline,
         GameLayerStack value)
     {
         var removedSlots = new List<int>();
-        var removedIds = new List<string>();
+        var removedLocalIds = new List<string>();
         var upsertSlots = new List<int>();
-        var upsertIds = new List<string>();
+        var upsertLocalIds = new List<string>();
         var upsertNames = new List<string>();
         for (int index = 0; index < GameLayer.C_MAX_COUNT; index++)
         {
             var layer = new GameLayer(index);
-            GameLayerId? baselineId = baseline.GetId(layer);
-            GameLayerId? valueId = value.GetId(layer);
+            ProjectLocalId? baselineId = baseline.GetLocalId(layer);
+            ProjectLocalId? valueId = value.GetLocalId(layer);
             string? baselineName = baseline.GetName(layer);
             string? valueName = value.GetName(layer);
-            if (baselineId is GameLayerId oldId && oldId != valueId)
+            if (baselineId is ProjectLocalId oldId && oldId != valueId)
             {
                 removedSlots.Add(index);
-                removedIds.Add(oldId.value);
+                removedLocalIds.Add(oldId.value);
             }
-            if (valueId is GameLayerId newId
+            if (valueId is ProjectLocalId newId
                 && (baselineId != valueId
                     || !string.Equals(baselineName, valueName, StringComparison.Ordinal)))
             {
                 upsertSlots.Add(index);
-                upsertIds.Add(newId.value);
+                upsertLocalIds.Add(newId.value);
                 upsertNames.Add(valueName!);
             }
         }
@@ -78,9 +78,9 @@ internal sealed class GameLayerSettingsComposer
         return new GameLayerSettingContribution
         {
             removedSlots = removedSlots.ToArray(),
-            removedIds = removedIds.ToArray(),
+            removedLocalIds = removedLocalIds.ToArray(),
             upsertSlots = upsertSlots.ToArray(),
-            upsertIds = upsertIds.ToArray(),
+            upsertLocalIds = upsertLocalIds.ToArray(),
             upsertNames = upsertNames.ToArray(),
             interactionFirstSlots = interactionFirstSlots.ToArray(),
             interactionSecondSlots = interactionSecondSlots.ToArray(),
@@ -89,13 +89,13 @@ internal sealed class GameLayerSettingsComposer
     }
 
     /// <summary>
-    /// Determines whether the contribution contains no changes from its baseline.
+    /// Determines whether a layer contribution contains no authored changes.
     /// </summary>
     /// <param name="contribution">
-    /// The contribution consumed by is empty; ownership remains with the caller unless explicitly stated otherwise.
+    /// The validated contribution to inspect.
     /// </param>
     /// <returns>
-    /// <see langword="true"/> when the operation succeeds or its condition is satisfied; otherwise, <see langword="false"/>.
+    /// <see langword="true"/> when the contribution contains no layer or interaction changes; otherwise, <see langword="false"/>.
     /// </returns>
     protected override bool IsEmpty(GameLayerSettingContribution contribution)
     {
@@ -106,28 +106,28 @@ internal sealed class GameLayerSettingsComposer
     }
 
     /// <summary>
-    /// Composes validated setting contributions into the final runtime setting.
+    /// Applies ordered project-local layer contributions to the target stack.
     /// </summary>
     /// <param name="target">
-    /// The existing target that receives the validated result.
+    /// The mutable stack that receives the composed result.
     /// </param>
     /// <param name="contributions">
-    /// The contributions consumed by compose; ownership remains with the caller unless explicitly stated otherwise.
+    /// The ordered, validated contributions to apply.
     /// </param>
     protected override void Compose(
         GameLayerStack target,
         IReadOnlyList<ProjectSettingContribution<GameLayerSettingContribution>> contributions)
     {
         var slotOwners = new string?[GameLayer.C_MAX_COUNT];
-        var idOwners = new Dictionary<GameLayerId, string>();
+        var localIdOwners = new Dictionary<ProjectLocalId, string>();
         var interactionOwners = new string[GameLayer.C_MAX_COUNT, GameLayer.C_MAX_COUNT];
         for (int index = 0; index < GameLayer.C_MAX_COUNT; index++)
         {
             var layer = new GameLayer(index);
-            if (target.GetId(layer) is GameLayerId id)
+            if (target.GetLocalId(layer) is ProjectLocalId localId)
             {
                 slotOwners[index] = "host";
-                idOwners.Add(id, "host");
+                localIdOwners.Add(localId, "host");
             }
             for (int second = 0; second < GameLayer.C_MAX_COUNT; second++)
                 interactionOwners[index, second] = "host";
@@ -136,8 +136,8 @@ internal sealed class GameLayerSettingsComposer
         foreach (ProjectSettingContribution<GameLayerSettingContribution> contribution in contributions)
         {
             contribution.value.Validate();
-            ApplyRemovals(target, contribution, slotOwners, idOwners);
-            ApplyUpserts(target, contribution, slotOwners, idOwners);
+            ApplyRemovals(target, contribution, slotOwners, localIdOwners);
+            ApplyUpserts(target, contribution, slotOwners, localIdOwners);
             ApplyInteractions(target, contribution, interactionOwners);
         }
     }
@@ -146,31 +146,27 @@ internal sealed class GameLayerSettingsComposer
         GameLayerStack target,
         ProjectSettingContribution<GameLayerSettingContribution> contribution,
         string?[] slotOwners,
-        Dictionary<GameLayerId, string> idOwners)
+        Dictionary<ProjectLocalId, string> localIdOwners)
     {
-        for (int i = 0; i < contribution.value.removedSlots.Length; i++)
+        for (int index = 0; index < contribution.value.removedSlots.Length; index++)
         {
-            var layer = new GameLayer(contribution.value.removedSlots[i]);
-            var expectedId = new GameLayerId(contribution.value.removedIds[i]);
-            GameLayerId? currentId = target.GetId(layer);
-            if (currentId is null)
+            var layer = new GameLayer(contribution.value.removedSlots[index]);
+            var expected = new ProjectLocalId(contribution.value.removedLocalIds[index]);
+            ProjectLocalId? current = target.GetLocalId(layer);
+            if (current is null)
                 continue;
-            if (currentId != expectedId)
+            if (current != expected)
             {
                 throw Conflict(
                     contribution.context,
-                    $"cannot remove layer '{expectedId}' from slot {layer.index} because it contains '{currentId}'.");
+                    $"cannot remove layer '{expected}' from slot {layer.index} because it contains '{current}'.");
             }
             string owner = slotOwners[layer.index] ?? "host";
             if (!contribution.context.CanOverride(owner))
-            {
-                throw Conflict(
-                    contribution.context,
-                    $"cannot remove layer '{expectedId}' owned by '{owner}'.");
-            }
+                throw Conflict(contribution.context, $"cannot remove layer '{expected}' owned by '{owner}'.");
             _ = target.Remove(layer);
             slotOwners[layer.index] = null;
-            idOwners.Remove(expectedId);
+            localIdOwners.Remove(expected);
         }
     }
 
@@ -178,46 +174,46 @@ internal sealed class GameLayerSettingsComposer
         GameLayerStack target,
         ProjectSettingContribution<GameLayerSettingContribution> contribution,
         string?[] slotOwners,
-        Dictionary<GameLayerId, string> idOwners)
+        Dictionary<ProjectLocalId, string> localIdOwners)
     {
-        for (int i = 0; i < contribution.value.upsertSlots.Length; i++)
+        for (int index = 0; index < contribution.value.upsertSlots.Length; index++)
         {
-            var layer = new GameLayer(contribution.value.upsertSlots[i]);
-            var id = new GameLayerId(contribution.value.upsertIds[i]);
-            string name = contribution.value.upsertNames[i];
-            GameLayerId? currentId = target.GetId(layer);
+            var layer = new GameLayer(contribution.value.upsertSlots[index]);
+            var localId = new ProjectLocalId(contribution.value.upsertLocalIds[index]);
+            string name = contribution.value.upsertNames[index];
+            ProjectLocalId? currentId = target.GetLocalId(layer);
             string? currentName = target.GetName(layer);
-            if (currentId == id && string.Equals(currentName, name, StringComparison.Ordinal))
+            if (currentId == localId && string.Equals(currentName, name, StringComparison.Ordinal))
                 continue;
 
-            if (target.TryGetLayer(id, out GameLayer existingLayer) && existingLayer != layer)
+            if (target.TryGetLayer(localId, out GameLayer existingLayer) && existingLayer != layer)
             {
-                string existingOwner = slotOwners[existingLayer.index] ?? idOwners[id];
+                string existingOwner = slotOwners[existingLayer.index] ?? localIdOwners[localId];
                 if (!contribution.context.CanOverride(existingOwner))
                 {
                     throw Conflict(
                         contribution.context,
-                        $"cannot move layer '{id}' from slot {existingLayer.index}; it is owned by '{existingOwner}'.");
+                        $"cannot move layer '{localId}' from slot {existingLayer.index}; it is owned by '{existingOwner}'.");
                 }
                 _ = target.Remove(existingLayer);
                 slotOwners[existingLayer.index] = null;
-                idOwners.Remove(id);
+                localIdOwners.Remove(localId);
             }
 
-            if (currentId is GameLayerId replacedId)
+            if (currentId is ProjectLocalId replacedId)
             {
-                string owner = slotOwners[layer.index] ?? idOwners[replacedId];
+                string owner = slotOwners[layer.index] ?? localIdOwners[replacedId];
                 if (!contribution.context.CanOverride(owner))
                 {
                     throw Conflict(
                         contribution.context,
                         $"cannot replace slot {layer.index} layer '{replacedId}' owned by '{owner}'.");
                 }
-                idOwners.Remove(replacedId);
+                localIdOwners.Remove(replacedId);
             }
-            target.Define(layer, id, name);
+            target.DefineLocal(layer, localId, name);
             slotOwners[layer.index] = contribution.context.contributorId;
-            idOwners[id] = contribution.context.contributorId;
+            localIdOwners[localId] = contribution.context.contributorId;
         }
     }
 
@@ -226,11 +222,11 @@ internal sealed class GameLayerSettingsComposer
         ProjectSettingContribution<GameLayerSettingContribution> contribution,
         string[,] interactionOwners)
     {
-        for (int i = 0; i < contribution.value.interactionFirstSlots.Length; i++)
+        for (int index = 0; index < contribution.value.interactionFirstSlots.Length; index++)
         {
-            var first = new GameLayer(contribution.value.interactionFirstSlots[i]);
-            var second = new GameLayer(contribution.value.interactionSecondSlots[i]);
-            bool value = contribution.value.interactionValues[i];
+            var first = new GameLayer(contribution.value.interactionFirstSlots[index]);
+            var second = new GameLayer(contribution.value.interactionSecondSlots[index]);
+            bool value = contribution.value.interactionValues[index];
             if (target.CanInteract(first, second) == value)
                 continue;
             string owner = interactionOwners[first.index, second.index];
@@ -261,13 +257,13 @@ internal sealed class GameLayerSettingContribution : ISerializable
     internal int[] removedSlots { get; set; } = [];
 
     [SerializableProperty]
-    internal string[] removedIds { get; set; } = [];
+    internal string[] removedLocalIds { get; set; } = [];
 
     [SerializableProperty]
     internal int[] upsertSlots { get; set; } = [];
 
     [SerializableProperty]
-    internal string[] upsertIds { get; set; } = [];
+    internal string[] upsertLocalIds { get; set; } = [];
 
     [SerializableProperty]
     internal string[] upsertNames { get; set; } = [];
@@ -284,9 +280,9 @@ internal sealed class GameLayerSettingContribution : ISerializable
     internal void Validate()
     {
         if (removedSlots is null
-            || removedIds is null
+            || removedLocalIds is null
             || upsertSlots is null
-            || upsertIds is null
+            || upsertLocalIds is null
             || upsertNames is null
             || interactionFirstSlots is null
             || interactionSecondSlots is null
@@ -294,43 +290,47 @@ internal sealed class GameLayerSettingContribution : ISerializable
         {
             throw new InvalidOperationException("GameLayer contribution arrays cannot be null.");
         }
-        if (removedSlots.Length != removedIds.Length)
+        if (removedSlots.Length != removedLocalIds.Length)
             throw new InvalidOperationException("GameLayer removal contribution arrays must have equal lengths.");
-        if (upsertSlots.Length != upsertIds.Length || upsertSlots.Length != upsertNames.Length)
+        if (upsertSlots.Length != upsertLocalIds.Length || upsertSlots.Length != upsertNames.Length)
             throw new InvalidOperationException("GameLayer upsert contribution arrays must have equal lengths.");
         if (interactionFirstSlots.Length != interactionSecondSlots.Length
             || interactionFirstSlots.Length != interactionValues.Length)
         {
             throw new InvalidOperationException("GameLayer interaction contribution arrays must have equal lengths.");
         }
+
         var slots = new HashSet<int>();
-        for (int i = 0; i < removedSlots.Length; i++)
+        for (int index = 0; index < removedSlots.Length; index++)
         {
-            _ = new GameLayer(removedSlots[i]);
-            _ = new GameLayerId(removedIds[i]);
-            if (!slots.Add(removedSlots[i]))
-                throw new InvalidOperationException($"GameLayer slot {removedSlots[i]} is removed more than once.");
+            _ = new GameLayer(removedSlots[index]);
+            _ = new ProjectLocalId(removedLocalIds[index]);
+            if (!slots.Add(removedSlots[index]))
+                throw new InvalidOperationException($"GameLayer slot {removedSlots[index]} is removed more than once.");
         }
         slots.Clear();
-        for (int i = 0; i < upsertSlots.Length; i++)
+        for (int index = 0; index < upsertSlots.Length; index++)
         {
-            _ = new GameLayer(upsertSlots[i]);
-            _ = new GameLayerId(upsertIds[i]);
-            _ = GameLayerStack.NormalizeName(upsertNames[i]);
-            if (!slots.Add(upsertSlots[i]))
-                throw new InvalidOperationException($"GameLayer slot {upsertSlots[i]} is upserted more than once.");
+            _ = new GameLayer(upsertSlots[index]);
+            _ = new ProjectLocalId(upsertLocalIds[index]);
+            _ = GameLayerStack.NormalizeName(upsertNames[index]);
+            if (!slots.Add(upsertSlots[index]))
+                throw new InvalidOperationException($"GameLayer slot {upsertSlots[index]} is upserted more than once.");
         }
         var pairs = new HashSet<(int first, int second)>();
-        for (int i = 0; i < interactionFirstSlots.Length; i++)
+        for (int index = 0; index < interactionFirstSlots.Length; index++)
         {
-            int first = interactionFirstSlots[i];
-            int second = interactionSecondSlots[i];
+            int first = interactionFirstSlots[index];
+            int second = interactionSecondSlots[index];
             _ = new GameLayer(first);
             _ = new GameLayer(second);
             if (first > second)
                 throw new InvalidOperationException("GameLayer interaction pairs must use canonical slot order.");
             if (!pairs.Add((first, second)))
-                throw new InvalidOperationException($"GameLayer interaction ({first}, {second}) is contributed more than once.");
+            {
+                throw new InvalidOperationException(
+                    $"GameLayer interaction ({first}, {second}) is contributed more than once.");
+            }
         }
     }
 }

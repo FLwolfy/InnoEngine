@@ -6,6 +6,8 @@ using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Inno.Core.IO;
+
 namespace Inno.Build;
 
 internal static class ContentPackWriter
@@ -63,7 +65,7 @@ internal static class ContentPackWriter
                 contentHash = Convert.ToHexString(await SHA256.HashDataAsync(input, cancellationToken).ConfigureAwait(false));
             }
             string packPath = Path.Combine(contentRoot, $"content-{contentHash}.pack");
-            File.Move(temporary, packPath);
+            AtomicFile.Install(temporary, packPath);
             return (packPath, contentHash);
         }
         catch

@@ -177,6 +177,9 @@ internal static class SupportPackPublisher
         };
         startInfo.ArgumentList.Add("publish");
         startInfo.ArgumentList.Add(playerProject);
+        startInfo.ArgumentList.Add("--disable-build-servers");
+        startInfo.ArgumentList.Add("-m:1");
+        startInfo.ArgumentList.Add("-nodeReuse:false");
         startInfo.ArgumentList.Add("--configuration");
         startInfo.ArgumentList.Add("Release");
         startInfo.ArgumentList.Add("--runtime");

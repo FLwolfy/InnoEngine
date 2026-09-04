@@ -1,59 +1,61 @@
 using System;
 
+using Inno.Core.Settings;
+
 namespace Inno.Scene.Layers;
 
 /// <summary>
-/// Identifies one logical game layer independently from its compact runtime slot.
+/// Identifies one project-scoped game layer independently from its compact runtime slot.
 /// </summary>
 public readonly record struct GameLayerId
 {
     /// <summary>
-    /// Gets the immutable built-in default layer identity.
-    /// </summary>
-    public static GameLayerId defaultLayer { get; } = new("inno.default");
-
-    /// <summary>
-    /// Creates a globally stable lowercase layer identity.
+    /// Creates a project-scoped layer identity.
     /// </summary>
     /// <param name="value">
-    /// A namespaced identifier containing lowercase letters, digits, dots, hyphens, or underscores.
+    /// The canonical qualified identity.
     /// </param>
-    /// <exception cref="ArgumentException">
-    /// Thrown when <paramref name="value"/> is empty or not portable.
-    /// </exception>
-    public GameLayerId(string value)
+    public GameLayerId(ProjectScopedId value)
+    {
+        if (string.IsNullOrEmpty(value.name.value))
+            throw new ArgumentException("A GameLayer ID requires a valid project-local name.", nameof(value));
+        this.value = value.value;
+    }
+
+    /// <summary>
+    /// Creates a project-scoped layer identity from its project and local parts.
+    /// </summary>
+    /// <param name="projectId">
+    /// The current project identity.
+    /// </param>
+    /// <param name="name">
+    /// The stable project-local layer identity.
+    /// </param>
+    public GameLayerId(ProjectId projectId, ProjectLocalId name)
+        : this(projectId.Qualify(name))
+    {
+    }
+
+    internal GameLayerId(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
         string normalized = value.Trim();
-        if (normalized.Length > 128)
-            throw new ArgumentException("A GameLayer ID cannot exceed 128 characters.", nameof(value));
-        for (int i = 0; i < normalized.Length; i++)
+        if (!normalized.Contains('.', StringComparison.Ordinal))
+            throw new ArgumentException("A GameLayer ID must contain project and local name segments.", nameof(value));
+        for (int index = 0; index < normalized.Length; index++)
         {
-            char character = normalized[i];
+            char character = normalized[index];
             bool valid = character is >= 'a' and <= 'z'
                          || character is >= '0' and <= '9'
                          || character is '.' or '-' or '_';
             if (!valid)
-            {
-                throw new ArgumentException(
-                    "A GameLayer ID may contain only lowercase ASCII letters, digits, dots, hyphens, and underscores.",
-                    nameof(value));
-            }
-        }
-        if (normalized[0] is '.' or '-' or '_' || normalized[^1] is '.' or '-' or '_')
-            throw new ArgumentException("A GameLayer ID must begin and end with a letter or digit.", nameof(value));
-        if (!normalized.Contains('.', StringComparison.Ordinal)
-            || normalized.Contains("..", StringComparison.Ordinal))
-        {
-            throw new ArgumentException(
-                "A GameLayer ID must contain at least two non-empty namespace segments.",
-                nameof(value));
+                throw new ArgumentException("A GameLayer ID is not portable.", nameof(value));
         }
         this.value = normalized;
     }
 
     /// <summary>
-    /// Gets the globally stable identity string.
+    /// Gets the canonical <c>projectId.name</c> identity string.
     /// </summary>
     public string value { get; }
 
@@ -66,7 +68,7 @@ public readonly record struct GameLayerId
     /// Formats this value as a human-readable representation.
     /// </summary>
     /// <returns>
-    /// The human-readable representation of this value.
+    /// The qualified identity.
     /// </returns>
     public override string ToString() => value ?? string.Empty;
 }

@@ -90,7 +90,7 @@ public sealed class EditorSettingsTests : IDisposable
                 ["Editor/Tests/Values/Project Count"] = value
             }));
 
-        string path = Path.Combine(m_projectRoot, "EditorSettings.inno");
+        string path = Path.Combine(m_projectRoot, "Settings.Editor.inno");
         Assert.True(File.Exists(path));
         Assert.False(Directory.Exists(Path.Combine(m_projectRoot, "Settings")));
         Assert.Equal(10, m_settings.Get("Editor/Tests/Values/Project Count").GetAsInt32("value"));
@@ -157,7 +157,7 @@ public sealed class EditorSettingsTests : IDisposable
         Assert.Equal(3, m_settings.Get("Editor/Tests/Values/Project Count").GetAsInt32("value"));
         Assert.True(definition.IsDefault(m_settings.Get("Editor/Tests/Values/Project Count")));
         Assert.NotSame(definition.defaultValue, definition.defaultValue);
-        Assert.NotEmpty(File.ReadAllBytes(Path.Combine(m_projectRoot, "EditorSettings.inno")));
+        Assert.NotEmpty(File.ReadAllBytes(Path.Combine(m_projectRoot, "Settings.Editor.inno")));
     }
 
     [Fact]
