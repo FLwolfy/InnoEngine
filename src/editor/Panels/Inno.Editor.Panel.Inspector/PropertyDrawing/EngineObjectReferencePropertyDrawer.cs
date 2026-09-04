@@ -9,8 +9,9 @@ using Inno.Editor.Interactions;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
-using Inno.Engine.Scene;
-using Inno.Engine.Scene.Components;
+using Inno.Runtime;
+using Inno.Scene;
+using Inno.Scene.Components;
 using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
@@ -23,7 +24,19 @@ internal sealed class EngineObjectReferencePropertyDrawer : IPropertyDrawer
     private const nuint C_SEARCH_BUFFER_SIZE = 256;
 
     private readonly Dictionary<string, string> m_searchByPath = new(StringComparer.Ordinal);
-    /// <inheritdoc />
+    private readonly RuntimeSession m_runtimeSession;
+
+    internal EngineObjectReferencePropertyDrawer(RuntimeSession runtimeSession)
+    {
+        m_runtimeSession = runtimeSession ?? throw new ArgumentNullException(nameof(runtimeSession));
+    }
+
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     public void Draw(PropertyDrawContext context)
     {
         Type targetType = context.propertyType;
@@ -33,7 +46,7 @@ internal sealed class EngineObjectReferencePropertyDrawer : IPropertyDrawer
             ? "None"
             : GetDisplayName(selected);
 
-        bool open = NativeImGui.BeginCombo($"##{context.path}", preview);
+        bool open = EditorWidget.BeginBoundedCombo($"##{context.path}", preview);
         _ = EditorDragDropRenderer.Target(
             context.interactions.For(
                 InspectorInteractionIds.C_ENGINE_OBJECT_REFERENCE_AREA,
@@ -42,39 +55,44 @@ internal sealed class EngineObjectReferencePropertyDrawer : IPropertyDrawer
         if (!open)
             return;
 
-        string search = m_searchByPath.TryGetValue(context.path, out string? currentSearch)
-            ? currentSearch
-            : string.Empty;
-        _ = EditorWidget.SearchInput(
-            context.path,
-            "Search scene objects...",
-            ref search,
-            C_SEARCH_BUFFER_SIZE);
-        m_searchByPath[context.path] = search;
-
-        if (NativeImGui.Selectable("None", selected is null))
-            context.SetValue(null);
-
-        for (int i = 0; i < candidates.Count; i++)
+        try
         {
-            EngineObject candidate = candidates[i];
-            string displayName = GetDisplayName(candidate);
-            if (!string.IsNullOrWhiteSpace(search) &&
-                displayName.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0)
+            string search = m_searchByPath.TryGetValue(context.path, out string? currentSearch)
+                ? currentSearch
+                : string.Empty;
+            _ = EditorWidget.SearchInput(
+                context.path,
+                "Search scene objects...",
+                ref search,
+                C_SEARCH_BUFFER_SIZE);
+            m_searchByPath[context.path] = search;
+
+            if (NativeImGui.Selectable("None", selected is null))
+                context.SetValue(null);
+
+            for (int i = 0; i < candidates.Count; i++)
             {
-                continue;
+                EngineObject candidate = candidates[i];
+                string displayName = GetDisplayName(candidate);
+                if (!string.IsNullOrWhiteSpace(search) &&
+                    displayName.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    continue;
+                }
+
+                if (NativeImGui.Selectable(displayName, ReferenceEquals(candidate, selected)))
+                    context.SetValue(candidate);
             }
-
-            if (NativeImGui.Selectable(displayName, ReferenceEquals(candidate, selected)))
-                context.SetValue(candidate);
         }
-
-        NativeImGui.EndCombo();
+        finally
+        {
+            NativeImGui.EndCombo();
+        }
     }
 
     private List<EngineObject> CollectCandidates(Type targetType)
     {
-        GameScene? activeScene = SceneManager.hasActiveScene ? SceneManager.activeScene : null;
+        GameScene? activeScene = m_runtimeSession.scenes.activeScene;
         IReadOnlyList<GameObject> objects = activeScene?.GetObjects() ?? [];
         var candidates = new List<EngineObject>(objects.Count);
         for (int objectIndex = 0; objectIndex < objects.Count; objectIndex++)

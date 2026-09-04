@@ -3,17 +3,18 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 
-using Inno.Core.Assemblies;
+using Inno.Extensibility.Modules;
+using Inno.Scripting.Reload;
 
 namespace Inno.Editor.Core;
 
 /// <summary>
 /// Coordinates weakly registered editor feature migrations around atomic assembly reload sessions.
 /// </summary>
-public static class EditorReloadCoordinator
+public sealed class EditorReloadCoordinator : IScriptReloadCoordinator
 {
-    private static readonly List<ParticipantReference> S_PARTICIPANTS = [];
-    private static readonly object S_SYNC = new();
+    private readonly List<ParticipantReference> m_participants = [];
+    private readonly object m_sync = new();
 
     /// <summary>
     /// Registers an editor feature that owns generation-bound live state.
@@ -22,19 +23,20 @@ public static class EditorReloadCoordinator
     /// The feature participant. The coordinator retains only a weak reference to this instance.
     /// </param>
     /// <returns>
-    /// A registration that must be disposed when the feature stops participating in reloads.
+    /// A registration lease that strongly retains the participant until the lease is disposed.
+    /// The coordinator itself retains only a weak reference.
     /// </returns>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="participant"/> is <see langword="null"/>.
     /// </exception>
-    public static IDisposable Register(IEditorReloadParticipant participant)
+    public IDisposable Register(IEditorReloadParticipant participant)
     {
         ArgumentNullException.ThrowIfNull(participant);
-        lock (S_SYNC)
+        lock (m_sync)
         {
             RemoveCollectedParticipants();
-            var registration = new Registration(Guid.NewGuid());
-            S_PARTICIPANTS.Add(new ParticipantReference(
+            var registration = new Registration(this, Guid.NewGuid(), participant);
+            m_participants.Add(new ParticipantReference(
                 registration.id,
                 new WeakReference<IEditorReloadParticipant>(participant)));
             return registration;
@@ -44,10 +46,15 @@ public static class EditorReloadCoordinator
     /// <summary>
     /// Applies one prepared assembly reload together with every registered editor feature migration.
     /// </summary>
-    /// <param name="reload">The prepared assembly reload session to activate and complete.</param>
-    /// <param name="synchronizeExternalState">
-    /// Optional synchronization performed after candidate activation and again after assembly
-    /// rollback, such as reconciling an asset database against the active generation.
+    /// <param name="reload">
+    /// The prepared assembly reload session to activate and complete.
+    /// </param>
+    /// <param name="activateExternalCandidate">
+    /// Optional synchronization performed after candidate assembly activation, such as provisionally
+    /// activating a staged Asset or Plugin generation.
+    /// </param>
+    /// <param name="restoreExternalState">
+    /// Optional synchronization performed after assembly rollback to restore the previous external generation.
     /// </param>
     /// <returns>
     /// A monitor that observes cooperative unloading of assemblies retired by the committed reload.
@@ -58,9 +65,10 @@ public static class EditorReloadCoordinator
     /// <exception cref="AggregateException">
     /// Thrown when activation fails and one or more feature or assembly rollback stages also fail.
     /// </exception>
-    public static AssemblyUnloadMonitor Execute(
+    public AssemblyUnloadMonitor Execute(
         AssemblyReloadSession reload,
-        Action? synchronizeExternalState = null)
+        Action? activateExternalCandidate = null,
+        Action? restoreExternalState = null)
     {
         ArgumentNullException.ThrowIfNull(reload);
         IEditorReloadTransaction[] transactions = CaptureTransactions(reload.context);
@@ -69,7 +77,7 @@ public static class EditorReloadCoordinator
             for (int i = 0; i < transactions.Length; i++)
                 transactions[i].PrepareForActivation();
             reload.Activate();
-            synchronizeExternalState?.Invoke();
+            activateExternalCandidate?.Invoke();
             for (int i = 0; i < transactions.Length; i++)
                 transactions[i].Apply();
             AssemblyUnloadMonitor monitor = reload.Complete();
@@ -88,10 +96,10 @@ public static class EditorReloadCoordinator
                     rollbackFailures);
             }
             TryRollback(reload.Rollback, "assembly generation rollback", rollbackFailures);
-            if (synchronizeExternalState is not null)
+            if (restoreExternalState is not null)
             {
                 TryRollback(
-                    synchronizeExternalState,
+                    restoreExternalState,
                     "external state rollback synchronization",
                     rollbackFailures);
             }
@@ -113,7 +121,7 @@ public static class EditorReloadCoordinator
     /// <summary>
     /// Requests every live participant to republish diagnostics derived from its current state.
     /// </summary>
-    public static void RefreshDiagnostics()
+    public void RefreshDiagnostics()
     {
         foreach (IEditorReloadParticipant participant in GetParticipants())
         {
@@ -131,7 +139,7 @@ public static class EditorReloadCoordinator
         }
     }
 
-    private static IEditorReloadTransaction[] CaptureTransactions(AssemblyReloadContext context)
+    private IEditorReloadTransaction[] CaptureTransactions(AssemblyReloadContext context)
     {
         List<IEditorReloadParticipant> participants = GetParticipants();
         var transactions = new IEditorReloadTransaction[participants.Count];
@@ -144,13 +152,13 @@ public static class EditorReloadCoordinator
         return transactions;
     }
 
-    private static List<IEditorReloadParticipant> GetParticipants()
+    private List<IEditorReloadParticipant> GetParticipants()
     {
         var participants = new List<IEditorReloadParticipant>();
-        lock (S_SYNC)
+        lock (m_sync)
         {
             RemoveCollectedParticipants();
-            foreach (ParticipantReference reference in S_PARTICIPANTS)
+            foreach (ParticipantReference reference in m_participants)
             {
                 if (reference.participant.TryGetTarget(out IEditorReloadParticipant? participant))
                     participants.Add(participant);
@@ -159,8 +167,8 @@ public static class EditorReloadCoordinator
         return participants;
     }
 
-    private static void RemoveCollectedParticipants()
-        => S_PARTICIPANTS.RemoveAll(static reference => !reference.participant.TryGetTarget(out _));
+    private void RemoveCollectedParticipants()
+        => m_participants.RemoveAll(static reference => !reference.participant.TryGetTarget(out _));
 
     private static void CompleteSafely(IEditorReloadTransaction transaction)
     {
@@ -194,28 +202,46 @@ public static class EditorReloadCoordinator
         }
     }
 
-    private static void Unregister(Guid registrationId)
+    private void Unregister(Guid registrationId)
     {
-        lock (S_SYNC)
-            S_PARTICIPANTS.RemoveAll(reference => reference.id == registrationId);
+        lock (m_sync)
+            m_participants.RemoveAll(reference => reference.id == registrationId);
     }
 
     private readonly record struct ParticipantReference(
         Guid id,
         WeakReference<IEditorReloadParticipant> participant);
 
-    private sealed class Registration(Guid id) : IDisposable
+    private sealed class Registration : IDisposable
     {
+        private readonly EditorReloadCoordinator m_owner;
+        private IEditorReloadParticipant? m_participant;
         private bool m_disposed;
 
-        internal Guid id { get; } = id;
+        internal Registration(
+            EditorReloadCoordinator owner,
+            Guid id,
+            IEditorReloadParticipant participant)
+        {
+            m_owner = owner;
+            this.id = id;
+            m_participant = participant;
+        }
 
+        internal Guid id { get; }
+
+        /// <summary>
+        /// Releases the resources owned by this instance.
+        /// </summary>
         public void Dispose()
         {
             if (m_disposed)
                 return;
             m_disposed = true;
-            Unregister(id);
+            IEditorReloadParticipant? participant = m_participant;
+            m_participant = null;
+            m_owner.Unregister(id);
+            GC.KeepAlive(participant);
         }
     }
 }

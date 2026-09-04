@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
-using Inno.Core.Reflection;
+using Inno.Extensibility.Types;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 
@@ -19,10 +19,15 @@ public sealed class InspectionDrawerRegistry : IDisposable
     /// <summary>
     /// Creates a generation-aware inspection drawer registry.
     /// </summary>
-    /// <param name="interactions">The active editor interaction entry point exposed to draw contexts.</param>
+    /// <param name="interactions">
+    /// The active editor interaction entry point exposed to draw contexts.
+    /// </param>
     /// <param name="factory">
     /// The composition-root factory used to construct discovered drawer types and resolve their
     /// module-specific dependencies.
+    /// </param>
+    /// <param name="types">
+    /// The host-owned type catalog that coordinates drawer generations.
     /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="interactions"/> or <paramref name="factory"/> is
@@ -30,20 +35,33 @@ public sealed class InspectionDrawerRegistry : IDisposable
     /// </exception>
     public InspectionDrawerRegistry(
         EditorInteractions interactions,
-        InspectionDrawerFactory factory)
+        InspectionDrawerFactory factory,
+        TypeCatalog types)
     {
-        m_registry = new InspectionTypeRegistry(interactions, factory);
+        m_registry = new InspectionTypeRegistry(interactions, factory, types);
     }
 
     /// <summary>
     /// Resolves the most specific registered drawer and creates its drawing context.
     /// </summary>
-    /// <param name="editorContext">The shared editor context exposed to the selected drawer.</param>
-    /// <param name="target">The selected object whose runtime type determines the drawer.</param>
-    /// <param name="renderer">The serialized property renderer exposed to the selected drawer.</param>
-    /// <param name="drawer">The resolved drawer when the method succeeds.</param>
-    /// <param name="context">The target-specific drawing context when the method succeeds.</param>
-    /// <returns><see langword="true"/> when a matching drawer was resolved.</returns>
+    /// <param name="editorContext">
+    /// The shared editor context exposed to the selected drawer.
+    /// </param>
+    /// <param name="target">
+    /// The selected object whose runtime type determines the drawer.
+    /// </param>
+    /// <param name="renderer">
+    /// The serialized property renderer exposed to the selected drawer.
+    /// </param>
+    /// <param name="drawer">
+    /// The resolved drawer when the method succeeds.
+    /// </param>
+    /// <param name="context">
+    /// The target-specific drawing context when the method succeeds.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when a matching drawer was resolved.
+    /// </returns>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="editorContext"/>, <paramref name="target"/>, or
     /// <paramref name="renderer"/> is <see langword="null"/>.
@@ -75,11 +93,21 @@ public sealed class InspectionDrawerRegistry : IDisposable
     /// <summary>
     /// Resolves only a drawer explicitly registered for the target's exact runtime type.
     /// </summary>
-    /// <param name="editorContext">The shared editor context exposed to the selected drawer.</param>
-    /// <param name="target">The selected object whose exact runtime type determines the drawer.</param>
-    /// <param name="renderer">The serialized property renderer exposed to the selected drawer.</param>
-    /// <param name="drawer">The exact drawer when the method succeeds.</param>
-    /// <param name="context">The target-specific drawing context when the method succeeds.</param>
+    /// <param name="editorContext">
+    /// The shared editor context exposed to the selected drawer.
+    /// </param>
+    /// <param name="target">
+    /// The selected object whose exact runtime type determines the drawer.
+    /// </param>
+    /// <param name="renderer">
+    /// The serialized property renderer exposed to the selected drawer.
+    /// </param>
+    /// <param name="drawer">
+    /// The exact drawer when the method succeeds.
+    /// </param>
+    /// <param name="context">
+    /// The target-specific drawing context when the method succeeds.
+    /// </param>
     /// <returns>
     /// <see langword="true"/> when an exact registration exists; inherited and fallback drawers are ignored.
     /// </returns>
@@ -120,7 +148,9 @@ public sealed class InspectionDrawerRegistry : IDisposable
 
         internal InspectionTypeRegistry(
             EditorInteractions interactions,
-            InspectionDrawerFactory factory)
+            InspectionDrawerFactory factory,
+            TypeCatalog types)
+            : base(types)
         {
             this.interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
             m_factory = factory ?? throw new ArgumentNullException(nameof(factory));
@@ -155,6 +185,15 @@ public sealed class InspectionDrawerRegistry : IDisposable
                 .Select(static registration => registration.drawer)
                 .FirstOrDefault();
 
+        /// <summary>
+        /// Builds a validated result from the current immutable input snapshot.
+        /// </summary>
+        /// <param name="types">
+        /// The active type catalog generation used for extension resolution.
+        /// </param>
+        /// <returns>
+        /// An immutable snapshot of the values selected by the operation.
+        /// </returns>
         protected override Registration[] Build(TypeCacheSnapshot types)
         {
             var drawers = new Dictionary<Type, IInspectionDrawer>();
@@ -189,6 +228,12 @@ public sealed class InspectionDrawerRegistry : IDisposable
             return registrations.ToArray();
         }
 
+        /// <summary>
+        /// Releases the generation lease retained by an immutable registry snapshot.
+        /// </summary>
+        /// <param name="snapshot">
+        /// The immutable state snapshot consumed by this operation.
+        /// </param>
         protected override void DisposeSnapshot(Registration[] snapshot)
         {
             var disposed = new HashSet<object>(ReferenceEqualityComparer.Instance);

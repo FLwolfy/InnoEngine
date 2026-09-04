@@ -1,9 +1,9 @@
 using System;
 using System.Numerics;
 
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
 using Inno.Native.ImGui;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.ImGui.ImGuiWidget;
@@ -16,9 +16,15 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Gets the visible bounds of the first glyph in a string at a requested font size.
     /// </summary>
-    /// <param name="font">Font that owns the glyph.</param>
-    /// <param name="fontSize">Requested baked font size.</param>
-    /// <param name="text">Text whose first Unicode scalar identifies the glyph.</param>
+    /// <param name="font">
+    /// Font that owns the glyph.
+    /// </param>
+    /// <param name="fontSize">
+    /// Requested baked font size.
+    /// </param>
+    /// <param name="text">
+    /// Text whose first Unicode scalar identifies the glyph.
+    /// </param>
     /// <returns>
     /// A vector containing the glyph's left, top, right, and bottom offsets relative to the
     /// text drawing origin.
@@ -47,12 +53,24 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws one glyph so the center of its visible bounds matches a requested point.
     /// </summary>
-    /// <param name="drawList">Draw list that receives the glyph.</param>
-    /// <param name="font">Font that owns the glyph.</param>
-    /// <param name="fontSize">Requested baked font size.</param>
-    /// <param name="text">Text containing the glyph to draw.</param>
-    /// <param name="center">Target center in screen coordinates.</param>
-    /// <param name="color">Packed ImGui text color.</param>
+    /// <param name="drawList">
+    /// Draw list that receives the glyph.
+    /// </param>
+    /// <param name="font">
+    /// Font that owns the glyph.
+    /// </param>
+    /// <param name="fontSize">
+    /// Requested baked font size.
+    /// </param>
+    /// <param name="text">
+    /// Text containing the glyph to draw.
+    /// </param>
+    /// <param name="center">
+    /// Target center in screen coordinates.
+    /// </param>
+    /// <param name="color">
+    /// Packed ImGui text color.
+    /// </param>
     [ScriptingApiIgnore]
     public static void AddGlyphCentered(
         ImDrawListPtr drawList,
@@ -78,10 +96,18 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws clickable text without a persistent or hovered background.
     /// </summary>
-    /// <param name="id">Stable identifier used by ImGui to track the interaction.</param>
-    /// <param name="text">Visible text or icon glyph.</param>
-    /// <param name="tooltip">Optional tooltip displayed while the interaction is hovered.</param>
-    /// <returns><see langword="true"/> when the text is pressed.</returns>
+    /// <param name="id">
+    /// Stable identifier used by ImGui to track the interaction.
+    /// </param>
+    /// <param name="text">
+    /// Visible text or icon glyph.
+    /// </param>
+    /// <param name="tooltip">
+    /// Optional tooltip displayed while the interaction is hovered.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the text is pressed.
+    /// </returns>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="id"/> is empty.
     /// </exception>
@@ -141,10 +167,18 @@ public static partial class ImGuiWidget
     /// Draws a clickable icon inside the same square interaction slot used by editor close controls.
     /// The icon has no resting background and changes only its glyph color while hovered or active.
     /// </summary>
-    /// <param name="id">Stable identifier used by ImGui to track the interaction.</param>
-    /// <param name="icon">The visible icon glyph.</param>
-    /// <param name="tooltip">Optional tooltip displayed while the interaction is hovered.</param>
-    /// <returns><see langword="true"/> when the icon is pressed.</returns>
+    /// <param name="id">
+    /// Stable identifier used by ImGui to track the interaction.
+    /// </param>
+    /// <param name="icon">
+    /// The visible icon glyph.
+    /// </param>
+    /// <param name="tooltip">
+    /// Optional tooltip displayed while the interaction is hovered.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the icon is pressed.
+    /// </returns>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="id"/> is empty.
     /// </exception>
@@ -171,10 +205,10 @@ public static partial class ImGuiWidget
             cursor + controlSize * 0.5f,
             color);
 
-        if (!string.IsNullOrWhiteSpace(tooltip) && hovered && NativeImGui.BeginTooltip())
+        if (!string.IsNullOrWhiteSpace(tooltip) && hovered && BeginMenuTooltip())
         {
             NativeImGui.TextUnformatted(tooltip);
-            NativeImGui.EndTooltip();
+            EndMenuTooltip();
         }
         return pressed;
     }
@@ -182,11 +216,21 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws clickable text centered inside an explicitly sized transparent interaction area.
     /// </summary>
-    /// <param name="id">Stable identifier used by ImGui to track the interaction.</param>
-    /// <param name="text">Visible text or icon glyph.</param>
-    /// <param name="controlSize">Size of the transparent interaction area.</param>
-    /// <param name="tooltip">Optional tooltip displayed while the interaction is hovered.</param>
-    /// <returns><see langword="true"/> when the text is pressed.</returns>
+    /// <param name="id">
+    /// Stable identifier used by ImGui to track the interaction.
+    /// </param>
+    /// <param name="text">
+    /// Visible text or icon glyph.
+    /// </param>
+    /// <param name="controlSize">
+    /// Size of the transparent interaction area.
+    /// </param>
+    /// <param name="tooltip">
+    /// Optional tooltip displayed while the interaction is hovered.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the text is pressed.
+    /// </returns>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="id"/> is empty.
     /// </exception>
@@ -226,10 +270,10 @@ public static partial class ImGuiWidget
             hovered,
             active);
 
-        if (!string.IsNullOrWhiteSpace(tooltip) && hovered && NativeImGui.BeginTooltip())
+        if (!string.IsNullOrWhiteSpace(tooltip) && hovered && BeginMenuTooltip())
         {
             NativeImGui.TextUnformatted(tooltip);
-            NativeImGui.EndTooltip();
+            EndMenuTooltip();
         }
 
         return pressed;
@@ -238,8 +282,12 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws non-interactive text centered inside a reserved layout area.
     /// </summary>
-    /// <param name="text">Visible text.</param>
-    /// <param name="areaSize">Size of the layout area that contains the text.</param>
+    /// <param name="text">
+    /// Visible text.
+    /// </param>
+    /// <param name="areaSize">
+    /// Size of the layout area that contains the text.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="text"/> is <see langword="null"/>.
     /// </exception>
@@ -267,10 +315,82 @@ public static partial class ImGuiWidget
     }
 
     /// <summary>
+    /// Draws wrapped non-interactive text as a centered block inside a padded layout area.
+    /// </summary>
+    /// <param name="text">
+    /// The literal text to wrap and draw.
+    /// </param>
+    /// <param name="areaSize">
+    /// The complete area reserved by the widget.
+    /// </param>
+    /// <param name="padding">
+    /// The minimum horizontal and vertical distance retained from the area edges whenever space permits.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="text"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when an area component is not positive or a padding component is negative.
+    /// </exception>
+    public static void CenteredWrappedText(string text, Vector2 areaSize, Vector2 padding)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        if (areaSize.X <= 0f || areaSize.Y <= 0f)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(areaSize),
+                areaSize,
+                "Centered wrapped text area size must be positive.");
+        }
+        if (padding.X < 0f || padding.Y < 0f)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(padding),
+                padding,
+                "Centered wrapped text padding cannot be negative.");
+        }
+
+        Vector2 origin = NativeImGui.GetCursorScreenPos();
+        Vector2 effectivePadding = new(
+            MathF.Min(padding.X, MathF.Max(0f, (areaSize.X - 1f) * 0.5f)),
+            MathF.Min(padding.Y, MathF.Max(0f, (areaSize.Y - 1f) * 0.5f)));
+        float wrapWidth = MathF.Max(1f, areaSize.X - effectivePadding.X * 2f);
+        Vector2 textSize = NativeImGui.CalcTextSize(text, hideTextAfterDoubleHash: false, wrapWidth);
+        Vector2 textPosition = origin + new Vector2(
+            MathF.Max(effectivePadding.X, (areaSize.X - textSize.X) * 0.5f),
+            MathF.Max(effectivePadding.Y, (areaSize.Y - textSize.Y) * 0.5f));
+        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
+        drawList.PushClipRect(
+            origin + effectivePadding,
+            origin + areaSize - effectivePadding,
+            intersectWithCurrentClipRect: true);
+        try
+        {
+            NativeImGui.AddText(
+                drawList,
+                NativeImGui.GetFont(),
+                NativeImGui.GetFontSize(),
+                textPosition,
+                NativeImGui.GetColorU32(ImGuiCol.Text),
+                text,
+                wrapWidth);
+        }
+        finally
+        {
+            drawList.PopClipRect();
+        }
+        NativeImGui.Dummy(areaSize);
+    }
+
+    /// <summary>
     /// Draws unformatted text with a temporary foreground color.
     /// </summary>
-    /// <param name="color">The foreground color applied only while drawing the text.</param>
-    /// <param name="text">The literal text to draw without format-string interpretation.</param>
+    /// <param name="color">
+    /// The foreground color applied only while drawing the text.
+    /// </param>
+    /// <param name="text">
+    /// The literal text to draw without format-string interpretation.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="text"/> is <see langword="null"/>.
     /// </exception>
@@ -292,7 +412,9 @@ public static partial class ImGuiWidget
     /// Draws literal text wrapped to the remaining content width without using a native
     /// variadic formatting entry point.
     /// </summary>
-    /// <param name="text">The literal text to draw.</param>
+    /// <param name="text">
+    /// The literal text to draw.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="text"/> is <see langword="null"/>.
     /// </exception>
@@ -313,9 +435,15 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Calculates a clickable text area from visible text and requested inner padding.
     /// </summary>
-    /// <param name="text">Visible text whose dimensions determine the content size.</param>
-    /// <param name="padding">Horizontal and vertical padding surrounding the text.</param>
-    /// <returns>The complete transparent interaction area size.</returns>
+    /// <param name="text">
+    /// Visible text whose dimensions determine the content size.
+    /// </param>
+    /// <param name="padding">
+    /// Horizontal and vertical padding surrounding the text.
+    /// </param>
+    /// <returns>
+    /// The complete transparent interaction area size.
+    /// </returns>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="text"/> is <see langword="null"/>.
     /// </exception>
@@ -340,7 +468,9 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Gets the compact fixed interaction size used by icon-style clickable text.
     /// </summary>
-    /// <returns>A fixed-size area that follows the editor icon slot convention.</returns>
+    /// <returns>
+    /// A fixed-size area that follows the editor icon slot convention.
+    /// </returns>
     public static Vector2 GetCompactClickableTextSize()
     {
         float iconSlotWidth = NativeImGui.GetTextLineHeight();
@@ -350,7 +480,9 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Gets the square icon interaction size shared by dock-header close controls and compact editor icons.
     /// </summary>
-    /// <returns>A square size based on the current ImGui font size.</returns>
+    /// <returns>
+    /// A square size based on the current ImGui font size.
+    /// </returns>
     public static Vector2 GetCompactIconSize()
     {
         float iconSlotSize = NativeImGui.GetFontSize();
@@ -376,9 +508,15 @@ public static partial class ImGuiWidget
     /// Draws icon and text with the icon's visible glyph bounds centered in a slot that expands
     /// when the glyph is wider than the normal editor icon slot.
     /// </summary>
-    /// <param name="icon">Icon text.</param>
-    /// <param name="text">Main text.</param>
-    /// <param name="highlight">Whether to underline and emphasize the drawn icon and text.</param>
+    /// <param name="icon">
+    /// Icon text.
+    /// </param>
+    /// <param name="text">
+    /// Main text.
+    /// </param>
+    /// <param name="highlight">
+    /// Whether to underline and emphasize the drawn icon and text.
+    /// </param>
     public static void IconText(string icon, string text, bool highlight)
     {
         ImGuiFontScope fontScope = highlight

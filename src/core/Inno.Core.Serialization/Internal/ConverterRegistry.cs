@@ -3,44 +3,47 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 
-using Inno.Core.Reflection;
+using Inno.Extensibility.Types;
 using Inno.Core.Serialization.Converters;
 
 namespace Inno.Core.Serialization;
 
-internal static class ConverterRegistry
+internal sealed class ConverterRegistry : IDisposable
 {
-    private static readonly ConverterTypeRegistry S_REGISTRY = new();
-    private static bool s_isInitialized;
+    private readonly ConverterTypeRegistry m_registry;
+    private bool m_disposed;
 
-    internal static void Initialize()
+    internal ConverterRegistry(TypeCatalog types)
     {
-        s_isInitialized = true;
-        S_REGISTRY.Refresh();
+        ArgumentNullException.ThrowIfNull(types);
+        m_registry = new ConverterTypeRegistry(types);
+        m_registry.Refresh();
     }
 
-    internal static void Refresh()
+    internal void Refresh() => RequireRegistry().Refresh();
+
+    /// <summary>
+    /// Releases the resources owned by this instance.
+    /// </summary>
+    public void Dispose()
     {
-        if (s_isInitialized)
-            S_REGISTRY.Refresh();
+        if (m_disposed)
+            return;
+        m_disposed = true;
+        m_registry.Dispose();
     }
 
-    internal static void Shutdown()
+    internal ConverterInvoker? Resolve(Type valueType)
     {
-        S_REGISTRY.Clear();
-        s_isInitialized = false;
+        using ConverterRegistryLease lease = Capture();
+        return lease.Resolve(valueType);
     }
 
-    internal static ConverterInvoker? Resolve(Type valueType)
-    {
-        ArgumentNullException.ThrowIfNull(valueType);
-        if (!s_isInitialized)
-            throw new InvalidOperationException("The serialization converter registry is not initialized.");
-        return S_REGISTRY.Resolve(Nullable.GetUnderlyingType(valueType) ?? valueType);
-    }
+    internal ConverterRegistryLease Capture() => RequireRegistry().Capture();
 
-    private static ConverterInvoker? ResolveUncached(ConverterRegistrySnapshot snapshot, Type valueType)
+    internal static ConverterInvoker? ResolveSnapshot(ConverterRegistrySnapshot snapshot, Type valueType)
     {
         var candidates = new List<ConverterCandidate>();
         for (int i = 0; i < snapshot.registrations.Count; i++)
@@ -231,6 +234,21 @@ internal static class ConverterRegistry
 
     private sealed class ConverterTypeRegistry : TypeRegistry<ConverterRegistrySnapshot>
     {
+        internal ConverterTypeRegistry(TypeCatalog types)
+            : base(types)
+        {
+        }
+
+        internal ConverterRegistryLease Capture()
+        {
+            while (true)
+            {
+                ConverterRegistrySnapshot snapshot = current;
+                if (snapshot.TryAcquire())
+                    return new ConverterRegistryLease(snapshot);
+            }
+        }
+
         internal ConverterInvoker? Resolve(Type valueType)
         {
             ConverterRegistrySnapshot snapshot = current;
@@ -238,12 +256,21 @@ internal static class ConverterRegistry
             {
                 if (snapshot.cache.TryGetValue(valueType, out ConverterInvoker? cached))
                     return cached;
-                ConverterInvoker? resolved = ResolveUncached(snapshot, valueType);
+                ConverterInvoker? resolved = ResolveSnapshot(snapshot, valueType);
                 snapshot.cache.Add(valueType, resolved);
                 return resolved;
             }
         }
 
+        /// <summary>
+        /// Builds a validated result from the current immutable input snapshot.
+        /// </summary>
+        /// <param name="types">
+        /// The active type catalog generation used for extension resolution.
+        /// </param>
+        /// <returns>
+        /// The validated converter registry snapshot that represents the completed operation.
+        /// </returns>
         protected override ConverterRegistrySnapshot Build(TypeCacheSnapshot types)
         {
             IReadOnlyList<Type> registrations = types
@@ -262,45 +289,128 @@ internal static class ConverterRegistry
 
             return new ConverterRegistrySnapshot(registrations);
         }
+
+        /// <summary>
+        /// Releases the generation lease retained by an immutable registry snapshot.
+        /// </summary>
+        /// <param name="snapshot">
+        /// The immutable state snapshot consumed by this operation.
+        /// </param>
+        protected override void DisposeSnapshot(ConverterRegistrySnapshot snapshot)
+            => snapshot.Release();
     }
 
-    private sealed class ConverterRegistrySnapshot(IReadOnlyList<Type> registrations) : IDisposable
+    private ConverterTypeRegistry RequireRegistry()
+        => !m_disposed
+            ? m_registry
+            : throw new ObjectDisposedException(nameof(ConverterRegistry));
+
+    internal sealed class ConverterRegistrySnapshot(IReadOnlyList<Type> registrations)
     {
         internal readonly object sync = new();
         internal readonly Dictionary<Type, ConverterInvoker?> cache = [];
         internal readonly Dictionary<Type, object> converterInstances = [];
-        internal readonly IReadOnlyList<Type> registrations = registrations;
+        internal IReadOnlyList<Type> registrations = registrations;
+        private int m_referenceCount = 1;
 
-        public void Dispose()
+        internal bool TryAcquire()
         {
             lock (sync)
             {
-                foreach (object converter in converterInstances.Values.Distinct(ReferenceEqualityComparer.Instance))
+                if (m_referenceCount == 0)
+                    return false;
+                m_referenceCount++;
+                return true;
+            }
+        }
+
+        internal void Release()
+        {
+            bool dispose;
+            lock (sync)
+            {
+                if (m_referenceCount <= 0)
+                    throw new InvalidOperationException("The serialization converter generation was released twice.");
+                m_referenceCount--;
+                dispose = m_referenceCount == 0;
+            }
+            if (!dispose)
+                return;
+
+            foreach (object converter in converterInstances.Values.Distinct(ReferenceEqualityComparer.Instance))
+            {
+                if (converter is IDisposable disposable)
                 {
-                    if (converter is IDisposable disposable)
+                    try
                     {
-                        try
-                        {
-                            disposable.Dispose();
-                        }
-                        catch (Exception exception)
-                        {
-                            Trace.TraceError(
-                                "Serialization converter '{0}' failed while being disposed: {1}",
-                                converter.GetType().FullName,
-                                exception);
-                        }
+                        disposable.Dispose();
+                    }
+                    catch (Exception exception)
+                    {
+                        Trace.TraceError(
+                            "Serialization converter '{0}' failed while being disposed: {1}",
+                            converter.GetType().FullName,
+                            exception);
                     }
                 }
+            }
+            lock (sync)
+            {
                 cache.Clear();
                 converterInstances.Clear();
+                registrations = Array.Empty<Type>();
             }
         }
     }
 }
 
+internal sealed class ConverterRegistryLease : IDisposable
+{
+    private ConverterRegistry.ConverterRegistrySnapshot? m_snapshot;
+
+    internal ConverterRegistryLease(ConverterRegistry.ConverterRegistrySnapshot snapshot)
+    {
+        m_snapshot = snapshot;
+    }
+
+    internal ConverterInvoker? Resolve(Type valueType)
+    {
+        ArgumentNullException.ThrowIfNull(valueType);
+        ConverterRegistry.ConverterRegistrySnapshot snapshot = m_snapshot
+            ?? throw new ObjectDisposedException(nameof(ConverterRegistryLease));
+        Type normalizedType = Nullable.GetUnderlyingType(valueType) ?? valueType;
+        lock (snapshot.sync)
+        {
+            if (snapshot.cache.TryGetValue(normalizedType, out ConverterInvoker? cached))
+                return cached;
+            ConverterInvoker? resolved = ConverterRegistry.ResolveSnapshot(snapshot, normalizedType);
+            snapshot.cache.Add(normalizedType, resolved);
+            return resolved;
+        }
+    }
+
+    /// <summary>
+    /// Releases the resources owned by this instance.
+    /// </summary>
+    public void Dispose()
+    {
+        ConverterRegistry.ConverterRegistrySnapshot? snapshot = Interlocked.Exchange(ref m_snapshot, null);
+        snapshot?.Release();
+    }
+
+}
+
 internal abstract class ConverterInvoker
 {
+    /// <summary>
+    /// Creates a validated converter invoker instance.
+    /// </summary>
+    /// <param name="targetType">
+    /// The target type consumed by converter invoker; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="converterType">
+    /// The converter type consumed by converter invoker; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     protected ConverterInvoker(Type targetType, Type converterType)
     {
         this.targetType = targetType;

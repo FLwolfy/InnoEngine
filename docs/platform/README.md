@@ -1,8 +1,11 @@
 # Platform API
 
-[返回 Wiki 首页](../README.md)
+[Wiki 首页](../README.md) · [Native](../native/README.md) · [Rendering](../render/README.md)
 
-| 项目 | 作用 | 状态 |
-| --- | --- | --- |
-| [Inno.Platform](Inno.Platform.md) | 应用、窗口、事件轮询和可选后端集成契约 | 已完成 |
-| [Inno.Platform.ImGui](Inno.Platform.ImGui.md) | Dear ImGui context、SDL3 渲染、viewport 与 layout 持久化 | 已完成 |
+| 项目 | 职责 |
+| --- | --- |
+| [Inno.Platform](Inno.Platform.md) | 后端中立 application/window/options/native-handle contract |
+| [Inno.Platform.Sdl3](Inno.Platform.Sdl3.md) | SDL3 application 与 window adapter |
+| [Inno.Platform.Sdl3.ImGui](Inno.Platform.Sdl3.ImGui.md) | SDL3、ImGui viewport 与 renderer bridge |
+
+只有 SDL3 adapter 引用 `Inno.Native.Sdl3`。SDL enum、pointer 和具体 window 类型不得进入上层 public/protected API。

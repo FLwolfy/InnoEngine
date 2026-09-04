@@ -1,4 +1,4 @@
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
 using Inno.Core.Serialization;
 using Inno.Core.Serialization.Converters;
 
@@ -15,6 +15,7 @@ using Inno.Core.Serialization.Converters;
 [assembly: ScriptingApiExport(typeof(OnSerializableRestored), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(PropertyVisibility), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(RequiresSerializationConverterAttribute), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(GenerateSerializationConverterAttribute), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(SerializablePropertyAttribute), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(SerializedProperty), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(SerializationContext), ScriptingApiScope.Runtime)]

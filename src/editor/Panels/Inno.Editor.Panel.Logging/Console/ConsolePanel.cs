@@ -5,12 +5,13 @@ using System.Numerics;
 
 using Inno.Core.Logging;
 using Inno.Editor.Core;
+using Inno.Editor.Diagnostics;
 using Inno.Editor.Interactions;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Native.ImGui;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Logging;
@@ -18,21 +19,19 @@ namespace Inno.Editor.Panel.Logging;
 /// <summary>
 /// Displays append-only logs and current diagnostics in the unified editor Console.
 /// </summary>
-[EditorPanel("diagnostics.console", "Console", order: 400)]
+[EditorPanel("diagnostics.console", "Console", order: 400, menuPath: "Diagnostics")]
 internal sealed class ConsolePanel : EditorPanel
 {
     #region State
     private readonly ConsolePanelContent m_content = new();
     private readonly HashSet<LogLevel> m_filterLevels = Enum.GetValues<LogLevel>().ToHashSet();
     private readonly LogLevel[] m_levels = Enum.GetValues<LogLevel>();
-    private readonly HashSet<long> m_openEntries = [];
+    private readonly HashSet<string> m_openEntries = new(StringComparer.Ordinal);
 
     private bool m_collapse = true;
-    private long m_lastLogVersion = -1;
-    private long m_lastDiagnosticVersion = -1;
+    private long m_lastRevision = -1;
     private bool m_requestScrollToBottom = true;
-    private bool m_lastRenderedCollapse = true;
-    private readonly LoggingModule m_logging;
+    private readonly IEditorConsole m_console;
     private readonly EditorInteractions m_interactions;
     #endregion
 
@@ -40,18 +39,49 @@ internal sealed class ConsolePanel : EditorPanel
     /// <summary>
     /// Creates the panel.
     /// </summary>
-    /// <param name="logging">The automatically discovered module that connects both Console data sources.</param>
-    /// <param name="interactions">The editor interaction entry point used by contextual entry commands.</param>
+    /// <param name="console">
+    /// The editor Console contract that owns snapshots and explicit retention operations.
+    /// </param>
+    /// <param name="interactions">
+    /// The editor interaction entry point used by contextual entry commands.
+    /// </param>
     /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="logging"/> or <paramref name="interactions"/> is <see langword="null"/>.
+    /// Thrown when <paramref name="console"/> or <paramref name="interactions"/> is <see langword="null"/>.
     /// </exception>
-    internal ConsolePanel(LoggingModule logging, EditorInteractions interactions)
+    internal ConsolePanel(IEditorConsole console, EditorInteractions interactions)
     {
-        m_logging = logging ?? throw new ArgumentNullException(nameof(logging));
+        m_console = console ?? throw new ArgumentNullException(nameof(console));
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Captures the persistent Console layout preferences without retaining log content.
+    /// </summary>
+    /// <param name="state">
+    /// The project-level panel state that receives stable presentation values.
+    /// </param>
+    protected override void Capture(EditorState state)
+    {
+        state.Set("collapse", m_collapse);
+    }
+
+    /// <summary>
+    /// Restores persistent Console layout preferences without restoring historical log content.
+    /// </summary>
+    /// <param name="state">
+    /// The project-level panel state containing stable presentation values.
+    /// </param>
+    protected override void Restore(EditorState state)
+    {
+        m_collapse = state.Get("collapse", true);
+    }
+
+    /// <summary>
+    /// Draws this feature using the current editor presentation context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnDraw(EditorContext context)
     {
         NativeImGui.BeginChild("ConsoleChild", Vector2.Zero);
@@ -81,8 +111,7 @@ internal sealed class ConsolePanel : EditorPanel
         NativeImGui.SameLine();
         if (NativeImGui.Button("Clear"))
         {
-            m_logging.logs.Clear();
-            m_logging.diagnostics.Clear();
+            m_console.Clear();
             m_openEntries.Clear();
             m_requestScrollToBottom = true;
         }
@@ -90,7 +119,10 @@ internal sealed class ConsolePanel : EditorPanel
 
     private bool DrawFilterCombo()
     {
-        if (!NativeImGui.BeginCombo("##ConsoleFilter", "Filter", ImGuiComboFlags.WidthFitPreview))
+        if (!EditorWidget.BeginBoundedCombo(
+                "##ConsoleFilter",
+                "Filter",
+                ImGuiComboFlags.WidthFitPreview))
         {
             return false;
         }
@@ -128,21 +160,15 @@ internal sealed class ConsolePanel : EditorPanel
     {
         NativeImGui.BeginChild("ConsoleRegion", Vector2.Zero);
 
-        BufferedLogEntry[] logs = m_logging.logs.SnapshotBuffered(out long logVersion);
-        EditorDiagnosticEntry[] diagnostics = m_logging.diagnostics.Snapshot(out long diagnosticVersion);
-        EditorConsoleEntry[] entries = m_content.Combine(logs, diagnostics);
-        RemoveStaleOpenEntries(entries);
-        bool hasNewEntries =
-            m_lastLogVersion >= 0 && logVersion != m_lastLogVersion ||
-            m_lastDiagnosticVersion >= 0 && diagnosticVersion != m_lastDiagnosticVersion;
-        m_lastLogVersion = logVersion;
-        m_lastDiagnosticVersion = diagnosticVersion;
+        EditorConsoleSnapshot snapshot = m_console.Capture();
+        RemoveStaleOpenEntries(snapshot);
+        bool hasNewEntries = m_lastRevision >= 0 && snapshot.revision != m_lastRevision;
+        m_lastRevision = snapshot.revision;
 
         bool scrollAtBottom = NativeImGui.GetScrollY() >=
                               NativeImGui.GetScrollMaxY() - EditorWidget.style.logAutoScrollTolerance;
         bool shouldScrollToBottom = m_requestScrollToBottom || (hasNewEntries && scrollAtBottom);
-        DrawEntries(entries);
-        m_lastRenderedCollapse = m_collapse;
+        DrawEntries(snapshot);
 
         if (shouldScrollToBottom)
         {
@@ -155,87 +181,62 @@ internal sealed class ConsolePanel : EditorPanel
     #endregion
 
     #region Entries
-    private void DrawEntries(EditorConsoleEntry[] entries)
+    private void DrawEntries(EditorConsoleSnapshot snapshot)
     {
-        if (entries.Length == 0)
+        if (snapshot.occurrences.Count == 0)
         {
             m_content.DrawDisabledHint("No logs or diagnostics yet.");
             return;
         }
 
-        List<EditorConsoleEntry> visibleEntries = m_content.CollectVisibleEntries(entries, m_filterLevels);
-
-        if (visibleEntries.Count == 0)
+        int visibleCount = 0;
+        if (m_collapse)
         {
+            for (int i = 0; i < snapshot.groups.Count; i++)
+            {
+                EditorConsoleGroup group = snapshot.groups[i];
+                if (!m_filterLevels.Contains(group.latest.level))
+                    continue;
+                visibleCount++;
+                DrawConsoleEntry(
+                    group.latest,
+                    group.occurrences,
+                    group.count,
+                    $"group/{group.identity}");
+            }
+        }
+        else
+        {
+            for (int i = 0; i < snapshot.occurrences.Count; i++)
+            {
+                EditorConsoleOccurrence occurrence = snapshot.occurrences[i];
+                if (!m_filterLevels.Contains(occurrence.level))
+                    continue;
+                visibleCount++;
+                DrawConsoleEntry(
+                    occurrence,
+                    [occurrence],
+                    1,
+                    $"occurrence/{occurrence.sequence}");
+            }
+        }
+
+        if (visibleCount == 0)
             m_content.DrawDisabledHint("All logs are filtered out.");
-            return;
-        }
-
-        int start = 0;
-        bool collapseModeChanged = m_collapse != m_lastRenderedCollapse;
-        bool switchedToCollapse = collapseModeChanged && m_collapse;
-        bool wasCollapseLastFrame = m_lastRenderedCollapse;
-
-        while (start < visibleEntries.Count)
-        {
-            int end = start;
-            while (end + 1 < visibleEntries.Count &&
-                   m_content.IsSameEntryIgnoreTime(visibleEntries[end + 1], visibleEntries[end]))
-            {
-                end++;
-            }
-
-            if (m_collapse)
-            {
-                List<long> runEntryIds = m_content.CollectRunEntryIds(visibleEntries, start, end);
-                long latestEntryId = runEntryIds[^1];
-                bool latestEntryOpen = m_openEntries.Contains(latestEntryId);
-                bool anyOpenInRun = m_content.ContainsAnyOpen(runEntryIds, m_openEntries);
-
-                if (latestEntryOpen)
-                {
-                    m_content.KeepOnlyLatestOpen(runEntryIds, latestEntryId, m_openEntries);
-                }
-                else if (anyOpenInRun)
-                {
-                    bool shouldPromoteLatest = wasCollapseLastFrame && !switchedToCollapse;
-                    m_content.CloseAll(runEntryIds, m_openEntries);
-
-                    if (shouldPromoteLatest)
-                    {
-                        m_openEntries.Add(latestEntryId);
-                    }
-                }
-
-                DrawConsoleEntry(visibleEntries[end], end - start + 1, runEntryIds, collapseView: true);
-            }
-            else
-            {
-                for (int i = start; i <= end; i++)
-                {
-                    long entryId = visibleEntries[i].id;
-                    DrawConsoleEntry(visibleEntries[i], 1, [entryId], collapseView: false);
-                }
-            }
-
-            start = end + 1;
-        }
     }
     #endregion
 
     #region Entry Card
     private void DrawConsoleEntry(
-        EditorConsoleEntry entry,
+        EditorConsoleOccurrence entry,
+        IReadOnlyList<EditorConsoleOccurrence> occurrences,
         int repeatCount,
-        IReadOnlyList<long> runEntryIds,
-        bool collapseView)
+        string identity)
     {
         (Vector4 levelColor, string levelIcon) = m_content.GetLevelVisual(entry.level);
 
-        long entryId = entry.id;
-        int rowId = entryId.GetHashCode();
-        NativeImGui.PushID(rowId);
-        bool open = m_openEntries.Contains(entryId);
+        ConsoleEntryImGuiIdentity.Push(identity);
+        bool open = m_openEntries.Contains(identity);
         if (!open)
         {
             Vector4 collapsedCardBg = m_content.GetCollapsedBgColor();
@@ -246,35 +247,21 @@ internal sealed class ConsolePanel : EditorPanel
             NativeImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, EditorWidget.style.borderSize);
             NativeImGui.PushStyleVar(ImGuiStyleVar.FramePadding, EditorWidget.style.framePadding);
 
-            ImGuiChildFlags collapsedChildFlags = ImGuiChildFlags.FrameStyle | ImGuiChildFlags.AutoResizeY;
+            ImGuiChildFlags collapsedChildFlags = ImGuiChildFlags.FrameStyle;
             ImGuiWindowFlags collapsedChildWindowFlags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoSavedSettings;
-            if (NativeImGui.BeginChild("##ConsoleEntryCard", new Vector2(0f, 0f), collapsedChildFlags, collapsedChildWindowFlags))
+            float collapsedHeight = NativeImGui.GetFrameHeight() + NativeImGui.GetStyle().FramePadding.Y * 2f;
+            if (NativeImGui.BeginChild("##ConsoleEntryCard", new Vector2(0f, collapsedHeight), collapsedChildFlags, collapsedChildWindowFlags))
             {
                 DrawHeader(entry, repeatCount, levelColor, levelIcon, false, collapsedCardBg, out bool toggled);
                 if (toggled)
-                {
-                    if (collapseView)
-                    {
-                        for (int i = 0; i < runEntryIds.Count; i++)
-                        {
-                            m_openEntries.Remove(runEntryIds[i]);
-                        }
-
-                        m_openEntries.Add(entryId);
-                    }
-                    else
-                    {
-                        m_openEntries.Add(entryId);
-                    }
-                }
+                    m_openEntries.Add(identity);
             }
 
             NativeImGui.EndChild();
             DrawEntryContextMenu(entry, repeatCount);
             NativeImGui.PopStyleVar(3);
             NativeImGui.PopStyleColor(2);
-            NativeImGui.Dummy(new Vector2(0f, EditorWidget.style.logCollapsedSpacing));
-            NativeImGui.PopID();
+            ConsoleEntryImGuiIdentity.Pop();
             return;
         }
 
@@ -292,40 +279,40 @@ internal sealed class ConsolePanel : EditorPanel
         {
             DrawHeader(entry, repeatCount, levelColor, levelIcon, true, cardBg, out bool toggled);
             if (toggled)
-            {
-                if (collapseView)
-                {
-                    for (int i = 0; i < runEntryIds.Count; i++)
-                    {
-                        m_openEntries.Remove(runEntryIds[i]);
-                    }
-                }
-                else
-                {
-                    m_openEntries.Remove(entryId);
-                }
-            }
+                m_openEntries.Remove(identity);
 
             NativeImGui.PushStyleColor(
                 ImGuiCol.Separator,
                 EditorPalette.GetLogSeparator(cardBg));
-            NativeImGui.Separator();
-            NativeImGui.PopStyleColor();
-            DrawDetail(entry);
+            try
+            {
+                NativeImGui.Separator();
+                for (int i = 0; i < occurrences.Count; i++)
+                {
+                    if (i > 0)
+                        NativeImGui.Separator();
+                    NativeImGui.PushID(unchecked((int)occurrences[i].sequence));
+                    DrawDetail(occurrences[i]);
+                    NativeImGui.PopID();
+                }
+            }
+            finally
+            {
+                NativeImGui.PopStyleColor();
+            }
         }
 
         NativeImGui.EndChild();
         DrawEntryContextMenu(entry, repeatCount);
         NativeImGui.PopStyleVar(3);
         NativeImGui.PopStyleColor(2);
-        NativeImGui.Dummy(new Vector2(0f, EditorWidget.style.logExpandedSpacing));
-        NativeImGui.PopID();
+        ConsoleEntryImGuiIdentity.Pop();
     }
     #endregion
 
     #region Entry Header / Detail
     private void DrawHeader(
-        EditorConsoleEntry entry,
+        EditorConsoleOccurrence entry,
         int repeatCount,
         Vector4 levelColor,
         string levelIcon,
@@ -416,7 +403,7 @@ internal sealed class ConsolePanel : EditorPanel
         }
     }
 
-    private static void DrawDetail(EditorConsoleEntry entry)
+    private static void DrawDetail(EditorConsoleOccurrence entry)
     {
         string timeText = entry.time.ToString("HH:mm:ss");
         string sourceText = entry.source;
@@ -439,12 +426,22 @@ internal sealed class ConsolePanel : EditorPanel
             DrawDetailFieldRow("Kind:", entry.kind.ToString());
             DrawDetailFieldRow("File:", fileWithLineText);
             DrawDetailFieldRow("Source:", sourceText);
+            if (entry.sessionId.isAssigned)
+                DrawDetailFieldRow("Session:", entry.sessionId.ToString());
             DrawDetailFieldRow("Time:", timeText);
             NativeImGui.EndTable();
         }
+
+        if (!string.IsNullOrWhiteSpace(entry.stackTrace))
+        {
+            NativeImGui.Separator();
+            NativeImGui.PushTextWrapPos(0f);
+            NativeImGui.TextUnformatted(entry.stackTrace);
+            NativeImGui.PopTextWrapPos();
+        }
     }
 
-    private void DrawEntryContextMenu(EditorConsoleEntry entry, int repeatCount)
+    private void DrawEntryContextMenu(EditorConsoleOccurrence entry, int repeatCount)
     {
         _ = EditorMenuRenderer.ContextMenu(
             "##ConsoleEntryContextMenu",
@@ -453,11 +450,15 @@ internal sealed class ConsolePanel : EditorPanel
                 new ConsoleEntryCopyTarget(entry, repeatCount)));
     }
 
-    private void RemoveStaleOpenEntries(IReadOnlyList<EditorConsoleEntry> entries)
+    private void RemoveStaleOpenEntries(EditorConsoleSnapshot snapshot)
     {
         if (m_openEntries.Count == 0)
             return;
-        var activeIds = new HashSet<long>(entries.Select(static entry => entry.id));
+        var activeIds = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < snapshot.groups.Count; i++)
+            activeIds.Add($"group/{snapshot.groups[i].identity}");
+        for (int i = 0; i < snapshot.occurrences.Count; i++)
+            activeIds.Add($"occurrence/{snapshot.occurrences[i].sequence}");
         m_openEntries.RemoveWhere(id => !activeIds.Contains(id));
     }
 

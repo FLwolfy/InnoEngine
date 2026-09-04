@@ -2,30 +2,48 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 
 using Inno.Assets;
+using Inno.Assets.Pipeline;
+using Inno.Build;
+using Inno.Build.Platform.MacOS;
+using Inno.Build.Platform.Windows;
+using Inno.Build.Toolchains.Bgfx.Tools;
 using Inno.Core.Events;
-using Inno.Core.Framework;
 using Inno.Core.Logging;
+using Inno.Core.Settings;
 using Inno.Editor.Core;
+using Inno.Editor.Rendering;
+using Inno.Runtime;
+using Inno.Scene;
 using Inno.Platform;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3;
+using Inno.Platform.Sdl3.ImGui;
+using Inno.Rendering;
+using Inno.Rendering.Assets;
+using Inno.Rendering.Bgfx;
+using Inno.Rendering.Bgfx.ImGui;
+using Inno.Rendering.Runtime;
+using Inno.Rendering.ShaderGraph;
 
 namespace Inno.Editor.Application;
 
 /// <summary>
-/// Editor runtime host that wires Platform + Shell + ImGui + Editor layer.
+/// Editor composition root that owns Platform, authoring services, runtime sessions, rendering, and presentation.
 /// </summary>
 internal sealed class EditorHost : IDisposable
 {
     private const string C_LOG_DIRECTORY_NAME = "Logs";
     private const string C_BOOT_LOG_FILE_NAME = "EditorBoot.log";
 
-    private readonly PlatformApplication m_platformApplication;
-    private readonly PlatformWindow m_window;
+    private readonly Sdl3PlatformApplication m_platformApplication;
+    private readonly Sdl3PlatformWindow m_window;
     private readonly HashSet<uint> m_focusedWindowIds = [];
-    private readonly Shell m_shell;
-    private readonly PlatformImGuiContext m_imgui;
+    private readonly RuntimeSession m_editSession;
+    private readonly EditorAuthoringServices m_authoring;
+    private readonly RenderRuntimeLayer m_rendering;
+    private readonly EditorHostLayerStack m_layers;
     private readonly EditorLayer m_editorLayer;
     private readonly EditorHostResourceStack m_resources;
     private readonly string m_bootLogPath;
@@ -38,10 +56,12 @@ internal sealed class EditorHost : IDisposable
     private EditorHost(
         string projectDirectory,
         string bootLogPath,
-        PlatformApplication platformApplication,
-        PlatformWindow window,
-        Shell shell,
-        PlatformImGuiContext imgui,
+        Sdl3PlatformApplication platformApplication,
+        Sdl3PlatformWindow window,
+        RuntimeSession editSession,
+        EditorAuthoringServices authoring,
+        RenderRuntimeLayer rendering,
+        EditorHostLayerStack layers,
         EditorLayer editorLayer,
         EditorHostResourceStack resources)
     {
@@ -49,8 +69,10 @@ internal sealed class EditorHost : IDisposable
         m_bootLogPath = bootLogPath;
         m_platformApplication = platformApplication;
         m_window = window;
-        m_shell = shell;
-        m_imgui = imgui;
+        m_editSession = editSession;
+        m_authoring = authoring;
+        m_rendering = rendering;
+        m_layers = layers;
         m_editorLayer = editorLayer;
         m_resources = resources;
         if (m_window.isFocused)
@@ -66,14 +88,16 @@ internal sealed class EditorHost : IDisposable
         string bootLogPath = Path.Combine(logDirectory, C_BOOT_LOG_FILE_NAME);
         var resources = new EditorHostResourceStack(
             exception => AppendBootLog(bootLogPath, $"Teardown failure: {exception}"));
+        bool renderingLayerPushed = false;
         bool overlayPushed = false;
+        BgfxImGuiRenderer? bgfxImGui = null;
         try
         {
             AppendBootLog(bootLogPath, "EditorHost creation start.");
-            PlatformApplication platform = resources.Acquire(
-                static () => new PlatformApplication(),
+            Sdl3PlatformApplication platform = resources.Acquire(
+                static () => new Sdl3PlatformApplication(),
                 static application => application.Dispose());
-            PlatformWindow window = resources.Acquire(
+            Sdl3PlatformWindow window = resources.Acquire(
                 () => platform.CreateWindow(new PlatformWindowOptions
                 {
                     title = "Inno Editor",
@@ -83,43 +107,192 @@ internal sealed class EditorHost : IDisposable
                     highPixelDensity = true
                 }),
                 static createdWindow => createdWindow.Dispose());
-            Shell shell = resources.Acquire(
-                () => Shell.Initialize(new ShellSettings
+            EngineHost engineHost = resources.Acquire(
+                () => new EngineHostBuilder()
+                    .UseMetadataCache(Path.Combine(normalizedProject, "Library", "Assemblies"))
+                    .Build(),
+                static host => host.Dispose());
+            RuntimeSession editSession = resources.Acquire(
+                () => engineHost.CreateSession(new RuntimeSessionOptions
                 {
+                    kind = RuntimeSessionKind.Edit,
+                    applicationId = "inno.editor",
+                    persistentDataDirectory = Path.Combine(
+                        normalizedProject,
+                        "Library",
+                        "PersistentData",
+                        "inno.editor"),
                     fixedDeltaTime = 1f / 60f,
                     maxFrameDeltaTime = 0.25f,
-                    maxUpdateStepsPerTick = 8,
-                    useSingleThreadJobSystem = false,
-                    jobWorkerCount = 0,
-                    projectRootDirectory = normalizedProject
+                    maxFixedStepsPerFrame = 8,
+                    jobExecutionMode = RuntimeJobExecutionMode.WorkerPool
                 }),
-                static _ =>
+                static session => session.Dispose());
+            _ = resources.Acquire(
+                editSession.EnterExecutionScope,
+                static scope => scope.Dispose());
+            var consoleLog = new ConsoleLogSink();
+            engineHost.logs.RegisterSink(consoleLog);
+            resources.Register(() => engineHost.logs.UnregisterSink(consoleLog));
+            EditorAuthoringServices authoring = resources.Acquire(
+                () => EditorAuthoringServices.Start(normalizedProject, engineHost),
+                static services => services.Dispose());
+            _ = resources.Acquire(
+                () => AssetExecutionContext.EnterScope(authoring.assets),
+                static scope => scope.Dispose());
+            _ = resources.Acquire(
+                () => ProjectSettingsExecutionContext.EnterScope(authoring.settings),
+                static scope => scope.Dispose());
+            var buildPipeline = new BuildPipeline(
+                authoring.assets,
+                authoring.plugins,
+                authoring.settings,
+                engineHost.serialization,
+                authoring.compiler,
+                ResolveSupportPackRoot(),
+                [
+                    new MacOSArm64GameBuildTarget(authoring.assets, engineHost.serialization),
+                    new WindowsX64GameBuildTarget(authoring.assets, engineHost.serialization)
+                ]);
+            BuildTargetId defaultBuildTarget = OperatingSystem.IsWindows()
+                ? BuildTargetId.windowsX64
+                : BuildTargetId.macOSArm64;
+            BuildSettings defaultBuildSettings = BuildSettings.CreateDefault(
+                Path.GetFileName(Path.TrimEndingDirectorySeparator(normalizedProject)),
+                FindDefaultStartupScene(authoring.assets),
+                defaultBuildTarget);
+            var buildSettings = new BuildSettingsStore(
+                Path.Combine(normalizedProject, SettingsFileNames.build),
+                engineHost.serialization,
+                defaultBuildSettings);
+            EditorHostLayerStack layers = resources.Acquire(
+                () => new EditorHostLayerStack(() => editSession.events.CreateHub()),
+                static stack => stack.Dispose());
+            BgfxDevice graphicsDevice = resources.Acquire(
+                () => new BgfxDevice(new BgfxDeviceOptions
                 {
-                    if (Shell.isInitialized)
-                        Shell.Shutdown();
-                });
+                    window = window,
+                    verticalSync = true,
+                    sRgbBackbuffer = true
+                }),
+                static device => device.Dispose());
+            resources.Register(() =>
+            {
+                graphicsDevice.BeginFrame();
+                try
+                {
+                    bgfxImGui?.PrepareFrame(ulong.MaxValue);
+                }
+                finally
+                {
+                    _ = graphicsDevice.EndFrame();
+                }
+            });
+            var shaderCompiler = new ShaderCompiler(new BgfxShadercToolchain());
+            var textureCompiler = new BgfxTextureTargetCompiler();
+            GraphicsPipelineDescriptor imguiPipeline = EditorShaderBootstrap.Compile(
+                shaderCompiler,
+                graphicsDevice.capabilities,
+                Path.Combine(normalizedProject, "Assets"));
+            EditorRenderDiagnosticSink renderDiagnostics = resources.Acquire(
+                () => new EditorRenderDiagnosticSink(engineHost.diagnostics),
+                static sink => sink.Dispose());
+            var renderArtifacts = resources.Acquire(
+                () => new EditorRenderTargetArtifactProvider(
+                    authoring.assets,
+                    engineHost.serialization,
+                    shaderCompiler,
+                    textureCompiler,
+                    renderDiagnostics),
+                static provider => provider.Dispose());
+            bgfxImGui = resources.Acquire(
+                () => new BgfxImGuiRenderer(graphicsDevice, imguiPipeline),
+                static renderer => renderer.Dispose());
             PlatformImGuiContext imgui = resources.Acquire(
                 () => platform.CreateImGuiContext(
                     window,
                     ImGuiContextFlags.EnableViewports |
                     ImGuiContextFlags.EnableDocking |
-                    ImGuiContextFlags.EnableSmoothResize),
+                    ImGuiContextFlags.EnableSmoothResize,
+                    bgfxImGui),
                 _ => platform.DestroyImGuiContext(window));
+            var renderingLayer = new RenderRuntimeLayer(
+                engineHost.types,
+                graphicsDevice,
+                renderDiagnostics,
+                contributors: [bgfxImGui],
+                targetArtifacts: renderArtifacts);
+            var renderingAdapter = new EditorRenderingLayer(renderingLayer);
+            var reloadCoordinator = new EditorReloadCoordinator();
+            var renderingHost = resources.Acquire(
+                () => new EditorRenderingHostService(
+                    renderingLayer,
+                    bgfxImGui,
+                    imgui,
+                    reloadCoordinator),
+                static service => service.Dispose());
+            var shaderNodes = resources.Acquire(
+                () => new ShaderNodeRegistry(engineHost.types),
+                static registry => registry.Dispose());
+            shaderNodes.RefreshExtensions();
             var editorContext = new EditorContext(normalizedProject);
             imgui.SetIniFile(null);
             imgui.LoadIniSettings(editorContext.imguiLayout);
-            EditorLayer layer = new EditorLayer(imgui, editorContext)
+            var playOptions = new RuntimeSessionOptions
+            {
+                kind = RuntimeSessionKind.Play,
+                applicationId = "inno.editor.play",
+                persistentDataDirectory = Path.Combine(
+                    normalizedProject,
+                    "Library",
+                    "PersistentData",
+                    "inno.editor.play"),
+                fixedDeltaTime = 1f / 60f,
+                maxFrameDeltaTime = 0.25f,
+                maxFixedStepsPerFrame = 8,
+                jobExecutionMode = RuntimeJobExecutionMode.WorkerPool
+            };
+            EditorLayer layer = new EditorLayer(
+                imgui,
+                editorContext,
+                engineHost.types,
+                engineHost.logs,
+                [
+                    renderingHost,
+                    shaderNodes,
+                    reloadCoordinator,
+                    engineHost,
+                    engineHost.modules,
+                    engineHost.diagnostics,
+                    editSession,
+                    playOptions,
+                    authoring.assets,
+                    authoring.plugins,
+                    authoring.settings,
+                    authoring.compiler,
+                    buildPipeline,
+                    buildSettings,
+                    engineHost.types,
+                    engineHost.serialization
+                ])
             {
                 isFocused = window.isFocused
             };
             resources.Register(() =>
             {
+                if (renderingLayerPushed)
+                    layers.PopLayer(renderingAdapter);
+            });
+            layers.PushLayer(renderingAdapter);
+            renderingLayerPushed = true;
+            resources.Register(() =>
+            {
                 if (overlayPushed)
-                    shell.layerStack.PopOverlay(layer);
+                    layers.PopOverlay(layer);
                 else
                     layer.DisposeUnattached();
             });
-            shell.layerStack.PushOverlay(layer);
+            layers.PushOverlay(layer);
             overlayPushed = true;
             if (layer.panelCount == 0)
                 throw new InvalidOperationException("No editor panels were discovered from the active host assemblies.");
@@ -128,12 +301,19 @@ internal sealed class EditorHost : IDisposable
                 bootLogPath,
                 platform,
                 window,
-                shell,
-                imgui,
+                editSession,
+                authoring,
+                renderingLayer,
+                layers,
                 layer,
                 resources);
             host.BootLog($"Editor layer attached with {layer.panelCount} panel(s).");
-            host.BootLog($"AssetManager initialized={AssetManager.isInitialized} root='{AssetManager.assetRoot}'.");
+            host.BootLog(
+                $"Rendering initialized with {graphicsDevice.capabilities.backend} " +
+                $"(views={graphicsDevice.capabilities.limits.maxViews}).");
+            host.BootLog(
+                $"AssetPipeline initialized={authoring.assets.isInitialized} " +
+                $"root='{authoring.assets.assetRoot}'.");
             return host;
         }
         catch
@@ -143,15 +323,33 @@ internal sealed class EditorHost : IDisposable
         }
     }
 
-    /// <summary>Gets the normalized project directory owned by this host.</summary>
+    private static string ResolveSupportPackRoot()
+    {
+        string? configured = Environment.GetEnvironmentVariable("INNO_SUPPORT_PACK_ROOT");
+        return string.IsNullOrWhiteSpace(configured)
+            ? Path.Combine(AppContext.BaseDirectory, "SupportPacks")
+            : Path.GetFullPath(configured);
+    }
+
+    /// <summary>
+    /// Gets the normalized project directory owned by this host.
+    /// </summary>
     public string projectDirectory { get; }
 
     /// <summary>
-    /// Runs the editor loop until window/application quit is requested.
+    /// Executes the configured workflow and returns its process outcome.
     /// </summary>
-    /// <returns>The process exit code produced after the main editor window closes.</returns>
-    public int Run()
+    /// <param name="smokeFrameLimit">
+    /// Optional positive frame count used by automated native smoke tests; <see langword="null"/> runs interactively.
+    /// </param>
+    /// <returns>
+    /// The process exit code produced after the main editor window closes.
+    /// </returns>
+    public int Run(int? smokeFrameLimit = null)
     {
+        if (smokeFrameLimit is <= 0)
+            throw new ArgumentOutOfRangeException(nameof(smokeFrameLimit));
+
         BootLog("Run loop start.");
         Stopwatch timer = Stopwatch.StartNew();
         double lastTime = 0.0;
@@ -176,7 +374,7 @@ internal sealed class EditorHost : IDisposable
                     m_running = false;
                     break;
                 }
-                m_shell.eventDispatcher.Enqueue(evnt);
+                m_editSession.events.Enqueue(evnt);
             }
 
             if (!m_running || m_window.isClosed)
@@ -188,16 +386,32 @@ internal sealed class EditorHost : IDisposable
             }
 
             if (m_frameCount == 0)
-                BootLog("About to execute first shell.Tick.");
+                BootLog("About to execute first editor frame.");
 
-            m_editorLayer.isFocused = HasEditorFocus();
-            m_shell.Tick((float)now, delta);
+            using (m_rendering.EnterExecutionScope())
+            {
+                m_editorLayer.isFocused = HasEditorFocus();
+                m_editorLayer.totalTime = (float)now;
+                m_authoring.Update();
+                m_editSession.Tick((float)now, delta);
+                using (m_editSession.EnterExecutionScope())
+                {
+                    m_layers.Update(delta);
+                    m_layers.LateUpdate(delta);
+                    m_layers.RenderFrame(delta);
+                }
+            }
 
             if (m_frameCount == 0)
-                BootLog("First shell.Tick completed.");
+                BootLog("First editor frame completed.");
 
             m_hasRenderedFrame = true;
             m_frameCount++;
+            if (smokeFrameLimit.HasValue && m_frameCount >= smokeFrameLimit.Value)
+            {
+                BootLog($"Smoke frame limit reached after {m_frameCount} frame(s).");
+                m_running = false;
+            }
         }
 
         SaveBeforeShutdown();
@@ -205,7 +419,9 @@ internal sealed class EditorHost : IDisposable
         return 0;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Releases the resources owned by this implementation.
+    /// </summary>
     public void Dispose()
     {
         if (m_disposed)
@@ -243,6 +459,19 @@ internal sealed class EditorHost : IDisposable
             throw new IOException($"Project directory '{normalizedPath}' points to a file.");
         Directory.CreateDirectory(normalizedPath);
         return normalizedPath;
+    }
+
+    private static string FindDefaultStartupScene(AssetPipeline assets)
+    {
+        foreach (AssetFileEntry entry in assets.GetFileSystemEntries(includeDirectories: false)
+                     .Where(static entry => entry.source == AssetSourceId.project)
+                     .Where(static entry => !AssetSample.IsRuntimeExcluded(entry.assetPath, isDirectory: false))
+                     .OrderBy(static entry => entry.assetPath.localPath, StringComparer.Ordinal))
+        {
+            if (assets.TryGetAssetType(entry.assetPath, out Type? type) && type == typeof(SceneAsset))
+                return entry.assetPath.ToString();
+        }
+        return string.Empty;
     }
 
     private bool HasEditorFocus()

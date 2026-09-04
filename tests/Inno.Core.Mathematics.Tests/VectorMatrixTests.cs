@@ -9,6 +9,34 @@ namespace Inno.Core.Mathematics.Tests;
 public sealed class VectorMatrixTests
 {
     [Fact]
+    public void Vector2QuaternionTransform_PreservesLengthForZRotation()
+    {
+        Quaternion rotation = Quaternion.CreateFromAxisAngle(Vector3.FORWARD, MathF.PI * 0.5f);
+
+        Vector2 result = Vector2.Transform(Vector2.UNIT_X, rotation);
+
+        Assert.InRange(result.x, -0.00001f, 0.00001f);
+        Assert.InRange(result.y, 0.99999f, 1.00001f);
+        Assert.InRange(result.Length(), 0.99999f, 1.00001f);
+    }
+
+    [Fact]
+    public void EulerAnglesXYZ_RoundTripsCompoundRotation()
+    {
+        var source = new Vector3(0.31f, -0.47f, 0.83f);
+
+        Quaternion original = Quaternion.FromEulerAnglesXYZ(source).normalized;
+        Quaternion roundTrip = Quaternion.FromEulerAnglesXYZ(original.ToEulerAnglesXYZ()).normalized;
+
+        float alignment = MathF.Abs(
+            original.x * roundTrip.x
+            + original.y * roundTrip.y
+            + original.z * roundTrip.z
+            + original.w * roundTrip.w);
+        Assert.InRange(alignment, 0.99999f, 1.00001f);
+    }
+
+    [Fact]
     public void Vector2_LengthSquared_MatchesDot()
     {
         var v = new Vector2(3f, 4f);
@@ -129,6 +157,32 @@ public sealed class VectorMatrixTests
 
         Assert.True(MathHelper.AlmostEquals(0f, pNear.z));
         Assert.True(MathHelper.AlmostEquals(1f, pFar.z));
+    }
+
+    [Fact]
+    public void Matrix_PerspectiveLH_MapsNearFar()
+    {
+        float near = 0.1f;
+        float far = 10f;
+        var projection = Matrix.CreatePerspectiveFieldOfView(MathF.PI / 2f, 1f, near, far);
+
+        Vector3 projectedNear = (projection * new Vector4(0f, 0f, near, 1f)).ProjectToVector3();
+        Vector3 projectedFar = (projection * new Vector4(0f, 0f, far, 1f)).ProjectToVector3();
+
+        Assert.True(MathHelper.AlmostEquals(0f, projectedNear.z));
+        Assert.True(MathHelper.AlmostEquals(1f, projectedFar.z));
+    }
+
+    [Fact]
+    public void Matrix_LookAtLH_RotatesWorldIntoCameraAxes()
+    {
+        Matrix view = Matrix.CreateLookAt(Vector3.ZERO, Vector3.RIGHT, Vector3.UP);
+
+        Vector3 forward = Vector3.Transform(Vector3.RIGHT, view);
+        Vector3 right = Vector3.Transform(Vector3.BACK, view);
+
+        Assert.True(forward == Vector3.FORWARD);
+        Assert.True(right == Vector3.RIGHT);
     }
 
     [Fact]

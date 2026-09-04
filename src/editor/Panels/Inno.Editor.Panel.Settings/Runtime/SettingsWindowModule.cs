@@ -1,10 +1,16 @@
+using Inno.Build;
 using Inno.Editor.Core;
+using Inno.Editor.Interactions;
 using Inno.Editor.Settings;
 
 namespace Inno.Editor.Panel.Settings;
 
 [EditorModule("settings-window", order: 20)]
-internal sealed class SettingsWindowModule(EditorSettings settings) : EditorModule
+internal sealed class SettingsWindowModule(
+    EditorSettings editorSettings,
+    ProjectSettingsEditor projectSettings,
+    BuildSettingsStore buildSettings,
+    EditorInteractions interactions) : EditorModule
 {
     private SettingsEditSession? m_session;
 
@@ -15,7 +21,11 @@ internal sealed class SettingsWindowModule(EditorSettings settings) : EditorModu
     internal void Open()
     {
         if (!isVisible)
-            m_session = new SettingsEditSession(settings);
+            m_session = new SettingsEditSession(
+                editorSettings,
+                projectSettings,
+                buildSettings,
+                interactions.history);
         isVisible = true;
     }
 
@@ -27,10 +37,19 @@ internal sealed class SettingsWindowModule(EditorSettings settings) : EditorModu
 
     internal void Refresh()
     {
-        m_session = new SettingsEditSession(settings);
+        m_session = new SettingsEditSession(
+            editorSettings,
+            projectSettings,
+            buildSettings,
+            interactions.history);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Stops this feature before its owning runtime releases the active generation.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnStop(EditorContext context)
         => Close();
 }

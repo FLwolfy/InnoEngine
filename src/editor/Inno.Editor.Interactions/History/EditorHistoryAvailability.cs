@@ -26,15 +26,23 @@ public readonly record struct EditorHistoryAvailability
     /// <summary>
     /// Creates an available transition result.
     /// </summary>
-    /// <returns>An availability value that permits the transition.</returns>
+    /// <returns>
+    /// An availability value that permits the transition.
+    /// </returns>
     public static EditorHistoryAvailability Available() => new(true, string.Empty);
 
     /// <summary>
     /// Creates an unavailable transition result.
     /// </summary>
-    /// <param name="message">The non-empty diagnostic explaining why the transition is unavailable.</param>
-    /// <returns>An availability value that rejects the transition.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="message"/> is empty.</exception>
+    /// <param name="message">
+    /// The non-empty diagnostic explaining why the transition is unavailable.
+    /// </param>
+    /// <returns>
+    /// An availability value that rejects the transition.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="message"/> is empty.
+    /// </exception>
     public static EditorHistoryAvailability Unavailable(string message)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(message);

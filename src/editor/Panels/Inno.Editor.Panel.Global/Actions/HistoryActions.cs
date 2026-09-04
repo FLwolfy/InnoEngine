@@ -8,6 +8,15 @@ namespace Inno.Editor.Panel.Global;
 [EditorShortcut(KeyCode.Z, primary: true)]
 internal sealed class UndoEditorAction : EditorAction
 {
+    /// <summary>
+    /// Evaluates whether the requested change can be applied to the current generation.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <returns>
+    /// The validated editor action state that represents the completed operation.
+    /// </returns>
     protected override EditorActionState Query(EditorActionContext context)
         => new(
             isVisible: true,
@@ -18,6 +27,12 @@ internal sealed class UndoEditorAction : EditorAction
                     : $"Undo {name}"
                 : "Undo");
 
+    /// <summary>
+    /// Executes the prepared operation and publishes only a completed result.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
     protected override void Execute(EditorActionContext context)
         => _ = context.history.Undo();
 }
@@ -28,6 +43,15 @@ internal sealed class UndoEditorAction : EditorAction
 [EditorShortcut(KeyCode.Y, primary: true)]
 internal sealed class RedoEditorAction : EditorAction
 {
+    /// <summary>
+    /// Evaluates whether the requested change can be applied to the current generation.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <returns>
+    /// The validated editor action state that represents the completed operation.
+    /// </returns>
     protected override EditorActionState Query(EditorActionContext context)
         => new(
             isVisible: true,
@@ -38,6 +62,12 @@ internal sealed class RedoEditorAction : EditorAction
                     : $"Redo {name}"
                 : "Redo");
 
+    /// <summary>
+    /// Executes the prepared operation and publishes only a completed result.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
     protected override void Execute(EditorActionContext context)
         => _ = context.history.Redo();
 }

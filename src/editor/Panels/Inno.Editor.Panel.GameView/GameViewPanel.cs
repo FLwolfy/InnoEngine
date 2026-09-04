@@ -1,0 +1,207 @@
+using System;
+using System.Collections.Generic;
+using System.Numerics;
+
+using Inno.Core.Settings;
+using Inno.Editor.Core;
+using Inno.Editor.ImGui;
+using Inno.Editor.Rendering;
+using Inno.Editor.Scene;
+using Inno.Editor.Settings;
+using Inno.Scene;
+using Inno.Rendering;
+using Inno.Runtime;
+using Inno.Native.ImGui;
+using NativeImGui = Inno.Native.ImGui.ImGui;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
+
+namespace Inno.Editor.Panel.GameView;
+
+/// <summary>
+/// Presents the active Plugin provider for the open Game viewport purpose.
+/// </summary>
+[EditorPanel("rendering.game-view", "Game", order: 220, menuPath: "Viewports")]
+internal sealed class GameViewPanel : EditorPanel
+{
+    private const string C_VIEWPORT_ID = "game-view";
+    private static readonly EditorViewportKindId S_KIND = new("inno.editor.viewport.game");
+    private static readonly Vector2 S_UNAVAILABLE_PADDING = new(48f, 32f);
+
+    private readonly EditorRenderingModule m_rendering;
+    private readonly IEditorGameScenePresentation m_scenePresentation;
+    private readonly EditorSettings m_editorSettings;
+    private readonly ProjectSettingsStore m_projectSettings;
+    private Vector4 m_backgroundColor;
+    private GamePresentationSettings m_presentation = new();
+    private long m_presentationRevision = -1;
+
+    internal GameViewPanel(
+        EditorRenderingModule rendering,
+        IEditorGameScenePresentation scenePresentation,
+        EditorSettings editorSettings,
+        ProjectSettingsStore projectSettings)
+    {
+        m_rendering = rendering ?? throw new ArgumentNullException(nameof(rendering));
+        m_scenePresentation = scenePresentation ?? throw new ArgumentNullException(nameof(scenePresentation));
+        m_editorSettings = editorSettings ?? throw new ArgumentNullException(nameof(editorSettings));
+        m_projectSettings = projectSettings ?? throw new ArgumentNullException(nameof(projectSettings));
+    }
+
+    /// <summary>
+    /// Gets whether use window padding is enabled for this implementation.
+    /// </summary>
+    public override bool useWindowPadding => false;
+
+    /// <summary>
+    /// Gets whether allow scrolling is enabled for this implementation.
+    /// </summary>
+    public override bool allowScrolling => false;
+
+    /// <summary>
+    /// Draws this feature using the current editor presentation context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    protected override void OnDraw(EditorContext context)
+    {
+        _ = context;
+        Vector2 available = NativeImGui.GetContentRegionAvail();
+        if (available.X <= 0f || available.Y <= 0f)
+            return;
+        RefreshPresentationSettings();
+        GameViewportLayout layout = CalculateLayout(available, m_presentation);
+        m_rendering.SetPresentation(
+            C_VIEWPORT_ID,
+            new EditorViewportPresentation(new Inno.Core.Mathematics.Color(
+                m_backgroundColor.X,
+                m_backgroundColor.Y,
+                m_backgroundColor.Z,
+                m_backgroundColor.W)));
+        m_rendering.SetContentScope(C_VIEWPORT_ID, CreateContentScope());
+        if (!m_rendering.TrySubmit(
+                S_KIND,
+                C_VIEWPORT_ID,
+                layout.pixelWidth,
+                layout.pixelHeight,
+                out EditorViewportOutput output))
+        {
+            DrawUnavailable(
+                available,
+                m_rendering.GetCompositionError(C_VIEWPORT_ID) ?? "No rendering model contributes to Game View.");
+            return;
+        }
+        if (!output.isReady)
+        {
+            DrawUnavailable(available, "Preparing Game View GPU target...");
+            return;
+        }
+
+        Vector2 origin = NativeImGui.GetCursorScreenPos();
+        if (m_presentation.preserveAspectRatio)
+        {
+            NativeImGui.GetWindowDrawList().AddRectFilled(
+                origin,
+                origin + available,
+                NativeImGui.ColorConvertFloat4ToU32(new Vector4(0f, 0f, 0f, 1f)));
+        }
+        NativeImGui.SetCursorScreenPos(origin + layout.offset);
+        m_rendering.Draw(output, layout.size);
+        NativeImGui.SetCursorScreenPos(origin);
+        NativeImGui.Dummy(available);
+    }
+
+    /// <summary>
+    /// Attaches this feature to its owning runtime generation.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    protected override void OnAttach(EditorContext context)
+    {
+        _ = context;
+        ApplyEditorSettings(m_editorSettings);
+        RefreshPresentationSettings();
+        m_editorSettings.changed += ApplyEditorSettings;
+    }
+
+    /// <summary>
+    /// Detaches this feature and releases generation-scoped state.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    protected override void OnDetach(EditorContext context)
+    {
+        _ = context;
+        m_editorSettings.changed -= ApplyEditorSettings;
+        m_rendering.Release(C_VIEWPORT_ID);
+        m_presentationRevision = -1;
+    }
+
+    private void ApplyEditorSettings(EditorSettings settings)
+        => m_backgroundColor = GameViewBackgroundSetting.Read(settings);
+
+    private void RefreshPresentationSettings()
+    {
+        if (m_presentationRevision == m_projectSettings.revision)
+            return;
+        m_presentation = m_projectSettings.Get<GamePresentationSettings>(GamePresentationSettings.settingId);
+        m_presentationRevision = m_projectSettings.revision;
+    }
+
+    private static GameViewportLayout CalculateLayout(
+        Vector2 available,
+        GamePresentationSettings presentation)
+    {
+        int availableWidth = Math.Max(1, (int)MathF.Floor(available.X));
+        int availableHeight = Math.Max(1, (int)MathF.Floor(available.Y));
+        GamePresentationViewport viewport = presentation.CalculateViewport(
+            availableWidth,
+            availableHeight);
+        return new GameViewportLayout(
+            new Vector2(viewport.x, viewport.y),
+            new Vector2(viewport.width, viewport.height),
+            viewport.width,
+            viewport.height);
+    }
+
+    private RenderContentScope CreateContentScope()
+    {
+        EditorScenePresentationSnapshot presentation = m_scenePresentation.Capture();
+        var contents = new List<RenderContentReference>(presentation.scenes.Count);
+        RenderContentId? activeContent = null;
+        foreach (GameScene scene in presentation.scenes)
+        {
+            var contentId = new RenderContentId(scene.identity.persistentId);
+            contents.Add(new RenderContentReference(contentId, scene));
+            if (ReferenceEquals(scene, presentation.activeScene))
+                activeContent = contentId;
+        }
+        return new RenderContentScope(contents, activeContent);
+    }
+
+    private void DrawUnavailable(Vector2 size, string message)
+    {
+        Vector2 minimum = NativeImGui.GetCursorScreenPos();
+        NativeImGui.GetWindowDrawList().AddRectFilled(
+            minimum,
+            minimum + size,
+            NativeImGui.ColorConvertFloat4ToU32(m_backgroundColor));
+        NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.textDisabled);
+        try
+        {
+            EditorWidget.CenteredWrappedText(message, size, S_UNAVAILABLE_PADDING);
+        }
+        finally
+        {
+            NativeImGui.PopStyleColor();
+        }
+    }
+
+    private readonly record struct GameViewportLayout(
+        Vector2 offset,
+        Vector2 size,
+        int pixelWidth,
+        int pixelHeight);
+}

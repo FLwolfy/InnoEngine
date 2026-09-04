@@ -1,38 +1,59 @@
 using System;
+using System.Collections.Generic;
 
 using Inno.Core.Events;
-using Inno.Core.Framework;
 using Inno.Core.Logging;
+using Inno.Extensibility.Types;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
+using Inno.Editor.PlayMode;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 
 namespace Inno.Editor.Application;
 
-/// <summary>Bridges the engine layer lifecycle to the attribute-discovered editor runtime.</summary>
-internal sealed class EditorLayer : Layer
+/// <summary>
+/// Bridges the engine layer lifecycle to the attribute-discovered editor runtime.
+/// </summary>
+internal sealed class EditorLayer : EditorHostLayer
 {
     private readonly PlatformImGuiContext m_imgui;
     private readonly EditorContext m_context;
     private readonly EditorProjectDiagnosticPublisher m_diagnostics = new();
+    private readonly EditorPlayModeLoop m_playModeLoop = new();
     private readonly ImGuiEditorRuntime m_runtime;
+    private readonly Logger m_log;
     private bool m_isShutdownPrepared;
+    private float m_totalTime;
     private double m_nextPersistenceRetryTime;
 
-    internal EditorLayer(PlatformImGuiContext imgui, EditorContext context)
-        : base("EditorLayer")
+    internal EditorLayer(
+        PlatformImGuiContext imgui,
+        EditorContext context,
+        TypeCatalog types,
+        LogRouter logs,
+        System.Collections.Generic.IEnumerable<object>? hostServices = null)
     {
         m_imgui = imgui;
         m_context = context;
+        m_log = logs.CreateLogger<EditorLayer>();
         EditorWidget.SetupStyle();
-        m_runtime = new ImGuiEditorRuntime(context);
+        m_runtime = new ImGuiEditorRuntime(
+            context,
+            types,
+            logs,
+            CreateHostServices(hostServices, m_playModeLoop));
     }
 
     internal int panelCount => m_runtime.panelCount;
 
     internal bool isFocused { get; set; }
+
+    internal float totalTime
+    {
+        set => m_totalTime = value;
+    }
 
     internal void DisposeUnattached()
     {
@@ -40,27 +61,44 @@ internal sealed class EditorLayer : Layer
         m_diagnostics.Dispose();
     }
 
-    /// <inheritdoc />
-    public override void OnAttach()
+    internal override void Attach()
     {
-        _ = Listen<KeyPressedEvent>(m_runtime.HandleKeyPressed, priority: 1000);
+        _ = Listen<KeyPressedEvent>(HandleKeyPressed, priority: 1000);
         m_runtime.Start();
     }
 
-    /// <inheritdoc />
-    public override void OnDetach()
+    internal override void Detach()
     {
         PrepareShutdown();
         m_runtime.Dispose();
         m_diagnostics.Dispose();
     }
 
-    /// <inheritdoc />
-    public override void OnLateUpdate(float deltaTime)
+    /// <summary>
+    /// Advances this feature using the current runtime state.
+    /// </summary>
+    /// <param name="deltaTime">
+    /// The elapsed frame time in seconds.
+    /// </param>
+    internal override void Update(float deltaTime)
+        => m_playModeLoop.Tick(deltaTime);
+
+    internal override void LateUpdate(float deltaTime)
     {
-        m_runtime.Update(new EditorFrame(deltaTime, Time.time, isFocused));
-        _ = m_imgui.RenderFrame(m_runtime.Draw);
-        SaveLayoutIfChanged();
+        using (m_playModeLoop.EnterPresentationScope())
+            m_runtime.Update(new EditorFrame(deltaTime, m_totalTime, isFocused));
+
+        using (m_playModeLoop.EnterPresentationScope())
+        {
+            _ = m_imgui.RenderFrame(m_runtime.Draw);
+            SaveLayoutIfChanged();
+        }
+    }
+
+    private void HandleKeyPressed(KeyPressedEvent keyEvent)
+    {
+        using (m_playModeLoop.EnterPresentationScope())
+            m_runtime.HandleKeyPressed(keyEvent);
     }
 
     internal bool PrepareShutdown()
@@ -82,9 +120,10 @@ internal sealed class EditorLayer : Layer
         {
             if (m_diagnostics.PublishPersistenceFailure(exception))
             {
-                Log.Error("Project editor state could not be saved to '{0}': {1}",
-                    m_context.layoutPath,
-                    exception);
+                m_log.Write(
+                    LogLevel.Error,
+                    "Project editor state could not be saved to '{0}': {1}",
+                    [m_context.layoutPath, exception]);
             }
             return false;
         }
@@ -110,9 +149,10 @@ internal sealed class EditorLayer : Layer
             m_nextPersistenceRetryTime = m_context.frame.totalTime + 1.0;
             if (m_diagnostics.PublishPersistenceFailure(exception))
             {
-                Log.Error("Project editor state could not be saved to '{0}': {1}",
-                    m_context.layoutPath,
-                    exception);
+                m_log.Write(
+                    LogLevel.Error,
+                    "Project editor state could not be saved to '{0}': {1}",
+                    [m_context.layoutPath, exception]);
             }
         }
     }
@@ -123,5 +163,14 @@ internal sealed class EditorLayer : Layer
             return false;
         m_context.SetImGuiLayout(layout);
         return true;
+    }
+
+    private static IEnumerable<object> CreateHostServices(
+        IEnumerable<object>? hostServices,
+        EditorPlayModeLoop playModeLoop)
+    {
+        List<object> services = hostServices is null ? [] : new List<object>(hostServices);
+        services.Add(playModeLoop);
+        return services;
     }
 }

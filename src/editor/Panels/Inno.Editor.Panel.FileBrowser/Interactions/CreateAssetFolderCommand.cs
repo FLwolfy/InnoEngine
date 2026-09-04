@@ -1,28 +1,44 @@
 using System;
+using System.Linq;
 
 using Inno.Assets;
-using Inno.Assets.File;
+using Inno.Assets.Pipeline;
 using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
 [EditorAction(FileBrowserInteractionIds.C_CREATE_FOLDER, FileBrowserInteractionIds.C_AREA)]
 [EditorMenu(FileBrowserInteractionIds.C_AREA, "Create/Folder", order: 100)]
-internal sealed class CreateAssetFolderCommand : EditorAction<string>
+internal sealed class CreateAssetFolderCommand(AssetEditorModule assets) : EditorAction<string>
 {
+    /// <summary>
+    /// Evaluates whether the requested change can be applied to the current generation.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <returns>
+    /// The validated editor action state that represents the completed operation.
+    /// </returns>
     protected override EditorActionState Query(EditorActionContext<string> context)
-        => AssetManager.isInitialized && IsDirectory(context.target)
+        => assets.pipeline.isInitialized && IsWritableDirectory(context.target)
             ? EditorActionState.enabled
             : EditorActionState.disabled;
 
+    /// <summary>
+    /// Executes the prepared operation and publishes only a completed result.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
     protected override void Execute(EditorActionContext<string> context)
     {
         string parent = Normalize(context.target);
         string candidate = Combine(parent, "New Folder");
         int suffix = 1;
-        while (AssetManager.TryGetFileSystemEntry(candidate, out _))
+        while (assets.pipeline.TryGetFileSystemEntry(AssetPath.Parse(candidate), out _))
             candidate = Combine(parent, $"New Folder {suffix++}");
-        AssetManager.CreateDirectory(candidate);
+        assets.pipeline.CreateDirectory(AssetPath.Parse(candidate));
         var data = new AssetHistoryData(
             AssetHistoryOperationKind.CreateDirectory,
             candidate,
@@ -41,7 +57,7 @@ internal sealed class CreateAssetFolderCommand : EditorAction<string>
         {
             try
             {
-                AssetManager.Delete(candidate);
+                assets.pipeline.Delete(AssetPath.Parse(candidate));
             }
             catch (Exception rollbackException)
             {
@@ -52,7 +68,7 @@ internal sealed class CreateAssetFolderCommand : EditorAction<string>
             }
             throw;
         }
-        if (!AssetManager.TryGetFileSystemEntry(candidate, out AssetFileEntry target))
+        if (!assets.pipeline.TryGetFileSystemEntry(AssetPath.Parse(candidate), out AssetFileEntry target))
             return;
         EditorInteraction interaction = context.interactions.For(FileBrowserInteractionIds.C_AREA, target);
         _ = interaction.Select();
@@ -67,11 +83,15 @@ internal sealed class CreateAssetFolderCommand : EditorAction<string>
             ? string.Empty
             : path.Replace('\\', '/').Trim('/');
 
-    private static bool IsDirectory(string relativePath)
+    private bool IsWritableDirectory(string relativePath)
     {
         string normalized = Normalize(relativePath);
-        return string.IsNullOrEmpty(normalized) ||
-               AssetManager.TryGetFileSystemEntry(normalized, out AssetFileEntry entry) &&
-               entry.isDirectory;
+        AssetSourceId source = AssetPath.Parse(normalized).source;
+        AssetSourceMount? mount = assets.pipeline.sourceMounts.FirstOrDefault(candidate => candidate.id == source);
+        if (mount is null || mount.isReadOnly)
+            return false;
+        return string.IsNullOrEmpty(AssetPath.Parse(normalized).localPath) ||
+               assets.pipeline.TryGetFileSystemEntry(AssetPath.Parse(normalized), out AssetFileEntry entry)
+               && entry.isDirectory;
     }
 }

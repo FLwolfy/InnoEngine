@@ -41,8 +41,12 @@ public sealed class SerializationReader
     /// <summary>
     /// Determines whether the current object contains a named member.
     /// </summary>
-    /// <param name="name">The member name.</param>
-    /// <returns><see langword="true"/> when the member exists; otherwise, <see langword="false"/>.</returns>
+    /// <param name="name">
+    /// The member name.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the member exists; otherwise, <see langword="false"/>.
+    /// </returns>
     public bool Contains(string name)
     {
         m_operation.EnsureActive();
@@ -52,10 +56,18 @@ public sealed class SerializationReader
     /// <summary>
     /// Reads a required named value through the unified value pipeline.
     /// </summary>
-    /// <typeparam name="TValue">The declared value type.</typeparam>
-    /// <param name="name">The required member name.</param>
-    /// <returns>The restored value.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the member is missing or invalid.</exception>
+    /// <typeparam name="TValue">
+    /// The declared value type.
+    /// </typeparam>
+    /// <param name="name">
+    /// The required member name.
+    /// </param>
+    /// <returns>
+    /// The restored value.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the member is missing or invalid.
+    /// </exception>
     public TValue Read<TValue>(string name)
     {
         SerializationNode node = GetRequiredNode(name);
@@ -70,10 +82,18 @@ public sealed class SerializationReader
     /// <summary>
     /// Attempts to read a named value through the unified value pipeline.
     /// </summary>
-    /// <typeparam name="TValue">The declared value type.</typeparam>
-    /// <param name="name">The optional member name.</param>
-    /// <param name="value">The restored value when the member exists.</param>
-    /// <returns><see langword="true"/> when the member exists; otherwise, <see langword="false"/>.</returns>
+    /// <typeparam name="TValue">
+    /// The declared value type.
+    /// </typeparam>
+    /// <param name="name">
+    /// The optional member name.
+    /// </param>
+    /// <param name="value">
+    /// The restored value when the member exists.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the member exists; otherwise, <see langword="false"/>.
+    /// </returns>
     public bool TryRead<TValue>(string name, out TValue value)
     {
         m_operation.EnsureActive();
@@ -95,8 +115,12 @@ public sealed class SerializationReader
     /// <summary>
     /// Reads a required named structured object.
     /// </summary>
-    /// <param name="name">The required member name.</param>
-    /// <returns>A reader for the child object.</returns>
+    /// <param name="name">
+    /// The required member name.
+    /// </param>
+    /// <returns>
+    /// A reader for the child object.
+    /// </returns>
     public SerializationReader ReadObject(string name)
     {
         SerializationNode node = GetRequiredNode(name);
@@ -108,8 +132,12 @@ public sealed class SerializationReader
     /// <summary>
     /// Reads a required ordered array of structured objects.
     /// </summary>
-    /// <param name="name">The required member name.</param>
-    /// <returns>Operation-scoped readers for the array elements.</returns>
+    /// <param name="name">
+    /// The required member name.
+    /// </param>
+    /// <returns>
+    /// Operation-scoped readers for the array elements.
+    /// </returns>
     public IReadOnlyList<SerializationReader> ReadObjectArray(string name)
     {
         SerializationNode node = GetRequiredNode(name);
@@ -130,8 +158,12 @@ public sealed class SerializationReader
     /// <summary>
     /// Restores annotated properties from the current structured object into an existing object.
     /// </summary>
-    /// <param name="target">The target whose annotated properties should be restored.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="target"/> is null.</exception>
+    /// <param name="target">
+    /// The target whose annotated properties should be restored.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="target"/> is null.
+    /// </exception>
     public void RestoreProperties(ISerializable target)
     {
         ArgumentNullException.ThrowIfNull(target);
@@ -142,8 +174,12 @@ public sealed class SerializationReader
     /// <summary>
     /// Schedules a callback to run after the complete decode operation succeeds.
     /// </summary>
-    /// <param name="callback">The callback to schedule.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="callback"/> is null.</exception>
+    /// <param name="callback">
+    /// The callback to schedule.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="callback"/> is null.
+    /// </exception>
     public void OnCompleted(Action callback)
     {
         ArgumentNullException.ThrowIfNull(callback);

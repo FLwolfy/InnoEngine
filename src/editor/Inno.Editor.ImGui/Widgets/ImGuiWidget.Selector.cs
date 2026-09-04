@@ -2,7 +2,7 @@ using System;
 using System.Numerics;
 
 using Inno.Native.ImGui;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.ImGui.ImGuiWidget;
@@ -12,12 +12,75 @@ namespace Inno.Editor.ImGui.ImGuiWidget;
 /// </summary>
 public static partial class ImGuiWidget
 {
+    private const int C_DEFAULT_COMBO_VISIBLE_ITEMS = 12;
+    private const float C_POPUP_WORK_AREA_RATIO = 0.70f;
+
     /// <summary>
-    /// Draws a compact selector control and begins an auto-sized, non-scrollable menu popup.
+    /// Begins a combo whose popup retains a stable trigger-derived width, remains in the parent
+    /// viewport, and becomes vertically scrollable when its submitted content exceeds its bound.
     /// </summary>
-    /// <param name="id">Stable selector identifier in the current ImGui scope.</param>
-    /// <param name="preview">Text displayed by the closed selector.</param>
-    /// <param name="width">Width reserved for the selector control.</param>
+    /// <param name="id">
+    /// Stable combo identifier in the current ImGui scope.
+    /// </param>
+    /// <param name="preview">
+    /// Text displayed by the closed combo.
+    /// </param>
+    /// <param name="flags">
+    /// Native combo presentation flags.
+    /// </param>
+    /// <param name="maximumVisibleItems">
+    /// Preferred maximum number of ordinary rows before scrolling.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the combo popup is open and its contents should be submitted;
+    /// otherwise, <see langword="false"/>.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="id"/> is empty.
+    /// </exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="preview"/> is null.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="maximumVisibleItems"/> is not positive.
+    /// </exception>
+    public static bool BeginBoundedCombo(
+        string id,
+        string preview,
+        ImGuiComboFlags flags = ImGuiComboFlags.None,
+        int maximumVisibleItems = C_DEFAULT_COMBO_VISIBLE_ITEMS)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentNullException.ThrowIfNull(preview);
+        if (maximumVisibleItems <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maximumVisibleItems),
+                maximumVisibleItems,
+                "A combo must allow at least one visible item.");
+        }
+
+        ImGuiViewportPtr parentViewport = NativeImGui.GetWindowViewport();
+        NativeImGui.SetNextWindowViewport(parentViewport.ID);
+        SetFixedBoundedPopupSize(
+            NativeImGui.CalcItemWidth(),
+            maximumVisibleItems,
+            parentViewport.WorkSize);
+        return NativeImGui.BeginCombo(id, preview, flags);
+    }
+
+    /// <summary>
+    /// Draws a compact selector control and begins a work-area-bounded menu popup.
+    /// </summary>
+    /// <param name="id">
+    /// Stable selector identifier in the current ImGui scope.
+    /// </param>
+    /// <param name="preview">
+    /// Text displayed by the closed selector.
+    /// </param>
+    /// <param name="width">
+    /// Width reserved for the selector control.
+    /// </param>
     /// <param name="minimumPopupWidth">
     /// Minimum outer width of the popup, including its window padding.
     /// </param>
@@ -67,27 +130,37 @@ public static partial class ImGuiWidget
         NativeImGui.SetNextWindowPos(
             new Vector2(minimum.X, minimum.Y + height),
             ImGuiCond.Appearing);
-        NativeImGui.SetNextWindowSizeConstraints(
-            new Vector2(MathF.Max(width, minimumPopupWidth), 0f),
-            new Vector2(float.MaxValue));
-        PushContextMenuStyle();
-        ImGuiWindowFlags flags = ImGuiWindowFlags.AlwaysAutoResize |
-                                 ImGuiWindowFlags.NoScrollbar |
-                                 ImGuiWindowFlags.NoScrollWithMouse |
-                                 ImGuiWindowFlags.NoSavedSettings;
-        if (NativeImGui.BeginPopup(popupId, flags))
-            return true;
-        PopContextMenuStyle();
-        return false;
+        ImGuiViewportPtr parentViewport = NativeImGui.GetWindowViewport();
+        NativeImGui.SetNextWindowViewport(parentViewport.ID);
+        SetFixedBoundedPopupSize(
+            MathF.Max(width, minimumPopupWidth),
+            C_DEFAULT_COMBO_VISIBLE_ITEMS,
+            parentViewport.WorkSize);
+        return BeginMenuPopup(popupId);
     }
 
     /// <summary>
     /// Ends a selector popup opened by <see cref="BeginMenuSelector"/>.
     /// </summary>
     public static void EndMenuSelector()
+        => EndMenuPopup();
+
+    private static void SetFixedBoundedPopupSize(
+        float requestedWidth,
+        int maximumVisibleItems,
+        Vector2 workSize)
     {
-        NativeImGui.EndPopup();
-        PopContextMenuStyle();
+        ImGuiStylePtr nativeStyle = NativeImGui.GetStyle();
+        float minimumHeight = MathF.Max(1f, NativeImGui.GetFrameHeight() * 2f);
+        float preferredHeight = NativeImGui.GetTextLineHeightWithSpacing() * maximumVisibleItems
+                                + nativeStyle.WindowPadding.Y * 2f;
+        float availableHeight = MathF.Max(minimumHeight, workSize.Y * C_POPUP_WORK_AREA_RATIO);
+        float maximumHeight = MathF.Max(minimumHeight, MathF.Min(preferredHeight, availableHeight));
+        float availableWidth = MathF.Max(1f, workSize.X);
+        float popupWidth = Math.Clamp(requestedWidth, 1f, availableWidth);
+        NativeImGui.SetNextWindowSizeConstraints(
+            new Vector2(popupWidth, 0f),
+            new Vector2(popupWidth, maximumHeight));
     }
 
     private static void DrawMenuSelectorFrame(

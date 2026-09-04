@@ -1,12 +1,10 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 
 using Inno.Core.Logging;
 using Inno.Editor.ImGui;
 using Inno.Native.ImGui;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Logging;
@@ -27,72 +25,6 @@ internal sealed class ConsolePanelContent
         NativeImGui.EndDisabled();
     }
 
-    internal EditorConsoleEntry[] Combine(
-        IReadOnlyList<BufferedLogEntry> logs,
-        IReadOnlyList<EditorDiagnosticEntry> diagnostics)
-    {
-        var entries = new EditorConsoleEntry[logs.Count + diagnostics.Count];
-        for (int i = 0; i < logs.Count; i++)
-            entries[i] = EditorConsoleEntry.FromLog(logs[i]);
-        for (int i = 0; i < diagnostics.Count; i++)
-            entries[logs.Count + i] = EditorConsoleEntry.FromDiagnostic(diagnostics[i]);
-        return entries
-            .OrderBy(static entry => entry.time)
-            .ThenBy(static entry => entry.id < 0 ? -entry.id : entry.id)
-            .ToArray();
-    }
-
-    internal List<EditorConsoleEntry> CollectVisibleEntries(
-        EditorConsoleEntry[] entries,
-        IReadOnlySet<LogLevel> filterLevels)
-    {
-        List<EditorConsoleEntry> visibleEntries = [];
-        for (int i = 0; i < entries.Length; i++)
-        {
-            if (filterLevels.Contains(entries[i].level))
-                visibleEntries.Add(entries[i]);
-        }
-        return visibleEntries;
-    }
-
-    internal List<long> CollectRunEntryIds(List<EditorConsoleEntry> visibleEntries, int start, int end)
-    {
-        List<long> runEntryIds = [];
-        for (int i = start; i <= end; i++)
-            runEntryIds.Add(visibleEntries[i].id);
-        return runEntryIds;
-    }
-
-    internal bool ContainsAnyOpen(
-        IReadOnlyList<long> runEntryIds,
-        IReadOnlySet<long> openEntries)
-    {
-        for (int i = 0; i < runEntryIds.Count; i++)
-        {
-            if (openEntries.Contains(runEntryIds[i]))
-                return true;
-        }
-        return false;
-    }
-
-    internal void KeepOnlyLatestOpen(
-        IReadOnlyList<long> runEntryIds,
-        long latestEntryId,
-        HashSet<long> openEntries)
-    {
-        for (int i = 0; i < runEntryIds.Count; i++)
-        {
-            if (runEntryIds[i] != latestEntryId)
-                openEntries.Remove(runEntryIds[i]);
-        }
-    }
-
-    internal void CloseAll(IReadOnlyList<long> runEntryIds, HashSet<long> openEntries)
-    {
-        for (int i = 0; i < runEntryIds.Count; i++)
-            openEntries.Remove(runEntryIds[i]);
-    }
-
     internal (Vector4 color, string icon) GetLevelVisual(LogLevel level)
     {
         return level switch
@@ -105,17 +37,6 @@ internal sealed class ConsolePanelContent
             _ => (EditorPalette.text, C_ICON_DEFAULT)
         };
     }
-
-    internal bool IsSameEntryIgnoreTime(in EditorConsoleEntry a, in EditorConsoleEntry b)
-        => a.level == b.level &&
-           string.Equals(a.source, b.source, StringComparison.Ordinal) &&
-           a.kind == b.kind &&
-           string.Equals(a.diagnosticSourceId, b.diagnosticSourceId, StringComparison.Ordinal) &&
-           string.Equals(a.code, b.code, StringComparison.Ordinal) &&
-           string.Equals(a.category, b.category, StringComparison.Ordinal) &&
-           string.Equals(a.message, b.message, StringComparison.Ordinal) &&
-           string.Equals(a.file, b.file, StringComparison.Ordinal) &&
-           a.line == b.line;
 
     internal Vector4 GetCollapsedBgColor()
         => EditorPalette.logCollapsedCard;

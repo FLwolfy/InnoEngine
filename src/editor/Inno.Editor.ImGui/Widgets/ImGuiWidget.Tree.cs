@@ -32,12 +32,18 @@ public static partial class ImGuiWidget
     /// Draws a full-width interactive tree row whose non-leaf content toggles expansion when
     /// double-clicked, while preserving single-click disclosure-arrow behavior.
     /// </summary>
-    /// <param name="id">Stable row identifier.</param>
+    /// <param name="id">
+    /// Stable row identifier.
+    /// </param>
     /// <param name="onDraw">
     /// Content drawing callback that receives the native row geometry established by ImGui.
     /// </param>
-    /// <param name="options">Tree row options.</param>
-    /// <returns>Interaction and row geometry for the submitted item.</returns>
+    /// <param name="options">
+    /// Tree row options.
+    /// </param>
+    /// <returns>
+    /// Interaction and row geometry for the submitted item.
+    /// </returns>
     public static TreeNodeResult TreeNode(
         string id,
         Action<TreeNodeDrawContext> onDraw,
@@ -163,7 +169,9 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Overrides the retained expansion state of the next submitted non-leaf tree row.
     /// </summary>
-    /// <param name="open">Whether the next row should be expanded.</param>
+    /// <param name="open">
+    /// Whether the next row should be expanded.
+    /// </param>
     public static void SetNextTreeNodeOpen(bool open)
     {
         s_hasNextTreeNodeOpen = true;
@@ -300,7 +308,10 @@ public static partial class ImGuiWidget
         return hasNextSibling;
     }
 
-    private static void DrawTreeGuideLines(Vector2 nodeCursor, bool hasNextSibling, bool hasDisclosureArrow)
+    private static void DrawTreeGuideLines(
+        Vector2 nodeCursor,
+        bool hasNextSibling,
+        bool hasDisclosureArrow)
     {
         if (s_treeNodeStack.Count == 0)
             return;
@@ -388,22 +399,34 @@ public readonly struct TreeNodeDrawContext
     public float rowHeight { get; }
 }
 
-/// <summary>Configures an interactive tree row.</summary>
+/// <summary>
+/// Configures an interactive tree row.
+/// </summary>
 public readonly struct TreeNodeOptions
 {
-    /// <summary>Gets whether the row is selected.</summary>
+    /// <summary>
+    /// Gets whether the row is selected.
+    /// </summary>
     public bool selected { get; init; }
 
-    /// <summary>Gets whether the row has no expandable children.</summary>
+    /// <summary>
+    /// Gets whether the row has no expandable children.
+    /// </summary>
     public bool isLeaf { get; init; }
 
-    /// <summary>Gets whether a custom background is drawn behind an unselected row.</summary>
+    /// <summary>
+    /// Gets whether a custom background is drawn behind an unselected row.
+    /// </summary>
     public bool showBackground { get; init; }
 
-    /// <summary>Gets the custom background color used when <see cref="showBackground"/> is enabled.</summary>
+    /// <summary>
+    /// Gets the custom background color used when <see cref="showBackground"/> is enabled.
+    /// </summary>
     public Vector4 backgroundColor { get; init; }
 
-    /// <summary>Gets whether the row keeps its configured background while hovered.</summary>
+    /// <summary>
+    /// Gets whether the row keeps its configured background while hovered.
+    /// </summary>
     public bool suppressHoverHighlight { get; init; }
 
     /// <summary>
@@ -418,7 +441,9 @@ public readonly struct TreeNodeOptions
     public Action? drawViewportOverlay { get; init; }
 }
 
-/// <summary>Describes interaction state produced by a tree row.</summary>
+/// <summary>
+/// Describes interaction state produced by a tree row.
+/// </summary>
 public readonly struct TreeNodeResult
 {
     internal TreeNodeResult(
@@ -439,10 +464,14 @@ public readonly struct TreeNodeResult
         this.contentMin = contentMin;
     }
 
-    /// <summary>Gets whether child content should be rendered.</summary>
+    /// <summary>
+    /// Gets whether child content should be rendered.
+    /// </summary>
     public bool isOpen { get; }
 
-    /// <summary>Gets whether the content row was clicked.</summary>
+    /// <summary>
+    /// Gets whether the content row was clicked.
+    /// </summary>
     public bool isClicked { get; }
 
     /// <summary>
@@ -451,16 +480,24 @@ public readonly struct TreeNodeResult
     /// </summary>
     public bool isDoubleClicked { get; }
 
-    /// <summary>Gets whether the full row is hovered.</summary>
+    /// <summary>
+    /// Gets whether the full row is hovered.
+    /// </summary>
     public bool isHovered { get; }
 
-    /// <summary>Gets the row minimum screen coordinate.</summary>
+    /// <summary>
+    /// Gets the row minimum screen coordinate.
+    /// </summary>
     public Vector2 min { get; }
 
-    /// <summary>Gets the row maximum screen coordinate.</summary>
+    /// <summary>
+    /// Gets the row maximum screen coordinate.
+    /// </summary>
     public Vector2 max { get; }
 
-    /// <summary>Gets the minimum screen coordinate of the row's interactive content, excluding tree indentation.</summary>
+    /// <summary>
+    /// Gets the minimum screen coordinate of the row's interactive content, excluding tree indentation.
+    /// </summary>
     public Vector2 contentMin { get; }
 }
 

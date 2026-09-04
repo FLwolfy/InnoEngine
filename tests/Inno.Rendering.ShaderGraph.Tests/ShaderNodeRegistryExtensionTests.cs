@@ -1,0 +1,95 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using Inno.Extensibility.Modules;
+using Inno.Core.Graphs;
+using Inno.Extensibility.Types;
+using Inno.Rendering;
+using Xunit;
+
+namespace Inno.Rendering.ShaderGraph.Tests;
+
+[Collection(ShaderNodeRegistryExtensionCollection.name)]
+public sealed class ShaderNodeRegistryExtensionTests : IDisposable
+{
+    private readonly string m_cacheDirectory = Path.Combine(
+        Path.GetTempPath(),
+        "InnoShaderNodeRegistryTests",
+        Guid.NewGuid().ToString("N"));
+    private readonly ModuleHost m_modules;
+    private readonly TypeCatalog m_types;
+
+    public ShaderNodeRegistryExtensionTests()
+    {
+        DisposableShaderNodeDefinition.disposeCount = 0;
+        m_modules = new ModuleHost(new ModuleHostOptions { cacheDirectory = m_cacheDirectory });
+        m_types = new TypeCatalog(m_modules);
+    }
+
+    public void Dispose()
+    {
+        m_types.Dispose();
+        m_modules.Dispose();
+        if (Directory.Exists(m_cacheDirectory))
+        {
+            Directory.Delete(m_cacheDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TypeCacheRebuildAtomicallyReplacesAndDisposesNodeGeneration()
+    {
+        using var registry = new ShaderNodeRegistry(m_types);
+        registry.RefreshExtensions();
+        ulong firstGeneration = registry.generation;
+        Assert.True(registry.TryResolveShader(DisposableShaderNodeDefinition.ID, out ShaderNodeDefinition? first));
+
+        m_types.Rebuild();
+
+        Assert.True(registry.generation > firstGeneration);
+        Assert.True(registry.TryResolveShader(DisposableShaderNodeDefinition.ID, out ShaderNodeDefinition? second));
+        Assert.NotSame(first, second);
+        Assert.Equal(1, DisposableShaderNodeDefinition.disposeCount);
+        Assert.Single(registry.definitions);
+    }
+}
+
+[CollectionDefinition(name, DisableParallelization = true)]
+public sealed class ShaderNodeRegistryExtensionCollection
+{
+    public const string name = "Shader node extension registry";
+}
+
+[ShaderNodeExtension(ID)]
+public sealed class DisposableShaderNodeDefinition : ShaderNodeDefinition, IDisposable
+{
+    public const string ID = "tests.shader-node.disposable";
+
+    public static int disposeCount;
+
+    public DisposableShaderNodeDefinition()
+        : base(ID, "Disposable Test", "Tests", ShaderStage.Fragment)
+    {
+    }
+
+    public override IReadOnlyList<GraphPortDefinition> GetPorts(GraphNodeRecord node)
+    {
+        _ = node;
+        return
+        [
+            new GraphPortDefinition(
+                new GraphPortId("value"),
+                "Value",
+                ShaderGraphValueTypes.GetId(ShaderValueType.Float),
+                GraphPortDirection.Output)
+        ];
+    }
+
+    public override void Emit(ShaderNodeEmitContext context)
+        => context.SetOutput(
+            new GraphPortId("value"),
+            new ShaderValue(ShaderValueType.Float, "1.0", context.node.id));
+
+    public void Dispose()
+        => disposeCount++;
+}

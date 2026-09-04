@@ -12,7 +12,7 @@
 using System;
 
 using Inno.Editor.Inspection;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 
 [InspectionDrawer(typeof(AnimationController))]
 internal sealed class AnimationControllerInspectionDrawer
@@ -45,7 +45,7 @@ internal sealed class AnimationControllerInspectionDrawer
 - 当前 target。
 - `SerializedPropertyRenderer`。
 
-通用 context 不包含 `SceneEdits`、AssetManager 或其他 feature service。具体 Drawer 需要领域能力时，由宿主组合根通过构造函数注入。例如 GameObject/Scene Drawer 在 Inspector Panel 内部取得 `SceneEdits`，而资产 Drawer 只取得资产 icon provider。
+通用 context 不包含 `SceneEdits`、AssetPipeline 或其他 feature service。具体 Drawer 需要领域能力时，由宿主组合根通过构造函数注入。例如 GameObject/Scene Drawer 在 Inspector Panel 内部取得 `SceneEdits`，而资产 Drawer 只取得资产 icon provider。
 
 ## PropertyDrawer
 
@@ -68,6 +68,12 @@ PropertyDrawer 通过 declared property type 匹配。`PropertyDrawContext.SetVa
 `SerializedPropertyRenderer` 本身不依赖 Scene。创建 renderer 的 feature 提供 `IInspectionPropertyEditService`，负责把通用的 owner、root property 与 mutation 转换成自己的 Undo/Redo 协议。Inspector Panel 使用 Scene adapter；未来 Material、Animation 或 RenderGraph 检查器可以使用各自的 history adapter，而不用把 Scene 引入通用 Inspection 项目。
 
 `PropertyDrawContext.DrawInlineChild` 同样进入 `SerializedPropertyRenderer.DrawInline`，不会自行 Resolve 或直接调用 Drawer。Inline 与普通属性共用 drawer resolution、readonly disabled scope、按完整 child path 去重的异常日志和错误呈现，但不创建额外 `PropertyRow`；Drawer 异常在当前 child 被消费，父属性与后续 Inspector 内容继续绘制。本次契约不改变 `SetValue` 的返回或 readonly 行为。
+
+需要跨帧保留尚未提交的数字、Guid 或集合文本时，Drawer 使用 `TryGetTextState`、`SetTextState` 和
+`ClearTextState`。状态由 `SerializedPropertyRenderer` 实例拥有，并以 inspected owner 弱引用、
+完整 property path 和 drawer-local key 三层隔离；不同 Inspector/Editor Host、相同路径的两个对象
+以及同一对象的两个 renderer 都不会串值。缓存只保存中立字符串，owner 消失后整组状态可自动
+回收，不会通过静态字典固定 Scene 对象或 Plugin ALC。
 
 ## Feature 间 presentation 契约
 

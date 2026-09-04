@@ -6,29 +6,22 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
     <InnoAssemblyScope>Editor</InnoAssemblyScope>
-    <NoWarn>$(NoWarn);RS1036</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Assemblies\Inno.Core.Assemblies.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Diagnose\Inno.Core.Diagnose.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\plugins\Inno.Plugins.Authoring\Inno.Plugins.Authoring.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\extensibility\Inno.Extensibility.Modules\Inno.Extensibility.Modules.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Diagnostics\Inno.Core.Diagnostics.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Settings\Inno.Core.Settings.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\scripting\Inno.Scripting.Reload\Inno.Scripting.Reload.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Editor.Core\Inno.Editor.Core.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\assets\Inno.Assets.Loader\Inno.Assets.Loader.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
-    <ProjectReference Include="..\..\assets\Inno.Assets.Core\Inno.Assets.Core.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
-  </ItemGroup>
-  <ItemGroup>
-    <AdditionalFiles Include="CodeAnalysis\Documentation\AnalyzerReleases.Shipped.md" />
-    <AdditionalFiles Include="CodeAnalysis\Documentation\AnalyzerReleases.Unshipped.md" />
+    <ProjectReference Include="..\..\scripting\Inno.Scripting.Compiler\Inno.Scripting.Compiler.csproj" />
+    <ProjectReference Include="..\..\assets\Inno.Assets.Pipeline\Inno.Assets.Pipeline.csproj" />
   </ItemGroup>
 </Project>

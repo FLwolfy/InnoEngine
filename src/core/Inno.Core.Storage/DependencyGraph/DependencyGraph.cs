@@ -8,7 +8,9 @@ namespace Inno.Core.Storage;
 /// <summary>
 /// Stores a directed dependency graph and provides deterministic dependency queries.
 /// </summary>
-/// <typeparam name="TKey">The node key type.</typeparam>
+/// <typeparam name="TKey">
+/// The node key type.
+/// </typeparam>
 /// <remarks>
 /// An edge from <c>node</c> to <c>dependency</c> means that <c>node</c> depends on
 /// <c>dependency</c>. The graph accepts cycles; operations that require an acyclic graph,
@@ -26,6 +28,18 @@ public sealed class DependencyGraph<TKey> where TKey : notnull
     private sealed class NodePriorityComparer(
         IComparer<TKey>? orderingComparer) : IComparer<NodePriority>
     {
+        /// <summary>
+        /// Compares two values according to the deterministic ordering used by this collection.
+        /// </summary>
+        /// <param name="x">
+        /// The horizontal or first component.
+        /// </param>
+        /// <param name="y">
+        /// The vertical or second component.
+        /// </param>
+        /// <returns>
+        /// The scalar result calculated from the supplied inputs.
+        /// </returns>
         public int Compare(NodePriority x, NodePriority y)
         {
             if (orderingComparer is not null)
@@ -56,7 +70,9 @@ public sealed class DependencyGraph<TKey> where TKey : notnull
     /// <summary>
     /// Creates an empty dependency graph.
     /// </summary>
-    /// <param name="equalityComparer">Optional node equality comparer.</param>
+    /// <param name="equalityComparer">
+    /// Optional node equality comparer.
+    /// </param>
     /// <param name="orderingComparer">
     /// Optional ordering comparer used to make query results deterministic. When omitted,
     /// node insertion order is used.
@@ -92,7 +108,9 @@ public sealed class DependencyGraph<TKey> where TKey : notnull
     /// <summary>
     /// Gets the structural version of the graph.
     /// </summary>
-    /// <remarks>The version changes after every successful structural mutation.</remarks>
+    /// <remarks>
+    /// The version changes after every successful structural mutation.
+    /// </remarks>
     public long version
     {
         get
@@ -112,8 +130,12 @@ public sealed class DependencyGraph<TKey> where TKey : notnull
     /// <summary>
     /// Determines whether a node exists.
     /// </summary>
-    /// <param name="node">The node key.</param>
-    /// <returns><see langword="true"/> when the node exists.</returns>
+    /// <param name="node">
+    /// The node key.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the node exists.
+    /// </returns>
     public bool ContainsNode(TKey node)
     {
         m_sync.EnterReadLock();
@@ -130,8 +152,12 @@ public sealed class DependencyGraph<TKey> where TKey : notnull
     /// <summary>
     /// Adds a node when it does not already exist.
     /// </summary>
-    /// <param name="node">The node key.</param>
-    /// <returns><see langword="true"/> when a node was added.</returns>
+    /// <param name="node">
+    /// The node key.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when a node was added.
+    /// </returns>
     public bool AddNode(TKey node)
     {
         m_sync.EnterWriteLock();
@@ -152,8 +178,12 @@ public sealed class DependencyGraph<TKey> where TKey : notnull
     /// <summary>
     /// Removes a node and every incoming and outgoing edge connected to it.
     /// </summary>
-    /// <param name="node">The node key.</param>
-    /// <returns><see langword="true"/> when the node was removed.</returns>
+    /// <param name="node">
+    /// The node key.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the node was removed.
+    /// </returns>
     public bool RemoveNode(TKey node)
     {
         m_sync.EnterWriteLock();
@@ -186,9 +216,15 @@ public sealed class DependencyGraph<TKey> where TKey : notnull
     /// <summary>
     /// Adds an edge indicating that one node depends on another.
     /// </summary>
-    /// <param name="node">The dependent node.</param>
-    /// <param name="dependency">The required dependency.</param>
-    /// <returns><see langword="true"/> when the edge was added.</returns>
+    /// <param name="node">
+    /// The dependent node.
+    /// </param>
+    /// <param name="dependency">
+    /// The required dependency.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the edge was added.
+    /// </returns>
     public bool AddDependency(TKey node, TKey dependency)
     {
         m_sync.EnterWriteLock();
@@ -212,9 +248,15 @@ public sealed class DependencyGraph<TKey> where TKey : notnull
     /// <summary>
     /// Removes a dependency edge.
     /// </summary>
-    /// <param name="node">The dependent node.</param>
-    /// <param name="dependency">The required dependency.</param>
-    /// <returns><see langword="true"/> when the edge was removed.</returns>
+    /// <param name="node">
+    /// The dependent node.
+    /// </param>
+    /// <param name="dependency">
+    /// The required dependency.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the edge was removed.
+    /// </returns>
     public bool RemoveDependency(TKey node, TKey dependency)
     {
         m_sync.EnterWriteLock();
@@ -241,8 +283,12 @@ public sealed class DependencyGraph<TKey> where TKey : notnull
     /// <summary>
     /// Atomically replaces every direct dependency of a node.
     /// </summary>
-    /// <param name="node">The dependent node.</param>
-    /// <param name="dependencies">The complete replacement dependency set.</param>
+    /// <param name="node">
+    /// The dependent node.
+    /// </param>
+    /// <param name="dependencies">
+    /// The complete replacement dependency set.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="dependencies"/> is <see langword="null"/>.
     /// </exception>
@@ -283,28 +329,48 @@ public sealed class DependencyGraph<TKey> where TKey : notnull
     /// <summary>
     /// Gets direct or transitive dependencies of a node.
     /// </summary>
-    /// <param name="node">The node to query.</param>
-    /// <param name="recursive">Whether transitive dependencies should be included.</param>
-    /// <returns>A stable dependency snapshot, or an empty list when the node is absent.</returns>
+    /// <param name="node">
+    /// The node to query.
+    /// </param>
+    /// <param name="recursive">
+    /// Whether transitive dependencies should be included.
+    /// </param>
+    /// <returns>
+    /// A stable dependency snapshot, or an empty list when the node is absent.
+    /// </returns>
     public IReadOnlyList<TKey> GetDependencies(TKey node, bool recursive = false)
         => GetConnectedNodes(node, recursive, static value => value.dependencies);
 
     /// <summary>
     /// Gets direct or transitive dependents of a node.
     /// </summary>
-    /// <param name="node">The node to query.</param>
-    /// <param name="recursive">Whether transitive dependents should be included.</param>
-    /// <returns>A stable dependent snapshot, or an empty list when the node is absent.</returns>
+    /// <param name="node">
+    /// The node to query.
+    /// </param>
+    /// <param name="recursive">
+    /// Whether transitive dependents should be included.
+    /// </param>
+    /// <returns>
+    /// A stable dependent snapshot, or an empty list when the node is absent.
+    /// </returns>
     public IReadOnlyList<TKey> GetDependents(TKey node, bool recursive = false)
         => GetConnectedNodes(node, recursive, static value => value.dependents);
 
     /// <summary>
     /// Determines whether one node directly or transitively depends on another.
     /// </summary>
-    /// <param name="node">The dependent node.</param>
-    /// <param name="dependency">The dependency to find.</param>
-    /// <param name="recursive">Whether transitive edges should be searched.</param>
-    /// <returns><see langword="true"/> when the dependency exists.</returns>
+    /// <param name="node">
+    /// The dependent node.
+    /// </param>
+    /// <param name="dependency">
+    /// The dependency to find.
+    /// </param>
+    /// <param name="recursive">
+    /// Whether transitive edges should be searched.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the dependency exists.
+    /// </returns>
     public bool DependsOn(TKey node, TKey dependency, bool recursive = false)
     {
         m_sync.EnterReadLock();
@@ -339,7 +405,9 @@ public sealed class DependencyGraph<TKey> where TKey : notnull
     /// <summary>
     /// Returns an order in which every dependency precedes its dependents.
     /// </summary>
-    /// <returns>A deterministic topological ordering.</returns>
+    /// <returns>
+    /// A deterministic topological ordering.
+    /// </returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown when the graph contains a cycle. The exception message contains a complete cycle.
     /// </exception>
@@ -389,7 +457,9 @@ public sealed class DependencyGraph<TKey> where TKey : notnull
     /// <param name="cycle">
     /// A closed cycle whose first and last nodes are equal, or an empty list when acyclic.
     /// </param>
-    /// <returns><see langword="true"/> when a cycle was found.</returns>
+    /// <returns>
+    /// <see langword="true"/> when a cycle was found.
+    /// </returns>
     public bool TryFindCycle(out IReadOnlyList<TKey> cycle)
     {
         m_sync.EnterReadLock();

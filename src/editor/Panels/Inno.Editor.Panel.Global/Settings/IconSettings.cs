@@ -7,7 +7,8 @@ using System.Reflection;
 using Inno.Editor.ImGui.ImGuiWidget;
 using Inno.Editor.Settings;
 using Inno.Native.ImGui;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Global;
@@ -27,23 +28,41 @@ internal abstract class IconSetting : EditorSetting
 
     private readonly string m_glyph;
 
+    /// <summary>
+    /// Creates a validated icon setting instance.
+    /// </summary>
+    /// <param name="glyph">
+    /// The glyph text validated by the icon setting operation.
+    /// </param>
     protected IconSetting(string glyph)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(glyph);
         m_glyph = glyph;
     }
 
+    /// <summary>
+    /// Gets a new value initialized to this setting's canonical default state.
+    /// </summary>
     public override EditorSettingObject defaultValue => CreateDefault(m_glyph);
 
+    /// <summary>
+    /// Gets the presentation section that groups this setting.
+    /// </summary>
     public override string section => "Editor Icons";
 
+    /// <summary>
+    /// Renders this feature using the current editor presentation context.
+    /// </summary>
+    /// <param name="setting">
+    /// The mutable editor setting value currently being presented.
+    /// </param>
     protected override void OnDraw(EditorSettingObject setting)
     {
         string value = setting.GetAsString("value", m_glyph) ?? m_glyph;
         float iconSlotWidth = GetIconSlotWidth();
         ImDrawListPtr comboDrawList = NativeImGui.GetWindowDrawList();
         NativeImGui.SetNextItemWidth(-1f);
-        bool isOpen = NativeImGui.BeginCombo("##icon", string.Empty);
+        bool isOpen = EditorWidget.BeginBoundedCombo("##icon", string.Empty);
         Vector2 comboMinimum = NativeImGui.GetItemRectMin();
         Vector2 comboMaximum = NativeImGui.GetItemRectMax();
         ImGuiStylePtr comboStyle = NativeImGui.GetStyle();
@@ -169,44 +188,62 @@ internal abstract class IconSetting : EditorSetting
     }
 }
 
-[EditorSettingPath("Global/Appearance/Icons/Scene")]
+[EditorSettingPath("Editor/Appearance/Icons/Scene")]
 internal sealed class SceneIconSetting() : IconSetting(ImGuiIcon.Cubes)
 {
+    /// <summary>
+    /// Gets the user-facing explanation of this feature or setting.
+    /// </summary>
     public override string description
         => "Selects the icon used wherever the editor presents a scene document or loaded scene.";
 }
 
-[EditorSettingPath("Global/Appearance/Icons/GameObject")]
+[EditorSettingPath("Editor/Appearance/Icons/GameObject")]
 internal sealed class GameObjectIconSetting() : IconSetting(ImGuiIcon.Cube)
 {
+    /// <summary>
+    /// Gets the user-facing explanation of this feature or setting.
+    /// </summary>
     public override string description
         => "Selects the icon used wherever the editor presents a scene GameObject.";
 }
 
-[EditorSettingPath("Global/Appearance/Icons/Prefab")]
+[EditorSettingPath("Editor/Appearance/Icons/Prefab")]
 internal sealed class PrefabIconSetting() : IconSetting(ImGuiIcon.DiceD6)
 {
+    /// <summary>
+    /// Gets the user-facing explanation of this feature or setting.
+    /// </summary>
     public override string description
         => "Selects the icon used wherever the editor presents a reusable prefab object.";
 }
 
-[EditorSettingPath("Global/Appearance/Icons/Layers")]
+[EditorSettingPath("Editor/Appearance/Icons/Layers")]
 internal sealed class LayersIconSetting() : IconSetting(ImGuiIcon.LayerGroup)
 {
+    /// <summary>
+    /// Gets the user-facing explanation of this feature or setting.
+    /// </summary>
     public override string description
         => "Selects the icon used wherever the editor presents a project layer configuration.";
 }
 
-[EditorSettingPath("Global/Appearance/Icons/Folder")]
+[EditorSettingPath("Editor/Appearance/Icons/Folder")]
 internal sealed class FolderIconSetting() : IconSetting(ImGuiIcon.Folder)
 {
+    /// <summary>
+    /// Gets the user-facing explanation of this feature or setting.
+    /// </summary>
     public override string description
         => "Selects the icon used wherever the editor presents a source directory.";
 }
 
-[EditorSettingPath("Global/Appearance/Icons/File")]
+[EditorSettingPath("Editor/Appearance/Icons/File")]
 internal sealed class FileIconSetting() : IconSetting(ImGuiIcon.File)
 {
+    /// <summary>
+    /// Gets the user-facing explanation of this feature or setting.
+    /// </summary>
     public override string description
         => "Selects the icon used wherever the editor presents a generic source file.";
 }

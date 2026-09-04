@@ -5,6 +5,8 @@ using System.Runtime.Loader;
 
 using Inno.Core.Events;
 using Inno.Core.Identity;
+using Inno.Core.Logging;
+using Inno.Scripting.Api;
 using Inno.Editor.Core;
 
 namespace Inno.Editor.Interactions;
@@ -12,13 +14,15 @@ namespace Inno.Editor.Interactions;
 /// <summary>
 /// Provides the single presentation-independent entry point for editor actions, menus, selection, focus, and drag-and-drop.
 /// </summary>
-public sealed class EditorInteractions
+public sealed class EditorInteractions : IEditorSelectionCoordinator, IEditorHistoryIsolation
 {
     private readonly EditorContext m_editor;
     private readonly EditorHistory m_history;
+    private readonly Logger m_log;
     private EditorActionRouter? m_actions;
     private EditorExtensionCatalog? m_catalog;
     private EditorMenuCatalog? m_menus;
+    private EditorToolbarCatalog? m_toolbars;
     private EditorDropRouter? m_drops;
     private string m_focusedArea = EditorBuiltInInteractionIds.C_GLOBAL_AREA;
     private object? m_focusedTarget;
@@ -27,13 +31,14 @@ public sealed class EditorInteractions
     private Guid? m_pendingSelectionId;
     private Guid? m_pendingFocusId;
 
-    internal EditorInteractions(EditorContext editor)
+    internal EditorInteractions(EditorContext editor, Logger log)
     {
         m_editor = editor ?? throw new ArgumentNullException(nameof(editor));
+        m_log = log ?? throw new ArgumentNullException(nameof(log));
         m_history = new EditorHistory(new EditorHistoryOptions
         {
             cacheDirectory = Path.Combine(editor.projectDirectory, "Library", "Editor", "History")
-        });
+        }, log);
         m_history.Attach(editor, this);
     }
 
@@ -42,24 +47,56 @@ public sealed class EditorInteractions
     /// </summary>
     public EditorSelectionState selection { get; } = new();
 
+    object? IEditorSelectionCoordinator.selectedTarget => selection.selectedTarget;
+
     /// <summary>
     /// Gets the transactional Undo and Redo history owned by this editor runtime.
     /// </summary>
     public IEditorHistory history => m_history;
 
+    /// <summary>
+    /// Starts an isolated temporary Undo and Redo branch while retaining the current editing branch.
+    /// </summary>
+    /// <remarks>
+    /// Disposing the returned scope releases every temporary operation and restores the retained branch.
+    /// This host-level boundary is intended for transient editor sessions such as Play Mode.
+    /// </remarks>
+    /// <returns>
+    /// A scope that restores the retained history branch when disposed.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown during an Undo, Redo, transaction, or another isolated branch.
+    /// </exception>
+    [ScriptingApiIgnore]
+    public IDisposable BeginHistoryIsolation() => m_history.BeginIsolation();
+
     internal EditorHistory historyHost => m_history;
 
-    /// <summary>Gets the area that most recently received keyboard focus.</summary>
+    /// <summary>
+    /// Gets the area that most recently received keyboard focus.
+    /// </summary>
     public string focusedArea => m_focusedArea;
 
-    /// <summary>Gets the target associated with the focused area.</summary>
+    /// <summary>
+    /// Gets the target associated with the focused area.
+    /// </summary>
     public object? focusedTarget => m_focusedTarget;
 
-    /// <summary>Creates a lightweight interaction handle for one area and optional target.</summary>
-    /// <param name="area">The stable interaction area.</param>
-    /// <param name="target">The optional object represented by the area.</param>
-    /// <returns>A lightweight interaction handle.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="area"/> is empty.</exception>
+    /// <summary>
+    /// Creates a lightweight interaction handle for one area and optional target.
+    /// </summary>
+    /// <param name="area">
+    /// The stable interaction area.
+    /// </param>
+    /// <param name="target">
+    /// The optional object represented by the area.
+    /// </param>
+    /// <returns>
+    /// A lightweight interaction handle.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="area"/> is empty.
+    /// </exception>
     public EditorInteraction For(string area, object? target = null)
         => new(this, area, target);
 
@@ -78,17 +115,33 @@ public sealed class EditorInteractions
             selection.Select(target);
     }
 
-    /// <summary>Resolves valid managed data for an active drag token.</summary>
-    /// <param name="token">The runtime-owned drag token.</param>
-    /// <param name="data">The managed drag data when resolution succeeds.</param>
-    /// <returns><see langword="true"/> when the token is current and valid; otherwise, <see langword="false"/>.</returns>
+    /// <summary>
+    /// Resolves valid managed data for an active drag token.
+    /// </summary>
+    /// <param name="token">
+    /// The runtime-owned drag token.
+    /// </param>
+    /// <param name="data">
+    /// The managed drag data when resolution succeeds.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the token is current and valid; otherwise, <see langword="false"/>.
+    /// </returns>
     public bool TryGetDragData(Guid token, out EditorDragData? data)
         => Drops.TryGetData(token, out data);
 
-    /// <summary>Toggles one panel in the currently active extension generation.</summary>
-    /// <param name="panelId">The stable panel identifier to resolve.</param>
-    /// <returns><see langword="true"/> when an available panel was found and toggled.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="panelId"/> is empty.</exception>
+    /// <summary>
+    /// Toggles one panel in the currently active extension generation.
+    /// </summary>
+    /// <param name="panelId">
+    /// The stable panel identifier to resolve.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when an available panel was found and toggled.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="panelId"/> is empty.
+    /// </exception>
     public bool TogglePanel(string panelId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(panelId);
@@ -99,9 +152,10 @@ public sealed class EditorInteractions
     {
         ArgumentNullException.ThrowIfNull(catalog);
         m_catalog = catalog;
-        m_actions = new EditorActionRouter(catalog, m_editor, this);
-        m_menus = new EditorMenuCatalog(catalog, m_actions);
-        m_drops = new EditorDropRouter(catalog);
+        m_actions = new EditorActionRouter(catalog, m_editor, this, m_log);
+        m_menus = new EditorMenuCatalog(catalog, m_actions, m_log);
+        m_toolbars = new EditorToolbarCatalog(catalog, m_actions);
+        m_drops = new EditorDropRouter(catalog, m_log);
     }
 
     internal void Update()
@@ -209,6 +263,9 @@ public sealed class EditorInteractions
     internal EditorMenuModel BuildMenu(string area, object? target)
         => Menus.Build(new EditorMenuContext(m_editor, this, area, target));
 
+    internal EditorToolbarModel BuildToolbar(string area, object? target)
+        => Toolbars.Build(CreateActionContext(area, target, argument: null));
+
     internal bool TryGetShortcut(
         string action,
         string area,
@@ -271,6 +328,9 @@ public sealed class EditorInteractions
     private EditorDropRouter Drops => m_drops
         ?? throw new InvalidOperationException("Editor interactions are not attached to a runtime.");
 
+    private EditorToolbarCatalog Toolbars => m_toolbars
+        ?? throw new InvalidOperationException("Editor interactions are not attached to a runtime.");
+
     private EditorActionContext CreateActionContext(
         string area,
         object? target,
@@ -282,8 +342,8 @@ public sealed class EditorInteractions
         if (m_pendingSelectionId is Guid selectionId)
         {
             m_pendingSelectionId = null;
-            IIdentityObject? replacement = IdentityManager.isInitialized
-                ? IdentityManager.Get<IIdentityObject>(selectionId)
+            IdentityObject? replacement = IdentityAllocator.hasCurrent
+                ? IdentityAllocator.current.Get<IdentityObject>(selectionId)
                 : null;
             if (replacement is not null)
                 selection.Select(replacement);
@@ -293,8 +353,8 @@ public sealed class EditorInteractions
         if (m_pendingFocusId is Guid focusId)
         {
             m_pendingFocusId = null;
-            m_focusedTarget = IdentityManager.isInitialized
-                ? IdentityManager.Get<IIdentityObject>(focusId)
+            m_focusedTarget = IdentityAllocator.hasCurrent
+                ? IdentityAllocator.current.Get<IdentityObject>(focusId)
                 : null;
         }
     }
@@ -310,8 +370,8 @@ public sealed class EditorInteractions
         {
             return;
         }
-        if (target is IIdentityObject identityObject)
-            retainIdentity(identityObject.GetIdentity().persistentId);
+        if (target is IdentityObject identityObject)
+            retainIdentity(identityObject.identity.persistentId);
         clear();
     }
 }

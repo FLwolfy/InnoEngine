@@ -3,6 +3,9 @@ namespace Inno.Core.Coroutines;
 /// <summary>
 /// Waits for a fixed number of frames.
 /// </summary>
+/// <param name="frames">
+/// The frames used to initialize this instance.
+/// </param>
 public sealed class WaitForFrames(int frames) : YieldInstruction
 {
     /// <summary>

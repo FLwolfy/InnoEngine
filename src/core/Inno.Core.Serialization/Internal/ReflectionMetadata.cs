@@ -46,7 +46,9 @@ internal static class ReflectionMetadata
         return properties;
     }
 
-    internal static Action? CreateRestoreCallback(ISerializable value)
+    internal static Action? CreateRestoreCallback(
+        ISerializable value,
+        SerializationContext context)
     {
         MethodInfo[] hooks = GetRestoreHooks(value.GetType());
         if (hooks.Length == 0)
@@ -55,7 +57,12 @@ internal static class ReflectionMetadata
         return () =>
         {
             for (int i = 0; i < hooks.Length; i++)
-                hooks[i].Invoke(value, null);
+            {
+                object?[]? arguments = hooks[i].GetParameters().Length == 0
+                    ? null
+                    : [context];
+                hooks[i].Invoke(value, arguments);
+            }
         };
     }
 
@@ -192,10 +199,14 @@ internal static class ReflectionMetadata
                 continue;
 
             MethodInfo hook = declaredHooks[0];
-            if (hook.IsStatic || hook.IsVirtual || hook.ReturnType != typeof(void) || hook.GetParameters().Length != 0)
+            ParameterInfo[] parameters = hook.GetParameters();
+            bool validParameters = parameters.Length == 0 ||
+                parameters.Length == 1 && parameters[0].ParameterType == typeof(SerializationContext);
+            if (hook.IsStatic || hook.IsVirtual || hook.ReturnType != typeof(void) || !validParameters)
             {
                 throw new InvalidOperationException(
-                    $"Restore callback '{hierarchy[i].FullName}.{hook.Name}' must be a non-static, non-virtual, parameterless void method.");
+                    $"Restore callback '{hierarchy[i].FullName}.{hook.Name}' must be a non-static, non-virtual void method " +
+                    "with either no parameters or one SerializationContext parameter.");
             }
 
             hooks.Add(hook);

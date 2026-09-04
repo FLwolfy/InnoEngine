@@ -1,6 +1,6 @@
 # Inno.Editor.Scene
 
-[Editor 索引](README.md) · [Interactions](Inno.Editor.Interactions.md) · [Engine Scene](../engine/Inno.Engine.Scene.md)
+[Editor 索引](README.md) · [Interactions](Inno.Editor.Interactions.md) · [Scene](../scene/Inno.Scene.md)
 
 `Inno.Editor.Scene` 是 Scene 领域的 Editor feature，不是 Panel。它拥有 Scene document workspace、统一的 `SceneEdits` 修改门面，以及把 Scene 修改解释为中立 Undo/Redo payload 的 Handler。Hierarchy 和 Inspector 只负责收集用户意图与绘制，不再各自实现 Scene 快照或恢复算法。
 
@@ -12,14 +12,19 @@ flowchart LR
     Edits --> History["EditorHistoryChange"]
     History --> Handlers["Current-generation handlers"]
     Handlers --> Scene["GameScene graph"]
-    Workspace["IEditorSceneWorkspace"] --> Assets["SceneAsset / AssetManager"]
+    Workspace["IEditorSceneWorkspace"] --> Assets["SceneAsset / AssetPipeline"]
+    Viewports["Game View / Scene View"] --> Presentation["IEditorGameScenePresentation"]
+    Presentation --> EditWorld["Edit SceneWorld"]
+    Presentation --> PlayWorld["Play SceneWorld"]
 ```
 
-- `IEditorSceneWorkspace` 是只读查询与 Open/Save 工作流契约；internal `EditorSceneWorkspace` Module 管理文档、source path、dirty baseline 与 `editor.ini` 状态。
+- `IEditorSceneWorkspace` 是当前 Edit/Play presentation 与 Open/Save 工作流契约；internal `EditorSceneWorkspace` Module 管理 Edit 文档、source path、dirty baseline、selection 映射与 `editor.ini` 状态。
+- `IEditorGameScenePresentation` 是 Game View 与 Scene View 的只读游戏场景来源；它在 Play 世界完整物化成功后才从 Edit SceneWorld 原子切换到 Play SceneWorld。
 - `SceneEdits` 是 Scene 内容修改的唯一高层入口，负责“修改成功后记录最小可逆数据”。
 - History Handler 根据 persistent ID 和 Stable Type ID 在当前 generation 重新解析对象，不保留旧实例。
-- `Inno.Engine.Scene.Assets` 提供通用 property/subtree/element 序列化能力，但不知道 Editor History。
+- `Inno.Scene.Assets` 提供通用 property/subtree/element 序列化能力，但不知道 Editor History。
 - Scene feature 通过 [Inno.Editor.Core](Inno.Editor.Core.md) 中 `EditorReloadCoordinator` 的中立 participant contract 接入 assembly reload，并自行拥有 Scene migration、Coroutine 清理和 Missing/reload diagnostics；`Inno.Editor.Scripting` 不引用 Scene 项目或 Scene 类型。
+- `EditorReloadCoordinator.Register` 返回的 registration lease 强持有 participant，而 Coordinator 只保留弱引用。只要 Workspace 持有 lease，GC 就不能移除 Scene migration；Workspace Dispose 会注销并释放 participant，避免新 TypeCache 激活后仍遗留旧 collectible `Type` 的 Component/System。该所有权契约适用于所有 Editor reload feature，不是 Scene 私有补丁。
 
 ## 公共 API
 
@@ -27,12 +32,13 @@ flowchart LR
 
 | 成员 | 作用 |
 | --- | --- |
-| `scenes` / `activeScene` | 查询当前 Editor scene setup。 |
+| `scenes` / `activeScene` | Edit 时查询 authoring Scene；Play 时查询同 persistent ID 的 runtime copy。 |
+| `canPersist` | 当前 Scene 是否是可保存的 Edit 文档；Play runtime copy 为 `false`。 |
 | `Open(path)` | additive 打开 Scene asset。 |
 | `Save(scene, directory)` | 保存到已有 source；未保存 Scene 在调用方提供的 fallback directory 创建 Asset。 |
 | `SaveToDirectory(scene, directory)` | 显式保存到目标 Asset directory。 |
 | `SavePrefab(gameObject, directory)` | 从 GameObject 子树保存 PrefabAsset。 |
-| `IsDirty(scene)` | 比较当前序列化 hash、source path 与文件名。 |
+| `IsDirty(scene)` | Edit 时比较序列化 hash、source path 与文件名；Play copy 恒为 `false`。 |
 | `TryGetSourcePath(scene, out path)` | 查询保存后的 source-relative path。 |
 
 具体 `EditorSceneWorkspace`、构造函数、Create/Close/Clear/Refresh 和 history/document helpers 均为 internal；可逆的 Scene 文档修改必须经 `SceneEdits`。该 Module 通过标准 protected Capture/Restore hooks 只把已保存 Scene 的顺序与 active Scene 写入 `[InnoEditor][Module.scene-workspace]`。Selection 属于当前 Editor session，不写入项目设置。未保存 Scene 内容和 dirty 内存同样不会写入 `editor.ini`；它们必须保存为 `.iscene`。
@@ -46,6 +52,29 @@ dirty baseline 也不会把任意 Asset 引用的 `lastKnownPath` 当成 Scene �
 脚本 Component/System 在 reload 中进入或退出 Missing 同样不是用户数据编辑。Scene serializer 保持原逻辑类型与 property payload 的规范表示；Workspace reload participant 还会在迁移前强制判定每个文档原本是否 dirty，并在整次迁移成功后只为原本 clean 的文档重建保存基线。因此即使恢复后的脚本增加了带默认值的序列化属性，Hierarchy 也不会把 generation migration 显示成用户造成的 `*`。原本 dirty 的文档绝不会被 rebase 掩盖，Missing 期间对其他 Scene 数据的真实修改仍正常保持 dirty、可以保存，并且不会破坏未来的原位恢复。恢复是否完整由原子 reload 事务和精确 diagnostics 判断，而不复用 dirty 标记：构造、属性或引用恢复不兼容会报告对应问题；事务失败则恢复旧 generation 与旧 dirty baseline。
 
 Scene Missing 是当前状态诊断，而不是 Scripting 编译诊断。Workspace 启动、loaded Scene 集合变化或 TypeCache generation 变化后的下一次主线程更新，会完整替换 `Missing Scene Scripts` 诊断组；因此刚打开的 Scene 若含 Missing 会立即出现在 Console，类型恢复或 Scene 关闭后也会被清除。协调 reload 的成功、失败恢复与无变化 diagnostics refresh 由 Scene 自己响应，不要求 Scripting 理解 Scene。
+
+### IEditorGameScenePresentation
+
+这是 viewport presentation 与 Scene owner 之间唯一的 Edit/Play 场景协议：
+
+| 成员 | 作用 |
+| --- | --- |
+| `Capture()` | 返回一个集合经过防御性复制的 `EditorScenePresentationSnapshot`，其中 scenes 与 active Scene 来自同一次捕获。 |
+| `EditorScenePresentationSnapshot.scenes` | 当前帧应作为游戏内容呈现的有序 Scene；Game View 与 Scene View 不得修改集合或跨帧保留引用。 |
+| `EditorScenePresentationSnapshot.activeScene` | 同一 snapshot 内的 active Scene；无 active Scene 时为 `null`。 |
+
+该接口不暴露 `RuntimeSession`、可切换 setter、Rendering 类型或生命周期操作。Viewport 通过不可变 snapshot 读取当前 world；Hierarchy、Inspector 和 Scene Action 通过 `IEditorSceneWorkspace`/`SceneEdits` 操作同一个当前 world。Play 时这些修改只进入 runtime copy 与临时 History 分支；Edit 文档所有权没有转移，Save/Open 被 persistence gate 拒绝，`IsDirty` 也不会把 runtime 修改显示成 `*`。
+
+### IEditorScenePlayMode
+
+该公开接口是 [Play Mode](Inno.Editor.PlayMode.md) 的跨程序集基础设施，不是普通 Scene 编辑入口：
+
+| 成员 | 作用 |
+| --- | --- |
+| `BeginPlayMode(runtimeSession)` | 捕获完整 Edit scene setup，把同 persistent ID 的独立对象图物化到 Play `RuntimeSession`，提交 presentation/selection 切换并返回幂等 lease。 |
+| 返回 lease 的 `Dispose()` | 停止向 Game View 与 Scene View 呈现 Play Scene；Edit Scene 从未被替换，因此无需反序列化恢复。 |
+
+物化是候选事务：目标 world 非空、快照捕获失败或任一 Scene 反序列化失败时，会清空候选 Play world，所有 Editor feature 继续指向 Edit world。只有全部 Scene、顺序和 active Scene 都准备完成后才发布 Play lease，并按 persistent ID 把 Selection 映射到 runtime copy。Play session 活动期间 Workspace 不消费 Asset source change、不把 runtime graph 写入 `editor.ini`，并禁止 Scene/Prefab Open/Save；退出后释放 runtime-only 对象、恢复 Edit Selection，排队的 source change 才应用到始终保留的 Edit 文档。
 
 ### SceneEdits
 
@@ -101,8 +130,8 @@ public sealed class AddAnimationControllerAction(SceneEdits edits)
 
 ## 相关序列化 API
 
-`ScenePropertySerialization`、`SceneSubtreeSerialization` 和 `SceneElementSerialization` 位于 [Inno.Engine.Scene.Assets](../engine/Inno.Engine.Scene.Assets.md)。它们是可复用的 Scene 数据工具，不引用 Editor。属性字节底层使用 [Inno.Core.Serialization](../core/Inno.Core.Serialization.md) 的中立 property-data 格式。
+`ScenePropertySerialization`、`SceneSubtreeSerialization` 和 `SceneElementSerialization` 位于 [Inno.Scene.Assets](../scene/Inno.Scene.Assets.md)。它们是可复用的 Scene 数据工具，不引用 Editor。属性字节底层使用 [Inno.Core.Serialization](../core/Inno.Core.Serialization.md) 的中立 property-data 格式。
 
 ## Scripting API
 
-EditorScripts 显式 `using InnoEditor.Scene;` 后只看到 `IEditorSceneWorkspace` 与 `SceneEdits`。concrete Workspace、构造/关闭/清空/刷新 helper、History payload、引用扫描器和 Handler 不导出；工作流通过接口，所有可逆 Scene 数据修改通过 `SceneEdits`。
+EditorScripts 显式 `using InnoEditor.Scene;` 后只看到 `IEditorSceneWorkspace` 与 `SceneEdits`。`IEditorScenePlayMode`、`IEditorGameScenePresentation` 和 `EditorScenePresentationSnapshot` 是 host/Panel 协调协议，不在脚本清单中；Play 控制使用 `InnoEditor.PlayMode.IEditorPlayMode`。concrete Workspace、构造/关闭/清空/刷新 helper、History payload、引用扫描器和 Handler 不导出；工作流通过接口，所有可逆 Scene 数据修改通过 `SceneEdits`。

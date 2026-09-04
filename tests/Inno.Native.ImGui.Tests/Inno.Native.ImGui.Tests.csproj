@@ -8,7 +8,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\native\Inno.Native.Dll\Inno.Native.Dll.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\native\Inno.Native.LibraryLoading\Inno.Native.LibraryLoading.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>

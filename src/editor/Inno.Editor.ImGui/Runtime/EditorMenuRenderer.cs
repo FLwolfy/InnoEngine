@@ -1,22 +1,33 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 
 using Inno.Editor.Interactions;
 using Inno.Editor.ImGui.ImGuiWidget;
+using Inno.Native.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.ImGui;
 
-/// <summary>Renders immutable editor menu models through ImGui.</summary>
+/// <summary>
+/// Renders immutable editor menu models through ImGui.
+/// </summary>
 public static class EditorMenuRenderer
 {
     /// <summary>
     /// Draws a resolved right-click menu for the most recently submitted ImGui item.
     /// </summary>
-    /// <param name="id">The stable popup identifier in the current ImGui ID scope.</param>
-    /// <param name="interaction">The interaction area and optional operation target.</param>
-    /// <returns><see langword="true"/> while the context popup is open and its items were drawn.</returns>
+    /// <param name="id">
+    /// The stable popup identifier in the current ImGui ID scope.
+    /// </param>
+    /// <param name="interaction">
+    /// The interaction area and optional operation target.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> while the context popup is open and its items were drawn.
+    /// </returns>
     public static bool ContextMenu(string id, EditorInteraction interaction)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -41,9 +52,15 @@ public static class EditorMenuRenderer
     /// <summary>
     /// Draws a resolved right-click menu when the current ImGui window's unoccupied background is clicked.
     /// </summary>
-    /// <param name="id">The stable popup identifier in the current ImGui ID scope.</param>
-    /// <param name="interaction">The interaction area and directory target for the background operation.</param>
-    /// <returns><see langword="true"/> while the background context popup is open and its items were drawn.</returns>
+    /// <param name="id">
+    /// The stable popup identifier in the current ImGui ID scope.
+    /// </param>
+    /// <param name="interaction">
+    /// The interaction area and directory target for the background operation.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> while the background context popup is open and its items were drawn.
+    /// </returns>
     public static bool WindowContextMenu(string id, EditorInteraction interaction)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -78,7 +95,9 @@ public static class EditorMenuRenderer
     /// <summary>
     /// Draws the complete editor main menu bar for the supplied menu context.
     /// </summary>
-    /// <param name="interaction">The main-menu interaction area.</param>
+    /// <param name="interaction">
+    /// The main-menu interaction area.
+    /// </param>
     public static void MainMenu(EditorInteraction interaction)
     {
         if (!NativeImGui.BeginMainMenuBar())
@@ -86,6 +105,7 @@ public static class EditorMenuRenderer
         try
         {
             DrawItems(interaction, interaction.BuildMenu().items);
+            DrawCenteredToolbar(interaction, interaction.BuildToolbar().items);
         }
         finally
         {
@@ -93,11 +113,97 @@ public static class EditorMenuRenderer
         }
     }
 
+    private static void DrawCenteredToolbar(
+        EditorInteraction interaction,
+        IReadOnlyList<EditorToolbarItem> items)
+    {
+        if (items.Count == 0)
+            return;
+        ImGuiStylePtr style = NativeImGui.GetStyle();
+        float extent = NativeImGui.GetFrameHeight();
+        float width = extent * items.Count + style.ItemSpacing.X * (items.Count - 1);
+        float centeredOffset = (NativeImGui.GetWindowWidth() - width) * 0.5f;
+        float minimumOffset = NativeImGui.GetCursorPosX() + style.ItemSpacing.X;
+        NativeImGui.SameLine(MathF.Max(centeredOffset, minimumOffset), 0f);
+
+        for (int i = 0; i < items.Count; i++)
+        {
+            if (i > 0)
+                NativeImGui.SameLine(0f, style.ItemSpacing.X);
+            DrawToolbarItem(interaction, items[i], new Vector2(extent, extent));
+        }
+    }
+
+    private static void DrawToolbarItem(
+        EditorInteraction interaction,
+        EditorToolbarItem item,
+        Vector2 size)
+    {
+        bool disabled = !item.status.isEnabled;
+        if (disabled)
+            NativeImGui.BeginDisabled(true);
+        Vector2 minimum = NativeImGui.GetCursorScreenPos();
+        bool pressed = NativeImGui.InvisibleButton($"##editor_toolbar_{item.actionId}", size);
+        bool hovered = NativeImGui.IsItemHovered();
+        bool active = NativeImGui.IsItemActive();
+        if (disabled)
+            NativeImGui.EndDisabled();
+
+        if (item.status.isChecked || hovered || active)
+        {
+            Vector4 background = active
+                ? EditorPalette.accentActive
+                : hovered
+                    ? EditorPalette.accentHovered
+                    : EditorPalette.accent;
+            NativeImGui.GetWindowDrawList().AddRectFilled(
+                minimum,
+                minimum + size,
+                NativeImGui.ColorConvertFloat4ToU32(background),
+                NativeImGui.GetStyle().FrameRounding);
+        }
+
+        uint color = NativeImGui.GetColorU32(disabled ? ImGuiCol.TextDisabled : ImGuiCol.Text);
+        EditorWidget.AddGlyphCentered(
+            NativeImGui.GetWindowDrawList(),
+            NativeImGui.GetFont(),
+            NativeImGui.GetFontSize(),
+            GetToolbarIcon(item.icon),
+            minimum + size * 0.5f,
+            color);
+
+        if (hovered && EditorWidget.BeginMenuTooltip())
+        {
+            string tooltip = interaction.TryGetShortcut(item.actionId, out HotKeyGesture shortcut)
+                ? $"{item.tooltip} ({shortcut})"
+                : item.tooltip;
+            NativeImGui.TextUnformatted(tooltip);
+            EditorWidget.EndMenuTooltip();
+        }
+        if (pressed && item.status.isEnabled)
+            interaction.Enqueue(item.actionId);
+    }
+
+    private static string GetToolbarIcon(EditorToolbarIcon icon)
+        => icon switch
+        {
+            EditorToolbarIcon.Play => ImGuiIcon.Play,
+            EditorToolbarIcon.Stop => ImGuiIcon.Stop,
+            EditorToolbarIcon.Pause => ImGuiIcon.Pause,
+            EditorToolbarIcon.Step => ImGuiIcon.ForwardStep,
+            EditorToolbarIcon.Edit => ImGuiIcon.Pen,
+            _ => string.Empty
+        };
+
     /// <summary>
     /// Recursively draws resolved menu nodes into the currently open popup or menu.
     /// </summary>
-    /// <param name="interaction">The interaction used to resolve shortcuts and enqueue selected actions.</param>
-    /// <param name="items">The immutable menu nodes to draw in display order.</param>
+    /// <param name="interaction">
+    /// The interaction used to resolve shortcuts and enqueue selected actions.
+    /// </param>
+    /// <param name="items">
+    /// The immutable menu nodes to draw in display order.
+    /// </param>
     public static void DrawItems(EditorInteraction interaction, IReadOnlyList<EditorMenuItem> items)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -135,11 +241,21 @@ public static class EditorMenuRenderer
         }
     }
 
-    /// <summary>Draws matching leaf commands as a flat searchable list.</summary>
-    /// <param name="interaction">The interaction used to enqueue selected actions.</param>
-    /// <param name="items">The immutable menu tree whose leaves should be searched.</param>
-    /// <param name="search">The case-insensitive text matched against each slash-delimited leaf path.</param>
-    /// <returns><see langword="true"/> when a command was selected.</returns>
+    /// <summary>
+    /// Draws matching leaf commands as a flat searchable list.
+    /// </summary>
+    /// <param name="interaction">
+    /// The interaction used to enqueue selected actions.
+    /// </param>
+    /// <param name="items">
+    /// The immutable menu tree whose leaves should be searched.
+    /// </param>
+    /// <param name="search">
+    /// The case-insensitive text matched against each slash-delimited leaf path.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when a command was selected.
+    /// </returns>
     public static bool DrawSearchItems(
         EditorInteraction interaction,
         IReadOnlyList<EditorMenuItem> items,

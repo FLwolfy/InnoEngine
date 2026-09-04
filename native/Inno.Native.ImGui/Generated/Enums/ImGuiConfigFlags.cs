@@ -68,5 +68,10 @@ namespace Inno.Native.ImGui
 		/// Application is using a touch screen instead of a mouse.<br/>
 		/// </summary>
 		IsTouchScreen = unchecked(2097152),
+
+		/// <summary>
+		/// Inno extension: overlay scrollbars on content and fade them after interaction.<br/>
+		/// </summary>
+		InnoOverlayScrollbars = unchecked(4194304),
 	}
 }

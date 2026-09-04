@@ -6,14 +6,80 @@ namespace Inno.Core.Storage;
 
 internal interface IIndexedObjectIndex<T> where T : class
 {
+    /// <summary>
+    /// Gets the human-readable name used for presentation and diagnostics.
+    /// </summary>
     string name { get; }
+    /// <summary>
+    /// Gets the key type accepted by this index implementation.
+    /// </summary>
     Type keyType { get; }
+    /// <summary>
+    /// Adds a new keyed value or atomically replaces the existing value for that key.
+    /// </summary>
+    /// <param name="item">
+    /// The stored item associated with the validated handle.
+    /// </param>
+    /// <param name="key">
+    /// The backend-neutral physical key associated with this event.
+    /// </param>
     void AddOrUpdate(T item, object key);
+    /// <summary>
+    /// Removes the requested value while preserving the collection's invariants.
+    /// </summary>
+    /// <param name="item">
+    /// The stored item associated with the validated handle.
+    /// </param>
     void Remove(T item);
+    /// <summary>
+    /// Removes all retained entries and returns the instance to an empty reusable state.
+    /// </summary>
     void Clear();
+    /// <summary>
+    /// Retrieves the requested count value from current authoritative state.
+    /// </summary>
+    /// <param name="key">
+    /// The backend-neutral physical key associated with this event.
+    /// </param>
+    /// <returns>
+    /// The scalar result calculated from the supplied inputs.
+    /// </returns>
     int GetCount(object key);
+    /// <summary>
+    /// Attempts to get single without changing state when the operation cannot complete.
+    /// </summary>
+    /// <param name="key">
+    /// The backend-neutral physical key associated with this event.
+    /// </param>
+    /// <param name="item">
+    /// The stored item associated with the validated handle.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the requested condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     bool TryGetSingle(object key, out T? item);
+    /// <summary>
+    /// Determines whether current state contains the requested value value.
+    /// </summary>
+    /// <param name="key">
+    /// The backend-neutral physical key associated with this event.
+    /// </param>
+    /// <param name="item">
+    /// The stored item associated with the validated handle.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the requested condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     bool Contains(object key, T item);
+    /// <summary>
+    /// Retrieves the requested set value from current authoritative state.
+    /// </summary>
+    /// <param name="key">
+    /// The backend-neutral physical key associated with this event.
+    /// </param>
+    /// <returns>
+    /// The validated hash sett? that represents the completed operation.
+    /// </returns>
     HashSet<T>? GetSet(object key);
 }
 
@@ -24,8 +90,17 @@ internal sealed class IndexedObjectIndex<T, TKey> : IIndexedObjectIndex<T> where
     private readonly IComparer<TKey> m_orderComparer;
     private readonly Dictionary<T, TKey> m_keyByItem;
 
+    /// <summary>
+    /// Gets the human-readable name used for presentation and diagnostics.
+    /// </summary>
     public string name { get; }
+    /// <summary>
+    /// Gets the key type accepted by this index implementation.
+    /// </summary>
     public Type keyType => typeof(TKey);
+    /// <summary>
+    /// Gets the index capabilities supported by this key declaration.
+    /// </summary>
     public IndexedObjectKeyFlags flags { get; }
 
     internal IndexedObjectIndex(
@@ -69,6 +144,15 @@ internal sealed class IndexedObjectIndex<T, TKey> : IIndexedObjectIndex<T> where
     HashSet<T>? IIndexedObjectIndex<T>.GetSet(object key)
         => FindUnsafe((TKey)key);
 
+    /// <summary>
+    /// Adds a new keyed value or atomically replaces the existing value for that key.
+    /// </summary>
+    /// <param name="item">
+    /// The stored item associated with the validated handle.
+    /// </param>
+    /// <param name="key">
+    /// The backend-neutral physical key associated with this event.
+    /// </param>
     public void AddOrUpdate(T item, TKey key)
     {
         if (m_keyByItem.TryGetValue(item, out var oldKey))
@@ -92,6 +176,12 @@ internal sealed class IndexedObjectIndex<T, TKey> : IIndexedObjectIndex<T> where
         m_keyByItem[item] = key;
     }
 
+    /// <summary>
+    /// Removes the requested value while preserving the collection's invariants.
+    /// </summary>
+    /// <param name="item">
+    /// The stored item associated with the validated handle.
+    /// </param>
     public void Remove(T item)
     {
         if (!m_keyByItem.TryGetValue(item, out var key))
@@ -103,6 +193,9 @@ internal sealed class IndexedObjectIndex<T, TKey> : IIndexedObjectIndex<T> where
             m_ordering.RemoveKey(key);
     }
 
+    /// <summary>
+    /// Removes all retained entries and returns the instance to an empty reusable state.
+    /// </summary>
     public void Clear()
     {
         m_storage.Clear();
@@ -110,6 +203,18 @@ internal sealed class IndexedObjectIndex<T, TKey> : IIndexedObjectIndex<T> where
         m_keyByItem.Clear();
     }
 
+    /// <summary>
+    /// Attempts to get single without changing state when the operation cannot complete.
+    /// </summary>
+    /// <param name="key">
+    /// The backend-neutral physical key associated with this event.
+    /// </param>
+    /// <param name="item">
+    /// The stored item associated with the validated handle.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the requested condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryGetSingle(TKey key, out T? item)
         => m_storage.TryGetSingle(key, out item);

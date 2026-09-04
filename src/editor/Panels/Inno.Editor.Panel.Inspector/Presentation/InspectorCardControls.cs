@@ -6,8 +6,8 @@ using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Editor.Scene;
-using Inno.Engine.Scene;
-using Inno.Platform.ImGui;
+using Inno.Scene;
+using Inno.Platform.Sdl3.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Panel.Inspector;
@@ -15,6 +15,13 @@ namespace Inno.Editor.Panel.Inspector;
 internal sealed class InspectorCardControls
 {
     private const int C_CONTROL_COUNT = 3;
+    private readonly Logger m_log;
+
+    internal InspectorCardControls(LogRouter logs)
+    {
+        ArgumentNullException.ThrowIfNull(logs);
+        m_log = logs.CreateLogger<InspectorCardControls>();
+    }
 
     internal float width => EditorWidget.GetCompactClickableTextSize().X * C_CONTROL_COUNT;
 
@@ -64,7 +71,7 @@ internal sealed class InspectorCardControls
             "System");
     }
 
-    private static void Draw(
+    private void Draw(
         Guid targetId,
         bool canMoveUp,
         bool canMoveDown,
@@ -102,7 +109,7 @@ internal sealed class InspectorCardControls
         }
     }
 
-    private static void DrawMoveButton(
+    private void DrawMoveButton(
         Guid targetId,
         bool canMove,
         int targetIndex,
@@ -126,19 +133,22 @@ internal sealed class InspectorCardControls
         }
         catch (InvalidOperationException exception)
         {
-            Log.Warn("{0} reorder was rejected: {1}", targetKind, exception.Message);
+            m_log.Write(
+                LogLevel.Warn,
+                "{0} reorder was rejected: {1}",
+                [targetKind, exception.Message]);
         }
     }
 
     private static GameComponent ResolveComponent(Guid persistentId)
-        => IdentityManager.Get<GameComponent>(persistentId)
+        => IdentityAllocator.current.Get<GameComponent>(persistentId)
            ?? throw new InvalidOperationException($"Component '{persistentId}' is no longer available.");
 
     private static GameScene ResolveScene(Guid persistentId)
-        => IdentityManager.Get<GameScene>(persistentId)
+        => IdentityAllocator.current.Get<GameScene>(persistentId)
            ?? throw new InvalidOperationException($"Scene '{persistentId}' is no longer available.");
 
     private static GameSystem ResolveSystem(Guid persistentId)
-        => IdentityManager.Get<GameSystem>(persistentId)
+        => IdentityAllocator.current.Get<GameSystem>(persistentId)
            ?? throw new InvalidOperationException($"System '{persistentId}' is no longer available.");
 }

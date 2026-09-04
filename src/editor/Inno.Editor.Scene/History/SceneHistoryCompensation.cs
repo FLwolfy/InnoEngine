@@ -2,8 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using Inno.Core.Identity;
-using Inno.Engine.Scene;
+using Inno.Scene;
 
 namespace Inno.Editor.Scene;
 
@@ -12,7 +11,8 @@ internal static class SceneHistoryCompensation
     internal static SceneHistoryCompensationResult RemoveCreatedObjects(
         GameScene scene,
         IReadOnlySet<GameObject> existing,
-        string description)
+        string description,
+        EditorSceneWorkspace workspace)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(existing);
@@ -29,7 +29,8 @@ internal static class SceneHistoryCompensation
             SceneHistoryCompensationResult result = Remove(
                 gameObject,
                 () => scene.DestroyObject(gameObject),
-                $"{description} GameObject '{gameObject.identity.persistentId}'");
+                $"{description} GameObject '{gameObject.identity.persistentId}'",
+                workspace);
             statePreserved &= result.statePreserved;
             if (!string.IsNullOrWhiteSpace(result.message))
                 messages.Add(result.message);
@@ -51,7 +52,8 @@ internal static class SceneHistoryCompensation
     internal static SceneHistoryCompensationResult Remove(
         EngineObject target,
         Func<bool> remove,
-        string description)
+        string description,
+        EditorSceneWorkspace workspace)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(remove);
@@ -69,7 +71,7 @@ internal static class SceneHistoryCompensation
         }
 
         bool remainsRegistered = ReferenceEquals(
-            IdentityManager.Get<EngineObject>(persistentId),
+            workspace.Find<EngineObject>(persistentId),
             target);
         if (target.isDestroyed && !remainsRegistered)
         {

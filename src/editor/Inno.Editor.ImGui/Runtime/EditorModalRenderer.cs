@@ -10,19 +10,29 @@ using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.ImGui;
 
-/// <summary>Renders centered editor modals consistently on the main viewport.</summary>
+/// <summary>
+/// Renders centered editor modals consistently on the main viewport.
+/// </summary>
 internal static class EditorModalRenderer
 {
     /// <summary>
     /// Draws a modal in the main viewport work area with a caller-provided opacity.
     /// </summary>
-    /// <param name="id">The stable popup identity independent of the visible title.</param>
-    /// <param name="title">The visible modal title.</param>
-    /// <param name="alpha">The opacity applied to the complete modal window.</param>
+    /// <param name="id">
+    /// The stable popup identity independent of the visible title.
+    /// </param>
+    /// <param name="title">
+    /// The visible modal title.
+    /// </param>
+    /// <param name="alpha">
+    /// The opacity applied to the complete modal window.
+    /// </param>
     /// <param name="modal">
     /// The modal content and window presentation policy.
     /// </param>
-    /// <param name="presentation">The generation-safe window presentation values.</param>
+    /// <param name="presentation">
+    /// The generation-safe window presentation values.
+    /// </param>
     /// <param name="context">
     /// The shared editor context supplied to the modal body.
     /// </param>
@@ -42,7 +52,8 @@ internal static class EditorModalRenderer
         string popupId = $"{title}##{id}";
         ImGuiViewportPtr viewport = NativeImGui.GetMainViewport();
         Vector2 center = viewport.WorkPos + viewport.WorkSize * 0.5f;
-        NativeImGui.OpenPopup(popupId, ImGuiPopupFlags.NoReopen);
+        if (presentation.blocksInteraction)
+            NativeImGui.OpenPopup(popupId, ImGuiPopupFlags.NoReopen);
         NativeImGui.SetNextWindowViewport(viewport.ID);
         ImGuiCond placementCondition = presentation.canMove || presentation.canResize
             ? ImGuiCond.Appearing
@@ -75,19 +86,27 @@ internal static class EditorModalRenderer
             flags |= ImGuiWindowFlags.NoMove;
         if (!presentation.canResize)
             flags |= ImGuiWindowFlags.NoResize | ImGuiWindowFlags.AlwaysAutoResize;
-        bool beganPopup = false;
+        bool beganWindow = false;
         try
         {
-            if (NativeImGui.BeginPopupModal(popupId, flags))
+            bool visible = presentation.blocksInteraction
+                ? NativeImGui.BeginPopupModal(popupId, flags)
+                : NativeImGui.Begin(popupId, flags | ImGuiWindowFlags.NoSavedSettings);
+            beganWindow = !presentation.blocksInteraction || visible;
+            if (visible)
             {
-                beganPopup = true;
                 _ = modal.Draw(context);
             }
         }
         finally
         {
-            if (beganPopup)
-                NativeImGui.EndPopup();
+            if (beganWindow)
+            {
+                if (presentation.blocksInteraction)
+                    NativeImGui.EndPopup();
+                else
+                    NativeImGui.End();
+            }
             NativeImGui.PopStyleVar();
         }
     }
@@ -95,8 +114,12 @@ internal static class EditorModalRenderer
     /// <summary>
     /// Closes a modal popup if it is currently open.
     /// </summary>
-    /// <param name="id">The stable popup identity used when the modal was opened.</param>
-    /// <param name="title">The visible title used when the modal was opened.</param>
+    /// <param name="id">
+    /// The stable popup identity used when the modal was opened.
+    /// </param>
+    /// <param name="title">
+    /// The visible title used when the modal was opened.
+    /// </param>
     internal static void Close(string id, string title)
     {
         string popupId = $"{title}##{id}";

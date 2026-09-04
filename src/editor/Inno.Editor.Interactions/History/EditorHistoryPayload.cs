@@ -43,16 +43,24 @@ public sealed class EditorHistoryPayload : IDisposable
     /// <summary>
     /// Creates an immutable history payload by copying the supplied bytes.
     /// </summary>
-    /// <param name="bytes">The neutral bytes to retain for future Undo and Redo transitions.</param>
-    /// <returns>A new independently owned payload.</returns>
+    /// <param name="bytes">
+    /// The neutral bytes to retain for future Undo and Redo transitions.
+    /// </param>
+    /// <returns>
+    /// A new independently owned payload.
+    /// </returns>
     public static EditorHistoryPayload FromBytes(ReadOnlySpan<byte> bytes)
         => new(bytes.ToArray());
 
     /// <summary>
     /// Reads the complete immutable payload into a newly allocated byte array.
     /// </summary>
-    /// <returns>A copy of the payload bytes.</returns>
-    /// <exception cref="ObjectDisposedException">Thrown after the payload has been disposed.</exception>
+    /// <returns>
+    /// A copy of the payload bytes.
+    /// </returns>
+    /// <exception cref="ObjectDisposedException">
+    /// Thrown after the payload has been disposed.
+    /// </exception>
     public byte[] ReadBytes()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);

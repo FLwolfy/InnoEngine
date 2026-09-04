@@ -1,6 +1,6 @@
 
 using System;
-using Inno.Assets.File;
+using Inno.Assets.Pipeline;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 using Inno.Editor.ImGui;
@@ -12,18 +12,25 @@ namespace Inno.Editor.Panel.FileBrowser;
 /// <summary>
 /// Binds managed File Browser drag sessions to native entry and directory items.
 /// </summary>
+/// <param name="assets">
+/// The assets used to initialize this instance.
+/// </param>
 internal sealed class FileBrowserDragDrop(AssetEditorModule assets)
 {
     /// <summary>
     /// Publishes the supplied source entry as a managed File Browser drag payload.
     /// </summary>
-    /// <param name="context">The current Editor context.</param>
-    /// <param name="entry">The source entry bound to the last native item.</param>
+    /// <param name="context">
+    /// The current Editor context.
+    /// </param>
+    /// <param name="entry">
+    /// The source entry bound to the last native item.
+    /// </param>
     internal void DrawAssetSource(EditorContext context, AssetFileEntry entry)
     {
         if (!assets.TryCreateContext(
                 context,
-                entry.relativePath,
+                entry.assetPath.ToString(),
                 out AssetEditorContext? assetContext) ||
             assetContext is null ||
             !assets.TryCreateDragData(assetContext, out EditorDragData? data) ||
@@ -38,12 +45,18 @@ internal sealed class FileBrowserDragDrop(AssetEditorModule assets)
     /// <summary>
     /// Accepts compatible File Browser payloads into a directory bound to the last native item.
     /// </summary>
-    /// <param name="context">The current Editor context.</param>
-    /// <param name="relativePath">The explicit target directory, or an empty string for the Assets root.</param>
+    /// <param name="context">
+    /// The current Editor context.
+    /// </param>
+    /// <param name="relativePath">
+    /// The explicit target directory, or an empty string for the Assets root.
+    /// </param>
     internal void DrawDirectoryTarget(
         EditorContext context,
         string relativePath)
     {
+        if (FileBrowserUtility.IsReadOnlySource(assets.pipeline, relativePath))
+            return;
         System.Numerics.Vector2 minimum = NativeImGui.GetItemRectMin();
         System.Numerics.Vector2 maximum = NativeImGui.GetItemRectMax();
         EditorDropWidgetResult result = EditorDragDropRenderer.Target(

@@ -1,5 +1,5 @@
 using Inno.Assets;
-using Inno.Assets.File;
+using Inno.Assets.Pipeline;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
 using Inno.Native.ImGui;
@@ -24,7 +24,9 @@ internal sealed class FileBrowserContextMenu(
             id,
             assets.interactions.For(
                 FileBrowserInteractionIds.C_AREA,
-                AssetManager.TryGetFileSystemEntry(relativePath, out AssetFileEntry entry) ? entry : null));
+                assets.pipeline.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry entry)
+                    ? entry
+                    : null));
         if (isOpen)
             rename.MarkInteraction(presentation);
     }
@@ -35,6 +37,8 @@ internal sealed class FileBrowserContextMenu(
         string relativePath,
         FileBrowserPresentation presentation)
     {
+        if (IsReadOnlySource(assets.pipeline, relativePath))
+            return;
         bool isOpen = EditorMenuRenderer.ContextMenu(
             id,
             CreateDirectoryInteraction(relativePath));
@@ -47,6 +51,8 @@ internal sealed class FileBrowserContextMenu(
         string id,
         FileBrowserPresentation presentation)
     {
+        if (IsReadOnlyLocation(assets.pipeline, assets.browser))
+            return;
         bool isOpen = EditorMenuRenderer.WindowContextMenu(
             id,
             CreateDirectoryInteraction(assets.browser.currentDirectory));

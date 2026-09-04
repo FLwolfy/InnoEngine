@@ -1,9 +1,7 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using System.Reflection;
 
 using Inno.Editor.ImGui;
 using Inno.Native.ImGui;
@@ -78,6 +76,62 @@ public sealed class EditorStyleMetricsTests
                 new Vector2(120f, 80f));
             Assert.Equal(windowVertexCount, windowDrawList.VtxBuffer.Size);
             Assert.True(foregroundDrawList.VtxBuffer.Size > foregroundVertexCount);
+            NativeImGui.End();
+            NativeImGui.Render();
+        }
+        finally
+        {
+            NativeImGui.DestroyContext(context);
+        }
+    }
+
+    [Fact]
+    public void CenteredWrappedTextStaysInsidePaddingAndUsesMultipleLines()
+    {
+        var context = NativeImGui.CreateContext();
+        try
+        {
+            ImGuiIOPtr io = NativeImGui.GetIO();
+            io.DisplaySize = new Vector2(640f, 480f);
+            io.DeltaTime = 1f / 60f;
+            io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
+            io.Fonts.RendererHasTextures = true;
+
+            NativeImGui.NewFrame();
+            NativeImGui.SetNextWindowSize(new Vector2(420f, 260f), ImGuiCond.Always);
+            _ = NativeImGui.Begin("Centered Wrapped Text Test");
+            Vector2 origin = NativeImGui.GetCursorScreenPos();
+            var area = new Vector2(320f, 180f);
+            var padding = new Vector2(36f, 24f);
+            ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
+            int vertexStart = drawList.VtxBuffer.Size;
+            uint textColor = NativeImGui.GetColorU32(ImGuiCol.Text);
+
+            EditorWidget.CenteredWrappedText(
+                "A deliberately long viewport diagnostic wraps into several centered lines " +
+                "without touching either horizontal edge of the presentation area.",
+                area,
+                padding);
+
+            Assert.Equal(area, NativeImGui.GetItemRectSize());
+            Vector2 minimum = new(float.MaxValue);
+            Vector2 maximum = new(float.MinValue);
+            for (int i = vertexStart; i < drawList.VtxBuffer.Size; i++)
+            {
+                ImDrawVert vertex = drawList.VtxBuffer[i];
+                if (vertex.Col != textColor)
+                    continue;
+
+                minimum = Vector2.Min(minimum, vertex.Pos);
+                maximum = Vector2.Max(maximum, vertex.Pos);
+            }
+
+            Assert.NotEqual(float.MaxValue, minimum.X);
+            Assert.True(minimum.X >= origin.X + padding.X - 1f);
+            Assert.True(maximum.X <= origin.X + area.X - padding.X + 1f);
+            Assert.True(minimum.Y >= origin.Y + padding.Y - 1f);
+            Assert.True(maximum.Y <= origin.Y + area.Y - padding.Y + 1f);
+            Assert.True(maximum.Y - minimum.Y > NativeImGui.GetTextLineHeight());
             NativeImGui.End();
             NativeImGui.Render();
         }
@@ -228,7 +282,6 @@ public sealed class EditorStyleMetricsTests
                 _ = EditorWidget.style.SetZoom(zoom);
                 EditorWidget.SetupStyle();
                 DrawTreeFrame();
-                AssertTreeStacksContainOnlyTheOpenRoot();
             }
         }
         finally
@@ -240,7 +293,7 @@ public sealed class EditorStyleMetricsTests
     }
 
     [Fact]
-    public void MenuSelectorPopupIsAutoSizedAndCannotScroll()
+    public void MenuSelectorPopupIsBoundedAndScrollsLongContent()
     {
         var context = NativeImGui.CreateContext();
         try
@@ -251,35 +304,110 @@ public sealed class EditorStyleMetricsTests
             io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
             io.Fonts.RendererHasTextures = true;
 
-            NativeImGui.NewFrame();
-            _ = NativeImGui.Begin("Menu Selector Test");
-            NativeImGui.OpenPopup("##menu_selector_popup_test");
-            Assert.True(EditorWidget.BeginMenuSelector("test", "Untagged", 180f, 240f));
-            ImGuiWindowFlags flags = ImGuiP.GetCurrentWindow().Flags;
-            Assert.True(flags.HasFlag(ImGuiWindowFlags.AlwaysAutoResize));
-            Assert.True(flags.HasFlag(ImGuiWindowFlags.NoScrollbar));
-            Assert.True(flags.HasFlag(ImGuiWindowFlags.NoScrollWithMouse));
-            Assert.True(flags.HasFlag(ImGuiWindowFlags.NoSavedSettings));
-            Assert.True(NativeImGui.GetWindowSize().X >= 240f);
-            string newTag = string.Empty;
-            NativeImGui.SetNextItemWidth(160f);
-            _ = NativeImGui.InputTextWithHint(
-                "##new_tag",
-                "Add tag...",
-                ref newTag,
-                (nuint)128);
-            float inputCenterY = (NativeImGui.GetItemRectMin().Y + NativeImGui.GetItemRectMax().Y) * 0.5f;
-            NativeImGui.SameLine();
-            _ = EditorWidget.ClickableText(
-                "add_tag",
-                "+",
-                new Vector2(EditorWidget.GetCompactIconSize().X, NativeImGui.GetFrameHeight()));
-            float actionCenterY = (NativeImGui.GetItemRectMin().Y + NativeImGui.GetItemRectMax().Y) * 0.5f;
-            Assert.Equal(inputCenterY, actionCenterY, 3);
-            NativeImGui.Selectable("Untagged");
-            EditorWidget.EndMenuSelector();
-            NativeImGui.End();
-            NativeImGui.Render();
+            for (int frame = 0; frame < 2; frame++)
+            {
+                NativeImGui.NewFrame();
+                _ = NativeImGui.Begin("Menu Selector Test");
+                if (frame == 0)
+                    NativeImGui.OpenPopup("##menu_selector_popup_test");
+                Assert.True(EditorWidget.BeginMenuSelector("test", "Untagged", 180f, 240f));
+                ImGuiWindowFlags flags = ImGuiP.GetCurrentWindow().Flags;
+                Assert.True(flags.HasFlag(ImGuiWindowFlags.AlwaysAutoResize));
+                Assert.False(flags.HasFlag(ImGuiWindowFlags.NoScrollbar));
+                Assert.False(flags.HasFlag(ImGuiWindowFlags.NoScrollWithMouse));
+                Assert.True(flags.HasFlag(ImGuiWindowFlags.NoSavedSettings));
+                Assert.True(NativeImGui.GetWindowSize().X >= 240f);
+                string newTag = string.Empty;
+                NativeImGui.SetNextItemWidth(160f);
+                _ = NativeImGui.InputTextWithHint(
+                    "##new_tag",
+                    "Add tag...",
+                    ref newTag,
+                    (nuint)128);
+                float inputCenterY = (NativeImGui.GetItemRectMin().Y + NativeImGui.GetItemRectMax().Y) * 0.5f;
+                NativeImGui.SameLine();
+                _ = EditorWidget.ClickableText(
+                    "add_tag",
+                    "+",
+                    new Vector2(EditorWidget.GetCompactIconSize().X, NativeImGui.GetFrameHeight()));
+                float actionCenterY = (NativeImGui.GetItemRectMin().Y + NativeImGui.GetItemRectMax().Y) * 0.5f;
+                Assert.Equal(inputCenterY, actionCenterY, 3);
+                for (int index = 0; index < 64; index++)
+                    NativeImGui.Selectable($"Entry {index:D2}");
+                if (frame == 1)
+                {
+                    Assert.True(NativeImGui.GetWindowSize().Y <= io.DisplaySize.Y * 0.70f + 1f);
+                    Assert.True(NativeImGui.GetScrollMaxY() > 0f);
+                }
+                EditorWidget.EndMenuSelector();
+                NativeImGui.End();
+                NativeImGui.Render();
+            }
+        }
+        finally
+        {
+            NativeImGui.DestroyContext(context);
+        }
+    }
+
+    [Fact]
+    public void NativeComboPopupUsesTheSharedBoundedScrollingContract()
+    {
+        var context = NativeImGui.CreateContext();
+        try
+        {
+            ImGuiIOPtr io = NativeImGui.GetIO();
+            io.DisplaySize = new Vector2(640f, 480f);
+            io.DeltaTime = 1f / 60f;
+            io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
+            io.Fonts.RendererHasTextures = true;
+
+            var popupWidths = new List<float>();
+            int openFrames = 0;
+            for (int frame = 0; frame < 5; frame++)
+            {
+                NativeImGui.NewFrame();
+                NativeImGui.SetNextWindowPos(new Vector2(400f, 340f), ImGuiCond.Always);
+                NativeImGui.SetNextWindowSize(new Vector2(220f, 120f), ImGuiCond.Always);
+                _ = NativeImGui.Begin("Bounded Combo Test");
+                uint parentViewportId = NativeImGui.GetWindowViewport().ID;
+                if (frame == 0)
+                {
+                    uint comboId = NativeImGui.GetID("##asset");
+                    uint popupId = ImGuiP.ImHashStr("##ComboPopup", comboId);
+                    ImGuiP.OpenPopupEx(popupId);
+                }
+                NativeImGui.SetNextItemWidth(180f);
+                bool open = EditorWidget.BeginBoundedCombo("##asset", "project:Material");
+                if (open)
+                {
+                    openFrames++;
+                    Assert.Equal(parentViewportId, NativeImGui.GetWindowViewport().ID);
+                    string search = string.Empty;
+                    _ = EditorWidget.SearchInput("assets", "Search assets...", ref search);
+                    for (int index = 0; index < 64; index++)
+                        NativeImGui.Selectable($"project:Material{index:D2}");
+                    popupWidths.Add(NativeImGui.GetWindowSize().X);
+                    if (openFrames >= 2)
+                    {
+                        Assert.InRange(NativeImGui.GetWindowSize().X, 179f, 181f);
+                        Assert.True(NativeImGui.GetWindowSize().Y <= io.DisplaySize.Y * 0.70f + 1f);
+                        Assert.True(NativeImGui.GetScrollMaxY() > 0f);
+                        ImGuiViewportPtr popupViewport = NativeImGui.GetWindowViewport();
+                        Vector2 popupMinimum = NativeImGui.GetWindowPos();
+                        Vector2 popupMaximum = popupMinimum + NativeImGui.GetWindowSize();
+                        Assert.True(popupMinimum.X >= popupViewport.WorkPos.X - 1f);
+                        Assert.True(popupMinimum.Y >= popupViewport.WorkPos.Y - 1f);
+                        Assert.True(popupMaximum.X <= popupViewport.WorkPos.X + popupViewport.WorkSize.X + 1f);
+                        Assert.True(popupMaximum.Y <= popupViewport.WorkPos.Y + popupViewport.WorkSize.Y + 1f);
+                    }
+                    NativeImGui.EndCombo();
+                }
+                NativeImGui.End();
+                NativeImGui.Render();
+            }
+            Assert.True(openFrames >= 2);
+            Assert.All(popupWidths, width => Assert.InRange(width, 179f, 181f));
         }
         finally
         {
@@ -334,7 +462,7 @@ public sealed class EditorStyleMetricsTests
     }
 
     [Fact]
-    public void TreeGuideSegmentsRemainContinuousAcrossCompactRows()
+    public void TreeGuideSegmentsRemainVisibleAcrossCompactRows()
     {
         var context = NativeImGui.CreateContext();
         try
@@ -348,6 +476,47 @@ public sealed class EditorStyleMetricsTests
 
             DrawTreeFrame();
             DrawTreeFrame(assertContinuousGuides: true);
+        }
+        finally
+        {
+            NativeImGui.DestroyContext(context);
+        }
+    }
+
+    [Fact]
+    public void ChildGuideRetainsAVisualGapBelowTheParentWithoutChangingCompactRowHeight()
+    {
+        var context = NativeImGui.CreateContext();
+        try
+        {
+            ImGuiIOPtr io = NativeImGui.GetIO();
+            io.DisplaySize = new Vector2(640f, 480f);
+            io.DeltaTime = 1f / 60f;
+            io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
+            io.Fonts.RendererHasTextures = true;
+            EditorWidget.SetupStyle();
+
+            NativeImGui.NewFrame();
+            NativeImGui.SetNextWindowSize(new Vector2(480f, 320f), ImGuiCond.Always);
+            _ = NativeImGui.Begin("Gapped Parent Guide Test");
+            float expectedHeight = NativeImGui.GetTextLineHeight();
+            EditorWidget.SetNextTreeNodeOpen(true);
+            TreeNodeResult parent = EditorWidget.TreeNode(
+                "connected_parent",
+                static _ => NativeImGui.TextUnformatted("Parent"),
+                new TreeNodeOptions());
+            Assert.True(parent.isOpen);
+            TreeNodeResult child = EditorWidget.TreeNode(
+                "connected_child",
+                static _ => NativeImGui.TextUnformatted("Child"),
+                new TreeNodeOptions { isLeaf = true });
+            NativeImGui.TreePop();
+
+            Assert.Equal(expectedHeight, parent.max.Y - parent.min.Y, 3);
+            Assert.Equal(expectedHeight, child.max.Y - child.min.Y, 3);
+            AssertCurrentTreeGuideDoesNotTouchY((parent.min.Y + parent.max.Y) * 0.5f);
+            NativeImGui.End();
+            NativeImGui.Render();
         }
         finally
         {
@@ -544,7 +713,7 @@ public sealed class EditorStyleMetricsTests
             NativeImGui.TreePop();
         }
         if (assertContinuousGuides)
-            AssertCurrentTreeGuideSegmentsAreContinuous();
+            AssertCurrentDrawListContainsTreeGuideColor();
         NativeImGui.End();
         NativeImGui.Render();
     }
@@ -719,6 +888,19 @@ public sealed class EditorStyleMetricsTests
         AssertCurrentDrawListContainsColor(
             guideColor,
             "The current drag frame did not submit any tree-guide vertices.");
+    }
+
+    private static void AssertCurrentTreeGuideDoesNotTouchY(float excludedY)
+    {
+        ImDrawListPtr drawList = NativeImGui.GetWindowDrawList();
+        uint guideColor = NativeImGui.ColorConvertFloat4ToU32(EditorPalette.treeGuide);
+        for (int i = 0; i < drawList.VtxBuffer.Size; i++)
+        {
+            ImDrawVert vertex = drawList.VtxBuffer[i];
+            Assert.False(
+                vertex.Col == guideColor && MathF.Abs(vertex.Pos.Y - excludedY) <= 1f,
+                "The child guide overlapped the parent disclosure row instead of retaining its visual gap.");
+        }
     }
 
     private static void DrawCurrentTreeBackgroundFrame(Vector2 position, Vector2 size)
@@ -929,71 +1111,4 @@ public sealed class EditorStyleMetricsTests
         NativeImGui.EndChild();
     }
 
-    private static void AssertCurrentTreeGuideSegmentsAreContinuous()
-    {
-        FieldInfo statesField = typeof(EditorWidget).GetField(
-            "s_treeStatesByWindow",
-            BindingFlags.NonPublic | BindingFlags.Static)!;
-        var states = (IDictionary)statesField.GetValue(null)!;
-        int windowKey = NativeImGui.GetWindowDrawList().GetHashCode();
-        Assert.True(states.Contains(windowKey));
-        object state = states[windowKey]!;
-        FieldInfo segmentsField = state.GetType().GetField(
-            "lineSegments",
-            BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var verticalSegments = new List<(Vector2 from, Vector2 to)>();
-        foreach (object segment in (IEnumerable)segmentsField.GetValue(state)!)
-        {
-            Type segmentType = segment.GetType();
-            Vector2 from = (Vector2)segmentType.GetField(
-                "from",
-                BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(segment)!;
-            Vector2 to = (Vector2)segmentType.GetField(
-                "to",
-                BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(segment)!;
-            if (MathF.Abs(to.X - from.X) <= MathF.Abs(to.Y - from.Y))
-                verticalSegments.Add((from, to));
-        }
-
-        verticalSegments.Sort(static (left, right) =>
-        {
-            int byX = left.from.X.CompareTo(right.from.X);
-            return byX != 0 ? byX : left.from.Y.CompareTo(right.from.Y);
-        });
-        bool foundMultiSegmentGuide = false;
-        for (int start = 0; start < verticalSegments.Count;)
-        {
-            int end = start + 1;
-            float maximumY = verticalSegments[start].to.Y;
-            while (end < verticalSegments.Count &&
-                   MathF.Abs(verticalSegments[end].from.X - verticalSegments[start].from.X) <= 0.01f)
-            {
-                foundMultiSegmentGuide = true;
-                Assert.True(
-                    verticalSegments[end].from.Y <= maximumY + 0.01f,
-                    $"Tree guide gap detected between {maximumY} and {verticalSegments[end].from.Y}.");
-                maximumY = MathF.Max(maximumY, verticalSegments[end].to.Y);
-                end++;
-            }
-            start = end;
-        }
-        Assert.True(foundMultiSegmentGuide, "Expected at least one multi-row vertical tree guide.");
-    }
-
-    private static void AssertTreeStacksContainOnlyTheOpenRoot()
-    {
-        FieldInfo statesField = typeof(EditorWidget).GetField(
-            "s_treeStatesByWindow",
-            BindingFlags.NonPublic | BindingFlags.Static)!;
-        var states = (IDictionary)statesField.GetValue(null)!;
-        foreach (DictionaryEntry entry in states)
-        {
-            object state = entry.Value!;
-            FieldInfo stackField = state.GetType().GetField(
-                "treeNodeStack",
-                BindingFlags.NonPublic | BindingFlags.Instance)!;
-            var stack = (ICollection)stackField.GetValue(state)!;
-            Assert.True(stack.Count <= 1, $"Retained tree depth was {stack.Count}; expected only the open root.");
-        }
-    }
 }

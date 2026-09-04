@@ -135,7 +135,32 @@ public sealed class AnimationTemplateMenu : EditorMenuSource
 
 Action 的 `Query` 决定条目是否可见、可用、勾选和动态标题；快捷键标签从 `[EditorShortcut]` 自动生成。
 
+Panel 主菜单使用同一棵层级菜单模型。`EditorPanelAttribute.menuPath` 是 `Panel/` 下的开放分类路径，支持任意斜杠层级；`separatorBefore` 在条目所在分类内开启视觉分组。每次构建菜单时，generated Panel leaf 直接从当前 extension generation 的 `isOpen` 生成 checked 状态，因此勾选与窗口关闭按钮、reload 后恢复状态始终一致。Host 不维护封闭类别枚举，内置 Panel 当前按 Workspace、Viewports、Authoring、Content 与 Diagnostics 分类，Plugin Panel 可以声明自己的稳定分类而无需修改 Editor。
+
 快捷键显示与键盘 dispatch 共用同一个 resolver：先按 action ID、area、target specificity 与 priority 解析实际 registration，再读取它的 gesture。同一 Action 可声明多个不同 gesture，每个都可 dispatch；菜单只显示当前 area 的第一个可用 gesture。精确 area shortcut 存在时会覆盖该 registration 的 global shortcuts。同一 Action 在同一有效 area 重复同一 gesture，或不同 Action 形成同 specificity 歧义，都会在 catalog Build 阶段被拒绝。
+
+## Toolbar
+
+紧凑 icon toolbar 与 Menu 复用同一个 Action resolver，不引入 command service：
+
+```csharp
+[EditorAction("simulation.toggle", "editor/main-menu")]
+[EditorToolbarItem(
+    "editor/main-menu",
+    EditorToolbarIcon.Play,
+    "Start Simulation",
+    activeIcon: EditorToolbarIcon.Stop)]
+public sealed class ToggleSimulationAction : EditorAction
+{
+    protected override EditorActionState Query(EditorActionContext context)
+        => new(true, true, isChecked: Simulation.isRunning);
+
+    protected override void Execute(EditorActionContext context)
+        => Simulation.Toggle();
+}
+```
+
+`EditorInteraction.BuildToolbar()` 返回 immutable `EditorToolbarModel`。每个 `EditorToolbarItem` 包含 `actionId`、解析后的语义 `EditorToolbarIcon`、`tooltip`、`order` 与完整 `EditorActionState`。checked 时使用 `activeIcon`；`displayName` 非空时替代 Attribute 的静态 tooltip。Toolbar Action 必须无 target、无 argument，且 placement area 不能越过 Action 自己的精确 area；重复 placement 会在 candidate Build 时拒绝。表现层只把语义 icon 映射到自己的 glyph，不把 ImGui 字符串带入 Interactions。
 
 ## Selection 与 Focus
 
@@ -148,6 +173,8 @@ if (panelFocused)
 ```
 
 `Select()` 本身走内建 Action，因此和其他操作共享队列与代际规则。`EditorSelectionState` 只公开读取和 `TryGet<T>`，不公开可绕过 Action 的 mutator。
+
+`IEditorSelectionCoordinator` 是给会替换对象实例的 host feature 使用的窄接口，只暴露 `selectedTarget` 与 `SetSelection`。当前 `EditorInteractions` 实现该接口；extension activator 可按此接口注入同一个稳定 interaction instance。普通 Panel 仍应使用 `EditorInteraction.Select()`，只有 Scene generation/Play Mode 这类必须在原子替换期间重绑 persistent identity 的基础设施才依赖 coordinator。
 
 ## Drag and Drop
 
@@ -186,6 +213,8 @@ Editor 正常关闭先捕获和原子写入最终状态，再 Stop Module、Deta
 ## Undo / Redo
 
 `EditorInteractions.history` 向扩展返回 `IEditorHistory`。具体 `EditorHistory`、delegate operation、`RecordValue`、handler-map 更新、Clear/Dispose 都是 host-only internal 能力；脚本只能提交中立 change，不能把 collectible delegate、`Type` 或 runtime object 固定在栈中。稳定记录由下列项组成：
+
+Host workflow 可使用 `EditorInteractions.BeginHistoryIsolation()` 临时切换到空 History 分支。scope 保留进入时完整的 Undo、Redo、fault 状态与 reload-safe payload；scope 内的新记录受同一容量和内存/磁盘预算约束，Dispose 时全部释放并恢复原分支。该入口标记为 `ScriptingApiIgnore`，用于 [Play Mode](Inno.Editor.PlayMode.md) 等可控瞬时会话，不是 EditorScripts 创建任意第二套 Undo 栈的许可。
 
 - `kind`：全局唯一的协议 ID，例如 `animation/state-property`。
 - `payload`：只含 ID、索引、字符串和序列化字节的中立数据。

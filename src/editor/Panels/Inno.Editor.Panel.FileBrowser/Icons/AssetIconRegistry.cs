@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using Inno.Assets.Core;
-using Inno.Core.Reflection;
+using Inno.Assets;
+using Inno.Extensibility.Types;
 using Inno.Editor.Settings;
 
 namespace Inno.Editor.Panel.FileBrowser;
@@ -12,7 +12,8 @@ internal sealed class AssetIconRegistry : TypeRegistry<AssetIconRegistry.Snapsho
 {
     private readonly EditorSettings m_settings;
 
-    internal AssetIconRegistry(EditorSettings settings)
+    internal AssetIconRegistry(EditorSettings settings, TypeCatalog types)
+        : base(types)
     {
         m_settings = settings ?? throw new ArgumentNullException(nameof(settings));
     }
@@ -35,6 +36,15 @@ internal sealed class AssetIconRegistry : TypeRegistry<AssetIconRegistry.Snapsho
         return false;
     }
 
+    /// <summary>
+    /// Builds a validated result from the current immutable input snapshot.
+    /// </summary>
+    /// <param name="types">
+    /// The active type catalog generation used for extension resolution.
+    /// </param>
+    /// <returns>
+    /// The validated snapshot that represents the completed operation.
+    /// </returns>
     protected override Snapshot Build(TypeCacheSnapshot types)
     {
         var typeRegistrations = new List<TypeRegistration>();

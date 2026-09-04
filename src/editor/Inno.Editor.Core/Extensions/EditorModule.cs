@@ -1,6 +1,6 @@
 using System;
 
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
 
 namespace Inno.Editor.Core;
 
@@ -25,7 +25,9 @@ public abstract class EditorModule : IDisposable
     /// <summary>
     /// Starts the module after the containing extension generation becomes active.
     /// </summary>
-    /// <param name="context">The shared editor context for the active runtime.</param>
+    /// <param name="context">
+    /// The shared editor context for the active runtime.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="context"/> is <see langword="null"/>.
     /// </exception>
@@ -49,7 +51,9 @@ public abstract class EditorModule : IDisposable
     /// <summary>
     /// Updates the module once per editor frame before panels and modals are drawn.
     /// </summary>
-    /// <param name="context">The shared editor context containing the current frame state.</param>
+    /// <param name="context">
+    /// The shared editor context containing the current frame state.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="context"/> is <see langword="null"/>.
     /// </exception>
@@ -72,7 +76,9 @@ public abstract class EditorModule : IDisposable
     /// <summary>
     /// Stops the module before the containing extension generation is released.
     /// </summary>
-    /// <param name="context">The shared editor context for the runtime being stopped.</param>
+    /// <param name="context">
+    /// The shared editor context for the runtime being stopped.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="context"/> is <see langword="null"/>.
     /// </exception>
@@ -96,7 +102,9 @@ public abstract class EditorModule : IDisposable
     /// <summary>
     /// Runs after the module generation becomes active and before its first update.
     /// </summary>
-    /// <param name="context">The shared editor context for the active runtime.</param>
+    /// <param name="context">
+    /// The shared editor context for the active runtime.
+    /// </param>
     protected virtual void OnStart(EditorContext context)
     {
     }
@@ -104,7 +112,9 @@ public abstract class EditorModule : IDisposable
     /// <summary>
     /// Runs once per editor frame before views are drawn.
     /// </summary>
-    /// <param name="context">The shared editor context containing the current frame state.</param>
+    /// <param name="context">
+    /// The shared editor context containing the current frame state.
+    /// </param>
     protected virtual void OnUpdate(EditorContext context)
     {
     }
@@ -112,7 +122,9 @@ public abstract class EditorModule : IDisposable
     /// <summary>
     /// Runs before the module generation is released and its disposable instances are destroyed.
     /// </summary>
-    /// <param name="context">The shared editor context for the runtime being stopped.</param>
+    /// <param name="context">
+    /// The shared editor context for the runtime being stopped.
+    /// </param>
     protected virtual void OnStop(EditorContext context)
     {
     }

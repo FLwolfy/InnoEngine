@@ -10,6 +10,9 @@ namespace Inno.Core.Mathematics;
 /// </summary>
 public static class MathHelper
 {
+  /// <summary>
+  /// The c tolerance value used as part of this type's public representation.
+  /// </summary>
   public const float C_TOLERANCE = 1e-6f;
   
   /// <summary>
@@ -17,8 +20,12 @@ public static class MathHelper
   /// using a relative tolerance based on the magnitude of the numbers.
   /// This is useful for comparing floats where rounding errors may occur.
   /// </summary>
-  /// <param name="a">The first float value to compare.</param>
-  /// <param name="b">The second float value to compare.</param>
+  /// <param name="a">
+  /// The first float value to compare.
+  /// </param>
+  /// <param name="b">
+  /// The second float value to compare.
+  /// </param>
   /// <param name="relTolerance">
   /// The relative tolerance allowed between <paramref name="a"/> and <paramref name="b"/>.
   /// Default is 1e-6. The comparison checks if the difference is within
@@ -38,12 +45,24 @@ public static class MathHelper
   /// <summary>
   /// Returns the Cartesian coordinate for one axis of a point that is defined by a given triangle and two normalized barycentric (areal) coordinates.
   /// </summary>
-  /// <param name="value1">The coordinate on one axis of vertex 1 of the defining triangle.</param>
-  /// <param name="value2">The coordinate on the same axis of vertex 2 of the defining triangle.</param>
-  /// <param name="value3">The coordinate on the same axis of vertex 3 of the defining triangle.</param>
-  /// <param name="amount1">The normalized barycentric (areal) coordinate b2, equal to the weighting factor for vertex 2, the coordinate of which is specified in value2.</param>
-  /// <param name="amount2">The normalized barycentric (areal) coordinate b3, equal to the weighting factor for vertex 3, the coordinate of which is specified in value3.</param>
-  /// <returns>Cartesian coordinate of the specified point with respect to the axis being used.</returns>
+  /// <param name="value1">
+  /// The coordinate on one axis of vertex 1 of the defining triangle.
+  /// </param>
+  /// <param name="value2">
+  /// The coordinate on the same axis of vertex 2 of the defining triangle.
+  /// </param>
+  /// <param name="value3">
+  /// The coordinate on the same axis of vertex 3 of the defining triangle.
+  /// </param>
+  /// <param name="amount1">
+  /// The normalized barycentric (areal) coordinate b2, equal to the weighting factor for vertex 2, the coordinate of which is specified in value2.
+  /// </param>
+  /// <param name="amount2">
+  /// The normalized barycentric (areal) coordinate b3, equal to the weighting factor for vertex 3, the coordinate of which is specified in value3.
+  /// </param>
+  /// <returns>
+  /// Cartesian coordinate of the specified point with respect to the axis being used.
+  /// </returns>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static float Barycentric(
     float value1,
@@ -58,12 +77,24 @@ public static class MathHelper
   /// <summary>
   /// Performs a Catmull-Rom interpolation using the specified positions.
   /// </summary>
-  /// <param name="value1">The first position in the interpolation.</param>
-  /// <param name="value2">The second position in the interpolation.</param>
-  /// <param name="value3">The third position in the interpolation.</param>
-  /// <param name="value4">The fourth position in the interpolation.</param>
-  /// <param name="amount">Weighting factor.</param>
-  /// <returns>A position that is the result of the Catmull-Rom interpolation.</returns>
+  /// <param name="value1">
+  /// The first position in the interpolation.
+  /// </param>
+  /// <param name="value2">
+  /// The second position in the interpolation.
+  /// </param>
+  /// <param name="value3">
+  /// The third position in the interpolation.
+  /// </param>
+  /// <param name="value4">
+  /// The fourth position in the interpolation.
+  /// </param>
+  /// <param name="amount">
+  /// Weighting factor.
+  /// </param>
+  /// <returns>
+  /// A position that is the result of the Catmull-Rom interpolation.
+  /// </returns>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static float CatmullRom(
     float value1,
@@ -80,21 +111,39 @@ public static class MathHelper
   /// <summary>
   /// Calculates the absolute value of the difference of two values.
   /// </summary>
-  /// <param name="value1">Source value.</param>
-  /// <param name="value2">Source value.</param>
-  /// <returns>Distance between the two values.</returns>
+  /// <param name="value1">
+  /// Source value.
+  /// </param>
+  /// <returns>
+  /// Distance between the two values.
+  /// </returns>
+  /// <param name="value2">
+  /// The value2 consumed by distance; ownership remains with the caller unless explicitly stated otherwise.
+  /// </param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static float Distance(float value1, float value2) => MathF.Abs(value1 - value2);
 
   /// <summary>
   /// Performs a Hermite spline interpolation.
   /// </summary>
-  /// <param name="value1">Source position.</param>
-  /// <param name="tangent1">Source tangent.</param>
-  /// <param name="value2">Source position.</param>
-  /// <param name="tangent2">Source tangent.</param>
-  /// <param name="amount">Weighting factor.</param>
-  /// <returns>The result of the Hermite spline interpolation.</returns>
+  /// <param name="value1">
+  /// Source position.
+  /// </param>
+  /// <param name="tangent1">
+  /// Source tangent.
+  /// </param>
+  /// <param name="value2">
+  /// Source position.
+  /// </param>
+  /// <param name="tangent2">
+  /// Source tangent.
+  /// </param>
+  /// <param name="amount">
+  /// Weighting factor.
+  /// </param>
+  /// <returns>
+  /// The result of the Hermite spline interpolation.
+  /// </returns>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static float Hermite(
     float value1,
@@ -113,11 +162,21 @@ public static class MathHelper
     return (double) amount != 0.0 ? ((double) amount != 1.0 ? (float) ((2.0 * num1 - 2.0 * num2 + num4 + num3) * num6 + (3.0 * num2 - 3.0 * num1 - 2.0 * num3 - num4) * num7 + num3 * num5 + num1) : value2) : value1;
   }
 
-  /// <summary>Linearly interpolates between two values.</summary>
-  /// <param name="value1">Source value.</param>
-  /// <param name="value2">Destination value.</param>
-  /// <param name="amount">Value between 0 and 1 indicating the weight of value2.</param>
-  /// <returns>Interpolated value.</returns>
+  /// <summary>
+  /// Linearly interpolates between two values.
+  /// </summary>
+  /// <param name="value1">
+  /// Source value.
+  /// </param>
+  /// <param name="value2">
+  /// Destination value.
+  /// </param>
+  /// <param name="amount">
+  /// Value between 0 and 1 indicating the weight of value2.
+  /// </param>
+  /// <returns>
+  /// Interpolated value.
+  /// </returns>
   /// <remarks>This method performs the linear interpolation based on the following formula:
   /// <code>value1 + (value2 - value1) * amount</code>
   /// Passing amount a value of 0 will cause value1 to be returned, a value of 1 will cause value2 to be returned.
@@ -129,7 +188,21 @@ public static class MathHelper
     return value1 + (value2 - value1) * amount;
   }
 
-  /// <summary>Linearly interpolates between two values without clamping the amount.</summary>
+  /// <summary>
+  /// Linearly interpolates between two values without clamping the amount.
+  /// </summary>
+  /// <param name="value1">
+  /// The value1 consumed by lerp unclamped; ownership remains with the caller unless explicitly stated otherwise.
+  /// </param>
+  /// <param name="value2">
+  /// The value2 consumed by lerp unclamped; ownership remains with the caller unless explicitly stated otherwise.
+  /// </param>
+  /// <param name="amount">
+  /// The amount consumed by lerp unclamped; ownership remains with the caller unless explicitly stated otherwise.
+  /// </param>
+  /// <returns>
+  /// The scalar result calculated from the supplied inputs.
+  /// </returns>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static float LerpUnclamped(float value1, float value2, float amount)
   {
@@ -141,10 +214,18 @@ public static class MathHelper
   /// This method is a less efficient, more precise version of <see cref="M:MathHelper.Lerp(System.Single,System.Single,System.Single)" />.
   /// See remarks for more info.
   /// </summary>
-  /// <param name="value1">Source value.</param>
-  /// <param name="value2">Destination value.</param>
-  /// <param name="amount">Value between 0 and 1 indicating the weight of value2.</param>
-  /// <returns>Interpolated value.</returns>
+  /// <param name="value1">
+  /// Source value.
+  /// </param>
+  /// <param name="value2">
+  /// Destination value.
+  /// </param>
+  /// <param name="amount">
+  /// Value between 0 and 1 indicating the weight of value2.
+  /// </param>
+  /// <returns>
+  /// Interpolated value.
+  /// </returns>
   /// <remarks>This method performs the linear interpolation based on the following formula:
   /// <code>((1 - amount) * value1) + (value2 * amount)</code>.
   /// Passing amount a value of 0 will cause value1 to be returned, a value of 1 will cause value2 to be returned.
@@ -165,10 +246,18 @@ public static class MathHelper
   /// <summary>
   /// Interpolates between two values using a cubic equation.
   /// </summary>
-  /// <param name="value1">Source value.</param>
-  /// <param name="value2">Source value.</param>
-  /// <param name="amount">Weighting value.</param>
-  /// <returns>Interpolated value.</returns>
+  /// <param name="value1">
+  /// Source value.
+  /// </param>
+  /// <param name="value2">
+  /// Source value.
+  /// </param>
+  /// <param name="amount">
+  /// Weighting value.
+  /// </param>
+  /// <returns>
+  /// Interpolated value.
+  /// </returns>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static float SmoothStep(float value1, float value2, float amount)
   {
@@ -179,8 +268,12 @@ public static class MathHelper
   /// <summary>
   /// Converts radians to degrees.
   /// </summary>
-  /// <param name="radians">The angle in radians.</param>
-  /// <returns>The angle in degrees.</returns>
+  /// <param name="radians">
+  /// The angle in radians.
+  /// </param>
+  /// <returns>
+  /// The angle in degrees.
+  /// </returns>
   /// <remarks>
   /// This method uses double precision internally,
   /// though it returns single float
@@ -192,33 +285,71 @@ public static class MathHelper
   /// <summary>
   /// Converts degrees to radians.
   /// </summary>
-  /// <param name="degrees">The angle in degrees.</param>
-  /// <returns>The angle in radians.</returns>
+  /// <returns>
+  /// The angle in radians.
+  /// </returns>
   /// <remarks>
   /// This method uses double precision internally,
   /// though it returns single float
   /// Factor = pi / 180
   /// </remarks>
+  /// <param name="degrees">
+  /// The degrees consumed by to radians; ownership remains with the caller unless explicitly stated otherwise.
+  /// </param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static float ToRadians(float degrees) => degrees * ((float) MathF.PI / 180f);
 
-  /// <summary>Clamps a value to the inclusive range [min, max].</summary>
+  /// <summary>
+  /// Clamps a value to the inclusive range [min, max].
+  /// </summary>
+  /// <param name="value">
+  /// The concrete value read or transformed by this operation.
+  /// </param>
+  /// <param name="min">
+  /// The min consumed by clamp; ownership remains with the caller unless explicitly stated otherwise.
+  /// </param>
+  /// <returns>
+  /// The scalar result calculated from the supplied inputs.
+  /// </returns>
+  /// <param name="max">
+  /// The max consumed by clamp; ownership remains with the caller unless explicitly stated otherwise.
+  /// </param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static float Clamp(float value, float min, float max) => Math.Clamp(value, min, max);
 
-  /// <summary>Clamps a value to the inclusive range [0, 1].</summary>
+  /// <summary>
+  /// Clamps a value to the inclusive range [0, 1].
+  /// </summary>
+  /// <returns>
+  /// The scalar result calculated from the supplied inputs.
+  /// </returns>
+  /// <param name="value">
+  /// The concrete value read or transformed by this operation.
+  /// </param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static float Saturate(float value) => Math.Clamp(value, 0f, 1f);
 
-  /// <summary>Returns true if the value is finite (not NaN or infinity).</summary>
+  /// <summary>
+  /// Returns true if the value is finite (not NaN or infinity).
+  /// </summary>
+  /// <returns>
+  /// <see langword="true"/> when the operation succeeds or its condition is satisfied; otherwise, <see langword="false"/>.
+  /// </returns>
+  /// <param name="value">
+  /// The concrete value read or transformed by this operation.
+  /// </param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
   /// <summary>
   /// Reduces a given angle to a value between π and -π.
   /// </summary>
-  /// <param name="angle">The angle to reduce, in radians.</param>
-  /// <returns>The new angle, in radians.</returns>
+  /// <param name="angle">
+  /// The angle to reduce, in radians.
+  /// </param>
+  /// <returns>
+  /// The new angle, in radians.
+  /// </returns>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static float WrapAngle(float angle)
   {
@@ -233,8 +364,12 @@ public static class MathHelper
   /// <summary>
   /// Determines if value is powered by two.
   /// </summary>
-  /// <param name="value">A value.</param>
-  /// <returns><c>true</c> if <c>value</c> is powered by two; otherwise <c>false</c>.</returns>
+  /// <returns>
+  /// <c>true</c> if <c>value</c> is powered by two; otherwise <c>false</c>.
+  /// </returns>
+  /// <param name="value">
+  /// The concrete value read or transformed by this operation.
+  /// </param>
   [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool IsPowerOfTwo(int value) => value > 0 && (value & value - 1) == 0;
 }

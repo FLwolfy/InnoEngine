@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using Inno.Core.Diagnose;
+using Inno.Core.Diagnostics;
 
 namespace Inno.Editor.Interactions;
 
@@ -60,6 +60,9 @@ internal sealed class EditorExtensionDiagnosticPublisher : IDisposable
         m_publishedState = state;
     }
 
+    /// <summary>
+    /// Releases the resources owned by this instance.
+    /// </summary>
     public void Dispose()
     {
         m_panelFailures.Clear();

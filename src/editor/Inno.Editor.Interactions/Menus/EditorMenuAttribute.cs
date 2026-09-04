@@ -2,18 +2,30 @@ using System;
 
 namespace Inno.Editor.Interactions;
 
-/// <summary>Places an editor action at an arbitrary path on a menu surface.</summary>
+/// <summary>
+/// Places an editor action at an arbitrary path on a menu surface.
+/// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class EditorMenuAttribute : Attribute
 {
     /// <summary>
     /// Creates a static placement for the annotated action on an exact menu surface.
     /// </summary>
-    /// <param name="area">The exact interaction area whose menu receives the action.</param>
-    /// <param name="path">The slash-delimited path used to create parent menus and the leaf label.</param>
-    /// <param name="order">The stable ordering value among sibling placements.</param>
-    /// <param name="separatorBefore">Whether a visual separator should precede the leaf placement.</param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="area"/> or <paramref name="path"/> is empty.</exception>
+    /// <param name="area">
+    /// The exact interaction area whose menu receives the action.
+    /// </param>
+    /// <param name="path">
+    /// The slash-delimited path used to create parent menus and the leaf label.
+    /// </param>
+    /// <param name="order">
+    /// The stable ordering value among sibling placements.
+    /// </param>
+    /// <param name="separatorBefore">
+    /// Whether a visual separator should precede the leaf placement.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="area"/> or <paramref name="path"/> is empty.
+    /// </exception>
     public EditorMenuAttribute(
         string area,
         string path,
@@ -30,15 +42,23 @@ public sealed class EditorMenuAttribute : Attribute
         this.separatorBefore = separatorBefore;
     }
 
-    /// <summary>Gets the menu area.</summary>
+    /// <summary>
+    /// Gets the menu area.
+    /// </summary>
     public string area { get; }
 
-    /// <summary>Gets the slash-delimited menu path.</summary>
+    /// <summary>
+    /// Gets the slash-delimited menu path.
+    /// </summary>
     public string path { get; }
 
-    /// <summary>Gets the stable menu ordering value.</summary>
+    /// <summary>
+    /// Gets the stable menu ordering value.
+    /// </summary>
     public int order { get; }
 
-    /// <summary>Gets whether a separator is rendered before the item.</summary>
+    /// <summary>
+    /// Gets whether a separator is rendered before the item.
+    /// </summary>
     public bool separatorBefore { get; }
 }

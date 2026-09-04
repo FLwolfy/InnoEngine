@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using Inno.Core.Logging;
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
 using Inno.Core.Serialization;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
@@ -17,17 +18,28 @@ namespace Inno.Editor.Inspection;
 /// </summary>
 public sealed class SerializedPropertyRenderer
 {
-    private readonly Dictionary<string, string> m_failureStates = new(StringComparer.Ordinal);
+    private readonly ConditionalWeakTable<object, Dictionary<string, string>> m_failureStates = new();
+    private readonly ConditionalWeakTable<object, Dictionary<string, string>> m_textStates = new();
     private readonly PropertyDrawerRegistry m_drawers;
     private readonly EditorInteractions m_interactions;
     private readonly IInspectionPropertyEditService m_edits;
+    private readonly Logger m_logger;
 
     /// <summary>
     /// Creates a serialized property renderer over one drawer registry and feature-owned edit service.
     /// </summary>
-    /// <param name="drawers">The property drawer registry used for runtime type resolution.</param>
-    /// <param name="interactions">The active editor interaction entry point.</param>
-    /// <param name="edits">The feature-owned service used to apply and record property changes.</param>
+    /// <param name="drawers">
+    /// The property drawer registry used for runtime type resolution.
+    /// </param>
+    /// <param name="interactions">
+    /// The active editor interaction entry point.
+    /// </param>
+    /// <param name="edits">
+    /// The feature-owned service used to apply and record property changes.
+    /// </param>
+    /// <param name="logs">
+    /// The host-owned log router used to report isolated drawer failures.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="drawers"/>, <paramref name="interactions"/>, or
     /// <paramref name="edits"/> is <see langword="null"/>.
@@ -36,20 +48,31 @@ public sealed class SerializedPropertyRenderer
     public SerializedPropertyRenderer(
         PropertyDrawerRegistry drawers,
         EditorInteractions interactions,
-        IInspectionPropertyEditService edits)
+        IInspectionPropertyEditService edits,
+        LogRouter logs)
     {
         m_drawers = drawers ?? throw new ArgumentNullException(nameof(drawers));
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
         m_edits = edits ?? throw new ArgumentNullException(nameof(edits));
+        ArgumentNullException.ThrowIfNull(logs);
+        m_logger = logs.CreateLogger<SerializedPropertyRenderer>();
     }
 
     /// <summary>
     /// Draws a root serialized property.
     /// </summary>
-    /// <param name="editorContext">Shared editor context.</param>
-    /// <param name="owner">The live domain object that owns the root property.</param>
-    /// <param name="ownerPath">Stable owner path.</param>
-    /// <param name="property">Serialized property.</param>
+    /// <param name="editorContext">
+    /// Shared editor context.
+    /// </param>
+    /// <param name="owner">
+    /// The live domain object that owns the root property.
+    /// </param>
+    /// <param name="ownerPath">
+    /// Stable owner path.
+    /// </param>
+    /// <param name="property">
+    /// Serialized property.
+    /// </param>
     public void Draw(
         EditorContext editorContext,
         object owner,
@@ -129,22 +152,55 @@ public sealed class SerializedPropertyRenderer
 
     private void DrawContent(PropertyDrawContext context)
     {
+        Dictionary<string, string> failureStates = m_failureStates.GetOrCreateValue(context.owner);
         try
         {
             IPropertyDrawer drawer = m_drawers.Resolve(context.propertyType);
             EditorWidget.Disabled(context.isReadOnly, () => drawer.Draw(context));
-            m_failureStates.Remove(context.path);
+            failureStates.Remove(context.path);
         }
         catch (Exception exception)
         {
             EditorWidget.ColoredText(EditorPalette.error, $"Error: {exception.Message}");
             string failureState = $"{exception.GetType().FullName}|{exception.Message}";
-            if (!m_failureStates.TryGetValue(context.path, out string? previous) ||
+            if (!failureStates.TryGetValue(context.path, out string? previous) ||
                 !string.Equals(previous, failureState, StringComparison.Ordinal))
             {
-                Log.Error("Inspector failed to draw property '{0}': {1}", context.path, exception);
-                m_failureStates[context.path] = failureState;
+                m_logger.Write(
+                    LogLevel.Error,
+                    "Inspector failed to draw property '{0}': {1}",
+                    [context.path, exception]);
+                failureStates[context.path] = failureState;
             }
         }
+    }
+
+    internal bool TryGetTextState(object owner, string path, string key, out string? value)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        value = null;
+        return m_textStates.TryGetValue(owner, out Dictionary<string, string>? states)
+            && states.TryGetValue(CreateStateKey(path, key), out value);
+    }
+
+    internal void SetTextState(object owner, string path, string key, string value)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(value);
+        m_textStates.GetOrCreateValue(owner)[CreateStateKey(path, key)] = value;
+    }
+
+    internal void ClearTextState(object owner, string path, string key)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        if (m_textStates.TryGetValue(owner, out Dictionary<string, string>? states))
+            states.Remove(CreateStateKey(path, key));
+    }
+
+    private static string CreateStateKey(string path, string key)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        return string.Concat(path, "\n", key);
     }
 }

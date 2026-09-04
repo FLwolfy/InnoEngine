@@ -11,7 +11,8 @@ namespace Inno.Editor.Interactions;
 internal sealed class EditorActionRouter(
     EditorExtensionCatalog catalog,
     EditorContext editor,
-    EditorInteractions interactions)
+    EditorInteractions interactions,
+    Logger log)
 {
     private readonly Queue<(string Action, EditorActionContext Context)> m_pending = [];
     private readonly HashSet<string> m_presentationFailures = new(StringComparer.Ordinal);
@@ -33,7 +34,7 @@ internal sealed class EditorActionRouter(
         catch (Exception exception)
         {
             if (m_queryFailures.Add(action))
-                Log.Error("Editor action '{0}' query failed: {1}", action, exception);
+                log.Write(LogLevel.Error, "Editor action '{0}' query failed: {1}", [action, exception]);
             return EditorActionState.disabled;
         }
     }
@@ -56,7 +57,7 @@ internal sealed class EditorActionRouter(
         catch (Exception exception)
         {
             TryCancel(registration.action, action, "execution cleanup");
-            Log.Error("Editor action '{0}' failed: {1}", action, exception);
+            log.Write(LogLevel.Error, "Editor action '{0}' failed: {1}", [action, exception]);
             return false;
         }
     }
@@ -78,7 +79,10 @@ internal sealed class EditorActionRouter(
         {
             TryCancel(registration.action, action, "presentation cleanup");
             if (m_presentationFailures.Add(action))
-                Log.Error("Editor action '{0}' presentation failed: {1}", action, exception);
+                log.Write(
+                    LogLevel.Error,
+                    "Editor action '{0}' presentation failed: {1}",
+                    [action, exception]);
             return false;
         }
     }
@@ -138,10 +142,10 @@ internal sealed class EditorActionRouter(
             }
             catch (Exception exception)
             {
-                Log.Error(
+                log.Write(
+                    LogLevel.Error,
                     "Editor action '{0}' failed while losing presentation focus: {1}",
-                    registration.attribute.action,
-                    exception);
+                    [registration.attribute.action, exception]);
             }
         }
     }
@@ -298,7 +302,7 @@ internal sealed class EditorActionRouter(
             : string.IsNullOrEmpty(shortcut.area));
     }
 
-    private static void TryCancel(EditorAction action, string actionId, string phase)
+    private void TryCancel(EditorAction action, string actionId, string phase)
     {
         try
         {
@@ -306,7 +310,10 @@ internal sealed class EditorActionRouter(
         }
         catch (Exception exception)
         {
-            Log.Error("Editor action '{0}' failed during {1}: {2}", actionId, phase, exception);
+            log.Write(
+                LogLevel.Error,
+                "Editor action '{0}' failed during {1}: {2}",
+                [actionId, phase, exception]);
         }
     }
 

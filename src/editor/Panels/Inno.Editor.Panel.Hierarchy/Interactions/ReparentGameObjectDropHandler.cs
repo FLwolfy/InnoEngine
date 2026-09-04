@@ -5,8 +5,8 @@ using System.Linq;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 using Inno.Editor.Scene;
-using Inno.Engine.Scene;
-using Inno.Engine.Scene.Components;
+using Inno.Scene;
+using Inno.Scene.Components;
 
 namespace Inno.Editor.Panel.Hierarchy;
 
@@ -14,6 +14,15 @@ namespace Inno.Editor.Panel.Hierarchy;
 internal sealed class ReparentGameObjectDropHandler(SceneEdits edits)
     : EditorDrop<GameObject, HierarchyObjectDropTarget>
 {
+    /// <summary>
+    /// Evaluates whether the requested change can be applied to the current generation.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <returns>
+    /// The validated editor drop status that represents the completed operation.
+    /// </returns>
     protected override EditorDropStatus Query(
         EditorDropContext<GameObject, HierarchyObjectDropTarget> context)
     {
@@ -29,6 +38,15 @@ internal sealed class ReparentGameObjectDropHandler(SceneEdits edits)
         });
     }
 
+    /// <summary>
+    /// Validates and applies the current editor drag-and-drop interaction atomically.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
+    /// <returns>
+    /// The validated editor drop result that represents the completed operation.
+    /// </returns>
     protected override EditorDropResult Drop(
         EditorDropContext<GameObject, HierarchyObjectDropTarget> context)
     {
@@ -41,10 +59,10 @@ internal sealed class ReparentGameObjectDropHandler(SceneEdits edits)
             .ToArray();
         _ = edits.ChangeHierarchy(
             source,
-            () =>
+            hierarchy =>
             {
                 if (!ReferenceEquals(source.scene, target.scene))
-                    SceneManager.MoveGameObjectToScene(source, target.scene);
+                    hierarchy.MoveToScene(source, target.scene);
                 ApplyDrop(context, sourceTransform, targetTransform);
             },
             "Reparent GameObject",

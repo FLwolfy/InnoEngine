@@ -7,6 +7,12 @@ internal sealed class UnsupportedPropertyDrawer : IPropertyDrawer
 {
     internal static UnsupportedPropertyDrawer instance { get; } = new();
 
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The operation scope that provides state, services, and ownership boundaries.
+    /// </param>
     public void Draw(PropertyDrawContext context)
     {
         object? value = context.GetValue();

@@ -12,7 +12,7 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 
-namespace Inno.Native.SDL3
+namespace Inno.Native.Sdl3
 {
     [Flags]
     public enum SDLWindowFlags : uint

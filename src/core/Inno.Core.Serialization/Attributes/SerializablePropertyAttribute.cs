@@ -27,7 +27,9 @@ public sealed class SerializablePropertyAttribute : Attribute
     /// <summary>
     /// Initializes a new instance of the <see cref="SerializablePropertyAttribute"/> class.
     /// </summary>
-    /// <param name="visibility">The member visibility in the serialization graph.</param>
+    /// <param name="visibility">
+    /// The member visibility in the serialization graph.
+    /// </param>
     public SerializablePropertyAttribute(PropertyVisibility visibility = PropertyVisibility.Show)
     {
         propertyVisibility = visibility;

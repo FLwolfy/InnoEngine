@@ -1,7 +1,7 @@
 using Xunit;
 using Xunit.Abstractions;
 
-namespace Inno.Native.SDL3.Tests;
+namespace Inno.Native.Sdl3.Tests;
 
 public sealed class Sdl3InitTests
 {

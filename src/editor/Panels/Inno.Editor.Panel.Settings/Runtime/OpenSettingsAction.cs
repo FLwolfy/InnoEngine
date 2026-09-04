@@ -6,7 +6,12 @@ namespace Inno.Editor.Panel.Settings;
 [EditorMenu(SettingsInteractionIds.C_MAIN_MENU_AREA, "Edit/Settings...", order: 1000)]
 internal sealed class OpenSettingsAction(SettingsWindowModule window) : EditorAction
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Applies the editor action to the supplied interaction context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void Execute(EditorActionContext context)
         => window.Open();
 }

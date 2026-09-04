@@ -5,6 +5,15 @@ namespace Inno.Core.Events;
 /// <summary>
 /// Base class for keyboard events.
 /// </summary>
+/// <param name="windowId">
+/// The window id used to initialize this instance.
+/// </param>
+/// <param name="key">
+/// The key used to initialize this instance.
+/// </param>
+/// <param name="modifiers">
+/// The modifiers used to initialize this instance.
+/// </param>
 public abstract class KeyEvent(uint windowId, KeyCode key, KeyModifier modifiers = KeyModifier.None)
     : Event
 {
@@ -27,6 +36,18 @@ public abstract class KeyEvent(uint windowId, KeyCode key, KeyModifier modifiers
 /// <summary>
 /// Raised when a key is pressed.
 /// </summary>
+/// <param name="windowId">
+/// The window id used to initialize this instance.
+/// </param>
+/// <param name="key">
+/// The key used to initialize this instance.
+/// </param>
+/// <param name="modifiers">
+/// The modifiers used to initialize this instance.
+/// </param>
+/// <param name="repeat">
+/// The repeat used to initialize this instance.
+/// </param>
 public class KeyPressedEvent(
     uint windowId,
     KeyCode key,
@@ -43,6 +64,15 @@ public class KeyPressedEvent(
 /// <summary>
 /// Raised when a key is released.
 /// </summary>
+/// <param name="windowId">
+/// The window id used to initialize this instance.
+/// </param>
+/// <param name="key">
+/// The key used to initialize this instance.
+/// </param>
+/// <param name="modifiers">
+/// The modifiers used to initialize this instance.
+/// </param>
 public class KeyReleasedEvent(uint windowId, KeyCode key, KeyModifier modifiers = KeyModifier.None)
     : KeyEvent(windowId, key, modifiers)
 {

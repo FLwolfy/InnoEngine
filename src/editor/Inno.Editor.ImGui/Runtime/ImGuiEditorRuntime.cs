@@ -3,10 +3,13 @@ using System.Collections.Generic;
 using System.Diagnostics;
 
 using Inno.Core.Events;
+using Inno.Core.Logging;
+using Inno.Extensibility.Types;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Editor.Interactions;
+using Inno.Native.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.ImGui;
@@ -22,28 +25,60 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
     private bool m_disposed;
 
     /// <summary>
-    /// Creates an ImGui editor runtime over an existing project context.
+    /// Creates an ImGui editor runtime with stable host-owned extension services.
     /// </summary>
-    /// <param name="context">The shared editor context that owns project settings and frame state.</param>
+    /// <param name="context">
+    /// The shared editor context that owns project settings and frame state.
+    /// </param>
+    /// <param name="types">
+    /// The host-owned type catalog that coordinates extension generations.
+    /// </param>
+    /// <param name="logs">
+    /// The host-owned logging router used by editor infrastructure.
+    /// </param>
+    /// <param name="hostServices">
+    /// Services available to discovered extension constructors.
+    /// </param>
     /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="context"/> is <see langword="null"/>.
+    /// Thrown when <paramref name="context"/>, <paramref name="types"/>, or
+    /// <paramref name="hostServices"/> is <see langword="null"/>.
     /// </exception>
-    public ImGuiEditorRuntime(EditorContext context)
+    public ImGuiEditorRuntime(
+        EditorContext context,
+        TypeCatalog types,
+        LogRouter logs,
+        IEnumerable<object> hostServices)
         : base(context ?? throw new ArgumentNullException(nameof(context)))
     {
-        m_runtime = new EditorInteractionRuntime(context);
+        ArgumentNullException.ThrowIfNull(types);
+        ArgumentNullException.ThrowIfNull(logs);
+        ArgumentNullException.ThrowIfNull(hostServices);
+        ImGuiIOPtr io = NativeImGui.GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags.InnoOverlayScrollbars;
+        m_runtime = new EditorInteractionRuntime(context, types, logs, hostServices);
     }
 
-    /// <summary>Gets the active presentation-independent interaction entry point.</summary>
+    /// <summary>
+    /// Gets the active presentation-independent interaction entry point.
+    /// </summary>
     public EditorInteractions interactions => m_runtime.interactions;
 
-    /// <summary>Gets the number of active dockable panels.</summary>
+    /// <summary>
+    /// Gets the number of active dockable panels.
+    /// </summary>
     public int panelCount => m_runtime.panelCount;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Starts value processing after validating the current state.
+    /// </summary>
     public override void Start() => m_runtime.Start();
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Recomputes owned state from the current validated inputs.
+    /// </summary>
+    /// <param name="frame">
+    /// The frame consumed by update; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     public override void Update(EditorFrame frame) => m_runtime.Update(frame);
 
     /// <summary>
@@ -75,7 +110,9 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
         m_runtime.PrepareShutdown();
     }
 
-    /// <summary>Draws the complete editor frame through ImGui.</summary>
+    /// <summary>
+    /// Draws the complete editor frame through ImGui.
+    /// </summary>
     public void Draw()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -84,7 +121,7 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
         double now = m_timer.Elapsed.TotalSeconds;
         bool blocksInteraction = m_modals.Update(modals, now);
 
-        _ = NativeImGui.DockSpaceOverViewport();
+        DrawDockSpace();
         if (blocksInteraction)
             NativeImGui.BeginDisabled(true);
         try
@@ -105,8 +142,26 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
         m_modals.Draw(context, modals, now);
     }
 
-    /// <summary>Dispatches an unhandled keyboard event through contextual shortcuts.</summary>
-    /// <param name="keyEvent">The keyboard event received from the application event stream.</param>
+    private static void DrawDockSpace()
+    {
+        NativeImGui.PushStyleColor(ImGuiCol.ResizeGripHovered, EditorPalette.accentHovered);
+        NativeImGui.PushStyleColor(ImGuiCol.ResizeGripActive, EditorPalette.accentActive);
+        try
+        {
+            _ = NativeImGui.DockSpaceOverViewport();
+        }
+        finally
+        {
+            NativeImGui.PopStyleColor(2);
+        }
+    }
+
+    /// <summary>
+    /// Dispatches an unhandled keyboard event through contextual shortcuts.
+    /// </summary>
+    /// <param name="keyEvent">
+    /// The keyboard event received from the application event stream.
+    /// </param>
     public void HandleKeyPressed(KeyPressedEvent keyEvent)
     {
         ArgumentNullException.ThrowIfNull(keyEvent);
@@ -115,7 +170,9 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
         m_runtime.HandleKeyPressed(keyEvent);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Releases the resources owned by this implementation.
+    /// </summary>
     public override void Dispose()
     {
         if (m_disposed)
@@ -131,9 +188,14 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
         for (int i = 0; i < panels.Count; i++)
         {
             EditorPanelExtension extension = panels[i];
-            if (!extension.isOpen || !extension.TryGetWindowPadding(out bool useWindowPadding))
+            if (!extension.isOpen || !extension.TryGetWindowPresentation(
+                    out bool useWindowPadding,
+                    out bool allowScrolling))
                 continue;
             bool isOpen = extension.isOpen;
+            ImGuiWindowFlags flags = ImGuiWindowFlags.NoCollapse;
+            if (!allowScrolling)
+                flags |= ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
             EditorWidget.PanelWindow(extension.title, ref isOpen, () =>
             {
                 if (extension.Draw(context) &&
@@ -143,7 +205,7 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
                         $"panel/{extension.id}",
                         interactions.selection.selectedTarget).Focus();
                 }
-            }, useWindowPadding: useWindowPadding);
+            }, flags, useWindowPadding);
             extension.isOpen = isOpen;
         }
     }

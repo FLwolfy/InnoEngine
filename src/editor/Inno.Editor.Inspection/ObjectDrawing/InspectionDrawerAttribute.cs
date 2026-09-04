@@ -26,10 +26,18 @@ public sealed class InspectionDrawerAttribute : Attribute
     /// <summary>
     /// Creates an inspector drawer registration.
     /// </summary>
-    /// <param name="targetType">The selected object type handled by the drawer.</param>
-    /// <param name="useForChildren">Whether the drawer may handle assignable derived target types.</param>
-    /// <param name="priority">The tie-breaking priority after exactness and inheritance distance.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="targetType"/> is <see langword="null"/>.</exception>
+    /// <param name="targetType">
+    /// The selected object type handled by the drawer.
+    /// </param>
+    /// <param name="useForChildren">
+    /// Whether the drawer may handle assignable derived target types.
+    /// </param>
+    /// <param name="priority">
+    /// The tie-breaking priority after exactness and inheritance distance.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="targetType"/> is <see langword="null"/>.
+    /// </exception>
     public InspectionDrawerAttribute(Type targetType, bool useForChildren = false, int priority = 0)
     {
         this.targetType = targetType ?? throw new ArgumentNullException(nameof(targetType));

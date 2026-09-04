@@ -13,11 +13,21 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Publishes an unmanaged drag payload for the most recently submitted item.
     /// </summary>
-    /// <typeparam name="TPayload">Unmanaged payload type.</typeparam>
-    /// <param name="payloadType">Stable ImGui payload type identifier.</param>
-    /// <param name="payload">Payload value.</param>
-    /// <param name="drawPreview">Optional preview drawing callback.</param>
-    /// <returns><see langword="true"/> while the item is an active drag source.</returns>
+    /// <typeparam name="TPayload">
+    /// Unmanaged payload type.
+    /// </typeparam>
+    /// <param name="payloadType">
+    /// Stable ImGui payload type identifier.
+    /// </param>
+    /// <param name="payload">
+    /// Payload value.
+    /// </param>
+    /// <param name="drawPreview">
+    /// Optional preview drawing callback.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> while the item is an active drag source.
+    /// </returns>
     public static bool DragDropSource<TPayload>(
         string payloadType,
         in TPayload payload,
@@ -39,11 +49,21 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Publishes a lazily created unmanaged drag payload for the most recently submitted item.
     /// </summary>
-    /// <typeparam name="TPayload">Unmanaged payload type.</typeparam>
-    /// <param name="payloadType">Stable ImGui payload type identifier.</param>
-    /// <param name="payloadFactory">Creates the payload only after dragging starts.</param>
-    /// <param name="drawPreview">Optional preview drawing callback.</param>
-    /// <returns><see langword="true"/> while the item is an active drag source.</returns>
+    /// <typeparam name="TPayload">
+    /// Unmanaged payload type.
+    /// </typeparam>
+    /// <param name="payloadType">
+    /// Stable ImGui payload type identifier.
+    /// </param>
+    /// <param name="payloadFactory">
+    /// Creates the payload only after dragging starts.
+    /// </param>
+    /// <param name="drawPreview">
+    /// Optional preview drawing callback.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> while the item is an active drag source.
+    /// </returns>
     public static bool DragDropSource<TPayload>(
         string payloadType,
         Func<TPayload> payloadFactory,
@@ -67,10 +87,18 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Accepts an unmanaged payload on the most recently submitted item.
     /// </summary>
-    /// <typeparam name="TPayload">Unmanaged payload type.</typeparam>
-    /// <param name="payloadType">Stable ImGui payload type identifier.</param>
-    /// <param name="payload">Delivered payload value.</param>
-    /// <returns><see langword="true"/> only when a compatible payload is delivered.</returns>
+    /// <typeparam name="TPayload">
+    /// Unmanaged payload type.
+    /// </typeparam>
+    /// <param name="payloadType">
+    /// Stable ImGui payload type identifier.
+    /// </param>
+    /// <param name="payload">
+    /// Delivered payload value.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> only when a compatible payload is delivered.
+    /// </returns>
     public static bool DragDropTarget<TPayload>(string payloadType, out TPayload payload)
         where TPayload : unmanaged
     {
@@ -80,11 +108,21 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Accepts an unmanaged payload and reports its preview state on the most recently submitted item.
     /// </summary>
-    /// <typeparam name="TPayload">Unmanaged payload type.</typeparam>
-    /// <param name="payloadType">Stable ImGui payload type identifier.</param>
-    /// <param name="payload">Previewed or delivered payload value.</param>
-    /// <param name="isPreviewing">Whether a compatible payload is hovering over the target.</param>
-    /// <returns><see langword="true"/> only when a compatible payload is delivered.</returns>
+    /// <typeparam name="TPayload">
+    /// Unmanaged payload type.
+    /// </typeparam>
+    /// <param name="payloadType">
+    /// Stable ImGui payload type identifier.
+    /// </param>
+    /// <param name="payload">
+    /// Previewed or delivered payload value.
+    /// </param>
+    /// <param name="isPreviewing">
+    /// Whether a compatible payload is hovering over the target.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> only when a compatible payload is delivered.
+    /// </returns>
     public static bool DragDropTarget<TPayload>(
         string payloadType,
         out TPayload payload,
@@ -97,12 +135,24 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Accepts an unmanaged payload and controls whether ImGui draws its default target rectangle.
     /// </summary>
-    /// <typeparam name="TPayload">Unmanaged payload type.</typeparam>
-    /// <param name="payloadType">Stable ImGui payload type identifier.</param>
-    /// <param name="payload">Previewed or delivered payload value.</param>
-    /// <param name="isPreviewing">Whether a compatible payload is hovering over the target.</param>
-    /// <param name="drawDefaultHighlight">Whether ImGui draws its default target rectangle.</param>
-    /// <returns><see langword="true"/> only when a compatible payload is delivered.</returns>
+    /// <typeparam name="TPayload">
+    /// Unmanaged payload type.
+    /// </typeparam>
+    /// <param name="payloadType">
+    /// Stable ImGui payload type identifier.
+    /// </param>
+    /// <param name="payload">
+    /// Previewed or delivered payload value.
+    /// </param>
+    /// <param name="isPreviewing">
+    /// Whether a compatible payload is hovering over the target.
+    /// </param>
+    /// <param name="drawDefaultHighlight">
+    /// Whether ImGui draws its default target rectangle.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> only when a compatible payload is delivered.
+    /// </returns>
     public static bool DragDropTarget<TPayload>(
         string payloadType,
         out TPayload payload,

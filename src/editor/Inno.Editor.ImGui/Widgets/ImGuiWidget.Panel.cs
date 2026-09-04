@@ -1,9 +1,9 @@
 using System;
 using System.Numerics;
 
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
 using Inno.Native.ImGui;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.ImGui.ImGuiWidget;
@@ -16,11 +16,21 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Opens a standard panel window and executes panel body.
     /// </summary>
-    /// <param name="title">Window title.</param>
-    /// <param name="isOpen">Visible state.</param>
-    /// <param name="drawBody">Panel body callback.</param>
-    /// <param name="flags">Window flags.</param>
-    /// <param name="useWindowPadding">Whether the panel body should use the current standard window padding.</param>
+    /// <param name="title">
+    /// Window title.
+    /// </param>
+    /// <param name="isOpen">
+    /// Visible state.
+    /// </param>
+    /// <param name="drawBody">
+    /// Panel body callback.
+    /// </param>
+    /// <param name="flags">
+    /// Window flags.
+    /// </param>
+    /// <param name="useWindowPadding">
+    /// Whether the panel body should use the current standard window padding.
+    /// </param>
     [ScriptingApiIgnore]
     public static void PanelWindow(
         string title,
@@ -70,8 +80,12 @@ public static partial class ImGuiWidget
     /// Draws a vertically auto-sized content region that is constrained to the current available
     /// width and cannot create an independent scroll range.
     /// </summary>
-    /// <param name="id">Stable identifier used by ImGui to track the content region.</param>
-    /// <param name="drawContent">Callback that draws the complete region contents.</param>
+    /// <param name="id">
+    /// Stable identifier used by ImGui to track the content region.
+    /// </param>
+    /// <param name="drawContent">
+    /// Callback that draws the complete region contents.
+    /// </param>
     /// <param name="useWindowPadding">
     /// Whether the region should apply the centralized standard window padding exactly once.
     /// </param>
@@ -161,10 +175,10 @@ public static partial class ImGuiWidget
                 hovered,
                 held);
 
-            if (hovered && NativeImGui.BeginTooltip())
+            if (hovered && BeginMenuTooltip())
             {
                 NativeImGui.TextUnformatted($"Close {title}");
-                NativeImGui.EndTooltip();
+                EndMenuTooltip();
             }
 
             return pressed;
@@ -178,7 +192,9 @@ public static partial class ImGuiWidget
     /// <summary>
     /// Draws a disabled hint text line.
     /// </summary>
-    /// <param name="text">Hint text.</param>
+    /// <param name="text">
+    /// Hint text.
+    /// </param>
     public static void Hint(string text)
     {
         NativeImGui.BeginDisabled(true);

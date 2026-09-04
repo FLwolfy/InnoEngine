@@ -1,10 +1,10 @@
 using Inno.Core.Identity;
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
 
 [assembly: ScriptingApiNamespace(
     "InnoEngine.Core",
     "Inno.Core.Identity",
     ScriptingApiScope.Runtime)]
 
-[assembly: ScriptingApiExport(typeof(IIdentityObject), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(IdentityObject), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(Identity), ScriptingApiScope.Runtime)]

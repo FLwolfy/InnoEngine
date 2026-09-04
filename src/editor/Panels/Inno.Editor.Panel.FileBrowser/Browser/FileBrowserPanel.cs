@@ -1,16 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Numerics;
 
 using Inno.Assets;
-using Inno.Assets.File;
+using Inno.Assets.Pipeline;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Native.ImGui;
-using Inno.Platform.ImGui;
+using Inno.Platform.Sdl3.ImGui;
 using static Inno.Editor.Panel.FileBrowser.FileBrowserUtility;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
@@ -19,7 +20,7 @@ namespace Inno.Editor.Panel.FileBrowser;
 /// <summary>
 /// Asset browser panel with a tree pane and filtered table view.
 /// </summary>
-[EditorPanel("asset.file-browser", "File", order: 300)]
+[EditorPanel("asset.file-browser", "File", order: 300, menuPath: "Content")]
 internal sealed class FileBrowserPanel : EditorPanel
 {
     #region Constants
@@ -57,7 +58,12 @@ internal sealed class FileBrowserPanel : EditorPanel
 
     #endregion
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Captures an immutable snapshot of the current observable state.
+    /// </summary>
+    /// <param name="state">
+    /// The lifecycle or domain state applied by this operation.
+    /// </param>
     protected override void Capture(EditorState state)
     {
         state.Set("viewMode", m_viewMode.ToString());
@@ -70,7 +76,12 @@ internal sealed class FileBrowserPanel : EditorPanel
         state.Set("listTypeSeparator", m_listTypeSeparatorPosition);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Restores the supplied snapshot while preserving current invariants.
+    /// </summary>
+    /// <param name="state">
+    /// The lifecycle or domain state applied by this operation.
+    /// </param>
     protected override void Restore(EditorState state)
     {
         if (Enum.TryParse(state.Get("viewMode", string.Empty), out ViewMode viewMode))
@@ -123,74 +134,121 @@ internal sealed class FileBrowserPanel : EditorPanel
             assets);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Attaches this feature to its owning runtime generation.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnAttach(EditorContext context)
     {
         m_changeTracker.Attach(context);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Detaches this feature and releases generation-scoped state.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnDetach(EditorContext context)
     {
         m_changeTracker.Detach();
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Draws this feature using the current editor presentation context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnDraw(EditorContext context)
     {
         m_rename.Update(context);
         PushBrowserStyle();
-        DrawBrowser(context);
-        PopBrowserStyle();
+        try
+        {
+            DrawBrowser(context);
+        }
+        finally
+        {
+            PopBrowserStyle();
+        }
     }
     #endregion
 
     #region Layout
     private void DrawBrowser(EditorContext context)
     {
-        m_navigation.SyncExternalDirectoryChange(m_assets.browser.currentDirectory);
+        m_navigation.SyncExternalDirectoryChange(
+            m_assets.browser.root,
+            m_assets.browser.currentDirectory);
 
         ImGuiStylePtr style = NativeImGui.GetStyle();
-        float breadcrumbBarHeight = GetBreadcrumbBarHeight(m_assets.browser.currentDirectory);
+        float breadcrumbBarHeight = GetBreadcrumbBarHeight(
+            m_assets.browser.root,
+            m_assets.browser.currentDirectory);
         Vector2 bodySize = new(0f, -(breadcrumbBarHeight + style.ItemSpacing.Y));
-        if (NativeImGui.BeginChild("##FileBrowserMain", bodySize, ImGuiChildFlags.None, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+        bool mainVisible = NativeImGui.BeginChild(
+            "##FileBrowserMain",
+            bodySize,
+            ImGuiChildFlags.None,
+            ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+        try
         {
-            ImGuiTableFlags splitFlags =
-                ImGuiTableFlags.NoPadOuterX |
-                ImGuiTableFlags.NoKeepColumnsVisible |
-                ImGuiTableFlags.SizingFixedFit |
-                ImGuiTableFlags.NoSavedSettings;
-
-            float splitterWidth = GetTreeSplitterWidth(style);
-            float availableWidth = MathF.Max(0f, NativeImGui.GetContentRegionAvail().X);
-            float treeWidth = ResolveTreeWidth(
-                m_treePaneRatio,
-                availableWidth,
-                splitterWidth);
-            NativeImGui.PushStyleVar(ImGuiStyleVar.CellPadding, Vector2.Zero);
-            if (NativeImGui.BeginTable("##FileBrowserSplit", 3, splitFlags))
+            if (mainVisible)
             {
-                NativeImGui.TableSetupColumn("##Tree", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize, treeWidth);
-                NativeImGui.TableSetupColumn("##Splitter", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize, splitterWidth);
-                NativeImGui.TableSetupColumn("##Content", ImGuiTableColumnFlags.WidthStretch);
+                ImGuiTableFlags splitFlags =
+                    ImGuiTableFlags.NoPadOuterX |
+                    ImGuiTableFlags.NoKeepColumnsVisible |
+                    ImGuiTableFlags.SizingFixedFit |
+                    ImGuiTableFlags.NoSavedSettings;
 
-                NativeImGui.TableNextRow();
-                _ = NativeImGui.TableSetColumnIndex(0);
-                DrawTreePane(context);
+                float splitterWidth = GetTreeSplitterWidth(style);
+                float availableWidth = MathF.Max(0f, NativeImGui.GetContentRegionAvail().X);
+                float treeWidth = ResolveTreeWidth(
+                    m_treePaneRatio,
+                    availableWidth,
+                    splitterWidth);
+                NativeImGui.PushStyleVar(ImGuiStyleVar.CellPadding, Vector2.Zero);
+                try
+                {
+                    bool splitStarted = NativeImGui.BeginTable("##FileBrowserSplit", 3, splitFlags);
+                    try
+                    {
+                        if (splitStarted)
+                        {
+                            NativeImGui.TableSetupColumn("##Tree", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize, treeWidth);
+                            NativeImGui.TableSetupColumn("##Splitter", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize, splitterWidth);
+                            NativeImGui.TableSetupColumn("##Content", ImGuiTableColumnFlags.WidthStretch);
 
-                _ = NativeImGui.TableSetColumnIndex(1);
-                DrawTreeSplitter(splitterWidth, availableWidth, treeWidth);
+                            NativeImGui.TableNextRow();
+                            _ = NativeImGui.TableSetColumnIndex(0);
+                            DrawTreePane(context);
 
-                _ = NativeImGui.TableSetColumnIndex(2);
-                DrawContentPane(context);
+                            _ = NativeImGui.TableSetColumnIndex(1);
+                            DrawTreeSplitter(splitterWidth, availableWidth, treeWidth);
 
-                NativeImGui.EndTable();
+                            _ = NativeImGui.TableSetColumnIndex(2);
+                            DrawContentPane(context);
+                        }
+                    }
+                    finally
+                    {
+                        if (splitStarted)
+                            NativeImGui.EndTable();
+                    }
+                }
+                finally
+                {
+                    NativeImGui.PopStyleVar();
+                }
             }
-
-            NativeImGui.PopStyleVar();
         }
-
-        NativeImGui.EndChild();
+        finally
+        {
+            NativeImGui.EndChild();
+        }
         DrawBreadcrumbBar(context, breadcrumbBarHeight);
     }
 
@@ -271,43 +329,122 @@ internal sealed class FileBrowserPanel : EditorPanel
     private void DrawTreePane(EditorContext context)
     {
         NativeImGui.PushStyleColor(ImGuiCol.ChildBg, EditorPalette.collectionHeader);
-        ImGuiStylePtr style = NativeImGui.GetStyle();
-        Vector2 treePaneSize = new(-style.WindowPadding.X, 0f);
-        if (NativeImGui.BeginChild(
+        try
+        {
+            ImGuiStylePtr style = NativeImGui.GetStyle();
+            Vector2 treePaneSize = new(-style.WindowPadding.X, 0f);
+            bool treeVisible = NativeImGui.BeginChild(
                 "##TreePane",
                 treePaneSize,
                 ImGuiChildFlags.None,
-                ImGuiWindowFlags.HorizontalScrollbar))
-        {
-            m_tree.PrepareOpenRequests(context);
-            m_tree.DrawEntry(context, string.Empty, "Assets", true);
-            m_tree.ClearOpenRequests();
-            HandleBackgroundSelection(context);
-            m_contextMenu.DrawBackground(
-                context,
-                "##asset_tree_background_context",
-                FileBrowserPresentation.Tree);
+                ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+            try
+            {
+                if (treeVisible)
+                {
+                    float footerHeight = NativeImGui.GetFrameHeight() +
+                                         style.WindowPadding.Y * 2f +
+                                         style.ItemSpacing.Y;
+                    bool treeScrollVisible = NativeImGui.BeginChild(
+                        "##TreeScroll",
+                        new Vector2(0f, -footerHeight),
+                        ImGuiChildFlags.None,
+                        ImGuiWindowFlags.HorizontalScrollbar);
+                    try
+                    {
+                        if (treeScrollVisible)
+                        {
+                            m_tree.PrepareOpenRequests();
+                            try
+                            {
+                                if (m_assets.browser.root == AssetBrowserRoot.Assets)
+                                    m_tree.DrawEntry(context, string.Empty, "Assets", true);
+                                else
+                                    m_tree.DrawPluginRoot(context, m_assets.pipeline.sourceMounts);
+                            }
+                            finally
+                            {
+                                m_tree.ClearOpenRequests();
+                            }
+                            HandleBackgroundSelection(context);
+                            m_contextMenu.DrawBackground(
+                                context,
+                                "##asset_tree_background_context",
+                                FileBrowserPresentation.Tree);
+                        }
+                    }
+                    finally
+                    {
+                        NativeImGui.EndChild();
+                    }
+                    DrawRootSwitchFooter(context);
+                }
+            }
+            finally
+            {
+                NativeImGui.EndChild();
+            }
+            if (!IsReadOnlyLocation(m_assets.pipeline, m_assets.browser))
+                m_dragDrop.DrawDirectoryTarget(context, m_assets.browser.currentDirectory);
         }
+        finally
+        {
+            NativeImGui.PopStyleColor();
+        }
+    }
 
-        NativeImGui.EndChild();
-        m_dragDrop.DrawDirectoryTarget(context, string.Empty);
-        NativeImGui.PopStyleColor();
+    private void DrawRootSwitchFooter(EditorContext context)
+    {
+        AssetBrowserRoot nextRoot = m_assets.browser.root == AssetBrowserRoot.Assets
+            ? AssetBrowserRoot.Plugins
+            : AssetBrowserRoot.Assets;
+        DrawFooterTopSplitter();
+        PushButtonColors(EditorPalette.assetAccent);
+        try
+        {
+            if (NativeImGui.Button($"Switch to {nextRoot}##FileBrowserRoot", new Vector2(-1f, 0f)))
+            {
+                m_tree.RequestOpenRoot();
+                m_navigation.SwitchRoot(context, nextRoot);
+            }
+        }
+        finally
+        {
+            NativeImGui.PopStyleColor(3);
+        }
     }
 
     private void DrawContentPane(EditorContext context)
     {
         NativeImGui.PushStyleColor(ImGuiCol.ChildBg, EditorPalette.collectionHeader);
-        if (NativeImGui.BeginChild("##ContentPane", Vector2.Zero, ImGuiChildFlags.None, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+        try
         {
-            DrawToolbar(context);
-            DrawEntriesRegion(
-                context,
-                m_data.CollectVisibleEntries(context, m_entryTypeFilter, m_entryScopeFilter, m_filter));
+            bool contentVisible = NativeImGui.BeginChild(
+                "##ContentPane",
+                Vector2.Zero,
+                ImGuiChildFlags.None,
+                ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+            try
+            {
+                if (contentVisible)
+                {
+                    DrawToolbar(context);
+                    DrawEntriesRegion(
+                        context,
+                        m_data.CollectVisibleEntries(context, m_entryTypeFilter, m_entryScopeFilter, m_filter));
+                }
+            }
+            finally
+            {
+                NativeImGui.EndChild();
+            }
+            if (!IsReadOnlyLocation(m_assets.pipeline, m_assets.browser))
+                m_dragDrop.DrawDirectoryTarget(context, m_assets.browser.currentDirectory);
         }
-
-        NativeImGui.EndChild();
-        m_dragDrop.DrawDirectoryTarget(context, m_assets.browser.currentDirectory);
-        NativeImGui.PopStyleColor();
+        finally
+        {
+            NativeImGui.PopStyleColor();
+        }
     }
     #endregion
 
@@ -346,7 +483,7 @@ internal sealed class FileBrowserPanel : EditorPanel
         NativeImGui.SameLine(0f, EditorWidget.style.assetToolbarSectionSpacing);
 
         NativeImGui.PushStyleColor(ImGuiCol.Text, EditorPalette.assetText);
-        NativeImGui.TextUnformatted(GetDirectoryLabel(current));
+        NativeImGui.TextUnformatted(GetDirectoryLabel(m_assets.browser.root, current));
         NativeImGui.PopStyleColor();
 
         NativeImGui.PopStyleVar();
@@ -372,7 +509,10 @@ internal sealed class FileBrowserPanel : EditorPanel
 
     private void DrawEntryFilterCombo()
     {
-        if (!NativeImGui.BeginCombo("##AssetEntryFilter", "Filter", ImGuiComboFlags.WidthFitPreview))
+        if (!EditorWidget.BeginBoundedCombo(
+                "##AssetEntryFilter",
+                "Filter",
+                ImGuiComboFlags.WidthFitPreview))
             return;
 
         DrawEntryTypeFilterOption("All", FileBrowserEntryTypeFilter.All);
@@ -409,7 +549,9 @@ internal sealed class FileBrowserPanel : EditorPanel
         }
     }
 
-    private void DrawEntriesRegion(EditorContext context, IReadOnlyList<AssetFileEntry> entries)
+    private void DrawEntriesRegion(
+        EditorContext context,
+        IReadOnlyList<FileBrowserDisplayEntry> entries)
     {
         if (m_viewMode == ViewMode.List)
         {
@@ -420,36 +562,58 @@ internal sealed class FileBrowserPanel : EditorPanel
         DrawGridRegion(context, entries);
     }
 
-    private void DrawListRegion(EditorContext context, IReadOnlyList<AssetFileEntry> entries)
+    private void DrawListRegion(
+        EditorContext context,
+        IReadOnlyList<FileBrowserDisplayEntry> entries)
     {
-        if (NativeImGui.BeginChild("##EntriesScroll", Vector2.Zero, ImGuiChildFlags.None))
+        bool entriesVisible = NativeImGui.BeginChild(
+            "##EntriesScroll",
+            Vector2.Zero,
+            ImGuiChildFlags.None);
+        try
         {
-            DrawEntriesTable(context, entries, m_assets.browser.currentDirectory);
-            HandleBackgroundSelection(context);
-            m_contextMenu.DrawBackground(
-                context,
-                "##asset_list_background_context",
-                FileBrowserPresentation.List);
+            if (entriesVisible)
+            {
+                DrawEntriesTable(context, entries, m_assets.browser.currentDirectory);
+                HandleBackgroundSelection(context);
+                m_contextMenu.DrawBackground(
+                    context,
+                    "##asset_list_background_context",
+                    FileBrowserPresentation.List);
+            }
         }
-
-        NativeImGui.EndChild();
+        finally
+        {
+            NativeImGui.EndChild();
+        }
     }
 
-    private void DrawGridRegion(EditorContext context, IReadOnlyList<AssetFileEntry> entries)
+    private void DrawGridRegion(
+        EditorContext context,
+        IReadOnlyList<FileBrowserDisplayEntry> entries)
     {
         ImGuiStylePtr style = NativeImGui.GetStyle();
         float sliderHeight = NativeImGui.GetFrameHeight() + style.WindowPadding.Y * 2f + style.ItemSpacing.Y;
-        if (NativeImGui.BeginChild("##EntriesScroll", new Vector2(0f, -sliderHeight), ImGuiChildFlags.None))
+        bool entriesVisible = NativeImGui.BeginChild(
+            "##EntriesScroll",
+            new Vector2(0f, -sliderHeight),
+            ImGuiChildFlags.None);
+        try
         {
-            DrawGrid(context, entries);
-            HandleBackgroundSelection(context);
-            m_contextMenu.DrawBackground(
-                context,
-                "##asset_grid_background_context",
-                FileBrowserPresentation.Grid);
+            if (entriesVisible)
+            {
+                DrawGrid(context, entries);
+                HandleBackgroundSelection(context);
+                m_contextMenu.DrawBackground(
+                    context,
+                    "##asset_grid_background_context",
+                    FileBrowserPresentation.Grid);
+            }
         }
-
-        NativeImGui.EndChild();
+        finally
+        {
+            NativeImGui.EndChild();
+        }
         DrawGridScaleSlider();
     }
 
@@ -468,7 +632,7 @@ internal sealed class FileBrowserPanel : EditorPanel
     private void DrawGridScaleSlider()
     {
         m_gridScale = Math.Clamp(m_gridScale, EditorWidget.style.assetGridMinimumScale, EditorWidget.style.assetGridMaximumScale);
-        DrawGridScaleTopSplitter();
+        DrawFooterTopSplitter();
         Vector2 cursor = NativeImGui.GetCursorPos();
         float labelOffsetY = MathF.Max(0f, (NativeImGui.GetFrameHeight() - NativeImGui.GetTextLineHeight()) * 0.5f);
         NativeImGui.SetCursorPosY(cursor.Y + labelOffsetY);
@@ -480,7 +644,7 @@ internal sealed class FileBrowserPanel : EditorPanel
         m_gridScale = Math.Clamp(m_gridScale, EditorWidget.style.assetGridMinimumScale, EditorWidget.style.assetGridMaximumScale);
     }
 
-    private static void DrawGridScaleTopSplitter()
+    private static void DrawFooterTopSplitter()
     {
         ImGuiStylePtr style = NativeImGui.GetStyle();
         Vector2 cursor = NativeImGui.GetCursorScreenPos();
@@ -495,7 +659,10 @@ internal sealed class FileBrowserPanel : EditorPanel
         NativeImGui.SetCursorPosY(NativeImGui.GetCursorPosY() + style.WindowPadding.Y * 2f);
     }
 
-    private void DrawEntriesTable(EditorContext context, IReadOnlyList<AssetFileEntry> entries, string currentDirectory)
+    private void DrawEntriesTable(
+        EditorContext context,
+        IReadOnlyList<FileBrowserDisplayEntry> entries,
+        string currentDirectory)
     {
         ImGuiTableFlags flags =
             ImGuiTableFlags.RowBg |
@@ -507,56 +674,76 @@ internal sealed class FileBrowserPanel : EditorPanel
         Vector2 tableOrigin = NativeImGui.GetCursorScreenPos();
         Vector2 tableSize = NativeImGui.GetContentRegionAvail();
         NativeImGui.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(style.WindowPadding.X, style.CellPadding.Y));
-        if (!NativeImGui.BeginTable("##FileBrowserEntries", 3, flags, new Vector2(0f, 0f)))
+        try
         {
+            bool tableStarted = NativeImGui.BeginTable(
+                "##FileBrowserEntries",
+                3,
+                flags,
+                new Vector2(0f, 0f));
+            if (!tableStarted)
+            {
+                NativeImGui.Dummy(Vector2.Zero);
+                return;
+            }
+            try
+            {
+                NativeImGui.TableSetupColumn(
+                    "Name",
+                    ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoResize,
+                    m_listNameSeparatorPosition);
+                NativeImGui.TableSetupColumn(
+                    "Type",
+                    ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoResize,
+                    m_listTypeSeparatorPosition - m_listNameSeparatorPosition);
+                NativeImGui.TableSetupColumn(
+                    "Source",
+                    ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoResize,
+                    1f - m_listTypeSeparatorPosition);
+                DrawHeaderRow();
+
+                uint rowBg = NativeImGui.ColorConvertFloat4ToU32(EditorPalette.collectionRow);
+                uint rowAltBg = NativeImGui.ColorConvertFloat4ToU32(EditorPalette.collectionRowAlternate);
+                float entryRowHeight = NativeImGui.GetTextLineHeight() + style.CellPadding.Y * 2f;
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    FileBrowserDisplayEntry item = entries[i];
+                    AssetFileEntry entry = item.entry;
+                    if (i > 0)
+                        NativeImGui.TableNextRow(ImGuiTableRowFlags.None, EditorWidget.style.assetListRowSpacing);
+                    NativeImGui.TableNextRow(ImGuiTableRowFlags.None, entryRowHeight);
+                    NativeImGui.TableSetBgColor(
+                        ImGuiTableBgTarget.RowBg0,
+                        i % 2 == 0 ? rowBg : rowAltBg);
+
+                    DrawNameCell(context, item);
+                    DrawTextCell(item.isPluginRoot ? "IPLUGIN" : GetTypeText(entry), EditorPalette.assetText);
+                    DrawTextCell(
+                        item.isPluginRoot
+                            ? "~"
+                            : GetSourceText(entry, currentDirectory),
+                        EditorPalette.assetText);
+                }
+            }
+            finally
+            {
+                NativeImGui.EndTable();
+            }
+
+            Vector2 tableEnd = NativeImGui.GetCursorScreenPos();
+            float tableHeight = MathF.Max(1f, tableEnd.Y - tableOrigin.Y);
+            var interactionSize = new Vector2(tableSize.X, tableHeight);
+            ListColumnSeparatorState separators = HandleListColumnSeparators(tableOrigin, interactionSize);
+            DrawListColumnSeparators(tableOrigin, tableSize.X, tableHeight, separators);
+            NativeImGui.SetCursorScreenPos(tableEnd);
+            // Commit the restored layout cursor so overlay separator hit targets cannot implicitly
+            // extend the scrolling child when UI scaling changes their physical bounds.
             NativeImGui.Dummy(Vector2.Zero);
-            NativeImGui.PopStyleVar();
-            return;
         }
-
-        NativeImGui.TableSetupColumn(
-            "Name",
-            ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoResize,
-            m_listNameSeparatorPosition);
-        NativeImGui.TableSetupColumn(
-            "Type",
-            ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoResize,
-            m_listTypeSeparatorPosition - m_listNameSeparatorPosition);
-        NativeImGui.TableSetupColumn(
-            "Source",
-            ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoResize,
-            1f - m_listTypeSeparatorPosition);
-        DrawHeaderRow();
-
-        uint rowBg = NativeImGui.ColorConvertFloat4ToU32(EditorPalette.collectionRow);
-        uint rowAltBg = NativeImGui.ColorConvertFloat4ToU32(EditorPalette.collectionRowAlternate);
-        float entryRowHeight = NativeImGui.GetTextLineHeight() + style.CellPadding.Y * 2f;
-        for (int i = 0; i < entries.Count; i++)
+        finally
         {
-            AssetFileEntry entry = entries[i];
-            if (i > 0)
-                NativeImGui.TableNextRow(ImGuiTableRowFlags.None, EditorWidget.style.assetListRowSpacing);
-            NativeImGui.TableNextRow(ImGuiTableRowFlags.None, entryRowHeight);
-            NativeImGui.TableSetBgColor(
-                ImGuiTableBgTarget.RowBg0,
-                i % 2 == 0 ? rowBg : rowAltBg);
-
-            DrawNameCell(context, entry);
-            DrawTextCell(GetTypeText(entry), EditorPalette.assetText);
-            DrawTextCell(GetSourceText(entry, currentDirectory), EditorPalette.assetText);
+            NativeImGui.PopStyleVar();
         }
-
-        NativeImGui.EndTable();
-        Vector2 tableEnd = NativeImGui.GetCursorScreenPos();
-        float tableHeight = MathF.Max(1f, tableEnd.Y - tableOrigin.Y);
-        var interactionSize = new Vector2(tableSize.X, tableHeight);
-        ListColumnSeparatorState separators = HandleListColumnSeparators(tableOrigin, interactionSize);
-        DrawListColumnSeparators(tableOrigin, tableSize.X, tableHeight, separators);
-        NativeImGui.SetCursorScreenPos(tableEnd);
-        // Commit the restored layout cursor so overlay separator hit targets cannot implicitly
-        // extend the scrolling child when UI scaling changes their physical bounds.
-        NativeImGui.Dummy(Vector2.Zero);
-        NativeImGui.PopStyleVar();
     }
 
     private ListColumnSeparatorState HandleListColumnSeparators(Vector2 origin, Vector2 size)
@@ -675,13 +862,16 @@ internal sealed class FileBrowserPanel : EditorPanel
         NativeImGui.TextUnformatted("Source");
     }
 
-    private void DrawNameCell(EditorContext context, AssetFileEntry entry)
+    private void DrawNameCell(EditorContext context, FileBrowserDisplayEntry item)
     {
+        AssetFileEntry entry = item.entry;
         _ = NativeImGui.TableSetColumnIndex(0);
         string icon = m_assets.GetIcon(entry);
-        string name = entry.nameWithoutExtension;
-        bool selected = string.Equals(m_assets.browser.GetSelectedPath(context), entry.relativePath, StringComparison.Ordinal);
-        bool editing = m_rename.IsEditing(context, entry.relativePath, FileBrowserPresentation.List);
+        string name = item.isPluginRoot
+            ? item.displayName
+            : entry.nameWithoutExtension;
+        bool selected = string.Equals(m_assets.browser.GetSelectedPath(context), entry.assetPath.ToString(), StringComparison.Ordinal);
+        bool editing = m_rename.IsEditing(context, entry.assetPath.ToString(), FileBrowserPresentation.List);
         ImGuiTablePtr table = ImGuiP.GetCurrentTable();
         float rowMinimumY = table.RowPosY1;
         float rowMaximumY = table.RowPosY2;
@@ -690,72 +880,77 @@ internal sealed class FileBrowserPanel : EditorPanel
         NativeImGui.PushStyleColor(ImGuiCol.Header, EditorPalette.transparent);
         NativeImGui.PushStyleColor(ImGuiCol.HeaderHovered, EditorPalette.transparent);
         NativeImGui.PushStyleColor(ImGuiCol.HeaderActive, EditorPalette.transparent);
-        Vector2 iconTextPos = NativeImGui.GetCursorScreenPos();
-        ImGuiSelectableFlags selectableFlags =
-            ImGuiSelectableFlags.SpanAllColumns |
-            ImGuiSelectableFlags.AllowDoubleClick |
-            ImGuiSelectableFlags.AllowOverlap;
-        bool activated = NativeImGui.Selectable(
-            $"##entry_{entry.relativePath}",
-            selected,
-            selectableFlags);
-        bool itemHovered = NativeImGui.IsItemHovered();
-        bool doubleClicked = itemHovered && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
-        if (activated)
+        try
         {
-            HandleEntryActivation(
-                context,
-                entry,
-                FileBrowserPresentation.List,
-                doubleClicked);
-        }
+            Vector2 iconTextPos = NativeImGui.GetCursorScreenPos();
+            ImGuiSelectableFlags selectableFlags =
+                ImGuiSelectableFlags.SpanAllColumns |
+                ImGuiSelectableFlags.AllowDoubleClick |
+                ImGuiSelectableFlags.AllowOverlap;
+            bool activated = NativeImGui.Selectable(
+                $"##entry_{entry.assetPath.ToString()}",
+                selected,
+                selectableFlags);
+            bool itemHovered = NativeImGui.IsItemHovered();
+            bool doubleClicked = itemHovered && NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
+            if (activated)
+            {
+                HandleEntryActivation(
+                    context,
+                    entry,
+                    FileBrowserPresentation.List,
+                    doubleClicked);
+            }
 
-        bool itemActive = NativeImGui.IsItemActive();
-        if (!editing)
-        {
-            m_contextMenu.DrawEntry(
-                context,
-                $"##asset_context_{entry.relativePath}",
-                entry.relativePath,
-                FileBrowserPresentation.List);
-        }
-        if (selected || itemHovered)
-        {
-            Vector4 highlight = itemActive
-                ? EditorPalette.GetHovered(EditorPalette.assetAccent)
-                : EditorPalette.assetAccent;
-            NativeImGui.TableSetBgColor(
-                ImGuiTableBgTarget.RowBg1,
-                NativeImGui.ColorConvertFloat4ToU32(highlight));
-        }
-        if (!editing)
-        {
-            m_dragDrop.DrawAssetSource(context, entry);
-            if (entry.isDirectory)
-                m_dragDrop.DrawDirectoryTarget(context, entry.relativePath);
-        }
+            bool itemActive = NativeImGui.IsItemActive();
+            if (!editing)
+            {
+                m_contextMenu.DrawEntry(
+                    context,
+                    $"##asset_context_{entry.assetPath.ToString()}",
+                    entry.assetPath.ToString(),
+                    FileBrowserPresentation.List);
+            }
+            if (selected || itemHovered)
+            {
+                Vector4 highlight = itemActive
+                    ? EditorPalette.GetHovered(EditorPalette.assetAccent)
+                    : EditorPalette.assetAccent;
+                NativeImGui.TableSetBgColor(
+                    ImGuiTableBgTarget.RowBg1,
+                    NativeImGui.ColorConvertFloat4ToU32(highlight));
+            }
+            if (!editing)
+            {
+                m_dragDrop.DrawAssetSource(context, entry);
+                if (entry.isDirectory && !entry.isReadOnly)
+                    m_dragDrop.DrawDirectoryTarget(context, entry.assetPath.ToString());
+            }
 
-        NativeImGui.SameLine(iconTextPos.X - NativeImGui.GetWindowPos().X, 0f);
-        if (editing)
-        {
-            EditorWidget.IconText(icon, string.Empty, false);
-            NativeImGui.SameLine(0f, 0f);
-            Vector2 renameCursor = NativeImGui.GetCursorScreenPos();
-            NativeImGui.SetCursorScreenPos(new Vector2(renameCursor.X, rowMinimumY));
-            m_rename.Draw(
-                context,
-                $"list_{entry.relativePath}",
-                entry.relativePath,
-                FileBrowserPresentation.List,
-                NativeImGui.GetContentRegionAvail().X,
-                MathF.Max(1f, rowMaximumY - rowMinimumY));
+            NativeImGui.SameLine(iconTextPos.X - NativeImGui.GetWindowPos().X, 0f);
+            if (editing)
+            {
+                EditorWidget.IconText(icon, string.Empty, false);
+                NativeImGui.SameLine(0f, 0f);
+                Vector2 renameCursor = NativeImGui.GetCursorScreenPos();
+                NativeImGui.SetCursorScreenPos(new Vector2(renameCursor.X, rowMinimumY));
+                m_rename.Draw(
+                    context,
+                    $"list_{entry.assetPath.ToString()}",
+                    entry.assetPath.ToString(),
+                    FileBrowserPresentation.List,
+                    NativeImGui.GetContentRegionAvail().X,
+                    MathF.Max(1f, rowMaximumY - rowMinimumY));
+            }
+            else
+            {
+                EditorWidget.IconText(icon, name, false);
+            }
         }
-        else
+        finally
         {
-            EditorWidget.IconText(icon, name, false);
+            NativeImGui.PopStyleColor(3);
         }
-
-        NativeImGui.PopStyleColor(3);
     }
 
     private static void DrawTextCell(string text, Vector4 color)
@@ -773,113 +968,132 @@ internal sealed class FileBrowserPanel : EditorPanel
             NativeImGui.GetCursorPosX() + EditorWidget.style.assetListContentHorizontalPadding);
     }
 
-    private void DrawGrid(EditorContext context, IReadOnlyList<AssetFileEntry> entries)
+    private void DrawGrid(
+        EditorContext context,
+        IReadOnlyList<FileBrowserDisplayEntry> entries)
     {
         float cellSize = GetGridCellSize();
         float available = MathF.Max(cellSize, NativeImGui.GetContentRegionAvail().X);
         int columns = Math.Max(1, (int)(available / cellSize));
 
-        if (!NativeImGui.BeginTable("##FileBrowserGrid", columns, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.NoPadOuterX | ImGuiTableFlags.NoSavedSettings))
+        bool tableStarted = NativeImGui.BeginTable(
+            "##FileBrowserGrid",
+            columns,
+            ImGuiTableFlags.SizingFixedFit |
+            ImGuiTableFlags.NoPadOuterX |
+            ImGuiTableFlags.NoSavedSettings);
+        if (!tableStarted)
             return;
-
-        for (int i = 0; i < entries.Count; i++)
+        try
         {
-            NativeImGui.TableNextColumn();
-            DrawGridItem(context, entries[i]);
+            for (int i = 0; i < entries.Count; i++)
+            {
+                NativeImGui.TableNextColumn();
+                DrawGridItem(context, entries[i]);
+            }
         }
-
-        NativeImGui.EndTable();
+        finally
+        {
+            NativeImGui.EndTable();
+        }
     }
 
-    private void DrawGridItem(EditorContext context, AssetFileEntry entry)
+    private void DrawGridItem(EditorContext context, FileBrowserDisplayEntry item)
     {
+        AssetFileEntry entry = item.entry;
         float cellSize = GetGridCellSize();
         string icon = m_assets.GetIcon(entry);
-        string name = Path.GetFileName(entry.relativePath);
-        bool selected = string.Equals(m_assets.browser.GetSelectedPath(context), entry.relativePath, StringComparison.Ordinal);
-        bool editing = m_rename.IsEditing(context, entry.relativePath, FileBrowserPresentation.Grid);
+        string name = item.isPluginRoot ? item.displayName : entry.name;
+        bool selected = string.Equals(m_assets.browser.GetSelectedPath(context), entry.assetPath.ToString(), StringComparison.Ordinal);
+        bool editing = m_rename.IsEditing(context, entry.assetPath.ToString(), FileBrowserPresentation.Grid);
         Vector2 itemSize = new(cellSize - EditorWidget.style.assetGridCellPadding, cellSize - EditorWidget.style.assetGridCellPadding);
 
-        NativeImGui.PushID(entry.relativePath);
+        NativeImGui.PushID(entry.assetPath.ToString());
         NativeImGui.PushStyleColor(ImGuiCol.Header, EditorPalette.transparent);
         NativeImGui.PushStyleColor(ImGuiCol.HeaderHovered, EditorPalette.transparent);
         NativeImGui.PushStyleColor(ImGuiCol.HeaderActive, EditorPalette.transparent);
-        ImGuiSelectableFlags selectableFlags = ImGuiSelectableFlags.AllowDoubleClick;
-        if (editing)
-            selectableFlags |= ImGuiSelectableFlags.AllowOverlap;
-        bool activated = NativeImGui.Selectable(
-            "##GridItem",
-            selected,
-            selectableFlags,
-            itemSize);
-        bool itemHovered = NativeImGui.IsItemHovered();
-        bool itemActive = NativeImGui.IsItemActive();
-        Vector2 itemMin = NativeImGui.GetItemRectMin();
-        Vector2 itemMax = NativeImGui.GetItemRectMax();
-        Vector2 layoutCursor = NativeImGui.GetCursorScreenPos();
-        bool doubleClicked = itemHovered &&
-                             NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
-        if (activated)
+        try
         {
-            HandleEntryActivation(
-                context,
-                entry,
-                FileBrowserPresentation.Grid,
-                doubleClicked);
-        }
+            ImGuiSelectableFlags selectableFlags = ImGuiSelectableFlags.AllowDoubleClick;
+            if (editing)
+                selectableFlags |= ImGuiSelectableFlags.AllowOverlap;
+            bool activated = NativeImGui.Selectable(
+                "##GridItem",
+                selected,
+                selectableFlags,
+                itemSize);
+            bool itemHovered = NativeImGui.IsItemHovered();
+            bool itemActive = NativeImGui.IsItemActive();
+            Vector2 itemMin = NativeImGui.GetItemRectMin();
+            Vector2 itemMax = NativeImGui.GetItemRectMax();
+            Vector2 layoutCursor = NativeImGui.GetCursorScreenPos();
+            bool doubleClicked = itemHovered &&
+                                 NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left);
+            if (activated)
+            {
+                HandleEntryActivation(
+                    context,
+                    entry,
+                    FileBrowserPresentation.Grid,
+                    doubleClicked);
+            }
 
-        if (!editing)
-        {
-            m_contextMenu.DrawEntry(
-                context,
-                "##asset_grid_context",
-                entry.relativePath,
-                FileBrowserPresentation.Grid);
-            m_dragDrop.DrawAssetSource(context, entry);
-            if (entry.isDirectory)
-                m_dragDrop.DrawDirectoryTarget(context, entry.relativePath);
+            if (!editing)
+            {
+                m_dragDrop.DrawAssetSource(context, entry);
+                m_contextMenu.DrawEntry(
+                    context,
+                    "##asset_grid_context",
+                    entry.assetPath.ToString(),
+                    FileBrowserPresentation.Grid);
+                if (entry.isDirectory && !entry.isReadOnly)
+                    m_dragDrop.DrawDirectoryTarget(context, entry.assetPath.ToString());
+            }
+            DrawGridItemVisual(
+                icon,
+                name,
+                selected,
+                m_gridScale,
+                itemHovered,
+                itemActive,
+                itemMin,
+                itemMax,
+                drawName: !editing);
+            if (editing)
+            {
+                float width = MathF.Max(
+                    1f,
+                    itemMax.X - itemMin.X - EditorWidget.style.assetGridLabelHorizontalPadding);
+                float lineHeight = NativeImGui.GetTextLineHeight();
+                float lineAdvance = MathF.Max(
+                    1f,
+                    lineHeight + EditorWidget.style.assetGridLabelLineSpacing);
+                float labelAreaHeight = lineHeight +
+                                        lineAdvance * (C_GRID_LABEL_LINE_COUNT - 1);
+                float labelAreaTop = itemMax.Y -
+                                     EditorWidget.style.assetGridLabelBottomPadding -
+                                     labelAreaHeight;
+                float y = labelAreaTop +
+                          (labelAreaHeight - lineHeight) * 0.5f;
+                NativeImGui.SetCursorScreenPos(new Vector2(
+                    itemMin.X + EditorWidget.style.assetGridLabelHorizontalPadding * 0.5f,
+                    y));
+                m_rename.Draw(
+                    context,
+                    $"grid_{entry.assetPath.ToString()}",
+                    entry.assetPath.ToString(),
+                    FileBrowserPresentation.Grid,
+                    width,
+                    lineHeight);
+                NativeImGui.SetCursorScreenPos(layoutCursor);
+                NativeImGui.Dummy(Vector2.Zero);
+            }
         }
-        DrawGridItemVisual(
-            icon,
-            name,
-            selected,
-            m_gridScale,
-            itemHovered,
-            itemActive,
-            itemMin,
-            itemMax,
-            drawName: !editing);
-        if (editing)
+        finally
         {
-            float width = MathF.Max(
-                1f,
-                itemMax.X - itemMin.X - EditorWidget.style.assetGridLabelHorizontalPadding);
-            float lineHeight = NativeImGui.GetTextLineHeight();
-            float lineAdvance = MathF.Max(
-                1f,
-                lineHeight + EditorWidget.style.assetGridLabelLineSpacing);
-            float labelAreaHeight = lineHeight +
-                                    lineAdvance * (C_GRID_LABEL_LINE_COUNT - 1);
-            float labelAreaTop = itemMax.Y -
-                                 EditorWidget.style.assetGridLabelBottomPadding -
-                                 labelAreaHeight;
-            float y = labelAreaTop +
-                      (labelAreaHeight - lineHeight) * 0.5f;
-            NativeImGui.SetCursorScreenPos(new Vector2(
-                itemMin.X + EditorWidget.style.assetGridLabelHorizontalPadding * 0.5f,
-                y));
-            m_rename.Draw(
-                context,
-                $"grid_{entry.relativePath}",
-                entry.relativePath,
-                FileBrowserPresentation.Grid,
-                width,
-                lineHeight);
-            NativeImGui.SetCursorScreenPos(layoutCursor);
-            NativeImGui.Dummy(Vector2.Zero);
+            NativeImGui.PopStyleColor(3);
+            NativeImGui.PopID();
         }
-        NativeImGui.PopStyleColor(3);
-        NativeImGui.PopID();
     }
 
     private void HandleEntryActivation(
@@ -895,8 +1109,7 @@ internal sealed class FileBrowserPanel : EditorPanel
             return;
         }
 
-        m_assets.browser.Select(context, entry.relativePath);
-        m_tree.RequestRevealPath(entry.relativePath);
+        m_assets.browser.Select(context, entry.assetPath.ToString());
     }
 
     private static void DrawGridItemVisual(
@@ -1021,7 +1234,9 @@ internal sealed class FileBrowserPanel : EditorPanel
     #region Bottom Bar
     private void DrawBreadcrumbBar(EditorContext context, float height)
     {
-        IReadOnlyList<(string Label, string Path)> parts = BuildBreadcrumbParts(m_assets.browser.currentDirectory);
+        IReadOnlyList<BreadcrumbPart> parts = BuildBreadcrumbParts(
+            m_assets.browser.root,
+            m_assets.browser.currentDirectory);
         Vector2 framePadding = EditorWidget.style.breadcrumbFramePadding;
         float contentWidth = CalculateBreadcrumbContentWidth(parts, framePadding);
         NativeImGui.SetNextWindowContentSize(new Vector2(MathF.Max(contentWidth, NativeImGui.GetContentRegionAvail().X), 0f));
@@ -1036,7 +1251,7 @@ internal sealed class FileBrowserPanel : EditorPanel
 
             for (int i = 0; i < parts.Count; i++)
             {
-                (string label, string path) = parts[i];
+                BreadcrumbPart part = parts[i];
                 if (i > 0)
                 {
                     NativeImGui.SameLine(0f, EditorWidget.style.assetBreadcrumbSpacing);
@@ -1046,9 +1261,17 @@ internal sealed class FileBrowserPanel : EditorPanel
                     NativeImGui.SameLine(0f, EditorWidget.style.assetBreadcrumbSpacing);
                 }
 
-                Vector2 itemSize = EditorWidget.GetClickableTextSize(label, framePadding);
-                if (EditorWidget.ClickableText($"crumb_{path}", label, itemSize))
-                    m_navigation.NavigateTo(context, path);
+                Vector2 itemSize = EditorWidget.GetClickableTextSize(part.label, framePadding);
+                if (EditorWidget.ClickableText(
+                        $"crumb_{part.root}_{part.directory}",
+                        part.label,
+                        itemSize))
+                {
+                    if (string.IsNullOrEmpty(part.directory))
+                        m_navigation.NavigateToRoot(context, part.root);
+                    else
+                        m_navigation.NavigateTo(context, part.directory);
+                }
             }
 
             NativeImGui.PopStyleColor();
@@ -1058,9 +1281,11 @@ internal sealed class FileBrowserPanel : EditorPanel
         NativeImGui.PopStyleVar();
     }
 
-    private static float GetBreadcrumbBarHeight(string currentDirectory)
+    private static float GetBreadcrumbBarHeight(
+        AssetBrowserRoot root,
+        string currentDirectory)
     {
-        IReadOnlyList<(string Label, string Path)> parts = BuildBreadcrumbParts(currentDirectory);
+        IReadOnlyList<BreadcrumbPart> parts = BuildBreadcrumbParts(root, currentDirectory);
         float contentWidth = CalculateBreadcrumbContentWidth(
             parts,
             EditorWidget.style.breadcrumbFramePadding);
@@ -1069,7 +1294,9 @@ internal sealed class FileBrowserPanel : EditorPanel
             : EditorWidget.style.assetBreadcrumbHeight;
     }
 
-    private static float CalculateBreadcrumbContentWidth(IReadOnlyList<(string Label, string Path)> parts, Vector2 framePadding)
+    private static float CalculateBreadcrumbContentWidth(
+        IReadOnlyList<BreadcrumbPart> parts,
+        Vector2 framePadding)
     {
         if (parts.Count == 0)
             return 0f;
@@ -1081,7 +1308,7 @@ internal sealed class FileBrowserPanel : EditorPanel
             if (i > 0)
                 width += separatorWidth + EditorWidget.style.assetBreadcrumbSpacing * 2f;
 
-            width += NativeImGui.CalcTextSize(parts[i].Label).X + framePadding.X * 2f;
+            width += NativeImGui.CalcTextSize(parts[i].label).X + framePadding.X * 2f;
         }
 
         return MathF.Ceiling(width);

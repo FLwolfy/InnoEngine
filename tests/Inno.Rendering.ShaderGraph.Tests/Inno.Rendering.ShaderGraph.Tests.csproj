@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\build\toolchains\Inno.Build.Toolchains.Bgfx.Tools\Inno.Build.Toolchains.Bgfx.Tools.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\extensibility\Inno.Extensibility.Modules\Inno.Extensibility.Modules.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Graphs\Inno.Core.Graphs.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\rendering\Inno.Rendering\Inno.Rendering.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\rendering\Inno.Rendering.Assets\Inno.Rendering.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\rendering\Inno.Rendering.Bgfx\Inno.Rendering.Bgfx.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\src\rendering\Inno.Rendering.ShaderGraph\Inno.Rendering.ShaderGraph.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.6.6" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.6">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>

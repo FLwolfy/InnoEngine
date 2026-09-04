@@ -1,4 +1,4 @@
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
 using Inno.Editor.Interactions;
 
 [assembly: ScriptingApiNamespace(
@@ -9,6 +9,7 @@ using Inno.Editor.Interactions;
 [assembly: ScriptingApiExport(typeof(EditorInteractions), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorInteraction), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorSelectionState), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(IEditorSelectionCoordinator), ScriptingApiScope.Editor)]
 
 [assembly: ScriptingApiExport(typeof(EditorAction), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorAction<>), ScriptingApiScope.Editor)]
@@ -42,6 +43,11 @@ using Inno.Editor.Interactions;
 [assembly: ScriptingApiExport(typeof(EditorMenuModel), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorMenuSource), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorMenuSourceAttribute), ScriptingApiScope.Editor)]
+
+[assembly: ScriptingApiExport(typeof(EditorToolbarIcon), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorToolbarItem), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorToolbarItemAttribute), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorToolbarModel), ScriptingApiScope.Editor)]
 
 [assembly: ScriptingApiExport(typeof(EditorDragData), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorDragContext), ScriptingApiScope.Editor)]

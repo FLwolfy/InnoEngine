@@ -6,6 +6,9 @@ namespace Inno.Editor.Application;
 /// <summary>
 /// Owns staged editor host resources and releases every acquired stage in reverse order.
 /// </summary>
+/// <param name="reportCleanupFailure">
+/// The report cleanup failure used to initialize this instance.
+/// </param>
 internal sealed class EditorHostResourceStack(Action<Exception> reportCleanupFailure) : IDisposable
 {
     private readonly List<Action> m_cleanup = [];
@@ -28,6 +31,9 @@ internal sealed class EditorHostResourceStack(Action<Exception> reportCleanupFai
         m_cleanup.Add(cleanup);
     }
 
+    /// <summary>
+    /// Releases the resources owned by this instance.
+    /// </summary>
     public void Dispose()
     {
         if (m_disposed)

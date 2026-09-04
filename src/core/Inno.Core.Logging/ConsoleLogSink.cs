@@ -10,7 +10,9 @@ public class ConsoleLogSink : ILogSink
     /// <summary>
     /// Writes the specified entry to standard output.
     /// </summary>
-    /// <param name="entry">The log entry to print.</param>
+    /// <param name="entry">
+    /// The log entry to print.
+    /// </param>
     public void Receive(LogEntry entry)
     {
         var originalColor = Console.ForegroundColor;

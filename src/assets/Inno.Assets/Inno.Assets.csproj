@@ -4,22 +4,15 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <WarningsAsErrors>$(WarningsAsErrors);CS1591</WarningsAsErrors>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**/bin/**;**/obj/**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\core\Inno.Core.Diagnose\Inno.Core.Diagnose.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Reflection\Inno.Core.Reflection.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Storage\Inno.Core.Storage.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Scripting\Inno.Core.Scripting.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\Inno.Assets.Loader\Inno.Assets.Loader.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\Inno.Assets.Serialization\Inno.Assets.Serialization.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\core\Inno.Core.Identity\Inno.Core.Identity.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\Inno.Assets.Types\Inno.Assets.Types.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Inno.Assets.Core\Inno.Assets.Core.csproj" />
-    <ProjectReference Include="..\Inno.Assets.File\Inno.Assets.File.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Identity\Inno.Core.Identity.csproj" />
+    <ProjectReference Include="..\..\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" />
   </ItemGroup>
 </Project>

@@ -3,7 +3,7 @@ using System;
 using System.IO;
 
 using Inno.Assets;
-using Inno.Assets.Core;
+using Inno.Assets.Pipeline;
 using Inno.Editor.Core;
 
 namespace Inno.Editor.Panel.FileBrowser;
@@ -16,14 +16,32 @@ internal sealed class FileBrowserChangeTracker(AssetEditorModule assets)
     {
         ArgumentNullException.ThrowIfNull(context);
         m_context = context;
-        AssetManager.Changed -= OnAssetsChanged;
-        AssetManager.Changed += OnAssetsChanged;
+        assets.pipeline.Changed -= OnAssetsChanged;
+        assets.pipeline.Changed += OnAssetsChanged;
+        assets.pipeline.SourceMountsChanged -= OnSourceMountsChanged;
+        assets.pipeline.SourceMountsChanged += OnSourceMountsChanged;
     }
 
     internal void Detach()
     {
-        AssetManager.Changed -= OnAssetsChanged;
+        assets.pipeline.Changed -= OnAssetsChanged;
+        assets.pipeline.SourceMountsChanged -= OnSourceMountsChanged;
         m_context = null;
+    }
+
+    private void OnSourceMountsChanged()
+    {
+        EditorContext? context = m_context;
+        if (context is null)
+            return;
+        string currentDirectory = FileBrowserUtility.NormalizePath(assets.browser.currentDirectory);
+        if (!assets.pipeline.TryGetFileSystemEntry(AssetPath.Parse(currentDirectory), out AssetFileEntry current)
+            || !current.isDirectory)
+            assets.browser.SetCurrentDirectory(string.Empty);
+        string selectedPath = FileBrowserUtility.NormalizePath(assets.browser.GetSelectedPath(context));
+        if (!string.IsNullOrEmpty(selectedPath)
+            && !assets.pipeline.TryGetFileSystemEntry(AssetPath.Parse(selectedPath), out _))
+            assets.browser.Select(context, null);
     }
 
     private void OnAssetsChanged(AssetChangeSet changes)
@@ -36,9 +54,12 @@ internal sealed class FileBrowserChangeTracker(AssetEditorModule assets)
         {
             AssetChange change = changes.changes[i];
             if (change.kind == AssetChangeKind.Moved)
-                ApplyMove(context, change.oldRelativePath, change.relativePath);
+                ApplyMove(
+                    context,
+                    change.previousAssetPath?.ToString() ?? string.Empty,
+                    change.assetPath.ToString());
             else if (change.kind is AssetChangeKind.Missing or AssetChangeKind.Removed)
-                ApplyRemoval(context, change.relativePath);
+                ApplyRemoval(context, change.assetPath.ToString());
         }
     }
 
@@ -81,12 +102,18 @@ internal sealed class FileBrowserChangeTracker(AssetEditorModule assets)
         if (!IsSameOrDescendant(currentDirectory, removedPath))
             return;
 
-        string fallback = Normalize(Path.GetDirectoryName(removedPath));
-        while (!string.IsNullOrEmpty(fallback) &&
-               (!AssetManager.TryGetFileSystemEntry(fallback, out var entry) || !entry.isDirectory))
+        string fallback = FileBrowserUtility.GetParentDirectory(removedPath);
+        while (!string.Equals(
+                   fallback,
+                   FileBrowserUtility.GetParentDirectory(fallback),
+                   StringComparison.Ordinal) &&
+               (!assets.pipeline.TryGetFileSystemEntry(AssetPath.Parse(fallback), out var entry) || !entry.isDirectory))
         {
-            fallback = Normalize(Path.GetDirectoryName(fallback));
+            fallback = FileBrowserUtility.GetParentDirectory(fallback);
         }
+        if (!assets.pipeline.TryGetFileSystemEntry(AssetPath.Parse(fallback), out AssetFileEntry available)
+            || !available.isDirectory)
+            fallback = string.Empty;
         assets.browser.SetCurrentDirectory(fallback);
     }
 

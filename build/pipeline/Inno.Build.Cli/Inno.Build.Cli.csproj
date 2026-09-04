@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Build\Inno.Build.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Build.Platform.MacOS\Inno.Build.Platform.MacOS.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Build.Platform.Windows\Inno.Build.Platform.Windows.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\src\assets\Inno.Assets.Pipeline\Inno.Assets.Pipeline.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\src\core\Inno.Core.Identity\Inno.Core.Identity.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\src\core\Inno.Core.Settings\Inno.Core.Settings.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\src\plugins\Inno.Plugins.Authoring\Inno.Plugins.Authoring.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\src\runtime\Inno.Runtime\Inno.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\src\scene\Inno.Scene.Assets\Inno.Scene.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\src\scripting\Inno.Scripting.Compiler\Inno.Scripting.Compiler.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+</Project>

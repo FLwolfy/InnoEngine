@@ -15,7 +15,9 @@ public sealed class EditorModuleAttribute : Attribute
     /// The globally unique module identifier used for discovery diagnostics and optional persisted
     /// module state.
     /// </param>
-    /// <param name="order">The ascending order used to start and update the module.</param>
+    /// <param name="order">
+    /// The ascending order used to start and update the module.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="id"/> is empty.
     /// </exception>

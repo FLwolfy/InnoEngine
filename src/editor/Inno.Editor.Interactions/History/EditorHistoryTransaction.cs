@@ -27,7 +27,9 @@ public sealed class EditorHistoryTransaction : IDisposable
     /// <summary>
     /// Commits all recorded child operations as one atomic history entry.
     /// </summary>
-    /// <exception cref="InvalidOperationException">Thrown when the transaction is no longer active.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the transaction is no longer active.
+    /// </exception>
     public void Commit()
     {
         EditorHistory owner = GetOwner();
@@ -38,8 +40,12 @@ public sealed class EditorHistoryTransaction : IDisposable
     /// <summary>
     /// Reverts every operation recorded by the transaction and does not add a history entry.
     /// </summary>
-    /// <returns>The result of the atomic rollback attempt.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the transaction is no longer active.</exception>
+    /// <returns>
+    /// The result of the atomic rollback attempt.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the transaction is no longer active.
+    /// </exception>
     public EditorHistoryResult Rollback()
     {
         EditorHistory owner = GetOwner();

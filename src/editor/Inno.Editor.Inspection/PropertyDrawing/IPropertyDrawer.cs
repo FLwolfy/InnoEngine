@@ -8,6 +8,8 @@ public interface IPropertyDrawer
     /// <summary>
     /// Draws a property through its encapsulated value accessors.
     /// </summary>
-    /// <param name="context">Property drawing context.</param>
+    /// <param name="context">
+    /// Property drawing context.
+    /// </param>
     void Draw(PropertyDrawContext context);
 }

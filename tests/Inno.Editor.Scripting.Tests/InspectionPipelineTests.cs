@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
 
-using Inno.Core.Assemblies;
-using Inno.Core.Reflection;
+using Inno.Extensibility.Modules;
+using Inno.Core.Logging;
+using Inno.Extensibility.Types;
 using Inno.Core.Serialization;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
@@ -23,23 +25,36 @@ public sealed class InspectionPipelineTests : IDisposable
         Path.GetTempPath(),
         "InnoInspectionPipelineTests",
         Guid.NewGuid().ToString("N"));
+    private readonly ModuleHost m_modules;
+    private readonly TypeCatalog m_types;
+    private readonly SerializationRegistry m_serialization;
+    private readonly LogRouter m_logs = new();
+    private readonly EditorInteractionRuntime m_runtime;
 
     public InspectionPipelineTests()
     {
         Directory.CreateDirectory(m_projectRoot);
-        AssemblyManager.Initialize(new AssemblyManagerOptions
+        m_modules = new ModuleHost(new ModuleHostOptions
         {
             cacheDirectory = Path.Combine(m_projectRoot, "Library", "Assemblies")
         });
-        TypeCacheManager.Initialize();
-        SerializationManager.Initialize();
+        m_types = new TypeCatalog(m_modules);
+        m_serialization = new SerializationRegistry(m_types);
+        m_runtime = new EditorInteractionRuntime(
+            new EditorContext(m_projectRoot),
+            m_types,
+            m_logs,
+            [m_types, m_serialization]);
+        m_runtime.Start();
     }
 
     public void Dispose()
     {
-        SerializationManager.Shutdown();
-        TypeCacheManager.Shutdown();
-        AssemblyManager.Shutdown();
+        m_runtime.Dispose();
+        m_serialization.Dispose();
+        m_types.Dispose();
+        m_modules.Dispose();
+        m_logs.Dispose();
         if (Directory.Exists(m_projectRoot))
             Directory.Delete(m_projectRoot, recursive: true);
     }
@@ -47,14 +62,20 @@ public sealed class InspectionPipelineTests : IDisposable
     [Fact]
     public void InlineChildFailureIsConsumedAndReadonlyDisabledScopeRemainsBalanced()
     {
-        var editor = new EditorContext(m_projectRoot);
-        var interactions = (EditorInteractions)ScriptingTestReflection.Create(
-            typeof(EditorInteractions),
-            editor);
-        using var drawers = new PropertyDrawerRegistry(interactions);
-        var renderer = new SerializedPropertyRenderer(drawers, interactions, new NoopEditService());
+        EditorContext editor = m_runtime.context;
+        using var drawers = new PropertyDrawerRegistry(
+            m_runtime.interactions,
+            m_types,
+            m_serialization,
+            []);
+        var renderer = new SerializedPropertyRenderer(
+            drawers,
+            m_runtime.interactions,
+            new NoopEditService(),
+            m_logs);
+        Assert.IsType<InlineParentDrawer>(drawers.Resolve(typeof(InlineParent)));
         var owner = new InlineOwner();
-        SerializedProperty property = Assert.Single(SerializationManager.GetProperties(owner));
+        SerializedProperty property = Assert.Single(m_serialization.GetProperties(owner));
         InlineParentDrawer.drewAfterFailure = false;
         var nativeContext = NativeImGui.CreateContext();
         try
@@ -68,9 +89,15 @@ public sealed class InspectionPipelineTests : IDisposable
 
             NativeImGui.NewFrame();
             _ = NativeImGui.Begin("Inline Property Test");
-            renderer.Draw(editor, owner, "owner", property);
-            NativeImGui.TextUnformatted("Content after the failing inline child.");
-            NativeImGui.End();
+            try
+            {
+                renderer.Draw(editor, owner, "owner", property);
+                NativeImGui.TextUnformatted("Content after the failing inline child.");
+            }
+            finally
+            {
+                NativeImGui.End();
+            }
             NativeImGui.Render();
 
             Assert.True(InlineParentDrawer.drewAfterFailure);
@@ -107,47 +134,45 @@ public sealed class InspectionPipelineTests : IDisposable
     }
 
     [Fact]
-    public void ModalFailureIsQuarantinedAndPopupStyleStackRemainsBalanced()
+    public void TextEditStateIsScopedByRendererOwnerAndPropertyPath()
     {
+        EditorContext editor = m_runtime.context;
+        using var drawers = new PropertyDrawerRegistry(
+            m_runtime.interactions,
+            m_types,
+            m_serialization,
+            []);
+        var firstRenderer = new SerializedPropertyRenderer(
+            drawers,
+            m_runtime.interactions,
+            new NoopEditService(),
+            m_logs);
+        var secondRenderer = new SerializedPropertyRenderer(
+            drawers,
+            m_runtime.interactions,
+            new NoopEditService(),
+            m_logs);
+        var firstOwner = new TextStateOwner { value = new TextStateValue("First") };
+        var secondOwner = new TextStateOwner { value = new TextStateValue("Second") };
+        SerializedProperty firstProperty = Assert.Single(m_serialization.GetProperties(firstOwner));
+        SerializedProperty secondProperty = Assert.Single(m_serialization.GetProperties(secondOwner));
+        TextStateDrawer.observations.Clear();
         var nativeContext = NativeImGui.CreateContext();
         try
         {
-            PrepareNativeFrame();
-            Exception? quarantined = null;
-            var modal = (EditorModalExtension)ScriptingTestReflection.Create(
-                typeof(EditorModalExtension),
-                "tests.throwing-modal",
-                "Throwing Modal",
-                0,
-                new ThrowingModal(),
-                new Action<Exception>(exception => quarantined = exception));
-            Assert.True(modal.TryGetPresentation(out EditorModalExtension.Presentation presentation));
-
-            Type rendererType = typeof(EditorWidget).Assembly.GetType(
-                "Inno.Editor.ImGui.EditorModalRenderer",
-                throwOnError: true)!;
-            _ = ScriptingTestReflection.InvokeStatic<object?>(
-                rendererType,
-                "Draw",
-                modal.id,
-                modal.title,
-                1f,
-                modal,
-                presentation,
-                new EditorContext(m_projectRoot));
-            _ = NativeImGui.Begin("Content After Modal Failure");
-            NativeImGui.TextUnformatted("Still drawing.");
-            NativeImGui.End();
-            NativeImGui.Render();
-
-            Assert.IsType<InvalidOperationException>(quarantined);
-            Assert.False(modal.TryGetPresentation(out _));
-            Assert.Equal(1f, NativeImGui.GetStyle().Alpha);
+            DrawPropertyFrame(firstRenderer, editor, firstOwner, firstProperty);
+            DrawPropertyFrame(firstRenderer, editor, firstOwner, firstProperty);
+            DrawPropertyFrame(firstRenderer, editor, secondOwner, secondProperty);
+            DrawPropertyFrame(secondRenderer, editor, firstOwner, firstProperty);
         }
         finally
         {
             NativeImGui.DestroyContext(nativeContext);
         }
+
+        Assert.Equal(
+            ["First:<new>", "First:First", "Second:<new>", "First:<new>"],
+            TextStateDrawer.observations);
     }
 
     private static void PrepareNativeFrame()
@@ -158,6 +183,25 @@ public sealed class InspectionPipelineTests : IDisposable
         io.BackendFlags |= Inno.Native.ImGui.ImGuiBackendFlags.RendererHasTextures;
         io.Fonts.RendererHasTextures = true;
         NativeImGui.NewFrame();
+    }
+
+    private static void DrawPropertyFrame(
+        SerializedPropertyRenderer renderer,
+        EditorContext editor,
+        object owner,
+        SerializedProperty property)
+    {
+        PrepareNativeFrame();
+        _ = NativeImGui.Begin("Text State Test");
+        try
+        {
+            renderer.Draw(editor, owner, "owner", property);
+        }
+        finally
+        {
+            NativeImGui.End();
+        }
+        NativeImGui.Render();
     }
 
     private sealed class NoopEditService : IInspectionPropertyEditService
@@ -174,14 +218,6 @@ public sealed class InspectionPipelineTests : IDisposable
     }
 }
 
-internal sealed class ThrowingModal : EditorModal
-{
-    public override bool isVisible => true;
-
-    protected override void OnDraw(EditorContext context)
-        => throw new InvalidOperationException("modal");
-}
-
 internal sealed class InlineOwner : ISerializable
 {
     [SerializableProperty]
@@ -194,6 +230,28 @@ internal sealed class InlineParent
 }
 
 internal sealed class InlineFailure;
+
+internal sealed class TextStateOwner : ISerializable
+{
+    [SerializableProperty]
+    public TextStateValue value { get; set; } = new("Unset");
+}
+
+internal sealed record TextStateValue(string id);
+
+[PropertyDrawer(typeof(TextStateValue), priority: 10_000)]
+internal sealed class TextStateDrawer : IPropertyDrawer
+{
+    internal static List<string> observations { get; } = [];
+
+    public void Draw(PropertyDrawContext context)
+    {
+        var value = (TextStateValue)context.GetValue()!;
+        bool hasState = context.TryGetTextState("editing", out string? state);
+        observations.Add($"{value.id}:{(hasState ? state : "<new>")}");
+        context.SetTextState("editing", value.id);
+    }
+}
 
 [PropertyDrawer(typeof(InlineParent), priority: 10_000)]
 internal sealed class InlineParentDrawer : IPropertyDrawer

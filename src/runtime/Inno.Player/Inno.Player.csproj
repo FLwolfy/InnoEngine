@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Inno.Player</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Events\Inno.Core.Events.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\core\Inno.Core.Settings\Inno.Core.Settings.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\platform\Inno.Platform\Inno.Platform.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\platform\Inno.Platform.Sdl3\Inno.Platform.Sdl3.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\rendering\Inno.Rendering\Inno.Rendering.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\rendering\Inno.Rendering.Bgfx\Inno.Rendering.Bgfx.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\rendering\Inno.Rendering.Runtime\Inno.Rendering.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\rendering\Inno.Rendering.Scene\Inno.Rendering.Scene.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Runtime\Inno.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\scene\Inno.Scene\Inno.Scene.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+</Project>

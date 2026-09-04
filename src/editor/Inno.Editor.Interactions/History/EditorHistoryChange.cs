@@ -12,11 +12,21 @@ public sealed class EditorHistoryChange : IDisposable
     /// <summary>
     /// Creates a neutral history change.
     /// </summary>
-    /// <param name="kind">The stable globally unique handler protocol identifier.</param>
-    /// <param name="payload">The immutable neutral payload interpreted by the handler.</param>
-    /// <param name="mergeKey">An optional stable key used by the handler to merge adjacent changes.</param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="kind"/> is empty.</exception>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="payload"/> is <see langword="null"/>.</exception>
+    /// <param name="kind">
+    /// The stable globally unique handler protocol identifier.
+    /// </param>
+    /// <param name="payload">
+    /// The immutable neutral payload interpreted by the handler.
+    /// </param>
+    /// <param name="mergeKey">
+    /// An optional stable key used by the handler to merge adjacent changes.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="kind"/> is empty.
+    /// </exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="payload"/> is <see langword="null"/>.
+    /// </exception>
     public EditorHistoryChange(
         string kind,
         EditorHistoryPayload payload,

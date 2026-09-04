@@ -16,7 +16,7 @@ internal static class ValuePipeline
         operation.EnterCapture(value, "$");
         try
         {
-            ConverterInvoker? converter = ConverterRegistry.Resolve(declaredType);
+            ConverterInvoker? converter = operation.ResolveConverter(declaredType);
             if (converter is not null)
                 return converter.Write(operation, "$", declaredType, value);
             if (declaredType.IsDefined(typeof(RequiresSerializationConverterAttribute), inherit: true))
@@ -44,7 +44,7 @@ internal static class ValuePipeline
         Type declaredType,
         SerializationOperation operation)
     {
-        ConverterInvoker? converter = ConverterRegistry.Resolve(declaredType);
+        ConverterInvoker? converter = operation.ResolveConverter(declaredType);
         if (converter is not null)
             return converter.Read(operation, "$", declaredType, RequireObject(node, declaredType, "$"));
         if (declaredType.IsDefined(typeof(RequiresSerializationConverterAttribute), inherit: true))
@@ -63,7 +63,7 @@ internal static class ValuePipeline
         Type targetType,
         SerializationOperation operation)
     {
-        ConverterInvoker? converter = ConverterRegistry.Resolve(targetType);
+        ConverterInvoker? converter = operation.ResolveConverter(targetType);
         if (converter is not null)
         {
             converter.Restore(operation, "$", targetType, RequireObject(node, targetType, "$"), target);
@@ -99,7 +99,7 @@ internal static class ValuePipeline
             operation.EnterCapture(value, path);
         try
         {
-            ConverterInvoker? converter = ConverterRegistry.Resolve(valueType);
+            ConverterInvoker? converter = operation.ResolveConverter(valueType);
             if (converter is not null)
                 return converter.Write(operation, path, valueType, value);
 
@@ -158,7 +158,7 @@ internal static class ValuePipeline
             throw new InvalidOperationException($"Non-nullable value '{path}' of type '{valueType.FullName}' cannot be null.");
         }
 
-        ConverterInvoker? converter = ConverterRegistry.Resolve(valueType);
+        ConverterInvoker? converter = operation.ResolveConverter(valueType);
         if (converter is not null)
             return converter.Read(operation, path, valueType, RequireObject(node, valueType, path));
 

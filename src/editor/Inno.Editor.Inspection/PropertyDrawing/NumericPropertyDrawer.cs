@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 
 using Inno.Native.ImGui;
@@ -21,9 +20,14 @@ namespace Inno.Editor.Inspection;
 internal sealed class NumericPropertyDrawer : IPropertyDrawer
 {
     private const nuint C_BUFFER_SIZE = 128;
-    private static readonly Dictionary<string, string> s_editBuffers = new(StringComparer.Ordinal);
+    private const string C_TEXT_STATE = "numeric";
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     public void Draw(PropertyDrawContext context)
     {
         object? rawValue = context.GetValue();
@@ -50,7 +54,7 @@ internal sealed class NumericPropertyDrawer : IPropertyDrawer
             return;
         }
 
-        if (!s_editBuffers.TryGetValue(context.path, out string? text))
+        if (!context.TryGetTextState(C_TEXT_STATE, out string? text))
         {
             text = Convert.ToString(rawValue, CultureInfo.InvariantCulture) ?? "0";
         }
@@ -64,12 +68,12 @@ internal sealed class NumericPropertyDrawer : IPropertyDrawer
             if (TryConvert(text, type, out object? converted))
             {
                 context.SetValue(converted);
-                s_editBuffers.Remove(context.path);
+                context.ClearTextState(C_TEXT_STATE);
                 return;
             }
         }
 
-        s_editBuffers[context.path] = text;
+        context.SetTextState(C_TEXT_STATE, text);
     }
 
     private static bool TryConvert(string text, Type type, out object? value)

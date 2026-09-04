@@ -1,23 +1,24 @@
 # Inno.Core.Logging
 
-[上一页：Diagnose](Inno.Core.Diagnose.md) · [Core 索引](README.md) · [下一页：Mathematics](Inno.Core.Mathematics.md)
+[上一页：Diagnose](Inno.Core.Diagnostics.md) · [Core 索引](README.md) · [下一页：Mathematics](Inno.Core.Mathematics.md)
 
-Logging 是基础、追加式日志系统。`Log` 自动从调用栈解析 category、源码位置、AssemblyDomain 与 AssemblyScope，`LogManager` 只负责异步分发不可撤回的日志事件。Compiler、Importer 和 Validator 的可替换当前问题属于独立的 [Inno.Core.Diagnose](Inno.Core.Diagnose.md)。
+Logging 是基础、追加式日志系统。`LogRouter` 显式拥有一个 Host 的异步队列、过滤策略和 Sink；`Log` 只是解析当前执行上下文的脚本便利门面。Compiler、Importer 和 Validator 的可替换当前问题属于独立的 [Inno.Core.Diagnostics](Inno.Core.Diagnostics.md)。
 
 ## 初始化
 
 ```csharp
-LogManager.Initialize();
-LogManager.RegisterSink(new ConsoleLogSink());
-LogManager.RegisterSink(new FileLogSink(Path.Combine(projectRoot, "Logs")));
-LogManager.SetMinimumLevel(LogLevel.Info);
+using var router = new LogRouter();
+router.RegisterSink(new ConsoleLogSink());
+router.RegisterSink(new FileLogSink(Path.Combine(projectRoot, "Logs")));
+router.SetMinimumLevel(LogLevel.Info);
 
-Log.Info("Loaded {0} assets", count);
+using (router.EnterScope())
+    Log.Info("Loaded {0} assets", count);
 
-LogManager.Shutdown();
+router.Flush();
 ```
 
-Shutdown 会停止 worker、排空队列，并 Dispose 所有实现 `IDisposable` 的已注册 sink。
+`Dispose` 会停止 worker、排空队列，并 Dispose 所有实现 `IDisposable` 的已注册 sink。`EngineHost` 正常情况下统一拥有并释放 Router。
 
 ## Log
 
@@ -40,20 +41,22 @@ Log.Info("Player spawned at {0}", transform.localPosition);
 Log.Warn("Health is low: {0}", health);
 ```
 
-只导出便捷门面 `Log`；`LogManager`、sink 和内部日志分发配置仍由 Host 管理，不向游戏脚本开放。
+只导出便捷门面 `Log`；`LogRouter`、sink 和日志分发配置仍由 Host 管理，不向游戏脚本开放。
 
-## LogManager
+## LogRouter
 
 | API | 说明 |
 | --- | --- |
-| `Initialize()` | 幂等启动后台 worker。 |
 | `RegisterSink(ILogSink)` | 添加接收器；允许多个。 |
 | `UnregisterSink(ILogSink)` | 移除接收器，但不自动 Dispose。 |
 | `SetMinimumLevel(LogLevel)` | 设置最低分发等级。 |
+| `CreateLogger<TOwner>()` | 为实例服务创建显式 category logger。 |
 | `Dispatch(LogEntry)` | 直接投递构造好的日志项。 |
-| `Shutdown()` | 停 worker、flush、清空并释放 sink。 |
+| `Flush()` | 等待调用前已入队的日志全部送达 sink；只用于低频生命周期边界。 |
+| `EnterScope()` | 将 Router 绑定到当前异步执行上下文，供脚本 `Log` 门面解析。 |
+| `Dispose()` | 停 worker、flush、清空并释放 sink。 |
 
-单个 sink 的 `Receive` 异常会被隔离，不会阻止其他 sink。
+单个 sink 的 `Receive` 异常会被隔离并将该 sink 从 Router 原子隔离；`sinkFailed` 会报告失败，而健康 sink 继续接收日志。`Flush()` 通过异步队列中的 barrier 保证先前日志已送达，不会把常规日志调用改成同步分发；从 logging worker 自身调用会抛出 `InvalidOperationException`，避免等待自身造成死锁。
 
 ## LogEntry 与 LogLevel
 
@@ -98,6 +101,6 @@ using FileLogSink sink = new(
 
 ## 注意事项
 
-- File sink 又有独立 worker，因此必须 Dispose/Shutdown 才能保证最后的日志落盘。
+- File sink 又有独立 worker，因此必须 Dispose 才能保证最后的日志落盘。
 - `Debug` 不是单纯运行时过滤；非 DEBUG 构建中调用会被编译器移除。
 - 日志格式参数错误会在生产日志的一侧抛出；不要把不可信文本直接当 composite format。

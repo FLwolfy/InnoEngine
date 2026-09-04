@@ -9,18 +9,26 @@ namespace Inno.Core.Storage;
 [Flags]
 public enum IndexedObjectKeyFlags
 {
-    /// <summary>Uses hash-based lookup without key ordering.</summary>
+    /// <summary>
+    /// Uses hash-based lookup without key ordering.
+    /// </summary>
     Unordered = 1 << 0,
-    /// <summary>Maintains key ordering using the supplied comparer.</summary>
+    /// <summary>
+    /// Maintains key ordering using the supplied comparer.
+    /// </summary>
     Ordered = 1 << 1,
-    /// <summary>Allows at most one item for each key value.</summary>
+    /// <summary>
+    /// Allows at most one item for each key value.
+    /// </summary>
     Unique =  1 << 2,
 }
 
 /// <summary>
 /// Opaque handle used to query a key without exposing its implementation.
 /// </summary>
-/// <typeparam name="TKey">Key type.</typeparam>
+/// <typeparam name="TKey">
+/// Key type.
+/// </typeparam>
 public readonly struct IndexedObjectKey<TKey>
 {
     internal readonly WeakReference<IIndexedObjectStore>? storeRef;

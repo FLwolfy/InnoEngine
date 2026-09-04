@@ -7,13 +7,13 @@ namespace Inno.Core.Serialization;
 
 internal static class PropertySnapshotBinaryFormat
 {
-    private const int C_VERSION = 1;
+    private const string C_MAGIC = "INNO-PROPERTY-SNAPSHOT-CURRENT";
 
     internal static byte[] Encode(IReadOnlyList<SerializationPropertySnapshot> snapshots)
     {
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
-        writer.Write(C_VERSION);
+        writer.Write(C_MAGIC);
         writer.Write(snapshots.Count);
         for (int i = 0; i < snapshots.Count; i++)
         {
@@ -30,9 +30,9 @@ internal static class PropertySnapshotBinaryFormat
     {
         using var stream = new MemoryStream(bytes.ToArray(), writable: false);
         using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: false);
-        int version = reader.ReadInt32();
-        if (version != C_VERSION)
-            throw new InvalidDataException($"Unsupported property snapshot data version '{version}'.");
+        string magic = reader.ReadString();
+        if (!string.Equals(magic, C_MAGIC, StringComparison.Ordinal))
+            throw new InvalidDataException($"Invalid property snapshot magic '{magic}'.");
         int count = reader.ReadInt32();
         if (count < 0)
             throw new InvalidDataException("Property snapshot count cannot be negative.");

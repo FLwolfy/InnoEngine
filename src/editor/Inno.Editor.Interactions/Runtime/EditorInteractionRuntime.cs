@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 using Inno.Core.Events;
+using Inno.Core.Logging;
+using Inno.Extensibility.Types;
 using Inno.Editor.Core;
 
 namespace Inno.Editor.Interactions;
@@ -19,28 +22,97 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
     private bool m_started;
     private bool m_disposed;
 
-    /// <summary>Creates an interaction runtime for one project.</summary>
-    /// <param name="projectDirectory">The project root containing Assets and Library.</param>
-    public EditorInteractionRuntime(string projectDirectory)
-        : this(new EditorContext(projectDirectory))
+    /// <summary>
+    /// Creates an interaction runtime for one project.
+    /// </summary>
+    /// <param name="projectDirectory">
+    /// The project root containing Assets and Library.
+    /// </param>
+    /// <param name="types">
+    /// The type catalog that owns editor extension generations.
+    /// </param>
+    /// <param name="logs">
+    /// The host-owned logging router used by editor infrastructure.
+    /// </param>
+    public EditorInteractionRuntime(
+        string projectDirectory,
+        TypeCatalog types,
+        LogRouter logs)
+        : this(new EditorContext(projectDirectory), types, logs)
     {
     }
 
-    /// <summary>Creates an interaction runtime for an existing passive editor context.</summary>
-    /// <param name="context">The passive editor context shared with the presentation backend.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="context"/> is <see langword="null"/>.</exception>
-    public EditorInteractionRuntime(EditorContext context)
+    /// <summary>
+    /// Creates an interaction runtime for an existing passive editor context.
+    /// </summary>
+    /// <param name="context">
+    /// The passive editor context shared with the presentation backend.
+    /// </param>
+    /// <param name="types">
+    /// The type catalog that owns editor extension generations.
+    /// </param>
+    /// <param name="logs">
+    /// The host-owned logging router used by editor infrastructure.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="context"/> or <paramref name="logs"/> is <see langword="null"/>.
+    /// </exception>
+    public EditorInteractionRuntime(
+        EditorContext context,
+        TypeCatalog types,
+        LogRouter logs)
+        : this(context, types, logs, Array.Empty<object>())
+    {
+    }
+
+    /// <summary>
+    /// Creates an interaction runtime with stable host-owned extension services.
+    /// </summary>
+    /// <param name="context">
+    /// The passive editor context shared with the presentation backend.
+    /// </param>
+    /// <param name="hostServices">
+    /// Stable host-owned services that editor extension constructors may request by assignable contract.
+    /// </param>
+    /// <param name="logs">
+    /// The host-owned logging router used by editor infrastructure.
+    /// </param>
+    /// <param name="types">
+    /// The type catalog that owns editor extension generations.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="context"/> or <paramref name="hostServices"/> is <see langword="null"/>.
+    /// </exception>
+    public EditorInteractionRuntime(
+        EditorContext context,
+        TypeCatalog types,
+        LogRouter logs,
+        IEnumerable<object> hostServices)
         : base(context)
     {
-        m_interactions = new EditorInteractions(context);
-        m_catalog = new EditorExtensionCatalog(context, m_interactions, InvalidateDescriptions);
+        ArgumentNullException.ThrowIfNull(types);
+        ArgumentNullException.ThrowIfNull(logs);
+        ArgumentNullException.ThrowIfNull(hostServices);
+        Logger logger = logs.CreateLogger<EditorInteractionRuntime>();
+        m_interactions = new EditorInteractions(context, logger);
+        m_catalog = new EditorExtensionCatalog(
+            types,
+            context,
+            m_interactions,
+            logger,
+            new object[] { logs }.Concat(hostServices),
+            InvalidateDescriptions);
         m_interactions.Attach(m_catalog);
     }
 
-    /// <summary>Gets the active presentation-independent interaction entry point.</summary>
+    /// <summary>
+    /// Gets the active presentation-independent interaction entry point.
+    /// </summary>
     public EditorInteractions interactions => m_interactions;
 
-    /// <summary>Gets active dockable panel extensions in deterministic order.</summary>
+    /// <summary>
+    /// Gets active dockable panel extensions in deterministic order.
+    /// </summary>
     public IReadOnlyList<EditorPanelExtension> panels
     {
         get
@@ -50,7 +122,9 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
         }
     }
 
-    /// <summary>Gets active modal extensions in deterministic order.</summary>
+    /// <summary>
+    /// Gets active modal extensions in deterministic order.
+    /// </summary>
     public IReadOnlyList<EditorModalExtension> modals
     {
         get
@@ -60,10 +134,14 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
         }
     }
 
-    /// <summary>Gets the number of active dockable panels.</summary>
+    /// <summary>
+    /// Gets the number of active dockable panels.
+    /// </summary>
     public int panelCount => panels.Count;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Starts value processing after validating the current state.
+    /// </summary>
     public override void Start()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -73,7 +151,12 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
         m_started = true;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Recomputes owned state from the current validated inputs.
+    /// </summary>
+    /// <param name="frame">
+    /// The frame consumed by update; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     public override void Update(EditorFrame frame)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -84,14 +167,18 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
         m_catalog.UpdateModules();
     }
 
-    /// <summary>Flushes actions queued during the current presentation traversal.</summary>
+    /// <summary>
+    /// Flushes actions queued during the current presentation traversal.
+    /// </summary>
     public void Flush() => m_interactions.Update();
 
     /// <summary>
     /// Captures every stateful active module and panel and atomically flushes changed project state
     /// to disk.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">Thrown after this runtime has been disposed.</exception>
+    /// <exception cref="ObjectDisposedException">
+    /// Thrown after this runtime has been disposed.
+    /// </exception>
     public void SaveState()
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -115,8 +202,12 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
         m_catalog.PrepareShutdown();
     }
 
-    /// <summary>Dispatches an unhandled keyboard event through contextual shortcuts.</summary>
-    /// <param name="keyEvent">The keyboard event received from the application event stream.</param>
+    /// <summary>
+    /// Dispatches an unhandled keyboard event through contextual shortcuts.
+    /// </summary>
+    /// <param name="keyEvent">
+    /// The keyboard event received from the application event stream.
+    /// </param>
     public void HandleKeyPressed(KeyPressedEvent keyEvent)
     {
         ArgumentNullException.ThrowIfNull(keyEvent);
@@ -124,7 +215,9 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
             keyEvent.HandleInGlobal();
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Releases the resources owned by this implementation.
+    /// </summary>
     /// <exception cref="AggregateException">
     /// Thrown after all shutdown stages have been attempted when one or more stages failed.
     /// </exception>

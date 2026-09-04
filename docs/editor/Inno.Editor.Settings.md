@@ -1,146 +1,120 @@
 # Inno.Editor.Settings
 
-[Editor 索引](README.md) · [Settings 界面](Inno.Editor.Panel.Settings.md) · [Global feature](Inno.Editor.Panel.Global.md) · [Wiki 首页](../README.md)
+[Editor 索引](README.md) · [Settings 界面](Inno.Editor.Panel.Settings.md) · [Core Project Settings](../core/Inno.Core.Settings.md) · [Wiki 首页](../README.md)
 
-`Inno.Editor.Settings` 是路径驱动、与 UI 后端无关的项目设置内核。它只公开设置定义、JSON 对象、路径 Attribute 和项目服务，不提供图标解析器、ImGui 控件、内建字段类型或 feature 默认值。
-
-## 当前稳定模型
+`Inno.Editor.Settings` 为同一个 Settings 窗口提供两种明确的编辑协议，但不合并它们的持久化语义：
 
 ```text
-[EditorSettingPath("Global/Appearance/Icons/Scene")]
-                         │
-                         ├─ override OnDraw → Icons 页面中的 Scene field
-                         └─ 默认 OnDraw     → 完整路径对应的 overview page
-                                              │
-                                              ▼
-                               EditorSettings.Get(path)
-                                              │
-                                              ▼
-                                  EditorSettingObject
-                                              │
-                                              ▼
-                           <ProjectRoot>/EditorSettings.json
+Editor/...                                      Project/...
+EditorSetting + EditorSettingObject             ProjectSettingEditor<TSetting>
+             │                                               │
+             ▼                                               ▼
+Settings.Editor.inno（Inno Serialization）        Settings.Project.inno（Inno Serialization）
+Editor-only、不会进入 Player                     Runtime/Plugin 可读取并进入构建
 ```
 
-- 完整路径同时是注册身份、读取地址和磁盘 key；不存在独立的 path、area、scope、provider 或 ID 类型。
-- 缺失的祖先节点由 frontend 从 definitions 自动合成，父节点无需中央注册。
-- 没有 override `OnDraw` 的 `EditorSetting` 是 page definition；`description` 是页面说明。
-- override `OnDraw` 的 `EditorSetting` 是 field；最后一个路径段是 label，父路径是所属页面。
-- `section` 的公开签名是非空 `string`；不分组的定义保留基类内部的空实现，非空 section 由 frontend 按不区分大小写的字母顺序绘制。
-- 所有值只写入项目根目录的 `EditorSettings.json`，不进入 `Settings/`、`Assets`、AssetManager、`editor.ini` 或用户目录。
+统一 frontend 还提供内置 `Build/...` 根。它直接编辑 [Inno.Build](../build/Inno.Build.md) 的强类型 `BuildSettings` 并写入 `Settings.Build.inno`；该文件是团队共享的 authoring/build 默认值，不进入 Player，也不是 Plugin 可贡献的 runtime Setting 协议。
 
-## 定义字段
+## Editor Settings
 
-每个字段以 `EditorSettingObject` 声明默认对象，并直接用 GetAs/SetAs 方法绘制自己的内容：
+Editor Settings 用于主题、图标、缩放、面板行为等只影响 Editor 的偏好。路径必须为 `Editor` 或以 `Editor/` 开头；完整路径同时是注册身份、读取地址和 Inno Serialization property key。
 
 ```csharp
-using Inno.Editor.Settings;
+using InnoEditor.ImGui;
+using InnoEditor.Settings;
 
-[EditorSettingPath("Global/Appearance/Icons/Scene")]
-public sealed class SceneIconSetting : EditorSetting
+[EditorSettingPath("Editor/Appearance/Grid/Visible")]
+public sealed class GridVisibilitySetting : EditorSetting
 {
-    public override EditorSettingObject defaultValue => CreateDefault();
+    public override EditorSettingObject defaultValue
+    {
+        get
+        {
+            var value = new EditorSettingObject();
+            value.SetAsBoolean("value", true);
+            return value;
+        }
+    }
 
-    public override string section => "Editor Icons";
-
-    public override string description => "Selects the Scene glyph.";
+    public override string description => "Shows the authoring grid.";
 
     protected override void OnDraw(EditorSettingObject setting)
     {
-        string value = setting.GetAsString("value", "default-glyph")!;
-        if (DrawSceneIconPicker(ref value))
-            setting.SetAsString("value", value);
+        bool value = setting.GetAsBoolean("value", true);
+        if (ImGui.Checkbox("##visible", ref value))
+            setting.SetAsBoolean("value", value);
     }
+}
+```
 
-    private static EditorSettingObject CreateDefault()
+没有 override `OnDraw` 的 `EditorSetting` 是页面定义；override 后是字段定义。`EditorSettingObject` 支持受控的 Boolean、整数、浮点、String 与数组 GetAs/SetAs 方法，不允许保存 `Type`、delegate、runtime object 或 GPU 资源。
+
+唯一读取入口仍是原始路径：
+
+```csharp
+EditorSettingObject value = editorSettings.Get("Editor/Appearance/Grid/Visible");
+bool visible = value.GetAsBoolean("value", true);
+```
+
+返回对象始终隔离；只有 `EditorSettings.Apply(values, resets)` 才通过 `SerializationRegistry` 原子更新 `Settings.Editor.inno` 并写入统一 Editor History。`EditorSettings.changed` 用于刷新 Editor-only 消费者。
+
+例如 Console 的保留策略只在 `Editor/Diagnostics/Console/Clear on Play` 注册和持久化，默认值为 `true`。Console backend 订阅 `EditorSettings.changed` 并在 Apply、Undo、Redo 后读取当前有效值；Console Panel 不再使用 `editor.ini` 或 toolbar 维护同名状态。
+
+## Project Settings 的 Editor 表现
+
+Project Settings 的运行时定义属于 [Inno.Core.Settings](../core/Inno.Core.Settings.md)。本项目只提供可选的 Editor Drawer 协议，使 Plugin 的强类型设置自动出现在同一个窗口的 `Project/...` 页面。
+
+```csharp
+using InnoEditor.ImGui;
+using InnoEditor.Settings;
+using InnoEngine.Settings;
+
+[ProjectSettingPath("Project/MyPlugin/Rendering")]
+public sealed class RenderingSettingEditor : ProjectSettingEditor<MyRenderingSettings>
+{
+    public override ProjectSettingId settingId => MyRenderingSettings.settingId;
+
+    public override string description => "Configures the runtime rendering provider.";
+
+    protected override void OnDraw(MyRenderingSettings setting)
     {
-        var value = new EditorSettingObject();
-        value.SetAsString("value", "default-glyph");
-        return value;
+        bool enabled = setting.enabled;
+        if (ImGui.Checkbox("##enabled", ref enabled))
+            setting.enabled = enabled;
     }
 }
 ```
 
-`OnDraw` 不接收 framework draw context。字段可以直接使用所属 feature 已经依赖的 UI API；Settings 内核不会因此依赖 ImGui。页面只需要 description，不需要空绘制函数：
+`Project/Identity/Project ID` 是内置的 `ProjectIdentitySettings` drawer；它只接受 portable lowercase namespace。Layer、Tag、Sorting Layer 等 Project-owned 定义不再让用户输入完整 ID，而是保存 local key 并在运行时组合为 `projectId.name`。Game/Plugin 导出身份也直接读取这个 Project ID，不在 Build Settings 或导出 modal 中维护第二份可编辑 ID。
 
-```csharp
-[EditorSettingPath("Global/Appearance")]
-public sealed class AppearanceSettingsPage : EditorSetting
-{
-    public override string description
-        => "Customize editor appearance and semantic presentation.";
-}
-```
+`ProjectSettingEditor<TSetting>` 收到的是当前 generation 的隔离暂存副本。它只能修改该副本；统一 Apply 中的 Project scope 以“Host + Plugin 合成结果”为 baseline：有 Composer 的协议只写语义 delta，没有 Composer 的协议写完整 replacement。Reset Project 删除项目 contribution，随后重新使用 Host 默认值与 Plugin 默认贡献的合成结果。如果编辑结果等于 baseline，Apply 会自动移除已有 project record，不留下空 override。
 
-## 最小公开 API
+同一个 `ProjectSettingId` 可以注册多个不同 placement 的 Editor 表现，只要它们的
+`TSetting` 完全相同。所有表现共享同一份隔离暂存对象、dirty 状态、Reset、Apply 和
+History 事务；这允许一个较大的运行时设置协议在 UI 中拆成多个完整 section，而不必
+为了排版拆碎运行时数据模型。各 placement path 仍必须全局唯一。
 
-| API | 当前语义 |
+## 公开 API
+
+| API | 稳定语义 |
 | --- | --- |
-| `EditorSettingPathAttribute` | 用一个原始字符串声明完整路径，并用 `order` 调整同组字段的稳定顺序。 |
-| `EditorSetting` | 表示 page 或 field；只有无参数构造，公开 placement metadata、`defaultValue`、`IsDefault` 和 `Draw`，protected virtual `OnDraw` 是唯一绘制扩展点；`Draw` 返回 staged object 是否发生实际变化。 |
-| `EditorSettingObject` | 隔离的 JSON object；公开 API 只有构造函数与 GetAs/SetAs 基元、数组方法。 |
-| `EditorSettings` | 发现定义、读取有效对象、原子 Apply，并通过统一 Editor History 支持 Undo/Redo。 |
+| `EditorSettingPathAttribute` | 把 Editor-only page/field 放入 `Editor/...`。 |
+| `EditorSetting` | Editor-only page/field 定义，`OnDraw(EditorSettingObject)` 是绘制扩展点。 |
+| `EditorSettingObject` | 使用当前 Inno Serialization 的隔离结构化值对象。 |
+| `EditorSettings` | `Settings.Editor.inno` 的读取、Apply、Reset、History 与变更通知。 |
+| `ProjectSettingPathAttribute` | 把强类型 Project Setting Drawer 放入 `Project/...`。 |
+| `ProjectSettingEditor` | frontend 使用的非泛型定义与 placement metadata。 |
+| `ProjectSettingEditor<TSetting>` | Plugin/Host 实现的强类型 `OnDraw(TSetting)` 扩展点。 |
+| `ProjectSettingsEditor` | Host-owned Project contribution staging、Apply 与 History 服务；普通业务脚本读取设置时应使用 `ProjectSettingsStore`。 |
 
-`EditorSettingObject` 支持 Boolean、Int32、UInt32、Int64、UInt64、Single、Double、String，以及 Boolean、Int32、UInt32、Single、Double、String 数组。数组读取始终返回独立副本；Single/Double 拒绝非有限值。框架不公开任意泛型反序列化入口，也不允许字段把运行时对象、`Type` 或 delegate 放入设置值。
+## 生命周期与约束
 
-唯一的业务读取入口是：
-
-```csharp
-EditorSettingObject value = editorSettings.Get("Global/Appearance/Icons/Scene");
-string glyph = value.GetAsString("value", "default-glyph")!;
-```
-
-路径无效、没有定义或指向 page 时，`Get` 抛出 `ArgumentException`。返回值始终隔离；调用方修改它不会改变已提交文档。
-
-## 存储、Apply 与 History
-
-磁盘中的每个 property name 是完整路径，每个 property value 必须是 JSON object：
-
-```json
-{
-  "Global/Appearance/Accessibility/Actual Size": {
-    "value": 1.25
-  },
-  "Project/Layers/Game Layers": {
-    "names": ["Default", "Player"],
-    "interactionMasks": [4294967295]
-  }
-}
-```
-
-`Apply(values, resets)` 接受原始字符串路径。一次有效 Apply 先生成完整 replacement，通过同目录临时文件原子覆盖根目录文档，再向 `EditorInteractions.history` 记录一条 `Apply Settings`。这条记录保存 Apply 前后的完整设置文档，因此 Actual Size、Icons、Game Layers 以及未来字段共用同一种 Undo/Redo 协议，不存在 feature 专属 Settings action。
-
-Undo/Redo 使用同一个严格 writer 恢复完整文档。磁盘写入或 History 记录失败时，Apply 回滚到原文档；无实际变化的 Apply 返回 `false` 且不制造空 History entry。成功的 Apply、Undo 或 Redo 都只调用一次：
-
-```csharp
-editorSettings.changed += settings => RefreshFrom(settings);
-```
-
-事件参数就是已提交的 `EditorSettings` 服务，没有 change-event args 或路径 diff 类型。通知按订阅者逐个隔离；单个订阅者抛异常只记录日志，后续订阅者仍会收到通知，也不会把已经成功的 Apply/Undo/Redo 改写为失败。
-
-Reset 通过 `resets` 集合删除指定完整路径的 override，随后 `Get` 返回该定义的默认对象。字段必须 override `defaultValue` 并在每次访问时返回新对象；page 保留基类的内部空实现。`IsDefault` 使用注册时绑定的隔离副本比较暂存值。它与普通值修改处于同一 Apply、同一原子写入和同一 History entry 中。
-
-## Feature 所有权
-
-框架不拥有任何内建设置：
-
-- [Inno.Editor.Panel.Global](Inno.Editor.Panel.Global.md) 定义 Global/Appearance 页面、Actual Size 和 Scene/GameObject/Prefab/Layers/Folder/File icon 字段，并拥有临时 Zoom actions/module。
-- [Inno.Editor.Panel.Inspector](Inno.Editor.Panel.Inspector.md) 定义 Project/Layers 与 Game Layers 字段。
-- Hierarchy、Inspector、FileBrowser 和 Global zoom module 直接用原始路径调用 `EditorSettings.Get`，各自解释对象属性；没有 `EditorIcons` 常量类或 `IEditorIconResolver` 中间层。
-- Game Layers 以 names/masks 数组保存在同一个根目录文档中，不存在 `.ilayers` importer、AssetObject、metadata、Asset History action 或第二套 Undo 栈。
-
-## 热重载与 Scripting API
-
-每个定义必须有可构造的无参数构造函数。TypeCache generation 激活时，Catalog 先构造完整候选，再原子切换 definitions snapshot；`catalogRevision` 标识当前发现结果。
-
-EditorScripts 使用 `using InnoEditor.Settings;`。脚本导出严格限于 `EditorSettingPathAttribute`、`EditorSetting`、`EditorSettingObject` 和 `EditorSettings`，其定义、读取、绘制和 Apply 行为与 Host 完全一致。
-
-## 常见约束
-
-- `OnDraw` 只改传入的 staged object，不直接写文件、不调用 Apply。
-- page 不 override `defaultValue` 或 `OnDraw`；field 必须同时 override `defaultValue` 与 `OnDraw`。
-- field 至少包含一个 parent page segment；完整 field path 不能同时充当其他定义的 parent page。
-- 不要把 Selection、Undo payload、dirty Scene、Dock layout 或 Workspace 导航写入 `EditorSettings.json`。
-- 删除或移动 path 时同步当前项目 JSON、调用方、测试和 Wiki，不保留旧 key alias。
+- Editor、Project、Build 三个域共享窗口、搜索、页面树、控件布局与一个 Apply 按钮，但仍拥有独立文档和 History entry，不伪装成跨文件原子事务。
+- `Editor/...` 不参与 Plugin 默认贡献，也不进入 Player；`Project/...` 使用强类型 Setting 协议而不是 Editor property bag。
+- `Build/...` 是 Host 内置编辑面，不提供 Plugin contribution；导出 modal 只复制默认值作为临时 draft。
+- `SettingsDocumentStore<T>` 统一三个域的 current-format 验证、capture/restore 与原子写入；`EditorSettings`、`ProjectSettingsStore`、`BuildSettingsStore` 继续拥有不同生命周期和 History。
+- Project setting 的长期身份是 `ProjectSettingId` 与 Stable Type ID，UI 路径只决定 Editor 中的位置。
+- Catalog generation 先完整构建候选再原子切换；Drawer 不应订阅静态事件或长期保存传入的 setting 实例。
+- 删除或移动路径时同步当前项目数据、调用方与 Wiki，不保留旧 key alias。
 
 [上一页：Inno.Editor.Scene](Inno.Editor.Scene.md) · [下一页：Inno.Editor.Panel.Settings](Inno.Editor.Panel.Settings.md)

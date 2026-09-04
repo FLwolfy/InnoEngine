@@ -16,33 +16,53 @@ namespace Inno.Editor.Panel.Inspector;
 /// <summary>
 /// Draws the registered inspector for the current editor selection.
 /// </summary>
-[EditorPanel("scene.inspector", "Inspector", order: 200)]
+[EditorPanel("scene.inspector", "Inspector", order: 200, menuPath: "Workspace")]
 internal sealed class InspectorPanel : EditorPanel
 {
     private readonly SceneInspectionModule m_inspection;
     private readonly EditorInteractions m_interactions;
     private readonly InspectorTargetHeader m_targetHeader;
+    private readonly Logger m_log;
     private string m_failureState = string.Empty;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets whether use window padding is enabled for this implementation.
+    /// </summary>
     public override bool useWindowPadding => false;
 
     /// <summary>
     /// Creates the panel.
     /// </summary>
-    /// <param name="inspection">The scene inspection module that owns drawer registries and property rendering.</param>
-    /// <param name="interactions">The active editor interaction entry point.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="inspection"/> or <paramref name="interactions"/> is <see langword="null"/>.</exception>
+    /// <param name="inspection">
+    /// The scene inspection module that owns drawer registries and property rendering.
+    /// </param>
+    /// <param name="interactions">
+    /// The active editor interaction entry point.
+    /// </param>
+    /// <param name="logs">
+    /// The application log router used for inspector presentation failures.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="inspection"/> or <paramref name="interactions"/> is <see langword="null"/>.
+    /// </exception>
     internal InspectorPanel(
         SceneInspectionModule inspection,
-        EditorInteractions interactions)
+        EditorInteractions interactions,
+        LogRouter logs)
     {
         m_inspection = inspection ?? throw new ArgumentNullException(nameof(inspection));
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
+        ArgumentNullException.ThrowIfNull(logs);
+        m_log = logs.CreateLogger<InspectorPanel>();
         m_targetHeader = new InspectorTargetHeader();
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Draws this feature using the current editor presentation context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnDraw(EditorContext context)
     {
         bool visible = NativeImGui.BeginChild(
@@ -102,10 +122,10 @@ internal sealed class InspectorPanel : EditorPanel
             string failureState = $"{target.GetType().FullName}:{exception}";
             if (!string.Equals(m_failureState, failureState, StringComparison.Ordinal))
             {
-                Log.Error(
+                m_log.Write(
+                    LogLevel.Error,
                     "Inspector failed for target '{0}': {1}",
-                    target.GetType().FullName ?? target.GetType().Name,
-                    exception);
+                    [target.GetType().FullName ?? target.GetType().Name, exception]);
                 m_failureState = failureState;
             }
         }

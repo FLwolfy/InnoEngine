@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
 
 namespace Inno.Editor.Core;
 
@@ -15,7 +15,9 @@ public sealed class EditorContext
     /// <summary>
     /// Creates a passive editor context for one project.
     /// </summary>
-    /// <param name="projectDirectory">The project root containing Assets and Library.</param>
+    /// <param name="projectDirectory">
+    /// The project root containing Assets and Library.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="projectDirectory"/> is empty.
     /// </exception>
@@ -26,12 +28,18 @@ public sealed class EditorContext
             throw new ArgumentException("A project directory is required.", nameof(projectDirectory));
         this.projectDirectory = Path.GetFullPath(projectDirectory);
         layout = new EditorLayoutSettings(this.projectDirectory);
+        statistics = new EditorStatistics();
     }
 
     /// <summary>
     /// Gets the normalized project root directory.
     /// </summary>
     public string projectDirectory { get; }
+
+    /// <summary>
+    /// Gets the frame-scoped statistics exchange used by independent editor features and viewers.
+    /// </summary>
+    public EditorStatistics statistics { get; }
 
     /// <summary>
     /// Gets the absolute path of the project editor layout document.

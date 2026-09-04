@@ -12,41 +12,41 @@ namespace Inno.Editor.Interactions;
 /// </summary>
 internal sealed class EditorHistory : IEditorHistory, IDisposable
 {
-    private const int C_DEFAULT_CAPACITY = 256;
-
-    private readonly List<EditorHistoryOperation> m_undo = [];
-    private readonly List<EditorHistoryOperation> m_redo = [];
+    private List<EditorHistoryOperation> m_undo = [];
+    private List<EditorHistoryOperation> m_redo = [];
     private readonly Stack<TransactionOperation> m_transactions = [];
     private readonly EditorHistoryOptions m_options;
     private readonly EditorHistoryBlobStore m_blobStore;
+    private readonly Logger m_log;
 
     private IReadOnlyDictionary<string, EditorHistoryHandler> m_handlers =
         new Dictionary<string, EditorHistoryHandler>(StringComparer.Ordinal);
     private EditorHistoryContext? m_context;
+    private IsolationState? m_isolation;
     private bool m_isTransitioning;
     private bool m_isFaulted;
     private string? m_faultReason;
     private bool m_isDisposed;
 
     /// <summary>
-    /// Creates an empty history with a bounded number of retained operations.
-    /// </summary>
-    /// <param name="capacity">The maximum number of committed top-level operations retained for Undo.</param>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="capacity"/> is not positive.</exception>
-    internal EditorHistory(int capacity = C_DEFAULT_CAPACITY)
-        : this(new EditorHistoryOptions { maxEntries = capacity })
-    {
-    }
-
-    /// <summary>
     /// Creates an empty history with explicit entry, resident-memory, and temporary-disk budgets.
     /// </summary>
-    /// <param name="options">The validated retention and payload storage options.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when an option contains an invalid capacity.</exception>
-    internal EditorHistory(EditorHistoryOptions options)
+    /// <param name="options">
+    /// The validated retention and payload storage options.
+    /// </param>
+    /// <param name="log">
+    /// The explicitly owned category logger for transition failures.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="options"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when an option contains an invalid capacity.
+    /// </exception>
+    internal EditorHistory(EditorHistoryOptions options, Logger log)
     {
         ArgumentNullException.ThrowIfNull(options);
+        m_log = log ?? throw new ArgumentNullException(nameof(log));
         options.Validate();
         m_options = options;
         capacity = options.maxEntries;
@@ -104,21 +104,37 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
     /// Gets the estimated resident payload bytes retained by committed Undo and Redo entries.
     /// </summary>
     public long residentBytes => Sum(m_undo, static operation => operation.estimatedMemorySize) +
-                                 Sum(m_redo, static operation => operation.estimatedMemorySize);
+                                 Sum(m_redo, static operation => operation.estimatedMemorySize) +
+                                 (m_isolation is IsolationState isolation
+                                     ? Sum(isolation.undo, static operation => operation.estimatedMemorySize) +
+                                       Sum(isolation.redo, static operation => operation.estimatedMemorySize)
+                                     : 0L);
 
     /// <summary>
     /// Gets the estimated temporary disk payload bytes retained by committed Undo and Redo entries.
     /// </summary>
     public long diskBytes => Sum(m_undo, static operation => operation.estimatedDiskSize) +
-                             Sum(m_redo, static operation => operation.estimatedDiskSize);
+                             Sum(m_redo, static operation => operation.estimatedDiskSize) +
+                             (m_isolation is IsolationState isolation
+                                 ? Sum(isolation.undo, static operation => operation.estimatedDiskSize) +
+                                   Sum(isolation.redo, static operation => operation.estimatedDiskSize)
+                                 : 0L);
 
     /// <summary>
     /// Begins an atomic group whose child operations appear as one Undo entry.
     /// </summary>
-    /// <param name="name">The user-facing name of the grouped operation.</param>
-    /// <returns>A transaction that must be committed or rolled back.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is empty.</exception>
-    /// <exception cref="InvalidOperationException">Thrown while Undo or Redo is executing.</exception>
+    /// <param name="name">
+    /// The user-facing name of the grouped operation.
+    /// </param>
+    /// <returns>
+    /// A transaction that must be committed or rolled back.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="name"/> is empty.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown while Undo or Redo is executing.
+    /// </exception>
     public EditorHistoryTransaction BeginTransaction(string name)
     {
         EnsureMutable();
@@ -132,11 +148,21 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
     /// <summary>
     /// Executes a mutation and records its inverse only when the mutation succeeds.
     /// </summary>
-    /// <param name="name">The user-facing operation name.</param>
-    /// <param name="execute">The callback that applies the initial mutation and every future Redo.</param>
-    /// <param name="undo">The callback that restores the previous state.</param>
-    /// <param name="mergeKey">An optional stable key used to coalesce adjacent value-like edits.</param>
-    /// <returns>The result produced by the initial mutation.</returns>
+    /// <param name="name">
+    /// The user-facing operation name.
+    /// </param>
+    /// <param name="execute">
+    /// The callback that applies the initial mutation and every future Redo.
+    /// </param>
+    /// <param name="undo">
+    /// The callback that restores the previous state.
+    /// </param>
+    /// <param name="mergeKey">
+    /// An optional stable key used to coalesce adjacent value-like edits.
+    /// </param>
+    /// <returns>
+    /// The result produced by the initial mutation.
+    /// </returns>
     internal EditorHistoryResult Execute(
         string name,
         Func<EditorHistoryResult> execute,
@@ -162,11 +188,21 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
     /// <summary>
     /// Applies a neutral change through its current-generation handler and records it only when successful.
     /// </summary>
-    /// <param name="name">The user-facing operation name.</param>
-    /// <param name="change">The independently owned neutral change whose ownership transfers to the history.</param>
-    /// <returns>The result of applying the change in the Redo direction.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is empty.</exception>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="change"/> is <see langword="null"/>.</exception>
+    /// <param name="name">
+    /// The user-facing operation name.
+    /// </param>
+    /// <param name="change">
+    /// The independently owned neutral change whose ownership transfers to the history.
+    /// </param>
+    /// <returns>
+    /// The result of applying the change in the Redo direction.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="name"/> is empty.
+    /// </exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="change"/> is <see langword="null"/>.
+    /// </exception>
     public EditorHistoryResult Execute(string name, EditorHistoryChange change)
     {
         EnsureMutable();
@@ -195,8 +231,12 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
     /// <summary>
     /// Records a mutation that has already been applied by the caller.
     /// </summary>
-    /// <param name="operation">The complete reversible operation representing the applied state.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="operation"/> is <see langword="null"/>.</exception>
+    /// <param name="operation">
+    /// The complete reversible operation representing the applied state.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="operation"/> is <see langword="null"/>.
+    /// </exception>
     internal void RecordApplied(EditorHistoryOperation operation)
     {
         EnsureMutable();
@@ -207,10 +247,18 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
     /// <summary>
     /// Records a neutral change whose mutation has already been applied by its feature facade.
     /// </summary>
-    /// <param name="name">The user-facing operation name.</param>
-    /// <param name="change">The independently owned neutral change whose ownership transfers to the history.</param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is empty.</exception>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="change"/> is <see langword="null"/>.</exception>
+    /// <param name="name">
+    /// The user-facing operation name.
+    /// </param>
+    /// <param name="change">
+    /// The independently owned neutral change whose ownership transfers to the history.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="name"/> is empty.
+    /// </exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="change"/> is <see langword="null"/>.
+    /// </exception>
     public void RecordApplied(string name, EditorHistoryChange change)
     {
         EnsureMutable();
@@ -229,12 +277,24 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
     /// <summary>
     /// Records an already-applied value change with automatic adjacent-edit coalescing.
     /// </summary>
-    /// <typeparam name="T">The value type captured by the operation.</typeparam>
-    /// <param name="name">The user-facing operation name.</param>
-    /// <param name="before">The value that existed before the edit.</param>
-    /// <param name="after">The value produced by the edit.</param>
-    /// <param name="apply">The callback that assigns either captured value.</param>
-    /// <param name="mergeKey">A stable key identifying edits to the same logical value.</param>
+    /// <typeparam name="T">
+    /// The value type captured by the operation.
+    /// </typeparam>
+    /// <param name="name">
+    /// The user-facing operation name.
+    /// </param>
+    /// <param name="before">
+    /// The value that existed before the edit.
+    /// </param>
+    /// <param name="after">
+    /// The value produced by the edit.
+    /// </param>
+    /// <param name="apply">
+    /// The callback that assigns either captured value.
+    /// </param>
+    /// <param name="mergeKey">
+    /// A stable key identifying edits to the same logical value.
+    /// </param>
     internal void RecordValue<T>(
         string name,
         T before,
@@ -252,14 +312,48 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
     /// <summary>
     /// Attempts to restore the state preceding the newest committed operation.
     /// </summary>
-    /// <returns>The transition result. A failed operation remains available for retry.</returns>
+    /// <returns>
+    /// The transition result. A failed operation remains available for retry.
+    /// </returns>
     public EditorHistoryResult Undo() => Transition(m_undo, m_redo, undo: true);
 
     /// <summary>
     /// Attempts to reapply the newest reverted operation.
     /// </summary>
-    /// <returns>The transition result. A failed operation remains available for retry.</returns>
+    /// <returns>
+    /// The transition result. A failed operation remains available for retry.
+    /// </returns>
     public EditorHistoryResult Redo() => Transition(m_redo, m_undo, undo: false);
+
+    /// <summary>
+    /// Starts a temporary empty history branch while retaining the current branch for restoration.
+    /// </summary>
+    /// <returns>
+    /// A scope that discards the temporary branch and restores the retained branch.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown during an Undo, Redo, transaction, or another isolated branch.
+    /// </exception>
+    internal IDisposable BeginIsolation()
+    {
+        EnsureMutable();
+        if (m_transactions.Count != 0)
+            throw new InvalidOperationException("Editor history cannot be isolated during a transaction.");
+        if (m_isolation is not null)
+            throw new InvalidOperationException("Editor history already owns an isolated branch.");
+
+        var isolation = new IsolationState(
+            m_undo,
+            m_redo,
+            m_isFaulted,
+            m_faultReason);
+        m_isolation = isolation;
+        m_undo = [];
+        m_redo = [];
+        m_isFaulted = false;
+        m_faultReason = null;
+        return new Isolation(this, isolation);
+    }
 
     /// <summary>
     /// Removes and disposes every Undo and Redo operation.
@@ -272,6 +366,12 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
             throw new InvalidOperationException("Editor history cannot be cleared during Undo or Redo.");
         DisposeAll(m_undo);
         DisposeAll(m_redo);
+        if (m_isolation is IsolationState isolation)
+        {
+            DisposeAll(isolation.undo);
+            DisposeAll(isolation.redo);
+            m_isolation = null;
+        }
         while (m_transactions.TryPop(out TransactionOperation? transaction))
             transaction.Dispose();
         m_isFaulted = false;
@@ -337,7 +437,8 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
             return;
         }
         m_undo.Add(operation);
-        while (m_undo.Count > capacity)
+        int retainedUndoCount = m_isolation?.undo.Count ?? 0;
+        while (m_undo.Count > 0 && m_undo.Count + retainedUndoCount > capacity)
         {
             m_undo[0].Dispose();
             m_undo.RemoveAt(0);
@@ -414,7 +515,10 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
             return;
         m_isFaulted = true;
         m_faultReason = result.message;
-        Log.Error("Editor history was faulted because state integrity was lost: {0}", result.message);
+        m_log.Write(
+            LogLevel.Error,
+            "Editor history was faulted because state integrity was lost: {0}",
+            [result.message]);
     }
 
     internal void Attach(EditorContext editor, EditorInteractions interactions)
@@ -506,15 +610,39 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
                 transaction.Dispose();
         }
 
-        int newestUnsafe = m_undo.FindLastIndex(static operation => !operation.isReloadSafe);
+        DiscardRuntimeBoundEntries(m_undo, m_redo);
+        if (m_isolation is IsolationState isolation)
+            DiscardRuntimeBoundEntries(isolation.undo, isolation.redo);
+    }
+
+    private static void DiscardRuntimeBoundEntries(
+        List<EditorHistoryOperation> undo,
+        List<EditorHistoryOperation> redo)
+    {
+        int newestUnsafe = undo.FindLastIndex(static operation => !operation.isReloadSafe);
         if (newestUnsafe >= 0)
         {
             for (int i = newestUnsafe; i >= 0; i--)
-                m_undo[i].Dispose();
-            m_undo.RemoveRange(0, newestUnsafe + 1);
+                undo[i].Dispose();
+            undo.RemoveRange(0, newestUnsafe + 1);
         }
-        if (m_redo.Exists(static operation => !operation.isReloadSafe))
-            DisposeAll(m_redo);
+        if (redo.Exists(static operation => !operation.isReloadSafe))
+            DisposeAll(redo);
+    }
+
+    private void EndIsolation(IsolationState isolation)
+    {
+        if (m_isDisposed || !ReferenceEquals(m_isolation, isolation))
+            return;
+        DisposeAll(m_undo);
+        DisposeAll(m_redo);
+        while (m_transactions.TryPop(out TransactionOperation? transaction))
+            transaction.Dispose();
+        m_undo = isolation.undo;
+        m_redo = isolation.redo;
+        m_isFaulted = isolation.isFaulted;
+        m_faultReason = isolation.faultReason;
+        m_isolation = null;
     }
 
     private string? GetUnavailableReason(
@@ -545,7 +673,7 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
         return total;
     }
 
-    private static EditorHistoryResult Invoke(
+    private EditorHistoryResult Invoke(
         Func<EditorHistoryResult> callback,
         string name,
         string transition)
@@ -554,12 +682,18 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
         {
             EditorHistoryResult result = callback();
             if (!result.succeeded)
-                Log.Warn("Editor history operation '{0}' could not {1}: {2}", name, transition, result.message);
+                m_log.Write(
+                    LogLevel.Warn,
+                    "Editor history operation '{0}' could not {1}: {2}",
+                    [name, transition, result.message]);
             return result;
         }
         catch (Exception exception)
         {
-            Log.Error("Editor history operation '{0}' failed to {1}: {2}", name, transition, exception);
+            m_log.Write(
+                LogLevel.Error,
+                "Editor history operation '{0}' failed to {1}: {2}",
+                [name, transition, exception]);
             return EditorHistoryResult.StateIntegrityLost(
                 $"The {transition} callback for '{name}' threw before it could prove rollback: {exception.Message}");
         }
@@ -612,8 +746,34 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
             }
             catch (Exception exception)
             {
-                Log.Error("Editor history could not release reload-unsafe entries: {0}", exception);
+                owner.m_log.Write(
+                    LogLevel.Error,
+                    "Editor history could not release reload-unsafe entries: {0}",
+                    [exception]);
             }
+        }
+    }
+
+    private sealed record IsolationState(
+        List<EditorHistoryOperation> undo,
+        List<EditorHistoryOperation> redo,
+        bool isFaulted,
+        string? faultReason);
+
+    private sealed class Isolation(EditorHistory owner, IsolationState state) : IDisposable
+    {
+        private EditorHistory? m_owner = owner;
+
+        /// <summary>
+        /// Releases the resources owned by this instance.
+        /// </summary>
+        public void Dispose()
+        {
+            EditorHistory? current = m_owner;
+            if (current is null)
+                return;
+            m_owner = null;
+            current.EndIsolation(state);
         }
     }
 
@@ -635,12 +795,36 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
             m_mergeKey = mergeKey;
         }
 
+        /// <summary>
+        /// Gets the human-readable name used for presentation and diagnostics.
+        /// </summary>
         public override string name { get; }
 
+        /// <summary>
+        /// Restores the state that preceded this history operation.
+        /// </summary>
+        /// <returns>
+        /// The validated editor history result that represents the completed operation.
+        /// </returns>
         protected override EditorHistoryResult Undo() => m_undo();
 
+        /// <summary>
+        /// Reapplies the state represented by this history operation.
+        /// </summary>
+        /// <returns>
+        /// The validated editor history result that represents the completed operation.
+        /// </returns>
         protected override EditorHistoryResult Redo() => m_redo();
 
+        /// <summary>
+        /// Attempts to merge without changing state when the operation cannot complete.
+        /// </summary>
+        /// <param name="newer">
+        /// The later history payload considered for coalescing.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the requested condition is satisfied; otherwise, <see langword="false"/>.
+        /// </returns>
         protected override bool TryMerge(EditorHistoryOperation newer)
         {
             if (m_mergeKey is null || newer is not DelegateOperation candidate ||
@@ -666,26 +850,65 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
             m_change = owner.RetainChange(change);
         }
 
+        /// <summary>
+        /// Gets the human-readable name used for presentation and diagnostics.
+        /// </summary>
         public override string name => m_name;
 
+        /// <summary>
+        /// Gets whether this value can undo.
+        /// </summary>
         public override bool canUndo => m_owner.Query(m_change, EditorHistoryDirection.Undo).isAvailable;
 
+        /// <summary>
+        /// Gets whether this value can redo.
+        /// </summary>
         public override bool canRedo => m_owner.Query(m_change, EditorHistoryDirection.Redo).isAvailable;
 
+        /// <summary>
+        /// Gets whether this value is reload safe.
+        /// </summary>
         public override bool isReloadSafe => true;
 
+        /// <summary>
+        /// Gets the estimated resident-memory cost in bytes.
+        /// </summary>
         public override long estimatedMemorySize => m_change.residentSize;
 
+        /// <summary>
+        /// Gets the estimated spill-file cost in bytes.
+        /// </summary>
         public override long estimatedDiskSize => m_change.diskSize;
 
         internal EditorHistoryChange change => m_change;
 
+        /// <summary>
+        /// Restores the state that preceded this history operation.
+        /// </summary>
+        /// <returns>
+        /// The validated editor history result that represents the completed operation.
+        /// </returns>
         protected override EditorHistoryResult Undo()
             => m_owner.Apply(m_change, EditorHistoryDirection.Undo);
 
+        /// <summary>
+        /// Reapplies the state represented by this history operation.
+        /// </summary>
+        /// <returns>
+        /// The validated editor history result that represents the completed operation.
+        /// </returns>
         protected override EditorHistoryResult Redo()
             => m_owner.Apply(m_change, EditorHistoryDirection.Redo);
 
+        /// <summary>
+        /// Attempts to merge without changing state when the operation cannot complete.
+        /// </summary>
+        /// <param name="newer">
+        /// The later history payload considered for coalescing.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the requested condition is satisfied; otherwise, <see langword="false"/>.
+        /// </returns>
         protected override bool TryMerge(EditorHistoryOperation newer)
         {
             if (newer is not DataOperation candidate ||
@@ -708,6 +931,12 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
             return true;
         }
 
+        /// <summary>
+        /// Releases the resources owned by this instance.
+        /// </summary>
+        /// <param name="disposing">
+        /// Whether the owner is permanently disposing rather than clearing reusable state.
+        /// </param>
         protected override void Dispose(bool disposing)
         {
             if (disposing)
@@ -740,20 +969,44 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
             m_lastEditTimestamp = Stopwatch.GetTimestamp();
         }
 
+        /// <summary>
+        /// Gets the human-readable name used for presentation and diagnostics.
+        /// </summary>
         public override string name { get; }
 
+        /// <summary>
+        /// Restores the state that preceded this history operation.
+        /// </summary>
+        /// <returns>
+        /// The validated editor history result that represents the completed operation.
+        /// </returns>
         protected override EditorHistoryResult Undo()
         {
             m_apply(m_before);
             return EditorHistoryResult.Success();
         }
 
+        /// <summary>
+        /// Reapplies the state represented by this history operation.
+        /// </summary>
+        /// <returns>
+        /// The validated editor history result that represents the completed operation.
+        /// </returns>
         protected override EditorHistoryResult Redo()
         {
             m_apply(m_after);
             return EditorHistoryResult.Success();
         }
 
+        /// <summary>
+        /// Attempts to merge without changing state when the operation cannot complete.
+        /// </summary>
+        /// <param name="newer">
+        /// The later history payload considered for coalescing.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the requested condition is satisfied; otherwise, <see langword="false"/>.
+        /// </returns>
         protected override bool TryMerge(EditorHistoryOperation newer)
         {
             if (newer is not ValueOperation<T> candidate ||
@@ -771,26 +1024,50 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
     {
         private readonly List<EditorHistoryOperation> m_children = [];
 
+        /// <summary>
+        /// Gets the human-readable name used for presentation and diagnostics.
+        /// </summary>
         public override string name => operationName;
 
         internal Guid id => transactionId;
 
         internal int count => m_children.Count;
 
+        /// <summary>
+        /// Gets whether this value is reload safe.
+        /// </summary>
         public override bool isReloadSafe => m_children.TrueForAll(static operation => operation.isReloadSafe);
 
+        /// <summary>
+        /// Gets whether this value can undo.
+        /// </summary>
         public override bool canUndo => m_children.TrueForAll(static operation => operation.canUndo);
 
+        /// <summary>
+        /// Gets whether this value can redo.
+        /// </summary>
         public override bool canRedo => m_children.TrueForAll(static operation => operation.canRedo);
 
+        /// <summary>
+        /// Gets the estimated resident-memory cost in bytes.
+        /// </summary>
         public override long estimatedMemorySize
             => Sum(m_children, static operation => operation.estimatedMemorySize);
 
+        /// <summary>
+        /// Gets the estimated spill-file cost in bytes.
+        /// </summary>
         public override long estimatedDiskSize
             => Sum(m_children, static operation => operation.estimatedDiskSize);
 
         internal void Add(EditorHistoryOperation operation) => m_children.Add(operation);
 
+        /// <summary>
+        /// Restores the state that preceded this history operation.
+        /// </summary>
+        /// <returns>
+        /// The validated editor history result that represents the completed operation.
+        /// </returns>
         protected override EditorHistoryResult Undo()
         {
             var compensationFailures = new List<string>();
@@ -813,6 +1090,12 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
             return EditorHistoryResult.Success();
         }
 
+        /// <summary>
+        /// Reapplies the state represented by this history operation.
+        /// </summary>
+        /// <returns>
+        /// The validated editor history result that represents the completed operation.
+        /// </returns>
         protected override EditorHistoryResult Redo()
         {
             var compensationFailures = new List<string>();
@@ -865,6 +1148,12 @@ internal sealed class EditorHistory : IEditorHistory, IDisposable
                 $"Transaction {transition} failed: {original.message} {compensation}");
         }
 
+        /// <summary>
+        /// Releases the resources owned by this instance.
+        /// </summary>
+        /// <param name="disposing">
+        /// Whether the owner is permanently disposing rather than clearing reusable state.
+        /// </param>
         protected override void Dispose(bool disposing)
         {
             if (!disposing)

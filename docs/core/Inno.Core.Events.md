@@ -1,6 +1,6 @@
 # Inno.Core.Events
 
-[上一页：Framework](Inno.Core.Framework.md) · [Core 索引](README.md) · [下一页：Coroutines](Inno.Core.Coroutines.md)
+[上一页：Diagnostics](Inno.Core.Diagnostics.md) · [Core 索引](README.md) · [下一页：Coroutines](Inno.Core.Coroutines.md)
 
 Events 系统由一个 `EventDispatcher` 和多个有序 `EventHub` 构成。Dispatcher 决定 hub 顺序；Hub 决定监听器优先级，并支持只终止当前 hub 或终止全局链。
 

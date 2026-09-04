@@ -15,7 +15,12 @@ internal sealed class StructPropertyDrawer : IPropertyDrawer
 {
     private static readonly ConditionalWeakTable<Type, MembersBox> S_MEMBER_CACHE = new();
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     public void Draw(PropertyDrawContext context)
     {
         object boxedValue = context.GetValue() ?? Activator.CreateInstance(context.propertyType)!;

@@ -36,15 +36,23 @@ public readonly record struct EditorHistoryResult
     /// <summary>
     /// Creates a successful history result.
     /// </summary>
-    /// <returns>A result representing a completed transition.</returns>
+    /// <returns>
+    /// A result representing a completed transition.
+    /// </returns>
     public static EditorHistoryResult Success() => new(true, true, string.Empty);
 
     /// <summary>
     /// Creates a failed history result without changing the owning history stack.
     /// </summary>
-    /// <param name="message">The non-empty diagnostic explaining why the transition could not complete.</param>
-    /// <returns>A result representing a rejected or failed transition.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="message"/> is empty.</exception>
+    /// <param name="message">
+    /// The non-empty diagnostic explaining why the transition could not complete.
+    /// </param>
+    /// <returns>
+    /// A result representing a rejected or failed transition.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="message"/> is empty.
+    /// </exception>
     public static EditorHistoryResult Failure(string message)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(message);

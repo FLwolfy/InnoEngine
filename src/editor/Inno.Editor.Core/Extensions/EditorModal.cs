@@ -1,16 +1,22 @@
 using System.Numerics;
 
-using Inno.Core.Scripting;
+using Inno.Scripting.Api;
 
 namespace Inno.Editor.Core;
 
-/// <summary>Defines non-dockable modal editor content.</summary>
+/// <summary>
+/// Defines non-dockable modal editor content.
+/// </summary>
 public abstract class EditorModal
 {
-    /// <summary>Gets whether the modal should currently be visible.</summary>
+    /// <summary>
+    /// Gets whether the modal should currently be visible.
+    /// </summary>
     public abstract bool isVisible { get; }
 
-    /// <summary>Gets whether the modal prevents interaction with regular editor views.</summary>
+    /// <summary>
+    /// Gets whether the modal prevents interaction with regular editor views.
+    /// </summary>
     public virtual bool blocksInteraction => true;
 
     /// <summary>
@@ -38,7 +44,9 @@ public abstract class EditorModal
     /// <summary>
     /// Draws the modal body inside the runtime-managed centered window.
     /// </summary>
-    /// <param name="context">The shared editor context containing current project and frame state.</param>
+    /// <param name="context">
+    /// The shared editor context containing current project and frame state.
+    /// </param>
     /// <exception cref="System.ArgumentNullException">
     /// Thrown when <paramref name="context"/> is <see langword="null"/>.
     /// </exception>
@@ -52,6 +60,8 @@ public abstract class EditorModal
     /// <summary>
     /// Draws the modal body inside the runtime-managed centered window.
     /// </summary>
-    /// <param name="context">The shared editor context containing current project and frame state.</param>
+    /// <param name="context">
+    /// The shared editor context containing current project and frame state.
+    /// </param>
     protected abstract void OnDraw(EditorContext context);
 }

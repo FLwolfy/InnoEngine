@@ -70,8 +70,12 @@ public sealed class SerializedProperty
     /// <summary>
     /// Gets the current value.
     /// </summary>
-    /// <returns>The value produced by the getter delegate.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when runtime reads are not permitted.</exception>
+    /// <returns>
+    /// The value produced by the getter delegate.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when runtime reads are not permitted.
+    /// </exception>
     public object? GetValue()
     {
         if (!canRead)
@@ -82,8 +86,12 @@ public sealed class SerializedProperty
     /// <summary>
     /// Sets the current value.
     /// </summary>
-    /// <param name="value">The value to assign.</param>
-    /// <exception cref="InvalidOperationException">Thrown when runtime writes are not permitted.</exception>
+    /// <param name="value">
+    /// The value to assign.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when runtime writes are not permitted.
+    /// </exception>
     public void SetValue(object? value)
     {
         if (!canWrite)

@@ -1,8 +1,11 @@
 namespace Inno.Platform;
 
 /// <summary>
-/// Options used when creating a <see cref="PlatformWindow"/>.
+/// Defines backend-neutral properties used to create a platform window.
 /// </summary>
+/// <returns>
+/// A validated immutable window description.
+/// </returns>
 public readonly struct PlatformWindowOptions()
 {
     /// <summary>
@@ -11,12 +14,12 @@ public readonly struct PlatformWindowOptions()
     public string title { get; init; } = "Inno Window";
 
     /// <summary>
-    /// Gets the initial window width in pixels.
+    /// Gets the initial window width in platform-independent logical units.
     /// </summary>
     public int width { get; init; } = 1280;
 
     /// <summary>
-    /// Gets the initial window height in pixels.
+    /// Gets the initial window height in platform-independent logical units.
     /// </summary>
     public int height { get; init; } = 720;
 

@@ -22,12 +22,24 @@ public sealed class AssetIconAttribute : Attribute
     /// <summary>
     /// Creates an icon declaration using a glyph from the Editor icon catalog.
     /// </summary>
-    /// <param name="assetType">The imported asset type represented by the icon.</param>
-    /// <param name="icon">The Editor icon glyph to render.</param>
-    /// <param name="useForChildren">Whether the declaration may also represent derived asset types.</param>
-    /// <param name="priority">The tie-breaking priority after exactness and inheritance distance.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="assetType"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="icon"/> is empty.</exception>
+    /// <param name="assetType">
+    /// The imported asset type represented by the icon.
+    /// </param>
+    /// <param name="icon">
+    /// The Editor icon glyph to render.
+    /// </param>
+    /// <param name="useForChildren">
+    /// Whether the declaration may also represent derived asset types.
+    /// </param>
+    /// <param name="priority">
+    /// The tie-breaking priority after exactness and inheritance distance.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="assetType"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="icon"/> is empty.
+    /// </exception>
     public AssetIconAttribute(
         Type assetType,
         string icon,
@@ -46,8 +58,12 @@ public sealed class AssetIconAttribute : Attribute
     /// <param name="extension">
     /// The simple or compound file extension. A leading period is optional and matching is case-insensitive.
     /// </param>
-    /// <param name="icon">The Editor icon glyph to render.</param>
-    /// <param name="priority">The tie-breaking priority after extension specificity.</param>
+    /// <param name="icon">
+    /// The Editor icon glyph to render.
+    /// </param>
+    /// <param name="priority">
+    /// The tie-breaking priority after extension specificity.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="extension"/> is empty or contains a path separator, or when
     /// <paramref name="icon"/> is empty.
@@ -74,7 +90,9 @@ public sealed class AssetIconAttribute : Attribute
     /// </summary>
     public string? extension { get; }
 
-    /// <summary>Gets the Editor icon glyph to render.</summary>
+    /// <summary>
+    /// Gets the Editor icon glyph to render.
+    /// </summary>
     public string icon { get; }
 
     /// <summary>
@@ -83,7 +101,9 @@ public sealed class AssetIconAttribute : Attribute
     /// </summary>
     public bool useForChildren { get; }
 
-    /// <summary>Gets the tie-breaking priority after target specificity.</summary>
+    /// <summary>
+    /// Gets the tie-breaking priority after target specificity.
+    /// </summary>
     public int priority { get; }
 
     private static string NormalizeExtension(string extension)

@@ -4,23 +4,37 @@
 
 该项目完整拥有 File Browser feature：Tree/List/Grid 表现、导航与过滤、Asset selection、AssetEditor 扩展、文件操作 Action、菜单、Asset drag source，以及 `AssetFileEntry` 的 `AssetSelectionInspectionDrawer`。它只引用共享的 `Inno.Editor.Inspection`，不引用 Hierarchy 或 Inspector Panel。
 
-Scene、Prefab、Folder 和普通文件 icon declaration 可以直接保存完整 Settings path；`AssetIconRegistry` 用 `EditorSettings.Get(path).GetAsString("value")` 读取 glyph。脚本声明仍可填写 literal glyph。Game Layers 已是项目根 `EditorSettings.json` 数据，不再作为 FileBrowser entry、extension icon 或 Asset inspection target。
+Scene、Prefab、Folder 和普通文件 icon declaration 可以直接保存完整 `Editor/...` Settings path；`AssetIconRegistry` 用 `EditorSettings.Get(path).GetAsString("value")` 读取当前 Inno Serialization 值对象中的 glyph。脚本声明仍可填写 literal glyph。
+
+## Assets / Plugins 双根与 `.iplugin`
+
+Tree 底部使用带水平分隔线、占满 pane 宽度的 `Switch to Assets` / `Switch to Plugins` 按钮，在可写 `Assets` 创作根与只读 `Plugins` 安装根之间切换。两边分别保存上次访问目录；`Plugins` overview 会在 Tree、List、Grid 中一致列出每个已激活 Plugin ID，进入后继续使用相同的导航、过滤、搜索、selection、打开和 drag source 逻辑。虚拟 `Assets` 与 `Plugins` 根是稳定容器节点，即使当前没有任何子项也始终保留 disclosure，并允许展开或收起；它们只用 icon/text 表示当前目录，不进入普通 Asset selection，也不绘制 selected row highlight。Plugin mount 与其后代才是可选择条目。单击普通目录只选择，双击才进入；Tree 展开只响应 disclosure 或明确的目录导航，不因 content selection 持续强制展开。所有真实条目使用完整 `AssetPath(source, localPath)`，因此不同 mount 的同名文件不会碰撞。
+
+Plugin ID 条目对应 active Plugin catalog 明确拥有的 Source Mount 根，而不是普通 Directory 或 Catalog Asset；它可以导航、选择和作为只读目录 drag source，但没有 `AssetInfo` 或 runtime asset type。FileBrowser 不再用“非 Project mount”猜测 Plugin 身份，因此以后增加其他 source kind 也不会误显示为 Plugin。List 将它显示为 `IPLUGIN` 且 Source 为当前层级 `~`，Inspector 也显示 `IPlugin`，安装容器内部的目录才继续显示 Directory/FOLDER。这里的 `IPlugin` 是 `.iplugin` package 激活后的 source mount 语义，不创建 companion asset。FileBrowser 核心布局与 entry 绘制的 Child、Table、Tree、ID 和 Style scope 会在异常路径中完整 unwind，因此条目交互失败不会再把 ImGui window stack 留在半开启状态。
+
+- `Assets` 是唯一官方创作源；Plugin 源码、Shader、设置和资产先在这里开发，再由 File 菜单的 `Export as Plugin...` 直接导出完整 Project。
+- 只有放在 `Plugins/` 根下的 `.iplugin` 文件是安装形态；Folder、`.zip` 和其他扩展名不会激活。Plugin 根和条目显示只读状态；Create、Rename、Move、Delete、Save 与 drop target 会隐藏或明确拒绝，Open、查看、导航、搜索与只读 drag source 保持可用。
+- File Browser 不提供 Plugin 管理或 trust 按钮；`.iplugin` 文件系统变化由 `PluginEnvironment` 自动监听、轮询并进入统一候选事务，错误通过 Diagnostics/Console 报告。
+- 放入带代码的 Plugin 即表示允许其以项目脚本相同的本机权限执行；File Browser 只展示 active Source Mount，不承担安全确认职责。
+- File Browser 不创建导出定义，也不拥有打包 UI。`.iplugin` 与 Game Player 的统一入口属于 [Inno.Editor.Exporting](Inno.Editor.Exporting.md)；导出不会自动安装或刷新当前项目。
+
+Project `Assets` 中名称以 `~` 开头的目录显示为 `ISAMPLE`，但仍按普通可写 authoring Folder 运行：正常导入、编译并参与 Editor 与 Play Mode，只在 Player deployment 中排除。相同目录导出并安装为 `.iplugin` 后，在只读 Plugin 根下才切换为待导入 Sample：它仍可展开、搜索、选择和浏览，但自身及后代不会直接导入或编译。右键该目录的 `Import Sample` 会把一个稳定快照直接导入到 `Assets/<原始~目录名>`，完整保留所有前导 `~`；目标已存在时命令禁用。导入结果是普通可编辑 Assets，保留 Sample 内部 `.imeta` 引用，并作为一个完整目录操作进入共享 Undo/Redo。
 
 ## 公共扩展 API
 
 | API | 作用 |
 | --- | --- |
-| `AssetBrowserState` | 按 persistent identity 保存当前目录与选择。 |
+| `AssetBrowserRoot` / `AssetBrowserState` | 区分 Assets/Plugins 根，分别保存导航位置，并始终保留最近的可写 Project 目录。 |
 | `AssetEditor` / `AssetEditorAttribute` | 为特定 Asset 类型声明 Open/Rename/Delete/Drag 行为。 |
 | `AssetEditorContext` | 当前 `EditorContext`、interactions、路径、Asset 信息和实例。 |
-| `AssetIconAttribute` / `AssetIconKind` | 按 imported Asset 类型或 source extension 配置 Tree/List/Grid 共用图标。 |
+| `AssetIconAttribute` | 按 imported Asset 类型或 source extension 配置 Tree/List/Grid 共用图标；glyph 使用 `InnoEditor.ImGui.ImGuiIcon`。 |
 | `AssetEditorModule.GetIcon` | 为其他 Editor presentation 解析完全相同的 Asset 图标。 |
 
 ## 为新 Asset 添加双击与右键行为
 
 ```csharp
 using Inno.Editor.Panel.FileBrowser;
-using AssetIconKind = Inno.Platform.ImGui.ImGuiIcon;
+using InnoEditor.ImGui;
 
 [AssetEditor(typeof(AnimationClipAsset), useForChildren: true, priority: 100)]
 public sealed class AnimationClipEditor : AssetEditor
@@ -40,9 +54,9 @@ public sealed class AnimationClipEditor : AssetEditor
 }
 ```
 
-Asset Rename/Delete 的物理事务始终由 `AssetManager` 执行。AssetEditor 只能验证以及接收提交后的通知，不能自行移动 source/meta/artifact，因此外部文件变化与 Editor 操作拥有同一身份规则。
+Asset Rename/Delete 的物理事务始终由 `AssetPipeline` 执行。AssetEditor 只能验证以及接收提交后的通知，不能自行移动 source/meta/artifact，因此外部文件变化与 Editor 操作拥有同一身份规则。
 
-Create Folder、Rename、Move 与 Delete 都接入共享中立 Undo/Redo。Rename/Move 只记录 source/target path；Delete 把 source、目录结构和 `.imeta` 编码进 History payload。大 payload 自动落到 `<Project>/Library/Editor/History`，Undo 先在临时目录完整验证 archive，再提交回 Asset root 并 `Rescan`，因此恢复失败不会留下半个目录。原 `.imeta` 会恢复相同 persistent ID；Redo 再走 `AssetManager.Delete`。目标发生外部冲突时操作失败并留在原栈，绝不覆盖新文件。Asset Browser selection 仅在文件系统事务成功后 best-effort 更新，通知异常不改变 History 结果。
+Create Folder、Import Sample、Rename、Move 与 Delete 都接入共享中立 Undo/Redo。Rename/Move 只记录 source/target path；Delete 与 Sample Import 把 source、目录结构和 `.imeta` 编码进 History payload。大 payload 自动落到 `<Project>/Library/Editor/History`，Undo 先在临时目录完整验证 archive，再提交回 Asset root 并 `Rescan`，因此恢复失败不会留下半个目录。原 `.imeta` 会恢复相同 persistent ID；Redo 再走 `AssetPipeline.Delete` 或恢复同一 Sample 快照。目标发生外部冲突时操作失败并留在原栈，绝不覆盖新文件。Asset Browser selection 仅在文件系统事务成功后 best-effort 更新，通知异常不改变 History 结果。
 
 ## 文件与目录移动
 
@@ -50,7 +64,7 @@ Tree、List 和 Grid 使用同一个 `AssetFileEntry` 目录目标及 `panel/ass
 
 Tree pane 只在名称或层级缩进真实超出 viewport 时产生横向范围，并显示原生水平 scrollbar；短内容没有 scrollbar。Tree 的 label/icon/hit area 只应用一次 `ScrollX`，不会出现内容比 disclosure 或 guide 多移动一份滚动距离的情况。
 
-提交前统一检查目标目录存在、同名冲突、目录拖入自身或 descendant，以及 AssetEditor 对 move 的验证。拖到当前 parent 属于 no-op，不产生 History；成功移动后保留 source/meta identity、选择新路径，并以单个 `Move Asset` 操作进入 Undo/Redo。目录移动由 `AssetManager.Move` 原子处理，目录内子项不单独复制或逐项重建。SceneAsset 的 Rename、Move、拖放及其 Undo/Redo 只改变 Asset source metadata；已加载的 clean Scene 会在同一 UI frame 更新 document 路径和显示名，不产生 Hierarchy `*`。
+提交前统一检查目标目录存在、同名冲突、目录拖入自身或 descendant，以及 AssetEditor 对 move 的验证。拖到当前 parent 属于 no-op，不产生 History；成功移动后保留 source/meta identity、选择新路径，并以单个 `Move Asset` 操作进入 Undo/Redo。目录移动由 `AssetPipeline.Move` 原子处理，目录内子项不单独复制或逐项重建。SceneAsset 的 Rename、Move、拖放及其 Undo/Redo 只改变 Asset source metadata；已加载的 clean Scene 会在同一 UI frame 更新 document 路径和显示名，不产生 Hierarchy `*`。
 
 所有 Tree/List/Grid 目录目标统一调用 `ImGuiWidget.DropTargetHighlight`。目标框使用全局 `DragDropTarget` 黄色、统一 rounding/thickness，并绘制在 viewport foreground draw list，因此不会被 Table column、Grid cell 或 child window 的 clip rect 截断。
 
@@ -75,7 +89,7 @@ public sealed class ReimportAnimationAction : EditorAction<AssetFileEntry>
 
     protected override void Execute(EditorActionContext<AssetFileEntry> context)
     {
-        AssetManager.Import(context.target.relativePath);
+        AssetPipeline.Import(context.target.relativePath);
     }
 }
 ```
@@ -91,13 +105,13 @@ using Inno.Editor.Panel.FileBrowser;
 
 [AssetIcon(
     typeof(AnimationClipAsset),
-    AssetIconKind.FileAudio,
+    ImGuiIcon.FileAudio,
     useForChildren: true,
     priority: 100)]
 [AssetIcon(
     typeof(AnimationControllerAsset),
-    AssetIconKind.DiagramProject)]
-[AssetIcon(".animationclip", AssetIconKind.FileAudio)]
+    ImGuiIcon.DiagramProject)]
+[AssetIcon(".animationclip", ImGuiIcon.FileAudio)]
 internal static class AnimationAssetIcons
 {
 }
@@ -107,11 +121,9 @@ internal static class AnimationAssetIcons
 
 类型声明适合需要按照继承体系选择图标的 Editor extension；extension 声明适合引擎内建文件格式，并且不要求 FileBrowser 项目引用定义 Asset 类型的程序集。extension 可以省略开头的 `.`，匹配时忽略大小写，也支持 `.editor.cs` 这样的复合后缀。解析时先选择类型声明；没有类型声明时选择最长的匹配后缀，再用 priority 打破同等 specificity。
 
-Host 代码使用普通 C# alias 将 `ImGuiIcon` 命名为 `AssetIconKind`；EditorScripts 则由 FileBrowser 项目的 `ScriptingApi.cs` 通过 `ScriptingApiExport(typeof(ImGuiIcon), "AssetIconKind", ...)` 获得相同的脚本侧名称。底层 `Inno.Platform.ImGui` 不声明 FileBrowser facade。两边都直接引用唯一的 `ImGuiIcon` 常量目录，因此没有第二份 enum、生成器或手写映射，新增底层 icon 会自动可用。
+`ImGuiIcon` 与 pointer-free `NativeImGui` 统一由 `Inno.Editor.ImGui/Properties/ScriptingApi.cs` 导出到 `InnoEditor.ImGui`。FileBrowser 的脚本清单只拥有 Asset feature API，不重复导出图标；`Inno.Platform.Sdl3.ImGui` 不声明脚本 API。
 
-CLR 层的 icon 常量仍是 ImGui 所需的 `const string` glyph；`AssetIconKind.Xxx` 是 facade/catalog API，而不是另一个 runtime enum。标准 C# Attribute 参数不支持自定义 struct 常量，因此在“不生成重复 enum”的前提下这是唯一能够保持一比一目录和编译期常量的形式。业务声明不需要书写裸字符串。
-
-内建 Text、Binary、Scene、Prefab 和 Scripting 图标全部在 `BuiltInAssetIcons` 上使用 extension overload 声明，没有基于具体 Asset CLR 类型的引用。FileBrowser 项目因此不再引用 `Inno.Assets.Types`、`Inno.Engine.Scene.Assets` 或 `Inno.Editor.Scripting`。内部 `AssetIconRegistry` 扫描当前 TypeCache snapshot 中的声明类型。EditorScripts 热重载时，新增或修改声明会随候选代际原子生效；移除声明或整个容器类型后，Registry 会释放旧映射并恢复优先级较低的内建声明，没有匹配时则使用通用 File icon。
+内建 Text、Binary、Scene、Prefab 和 Scripting 图标全部在 `BuiltInAssetIcons` 上使用 extension overload 声明，没有基于具体 Asset CLR 类型的引用。FileBrowser 项目因此不再引用 `Inno.Assets`、`Inno.Scene.Assets` 或 `Inno.Editor.Scripting`。内部 `AssetIconRegistry` 扫描当前 TypeCache snapshot 中的声明类型。EditorScripts 热重载时，新增或修改声明会随候选代际原子生效；移除声明或整个容器类型后，Registry 会释放旧映射并恢复优先级较低的内建声明，没有匹配时则使用通用 File icon。
 
 `AssetEditorModule.GetIcon(entry)` 是唯一对外 presentation resolver，同时通过 `IInspectionIconProvider<AssetFileEntry>` 向 Inspection 基础设施提供同一个规则。File Browser 的三种视图与 Asset Inspection Header 都调用该入口，不复制 extension switch，也不各自持有 Registry snapshot。Registry 先按类型/extension 选中声明；若 declaration 字符串是已注册 Settings path，就直接读取其中的 `value`，否则把它当作 literal glyph。Settings 基础项目不提供 icon resolver。
 
@@ -127,9 +139,9 @@ CLR 层的 icon 常量仍是 ImGui 所需的 `const string` glyph；`AssetIconKi
 - 输入框失去焦点或 selection 切换到其他 target 时，Rename Action 会提交当前有效名称并结束；无效名称保留原值并结束。
 - Tree/List/Grid 的未占用背景收到左键点击时会清除当前 Asset selection。
 - SceneAsset 打开 Action 由 Hierarchy feature 实现，但使用全局 Open 语义和共享路径参数，不形成 Panel project 引用。
-- 全局 Save 保存尚无 source path 的 Scene 时，使用 File Browser 当前打开目录作为 fallback；已有 source 的 Scene 仍保存回自身路径。
+- 全局 Save 保存尚无 source path 的 Scene 时，始终使用 File Browser 最近访问的 `Assets` 目录作为 fallback；即使当前正在查看只读 Plugin，也不会尝试向 Plugin Mount 写入。已有 source 的 Scene 仍保存回自身路径。
 
-ID 为 `asset-browser` 的 Asset Browser Module 只保存当前目录；Asset selection 属于当前 Editor session，不写入 `editor.ini`。运行期间若选中的路径被外部移动，Change Tracker 仍会按本次 session 的路径变化同步 selection；被删除时则清除。ID 为 `asset.file-browser` 的 Panel 自己保存 List/Grid 模式、搜索过滤、scope/type filter、Tree/Content 分隔比例、grid scale，以及 List 中 Name/Type/Source 两个分隔位置。没有 `[InnoEditor][Panel.asset.file-browser]` 状态时，Tree 与 Content 在扣除 splitter 后各占一半；拖动后以 `treePaneRatio` 的 `0..1` 归一化值保存，下次打开项目时恢复。列分隔位置同样以 `0..1` 的归一化值写入 `listNameSeparator` 和 `listTypeSeparator`，因此 Panel 宽度变化后仍能恢复相同比例。
+ID 为 `asset-browser` 的 Asset Browser Module 保存 active root，以及 Assets/Plugins 各自的完整当前 `AssetPath`；Asset selection 属于当前 Editor session，不写入 `editor.ini`。Plugin mount 消失时 Plugins 视图退回只读 overview 并清除无效 selection，不会破坏 Assets 创作位置。ID 为 `asset.file-browser` 的 Panel 保存 List/Grid 模式、搜索过滤、scope/type filter、Tree/Content 分隔比例、grid scale，以及 List 分隔位置。
 
 List 的三个 column 使用同一个内容 inset，手动 splitter 只占用从 header 到最后一行的真实 table 高度，因此 header 与每一条内容 row 都能接收 resize 拖动，而下方空白区域不会继续接收 hover 或拖动。row Selectable 明确允许 splitter overlay 重叠，separator 不会吞掉 Name、Type 或 Source 的正常点击区域。Grid 图标和文件名使用 draw-list overlay 绘制，不通过 `SetCursorScreenPos` 移动布局 cursor；图标先从卡片中扣除顶部、水平和 label 间距，再按剩余区域等比缩小。最终位置使用 baked glyph 的 `X0/Y0/X1/Y1` 可见边界计算，所以 Font Awesome 中左右 bearing 不对称的 Cube、Folder 等图标也会把真实轮廓中心放在卡片水平中心线上，并且不会越过卡片上沿。Selectable 仍是唯一负责 cell 尺寸与输入的 ImGui item。Inline Rename 必须临时移动 cursor 时，会在恢复布局位置后提交零尺寸 item，避免扩展 parent boundary 的 ImGui assertion。
 

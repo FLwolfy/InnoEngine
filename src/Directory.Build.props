@@ -8,4 +8,14 @@
   <PropertyGroup Condition="'$(InnoScriptApi)' == ''">
     <InnoScriptApi>None</InnoScriptApi>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' != 'Inno.Core.Serialization.Generators'">
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1570;CS1572;CS1573;CS1591</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(MSBuildProjectName)' != 'Inno.Core.Serialization.Generators'">
+    <ProjectReference
+      Include="$(MSBuildThisFileDirectory)core/Inno.Core.Serialization.Generators/Inno.Core.Serialization.Generators.csproj"
+      OutputItemType="Analyzer"
+      ReferenceOutputAssembly="false" />
+  </ItemGroup>
 </Project>

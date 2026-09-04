@@ -1,25 +1,29 @@
 # Inno.Editor.Panel.Logging
 
-[Editor 索引](README.md) · [Core Logging](../core/Inno.Core.Logging.md) · [Core Diagnose](../core/Inno.Core.Diagnose.md) · [Stats](Inno.Editor.Panel.Stats.md)
+[Editor 索引](README.md) · [Core Logging](../core/Inno.Core.Logging.md) · [Core Diagnose](../core/Inno.Core.Diagnostics.md) · [Stats](Inno.Editor.Panel.Stats.md)
 
-该项目同时订阅彼此独立的 `Inno.Core.Logging` 与 `Inno.Core.Diagnose`，并把两种数据组合成统一的 Editor Console。目录和项目名使用 `Logging`，避免 `Log` 被 ignore 规则或输出目录约定误判。
+该项目同时订阅彼此独立的 `Inno.Core.Logging` 与 `Inno.Core.Diagnostics`，并把两种数据组合成统一的 Editor Console。目录和项目名使用 `Logging`，避免 `Log` 被 ignore 规则或输出目录约定误判。
 
 ## 组成
 
-- `LoggingModule`：随 Editor runtime 启停普通日志和当前诊断订阅。
-- `EditorLogBuffer`：保留有界、追加式日志历史。
-- `EditorDiagnosticBuffer`：按 producer 替换当前诊断，不把过期编译结果写入历史。
-- `ConsolePanel`：统一排序两种流，并提供来源标识、等级过滤、折叠和详情显示。
+- `EditorConsole`：位于 `Inno.Editor.Diagnostics`，拥有有界日志、当前诊断、全局 fingerprint 分组和 Play Session 保留策略。
+- `ConsolePanel`：只读取 `IEditorConsole` 的不可变 Snapshot，负责等级过滤、折叠、详情和操作表现。
 
-当滚动条原本位于底部时，新日志会继续滚到底部；用户向上浏览后不会抢夺滚动位置。按钮、折叠三角、行距与颜色全部来自 `ImGuiWidget`、`EditorStyleMetrics` 和 `EditorPalette`。
+当滚动条原本位于底部时，新日志会继续滚到底部；用户向上浏览后不会抢夺滚动位置。按钮、折叠三角、行距与颜色全部来自 `ImGuiWidget`、`EditorStyleMetrics` 和 `EditorPalette`。相邻 card 只使用一次标准 `ItemSpacing`，不会再叠加额外占位元素，因此展开与收起状态都保持确定、均匀的外部间距。
+
+内部实现中，Console entry identity 由来源种类与完整 64 位序号共同组成。普通 Log 与 Diagnostic 的计数空间彼此独立，ImGui scope 会分别压入来源、序号高位和低位，不能直接使用 `long.GetHashCode()` 代替身份；后者会让部分正负序号产生相同的 32 位值，并导致 auto-resize child 错误复用另一张 card 的布局状态。
 
 游戏脚本的 `InnoEngine.Logging.Log` 与 Editor Panel 消费的是同一 Core stream。生命周期日志只会在 Scene 真正执行 Runtime lifecycle 时产生；Edit Mode 中单纯切换 enabled 不会伪造 `OnEnable`/`OnDisable`。
 
-脚本编译使用 `Script Compiler` group，每次编译完成都通过 `Diagnostics.Set` 设置完整结果；下一次干净编译设置空集合后，旧 warning/error 自动消失。脚本 reload 使用独立的 `Script Reload` group，因此编译结果与状态迁移问题不会互相覆盖。普通 Log 仍一直保留到容量淘汰或用户点击 Clear。
+Console 默认启用与 Unity 一致的 `Clear on Play`：Play 请求进入 `Compiling` 时先 `Flush` LogRouter，再清除 Console 内上一轮普通 Log；Compiler、Importer、Rendering 等 `DiagnosticHub` current report 不会被清除，因为它们描述的错误仍然存在。当前 Play Session 的 Debug/Info/Warn/Error/Fatal 在退出后全部保留，便于停止后检查；下一次 Play 开始时再统一清除。该策略位于 Settings 的 `Editor/Diagnostics/Console/Clear on Play`，默认值为 `true`，Apply、Undo 或 Redo 后立即作用于 Console backend。Console toolbar 不再保存或显示第二份开关。Collapse 仍是 Panel layout preference；日志内容、展开项和 filter 临时状态不持久化。手动 Clear 同时清除普通 Log 和当前 Diagnostic 展示，后续 producer 发布完整 report 时会重新出现仍然有效的诊断。
+
+Collapse fingerprint 包含 `LogSessionId`。同一 Session 内非连续、且 message/location/stack 相同的 occurrence 会全局聚合；不同 Edit/Play Session 即使文本完全相同也不会合并，展开时仍保留每次 occurrence。
+
+脚本编译使用 `Script Compiler` group，每次编译完成都通过 `Diagnostics.Set` 设置完整结果；下一次干净编译设置空集合后，旧 warning/error 自动消失。脚本 reload 使用独立的 `Script Reload` group，因此编译结果与状态迁移问题不会互相覆盖。非 Play 临时输出的普通 Log 仍保留到容量淘汰或用户点击 Clear。
 
 Console 还会实时显示 Asset Import/Build/Catalog、Asset Source Database、Scene Workspace、Editor Workspace、Panel Activation 和 Project Persistence 的当前报告。Diagnostic 恢复时对应卡片自动消失；同一失败首次出现时写入的异常 Log 不会随之删除。这使 Console 同时保留“现在需要处理什么”和“过去发生过什么”，但两者不会混成一条不可清理的历史流。
 
-Console card header 只显示等级，例如 `[Info]` 或 `[Error]`。展开后的详情通过 `Kind: Log` 或 `Kind: Diagnostic` 明确来源，`Copy Full Entry` 文本也保留同一来源信息，避免等级相同的历史日志与当前诊断产生歧义。所有 card 都使用统一 Editor Action/Menu 系统提供右键菜单：
+Console card header 只显示等级，例如 `[Info]` 或 `[Error]`。展开后的详情通过 `Kind: Log` 或 `Kind: Diagnostic` 明确来源；元数据稳定按 Kind、File、Source、Session、Time 排列，未分配的 Session 行省略。Header/metadata 与 stack trace 之间的横线都使用同一张 card 推导出的 separator color，避免展开区域出现两种无语义差异的颜色。`Copy Full Entry` 文本也保留同一来源信息，避免等级相同的历史日志与当前诊断产生歧义。所有 card 都使用统一 Editor Action/Menu 系统提供右键菜单：
 
 - `Copy Message`：复制诊断 code 与消息正文。
 - `Copy Full Entry`：复制时间、等级、category、重复次数和源文件位置。

@@ -5,7 +5,9 @@ using Inno.Editor.Core;
 
 namespace Inno.Editor.Interactions;
 
-/// <summary>Describes one active modal extension.</summary>
+/// <summary>
+/// Describes one active modal extension.
+/// </summary>
 public sealed class EditorModalExtension
 {
     private readonly Action<Exception> m_quarantine;
@@ -26,13 +28,19 @@ public sealed class EditorModalExtension
         m_quarantine = quarantine;
     }
 
-    /// <summary>Gets the stable modal identifier.</summary>
+    /// <summary>
+    /// Gets the stable modal identifier.
+    /// </summary>
     public string id { get; }
 
-    /// <summary>Gets the visible modal title.</summary>
+    /// <summary>
+    /// Gets the visible modal title.
+    /// </summary>
     public string title { get; }
 
-    /// <summary>Gets the stable modal ordering value.</summary>
+    /// <summary>
+    /// Gets the stable modal ordering value.
+    /// </summary>
     public int order { get; }
 
     /// <summary>
@@ -74,7 +82,9 @@ public sealed class EditorModalExtension
     /// <summary>
     /// Safely draws the modal body and quarantines a failing extension instance.
     /// </summary>
-    /// <param name="context">The active editor context supplied by the presentation backend.</param>
+    /// <param name="context">
+    /// The active editor context supplied by the presentation backend.
+    /// </param>
     /// <returns>
     /// <see langword="true"/> when the modal completed drawing without being quarantined.
     /// </returns>
@@ -107,12 +117,24 @@ public sealed class EditorModalExtension
         /// <summary>
         /// Creates an immutable modal presentation snapshot.
         /// </summary>
-        /// <param name="isVisible">Whether the modal should currently be visible.</param>
-        /// <param name="blocksInteraction">Whether the modal blocks regular editor interaction.</param>
-        /// <param name="canMove">Whether the modal window can be moved.</param>
-        /// <param name="canResize">Whether the modal window can be resized.</param>
-        /// <param name="initialSize">The initial size in unscaled editor units.</param>
-        /// <param name="minimumSize">The minimum size in unscaled editor units.</param>
+        /// <param name="isVisible">
+        /// Whether the modal should currently be visible.
+        /// </param>
+        /// <param name="blocksInteraction">
+        /// Whether the modal blocks regular editor interaction.
+        /// </param>
+        /// <param name="canMove">
+        /// Whether the modal window can be moved.
+        /// </param>
+        /// <param name="canResize">
+        /// Whether the modal window can be resized.
+        /// </param>
+        /// <param name="initialSize">
+        /// The initial size in unscaled editor units.
+        /// </param>
+        /// <param name="minimumSize">
+        /// The minimum size in unscaled editor units.
+        /// </param>
         public Presentation(
             bool isVisible,
             bool blocksInteraction,
@@ -129,22 +151,34 @@ public sealed class EditorModalExtension
             this.minimumSize = minimumSize;
         }
 
-        /// <summary>Gets whether the modal should currently be visible.</summary>
+        /// <summary>
+        /// Gets whether the modal should currently be visible.
+        /// </summary>
         public bool isVisible { get; }
 
-        /// <summary>Gets whether the modal blocks regular editor interaction.</summary>
+        /// <summary>
+        /// Gets whether the modal blocks regular editor interaction.
+        /// </summary>
         public bool blocksInteraction { get; }
 
-        /// <summary>Gets whether the modal window can be moved.</summary>
+        /// <summary>
+        /// Gets whether the modal window can be moved.
+        /// </summary>
         public bool canMove { get; }
 
-        /// <summary>Gets whether the modal window can be resized.</summary>
+        /// <summary>
+        /// Gets whether the modal window can be resized.
+        /// </summary>
         public bool canResize { get; }
 
-        /// <summary>Gets the initial size in unscaled editor units.</summary>
+        /// <summary>
+        /// Gets the initial size in unscaled editor units.
+        /// </summary>
         public Vector2 initialSize { get; }
 
-        /// <summary>Gets the minimum size in unscaled editor units.</summary>
+        /// <summary>
+        /// Gets the minimum size in unscaled editor units.
+        /// </summary>
         public Vector2 minimumSize { get; }
     }
 }

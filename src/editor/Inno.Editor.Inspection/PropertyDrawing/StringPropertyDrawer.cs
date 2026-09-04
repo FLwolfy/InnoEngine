@@ -8,7 +8,12 @@ internal sealed class StringPropertyDrawer : IPropertyDrawer
 {
     private const nuint C_BUFFER_SIZE = 1024;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     public void Draw(PropertyDrawContext context)
     {
         string value = context.GetValue() as string ?? string.Empty;

@@ -6,6 +6,9 @@ using System.Runtime.Intrinsics.X86;
 
 namespace Inno.Core.Mathematics;
 
+/// <summary>
+/// Represents a mutable four-by-four transformation matrix using column-vector multiplication.
+/// </summary>
 /// <remarks>
 /// Conventions used by this type:
 /// <list type="bullet">
@@ -25,40 +28,72 @@ public struct Matrix : IEquatable<Matrix>
 {
     #region Data (Row-major)
 
-    /// <summary>Row 1, Column 1.</summary>
+    /// <summary>
+    /// Row 1, Column 1.
+    /// </summary>
     [DataMember] public float m11;
-    /// <summary>Row 1, Column 2.</summary>
+    /// <summary>
+    /// Row 1, Column 2.
+    /// </summary>
     [DataMember] public float m12;
-    /// <summary>Row 1, Column 3.</summary>
+    /// <summary>
+    /// Row 1, Column 3.
+    /// </summary>
     [DataMember] public float m13;
-    /// <summary>Row 1, Column 4.</summary>
+    /// <summary>
+    /// Row 1, Column 4.
+    /// </summary>
     [DataMember] public float m14;
 
-    /// <summary>Row 2, Column 1.</summary>
+    /// <summary>
+    /// Row 2, Column 1.
+    /// </summary>
     [DataMember] public float m21;
-    /// <summary>Row 2, Column 2.</summary>
+    /// <summary>
+    /// Row 2, Column 2.
+    /// </summary>
     [DataMember] public float m22;
-    /// <summary>Row 2, Column 3.</summary>
+    /// <summary>
+    /// Row 2, Column 3.
+    /// </summary>
     [DataMember] public float m23;
-    /// <summary>Row 2, Column 4.</summary>
+    /// <summary>
+    /// Row 2, Column 4.
+    /// </summary>
     [DataMember] public float m24;
 
-    /// <summary>Row 3, Column 1.</summary>
+    /// <summary>
+    /// Row 3, Column 1.
+    /// </summary>
     [DataMember] public float m31;
-    /// <summary>Row 3, Column 2.</summary>
+    /// <summary>
+    /// Row 3, Column 2.
+    /// </summary>
     [DataMember] public float m32;
-    /// <summary>Row 3, Column 3.</summary>
+    /// <summary>
+    /// Row 3, Column 3.
+    /// </summary>
     [DataMember] public float m33;
-    /// <summary>Row 3, Column 4.</summary>
+    /// <summary>
+    /// Row 3, Column 4.
+    /// </summary>
     [DataMember] public float m34;
 
-    /// <summary>Row 4, Column 1 (translation X component for affine transforms).</summary>
+    /// <summary>
+    /// Row 4, Column 1 (translation X component for affine transforms).
+    /// </summary>
     [DataMember] public float m41;
-    /// <summary>Row 4, Column 2 (translation Y component for affine transforms).</summary>
+    /// <summary>
+    /// Row 4, Column 2 (translation Y component for affine transforms).
+    /// </summary>
     [DataMember] public float m42;
-    /// <summary>Row 4, Column 3 (translation Z component for affine transforms).</summary>
+    /// <summary>
+    /// Row 4, Column 3 (translation Z component for affine transforms).
+    /// </summary>
     [DataMember] public float m43;
-    /// <summary>Row 4, Column 4.</summary>
+    /// <summary>
+    /// Row 4, Column 4.
+    /// </summary>
     [DataMember] public float m44;
 
     #endregion
@@ -68,22 +103,54 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Initializes a 4x4 matrix with explicit row-major elements.
     /// </summary>
-    /// <param name="m11">Row 1, Column 1.</param>
-    /// <param name="m12">Row 1, Column 2.</param>
-    /// <param name="m13">Row 1, Column 3.</param>
-    /// <param name="m14">Row 1, Column 4.</param>
-    /// <param name="m21">Row 2, Column 1.</param>
-    /// <param name="m22">Row 2, Column 2.</param>
-    /// <param name="m23">Row 2, Column 3.</param>
-    /// <param name="m24">Row 2, Column 4.</param>
-    /// <param name="m31">Row 3, Column 1.</param>
-    /// <param name="m32">Row 3, Column 2.</param>
-    /// <param name="m33">Row 3, Column 3.</param>
-    /// <param name="m34">Row 3, Column 4.</param>
-    /// <param name="m41">Row 4, Column 1.</param>
-    /// <param name="m42">Row 4, Column 2.</param>
-    /// <param name="m43">Row 4, Column 3.</param>
-    /// <param name="m44">Row 4, Column 4.</param>
+    /// <param name="m11">
+    /// Row 1, Column 1.
+    /// </param>
+    /// <param name="m12">
+    /// Row 1, Column 2.
+    /// </param>
+    /// <param name="m13">
+    /// Row 1, Column 3.
+    /// </param>
+    /// <param name="m14">
+    /// Row 1, Column 4.
+    /// </param>
+    /// <param name="m21">
+    /// Row 2, Column 1.
+    /// </param>
+    /// <param name="m22">
+    /// Row 2, Column 2.
+    /// </param>
+    /// <param name="m23">
+    /// Row 2, Column 3.
+    /// </param>
+    /// <param name="m24">
+    /// Row 2, Column 4.
+    /// </param>
+    /// <param name="m31">
+    /// Row 3, Column 1.
+    /// </param>
+    /// <param name="m32">
+    /// Row 3, Column 2.
+    /// </param>
+    /// <param name="m33">
+    /// Row 3, Column 3.
+    /// </param>
+    /// <param name="m34">
+    /// Row 3, Column 4.
+    /// </param>
+    /// <param name="m41">
+    /// Row 4, Column 1.
+    /// </param>
+    /// <param name="m42">
+    /// Row 4, Column 2.
+    /// </param>
+    /// <param name="m43">
+    /// Row 4, Column 3.
+    /// </param>
+    /// <param name="m44">
+    /// Row 4, Column 4.
+    /// </param>
     public Matrix(
         float m11, float m12, float m13, float m14,
         float m21, float m22, float m23, float m24,
@@ -112,10 +179,18 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Creates a translation matrix.
     /// </summary>
-    /// <param name="x">Translation on X axis.</param>
-    /// <param name="y">Translation on Y axis.</param>
-    /// <param name="z">Translation on Z axis.</param>
-    /// <returns>A translation matrix whose translation resides in (m14, m24, m34).</returns>
+    /// <param name="x">
+    /// Translation on X axis.
+    /// </param>
+    /// <param name="y">
+    /// Translation on Y axis.
+    /// </param>
+    /// <param name="z">
+    /// Translation on Z axis.
+    /// </param>
+    /// <returns>
+    /// A translation matrix whose translation resides in (m14, m24, m34).
+    /// </returns>
     public static Matrix CreateTranslation(float x, float y, float z)
     {
         return new Matrix(
@@ -128,24 +203,40 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Creates a translation matrix.
     /// </summary>
-    /// <param name="v">Translation vector.</param>
-    /// <returns>A translation matrix.</returns>
+    /// <returns>
+    /// A translation matrix.
+    /// </returns>
+    /// <param name="v">
+    /// The concrete value read or transformed by this operation.
+    /// </param>
     public static Matrix CreateTranslation(Vector3 v) => CreateTranslation(v.x, v.y, v.z);
 
     /// <summary>
     /// Creates a uniform scale matrix.
     /// </summary>
-    /// <param name="scale">Uniform scale factor.</param>
-    /// <returns>A scale matrix.</returns>
+    /// <returns>
+    /// A scale matrix.
+    /// </returns>
+    /// <param name="scale">
+    /// The scale consumed by create scale; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
     public static Matrix CreateScale(float scale) => CreateScale(scale, scale, scale);
 
     /// <summary>
     /// Creates a non-uniform scale matrix.
     /// </summary>
-    /// <param name="x">Scale factor on X axis.</param>
-    /// <param name="y">Scale factor on Y axis.</param>
-    /// <param name="z">Scale factor on Z axis.</param>
-    /// <returns>A scale matrix.</returns>
+    /// <param name="x">
+    /// Scale factor on X axis.
+    /// </param>
+    /// <param name="y">
+    /// Scale factor on Y axis.
+    /// </param>
+    /// <param name="z">
+    /// Scale factor on Z axis.
+    /// </param>
+    /// <returns>
+    /// A scale matrix.
+    /// </returns>
     public static Matrix CreateScale(float x, float y, float z)
     {
         return new Matrix(
@@ -158,15 +249,23 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Creates a non-uniform scale matrix.
     /// </summary>
-    /// <param name="v">Scale vector.</param>
-    /// <returns>A scale matrix.</returns>
+    /// <returns>
+    /// A scale matrix.
+    /// </returns>
+    /// <param name="v">
+    /// The concrete value read or transformed by this operation.
+    /// </param>
     public static Matrix CreateScale(Vector3 v) => CreateScale(v.x, v.y, v.z);
 
     /// <summary>
     /// Creates a rotation matrix around the X axis (radians).
     /// </summary>
-    /// <param name="radians">Rotation angle in radians.</param>
-    /// <returns>A rotation matrix.</returns>
+    /// <param name="radians">
+    /// Rotation angle in radians.
+    /// </param>
+    /// <returns>
+    /// A rotation matrix.
+    /// </returns>
     public static Matrix CreateRotationX(float radians)
     {
         float c = MathF.Cos(radians);
@@ -181,8 +280,12 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Creates a rotation matrix around the Y axis (radians).
     /// </summary>
-    /// <param name="radians">Rotation angle in radians.</param>
-    /// <returns>A rotation matrix.</returns>
+    /// <param name="radians">
+    /// Rotation angle in radians.
+    /// </param>
+    /// <returns>
+    /// A rotation matrix.
+    /// </returns>
     public static Matrix CreateRotationY(float radians)
     {
         float c = MathF.Cos(radians);
@@ -197,8 +300,12 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Creates a rotation matrix around the Z axis (radians).
     /// </summary>
-    /// <param name="radians">Rotation angle in radians.</param>
-    /// <returns>A rotation matrix.</returns>
+    /// <param name="radians">
+    /// Rotation angle in radians.
+    /// </param>
+    /// <returns>
+    /// A rotation matrix.
+    /// </returns>
     public static Matrix CreateRotationZ(float radians)
     {
         float c = MathF.Cos(radians);
@@ -213,8 +320,12 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Creates a rotation matrix from a quaternion.
     /// </summary>
-    /// <param name="q">Source quaternion.</param>
-    /// <returns>A rotation matrix.</returns>
+    /// <param name="q">
+    /// Source quaternion.
+    /// </param>
+    /// <returns>
+    /// A rotation matrix.
+    /// </returns>
     public static Matrix CreateFromQuaternion(Quaternion q)
     {
         float xx = q.x * q.x, yy = q.y * q.y, zz = q.z * q.z;
@@ -235,26 +346,51 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Creates a left-handed, perspective projection matrix ( depth range 0..1).
     /// </summary>
-    /// <param name="fov">Vertical field of view in radians.</param>
-    /// <param name="aspect">Viewport aspect ratio (width / height).</param>
-    /// <param name="near">Near plane distance (positive).</param>
-    /// <param name="far">Far plane distance (positive).</param>
-    /// <returns>A perspective projection matrix.</returns>
+    /// <param name="fov">
+    /// Vertical field of view in radians.
+    /// </param>
+    /// <param name="aspect">
+    /// Viewport aspect ratio (width / height).
+    /// </param>
+    /// <param name="near">
+    /// Near plane distance (positive).
+    /// </param>
+    /// <param name="far">
+    /// Far plane distance (positive).
+    /// </param>
+    /// <returns>
+    /// A perspective projection matrix.
+    /// </returns>
     public static Matrix CreatePerspectiveFieldOfView(float fov, float aspect, float near, float far)
     {
         float f  = 1f / MathF.Tan(fov * 0.5f);
         float nf = 1f / (far - near);
 
         return new Matrix(
-            f / aspect, 0, 0,                 0,
-            0,          f, 0,                 0,
-            0,          0, far * nf,          1,
-            0,          0, -near * far * nf,  0);
+            f / aspect, 0, 0,                0,
+            0,          f, 0,                0,
+            0,          0, far * nf,         -near * far * nf,
+            0,          0, 1,                0);
     }
 
     /// <summary>
     /// Creates a right-handed, perspective projection matrix (depth range 0..1).
     /// </summary>
+    /// <param name="fov">
+    /// The fov consumed by create perspective field of view rh; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="aspect">
+    /// The aspect consumed by create perspective field of view rh; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="near">
+    /// The near consumed by create perspective field of view rh; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="far">
+    /// The far consumed by create perspective field of view rh; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// The validated matrix that represents the completed operation.
+    /// </returns>
     public static Matrix CreatePerspectiveFieldOfViewRH(float fov, float aspect, float near, float far)
     {
         float f = 1f / MathF.Tan(fov * 0.5f);
@@ -270,11 +406,21 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Creates an orthographic projection matrix (depth range 0..1).
     /// </summary>
-    /// <param name="width">View width.</param>
-    /// <param name="height">View height.</param>
-    /// <param name="near">Near plane in camera space.</param>
-    /// <param name="far">Far plane in camera space.</param>
-    /// <returns>An orthographic projection matrix.</returns>
+    /// <param name="width">
+    /// View width.
+    /// </param>
+    /// <param name="height">
+    /// View height.
+    /// </param>
+    /// <param name="near">
+    /// Near plane in camera space.
+    /// </param>
+    /// <param name="far">
+    /// Far plane in camera space.
+    /// </param>
+    /// <returns>
+    /// An orthographic projection matrix.
+    /// </returns>
     public static Matrix CreateOrthographic(float width, float height, float near, float far)
     {
         return CreateOrthographicOffCenter(
@@ -289,13 +435,27 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Creates an off-center orthographic projection matrix (depth range 0..1).
     /// </summary>
-    /// <param name="left">Left plane.</param>
-    /// <param name="right">Right plane.</param>
-    /// <param name="bottom">Bottom plane.</param>
-    /// <param name="top">Top plane.</param>
-    /// <param name="near">Near plane.</param>
-    /// <param name="far">Far plane.</param>
-    /// <returns>An orthographic projection matrix.</returns>
+    /// <param name="left">
+    /// Left plane.
+    /// </param>
+    /// <param name="right">
+    /// Right plane.
+    /// </param>
+    /// <param name="bottom">
+    /// Bottom plane.
+    /// </param>
+    /// <param name="top">
+    /// Top plane.
+    /// </param>
+    /// <param name="near">
+    /// Near plane.
+    /// </param>
+    /// <param name="far">
+    /// Far plane.
+    /// </param>
+    /// <returns>
+    /// An orthographic projection matrix.
+    /// </returns>
     public static Matrix CreateOrthographicOffCenter(float left, float right, float bottom, float top, float near, float far)
     {
         float m00 = 2f / (right - left);
@@ -320,10 +480,18 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Creates a left-handed view matrix that looks from <paramref name="eye"/> to <paramref name="target"/>.
     /// </summary>
-    /// <param name="eye">Camera position in world space.</param>
-    /// <param name="target">Target position in world space.</param>
-    /// <param name="up">Up direction in world space.</param>
-    /// <returns>A view matrix.</returns>
+    /// <param name="eye">
+    /// Camera position in world space.
+    /// </param>
+    /// <param name="target">
+    /// Target position in world space.
+    /// </param>
+    /// <param name="up">
+    /// Up direction in world space.
+    /// </param>
+    /// <returns>
+    /// A view matrix.
+    /// </returns>
     public static Matrix CreateLookAt(Vector3 eye, Vector3 target, Vector3 up)
     {
         // LH: forward points from eye to target
@@ -332,15 +500,27 @@ public struct Matrix : IEquatable<Matrix>
         Vector3 y = Vector3.Cross(z, x);                // up
 
         return new Matrix(
-            x.x, y.x, z.x, -Vector3.Dot(x, eye),
-            x.y, y.y, z.y, -Vector3.Dot(y, eye),
-            x.z, y.z, z.z, -Vector3.Dot(z, eye),
+            x.x, x.y, x.z, -Vector3.Dot(x, eye),
+            y.x, y.y, y.z, -Vector3.Dot(y, eye),
+            z.x, z.y, z.z, -Vector3.Dot(z, eye),
             0,   0,   0,   1);
     }
 
     /// <summary>
     /// Creates a right-handed view matrix that looks from <paramref name="eye"/> to <paramref name="target"/>.
     /// </summary>
+    /// <param name="eye">
+    /// The eye consumed by create look at rh; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="target">
+    /// The existing target that receives the validated result.
+    /// </param>
+    /// <param name="up">
+    /// The up consumed by create look at rh; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// The validated matrix that represents the completed operation.
+    /// </returns>
     public static Matrix CreateLookAtRH(Vector3 eye, Vector3 target, Vector3 up)
     {
         // RH: forward points from eye to target but is -Z in view space
@@ -349,9 +529,9 @@ public struct Matrix : IEquatable<Matrix>
         Vector3 y = Vector3.Cross(z, x);                // up
 
         return new Matrix(
-            x.x, y.x, z.x, -Vector3.Dot(x, eye),
-            x.y, y.y, z.y, -Vector3.Dot(y, eye),
-            x.z, y.z, z.z, -Vector3.Dot(z, eye),
+            x.x, x.y, x.z, -Vector3.Dot(x, eye),
+            y.x, y.y, y.z, -Vector3.Dot(y, eye),
+            z.x, z.y, z.z, -Vector3.Dot(z, eye),
             0,   0,   0,   1);
     }
 
@@ -363,9 +543,15 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Multiplies two matrices using standard matrix multiplication.
     /// </summary>
-    /// <param name="a">Left operand.</param>
-    /// <param name="b">Right operand.</param>
-    /// <returns>The product matrix <c>a * b</c>.</returns>
+    /// <param name="a">
+    /// Left operand.
+    /// </param>
+    /// <param name="b">
+    /// Right operand.
+    /// </param>
+    /// <returns>
+    /// The product matrix <c>a * b</c>.
+    /// </returns>
     public static Matrix Multiply(Matrix a, Matrix b)
     {
         if (Sse.IsSupported || AdvSimd.IsSupported)
@@ -429,6 +615,12 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Returns the determinant of the matrix.
     /// </summary>
+    /// <param name="m">
+    /// The transformation matrix applied to the supplied value.
+    /// </param>
+    /// <returns>
+    /// The scalar result calculated from the supplied inputs.
+    /// </returns>
     public static float Determinant(Matrix m)
     {
         float a00 = m.m11, a01 = m.m12, a02 = m.m13, a03 = m.m14;
@@ -455,6 +647,21 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Decomposes a matrix into scale, rotation and translation.
     /// </summary>
+    /// <param name="m">
+    /// The transformation matrix applied to the supplied value.
+    /// </param>
+    /// <param name="scale">
+    /// The scale consumed by decompose; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <param name="rotation">
+    /// The rotation applied to the supplied value.
+    /// </param>
+    /// <param name="translation">
+    /// The translation consumed by decompose; ownership remains with the caller unless explicitly stated otherwise.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the operation succeeds or its condition is satisfied; otherwise, <see langword="false"/>.
+    /// </returns>
     public static bool Decompose(Matrix m, out Vector3 scale, out Quaternion rotation, out Vector3 translation)
     {
         translation = new Vector3(m.m14, m.m24, m.m34);
@@ -494,8 +701,12 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Extracts the 2D-affine portion of a matrix (XY basis + XY translation).
     /// </summary>
-    /// <param name="m">Source matrix.</param>
-    /// <returns>A matrix representing the 2D transform embedded in <paramref name="m"/>.</returns>
+    /// <param name="m">
+    /// Source matrix.
+    /// </param>
+    /// <returns>
+    /// A matrix representing the 2D transform embedded in <paramref name="m"/>.
+    /// </returns>
     public static Matrix Extract2DTransform(Matrix m)
     {
         return new Matrix(
@@ -509,8 +720,12 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Returns the transpose of a matrix.
     /// </summary>
-    /// <param name="a">Source matrix.</param>
-    /// <returns>Transposed matrix.</returns>
+    /// <param name="a">
+    /// Source matrix.
+    /// </param>
+    /// <returns>
+    /// Transposed matrix.
+    /// </returns>
     public static Matrix Transpose(Matrix a)
     {
         return new Matrix(
@@ -524,8 +739,12 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Returns the inverse of a matrix. If the matrix is non-invertible, returns <see cref="identity"/>.
     /// </summary>
-    /// <param name="m">Source matrix.</param>
-    /// <returns>Inverse matrix, or <see cref="identity"/> when not invertible.</returns>
+    /// <param name="m">
+    /// Source matrix.
+    /// </param>
+    /// <returns>
+    /// Inverse matrix, or <see cref="identity"/> when not invertible.
+    /// </returns>
     public static Matrix Invert(Matrix m)
     {
         float a00 = m.m11, a01 = m.m12, a02 = m.m13, a03 = m.m14;
@@ -583,8 +802,12 @@ public struct Matrix : IEquatable<Matrix>
     /// Copies matrix elements into an array in column-major order.
     /// Useful for APIs like bgfx that expect column-major float[16].
     /// </summary>
-    /// <param name="destination">Destination array.</param>
-    /// <param name="startIndex">Start index in the destination array.</param>
+    /// <param name="destination">
+    /// Destination array.
+    /// </param>
+    /// <param name="startIndex">
+    /// Start index in the destination array.
+    /// </param>
     public void CopyToColumnMajor(float[] destination, int startIndex = 0)
     {
         if (destination == null)
@@ -618,6 +841,9 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Returns a new array containing matrix elements in column-major order.
     /// </summary>
+    /// <returns>
+    /// An immutable snapshot of the values selected by the operation.
+    /// </returns>
     public float[] ToColumnMajorArray()
     {
         var data = new float[16];
@@ -632,17 +858,29 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Multiplies two matrices.
     /// </summary>
-    /// <param name="a">Left operand.</param>
-    /// <param name="b">Right operand.</param>
-    /// <returns>The product matrix.</returns>
+    /// <param name="a">
+    /// Left operand.
+    /// </param>
+    /// <param name="b">
+    /// Right operand.
+    /// </param>
+    /// <returns>
+    /// The product matrix.
+    /// </returns>
     public static Matrix operator *(Matrix a, Matrix b) => Multiply(a, b);
 
     /// <summary>
     /// Tests matrices for approximate equality (per-element).
     /// </summary>
-    /// <param name="matrix1">First matrix.</param>
-    /// <param name="matrix2">Second matrix.</param>
-    /// <returns><c>true</c> if all elements are approximately equal.</returns>
+    /// <param name="matrix1">
+    /// First matrix.
+    /// </param>
+    /// <param name="matrix2">
+    /// Second matrix.
+    /// </param>
+    /// <returns>
+    /// <c>true</c> if all elements are approximately equal.
+    /// </returns>
     public static bool operator ==(Matrix matrix1, Matrix matrix2)
     {
         return
@@ -667,16 +905,27 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Tests matrices for inequality.
     /// </summary>
-    /// <param name="a">First matrix.</param>
-    /// <param name="b">Second matrix.</param>
-    /// <returns><c>true</c> if matrices are not equal.</returns>
+    /// <param name="a">
+    /// First matrix.
+    /// </param>
+    /// <param name="b">
+    /// Second matrix.
+    /// </param>
+    /// <returns>
+    /// <c>true</c> if matrices are not equal.
+    /// </returns>
     public static bool operator !=(Matrix a, Matrix b) => !(a == b);
 
     /// <summary>
     /// Converts to <see cref="System.Numerics.Matrix4x4"/> preserving element order.
     /// System.Numerics assumes row-major with row vectors, so transpose as needed for column-vector usage.
     /// </summary>
-    /// <param name="m">Source matrix.</param>
+    /// <param name="m">
+    /// Source matrix.
+    /// </param>
+    /// <returns>
+    /// The validated system.numerics.matrix4x4 that represents the completed operation.
+    /// </returns>
     public static implicit operator System.Numerics.Matrix4x4(Matrix m)
     {
         return new System.Numerics.Matrix4x4(
@@ -691,7 +940,12 @@ public struct Matrix : IEquatable<Matrix>
     /// Converts from <see cref="System.Numerics.Matrix4x4"/> preserving element order.
     /// System.Numerics assumes row-major with row vectors, so transpose as needed for column-vector usage.
     /// </summary>
-    /// <param name="m">Source matrix.</param>
+    /// <param name="m">
+    /// Source matrix.
+    /// </param>
+    /// <returns>
+    /// The validated matrix that represents the completed operation.
+    /// </returns>
     public static implicit operator Matrix(System.Numerics.Matrix4x4 m)
     {
         return new Matrix
@@ -710,14 +964,31 @@ public struct Matrix : IEquatable<Matrix>
     /// <summary>
     /// Determines whether this instance is equal to another matrix.
     /// </summary>
-    /// <param name="other">Other matrix.</param>
-    /// <returns><c>true</c> if equal.</returns>
+    /// <param name="other">
+    /// Other matrix.
+    /// </param>
+    /// <returns>
+    /// <c>true</c> if equal.
+    /// </returns>
     public bool Equals(Matrix other) => this == other;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Determines whether this instance and the supplied value represent the same logical state.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> when both values represent the same logical state; otherwise, <see langword="false"/>.
+    /// </returns>
+    /// <param name="obj">
+    /// The object to compare with this instance.
+    /// </param>
     public override bool Equals(object? obj) => obj is Matrix other && Equals(other);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Computes a hash code from the fields that participate in logical equality.
+    /// </summary>
+    /// <returns>
+    /// A hash code consistent with the implemented equality contract.
+    /// </returns>
     public override int GetHashCode()
     {
         return this.m11.GetHashCode() + this.m12.GetHashCode() + this.m13.GetHashCode() + this.m14.GetHashCode() +
@@ -726,10 +997,13 @@ public struct Matrix : IEquatable<Matrix>
                this.m41.GetHashCode() + this.m42.GetHashCode() + this.m43.GetHashCode() + this.m44.GetHashCode();
     }
 
+
     /// <summary>
     /// Returns a multi-line string representation of the matrix in row-major layout.
     /// </summary>
-
+    /// <returns>
+    /// The human-readable representation of this value.
+    /// </returns>
     public override string ToString()
     {
         return $"[{m11}, {m12}, {m13}, {m14}]\n" +

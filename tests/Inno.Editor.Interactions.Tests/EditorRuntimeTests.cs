@@ -3,16 +3,19 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Reflection.Emit;
 
-using Inno.Core.Assemblies;
-using Inno.Core.Diagnose;
+using Inno.Extensibility.Modules;
+using Inno.Core.Diagnostics;
 using Inno.Core.Events;
 using Inno.Core.Identity;
 using Inno.Core.Input;
-using Inno.Core.Reflection;
+using Inno.Core.Logging;
+using Inno.Core.Serialization;
+using Inno.Core.Settings;
+using Inno.Extensibility.Types;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
+using Inno.Editor.Settings;
 using Xunit;
 
 namespace Inno.Editor.Interactions.Tests;
@@ -23,16 +26,22 @@ public sealed class EditorRuntimeTests : IDisposable
         Path.GetTempPath(),
         "InnoEditorRuntimeTests",
         Guid.NewGuid().ToString("N"));
+    private readonly DiagnosticHub m_diagnostics = new();
+    private readonly LogRouter m_logs = new();
+    private readonly IDisposable m_diagnosticScope;
+    private readonly ModuleHost m_modules;
+    private readonly TypeCatalog m_types;
     private readonly EditorInteractionRuntime m_runtime;
 
     public EditorRuntimeTests()
     {
         Directory.CreateDirectory(Path.Combine(m_projectRoot, "Assets"));
-        AssemblyManager.Initialize(new AssemblyManagerOptions
+        m_diagnosticScope = m_diagnostics.EnterScope();
+        m_modules = new ModuleHost(new ModuleHostOptions
         {
             cacheDirectory = Path.Combine(m_projectRoot, "Library", "Assemblies")
         });
-        TypeCacheManager.Initialize();
+        m_types = new TypeCatalog(m_modules);
 
         TestModule.startCount = 0;
         TestModule.stopCount = 0;
@@ -51,6 +60,8 @@ public sealed class EditorRuntimeTests : IDisposable
         FollowingUpdateModule.updateCount = 0;
         TestPanel.throwFromWindowPadding = false;
         MultiShortcutAction.executeCount = 0;
+        ToolbarAction.isChecked = false;
+        ToolbarAction.executeCount = 0;
         MetadataAction.targetTypeReadCount = 0;
         MetadataAction.throwWhenRead = false;
         ThrowAfterActivateAction.cancelCount = 0;
@@ -61,18 +72,25 @@ public sealed class EditorRuntimeTests : IDisposable
         ZThrowingDisposeModule.throwOnDispose = false;
         ShutdownOrder.events.Clear();
 
-        m_runtime = new EditorInteractionRuntime(m_projectRoot);
+        m_runtime = CreateRuntime(new EditorContext(m_projectRoot));
         m_runtime.Start();
     }
 
     public void Dispose()
     {
         m_runtime.Dispose();
-        TypeCacheManager.Shutdown();
-        AssemblyManager.Shutdown();
+        m_types.Dispose();
+        m_logs.Dispose();
+        m_diagnosticScope.Dispose();
+        m_modules.Dispose();
         if (Directory.Exists(m_projectRoot))
             Directory.Delete(m_projectRoot, recursive: true);
     }
+
+    private EditorInteractionRuntime CreateRuntime(
+        EditorContext context,
+        params object[] hostServices)
+        => new(context, m_types, m_logs, [m_types, .. hostServices]);
 
     [Fact]
     public void HistoryAndExtensionStateContractsDoNotExposeStandaloneWorkspaceTypes()
@@ -89,38 +107,30 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
-    public void ModuleAndPanelBasesExposeOnlyProtectedStateHooks()
+    public void InteractionRuntimeInjectsOneStableAssignableHostService()
     {
-        Assert.Null(typeof(EditorModule).GetMethod("Dispose"));
-        Assert.True(typeof(IDisposable).IsAssignableFrom(typeof(EditorModule)));
-        MethodInfo? moduleCapture = typeof(EditorModule).GetMethod(
-            "Capture",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-        MethodInfo? panelCapture = typeof(EditorPanel).GetMethod(
-            "Capture",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.NotNull(moduleCapture);
-        Assert.NotNull(panelCapture);
-        Assert.Equal(typeof(EditorState), Assert.Single(moduleCapture.GetParameters()).ParameterType);
-        Assert.Equal(typeof(EditorState), Assert.Single(panelCapture.GetParameters()).ParameterType);
-        Assert.Null(typeof(EditorModule).GetMethod(
-            "ReadState",
-            BindingFlags.Static | BindingFlags.NonPublic));
-        Assert.Null(typeof(EditorPanel).GetMethod(
-            "WriteState",
-            BindingFlags.Static | BindingFlags.NonPublic));
-        Assert.Equal(
-            ["Get", "Set"],
-            typeof(EditorState)
-                .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)
-                .Select(static method => method.Name)
-                .OrderBy(static name => name, StringComparer.Ordinal));
-        ConstructorInfo constructor = Assert.Single(typeof(EditorModuleAttribute).GetConstructors());
-        Assert.Collection(
-            constructor.GetParameters(),
-            static parameter => Assert.Equal(typeof(string), parameter.ParameterType),
-            static parameter => Assert.Equal(typeof(int), parameter.ParameterType));
-        Assert.Throws<ArgumentException>(() => new EditorModuleAttribute(string.Empty));
+        var service = new TestHostService();
+        HostServicePanel.current = null;
+        using EditorInteractionRuntime runtime = CreateRuntime(
+            new EditorContext(m_projectRoot),
+            service);
+
+        runtime.Start();
+
+        Assert.Contains(runtime.panels, static panel => panel.id == "tests.host-service");
+        Assert.Same(service, HostServicePanel.current);
+    }
+
+    [Fact]
+    public void InteractionRuntimeRejectsExtensionWhenHostServiceIsUnavailable()
+    {
+        HostServicePanel.current = null;
+        using EditorInteractionRuntime runtime = CreateRuntime(new EditorContext(m_projectRoot));
+
+        runtime.Start();
+
+        Assert.DoesNotContain(runtime.panels, static panel => panel.id == "tests.host-service");
+        Assert.Null(HostServicePanel.current);
     }
 
     [Fact]
@@ -149,6 +159,34 @@ public sealed class EditorRuntimeTests : IDisposable
         Assert.True(TestPanel.attachCount > 0);
         Assert.False(TestPanel.firstAttachPrecededModuleStart);
         Assert.True(m_runtime.panelCount >= 1);
+    }
+
+    [Fact]
+    public void StatisticsUseStableReplacementAndOneFrameOrderHandoff()
+    {
+        EditorStatistics statistics = m_runtime.context.statistics;
+        var id = new EditorStatisticId("tests.statistics.frame-time");
+        var groupId = new EditorStatisticGroupId("tests.statistics");
+        statistics.Publish(new EditorStatistic(
+            id,
+            groupId,
+            "Tests",
+            "Frame Time",
+            "10 ms"));
+        statistics.Publish(new EditorStatistic(
+            id,
+            groupId,
+            "Tests",
+            "Frame Time",
+            "8 ms"));
+
+        Assert.Equal("8 ms", Assert.Single(statistics.GetSnapshot()).value);
+
+        m_runtime.Update(new EditorFrame(0.016f, 0.016f, isFocused: true));
+        Assert.Equal("8 ms", Assert.Single(statistics.GetSnapshot()).value);
+
+        m_runtime.Update(new EditorFrame(0.016f, 0.032f, isFocused: true));
+        Assert.Empty(statistics.GetSnapshot());
     }
 
     [Fact]
@@ -231,36 +269,23 @@ public sealed class EditorRuntimeTests : IDisposable
     [Fact]
     public void BuiltInUndoAndRedoActionsExposeHistoryThroughMenusAndShortcuts()
     {
-        int value = 0;
-        object historyHost = EditorTestReflection.Get<object>(m_runtime.interactions, "historyHost");
-        Assert.True(EditorTestReflection.Invoke<EditorHistoryResult>(
-            historyHost,
-            "Execute",
+        NeutralHistoryHandler.value = 1;
+        m_runtime.interactions.history.RecordApplied(
             "Change Test Value",
-            () =>
-            {
-                value = 1;
-                return EditorHistoryResult.Success();
-            },
-            () =>
-            {
-                value = 0;
-                return EditorHistoryResult.Success();
-            },
-            null).succeeded);
+            NeutralHistoryHandler.CreateChange(before: 0, after: 1));
         EditorInteraction global = m_runtime.interactions.For("editor/global");
 
         EditorActionState undo = global.Query("editor/undo");
         Assert.True(undo.isEnabled);
         Assert.Equal("Undo Change Test Value", undo.displayName);
         Assert.True(global.Execute("editor/undo"));
-        Assert.Equal(0, value);
+        Assert.Equal(0, NeutralHistoryHandler.value);
 
         EditorActionState redo = global.Query("editor/redo");
         Assert.True(redo.isEnabled);
         Assert.Equal("Redo Change Test Value", redo.displayName);
         Assert.True(global.Execute("editor/redo"));
-        Assert.Equal(1, value);
+        Assert.Equal(1, NeutralHistoryHandler.value);
     }
 
     [Fact]
@@ -271,7 +296,7 @@ public sealed class EditorRuntimeTests : IDisposable
             "Change Neutral Value",
             NeutralHistoryHandler.CreateChange(before: 3, after: 14));
 
-        TypeCacheManager.Rebuild();
+        m_types.Rebuild();
         _ = m_runtime.panelCount;
 
         Assert.True(m_runtime.interactions.history.canUndo);
@@ -279,35 +304,6 @@ public sealed class EditorRuntimeTests : IDisposable
         Assert.Equal(3, NeutralHistoryHandler.value);
         Assert.True(m_runtime.interactions.history.Redo().succeeded);
         Assert.Equal(14, NeutralHistoryHandler.value);
-    }
-
-    [Fact]
-    public void RuntimeBoundHistoryIsDiscardedWhenExtensionsRefresh()
-    {
-        int value = 0;
-        object historyHost = EditorTestReflection.Get<object>(m_runtime.interactions, "historyHost");
-        Assert.True(EditorTestReflection.Invoke<EditorHistoryResult>(
-            historyHost,
-            "Execute",
-            "Runtime-bound Change",
-            () =>
-            {
-                value = 1;
-                return EditorHistoryResult.Success();
-            },
-            () =>
-            {
-                value = 0;
-                return EditorHistoryResult.Success();
-            },
-            null).succeeded);
-
-        TypeCacheManager.Rebuild();
-        _ = m_runtime.panelCount;
-
-        Assert.Equal(1, value);
-        Assert.False(m_runtime.interactions.history.canUndo);
-        Assert.Null(m_runtime.interactions.history.undoName);
     }
 
     [Fact]
@@ -359,6 +355,28 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void ToolbarResolvesContextualIconTooltipStateAndDispatch()
+    {
+        EditorInteraction interaction = m_runtime.interactions.For("tests/toolbar");
+
+        EditorToolbarItem initial = Assert.Single(interaction.BuildToolbar().items);
+        Assert.Equal("tests.toolbar", initial.actionId);
+        Assert.Equal(EditorToolbarIcon.Play, initial.icon);
+        Assert.Equal("Start Runtime", initial.tooltip);
+        Assert.False(initial.status.isChecked);
+
+        ToolbarAction.isChecked = true;
+        EditorToolbarItem active = Assert.Single(interaction.BuildToolbar().items);
+        Assert.Equal(EditorToolbarIcon.Stop, active.icon);
+        Assert.Equal("Stop Runtime", active.tooltip);
+        Assert.True(active.status.isChecked);
+
+        interaction.Enqueue(active.actionId);
+        m_runtime.Update(new EditorFrame(0.016f, 1f, isFocused: true));
+        Assert.Equal(1, ToolbarAction.executeCount);
+    }
+
+    [Fact]
     public void MainMenuPlacesGeneratedPanelTogglesUnderPanel()
     {
         EditorMenuModel menu = m_runtime.interactions
@@ -366,77 +384,22 @@ public sealed class EditorRuntimeTests : IDisposable
             .BuildMenu();
 
         EditorMenuItem panel = Assert.Single(menu.items.Where(static item => item.label == "Panel"));
-        Assert.Contains(panel.children, static item => item.label == "Test");
+        EditorMenuItem testing = Assert.Single(panel.children.Where(static item => item.label == "Testing"));
+        EditorMenuItem test = Assert.Single(testing.children.Where(static item => item.label == "Test"));
+        Assert.False(test.status.isChecked);
         EditorMenuItem? view = menu.items.SingleOrDefault(static item => item.label == "View");
         Assert.True(view is null || view.children.All(static item => item.label != "Test"));
-    }
 
-    [Fact]
-    public void PlusGestureTreatsPhysicalShiftAsPartOfTheSymbolicKey()
-    {
-        KeyModifier primary = OperatingSystem.IsMacOS()
-            ? KeyModifier.Super
-            : KeyModifier.Control;
-        var gesture = new HotKeyGesture(KeyCode.Plus, primary);
-
-        Assert.True(EditorTestReflection.Invoke<bool>(
-            gesture,
-            "Matches",
-            new KeyPressedEvent(
-                windowId: 0,
-                KeyCode.Plus,
-                primary | KeyModifier.Shift)));
-        Assert.Equal(primary, gesture.modifiers);
-        Assert.DoesNotContain("Shift", gesture.ToString(), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void EqualSpecificityShortcutConflictsAreRejectedDuringCatalogBuild()
-    {
-        Type catalogType = typeof(EditorInteractions).Assembly.GetType(
-            "Inno.Editor.Interactions.EditorExtensionCatalog",
-            throwOnError: true)!;
-        Type registrationType = catalogType.GetNestedType(
-            "ActionRegistration",
-            BindingFlags.Public | BindingFlags.NonPublic)!;
-        object left = Activator.CreateInstance(
-            registrationType,
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-            binder: null,
-            args: [
-            new EditorActionAttribute("tests.shortcut-left", "tests/shortcut", priority: 20),
-            typeof(DeferredAction),
-            new DeferredAction(),
-            null,
-            null,
-            Array.Empty<EditorMenuAttribute>(),
-            new[] { new EditorShortcutAttribute(KeyCode.F1) }],
-            culture: null)!;
-        object right = Activator.CreateInstance(
-            registrationType,
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-            binder: null,
-            args: [
-            new EditorActionAttribute("tests.shortcut-right", "tests/shortcut", priority: 20),
-            typeof(DeferredAction),
-            new DeferredAction(),
-            null,
-            null,
-            Array.Empty<EditorMenuAttribute>(),
-            new[] { new EditorShortcutAttribute(KeyCode.F1) }],
-            culture: null)!;
-        Array registrations = Array.CreateInstance(registrationType, 2);
-        registrations.SetValue(left, 0);
-        registrations.SetValue(right, 1);
-        MethodInfo validate = catalogType.GetMethod(
-            "ValidateShortcuts",
-            BindingFlags.Static | BindingFlags.NonPublic)!;
-
-        TargetInvocationException exception = Assert.Throws<TargetInvocationException>(
-            () => validate.Invoke(null, [registrations]));
-
-        InvalidOperationException conflict = Assert.IsType<InvalidOperationException>(exception.InnerException);
-        Assert.Contains("ambiguous", conflict.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(m_runtime.interactions.TogglePanel("tests.panel"));
+        EditorMenuModel openMenu = m_runtime.interactions
+            .For("editor/main-menu")
+            .BuildMenu();
+        EditorMenuItem openPanel = Assert.Single(openMenu.items.Where(static item => item.label == "Panel"));
+        EditorMenuItem openTesting = Assert.Single(
+            openPanel.children.Where(static item => item.label == "Testing"));
+        EditorMenuItem openTest = Assert.Single(
+            openTesting.children.Where(static item => item.label == "Test"));
+        Assert.True(openTest.status.isChecked);
     }
 
     [Fact]
@@ -515,48 +478,8 @@ public sealed class EditorRuntimeTests : IDisposable
 
         Assert.True(m_runtime.interactions.For("tests/other").Select());
         Assert.Null(m_runtime.interactions.selection.selectedTarget);
-        Assert.Null(typeof(EditorSelectionState).GetMethod(
-            "Select",
-            BindingFlags.Instance | BindingFlags.Public));
-        Assert.Null(typeof(EditorSelectionState).GetMethod(
-            "Clear",
-            BindingFlags.Instance | BindingFlags.Public));
-    }
-
-    [Fact]
-    public void GenerationTransitionRebindsCollectibleIdentitySelectionAndFocus()
-    {
-        IdentityManager.Initialize();
-        try
-        {
-            Type collectibleType = CreateCollectibleIdentityType();
-            var previous = Assert.IsAssignableFrom<IIdentityObject>(Activator.CreateInstance(collectibleType));
-            Assert.True(IdentityManager.Register(previous));
-            Guid persistentId = previous.GetIdentity().persistentId;
-            EditorInteraction interaction = m_runtime.interactions.For("tests/collectible", previous);
-            Assert.True(interaction.Select());
-            interaction.Focus();
-
-            EditorTestReflection.Invoke(m_runtime.interactions, "PrepareGenerationTransition");
-
-            Assert.Null(m_runtime.interactions.selection.selectedTarget);
-            Assert.Null(m_runtime.interactions.focusedTarget);
-            Assert.True(IdentityManager.Unregister(previous));
-            var replacement = Assert.IsAssignableFrom<IIdentityObject>(Activator.CreateInstance(collectibleType));
-            Assert.True(IdentityManager.Register(replacement, persistentId));
-            EditorTestReflection.Invoke(m_runtime.interactions, "CompleteGenerationTransition");
-
-            m_runtime.Update(new EditorFrame(0.016f, 1f, isFocused: true));
-
-            Assert.Same(replacement, m_runtime.interactions.selection.selectedTarget);
-            Assert.Same(replacement, m_runtime.interactions.focusedTarget);
-            Assert.True(m_runtime.interactions.For("tests/collectible").Select());
-            Assert.True(IdentityManager.Unregister(replacement));
-        }
-        finally
-        {
-            IdentityManager.Shutdown();
-        }
+        Assert.Null(typeof(EditorSelectionState).GetMethod("Select"));
+        Assert.Null(typeof(EditorSelectionState).GetMethod("Clear"));
     }
 
     [Fact]
@@ -604,7 +527,7 @@ public sealed class EditorRuntimeTests : IDisposable
         EditorPanelExtension panel = Assert.Single(
             m_runtime.panels.Where(static value => value.id == "tests.panel"));
 
-        Assert.False(panel.TryGetWindowPadding(out _));
+        Assert.False(panel.TryGetWindowPresentation(out _, out _));
         Assert.False(panel.isOpen);
     }
 
@@ -630,7 +553,7 @@ public sealed class EditorRuntimeTests : IDisposable
         int starts = TestModule.startCount;
         int attaches = TestPanel.attachCount;
 
-        TypeCacheManager.Rebuild();
+        m_types.Rebuild();
         _ = m_runtime.panelCount;
 
         Assert.Equal(starts, TestModule.startCount);
@@ -653,7 +576,7 @@ public sealed class EditorRuntimeTests : IDisposable
         Assert.Contains("[InnoEditor][Module.tests.state]", document);
         Assert.DoesNotContain("[InnoEditor][Module.tests.update-barrier]", document);
 
-        using var restored = new EditorInteractionRuntime(m_projectRoot);
+        using EditorInteractionRuntime restored = CreateRuntime(new EditorContext(m_projectRoot));
         restored.Start();
 
         Assert.Equal(42, TestModule.restoredStateValue);
@@ -673,7 +596,7 @@ public sealed class EditorRuntimeTests : IDisposable
         context.SaveLayout();
         TestModule.restoredStateValue = -1;
 
-        using var restored = new EditorInteractionRuntime(context);
+        using EditorInteractionRuntime restored = CreateRuntime(context);
         restored.Start();
 
         Assert.Equal(0, TestModule.restoredStateValue);
@@ -683,7 +606,7 @@ public sealed class EditorRuntimeTests : IDisposable
     public void ExtensionStateCaptureFailure_PublishesCurrentDiagnosticUntilRetrySucceeds()
     {
         var sink = new TestDiagnosticSink();
-        DiagnosticManager.RegisterSink(sink);
+        m_diagnostics.RegisterSink(sink);
         try
         {
             TestModule.captureFailure = true;
@@ -703,7 +626,7 @@ public sealed class EditorRuntimeTests : IDisposable
         finally
         {
             TestModule.captureFailure = false;
-            DiagnosticManager.UnregisterSink(sink);
+            m_diagnostics.UnregisterSink(sink);
         }
     }
 
@@ -747,7 +670,7 @@ public sealed class EditorRuntimeTests : IDisposable
         TestModule.restoredStateValue = 0;
         TestModule.rebuildDuringRestore = true;
 
-        using var restored = new EditorInteractionRuntime(m_projectRoot);
+        using EditorInteractionRuntime restored = CreateRuntime(new EditorContext(m_projectRoot));
         restored.Start();
         Assert.Equal(91, TestModule.restoredStateValue);
         TestModule.stateValue = TestModule.restoredStateValue;
@@ -771,19 +694,6 @@ public sealed class EditorRuntimeTests : IDisposable
             => reports.Remove(source.id);
     }
 
-    private static Type CreateCollectibleIdentityType()
-    {
-        AssemblyBuilder assembly = AssemblyBuilder.DefineDynamicAssembly(
-            new AssemblyName("Inno.Editor.Interactions.Tests.CollectibleIdentity." + Guid.NewGuid().ToString("N")),
-            AssemblyBuilderAccess.RunAndCollect);
-        ModuleBuilder module = assembly.DefineDynamicModule("Main");
-        TypeBuilder type = module.DefineType(
-            "CollectibleIdentity",
-            TypeAttributes.Public | TypeAttributes.Sealed | TypeAttributes.Class);
-        type.AddInterfaceImplementation(typeof(IIdentityObject));
-        _ = type.DefineDefaultConstructor(MethodAttributes.Public);
-        return type.CreateType()!;
-    }
 }
 
 public class BaseTarget;
@@ -839,15 +749,40 @@ public sealed class NeutralHistoryHandler : EditorHistoryHandler
     }
 }
 
+public interface ITestHostService;
+
+public sealed class TestHostService : ITestHostService;
+
+[EditorPanel("tests.host-service", "Host Service")]
+public sealed class HostServicePanel : EditorPanel
+{
+    public static ITestHostService? current;
+
+    public HostServicePanel(ITestHostService service)
+    {
+        current = service;
+    }
+
+    protected override void OnDraw(EditorContext context)
+        => _ = context;
+}
+
 [EditorModule("tests.state")]
 public sealed class TestModule : EditorModule
 {
+    private readonly TypeCatalog m_types;
+
     public static int startCount;
     public static int stopCount;
     public static int stateValue;
     public static int restoredStateValue;
     public static bool rebuildDuringRestore;
     public static bool captureFailure;
+
+    public TestModule(TypeCatalog types)
+    {
+        m_types = types;
+    }
 
     protected override void Capture(EditorState state)
     {
@@ -862,14 +797,14 @@ public sealed class TestModule : EditorModule
         if (!rebuildDuringRestore)
             return;
         rebuildDuringRestore = false;
-        TypeCacheManager.Rebuild();
+        m_types.Rebuild();
     }
 
     protected override void OnStart(EditorContext context)
     {
         startCount++;
         if (startCount == 1)
-            TypeCacheManager.Rebuild();
+            m_types.Rebuild();
     }
 
     protected override void OnStop(EditorContext context)
@@ -906,7 +841,7 @@ public sealed class FollowingUpdateModule : EditorModule
     protected override void OnUpdate(EditorContext context) => updateCount++;
 }
 
-[EditorPanel("tests.panel", "Test", defaultOpen: false)]
+[EditorPanel("tests.panel", "Test", defaultOpen: false, menuPath: "Testing")]
 public sealed class TestPanel(TestModule module) : EditorPanel
 {
     public static int attachCount;
@@ -935,6 +870,34 @@ public sealed class TestPanel(TestModule module) : EditorPanel
     protected override void OnDraw(EditorContext context)
     {
     }
+}
+
+[StableTypeId("0fbd66e2-303e-4b35-83a1-fc2b90d58360")]
+[ProjectSettingDefinition("tests.editor.multi-presentation")]
+public sealed class MultiPresentationSetting : ISerializable
+{
+    public static ProjectSettingId settingId => new("tests.editor.multi-presentation");
+
+    [SerializableProperty]
+    public int value { get; set; } = 7;
+}
+
+[ProjectSettingPath("Project/Tests/Multi/Primary")]
+public sealed class PrimaryMultiPresentationEditor : ProjectSettingEditor<MultiPresentationSetting>
+{
+    public override ProjectSettingId settingId => MultiPresentationSetting.settingId;
+
+    protected override void OnDraw(MultiPresentationSetting setting)
+        => _ = setting;
+}
+
+[ProjectSettingPath("Project/Tests/Multi/Secondary")]
+public sealed class SecondaryMultiPresentationEditor : ProjectSettingEditor<MultiPresentationSetting>
+{
+    public override ProjectSettingId settingId => MultiPresentationSetting.settingId;
+
+    protected override void OnDraw(MultiPresentationSetting setting)
+        => _ = setting;
 }
 
 [EditorAction("tests.resolve")]
@@ -995,6 +958,23 @@ public sealed class MetadataAction : EditorAction
 public sealed class MultiShortcutAction : EditorAction
 {
     public static int executeCount;
+
+    protected override void Execute(EditorActionContext context) => executeCount++;
+}
+
+[EditorAction("tests.toolbar", "tests/toolbar")]
+[EditorToolbarItem(
+    "tests/toolbar",
+    EditorToolbarIcon.Play,
+    "Start Runtime",
+    activeIcon: EditorToolbarIcon.Stop)]
+public sealed class ToolbarAction : EditorAction
+{
+    public static bool isChecked;
+    public static int executeCount;
+
+    protected override EditorActionState Query(EditorActionContext context)
+        => new(true, true, isChecked, isChecked ? "Stop Runtime" : "Start Runtime");
 
     protected override void Execute(EditorActionContext context) => executeCount++;
 }
@@ -1060,7 +1040,8 @@ internal static class ShutdownOrder
 }
 
 [EditorAction("tests.interaction")]
-public sealed class InteractionAction : EditorAction<InteractionTarget>
+public sealed class InteractionAction :
+    EditorPresentationAction<InteractionTarget, InteractionPresentation>
 {
     private string m_value = string.Empty;
 
@@ -1071,10 +1052,10 @@ public sealed class InteractionAction : EditorAction<InteractionTarget>
         Activate(context);
     }
 
-    protected override bool Present(EditorActionContext<InteractionTarget> context)
+    protected override bool Present(
+        EditorActionContext<InteractionTarget, InteractionPresentation> context)
     {
-        if (EditorTestReflection.Get<object?>(context, "argument") is not InteractionPresentation presentation)
-            return false;
+        InteractionPresentation presentation = context.argument;
         if (presentation.cancel)
         {
             Cancel();

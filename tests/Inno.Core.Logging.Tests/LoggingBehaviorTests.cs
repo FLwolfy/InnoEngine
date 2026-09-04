@@ -16,31 +16,34 @@ public sealed class LoggingCollection;
 [Collection("Logging")]
 public sealed class LoggingBehaviorTests : IDisposable
 {
+    private readonly LogRouter m_router = new();
+    private readonly IDisposable m_scope;
+
     public LoggingBehaviorTests()
     {
-        LogManager.Initialize();
-        LogManager.SetMinimumLevel(LogLevel.Debug);
+        m_scope = m_router.EnterScope();
+        m_router.SetMinimumLevel(LogLevel.Debug);
     }
 
     [Fact]
-    public void LogManager_DispatchesToRegisteredSink()
+    public void LogRouter_DispatchesToRegisteredSink()
     {
         using var sink = new ProbeSink();
-        LogManager.RegisterSink(sink);
+        m_router.RegisterSink(sink);
 
         Log.Info("message-{0}", 42);
 
         Assert.True(sink.WaitForCount(1, TimeSpan.FromSeconds(2)));
         Assert.Contains(sink.entries, e => e.message == "message-42" && e.level == LogLevel.Info);
-        LogManager.UnregisterSink(sink);
+        m_router.UnregisterSink(sink);
     }
 
     [Fact]
-    public void LogManager_RespectsMinimumLevel()
+    public void LogRouter_RespectsMinimumLevel()
     {
         using var sink = new ProbeSink();
-        LogManager.RegisterSink(sink);
-        LogManager.SetMinimumLevel(LogLevel.Warn);
+        m_router.RegisterSink(sink);
+        m_router.SetMinimumLevel(LogLevel.Warn);
 
         Log.Info("suppressed");
         Log.Warn("visible");
@@ -49,7 +52,56 @@ public sealed class LoggingBehaviorTests : IDisposable
         Assert.Single(sink.entries);
         Assert.Equal(LogLevel.Warn, sink.entries[0].level);
         Assert.Equal("visible", sink.entries[0].message);
-        LogManager.UnregisterSink(sink);
+        m_router.UnregisterSink(sink);
+    }
+
+    [Fact]
+    public void LogRouterFlushDeliversEveryPreviouslyQueuedEntry()
+    {
+        using var sink = new ProbeSink();
+        m_router.RegisterSink(sink);
+
+        Log.Info("before-flush-1");
+        Log.Info("before-flush-2");
+        m_router.Flush();
+
+        Assert.Contains(sink.entries, static entry => entry.message == "before-flush-1");
+        Assert.Contains(sink.entries, static entry => entry.message == "before-flush-2");
+        m_router.UnregisterSink(sink);
+    }
+
+    [Fact]
+    public void LogRouterFlushCompletesWithoutRegisteredSinks()
+    {
+        Log.Info("discarded-before-flush");
+
+        m_router.Flush();
+    }
+
+    [Fact]
+    public void FailingSinkIsReportedQuarantinedAndDoesNotBlockHealthySinks()
+    {
+        var failing = new FailingSink();
+        using var healthy = new ProbeSink();
+        ILogSink? reportedSink = null;
+        Exception? reportedFailure = null;
+        m_router.sinkFailed += (sink, failure) =>
+        {
+            reportedSink = sink;
+            reportedFailure = failure;
+        };
+        m_router.RegisterSink(failing);
+        m_router.RegisterSink(healthy);
+
+        Log.Info("first");
+        Log.Info("second");
+        m_router.Flush();
+
+        Assert.Same(failing, reportedSink);
+        Assert.IsType<InvalidOperationException>(reportedFailure);
+        Assert.Equal(1, failing.receiveCount);
+        Assert.Equal(["first", "second"], healthy.entries.Select(static entry => entry.message));
+        m_router.UnregisterSink(healthy);
     }
 
     [Fact]
@@ -59,34 +111,26 @@ public sealed class LoggingBehaviorTests : IDisposable
         Directory.CreateDirectory(dir);
 
         using var sink = new FileLogSink(dir, maxFileSizeBytes: 256, maxFiles: 3);
-        LogManager.RegisterSink(sink);
+        m_router.RegisterSink(sink);
 
         for (var i = 0; i < 80; i++)
             Log.Warn("line-{0}", i);
 
-        var timeout = DateTime.UtcNow.AddSeconds(5);
-        while (DateTime.UtcNow < timeout)
-        {
-            var files = Directory.GetFiles(dir, FileLogSink.C_LOG_FILE_PREFIX + "*.log");
-            var combined = string.Join(Environment.NewLine, files.Select(File.ReadAllText));
-            if (combined.Contains("line-79"))
-            {
-                Assert.True(files.Length <= 3);
-                Assert.All(files, static file => Assert.Equal(".log", Path.GetExtension(file)));
-                LogManager.UnregisterSink(sink);
-                return;
-            }
+        m_router.Flush();
+        m_router.UnregisterSink(sink);
+        sink.Dispose();
 
-            Thread.Sleep(20);
-        }
-
-        LogManager.UnregisterSink(sink);
-        throw new TimeoutException("Timed out waiting for file sink output.");
+        var files = Directory.GetFiles(dir, FileLogSink.C_LOG_FILE_PREFIX + "*.log");
+        var combined = string.Join(Environment.NewLine, files.Select(File.ReadAllText));
+        Assert.Contains("line-79", combined);
+        Assert.True(files.Length <= 3);
+        Assert.All(files, static file => Assert.Equal(".log", Path.GetExtension(file)));
     }
 
     public void Dispose()
     {
-        LogManager.Shutdown();
+        m_scope.Dispose();
+        m_router.Dispose();
     }
 
     private sealed class ProbeSink : ILogSink, IDisposable
@@ -120,6 +164,18 @@ public sealed class LoggingBehaviorTests : IDisposable
         public void Dispose()
         {
             m_signal.Dispose();
+        }
+    }
+
+    private sealed class FailingSink : ILogSink
+    {
+        internal int receiveCount { get; private set; }
+
+        public void Receive(LogEntry entry)
+        {
+            _ = entry;
+            receiveCount++;
+            throw new InvalidOperationException("Expected sink failure.");
         }
     }
 }

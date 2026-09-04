@@ -1,6 +1,8 @@
 using System;
 
+using Inno.Editor.ImGui.ImGuiWidget;
 using Inno.Native.ImGui;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
 namespace Inno.Editor.Inspection;
@@ -8,7 +10,12 @@ namespace Inno.Editor.Inspection;
 [PropertyDrawer(typeof(Enum), useForChildren: true, priority: 100)]
 internal sealed class EnumPropertyDrawer : IPropertyDrawer
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     public void Draw(PropertyDrawContext context)
     {
         Type enumType = context.propertyType;
@@ -20,7 +27,7 @@ internal sealed class EnumPropertyDrawer : IPropertyDrawer
         }
 
         string preview = Enum.GetName(enumType, value) ?? value.ToString() ?? "Unknown";
-        if (!NativeImGui.BeginCombo($"##{context.path}", preview))
+        if (!EditorWidget.BeginBoundedCombo($"##{context.path}", preview))
         {
             return;
         }
@@ -43,7 +50,7 @@ internal sealed class EnumPropertyDrawer : IPropertyDrawer
     {
         ulong currentBits = ToBits(enumType, value);
         string preview = value.ToString() ?? currentBits.ToString();
-        if (!NativeImGui.BeginCombo($"##{context.path}", preview))
+        if (!EditorWidget.BeginBoundedCombo($"##{context.path}", preview))
         {
             return;
         }

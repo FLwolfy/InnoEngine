@@ -9,10 +9,11 @@ internal static class PropertySnapshotPipeline
     internal static SerializationPropertySnapshot CaptureProperty(
         ISerializable value,
         string propertyName,
-        SerializationContext context)
+        SerializationContext context,
+        ConverterRegistryLease converters)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(propertyName);
-        return Capture(value, context).FirstOrDefault(snapshot =>
+        return Capture(value, context, converters).FirstOrDefault(snapshot =>
                    string.Equals(snapshot.name, propertyName, StringComparison.Ordinal))
                ?? throw new ArgumentException(
                    $"Serializable property '{propertyName}' was not found on '{value.GetType().FullName}'.",
@@ -21,7 +22,8 @@ internal static class PropertySnapshotPipeline
 
     internal static IReadOnlyList<SerializationPropertySnapshot> Capture(
         ISerializable value,
-        SerializationContext context)
+        SerializationContext context,
+        ConverterRegistryLease converters)
     {
         SerializableMember[] members = ReflectionMetadata.GetSerializableMembers(value.GetType());
         var snapshots = new List<SerializationPropertySnapshot>(members.Length);
@@ -31,7 +33,7 @@ internal static class PropertySnapshotPipeline
             if ((member.visibility & PropertyVisibility.Serialize) == 0)
                 continue;
 
-            var operation = new SerializationOperation(context);
+            var operation = new SerializationOperation(context, converters);
             try
             {
                 SerializationNode node = ValuePipeline.Write(
@@ -57,7 +59,8 @@ internal static class PropertySnapshotPipeline
         ISerializable target,
         IReadOnlyList<SerializationPropertySnapshot> snapshots,
         SerializationPropertyRestoreMode mode,
-        SerializationContext context)
+        SerializationContext context,
+        ConverterRegistryLease converters)
     {
         SerializableMember[] members = ReflectionMetadata.GetSerializableMembers(target.GetType());
         var membersByName = new Dictionary<string, SerializableMember>(members.Length, StringComparer.Ordinal);
@@ -72,7 +75,7 @@ internal static class PropertySnapshotPipeline
         var failures = new List<SerializationPropertyRestoreFailure>();
         int restoredCount = 0;
         int ignoredCount = 0;
-        var operation = new SerializationOperation(context);
+        var operation = new SerializationOperation(context, converters);
         try
         {
             for (int i = 0; i < snapshots.Count; i++)
@@ -98,7 +101,7 @@ internal static class PropertySnapshotPipeline
                     restoredCount++;
                 }
                 catch (Exception exception) when (
-                    mode == SerializationPropertyRestoreMode.Compatible &&
+                    mode == SerializationPropertyRestoreMode.CollectFailures &&
                     IsRecoverable(exception))
                 {
                     operation.Rollback(checkpoint);

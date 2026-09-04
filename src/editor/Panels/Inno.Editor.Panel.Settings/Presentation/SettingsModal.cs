@@ -14,37 +14,55 @@ namespace Inno.Editor.Panel.Settings;
 
 [EditorModal("editor.settings", "Settings", order: 100)]
 internal sealed class SettingsModal(
-    EditorSettings settings,
+    EditorSettings editorSettings,
+    ProjectSettingsEditor projectSettings,
     SettingsWindowModule window) : EditorModal
 {
+    private readonly SettingsNavigation m_navigation = new();
     private readonly SettingsTree m_tree = new();
 
+    private SettingsEditSession? m_navigationSession;
     private string m_query = string.Empty;
-    private string m_selectedPath = string.Empty;
     private float m_treePaneRatio = 0.25f;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets whether this implementation is visible.
+    /// </summary>
     public override bool isVisible => window.isVisible;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets whether this implementation can move.
+    /// </summary>
     public override bool canMove => true;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets whether this implementation can resize.
+    /// </summary>
     public override bool canResize => true;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the preferred initial window size in logical editor units.
+    /// </summary>
     public override Vector2 initialSize => new(1050f, 700f);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets the smallest editor window size that keeps every setting control usable.
+    /// </summary>
     public override Vector2 minimumSize => new(760f, 520f);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Draws this feature using the current editor presentation context.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
     protected override void OnDraw(EditorContext context)
     {
         SettingsEditSession? session = window.session;
         if (session is null)
             return;
-        if (session.catalogRevision != settings.catalogRevision)
+        if (session.editorCatalogRevision != editorSettings.catalogRevision ||
+            session.projectCatalogRevision != projectSettings.catalogRevision)
         {
             window.Refresh();
             session = window.session;
@@ -53,10 +71,11 @@ internal sealed class SettingsModal(
         }
 
         IReadOnlyList<SettingsPage> pages = session.pages;
-        SettingsPage? selected = SettingsTree.FindPage(pages, m_selectedPath);
+        EnsureNavigationSession(session, pages);
+        SettingsPage? selected = SettingsTree.FindPage(pages, m_navigation.currentPath);
         selected ??= SettingsTree.FindFirstMatch(pages, m_query);
         if (selected is not null)
-            m_selectedPath = selected.path;
+            m_navigation.Replace(selected.path);
 
         float footerHeight = NativeImGui.GetFrameHeightWithSpacing() +
                              NativeImGui.GetStyle().ItemSpacing.Y;
@@ -127,6 +146,10 @@ internal sealed class SettingsModal(
         {
             if (!visible)
                 return;
+            DrawNavigationButtons();
+            NativeImGui.SameLine(0f, EditorWidget.style.assetToolbarSectionSpacing);
+            bool wasSearching = !string.IsNullOrWhiteSpace(m_query);
+            NativeImGui.SetNextItemWidth(-1f);
             bool queryChanged = EditorWidget.SearchInput(
                 "settings",
                 "Search settings",
@@ -135,7 +158,17 @@ internal sealed class SettingsModal(
             if (queryChanged)
             {
                 SettingsPage? first = SettingsTree.FindFirstMatch(pages, m_query);
-                m_selectedPath = first?.path ?? string.Empty;
+                if (first is not null)
+                {
+                    if (wasSearching)
+                        m_navigation.Replace(first.path);
+                    else
+                        m_navigation.NavigateTo(first.path);
+                }
+                else
+                {
+                    m_navigation.Replace(string.Empty);
+                }
             }
             NativeImGui.Separator();
             bool scrollVisible = NativeImGui.BeginChild("##settings_tree_scroll", Vector2.Zero);
@@ -146,8 +179,8 @@ internal sealed class SettingsModal(
                     m_tree.Draw(
                         pages,
                         m_query,
-                        m_selectedPath,
-                        page => m_selectedPath = page.path);
+                        m_navigation.currentPath,
+                        page => m_navigation.NavigateTo(page.path));
                 }
             }
             finally
@@ -174,11 +207,11 @@ internal sealed class SettingsModal(
         {
             if (!visible)
                 return;
-            SettingsPage? page = SettingsTree.FindPage(pages, m_selectedPath);
+            SettingsPage? page = SettingsTree.FindPage(pages, m_navigation.currentPath);
             if (page is not null)
             {
                 var view = new SettingsPageView(session);
-                view.Draw(page, child => m_selectedPath = child.path);
+                view.Draw(page, child => m_navigation.NavigateTo(child.path));
             }
             else
             {
@@ -246,19 +279,64 @@ internal sealed class SettingsModal(
 
     private void DrawButtons(SettingsEditSession session)
     {
-        NativeImGui.BeginDisabled(!session.isDirty);
-        try
+        ImGuiStylePtr style = NativeImGui.GetStyle();
+        if (!session.isDirty)
         {
-            if (NativeImGui.Button("Apply"))
-                _ = session.Apply();
-        }
-        finally
-        {
-            NativeImGui.EndDisabled();
+            float okWidth = NativeImGui.CalcTextSize("OK").X + style.FramePadding.X * 2f;
+            NativeImGui.SetCursorPosX(
+                NativeImGui.GetCursorPosX() +
+                MathF.Max(0f, NativeImGui.GetContentRegionAvail().X - okWidth));
+            if (NativeImGui.Button("OK"))
+                window.Close();
+            return;
         }
 
-        NativeImGui.SameLine();
+        float cancelWidth = NativeImGui.CalcTextSize("Cancel").X + style.FramePadding.X * 2f;
+        float applyWidth = NativeImGui.CalcTextSize("Apply").X + style.FramePadding.X * 2f;
+        float totalWidth = cancelWidth + style.ItemSpacing.X + applyWidth;
+        NativeImGui.SetCursorPosX(
+            NativeImGui.GetCursorPosX() +
+            MathF.Max(0f, NativeImGui.GetContentRegionAvail().X - totalWidth));
         if (NativeImGui.Button("Cancel"))
             window.Close();
+
+        NativeImGui.SameLine();
+        if (NativeImGui.Button("Apply"))
+            _ = session.Apply();
+    }
+
+    private void DrawNavigationButtons()
+    {
+        float frameHeight = NativeImGui.GetFrameHeight();
+        var buttonSize = new Vector2(frameHeight, frameHeight);
+        NativeImGui.BeginDisabled(!m_navigation.canGoBack);
+        if (NativeImGui.Button(
+                $"{Inno.Platform.Sdl3.ImGui.ImGuiIcon.AngleLeft}##SettingsBack",
+                buttonSize))
+        {
+            m_navigation.GoBack();
+        }
+        NativeImGui.EndDisabled();
+
+        NativeImGui.SameLine(0f, EditorWidget.style.assetToolbarTightSpacing);
+        NativeImGui.BeginDisabled(!m_navigation.canGoForward);
+        if (NativeImGui.Button(
+                $"{Inno.Platform.Sdl3.ImGui.ImGuiIcon.AngleRight}##SettingsForward",
+                buttonSize))
+        {
+            m_navigation.GoForward();
+        }
+        NativeImGui.EndDisabled();
+    }
+
+    private void EnsureNavigationSession(
+        SettingsEditSession session,
+        IReadOnlyList<SettingsPage> pages)
+    {
+        if (ReferenceEquals(m_navigationSession, session))
+            return;
+        m_navigationSession = session;
+        SettingsPage? first = SettingsTree.FindFirstMatch(pages, m_query);
+        m_navigation.Reset(first?.path ?? string.Empty);
     }
 }

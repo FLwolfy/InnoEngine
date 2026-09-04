@@ -67,6 +67,9 @@ public abstract class Event
 
     internal readonly struct HubDispatchScope(HubFrameStack frames, Event eventRef) : IDisposable
     {
+        /// <summary>
+        /// Releases the resources owned by this instance.
+        /// </summary>
         public void Dispose()
         {
             frames.PopIfCurrent(eventRef);
@@ -79,12 +82,24 @@ public abstract class Event
         private bool[] m_handled;
         private int m_count;
 
+        /// <summary>
+        /// Creates a validated hub frame stack instance.
+        /// </summary>
+        /// <param name="capacity">
+        /// The capacity consumed by hub frame stack; ownership remains with the caller unless explicitly stated otherwise.
+        /// </param>
         public HubFrameStack(int capacity)
         {
             m_events = new Event[capacity];
             m_handled = new bool[capacity];
         }
 
+        /// <summary>
+        /// Pushes the supplied event onto the current execution context stack.
+        /// </summary>
+        /// <param name="e">
+        /// The e consumed by push; ownership remains with the caller unless explicitly stated otherwise.
+        /// </param>
         public void Push(Event e)
         {
             EnsureCapacity(m_count + 1);
@@ -93,11 +108,23 @@ public abstract class Event
             m_count++;
         }
 
+        /// <summary>
+        /// Determines whether the supplied event owns the current execution context.
+        /// </summary>
+        /// <param name="e">
+        /// The e consumed by is current; ownership remains with the caller unless explicitly stated otherwise.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the requested condition is satisfied; otherwise, <see langword="false"/>.
+        /// </returns>
         public bool IsCurrent(Event e)
         {
             return m_count > 0 && ReferenceEquals(m_events[m_count - 1], e);
         }
 
+        /// <summary>
+        /// Marks the current event handled without changing another event context.
+        /// </summary>
         public void MarkHandledCurrent()
         {
             if (m_count > 0)
@@ -106,6 +133,15 @@ public abstract class Event
             }
         }
 
+        /// <summary>
+        /// Determines whether the current event context has been marked handled.
+        /// </summary>
+        /// <param name="e">
+        /// The e consumed by is current handled; ownership remains with the caller unless explicitly stated otherwise.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> when the requested condition is satisfied; otherwise, <see langword="false"/>.
+        /// </returns>
         public bool IsCurrentHandled(Event e)
         {
             return m_count > 0
@@ -113,6 +149,12 @@ public abstract class Event
                    && m_handled[m_count - 1];
         }
 
+        /// <summary>
+        /// Removes the supplied event only when it is the current execution context.
+        /// </summary>
+        /// <param name="e">
+        /// The e consumed by pop if current; ownership remains with the caller unless explicitly stated otherwise.
+        /// </param>
         public void PopIfCurrent(Event e)
         {
             if (!IsCurrent(e))

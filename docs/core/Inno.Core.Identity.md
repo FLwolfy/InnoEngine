@@ -1,6 +1,6 @@
 # Inno.Core.Identity
 
-[上一页：Job](Inno.Core.Job.md) · [Core 索引](README.md) · [下一页：Input](Inno.Core.Input.md)
+[上一页：Job](Inno.Core.Jobs.md) · [Core 索引](README.md) · [下一页：Input](Inno.Core.Input.md)
 
 Identity 模块为引擎对象提供两个层次的身份：跨保存/重载保持的 `persistentId`，以及只在当前 Registry 注册期间有效的 `runtimeId`。对象通过 `IIdentityObject` 获得弱关联的身份存储，无需继承特定基类。
 
@@ -34,14 +34,12 @@ Guid persistentId = resource.GetIdentity().persistentId;
 
 对象到 identity 的映射使用 `ConditionalWeakTable`，不会仅因身份系统而阻止对象 GC。
 
-## IdentityManager
+## IdentityAllocator
 
 | 成员 | 说明 |
 | --- | --- |
-| `isInitialized` | 当前全局 Registry 是否初始化。 |
 | `ObjectUnregistered` | 对象从 Registry 永久移除后触发；所有 handler 都执行，失败聚合。 |
-| `Initialize()` | 创建新 Registry；也可用于 reset。 |
-| `Shutdown()` | 丢弃当前 Registry 并标为未初始化。 |
+| `EnterScope()` | 将当前 Session 的 Allocator 绑定到异步执行上下文。 |
 | `Register(obj, Guid? override = null)` | 绑定 runtime ID；已注册返回 `false`。 |
 | `InitializePersistentIdentity(obj, Guid)` | 给未注册对象指定非空 persistent ID。 |
 | `Unregister(obj)` | 移除 runtime 映射并保留 persistent ID。 |
@@ -49,17 +47,16 @@ Guid persistentId = resource.GetIdentity().persistentId;
 | `Get<TIdentity>(Guid persistentId)` | 按 persistent ID 查找。 |
 
 ```csharp
-IdentityManager.Initialize();
+var identities = new IdentityAllocator();
 
 RuntimeResource resource = new();
-IdentityManager.InitializePersistentIdentity(resource, savedId);
-IdentityManager.Register(resource);
+identities.InitializePersistentIdentity(resource, savedId);
+identities.Register(resource);
 
 int runtimeId = resource.GetIdentity().runtimeId!.Value;
-RuntimeResource? same = IdentityManager.Get<RuntimeResource>(runtimeId);
+RuntimeResource? same = identities.Get<RuntimeResource>(runtimeId);
 
-IdentityManager.Unregister(resource);
-IdentityManager.Shutdown();
+identities.Unregister(resource);
 ```
 
 ## 冲突与陈旧 ID
@@ -68,6 +65,7 @@ IdentityManager.Shutdown();
 - runtime ID 由 slot + generation 编码。对象移除后 slot 可复用，但旧 ID 的 generation 不匹配，因此不会解析到新对象。
 - `InitializePersistentIdentity` 只允许未注册对象；空 Guid、null 或已注册状态会失败。
 - Unregister event 在 Registry 已更新后触发，即使 handler 抛错也不会恢复对象。
+- 每个 `RuntimeSession` 拥有独立 `IdentityAllocator`；不存在进程级可变 Identity Manager。
 
 ## 热重载用法
 

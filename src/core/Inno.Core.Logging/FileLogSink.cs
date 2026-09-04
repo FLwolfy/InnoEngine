@@ -22,6 +22,7 @@ public class FileLogSink : ILogSink, IDisposable
     private readonly string m_logDirectory;
     private readonly long m_maxFileSize;
     private readonly int m_maxFiles;
+    private readonly object m_lifecycleSync = new();
     private string m_currentFile;
     private long m_currentSize;
     private FileStream? m_stream;
@@ -31,13 +32,20 @@ public class FileLogSink : ILogSink, IDisposable
     private readonly SemaphoreSlim m_signal = new(0);
     private readonly Thread m_workerThread;
     private volatile bool m_running = true;
+    private bool m_disposed;
 
     /// <summary>
     /// Initializes a file sink.
     /// </summary>
-    /// <param name="logDirectory">Directory where log files are stored.</param>
-    /// <param name="maxFileSizeBytes">Maximum file size before rotation.</param>
-    /// <param name="maxFiles">Maximum number of retained files.</param>
+    /// <param name="logDirectory">
+    /// Directory where log files are stored.
+    /// </param>
+    /// <param name="maxFileSizeBytes">
+    /// Maximum file size before rotation.
+    /// </param>
+    /// <param name="maxFiles">
+    /// Maximum number of retained files.
+    /// </param>
     public FileLogSink(string logDirectory, long maxFileSizeBytes = 10 * 1024 * 1024, int maxFiles = 10)
     {
         m_logDirectory = logDirectory;
@@ -58,11 +66,17 @@ public class FileLogSink : ILogSink, IDisposable
     /// <summary>
     /// Queues a log entry for asynchronous file writing.
     /// </summary>
-    /// <param name="entry">The entry to persist.</param>
+    /// <param name="entry">
+    /// The entry to persist.
+    /// </param>
     public void Receive(LogEntry entry)
     {
-        m_queue.Enqueue(entry);
-        m_signal.Release();
+        lock (m_lifecycleSync)
+        {
+            ObjectDisposedException.ThrowIf(m_disposed, this);
+            m_queue.Enqueue(entry);
+            m_signal.Release();
+        }
     }
 
     private void ProcessQueue()
@@ -171,8 +185,15 @@ public class FileLogSink : ILogSink, IDisposable
     /// </summary>
     public void Dispose()
     {
-        m_running = false;
-        m_signal.Release();
+        lock (m_lifecycleSync)
+        {
+            if (m_disposed)
+                return;
+            m_disposed = true;
+            m_running = false;
+            m_signal.Release();
+        }
+
         m_workerThread.Join();
 
         DrainQueue();

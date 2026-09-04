@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 
-using Inno.Core.Reflection;
+using Inno.Extensibility.Types;
 
 namespace Inno.Editor.Scene;
 

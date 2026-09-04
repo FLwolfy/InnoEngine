@@ -1,0 +1,201 @@
+name: Rendering CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/rendering-ci.yml"
+      - "build/**"
+      - "extern/**"
+      - "native/**"
+      - "src/core/**"
+      - "src/assets/**"
+      - "src/extensibility/**"
+      - "src/scripting/**"
+      - "src/plugins/**"
+      - "src/scene/**"
+      - "src/runtime/**"
+      - "src/editor/**"
+      - "src/platform/**"
+      - "src/rendering/**"
+      - "tools/**"
+      - "docs/**"
+      - "tests/**"
+      - ".gitmodules"
+      - "Directory.Build.props"
+      - "InnoEngine.sln"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/rendering-ci.yml"
+      - "build/**"
+      - "extern/**"
+      - "native/**"
+      - "src/core/**"
+      - "src/assets/**"
+      - "src/extensibility/**"
+      - "src/scripting/**"
+      - "src/plugins/**"
+      - "src/scene/**"
+      - "src/runtime/**"
+      - "src/editor/**"
+      - "src/platform/**"
+      - "src/rendering/**"
+      - "tools/**"
+      - "docs/**"
+      - "tests/**"
+      - ".gitmodules"
+      - "Directory.Build.props"
+      - "InnoEngine.sln"
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+
+jobs:
+  rendering:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            platform: windows-x64
+            build_target: windows-x64
+            architecture: X64
+            backend_pattern: "Rendering initialized with Direct3D(11|12)"
+          - os: macos-15
+            platform: osx-arm64
+            build_target: macos-arm64
+            architecture: Arm64
+            backend_pattern: "Rendering initialized with Metal"
+
+    steps:
+      - name: Checkout repository and native dependencies
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Install MSBuild
+        if: runner.os == 'Windows'
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Verify runner architecture
+        shell: pwsh
+        run: |
+          $actual = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
+          if ($actual -ne '${{ matrix.architecture }}') {
+            throw "Runner architecture '$actual' does not match required '${{ matrix.architecture }}'."
+          }
+
+      - name: Build native editor and Player dependencies
+        shell: pwsh
+        run: |
+          dotnet run --project build/toolchains/Inno.Build.Toolchains.Sdl3 -- build --config debug
+          dotnet run --project build/toolchains/Inno.Build.Toolchains.Sdl3 -- build --config release
+          dotnet run --project build/toolchains/Inno.Build.Toolchains.ImGui -- build --config debug
+          dotnet run --project build/toolchains/Inno.Build.Toolchains.ImGuizmo -- build --config debug
+          dotnet run --project build/toolchains/Inno.Build.Toolchains.Bgfx -- native --config debug
+          dotnet run --project build/toolchains/Inno.Build.Toolchains.Bgfx -- native --config release
+          dotnet run --project build/toolchains/Inno.Build.Toolchains.Bgfx -- tools --config debug
+
+      - name: Enforce architecture boundaries
+        shell: pwsh
+        run: dotnet run --project tools/Inno.Tooling.Architecture -- .
+
+      - name: Build managed solution
+        shell: pwsh
+        run: dotnet build InnoEngine.sln --disable-build-servers -m:1 -nr:false
+
+      - name: Run complete test suite
+        shell: pwsh
+        run: dotnet test InnoEngine.sln --no-build --no-restore --disable-build-servers -m:1 -nr:false
+
+      - name: Generate source-independent Player Support Pack
+        shell: pwsh
+        run: |
+          $supportPacks = Join-Path $env:RUNNER_TEMP "InnoSupportPacks"
+          dotnet run --project build/support/Inno.Build.SupportPacks --no-build -- `
+            --engine-root $PWD `
+            --output $supportPacks `
+            --target '${{ matrix.build_target }}' `
+            --dotnet (Get-Command dotnet).Source
+
+      - name: Export and run real Player E2E
+        shell: pwsh
+        run: |
+          $supportPacks = Join-Path $env:RUNNER_TEMP "InnoSupportPacks"
+          $e2eOutput = Join-Path $env:RUNNER_TEMP "InnoPlayerE2E"
+          dotnet run --project tests/Inno.Player.E2E --no-build -- `
+            --target '${{ matrix.build_target }}' `
+            --support-packs $supportPacks `
+            --output $e2eOutput
+
+      - name: Run real renderer smoke
+        shell: pwsh
+        run: |
+          $smokeProject = Join-Path $env:RUNNER_TEMP "InnoRenderingSmoke"
+          New-Item -ItemType Directory -Force (Join-Path $smokeProject "Assets") | Out-Null
+          $nativeLog = Join-Path $smokeProject "Logs/NativeRendering.log"
+          New-Item -ItemType Directory -Force (Split-Path $nativeLog) | Out-Null
+          dotnet src/editor/Inno.Editor.Application/bin/Debug/net9.0/Inno.Editor.Application.dll `
+            $smokeProject --smoke-frames 3 2>&1 | Tee-Object -FilePath $nativeLog
+          if ($LASTEXITCODE -ne 0) {
+            throw "Renderer smoke exited with code $LASTEXITCODE."
+          }
+
+          $bootLog = Join-Path $smokeProject "Logs/EditorBoot.log"
+          if (-not (Test-Path $bootLog)) {
+            throw "Renderer smoke did not produce EditorBoot.log."
+          }
+          $boot = Get-Content -Raw $bootLog
+          if ($boot -notmatch '${{ matrix.backend_pattern }}') {
+            throw "Renderer smoke did not initialize the required backend pattern '${{ matrix.backend_pattern }}'."
+          }
+          if ($boot -notmatch 'Smoke frame limit reached after 3 frame\(s\)\.') {
+            throw "Renderer smoke did not submit the required frame count."
+          }
+          if ($boot -notmatch 'Dispose end\.') {
+            throw "Renderer smoke did not complete orderly shutdown."
+          }
+          if ($boot -match 'Teardown failure') {
+            throw "Renderer smoke reported a teardown failure."
+          }
+
+          $native = Get-Content -Raw $nativeLog
+          if ($native -notmatch '\[x\] sRGB Back Buffer') {
+            throw "Renderer smoke did not enable the sRGB backbuffer contract."
+          }
+          if ($native -notmatch 'BGFX Shutdown complete\.') {
+            throw "Renderer smoke did not complete BGFX shutdown."
+          }
+          if ($native -match 'BGFX FATAL') {
+            throw "Renderer smoke reported a BGFX fatal diagnostic."
+          }
+
+      - name: Upload renderer smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendering-smoke-${{ matrix.platform }}
+          path: ${{ runner.temp }}/InnoRenderingSmoke/Logs/**
+          if-no-files-found: warn
+
+      - name: Upload Player E2E output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-e2e-${{ matrix.build_target }}
+          path: ${{ runner.temp }}/InnoPlayerE2E/**
+          if-no-files-found: warn
