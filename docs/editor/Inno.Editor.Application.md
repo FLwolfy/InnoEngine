@@ -22,7 +22,7 @@ Editor 当前不需要额外的 InnoEngine project descriptor。目录本身就�
 
 ## internal EditorHost
 
-`EditorHost` 是 Application 内部的启动实现，不属于公开 API。它依次构造 Platform、Window、EngineHost、Edit RuntimeSession、authoring services、ImGui context 与 Editor runtime；启动失败与正常 `Dispose` 共用幂等资源栈，并按 Editor → ImGui → Session → EngineHost → Window → Platform 的逆序释放。
+`EditorHost` 是 Application 内部的启动实现，不属于公开 API。它依次构造 Platform、Window、EngineHost、Edit RuntimeSession、authoring services、Editor Audio、ImGui context 与 Editor runtime；启动失败与正常 `Dispose` 共用幂等资源栈，并按 Editor → ImGui → Audio → Session → EngineHost → Window → Platform 的逆序释放。
 
 `editor.ini`、`Settings.Editor.inno`、`Settings.Project.inno`、`Settings.Build.inno`、Editor boot log、Assets、Plugins 与脚本产物都以 `projectDirectory` 为根目录。`editor.ini` 只保存 ImGui layout 与 Module/Panel 状态；Editor 偏好通过 SerializationRegistry 写入 `Settings.Editor.inno`；runtime 项目协议和团队共享的导出默认值分别写入 `Settings.Project.inno` 与 `Settings.Build.inno`。三个设置文档共享一个 Settings frontend，但保持独立的生命周期和部署边界。
 
@@ -38,7 +38,7 @@ Module/Panel 状态只使用 `editor.ini` 中由 Attribute ID 确定的具名可
 
 Editor 启动阶段在 LogRouter 可用之前产生的诊断写入 `<Project>/Logs/EditorBoot.log`；EngineHost 初始化后的轮转日志写入同一目录。项目根目录不生成独立日志文件。
 
-每帧安全点顺序为：推进完整 Play Session tick → 在当前 Edit/Play execution scope 中更新 `EditorFrame` 与 Module transition → 重新解析 transition 后的 scope 并绘制统一主菜单、中央 Toolbar、自动发现 Panel 与 Modal → 执行 Rendering frame。Update 与 Draw 分别获取 scope，因此 Preparing 在 Update 中提交为 Playing 后，同一帧 Draw 已经指向 Play world，不会出现一帧 Edit/Play 混合。Exit Action 生效后下一帧不再模拟，并在 transition 安全点释放 Play Scene、Session 与 History。脚本编译弹窗位于 `Inno.Editor.Scripting`，由 internal `EditorScripting` module 驱动真实编译阶段进度；Application 不包含 Scene action、恢复算法或 ScriptManager 状态机。
+每帧安全点顺序为：在对应 Audio execution scope 中推进完整 Play Session tick 和 Audio update → 在当前 Edit/Play execution scope 中更新 `EditorFrame` 与 Module transition → 重新解析 transition 后的 scope 并绘制统一主菜单、中央 Toolbar、自动发现 Panel 与 Modal → 执行 Rendering frame。Update 与 Draw 分别获取 scope，因此 Preparing 在 Update 中提交为 Playing 后，同一帧 Draw 已经指向 Play world，不会出现一帧 Edit/Play 或 Audio generation 混合。Exit Action 生效后下一帧不再模拟，并在 transition 安全点释放 Play Audio、Scene、Session 与 History。脚本编译弹窗位于 `Inno.Editor.Scripting`，由 internal `EditorScripting` module 驱动真实编译阶段进度；Application 不包含 Scene action、恢复算法或 ScriptManager 状态机。
 
 internal `EditorRenderingHostService` 只负责组合通用 Render Runtime、BGFX 设备与 ImGui contributor，并作为 Scripting reload participant 协调 Pipeline/Feature generation。它不提供任何 Camera、Light、PBR 或固定 Scene 语义；没有活动 Viewport/Pipeline Plugin 时 Editor 仍正常运行，Scene/Game View 只显示无活动 rendering provider 的诊断。
 

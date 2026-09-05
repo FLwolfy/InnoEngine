@@ -75,15 +75,15 @@ ISceneReloadMigration migration =
 
 | API | 说明 |
 | --- | --- |
-| `ScenePropertySerialization.CaptureProperty` | 捕获一个 Scene object 的一个 root serialized property。 |
-| `ScenePropertySerialization.CaptureProperties` | 捕获一个 Component/System 的全部 persistent properties，不包含 owning Scene。 |
-| `ScenePropertySerialization.RestoreProperties` | 使用 Scene reference context 恢复 property-data bytes，支持 Strict/Compatible。 |
+| `ScenePropertySerialization.CaptureProperty` | 捕获一个 Scene object 的一个 root serialized property；显式接收当前 asset resolver。 |
+| `ScenePropertySerialization.CaptureProperties` | 捕获一个 Component/System 的全部 persistent properties，不包含 owning Scene；显式接收当前 asset resolver。 |
+| `ScenePropertySerialization.RestoreProperties` | 使用 Scene reference context 与当前 asset resolver 恢复 property-data bytes，支持 Strict/Compatible。 |
 | `SceneSubtreeSerialization.Capture` | 捕获一个 GameObject 与全部 descendants，保留对象/组件 persistent ID。 |
 | `SceneSubtreeSerialization.Restore` | 把 subtree 恢复到指定 Scene、parent 与 sibling index；失败时清理候选 subtree。 |
-| `SceneElementSerialization.RestoreComponent` | 根据 `TypeRef` 与 persistent ID 重建一个 Component，不调用 Reset。 |
-| `SceneElementSerialization.RestoreSystem` | 根据 `TypeRef` 与 persistent ID 重建一个 GameSystem，不调用 Reset。 |
+| `SceneElementSerialization.RestoreComponent` | 根据 `TypeRef` 与 persistent ID 重建一个 Component，不调用 Reset；通过传入的 asset resolver 恢复资产属性。 |
+| `SceneElementSerialization.RestoreSystem` | 根据 `TypeRef` 与 persistent ID 重建一个 GameSystem，不调用 Reset；通过传入的 asset resolver 恢复资产属性。 |
 
-这些 API 不保存 Editor selection、Undo 栈或 workspace；该编排属于 [Inno.Editor.Scene](../editor/Inno.Editor.Scene.md)。Element restore 会先解析当前 TypeCache generation 的类型，验证具体基类与 multiplicity。Property restore 只有在 `success=true` 且 `ignoredCount=0` 时才视为完整；失败或忽略属性都会删除新实例。清理返回 `false` 而对象仍存活、返回 `true` 但 postcondition 仍显示对象存活，或清理回调抛异常时，API 会把恢复失败与清理失败一并报告，不再忽略清理结果。
+这些 API 不保存 Editor selection、Undo 栈或 workspace；该编排属于 [Inno.Editor.Scene](../editor/Inno.Editor.Scene.md)。局部属性捕获与恢复必须接收当前 generation 的 `IAssetReferenceResolver`，因此 `AssetObject` 属性会恢复为该 resolver 拥有的 canonical instance，而不是脱离 Asset 系统新建对象。Element restore 会先解析当前 TypeCache generation 的类型，验证具体基类与 multiplicity。Property restore 只有在 `success=true` 且 `ignoredCount=0` 时才视为完整；失败或忽略属性都会删除新实例。清理返回 `false` 而对象仍存活、返回 `true` 但 postcondition 仍显示对象存活，或清理回调抛异常时，API 会把恢复失败与清理失败一并报告，不再忽略清理结果。
 
 ## 多实例约束
 

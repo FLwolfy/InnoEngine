@@ -110,7 +110,7 @@ public sealed class AssetFileSystemTests
     }
 
     [Fact]
-    public void Refresh_ClassifiesSampleRootsAndTheirContentsWithoutHidingThem()
+    public void Refresh_TreatsProjectTildeDirectoriesAsOrdinaryWritableContent()
     {
         string root = CreateRoot();
         try
@@ -123,14 +123,14 @@ public sealed class AssetFileSystemTests
 
             using var fileSystem = new AssetFileSystem(root, autoStart: false);
 
-            Assert.True(fileSystem.TryGetEntry(AssetPath.Project("~Starter"), out AssetFileEntry sample));
-            Assert.True(sample.isSample);
-            Assert.True(sample.isSampleContent);
+            Assert.True(fileSystem.TryGetEntry(AssetPath.Project("~Starter"), out AssetFileEntry tildeRoot));
+            Assert.False(tildeRoot.isSample);
+            Assert.False(tildeRoot.isSampleContent);
             Assert.True(fileSystem.TryGetEntry(
                 AssetPath.Project("~Starter/Scenes/Game.cs"),
-                out AssetFileEntry sampleContent));
-            Assert.False(sampleContent.isSample);
-            Assert.True(sampleContent.isSampleContent);
+                out AssetFileEntry tildeContent));
+            Assert.False(tildeContent.isSample);
+            Assert.False(tildeContent.isSampleContent);
             Assert.True(fileSystem.TryGetEntry(
                 AssetPath.Project("~Standalone.cs"),
                 out AssetFileEntry ordinaryFile));

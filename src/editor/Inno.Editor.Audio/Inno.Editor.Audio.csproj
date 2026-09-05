@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
+    <InnoAssemblyScope>Editor</InnoAssemblyScope>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\audio\Inno.Audio.MiniAudio\Inno.Audio.MiniAudio.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\audio\Inno.Audio.Runtime\Inno.Audio.Runtime.csproj" />
+    <ProjectReference Include="..\..\audio\Inno.Audio.Scene\Inno.Audio.Scene.csproj" />
+    <ProjectReference Include="..\..\audio\Inno.Audio\Inno.Audio.csproj" />
+    <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" />
+    <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" />
+    <ProjectReference Include="..\..\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" />
+    <ProjectReference Include="..\..\runtime\Inno.Runtime\Inno.Runtime.csproj" />
+  </ItemGroup>
+</Project>

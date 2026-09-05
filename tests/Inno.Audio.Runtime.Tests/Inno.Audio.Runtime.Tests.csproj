@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\audio\Inno.Audio.Runtime\Inno.Audio.Runtime.csproj" />
+    <ProjectReference Include="..\..\src\audio\Inno.Audio\Inno.Audio.csproj" />
+    <ProjectReference Include="..\..\src\assets\Inno.Assets\Inno.Assets.csproj" />
+    <ProjectReference Include="..\..\src\core\Inno.Core.Events\Inno.Core.Events.csproj" />
+    <ProjectReference Include="..\..\src\extensibility\Inno.Extensibility.Modules\Inno.Extensibility.Modules.csproj" />
+    <ProjectReference Include="..\..\src\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.6.6" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.6">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>

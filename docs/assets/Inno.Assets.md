@@ -82,6 +82,7 @@ Observer 按订阅顺序在 owner thread 调用。某个 observer 抛异常会�
 | API | 行为 |
 | --- | --- |
 | `IAssetLookup` | Authoring `AssetPipeline` 与 Player `AssetDatabase` 共同实现的最小只读查询边界。 |
+| `IAssetArtifactLookup` | 两种宿主共同实现的 named Artifact 定位边界；Runtime 服务不需要依赖 authoring pipeline。 |
 | `Assets.Load/TryLoad` | 项目脚本使用的无状态门面；只解析当前异步执行作用域，不拥有 Catalog、缓存或 Session 状态。 |
 | `Assets.LocalPath(localPath)` | 根据调用脚本 assembly 的 `Inno.AssetSource` metadata 创建 source-local 路径；同一代码在 Project 开发态与 `.iplugin` 安装态自动指向各自 Assets 根。 |
 | `Load<T>(AssetPath/id)` | 返回跨 mount canonical instance；缺失或类型不兼容时抛异常。字符串重载表示 Project mount。 |

@@ -8,6 +8,7 @@
     <InnoAssemblyScope>Editor</InnoAssemblyScope>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\src\extensibility\Inno.Extensibility.Modules\Inno.Extensibility.Modules.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\src\core\Inno.Core.Identity\Inno.Core.Identity.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\src\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />

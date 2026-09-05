@@ -2,7 +2,7 @@
 
 [Editor 索引](README.md) · [Interactions](Inno.Editor.Interactions.md) · [Scene](Inno.Editor.Scene.md) · [Scripting](Inno.Editor.Scripting.md) · [Application](Inno.Editor.Application.md)
 
-`Inno.Editor.PlayMode` 负责在可编辑 Scene 文档与可运行游戏副本之间执行原子切换。它只编排脚本就绪、Scene 隔离、History 隔离和游戏生命周期；不拥有 Scene 文件格式、脚本编译器、渲染 Pipeline 或具体 Panel。
+`Inno.Editor.PlayMode` 负责在可编辑 Scene 文档与可运行游戏副本之间执行原子切换。它只编排脚本就绪、Scene 隔离、Audio generation、History 隔离和游戏生命周期；不拥有 Scene 文件格式、脚本编译器、音频后端、渲染 Pipeline 或具体 Panel。
 
 ## 职责与边界
 
@@ -13,6 +13,7 @@ flowchart LR
     API --> History["EditorInteractions history isolation"]
     API --> Scenes["IEditorScenePlayMode"]
     Host["EditorPlayModeLoop"] --> Runtime["RuntimeSession.Tick"]
+    API --> Audio["IEditorAudioHost"]
     Scenes --> API
     API --> UI
 ```
@@ -93,16 +94,18 @@ Command/Ctrl + `P` 与 icon 使用同一个 Action 和状态查询，因此不�
 2. 只等待该 ticket；stale、canceled、superseded 或 failed ticket 都不能激活 Play。
 3. ticket 成功后切换到 `Preparing`，保留 Edit Undo/Redo 并启动隔离 History 分支。
 4. 创建新的 Play `RuntimeSession`，捕获 Edit Scene 起始快照，并在候选 Play SceneWorld 中完整反序列化同 persistent ID 的对象图。
-5. 全部 Scene、顺序与 active Scene 成功后提交 Scene lease；workspace 按 persistent ID 把 Scene selection 重映射到 runtime copy，并让全部 Scene-facing Editor feature 一次切换到 Play Scene。
-6. 切换为 `Playing`，下一帧开始由 Play Session 推进完整游戏生命周期。
+5. 全部 Scene、顺序与 active Scene 成功后提交 Scene lease，并为 Play Session 创建独立 Audio generation；任一失败都会逆序回滚候选资源。
+6. workspace 按 persistent ID 把 Scene selection 重映射到 runtime copy，并让全部 Scene-facing Editor feature 一次切换到 Play Scene。
+7. 切换为 `Playing`，下一帧开始由 Play Session 在对应 Audio scope 中推进完整游戏生命周期。
 
 退出 Play：
 
 1. Action 立即切换到 `Stopping`，因此下一次 host callback 不再模拟。
-2. 释放 Scene lease，全部 Scene-facing Editor feature 原子切回始终存在的 Edit Scene；若当前 runtime selection 在 Edit 世界有同 ID 对象则重映射，否则恢复进入 Play 前的 selection。
-3. Dispose Play `RuntimeSession`，统一卸载 runtime-only Scene、对象、Coroutines、Jobs、Events、Asset 和日志资源。
-4. 释放临时 History，恢复进入 Play 前的完整 Undo/Redo 分支。
-5. 切回 `Editing`。若释放失败则保留 `Stopping` 和诊断，并在后续安全点重试，不会错误宣称已回到 Edit。
+2. 释放 Play Audio generation，再释放 Scene lease；全部 Scene-facing Editor feature 原子切回始终存在的 Edit Scene，并恢复 Edit master Bus。
+3. 若当前 runtime selection 在 Edit 世界有同 ID 对象则重映射，否则恢复进入 Play 前的 selection。
+4. Dispose Play `RuntimeSession`，统一卸载 runtime-only Scene、对象、Coroutines、Jobs、Events、Asset 和日志资源。
+5. 释放临时 History，恢复进入 Play 前的完整 Undo/Redo 分支。
+6. 切回 `Editing`。若释放失败则保留 `Stopping` 和诊断，并在后续安全点重试，不会错误宣称已回到 Edit。
 
 ## Reload、保存与生命周期注意事项
 

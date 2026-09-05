@@ -18,6 +18,7 @@
     <ProjectReference Include="..\..\scene\Inno.Scene\Inno.Scene.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Inno.Editor.Audio\Inno.Editor.Audio.csproj" />
     <ProjectReference Include="..\Inno.Editor.Core\Inno.Editor.Core.csproj" />
     <ProjectReference Include="..\..\runtime\Inno.Runtime\Inno.Runtime.csproj" />
   </ItemGroup>

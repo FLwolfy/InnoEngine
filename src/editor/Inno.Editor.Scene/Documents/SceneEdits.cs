@@ -232,7 +232,8 @@ public sealed class SceneEdits : EditorModule
             TypeRef typeRef = GetTypeRef(componentType);
             byte[] state = ScenePropertySerialization.CaptureProperties(
                 component,
-                m_workspace.serialization);
+                m_workspace.serialization,
+                m_workspace.assets);
             RecordElement(
                 historyName ?? $"Add {componentType.Name}",
                 new SceneElementHistoryData(
@@ -282,7 +283,10 @@ public sealed class SceneEdits : EditorModule
         GameObject owner = component.gameObject;
         GameScene scene = owner.scene;
         TypeRef typeRef = GetTypeRef(component.GetType());
-        byte[] state = ScenePropertySerialization.CaptureProperties(component, m_workspace.serialization);
+        byte[] state = ScenePropertySerialization.CaptureProperties(
+            component,
+            m_workspace.serialization,
+            m_workspace.assets);
         SceneIncomingReferenceState[] incoming = SceneReferenceIndex.CaptureIncoming(
             component,
             scene,
@@ -324,7 +328,8 @@ public sealed class SceneEdits : EditorModule
                     componentId,
                     index,
                     state,
-                    m_workspace.serialization);
+                    m_workspace.serialization,
+                    m_workspace.assets);
                 RequirePropertyRestore(restored, state);
                 RequireReferenceRestore(SceneReferenceIndex.RestoreIncoming(incoming, m_workspace));
             });
@@ -346,12 +351,18 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(component);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         GameObject owner = component.gameObject;
-        byte[] before = ScenePropertySerialization.CaptureProperties(component, m_workspace.serialization);
+        byte[] before = ScenePropertySerialization.CaptureProperties(
+            component,
+            m_workspace.serialization,
+            m_workspace.assets);
         byte[] after;
         try
         {
             owner.ResetComponent(component);
-            after = ScenePropertySerialization.CaptureProperties(component, m_workspace.serialization);
+            after = ScenePropertySerialization.CaptureProperties(
+                component,
+                m_workspace.serialization,
+                m_workspace.assets);
         }
         catch (Exception exception)
         {
@@ -472,7 +483,8 @@ public sealed class SceneEdits : EditorModule
                     beforeState: [],
                     afterState: ScenePropertySerialization.CaptureProperties(
                         system,
-                        m_workspace.serialization),
+                        m_workspace.serialization,
+                        m_workspace.assets),
                     incomingReferences: []));
             return system;
         }
@@ -509,7 +521,10 @@ public sealed class SceneEdits : EditorModule
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
         if (system.isDestroyed)
             return false;
-        byte[] state = ScenePropertySerialization.CaptureProperties(system, m_workspace.serialization);
+        byte[] state = ScenePropertySerialization.CaptureProperties(
+            system,
+            m_workspace.serialization,
+            m_workspace.assets);
         SceneIncomingReferenceState[] incoming = SceneReferenceIndex.CaptureIncoming(
             system,
             scene,
@@ -552,7 +567,8 @@ public sealed class SceneEdits : EditorModule
                     systemId,
                     index,
                     state,
-                    m_workspace.serialization);
+                    m_workspace.serialization,
+                    m_workspace.assets);
                 RequirePropertyRestore(restored, state);
                 RequireReferenceRestore(SceneReferenceIndex.RestoreIncoming(incoming, m_workspace));
             });
@@ -577,12 +593,18 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(system);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
-        byte[] before = ScenePropertySerialization.CaptureProperties(system, m_workspace.serialization);
+        byte[] before = ScenePropertySerialization.CaptureProperties(
+            system,
+            m_workspace.serialization,
+            m_workspace.assets);
         byte[] after;
         try
         {
             scene.ResetSystem(system);
-            after = ScenePropertySerialization.CaptureProperties(system, m_workspace.serialization);
+            after = ScenePropertySerialization.CaptureProperties(
+                system,
+                m_workspace.serialization,
+                m_workspace.assets);
         }
         catch (Exception exception)
         {
@@ -949,7 +971,8 @@ public sealed class SceneEdits : EditorModule
         byte[] before = ScenePropertySerialization.CaptureProperty(
             target,
             propertyName,
-            m_workspace.serialization);
+            m_workspace.serialization,
+            m_workspace.assets);
         byte[] after;
         try
         {
@@ -957,7 +980,8 @@ public sealed class SceneEdits : EditorModule
             after = ScenePropertySerialization.CaptureProperty(
                 target,
                 propertyName,
-                m_workspace.serialization);
+                m_workspace.serialization,
+                m_workspace.assets);
         }
         catch (Exception exception)
         {
@@ -1181,7 +1205,8 @@ public sealed class SceneEdits : EditorModule
         SerializationPropertyRestoreResult result = ScenePropertySerialization.RestoreProperties(
             target,
             data,
-            m_workspace.serialization);
+            m_workspace.serialization,
+            m_workspace.assets);
         if (!result.success || result.ignoredCount != 0 || result.restoredCount == 0)
             throw new InvalidOperationException("Scene property compensation was incomplete.");
     }

@@ -103,6 +103,25 @@ internal static partial class ArchitectureRules
             failures.Add($"{relative}: process-wide static Manager ownership is forbidden.");
         if (StaticLogFacadeCallPattern().IsMatch(source))
             failures.Add($"{relative}: engine implementation must use an explicitly owned Logger.");
+        if (relative.StartsWith("src/audio/Inno.Audio.MiniAudio/", StringComparison.Ordinal) &&
+            (source.Contains("AudioContentProvider", StringComparison.Ordinal) ||
+             source.Contains("AudioMixerExtension", StringComparison.Ordinal) ||
+             source.Contains("AudioMixerFeature", StringComparison.Ordinal) ||
+             source.Contains("TypeCatalog", StringComparison.Ordinal) ||
+             source.Contains("System.Reflection", StringComparison.Ordinal)))
+        {
+            failures.Add(
+                $"{relative}: the real-time MiniAudio adapter cannot retain managed extension-generation objects or reflection state.");
+        }
+        if (relative.StartsWith("src/audio/", StringComparison.Ordinal) &&
+            relative.EndsWith("/Properties/ScriptingApi.cs", StringComparison.Ordinal) &&
+            (source.Contains("typeof(IAudioDevice)", StringComparison.Ordinal) ||
+             source.Contains("typeof(AudioDevice)", StringComparison.Ordinal) ||
+             source.Contains("Inno.Native", StringComparison.Ordinal) ||
+             source.Contains("typeof(MiniAudio", StringComparison.Ordinal)))
+        {
+            failures.Add($"{relative}: scripting API cannot export audio devices, native bindings, or backend adapters.");
+        }
         int lineNumber = 0;
         using var reader = new StringReader(source);
         string? line;
@@ -226,6 +245,18 @@ internal static partial class ArchitectureRules
              targetPath.StartsWith("src/editor/", StringComparison.Ordinal)))
         {
             failures.Add($"{sourcePath}: backend-neutral Rendering cannot reference {targetPath}.");
+        }
+        if (string.Equals(project.name, "Inno.Audio", StringComparison.Ordinal) &&
+            (targetPath.StartsWith("src/audio/Inno.Audio.Runtime/", StringComparison.Ordinal) ||
+             targetPath.StartsWith("src/audio/Inno.Audio.Scene/", StringComparison.Ordinal) ||
+             targetPath.StartsWith("src/audio/Inno.Audio.MiniAudio/", StringComparison.Ordinal) ||
+             targetPath.StartsWith("src/scene/", StringComparison.Ordinal) ||
+             targetPath.StartsWith("src/runtime/", StringComparison.Ordinal) ||
+             targetPath.StartsWith("src/editor/", StringComparison.Ordinal) ||
+             targetPath.StartsWith("src/platform/", StringComparison.Ordinal) ||
+             targetPath.StartsWith("native/", StringComparison.Ordinal)))
+        {
+            failures.Add($"{sourcePath}: backend-neutral Audio cannot reference {targetPath}.");
         }
         if (target.name.Contains("Inno.Native.Bgfx", StringComparison.Ordinal) &&
             !IsAllowedBgfxConsumer(project.name))

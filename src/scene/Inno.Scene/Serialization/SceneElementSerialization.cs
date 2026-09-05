@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Runtime.ExceptionServices;
 
+using Inno.Assets;
 using Inno.Core.Identity;
 using Inno.Extensibility.Types;
 using Inno.Core.Serialization;
@@ -35,6 +36,9 @@ public static class SceneElementSerialization
     /// <param name="serialization">
     /// The serialization registry that owns the active converter generation.
     /// </param>
+    /// <param name="assets">
+    /// The resolver used to materialize canonical asset references in restored properties.
+    /// </param>
     /// <returns>
     /// The recreated component.
     /// </returns>
@@ -54,10 +58,12 @@ public static class SceneElementSerialization
         Guid persistentId,
         int componentIndex,
         ReadOnlySpan<byte> propertyData,
-        SerializationRegistry serialization)
+        SerializationRegistry serialization,
+        IAssetReferenceResolver assets)
     {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(serialization);
+        ArgumentNullException.ThrowIfNull(assets);
         Type componentType = ResolveType<GameComponent>(owner.scene.typeCatalog, type, "component");
         GameComponent component = owner.scene.AddComponent(
             owner,
@@ -68,7 +74,7 @@ public static class SceneElementSerialization
         {
             owner.SetComponentIndex(component, componentIndex);
             RequireComplete(
-                ScenePropertySerialization.RestoreProperties(component, propertyData, serialization),
+                ScenePropertySerialization.RestoreProperties(component, propertyData, serialization, assets),
                 "component");
             return component;
         }
@@ -104,6 +110,9 @@ public static class SceneElementSerialization
     /// <param name="serialization">
     /// The serialization registry that owns the active converter generation.
     /// </param>
+    /// <param name="assets">
+    /// The resolver used to materialize canonical asset references in restored properties.
+    /// </param>
     /// <returns>
     /// The recreated system.
     /// </returns>
@@ -123,17 +132,19 @@ public static class SceneElementSerialization
         Guid persistentId,
         int systemIndex,
         ReadOnlySpan<byte> propertyData,
-        SerializationRegistry serialization)
+        SerializationRegistry serialization,
+        IAssetReferenceResolver assets)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(serialization);
+        ArgumentNullException.ThrowIfNull(assets);
         Type systemType = ResolveType<GameSystem>(scene.typeCatalog, type, "system");
         GameSystem system = scene.AddSystem(systemType, persistentId, invokeReset: false);
         try
         {
             scene.SetSystemIndex(system, systemIndex);
             RequireComplete(
-                ScenePropertySerialization.RestoreProperties(system, propertyData, serialization),
+                ScenePropertySerialization.RestoreProperties(system, propertyData, serialization, assets),
                 "system");
             return system;
         }

@@ -1120,10 +1120,14 @@ internal sealed class EditorSceneWorkspace :
         try
         {
             IReadOnlyList<SceneDocumentSnapshot> snapshots = session.snapshots;
+            SerializationContext serializationContext = SerializationContext.empty
+                .With<IAssetReferenceResolver>(m_assets);
             for (int i = 0; i < snapshots.Count; i++)
             {
                 SceneDocumentSnapshot snapshot = snapshots[i];
-                GameScene runtimeScene = m_serialization.Deserialize<GameScene>(snapshot.payload);
+                GameScene runtimeScene = m_serialization.Deserialize<GameScene>(
+                    snapshot.payload,
+                    serializationContext);
                 runtimeWorld.LoadSceneAdditive(runtimeScene, makeActive: false);
                 runtimeWorld.SetSceneIndex(runtimeScene, snapshot.sceneIndex);
             }

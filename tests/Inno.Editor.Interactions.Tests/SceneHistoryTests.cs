@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 
+using Inno.Assets;
 using Inno.Assets.Pipeline;
 using Inno.Extensibility.Modules;
 using Inno.Core.Identity;
@@ -197,6 +198,32 @@ public sealed class SceneHistoryTests : IDisposable
     }
 
     [Fact]
+    public void RemovingComponentRestoresSerializedAssetReferences()
+    {
+        string sourcePath = Path.Combine(m_projectRoot, "Assets", "Text", "shared.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
+        File.WriteAllText(sourcePath, "shared");
+        AssetPath assetPath = AssetPath.Project("Text/shared.txt");
+        Assert.True(m_assets.Import(assetPath));
+        TextAsset asset = m_assets.Load<TextAsset>(assetPath);
+
+        GameObject owner = CreateScene().CreateObject("Audio Source Owner");
+        var component = owner.AddComponent<HistoryAssetReferenceComponent>();
+        component.asset = asset;
+        Guid componentId = component.identity.persistentId;
+
+        Assert.True(m_edits.RemoveComponent(component));
+        EditorHistoryResult undo = m_runtime.interactions.history.Undo();
+
+        Assert.True(undo.succeeded, undo.message);
+        var restored = Assert.IsType<HistoryAssetReferenceComponent>(
+            IdentityAllocator.current.Get<GameComponent>(componentId));
+        Assert.Same(asset, restored.asset);
+        Assert.True(m_runtime.interactions.history.Redo().succeeded);
+        Assert.Null(IdentityAllocator.current.Get<GameComponent>(componentId));
+    }
+
+    [Fact]
     public void RemovingAnElementAndSubtreeRestoresExternalSceneReferences()
     {
         GameScene scene = CreateScene();
@@ -240,7 +267,8 @@ public sealed class SceneHistoryTests : IDisposable
         var source = sourceObject.AddComponent<HistoryReferenceComponent>();
         byte[] incompatibleState = ScenePropertySerialization.CaptureProperties(
             source,
-            m_host.serialization);
+            m_host.serialization,
+            m_assets);
         GameObject owner = scene.CreateObject("Owner");
         TypeRef componentType = m_host.types.GetTypeRef(typeof(HistoryComponent));
         TypeRef systemType = m_host.types.GetTypeRef(typeof(HistorySystem));
@@ -254,7 +282,8 @@ public sealed class SceneHistoryTests : IDisposable
                 componentId,
                 componentIndex: owner.GetComponents().Count,
                 incompatibleState,
-                m_host.serialization));
+                m_host.serialization,
+                m_assets));
         InvalidOperationException systemFailure = Assert.Throws<InvalidOperationException>(() =>
             SceneElementSerialization.RestoreSystem(
                 scene,
@@ -262,7 +291,8 @@ public sealed class SceneHistoryTests : IDisposable
                 systemId,
                 systemIndex: scene.GetSystems().Count,
                 incompatibleState,
-                m_host.serialization));
+                m_host.serialization,
+                m_assets));
 
         Assert.Contains("incomplete", componentFailure.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("incomplete", systemFailure.Message, StringComparison.OrdinalIgnoreCase);
@@ -276,7 +306,10 @@ public sealed class SceneHistoryTests : IDisposable
         GameScene scene = CreateScene();
         GameObject sourceOwner = scene.CreateObject("Source");
         var source = sourceOwner.AddComponent<RestoreCleanupFailureComponent>();
-        byte[] state = ScenePropertySerialization.CaptureProperties(source, m_host.serialization);
+        byte[] state = ScenePropertySerialization.CaptureProperties(
+            source,
+            m_host.serialization,
+            m_assets);
         GameObject targetOwner = scene.CreateObject("Target");
         TypeRef typeRef = m_host.types.GetTypeRef(typeof(RestoreCleanupFailureComponent));
         Guid persistentId = Guid.NewGuid();
@@ -288,7 +321,8 @@ public sealed class SceneHistoryTests : IDisposable
                 persistentId,
                 componentIndex: targetOwner.GetComponents().Count,
                 state,
-                m_host.serialization));
+                m_host.serialization,
+                m_assets));
 
         Assert.Null(IdentityAllocator.current.Get<GameComponent>(persistentId));
     }
@@ -551,6 +585,14 @@ internal sealed class HistoryReferenceComponent : GameComponent
 
     [SerializableProperty]
     public GameComponent? targetComponent { get; set; }
+}
+
+[StableTypeId("edbd3940-a94c-499e-8f03-b0e232a39b21")]
+[AllowMultipleComponent]
+internal sealed class HistoryAssetReferenceComponent : GameComponent
+{
+    [SerializableProperty]
+    public TextAsset? asset { get; set; }
 }
 
 [StableTypeId("f00d5950-1136-4393-b246-644b69948f90")]

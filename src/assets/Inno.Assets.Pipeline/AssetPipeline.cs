@@ -22,7 +22,7 @@ namespace Inno.Assets.Pipeline;
 /// Provides the single application-level entry point for importing, loading, saving and
 /// collecting assets.
 /// </summary>
-public sealed class AssetPipeline : IDisposable, IAssetLookup, IAssetReferenceResolver
+public sealed class AssetPipeline : IDisposable, IAssetLookup, IAssetReferenceResolver, IAssetArtifactLookup
 {
     private readonly Lock m_lifecycleLock = new();
     private readonly AssetCatalogParticipant m_catalogParticipant;

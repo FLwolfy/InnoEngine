@@ -169,7 +169,8 @@ internal sealed class SceneElementHistoryHandler : EditorHistoryHandler
                 {
                     byte[] rollbackState = ScenePropertySerialization.CaptureProperties(
                         current,
-                        m_workspace.serialization);
+                        m_workspace.serialization,
+                        m_workspace.assets);
                     int rollbackIndex = GetIndex(data, scene, current);
                     SceneReferenceRollbackState[] rollbackReferences =
                         SceneReferenceIndex.CaptureCurrent(data.incomingReferences, m_workspace);
@@ -181,7 +182,8 @@ internal sealed class SceneElementHistoryHandler : EditorHistoryHandler
                                 ScenePropertySerialization.RestoreProperties(
                                     current,
                                     state,
-                                    m_workspace.serialization);
+                                    m_workspace.serialization,
+                                    m_workspace.assets);
                             if (!IsComplete(propertyResult))
                                 throw new InvalidOperationException("Scene element property restore was incomplete.");
                         }
@@ -217,7 +219,8 @@ internal sealed class SceneElementHistoryHandler : EditorHistoryHandler
             {
                 byte[] rollbackState = ScenePropertySerialization.CaptureProperties(
                     current,
-                    m_workspace.serialization);
+                    m_workspace.serialization,
+                    m_workspace.assets);
                 int rollbackIndex = GetIndex(data, scene, current);
                 SceneReferenceRollbackState[] rollbackReferences =
                     SceneReferenceIndex.CaptureCurrent(data.incomingReferences, m_workspace);
@@ -271,14 +274,16 @@ internal sealed class SceneElementHistoryHandler : EditorHistoryHandler
                 data.elementId,
                 index,
                 state,
-                m_workspace.serialization),
+                m_workspace.serialization,
+                m_workspace.assets),
             SceneElementKind.System => SceneElementSerialization.RestoreSystem(
                 scene,
                 data.type,
                 data.elementId,
                 index,
                 state,
-                m_workspace.serialization),
+                m_workspace.serialization,
+                m_workspace.assets),
             _ => throw new InvalidOperationException($"Unsupported scene element kind '{data.elementKind}'.")
         };
 
@@ -332,7 +337,8 @@ internal sealed class SceneElementHistoryHandler : EditorHistoryHandler
                 ScenePropertySerialization.RestoreProperties(
                     current,
                     rollbackState,
-                    m_workspace.serialization);
+                    m_workspace.serialization,
+                    m_workspace.assets);
             if (!IsComplete(propertyResult))
                 failures.Add("property rollback was incomplete");
         }

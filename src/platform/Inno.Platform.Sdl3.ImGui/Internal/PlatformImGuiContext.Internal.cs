@@ -99,6 +99,7 @@ public sealed partial class PlatformImGuiContext
         UpdateDisplayMetrics(io);
         m_renderer = renderer ?? new PlatformImGuiSdlRenderer(window);
         m_viewports = enableViewports ? new PlatformImGuiViewportBackend(window, m_renderer) : null;
+        RegisterClipboardCallbacks();
     }
 
     /// <summary>
@@ -818,6 +819,7 @@ public sealed partial class PlatformImGuiContext
 
         ImGuiNative.SetCurrentContext(m_context);
         var io = ImGuiNative.GetIO();
+        UnregisterClipboardCallbacks();
         if (m_textInputActive)
         {
             var textInputWindow = m_textInputWindow.IsNull ? m_window.GetSdlWindow() : m_textInputWindow;

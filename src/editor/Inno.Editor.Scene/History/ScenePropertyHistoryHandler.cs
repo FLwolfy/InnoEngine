@@ -103,7 +103,8 @@ internal sealed class ScenePropertyHistoryHandler : EditorHistoryHandler
             rollback = ScenePropertySerialization.CaptureProperty(
                 target,
                 data.propertyName,
-                m_workspace.serialization);
+                m_workspace.serialization,
+                m_workspace.assets);
         }
         catch (Exception exception)
         {
@@ -115,7 +116,8 @@ internal sealed class ScenePropertyHistoryHandler : EditorHistoryHandler
             SerializationPropertyRestoreResult result = ScenePropertySerialization.RestoreProperties(
                 target,
                 direction == EditorHistoryDirection.Undo ? data.before : data.after,
-                m_workspace.serialization);
+                m_workspace.serialization,
+                m_workspace.assets);
             if (!IsComplete(result))
                 throw new InvalidOperationException("The scene property restore was incomplete.");
             return EditorHistoryResult.Success();
@@ -128,7 +130,8 @@ internal sealed class ScenePropertyHistoryHandler : EditorHistoryHandler
                     ScenePropertySerialization.RestoreProperties(
                         target,
                         rollback,
-                        m_workspace.serialization);
+                        m_workspace.serialization,
+                        m_workspace.assets);
                 if (!IsComplete(rollbackResult))
                     throw new InvalidOperationException("The scene property rollback was incomplete.");
             }

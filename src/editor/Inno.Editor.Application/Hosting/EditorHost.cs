@@ -6,6 +6,9 @@ using System.Linq;
 
 using Inno.Assets;
 using Inno.Assets.Pipeline;
+using Inno.Audio.Assets;
+using Inno.Audio.Runtime;
+using Inno.Audio.Scene;
 using Inno.Build;
 using Inno.Build.Platform.MacOS;
 using Inno.Build.Platform.Windows;
@@ -13,6 +16,7 @@ using Inno.Build.Toolchains.Bgfx.Tools;
 using Inno.Core.Events;
 using Inno.Core.Logging;
 using Inno.Core.Settings;
+using Inno.Editor.Audio;
 using Inno.Editor.Core;
 using Inno.Editor.Rendering;
 using Inno.Runtime;
@@ -41,6 +45,7 @@ internal sealed class EditorHost : IDisposable
     private readonly Sdl3PlatformWindow m_window;
     private readonly HashSet<uint> m_focusedWindowIds = [];
     private readonly RuntimeSession m_editSession;
+    private readonly IEditorAudioHost m_audio;
     private readonly EditorAuthoringServices m_authoring;
     private readonly RenderRuntimeLayer m_rendering;
     private readonly EditorHostLayerStack m_layers;
@@ -59,6 +64,7 @@ internal sealed class EditorHost : IDisposable
         Sdl3PlatformApplication platformApplication,
         Sdl3PlatformWindow window,
         RuntimeSession editSession,
+        IEditorAudioHost audio,
         EditorAuthoringServices authoring,
         RenderRuntimeLayer rendering,
         EditorHostLayerStack layers,
@@ -70,6 +76,7 @@ internal sealed class EditorHost : IDisposable
         m_platformApplication = platformApplication;
         m_window = window;
         m_editSession = editSession;
+        m_audio = audio;
         m_authoring = authoring;
         m_rendering = rendering;
         m_layers = layers;
@@ -94,6 +101,9 @@ internal sealed class EditorHost : IDisposable
         try
         {
             AppendBootLog(bootLogPath, "EditorHost creation start.");
+            _ = typeof(AudioClipImporter);
+            _ = typeof(AudioProjectSettings);
+            _ = typeof(AudioSource);
             Sdl3PlatformApplication platform = resources.Acquire(
                 static () => new Sdl3PlatformApplication(),
                 static application => application.Dispose());
@@ -143,6 +153,20 @@ internal sealed class EditorHost : IDisposable
             _ = resources.Acquire(
                 () => ProjectSettingsExecutionContext.EnterScope(authoring.settings),
                 static scope => scope.Dispose());
+            EditorAudioHost audio = resources.Acquire(
+                () => new EditorAudioHost(
+                    engineHost.types,
+                    authoring.assets,
+                    engineHost.logs,
+                    () => authoring.settings.TryGet(
+                            AudioProjectSettings.settingId,
+                            out AudioProjectSettings? configured) && configured is not null
+                        ? configured
+                        : new AudioProjectSettings()),
+                static host => host.Dispose());
+            _ = resources.Acquire(
+                () => audio.BeginSession(editSession),
+                static lease => lease.Dispose());
             var buildPipeline = new BuildPipeline(
                 authoring.assets,
                 authoring.plugins,
@@ -273,7 +297,8 @@ internal sealed class EditorHost : IDisposable
                     buildPipeline,
                     buildSettings,
                     engineHost.types,
-                    engineHost.serialization
+                    engineHost.serialization,
+                    audio
                 ])
             {
                 isFocused = window.isFocused
@@ -302,6 +327,7 @@ internal sealed class EditorHost : IDisposable
                 platform,
                 window,
                 editSession,
+                audio,
                 authoring,
                 renderingLayer,
                 layers,
@@ -389,11 +415,13 @@ internal sealed class EditorHost : IDisposable
                 BootLog("About to execute first editor frame.");
 
             using (m_rendering.EnterExecutionScope())
+            using (m_audio.EnterExecutionScope(m_editSession))
             {
                 m_editorLayer.isFocused = HasEditorFocus();
                 m_editorLayer.totalTime = (float)now;
                 m_authoring.Update();
                 m_editSession.Tick((float)now, delta);
+                m_audio.Update(m_editSession, delta);
                 using (m_editSession.EnterExecutionScope())
                 {
                     m_layers.Update(delta);

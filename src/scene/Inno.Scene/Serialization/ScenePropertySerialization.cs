@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+using Inno.Assets;
 using Inno.Core.Serialization;
 using Inno.Scene;
 
@@ -24,6 +25,9 @@ public static class ScenePropertySerialization
     /// <param name="serialization">
     /// The serialization registry that owns the active converter generation.
     /// </param>
+    /// <param name="assets">
+    /// The resolver used to preserve canonical asset references in captured values.
+    /// </param>
     /// <returns>
     /// Neutral bytes that can be restored into the same logical object identity.
     /// </returns>
@@ -39,16 +43,19 @@ public static class ScenePropertySerialization
     public static byte[] CaptureProperty(
         EngineObject target,
         string propertyName,
-        SerializationRegistry serialization)
+        SerializationRegistry serialization,
+        IAssetReferenceResolver assets)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentException.ThrowIfNullOrWhiteSpace(propertyName);
         ArgumentNullException.ThrowIfNull(serialization);
+        ArgumentNullException.ThrowIfNull(assets);
         if (target is not ISerializable serializable)
             throw new ArgumentException($"Scene object '{target.GetType().FullName}' is not serializable.", nameof(target));
         SceneGraphReferenceMap references = CreateReferences(ResolveScene(target));
+        SerializationContext context = SerializationContext.empty.With<IAssetReferenceResolver>(assets);
         using (references.Enter())
-            return serialization.CapturePropertyData(serializable, propertyName);
+            return serialization.CapturePropertyData(serializable, propertyName, context);
     }
 
     /// <summary>
@@ -59,6 +66,9 @@ public static class ScenePropertySerialization
     /// </param>
     /// <param name="serialization">
     /// The serialization registry that owns the active converter generation.
+    /// </param>
+    /// <param name="assets">
+    /// The resolver used to preserve canonical asset references in captured values.
     /// </param>
     /// <returns>
     /// Neutral bytes containing independently encoded properties.
@@ -71,15 +81,18 @@ public static class ScenePropertySerialization
     /// </exception>
     public static byte[] CaptureProperties(
         EngineObject target,
-        SerializationRegistry serialization)
+        SerializationRegistry serialization,
+        IAssetReferenceResolver assets)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(serialization);
+        ArgumentNullException.ThrowIfNull(assets);
         if (target is not ISerializable serializable)
             throw new ArgumentException($"Scene object '{target.GetType().FullName}' is not serializable.", nameof(target));
         SceneGraphReferenceMap references = CreateReferences(ResolveScene(target));
+        SerializationContext context = SerializationContext.empty.With<IAssetReferenceResolver>(assets);
         using (references.Enter())
-            return serialization.CapturePropertiesData(serializable);
+            return serialization.CapturePropertiesData(serializable, context);
     }
 
     /// <summary>
@@ -97,6 +110,9 @@ public static class ScenePropertySerialization
     /// <param name="serialization">
     /// The serialization registry that owns the active converter generation.
     /// </param>
+    /// <param name="assets">
+    /// The resolver used to materialize canonical asset references in restored values.
+    /// </param>
     /// <returns>
     /// A summary of restored, ignored, and incompatible properties.
     /// </returns>
@@ -110,15 +126,18 @@ public static class ScenePropertySerialization
         EngineObject target,
         ReadOnlySpan<byte> data,
         SerializationRegistry serialization,
+        IAssetReferenceResolver assets,
         SerializationPropertyRestoreMode mode = SerializationPropertyRestoreMode.Strict)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(serialization);
+        ArgumentNullException.ThrowIfNull(assets);
         if (target is not ISerializable serializable)
             throw new ArgumentException($"Scene object '{target.GetType().FullName}' is not serializable.", nameof(target));
         SceneGraphReferenceMap references = CreateReferences(ResolveScene(target));
+        SerializationContext context = SerializationContext.empty.With<IAssetReferenceResolver>(assets);
         using (references.Enter())
-            return serialization.RestorePropertiesData(serializable, data, mode);
+            return serialization.RestorePropertiesData(serializable, data, mode, context);
     }
 
     private static SceneGraphReferenceMap CreateReferences(GameScene scene)

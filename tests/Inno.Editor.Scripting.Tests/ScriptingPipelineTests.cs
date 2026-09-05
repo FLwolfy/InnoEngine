@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -318,24 +319,27 @@ public sealed class ScriptingPipelineTests : IDisposable
     }
 
     [Fact]
-    public void SampleDirectoriesRemainBrowsableButAreExcludedFromCompilationAndIdeProjects()
+    public void ProjectTildeDirectoriesRemainBrowsableAndParticipateInAuthoringCompilation()
     {
         m_fixture.Write(
             "Runtime.cs",
             "using InnoEngine.Scene; public sealed class RuntimeScript : GameBehavior { }");
-        m_fixture.Write("~Examples/Broken.cs", "this source must never compile");
+        m_fixture.Write(
+            "~Examples/Example.cs",
+            "using InnoEngine.Scene; public sealed class ExampleScript : GameBehavior { }");
         m_fixture.Rescan();
 
         Assert.True(m_fixture.assets.TryGetFileSystemEntry(
             AssetPath.Project("~Examples"),
-            out AssetFileEntry sample));
-        Assert.True(sample.isSample);
+            out AssetFileEntry tildeRoot));
+        Assert.False(tildeRoot.isSample);
+        Assert.False(tildeRoot.isSampleContent);
         Assert.True(m_fixture.assets.TryGetFileSystemEntry(
-            AssetPath.Project("~Examples/Broken.cs"),
-            out AssetFileEntry sampleSource));
-        Assert.True(sampleSource.isSampleContent);
-        Assert.False(m_fixture.assets.TryGetInfo(
-            AssetPath.Project("~Examples/Broken.cs"),
+            AssetPath.Project("~Examples/Example.cs"),
+            out AssetFileEntry tildeSource));
+        Assert.False(tildeSource.isSampleContent);
+        Assert.True(m_fixture.assets.TryGetInfo(
+            AssetPath.Project("~Examples/Example.cs"),
             out _));
 
         ScriptCompilationResult compilation = m_fixture.Compile();
@@ -345,48 +349,49 @@ public sealed class ScriptingPipelineTests : IDisposable
         string gameProject = File.ReadAllText(
             Path.Combine(m_fixture.projectRoot, "Inno.GameScripts.csproj"));
         Assert.Contains("Compile Include=\"Assets/Runtime.cs\"", gameProject);
-        Assert.DoesNotContain("~Examples", gameProject);
+        Assert.Contains("Compile Include=\"Assets/~Examples/Example.cs\"", gameProject);
     }
 
     [Fact]
-    public void ImportSampleCreatesAnImmediatelyCompilableWritableCopy()
+    public void InstalledPluginSampleImportsAsAnImmediatelyCompilableWritableCopy()
     {
-        m_fixture.Write(
-            "Template/StarterBehavior.cs",
-            "using InnoEngine.Scene; public sealed class StarterBehavior : GameBehavior { }");
-        m_fixture.Rescan();
-        Assert.True(m_fixture.assets.TryGetInfo(
-            AssetPath.Project("Template/StarterBehavior.cs"),
+        using var fixture = new ScriptingFixture(WriteSamplePlugin);
+        AssetPath source = new(new AssetSourceId("tests.samples"), "~Starter");
+        AssetPath sourceFile = new(new AssetSourceId("tests.samples"), "~Starter/StarterBehavior.cs");
+        Assert.True(fixture.assets.TryGetFileSystemEntry(source, out AssetFileEntry sample));
+        Assert.True(sample.isReadOnly);
+        Assert.True(sample.isSample);
+        Assert.True(sample.isSampleContent);
+        Assert.True(fixture.assets.TryGetFileSystemEntry(sourceFile, out AssetFileEntry sampleContent));
+        Assert.True(sampleContent.isReadOnly);
+        Assert.True(sampleContent.isSampleContent);
+        Assert.True(fixture.assets.TryGetInfo(
+            sourceFile,
             out AssetInfo? templateInfo));
         Guid sourcePersistentId = Assert.IsType<AssetInfo>(templateInfo).persistentId;
-        string sourceRoot = Path.Combine(m_fixture.projectRoot, "Assets", "Template");
-        string sampleRoot = Path.Combine(m_fixture.projectRoot, "Assets", "~Starter");
-        string sourceFileMeta = Path.Combine(sourceRoot, "StarterBehavior.cs.imeta");
-        byte[] sourceFileMetaBytes = File.ReadAllBytes(sourceFileMeta);
-        Directory.Move(sourceRoot, sampleRoot);
-        File.Move(sourceRoot + ".imeta", sampleRoot + ".imeta");
-        m_fixture.Rescan();
-        Assert.Equal(
-            sourceFileMetaBytes,
-            File.ReadAllBytes(Path.Combine(sampleRoot, "StarterBehavior.cs.imeta")));
 
-        AssetPath imported = m_fixture.assets.ImportSample(AssetPath.Project("~Starter"));
+        AssetPath imported = fixture.assets.ImportSample(source);
 
-        Assert.Equal(AssetPath.Project("Starter"), imported);
+        Assert.Equal(AssetPath.Project("~Starter"), imported);
         Assert.True(File.Exists(Path.Combine(
-            m_fixture.projectRoot,
+            fixture.projectRoot,
             "Assets",
-            "Starter",
+            "~Starter",
             "StarterBehavior.cs")));
-        Assert.True(m_fixture.assets.TryGetInfo(
-            AssetPath.Project("Starter/StarterBehavior.cs"),
+        Assert.True(fixture.assets.TryGetInfo(
+            AssetPath.Project("~Starter/StarterBehavior.cs"),
             out AssetInfo? importedInfo));
-        Assert.Equal(sourcePersistentId, Assert.IsType<AssetInfo>(importedInfo).persistentId);
-        Assert.True(m_fixture.assets.TryGetFileSystemEntry(imported, out AssetFileEntry importedDirectory));
+        Assert.NotEqual(sourcePersistentId, Assert.IsType<AssetInfo>(importedInfo).persistentId);
+        Assert.True(fixture.assets.TryGetFileSystemEntry(imported, out AssetFileEntry importedDirectory));
         Assert.False(importedDirectory.isReadOnly);
+        Assert.False(importedDirectory.isSample);
         Assert.False(importedDirectory.isSampleContent);
-        ScriptCompilationResult compilation = m_fixture.Compile();
+        ScriptCompilationResult compilation = fixture.Compile();
         Assert.True(compilation.success, FormatDiagnostics(compilation));
+        fixture.compiler.GenerateProjectFiles(compilation);
+        string gameProject = File.ReadAllText(
+            Path.Combine(fixture.projectRoot, "Inno.GameScripts.csproj"));
+        Assert.Contains("Compile Include=\"Assets/~Starter/StarterBehavior.cs\"", gameProject);
     }
 
     [Fact]
@@ -583,14 +588,20 @@ public sealed class ScriptingPipelineTests : IDisposable
         Guid pluginComponentId = pluginComponent.identity.persistentId;
         Guid scriptComponentId = scriptComponent.identity.persistentId;
 
-        string installedPlugin = Path.Combine(fixture.projectRoot, "Plugins", "UnavailabilityPlugin");
+        string installedPlugin = Path.Combine(fixture.projectRoot, "Plugins", "unavailability.iplugin");
         string detachedPlugin = Path.Combine(fixture.projectRoot, "UnavailabilityPlugin.detached");
-        string pluginSource = Path.Combine(installedPlugin, "Assets", "PluginBehavior.cs");
-        string validPluginSource = File.ReadAllText(pluginSource);
+        byte[] validPluginPackage = File.ReadAllBytes(installedPlugin);
         if (updateInPlace)
-            File.WriteAllText(pluginSource, "this Plugin update is deliberately invalid C#");
+        {
+            WriteUnavailableGenerationPlugin(
+                fixture.projectRoot,
+                fixture.host.serialization,
+                "this Plugin update is deliberately invalid C#");
+        }
         else
-            Directory.Move(installedPlugin, detachedPlugin);
+        {
+            File.Move(installedPlugin, detachedPlugin);
+        }
         Assert.True(fixture.RefreshPlugins());
 
         ScriptCompilationResult unavailable = fixture.CompilePendingPluginReload(reload);
@@ -612,9 +623,9 @@ public sealed class ScriptingPipelineTests : IDisposable
         Assert.Equal("DependentBehavior", missingScript.missingTypeName);
 
         if (updateInPlace)
-            File.WriteAllText(pluginSource, validPluginSource);
+            File.WriteAllBytes(installedPlugin, validPluginPackage);
         else
-            Directory.Move(detachedPlugin, installedPlugin);
+            File.Move(detachedPlugin, installedPlugin);
         Assert.True(fixture.RefreshPlugins());
         ScriptCompilationResult recoveredCompilation = fixture.CompilePendingPluginReload(reload);
         Assert.True(recoveredCompilation.success, FormatDiagnostics(recoveredCompilation));
@@ -787,9 +798,9 @@ public sealed class ScriptingPipelineTests : IDisposable
         Type pluginType = fixture.ResolveActiveType("PluginBehavior");
         GameComponent component = owner.AddComponent(pluginType);
         Guid componentId = component.identity.persistentId;
-        string installedPlugin = Path.Combine(fixture.projectRoot, "Plugins", "UnavailabilityPlugin");
+        string installedPlugin = Path.Combine(fixture.projectRoot, "Plugins", "unavailability.iplugin");
         string detachedPlugin = Path.Combine(fixture.projectRoot, "UnavailabilityPlugin.detached");
-        Directory.Move(installedPlugin, detachedPlugin);
+        File.Move(installedPlugin, detachedPlugin);
         Assert.True(fixture.RefreshPlugins());
         ScriptCompilationResult unavailable = fixture.CompilePendingPluginReload(reload);
         Assert.True(unavailable.success, FormatDiagnostics(unavailable));
@@ -828,18 +839,7 @@ public sealed class ScriptingPipelineTests : IDisposable
         string projectRoot,
         SerializationRegistry serialization)
     {
-        string pluginRoot = Path.Combine(projectRoot, "Plugins", "ProjectionPlugin");
-        string assetRoot = Path.Combine(pluginRoot, "Assets");
-        Directory.CreateDirectory(assetRoot);
-        File.WriteAllBytes(
-            Path.Combine(pluginRoot, "Plugin.inno"),
-            serialization.Serialize(new PluginManifest
-            {
-                pluginId = "tests.projection",
-                displayName = "Projection Plugin"
-            }));
-        string sourcePath = Path.Combine(assetRoot, "ProjectionRuntime.cs");
-        File.WriteAllText(sourcePath, """
+        const string c_source = """
             using InnoEngine.Scene;
 
             namespace ProjectionPlugin;
@@ -847,33 +847,27 @@ public sealed class ScriptingPipelineTests : IDisposable
             public sealed class ProjectionRuntime : GameBehavior
             {
             }
-            """);
-        File.WriteAllBytes(
-            sourcePath + ".imeta",
-            serialization.Serialize(new ScriptingAssetSourceMeta
+            """;
+        WritePluginPackage(
+            projectRoot,
+            "projection.iplugin",
+            serialization,
+            new PluginManifest
             {
-                persistentId = Guid.NewGuid(),
-                sourceKind = (int)AssetSourceKind.File,
-                importerId = "inno.editor.csharp-script"
-            }));
+                pluginId = "tests.projection",
+                displayName = "Projection Plugin"
+            },
+            new Dictionary<string, byte[]>
+            {
+                ["Assets/ProjectionRuntime.cs"] = System.Text.Encoding.UTF8.GetBytes(c_source),
+                ["Assets/ProjectionRuntime.cs.imeta"] = CreateScriptSourceMeta(serialization, Guid.NewGuid())
+            });
     }
 
     private static void WriteUnavailableGenerationPlugin(
         string projectRoot,
         SerializationRegistry serialization)
-    {
-        string pluginRoot = Path.Combine(projectRoot, "Plugins", "UnavailabilityPlugin");
-        string assetRoot = Path.Combine(pluginRoot, "Assets");
-        Directory.CreateDirectory(assetRoot);
-        File.WriteAllBytes(
-            Path.Combine(pluginRoot, "Plugin.inno"),
-            serialization.Serialize(new PluginManifest
-            {
-                pluginId = "tests.unavailability",
-                displayName = "Unavailability Test Plugin"
-            }));
-        string sourcePath = Path.Combine(assetRoot, "PluginBehavior.cs");
-        File.WriteAllText(sourcePath, """
+        => WriteUnavailableGenerationPlugin(projectRoot, serialization, """
             using InnoEngine.Reflection;
             using InnoEngine.Scene;
             using InnoEngine.Serialization;
@@ -887,14 +881,96 @@ public sealed class ScriptingPipelineTests : IDisposable
                 public int retained { get; set; } = 5;
             }
             """);
-        File.WriteAllBytes(
-            sourcePath + ".imeta",
-            serialization.Serialize(new ScriptingAssetSourceMeta
+
+    private static void WriteUnavailableGenerationPlugin(
+        string projectRoot,
+        SerializationRegistry serialization,
+        string source)
+    {
+        WritePluginPackage(
+            projectRoot,
+            "unavailability.iplugin",
+            serialization,
+            new PluginManifest
             {
-                persistentId = Guid.Parse("37f9751f-a7de-43c7-94ac-c8e854762d49"),
-                sourceKind = (int)AssetSourceKind.File,
-                importerId = "inno.editor.csharp-script"
-            }));
+                pluginId = "tests.unavailability",
+                displayName = "Unavailability Test Plugin"
+            },
+            new Dictionary<string, byte[]>
+            {
+                ["Assets/PluginBehavior.cs"] = System.Text.Encoding.UTF8.GetBytes(source),
+                ["Assets/PluginBehavior.cs.imeta"] = CreateScriptSourceMeta(
+                    serialization,
+                    Guid.Parse("37f9751f-a7de-43c7-94ac-c8e854762d49"))
+            });
+    }
+
+    private static void WriteSamplePlugin(
+        string projectRoot,
+        SerializationRegistry serialization)
+    {
+        const string c_source =
+            "using InnoEngine.Scene; public sealed class StarterBehavior : GameBehavior { }";
+        WritePluginPackage(
+            projectRoot,
+            "samples.iplugin",
+            serialization,
+            new PluginManifest
+            {
+                pluginId = "tests.samples",
+                displayName = "Sample Test Plugin"
+            },
+            new Dictionary<string, byte[]>
+            {
+                ["Assets/"] = [],
+                ["Assets/~Starter/"] = [],
+                ["Assets/~Starter.imeta"] = serialization.Serialize(new ScriptingAssetSourceMeta
+                {
+                    persistentId = Guid.Parse("7726b1d2-9aee-4d2c-a865-2fd53155095f"),
+                    sourceKind = (int)AssetSourceKind.Directory
+                }),
+                ["Assets/~Starter/StarterBehavior.cs"] = System.Text.Encoding.UTF8.GetBytes(c_source),
+                ["Assets/~Starter/StarterBehavior.cs.imeta"] = CreateScriptSourceMeta(
+                    serialization,
+                    Guid.Parse("75f6a70b-93b2-47f0-8747-cc359474b7a3"))
+            });
+    }
+
+    private static byte[] CreateScriptSourceMeta(
+        SerializationRegistry serialization,
+        Guid persistentId)
+        => serialization.Serialize(new ScriptingAssetSourceMeta
+        {
+            persistentId = persistentId,
+            sourceKind = (int)AssetSourceKind.File,
+            importerId = "inno.editor.csharp-script"
+        });
+
+    private static void WritePluginPackage(
+        string projectRoot,
+        string fileName,
+        SerializationRegistry serialization,
+        PluginManifest manifest,
+        IReadOnlyDictionary<string, byte[]> entries)
+    {
+        string path = Path.Combine(projectRoot, "Plugins", fileName);
+        using FileStream stream = File.Create(path);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Create);
+        WritePluginPackageEntry(archive, "Plugin.inno", serialization.Serialize(manifest));
+        foreach ((string entryPath, byte[] bytes) in entries)
+            WritePluginPackageEntry(archive, entryPath, bytes);
+    }
+
+    private static void WritePluginPackageEntry(
+        ZipArchive archive,
+        string path,
+        byte[] bytes)
+    {
+        ZipArchiveEntry entry = archive.CreateEntry(path, CompressionLevel.Optimal);
+        if (path.EndsWith("/", StringComparison.Ordinal))
+            return;
+        using Stream output = entry.Open();
+        output.Write(bytes);
     }
 
     private static string FormatDiagnostics(ScriptCompilationResult result)

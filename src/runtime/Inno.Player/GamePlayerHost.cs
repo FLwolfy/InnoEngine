@@ -4,6 +4,10 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Inno.Assets;
+using Inno.Audio;
+using Inno.Audio.MiniAudio;
+using Inno.Audio.Runtime;
+using Inno.Audio.Scene;
 using Inno.Core.Events;
 using Inno.Core.Logging;
 using Inno.Core.Serialization;
@@ -25,6 +29,7 @@ internal sealed class GamePlayerHost : IDisposable
     private readonly Sdl3PlatformApplication m_platform;
     private readonly Sdl3PlatformWindow m_window;
     private readonly BgfxDevice m_device;
+    private readonly AudioRuntimeLayer m_audio;
     private readonly EngineHost m_engine;
     private readonly ProjectSettingsStore m_settings;
     private readonly RuntimeSession m_session;
@@ -35,6 +40,7 @@ internal sealed class GamePlayerHost : IDisposable
         Sdl3PlatformApplication platform,
         Sdl3PlatformWindow window,
         BgfxDevice device,
+        AudioRuntimeLayer audio,
         EngineHost engine,
         ProjectSettingsStore settings,
         RuntimeSession session,
@@ -43,6 +49,7 @@ internal sealed class GamePlayerHost : IDisposable
         m_platform = platform;
         m_window = window;
         m_device = device;
+        m_audio = audio;
         m_engine = engine;
         m_settings = settings;
         m_session = session;
@@ -51,6 +58,8 @@ internal sealed class GamePlayerHost : IDisposable
 
     internal static GamePlayerHost Create()
     {
+        _ = typeof(AudioProjectSettings);
+        _ = typeof(AudioSource);
         string packagedContentRoot = ResolvePackagedContentRoot();
         byte[] manifestEnvelope = File.ReadAllBytes(Path.Combine(packagedContentRoot, "runtime.manifest"));
         string applicationId = RuntimeManifestEnvelope.ReadApplicationId(manifestEnvelope);
@@ -121,24 +130,44 @@ internal sealed class GamePlayerHost : IDisposable
                             primaryPresentationViewportProvider: size => CreatePresentationViewport(
                                 presentation,
                                 size));
-                        using (settings.EnterExecutionScope())
-                        using (session.EnterExecutionScope())
+                        AudioRuntimeLayer? audio = null;
+                        bool renderingAttached = false;
+                        try
                         {
-                            rendering.OnAttach();
-                            SceneAsset startupAsset = session.assets.Load<SceneAsset>(
-                                AssetPath.Parse(manifest.startupScene));
-                            session.scenes.LoadScene(startupAsset.Instantiate(
-                                engine.serialization,
-                                session.assets));
+                            audio = CreateAudioRuntime(engine, session, settings);
+                            using (settings.EnterExecutionScope())
+                            using (audio.EnterExecutionScope())
+                            using (session.EnterExecutionScope())
+                            {
+                                rendering.OnAttach();
+                                renderingAttached = true;
+                                SceneAsset startupAsset = session.assets.Load<SceneAsset>(
+                                    AssetPath.Parse(manifest.startupScene));
+                                session.scenes.LoadScene(startupAsset.Instantiate(
+                                    engine.serialization,
+                                    session.assets));
+                            }
+                            return new GamePlayerHost(
+                                platform,
+                                window,
+                                device,
+                                audio,
+                                engine,
+                                settings,
+                                session,
+                                rendering);
                         }
-                        return new GamePlayerHost(
-                            platform,
-                            window,
-                            device,
-                            engine,
-                            settings,
-                            session,
-                            rendering);
+                        catch
+                        {
+                            audio?.Dispose();
+                            if (renderingAttached)
+                            {
+                                using (settings.EnterExecutionScope())
+                                using (session.EnterExecutionScope())
+                                    rendering.OnDetach();
+                            }
+                            throw;
+                        }
                     }
                     catch
                     {
@@ -202,10 +231,12 @@ internal sealed class GamePlayerHost : IDisposable
             float delta = Math.Max(0f, (float)(now - previous));
             using (m_settings.EnterExecutionScope())
             using (m_rendering.EnterExecutionScope())
+            using (m_audio.EnterExecutionScope())
             {
                 m_session.Tick((float)now, delta);
                 using (m_session.EnterExecutionScope())
                 {
+                    m_audio.Update(delta);
                     m_rendering.OnBeforeRender(delta);
                     try
                     {
@@ -246,8 +277,10 @@ internal sealed class GamePlayerHost : IDisposable
         m_disposed = true;
         using (m_settings.EnterExecutionScope())
         using (m_rendering.EnterExecutionScope())
+        using (m_audio.EnterExecutionScope())
         using (m_session.EnterExecutionScope())
             m_rendering.OnDetach();
+        m_audio.Dispose();
         m_session.Dispose();
         m_settings.Dispose();
         m_engine.Dispose();
@@ -264,6 +297,61 @@ internal sealed class GamePlayerHost : IDisposable
         if (!Directory.Exists(result))
             throw new DirectoryNotFoundException($"Game content root '{result}' does not exist.");
         return result;
+    }
+
+    private static AudioRuntimeLayer CreateAudioRuntime(
+        EngineHost engine,
+        RuntimeSession session,
+        ProjectSettingsStore settings)
+    {
+        var diagnostics = new PlayerAudioDiagnosticSink(engine.logs);
+        IAudioDevice device;
+        try
+        {
+            device = new MiniAudioDevice();
+        }
+        catch (Exception exception)
+        {
+            diagnostics.Publish(new AudioDiagnostic(
+                "AUDIO_DEVICE_INIT_FAILED",
+                $"The operating-system audio device could not start; the session is explicitly muted: {exception.Message}",
+                AudioDiagnosticSeverity.Warning,
+                "MiniAudio"));
+            device = new MutedAudioDevice();
+        }
+
+        AudioProjectSettings audioSettings = settings.TryGet(
+                AudioProjectSettings.settingId,
+                out AudioProjectSettings? configured) && configured is not null
+            ? configured
+            : new AudioProjectSettings();
+        var runtime = new AudioRuntimeLayer(
+            engine.types,
+            device,
+            session.assets,
+            session.events,
+            diagnostics,
+            new AudioRuntimeOptions
+            {
+                maxVoices = audioSettings.maxVoices,
+                decodedCacheBudgetBytes = audioSettings.decodedCacheBudgetBytes,
+                automaticStreamingThresholdBytes = audioSettings.automaticStreamingThresholdBytes
+            },
+            new SceneAudioContent(session.scenes).Capture,
+            static () => new MiniAudioDevice());
+        try
+        {
+            if (audioSettings.defaultMixer is not null && !runtime.ApplyMixer(audioSettings.defaultMixer))
+                throw new InvalidOperationException("The configured default audio mixer could not be activated.");
+            if (!runtime.SetBusVolume(AudioBusId.master, audioSettings.masterVolume))
+                throw new InvalidOperationException("The configured master audio volume could not be applied.");
+            return runtime;
+        }
+        catch
+        {
+            runtime.Dispose();
+            throw;
+        }
     }
 
     private static string ResolvePersistentRoot(string applicationId)
@@ -391,5 +479,48 @@ internal sealed class GamePlayerHost : IDisposable
             string? sourceId,
             string message,
             RenderDiagnosticSeverity severity);
+    }
+
+    private sealed class PlayerAudioDiagnosticSink : IAudioDiagnosticSink
+    {
+        private readonly HashSet<AudioDiagnosticIdentity> m_active = [];
+        private readonly Logger m_logger;
+
+        internal PlayerAudioDiagnosticSink(LogRouter logs)
+        {
+            ArgumentNullException.ThrowIfNull(logs);
+            m_logger = logs.CreateLogger<PlayerAudioDiagnosticSink>();
+        }
+
+        /// <summary>
+        /// Writes a new structured audio diagnostic to the Player log once per identity.
+        /// </summary>
+        /// <param name="diagnostic">
+        /// Diagnostic emitted by the active audio runtime.
+        /// </param>
+        public void Publish(AudioDiagnostic diagnostic)
+        {
+            ArgumentNullException.ThrowIfNull(diagnostic);
+            var identity = new AudioDiagnosticIdentity(
+                diagnostic.code,
+                diagnostic.source,
+                diagnostic.message,
+                diagnostic.severity);
+            if (!m_active.Add(identity))
+                return;
+            LogLevel level = diagnostic.severity switch
+            {
+                AudioDiagnosticSeverity.Error => LogLevel.Error,
+                AudioDiagnosticSeverity.Warning => LogLevel.Warn,
+                _ => LogLevel.Info
+            };
+            m_logger.Write(level, "[{0}] {1}", [diagnostic.code, diagnostic.message]);
+        }
+
+        private readonly record struct AudioDiagnosticIdentity(
+            string code,
+            string? source,
+            string message,
+            AudioDiagnosticSeverity severity);
     }
 }

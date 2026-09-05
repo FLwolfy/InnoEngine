@@ -11,6 +11,7 @@ Editor 采用“被动核心 → 后端无关交互 → ImGui 表现 → 独立 
 | [Inno.Editor.Core](Inno.Editor.Core.md) | `EditorContext`、frame/runtime、Module、Panel、Modal 与可选状态 hooks 的最小契约。 |
 | [Inno.Editor.Interactions](Inno.Editor.Interactions.md) | Action、area、menu、shortcut、selection、drag/drop、Undo/Redo、Module/Panel 状态存储与扩展代际。 |
 | [Inno.Editor.PlayMode](Inno.Editor.PlayMode.md) | 脚本门禁、Scene/History 隔离、游戏循环与 Play/Edit 原子切换。 |
+| [Inno.Editor.Audio](Inno.Editor.Audio.md) | Edit/Play 独立音频 generation、预览、scope 与诊断。 |
 | [Inno.Editor.Scene](Inno.Editor.Scene.md) | Scene document workspace、细粒度 Scene 编辑门面与 reload-safe History 协议。 |
 | [Inno.Editor.Settings](Inno.Editor.Settings.md) | Editor 结构化值与强类型 Project Setting Drawer 的统一 frontend 协议。 |
 | [Inno.Editor.ImGui](Inno.Editor.ImGui.md) | ImGui runtime、pointer-free 脚本 facade、统一 Widget、Palette 与 Style metrics。 |
@@ -39,6 +40,7 @@ flowchart TD
     Core --> ImGui["Inno.Editor.ImGui"]
     Interactions --> ImGui
     Interactions --> PlayMode["Inno.Editor.PlayMode"]
+    PlayMode --> Audio["Inno.Editor.Audio"]
     Core --> Inspection["Inno.Editor.Inspection"]
     Interactions --> Inspection
     ImGui --> Inspection
@@ -61,6 +63,7 @@ flowchart TD
     Settings --> Exporting
     Exporting --> Application
     PlayMode --> Application
+    Audio --> Application
     Panels --> Application["Inno.Editor.Application"]
     Scripting --> Application
     ImGui --> Application

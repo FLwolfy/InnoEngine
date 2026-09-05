@@ -17,7 +17,7 @@ namespace Inno.Assets;
 /// This database never reads project source files, creates source mounts, runs importers, or writes content.
 /// One runtime session owns one database instance and disposes it before releasing its identity services.
 /// </remarks>
-public sealed class AssetDatabase : IDisposable, IAssetLookup, IAssetReferenceResolver
+public sealed class AssetDatabase : IDisposable, IAssetLookup, IAssetReferenceResolver, IAssetArtifactLookup
 {
     private readonly object m_sync = new();
     private readonly Dictionary<AssetPath, RuntimeAssetRecord> m_recordsByPath = [];
@@ -271,8 +271,8 @@ public sealed class AssetDatabase : IDisposable, IAssetLookup, IAssetReferenceRe
     /// <param name="outputName">
     /// The exact artifact output name.
     /// </param>
-    /// <param name="artifactPath">
-    /// Receives the verified absolute artifact file path when successful.
+    /// <param name="artifact">
+    /// Receives verified output metadata and its absolute immutable path when successful.
     /// </param>
     /// <returns>
     /// <see langword="true"/> when the deployed bundle contains the requested output; otherwise,
@@ -284,20 +284,26 @@ public sealed class AssetDatabase : IDisposable, IAssetLookup, IAssetReferenceRe
     public bool TryGetArtifact(
         Guid persistentId,
         string outputName,
-        out string? artifactPath)
+        out AssetArtifactInfo? artifact)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputName);
         lock (m_sync)
         {
             EnsureActive();
-            artifactPath = null;
+            artifact = null;
             if (!m_recordsById.TryGetValue(persistentId, out RuntimeAssetRecord? record))
                 return false;
             RuntimeArtifactOutput output = ReadArtifactManifest(record).outputs.FirstOrDefault(candidate =>
                 string.Equals(candidate.name, outputName, StringComparison.Ordinal));
             if (string.IsNullOrWhiteSpace(output.name))
                 return false;
-            artifactPath = GetVerifiedOutputPath(record, output);
+            string artifactPath = GetVerifiedOutputPath(record, output);
+            artifact = new AssetArtifactInfo(
+                new AssetArtifactKey(record.artifactKey),
+                output.name,
+                artifactPath,
+                output.contentHash,
+                output.length);
             return true;
         }
     }

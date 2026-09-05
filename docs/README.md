@@ -10,6 +10,7 @@
 | [Extensibility](extensibility/README.md) | collectible module generation、Stable Type ID 与 Registry snapshot |
 | [Scripting](scripting/README.md) | 脚本 API、编译与原子 reload |
 | [Assets](assets/README.md) | Player-safe runtime assets 与 authoring pipeline |
+| [Audio](audio/README.md) | 后端中立播放/Mixer 契约、Runtime、资产、MiniAudio 与 Scene 集成 |
 | [Plugins](plugins/README.md) | Plugin manifest、安装源、只读 mount 与候选激活 |
 | [Scene](scene/README.md) | SceneWorld、GameBehavior、GameSystem、Scene/Prefab asset integration |
 | [Rendering](render/README.md) | 后端中立 Rendering、目标资产、BGFX 与 ShaderGraph |
@@ -28,7 +29,7 @@ Application / Player / Build CLI
         ↓
 Editor / Build / Runtime
         ↓
-Scripting / Plugins / Assets / Scene / Rendering / Platform
+Scripting / Plugins / Assets / Audio / Scene / Rendering / Platform
         ↓
 Extensibility / Core / Native adapters
 ```

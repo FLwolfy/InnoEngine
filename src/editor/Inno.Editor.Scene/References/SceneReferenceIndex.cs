@@ -39,7 +39,8 @@ internal static class SceneReferenceIndex
                     ScenePropertySerialization.CaptureProperty(
                         owner,
                         property.name,
-                        workspace.serialization)));
+                        workspace.serialization,
+                        workspace.assets)));
             }
         }
         return result.ToArray();
@@ -74,11 +75,12 @@ internal static class SceneReferenceIndex
             }
             try
             {
-                rollback.Add(CaptureRollback(owner, reference.propertyName, workspace.serialization));
+                rollback.Add(CaptureRollback(owner, reference.propertyName, workspace));
                 SerializationPropertyRestoreResult result = ScenePropertySerialization.RestoreProperties(
                     owner,
                     reference.data,
                     workspace.serialization,
+                    workspace.assets,
                     SerializationPropertyRestoreMode.CollectFailures);
                 if (!IsComplete(result))
                 {
@@ -110,7 +112,7 @@ internal static class SceneReferenceIndex
             EngineObject owner = workspace.Find<EngineObject>(reference.ownerId)
                 ?? throw new InvalidOperationException(
                     $"Incoming reference owner '{reference.ownerId}' is unavailable.");
-            result[i] = CaptureRollback(owner, reference.propertyName, workspace.serialization);
+            result[i] = CaptureRollback(owner, reference.propertyName, workspace);
         }
         return result;
     }
@@ -139,6 +141,7 @@ internal static class SceneReferenceIndex
                         owner,
                         reference.data,
                         workspace.serialization,
+                        workspace.assets,
                         SerializationPropertyRestoreMode.Strict);
                     if (!IsComplete(result))
                         rollbackFailures.Add($"'{reference.ownerId}.{reference.propertyName}' was incomplete");
@@ -166,19 +169,23 @@ internal static class SceneReferenceIndex
     private static SceneReferenceRollbackState CaptureRollback(
         EngineObject owner,
         string propertyName,
-        SerializationRegistry serialization)
+        EditorSceneWorkspace workspace)
     {
         try
         {
             return new SceneReferenceRollbackState(
                 owner.identity.persistentId,
                 propertyName,
-                ScenePropertySerialization.CaptureProperty(owner, propertyName, serialization),
+                ScenePropertySerialization.CaptureProperty(
+                    owner,
+                    propertyName,
+                    workspace.serialization,
+                    workspace.assets),
                 runtimeValue: null);
         }
         catch (InvalidOperationException)
         {
-            SerializedProperty property = ResolveProperty(owner, propertyName, serialization);
+            SerializedProperty property = ResolveProperty(owner, propertyName, workspace.serialization);
             return new SceneReferenceRollbackState(
                 owner.identity.persistentId,
                 propertyName,
@@ -278,7 +285,8 @@ internal static class SceneReferenceIndex
                     ScenePropertySerialization.CaptureProperty(
                         owner,
                         property.name,
-                        workspace.serialization)));
+                        workspace.serialization,
+                        workspace.assets)));
             }
         }
         return result.ToArray();

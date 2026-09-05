@@ -1,6 +1,7 @@
 using System;
 
 using Inno.Core.Logging;
+using Inno.Editor.Audio;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 using Inno.Editor.Scene;
@@ -25,7 +26,8 @@ internal sealed class EditorPlayModeModule : EditorModule, IEditorPlayMode
         IEditorScenePlayMode scenes,
         IEditorScriptCompilation scripting,
         EditorInteractions interactions,
-        EditorReloadCoordinator reloads)
+        EditorReloadCoordinator reloads,
+        IEditorAudioHost audio)
     {
         m_loop = loop ?? throw new ArgumentNullException(nameof(loop));
         m_reloads = reloads ?? throw new ArgumentNullException(nameof(reloads));
@@ -35,7 +37,8 @@ internal sealed class EditorPlayModeModule : EditorModule, IEditorPlayMode
             scenes,
             scripting,
             interactions,
-            engineHost.logs);
+            engineHost.logs,
+            audio);
     }
 
     /// <summary>

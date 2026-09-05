@@ -7,6 +7,10 @@
     <AssemblyName>Inno.Player</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\audio\Inno.Audio.MiniAudio\Inno.Audio.MiniAudio.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\audio\Inno.Audio.Runtime\Inno.Audio.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\audio\Inno.Audio.Scene\Inno.Audio.Scene.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\audio\Inno.Audio\Inno.Audio.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Events\Inno.Core.Events.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />

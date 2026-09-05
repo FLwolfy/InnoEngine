@@ -77,6 +77,7 @@ internal static partial class Program
         }
 
         ValidateProjectReferences(repositoryRoot, failures);
+        ValidateTestSolutionFolders(repositoryRoot, failures);
         ArchitectureRules.Validate(repositoryRoot, failures);
         if (failures.Count == 0)
         {
@@ -626,12 +627,128 @@ internal static partial class Program
                 if (targetRelative.Contains("Inno.Native.MiniAudio", StringComparison.Ordinal) &&
                     !projectRelative.Contains("Inno.Audio.MiniAudio", StringComparison.Ordinal) &&
                     !projectRelative.Contains("Inno.Native.MiniAudio", StringComparison.Ordinal) &&
-                    !projectRelative.StartsWith("build/toolchains/Inno.Build.Toolchains.MiniAudio", StringComparison.Ordinal))
+                    !projectRelative.StartsWith("build/toolchains/Inno.Build.Toolchains.MiniAudio", StringComparison.Ordinal) &&
+                    !projectRelative.StartsWith("tests/", StringComparison.Ordinal))
                 {
                     failures.Add($"{projectRelative}: miniaudio native code is restricted to the MiniAudio adapter.");
                 }
             }
         }
+    }
+
+    private static void ValidateTestSolutionFolders(string repositoryRoot, ICollection<string> failures)
+    {
+        string solutionPath = Path.Combine(repositoryRoot, "InnoEngine.sln");
+        var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var paths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var solutionFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var parents = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        bool readingNestedProjects = false;
+
+        foreach (string line in File.ReadLines(solutionPath))
+        {
+            Match project = SolutionProjectPattern().Match(line);
+            if (project.Success)
+            {
+                string id = project.Groups["id"].Value;
+                names[id] = project.Groups["name"].Value;
+                paths[id] = project.Groups["path"].Value.Replace('\\', '/');
+                if (string.Equals(project.Groups["type"].Value, "{2150E333-8FDC-42A3-9474-1A3956D46DE8}", StringComparison.OrdinalIgnoreCase))
+                    solutionFolders.Add(id);
+                continue;
+            }
+
+            if (line.Contains("GlobalSection(NestedProjects)", StringComparison.Ordinal))
+            {
+                readingNestedProjects = true;
+                continue;
+            }
+            if (readingNestedProjects && line.Contains("EndGlobalSection", StringComparison.Ordinal))
+            {
+                readingNestedProjects = false;
+                continue;
+            }
+            if (!readingNestedProjects)
+                continue;
+
+            Match nesting = SolutionNestingPattern().Match(line);
+            if (nesting.Success)
+                parents[nesting.Groups[1].Value] = nesting.Groups[2].Value;
+        }
+
+        string? testsRoot = solutionFolders.FirstOrDefault(id =>
+            string.Equals(names.GetValueOrDefault(id), "tests", StringComparison.Ordinal));
+        if (testsRoot is null)
+        {
+            failures.Add("InnoEngine.sln: missing root tests Solution Folder.");
+            return;
+        }
+
+        var declaredTestProjects = paths
+            .Where(static pair => pair.Value.StartsWith("tests/", StringComparison.Ordinal) &&
+                                  pair.Value.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(static pair => pair.Value, static pair => pair.Key, StringComparer.OrdinalIgnoreCase);
+        string testsDirectory = Path.Combine(repositoryRoot, "tests");
+        foreach (string projectPath in EnumerateFiles(testsDirectory, "*.csproj"))
+        {
+            string relative = Relative(repositoryRoot, projectPath);
+            if (!declaredTestProjects.ContainsKey(relative))
+                failures.Add($"{relative}: test project is missing from InnoEngine.sln.");
+        }
+
+        foreach ((string projectPath, string projectId) in declaredTestProjects)
+        {
+            if (!parents.TryGetValue(projectId, out string? parentId) ||
+                string.Equals(parentId, testsRoot, StringComparison.OrdinalIgnoreCase) ||
+                !solutionFolders.Contains(parentId) ||
+                !HasSolutionAncestor(parentId, testsRoot, parents))
+            {
+                failures.Add($"{projectPath}: test project must be nested below a tests/<domain> Solution Folder.");
+                continue;
+            }
+
+            string projectName = names[projectId];
+            bool isFixture = projectName.Contains(".TestModule", StringComparison.Ordinal) ||
+                             projectName.Contains(".TestAssembly", StringComparison.Ordinal) ||
+                             projectName.Contains(".TestDependency", StringComparison.Ordinal);
+            if (isFixture && !HasNamedSolutionAncestor(parentId, "fixtures", names, parents))
+                failures.Add($"{projectPath}: test support project must be nested below a fixtures Solution Folder.");
+        }
+    }
+
+    private static bool HasSolutionAncestor(
+        string startingId,
+        string expectedAncestorId,
+        IReadOnlyDictionary<string, string> parents)
+    {
+        string currentId = startingId;
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (visited.Add(currentId))
+        {
+            if (string.Equals(currentId, expectedAncestorId, StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (!parents.TryGetValue(currentId, out currentId!))
+                return false;
+        }
+        return false;
+    }
+
+    private static bool HasNamedSolutionAncestor(
+        string startingId,
+        string expectedName,
+        IReadOnlyDictionary<string, string> names,
+        IReadOnlyDictionary<string, string> parents)
+    {
+        string currentId = startingId;
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (visited.Add(currentId))
+        {
+            if (string.Equals(names.GetValueOrDefault(currentId), expectedName, StringComparison.Ordinal))
+                return true;
+            if (!parents.TryGetValue(currentId, out currentId!))
+                return false;
+        }
+        return false;
     }
 
     private static bool IsAnyDomain(string path, params string[] domains)
@@ -723,4 +840,10 @@ internal static partial class Program
 
     [GeneratedRegex(@"(?<=[a-z0-9])([A-Z])")]
     private static partial Regex HumanizePattern();
+
+    [GeneratedRegex("""^Project\("(?<type>\{[^}]+\})"\) = "(?<name>[^"]+)", "(?<path>[^"]+)", "(?<id>\{[^}]+\})"$""")]
+    private static partial Regex SolutionProjectPattern();
+
+    [GeneratedRegex(@"^\s*(\{[^}]+\})\s*=\s*(\{[^}]+\})\s*$")]
+    private static partial Regex SolutionNestingPattern();
 }

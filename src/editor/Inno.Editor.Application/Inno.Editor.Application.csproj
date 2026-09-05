@@ -9,6 +9,7 @@
     <InnoAssemblyScope>Editor</InnoAssemblyScope>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Inno.Editor.Audio\Inno.Editor.Audio.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\build\pipeline\Inno.Build\Inno.Build.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\build\pipeline\Inno.Build.Platform.MacOS\Inno.Build.Platform.MacOS.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\build\pipeline\Inno.Build.Platform.Windows\Inno.Build.Platform.Windows.csproj" PrivateAssets="compile" />
@@ -35,6 +36,9 @@
     <ProjectReference Include="..\Panels\Inno.Editor.Panel.SceneView\Inno.Editor.Panel.SceneView.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Panels\Inno.Editor.Panel.ShaderGraph\Inno.Editor.Panel.ShaderGraph.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\audio\Inno.Audio.Assets\Inno.Audio.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\audio\Inno.Audio.Runtime\Inno.Audio.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\audio\Inno.Audio.Scene\Inno.Audio.Scene.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\plugins\Inno.Plugins.Authoring\Inno.Plugins.Authoring.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Diagnostics\Inno.Core.Diagnostics.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\core\Inno.Core.Events\Inno.Core.Events.csproj" PrivateAssets="compile" />

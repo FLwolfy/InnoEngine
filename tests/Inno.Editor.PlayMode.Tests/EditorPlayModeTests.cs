@@ -2,12 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
+using Inno.Assets;
 using Inno.Assets.Pipeline;
 using Inno.Core.Identity;
 using Inno.Core.Mathematics;
+using Inno.Core.Serialization;
 using Inno.Editor.Interactions;
 using Inno.Editor.Scene;
 using Inno.Editor.Scripting;
+using Inno.Extensibility.Types;
 using Inno.Runtime;
 using Inno.Scene;
 using Inno.Scripting.Compiler;
@@ -227,6 +230,41 @@ public sealed class EditorPlayModeTests : IDisposable
         Assert.Same(editScene, Assert.Single(workspace.scenes));
         Assert.Same(editScene, workspace.activeScene);
         Assert.True(workspace.canPersist);
+    }
+
+    [Fact]
+    public void SceneSessionMaterializesSerializedAssetReferences()
+    {
+        string sourcePath = Path.Combine(m_projectRoot, "Assets", "Text", "shared.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
+        File.WriteAllText(sourcePath, "shared");
+        AssetPath assetPath = AssetPath.Project("Text/shared.txt");
+        Assert.True(m_authoringAssets.Import(assetPath));
+        TextAsset asset = m_authoringAssets.Load<TextAsset>(assetPath);
+
+        using EditorSceneWorkspaceHost workspaceHost = EditorSceneWorkspaceFactory.Create(
+            m_editSession,
+            m_authoringAssets,
+            m_engineHost.types,
+            m_engineHost.serialization,
+            m_engineHost.logs);
+        var editScene = new GameScene("Asset Reference Scene");
+        editScene.CreateObject("Asset Reference")
+            .AddComponent<PlayModeAssetReferenceBehavior>()
+            .asset = asset;
+        SceneManager.LoadScene(editScene);
+
+        using RuntimeSession runtimeSession = m_engineHost.CreateSession(
+            CreateSessionOptions(RuntimeSessionKind.Play));
+        using IDisposable playLease = workspaceHost.playMode.BeginPlayMode(runtimeSession);
+        using IDisposable runtimeScope = runtimeSession.EnterExecutionScope();
+        GameObject runtimeObject = Assert.Single(
+            Assert.Single(SceneManager.loadedScenes).GetObjects());
+        TextAsset? runtimeAsset = runtimeObject
+            .GetComponent<PlayModeAssetReferenceBehavior>()
+            .asset;
+
+        Assert.Same(asset, runtimeAsset);
     }
 
     [Fact]
@@ -512,4 +550,14 @@ public sealed class EditorPlayModeTests : IDisposable
             jobExecutionMode = RuntimeJobExecutionMode.SingleThread
         };
     }
+}
+
+[StableTypeId("9afec1fd-c1ef-45fa-9bcc-0b3e2877d613")]
+internal sealed class PlayModeAssetReferenceBehavior : GameBehavior
+{
+    /// <summary>
+    /// Gets or sets the asset reference copied into the isolated Play Mode scene.
+    /// </summary>
+    [SerializableProperty]
+    public TextAsset? asset { get; set; }
 }

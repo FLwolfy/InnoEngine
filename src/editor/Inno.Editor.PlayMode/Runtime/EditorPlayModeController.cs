@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Inno.Core.Logging;
 using Inno.Extensibility.Modules;
 using Inno.Scripting.Api;
+using Inno.Editor.Audio;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 using Inno.Editor.Scene;
@@ -26,6 +27,7 @@ public sealed class EditorPlayModeController :
     IDisposable
 {
     private readonly IEditorHistoryIsolation m_history;
+    private readonly IEditorAudioHost? m_audio;
     private readonly EngineHost m_engineHost;
     private readonly Logger m_log;
     private readonly RuntimeSessionOptions m_runtimeOptions;
@@ -33,6 +35,7 @@ public sealed class EditorPlayModeController :
     private readonly IEditorScriptCompilation m_scripting;
 
     private IDisposable? m_historyIsolation;
+    private IDisposable? m_audioLease;
     private IDisposable? m_sceneLease;
     private IScriptCompilationTicket? m_compilationTicket;
     private RuntimeSession? m_runtimeSession;
@@ -63,6 +66,9 @@ public sealed class EditorPlayModeController :
     /// <param name="logs">
     /// The application log router that receives Play Mode lifecycle failures.
     /// </param>
+    /// <param name="audio">
+    /// Optional Editor audio host that creates an isolated backend generation for Play Mode.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when any dependency is <see langword="null"/>.
     /// </exception>
@@ -72,7 +78,8 @@ public sealed class EditorPlayModeController :
         IEditorScenePlayMode scenes,
         IEditorScriptCompilation scripting,
         IEditorHistoryIsolation history,
-        LogRouter logs)
+        LogRouter logs,
+        IEditorAudioHost? audio = null)
     {
         m_engineHost = engineHost ?? throw new ArgumentNullException(nameof(engineHost));
         m_runtimeOptions = runtimeOptions ?? throw new ArgumentNullException(nameof(runtimeOptions));
@@ -85,6 +92,7 @@ public sealed class EditorPlayModeController :
         m_scenes = scenes ?? throw new ArgumentNullException(nameof(scenes));
         m_scripting = scripting ?? throw new ArgumentNullException(nameof(scripting));
         m_history = history ?? throw new ArgumentNullException(nameof(history));
+        m_audio = audio;
         ArgumentNullException.ThrowIfNull(logs);
         m_log = logs.CreateLogger<EditorPlayModeController>();
     }
@@ -200,7 +208,9 @@ public sealed class EditorPlayModeController :
             session =>
             {
                 m_playTime += Math.Max(0f, deltaTime);
+                using IDisposable? audioScope = m_audio?.EnterExecutionScope(session);
                 session.Tick(m_playTime, deltaTime);
+                m_audio?.Update(session, deltaTime);
             },
             "frame update");
 
@@ -285,21 +295,25 @@ public sealed class EditorPlayModeController :
         IDisposable? historyIsolation = null;
         RuntimeSession? runtimeSession = null;
         IDisposable? sceneLease = null;
+        IDisposable? audioLease = null;
         try
         {
             historyIsolation = m_history.BeginHistoryIsolation();
             runtimeSession = m_engineHost.CreateSession(m_runtimeOptions);
             using (runtimeSession.EnterExecutionScope())
                 sceneLease = m_scenes.BeginPlayMode(runtimeSession);
+            audioLease = m_audio?.BeginSession(runtimeSession);
             m_historyIsolation = historyIsolation;
             m_runtimeSession = runtimeSession;
             m_sceneLease = sceneLease;
+            m_audioLease = audioLease;
             m_activeSessionId = runtimeSession.sessionId;
             m_playTime = 0f;
             SetState(EditorPlayModeState.Playing);
         }
         catch (Exception exception)
         {
+            audioLease?.Dispose();
             sceneLease?.Dispose();
             runtimeSession?.Dispose();
             historyIsolation?.Dispose();
@@ -325,6 +339,7 @@ public sealed class EditorPlayModeController :
     private void ReleasePlayResources()
     {
         List<Exception>? failures = null;
+        DisposeResource(ref m_audioLease, ref failures);
         DisposeResource(ref m_sceneLease, ref failures);
         DisposeResource(ref m_runtimeSession, ref failures);
         DisposeResource(ref m_historyIsolation, ref failures);
@@ -384,9 +399,21 @@ public sealed class EditorPlayModeController :
     }
 
     internal IDisposable? EnterPresentationScope()
-        => m_state == EditorPlayModeState.Playing
-            ? m_runtimeSession?.EnterExecutionScope()
-            : null;
+    {
+        if (m_state != EditorPlayModeState.Playing || m_runtimeSession is not RuntimeSession session)
+            return null;
+        IDisposable? audioScope = null;
+        try
+        {
+            audioScope = m_audio?.EnterExecutionScope(session);
+            return new PresentationScope(session.EnterExecutionScope(), audioScope);
+        }
+        catch
+        {
+            audioScope?.Dispose();
+            throw;
+        }
+    }
 
     private void Fail(string failure)
     {
@@ -457,6 +484,33 @@ public sealed class EditorPlayModeController :
         {
             failures ??= [];
             failures.Add(exception);
+        }
+    }
+
+    private sealed class PresentationScope(
+        IDisposable sessionScope,
+        IDisposable? audioScope) : IDisposable
+    {
+        private IDisposable? m_sessionScope = sessionScope;
+        private IDisposable? m_audioScope = audioScope;
+
+        /// <summary>
+        /// Releases the presentation and audio execution scopes in reverse acquisition order.
+        /// </summary>
+        public void Dispose()
+        {
+            IDisposable? session = m_sessionScope;
+            IDisposable? audio = m_audioScope;
+            m_sessionScope = null;
+            m_audioScope = null;
+            try
+            {
+                session?.Dispose();
+            }
+            finally
+            {
+                audio?.Dispose();
+            }
         }
     }
 
