@@ -13,6 +13,7 @@
 | [Inno.Build.Toolchains.Bgfx](Inno.Build.Toolchains.Bgfx.md) | BGFX native build CLI |
 | [Inno.Build.Toolchains.Bgfx.Tools](Inno.Build.Toolchains.Bgfx.Tools.md) | shaderc/texturec 与目标内容编译 |
 | [Inno.Build.Toolchains.Sdl3](Inno.Build.Toolchains.Sdl3.md) | SDL3 native build CLI |
+| [Inno.Build.Toolchains.MiniAudio](Inno.Build.Toolchains.MiniAudio.md) | miniaudio native build CLI |
 | [Inno.Build.Toolchains.ImGui](Inno.Build.Toolchains.ImGui.md) | cimgui native build CLI |
 | [Inno.Build.Toolchains.ImGuizmo](Inno.Build.Toolchains.ImGuizmo.md) | cimguizmo native build CLI |
 

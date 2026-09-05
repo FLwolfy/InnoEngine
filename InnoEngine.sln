@@ -280,6 +280,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.IO", "src\core\In
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.IO.Tests", "tests\Inno.Core.IO.Tests\Inno.Core.IO.Tests.csproj", "{720A0191-A558-4B48-947A-F10F53051985}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.MiniAudio", "native\Inno.Native.MiniAudio\Inno.Native.MiniAudio.csproj", "{3B7C6CF1-C2C6-4C78-8228-409767104F70}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Toolchains.MiniAudio", "build\toolchains\Inno.Build.Toolchains.MiniAudio\Inno.Build.Toolchains.MiniAudio.csproj", "{03BDB159-BF45-4872-8A5F-6BFCEF4B1A5D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.MiniAudio.Tests", "tests\Inno.Native.MiniAudio.Tests\Inno.Native.MiniAudio.Tests.csproj", "{FC817548-B626-452B-9505-48E7A9F5E273}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -766,6 +772,18 @@ Global
 		{720A0191-A558-4B48-947A-F10F53051985}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{720A0191-A558-4B48-947A-F10F53051985}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{720A0191-A558-4B48-947A-F10F53051985}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3B7C6CF1-C2C6-4C78-8228-409767104F70}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3B7C6CF1-C2C6-4C78-8228-409767104F70}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3B7C6CF1-C2C6-4C78-8228-409767104F70}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3B7C6CF1-C2C6-4C78-8228-409767104F70}.Release|Any CPU.Build.0 = Release|Any CPU
+		{03BDB159-BF45-4872-8A5F-6BFCEF4B1A5D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{03BDB159-BF45-4872-8A5F-6BFCEF4B1A5D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{03BDB159-BF45-4872-8A5F-6BFCEF4B1A5D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{03BDB159-BF45-4872-8A5F-6BFCEF4B1A5D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FC817548-B626-452B-9505-48E7A9F5E273}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FC817548-B626-452B-9505-48E7A9F5E273}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FC817548-B626-452B-9505-48E7A9F5E273}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FC817548-B626-452B-9505-48E7A9F5E273}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -905,5 +923,8 @@ Global
 		{0D4B7F31-992B-4BB2-941B-0A5C8445D637} = {D6BE33BD-7AC1-4C59-AF9A-52C523FABA31}
 		{D6DF1319-7754-4374-8EB2-B3D2080F6928} = {3BB28C37-744C-4596-89C6-DC6E0FEC02D2}
 		{720A0191-A558-4B48-947A-F10F53051985} = {D6BE33BD-7AC1-4C59-AF9A-52C523FABA31}
+		{3B7C6CF1-C2C6-4C78-8228-409767104F70} = {304A48B8-A137-4877-AADE-FA93686D1127}
+		{03BDB159-BF45-4872-8A5F-6BFCEF4B1A5D} = {ABB33767-92C6-407F-987D-272E83B06D4C}
+		{FC817548-B626-452B-9505-48E7A9F5E273} = {D6BE33BD-7AC1-4C59-AF9A-52C523FABA31}
 	EndGlobalSection
 EndGlobal

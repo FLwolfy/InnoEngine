@@ -237,6 +237,11 @@ internal static partial class ArchitectureRules
         {
             failures.Add($"{sourcePath}: SDL3 native code is restricted to SDL3 adapters and toolchains.");
         }
+        if (target.name.Contains("Inno.Native.MiniAudio", StringComparison.Ordinal) &&
+            !IsAllowedMiniAudioConsumer(project.name))
+        {
+            failures.Add($"{sourcePath}: miniaudio native code is restricted to the MiniAudio adapter and toolchain.");
+        }
     }
 
     private static void ValidateCycles(
@@ -322,6 +327,11 @@ internal static partial class ArchitectureRules
            name.StartsWith("Inno.Native.Sdl3", StringComparison.Ordinal) ||
            name.EndsWith(".Tests", StringComparison.Ordinal);
 
+    private static bool IsAllowedMiniAudioConsumer(string name)
+        => name.StartsWith("Inno.Audio.MiniAudio", StringComparison.Ordinal) ||
+           name.StartsWith("Inno.Build.Toolchains.MiniAudio", StringComparison.Ordinal) ||
+           name.StartsWith("Inno.Native.MiniAudio", StringComparison.Ordinal);
+
     private static IEnumerable<string> EnumerateFiles(string root, string pattern)
     {
         foreach (string path in Directory.EnumerateFiles(root, pattern, SearchOption.AllDirectories))
@@ -353,7 +363,7 @@ internal static partial class ArchitectureRules
     [GeneratedRegex(@"\bLog\.(Debug|Info|Warn|Error|Fatal)\s*\(")]
     private static partial Regex StaticLogFacadeCallPattern();
 
-    [GeneratedRegex(@"\b(public|protected)\b[^\r\n;{]*(Inno\.Native\.|bgfx_|SDL[A-Z]|ImGuiPtr)")]
+    [GeneratedRegex(@"\b(public|protected)\b[^\r\n;{]*(Inno\.Native\.|bgfx_|SDL[A-Z]|ImGuiPtr|Ma[A-Z]\w*)")]
     private static partial Regex PublicNativeSignaturePattern();
 
     [GeneratedRegex(@"BindingFlags\s*\.[^\r\n;]*(NonPublic|Private)|(GetField|GetMethod|GetProperty|GetConstructor)\s*\([^\r\n;]*BindingFlags\s*\.[^\r\n;]*(NonPublic|Private)")]

@@ -226,7 +226,7 @@ internal static class SupportPackPublisher
         string nativePlatform = command.target == BuildTargetId.macOSArm64
             ? "osx-arm64"
             : "windows-x64";
-        string[] components = ["bgfx", "sdl3"];
+        string[] components = ["bgfx", "sdl3", "miniaudio"];
         string destination = Path.Combine(staging, "native");
         foreach (string component in components)
         {

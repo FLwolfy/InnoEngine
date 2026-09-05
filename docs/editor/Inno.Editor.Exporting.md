@@ -54,7 +54,7 @@ Content/
 
 `Settings.Build.inno` 与 `Settings.Editor.inno` 都不属于 runtime content；Game 只部署经过组合的 `Settings.Project.inno`。Plugin 导出同样不会把宿主项目的 Build/Editor 设置打进 `.iplugin`。
 
-macOS 初始目标是 `osx-arm64`，Windows 初始目标是 `win-x64`。内置 publisher 使用当前 .NET SDK 的 Release、自包含、单文件发布，并把目标平台的 SDL3、BGFX、shader/texture tools 与 BGFX include 收集到 Player 的 `native/`。SDK Host 会被解析为绝对路径：显式 `DOTNET_HOST_PATH` / 架构对应的 `DOTNET_ROOT` 优先，随后检查当前运行时安装根、进程 `PATH`、用户级 `~/.dotnet` 和标准系统安装目录。因此从 macOS GUI 启动 Editor 时不依赖终端注入 `PATH`。当前宿主目标缺少 release native bundle 时会自动调用仓库的 SDL3/BGFX builder；跨宿主导出则要求 `.lib/<product>/<target>` 已由对应目标机器准备好。平台合成发生在 staging 目录，最终目录通过 rename 原子安装，并在替换失败时恢复旧输出。
+macOS 初始目标是 `osx-arm64`，Windows 初始目标是 `win-x64`。内置 publisher 使用当前 .NET SDK 的 Release、自包含、单文件发布，并把目标平台的 SDL3、BGFX、miniaudio、shader/texture tools 与 BGFX include 收集到 Player 的 `native/`。SDK Host 会被解析为绝对路径：显式 `DOTNET_HOST_PATH` / 架构对应的 `DOTNET_ROOT` 优先，随后检查当前运行时安装根、进程 `PATH`、用户级 `~/.dotnet` 和标准系统安装目录。因此从 macOS GUI 启动 Editor 时不依赖终端注入 `PATH`。生成 Support Pack 前必须由对应目标机器在 `.lib/<product>/<target>` 准备全部 release native bundle；跨宿主导出同样只消费已准备的目标产物。平台合成发生在 staging 目录，最终目录通过 rename 原子安装，并在替换失败时恢复旧输出。
 
 ## 公开 API
 

@@ -623,6 +623,13 @@ internal static partial class Program
                 {
                     failures.Add($"{projectRelative}: SDL3 native code is restricted to the SDL3 platform adapter.");
                 }
+                if (targetRelative.Contains("Inno.Native.MiniAudio", StringComparison.Ordinal) &&
+                    !projectRelative.Contains("Inno.Audio.MiniAudio", StringComparison.Ordinal) &&
+                    !projectRelative.Contains("Inno.Native.MiniAudio", StringComparison.Ordinal) &&
+                    !projectRelative.StartsWith("build/toolchains/Inno.Build.Toolchains.MiniAudio", StringComparison.Ordinal))
+                {
+                    failures.Add($"{projectRelative}: miniaudio native code is restricted to the MiniAudio adapter.");
+                }
             }
         }
     }

@@ -58,7 +58,7 @@ public sealed class PlayerSupportPackCatalog
     /// Thrown when no Support Pack is installed for <paramref name="target"/>.
     /// </exception>
     /// <exception cref="InvalidDataException">
-    /// Thrown when the pack is empty, contains build-time payload, or lacks its Player executable.
+    /// Thrown when the pack is empty, contains build-time payload, or lacks its Player executable or native runtimes.
     /// </exception>
     public string Resolve(BuildTargetId target)
     {
@@ -88,8 +88,8 @@ public sealed class PlayerSupportPackCatalog
         if (!File.Exists(executable))
             throw new InvalidDataException($"Player Support Pack '{target}' has no Player executable.");
         string[] requiredNativeFiles = target == BuildTargetId.macOSArm64
-            ? ["libbgfx-shared-lib-release.dylib", "SDL3-release.dylib"]
-            : ["bgfx-shared-lib-release.dll", "SDL3-release.dll"];
+            ? ["libbgfx-shared-lib-release.dylib", "SDL3-release.dylib", "libminiaudio-release.dylib"]
+            : ["bgfx-shared-lib-release.dll", "SDL3-release.dll", "miniaudio-release.dll"];
         foreach (string requiredNativeFile in requiredNativeFiles)
         {
             if (!files.Any(file => string.Equals(

@@ -418,6 +418,19 @@ public sealed class BuildPipelineTests : IDisposable
     }
 
     [Fact]
+    public void SupportPackRejectsMissingMiniAudioRuntime()
+    {
+        string supportPack = Path.Combine(m_supportPackRoot, BuildTargetId.macOSArm64.value);
+        File.Delete(Path.Combine(supportPack, "native", "libminiaudio-release.dylib"));
+        var catalog = new PlayerSupportPackCatalog(m_supportPackRoot);
+
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(
+            () => catalog.Resolve(BuildTargetId.macOSArm64));
+
+        Assert.Contains("libminiaudio-release.dylib", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task PluginBuildIsDeterministicSourceOnlyAndUsesTheInstallContract()
     {
         m_assets.CreateDirectory(AssetPath.Project("Content"));
@@ -523,8 +536,8 @@ public sealed class BuildPipelineTests : IDisposable
         string native = Path.Combine(directory, "native");
         Directory.CreateDirectory(native);
         string[] required = target == BuildTargetId.macOSArm64
-            ? ["libbgfx-shared-lib-release.dylib", "SDL3-release.dylib"]
-            : ["bgfx-shared-lib-release.dll", "SDL3-release.dll"];
+            ? ["libbgfx-shared-lib-release.dylib", "SDL3-release.dylib", "libminiaudio-release.dylib"]
+            : ["bgfx-shared-lib-release.dll", "SDL3-release.dll", "miniaudio-release.dll"];
         foreach (string file in required)
             File.WriteAllBytes(Path.Combine(native, file), [0x49, 0x4E, 0x4E, 0x4F]);
     }
