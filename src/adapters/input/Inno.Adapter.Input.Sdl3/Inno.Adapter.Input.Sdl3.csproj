@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Adapter.Input\Inno.Adapter.Input.csproj" />
+    <ProjectReference Include="..\..\..\services\input\Inno.Input\Inno.Input.csproj" />
+    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Events\Inno.Core.Events.csproj" />
+    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Input\Inno.Core.Input.csproj" />
+    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Mathematics\Inno.Core.Mathematics.csproj" />
+  </ItemGroup>
+</Project>

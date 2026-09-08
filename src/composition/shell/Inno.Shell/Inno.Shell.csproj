@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../foundation/core/Inno.Core.Execution/Inno.Core.Execution.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="../../../runtime/engine/Inno.Runtime/Inno.Runtime.csproj" />
+    <ProjectReference Include="../../../runtime/contracts/Inno.Runtime.Contracts/Inno.Runtime.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\adapters\common\Inno.Adapter\Inno.Adapter.csproj" />
+    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Events\Inno.Core.Events.csproj" />
+    <ProjectReference Include="..\..\..\adapters\input\Inno.Adapter.Input\Inno.Adapter.Input.csproj" />
+    <ProjectReference Include="..\..\..\services\platform\Inno.Platform\Inno.Platform.csproj" />
+    <ProjectReference Include="..\..\..\adapters\rendering\Inno.Adapter.Rendering\Inno.Adapter.Rendering.csproj" />
+    <ProjectReference Include="..\..\..\services\rendering\Inno.Rendering\Inno.Rendering.csproj" />
+  </ItemGroup>
+</Project>

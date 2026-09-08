@@ -10,7 +10,7 @@
 using System;
 using BGCS.Runtime;
 
-namespace Inno.Native.SDL3
+namespace Inno.Native.Sdl3
 {
 	/// <summary>
 	/// TODO: include/SDL_stdinc.h:390: error: size of array 'SDL_dummy_enum' is negative <br/>

@@ -1,6 +1,8 @@
 # Inno.Core.Events
 
-[上一页：Framework](Inno.Core.Framework.md) · [Core 索引](README.md) · [下一页：Coroutines](Inno.Core.Coroutines.md)
+`EventDispatcher(queueCapacity = 65536, flushBudget = 4096)` 提供显式背压。`TryEnqueue` 仅在成功时接受事件，容量不足返回 false；`Enqueue` 则抛出。`pendingCount` 可观测积压；`Flush` 只排空调用开始时的有限前缀，递归 enqueue 留到后续帧。`DiscardPending` 是显式丢弃操作，返回数量，不能用作静默处理关键事件的策略。
+
+[上一页：Diagnostics](Inno.Core.Diagnostics.md) · [Core 索引](README.md) · [下一页：Coroutines](Inno.Core.Coroutines.md)
 
 Events 系统由一个 `EventDispatcher` 和多个有序 `EventHub` 构成。Dispatcher 决定 hub 顺序；Hub 决定监听器优先级，并支持只终止当前 hub 或终止全局链。
 

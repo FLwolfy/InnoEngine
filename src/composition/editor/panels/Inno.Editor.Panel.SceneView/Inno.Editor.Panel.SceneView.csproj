@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
+    <InnoAssemblyScope>Editor</InnoAssemblyScope>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\..\native\Inno.Native.ImGuizmo\Inno.Native.ImGuizmo.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\presentation\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\framework\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\framework\Inno.Editor.Core\Inno.Editor.Core.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\features\Inno.Editor.Rendering\Inno.Editor.Rendering.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\features\Inno.Editor.Scene\Inno.Editor.Scene.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\framework\Inno.Editor.Settings\Inno.Editor.Settings.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\foundation\core\Inno.Core.Identity\Inno.Core.Identity.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\foundation\core\Inno.Core.Mathematics\Inno.Core.Mathematics.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\content\scene\Inno.Scene\Inno.Scene.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\adapters\presentation\Inno.Adapter.Presentation.ImGui.Sdl3\Inno.Adapter.Presentation.ImGui.Sdl3.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\services\rendering\Inno.Rendering\Inno.Rendering.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../content/references/Inno.References/Inno.References.csproj" />
+  </ItemGroup>
+</Project>

@@ -6,7 +6,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Inno.Native.Dll\Inno.Native.Dll.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\Inno.Native.LibraryLoading\Inno.Native.LibraryLoading.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="BGCS.Runtime" Version="1.0.1" PrivateAssets="compile" />

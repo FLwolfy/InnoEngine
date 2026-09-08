@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\rendering\Inno.Adapter.Rendering.Bgfx\Inno.Adapter.Rendering.Bgfx.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Adapter.Presentation\Inno.Adapter.Presentation.csproj" />
+    <ProjectReference Include="..\Inno.Adapter.Presentation.ImGui.Sdl3\Inno.Adapter.Presentation.ImGui.Sdl3.csproj" />
+    <ProjectReference Include="..\..\..\services\rendering\Inno.Rendering\Inno.Rendering.csproj" />
+  </ItemGroup>
+</Project>

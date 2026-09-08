@@ -23,7 +23,7 @@ Inno.Editor.Panel.Global/
 
 Zoom 的持久设置、session 倍率 Module 与三个 Action 作为一个 feature 放在 `Zoom`；其他全局历史、选择和 Panel Action 继续位于 `Actions`。目录表达业务归属，不再按 Runtime/Action/Setting 类型机械拆散同一功能。
 
-- `Inno.Editor.Settings` 只保留机制；本项目拥有 Global、Appearance、Icons 页面和实际字段。
+- `Inno.Editor.Settings` 只保留机制；本项目拥有 Editor、Appearance、Icons 页面和实际字段。
 - `Inno.Editor.Interactions` 只保留路由与 History 机制；本项目拥有宿主默认的 Undo、Redo、Selection 和 Toggle Panel action。
 - 所有类型都是 internal，并由 TypeCache 根据 Attribute 发现。Application 通过项目引用确保程序集被加载。
 - Attribute 与运行时调用都集中使用项目根目录 `GlobalInteractionIds` 中的 `const string`，不散落字符串 literal。Settings path 仍按当前契约使用原始完整字符串。
@@ -34,17 +34,17 @@ Zoom 的持久设置、session 倍率 Module 与三个 Action 作为一个 featu
 
 | 路径 | 对象内容 | 消费者 |
 | --- | --- | --- |
-| `Global/Appearance/Accessibility/Actual Size` | Single 属性 `value` | `EditorZoomModule` |
-| `Global/Appearance/Icons/Scene` | String 属性 `value` | Hierarchy、FileBrowser、Inspector |
-| `Global/Appearance/Icons/GameObject` | String 属性 `value` | Hierarchy、Inspector |
-| `Global/Appearance/Icons/Prefab` | String 属性 `value` | FileBrowser、Inspector |
-| `Global/Appearance/Icons/Layers` | String 属性 `value` | Settings/Inspector presentation |
-| `Global/Appearance/Icons/Folder` | String 属性 `value` | FileBrowser |
-| `Global/Appearance/Icons/File` | String 属性 `value` | FileBrowser fallback |
+| `Editor/Appearance/Accessibility/Actual Size` | Single 属性 `value` | `EditorZoomModule` |
+| `Editor/Appearance/Icons/Scene` | String 属性 `value` | Hierarchy、FileBrowser、Inspector |
+| `Editor/Appearance/Icons/GameObject` | String 属性 `value` | Hierarchy、Inspector |
+| `Editor/Appearance/Icons/Prefab` | String 属性 `value` | FileBrowser、Inspector |
+| `Editor/Appearance/Icons/Layers` | String 属性 `value` | Settings/Inspector presentation |
+| `Editor/Appearance/Icons/Folder` | String 属性 `value` | FileBrowser |
+| `Editor/Appearance/Icons/File` | String 属性 `value` | FileBrowser fallback |
 
 每个 icon 是独立的 `EditorSetting` field，并在自己的 `OnDraw(EditorSettingObject)` 中绘制 ImGui glyph selector。Selector 的关闭预览和弹出选项使用同一个最大 icon slot；每个 glyph 再按 baked font 的真实可见边界居中，因此 File、Folder 与较宽的 Cubes 等轮廓中心保持在同一竖线上，label 也从同一位置开始。消费者直接调用 `EditorSettings.Get("...")`，再读取 `value`；Settings 内核不会解析 icon，也不导出路径常量。
 
-Actual Size field 同样直接绘制选择器，并通过 Settings Modal 的 Apply 进入统一 Undo/Redo。Zoom In/Out 只改变以 actual size 为基准的 session 倍率，Actual Size action 只清除临时倍率；这三个快捷键不会改 `EditorSettings.json`，也不会制造 Settings History。
+Actual Size field 同样直接绘制选择器，并通过 Settings Modal 的 Apply 进入统一 Undo/Redo。Zoom In/Out 只改变以 actual size 为基准的 session 倍率，Actual Size action 只清除临时倍率；这三个快捷键不会改 `Settings.Editor.inno`，也不会制造 Settings History。
 
 ## 内建 Actions
 

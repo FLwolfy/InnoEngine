@@ -62,13 +62,13 @@
 - 发现潜在编译风险时，要在提交说明中显式标注。
 
 ## 10. 目录边界
-- `src/core`, `src/engine`, `src/assets`, `src/editor`, `src/platform`, `build`, `tests`
+- `src/core`, `src/engine`, `src/assets`, `src/render`, `src/editor`, `src/platform`, `build`, `tests`
 - 新文件尽量放置在匹配现有分层与职责目录。
 
 ## 11. Wiki 文档维护
 - API Wiki 统一位于根目录 `docs/`，入口为 `docs/README.md`。
-- Wiki 目录优先映射源码分层：`docs/core`、`docs/assets`、`docs/engine`、`docs/editor`、`docs/platform`；每个分类必须有 `README.md` 索引。
-- 默认每个 `.csproj` 对应一个独立 Markdown 项目页，文件名使用完整项目名，例如 `docs/core/Inno.Core.Reflection.md`。
+- Wiki 目录优先映射源码分层：`docs/core`、`docs/assets`、`docs/engine`、`docs/rendering`、`docs/editor`、`docs/platform`；每个分类必须有 `README.md` 索引。
+- 默认每个 `.csproj` 对应一个独立 Markdown 项目页，文件名使用完整项目名，例如 `docs/core/Inno.Extensibility.Types.md`。
 - 项目页至少包含：职责与边界、依赖/初始化顺序、所有 `public` API、面向派生实现者的重要 `protected` 扩展点、常见工作流、可编译风格示例、错误/生命周期/热重载注意事项、相邻页面导航。
 - API 表格与示例必须以当前源码为依据；不得把 `internal` 实现描述成稳定公开契约。若解释内部机制，应明确标注其非公开性质。
 - 新增、删除、重命名或改变公开 API 行为时，在同一变更中同步对应项目页和分类索引。新增项目时同步创建项目页并加入 `docs/README.md` 的覆盖状态。
@@ -122,5 +122,45 @@
 - 代码审查或清理包含 `version`、`legacy`、`migration`、`compatibility`、`former`、`deprecated` 等名称的实现时，必须先判断其是否只服务于旧数据/API；如果是，应连同测试和文档一起删除，而不是继续扩展。
 
 ## 16. 完成提示音
-- 完成用户要求的代码或文件操作并通过必要验证后，默认播放 `/System/Library/Sounds/Glass.aiff` 作为完成提示音，无需用户在每次任务中重复要求。
+- 在设计阶段等待用户作出会改变方案边界的决策前、最终设计完成后，以及完成用户要求的代码或文件操作并通过必要验证后，默认播放 `/System/Library/Sounds/Glass.aiff` 作为提示音，无需用户在每次任务中重复要求。
 - 如果当前环境无法访问音频设备，应在最终结果中明确说明提示音未能播放；用户明确要求静默时不播放。
+
+## 17. Rendering 强制边界
+- Rendering 的公开设计必须同时满足：跨平台、API 易用、扩展灵活和低耦合。不得以实现便利为由破坏其中任一项。
+- 只有 `Inno.Adapter.Rendering.Bgfx` 可以引用 `Inno.Native.Bgfx` 与 `Inno.Native.Bgfx.Tools`。BGFX handle、View ID、原生指针和 BGFX 枚举不得出现在其他项目的 public/protected API 中。
+- `Inno.Rendering.Core` 必须保持后端中立，且不得引用 Scene、Assets、Editor 或任何具体图形后端。上层模块通过资源描述、能力集合、RenderGraph 和命令编码接口工作。
+- 通用 Graph 不得引用 Rendering 或 ImGui；Rendering 也不得反向引用 ShaderGraph 或 Editor Graph。ShaderGraph 只能作为面向 Rendering 契约的上层编译前端。
+- 手写 Shader 与节点生成 Shader 必须进入同一个 Shader IR、编译、反射、验证和产物缓存链；不得维护第二套节点专用 shader 编译路径。
+- Pipeline、Feature、Pass、Shader Node、GPU 资源与编译产物必须 capability-aware、generation-scoped 且 reload-safe。持久状态只保存 Stable ID 与中立数据，禁止长期保存 collectible ALC 的 `Type`、delegate 或 runtime 对象。
+- Project 脚本扩展只允许使用后端中立 Rendering API。扩展失败必须隔离，候选成功后只能在帧安全点原子切换，并保留 last-good Pipeline、Shader 和 GPU 资源。
+- Rendering Core 只提供图形机制，不得内建 2D、2.5D、3D、PBR、Forward、Deferred、Light、Shadow、Camera、MeshRenderer 或任何具体渲染世界观。所有具体渲染模型必须能够由 Project 脚本或 Plugin 从零组合。
+- Shader、Technique、Material 与 Pipeline 通过开放 Stable ID 契约组合；内核不得维护封闭 Pass Tag、Render Path、资源语义或质量设置名单。
+
+## 18. Plugin 与结构化内容强制边界
+- Project 根目录的 `Plugins` 与 `Assets` 平级。`Assets` 是唯一官方可写创作源；完整 Project 通过 File 菜单的 `Export as Plugin` 直接导出 `.iplugin`，不创建 `PluginDefinitionAsset` 或第二套 package authoring asset。`Plugins/*.iplugin` 是唯一安装源；Folder Plugin、`.zip` Plugin 与其他扩展名均不支持。安装包必须经过完整校验并作为只读 Asset Source Mount 进入现有 Asset Catalog、Importer、依赖图和 Artifact 流程，禁止建立 Plugin 专用资产数据库。
+- File Browser 与所有 Asset mutation API 必须把 `.iplugin` 安装内容视为逻辑只读。外部替换 `.iplugin` 只表示安装内容更新并触发候选事务，不授予 Editor 内写权限；`Library/Plugins` 始终是不可编辑、可完全重建的缓存。
+- `.iplugin` 本质是使用 ZIP 容器格式的本地内容与代码包，不得引入 Package Manager、远程仓库、语义版本解析或平台产物发布系统。Plugin 依赖使用稳定 Plugin ID；导出器根据当前 active Plugin generation 自动声明依赖，并只在明确的 Editor Setting 开启时内嵌扁平、完整、确定性的依赖 `.iplugin`。规范化 source content hash 只用于候选、变化检测与缓存身份。
+- Project `Assets` 中以 `~` 开头的目录仍按普通创作内容导入并参与脚本编译，便于完整开发和验证；Project 导出为 `.iplugin` 时这些目录随源内容进入包。安装后的 Plugin Mount 将其视为必须显式 Import 到 Project 的 Sample 子树；Import 必须完整保留原目录名及全部前导 `~`，导入后按 Project 普通内容运行。任何 Source 中的 `~` 子树都不得进入最终 Player runtime closure。
+- 脚本引用同一 Source 内的资源必须使用 source-local Asset 路径协议，由脚本程序集的 Asset Source 元数据在 Project 开发态与 `.iplugin` 安装态自动解析；禁止在业务脚本中硬编码 Plugin source ID，也禁止为 Rendering 等具体领域建立 source mount 适配分支。
+- Plugin 扩展必须复用现有 `AssemblyDomain.InnoPlugin`、collectible ALC、TypeCache、TypeRegistry 和候选事务。持久状态不得保存 Plugin `Type`、实例或 delegate。
+- 所有结构化资产、Graph、Plugin 清单和 Project Settings 必须使用 `ISerializable`、`SerializableProperty`、Serialization Converter 与 `SerializationManager`。只有 C#、Shader source/include 和普通文档等天然文本允许保持文本格式；禁止为 Rendering、Plugin 或 Settings 建立独立 JSON 持久化旁路。
+- Plugin 可以同时贡献资产、Shader、Pipeline、Importer、Component、Editor 扩展、设置和玩法代码。Manifest 不得维护各领域类型名单；具体扩展继续由稳定 attribute 和 TypeRegistry 自动发现。
+
+## 19. 新系统完成标准
+- 新功能必须先定义清晰的程序集/领域边界与最小公开入口，再实现具体 UI 或平台适配；平台、存储、编译器和 presentation 通过可替换契约隔离，禁止把临时流程堆入 Panel、Application 或静态工具类。
+- 默认一次完成源码、调用方、项目引用、解决方案归类、公开 XML、Wiki、成功/失败/边界测试与必要构建验证。不得留下占位实现、静默 fallback、重复协议或“以后再重构”的妥协路径。
+- 公开 API 必须少而完整；能由引擎可靠推导的信息不得要求用户创建 companion asset、重复填写清单或修改无关调用方。新增公开 API 时必须在交付说明中列出其必要性与稳定语义。
+- 绝对禁止使用 `InternalsVisibleTo`、测试专用后门、反射穿透或扩大 `internal` 成员可见性来简化测试。测试只能通过真实公开契约和可替换 public boundary 验证行为。
+- 新项目和功能文件必须按职责归类，文件名与主类型一致；一个文件只承载紧密相关的契约或实现，不使用含义模糊的 helper/internal 目录，也不把互不相关的类型收进巨型文件。
+
+## 20. Identity、Missing、引用与热重载强制边界
+- 跨 UI、callback、queue、frame、Scene、Asset、Scripting 或 Plugin generation 边界定位 live object 时必须经过 `Inno.Core.Identity`。当前 domain 内瞬时解析使用 `Identity.runtimeId`，持久化、History 和跨代恢复只保存 `Identity.persistentId`；runtime ID 绝不进入 Scene、Prefab、Asset metadata、Settings、Plugin manifest 或 History。
+- Stable Type ID、Plugin/Feature/Importer 等 semantic ID、Artifact key 和 generation handle 各自保持独立语义，不得与 object Identity 混用。领域二级索引可以把 path/semantic key 映射到 persistent ID 或 immutable record，但不能成为跨 generation live object 的第二权威表。
+- Editor ImGui DragDrop 的 native payload 数据必须是源 identity 的 runtime ID；禁止使用随机 token 回查 managed source object。Preview 与 Delivery 都必须通过正确的 `IdentityAllocator` 重新解析并校验 generation；Drop 落盘或记录 History 时转换为 persistent ID。
+- Asset、Script Type、Plugin、Importer、Component/System、Graph node、Settings contribution 或 extension 暂时不可用时必须保留 Missing state：原 persistent ID、Stable ID、结构位置、property bytes、依赖和中立 extension state均不得丢失。Missing 与 null/Unassigned 必须在 API 和 UI 中严格区分。
+- 同一 identity/type/plugin 恢复后必须通过统一 candidate/recovery transaction 在 owner-thread safe point 原子重建；失败保留原 Missing 与诊断。不得让 Assets、Scene、Scripting、Plugins、Graph 或各 Panel 分别实现互不兼容的 resolver、placeholder 生命周期或恢复事务。
+- reload-safe Undo/Redo 只能保存 stable protocol kind、persistent ID、Stable ID、结构值和中立 bytes；不得捕获 runtime object、`Type`、delegate、extension instance 或 ALC。暂时 Missing 只能成为可恢复 barrier，不能丢弃、跳过或移动栈指针；恢复后原操作应自动重新可用。
+- 所有可能包含 Asset/Object reference 的序列化必须从 owner 取得完整 `SerializationContext`。除经类型与测试证明完全 context-free 的纯值图外，业务代码禁止直接从 `SerializationContext.empty` 临时拼接 resolver；缺少 required resolver 必须在 composition/startup 失败，不能延迟到 Play、Undo 或 recovery 才爆出。
+- Scripting、Plugin、Asset type、Serializer 和 extension generation 必须进入统一 candidate transaction。旧 collectible ALC 的成功退休必须执行 Full GC → `GC.WaitForPendingFinalizers()` → Full GC，并由弱 monitor 确认全部 context 不可达；在此之前 reload 不得报告 Success，也不得开始新的 reload、Play、Build 或 Export。
+- unload verification 的 timeout 只能触发明确异常和 `Faulted`，绝不能清空仍 Pending 的 monitor 后继续。失败必须列出 module/domain/scope/generation；Faulted 进程禁止继续 generation transaction，需完整重启 Host。static/event/task/thread/AsyncLocal/GCHandle/native callback/Editor transient state 等旧 generation 强引用必须被测试覆盖。
+- 完整规范、目标 API、当前差距和测试矩阵见 `docs/architecture/IDENTITY_REFERENCE_RELOAD_STANDARD.md`；修改 Identity、Scripting、Plugins、Assets、Scene、Editor Interactions/History 或任何 collectible extension 时必须同步核对此页。

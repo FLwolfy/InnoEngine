@@ -1,40 +1,58 @@
 # InnoEngine Wiki
 
-这里是 InnoEngine 的源码级 API Wiki。文档按 `src` 下的程序集边界组织；每个项目页同时说明职责、初始化方式、公开 API、常见工作流和易错点。
+本文档按当前程序集与 bounded context 组织。公开契约以源码和英文 XML 为准；Wiki 解释 owner、依赖方向、组合方式和生命周期。历史项目、旧 namespace 和兼容入口不在 Wiki 中保留。
 
-> 当前详细覆盖 Core、Assets 与 Editor；Engine、Platform 与 Native 会沿用相同结构继续补充。
+## 分类入口
 
-## 快速入口
+| 分类 | 稳定职责 |
+| --- | --- |
+| [Core](core/README.md) | 无业务世界观的基础设施 |
+| [Extensibility](extensibility/README.md) | collectible module generation、Stable Type ID 与 Registry snapshot |
+| [Scripting](scripting/README.md) | 脚本 API、编译与原子 reload |
+| [Assets](assets/README.md) | Player-safe runtime assets 与 authoring pipeline |
+| [References](references/README.md) | 跨领域持久引用、Missing 与恢复事务 |
+| [Input](input/README.md) | 每 Session 的物理输入快照、脚本 façade 与 SDL3 adapter |
+| [Storage](storage/README.md) | 沙箱化应用持久数据契约、Runtime Subsystem 与文件系统 adapter |
+| [Animation](animation/README.md) | 后端中立 Clip、采样、混合、事件、资产与 Runtime Subsystem |
+| [Audio](audio/README.md) | 后端中立播放/Mixer 契约、Runtime、资产与 MiniAudio adapter |
+| [Plugins](plugins/README.md) | Plugin manifest、安装源、只读 mount 与候选激活 |
+| [Scene](scene/README.md) | SceneWorld、GameBehavior、GameSystem、Scene/Prefab asset integration |
+| [Rendering](render/README.md) | 后端中立 Rendering、目标资产、BGFX 与 ShaderGraph |
+| [Platform](platform/README.md) | 中立窗口契约与 SDL3 adapter |
+| [Runtime](runtime/README.md) | Subsystem Contracts、声明生成器、默认装配、EngineHost、RuntimeSession 与 Player |
+| [Editor](editor/README.md) | Editor feature、Panel、Play Mode、Diagnostics 与 Export UI |
+| [Build](build/README.md) | Build Pipeline、平台 target、Support Pack 与 toolchain |
+| [Native](native/README.md) | 原生绑定与动态库加载 |
+| [Architecture](architecture/README.md) | Foundation、Content/Services/Runtime、Adapter、Composition 的边界，以及 Identity、Missing、Undo/Redo 与 GC-safe reload 标准 |
+| [Architecture Tooling](tooling/README.md) | 可执行架构规则 |
+| [Issues](issues/README.md) | 唯一问题台账、审查记录与整改规格 |
 
-| 分类 | 内容 | 状态 |
-| --- | --- | --- |
-| [Core](core/README.md) | 程序集、反射、序列化、框架、事件、协程、任务、数学、存储等基础设施 | 已完成 |
-| [Assets](assets/README.md) | 资产门面、资产模型、文件索引、Importer、序列化桥接与内置资产类型 | 已完成 |
-| [Engine](engine/README.md) | Scene、Rendering 等运行时能力 | 部分完成 |
-| [Editor](editor/README.md) | 编辑器交互契约、[Global/Settings](editor/Inno.Editor.Panel.Global.md)、领域 feature、ImGui、Scripting 与宿主 | 已完成 |
-| [Platform](platform/README.md) / Native | 窗口、图形后端与原生集成 | 部分完成 |
+## 核心依赖方向
 
-## 推荐阅读路线
+```text
+EditorHost : Shell / GamePlayerHost : Shell / Build CLI
+        ↓ compose through neutral catalogs
+Default Adapter Implementations / Bundled Plugins
+        ↓
+Content / Services / Runtime
+        ↓
+Foundation (Extensibility / Core / Scripting API)
 
-如果想理解引擎启动与扩展发现，建议依次阅读：
+Native Bindings ← only Adapters / Toolchains / native tests
+```
 
-1. [Inno.Core.Assemblies](core/Inno.Core.Assemblies.md)：活动程序集目录与事务式 Reload。
-2. [Inno.Core.Reflection](core/Inno.Core.Reflection.md)：TypeCache、Stable Type ID 与通用 TypeRegistry。
-3. [Inno.Core.Scripting](core/Inno.Core.Scripting.md)：每项目显式脚本 API 清单。
-4. [Inno.Core.Serialization](core/Inno.Core.Serialization.md)：属性序列化与 Converter 扩展。
-5. [Inno.Assets.Loader](assets/Inno.Assets.Loader.md)：Importer 发现、导入缓存与加载。
-6. [Inno.Assets](assets/Inno.Assets.md)：应用层使用的资产系统门面。
+Core 不引用业务领域；Build 不引用 Editor；Runtime 不引用 Build/Editor；Player closure 不包含 Compiler、authoring pipeline 或 toolchain。违反关系由 `Inno.Tooling.Architecture` 阻止。引擎长期分层与新系统归属以
+[完整项目架构 Overview 与本体收口方案](architecture/ENGINE_ARCHITECTURE_OVERVIEW.md)为准。
+所有跨域 live object 索引、可恢复引用、Missing、Undo/Redo 与 collectible generation 的完成语义以
+[Identity、可恢复引用与热重载强制标准](architecture/IDENTITY_REFERENCE_RELOAD_STANDARD.md)为准。
+本轮代码、公开边界和逐项验证见[统一收口实施记录](architecture/ENGINE_CONSOLIDATION_IMPLEMENTATION.md)；
+新增 Core.Execution、Runtime.Contracts、Runtime.Generators 和 Engine.Default 均有独立项目页。
+最新本轮结果见[2026-09-08 实现交付与集中验收](architecture/ENGINE_CLOSURE_IMPLEMENTATION_2026_09_08.md)；
+新增 [Architecture CLI 测试项目](tooling/Inno.Tooling.Architecture.Tests.md)已纳入 `tests/tooling`、Solution 和项目文档。
 
-如果只想开始写游戏脚本，通常先看 [Framework](core/Inno.Core.Framework.md)、[Mathematics](core/Inno.Core.Mathematics.md) 和 [Assets](assets/README.md) 即可。
+## 当前格式与状态
 
-## 文档约定
-
-- 文中的 API 名称与当前源码一致，包括引擎已有的 Unity 风格小写属性，例如 `isInitialized`、`deltaTime`。
-- “公开 API”包括 `public` 类型/成员，也包括面向派生类实现者的重要 `protected` 扩展点。
-- 标为 `internal` 的实现只在解释运行机制确有必要时出现，不作为稳定调用契约。
-- 示例默认使用 .NET 9、nullable enabled，并假定相关 Manager 已按页面说明初始化。
-- Wiki 描述的是当前工作树；若源码行为和 Wiki 冲突，以源码为准，并应在同一变更中修正文档。
-
-## 源码与 Wiki 的关系
-
-Wiki 不替代公开 API 上的英文 XML 注释。XML 注释回答“这个成员是什么”，Wiki 重点回答“何时使用、如何组合、生命周期如何衔接，以及有哪些约束”。维护方法见根目录 [`AGENTS.md`](../AGENTS.md) 的 Wiki 章节。
+- Project Settings、Editor Settings、Build Profile、Plugin Manifest、Catalog 与 Artifact 只支持当前源码格式。
+- `Assets` 是唯一可写创作源；`Plugins` 是只读安装源；`Library` 可完全重建。
+- API 变更必须同步源码 XML、所属项目页和索引。
+- 当前 C01–C18 收口状态在[最新验收报告](architecture/ENGINE_CLOSURE_IMPLEMENTATION_2026_09_08.md)维护；此前编号和历史证据保留于[2026-08-31 台账](issues/2026-08-31-complete-issue-register.md)。

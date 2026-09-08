@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\extensibility\Inno.Extensibility.Modules\Inno.Extensibility.Modules.csproj" />
+    <ProjectReference Include="../Inno.Core.Diagnostics/Inno.Core.Diagnostics.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Core.Execution\Inno.Core.Execution.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+</Project>

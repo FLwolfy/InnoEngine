@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../runtime/generators/Inno.Runtime.Generators/Inno.Runtime.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="../../../services/audio/Inno.Audio.Runtime/Inno.Audio.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="../../../services/input/Inno.Input.Runtime/Inno.Input.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="../../../services/storage/Inno.Storage.Runtime/Inno.Storage.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="../../../content/animation/Inno.Animation.Runtime/Inno.Animation.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="../../../content/scene/Inno.Scene/Inno.Scene.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="../../../foundation/core/Inno.Core.Diagnostics/Inno.Core.Diagnostics.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../runtime/contracts/Inno.Runtime.Contracts/Inno.Runtime.Contracts.csproj" />
+    <ProjectReference Include="../../../runtime/engine/Inno.Runtime/Inno.Runtime.csproj" />
+    <ProjectReference Include="../../../adapters/common/Inno.Adapter/Inno.Adapter.csproj" />
+    <ProjectReference Include="../../../adapters/input/Inno.Adapter.Input/Inno.Adapter.Input.csproj" />
+    <ProjectReference Include="../../../content/assets/Inno.Assets/Inno.Assets.csproj" />
+    <ProjectReference Include="../../../services/audio/Inno.Audio/Inno.Audio.csproj" />
+    <ProjectReference Include="../../../services/rendering/Inno.Rendering.Runtime/Inno.Rendering.Runtime.csproj" />
+  </ItemGroup>
+</Project>

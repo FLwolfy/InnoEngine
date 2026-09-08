@@ -11,6 +11,7 @@ Inno.Editor.Core/
 ├─ Runtime/
 │  ├─ EditorContext.cs
 │  ├─ EditorFrame.cs
+│  ├─ EditorStatistics.cs
 │  ├─ EditorRuntime.cs
 │  ├─ EditorState.cs
 │  └─ EditorLayoutSettings.cs
@@ -24,8 +25,7 @@ Inno.Editor.Core/
 │  └─ IEditorPanelReloadState.cs
 ├─ Reloading/
 │  ├─ EditorReloadCoordinator.cs
-│  ├─ IEditorReloadParticipant.cs
-│  └─ IEditorReloadTransaction.cs
+│  └─ IEditorReloadParticipant.cs
 └─ Properties/ScriptingApi.cs
 ```
 
@@ -37,9 +37,12 @@ Inno.Editor.Core/
 
 | API | 说明 |
 | --- | --- |
-| `EditorContext` | 对扩展只公开只读项目根目录、最新 `EditorFrame` 与焦点等被动状态；不提供 service locator 或持久化写入口。 |
+| `EditorContext` | 对扩展公开只读项目根目录、最新 `EditorFrame`、焦点和窄作用域的帧统计交换；不提供 service locator 或持久化写入口。 |
 | `EditorLayoutSettings` | internal 实现；协调 `editor.ini` 中互不覆盖的 ImGui layout 与可读具名 section。它不会成为跨项目公开依赖。 |
 | `EditorFrame` | 一帧的 `deltaTime`、`totalTime`、`isFocused` 不可变快照。 |
+| `EditorStatisticId` / `EditorStatisticGroupId` | 跨 Panel、Module 和 Plugin 唯一的稳定统计项/分组标识。 |
+| `EditorStatistic` | 只保存 stable ID、显示顺序和字符串值的不可变贡献，不保留 Plugin 类型或实例。 |
+| `EditorStatistics` | 当前帧发布、同 ID 替换和上一完成帧 handoff 的顺序无关交换。 |
 | `EditorRuntime` | 表现无关的 `Start`、`Update(EditorFrame)`、`Dispose` 抽象。 |
 
 `EditorContext` 是由 Application host 创建并注入扩展的中立数据，不承担路由：
@@ -47,11 +50,23 @@ Inno.Editor.Core/
 ```csharp
 Console.WriteLine(context.projectDirectory);
 Console.WriteLine(context.frame.totalTime);
+context.statistics.Publish(new EditorStatistic(
+    new EditorStatisticId("sample.animation.playing-clips"),
+    new EditorStatisticGroupId("sample.animation"),
+    "Animation",
+    "Playing Clips",
+    playingClipCount.ToString()));
 ```
 
-构造函数、`layoutPath`、`imguiLayout`、section 读写、ImGui layout 更新和 Save 是 CLR host 边界。由于 Application 与 Interactions 是独立程序集，这些成员是 public CLR API，但全部标记 `ScriptingApiIgnore`，不会进入 EditorScripts facade。测试若要验证未公开实现细节只能使用反射；Editor 项目不使用 `InternalsVisibleTo`。EditorScripts 不能创建第二个 Context、读取原始 section、覆盖其他扩展状态或主动写入 `editor.ini`。
+Statistics 是唯一允许写入 Context 的帧数据通道，不是任意 service bag。每次 runtime
+推进 `EditorFrame` 时，当前贡献成为上一完成帧快照并开始新的 current frame；读取时 current
+覆盖同 ID 的 completed 值。因此 Stats Panel 先于或后于某个扩展绘制都不会丢数据，停止贡献
+后值最多保留一个 handoff frame。值已经是面向人的字符串，采样器、Profiler 历史和持久配置
+仍应由各自领域拥有。
 
-这些 API 只处理 Module/Panel 项目状态与 Dear ImGui 使用的 `editor.ini`。业务设置由 [Inno.Editor.Settings](Inno.Editor.Settings.md) 独立写入项目根 `EditorSettings.json`。业务扩展若需要 Settings、Action/Menu/Selection，仍应在构造函数中接收 `EditorSettings` 或 `EditorInteractions`，而不是向 `EditorContext` 添加新服务属性。
+构造函数、`layoutPath`、`imguiLayout`、section 读写、ImGui layout 更新和 Save 是 CLR host 边界。由于 Application 与 Interactions 是独立程序集，这些成员是 public CLR API，但全部标记 `ScriptingApiIgnore`，不会进入 EditorScripts facade。测试通过真实公开契约验证，不允许反射穿透、测试后门或 `InternalsVisibleTo`。EditorScripts 不能创建第二个 Context、读取原始 section、覆盖其他扩展状态或主动写入 `editor.ini`。
+
+这些 API 只处理 Module/Panel 项目状态与 Dear ImGui 使用的 `editor.ini`。业务设置由 [Inno.Editor.Settings](Inno.Editor.Settings.md) 通过 SerializationRegistry 写入项目根 `Settings.Editor.inno`。业务扩展通过构造注入接收正式服务，不向 `EditorContext` 添加全局 service locator。
 
 ## Module
 
@@ -85,12 +100,22 @@ public sealed class AnimationModule : EditorModule
 
 `EditorModule` 由扩展 Catalog 通过 `IDisposable` 统一释放，但 `Dispose` 是显式接口实现，不是派生类型的公开成员。Module 若拥有 Registry、watcher 或其他资源，只重写 `protected virtual OnDispose()`；Catalog 会在 Stop 且 generation 离开活动状态后调用一次。`IDisposable` 在这里仍有明确用途：它是 Catalog 与所有 Module 共用的基础设施 teardown 协议，而不是 feature 自己暴露或手工调用的生命周期 API。
 
+启动前即建立 Module 所有权：`OnStart` 失败也必须执行 `OnStop` 补偿。只有 Start 成功后才可 Update；
+Stop 开始后不再 Update。完成的 Stop 幂等，`IDisposable.Dispose` 会补停尚未停止的 Module，再执行 OnDispose。
+`RetirementPendingException` 不表示已释放：Stop/Dispose 必须保留未完成步骤供 owner 重试；不能提前标 disposed。
+普通 Stop/Dispose 错误在完成其余清理后聚合报告。Catalog 使用 Core 的有界退休协议，超时 Fault 并要求重启。
+
 Module、Panel、Action、Menu source 和 Drop handler 可以在唯一构造函数中请求 `EditorContext`、`EditorInteractions` 或一个无歧义的已发现 `EditorModule`。不存在手工注册表。
 
 ## Panel
 
 ```csharp
-[EditorPanel("animation.graph", "Animator", order: 500, defaultOpen: true)]
+[EditorPanel(
+    "animation.graph",
+    "Animator",
+    order: 500,
+    defaultOpen: true,
+    menuPath: "Authoring")]
 public sealed class AnimatorPanel(AnimationModule animation) : EditorPanel
 {
     protected override void OnDraw(EditorContext context)
@@ -102,7 +127,11 @@ public sealed class AnimatorPanel(AnimationModule animation) : EditorPanel
 
 `EditorPanel.useWindowPadding` 默认返回 `true`，表示表现后端应使用标准窗口内边距。需要让背景、Tree 行或根滚动区域与 Dock body 边缘对齐的 Panel 可以重写为 `false`；正文仍可通过表现层的统一 content region 恢复恰好一层内边距。这是 Panel 的布局策略，不要求业务代码修改或重置滚动位置。
 
-`EditorPanelAttribute.id` 必须稳定且全局唯一；它用于 Panel 菜单、窗口 identity 和 reload 状态。`title` 只用于显示，可以变化。
+`EditorPanel.allowScrolling` 默认返回 `true`。Scene/Game/Graph 等自行管理画布导航的
+全画布 Panel 应返回 `false`，Host 会同时禁用窗口滚动条和鼠标滚动范围。普通列表、
+Inspector 与文档 Panel 保持默认值，并自动使用 Editor 的全局 overlay scrollbar。
+
+`EditorPanelAttribute.id` 必须稳定且全局唯一；它用于 Panel 菜单、窗口 identity 和 reload 状态。`title` 只用于显示，可以变化。可选 `menuPath` 是 `Panel` 主菜单下的开放斜杠分类路径，`separatorBefore` 可在最终分类内开始新的视觉分组；Panel 分类不由 Host 维护封闭名单。
 
 运行时始终按 ID 迁移 `isOpen`。需要迁移更多中立状态时实现 `IEditorPanelReloadState`，只返回不引用插件对象的字节：
 
@@ -114,6 +143,9 @@ public void RestoreReloadState(ReadOnlyMemory<byte> state)
     m_stateBytes = state.ToArray();
 }
 ```
+
+Attach 同样先记录所有权：`OnAttach` 失败会调用 `OnDetach` 补偿，只有补偿成功才能把 Panel 隔离后继续。
+Detach 完成后幂等；Pending 时 Panel 禁止 Draw，资源和依赖保持受拥有。不是把失败 Attach 当作从未启动。
 
 ## Modal
 
@@ -143,24 +175,25 @@ public sealed class AnimationBakeModal(AnimationModule animation) : EditorModal
 
 ## Reload coordination
 
-`EditorReloadCoordinator` 是 Core 中唯一的跨 feature reload 协调入口。`Register(IEditorReloadParticipant)` 只弱持有参与者；registration 被释放或参与者被回收后不会残留领域实例。Core 不知道 Scene、Missing、Panel 或脚本编译，仅编排中立事务。
+`EditorReloadCoordinator` 是 Core 中唯一的跨 feature reload 协调入口。Coordinator 的索引只弱持有参与者；`Register(IEditorReloadParticipant)` 返回的 registration lease 则强持有参与者，调用方必须在 feature 生命周期内保存该 lease。释放 lease 会先注销再解除强引用；如果整个 feature 与 lease 一起失去所有权，弱索引也不会阻止它们被回收。Core 不知道 Scene、Missing、Panel 或脚本编译，仅编排中立事务。
 
-协调顺序固定为：全部 `PrepareForActivation` → Assembly candidate `Activate` → 可选外部状态同步 → 全部 `Apply` → Assembly `Complete` → 各 participant cleanup-only `Complete`。提交前任一步失败时，按反序恢复 feature 结构、Assembly generation、外部状态和 previous feature state。Assembly `Complete` 后的 participant cleanup 异常只能被隔离记录，因为发布已经不可回滚。
+协调顺序固定为：全部 `PrepareForActivation` → Assembly candidate `Activate` → 可选外部状态同步 → 全部 `Apply` → Assembly `Complete` → 各 participant cleanup-only `Complete`。Assembly 与外部 Asset/Settings 构成同一个 publication 边界；提交前失败先逆序恢复 feature 结构，再恢复 Assembly 和外部 resolver，最后逆序恢复 previous feature 属性。外部恢复不能放到最后一个领域 participant，否则 Scene 会用候选 Asset resolver 恢复旧属性。提交后普通清理异常聚合抛出并 Fault，不能伪回滚，也不能只记日志继续。
+任何阶段的未退休信号都不得被普通异常聚合掩盖：共享 coordinator 保留未完成事务，停止后续卸载/恢复，封锁 Play、Build、Export 和下一次 reload。
 
 | API | 说明 |
 | --- | --- |
-| `EditorReloadCoordinator.Register` | 弱注册一个拥有 generation-bound live state 的领域参与者。 |
+| `EditorReloadCoordinator.Register` | 在 Coordinator 中弱注册领域参与者，并返回负责强生命周期所有权的 registration lease。 |
 | `EditorReloadCoordinator.Execute` | 把 prepared `AssemblyReloadSession` 与所有领域事务作为一次原子切换执行。 |
 | `EditorReloadCoordinator.RefreshDiagnostics` | 请求所有存活领域按当前状态重新发布诊断。 |
 | `IEditorReloadParticipant.Capture` | 只捕获事务，不在 capture 阶段修改 live state。 |
 | `IEditorReloadParticipant.RefreshDiagnostics` | 重建当前状态诊断；不依赖某一种 reload 请求。 |
-| `IEditorReloadTransaction` | 定义 prepare、apply、rollback、previous-state restore 与 cleanup-only complete。 |
+| `IGenerationChange`（来自 `Inno.Extensibility.Reload`） | 领域 Capture 返回的统一 prepare、apply、结构回滚、旧状态恢复与 cleanup-only complete 协议；没有 Editor 专属事务副本。 |
 
 Scripting 负责准备 assembly session 并调用协调器；Scene 独立注册自己的 participant。因此二者都只依赖 Core，不互相引用。
 
 ## Scripting API
 
-EditorScripts 使用唯一逻辑命名空间 `InnoEditor.Core`。它导出 Context、Frame、Runtime、Module、Panel、Modal、`EditorState` 和 Panel Reload State 接口；不导出 assembly reload coordinator、layout reader/writer 或 JSON DOM。脚本 Module/Panel 只能实现 protected `OnStart/OnUpdate/OnStop`、`OnAttach/OnDetach/OnDraw` 与 `Capture/Restore` hooks，不能直接调用标记为 `ScriptingApiIgnore` 的 Start、Update、Stop、Attach、Detach 或 Draw；所有脚本必须显式写普通 `using`。
+EditorScripts 使用唯一逻辑命名空间 `InnoEditor.Core`。它导出 Context、Frame、frame-scoped Statistics、Runtime、Module、Panel、Modal、`EditorState` 和 Panel Reload State 接口；不导出 assembly reload coordinator、layout reader/writer 或 JSON DOM。脚本 Module/Panel 只能实现 protected `OnStart/OnUpdate/OnStop`、`OnAttach/OnDetach/OnDraw` 与 `Capture/Restore` hooks，不能直接调用标记为 `ScriptingApiIgnore` 的 Start、Update、Stop、Attach、Detach 或 Draw；所有脚本必须显式写普通 `using`。
 
 ## Module/Panel 项目状态
 
@@ -194,3 +227,5 @@ Scene document 的公开查询/工作流面位于 `Inno.Editor.Scene.IEditorScen
 - 不向 Context 添加 `IWhateverService` 集合或可变注册接口。
 - 不在 Core 引用 ImGui。
 - Action/Menu/Drag/Selection 统一见 [Interactions](Inno.Editor.Interactions.md)。
+
+EditorReloadCoordinator.Execute(reload, externalChange) 的可选参数是 Foundation IGenerationChange，不是 activate/restore Action 对。Editor participant 的 Capture 在共享 gate 的 Prepare 阶段发生；外部 Plugin/Settings change 与 Editor 状态共同提交/回滚，Pending 和 timeout 穿透诊断隔离。没有公开测试后门或按具体领域硬编码的 coordinator。

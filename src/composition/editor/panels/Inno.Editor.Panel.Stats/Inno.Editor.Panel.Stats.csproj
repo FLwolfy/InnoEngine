@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
+    <InnoAssemblyScope>Editor</InnoAssemblyScope>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\presentation\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\adapters\presentation\Inno.Adapter.Presentation.ImGui.Sdl3\Inno.Adapter.Presentation.ImGui.Sdl3.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\framework\Inno.Editor.Core\Inno.Editor.Core.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+</Project>

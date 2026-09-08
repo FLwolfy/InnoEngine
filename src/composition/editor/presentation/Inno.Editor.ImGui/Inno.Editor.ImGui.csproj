@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
+    <InnoAssemblyScope>Editor</InnoAssemblyScope>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\foundation\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\foundation\core\Inno.Core.Execution\Inno.Core.Execution.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\adapters\presentation\Inno.Adapter.Presentation.ImGui.Sdl3\Inno.Adapter.Presentation.ImGui.Sdl3.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\foundation\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" />
+    <ProjectReference Include="..\..\framework\Inno.Editor.Core\Inno.Editor.Core.csproj" />
+    <ProjectReference Include="..\..\framework\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" />
+    <ProjectReference Include="..\..\..\..\foundation\core\Inno.Core.Identity\Inno.Core.Identity.csproj" />
+    <ProjectReference Include="..\..\..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" />
+    <ProjectReference Include="..\..\..\..\foundation\core\Inno.Core.Events\Inno.Core.Events.csproj" />
+    <ProjectReference Include="..\..\..\..\foundation\core\Inno.Core.Logging\Inno.Core.Logging.csproj" />
+  </ItemGroup>
+</Project>

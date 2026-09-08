@@ -9,7 +9,7 @@
  *
  */
 
-using Inno.Native.Dll;
+using Inno.Native.LibraryLoading;
 
 namespace Inno.Native.Bgfx;
 

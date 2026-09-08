@@ -1,15 +1,24 @@
 namespace Inno.Native.ImGuizmo
 {
     using BGCS.Runtime;
-    using Inno.Native.Dll;
+    using Inno.Native.LibraryLoading;
     using System.Diagnostics;
 
-    public static class ImGuizmoConfig
+    /// <summary>
+    /// Provides the generated native ImGuizmo ABI surface used exclusively by the editor adapter.
+    /// </summary>
+public static class ImGuizmoConfig
     {
-        public static bool AotStaticLink;
+        /// <summary>
+        /// The aot static link value used as part of this type's public representation.
+        /// </summary>
+public static bool AotStaticLink;
     }
 
-    public static unsafe partial class ImGuizmo
+    /// <summary>
+    /// Provides the generated native ImGuizmo ABI surface used exclusively by the editor adapter.
+    /// </summary>
+public static unsafe partial class ImGuizmo
     {
 #if DEBUG
         private const string DLL_NAME = "libcimguizmo-debug";
@@ -34,7 +43,13 @@ namespace Inno.Native.ImGuizmo
             InitApi(new NativeLibraryContext(handle));
         }
 
-        public static string GetLibraryName()
+        /// <summary>
+        /// Retrieves the requested library name value from current authoritative state.
+        /// </summary>
+        /// <returns>
+        /// The validated text representation owned by the caller.
+        /// </returns>
+public static string GetLibraryName()
         {
             return "cimguizmo";
         }

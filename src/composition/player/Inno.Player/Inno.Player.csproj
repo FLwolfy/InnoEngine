@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Inno.Player</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../foundation/core/Inno.Core.Execution/Inno.Core.Execution.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="../../default/Inno.Engine.Default/Inno.Engine.Default.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\adapters\common\Inno.Adapter\Inno.Adapter.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\adapters\default\Inno.Adapter.Default\Inno.Adapter.Default.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\shell\Inno.Shell\Inno.Shell.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\content\animation\Inno.Animation.Runtime\Inno.Animation.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\content\animation\Inno.Animation\Inno.Animation.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\services\audio\Inno.Audio.Runtime\Inno.Audio.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\services\audio\Inno.Audio\Inno.Audio.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\content\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Events\Inno.Core.Events.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Logging\Inno.Core.Logging.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Settings\Inno.Core.Settings.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\services\input\Inno.Input.Runtime\Inno.Input.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\services\platform\Inno.Platform\Inno.Platform.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\content\references\Inno.References\Inno.References.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\services\rendering\Inno.Rendering\Inno.Rendering.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\services\rendering\Inno.Rendering.Runtime\Inno.Rendering.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\runtime\engine\Inno.Runtime\Inno.Runtime.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\content\scene\Inno.Scene\Inno.Scene.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\services\storage\Inno.Storage.Runtime\Inno.Storage.Runtime.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../foundation/core/Inno.Core.Diagnostics/Inno.Core.Diagnostics.csproj" />
+  </ItemGroup>
+</Project>

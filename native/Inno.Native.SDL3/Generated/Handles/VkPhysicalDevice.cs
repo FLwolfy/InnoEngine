@@ -12,7 +12,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using BGCS.Runtime;
 
-namespace Inno.Native.SDL3
+namespace Inno.Native.Sdl3
 {
 	[NativeName(NativeNameType.Typedef, "VkPhysicalDevice")]
 	#if NET5_0_OR_GREATER

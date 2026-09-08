@@ -1,19 +1,27 @@
-﻿using System;
+using System;
 
 namespace Inno.Native.ImGui
 {
     /// <summary>
     /// A structure representing a dynamic array for unmanaged types.
     /// </summary>
-    /// <typeparam name="T">The type of elements in the vector, must be unmanaged.</typeparam>
+    /// <typeparam name="T">
+    /// The type of elements in the vector, must be unmanaged.
+    /// </typeparam>
     public unsafe struct ImVector<T> where T : unmanaged
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="ImVector{T}"/> struct with the specified size, capacity, and data pointer.
         /// </summary>
-        /// <param name="size">The initial size of the vector.</param>
-        /// <param name="capacity">The initial capacity of the vector.</param>
-        /// <param name="data">Pointer to the initial data.</param>
+        /// <param name="size">
+        /// The initial size of the vector.
+        /// </param>
+        /// <param name="capacity">
+        /// The initial capacity of the vector.
+        /// </param>
+        /// <param name="data">
+        /// Pointer to the initial data.
+        /// </param>
         public ImVector(int size, int capacity, T* data)
         {
             this.size = size;
@@ -29,9 +37,15 @@ namespace Inno.Native.ImGui
         /// <summary>
         /// Gets or sets the element at the specified index.
         /// </summary>
-        /// <param name="index">The zero-based index of the element to get or set.</param>
-        /// <returns>The element at the specified index.</returns>
-        /// <exception cref="IndexOutOfRangeException">Thrown when the index is out of range.</exception>
+        /// <param name="index">
+        /// The zero-based index of the element to get or set.
+        /// </param>
+        /// <returns>
+        /// The element at the specified index.
+        /// </returns>
+        /// <exception cref="IndexOutOfRangeException">
+        /// Thrown when the index is out of range.
+        /// </exception>
         public T this[int index]
         {
             get
@@ -112,7 +126,9 @@ namespace Inno.Native.ImGui
         /// <summary>
         /// Grows the capacity of the vector to at least the specified value.
         /// </summary>
-        /// <param name="newCapacity">The new capacity.</param>
+        /// <param name="newCapacity">
+        /// The new capacity.
+        /// </param>
         public void Grow(int newCapacity)
         {
             if (newCapacity > capacity)
@@ -124,7 +140,9 @@ namespace Inno.Native.ImGui
         /// <summary>
         /// Ensures that the vector has at least the specified capacity.
         /// </summary>
-        /// <param name="size">The minimum capacity required.</param>
+        /// <param name="size">
+        /// The minimum capacity required.
+        /// </param>
         public void EnsureCapacity(int size)
         {
             if (size > capacity)
@@ -136,7 +154,9 @@ namespace Inno.Native.ImGui
         /// <summary>
         /// Resizes the vector to the specified size.
         /// </summary>
-        /// <param name="newSize">The new size of the vector.</param>
+        /// <param name="newSize">
+        /// The new size of the vector.
+        /// </param>
         public void Resize(int newSize)
         {
             EnsureCapacity(newSize);
@@ -154,7 +174,9 @@ namespace Inno.Native.ImGui
         /// <summary>
         /// Adds an element to the end of the vector.
         /// </summary>
-        /// <param name="value">The value to add.</param>
+        /// <param name="value">
+        /// The value to add.
+        /// </param>
         public void PushBack(T value)
         {
             EnsureCapacity(size + 1);

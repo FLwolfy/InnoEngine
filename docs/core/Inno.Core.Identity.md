@@ -1,8 +1,8 @@
 # Inno.Core.Identity
 
-[上一页：Job](Inno.Core.Job.md) · [Core 索引](README.md) · [下一页：Input](Inno.Core.Input.md)
+[上一页：Job](Inno.Core.Jobs.md) · [Core 索引](README.md) · [下一页：Input](Inno.Core.Input.md) · [跨域引用与热重载标准](../architecture/IDENTITY_REFERENCE_RELOAD_STANDARD.md)
 
-Identity 模块为引擎对象提供两个层次的身份：跨保存/重载保持的 `persistentId`，以及只在当前 Registry 注册期间有效的 `runtimeId`。对象通过 `IIdentityObject` 获得弱关联的身份存储，无需继承特定基类。
+Identity 模块为引擎对象提供两个层次的身份：跨保存/重载保持的 `persistentId`，以及只在当前 Registry 注册期间有效的 `runtimeId`。需要身份的对象继承 `IdentityObject`，并由明确生命周期 owner 的 `IdentityAllocator` 注册。
 
 ## Identity
 
@@ -16,32 +16,31 @@ Identity 模块为引擎对象提供两个层次的身份：跨保存/重载保�
 
 复制 Identity 只是复制快照；runtime 有效性仍由对 Registry 的弱引用验证。
 
-## IIdentityObject
+## IdentityObject
 
-接口提供默认实现：
+抽象基类提供实例 identity 存储：
 
-- `GetIdentity()`：首次调用会生成一个 persistent ID，之后返回当前 identity 值。
-- `protected internal SetIdentity(Identity)`：供派生/引擎基础设施替换关联 identity。
+- `identity`：返回当前 persistent/runtime identity snapshot。
+- 新实例立即具有非空 persistent ID，但在 allocator 注册前没有 runtime ID。
+- identity 绑定和替换只由同程序集的 Identity 基础设施执行。
 
 ```csharp
-public sealed class RuntimeResource : IIdentityObject
+public sealed class RuntimeResource : IdentityObject
 {
 }
 
 RuntimeResource resource = new();
-Guid persistentId = resource.GetIdentity().persistentId;
+Guid persistentId = resource.identity.persistentId;
 ```
 
-对象到 identity 的映射使用 `ConditionalWeakTable`，不会仅因身份系统而阻止对象 GC。
+Registry 使用弱 object entry 和 `ConditionalWeakTable` slot 映射，不会仅因索引本身阻止失去 owner 的对象 GC。
 
-## IdentityManager
+## IdentityAllocator
 
 | 成员 | 说明 |
 | --- | --- |
-| `isInitialized` | 当前全局 Registry 是否初始化。 |
 | `ObjectUnregistered` | 对象从 Registry 永久移除后触发；所有 handler 都执行，失败聚合。 |
-| `Initialize()` | 创建新 Registry；也可用于 reset。 |
-| `Shutdown()` | 丢弃当前 Registry 并标为未初始化。 |
+| `EnterScope()` | 将当前 Session 的 Allocator 绑定到异步执行上下文。 |
 | `Register(obj, Guid? override = null)` | 绑定 runtime ID；已注册返回 `false`。 |
 | `InitializePersistentIdentity(obj, Guid)` | 给未注册对象指定非空 persistent ID。 |
 | `Unregister(obj)` | 移除 runtime 映射并保留 persistent ID。 |
@@ -49,17 +48,16 @@ Guid persistentId = resource.GetIdentity().persistentId;
 | `Get<TIdentity>(Guid persistentId)` | 按 persistent ID 查找。 |
 
 ```csharp
-IdentityManager.Initialize();
+var identities = new IdentityAllocator();
 
 RuntimeResource resource = new();
-IdentityManager.InitializePersistentIdentity(resource, savedId);
-IdentityManager.Register(resource);
+identities.InitializePersistentIdentity(resource, savedId);
+identities.Register(resource);
 
-int runtimeId = resource.GetIdentity().runtimeId!.Value;
-RuntimeResource? same = IdentityManager.Get<RuntimeResource>(runtimeId);
+int runtimeId = resource.identity.runtimeId!.Value;
+RuntimeResource? same = identities.Get<RuntimeResource>(runtimeId);
 
-IdentityManager.Unregister(resource);
-IdentityManager.Shutdown();
+identities.Unregister(resource);
 ```
 
 ## 冲突与陈旧 ID
@@ -68,6 +66,7 @@ IdentityManager.Shutdown();
 - runtime ID 由 slot + generation 编码。对象移除后 slot 可复用，但旧 ID 的 generation 不匹配，因此不会解析到新对象。
 - `InitializePersistentIdentity` 只允许未注册对象；空 Guid、null 或已注册状态会失败。
 - Unregister event 在 Registry 已更新后触发，即使 handler 抛错也不会恢复对象。
+- 每个 `RuntimeSession` 拥有独立 `IdentityAllocator`；不存在进程级可变 Identity Manager。
 
 ## 热重载用法
 

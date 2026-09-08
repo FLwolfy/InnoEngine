@@ -16,3 +16,6 @@
 [submodule "extern/cimguizmo"]
 	path = extern/cimguizmo
 	url = https://github.com/cimgui/cimguizmo.git
+[submodule "extern/miniaudio"]
+	path = extern/miniaudio
+	url = https://github.com/mackron/miniaudio.git

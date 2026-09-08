@@ -1,0 +1,123 @@
+
+
+using System;
+using System.Collections.Generic;
+
+using Inno.Editor.Core;
+using Inno.Editor.Inspection;
+using Inno.Editor.Interactions;
+using Inno.Editor.ImGui;
+using Inno.Editor.ImGui.ImGuiWidget;
+using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
+using Inno.Runtime;
+using Inno.Scene;
+using Inno.Scene.Components;
+using Inno.Native.ImGui;
+using NativeImGui = Inno.Native.ImGui.ImGui;
+
+namespace Inno.Editor.Panel.Inspector;
+
+[PropertyDrawer(typeof(GameObject), useForChildren: true, priority: 100)]
+[PropertyDrawer(typeof(GameComponent), useForChildren: true, priority: 100)]
+internal sealed class EngineObjectReferencePropertyDrawer : IPropertyDrawer
+{
+    private const nuint C_SEARCH_BUFFER_SIZE = 256;
+
+    private readonly Dictionary<string, string> m_searchByPath = new(StringComparer.Ordinal);
+    private readonly RuntimeSession m_runtimeSession;
+
+    internal EngineObjectReferencePropertyDrawer(RuntimeSession runtimeSession)
+    {
+        m_runtimeSession = runtimeSession ?? throw new ArgumentNullException(nameof(runtimeSession));
+    }
+
+    /// <summary>
+    /// Renders the value presentation for the current editor frame.
+    /// </summary>
+    /// <param name="context">
+    /// The context that supplies state and services for this operation.
+    /// </param>
+    public void Draw(PropertyDrawContext context)
+    {
+        Type targetType = context.propertyType;
+        EngineObject? selected = context.GetValue() as EngineObject;
+        List<EngineObject> candidates = CollectCandidates(targetType);
+        string preview = selected is null || selected.isDestroyed
+            ? "None"
+            : GetDisplayName(selected);
+
+        bool open = EditorWidget.BeginBoundedCombo($"##{context.path}", preview);
+        _ = EditorDragDropRenderer.Target(
+            context.interactions.For(
+                InspectorInteractionIds.C_ENGINE_OBJECT_REFERENCE_AREA,
+                new EngineObjectReferenceDropTarget(targetType, context.SetValue)));
+
+        if (!open)
+            return;
+
+        try
+        {
+            string search = m_searchByPath.TryGetValue(context.path, out string? currentSearch)
+                ? currentSearch
+                : string.Empty;
+            _ = EditorWidget.SearchInput(
+                context.path,
+                "Search scene objects...",
+                ref search,
+                C_SEARCH_BUFFER_SIZE);
+            m_searchByPath[context.path] = search;
+
+            if (NativeImGui.Selectable("None", selected is null))
+                context.SetValue(null);
+
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                EngineObject candidate = candidates[i];
+                string displayName = GetDisplayName(candidate);
+                if (!string.IsNullOrWhiteSpace(search) &&
+                    displayName.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    continue;
+                }
+
+                if (NativeImGui.Selectable(displayName, ReferenceEquals(candidate, selected)))
+                    context.SetValue(candidate);
+            }
+        }
+        finally
+        {
+            NativeImGui.EndCombo();
+        }
+    }
+
+    private List<EngineObject> CollectCandidates(Type targetType)
+    {
+        GameScene? activeScene = m_runtimeSession.scenes.activeScene;
+        IReadOnlyList<GameObject> objects = activeScene?.GetObjects() ?? [];
+        var candidates = new List<EngineObject>(objects.Count);
+        for (int objectIndex = 0; objectIndex < objects.Count; objectIndex++)
+        {
+            GameObject gameObject = objects[objectIndex];
+            if (targetType.IsInstanceOfType(gameObject))
+                candidates.Add(gameObject);
+
+            IReadOnlyList<GameComponent> components = gameObject.GetComponents();
+            for (int componentIndex = 0; componentIndex < components.Count; componentIndex++)
+            {
+                if (targetType.IsInstanceOfType(components[componentIndex]))
+                    candidates.Add(components[componentIndex]);
+            }
+        }
+        return candidates;
+    }
+
+    private static string GetDisplayName(EngineObject target)
+    {
+        return target switch
+        {
+            GameObject gameObject => gameObject.name,
+            GameComponent component => $"{component.gameObject.name} ({component.GetType().Name})",
+            _ => target.GetType().Name
+        };
+    }
+}
