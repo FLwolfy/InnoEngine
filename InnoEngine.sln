@@ -48,145 +48,193 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.Sdl3", "native\
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{3D60B0C5-D01B-4CF9-AAE3-8BCEF8229B7A}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "foundation", "foundation", "{A0100001-0000-4000-8000-000000000001}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "scripting", "scripting", "{A0100002-0000-4000-8000-000000000002}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "content", "content", "{A0200001-0000-4000-8000-000000000001}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "references", "references", "{A0200002-0000-4000-8000-000000000002}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "input", "input", "{A0200003-0000-4000-8000-000000000003}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "storage", "storage", "{A0200004-0000-4000-8000-000000000004}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "animation", "animation", "{A0200005-0000-4000-8000-000000000005}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "services", "services", "{A0210001-0000-4000-8000-000000000001}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "runtime", "runtime", "{A0220001-0000-4000-8000-000000000001}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "adapters", "adapters", "{A0300001-0000-4000-8000-000000000001}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "platform", "platform", "{A0300002-0000-4000-8000-000000000002}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "input", "input", "{A0300003-0000-4000-8000-000000000003}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "storage", "storage", "{A0300004-0000-4000-8000-000000000004}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "rendering", "rendering", "{A0300005-0000-4000-8000-000000000005}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "audio", "audio", "{A0300006-0000-4000-8000-000000000006}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "presentation", "presentation", "{A0300007-0000-4000-8000-000000000007}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "common", "common", "{A0300008-0000-4000-8000-000000000008}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "default", "default", "{A0300009-0000-4000-8000-000000000009}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "composition", "composition", "{A0400001-0000-4000-8000-000000000001}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "player", "player", "{A0400002-0000-4000-8000-000000000002}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "shell", "shell", "{A0400003-0000-4000-8000-000000000003}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "assets", "assets", "{96D9E300-4DD5-4F9E-85FE-220DFEDD3CC8}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Assets.Pipeline", "src\assets\Inno.Assets.Pipeline\Inno.Assets.Pipeline.csproj", "{D1195814-D6A5-40E7-BF82-7B035581496B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Assets.Pipeline", "src\content\assets\Inno.Assets.Pipeline\Inno.Assets.Pipeline.csproj", "{D1195814-D6A5-40E7-BF82-7B035581496B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Assets", "src\assets\Inno.Assets\Inno.Assets.csproj", "{4CF207E2-26DF-4C93-B118-2B516FE26F6C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Assets", "src\content\assets\Inno.Assets\Inno.Assets.csproj", "{4CF207E2-26DF-4C93-B118-2B516FE26F6C}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "core", "core", "{3BB28C37-744C-4596-89C6-DC6E0FEC02D2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Coroutines", "src\core\Inno.Core.Coroutines\Inno.Core.Coroutines.csproj", "{3E3AC769-D782-4868-9E63-410894D6D6F4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Coroutines", "src\foundation\core\Inno.Core.Coroutines\Inno.Core.Coroutines.csproj", "{3E3AC769-D782-4868-9E63-410894D6D6F4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Diagnostics", "src\core\Inno.Core.Diagnostics\Inno.Core.Diagnostics.csproj", "{23B9F417-3AC9-4B28-8226-C0E327249FC1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Diagnostics", "src\foundation\core\Inno.Core.Diagnostics\Inno.Core.Diagnostics.csproj", "{23B9F417-3AC9-4B28-8226-C0E327249FC1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Events", "src\core\Inno.Core.Events\Inno.Core.Events.csproj", "{7922E16A-C1E4-4668-B4C2-7386FDD231CE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Events", "src\foundation\core\Inno.Core.Events\Inno.Core.Events.csproj", "{7922E16A-C1E4-4668-B4C2-7386FDD231CE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Graphs", "src\core\Inno.Core.Graphs\Inno.Core.Graphs.csproj", "{FFEE1959-7068-4DBE-8F83-95D7D2E7BDB2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Graphs", "src\foundation\core\Inno.Core.Graphs\Inno.Core.Graphs.csproj", "{FFEE1959-7068-4DBE-8F83-95D7D2E7BDB2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Identity", "src\core\Inno.Core.Identity\Inno.Core.Identity.csproj", "{813ACCB2-3206-4E66-AB6E-4AEE0ACFECDB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Identity", "src\foundation\core\Inno.Core.Identity\Inno.Core.Identity.csproj", "{813ACCB2-3206-4E66-AB6E-4AEE0ACFECDB}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Input", "src\core\Inno.Core.Input\Inno.Core.Input.csproj", "{546B2835-D992-47E1-AE8F-E36A6DAA4C98}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Input", "src\foundation\core\Inno.Core.Input\Inno.Core.Input.csproj", "{546B2835-D992-47E1-AE8F-E36A6DAA4C98}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Jobs", "src\core\Inno.Core.Jobs\Inno.Core.Jobs.csproj", "{D4E25917-A46E-435A-AD84-5CC91D814B27}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Jobs", "src\foundation\core\Inno.Core.Jobs\Inno.Core.Jobs.csproj", "{D4E25917-A46E-435A-AD84-5CC91D814B27}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Logging", "src\core\Inno.Core.Logging\Inno.Core.Logging.csproj", "{BD120537-0611-48E8-8073-66F0EFBDEA68}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Logging", "src\foundation\core\Inno.Core.Logging\Inno.Core.Logging.csproj", "{BD120537-0611-48E8-8073-66F0EFBDEA68}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Mathematics", "src\core\Inno.Core.Mathematics\Inno.Core.Mathematics.csproj", "{F3BAF793-0800-4FD6-BD2C-0590E1C8552C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Mathematics", "src\foundation\core\Inno.Core.Mathematics\Inno.Core.Mathematics.csproj", "{F3BAF793-0800-4FD6-BD2C-0590E1C8552C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Serialization.Generators", "src\core\Inno.Core.Serialization.Generators\Inno.Core.Serialization.Generators.csproj", "{E81E922A-A54C-4D6C-9BDD-04134A795EAD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Serialization.Generators", "src\foundation\core\Inno.Core.Serialization.Generators\Inno.Core.Serialization.Generators.csproj", "{E81E922A-A54C-4D6C-9BDD-04134A795EAD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Serialization", "src\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj", "{964F82AB-1BDF-479F-8D0C-41211B02B2DB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Serialization", "src\foundation\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj", "{964F82AB-1BDF-479F-8D0C-41211B02B2DB}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Settings", "src\core\Inno.Core.Settings\Inno.Core.Settings.csproj", "{209B6E01-2E85-47FB-9A94-759F148882DE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Settings", "src\foundation\core\Inno.Core.Settings\Inno.Core.Settings.csproj", "{209B6E01-2E85-47FB-9A94-759F148882DE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Storage", "src\core\Inno.Core.Storage\Inno.Core.Storage.csproj", "{95EA028D-E6AD-4B5E-8B69-F9F45BF916B0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Collections", "src\foundation\core\Inno.Core.Collections\Inno.Core.Collections.csproj", "{95EA028D-E6AD-4B5E-8B69-F9F45BF916B0}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "editor", "editor", "{F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Application", "src\editor\Inno.Editor.Application\Inno.Editor.Application.csproj", "{FBE02075-4C35-4E6B-B181-931064034E1B}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "host", "host", "{C0410001-0000-4000-8000-000000000001}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Core", "src\editor\Inno.Editor.Core\Inno.Editor.Core.csproj", "{8F7EA7E8-682F-4D33-8174-0C228918A3B5}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "framework", "framework", "{C0410002-0000-4000-8000-000000000002}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Diagnostics", "src\editor\Inno.Editor.Diagnostics\Inno.Editor.Diagnostics.csproj", "{6351AD70-7909-443F-9A18-76303E9599B4}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "features", "features", "{C0410003-0000-4000-8000-000000000003}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Exporting", "src\editor\Inno.Editor.Exporting\Inno.Editor.Exporting.csproj", "{6267F747-15B3-4D51-A304-22FA6FF12FE0}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "presentation", "presentation", "{C0410004-0000-4000-8000-000000000004}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Graph", "src\editor\Inno.Editor.Graph\Inno.Editor.Graph.csproj", "{63A9723D-6EAF-40B0-92C6-41B508115B43}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Application", "src\composition\editor\host\Inno.Editor.Application\Inno.Editor.Application.csproj", "{FBE02075-4C35-4E6B-B181-931064034E1B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.ImGui", "src\editor\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj", "{62D0E0E2-0C16-40C5-B5B6-ACB73D0B8A61}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Core", "src\composition\editor\framework\Inno.Editor.Core\Inno.Editor.Core.csproj", "{8F7EA7E8-682F-4D33-8174-0C228918A3B5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Inspection", "src\editor\Inno.Editor.Inspection\Inno.Editor.Inspection.csproj", "{112BDAD0-245F-4730-A868-4AA5D7162E74}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Diagnostics", "src\composition\editor\framework\Inno.Editor.Diagnostics\Inno.Editor.Diagnostics.csproj", "{6351AD70-7909-443F-9A18-76303E9599B4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Interactions", "src\editor\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj", "{158A7EFF-99AD-40BF-B765-C2711C39DBE6}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Exporting", "src\composition\editor\features\Inno.Editor.Exporting\Inno.Editor.Exporting.csproj", "{6267F747-15B3-4D51-A304-22FA6FF12FE0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.PlayMode", "src\editor\Inno.Editor.PlayMode\Inno.Editor.PlayMode.csproj", "{EC99A22E-FE5B-4A5C-A95C-2461ED3FE1E7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Graph", "src\composition\editor\framework\Inno.Editor.Graph\Inno.Editor.Graph.csproj", "{63A9723D-6EAF-40B0-92C6-41B508115B43}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Rendering", "src\editor\Inno.Editor.Rendering\Inno.Editor.Rendering.csproj", "{32A80B1A-9C94-4142-8A96-9579B6113DEB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.ImGui", "src\composition\editor\presentation\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj", "{62D0E0E2-0C16-40C5-B5B6-ACB73D0B8A61}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Scene", "src\editor\Inno.Editor.Scene\Inno.Editor.Scene.csproj", "{874FF3FA-A63E-432B-976B-03E7FB3A1646}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Inspection", "src\composition\editor\framework\Inno.Editor.Inspection\Inno.Editor.Inspection.csproj", "{112BDAD0-245F-4730-A868-4AA5D7162E74}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Scripting", "src\editor\Inno.Editor.Scripting\Inno.Editor.Scripting.csproj", "{0D4D9EFC-6424-4B61-AA27-D50BFB7B9CB5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Interactions", "src\composition\editor\framework\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj", "{158A7EFF-99AD-40BF-B765-C2711C39DBE6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Settings", "src\editor\Inno.Editor.Settings\Inno.Editor.Settings.csproj", "{4D9E6C36-B1B4-42BB-AAB2-757960F74B96}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.PlayMode", "src\composition\editor\features\Inno.Editor.PlayMode\Inno.Editor.PlayMode.csproj", "{EC99A22E-FE5B-4A5C-A95C-2461ED3FE1E7}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Panels", "Panels", "{265D9312-B8CC-46C7-9F2F-13EA2F86A3DC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Rendering", "src\composition\editor\features\Inno.Editor.Rendering\Inno.Editor.Rendering.csproj", "{32A80B1A-9C94-4142-8A96-9579B6113DEB}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.FileBrowser", "src\editor\Panels\Inno.Editor.Panel.FileBrowser\Inno.Editor.Panel.FileBrowser.csproj", "{3F3E5448-3C50-455E-A18A-8057D5153231}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Scene", "src\composition\editor\features\Inno.Editor.Scene\Inno.Editor.Scene.csproj", "{874FF3FA-A63E-432B-976B-03E7FB3A1646}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.GameView", "src\editor\Panels\Inno.Editor.Panel.GameView\Inno.Editor.Panel.GameView.csproj", "{7EF925D1-9D9C-44D4-9B41-9D8A07A000BA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Scripting", "src\composition\editor\features\Inno.Editor.Scripting\Inno.Editor.Scripting.csproj", "{0D4D9EFC-6424-4B61-AA27-D50BFB7B9CB5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.Global", "src\editor\Panels\Inno.Editor.Panel.Global\Inno.Editor.Panel.Global.csproj", "{A32DDE6E-BA0D-40AA-BED3-1A10049D59BC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Settings", "src\composition\editor\framework\Inno.Editor.Settings\Inno.Editor.Settings.csproj", "{4D9E6C36-B1B4-42BB-AAB2-757960F74B96}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.Hierarchy", "src\editor\Panels\Inno.Editor.Panel.Hierarchy\Inno.Editor.Panel.Hierarchy.csproj", "{720483C6-D06B-481D-8899-E1D9BD654EDA}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "panels", "panels", "{265D9312-B8CC-46C7-9F2F-13EA2F86A3DC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.Inspector", "src\editor\Panels\Inno.Editor.Panel.Inspector\Inno.Editor.Panel.Inspector.csproj", "{37EFCF00-19A6-497D-8E6B-49876C9E1985}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.FileBrowser", "src\composition\editor\panels\Inno.Editor.Panel.FileBrowser\Inno.Editor.Panel.FileBrowser.csproj", "{3F3E5448-3C50-455E-A18A-8057D5153231}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.Logging", "src\editor\Panels\Inno.Editor.Panel.Logging\Inno.Editor.Panel.Logging.csproj", "{860DF6A9-D1D5-49E3-9CE5-D2DE347CEED0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.GameView", "src\composition\editor\panels\Inno.Editor.Panel.GameView\Inno.Editor.Panel.GameView.csproj", "{7EF925D1-9D9C-44D4-9B41-9D8A07A000BA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.SceneView", "src\editor\Panels\Inno.Editor.Panel.SceneView\Inno.Editor.Panel.SceneView.csproj", "{CC850199-5215-408E-BB06-4B80395A17AB}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.Global", "src\composition\editor\panels\Inno.Editor.Panel.Global\Inno.Editor.Panel.Global.csproj", "{A32DDE6E-BA0D-40AA-BED3-1A10049D59BC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.Settings", "src\editor\Panels\Inno.Editor.Panel.Settings\Inno.Editor.Panel.Settings.csproj", "{62F87567-0571-43C5-B380-C17EFD4404DD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.Hierarchy", "src\composition\editor\panels\Inno.Editor.Panel.Hierarchy\Inno.Editor.Panel.Hierarchy.csproj", "{720483C6-D06B-481D-8899-E1D9BD654EDA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.ShaderGraph", "src\editor\Panels\Inno.Editor.Panel.ShaderGraph\Inno.Editor.Panel.ShaderGraph.csproj", "{A441C37F-B451-4B47-AAB2-2CA4EAEBA170}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.Inspector", "src\composition\editor\panels\Inno.Editor.Panel.Inspector\Inno.Editor.Panel.Inspector.csproj", "{37EFCF00-19A6-497D-8E6B-49876C9E1985}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.Stats", "src\editor\Panels\Inno.Editor.Panel.Stats\Inno.Editor.Panel.Stats.csproj", "{C6F2FA90-1B02-4F7A-B610-CB7A2C3F99B9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.Logging", "src\composition\editor\panels\Inno.Editor.Panel.Logging\Inno.Editor.Panel.Logging.csproj", "{860DF6A9-D1D5-49E3-9CE5-D2DE347CEED0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.SceneView", "src\composition\editor\panels\Inno.Editor.Panel.SceneView\Inno.Editor.Panel.SceneView.csproj", "{CC850199-5215-408E-BB06-4B80395A17AB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.Settings", "src\composition\editor\panels\Inno.Editor.Panel.Settings\Inno.Editor.Panel.Settings.csproj", "{62F87567-0571-43C5-B380-C17EFD4404DD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.ShaderGraph", "src\composition\editor\panels\Inno.Editor.Panel.ShaderGraph\Inno.Editor.Panel.ShaderGraph.csproj", "{A441C37F-B451-4B47-AAB2-2CA4EAEBA170}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.Stats", "src\composition\editor\panels\Inno.Editor.Panel.Stats\Inno.Editor.Panel.Stats.csproj", "{C6F2FA90-1B02-4F7A-B610-CB7A2C3F99B9}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "extensibility", "extensibility", "{107ED04B-1A71-4C7C-87DA-07CB2ECE590F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Modules", "src\extensibility\Inno.Extensibility.Modules\Inno.Extensibility.Modules.csproj", "{3159C670-359F-481F-B4C4-90A04103815F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Modules", "src\foundation\extensibility\Inno.Extensibility.Modules\Inno.Extensibility.Modules.csproj", "{3159C670-359F-481F-B4C4-90A04103815F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Types", "src\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj", "{ADCEF13E-CEB2-445D-A537-AB4C28450749}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Types", "src\foundation\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj", "{ADCEF13E-CEB2-445D-A537-AB4C28450749}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "platform", "platform", "{DDFB86C3-248F-4B3B-8133-1269F2D5F203}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Platform.Sdl3.ImGui", "src\platform\Inno.Platform.Sdl3.ImGui\Inno.Platform.Sdl3.ImGui.csproj", "{0DD747F7-0B85-4208-BA76-C537F3A64362}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Presentation.ImGui.Sdl3", "src\adapters\presentation\Inno.Adapter.Presentation.ImGui.Sdl3\Inno.Adapter.Presentation.ImGui.Sdl3.csproj", "{0DD747F7-0B85-4208-BA76-C537F3A64362}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Platform.Sdl3", "src\platform\Inno.Platform.Sdl3\Inno.Platform.Sdl3.csproj", "{6092DB32-4A29-410B-B7D7-0842F76427A9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Platform.Sdl3", "src\adapters\platform\Inno.Adapter.Platform.Sdl3\Inno.Adapter.Platform.Sdl3.csproj", "{6092DB32-4A29-410B-B7D7-0842F76427A9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Platform", "src\platform\Inno.Platform\Inno.Platform.csproj", "{1CC3C349-3E26-430D-B6BF-309BCF2ECEE7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Platform", "src\services\platform\Inno.Platform\Inno.Platform.csproj", "{1CC3C349-3E26-430D-B6BF-309BCF2ECEE7}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "plugins", "plugins", "{47F077BB-EA30-4B73-8147-44CAFE4E1C17}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Plugins.Authoring", "src\plugins\Inno.Plugins.Authoring\Inno.Plugins.Authoring.csproj", "{4624635E-E95D-4A09-8ACC-AD417421361C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Plugins.Authoring", "src\runtime\plugins\Inno.Plugins.Authoring\Inno.Plugins.Authoring.csproj", "{4624635E-E95D-4A09-8ACC-AD417421361C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Plugins", "src\plugins\Inno.Plugins\Inno.Plugins.csproj", "{09204EC3-B629-41C6-8E63-114E30677410}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Plugins", "src\runtime\plugins\Inno.Plugins\Inno.Plugins.csproj", "{09204EC3-B629-41C6-8E63-114E30677410}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "rendering", "rendering", "{EF7F2399-5D6B-4B1E-AE43-CB72AA3A7F78}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Assets", "src\rendering\Inno.Rendering.Assets\Inno.Rendering.Assets.csproj", "{03A744C8-19FD-4976-96B8-6A083E23E863}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Assets", "src\services\rendering\Inno.Rendering.Assets\Inno.Rendering.Assets.csproj", "{03A744C8-19FD-4976-96B8-6A083E23E863}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Bgfx.ImGui", "src\rendering\Inno.Rendering.Bgfx.ImGui\Inno.Rendering.Bgfx.ImGui.csproj", "{B81C0BD6-5751-4164-B8AD-1834E0158703}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Presentation.ImGui.Bgfx", "src\adapters\presentation\Inno.Adapter.Presentation.ImGui.Bgfx\Inno.Adapter.Presentation.ImGui.Bgfx.csproj", "{B81C0BD6-5751-4164-B8AD-1834E0158703}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Bgfx", "src\rendering\Inno.Rendering.Bgfx\Inno.Rendering.Bgfx.csproj", "{A2CA697E-FF0A-4BC4-96C1-CC2E0D1DA33E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Rendering.Bgfx", "src\adapters\rendering\Inno.Adapter.Rendering.Bgfx\Inno.Adapter.Rendering.Bgfx.csproj", "{A2CA697E-FF0A-4BC4-96C1-CC2E0D1DA33E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Runtime", "src\rendering\Inno.Rendering.Runtime\Inno.Rendering.Runtime.csproj", "{372D76BF-B319-484F-BA27-5393959A92D3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Runtime", "src\services\rendering\Inno.Rendering.Runtime\Inno.Rendering.Runtime.csproj", "{372D76BF-B319-484F-BA27-5393959A92D3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Scene", "src\rendering\Inno.Rendering.Scene\Inno.Rendering.Scene.csproj", "{852CE79A-25DD-4FF0-A36C-49664B2D56D9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.ShaderGraph", "src\services\rendering\Inno.Rendering.ShaderGraph\Inno.Rendering.ShaderGraph.csproj", "{F18A1E5C-A25D-41DF-B2A8-21013F314F0C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.ShaderGraph", "src\rendering\Inno.Rendering.ShaderGraph\Inno.Rendering.ShaderGraph.csproj", "{F18A1E5C-A25D-41DF-B2A8-21013F314F0C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering", "src\services\rendering\Inno.Rendering\Inno.Rendering.csproj", "{4310DB2C-837A-425C-BF96-A8A48931B53E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering", "src\rendering\Inno.Rendering\Inno.Rendering.csproj", "{4310DB2C-837A-425C-BF96-A8A48931B53E}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "engine", "engine", "{C2B99C13-4067-4DB7-8375-02C994D69470}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "runtime", "runtime", "{C2B99C13-4067-4DB7-8375-02C994D69470}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Player", "src\composition\player\Inno.Player\Inno.Player.csproj", "{60FD606B-CE9A-4804-9852-98DA35708B4E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Player", "src\runtime\Inno.Player\Inno.Player.csproj", "{60FD606B-CE9A-4804-9852-98DA35708B4E}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Runtime", "src\runtime\Inno.Runtime\Inno.Runtime.csproj", "{D3649C6D-1498-4F33-B83C-D0B0160B5C75}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Runtime", "src\runtime\engine\Inno.Runtime\Inno.Runtime.csproj", "{D3649C6D-1498-4F33-B83C-D0B0160B5C75}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "scene", "scene", "{63021944-AB0B-464B-AC55-EDD808E2566D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Scene.Assets", "src\scene\Inno.Scene.Assets\Inno.Scene.Assets.csproj", "{82A42473-08A4-4AFB-996B-5563AAF0C2AE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Scene.Assets", "src\content\scene\Inno.Scene.Assets\Inno.Scene.Assets.csproj", "{82A42473-08A4-4AFB-996B-5563AAF0C2AE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Scene", "src\scene\Inno.Scene\Inno.Scene.csproj", "{1F897308-0EB2-41DA-BE7E-D7107EE2B92F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Scene", "src\content\scene\Inno.Scene\Inno.Scene.csproj", "{1F897308-0EB2-41DA-BE7E-D7107EE2B92F}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "scripting", "scripting", "{C31D9C96-B62A-4AD5-815D-01BED430E80C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Scripting.Api", "src\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj", "{836753BC-D369-4197-9B23-9E3F2751C4DC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Scripting.Api", "src\foundation\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj", "{836753BC-D369-4197-9B23-9E3F2751C4DC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Scripting.Compiler", "src\scripting\Inno.Scripting.Compiler\Inno.Scripting.Compiler.csproj", "{90CBDDFC-BBE0-4956-B68D-7F62E348462B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Scripting.Compiler", "src\runtime\scripting\Inno.Scripting.Compiler\Inno.Scripting.Compiler.csproj", "{90CBDDFC-BBE0-4956-B68D-7F62E348462B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Scripting.Reload", "src\scripting\Inno.Scripting.Reload\Inno.Scripting.Reload.csproj", "{B817139D-F38E-42C5-AE7F-63842325E07E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Scripting.Reload", "src\runtime\scripting\Inno.Scripting.Reload\Inno.Scripting.Reload.csproj", "{B817139D-F38E-42C5-AE7F-63842325E07E}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{D6BE33BD-7AC1-4C59-AF9A-52C523FABA31}"
 EndProject
@@ -222,127 +270,211 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "fixtures", "fixtures", "{DD
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "scripting", "scripting", "{C704476C-D102-4AD9-9B2F-3F48F8E473D9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Assets.Tests", "tests\Inno.Assets.Tests\Inno.Assets.Tests.csproj", "{AFBC524D-E6C6-4E73-83BF-ADFB9C211DE1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Assets.Tests", "tests\assets\Inno.Assets.Tests\Inno.Assets.Tests.csproj", "{AFBC524D-E6C6-4E73-83BF-ADFB9C211DE1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Tests", "tests\Inno.Build.Tests\Inno.Build.Tests.csproj", "{70C219EE-A902-4DFF-BF8D-F1E774B69753}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Tests", "tests\build\Inno.Build.Tests\Inno.Build.Tests.csproj", "{70C219EE-A902-4DFF-BF8D-F1E774B69753}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Coroutines.Tests", "tests\Inno.Core.Coroutines.Tests\Inno.Core.Coroutines.Tests.csproj", "{FD075FF9-F198-4853-A61C-57EB267C57F5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Coroutines.Tests", "tests\core\Inno.Core.Coroutines.Tests\Inno.Core.Coroutines.Tests.csproj", "{FD075FF9-F198-4853-A61C-57EB267C57F5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Diagnostics.Tests", "tests\Inno.Core.Diagnostics.Tests\Inno.Core.Diagnostics.Tests.csproj", "{4F78471D-89B0-46A5-B8AD-958026088A84}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Diagnostics.Tests", "tests\core\Inno.Core.Diagnostics.Tests\Inno.Core.Diagnostics.Tests.csproj", "{4F78471D-89B0-46A5-B8AD-958026088A84}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Events.Tests", "tests\Inno.Core.Events.Tests\Inno.Core.Events.Tests.csproj", "{2E6D0857-0E87-494A-A067-73FFE847CE48}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Events.Tests", "tests\core\Inno.Core.Events.Tests\Inno.Core.Events.Tests.csproj", "{2E6D0857-0E87-494A-A067-73FFE847CE48}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Graphs.Tests", "tests\Inno.Core.Graphs.Tests\Inno.Core.Graphs.Tests.csproj", "{C8546545-192F-468B-BDB5-CCBBFA816C7F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Graphs.Tests", "tests\core\Inno.Core.Graphs.Tests\Inno.Core.Graphs.Tests.csproj", "{C8546545-192F-468B-BDB5-CCBBFA816C7F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Identity.Tests", "tests\Inno.Core.Identity.Tests\Inno.Core.Identity.Tests.csproj", "{F000BEE0-1647-4804-84FD-F285B1DABF6B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Identity.Tests", "tests\core\Inno.Core.Identity.Tests\Inno.Core.Identity.Tests.csproj", "{F000BEE0-1647-4804-84FD-F285B1DABF6B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Jobs.Tests", "tests\Inno.Core.Jobs.Tests\Inno.Core.Jobs.Tests.csproj", "{90D6EAE3-2DA9-4F51-B4BA-0B45159C87E1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Jobs.Tests", "tests\core\Inno.Core.Jobs.Tests\Inno.Core.Jobs.Tests.csproj", "{90D6EAE3-2DA9-4F51-B4BA-0B45159C87E1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Logging.Tests", "tests\Inno.Core.Logging.Tests\Inno.Core.Logging.Tests.csproj", "{C2D8BE16-6909-4C7F-83F6-BF73A9410958}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Logging.Tests", "tests\core\Inno.Core.Logging.Tests\Inno.Core.Logging.Tests.csproj", "{C2D8BE16-6909-4C7F-83F6-BF73A9410958}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Mathematics.Tests", "tests\Inno.Core.Mathematics.Tests\Inno.Core.Mathematics.Tests.csproj", "{DD7C7251-40C4-4231-85E2-41DDE89FDDFA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Mathematics.Tests", "tests\core\Inno.Core.Mathematics.Tests\Inno.Core.Mathematics.Tests.csproj", "{DD7C7251-40C4-4231-85E2-41DDE89FDDFA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Serialization.Tests", "tests\Inno.Core.Serialization.Tests\Inno.Core.Serialization.Tests.csproj", "{44D2340E-E5AD-422C-B3EB-06A64BBED48E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Serialization.Tests", "tests\core\Inno.Core.Serialization.Tests\Inno.Core.Serialization.Tests.csproj", "{44D2340E-E5AD-422C-B3EB-06A64BBED48E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Storage.Tests", "tests\Inno.Core.Storage.Tests\Inno.Core.Storage.Tests.csproj", "{D302B69F-2F20-4E53-9F41-44C1257CCED0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Collections.Tests", "tests\core\Inno.Core.Collections.Tests\Inno.Core.Collections.Tests.csproj", "{D302B69F-2F20-4E53-9F41-44C1257CCED0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Graph.Tests", "tests\Inno.Editor.Graph.Tests\Inno.Editor.Graph.Tests.csproj", "{128E9392-CC6D-4D07-8905-077DFECE0DD3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Graph.Tests", "tests\editor\Inno.Editor.Graph.Tests\Inno.Editor.Graph.Tests.csproj", "{128E9392-CC6D-4D07-8905-077DFECE0DD3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Interactions.Tests", "tests\Inno.Editor.Interactions.Tests\Inno.Editor.Interactions.Tests.csproj", "{4116F28D-FA32-4D06-AFC6-13D975FB46C4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Interactions.Tests", "tests\editor\Inno.Editor.Interactions.Tests\Inno.Editor.Interactions.Tests.csproj", "{4116F28D-FA32-4D06-AFC6-13D975FB46C4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.PlayMode.Tests", "tests\Inno.Editor.PlayMode.Tests\Inno.Editor.PlayMode.Tests.csproj", "{A5788F8E-70F6-497C-AF52-91A467D0ADE7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.PlayMode.Tests", "tests\editor\Inno.Editor.PlayMode.Tests\Inno.Editor.PlayMode.Tests.csproj", "{A5788F8E-70F6-497C-AF52-91A467D0ADE7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Scripting.Tests", "tests\Inno.Editor.Scripting.Tests\Inno.Editor.Scripting.Tests.csproj", "{AE1CB78C-A6E6-499C-BA7A-AB54806A5DBF}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Scripting.Tests", "tests\scripting\Inno.Editor.Scripting.Tests\Inno.Editor.Scripting.Tests.csproj", "{AE1CB78C-A6E6-499C-BA7A-AB54806A5DBF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Modules.TestDependency", "tests\Inno.Extensibility.Modules.TestDependency\Inno.Extensibility.Modules.TestDependency.csproj", "{39D03BF9-C281-4839-AF97-E63975F93E78}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Modules.TestDependency", "tests\extensibility\fixtures\Inno.Extensibility.Modules.TestDependency\Inno.Extensibility.Modules.TestDependency.csproj", "{39D03BF9-C281-4839-AF97-E63975F93E78}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Modules.TestModule.Invalid", "tests\Inno.Extensibility.Modules.TestModule.Invalid\Inno.Extensibility.Modules.TestModule.Invalid.csproj", "{57826B17-6F57-4F86-B39E-D351A5B3A339}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Modules.TestModule.Invalid", "tests\extensibility\fixtures\Inno.Extensibility.Modules.TestModule.Invalid\Inno.Extensibility.Modules.TestModule.Invalid.csproj", "{57826B17-6F57-4F86-B39E-D351A5B3A339}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Modules.TestModule.V1", "tests\Inno.Extensibility.Modules.TestModule.V1\Inno.Extensibility.Modules.TestModule.V1.csproj", "{5CDC3D12-AA6D-44F5-B048-4B781058B491}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Modules.TestModule.V1", "tests\extensibility\fixtures\Inno.Extensibility.Modules.TestModule.V1\Inno.Extensibility.Modules.TestModule.V1.csproj", "{5CDC3D12-AA6D-44F5-B048-4B781058B491}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Modules.TestModule.V2", "tests\Inno.Extensibility.Modules.TestModule.V2\Inno.Extensibility.Modules.TestModule.V2.csproj", "{A76F05BD-DBEA-48B4-8C94-28E2999BDA6C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Modules.TestModule.V2", "tests\extensibility\fixtures\Inno.Extensibility.Modules.TestModule.V2\Inno.Extensibility.Modules.TestModule.V2.csproj", "{A76F05BD-DBEA-48B4-8C94-28E2999BDA6C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Modules.Tests", "tests\Inno.Extensibility.Modules.Tests\Inno.Extensibility.Modules.Tests.csproj", "{FBC2CB44-DE10-4B49-86A2-69C116994723}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Modules.Tests", "tests\extensibility\Inno.Extensibility.Modules.Tests\Inno.Extensibility.Modules.Tests.csproj", "{FBC2CB44-DE10-4B49-86A2-69C116994723}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Types.TestAssemblyA", "tests\Inno.Extensibility.Types.TestAssemblyA\Inno.Extensibility.Types.TestAssemblyA.csproj", "{8149A30A-02D3-4F85-801E-AFC0AED810C5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Types.TestAssemblyA", "tests\extensibility\fixtures\Inno.Extensibility.Types.TestAssemblyA\Inno.Extensibility.Types.TestAssemblyA.csproj", "{8149A30A-02D3-4F85-801E-AFC0AED810C5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Types.TestAssemblyB", "tests\Inno.Extensibility.Types.TestAssemblyB\Inno.Extensibility.Types.TestAssemblyB.csproj", "{D10E34C8-9DF1-4A69-8ED1-8B3D63319D8D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Types.TestAssemblyB", "tests\extensibility\fixtures\Inno.Extensibility.Types.TestAssemblyB\Inno.Extensibility.Types.TestAssemblyB.csproj", "{D10E34C8-9DF1-4A69-8ED1-8B3D63319D8D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Types.Tests", "tests\Inno.Extensibility.Types.Tests\Inno.Extensibility.Types.Tests.csproj", "{B33C523A-1216-4096-BC77-2917601769E1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Types.Tests", "tests\extensibility\Inno.Extensibility.Types.Tests\Inno.Extensibility.Types.Tests.csproj", "{B33C523A-1216-4096-BC77-2917601769E1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.Bgfx.Tests", "tests\Inno.Native.Bgfx.Tests\Inno.Native.Bgfx.Tests.csproj", "{C2D78C59-704C-4243-AACC-CEC597BD78BD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.Bgfx.Tests", "tests\native\Inno.Native.Bgfx.Tests\Inno.Native.Bgfx.Tests.csproj", "{C2D78C59-704C-4243-AACC-CEC597BD78BD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.Bgfx.Tools.Tests", "tests\Inno.Native.Bgfx.Tools.Tests\Inno.Native.Bgfx.Tools.Tests.csproj", "{FF7C31DE-35F9-4E20-8B93-41CFCB18ECED}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.Bgfx.Tools.Tests", "tests\native\Inno.Native.Bgfx.Tools.Tests\Inno.Native.Bgfx.Tools.Tests.csproj", "{FF7C31DE-35F9-4E20-8B93-41CFCB18ECED}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.ImGui.Tests", "tests\Inno.Native.ImGui.Tests\Inno.Native.ImGui.Tests.csproj", "{986E2A3F-A003-4BA8-8C8C-689EDBE9EE2D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.ImGui.Tests", "tests\native\Inno.Native.ImGui.Tests\Inno.Native.ImGui.Tests.csproj", "{986E2A3F-A003-4BA8-8C8C-689EDBE9EE2D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.ImGuizmo.Tests", "tests\Inno.Native.ImGuizmo.Tests\Inno.Native.ImGuizmo.Tests.csproj", "{AB1EEF01-950B-4E7D-9468-7336C33B291F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.ImGuizmo.Tests", "tests\native\Inno.Native.ImGuizmo.Tests\Inno.Native.ImGuizmo.Tests.csproj", "{AB1EEF01-950B-4E7D-9468-7336C33B291F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.Sdl3.Tests", "tests\Inno.Native.Sdl3.Tests\Inno.Native.Sdl3.Tests.csproj", "{6FB47C97-B108-4B66-BE34-69437A4FC91D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.Sdl3.Tests", "tests\native\Inno.Native.Sdl3.Tests\Inno.Native.Sdl3.Tests.csproj", "{6FB47C97-B108-4B66-BE34-69437A4FC91D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Assets.Tests", "tests\Inno.Rendering.Assets.Tests\Inno.Rendering.Assets.Tests.csproj", "{C8803EFA-9818-41FC-95EC-A347A301FFA5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Assets.Tests", "tests\rendering\Inno.Rendering.Assets.Tests\Inno.Rendering.Assets.Tests.csproj", "{C8803EFA-9818-41FC-95EC-A347A301FFA5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Bgfx.Tests", "tests\Inno.Rendering.Bgfx.Tests\Inno.Rendering.Bgfx.Tests.csproj", "{D761B4FA-8716-4203-A21D-F51084537107}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Rendering.Bgfx.Tests", "tests\rendering\Inno.Adapter.Rendering.Bgfx.Tests\Inno.Adapter.Rendering.Bgfx.Tests.csproj", "{D761B4FA-8716-4203-A21D-F51084537107}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Tests", "tests\Inno.Rendering.Tests\Inno.Rendering.Tests.csproj", "{4EE08789-5C77-4C79-BD1B-80FF0E59434F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Tests", "tests\rendering\Inno.Rendering.Tests\Inno.Rendering.Tests.csproj", "{4EE08789-5C77-4C79-BD1B-80FF0E59434F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Runtime.Tests", "tests\Inno.Rendering.Runtime.Tests\Inno.Rendering.Runtime.Tests.csproj", "{CA45BD48-F2DC-4126-907F-CFF7E263C258}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Runtime.Tests", "tests\rendering\Inno.Rendering.Runtime.Tests\Inno.Rendering.Runtime.Tests.csproj", "{CA45BD48-F2DC-4126-907F-CFF7E263C258}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Runtime.Reload.TestModule", "tests\Inno.Rendering.Runtime.Reload.TestModule\Inno.Rendering.Runtime.Reload.TestModule.csproj", "{5B9FCAD1-53A9-4FE4-B840-30933ADBA726}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Runtime.Reload.TestModule", "tests\rendering\fixtures\Inno.Rendering.Runtime.Reload.TestModule\Inno.Rendering.Runtime.Reload.TestModule.csproj", "{5B9FCAD1-53A9-4FE4-B840-30933ADBA726}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.ShaderGraph.Tests", "tests\Inno.Rendering.ShaderGraph.Tests\Inno.Rendering.ShaderGraph.Tests.csproj", "{BDF511BB-3810-46CB-A81B-F78D953B4C87}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.ShaderGraph.Tests", "tests\rendering\Inno.Rendering.ShaderGraph.Tests\Inno.Rendering.ShaderGraph.Tests.csproj", "{BDF511BB-3810-46CB-A81B-F78D953B4C87}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Runtime.Tests", "tests\Inno.Runtime.Tests\Inno.Runtime.Tests.csproj", "{A5CB9195-41B8-4841-A628-C0D38D455316}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Runtime.Tests", "tests\runtime\Inno.Runtime.Tests\Inno.Runtime.Tests.csproj", "{A5CB9195-41B8-4841-A628-C0D38D455316}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Scene.Tests", "tests\Inno.Scene.Tests\Inno.Scene.Tests.csproj", "{BD7A5B4D-2E88-4BD0-8D14-F7EB9E1A253C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Scene.Tests", "tests\scene\Inno.Scene.Tests\Inno.Scene.Tests.csproj", "{BD7A5B4D-2E88-4BD0-8D14-F7EB9E1A253C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Scene.Reload.TestModule", "tests\Inno.Scene.Reload.TestModule\Inno.Scene.Reload.TestModule.csproj", "{2FD04E36-9420-4ED2-8FE1-F135D25CA678}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Scene.Reload.TestModule", "tests\scene\fixtures\Inno.Scene.Reload.TestModule\Inno.Scene.Reload.TestModule.csproj", "{2FD04E36-9420-4ED2-8FE1-F135D25CA678}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{DFEDE49D-C28D-48A7-8B52-BB5A3B5C422B}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Tooling.Architecture", "tools\Inno.Tooling.Architecture\Inno.Tooling.Architecture.csproj", "{E306D60C-C2A8-4CD9-A784-5E01C91BCF5C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Assets.Pipeline.Tests", "tests\Inno.Assets.Pipeline.Tests\Inno.Assets.Pipeline.Tests.csproj", "{618E203B-83E5-4DBC-8DBF-0E57B1EDA314}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Assets.Pipeline.Tests", "tests\assets\Inno.Assets.Pipeline.Tests\Inno.Assets.Pipeline.Tests.csproj", "{618E203B-83E5-4DBC-8DBF-0E57B1EDA314}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Plugins.Tests", "tests\Inno.Plugins.Tests\Inno.Plugins.Tests.csproj", "{44698527-46FA-4300-95C7-A0EFFDD3AE81}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Plugins.Tests", "tests\plugins\Inno.Plugins.Tests\Inno.Plugins.Tests.csproj", "{44698527-46FA-4300-95C7-A0EFFDD3AE81}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Player.E2E", "tests\Inno.Player.E2E\Inno.Player.E2E.csproj", "{0D4B7F31-992B-4BB2-941B-0A5C8445D637}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Player.E2E", "tests\player\Inno.Player.E2E\Inno.Player.E2E.csproj", "{0D4B7F31-992B-4BB2-941B-0A5C8445D637}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.IO", "src\core\Inno.Core.IO\Inno.Core.IO.csproj", "{D6DF1319-7754-4374-8EB2-B3D2080F6928}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.IO", "src\foundation\core\Inno.Core.IO\Inno.Core.IO.csproj", "{D6DF1319-7754-4374-8EB2-B3D2080F6928}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.IO.Tests", "tests\Inno.Core.IO.Tests\Inno.Core.IO.Tests.csproj", "{720A0191-A558-4B48-947A-F10F53051985}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.IO.Tests", "tests\core\Inno.Core.IO.Tests\Inno.Core.IO.Tests.csproj", "{720A0191-A558-4B48-947A-F10F53051985}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.MiniAudio", "native\Inno.Native.MiniAudio\Inno.Native.MiniAudio.csproj", "{3B7C6CF1-C2C6-4C78-8228-409767104F70}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Build.Toolchains.MiniAudio", "build\toolchains\Inno.Build.Toolchains.MiniAudio\Inno.Build.Toolchains.MiniAudio.csproj", "{03BDB159-BF45-4872-8A5F-6BFCEF4B1A5D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.MiniAudio.Tests", "tests\Inno.Native.MiniAudio.Tests\Inno.Native.MiniAudio.Tests.csproj", "{FC817548-B626-452B-9505-48E7A9F5E273}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Native.MiniAudio.Tests", "tests\native\Inno.Native.MiniAudio.Tests\Inno.Native.MiniAudio.Tests.csproj", "{FC817548-B626-452B-9505-48E7A9F5E273}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "audio", "audio", "{8236FE81-05F1-4A56-8B5C-B194DDC15270}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Audio", "src\audio\Inno.Audio\Inno.Audio.csproj", "{4CC4D438-818A-4C30-82E8-B128B00A8348}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Audio", "src\services\audio\Inno.Audio\Inno.Audio.csproj", "{4CC4D438-818A-4C30-82E8-B128B00A8348}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Audio.Runtime", "src\audio\Inno.Audio.Runtime\Inno.Audio.Runtime.csproj", "{73D4EF8E-8F4D-4409-AE38-480163429965}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Audio.Runtime", "src\services\audio\Inno.Audio.Runtime\Inno.Audio.Runtime.csproj", "{73D4EF8E-8F4D-4409-AE38-480163429965}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Audio.Assets", "src\audio\Inno.Audio.Assets\Inno.Audio.Assets.csproj", "{CD9A5D27-C02E-40CF-AC96-E8CC0C61F27C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Audio.Assets", "src\services\audio\Inno.Audio.Assets\Inno.Audio.Assets.csproj", "{CD9A5D27-C02E-40CF-AC96-E8CC0C61F27C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Audio.MiniAudio", "src\audio\Inno.Audio.MiniAudio\Inno.Audio.MiniAudio.csproj", "{3716F71C-09E7-44B8-ACFA-D910A934783A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Audio.MiniAudio", "src\adapters\audio\Inno.Adapter.Audio.MiniAudio\Inno.Adapter.Audio.MiniAudio.csproj", "{3716F71C-09E7-44B8-ACFA-D910A934783A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Audio.Scene", "src\audio\Inno.Audio.Scene\Inno.Audio.Scene.csproj", "{E69F7DE1-4A7E-4CC1-88B5-FC27AC5B6060}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Audio", "src\composition\editor\features\Inno.Editor.Audio\Inno.Editor.Audio.csproj", "{2B629DAE-0E83-4F91-B2DA-3928A08911BF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Audio", "src\editor\Inno.Editor.Audio\Inno.Editor.Audio.csproj", "{2B629DAE-0E83-4F91-B2DA-3928A08911BF}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Audio.Tests", "tests\audio\Inno.Audio.Tests\Inno.Audio.Tests.csproj", "{06B2A105-FF43-4B80-A1BB-9AF7FD3DB4A7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Audio.Tests", "tests\Inno.Audio.Tests\Inno.Audio.Tests.csproj", "{06B2A105-FF43-4B80-A1BB-9AF7FD3DB4A7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Audio.Assets.Tests", "tests\audio\Inno.Audio.Assets.Tests\Inno.Audio.Assets.Tests.csproj", "{985C305D-9562-460F-9E01-73BA7B9EFE50}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Audio.Assets.Tests", "tests\Inno.Audio.Assets.Tests\Inno.Audio.Assets.Tests.csproj", "{985C305D-9562-460F-9E01-73BA7B9EFE50}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Audio.Runtime.Tests", "tests\audio\Inno.Audio.Runtime.Tests\Inno.Audio.Runtime.Tests.csproj", "{355F52C8-22E3-494F-BEB5-E4DD6397504D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Audio.Runtime.Tests", "tests\Inno.Audio.Runtime.Tests\Inno.Audio.Runtime.Tests.csproj", "{355F52C8-22E3-494F-BEB5-E4DD6397504D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Audio.MiniAudio.Tests", "tests\audio\Inno.Adapter.Audio.MiniAudio.Tests\Inno.Adapter.Audio.MiniAudio.Tests.csproj", "{A7B51F36-D7C9-48A1-8C05-6D4939292736}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Audio.MiniAudio.Tests", "tests\Inno.Audio.MiniAudio.Tests\Inno.Audio.MiniAudio.Tests.csproj", "{A7B51F36-D7C9-48A1-8C05-6D4939292736}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Audio.Tests", "tests\editor\Inno.Editor.Audio.Tests\Inno.Editor.Audio.Tests.csproj", "{0FDD712B-BC25-4D8D-8071-6E0036370481}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Audio.Scene.Tests", "tests\Inno.Audio.Scene.Tests\Inno.Audio.Scene.Tests.csproj", "{9FDBEB5F-C881-4B77-B7DA-314FC02241ED}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.References", "src\content\references\Inno.References\Inno.References.csproj", "{B0200001-0000-4000-8000-000000000001}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Audio.Tests", "tests\Inno.Editor.Audio.Tests\Inno.Editor.Audio.Tests.csproj", "{0FDD712B-BC25-4D8D-8071-6E0036370481}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "references", "references", "{A1200001-0000-4000-8000-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.References.Tests", "tests\references\Inno.References.Tests\Inno.References.Tests.csproj", "{B1200001-0000-4000-8000-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Reload", "src\foundation\extensibility\Inno.Extensibility.Reload\Inno.Extensibility.Reload.csproj", "{B0100001-0000-4000-8000-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Extensibility.Reload.Tests", "tests\extensibility\Inno.Extensibility.Reload.Tests\Inno.Extensibility.Reload.Tests.csproj", "{B1100001-0000-4000-8000-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Input", "src\services\input\Inno.Input\Inno.Input.csproj", "{B0300001-0000-4000-8000-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Input.Runtime", "src\services\input\Inno.Input.Runtime\Inno.Input.Runtime.csproj", "{B0300002-0000-4000-8000-000000000002}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Input.Sdl3", "src\adapters\input\Inno.Adapter.Input.Sdl3\Inno.Adapter.Input.Sdl3.csproj", "{B0300003-0000-4000-8000-000000000003}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "input", "input", "{A1300001-0000-4000-8000-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Input.Tests", "tests\input\Inno.Input.Tests\Inno.Input.Tests.csproj", "{B1300001-0000-4000-8000-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Storage", "src\services\storage\Inno.Storage\Inno.Storage.csproj", "{B0400001-0000-4000-8000-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Storage.Runtime", "src\services\storage\Inno.Storage.Runtime\Inno.Storage.Runtime.csproj", "{B0400002-0000-4000-8000-000000000002}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Storage.FileSystem", "src\adapters\storage\Inno.Adapter.Storage.FileSystem\Inno.Adapter.Storage.FileSystem.csproj", "{B0400003-0000-4000-8000-000000000003}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "storage", "storage", "{A1400001-0000-4000-8000-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Storage.Tests", "tests\storage\Inno.Storage.Tests\Inno.Storage.Tests.csproj", "{B1400001-0000-4000-8000-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Animation", "src\content\animation\Inno.Animation\Inno.Animation.csproj", "{0F071106-A85F-492C-92B7-AE16144E46FB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Animation.Assets", "src\content\animation\Inno.Animation.Assets\Inno.Animation.Assets.csproj", "{8490128A-8DB4-49C0-93D9-111A21B512E0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Animation.Runtime", "src\content\animation\Inno.Animation.Runtime\Inno.Animation.Runtime.csproj", "{A54250A9-223B-42C1-B919-18C03C538ED7}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "animation", "animation", "{F6B9EAA6-9924-42FB-BA08-88CB4306AFA1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Animation.Tests", "tests\animation\Inno.Animation.Tests\Inno.Animation.Tests.csproj", "{C9C2BDD0-7955-40A5-A344-2770BEBCFC46}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Platform", "src\adapters\platform\Inno.Adapter.Platform\Inno.Adapter.Platform.csproj", "{6A4E4BEF-9A4D-4A0D-BC7E-9C10CDB06090}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Input", "src\adapters\input\Inno.Adapter.Input\Inno.Adapter.Input.csproj", "{7CBFC850-0664-4ABB-80E6-13DDC0A11D93}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Storage", "src\adapters\storage\Inno.Adapter.Storage\Inno.Adapter.Storage.csproj", "{D9719131-3AF0-4374-A93C-F6B5E9D58813}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Rendering", "src\adapters\rendering\Inno.Adapter.Rendering\Inno.Adapter.Rendering.csproj", "{9253F4B2-E342-429E-9D49-CEDD0D50CDC5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Rendering.Authoring", "src\adapters\rendering\Inno.Adapter.Rendering.Authoring\Inno.Adapter.Rendering.Authoring.csproj", "{C24C0F50-1494-48B8-8D6A-8AFE8F80D5BB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Audio", "src\adapters\audio\Inno.Adapter.Audio\Inno.Adapter.Audio.csproj", "{4E8C7B8E-E69F-4966-8122-5532D42DE15A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Presentation", "src\adapters\presentation\Inno.Adapter.Presentation\Inno.Adapter.Presentation.csproj", "{A6B62116-9861-46BF-BBFA-7CB1A5B4FA91}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter", "src\adapters\common\Inno.Adapter\Inno.Adapter.csproj", "{D6934520-D18C-4805-BB23-F6DF10675F19}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Default", "src\adapters\default\Inno.Adapter.Default\Inno.Adapter.Default.csproj", "{64E5C47F-8758-4BC1-8F58-EDA06D5AC926}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Authoring.Default", "src\adapters\default\Inno.Adapter.Authoring.Default\Inno.Adapter.Authoring.Default.csproj", "{B13BDFEE-E7BC-4F9C-A50D-BED54F2BC810}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Shell", "src\composition\shell\Inno.Shell\Inno.Shell.csproj", "{AE8C76E2-9C0C-43F4-A0DC-EC11E27FEC9D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Layers", "src\foundation\core\Inno.Core.Layers\Inno.Core.Layers.csproj", "{97E1E64D-A52C-4226-8B6E-4452B26D7DB7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Layers.Tests", "tests\core\Inno.Core.Layers.Tests\Inno.Core.Layers.Tests.csproj", "{CEA4ACA8-6D46-4466-A901-7008DF351529}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Execution", "src\foundation\core\Inno.Core.Execution\Inno.Core.Execution.csproj", "{8B63BAE4-1BD6-4D8B-8135-A0E4C102B202}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Core.Execution.Tests", "tests\core\Inno.Core.Execution.Tests\Inno.Core.Execution.Tests.csproj", "{7BA68545-96EA-4EB6-BA76-1A72D385D4B6}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "contracts", "contracts", "{D90FBD84-BB81-4E1C-A8B8-0DF5A7B08A23}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Runtime.Contracts", "src\runtime\contracts\Inno.Runtime.Contracts\Inno.Runtime.Contracts.csproj", "{48B37737-599C-47DD-9CED-3613BE594918}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "generators", "generators", "{462C8C6A-20AC-45F0-A16F-55C9E62449A0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Runtime.Generators", "src\runtime\generators\Inno.Runtime.Generators\Inno.Runtime.Generators.csproj", "{BE22022E-A93E-4FF2-B730-EC2AD9CEDA41}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "default", "default", "{04592234-45FB-46DE-8EDC-D2FF2FBFEC3B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Engine.Default", "src\composition\default\Inno.Engine.Default\Inno.Engine.Default.csproj", "{35E4381A-BED6-42AE-8CEF-8267D193FA5D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Runtime.Generators.Tests", "tests\runtime\Inno.Runtime.Generators.Tests\Inno.Runtime.Generators.Tests.csproj", "{7BBE6754-2853-429D-A1AF-A76B473E7EC2}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tooling", "tooling", "{9CEE6632-0D0D-444A-BE3C-72CEBB7DDE97}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Tooling.Architecture.Tests", "tests\tooling\Inno.Tooling.Architecture.Tests\Inno.Tooling.Architecture.Tests.csproj", "{24A449B0-2513-4331-9C4B-57E4FE8A3A2A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -614,10 +746,6 @@ Global
 		{372D76BF-B319-484F-BA27-5393959A92D3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{372D76BF-B319-484F-BA27-5393959A92D3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{372D76BF-B319-484F-BA27-5393959A92D3}.Release|Any CPU.Build.0 = Release|Any CPU
-		{852CE79A-25DD-4FF0-A36C-49664B2D56D9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{852CE79A-25DD-4FF0-A36C-49664B2D56D9}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{852CE79A-25DD-4FF0-A36C-49664B2D56D9}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{852CE79A-25DD-4FF0-A36C-49664B2D56D9}.Release|Any CPU.Build.0 = Release|Any CPU
 		{F18A1E5C-A25D-41DF-B2A8-21013F314F0C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{F18A1E5C-A25D-41DF-B2A8-21013F314F0C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F18A1E5C-A25D-41DF-B2A8-21013F314F0C}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -858,10 +986,6 @@ Global
 		{3716F71C-09E7-44B8-ACFA-D910A934783A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3716F71C-09E7-44B8-ACFA-D910A934783A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3716F71C-09E7-44B8-ACFA-D910A934783A}.Release|Any CPU.Build.0 = Release|Any CPU
-		{E69F7DE1-4A7E-4CC1-88B5-FC27AC5B6060}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{E69F7DE1-4A7E-4CC1-88B5-FC27AC5B6060}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{E69F7DE1-4A7E-4CC1-88B5-FC27AC5B6060}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{E69F7DE1-4A7E-4CC1-88B5-FC27AC5B6060}.Release|Any CPU.Build.0 = Release|Any CPU
 		{2B629DAE-0E83-4F91-B2DA-3928A08911BF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{2B629DAE-0E83-4F91-B2DA-3928A08911BF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2B629DAE-0E83-4F91-B2DA-3928A08911BF}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -882,14 +1006,154 @@ Global
 		{A7B51F36-D7C9-48A1-8C05-6D4939292736}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A7B51F36-D7C9-48A1-8C05-6D4939292736}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A7B51F36-D7C9-48A1-8C05-6D4939292736}.Release|Any CPU.Build.0 = Release|Any CPU
-		{9FDBEB5F-C881-4B77-B7DA-314FC02241ED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{9FDBEB5F-C881-4B77-B7DA-314FC02241ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{9FDBEB5F-C881-4B77-B7DA-314FC02241ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{9FDBEB5F-C881-4B77-B7DA-314FC02241ED}.Release|Any CPU.Build.0 = Release|Any CPU
 		{0FDD712B-BC25-4D8D-8071-6E0036370481}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{0FDD712B-BC25-4D8D-8071-6E0036370481}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0FDD712B-BC25-4D8D-8071-6E0036370481}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0FDD712B-BC25-4D8D-8071-6E0036370481}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B0200001-0000-4000-8000-000000000001}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B0200001-0000-4000-8000-000000000001}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B0200001-0000-4000-8000-000000000001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B0200001-0000-4000-8000-000000000001}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B1200001-0000-4000-8000-000000000001}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B1200001-0000-4000-8000-000000000001}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B1200001-0000-4000-8000-000000000001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B1200001-0000-4000-8000-000000000001}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B0100001-0000-4000-8000-000000000001}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B0100001-0000-4000-8000-000000000001}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B0100001-0000-4000-8000-000000000001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B0100001-0000-4000-8000-000000000001}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B1100001-0000-4000-8000-000000000001}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B1100001-0000-4000-8000-000000000001}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B1100001-0000-4000-8000-000000000001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B1100001-0000-4000-8000-000000000001}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B0300001-0000-4000-8000-000000000001}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B0300001-0000-4000-8000-000000000001}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B0300001-0000-4000-8000-000000000001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B0300001-0000-4000-8000-000000000001}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B0300002-0000-4000-8000-000000000002}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B0300002-0000-4000-8000-000000000002}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B0300002-0000-4000-8000-000000000002}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B0300002-0000-4000-8000-000000000002}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B0300003-0000-4000-8000-000000000003}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B0300003-0000-4000-8000-000000000003}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B0300003-0000-4000-8000-000000000003}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B0300003-0000-4000-8000-000000000003}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B1300001-0000-4000-8000-000000000001}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B1300001-0000-4000-8000-000000000001}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B1300001-0000-4000-8000-000000000001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B1300001-0000-4000-8000-000000000001}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B0400001-0000-4000-8000-000000000001}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B0400001-0000-4000-8000-000000000001}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B0400001-0000-4000-8000-000000000001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B0400001-0000-4000-8000-000000000001}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B0400002-0000-4000-8000-000000000002}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B0400002-0000-4000-8000-000000000002}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B0400002-0000-4000-8000-000000000002}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B0400002-0000-4000-8000-000000000002}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B0400003-0000-4000-8000-000000000003}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B0400003-0000-4000-8000-000000000003}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B0400003-0000-4000-8000-000000000003}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B0400003-0000-4000-8000-000000000003}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B1400001-0000-4000-8000-000000000001}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B1400001-0000-4000-8000-000000000001}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B1400001-0000-4000-8000-000000000001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B1400001-0000-4000-8000-000000000001}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0F071106-A85F-492C-92B7-AE16144E46FB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0F071106-A85F-492C-92B7-AE16144E46FB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0F071106-A85F-492C-92B7-AE16144E46FB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0F071106-A85F-492C-92B7-AE16144E46FB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8490128A-8DB4-49C0-93D9-111A21B512E0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8490128A-8DB4-49C0-93D9-111A21B512E0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8490128A-8DB4-49C0-93D9-111A21B512E0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8490128A-8DB4-49C0-93D9-111A21B512E0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A54250A9-223B-42C1-B919-18C03C538ED7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A54250A9-223B-42C1-B919-18C03C538ED7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A54250A9-223B-42C1-B919-18C03C538ED7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A54250A9-223B-42C1-B919-18C03C538ED7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C9C2BDD0-7955-40A5-A344-2770BEBCFC46}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C9C2BDD0-7955-40A5-A344-2770BEBCFC46}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C9C2BDD0-7955-40A5-A344-2770BEBCFC46}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C9C2BDD0-7955-40A5-A344-2770BEBCFC46}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6A4E4BEF-9A4D-4A0D-BC7E-9C10CDB06090}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6A4E4BEF-9A4D-4A0D-BC7E-9C10CDB06090}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6A4E4BEF-9A4D-4A0D-BC7E-9C10CDB06090}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6A4E4BEF-9A4D-4A0D-BC7E-9C10CDB06090}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7CBFC850-0664-4ABB-80E6-13DDC0A11D93}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7CBFC850-0664-4ABB-80E6-13DDC0A11D93}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7CBFC850-0664-4ABB-80E6-13DDC0A11D93}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7CBFC850-0664-4ABB-80E6-13DDC0A11D93}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D9719131-3AF0-4374-A93C-F6B5E9D58813}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D9719131-3AF0-4374-A93C-F6B5E9D58813}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D9719131-3AF0-4374-A93C-F6B5E9D58813}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D9719131-3AF0-4374-A93C-F6B5E9D58813}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9253F4B2-E342-429E-9D49-CEDD0D50CDC5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9253F4B2-E342-429E-9D49-CEDD0D50CDC5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9253F4B2-E342-429E-9D49-CEDD0D50CDC5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9253F4B2-E342-429E-9D49-CEDD0D50CDC5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C24C0F50-1494-48B8-8D6A-8AFE8F80D5BB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C24C0F50-1494-48B8-8D6A-8AFE8F80D5BB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C24C0F50-1494-48B8-8D6A-8AFE8F80D5BB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C24C0F50-1494-48B8-8D6A-8AFE8F80D5BB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4E8C7B8E-E69F-4966-8122-5532D42DE15A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4E8C7B8E-E69F-4966-8122-5532D42DE15A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4E8C7B8E-E69F-4966-8122-5532D42DE15A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4E8C7B8E-E69F-4966-8122-5532D42DE15A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A6B62116-9861-46BF-BBFA-7CB1A5B4FA91}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A6B62116-9861-46BF-BBFA-7CB1A5B4FA91}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A6B62116-9861-46BF-BBFA-7CB1A5B4FA91}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A6B62116-9861-46BF-BBFA-7CB1A5B4FA91}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D6934520-D18C-4805-BB23-F6DF10675F19}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D6934520-D18C-4805-BB23-F6DF10675F19}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D6934520-D18C-4805-BB23-F6DF10675F19}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D6934520-D18C-4805-BB23-F6DF10675F19}.Release|Any CPU.Build.0 = Release|Any CPU
+		{64E5C47F-8758-4BC1-8F58-EDA06D5AC926}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{64E5C47F-8758-4BC1-8F58-EDA06D5AC926}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{64E5C47F-8758-4BC1-8F58-EDA06D5AC926}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{64E5C47F-8758-4BC1-8F58-EDA06D5AC926}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B13BDFEE-E7BC-4F9C-A50D-BED54F2BC810}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B13BDFEE-E7BC-4F9C-A50D-BED54F2BC810}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B13BDFEE-E7BC-4F9C-A50D-BED54F2BC810}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B13BDFEE-E7BC-4F9C-A50D-BED54F2BC810}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AE8C76E2-9C0C-43F4-A0DC-EC11E27FEC9D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AE8C76E2-9C0C-43F4-A0DC-EC11E27FEC9D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AE8C76E2-9C0C-43F4-A0DC-EC11E27FEC9D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AE8C76E2-9C0C-43F4-A0DC-EC11E27FEC9D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{97E1E64D-A52C-4226-8B6E-4452B26D7DB7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{97E1E64D-A52C-4226-8B6E-4452B26D7DB7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{97E1E64D-A52C-4226-8B6E-4452B26D7DB7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{97E1E64D-A52C-4226-8B6E-4452B26D7DB7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CEA4ACA8-6D46-4466-A901-7008DF351529}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CEA4ACA8-6D46-4466-A901-7008DF351529}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CEA4ACA8-6D46-4466-A901-7008DF351529}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CEA4ACA8-6D46-4466-A901-7008DF351529}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8B63BAE4-1BD6-4D8B-8135-A0E4C102B202}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8B63BAE4-1BD6-4D8B-8135-A0E4C102B202}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8B63BAE4-1BD6-4D8B-8135-A0E4C102B202}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8B63BAE4-1BD6-4D8B-8135-A0E4C102B202}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7BA68545-96EA-4EB6-BA76-1A72D385D4B6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7BA68545-96EA-4EB6-BA76-1A72D385D4B6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7BA68545-96EA-4EB6-BA76-1A72D385D4B6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7BA68545-96EA-4EB6-BA76-1A72D385D4B6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{48B37737-599C-47DD-9CED-3613BE594918}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{48B37737-599C-47DD-9CED-3613BE594918}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{48B37737-599C-47DD-9CED-3613BE594918}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{48B37737-599C-47DD-9CED-3613BE594918}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BE22022E-A93E-4FF2-B730-EC2AD9CEDA41}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BE22022E-A93E-4FF2-B730-EC2AD9CEDA41}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BE22022E-A93E-4FF2-B730-EC2AD9CEDA41}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BE22022E-A93E-4FF2-B730-EC2AD9CEDA41}.Release|Any CPU.Build.0 = Release|Any CPU
+		{35E4381A-BED6-42AE-8CEF-8267D193FA5D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{35E4381A-BED6-42AE-8CEF-8267D193FA5D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{35E4381A-BED6-42AE-8CEF-8267D193FA5D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{35E4381A-BED6-42AE-8CEF-8267D193FA5D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7BBE6754-2853-429D-A1AF-A76B473E7EC2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7BBE6754-2853-429D-A1AF-A76B473E7EC2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7BBE6754-2853-429D-A1AF-A76B473E7EC2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7BBE6754-2853-429D-A1AF-A76B473E7EC2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{24A449B0-2513-4331-9C4B-57E4FE8A3A2A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{24A449B0-2513-4331-9C4B-57E4FE8A3A2A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{24A449B0-2513-4331-9C4B-57E4FE8A3A2A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{24A449B0-2513-4331-9C4B-57E4FE8A3A2A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -915,10 +1179,31 @@ Global
 		{1EA28738-D5F0-458B-9166-1AE9E933FA07} = {304A48B8-A137-4877-AADE-FA93686D1127}
 		{5995F74F-F8F5-4D0F-A988-B57C04905B68} = {304A48B8-A137-4877-AADE-FA93686D1127}
 		{6B6BAB40-E5C5-4965-9682-7D6AC3FE936D} = {304A48B8-A137-4877-AADE-FA93686D1127}
-		{96D9E300-4DD5-4F9E-85FE-220DFEDD3CC8} = {3D60B0C5-D01B-4CF9-AAE3-8BCEF8229B7A}
+		{A0100001-0000-4000-8000-000000000001} = {3D60B0C5-D01B-4CF9-AAE3-8BCEF8229B7A}
+		{A0100002-0000-4000-8000-000000000002} = {A0100001-0000-4000-8000-000000000001}
+		{A0200001-0000-4000-8000-000000000001} = {3D60B0C5-D01B-4CF9-AAE3-8BCEF8229B7A}
+		{A0200002-0000-4000-8000-000000000002} = {A0200001-0000-4000-8000-000000000001}
+		{A0210001-0000-4000-8000-000000000001} = {3D60B0C5-D01B-4CF9-AAE3-8BCEF8229B7A}
+		{A0220001-0000-4000-8000-000000000001} = {3D60B0C5-D01B-4CF9-AAE3-8BCEF8229B7A}
+		{A0200003-0000-4000-8000-000000000003} = {A0210001-0000-4000-8000-000000000001}
+		{A0200004-0000-4000-8000-000000000004} = {A0210001-0000-4000-8000-000000000001}
+		{A0200005-0000-4000-8000-000000000005} = {A0200001-0000-4000-8000-000000000001}
+		{A0300001-0000-4000-8000-000000000001} = {3D60B0C5-D01B-4CF9-AAE3-8BCEF8229B7A}
+		{A0300002-0000-4000-8000-000000000002} = {A0300001-0000-4000-8000-000000000001}
+		{A0300003-0000-4000-8000-000000000003} = {A0300001-0000-4000-8000-000000000001}
+		{A0300004-0000-4000-8000-000000000004} = {A0300001-0000-4000-8000-000000000001}
+		{A0300005-0000-4000-8000-000000000005} = {A0300001-0000-4000-8000-000000000001}
+		{A0300006-0000-4000-8000-000000000006} = {A0300001-0000-4000-8000-000000000001}
+		{A0300007-0000-4000-8000-000000000007} = {A0300001-0000-4000-8000-000000000001}
+		{A0300008-0000-4000-8000-000000000008} = {A0300001-0000-4000-8000-000000000001}
+		{A0300009-0000-4000-8000-000000000009} = {A0300001-0000-4000-8000-000000000001}
+		{A0400001-0000-4000-8000-000000000001} = {3D60B0C5-D01B-4CF9-AAE3-8BCEF8229B7A}
+		{A0400002-0000-4000-8000-000000000002} = {A0400001-0000-4000-8000-000000000001}
+		{A0400003-0000-4000-8000-000000000003} = {A0400001-0000-4000-8000-000000000001}
+		{96D9E300-4DD5-4F9E-85FE-220DFEDD3CC8} = {A0200001-0000-4000-8000-000000000001}
 		{D1195814-D6A5-40E7-BF82-7B035581496B} = {96D9E300-4DD5-4F9E-85FE-220DFEDD3CC8}
 		{4CF207E2-26DF-4C93-B118-2B516FE26F6C} = {96D9E300-4DD5-4F9E-85FE-220DFEDD3CC8}
-		{3BB28C37-744C-4596-89C6-DC6E0FEC02D2} = {3D60B0C5-D01B-4CF9-AAE3-8BCEF8229B7A}
+		{3BB28C37-744C-4596-89C6-DC6E0FEC02D2} = {A0100001-0000-4000-8000-000000000001}
 		{3E3AC769-D782-4868-9E63-410894D6D6F4} = {3BB28C37-744C-4596-89C6-DC6E0FEC02D2}
 		{23B9F417-3AC9-4B28-8226-C0E327249FC1} = {3BB28C37-744C-4596-89C6-DC6E0FEC02D2}
 		{7922E16A-C1E4-4668-B4C2-7386FDD231CE} = {3BB28C37-744C-4596-89C6-DC6E0FEC02D2}
@@ -932,20 +1217,24 @@ Global
 		{964F82AB-1BDF-479F-8D0C-41211B02B2DB} = {3BB28C37-744C-4596-89C6-DC6E0FEC02D2}
 		{209B6E01-2E85-47FB-9A94-759F148882DE} = {3BB28C37-744C-4596-89C6-DC6E0FEC02D2}
 		{95EA028D-E6AD-4B5E-8B69-F9F45BF916B0} = {3BB28C37-744C-4596-89C6-DC6E0FEC02D2}
-		{F31DAA54-96B1-49BD-B7D7-3C036F60B1BB} = {3D60B0C5-D01B-4CF9-AAE3-8BCEF8229B7A}
-		{FBE02075-4C35-4E6B-B181-931064034E1B} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
-		{8F7EA7E8-682F-4D33-8174-0C228918A3B5} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
-		{6351AD70-7909-443F-9A18-76303E9599B4} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
-		{6267F747-15B3-4D51-A304-22FA6FF12FE0} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
-		{63A9723D-6EAF-40B0-92C6-41B508115B43} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
-		{62D0E0E2-0C16-40C5-B5B6-ACB73D0B8A61} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
-		{112BDAD0-245F-4730-A868-4AA5D7162E74} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
-		{158A7EFF-99AD-40BF-B765-C2711C39DBE6} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
-		{EC99A22E-FE5B-4A5C-A95C-2461ED3FE1E7} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
-		{32A80B1A-9C94-4142-8A96-9579B6113DEB} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
-		{874FF3FA-A63E-432B-976B-03E7FB3A1646} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
-		{0D4D9EFC-6424-4B61-AA27-D50BFB7B9CB5} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
-		{4D9E6C36-B1B4-42BB-AAB2-757960F74B96} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
+		{F31DAA54-96B1-49BD-B7D7-3C036F60B1BB} = {A0400001-0000-4000-8000-000000000001}
+		{C0410001-0000-4000-8000-000000000001} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
+		{C0410002-0000-4000-8000-000000000002} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
+		{C0410003-0000-4000-8000-000000000003} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
+		{C0410004-0000-4000-8000-000000000004} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
+		{FBE02075-4C35-4E6B-B181-931064034E1B} = {C0410001-0000-4000-8000-000000000001}
+		{8F7EA7E8-682F-4D33-8174-0C228918A3B5} = {C0410002-0000-4000-8000-000000000002}
+		{6351AD70-7909-443F-9A18-76303E9599B4} = {C0410002-0000-4000-8000-000000000002}
+		{6267F747-15B3-4D51-A304-22FA6FF12FE0} = {C0410003-0000-4000-8000-000000000003}
+		{63A9723D-6EAF-40B0-92C6-41B508115B43} = {C0410002-0000-4000-8000-000000000002}
+		{62D0E0E2-0C16-40C5-B5B6-ACB73D0B8A61} = {C0410004-0000-4000-8000-000000000004}
+		{112BDAD0-245F-4730-A868-4AA5D7162E74} = {C0410002-0000-4000-8000-000000000002}
+		{158A7EFF-99AD-40BF-B765-C2711C39DBE6} = {C0410002-0000-4000-8000-000000000002}
+		{EC99A22E-FE5B-4A5C-A95C-2461ED3FE1E7} = {C0410003-0000-4000-8000-000000000003}
+		{32A80B1A-9C94-4142-8A96-9579B6113DEB} = {C0410003-0000-4000-8000-000000000003}
+		{874FF3FA-A63E-432B-976B-03E7FB3A1646} = {C0410003-0000-4000-8000-000000000003}
+		{0D4D9EFC-6424-4B61-AA27-D50BFB7B9CB5} = {C0410003-0000-4000-8000-000000000003}
+		{4D9E6C36-B1B4-42BB-AAB2-757960F74B96} = {C0410002-0000-4000-8000-000000000002}
 		{265D9312-B8CC-46C7-9F2F-13EA2F86A3DC} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
 		{3F3E5448-3C50-455E-A18A-8057D5153231} = {265D9312-B8CC-46C7-9F2F-13EA2F86A3DC}
 		{7EF925D1-9D9C-44D4-9B41-9D8A07A000BA} = {265D9312-B8CC-46C7-9F2F-13EA2F86A3DC}
@@ -957,32 +1246,31 @@ Global
 		{62F87567-0571-43C5-B380-C17EFD4404DD} = {265D9312-B8CC-46C7-9F2F-13EA2F86A3DC}
 		{A441C37F-B451-4B47-AAB2-2CA4EAEBA170} = {265D9312-B8CC-46C7-9F2F-13EA2F86A3DC}
 		{C6F2FA90-1B02-4F7A-B610-CB7A2C3F99B9} = {265D9312-B8CC-46C7-9F2F-13EA2F86A3DC}
-		{107ED04B-1A71-4C7C-87DA-07CB2ECE590F} = {3D60B0C5-D01B-4CF9-AAE3-8BCEF8229B7A}
+		{107ED04B-1A71-4C7C-87DA-07CB2ECE590F} = {A0100001-0000-4000-8000-000000000001}
 		{3159C670-359F-481F-B4C4-90A04103815F} = {107ED04B-1A71-4C7C-87DA-07CB2ECE590F}
 		{ADCEF13E-CEB2-445D-A537-AB4C28450749} = {107ED04B-1A71-4C7C-87DA-07CB2ECE590F}
-		{DDFB86C3-248F-4B3B-8133-1269F2D5F203} = {3D60B0C5-D01B-4CF9-AAE3-8BCEF8229B7A}
-		{0DD747F7-0B85-4208-BA76-C537F3A64362} = {DDFB86C3-248F-4B3B-8133-1269F2D5F203}
-		{6092DB32-4A29-410B-B7D7-0842F76427A9} = {DDFB86C3-248F-4B3B-8133-1269F2D5F203}
+		{DDFB86C3-248F-4B3B-8133-1269F2D5F203} = {A0210001-0000-4000-8000-000000000001}
+		{0DD747F7-0B85-4208-BA76-C537F3A64362} = {A0300007-0000-4000-8000-000000000007}
+		{6092DB32-4A29-410B-B7D7-0842F76427A9} = {A0300002-0000-4000-8000-000000000002}
 		{1CC3C349-3E26-430D-B6BF-309BCF2ECEE7} = {DDFB86C3-248F-4B3B-8133-1269F2D5F203}
-		{47F077BB-EA30-4B73-8147-44CAFE4E1C17} = {3D60B0C5-D01B-4CF9-AAE3-8BCEF8229B7A}
+		{47F077BB-EA30-4B73-8147-44CAFE4E1C17} = {A0220001-0000-4000-8000-000000000001}
 		{4624635E-E95D-4A09-8ACC-AD417421361C} = {47F077BB-EA30-4B73-8147-44CAFE4E1C17}
 		{09204EC3-B629-41C6-8E63-114E30677410} = {47F077BB-EA30-4B73-8147-44CAFE4E1C17}
-		{EF7F2399-5D6B-4B1E-AE43-CB72AA3A7F78} = {3D60B0C5-D01B-4CF9-AAE3-8BCEF8229B7A}
+		{EF7F2399-5D6B-4B1E-AE43-CB72AA3A7F78} = {A0210001-0000-4000-8000-000000000001}
 		{03A744C8-19FD-4976-96B8-6A083E23E863} = {EF7F2399-5D6B-4B1E-AE43-CB72AA3A7F78}
-		{B81C0BD6-5751-4164-B8AD-1834E0158703} = {EF7F2399-5D6B-4B1E-AE43-CB72AA3A7F78}
-		{A2CA697E-FF0A-4BC4-96C1-CC2E0D1DA33E} = {EF7F2399-5D6B-4B1E-AE43-CB72AA3A7F78}
+		{B81C0BD6-5751-4164-B8AD-1834E0158703} = {A0300007-0000-4000-8000-000000000007}
+		{A2CA697E-FF0A-4BC4-96C1-CC2E0D1DA33E} = {A0300005-0000-4000-8000-000000000005}
 		{372D76BF-B319-484F-BA27-5393959A92D3} = {EF7F2399-5D6B-4B1E-AE43-CB72AA3A7F78}
-		{852CE79A-25DD-4FF0-A36C-49664B2D56D9} = {EF7F2399-5D6B-4B1E-AE43-CB72AA3A7F78}
 		{F18A1E5C-A25D-41DF-B2A8-21013F314F0C} = {EF7F2399-5D6B-4B1E-AE43-CB72AA3A7F78}
 		{4310DB2C-837A-425C-BF96-A8A48931B53E} = {EF7F2399-5D6B-4B1E-AE43-CB72AA3A7F78}
-		{C2B99C13-4067-4DB7-8375-02C994D69470} = {3D60B0C5-D01B-4CF9-AAE3-8BCEF8229B7A}
-		{60FD606B-CE9A-4804-9852-98DA35708B4E} = {C2B99C13-4067-4DB7-8375-02C994D69470}
+		{C2B99C13-4067-4DB7-8375-02C994D69470} = {A0220001-0000-4000-8000-000000000001}
+		{60FD606B-CE9A-4804-9852-98DA35708B4E} = {A0400002-0000-4000-8000-000000000002}
 		{D3649C6D-1498-4F33-B83C-D0B0160B5C75} = {C2B99C13-4067-4DB7-8375-02C994D69470}
-		{63021944-AB0B-464B-AC55-EDD808E2566D} = {3D60B0C5-D01B-4CF9-AAE3-8BCEF8229B7A}
+		{63021944-AB0B-464B-AC55-EDD808E2566D} = {A0200001-0000-4000-8000-000000000001}
 		{82A42473-08A4-4AFB-996B-5563AAF0C2AE} = {63021944-AB0B-464B-AC55-EDD808E2566D}
 		{1F897308-0EB2-41DA-BE7E-D7107EE2B92F} = {63021944-AB0B-464B-AC55-EDD808E2566D}
-		{C31D9C96-B62A-4AD5-815D-01BED430E80C} = {3D60B0C5-D01B-4CF9-AAE3-8BCEF8229B7A}
-		{836753BC-D369-4197-9B23-9E3F2751C4DC} = {C31D9C96-B62A-4AD5-815D-01BED430E80C}
+		{C31D9C96-B62A-4AD5-815D-01BED430E80C} = {A0220001-0000-4000-8000-000000000001}
+		{836753BC-D369-4197-9B23-9E3F2751C4DC} = {A0100002-0000-4000-8000-000000000002}
 		{90CBDDFC-BBE0-4956-B68D-7F62E348462B} = {C31D9C96-B62A-4AD5-815D-01BED430E80C}
 		{B817139D-F38E-42C5-AE7F-63842325E07E} = {C31D9C96-B62A-4AD5-815D-01BED430E80C}
 		{157BEA4D-985F-4974-9323-4581B92163D5} = {D6BE33BD-7AC1-4C59-AF9A-52C523FABA31}
@@ -1048,18 +1336,60 @@ Global
 		{3B7C6CF1-C2C6-4C78-8228-409767104F70} = {304A48B8-A137-4877-AADE-FA93686D1127}
 		{03BDB159-BF45-4872-8A5F-6BFCEF4B1A5D} = {ABB33767-92C6-407F-987D-272E83B06D4C}
 		{FC817548-B626-452B-9505-48E7A9F5E273} = {F6184EF0-70D8-4BBE-AA5A-CBFD122BCCEA}
-		{8236FE81-05F1-4A56-8B5C-B194DDC15270} = {3D60B0C5-D01B-4CF9-AAE3-8BCEF8229B7A}
+		{8236FE81-05F1-4A56-8B5C-B194DDC15270} = {A0210001-0000-4000-8000-000000000001}
 		{4CC4D438-818A-4C30-82E8-B128B00A8348} = {8236FE81-05F1-4A56-8B5C-B194DDC15270}
 		{73D4EF8E-8F4D-4409-AE38-480163429965} = {8236FE81-05F1-4A56-8B5C-B194DDC15270}
 		{CD9A5D27-C02E-40CF-AC96-E8CC0C61F27C} = {8236FE81-05F1-4A56-8B5C-B194DDC15270}
-		{3716F71C-09E7-44B8-ACFA-D910A934783A} = {8236FE81-05F1-4A56-8B5C-B194DDC15270}
-		{E69F7DE1-4A7E-4CC1-88B5-FC27AC5B6060} = {8236FE81-05F1-4A56-8B5C-B194DDC15270}
-		{2B629DAE-0E83-4F91-B2DA-3928A08911BF} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
+		{3716F71C-09E7-44B8-ACFA-D910A934783A} = {A0300006-0000-4000-8000-000000000006}
 		{06B2A105-FF43-4B80-A1BB-9AF7FD3DB4A7} = {12207492-F02B-4CE8-8B2B-AE3608F7E7C9}
 		{985C305D-9562-460F-9E01-73BA7B9EFE50} = {12207492-F02B-4CE8-8B2B-AE3608F7E7C9}
 		{355F52C8-22E3-494F-BEB5-E4DD6397504D} = {12207492-F02B-4CE8-8B2B-AE3608F7E7C9}
 		{A7B51F36-D7C9-48A1-8C05-6D4939292736} = {12207492-F02B-4CE8-8B2B-AE3608F7E7C9}
-		{9FDBEB5F-C881-4B77-B7DA-314FC02241ED} = {12207492-F02B-4CE8-8B2B-AE3608F7E7C9}
 		{0FDD712B-BC25-4D8D-8071-6E0036370481} = {5B8E6AE9-3636-4299-AB37-F8696D036FDC}
+		{B0200001-0000-4000-8000-000000000001} = {A0200002-0000-4000-8000-000000000002}
+		{A1200001-0000-4000-8000-000000000001} = {D6BE33BD-7AC1-4C59-AF9A-52C523FABA31}
+		{B1200001-0000-4000-8000-000000000001} = {A1200001-0000-4000-8000-000000000001}
+		{B0100001-0000-4000-8000-000000000001} = {107ED04B-1A71-4C7C-87DA-07CB2ECE590F}
+		{B1100001-0000-4000-8000-000000000001} = {5F9BAD0A-6F9C-42E5-AB4C-C7842A068A4B}
+		{B0300001-0000-4000-8000-000000000001} = {A0200003-0000-4000-8000-000000000003}
+		{B0300002-0000-4000-8000-000000000002} = {A0200003-0000-4000-8000-000000000003}
+		{B0300003-0000-4000-8000-000000000003} = {A0300003-0000-4000-8000-000000000003}
+		{A1300001-0000-4000-8000-000000000001} = {D6BE33BD-7AC1-4C59-AF9A-52C523FABA31}
+		{B1300001-0000-4000-8000-000000000001} = {A1300001-0000-4000-8000-000000000001}
+		{B0400001-0000-4000-8000-000000000001} = {A0200004-0000-4000-8000-000000000004}
+		{B0400002-0000-4000-8000-000000000002} = {A0200004-0000-4000-8000-000000000004}
+		{B0400003-0000-4000-8000-000000000003} = {A0300004-0000-4000-8000-000000000004}
+		{A1400001-0000-4000-8000-000000000001} = {D6BE33BD-7AC1-4C59-AF9A-52C523FABA31}
+		{B1400001-0000-4000-8000-000000000001} = {A1400001-0000-4000-8000-000000000001}
+		{0F071106-A85F-492C-92B7-AE16144E46FB} = {A0200005-0000-4000-8000-000000000005}
+		{8490128A-8DB4-49C0-93D9-111A21B512E0} = {A0200005-0000-4000-8000-000000000005}
+		{A54250A9-223B-42C1-B919-18C03C538ED7} = {A0200005-0000-4000-8000-000000000005}
+		{F6B9EAA6-9924-42FB-BA08-88CB4306AFA1} = {D6BE33BD-7AC1-4C59-AF9A-52C523FABA31}
+		{C9C2BDD0-7955-40A5-A344-2770BEBCFC46} = {F6B9EAA6-9924-42FB-BA08-88CB4306AFA1}
+		{6A4E4BEF-9A4D-4A0D-BC7E-9C10CDB06090} = {A0300002-0000-4000-8000-000000000002}
+		{7CBFC850-0664-4ABB-80E6-13DDC0A11D93} = {A0300003-0000-4000-8000-000000000003}
+		{D9719131-3AF0-4374-A93C-F6B5E9D58813} = {A0300004-0000-4000-8000-000000000004}
+		{9253F4B2-E342-429E-9D49-CEDD0D50CDC5} = {A0300005-0000-4000-8000-000000000005}
+		{C24C0F50-1494-48B8-8D6A-8AFE8F80D5BB} = {A0300005-0000-4000-8000-000000000005}
+		{4E8C7B8E-E69F-4966-8122-5532D42DE15A} = {A0300006-0000-4000-8000-000000000006}
+		{A6B62116-9861-46BF-BBFA-7CB1A5B4FA91} = {A0300007-0000-4000-8000-000000000007}
+		{D6934520-D18C-4805-BB23-F6DF10675F19} = {A0300008-0000-4000-8000-000000000008}
+		{64E5C47F-8758-4BC1-8F58-EDA06D5AC926} = {A0300009-0000-4000-8000-000000000009}
+		{B13BDFEE-E7BC-4F9C-A50D-BED54F2BC810} = {A0300009-0000-4000-8000-000000000009}
+		{AE8C76E2-9C0C-43F4-A0DC-EC11E27FEC9D} = {A0400003-0000-4000-8000-000000000003}
+		{97E1E64D-A52C-4226-8B6E-4452B26D7DB7} = {3BB28C37-744C-4596-89C6-DC6E0FEC02D2}
+		{CEA4ACA8-6D46-4466-A901-7008DF351529} = {98E33FD9-4264-40D5-873B-A73BBFF26F19}
+		{2B629DAE-0E83-4F91-B2DA-3928A08911BF} = {C0410003-0000-4000-8000-000000000003}
+		{8B63BAE4-1BD6-4D8B-8135-A0E4C102B202} = {3BB28C37-744C-4596-89C6-DC6E0FEC02D2}
+		{7BA68545-96EA-4EB6-BA76-1A72D385D4B6} = {98E33FD9-4264-40D5-873B-A73BBFF26F19}
+		{D90FBD84-BB81-4E1C-A8B8-0DF5A7B08A23} = {A0220001-0000-4000-8000-000000000001}
+		{48B37737-599C-47DD-9CED-3613BE594918} = {D90FBD84-BB81-4E1C-A8B8-0DF5A7B08A23}
+		{462C8C6A-20AC-45F0-A16F-55C9E62449A0} = {A0220001-0000-4000-8000-000000000001}
+		{BE22022E-A93E-4FF2-B730-EC2AD9CEDA41} = {462C8C6A-20AC-45F0-A16F-55C9E62449A0}
+		{04592234-45FB-46DE-8EDC-D2FF2FBFEC3B} = {A0400001-0000-4000-8000-000000000001}
+		{35E4381A-BED6-42AE-8CEF-8267D193FA5D} = {04592234-45FB-46DE-8EDC-D2FF2FBFEC3B}
+		{7BBE6754-2853-429D-A1AF-A76B473E7EC2} = {985CC4F9-F39F-4691-BE3E-828CD78728D6}
+		{9CEE6632-0D0D-444A-BE3C-72CEBB7DDE97} = {D6BE33BD-7AC1-4C59-AF9A-52C523FABA31}
+		{24A449B0-2513-4331-9C4B-57E4FE8A3A2A} = {9CEE6632-0D0D-444A-BE3C-72CEBB7DDE97}
 	EndGlobalSection
 EndGlobal

@@ -10,15 +10,15 @@ Target Header 右上角提供 lock/unlock 控件，其交互面积、图标居�
 
 Asset target Drawer 由 FileBrowser 项目自身提供，并通过 `IInspectionIconProvider<AssetFileEntry>` 复用 `AssetEditorModule` 的 type/extension icon registry；因此 File Browser Tree/List/Grid 与 Inspector Header 始终一致，EditorScripts 热重载图标声明后两处会同时更新。第二行 source path 使用与 File Browser 底部 breadcrumb 相同的半透明 palette color。Plugin Source Mount 根使用 `IPlugin` 类型，不伪装成普通 Directory，也不创建 `.iplugin` companion asset。
 
-GameObject Header 的第二行包含 Active、项目 Tag picker 和 Layer picker。`SceneProjectSettingsModule` 按 `ProjectSettingsStore.revision` 刷新隔离的 `GameTagCatalog` 与 `GameLayerStack` 快照；Inspector 不从 `editor.ini` 或 `Settings.Editor.inno` 建立第二份 catalog。对象修改通过 `SceneEdits` 进入 Scene History。
+GameObject Header 的第二行包含 Active、项目 Tag picker 和 Layer picker。`SceneProjectSettingsModule` 按 `ProjectSettingsStore.revision` 刷新隔离的 `GameTagCatalog` 与 `GameLayerCatalog` 快照；Inspector 不从 `editor.ini` 或 `Settings.Editor.inno` 建立第二份 catalog。对象修改通过 `SceneEdits` 进入 Scene History。
 
-定义在 `Edit/Settings... → Project/Scene/Tags` 与 `Project/Scene/Layers` 编辑，分别由 `ProjectSettingEditor<GameTagCatalog>` 与 `ProjectSettingEditor<GameLayerStack>` 暂存，并由 Settings 窗口右下角的单一 `Apply` 写入 `<ProjectRoot>/Settings.Project.inno`。删除定义不会自动重写已加载或未加载 Scene；assignment 仍保存在 Scene/Prefab 中，并发布 `GAMEOBJECT-TAG-UNDEFINED` 或 `GAMEOBJECT-LAYER-UNDEFINED`，直到用户恢复定义或显式修改对象。这避免一次设置操作隐式制造大量 Scene dirty state。
+定义在 `Edit/Settings... → Project/Scene/Tags` 与 `Project/Scene/Layers` 编辑，分别由 `ProjectSettingEditor<GameTagCatalog>` 与 `ProjectSettingEditor<GameLayerCatalog>` 暂存，并由 Settings 窗口右下角的单一 `Apply` 写入 `<ProjectRoot>/Settings.Project.inno`。删除定义不会自动重写已加载或未加载 Scene；assignment 仍保存在 Scene/Prefab 中，并发布 `GAMEOBJECT-TAG-UNDEFINED` 或 `GAMEOBJECT-LAYER-UNDEFINED`，直到用户恢复定义或显式修改对象。这避免一次设置操作隐式制造大量 Scene dirty state。
 
 Layer 页面以紧凑表格显示 slot、globally stable ID、name 与 remove action；未使用 slot 收口到 `Add layer...`。Tag 页面提供统一 Add 与定义列表，并与 Layer 表格共享相同的 cell padding、plain-cell frame inset、header background、Action 列宽和 inner borders。GameObject Header 的 Layer/Tag selector 与 Layer 添加 selector 都使用共享 menu popup contract，具有与右键菜单一致的 padding、颜色和 work-area-bounded 滚动行为。Apply 时两者分别由协议 Composer 捕获 sparse layer/interaction operations 与 tag additions/removals，所以多个 Plugin 可以修改同一设置而不互相覆盖整个集合。两者只是普通强类型 Project Setting Drawer，不创建 Asset、metadata 或 feature 专属持久化通道。
 
 Inspector Panel 关闭根 window padding，使外层纵向 scrollbar 贴紧 Dock body 边缘；所有 Target Header、卡片和 Drawer 正文统一放在 `ConstrainedContent` 中，由容器准确恢复一层标准 window padding，不再出现零间距或 Panel/child 双层空隙。该 auto-resize child 的显式 content width 始终等于 viewport 扣除左右 padding 后的宽度，并禁用自身 scrollbar/scroll input；因此 Inspector 在所有 target（包括 GameBehavior/GameSystem）下都不会产生横向 scroll range，也不需要逐帧重置 `scrollX`。长卡片标题会在右侧操作区之前裁剪，属性 label 和多轴数值字段会按真实可用宽度收缩，任何 Drawer 都不能把纵向滚动父级撑宽。
 
-`GameLayerStack` 仍保留对称 interaction matrix API 与 source 数据，因为自定义物理、感知或查询系统可以显式调用 `CanInteract`/`SetInteraction`；当前引擎没有内建系统自动消费这些规则。因此 Inspector 不再显示 `Layer Interactions` 区域，项目只需要 layer 分类时无需配置它。
+`GameLayerCatalog` 仍保留对称 interaction matrix API 与 source 数据，因为自定义物理、感知或查询系统可以显式调用 `CanInteract`/`SetInteraction`；当前引擎没有内建系统自动消费这些规则。因此 Inspector 不再显示 `Layer Interactions` 区域，项目只需要 layer 分类时无需配置它。
 
 ## Registry 扩展
 

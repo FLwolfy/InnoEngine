@@ -1,10 +1,16 @@
 # Inno.Editor.ImGui
 
-[Editor 索引](README.md) · [Platform ImGui](../platform/Inno.Platform.Sdl3.ImGui.md) · [Wiki 首页](../README.md)
+[Editor 索引](README.md) · [Platform ImGui](../platform/Inno.Adapter.Presentation.ImGui.Sdl3.md) · [Wiki 首页](../README.md)
+
+## 退出所有权
+
+`ImGuiEditorRuntime.Dispose()` 只有在 interaction runtime 完整退场后才标记完成。
+Core `RetirementPendingException` 原样上抛并保留内部 runtime；普通已终结错误仍传播，但不会重复已完成的 Dispose。
+因此表现层不会把未退休的扩展误当作已经销毁，也不授权上层提前释放 ImGui/native context。
 
 `Inno.Editor.ImGui` 提供编辑器统一控件、菜单/拖放渲染桥和视觉配置。它只包装可复用的 UI 原语，不持有 Scene、Selection 或 Panel 业务状态。
 
-EditorScripts 使用逻辑 namespace `InnoEditor.ImGui`。该项目的唯一 `Properties/ScriptingApi.cs` 导出 Editor widgets、常用 Dear ImGui flags 与 pointer-free `ImGui` facade；`Inno.Platform.Sdl3.ImGui` 不声明脚本 API。Facade 不暴露 native pointer、callback userdata 或 backend texture ID，只能在 Panel/Modal/Drawer 绘制回调期间调用。
+EditorScripts 使用逻辑 namespace `InnoEditor.ImGui`。该项目的唯一 `Properties/ScriptingApi.cs` 导出 Editor widgets、常用 Dear ImGui flags 与 pointer-free `ImGui` facade；`Inno.Adapter.Presentation.ImGui` 不声明脚本 API。Facade 不暴露 native pointer、callback userdata 或 backend texture ID，只能在 Panel/Modal/Drawer 绘制回调期间调用。
 
 ```text
 Inno.Editor.ImGui/
@@ -125,7 +131,7 @@ Tree 行高采用紧凑的原生 `TreeNode` 内容高度；Hierarchy 通过可�
 
 Scripting facade 同时导出 `TreeNodeDrawContext`、`TreeNodeOptions`、`TreeNodeResult` 与可调用的 `TreeNode` 入口；content callback 必须接收 draw context。native 指针/内部布局 helper 通过显式 member-level ignore 留在 host，不会因为 signature closure 被误导出。
 
-`IconText` 使用 baked glyph 的可见边界把 icon 轮廓放在 slot 中心。字体注册与自定义方式见 [Platform ImGui](../platform/Inno.Platform.Sdl3.ImGui.md)。
+`IconText` 使用 baked glyph 的可见边界把 icon 轮廓放在 slot 中心。字体注册与自定义方式见 [Platform ImGui](../platform/Inno.Adapter.Presentation.ImGui.Sdl3.md)。
 
 `DragDropTarget(..., drawDefaultHighlight: false)` 可关闭 ImGui 默认目标框，适合需要按鼠标在行内位置绘制互斥反馈的复合目标。
 

@@ -12,7 +12,7 @@
 using System;
 
 using Inno.Editor.Inspection;
-using Inno.Platform.Sdl3.ImGui;
+using Inno.Adapter.Presentation.ImGui;
 
 [InspectionDrawer(typeof(AnimationController))]
 internal sealed class AnimationControllerInspectionDrawer

@@ -11,7 +11,7 @@
 ```shell
 /path/to/dotnet build/support/Inno.Build.SupportPacks/bin/Debug/net9.0/Inno.Build.SupportPacks.dll \
   --engine-root /path/to/InnoEngine \
-  --output /path/to/InnoEngine/src/editor/Inno.Editor.Application/bin/Debug/net9.0/SupportPacks \
+  --output /path/to/InnoEngine/src/composition/editor/host/Inno.Editor.Application/bin/Debug/net9.0/SupportPacks \
   --target macos-arm64 \
   --dotnet /path/to/dotnet
 ```

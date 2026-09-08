@@ -30,15 +30,15 @@
 
 纹理导入器把原始 PNG/JPG 等写入 Artifact：
 
-[TextureAssetImporter.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/rendering/Inno.Rendering.Assets/Importing/TextureAssetImporter.cs:41)
+[TextureAssetImporter.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/services/rendering/Inno.Rendering.Assets/Importing/TextureAssetImporter.cs:41)
 
 但游戏导出明确只创建空的 `Sources/<source-id>` 身份目录，不复制源文件：
 
-[AssetLoader.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/assets/Inno.Assets.Pipeline/AssetLoader.cs:1439)
+[AssetLoader.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/content/assets/Inno.Assets.Pipeline/AssetLoader.cs:1439)
 
 Player 运行时预热纹理，却仍然从物理 source path 调用 `texturec`：
 
-[RenderAssetPrewarmService.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/rendering/Inno.Rendering.Runtime/RenderAssetPrewarmService.cs:117)
+[RenderAssetPrewarmService.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/services/rendering/Inno.Rendering.Runtime/RenderAssetPrewarmService.cs:117)
 
 因此导出后：
 
@@ -54,7 +54,7 @@ texturec 失败
 
 现有测试没有发现它，是因为测试里的假纹理编译器完全忽略了 `sourcePath`：
 
-[EmptyRenderingKernelTests.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/tests/Inno.Rendering.Runtime.Tests/EmptyRenderingKernelTests.cs:954)
+[EmptyRenderingKernelTests.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/tests/rendering/Inno.Rendering.Runtime.Tests/EmptyRenderingKernelTests.cs:954)
 
 这应当作为 P0 修复。正确方向不是临时把裸资源重新复制进 Player，而是：
 
@@ -69,9 +69,9 @@ texturec 失败
 
 当前有 11 处 `InternalsVisibleTo`，其中多处是生产程序集之间的耦合，例如：
 
-- [Inno.Rendering.Core/AssemblyInfo.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/rendering/Inno.Rendering.Core/Properties/AssemblyInfo.cs:3)
-- [Inno.Rendering/AssemblyInfo.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/rendering/Inno.Rendering/Properties/AssemblyInfo.cs:3)
-- [Inno.Assets.Pipeline/AssemblyInfo.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/assets/Inno.Assets.Pipeline/Properties/AssemblyInfo.cs:3)
+- [Inno.Rendering.Core/AssemblyInfo.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/services/rendering/Inno.Rendering.Core/Properties/AssemblyInfo.cs:3)
+- [Inno.Rendering/AssemblyInfo.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/services/rendering/Inno.Rendering/Properties/AssemblyInfo.cs:3)
+- [Inno.Assets.Pipeline/AssemblyInfo.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/content/assets/Inno.Assets.Pipeline/Properties/AssemblyInfo.cs:3)
 - [Inno.Scene/AssemblyInfo.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/engine/Inno.Scene/Properties/AssemblyInfo.cs:3)
 
 这不仅违反你的硬性要求，也说明某些项目拆分只是“程序集上分开了”，真实协议边界还没有完全独立。
@@ -95,15 +95,15 @@ texturec 失败
 
 内置 Publisher 每次 Export 都执行 `dotnet publish`：
 
-[DotnetGamePlayerPublisher.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/editor/Inno.Editor.Exporting/Building/DotnetGamePlayerPublisher.cs:41)
+[DotnetGamePlayerPublisher.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/composition/editor/features/Inno.Editor.Exporting/Building/DotnetGamePlayerPublisher.cs:41)
 
 而且通过查找 `InnoEngine.sln` 判断是否处于源码 checkout：
 
-[DotnetGamePlayerPublisher.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/editor/Inno.Editor.Exporting/Building/DotnetGamePlayerPublisher.cs:192)
+[DotnetGamePlayerPublisher.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/composition/editor/features/Inno.Editor.Exporting/Building/DotnetGamePlayerPublisher.cs:192)
 
 `GameExportRequest` 甚至公开要求调用者传入 `playerProjectPath`：
 
-[GameExportRequest.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/editor/Inno.Editor.Exporting/Building/GameExportRequest.cs:33)
+[GameExportRequest.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/composition/editor/features/Inno.Editor.Exporting/Building/GameExportRequest.cs:33)
 
 这是明显的内部构建细节泄漏。正式 Editor 安装包脱离源码仓库后，这套 API 就不成立。
 
@@ -121,7 +121,7 @@ texturec 失败
 
 Publisher 会把 BGFX 工具目录、`bgfx_shader.sh`、`bgfx_compute.sh` 复制进游戏：
 
-[DotnetGamePlayerPublisher.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/editor/Inno.Editor.Exporting/Building/DotnetGamePlayerPublisher.cs:163)
+[DotnetGamePlayerPublisher.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/composition/editor/features/Inno.Editor.Exporting/Building/DotnetGamePlayerPublisher.cs:163)
 
 Player 启动后创建运行时 Shader/Texture compiler：
 
@@ -129,7 +129,7 @@ Player 启动后创建运行时 Shader/Texture compiler：
 
 Shader source importer 还重复输出 `runtime` 和 `source`：
 
-[ShaderSourceAssetImporter.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/rendering/Inno.Rendering.Assets/Importing/ShaderSourceAssetImporter.cs:29)
+[ShaderSourceAssetImporter.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/services/rendering/Inno.Rendering.Assets/Importing/ShaderSourceAssetImporter.cs:29)
 
 这会造成：
 
@@ -155,7 +155,7 @@ Asset 自身的导出在 Loader gate 内是稳定的，这是优点。但 Game E
 4. runtime assemblies；
 5. Player；
 
-见 [GameExportService.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/editor/Inno.Editor.Exporting/Building/GameExportService.cs:85)。
+见 [GameExportService.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/composition/editor/features/Inno.Editor.Exporting/Building/GameExportService.cs:85)。
 
 没有一个统一 generation token 或 lease。脚本、Plugin、Settings 或 Asset 在中途切换时，有机会组成混合代际 Build。
 
@@ -185,11 +185,11 @@ ProjectBuildSnapshotLease
 
 `ExportAsync` 在第一次 `await` 之前已经同步完成 Asset 导出、Settings、Manifest 和程序集复制：
 
-[GameExportService.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/editor/Inno.Editor.Exporting/Building/GameExportService.cs:85)
+[GameExportService.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/composition/editor/features/Inno.Editor.Exporting/Building/GameExportService.cs:85)
 
 它从 Editor 的 `OnUpdate` 直接启动：
 
-[ExportWindowModule.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/editor/Inno.Editor.Exporting/Runtime/ExportWindowModule.cs:173)
+[ExportWindowModule.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/composition/editor/features/Inno.Editor.Exporting/Runtime/ExportWindowModule.cs:173)
 
 因此大项目会卡主线程。
 
@@ -270,11 +270,11 @@ Plugin Export 更明显：
 allowDefaultObject: false
 ```
 
-见 [ValuePipeline.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/core/Inno.Core.Serialization/Internal/ValuePipeline.cs:194)。
+见 [ValuePipeline.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/foundation/core/Inno.Core.Serialization/Internal/ValuePipeline.cs:194)。
 
 因此即使是 sealed、准确声明类型、实现 `ISerializable` 的普通嵌套对象，也必须编写 Converter：
 
-[ValuePipeline.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/core/Inno.Core.Serialization/Internal/ValuePipeline.cs:134)
+[ValuePipeline.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/foundation/core/Inno.Core.Serialization/Internal/ValuePipeline.cs:134)
 
 这就是之前 `GameRuntimePlugin` 报错的根本原因。
 
@@ -332,11 +332,11 @@ allowDefaultObject: false
 
 例如 AssetPipeline observer：
 
-[AssetPipeline.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/assets/Inno.Assets/AssetPipeline.cs:925)
+[AssetPipeline.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/content/assets/Inno.Assets/AssetPipeline.cs:925)
 
 AssetLoader reload observer：
 
-[AssetLoader.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/assets/Inno.Assets.Pipeline/AssetLoader.cs:2196)
+[AssetLoader.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/content/assets/Inno.Assets.Pipeline/AssetLoader.cs:2196)
 
 Plugin candidate observer 也采用类似方式。
 
@@ -380,7 +380,7 @@ Play Mode 整体设计是成功的：
 - 日志 session 分离；
 - 编译、Scene、Interactions 都通过窄接口注入。
 
-[EditorPlayModeModule.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/editor/Inno.Editor.PlayMode/Runtime/EditorPlayModeModule.cs:12)
+[EditorPlayModeModule.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/composition/editor/features/Inno.Editor.PlayMode/Runtime/EditorPlayModeModule.cs:12)
 
 但有两个需要收口的点。
 
@@ -388,11 +388,11 @@ Play Mode 整体设计是成功的：
 
 `RequestCompilation()` 返回 `void`，调用方只能轮询全局 `state` 和 `lastCompilation`：
 
-[IEditorScriptCompilation.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/editor/Inno.Editor.Scripting/Runtime/IEditorScriptCompilation.cs:19)
+[IEditorScriptCompilation.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/composition/editor/features/Inno.Editor.Scripting/Runtime/IEditorScriptCompilation.cs:19)
 
 这不能证明“当前结果正是我请求的那一代”。Play Mode 本身甚至不主动请求 fresh compilation，只等待当前状态：
 
-[EditorPlayModeModule.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/editor/Inno.Editor.PlayMode/Runtime/EditorPlayModeModule.cs:115)
+[EditorPlayModeModule.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/composition/editor/features/Inno.Editor.PlayMode/Runtime/EditorPlayModeModule.cs:115)
 
 应让请求返回 `CompilationTicket`，包含 generation ID、Task、result 和 pin/release。Export 与 Play Mode 都复用这个协议。
 
@@ -476,7 +476,7 @@ LocalApplicationData/InnoEngine/<executable-name>
 - 总计 756 个测试；
 - 首次全量运行：755 通过，1 失败；
 - 失败位于 Script Compiler 的 Roslyn metadata namespace 加载，抛出内部 `NullReferenceException`：
-  [ScriptCompiler.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/editor/Inno.Editor.Scripting/Compilation/ScriptCompiler.cs:272)
+  [ScriptCompiler.cs](/Users/aaronliao/Dev/GameEngineDev/InnoEngine/src/composition/editor/features/Inno.Editor.Scripting/Compilation/ScriptCompiler.cs:272)
 - 单独重跑失败测试：通过；
 - 单独重跑完整 Scripting 测试项目：143/143 全部通过。
 

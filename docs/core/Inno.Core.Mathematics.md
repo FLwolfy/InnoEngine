@@ -1,6 +1,6 @@
 # Inno.Core.Mathematics
 
-[上一页：Logging](Inno.Core.Logging.md) · [Core 索引](README.md) · [下一页：Storage](Inno.Core.Storage.md)
+[上一页：Logging](Inno.Core.Logging.md) · [Core 索引](README.md) · [下一页：Storage](Inno.Core.Collections.md)
 
 Mathematics 提供引擎自有的 float/int 向量、四元数、4×4 矩阵、矩形、颜色与标量工具，并对热点点积/矩阵运算使用平台 SIMD。多数类型是可变 struct，公开分量字段采用 `x/y/z/w` 或 `m11...m44`。
 

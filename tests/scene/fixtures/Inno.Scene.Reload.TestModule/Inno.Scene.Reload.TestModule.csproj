@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Inno.Scene.Reload.TestModule</AssemblyName>
+    <InnoAssemblyDomain>InnoPlugin</InnoAssemblyDomain>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../src/content/assets/Inno.Assets/Inno.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\src\foundation\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\src\foundation\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\src\content\scene\Inno.Scene\Inno.Scene.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+</Project>

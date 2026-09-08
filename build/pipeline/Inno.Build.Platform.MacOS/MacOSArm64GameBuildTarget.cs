@@ -39,6 +39,16 @@ public sealed class MacOSArm64GameBuildTarget : IGameBuildTarget
     public BuildTargetId id => BuildTargetId.macOSArm64;
 
     /// <summary>
+    /// Gets the target name presented by authoring hosts.
+    /// </summary>
+    public string displayName => "macOS (Apple silicon)";
+
+    /// <summary>
+    /// Gets whether macOS ARM64 is the natural default on this host.
+    /// </summary>
+    public bool isPreferredOnCurrentHost => OperatingSystem.IsMacOS();
+
+    /// <summary>
     /// Compiles Metal shader variants and portable texture artifacts for the macOS Player.
     /// </summary>
     /// <param name="context">

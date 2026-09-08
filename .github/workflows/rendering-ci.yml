@@ -1,4 +1,4 @@
-name: Rendering CI
+name: Engine CI
 
 on:
   workflow_dispatch:
@@ -8,17 +8,7 @@ on:
       - "build/**"
       - "extern/**"
       - "native/**"
-      - "src/core/**"
-      - "src/assets/**"
-      - "src/audio/**"
-      - "src/extensibility/**"
-      - "src/scripting/**"
-      - "src/plugins/**"
-      - "src/scene/**"
-      - "src/runtime/**"
-      - "src/editor/**"
-      - "src/platform/**"
-      - "src/rendering/**"
+      - "src/**"
       - "tools/**"
       - "docs/**"
       - "tests/**"
@@ -33,17 +23,7 @@ on:
       - "build/**"
       - "extern/**"
       - "native/**"
-      - "src/core/**"
-      - "src/assets/**"
-      - "src/audio/**"
-      - "src/extensibility/**"
-      - "src/scripting/**"
-      - "src/plugins/**"
-      - "src/scene/**"
-      - "src/runtime/**"
-      - "src/editor/**"
-      - "src/platform/**"
-      - "src/rendering/**"
+      - "src/**"
       - "tools/**"
       - "docs/**"
       - "tests/**"
@@ -114,13 +94,13 @@ jobs:
           dotnet run --project build/toolchains/Inno.Build.Toolchains.Bgfx -- native --config release
           dotnet run --project build/toolchains/Inno.Build.Toolchains.Bgfx -- tools --config debug
 
-      - name: Enforce architecture boundaries
-        shell: pwsh
-        run: dotnet run --project tools/Inno.Tooling.Architecture -- .
-
       - name: Build managed solution
         shell: pwsh
         run: dotnet build InnoEngine.sln --disable-build-servers -m:1 -nr:false
+
+      - name: Enforce source and compiled public API architecture boundaries
+        shell: pwsh
+        run: dotnet run --project tools/Inno.Tooling.Architecture --no-build -- .
 
       - name: Run complete test suite
         shell: pwsh
@@ -150,7 +130,7 @@ jobs:
         run: |
           $supportPacks = Join-Path $env:RUNNER_TEMP "InnoSupportPacks"
           $e2eOutput = Join-Path $env:RUNNER_TEMP "InnoPlayerE2E"
-          dotnet run --project tests/Inno.Player.E2E --no-build -- `
+          dotnet run --project tests/player/Inno.Player.E2E --no-build -- `
             --target '${{ matrix.build_target }}' `
             --support-packs $supportPacks `
             --output $e2eOutput
@@ -162,7 +142,7 @@ jobs:
           New-Item -ItemType Directory -Force (Join-Path $smokeProject "Assets") | Out-Null
           $nativeLog = Join-Path $smokeProject "Logs/NativeRendering.log"
           New-Item -ItemType Directory -Force (Split-Path $nativeLog) | Out-Null
-          dotnet src/editor/Inno.Editor.Application/bin/Debug/net9.0/Inno.Editor.Application.dll `
+          dotnet src/composition/editor/host/Inno.Editor.Application/bin/Debug/net9.0/Inno.Editor.Application.dll `
             $smokeProject --smoke-frames 3 2>&1 | Tee-Object -FilePath $nativeLog
           if ($LASTEXITCODE -ne 0) {
             throw "Renderer smoke exited with code $LASTEXITCODE."

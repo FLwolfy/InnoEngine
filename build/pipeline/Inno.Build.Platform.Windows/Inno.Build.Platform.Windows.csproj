@@ -10,9 +10,9 @@
     <ProjectReference Include="..\..\toolchains\Inno.Build.Toolchains.Bgfx.Tools\Inno.Build.Toolchains.Bgfx.Tools.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\assets\Inno.Assets\Inno.Assets.csproj" />
-    <ProjectReference Include="..\..\..\src\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
+    <ProjectReference Include="..\..\..\src\content\assets\Inno.Assets\Inno.Assets.csproj" />
+    <ProjectReference Include="..\..\..\src\foundation\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
     <ProjectReference Include="..\Inno.Build\Inno.Build.csproj" />
-    <ProjectReference Include="..\..\..\src\assets\Inno.Assets.Pipeline\Inno.Assets.Pipeline.csproj" />
+    <ProjectReference Include="..\..\..\src\content\assets\Inno.Assets.Pipeline\Inno.Assets.Pipeline.csproj" />
   </ItemGroup>
 </Project>

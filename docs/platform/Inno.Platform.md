@@ -2,7 +2,7 @@
 
 [Platform 索引](README.md) · [Wiki 首页](../README.md)
 
-`Inno.Platform` 只定义后端中立窗口与应用契约。SDL3 事件循环和原生事件扩展属于 `Inno.Platform.Sdl3`，Dear ImGui 集成属于 `Inno.Platform.Sdl3.ImGui`；上层不接触 SDL enum、pointer 或 window 类型。
+`Inno.Platform` 只定义后端中立窗口与应用契约。SDL3 事件循环和原生事件扩展属于 `Inno.Adapter.Platform.Sdl3`，Dear ImGui 平台集成属于 `Inno.Adapter.Presentation.ImGui.Sdl3`；上层 Host 不接触 SDL enum、pointer 或 window 类型。
 
 ## IPlatformApplication
 
@@ -35,7 +35,7 @@
 
 ## ImGui layout 文件
 
-`Inno.Platform.Sdl3.ImGui.PlatformImGuiContext.SetIniFile(string?)` 在首帧之前设置 Dear ImGui 的 layout 持久化文件。相对路径会转换为绝对路径，父目录会按需创建；传入 `null` 或空白字符串会关闭 ini 持久化。首帧开始后再调用会抛出 `InvalidOperationException`。
+`Inno.Adapter.Presentation.ImGui.PlatformImGuiContext.SetIniFile(string?)` 在首帧之前设置 Dear ImGui 的 layout 持久化文件。相对路径会转换为绝对路径，父目录会按需创建；传入 `null` 或空白字符串会关闭 ini 持久化。首帧开始后再调用会抛出 `InvalidOperationException`。
 
 Editor Host 当前在创建 ImGui context 后立即配置：
 

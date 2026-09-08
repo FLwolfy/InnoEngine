@@ -38,6 +38,16 @@ public sealed class WindowsX64GameBuildTarget : IGameBuildTarget
     public BuildTargetId id => BuildTargetId.windowsX64;
 
     /// <summary>
+    /// Gets the target name presented by authoring hosts.
+    /// </summary>
+    public string displayName => "Windows (x64)";
+
+    /// <summary>
+    /// Gets whether Windows x64 is the natural default on this host.
+    /// </summary>
+    public bool isPreferredOnCurrentHost => OperatingSystem.IsWindows();
+
+    /// <summary>
     /// Compiles every supported Windows shader backend and portable texture artifact.
     /// </summary>
     /// <param name="context">

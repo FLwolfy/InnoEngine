@@ -1,5 +1,9 @@
 # Inno.Core.Logging
 
+本轮收口新增 `DiagnosticLogSink(hub, logs)`：作为 `IDiagnosticSink` 接收 Replace/Clear，只把新增或变化的问题写入 LogRouter；Dispose 注销并释放去重快照。hub 与 logs 由 Host 显式持有，必须比 sink 长寿。
+
+`LogRouter(queueCapacity = 65536, drainBudget = 4096)` 限制积压与单批排空。`TryDispatch(entry)` 在容量不足时返回 false，`Dispatch(entry)` 明确抛出；Flush 所需 barrier 也受容量限制，满时需要由调用方重试。不能在日志 worker 自己的 callback 中等待自身退出。
+
 [上一页：Diagnose](Inno.Core.Diagnostics.md) · [Core 索引](README.md) · [下一页：Mathematics](Inno.Core.Mathematics.md)
 
 Logging 是基础、追加式日志系统。`LogRouter` 显式拥有一个 Host 的异步队列、过滤策略和 Sink；`Log` 只是解析当前执行上下文的脚本便利门面。Compiler、Importer 和 Validator 的可替换当前问题属于独立的 [Inno.Core.Diagnostics](Inno.Core.Diagnostics.md)。

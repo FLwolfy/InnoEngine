@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../content/references/Inno.References/Inno.References.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="../../../foundation/extensibility/Inno.Extensibility.Reload/Inno.Extensibility.Reload.csproj" />
+    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Execution\Inno.Core.Execution.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\foundation\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.IO\Inno.Core.IO.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\foundation\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Collections\Inno.Core.Collections.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Settings\Inno.Core.Settings.csproj" />
+    <ProjectReference Include="..\..\..\content\assets\Inno.Assets\Inno.Assets.csproj" />
+    <ProjectReference Include="..\..\..\content\assets\Inno.Assets.Pipeline\Inno.Assets.Pipeline.csproj" />
+    <ProjectReference Include="..\Inno.Plugins\Inno.Plugins.csproj" />
+  </ItemGroup>
+</Project>

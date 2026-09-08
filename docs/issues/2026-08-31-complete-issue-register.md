@@ -296,7 +296,7 @@
 
 - 历史证据：上层 public/protected API 可看到 SDL enum、pointer 或 window 类型。
 - 根因与影响：平台 contract 与单一 backend 绑定，测试和替换困难。
-- 当前实现：`Inno.Platform` 只保留 `IPlatformApplication`、`IPlatformWindow`、neutral options/handles；SDL3 实现在 `Inno.Platform.Sdl3`，ImGui bridge 独立。
+- 当前实现：`Inno.Platform` 只保留 `IPlatformApplication`、`IPlatformWindow`、neutral options/handles；SDL3 实现在 `Inno.Adapter.Platform.Sdl3`，ImGui bridge 独立。
 - 测试与守卫：Architecture Tool 限制 SDL native consumer 并扫描 native signature leakage。
 - 关闭标准：上层 contract 无 SDL 类型。已满足。
 
@@ -312,7 +312,7 @@
 
 - 历史证据：旧全量测试出现过 Roslyn 偶发失败，Game Export 只使用 Fake Publisher。
 - 根因与影响：无法证明脱离源码的真实 Player 能启动、创建图形 backend、运行帧并有序退出。
-- 当前实现：`tests/Inno.Player.E2E` 创建临时 Project、fresh script generation、Artifact closure、Build、启动导出 Player 并验证帧与退出；CI matrix 在 macOS ARM64 和 Windows x64 构建 Native/Support Pack 后执行同一 E2E。
+- 当前实现：`tests/player/Inno.Player.E2E` 创建临时 Project、fresh script generation、Artifact closure、Build、启动导出 Player 并验证帧与退出；CI matrix 在 macOS ARM64 和 Windows x64 构建 Native/Support Pack 后执行同一 E2E。
 - 当前证据：macOS ARM64 本机 E2E 已成功，Metal/BGFX 初始化并运行 3 帧；Windows x64 代码、Support Pack 生成和 CI job 已配置，但当前 macOS 主机不能执行 Windows 进程。
 - 关闭标准：两个目标 runner 都产生一次成功 E2E 记录。状态保持“待平台验证”，在 Windows CI 实际成功前不得写成已关闭。
 
@@ -376,7 +376,7 @@
 
 - 历史证据：default pipeline、capabilities 和 frame statistics 由静态字段持有；第二个 Runtime 会覆盖第一个 Runtime 的脚本观察值。
 - 根因与影响：Unity 风格调用形式被错误地等同于 process-global owner，破坏多 `RuntimeSession` 隔离并让测试顺序影响状态。
-- 当前实现：`GraphicsSettings` 只作为脚本 façade，通过 `AsyncLocal` 解析当前 `RenderRuntimeLayer` 私有的 `GraphicsSettingsState`。Editor/Player composition root 只在当前帧执行边界进入 `EnterExecutionScope()`，引擎内部直接使用实例状态；无 scope 时读取为 null、写入明确失败。
+- 当前实现：`GraphicsSettings` 只作为脚本 façade，通过 `AsyncLocal` 解析当前 `RenderRuntime` 私有的 `GraphicsSettingsState`。Editor/Player composition root 只在当前帧执行边界进入 `EnterExecutionScope()`，引擎内部直接使用实例状态；无 scope 时读取为 null、写入明确失败。
 - 测试：`GraphicsFacadeResolvesTheCurrentlyBoundRenderingRuntime` 验证两个 Runtime 的嵌套 scope、统计与 default pipeline 完全隔离，并验证退出 scope 后不残留状态。
 - 关闭标准：静态 façade 不拥有状态，多个 Runtime 不互相覆盖。已满足。
 
@@ -557,7 +557,7 @@ dotnet run --project tools/Inno.Tooling.Architecture -- .
 dotnet build InnoEngine.sln --no-restore --disable-build-servers -m:1 -p:UseSharedCompilation=false
 dotnet test InnoEngine.sln --no-build --no-restore --disable-build-servers -m:1 -p:UseSharedCompilation=false
 dotnet run --project build/support/Inno.Build.SupportPacks -- --target macos-arm64 ...
-dotnet run --project tests/Inno.Player.E2E -- --target macos-arm64 ...
+dotnet run --project tests/player/Inno.Player.E2E -- --target macos-arm64 ...
 ```
 
 Windows x64 的最后一条 E2E 必须在 Windows runner 执行；CI 定义位于 `.github/workflows/rendering-ci.yml`。

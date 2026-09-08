@@ -6,6 +6,12 @@
 
 ## 职责与边界
 
+启动和退出资源按字段即时登记。Pending Dispose 不清空 Session/History，不把 Controller 标为 disposed，
+正常退出保持 `Stopping` 并在后续安全点重试；Scene entry 失败也使用这条路径，完全补偿后才进入 `Failed`。
+退休期间持有 generation change reservation，阻止新 Play、Reload、Build/Export；超时明确 Fault，不能继续重试启动。
+`EditorPlayModeLoop.Quiesce()` 是产品退出入口：EditorHost 在拆 Module/Layer/presentation 之前先排空 Play Session，
+与 assembly reload 的 quiescence 复用同一逻辑。它不是第二套 Session owner，不向脚本导出。
+
 ```mermaid
 flowchart LR
     UI["Toolbar / Shortcut"] --> API["IEditorPlayMode"]

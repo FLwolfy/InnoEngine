@@ -126,11 +126,6 @@ internal sealed class BuildWorkspace : IDisposable
             engine = new EngineHostBuilder()
                 .UseMetadataCache(Path.Combine(libraryRoot, "Build", "Metadata"))
                 .Build();
-            settings = new ProjectSettingsStore(
-                Path.Combine(projectRoot, SettingsFileNames.project),
-                engine.types,
-                engine.serialization,
-                ProjectId.FromName(Path.GetFileName(projectRoot)));
             var sources = new PluginSourceService(engine.serialization, pluginsRoot, libraryRoot);
             PluginScanResult scan = sources.Scan();
             AssetPipelineOptions options = AssetPipelineOptions.Create(assetsRoot, libraryRoot);
@@ -152,13 +147,20 @@ internal sealed class BuildWorkspace : IDisposable
                         .. PluginSourceService.GetActivatableMounts(scan)
                     ]
                 });
+            settings = new ProjectSettingsStore(
+                Path.Combine(projectRoot, SettingsFileNames.project),
+                engine.types,
+                engine.serialization,
+                ProjectId.FromName(new DirectoryInfo(projectRoot).Name),
+                AssetSerializationContext.Create(assets));
             plugins = new PluginEnvironment(
                 assets,
                 settings,
                 engine.serialization,
                 pluginsRoot,
                 libraryRoot,
-                scan);
+                scan,
+                engine.modules.generations);
             var compiler = new ScriptCompiler(
                 new ScriptCompilerOptions
                 {
@@ -171,6 +173,7 @@ internal sealed class BuildWorkspace : IDisposable
                 plugins,
                 settings,
                 engine.serialization,
+                engine.generations,
                 compiler,
                 supportPackRoot,
                 [

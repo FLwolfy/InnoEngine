@@ -175,7 +175,7 @@ InnoEngine/
 │   │   ├── Inno.Core.Identity
 │   │   ├── Inno.Core.Serialization
 │   │   ├── Inno.Core.Serialization.Generators
-│   │   ├── Inno.Core.Storage
+│   │   ├── Inno.Core.Collections
 │   │   ├── Inno.Core.Events
 │   │   ├── Inno.Core.Input
 │   │   ├── Inno.Core.Jobs
@@ -208,15 +208,15 @@ InnoEngine/
 │   │   ├── Inno.Rendering
 │   │   ├── Inno.Rendering.Runtime
 │   │   ├── Inno.Rendering.Assets
-│   │   ├── Inno.Rendering.Bgfx
-│   │   ├── Inno.Rendering.Bgfx.ImGui
+│   │   ├── Inno.Adapter.Rendering.Bgfx
+│   │   ├── Inno.Adapter.Presentation.ImGui
 │   │   ├── Inno.Rendering.ShaderGraph
 │   │   └── Inno.Rendering.Scene
 │   │
 │   ├── platform/
 │   │   ├── Inno.Platform
-│   │   ├── Inno.Platform.Sdl3
-│   │   └── Inno.Platform.Sdl3.ImGui
+│   │   ├── Inno.Adapter.Platform.Sdl3
+│   │   └── Inno.Adapter.Presentation.ImGui
 │   │
 │   ├── runtime/
 │   │   ├── Inno.Runtime
@@ -706,7 +706,7 @@ Console Collapse：
 
 `Inno.Platform` 只定义后端中立契约。
 
-`Inno.Platform.Sdl3` 承担 SDL3 实现。
+`Inno.Adapter.Platform.Sdl3` 承担 SDL3 实现。
 
 SDL enum、pointer 和 window 类型不得出现在上层 public/protected API。
 

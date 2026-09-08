@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inno.Adapter.Rendering\Inno.Adapter.Rendering.csproj" />
+    <ProjectReference Include="..\..\..\services\rendering\Inno.Rendering.Assets\Inno.Rendering.Assets.csproj" />
+  </ItemGroup>
+</Project>

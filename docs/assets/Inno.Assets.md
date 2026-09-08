@@ -1,8 +1,60 @@
 # Inno.Assets
 
+## 冷加载峰值预算与合并
+
+`AssetDatabase` 提供构造参数 `preparationBudgetBytes`（默认 64 MiB）和只读 `preparingBytes`。这是 encoded IO 预留预算，不等同于已有的 resident payload 预算。同一数据库内相同 persistent ID 的并发请求共用一次依赖闭包读取；不同 root 引用相同 dependency 时也共用该不可变 payload 的 IO 和唯一字节预留。取消一个等待者不取消其他等待者。
+
+在开始读取前对闭包中尚未预留的 payload 长度求和并预留预算。打开文件后先验证实际长度，再分配精确大小并校验 hash；准备完成但尚未经过 `CompletePendingLoads` 的 bytes 仍计入预留。最后一个使用该 payload 的 root 完成/取消后归还预留。并发请求数仍限制为 32，超预算明确拒绝，不静默转为同步加载。
+
+`preparationStatistics` 返回不可变 `AssetPreparationStatistics`：`pendingRequests`、`peakPendingRequests`、
+`rejectedRequests`、`pendingPayloads`、`payloadReadsStarted`、`sharedPayloadReads`、`reservedBytes`、`peakReservedBytes`。
+累计/峰值计数的范围是数据库生命周期；当前计数在 publication/cancellation 后下降。`sharedPayloadReads`
+专指不同 root 的共享，重复请求同一 root 不会重复建立其依赖读集合。该统计不持有 Asset、Task、Type 或 delegate。
+每个数据库最多同时进行 4 个 payload 文件读取；共享不会变成无上限同时打开文件。Dispose 先取消并排空全部 IO，再销毁读取 gate。
+
+`IAssetReferenceResolver` 的通用引用桥会拒绝不同 persistent ID 的返回值，不允许 last-known path 偷换目标。
+
+运行时外部 owner（例如 Settings）解析合法但尚未物化的引用时，AssetDatabase 通过同一 canonical
+冷加载路径解析，并采用 Session pin。资产自身物化仍使用内部的 prepared-only resolver 视图，
+未在预备依赖闭包中的引用不能偷偷触发第二次冷加载。两者复用同一 `IAssetReferenceResolver` 协议与
+Identity/type 校验，不增加持久化引用格式。通用引用桥必须原样传播 `RetirementPendingException`，
+不得将未退出的 generation 包装成普通 Missing。
+
 [Assets 索引](README.md) · [Assets Pipeline](Inno.Assets.Pipeline.md) · [Wiki 首页](../README.md)
 
 `Inno.Assets` 是 Player-safe 的运行时资产契约和只读 `AssetDatabase`。创作源、Importer、Watcher、依赖图和 Artifact Writer 属于 `Inno.Assets.Pipeline`；Editor 通过一个显式 `AssetPipeline` 实例组合它们。
+
+## 运行状态与租约边界
+
+`AssetRuntimeOwner` 是数据库私有持有的写入权限：Initialize 首次声明实例归属，后续 Initialize/UpdateAssetPath/Release/GetSourceHash 都验证同一 owner。它不保留资产列表，不是静态全局写入口，也不导出给脚本。跨 owner 写入明确失败。Asset 不在 finalizer 中执行派生回调；数据库显式 Release。payload hook 失败会恢复先前的字段、payload 与内容 revision。
+
+`AssetObject.OnUnloading` 在资源真正退出后才算完成。派生 hook 抛出 `RetirementPendingException` 时，
+`AssetRuntimeOwner.Release` 保留 payload 与未完成状态；owner 必须保留对象并重试，派生实现不得重复
+已经完成的释放步骤。普通异常是终止失败，向上报告而不重复调用 hook；成功后重复 Release 无副作用。
+`AssetLoader` 与 Player `AssetDatabase` 的最终退出均以 Core lifetime 保留 Pending canonical object、
+Identity 注册与下层依赖，不能提前标记 disposed。进入退出后拒绝新加载。
+Runtime budget eviction 也在卸载成功后才移除 dependency retention 与 residency 计数；
+尚在退休中的记录不会被当作可继续使用的 loaded object 返回。
+
+`AssetReferenceLocation` / `AssetReferenceInfo` 的公开构造用于创建中立诊断快照；后者复制并冻结 reference 集合，不授予修改资产的权限。
+
+`IAssetArtifactLookup.AcquireArtifact(id, output)` 返回必须释放的 `ArtifactLease`。`ArtifactRetention.Retain(info)` 与 `GetRetainedKeys()` 为自定义 provider 提供 artifact-key 引用计数；provider 必须串行化 acquisition 与 collection。Authoring collector 把租约持有的旧 key 加入 reachable 集合，即使源已 reimport/delete 也不会提前删除。
+
+`AssetLease<T>` 和 `ArtifactLease` 使用同一个内部 residency owner：直接或任意包装层内的 `RetirementPendingException`
+保留 value 与 release callback，所属生命周期必须在安全点重试；成功或普通终止异常才撤销 value/callback。
+同一租约的并发或重入释放不会同时执行 callback，而是返回 Pending，不能当成已经释放。回调在内部锁之外执行；
+provider 对部分完成的引用计数、native 释放等必须记录阶段，重试不得重复副作用。终止之后再次 Dispose 无副作用。
+包装 Pending 中的普通错误通过 Core 分类收集，按实例去重；之后即使 release 成功也以 AggregateException 报告。
+单次普通终止失败仍原样上抛，不为了统一内部结构改变 provider 原来的异常类型。
+`RetentionScope` 复用 Core `LifetimeScope` 的逆序退休：Pending 阻止下层依赖被提前释放，之前的普通失败保留到
+最终聚合；开始退休之后禁止继续 Retain。它不是独立的第二套生命周期协议。
+
+冷路径 `AssetDatabase.AcquireAsync` 在后台读取并校验不可变 payload，不把 Type、serializer、Identity 或 execution scope
+流入 IO task。数据库固定接收 `TypeCacheSnapshot`，不在 Player 加载期间刷新 Authoring Registry。
+`CompletePendingLoads(completionBudget = 8)` 由 RuntimeSession 每帧调用，在 owner thread 创建、反序列化和注册资产。
+独立 Host 必须自己在安全点调用这一入口，不可在 owner thread 阻塞等待尚未发布的 lease。
+最多同时准备 32 个请求，超限明确拒绝；取消或 Dispose 不发布半成品，销毁数据库会取消并等待其 IO 退出。
+缓存命中返回已完成 lease；无论命中与否，调用方都必须 Dispose 租约。
 
 ## 初始化与目录
 
@@ -84,6 +136,9 @@ Observer 按订阅顺序在 owner thread 调用。某个 observer 抛异常会�
 | `IAssetLookup` | Authoring `AssetPipeline` 与 Player `AssetDatabase` 共同实现的最小只读查询边界。 |
 | `IAssetArtifactLookup` | 两种宿主共同实现的 named Artifact 定位边界；Runtime 服务不需要依赖 authoring pipeline。 |
 | `Assets.Load/TryLoad` | 项目脚本使用的无状态门面；只解析当前异步执行作用域，不拥有 Catalog、缓存或 Session 状态。 |
+| `Assets.AcquireAsync<T>` | 异步取得 canonical asset 与显式强驻留 `AssetLease<T>`；释放 lease 后对象才可参与预算回收。 |
+| `Assets.AcquireArtifact` | 取得 named immutable Artifact 的 `ArtifactLease`，并通过 `OpenRead()` 打开只读流。 |
+| `RetentionScope` | 组合多个 lease，并按加入顺序的逆序统一释放。 |
 | `Assets.LocalPath(localPath)` | 根据调用脚本 assembly 的 `Inno.AssetSource` metadata 创建 source-local 路径；同一代码在 Project 开发态与 `.iplugin` 安装态自动指向各自 Assets 根。 |
 | `Load<T>(AssetPath/id)` | 返回跨 mount canonical instance；缺失或类型不兼容时抛异常。字符串重载表示 Project mount。 |
 | `TryLoad<T>(path/id,out asset)` | 安全失败。 |
@@ -107,7 +162,14 @@ Scope 时，脚本 `Assets` 门面明确抛出 `InvalidOperationException`。引
 
 `Rescan` 同时是 TypeCache generation 的资源收敛安全点。若已加载 canonical asset 的运行时类型已退休，Loader 会从内部 record、identity 和 dependency retention 中释放它；仍存活的 host asset 会用当前 generation 重新恢复其序列化引用。调用方自己仍强持有旧 canonical instance 时，旧 collectible ALC 会按普通 CLR 引用规则延迟卸载，这不影响 Loader 返回当前 generation 的新实例。
 
-`AssetPipeline` 还是统一 Assembly Catalog transaction participant。候选 TypeCache 与 Importer/Build Processor Registry 激活后、Assembly Catalog 对外发布前，它会在 owner thread 对全部 Source Mount 重新对账；兼容的 host canonical asset 原位更新，退休的 Plugin 类型退出当前缓存。激活前会按 source path、状态、source hash、Importer ID 与结构化诊断记录可写 Project Mount 已有的失败指纹；候选 Importer 新制造或改变任何 Project Asset 导入失败时，整个 Assembly/Plugin 候选都会被拒绝。仅因无关脚本重编译而变化的程序集 MVID 不属于失败语义，所以完全相同的既有失败会继续作为诊断而不会阻塞 reload。Plugin 只读 Mount 的导入失败或 Persistent ID 冲突始终直接拒绝 Source Mount 候选。
+`AssetPipeline` 也是统一 Assembly Catalog transaction participant。候选 TypeCache 与 Importer/Build Processor
+Registry 激活后，它只对隔离 loader 的 Source Mount 重新对账，成功后通过共同 Source recovery 发布新 canonical
+实例，旧 loader 直到 Complete 都不被 Rescan 修改；普通源文件 reimport 的原位更新与这种代际替换是两种不同操作。
+已有 Plugin compilation candidate 保持原 publication owner，程序集事务只复用验证，不重复 Complete/Rollback。
+激活前按 source path、状态、source hash、Importer ID 与结构化诊断记录可写 Project Mount 已有失败指纹；
+候选新制造或改变失败时拒绝整个程序集候选。MVID 本身不属于失败语义，完全相同的既有失败保留为诊断而不阻塞 reload。
+候选 sidecar 写入与诊断也暂存；失败恢复旧 loader/Identity/诊断，不通过下一次 GetLoader 延迟重扫修复。
+相关提交与 metadata 外部冲突约束见 [Pipeline 候选协议](Inno.Assets.Pipeline.md)。
 
 若本 transaction 或后续 participant 失败，ModuleHost 先恢复旧 TypeCache，AssetPipeline 再在下一次 owner-thread `Update`/访问时用旧 generation 自动恢复目录快照。Plugin mount 指向 `Library/Plugins/<pluginId>/<contentHash>` 中完整且不可变的 `.iplugin` generation snapshot，因此即使原安装包在 reload 中途被删除或覆盖，旧 Loader 的恢复、查询与关闭也不会访问失效路径。外部观察者不会看到“新 Registry + 旧 Asset Catalog”的半切换状态。
 
@@ -142,6 +204,11 @@ if (AssetPipeline.TryGetInfo(AssetPath.Project("Scripts/Player.cs"), out AssetIn
 `GetFileSystemEntries`、`GetFileSystemChildren` 和 `TryGetFileSystemEntry` 返回所有活动 mount 的统一 Source Policy 视图。条目的 `assetPath.source` 保持来源隔离；`.imeta`、artifact、IDE cache 和默认系统噪声不出现，Unsupported source 仍出现。
 
 `PrepareSourceMounts` 返回隔离的 `AssetSourceMountTransaction`。候选拥有自己的 Loader、FileSystem、Catalog 暂存文件与查询入口；在 `Activate` 前不会改变 `AssetPipeline.sourceMounts`、普通加载结果或正式 `Library/AssetDatabase/Catalog.snapshot`。内容寻址 Artifact 可以安全复用正式缓存，但 Catalog 只有 `Complete` 时才执行单次 atomic replace；`Rollback` 删除暂存 Catalog，进程异常遗留的候选目录会在下次初始化清理。`Activate` 只做安全点内的临时切换，不释放旧 generation，也不通知观察者；`Complete` 才发布 `SourceMountsChanged` 并退休旧 generation。`ReplaceSourceMounts` 是立即执行 Prepare → Activate → Complete 的便利入口。
+
+Source entry 也是正式 Identity 对象。存在 `.imeta` 时使用 source persistent ID 派生 entry ID；mount root、
+目录或尚无 metadata 的节点使用隔离 `AssetPath` 派生的确定性 ID。候选 FileSystem 只初始化 persistent ID，
+在 `Activate` 前不注册 runtime ID；激活时先停用 last-good entry，再原子注册候选，失败或 `Rollback` 时反向
+恢复。因而同一 persistent identity 不会同时对应两个 live source entry，Editor DragDrop 也不会看到候选对象。
 
 Plugin mount 必须只读，且只能来自完整 `.iplugin` 文件；Folder 和 `.zip` 安装不会创建 Mount。运行时和 Editor 无法绕过 source transaction 直接写入安装源或活动 snapshot。外部 package 变化只会触发 Plugin 候选事务。跨 mount 依赖必须由 mount 的 `dependencySourceIds` 明确授权。任何 Persistent ID 冲突或未声明依赖都会拒绝候选并保留旧 snapshot。该两阶段协议也允许 `.iplugin` 脚本从隔离候选 artifact 编译，而 File Browser、运行时资产与当前 Plugin Catalog 始终只观察 last-good generation。
 
@@ -198,6 +265,15 @@ using RuntimeSession player = host.CreateSession(new RuntimeSessionOptions
 ```
 
 `AssetDatabase` 启动时直接加载并严格验证部署 Catalog/CAS，不扫描 source、不引用 Assets Pipeline、不运行 Importer、不生成 `.imeta`、不回收部署 bundle，也不启动 watcher。Player 因而不具备任何 authoring mutation API，不会在用户机器上悄悄重建内容。
+
+`AssetReferenceProtocol` 定义 Assets 在共享 Reference Catalog 中的稳定 kind；`IAssetReferenceResolver` 是该
+协议的领域 resolver。所有 Asset-aware 序列化必须由 owner 使用 `AssetSerializationContext.Create(...)`
+组合完整 context，不能由 converter、Scene 或 Editor feature 私自创建不完整 resolver scope。
+
+Runtime Database 将旧的 `Load/TryLoad` 视为 Session 级 pin；显式 `AcquireAsync` 使用引用计数 lease。超过 `RuntimeSessionOptions.assetResidencyBudgetBytes` 时，只在安全访问点按 LRU 释放无 pin、无 lease、且未被其他已加载资产依赖的 payload。`AssetResidencyStatistics` 区分预算、resident bytes、materialized count 与 leased count；Artifact 文件属于冻结部署内容，不因对象 lease 释放而被删除。
+
+最后一个租约释放触发预算回收时，`OnUnloading` 的 Pending 会保留该租约、canonical Identity 与 payload。
+重试继续预算回收，但每个租约的计数只递减一次；不能提前归零后丢掉释放路径，也不能误减其他租约。
 
 ## 关闭顺序
 

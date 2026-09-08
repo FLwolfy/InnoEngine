@@ -8,6 +8,8 @@
 
 ## 多 Scene
 
+Scene reload 的旧 element 普通退休失败会聚合抛出，且仍尝试其余旧 element；统一 generation 的不可逆 Complete 阶段据此 Fault。RetirementPendingException 则保持 owner、立即阻止后续清理并交给共享 gate Fault。不能只发布 Warning 后继续报告成功，也不能撤销已经提交的新 generation 假装回滚。
+
 ```csharp
 SceneManager.LoadScene(first);                 // Single: unload current set.
 SceneManager.LoadSceneAdditive(second);        // Add to the bottom and make active.
@@ -41,14 +43,14 @@ Name 与 Tag 都按 `StringComparison.Ordinal` 匹配，复数查询保持 Scene
 可用 Tag 定义由 `GameTagCatalog` 这个普通 Project Setting 提供；assignment 与 definition 明确分离：
 
 ```csharp
-GameTagCatalog tags = ProjectSettingsStore.Get<GameTagCatalog>(GameTagCatalog.settingId);
+GameTagCatalog tags = Settings.Get<GameTagCatalog>(GameTagCatalog.settingId);
 if (tags.IsDefined("Player"))
     player.tag = "Player";
 ```
 
 `GetTags` 返回确定性隔离快照；`Add`/`Remove` 只修改当前可编辑 setting 实例。删除定义不会改写 Scene 中已有字符串，因此重新定义同名 Tag 可恢复其配置语义。
 
-## GameLayer、GameLayerMask 与 GameLayerStack
+## GameLayer、GameLayerMask 与 GameLayerCatalog
 
 `Inno.Scene.Layers` 将对象所属层、筛选集合与项目配置明确分开：
 
@@ -60,7 +62,7 @@ if (tags.IsDefined("Player"))
 | `GameLayer` | 0–31 的紧凑运行时 slot；Scene/Prefab 只保存这个值。 |
 | `GameLayerMask` | 32 位多层集合，用于渲染、物理和查询过滤。 |
 | `GameLayerDefinition` | 自动 local key、当前 slot 与显示名称的只读快照。 |
-| `GameLayerStack` | 最多 32 个自动 local key/name 映射及对称 interaction matrix。 |
+| `GameLayerCatalog` | 最多 32 个自动 local key/name 映射及对称 interaction matrix。 |
 
 用户只编辑 Layer 名称和 slot，不输入 ID。新 slot 自动得到稳定 local key（例如 `layer.01`）；完整 ID 只在需要时由当前 Project ID 解析。Project ID 改名不会触碰 Layer setting、Scene 或 Prefab；Layer 显示名改名也不会改变已经生成的 local key。
 
@@ -68,7 +70,7 @@ if (tags.IsDefined("Player"))
 using InnoEngine.Scene;
 using InnoEngine.Settings;
 
-GameLayerStack layers = Settings.Get<GameLayerStack>(GameLayerStack.settingId);
+GameLayerCatalog layers = Settings.Get<GameLayerCatalog>(GameLayerCatalog.settingId);
 GameLayer player = layers.GetLayer("Player");
 GameLayer enemy = layers.GetLayer("Enemy");
 GameLayerId playerId = layers.GetId(Settings.projectId, player)!.Value;
@@ -118,7 +120,7 @@ Inspector header 提供 Move Up、Move Down 和 Remove，但不允许拖拽。�
 
 `GameSystem` 是附加到 `GameScene` 而不是单个 `GameObject` 的有状态对象。它适合表达“每个 Scene 一份、需要序列化、需要 Inspector 配置、并参与 Scene 生命周期”的协调逻辑，例如物理世界、导航世界、寻路网格实例、场景级音频环境、昼夜控制、波次导演、实体索引或面向某种渲染模型的 Scene extraction cache。默认每个具体类型在一个 Scene 中只允许一个实例；只有显式标记 `AllowMultipleSystem` 的类型才能重复。
 
-`GameSystem` 不等于所有引擎 service 的通用基类。图形设备、RenderGraph、Player loop、AssetDatabase、编译器和 Editor service 的 owner 都高于或独立于单个 Scene，把它们继承 `GameSystem` 会让后端生命周期被 Scene 加载状态绑死，并制造 Rendering → Scene 的反向依赖。当前 Rendering Runtime 因此使用 host-owned frame boundary 和 attribute 驱动的 `RenderRequestProvider`；`Inno.Rendering.Scene` 只把 `SceneWorld` 投影成中立 `RenderContentScope`。具体渲染 Plugin 可以在确实需要持久化 Scene 级配置或增量 extraction 状态时提供自己的 `GameSystem`，但普通 Camera、Renderer 与 Light 仍应是直接附着到对象的 `GameBehavior`。
+`GameSystem` 不等于所有引擎 service 的通用基类。图形设备、RenderGraph、Player loop、AssetDatabase、编译器和 Editor service 的 owner 都高于或独立于单个 Scene，把它们继承 `GameSystem` 会让后端生命周期被 Scene 加载状态绑死，并制造 Rendering → Scene 的反向依赖。当前 Rendering Runtime 因此使用 host-owned frame boundary 和 attribute 驱动的 `RenderRequestProvider`；`SceneContentSource` 把 `SceneWorld` 投影成共享的 `ContentReadScope`。具体渲染 Plugin 可以在确实需要持久化 Scene 级配置或增量 extraction 状态时提供自己的 `GameSystem`，但普通 Camera、Renderer 与 Light 仍应是直接附着到对象的 `GameBehavior`。
 
 生命周期调度缓存 loaded Scene、GameBehavior 与 GameSystem 的稳定数组，只在 Scene 结构、System 显示顺序或类型 generation 变化时重建。两种类型的 `enabled` 变化都会在 loaded Scene 中立即协调 `OnEnable`/`OnDisable`，不等待下一帧。`GameSystem.order` 仍会在每个阶段开始前读取；值变化时复用现有数组原地排序。`GameSystem.Query<T...>()` 内部使用最多三个规范排序的当前 generation runtime type ID 组成值类型 key，缓存命中时也不再创建 `Type[]`、规范化数组或字符串 key。因此正常 FixedUpdate、Update 与 LateUpdate 不再为这些 traversal 分配新数组。
 
@@ -156,7 +158,7 @@ Scene/Prefab 的 History、Missing、序列化和 reload previous/candidate 边�
 | `MissingGameComponent` | 原 Component 类型暂时不可用时，占据相同 attachment index 和 persistent ID。公开 `TypeRef missingType`、`missingTypeName` 供 Inspector/工具识别。 |
 | `MissingGameSystem` | 原 System 类型暂时不可用时，占据相同 display index 和 persistent ID，并保持禁用。公开同样的 missing 类型信息。 |
 
-这两个类型只能由 Scene restore 或脚本 reload 管线创建，不能通过普通 `AddComponent` / `AddSystem` 添加，也不进入 Scripting API facade。占位对象只保存 `TypeRef`、类型名、中立 property bytes、资产依赖 token 和引用别名；`TypeRef` 不保存旧 `Type`、反射 metadata、委托或旧脚本实例，所以本身不会阻止 collectible ALC 卸载。原 Stable ID 再次可解析时，`missingType.isValid` 自动变回 true，reload 原位创建真实类型、恢复兼容属性和当前图引用；构造、属性或清理失败则连同 identity/index 一起回滚到完全相同的占位对象。
+这两个类型只能由 Scene restore 或脚本 reload 管线创建，不能通过普通 `AddComponent` / `AddSystem` 添加，也不进入 Scripting API facade。占位对象只保存 `TypeRef`、类型名、中立 property bytes、资产依赖和引用别名；`TypeRef` 不保存旧 `Type`、反射 metadata、委托或旧脚本实例，所以本身不会阻止 collectible ALC 卸载。原 Stable ID 再次可解析时，`missingType.IsValid(types)` 返回 true；reload 原位创建真实类型，严格恢复全部原属性和当前图引用。构造、属性失败回滚到原占位，提交后的退休清理失败则 Fault，不伪回滚。
 
 Missing 是运行时占位状态，不是 Scene 数据格式中的额外元素类型或 dirty 修改。序列化仍写原逻辑 Stable Type ID、原类型名和原 property bytes，不写 `MissingGameComponent` / `MissingGameSystem` 的 Stable ID，也不写 missing 标志；普通 Scene 中恒等的引用 token 不产生冗余 alias。因而 clean Scene 在类型消失或恢复时保持 clean，Hierarchy 不显示 `*`。用户可以在 missing 存在时修改并保存其他内容；后续相同 Stable ID 恢复时，保存过的原始状态仍会原位还原。
 
@@ -168,10 +170,54 @@ Reload 的同步顺序如下：
 
 1. Capture 阶段把旧实例属性编码为不含 `Type` 的中立 bytes，并记录 previous runtime type ID、Stable Type ID、资产依赖和图引用命名空间。
 2. TypeCache 与中立 Scene 类型目录原子激活 candidate，同时清除所有存活 SceneStore 的类型派生数组缓存。
-3. Migration 有 replacement 时创建新实例；没有 replacement 时创建 host-owned missing 占位；已存在的占位在 Stable Type ID 恢复时创建真实实例。三种路径都以 candidate runtime type ID 原地更新 Component/System typed key。
-4. 成功时立即释放旧实例图和序列化迁移快照；失败时先用捕获的 previous runtime type ID 恢复索引，再回滚 TypeCache 和类型目录。
+3. Scene domain participant 经 `ReferenceRecoveryTransaction` 创建 replacement 或 host-owned missing 占位；已有占位在 Stable Type ID 恢复时创建真实实例。三种路径以 candidate runtime type ID 更新 typed key，相同对象保留 persistent ID，取得新 runtime ID。
+4. 统一解析真实 element 与 Asset dependency slots，再做 commit 前验证。element 使用对象 persistent ID，类型 ID 只用作约束；嵌套 Asset 仍 Missing 不阻止元素恢复，也不能被改成 null。
+5. 失败时先恢复 Scene 结构，再回滚 Type/Serializer 和外部 Asset publication，最后恢复旧属性与 lifecycle。成功 commit 后释放旧实例图、snapshot 和候选 resolver；Pending 例外必须继续保留 owner。
 
 这样旧 Scene 索引或引擎内部数组不会因为持有 collectible ALC 的 `Type` 而阻止卸载。调用方如果自行长期保留旧 `TypeCacheSnapshot`、旧 Component/System 实例或先前返回的强引用快照，仍会按 .NET 规则延长旧 ALC 生命周期，调用方应在 reload safe point 释放它们。
+
+`SceneReloadService(world, serialization, assets).Capture(typeReload)` 返回 `ISceneReloadStateTransfer`，包含
+`retiredObjects`、`diagnostics`、`recoveryChanges` 和 PrepareForActivation / Apply / Complete / RollbackStructure /
+RestorePreviousState。`recoveryChanges` 在 Apply 后提供真实槽位结果，在 rollback 后为空；完成后不持有旧 Type/实例。
+它是 Host 边界，不导出游戏脚本。内部 SceneReloadRecovery 只负责组合共享事务与 Scene state-transfer owner，
+SceneElementReferenceResolver 只通过 SceneWorld 的 Identity allocator 定位 live element，没有新的全局对象索引。
+
+活跃类型到活跃类型的代码更新继续保留既有逐属性失败诊断政策；Missing 到具体类型则要求严格完整恢复，
+忽略或失败的属性不能被静默丢弃。完整 C07 仍需继续接 Assets 全量、Graph、Settings 与 Plugin availability。
+
+## 局部元素状态与 History
+
+| API | 当前语义 |
+| --- | --- |
+| `ScenePropertySerialization.CaptureProperty / CaptureProperties / RestoreProperties` | 单属性或纯 property-data；不包含完整 Missing 元素元数据 |
+| `SceneElementSerialization.CaptureState(target, serialization, assets)` | Component/System 完整中立状态：逻辑 type ID/name、属性、Asset dependencies、Scene alias；接受 Missing 占位 |
+| `SceneElementSerialization.RestoreState(target, stateData, serialization, assets)` | 恢复同一逻辑类型的状态；具体实例要求完整属性恢复，Missing 保存原 bytes 和依赖 |
+| `SceneElementSerialization.RestoreComponent(owner, type, persistentId, componentIndex, stateData, serialization, assets)` | 不调用 Reset，按原身份/位置恢复；类型缺失时创建 MissingGameComponent |
+| `SceneElementSerialization.RestoreSystem(scene, type, persistentId, systemIndex, stateData, serialization, assets)` | 对称的 System 恢复；类型缺失时创建 MissingGameSystem |
+| `SceneSubtreeSerialization.Capture / Restore` | 完整最小子树，不用于小属性/元素操作 |
+
+Element 的 stateData 必须来自 CaptureState，而不是普通 CaptureProperties。内部 SceneElementState 通过
+ISerializable/SerializableProperty 与同一个 SerializationRegistry 编码；不引入自定义 JSON、版本字段或旧格式读取。
+对象 identity 和结构 index 仍由调用 owner 持有；element state 内不保存 runtime ID、Type 或 collectible delegate。
+
+```csharp
+using System;
+using Inno.Assets;
+using Inno.Core.Serialization;
+using Inno.Extensibility.Types;
+using Inno.Scene;
+
+static GameComponent RestoreRemovedComponent(GameObject owner, TypeRef type, Guid id, int index,
+    byte[] state, SerializationRegistry serialization, IAssetReferenceResolver assets)
+{
+    return SceneElementSerialization.RestoreComponent(owner, type, id, index, state, serialization, assets);
+}
+```
+
+History 通过 SceneEdits 捕获这些 bytes，不直接使用上面的 Host 工具操作用户数据。
+删除/移动 Missing 元素保存其原逻辑类型，不保存 placeholder 类型；Undo 可以先恢复占位，类型返回后原 Redo 仍可用。
+缺少 owner/Handler、身份冲突、错误 payload 或补偿失败仍明确阻断且保持栈位置。普通元素恢复失败必须移除所有半创建状态；
+不可逆退休失败属于 Fault。已保存 Scene 的自动 Missing/Recovery 不产生 dirty 或伪 History entry。
 
 ## Editor Scene 名称与资产路径
 

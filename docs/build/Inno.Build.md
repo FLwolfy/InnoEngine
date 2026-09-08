@@ -16,8 +16,8 @@ Game Build 在内容打包前把已验证 Support Pack 作为目标运行时交�
 | `BuildProfile`, `BuildProfileStore`, `BuildTargetId` | 一次 Game 构建所需的可验证 profile 与目标身份；显式 profile 文件可供 headless one-off 构建使用 |
 | `GameBuildRequest`, `PluginBuildRequest` | 一次不可变构建请求 |
 | `BuildProgress`, `BuildDiagnostic`, `BuildDiagnosticSeverity`, `BuildResult` | 进度、结构化诊断与最终结果 |
-| `BuildPipeline` | Game/Plugin 的最小异步入口 |
-| `IGameBuildTarget` | 真正可替换的平台目标 contract |
+| `BuildPipeline` | Game/Plugin 的最小异步入口，并公开当前注册目标、adapter-selected 默认目标与显示名称查询 |
+| `IGameBuildTarget` | 真正可替换的平台目标 contract；目标自己声明稳定 ID、显示名称和当前 Host preference |
 | `GameBuildContentContext`, `GameBuildPackageContext` | 平台目标获得的隔离 staging context |
 | `PlayerSupportPackCatalog` | 验证并解析部署 closure |
 
@@ -37,6 +37,12 @@ BuildResult result = await pipeline.BuildGameAsync(
 ```
 
 构建开始后会捕获 Assets/Plugins/Settings revision 与 Serialization generation。任一代际变化、取消或 stage 失败都会清理 staging，不覆盖已提交产品。
+
+`BuildProfile.Validate()` 只验证 target 是合法的 portable `BuildTargetId`，不维护 macOS/Windows 支持名单。
+`BuildPipeline` 从 Composition Root 注册的 `IGameBuildTarget` 集合解析支持性：重复 ID、空显示名或多个
+`isPreferredOnCurrentHost` 会在构造时失败；没有 adapter 声明 host preference 时，以稳定 ID 排序的第一个
+target 作为默认值。Editor Export 与 Settings UI 枚举 `availableGameTargets`，已保存但未安装的 target 会保留
+其 ID 并显示 `Missing (<id>)`，不会被静默改写。
 
 `Settings.Build.inno` 保存团队可版本控制的导出默认值；文件不存在时，composition root 以项目名、host target 和按路径排序的第一个已导入且可部署 Scene 建立隔离默认值，`~` authoring sample 中的 Scene 不会被自动选为 Startup Scene。Editor 的 Settings Apply 才会持久化该文件。每次打开导出 modal 都重新复制这些默认值，modal 内修改只属于本次请求，绝不回写 `Settings.Build.inno`。Game Application ID 与 Plugin ID 不是 Build 默认值，而是直接取 `Settings.Project.inno` 中的当前 Project ID；`BuildProfile` 仅保存 one-off 构建参数，加载后也会绑定当前 Project ID。
 

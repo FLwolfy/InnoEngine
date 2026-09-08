@@ -1,6 +1,6 @@
 # Plugins API
 
-[Wiki 首页](../README.md) · [Assets](../assets/README.md) · [Build](../build/README.md)
+[Wiki 首页](../README.md) · [Assets](../assets/README.md) · [Build](../build/README.md) · [Identity 与可恢复引用标准](../architecture/IDENTITY_REFERENCE_RELOAD_STANDARD.md)
 
 | 项目 | 职责 |
 | --- | --- |

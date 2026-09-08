@@ -121,7 +121,7 @@ internal static class AnimationAssetIcons
 
 类型声明适合需要按照继承体系选择图标的 Editor extension；extension 声明适合引擎内建文件格式，并且不要求 FileBrowser 项目引用定义 Asset 类型的程序集。extension 可以省略开头的 `.`，匹配时忽略大小写，也支持 `.editor.cs` 这样的复合后缀。解析时先选择类型声明；没有类型声明时选择最长的匹配后缀，再用 priority 打破同等 specificity。
 
-`ImGuiIcon` 与 pointer-free `NativeImGui` 统一由 `Inno.Editor.ImGui/Properties/ScriptingApi.cs` 导出到 `InnoEditor.ImGui`。FileBrowser 的脚本清单只拥有 Asset feature API，不重复导出图标；`Inno.Platform.Sdl3.ImGui` 不声明脚本 API。
+`ImGuiIcon` 与 pointer-free `NativeImGui` 统一由 `Inno.Editor.ImGui/Properties/ScriptingApi.cs` 导出到 `InnoEditor.ImGui`。FileBrowser 的脚本清单只拥有 Asset feature API，不重复导出图标；`Inno.Adapter.Presentation.ImGui` 不声明脚本 API。
 
 内建 Text、Binary、Scene、Prefab 和 Scripting 图标全部在 `BuiltInAssetIcons` 上使用 extension overload 声明，没有基于具体 Asset CLR 类型的引用。FileBrowser 项目因此不再引用 `Inno.Assets`、`Inno.Scene.Assets` 或 `Inno.Editor.Scripting`。内部 `AssetIconRegistry` 扫描当前 TypeCache snapshot 中的声明类型。EditorScripts 热重载时，新增或修改声明会随候选代际原子生效；移除声明或整个容器类型后，Registry 会释放旧映射并恢复优先级较低的内建声明，没有匹配时则使用通用 File icon。
 

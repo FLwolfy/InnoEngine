@@ -17,6 +17,8 @@ Editor-only、不会进入 Player                     Runtime/Plugin 可读取�
 
 ## Editor Settings
 
+公开 `definitions` 集合不暴露内部数组。Settings/ProjectSettingEditor 候选构造使用 TypeRegistry 的资源归属；冲突验证失败会补偿全部新实例，退休失败聚合并 Fault，而不是只写诊断。
+
 Editor Settings 用于主题、图标、缩放、面板行为等只影响 Editor 的偏好。路径必须为 `Editor` 或以 `Editor/` 开头；完整路径同时是注册身份、读取地址和 Inno Serialization property key。
 
 ```csharp

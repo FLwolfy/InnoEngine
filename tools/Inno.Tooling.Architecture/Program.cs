@@ -77,8 +77,10 @@ internal static partial class Program
         }
 
         ValidateProjectReferences(repositoryRoot, failures);
+        ValidateSourceSolutionFolders(repositoryRoot, failures);
         ValidateTestSolutionFolders(repositoryRoot, failures);
         ArchitectureRules.Validate(repositoryRoot, failures);
+        PublicApiBoundaryValidator.Validate(repositoryRoot, failures);
         if (failures.Count == 0)
         {
             Console.WriteLine("InnoEngine architecture validation passed.");
@@ -129,6 +131,7 @@ internal static partial class Program
             if (relative.StartsWith("tools/Inno.Tooling.Architecture/", StringComparison.Ordinal))
                 continue;
             PublicApiDocumentationValidator.Validate(relative, source, failures);
+            GenerationCleanupValidator.Validate(relative, source, failures);
             AddSourceFailure(source.Contains("InternalsVisibleTo", StringComparison.Ordinal), relative,
                 "friend assemblies are forbidden", failures);
             AddSourceFailure(source.Contains("[Obsolete", StringComparison.Ordinal), relative,
@@ -592,40 +595,41 @@ internal static partial class Program
                     continue;
                 string target = Path.GetFullPath(include, Path.GetDirectoryName(projectPath)!);
                 string targetRelative = Relative(repositoryRoot, target);
-                if (projectRelative.StartsWith("src/core/", StringComparison.Ordinal) &&
-                    IsAnyDomain(targetRelative, "assets", "editor", "engine", "platform", "render", "runtime", "scripting", "plugins"))
+                if (projectRelative.StartsWith("src/foundation/", StringComparison.Ordinal) &&
+                    !targetRelative.StartsWith("src/foundation/", StringComparison.Ordinal))
                 {
-                    failures.Add($"{projectRelative}: Core cannot reference business project {targetRelative}.");
+                    failures.Add($"{projectRelative}: Foundation cannot reference upper-layer project {targetRelative}.");
                 }
                 if (projectRelative.StartsWith("build/", StringComparison.Ordinal) &&
-                    targetRelative.StartsWith("src/editor/", StringComparison.Ordinal))
+                    targetRelative.StartsWith("src/composition/editor/", StringComparison.Ordinal))
                 {
                     failures.Add($"{projectRelative}: Build cannot reference Editor project {targetRelative}.");
                 }
-                if ((projectRelative.StartsWith("src/runtime/", StringComparison.Ordinal) ||
-                     projectRelative.StartsWith("src/engine/", StringComparison.Ordinal)) &&
-                    (targetRelative.StartsWith("src/editor/", StringComparison.Ordinal) ||
+                if (projectRelative.StartsWith("src/runtime/", StringComparison.Ordinal) &&
+                    (targetRelative.StartsWith("src/composition/", StringComparison.Ordinal) ||
                      targetRelative.StartsWith("build/", StringComparison.Ordinal)))
                 {
                     failures.Add($"{projectRelative}: Runtime cannot reference {targetRelative}.");
                 }
                 if (targetRelative.Contains("Inno.Native.Bgfx", StringComparison.Ordinal) &&
-                    !projectRelative.Contains("Inno.Rendering.Bgfx", StringComparison.Ordinal) &&
+                    !projectRelative.Contains("Inno.Adapter.Rendering.Bgfx", StringComparison.Ordinal) &&
                     !projectRelative.Contains("Inno.Native.Bgfx", StringComparison.Ordinal) &&
                     !projectRelative.StartsWith("build/toolchains/Inno.Build.Toolchains.Bgfx", StringComparison.Ordinal) &&
                     !projectRelative.StartsWith("tests/", StringComparison.Ordinal))
                 {
                     failures.Add($"{projectRelative}: BGFX native code is restricted to the BGFX adapter.");
                 }
-                if (targetRelative.Contains("Inno.Native.SDL3", StringComparison.Ordinal) &&
-                    !projectRelative.Contains("Inno.Platform.Sdl3", StringComparison.Ordinal) &&
-                    !projectRelative.Contains("Inno.Native.SDL3", StringComparison.Ordinal) &&
+                if (targetRelative.Contains("Inno.Native.Sdl3", StringComparison.Ordinal) &&
+                    !projectRelative.Contains("Inno.Adapter.Platform.Sdl3", StringComparison.Ordinal) &&
+                    !projectRelative.Contains("Inno.Adapter.Presentation.ImGui.Sdl3", StringComparison.Ordinal) &&
+                    !projectRelative.Contains("Inno.Native.Sdl3", StringComparison.Ordinal) &&
+                    !projectRelative.StartsWith("build/toolchains/Inno.Build.Toolchains.Sdl3", StringComparison.Ordinal) &&
                     !projectRelative.StartsWith("tests/", StringComparison.Ordinal))
                 {
                     failures.Add($"{projectRelative}: SDL3 native code is restricted to the SDL3 platform adapter.");
                 }
                 if (targetRelative.Contains("Inno.Native.MiniAudio", StringComparison.Ordinal) &&
-                    !projectRelative.Contains("Inno.Audio.MiniAudio", StringComparison.Ordinal) &&
+                    !projectRelative.Contains("Inno.Adapter.Audio.MiniAudio", StringComparison.Ordinal) &&
                     !projectRelative.Contains("Inno.Native.MiniAudio", StringComparison.Ordinal) &&
                     !projectRelative.StartsWith("build/toolchains/Inno.Build.Toolchains.MiniAudio", StringComparison.Ordinal) &&
                     !projectRelative.StartsWith("tests/", StringComparison.Ordinal))
@@ -713,7 +717,199 @@ internal static partial class Program
                              projectName.Contains(".TestDependency", StringComparison.Ordinal);
             if (isFixture && !HasNamedSolutionAncestor(parentId, "fixtures", names, parents))
                 failures.Add($"{projectPath}: test support project must be nested below a fixtures Solution Folder.");
+
+            string actualPath = GetSolutionFolderPath(projectId, names, solutionFolders, parents);
+            string physicalGroup = Path.GetDirectoryName(Path.GetDirectoryName(projectPath))?
+                .Replace('\\', '/').TrimEnd('/') ?? string.Empty;
+            if (!string.Equals(physicalGroup, actualPath, StringComparison.Ordinal))
+            {
+                failures.Add(
+                    $"{projectPath}: physical test folder '{physicalGroup}' must match Solution Folder '{actualPath}'.");
+            }
         }
+    }
+
+    private static void ValidateSourceSolutionFolders(string repositoryRoot, ICollection<string> failures)
+    {
+        string solutionPath = Path.Combine(repositoryRoot, "InnoEngine.sln");
+        var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var paths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var solutionFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var parents = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        bool readingNestedProjects = false;
+
+        foreach (string line in File.ReadLines(solutionPath))
+        {
+            Match project = SolutionProjectPattern().Match(line);
+            if (project.Success)
+            {
+                string id = project.Groups["id"].Value;
+                names[id] = project.Groups["name"].Value;
+                paths[id] = project.Groups["path"].Value.Replace('\\', '/');
+                if (string.Equals(project.Groups["type"].Value, "{2150E333-8FDC-42A3-9474-1A3956D46DE8}", StringComparison.OrdinalIgnoreCase))
+                    solutionFolders.Add(id);
+                continue;
+            }
+
+            if (line.Contains("GlobalSection(NestedProjects)", StringComparison.Ordinal))
+            {
+                readingNestedProjects = true;
+                continue;
+            }
+            if (readingNestedProjects && line.Contains("EndGlobalSection", StringComparison.Ordinal))
+            {
+                readingNestedProjects = false;
+                continue;
+            }
+            if (!readingNestedProjects)
+                continue;
+
+            Match nesting = SolutionNestingPattern().Match(line);
+            if (!nesting.Success)
+                continue;
+            string childId = nesting.Groups[1].Value;
+            string parentId = nesting.Groups[2].Value;
+            if (!parents.TryAdd(childId, parentId))
+                failures.Add($"InnoEngine.sln: project or folder '{names.GetValueOrDefault(childId, childId)}' has more than one Solution Folder parent.");
+        }
+
+        var declaredSourceProjects = paths
+            .Where(static pair => pair.Value.StartsWith("src/", StringComparison.Ordinal) &&
+                                  pair.Value.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(static pair => pair.Value, static pair => pair.Key, StringComparer.OrdinalIgnoreCase);
+        string sourceDirectory = Path.Combine(repositoryRoot, "src");
+        foreach (string projectPath in EnumerateFiles(sourceDirectory, "*.csproj"))
+        {
+            string relative = Relative(repositoryRoot, projectPath);
+            if (!declaredSourceProjects.ContainsKey(relative))
+                failures.Add($"{relative}: source project is missing from InnoEngine.sln.");
+        }
+
+        foreach ((string projectPath, string projectId) in declaredSourceProjects)
+        {
+            string projectName = names[projectId];
+            string? expectedPath = ClassifySourceSolutionPath(projectName);
+            if (expectedPath is null)
+            {
+                failures.Add($"{projectPath}: source project '{projectName}' has no conceptual Solution Folder classification.");
+                continue;
+            }
+
+            string actualPath = GetSolutionFolderPath(projectId, names, solutionFolders, parents);
+            if (!string.Equals(actualPath, expectedPath, StringComparison.Ordinal))
+                failures.Add($"{projectPath}: expected Solution Folder '{expectedPath}', found '{actualPath}'.");
+
+            string physicalGroup = Path.GetDirectoryName(Path.GetDirectoryName(projectPath))?
+                .Replace('\\', '/').TrimEnd('/') ?? string.Empty;
+            if (!string.Equals(physicalGroup, expectedPath, StringComparison.Ordinal))
+            {
+                failures.Add(
+                    $"{projectPath}: physical source folder '{physicalGroup}' must match conceptual folder '{expectedPath}'.");
+            }
+        }
+    }
+
+    private static string? ClassifySourceSolutionPath(string projectName)
+    {
+        if (projectName.StartsWith("Inno.Core.", StringComparison.Ordinal))
+            return "src/foundation/core";
+        if (projectName.StartsWith("Inno.Extensibility.", StringComparison.Ordinal))
+            return "src/foundation/extensibility";
+        if (string.Equals(projectName, "Inno.Scripting.Api", StringComparison.Ordinal))
+            return "src/foundation/scripting";
+        if (string.Equals(projectName, "Inno.Shell", StringComparison.Ordinal))
+            return "src/composition/shell";
+        if (string.Equals(projectName, "Inno.Player", StringComparison.Ordinal))
+            return "src/composition/player";
+        if (projectName.StartsWith("Inno.Editor.Panel.", StringComparison.Ordinal))
+            return "src/composition/editor/panels";
+        if (string.Equals(projectName, "Inno.Editor.Application", StringComparison.Ordinal))
+            return "src/composition/editor/host";
+        if (string.Equals(projectName, "Inno.Editor.ImGui", StringComparison.Ordinal))
+            return "src/composition/editor/presentation";
+        if (string.Equals(projectName, "Inno.Editor.Core", StringComparison.Ordinal) ||
+            string.Equals(projectName, "Inno.Editor.Diagnostics", StringComparison.Ordinal) ||
+            string.Equals(projectName, "Inno.Editor.Graph", StringComparison.Ordinal) ||
+            string.Equals(projectName, "Inno.Editor.Inspection", StringComparison.Ordinal) ||
+            string.Equals(projectName, "Inno.Editor.Interactions", StringComparison.Ordinal) ||
+            string.Equals(projectName, "Inno.Editor.Settings", StringComparison.Ordinal))
+        {
+            return "src/composition/editor/framework";
+        }
+        if (projectName.StartsWith("Inno.Editor.", StringComparison.Ordinal))
+            return "src/composition/editor/features";
+        if (string.Equals(projectName, "Inno.Adapter", StringComparison.Ordinal))
+            return "src/adapters/common";
+        if (string.Equals(projectName, "Inno.Adapter.Default", StringComparison.Ordinal))
+            return "src/adapters/default";
+        if (string.Equals(projectName, "Inno.Adapter.Authoring.Default", StringComparison.Ordinal))
+            return "src/adapters/default";
+        if (projectName.StartsWith("Inno.Adapter.Presentation", StringComparison.Ordinal))
+            return "src/adapters/presentation";
+        if (projectName.StartsWith("Inno.Adapter.Platform", StringComparison.Ordinal))
+            return "src/adapters/platform";
+        if (projectName.StartsWith("Inno.Adapter.Input", StringComparison.Ordinal))
+            return "src/adapters/input";
+        if (projectName.StartsWith("Inno.Adapter.Storage", StringComparison.Ordinal))
+            return "src/adapters/storage";
+        if (projectName.StartsWith("Inno.Adapter.Rendering", StringComparison.Ordinal))
+            return "src/adapters/rendering";
+        if (projectName.StartsWith("Inno.Adapter.Audio", StringComparison.Ordinal))
+            return "src/adapters/audio";
+        if (projectName.StartsWith("Inno.References", StringComparison.Ordinal))
+            return "src/content/references";
+        if (projectName.StartsWith("Inno.Assets", StringComparison.Ordinal))
+            return "src/content/assets";
+        if (projectName.StartsWith("Inno.Scene", StringComparison.Ordinal))
+            return "src/content/scene";
+        if (projectName.StartsWith("Inno.Animation", StringComparison.Ordinal))
+            return "src/content/animation";
+        if (string.Equals(projectName, "Inno.Platform", StringComparison.Ordinal))
+            return "src/services/platform";
+        if (projectName.StartsWith("Inno.Input", StringComparison.Ordinal))
+            return "src/services/input";
+        if (projectName.StartsWith("Inno.Storage", StringComparison.Ordinal))
+            return "src/services/storage";
+        if (projectName.StartsWith("Inno.Rendering", StringComparison.Ordinal))
+            return "src/services/rendering";
+        if (projectName.StartsWith("Inno.Audio", StringComparison.Ordinal))
+            return "src/services/audio";
+        if (string.Equals(projectName, "Inno.Runtime", StringComparison.Ordinal))
+            return "src/runtime/engine";
+        if (string.Equals(projectName, "Inno.Runtime.Contracts", StringComparison.Ordinal))
+            return "src/runtime/contracts";
+        if (string.Equals(projectName, "Inno.Runtime.Generators", StringComparison.Ordinal))
+            return "src/runtime/generators";
+        if (string.Equals(projectName, "Inno.Engine.Default", StringComparison.Ordinal))
+            return "src/composition/default";
+        if (projectName.StartsWith("Inno.Scripting", StringComparison.Ordinal))
+            return "src/runtime/scripting";
+        if (projectName.StartsWith("Inno.Plugins", StringComparison.Ordinal))
+            return "src/runtime/plugins";
+        return null;
+    }
+
+    private static string GetSolutionFolderPath(
+        string projectId,
+        IReadOnlyDictionary<string, string> names,
+        IReadOnlySet<string> solutionFolders,
+        IReadOnlyDictionary<string, string> parents)
+    {
+        if (!parents.TryGetValue(projectId, out string? currentId))
+            return "<solution-root>";
+
+        var segments = new List<string>();
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (visited.Add(currentId))
+        {
+            if (!solutionFolders.Contains(currentId))
+                return "<invalid-parent>";
+            segments.Add(names.GetValueOrDefault(currentId, currentId));
+            if (!parents.TryGetValue(currentId, out currentId!))
+                break;
+        }
+        segments.Reverse();
+        return string.Join('/', segments);
     }
 
     private static bool HasSolutionAncestor(

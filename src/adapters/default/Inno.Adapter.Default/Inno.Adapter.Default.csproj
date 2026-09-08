@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\common\Inno.Adapter\Inno.Adapter.csproj" />
+    <ProjectReference Include="..\..\audio\Inno.Adapter.Audio.MiniAudio\Inno.Adapter.Audio.MiniAudio.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\input\Inno.Adapter.Input.Sdl3\Inno.Adapter.Input.Sdl3.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\platform\Inno.Adapter.Platform.Sdl3\Inno.Adapter.Platform.Sdl3.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\rendering\Inno.Adapter.Rendering.Bgfx\Inno.Adapter.Rendering.Bgfx.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\storage\Inno.Adapter.Storage.FileSystem\Inno.Adapter.Storage.FileSystem.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+</Project>

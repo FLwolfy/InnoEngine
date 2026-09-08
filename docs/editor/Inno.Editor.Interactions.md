@@ -1,6 +1,13 @@
 # Inno.Editor.Interactions
 
-[Editor 索引](README.md) · [Core](Inno.Editor.Core.md) · [ImGui](Inno.Editor.ImGui.md)
+## 扩展退休失败
+
+Editor extension snapshot 现在使用 TypeRegistry 的统一 `DisposeExtensions`，去重、逆序并尝试全部实例后聚合失败。
+Dispose 异常不再只写 LogError：调用者收到异常，共享 generation gate 进入 Faulted，禁止继续 reload。
+当前 shutdown 的 Panel → Module → History/Interactions → extension Dispose 顺序不变；相关测试同时验证顺序、次数与 Fault。
+这不表示所有 Stop/Detach 分支都已完成相同审计，剩余范围见[续轮报告](../architecture/ENGINE_CLOSURE_CONTINUATION_2026_09_07.md)。
+
+[Editor 索引](README.md) · [Core](Inno.Editor.Core.md) · [ImGui](Inno.Editor.ImGui.md) · [Identity、Missing 与 reload 标准](../architecture/IDENTITY_REFERENCE_RELOAD_STANDARD.md)
 
 `Inno.Editor.Interactions` 提供表现后端无关的交互语言：稳定的 `string` area/action/panel ID、可选 `target`、轻量 `EditorInteraction`，以及 Attribute 自动发现的 Action、Menu、Shortcut 和 Drop。它不引用 ImGui、Assets、Scene、Scripting 或任何 Panel project；跨 feature reload 协议位于 [Inno.Editor.Core](Inno.Editor.Core.md)。
 
@@ -196,19 +203,33 @@ public sealed class ClipToStateDrop
 }
 ```
 
-视图通过 `BeginDrag` 获得 token，再在目标 interaction 上调用 `QueryDrop`/`Drop`。`BeginDrag` 先同步当前 extension generation，再创建属于该 generation 的 token，避免首次 drop resolver 刷新时立即取消刚创建的 session。每次真实 Begin 都生成新 token 并替换完整 session，即使 source 或 data reference 与上次相同也不会复用；token 只对当前 session 的同一 data reference 有效。managed payload 不进入 native 字节常量；generation 更新、source 失效、validity predicate 返回 `false` 或抛异常、drop 完成都会取消 token。predicate 异常只拒绝本次 drag session。
+视图提交 `EditorDragData(IdentityObject source, string label)`；该值只保存 `RuntimeIdentity sourceIdentity` 和显示文本，
+不保存源对象。内部 BeginDrag/QueryDrop/Drop 按 domain 选择已注册的 `IdentityAllocator`，Preview 与 Delivery 均重新解析
+源 runtime ID。ImGui payload kind 标识 domain，原生 bytes 只有该 domain 内的 runtime ID，没有随机 token 或 managed object 回查表。
+generation 变化、源注销、domain 不匹配或成功 Drop 会结束当前拖拽。落盘与 History 必须改用 persistent ID。
 
 ## Runtime 与热重载
 
 `EditorInteractionRuntime` 从当前 TypeCache snapshot 原子构建 Module、Action、Menu source、Drop、Panel 和 Modal。候选冲突或构造失败会拒绝新 snapshot，旧 generation 继续工作。Host 类型实例会尽量保留；插件类型会 Detach/Stop/Dispose，避免固定旧 ALC。
 
-candidate 激活前会取消 drag、清空 pending action/presentation/menu model。Selection 与 Focus 指向 retiring collectible 类型时先清除；若对象实现 `IIdentityObject`，则暂存 persistent ID 并在下一次 Update 尝试绑定当前 generation 对象，解析失败才保持清空。
+candidate 激活前会取消 drag、清空 pending action/presentation/menu model。Selection 与 Focus 指向 retiring collectible 类型时先清除；若对象继承 `IdentityObject`，则暂存 persistent ID 并在下一次 Update 尝试绑定当前 generation 对象，解析失败才保持清空。
 
-候选 snapshot 作为 staging catalog 对生命周期回调可见。重入请求的新 rebuild 只能在当前全局 Complete 之后作为独立 transaction 运行；已完成的 Registry transaction 不再执行可失败的 pending refresh。激活时先按 `EditorModuleAttribute.order` Start Module，再 Attach 依赖它们的 Panel，最后对成功附加的扩展执行可容错 Restore；全部强制 Module 成功后才发布 active snapshot。Module Start 失败会逆序清理 candidate 并恢复旧 snapshot 与旧 History handler map；Panel Attach 失败只隔离该 Panel。全局 Complete 后才逆序 Stop/Detach retiring generation。被新旧 snapshot 共同保留的 Host instance 不重复 Start/Attach，也不会随旧 snapshot 被 Dispose。
+候选 snapshot 作为 staging catalog 对生命周期回调可见。重入请求的新 rebuild 只能在当前全局 Complete 之后作为独立 transaction 运行。
+激活先逆序 Detach 旧 Panel、Stop 旧 Module，再按 `EditorModuleAttribute.order` Start 新 Module、Attach 新 Panel，最后 Restore。
+尝试 Start/Attach 前即登记 candidate ownership，部分失败也参与补偿。Module Start 失败后逆序补偿 candidate 并恢复旧 snapshot、
+旧 History handler map 和已停止的旧扩展；Panel Attach 失败只有在 Detach 补偿成功后才能单独隔离。
+Complete 后释放旧 snapshot 实例。共同保留的 Host instance 不重复 Start/Attach，也不被旧 snapshot Dispose。
 
-无法 Attach 或 Draw 的 Panel 会被关闭并进入当前 generation quarantine；Panel `useWindowPadding` 和 Module `blocksFollowingUpdates` 这类扩展虚属性也在单实例边界内读取，getter 抛异常只隔离所属扩展。Module Update 失败会隔离当前 Module 但继续后续更新；Modal 状态读取/Draw 失败会跳过当前 Modal。Stop/Detach 异常只记清理诊断并继续；snapshot 释放时每个 `IDisposable` 实例单独 `try/catch`，前一个失败不会跻过后续实例。quarantine 只属于当前 snapshot，新 generation 会重新尝试，诊断按 extension ID 去重并在恢复后清除。失败 Panel 不参与 Restore、Capture 或 Draw。
+无法 Attach 或 Draw 的 Panel 会被关闭并进入当前 generation quarantine；Panel `useWindowPadding`、Module `blocksFollowingUpdates`
+等 getter 抛异常仍按实例隔离。Module Update、Modal 状态读取/Draw 的失败也是帧执行隔离边界。
+**Stop/Detach/Dispose 则是所有权边界，不允许只记日志。** 普通退出错误聚合上抛并 Fault；Pending 使用 Core RetirementBarrier
+在控制线程有界排空，超时保留 owner、封锁整个 generation，不继续释放 History、模块依赖或 native backend。
+恢复旧 generation 的 Start/Attach 失败同样报告 Fault。quarantine 不会被用来掩盖清理失败；失败 Panel 不参与 Restore、Capture 或 Draw。
 
-Editor 正常关闭先捕获和原子写入最终状态，再 Stop Module、Detach Panel，然后才清空 Action/drag 并 Dispose History，最后逐实例 Dispose extension snapshot。任一阶段失败不会跳过后续阶段；全部退场尝试完成后再聚合报告宿主级失败。
+Editor 正常关闭先捕获并原子写入最终状态，再逆序 Detach Panel、Stop Module，然后清空 Action/drag 并 Dispose History，最后退休 extension snapshot。
+EditorInteractionRuntime 记录已完成 shutdown stage，Pending 不标 disposed、不清空 action/snapshot，且拒绝 Start/Update。
+普通终结错误仍尝试后续阶段并统一报告；不能把 Pending 包进普通 AggregateException 后继续。ImGui runtime、EditorLayer、Host resource stack
+逐层遵循相同规则；EditorLayer 用 Core LifetimeScope 拥有 runtime 与 diagnostics，无第二套生命周期容器。
 
 ## Undo / Redo
 

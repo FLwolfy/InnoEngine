@@ -1,3 +1,4 @@
+using Inno.Core.Diagnostics;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -250,8 +251,8 @@ internal sealed class GameBuildPipeline
     {
         BuildDiagnosticSeverity severity = diagnostic.severity switch
         {
-            ScriptDiagnosticSeverity.Error => BuildDiagnosticSeverity.Error,
-            ScriptDiagnosticSeverity.Warning => BuildDiagnosticSeverity.Warning,
+            DiagnosticSeverity.Error => BuildDiagnosticSeverity.Error,
+            DiagnosticSeverity.Warning => BuildDiagnosticSeverity.Warning,
             _ => BuildDiagnosticSeverity.Information
         };
         string location = diagnostic.filePath is null

@@ -1,10 +1,23 @@
 # Inno.Extensibility.Modules
 
-[Core 索引](README.md) · [下一页：Reflection](Inno.Extensibility.Types.md) · [Wiki 首页](../README.md)
+[Extensibility 索引](README.md) · [下一页：Reflection](Inno.Extensibility.Types.md) · [Wiki 首页](../README.md)
+
+Pending / timeout 的分类覆盖整棵 Aggregate/InnerException 树。Catalog/Reload participant 和 ModuleHost
+保留原始异常、事务及未退出的两代 context；不得将包装 Pending 当成普通错误后继续 BeginUnload。
+已用真实 collectible ALC 验证 Activate、Complete、Rollback 三条包装异常路径。
+
+Catalog 候选失败并完整回滚后，保留当前 last-good publication，不因异常本身重新设置自动刷新请求。
+失败原样上抛；只有新的 Host Assembly load、显式 `Rebuild()` 或后续实际代际变更才发起新尝试。
+这样普通 `TypeCatalog.current` / Asset 查询不会不断重跑同一被拒绝候选，导致 last-good 虽已恢复却无法访问。
+候选准备期间实际到达的新 Assembly load 仍保留 dirty 标志，不吞掉新变化。
+AssemblyLoad 只为符合 Catalog 同一分类规则的非动态 Host/InnoInternal 程序集置 dirty；
+异常格式化时加载的 BCL、测试工具和不参与 Catalog 的程序集不会触发无关的全域重新发布。
 
 `Inno.Extensibility.Modules` 是不依赖反射业务的程序集生命周期层。它管理当前“哪些程序集是活动的”、模块代际、shadow copy、collectible `AssemblyLoadContext` 和原子切换事务；它不知道 TypeCache、Importer、Converter、Component 或脚本目录。
 
 ## 源码目录
+
+`AssemblyCatalogSnapshot.assemblies` 持有独立只读副本，不能通过数组/IList 强转改写 generation 内容。快照仍强持有该代 Assembly；调用者必须在代际退休前释放其引用，不能把只读误解为弱引用。
 
 ```text
 Inno.Extensibility.Modules/
@@ -148,8 +161,15 @@ sequenceDiagram
 ```
 
 `AssemblyReloadSession.Dispose()` 会对未完成 session 自动 rollback。`Complete()` 后 `AssemblyReloadContext` 会释放强引用，不能继续访问。
+普通、已终结的清理错误会在尝试其余清理后报告 Fault。`RetirementPendingException` 则表示依赖仍在使用：
+保留 transaction、module entries 和迁移 context，停止下游清理及 ALC Unload，原样抛出并关闭 generation gate。
+重复 Dispose/Complete/Rollback 不允许借由 finished 标志绕过该屏障；必须重启整个 Host。
+此时已提交 generation 不伪回滚，但 reload 不报告 Success，也不允许继续 Play/Build/Export。
 
-多模块 session 使用 [Core Storage](../core/Inno.Core.Storage.md) 的 `DependencyGraph<string>` 对 `upstreamModuleNames` 做确定性拓扑排序；Project Scripting 自然位于其 Plugin 依赖之后，Editor Scripts 位于 Runtime Scripts 之后。下游 `ModuleLoadContext` 显式复用同一事务上游 candidate 中的精确 `Assembly` 实例，不复制并二次加载依赖 DLL。发布时一次切换 module map、Assembly catalog、TypeCache 与全部 Registry candidate；任一 stage、participant、Scene 或 extension 激活失败都恢复完整 previous 集合并逆序卸载 candidate。`Complete` 仅释放 previous snapshot 并按反向拓扑请求协作式卸载，不执行可失败的发现或刷新。
+自动 Catalog refresh 在 Build/Export 的读租约期间保留当前快照，将 dirty 刷新延后；
+它通过 TryAcquireChange 预留互斥发布，不得为了响应一次类型查询而突破冻结 generation。
+
+多模块 session 使用 [Core Collections](../core/Inno.Core.Collections.md) 的 `DependencyGraph<string>` 对 `upstreamModuleNames` 做确定性拓扑排序；Project Scripting 自然位于其 Plugin 依赖之后，Editor Scripts 位于 Runtime Scripts 之后。下游 `ModuleLoadContext` 显式复用同一事务上游 candidate 中的精确 `Assembly` 实例，不复制并二次加载依赖 DLL。发布时一次切换 module map、Assembly catalog、TypeCache 与全部 Registry candidate；任一 stage、participant、Scene 或 extension 激活失败都恢复完整 previous 集合并逆序卸载 candidate。`Complete` 仅释放 previous snapshot 并按反向拓扑请求协作式卸载，不执行可失败的发现或刷新。
 
 依赖闭包是强制约束：Runtime Scripts reload 或 removal 必须包含 Editor Scripts；某个 Plugin reload/unload 必须包含依赖它的 Plugin 与 Project Scripting。Closure validation 对 replacement request 与 explicit removed module 使用完全相同的 domain/scope 语义，因此允许在没有替代 DLL 时原子退休完整闭包，同时仍拒绝遗漏任一活动下游。`upstreamModuleNames` 的空值语义不可被活动进程状态改写；否则删除 Plugin 的同一事务会让新的 Runtime Scripts 再次引用正在退休的 Plugin ALC。Plugin module 数量不封闭，通常每个稳定 Plugin ID 对应独立 collectible ALC；Runtime Scripting 和 Editor Scripting 各保持一个模块。每个事务会在加载前建立完整 module/simple-name/domain/scope 图，并在加载后校验实际 AssemblyRef；重复 simple name、Runtime → Editor、Plugin → Scripting、模块依赖 cycle、未声明的自定义依赖以及非 `InnoInternal` 的 Default ALC 共享依赖都会在发布前拒绝。只有受信任的平台程序集与具有当前 `InnoInternal` metadata 的 Host contract 可以从 Default ALC 共享。
 
@@ -179,8 +199,8 @@ types.TryResolveReplacement(previous, out TypeRef replacement);
 | --- | --- |
 | `object? context` | 可选的短生命周期迁移上下文。 |
 | `Activate()` | 原子发布候选状态。 |
-| `Complete()` | 仅释放旧状态，不得再执行发布；异常会被协调器逐 participant 报告并隔离，已发布 generation 不会伪回滚。 |
-| `Rollback()` | 恢复旧状态并释放候选状态；应可安全重复调用，单个 participant 的清理异常不会跳过其余 participant。 |
+| `Complete()` | 仅释放旧状态，不得再执行发布；普通错误聚合并 Fault，不伪回滚；未退休信号保留 owner 并停止下层释放。 |
+| `Rollback()` | 恢复旧状态并释放候选状态；普通错误继续尝试其他 participant，Pending 不可伪装为完成。 |
 
 参与者不要保留过期的 `AssemblyCatalogSnapshot`，因为其中的 `assemblies` 会强引用 collectible ALC。
 
@@ -197,10 +217,12 @@ AssemblyScope scope = typeof(MyType).Assembly.GetInnoAssemblyScope();
 
 物理 ALC 拓扑为 Default/Internal、多个按显式 DAG 连接的 `Plugin.<id>`、Runtime Scripts、Editor Scripts。依赖只能沿 Internal ← dependency Plugin ← dependent Plugin ← Runtime Scripts ← Editor Scripts 方向；Editor Scripts 还可访问 editor-scope Plugin/Internal API。ALC 只提供卸载和更新粒度，不是安全沙箱。
 
+内部 `ModuleLoadContext` 在 `Unloading` 时释放共享程序集解析表。这张表只服务于活动 generation 的依赖解析，不能在退休后继续强持有上游 collectible Assembly；跨上下文泛型依赖可能使这类引用与 CLR 的 loader allocator 形成保留环。该清理覆盖正常卸载和候选加载失败，不改变弱 monitor、GC barrier 或 Faulted 语义。
+
 ## 常见误区
 
 - `Rebuild()` 只对当前活动 assembly 重做 catalog/participant 状态，不会从磁盘重新加载同名 DLL；文件内容变化必须走 `BeginReload()`。
 - `Unload()` 是协作式的。旧线程、静态事件、缓存的 `Type`/delegate/instance 都可能让 monitor 长期 `Pending`。
-- Assemblies 层的普通 reload 不强制 Full GC；测试/诊断和上层 Scripting reload safe point 可以有界触发 GC。Monitor 为 `Pending` 不影响新 generation 继续运行，也不能被误报为已卸载。Editor Scripting 选择在提交后阻塞自己的 modal 并强制验证，但不会把这一延迟策略施加给所有 `ModuleHost` 调用方。
+- `Unload()` 发起退休并登记共享 GenerationCoordinator；`Pending` 不是成功。退休对象经 Full GC → Finalizers → Full GC 和弱 monitor 确认不可达后才能完成；等待期间不得开始另一代际事务或 Play/Build/Export，超时进入 Faulted，不能忽略 monitor 继续运行。
 - 不要从该层访问 TypeCache；依赖方向是 [Reflection](Inno.Extensibility.Types.md) → Assemblies，而不是反过来。
 - 一个时刻只允许一个 reload session；新 Load/Register/Unload/Rebuild 不能穿插在未完成事务中。

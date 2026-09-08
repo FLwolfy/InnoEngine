@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../foundation/core/Inno.Core.Events/Inno.Core.Events.csproj" />
+    <ProjectReference Include="../../../foundation/core/Inno.Core.Diagnostics/Inno.Core.Diagnostics.csproj" />
+    <ProjectReference Include="../../../foundation/core/Inno.Core.Execution/Inno.Core.Execution.csproj" />
+    <ProjectReference Include="../../../foundation/core/Inno.Core.Identity/Inno.Core.Identity.csproj" />
+    <ProjectReference Include="../../../foundation/extensibility/Inno.Extensibility.Types/Inno.Extensibility.Types.csproj" />
+  </ItemGroup>
+</Project>

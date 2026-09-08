@@ -127,7 +127,7 @@
 
 ## 17. Rendering 强制边界
 - Rendering 的公开设计必须同时满足：跨平台、API 易用、扩展灵活和低耦合。不得以实现便利为由破坏其中任一项。
-- 只有 `Inno.Rendering.Bgfx` 可以引用 `Inno.Native.Bgfx` 与 `Inno.Native.Bgfx.Tools`。BGFX handle、View ID、原生指针和 BGFX 枚举不得出现在其他项目的 public/protected API 中。
+- 只有 `Inno.Adapter.Rendering.Bgfx` 可以引用 `Inno.Native.Bgfx` 与 `Inno.Native.Bgfx.Tools`。BGFX handle、View ID、原生指针和 BGFX 枚举不得出现在其他项目的 public/protected API 中。
 - `Inno.Rendering.Core` 必须保持后端中立，且不得引用 Scene、Assets、Editor 或任何具体图形后端。上层模块通过资源描述、能力集合、RenderGraph 和命令编码接口工作。
 - 通用 Graph 不得引用 Rendering 或 ImGui；Rendering 也不得反向引用 ShaderGraph 或 Editor Graph。ShaderGraph 只能作为面向 Rendering 契约的上层编译前端。
 - 手写 Shader 与节点生成 Shader 必须进入同一个 Shader IR、编译、反射、验证和产物缓存链；不得维护第二套节点专用 shader 编译路径。
@@ -152,3 +152,15 @@
 - 公开 API 必须少而完整；能由引擎可靠推导的信息不得要求用户创建 companion asset、重复填写清单或修改无关调用方。新增公开 API 时必须在交付说明中列出其必要性与稳定语义。
 - 绝对禁止使用 `InternalsVisibleTo`、测试专用后门、反射穿透或扩大 `internal` 成员可见性来简化测试。测试只能通过真实公开契约和可替换 public boundary 验证行为。
 - 新项目和功能文件必须按职责归类，文件名与主类型一致；一个文件只承载紧密相关的契约或实现，不使用含义模糊的 helper/internal 目录，也不把互不相关的类型收进巨型文件。
+
+## 20. Identity、Missing、引用与热重载强制边界
+- 跨 UI、callback、queue、frame、Scene、Asset、Scripting 或 Plugin generation 边界定位 live object 时必须经过 `Inno.Core.Identity`。当前 domain 内瞬时解析使用 `Identity.runtimeId`，持久化、History 和跨代恢复只保存 `Identity.persistentId`；runtime ID 绝不进入 Scene、Prefab、Asset metadata、Settings、Plugin manifest 或 History。
+- Stable Type ID、Plugin/Feature/Importer 等 semantic ID、Artifact key 和 generation handle 各自保持独立语义，不得与 object Identity 混用。领域二级索引可以把 path/semantic key 映射到 persistent ID 或 immutable record，但不能成为跨 generation live object 的第二权威表。
+- Editor ImGui DragDrop 的 native payload 数据必须是源 identity 的 runtime ID；禁止使用随机 token 回查 managed source object。Preview 与 Delivery 都必须通过正确的 `IdentityAllocator` 重新解析并校验 generation；Drop 落盘或记录 History 时转换为 persistent ID。
+- Asset、Script Type、Plugin、Importer、Component/System、Graph node、Settings contribution 或 extension 暂时不可用时必须保留 Missing state：原 persistent ID、Stable ID、结构位置、property bytes、依赖和中立 extension state均不得丢失。Missing 与 null/Unassigned 必须在 API 和 UI 中严格区分。
+- 同一 identity/type/plugin 恢复后必须通过统一 candidate/recovery transaction 在 owner-thread safe point 原子重建；失败保留原 Missing 与诊断。不得让 Assets、Scene、Scripting、Plugins、Graph 或各 Panel 分别实现互不兼容的 resolver、placeholder 生命周期或恢复事务。
+- reload-safe Undo/Redo 只能保存 stable protocol kind、persistent ID、Stable ID、结构值和中立 bytes；不得捕获 runtime object、`Type`、delegate、extension instance 或 ALC。暂时 Missing 只能成为可恢复 barrier，不能丢弃、跳过或移动栈指针；恢复后原操作应自动重新可用。
+- 所有可能包含 Asset/Object reference 的序列化必须从 owner 取得完整 `SerializationContext`。除经类型与测试证明完全 context-free 的纯值图外，业务代码禁止直接从 `SerializationContext.empty` 临时拼接 resolver；缺少 required resolver 必须在 composition/startup 失败，不能延迟到 Play、Undo 或 recovery 才爆出。
+- Scripting、Plugin、Asset type、Serializer 和 extension generation 必须进入统一 candidate transaction。旧 collectible ALC 的成功退休必须执行 Full GC → `GC.WaitForPendingFinalizers()` → Full GC，并由弱 monitor 确认全部 context 不可达；在此之前 reload 不得报告 Success，也不得开始新的 reload、Play、Build 或 Export。
+- unload verification 的 timeout 只能触发明确异常和 `Faulted`，绝不能清空仍 Pending 的 monitor 后继续。失败必须列出 module/domain/scope/generation；Faulted 进程禁止继续 generation transaction，需完整重启 Host。static/event/task/thread/AsyncLocal/GCHandle/native callback/Editor transient state 等旧 generation 强引用必须被测试覆盖。
+- 完整规范、目标 API、当前差距和测试矩阵见 `docs/architecture/IDENTITY_REFERENCE_RELOAD_STANDARD.md`；修改 Identity、Scripting、Plugins、Assets、Scene、Editor Interactions/History 或任何 collectible extension 时必须同步核对此页。

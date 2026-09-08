@@ -1,6 +1,6 @@
 # Inno.Editor.Scripting
 
-[Editor 索引](README.md) · [Scripting API](../scripting/Inno.Scripting.Api.md) · [Assets](../assets/README.md) · [Modules](../extensibility/Inno.Extensibility.Modules.md)
+[Editor 索引](README.md) · [Scripting API](../scripting/Inno.Scripting.Api.md) · [Assets](../assets/README.md) · [Modules](../extensibility/Inno.Extensibility.Modules.md) · [目标 reload 强制标准](../architecture/IDENTITY_REFERENCE_RELOAD_STANDARD.md)
 
 `Inno.Editor.Scripting` 把 Project 与已激活 `.iplugin` Mount 中的 C# source、assembly definition 当成正式资产，再把它们编译为可回滚的 collectible Script Module。文件发现和变化来源是统一 Asset Database；该项目没有自己的 `FileSystemWatcher`，也不递归扫描 Project 目录。
 
@@ -134,6 +134,10 @@ Type Registry candidate 在 assembly stage 时可能已经包含 Play Session �
 
 验证达到十次仍有 context 存活时，modal 显示“reload 已提交但卸载验证失败”，并向 Console 的 `Script Unload` 来源发布 `INNO-ALC-UNLOAD` Error，逐项列出 module、domain/scope 与 generation。这个错误是 post-commit 资源回收失败：新 generation 已经可用且不会伪回滚；外部保存的旧 `Type`、object、delegate、extension、task、subscription 或 thread 仍必须由持有方释放，GC 不能强行破坏可达引用。Host Play Mode 会在 commit 前释放整个 Play Session；Inspector lock 对 Scene identity 只保存 persistent ID，对其他 collectible target 只保存弱引用，因此两类 Editor-owned 长期引用不会固定退休 generation。
 
+以上是当前实现。目标强制标准不再允许验证失败后继续正常接受 generation operation：旧 ALC 未确认不可达时
+reload 不得成功；达到失败阈值必须抛出并进入 Faulted，阻止后续 reload、Play、Build 与 Export。详见
+[Identity、可恢复引用与热重载强制标准](../architecture/IDENTITY_REFERENCE_RELOAD_STANDARD.md)。
+
 ## 编译进度 modal
 
 用户从菜单排队请求或文件观察器产生请求时，Editor 立即以 0% 打开阻塞式 Modal，与 Settings Modal 使用相同的后方交互禁用和 popup 规则。Modal 使用固定宽度，状态文字按可用 content width 自动换行，并提供 Cancel。后台编译、Editor frame 与进度绘制继续运行；阻塞的是后方窗口输入，而原子激活候选仍只发生在短 safe point。
@@ -153,7 +157,9 @@ Type Registry candidate 在 assembly stage 时可能已经包含 Play Session �
 | `status` | 当前 compiler/reload 阶段的可读说明。 |
 | `lastCompilation` | 最近完成的 `ScriptCompilationResult`，首次完成前为 `null`。 |
 
-`Ready` 只表示最近编译成功且 generation 已完成激活；编译、candidate activation 和旧 ALC unload verification 期间均为 `Compiling`。最近失败即为 `Failed`，新的 Play entry 不会静默使用过期脚本。普通编译失败时 active generation 保持不变；Plugin availability 失败时 active generation 已明确退休不可成立的 module closure，场景状态以 Missing 保留。该 contract 是 Editor host API，不加入 EditorScripts 的逻辑 facade。
+`Ready` 表示最近编译成功、generation 已完成激活且旧代 GC 验证通过；编译、candidate activation 和旧 ALC unload verification 期间均为 `Compiling`。`IScriptCompilationTicket` 也必须等待上述完整过程，不能在 80% 编译完成或刚发布候选时提前成功。IDE 投影在屏障完成后生成，避免在 AwaitingCollection 期间申请新 read lease。即使其他 Host 边界先推进完成了屏障，下一次 Editor Update 仍会完成对应票据并关闭弹窗，且不依赖窗口焦点。
+
+编译、激活或退休失败均为 `Failed`，新的 Play entry 不会静默使用过期脚本。退休失败由 Core Diagnostics 显式报告并关闭进度弹窗；Faulted 优先于 queued/compiling flags，遗留排队标记不能让 Editor 永远显示忙碌。Faulted Host 的新请求直接获得失败票据，需要重启，不能继续 reload。普通编译失败时 active generation 保持不变；Plugin availability 失败时 active generation 已明确退休不可成立的 module closure，场景状态以 Missing 保留。该 contract 是 Editor host API，不加入 EditorScripts 的逻辑 facade。
 
 成功结果的 `runtimeAssemblyPaths` 是本 generation 中所有 runtime-scope main/preload assembly 的去重绝对路径。Game Export 只消费这组路径，因此不会凭输出目录猜测 DLL，也不会把 Editor assembly 部署进 Player；路径对应的 generation 必须在导出开始时仍是最新成功结果。
 

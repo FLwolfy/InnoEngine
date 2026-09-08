@@ -35,8 +35,24 @@ internal static partial class ArchitectureRules
         "Inno.Core.Reflection",
         "Inno.Core.Scripting",
         "Inno.Engine.Scene",
+        "Inno.Audio.Scene",
         "Inno.Rendering.Core",
         "Inno.Native.Dll"
+    ];
+    private static readonly string[] S_CONCRETE_ADAPTER_MARKERS =
+    [
+        "Inno.Adapter.Platform.Sdl3",
+        "Inno.Adapter.Input.Sdl3",
+        "Inno.Adapter.Storage.FileSystem",
+        "Inno.Adapter.Rendering.Bgfx",
+        "Inno.Adapter.Audio.MiniAudio",
+        "Inno.Adapter.Presentation.ImGui",
+        "Sdl3Platform",
+        "Sdl3Input",
+        "FileSystemApplicationStorage",
+        "BgfxDevice",
+        "MiniAudioDevice",
+        "PlatformImGuiContext"
     ];
 
     internal static void Validate(string repositoryRoot, ICollection<string> failures)
@@ -44,6 +60,8 @@ internal static partial class ArchitectureRules
         ValidateRepositorySources(repositoryRoot, failures);
         Dictionary<string, ProjectNode> graph = LoadProjectGraph(repositoryRoot, failures);
         ValidateCycles(repositoryRoot, graph, failures);
+        ValidateConceptualLayerReferences(graph, failures);
+        ValidateCompositionShellBoundaries(graph, failures);
         ValidatePlayerClosure(repositoryRoot, graph, failures);
         ValidateRemovedProjects(repositoryRoot, failures);
     }
@@ -99,11 +117,33 @@ internal static partial class ArchitectureRules
     {
         if (relative.StartsWith("tools/Inno.Tooling.Architecture/", StringComparison.Ordinal))
             return;
+        if (source.Contains(".With<IAssetReferenceResolver>", StringComparison.Ordinal) &&
+            !relative.EndsWith(
+                "src/content/assets/Inno.Assets/Serialization/AssetSerializationContext.cs",
+                StringComparison.Ordinal))
+        {
+            failures.Add(
+                $"{relative}: asset-aware serialization must use the owner-complete AssetSerializationContext factory.");
+        }
         if (StaticManagerDeclarationPattern().IsMatch(source))
             failures.Add($"{relative}: process-wide static Manager ownership is forbidden.");
         if (StaticLogFacadeCallPattern().IsMatch(source))
             failures.Add($"{relative}: engine implementation must use an explicitly owned Logger.");
-        if (relative.StartsWith("src/audio/Inno.Audio.MiniAudio/", StringComparison.Ordinal) &&
+        if ((relative.StartsWith("src/composition/editor/", StringComparison.Ordinal) ||
+             relative.StartsWith("src/composition/player/Inno.Player/", StringComparison.Ordinal)) &&
+            source.Contains("_ = typeof(", StringComparison.Ordinal))
+        {
+            failures.Add(
+                $"{relative}: composition roots must discover engine modules from their declared dependency closure, not typeof anchors.");
+        }
+        if ((relative.StartsWith("src/composition/player/Inno.Player/", StringComparison.Ordinal) ||
+             relative.StartsWith("src/composition/editor/host/Inno.Editor.Application/", StringComparison.Ordinal)) &&
+            S_CONCRETE_ADAPTER_MARKERS.Any(source.Contains))
+        {
+            failures.Add(
+                $"{relative}: product composition must use Shell and backend-neutral adapter contracts instead of concrete backend types.");
+        }
+        if (relative.StartsWith("src/adapters/audio/Inno.Adapter.Audio.MiniAudio/", StringComparison.Ordinal) &&
             (source.Contains("AudioContentProvider", StringComparison.Ordinal) ||
              source.Contains("AudioMixerExtension", StringComparison.Ordinal) ||
              source.Contains("AudioMixerFeature", StringComparison.Ordinal) ||
@@ -113,7 +153,7 @@ internal static partial class ArchitectureRules
             failures.Add(
                 $"{relative}: the real-time MiniAudio adapter cannot retain managed extension-generation objects or reflection state.");
         }
-        if (relative.StartsWith("src/audio/", StringComparison.Ordinal) &&
+        if (relative.StartsWith("src/services/audio/", StringComparison.Ordinal) &&
             relative.EndsWith("/Properties/ScriptingApi.cs", StringComparison.Ordinal) &&
             (source.Contains("typeof(IAudioDevice)", StringComparison.Ordinal) ||
              source.Contains("typeof(AudioDevice)", StringComparison.Ordinal) ||
@@ -179,6 +219,8 @@ internal static partial class ArchitectureRules
             ValidateProjectProperties(node, document, failures);
             foreach (XElement reference in document.Descendants("ProjectReference"))
             {
+                if (string.Equals((string?)reference.Attribute("ReferenceOutputAssembly"), "false", StringComparison.OrdinalIgnoreCase))
+                    continue;
                 string? include = reference.Attribute("Include")?.Value;
                 if (string.IsNullOrWhiteSpace(include))
                     continue;
@@ -189,6 +231,11 @@ internal static partial class ArchitectureRules
                 if (!graph.TryGetValue(targetPath, out ProjectNode? target))
                 {
                     failures.Add($"{node.relative}: project reference '{include}' does not resolve to a repository project.");
+                    continue;
+                }
+                if (node.references.Contains(target))
+                {
+                    failures.Add($"{node.relative}: project reference '{include}' is duplicated.");
                     continue;
                 }
                 node.references.Add(target);
@@ -227,36 +274,43 @@ internal static partial class ArchitectureRules
         {
             failures.Add($"{sourcePath}: Native cannot reference upper-layer project {targetPath}.");
         }
-        if (sourcePath.StartsWith("src/core/", StringComparison.Ordinal) &&
-            !targetPath.StartsWith("src/core/", StringComparison.Ordinal) &&
-            !targetPath.StartsWith("src/extensibility/", StringComparison.Ordinal) &&
-            !targetPath.Contains("Inno.Scripting.Api", StringComparison.Ordinal))
+        if (sourcePath.StartsWith("src/foundation/", StringComparison.Ordinal) &&
+            !targetPath.StartsWith("src/foundation/", StringComparison.Ordinal))
         {
             failures.Add($"{sourcePath}: Core cannot reference upper-layer project {targetPath}.");
         }
         if (sourcePath.StartsWith("build/", StringComparison.Ordinal) &&
-            targetPath.StartsWith("src/editor/", StringComparison.Ordinal))
+            targetPath.StartsWith("src/composition/editor/", StringComparison.Ordinal))
         {
             failures.Add($"{sourcePath}: Build cannot reference Editor project {targetPath}.");
         }
         if (sourcePath.Contains("Inno.Rendering/", StringComparison.Ordinal) &&
             (targetPath.Contains("ShaderGraph", StringComparison.Ordinal) ||
-             targetPath.StartsWith("src/scene/", StringComparison.Ordinal) ||
-             targetPath.StartsWith("src/editor/", StringComparison.Ordinal)))
+             targetPath.StartsWith("src/content/scene/", StringComparison.Ordinal) ||
+             targetPath.StartsWith("src/composition/editor/", StringComparison.Ordinal)))
         {
             failures.Add($"{sourcePath}: backend-neutral Rendering cannot reference {targetPath}.");
         }
         if (string.Equals(project.name, "Inno.Audio", StringComparison.Ordinal) &&
-            (targetPath.StartsWith("src/audio/Inno.Audio.Runtime/", StringComparison.Ordinal) ||
-             targetPath.StartsWith("src/audio/Inno.Audio.Scene/", StringComparison.Ordinal) ||
-             targetPath.StartsWith("src/audio/Inno.Audio.MiniAudio/", StringComparison.Ordinal) ||
-             targetPath.StartsWith("src/scene/", StringComparison.Ordinal) ||
+            (targetPath.StartsWith("src/services/audio/Inno.Audio.Runtime/", StringComparison.Ordinal) ||
+             targetPath.StartsWith("src/adapters/audio/Inno.Adapter.Audio.MiniAudio/", StringComparison.Ordinal) ||
+             targetPath.StartsWith("src/content/scene/", StringComparison.Ordinal) ||
              targetPath.StartsWith("src/runtime/", StringComparison.Ordinal) ||
-             targetPath.StartsWith("src/editor/", StringComparison.Ordinal) ||
-             targetPath.StartsWith("src/platform/", StringComparison.Ordinal) ||
+             targetPath.StartsWith("src/composition/editor/", StringComparison.Ordinal) ||
+             targetPath.StartsWith("src/services/platform/", StringComparison.Ordinal) ||
              targetPath.StartsWith("native/", StringComparison.Ordinal)))
         {
             failures.Add($"{sourcePath}: backend-neutral Audio cannot reference {targetPath}.");
+        }
+        if (string.Equals(project.name, "Inno.Animation", StringComparison.Ordinal) &&
+            (targetPath.StartsWith("src/runtime/", StringComparison.Ordinal) ||
+             targetPath.StartsWith("src/content/scene/", StringComparison.Ordinal) ||
+             targetPath.StartsWith("src/services/rendering/", StringComparison.Ordinal) ||
+             targetPath.StartsWith("src/services/audio/", StringComparison.Ordinal) ||
+             targetPath.StartsWith("src/composition/editor/", StringComparison.Ordinal) ||
+             targetPath.StartsWith("native/", StringComparison.Ordinal)))
+        {
+            failures.Add($"{sourcePath}: backend-neutral Animation cannot reference {targetPath}.");
         }
         if (target.name.Contains("Inno.Native.Bgfx", StringComparison.Ordinal) &&
             !IsAllowedBgfxConsumer(project.name))
@@ -272,6 +326,10 @@ internal static partial class ArchitectureRules
             !IsAllowedMiniAudioConsumer(project.name))
         {
             failures.Add($"{sourcePath}: miniaudio native code is restricted to the MiniAudio adapter and toolchain.");
+        }
+        if (IsAdapterContract(project.name) && IsConcreteAdapter(target.name))
+        {
+            failures.Add($"{sourcePath}: adapter contract projects cannot reference concrete implementation {targetPath}.");
         }
     }
 
@@ -314,7 +372,7 @@ internal static partial class ArchitectureRules
         ProjectNode? player = graph.Values.SingleOrDefault(static value => value.name == "Inno.Player");
         if (player is null)
         {
-            failures.Add("src/runtime/Inno.Player: Player composition project is missing.");
+            failures.Add("src/composition/player/Inno.Player: Player composition project is missing.");
             return;
         }
         var visited = new HashSet<ProjectNode>();
@@ -343,23 +401,122 @@ internal static partial class ArchitectureRules
         {
             if (solution.Contains(removed, StringComparison.Ordinal))
                 failures.Add($"InnoEngine.sln: removed project '{removed}' remains in the solution.");
+            foreach (string projectPath in EnumerateFiles(repositoryRoot, "*.csproj"))
+            {
+                if (string.Equals(
+                        Path.GetFileNameWithoutExtension(projectPath),
+                        removed,
+                        StringComparison.Ordinal))
+                {
+                    failures.Add(
+                        $"{Relative(repositoryRoot, projectPath)}: removed project '{removed}' remains in the repository.");
+                }
+            }
         }
     }
 
+    private static void ValidateConceptualLayerReferences(
+        IReadOnlyDictionary<string, ProjectNode> graph,
+        ICollection<string> failures)
+    {
+        foreach (ProjectNode project in graph.Values)
+        {
+            ConceptualLayer? sourceLayer = ClassifyConceptualLayer(project);
+            if (sourceLayer is null)
+                continue;
+            foreach (ProjectNode target in project.references)
+            {
+                ConceptualLayer? targetLayer = ClassifyConceptualLayer(target);
+                if (targetLayer is null || targetLayer <= sourceLayer)
+                    continue;
+                failures.Add(
+                    $"{project.relative}: {sourceLayer} project cannot reference upper {targetLayer} project {target.relative}.");
+            }
+        }
+    }
+
+    private static void ValidateCompositionShellBoundaries(
+        IReadOnlyDictionary<string, ProjectNode> graph,
+        ICollection<string> failures)
+    {
+        ValidateHost("Inno.Player");
+        ValidateHost("Inno.Editor.Application");
+
+        void ValidateHost(string projectName)
+        {
+            ProjectNode? host = graph.Values.SingleOrDefault(value =>
+                string.Equals(value.name, projectName, StringComparison.Ordinal));
+            if (host is null)
+            {
+                failures.Add($"{projectName}: product composition project is missing.");
+                return;
+            }
+            if (!host.references.Any(static target =>
+                    string.Equals(target.name, "Inno.Shell", StringComparison.Ordinal)))
+            {
+                failures.Add($"{host.relative}: product composition must inherit the common Inno.Shell lifecycle.");
+            }
+            foreach (ProjectNode target in host.references.Where(static target => IsConcreteAdapter(target.name)))
+            {
+                failures.Add(
+                    $"{host.relative}: product composition cannot reference concrete adapter project {target.relative}; use Inno.Adapter.Default and neutral contracts.");
+            }
+        }
+    }
+
+    private static ConceptualLayer? ClassifyConceptualLayer(ProjectNode project)
+    {
+        if (!project.relative.StartsWith("src/", StringComparison.Ordinal))
+            return null;
+        if (project.relative.StartsWith("src/foundation/", StringComparison.Ordinal))
+        {
+            return ConceptualLayer.Foundation;
+        }
+        if (project.relative.StartsWith("src/composition/", StringComparison.Ordinal))
+        {
+            return ConceptualLayer.Composition;
+        }
+        if (project.name.StartsWith("Inno.Adapter", StringComparison.Ordinal))
+        {
+            return ConceptualLayer.Adapter;
+        }
+        return ConceptualLayer.EngineCapability;
+    }
+
+    private static bool IsAdapterContract(string name)
+        => string.Equals(name, "Inno.Adapter", StringComparison.Ordinal) ||
+           string.Equals(name, "Inno.Adapter.Platform", StringComparison.Ordinal) ||
+           string.Equals(name, "Inno.Adapter.Input", StringComparison.Ordinal) ||
+           string.Equals(name, "Inno.Adapter.Storage", StringComparison.Ordinal) ||
+           string.Equals(name, "Inno.Adapter.Rendering", StringComparison.Ordinal) ||
+           string.Equals(name, "Inno.Adapter.Audio", StringComparison.Ordinal) ||
+           string.Equals(name, "Inno.Adapter.Presentation", StringComparison.Ordinal);
+
+    private static bool IsConcreteAdapter(string name)
+        => name.StartsWith("Inno.Adapter.Platform.", StringComparison.Ordinal) ||
+           name.StartsWith("Inno.Adapter.Input.", StringComparison.Ordinal) ||
+           name.StartsWith("Inno.Adapter.Storage.", StringComparison.Ordinal) ||
+           name.StartsWith("Inno.Adapter.Rendering.", StringComparison.Ordinal) &&
+           !string.Equals(name, "Inno.Adapter.Rendering.Authoring", StringComparison.Ordinal) ||
+           name.StartsWith("Inno.Adapter.Audio.", StringComparison.Ordinal) ||
+           name.StartsWith("Inno.Adapter.Presentation.", StringComparison.Ordinal);
+
     private static bool IsAllowedBgfxConsumer(string name)
-        => name.StartsWith("Inno.Rendering.Bgfx", StringComparison.Ordinal) ||
+        => name.StartsWith("Inno.Adapter.Rendering.Bgfx", StringComparison.Ordinal) ||
+           name.StartsWith("Inno.Adapter.Presentation.ImGui.Bgfx", StringComparison.Ordinal) ||
            name.StartsWith("Inno.Build.Toolchains.Bgfx", StringComparison.Ordinal) ||
            name.StartsWith("Inno.Native.Bgfx", StringComparison.Ordinal) ||
            name.EndsWith(".Tests", StringComparison.Ordinal);
 
     private static bool IsAllowedSdlConsumer(string name)
-        => name.StartsWith("Inno.Platform.Sdl3", StringComparison.Ordinal) ||
+        => name.StartsWith("Inno.Adapter.Platform.Sdl3", StringComparison.Ordinal) ||
+           name.StartsWith("Inno.Adapter.Presentation.ImGui.Sdl3", StringComparison.Ordinal) ||
            name.StartsWith("Inno.Build.Toolchains.Sdl3", StringComparison.Ordinal) ||
            name.StartsWith("Inno.Native.Sdl3", StringComparison.Ordinal) ||
            name.EndsWith(".Tests", StringComparison.Ordinal);
 
     private static bool IsAllowedMiniAudioConsumer(string name)
-        => name.StartsWith("Inno.Audio.MiniAudio", StringComparison.Ordinal) ||
+        => name.StartsWith("Inno.Adapter.Audio.MiniAudio", StringComparison.Ordinal) ||
            name.StartsWith("Inno.Build.Toolchains.MiniAudio", StringComparison.Ordinal) ||
            name.StartsWith("Inno.Native.MiniAudio", StringComparison.Ordinal);
 
@@ -412,5 +569,13 @@ internal static partial class ArchitectureRules
     {
         Visiting,
         Visited
+    }
+
+    private enum ConceptualLayer
+    {
+        Foundation,
+        EngineCapability,
+        Adapter,
+        Composition
     }
 }

@@ -25,8 +25,7 @@ Inno.Editor.Core/
 │  └─ IEditorPanelReloadState.cs
 ├─ Reloading/
 │  ├─ EditorReloadCoordinator.cs
-│  ├─ IEditorReloadParticipant.cs
-│  └─ IEditorReloadTransaction.cs
+│  └─ IEditorReloadParticipant.cs
 └─ Properties/ScriptingApi.cs
 ```
 
@@ -65,7 +64,7 @@ Statistics 是唯一允许写入 Context 的帧数据通道，不是任意 servi
 后值最多保留一个 handoff frame。值已经是面向人的字符串，采样器、Profiler 历史和持久配置
 仍应由各自领域拥有。
 
-构造函数、`layoutPath`、`imguiLayout`、section 读写、ImGui layout 更新和 Save 是 CLR host 边界。由于 Application 与 Interactions 是独立程序集，这些成员是 public CLR API，但全部标记 `ScriptingApiIgnore`，不会进入 EditorScripts facade。测试若要验证未公开实现细节只能使用反射；Editor 项目不使用 `InternalsVisibleTo`。EditorScripts 不能创建第二个 Context、读取原始 section、覆盖其他扩展状态或主动写入 `editor.ini`。
+构造函数、`layoutPath`、`imguiLayout`、section 读写、ImGui layout 更新和 Save 是 CLR host 边界。由于 Application 与 Interactions 是独立程序集，这些成员是 public CLR API，但全部标记 `ScriptingApiIgnore`，不会进入 EditorScripts facade。测试通过真实公开契约验证，不允许反射穿透、测试后门或 `InternalsVisibleTo`。EditorScripts 不能创建第二个 Context、读取原始 section、覆盖其他扩展状态或主动写入 `editor.ini`。
 
 这些 API 只处理 Module/Panel 项目状态与 Dear ImGui 使用的 `editor.ini`。业务设置由 [Inno.Editor.Settings](Inno.Editor.Settings.md) 通过 SerializationRegistry 写入项目根 `Settings.Editor.inno`。业务扩展通过构造注入接收正式服务，不向 `EditorContext` 添加全局 service locator。
 
@@ -100,6 +99,11 @@ public sealed class AnimationModule : EditorModule
 `EditorModuleAttribute.id` 是必填且全局唯一的 Module identity。它同时用于发现冲突、诊断和可选状态 section；Module 不再声明第二个 workspace ID。
 
 `EditorModule` 由扩展 Catalog 通过 `IDisposable` 统一释放，但 `Dispose` 是显式接口实现，不是派生类型的公开成员。Module 若拥有 Registry、watcher 或其他资源，只重写 `protected virtual OnDispose()`；Catalog 会在 Stop 且 generation 离开活动状态后调用一次。`IDisposable` 在这里仍有明确用途：它是 Catalog 与所有 Module 共用的基础设施 teardown 协议，而不是 feature 自己暴露或手工调用的生命周期 API。
+
+启动前即建立 Module 所有权：`OnStart` 失败也必须执行 `OnStop` 补偿。只有 Start 成功后才可 Update；
+Stop 开始后不再 Update。完成的 Stop 幂等，`IDisposable.Dispose` 会补停尚未停止的 Module，再执行 OnDispose。
+`RetirementPendingException` 不表示已释放：Stop/Dispose 必须保留未完成步骤供 owner 重试；不能提前标 disposed。
+普通 Stop/Dispose 错误在完成其余清理后聚合报告。Catalog 使用 Core 的有界退休协议，超时 Fault 并要求重启。
 
 Module、Panel、Action、Menu source 和 Drop handler 可以在唯一构造函数中请求 `EditorContext`、`EditorInteractions` 或一个无歧义的已发现 `EditorModule`。不存在手工注册表。
 
@@ -140,6 +144,9 @@ public void RestoreReloadState(ReadOnlyMemory<byte> state)
 }
 ```
 
+Attach 同样先记录所有权：`OnAttach` 失败会调用 `OnDetach` 补偿，只有补偿成功才能把 Panel 隔离后继续。
+Detach 完成后幂等；Pending 时 Panel 禁止 Draw，资源和依赖保持受拥有。不是把失败 Attach 当作从未启动。
+
 ## Modal
 
 `EditorModal` 是被发现的阻塞或非阻塞浮层契约。具体位置、尺寸、淡入淡出和输入阻塞由 ImGui runtime 统一处理。
@@ -170,7 +177,8 @@ public sealed class AnimationBakeModal(AnimationModule animation) : EditorModal
 
 `EditorReloadCoordinator` 是 Core 中唯一的跨 feature reload 协调入口。Coordinator 的索引只弱持有参与者；`Register(IEditorReloadParticipant)` 返回的 registration lease 则强持有参与者，调用方必须在 feature 生命周期内保存该 lease。释放 lease 会先注销再解除强引用；如果整个 feature 与 lease 一起失去所有权，弱索引也不会阻止它们被回收。Core 不知道 Scene、Missing、Panel 或脚本编译，仅编排中立事务。
 
-协调顺序固定为：全部 `PrepareForActivation` → Assembly candidate `Activate` → 可选外部状态同步 → 全部 `Apply` → Assembly `Complete` → 各 participant cleanup-only `Complete`。提交前任一步失败时，按反序恢复 feature 结构、Assembly generation、外部状态和 previous feature state。Assembly `Complete` 后的 participant cleanup 异常只能被隔离记录，因为发布已经不可回滚。
+协调顺序固定为：全部 `PrepareForActivation` → Assembly candidate `Activate` → 可选外部状态同步 → 全部 `Apply` → Assembly `Complete` → 各 participant cleanup-only `Complete`。Assembly 与外部 Asset/Settings 构成同一个 publication 边界；提交前失败先逆序恢复 feature 结构，再恢复 Assembly 和外部 resolver，最后逆序恢复 previous feature 属性。外部恢复不能放到最后一个领域 participant，否则 Scene 会用候选 Asset resolver 恢复旧属性。提交后普通清理异常聚合抛出并 Fault，不能伪回滚，也不能只记日志继续。
+任何阶段的未退休信号都不得被普通异常聚合掩盖：共享 coordinator 保留未完成事务，停止后续卸载/恢复，封锁 Play、Build、Export 和下一次 reload。
 
 | API | 说明 |
 | --- | --- |
@@ -179,7 +187,7 @@ public sealed class AnimationBakeModal(AnimationModule animation) : EditorModal
 | `EditorReloadCoordinator.RefreshDiagnostics` | 请求所有存活领域按当前状态重新发布诊断。 |
 | `IEditorReloadParticipant.Capture` | 只捕获事务，不在 capture 阶段修改 live state。 |
 | `IEditorReloadParticipant.RefreshDiagnostics` | 重建当前状态诊断；不依赖某一种 reload 请求。 |
-| `IEditorReloadTransaction` | 定义 prepare、apply、rollback、previous-state restore 与 cleanup-only complete。 |
+| `IGenerationChange`（来自 `Inno.Extensibility.Reload`） | 领域 Capture 返回的统一 prepare、apply、结构回滚、旧状态恢复与 cleanup-only complete 协议；没有 Editor 专属事务副本。 |
 
 Scripting 负责准备 assembly session 并调用协调器；Scene 独立注册自己的 participant。因此二者都只依赖 Core，不互相引用。
 
@@ -219,3 +227,5 @@ Scene document 的公开查询/工作流面位于 `Inno.Editor.Scene.IEditorScen
 - 不向 Context 添加 `IWhateverService` 集合或可变注册接口。
 - 不在 Core 引用 ImGui。
 - Action/Menu/Drag/Selection 统一见 [Interactions](Inno.Editor.Interactions.md)。
+
+EditorReloadCoordinator.Execute(reload, externalChange) 的可选参数是 Foundation IGenerationChange，不是 activate/restore Action 对。Editor participant 的 Capture 在共享 gate 的 Prepare 阶段发生；外部 Plugin/Settings change 与 Editor 状态共同提交/回滚，Pending 和 timeout 穿透诊断隔离。没有公开测试后门或按具体领域硬编码的 coordinator。

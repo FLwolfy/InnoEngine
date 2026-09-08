@@ -19,22 +19,22 @@ public sealed class BgfxGameContentCompiler
 {
     private readonly AssetPipeline m_assets;
     private readonly BgfxShaderTargetPlatform m_platform;
-    private readonly GraphicsBackend[] m_backends;
+    private readonly GraphicsApi[] m_backends;
     private readonly SerializationRegistry m_serialization;
 
     private BgfxGameContentCompiler(
         AssetPipeline assets,
         SerializationRegistry serialization,
         BgfxShaderTargetPlatform platform,
-        IEnumerable<GraphicsBackend> backends)
+        IEnumerable<GraphicsApi> backends)
     {
         ArgumentNullException.ThrowIfNull(assets);
         ArgumentNullException.ThrowIfNull(serialization);
         ArgumentNullException.ThrowIfNull(backends);
-        GraphicsBackend[] snapshot = backends.Distinct().ToArray();
+        GraphicsApi[] snapshot = backends.Distinct().ToArray();
         if (snapshot.Length == 0)
             throw new ArgumentException("At least one Player graphics backend is required.", nameof(backends));
-        if (snapshot.Contains(GraphicsBackend.Noop))
+        if (snapshot.Contains(GraphicsApi.Noop))
             throw new ArgumentException("A deployable Player cannot target the Noop graphics backend.", nameof(backends));
         m_assets = assets;
         m_serialization = serialization;
@@ -61,7 +61,7 @@ public sealed class BgfxGameContentCompiler
             assets,
             serialization,
             BgfxShaderTargetPlatform.MacOSArm64,
-            [GraphicsBackend.Metal]);
+            [GraphicsApi.Metal]);
 
     /// <summary>
     /// Creates the canonical compiler used by 64-bit Windows Players.
@@ -82,7 +82,7 @@ public sealed class BgfxGameContentCompiler
             assets,
             serialization,
             BgfxShaderTargetPlatform.WindowsX64,
-            [GraphicsBackend.Direct3D11, GraphicsBackend.Direct3D12, GraphicsBackend.Vulkan]);
+            [GraphicsApi.Direct3D11, GraphicsApi.Direct3D12, GraphicsApi.Vulkan]);
 
     /// <summary>
     /// Captures the active Asset generation and compiles every required runtime variant.
@@ -108,7 +108,7 @@ public sealed class BgfxGameContentCompiler
         string outputRoot = Path.GetFullPath(context.outputDirectory);
         Directory.CreateDirectory(outputRoot);
         var shaderCompiler = new ShaderCompiler(new BgfxShadercToolchain(m_platform));
-        foreach (GraphicsBackend backend in m_backends.Order())
+        foreach (GraphicsApi backend in m_backends.Order())
         {
             GraphicsCapabilities capabilities = CreateCapabilities(backend);
             ShaderCompileTarget target = shaderCompiler.CreateTarget(
@@ -241,11 +241,11 @@ public sealed class BgfxGameContentCompiler
             ? mount
             : throw new InvalidOperationException($"Asset source mount '{path.source}' is not active.");
 
-    private static GraphicsCapabilities CreateCapabilities(GraphicsBackend backend)
+    private static GraphicsCapabilities CreateCapabilities(GraphicsApi backend)
     {
         RenderTextureFormat[] formats = Enum.GetValues<RenderTextureFormat>();
-        GraphicsFeature features = Enum.GetValues<GraphicsFeature>()
-            .Aggregate(GraphicsFeature.None, static (current, value) => current | value);
+        GraphicsCapability features = Enum.GetValues<GraphicsCapability>()
+            .Aggregate(GraphicsCapability.None, static (current, value) => current | value);
         return new GraphicsCapabilities(
             backend,
             features,
@@ -254,8 +254,8 @@ public sealed class BgfxGameContentCompiler
             formats,
             formats,
             formats,
-            originBottomLeft: backend == GraphicsBackend.OpenGL,
-            homogeneousDepth: backend == GraphicsBackend.OpenGL,
+            originBottomLeft: backend == GraphicsApi.OpenGL,
+            homogeneousDepth: backend == GraphicsApi.OpenGL,
             formats,
             formats,
             formats);

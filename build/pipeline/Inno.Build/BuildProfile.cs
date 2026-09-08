@@ -60,7 +60,7 @@ public sealed class BuildProfile : ISerializable
     public int windowHeight { get; set; } = 720;
 
     [SerializableProperty]
-    internal string m_targetId = BuildTargetId.macOSArm64.value;
+    internal string m_targetId = string.Empty;
 
     /// <summary>
     /// Validates product identity, startup content, target, and window dimensions.
@@ -76,17 +76,14 @@ public sealed class BuildProfile : ISerializable
             throw new InvalidDataException("Product name must be a portable file name.");
         if (string.IsNullOrWhiteSpace(startupScene))
             throw new InvalidDataException("A startup scene is required.");
-        BuildTargetId validatedTarget;
         try
         {
-            validatedTarget = new BuildTargetId(m_targetId);
+            _ = new BuildTargetId(m_targetId);
         }
         catch (ArgumentException exception)
         {
             throw new InvalidDataException("A game build target is required and must use a portable target ID.", exception);
         }
-        if (validatedTarget != BuildTargetId.macOSArm64 && validatedTarget != BuildTargetId.windowsX64)
-            throw new InvalidDataException($"Build target '{validatedTarget}' is not supported.");
         if (windowWidth <= 0 || windowHeight <= 0)
             throw new InvalidDataException("Window dimensions must be positive.");
     }

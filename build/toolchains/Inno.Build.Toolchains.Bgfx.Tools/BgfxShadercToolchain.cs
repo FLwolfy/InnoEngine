@@ -250,14 +250,14 @@ public sealed class BgfxShadercToolchain : IShaderCompilerToolchain
 
 internal sealed class BgfxShaderCompilerProfile(
     BgfxShaderTargetPlatform targetPlatform,
-    GraphicsBackend backend,
+    GraphicsApi backend,
     string shadercPlatform,
     string vertexProfile,
     string fragmentProfile,
     string computeProfile)
 {
     internal BgfxShaderTargetPlatform targetPlatform { get; } = targetPlatform;
-    internal GraphicsBackend backend { get; } = backend;
+    internal GraphicsApi backend { get; } = backend;
     internal string shadercPlatform { get; } = shadercPlatform;
     internal string vertexProfile { get; } = vertexProfile;
     internal string fragmentProfile { get; } = fragmentProfile;
@@ -283,45 +283,45 @@ internal static class BgfxRendererProfileCatalog
         GraphicsCapabilities capabilities)
     {
         ArgumentNullException.ThrowIfNull(capabilities);
-        bool compute = capabilities.Supports(GraphicsFeature.Compute);
+        bool compute = capabilities.Supports(GraphicsCapability.Compute);
         return (targetPlatform, capabilities.backend) switch
         {
-            (BgfxShaderTargetPlatform.WindowsX64, GraphicsBackend.Direct3D11 or GraphicsBackend.Direct3D12) => new(
+            (BgfxShaderTargetPlatform.WindowsX64, GraphicsApi.Direct3D11 or GraphicsApi.Direct3D12) => new(
                 targetPlatform,
                 capabilities.backend,
                 "windows",
                 "s_5_0",
                 "s_5_0",
                 compute ? "s_5_0" : string.Empty),
-            (BgfxShaderTargetPlatform.MacOSArm64, GraphicsBackend.Metal) => new(
+            (BgfxShaderTargetPlatform.MacOSArm64, GraphicsApi.Metal) => new(
                 targetPlatform,
                 capabilities.backend,
                 "osx",
                 "metal",
                 "metal",
                 compute ? "metal" : string.Empty),
-            (BgfxShaderTargetPlatform.WindowsX64, GraphicsBackend.Vulkan) => new(
+            (BgfxShaderTargetPlatform.WindowsX64, GraphicsApi.Vulkan) => new(
                 targetPlatform,
                 capabilities.backend,
                 "windows",
                 "spirv",
                 "spirv",
                 compute ? "spirv" : string.Empty),
-            (BgfxShaderTargetPlatform.MacOSArm64, GraphicsBackend.Vulkan) => new(
+            (BgfxShaderTargetPlatform.MacOSArm64, GraphicsApi.Vulkan) => new(
                 targetPlatform,
                 capabilities.backend,
                 "osx",
                 "spirv",
                 "spirv",
                 compute ? "spirv" : string.Empty),
-            (BgfxShaderTargetPlatform.WindowsX64, GraphicsBackend.OpenGL) => new(
+            (BgfxShaderTargetPlatform.WindowsX64, GraphicsApi.OpenGL) => new(
                 targetPlatform,
                 capabilities.backend,
                 "windows",
                 "430",
                 "430",
                 compute ? "430" : string.Empty),
-            (BgfxShaderTargetPlatform.MacOSArm64, GraphicsBackend.OpenGL) => new(
+            (BgfxShaderTargetPlatform.MacOSArm64, GraphicsApi.OpenGL) => new(
                 targetPlatform,
                 capabilities.backend,
                 "osx",

@@ -12,4 +12,4 @@ Game View 是开放 kind `inno.editor.viewport.game` 的通用 viewport host。�
 
 无适用 Contributor、全部贡献失败或 GPU target 尚未准备好时，Panel 使用背景色填充完整区域，并以淡色、可换行、有左右/上下 padding 的文本块在区域中央显示状态；不可用输出会被释放，不影响 Editor 主界面。单个 Contributor 失败时，其他模型层仍可继续显示。
 
-Editor 的通用 `RenderRuntimeLayer` 不注入任何隐式 Scene content。Scene View 与 Game View 都必须显式提交自己的 `RenderContentScope`，因此不会在 viewport 请求之外额外把 Edit 世界渲染到 Editor backbuffer，也不存在同一帧两个互相矛盾的游戏世界来源。
+Editor 的通用 `RenderRuntime` 不注入任何隐式 Scene content。Scene View 与 Game View 都必须显式提交自己的 `RenderContentScope`，因此不会在 viewport 请求之外额外把 Edit 世界渲染到 Editor backbuffer，也不存在同一帧两个互相矛盾的游戏世界来源。

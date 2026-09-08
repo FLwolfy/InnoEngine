@@ -106,7 +106,8 @@ internal static class SupportPackPublisher
         string playerProject = Path.Combine(
             command.engineRoot,
             "src",
-            "runtime",
+            "composition",
+            "player",
             "Inno.Player",
             "Inno.Player.csproj");
         if (!File.Exists(playerProject))

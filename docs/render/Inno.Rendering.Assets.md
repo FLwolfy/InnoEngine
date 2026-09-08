@@ -1,5 +1,9 @@
 # Inno.Rendering.Assets
 
+## 编译结果快照
+
+编译发布的 stages、passes、diagnostics 与 last-good selection diagnostics 均拥有冻结副本。修改调用者传入的 List/数组不会改变已经发布的容器。
+
 [Rendering 索引](README.md) · [公开 API](Inno.Rendering.md) · [ShaderGraph](Inno.Rendering.ShaderGraph.md)
 
 `Inno.Rendering.Assets` 将通用渲染源转换成后端中立候选产物。它不创建 GPU handle，也不包含具体材质模型。

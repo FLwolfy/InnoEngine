@@ -1,4 +1,5 @@
 using System;
+using Inno.Extensibility.Reload;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -18,9 +19,13 @@ namespace Inno.Build;
 /// </summary>
 public sealed class BuildPipeline
 {
+    private readonly IReadOnlyList<BuildTargetId> m_availableGameTargets;
+    private readonly BuildTargetId m_defaultGameTarget;
+    private readonly IReadOnlyDictionary<BuildTargetId, IGameBuildTarget> m_gameTargets;
     private readonly GameBuildPipeline m_game;
     private readonly PluginPackageBuilder m_plugins;
     private readonly PlayerSupportPackCatalog m_supportPacks;
+    private readonly GenerationCoordinator m_generations;
 
     /// <summary>
     /// Creates a build pipeline from installed Player Support Packs and platform packagers.
@@ -30,6 +35,9 @@ public sealed class BuildPipeline
     /// </param>
     /// <param name="assets">
     /// The active authoring asset pipeline captured by builds.
+    /// </param>
+    /// <param name="generations">
+    /// The host-wide admission gate that remains pinned until the build snapshot is released.
     /// </param>
     /// <param name="plugins">
     /// The active Plugin environment captured by builds.
@@ -47,13 +55,15 @@ public sealed class BuildPipeline
     /// The complete set of replaceable platform package implementations available to this host.
     /// </param>
     /// <exception cref="ArgumentException">
-    /// Thrown when the Support Pack root is empty or a target identity is duplicated.
+    /// Thrown when the Support Pack root is empty, no target is provided, a target identity is duplicated,
+    /// or multiple targets claim current-host preference.
     /// </exception>
     public BuildPipeline(
         AssetPipeline assets,
         PluginEnvironment plugins,
         ProjectSettingsStore settings,
         SerializationRegistry serialization,
+        GenerationCoordinator generations,
         ScriptCompiler compiler,
         string supportPackRoot,
         IEnumerable<IGameBuildTarget> gameTargets)
@@ -62,17 +72,42 @@ public sealed class BuildPipeline
         ArgumentNullException.ThrowIfNull(plugins);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(serialization);
+        m_generations = generations ?? throw new ArgumentNullException(nameof(generations));
         ArgumentNullException.ThrowIfNull(compiler);
         ArgumentException.ThrowIfNullOrWhiteSpace(supportPackRoot);
         ArgumentNullException.ThrowIfNull(gameTargets);
         IGameBuildTarget[] targets = gameTargets.ToArray();
         if (targets.Any(static value => value is null))
             throw new ArgumentException("Game target collection cannot contain null values.", nameof(gameTargets));
+        if (targets.Length == 0)
+            throw new ArgumentException("At least one game build target is required.", nameof(gameTargets));
+        if (targets.Any(static value => string.IsNullOrWhiteSpace(value.id.value)))
+            throw new ArgumentException("Every game build target requires a valid identity.", nameof(gameTargets));
+        if (targets.Any(static value => string.IsNullOrWhiteSpace(value.displayName)))
+            throw new ArgumentException("Every game build target requires a display name.", nameof(gameTargets));
         IGrouping<BuildTargetId, IGameBuildTarget>? duplicate = targets
             .GroupBy(static value => value.id)
             .FirstOrDefault(static group => group.Count() > 1);
         if (duplicate is not null)
             throw new ArgumentException($"Game target '{duplicate.Key}' is registered more than once.", nameof(gameTargets));
+        IGameBuildTarget[] preferred = targets
+            .Where(static target => target.isPreferredOnCurrentHost)
+            .OrderBy(static target => target.id.value, StringComparer.Ordinal)
+            .ToArray();
+        if (preferred.Length > 1)
+        {
+            throw new ArgumentException(
+                "More than one game build target is preferred on the current host.",
+                nameof(gameTargets));
+        }
+        m_availableGameTargets = targets
+            .Select(static target => target.id)
+            .OrderBy(static id => id.value, StringComparer.Ordinal)
+            .ToArray();
+        m_defaultGameTarget = preferred.Length == 1
+            ? preferred[0].id
+            : m_availableGameTargets[0];
+        m_gameTargets = targets.ToDictionary(static value => value.id);
         m_supportPacks = new PlayerSupportPackCatalog(supportPackRoot);
         m_game = new GameBuildPipeline(
             assets,
@@ -80,13 +115,46 @@ public sealed class BuildPipeline
             settings,
             serialization,
             compiler,
-            targets.ToDictionary(static value => value.id),
+            m_gameTargets,
             m_supportPacks);
         m_plugins = new PluginPackageBuilder(
             assets,
             plugins,
             settings,
             serialization);
+    }
+
+    /// <summary>
+    /// Gets every build target registered by the current composition root in stable identity order.
+    /// </summary>
+    public IReadOnlyList<BuildTargetId> availableGameTargets => m_availableGameTargets;
+
+    /// <summary>
+    /// Gets the single adapter-selected target preferred for new build settings on this host.
+    /// </summary>
+    public BuildTargetId defaultGameTarget => m_defaultGameTarget;
+
+    /// <summary>
+    /// Tries to get the adapter-owned display name for a registered game target.
+    /// </summary>
+    /// <param name="target">
+    /// The stable target identity to query.
+    /// </param>
+    /// <param name="displayName">
+    /// Receives the registered user-facing name, or an empty value when no target is registered.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the target is registered; otherwise, <see langword="false"/>.
+    /// </returns>
+    public bool TryGetGameTargetDisplayName(BuildTargetId target, out string displayName)
+    {
+        if (m_gameTargets.TryGetValue(target, out IGameBuildTarget? gameTarget))
+        {
+            displayName = gameTarget.displayName;
+            return true;
+        }
+        displayName = string.Empty;
+        return false;
     }
 
     /// <summary>
@@ -107,11 +175,14 @@ public sealed class BuildPipeline
     /// <exception cref="OperationCanceledException">
     /// Thrown when cancellation is requested before commit.
     /// </exception>
-    public ValueTask<BuildResult> BuildGameAsync(
+    public async ValueTask<BuildResult> BuildGameAsync(
         GameBuildRequest request,
         IProgress<BuildProgress>? progress = null,
         CancellationToken cancellationToken = default)
-        => m_game.BuildAsync(request, progress, cancellationToken);
+    {
+        using IDisposable admission = m_generations.AcquireRead("build a Player");
+        return await m_game.BuildAsync(request, progress, cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Builds and atomically commits one deterministic project Plugin package.
@@ -131,9 +202,12 @@ public sealed class BuildPipeline
     /// <exception cref="OperationCanceledException">
     /// Thrown when cancellation is requested before commit.
     /// </exception>
-    public ValueTask<BuildResult> BuildPluginAsync(
+    public async ValueTask<BuildResult> BuildPluginAsync(
         PluginBuildRequest request,
         IProgress<BuildProgress>? progress = null,
         CancellationToken cancellationToken = default)
-        => m_plugins.BuildAsync(request, progress, cancellationToken);
+    {
+        using IDisposable admission = m_generations.AcquireRead("export a Plugin");
+        return await m_plugins.BuildAsync(request, progress, cancellationToken).ConfigureAwait(false);
+    }
 }

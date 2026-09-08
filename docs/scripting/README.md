@@ -1,6 +1,6 @@
 # Scripting API
 
-[Wiki 首页](../README.md) · [Extensibility](../extensibility/README.md) · [Editor](../editor/README.md)
+[Wiki 首页](../README.md) · [Extensibility](../extensibility/README.md) · [Editor](../editor/README.md) · [Identity 与 GC-safe reload 标准](../architecture/IDENTITY_REFERENCE_RELOAD_STANDARD.md)
 
 | 项目 | 职责 |
 | --- | --- |

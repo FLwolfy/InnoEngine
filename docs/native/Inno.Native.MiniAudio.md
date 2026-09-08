@@ -9,7 +9,7 @@
 - `MiniAudioConfig.AotStaticLink` 必须在首次访问 `MiniAudio` 前设置；默认动态模式从引擎 native 输出或 Player Support Pack 装载当前配置的动态库。
 - `MiniAudio.GetLibraryName()` 返回平台无关的 `miniaudio` library stem。
 - Debug 与 Release 分别绑定 `miniaudio-debug`、`miniaudio-release`。macOS 的 `lib` 前缀及扩展名由 `Inno.Native.LibraryLoading` 解析。
-- 该程序集是后端 ABI，不是稳定游戏音频 API。业务、Scene、Asset 与脚本不得直接依赖；未来由 `Inno.Audio.MiniAudio` adapter 隔离。
+- 该程序集是后端 ABI，不是稳定游戏音频 API。业务、Scene、Asset 与脚本不得直接依赖；未来由 `Inno.Adapter.Audio.MiniAudio` adapter 隔离。
 
 ## 生成来源与生命周期
 

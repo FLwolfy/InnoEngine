@@ -6,7 +6,7 @@
 
 ## 启动参数
 
-`Program` 只接受且必须接受一个位置参数：要打开的 project directory。缺少参数或存在多余参数时打印 usage 并返回 exit code `2`；产品代码不读取当前工作目录、机器专属路径或隐式的 InnoProject 默认值。
+`Program` 必须接受一个位置参数：要打开的 project directory；可选 `--smoke-frames <positive-count>` 用于有限帧启动验证。缺少参数或参数组合无效时打印 usage 并返回 exit code `2`；产品代码不使用机器专属路径或隐式的 InnoProject 默认值。显式传入的相对路径按当前工作目录解析。
 
 ```text
 Inno.Editor.Application /path/to/InnoProject
@@ -17,12 +17,17 @@ Editor 当前不需要额外的 InnoEngine project descriptor。目录本身就�
 - 已有目录会原位打开，不会覆盖 Assets。
 - 不存在或空目录会被创建，Application Composition Root 再创建所需的 `Assets` / `Library` 结构并启动实例化 authoring 与 scripting services。
 - 如果传入路径指向普通文件，构造会抛出 `IOException`。
+- 目录可以使用绝对路径、相对路径，或带末尾目录分隔符的路径。初始 Project ID 从目录名称派生，`/path/TestProject` 与 `/path/TestProject/` 得到相同名称；已有设置中的 Project ID 不会因路径写法改变。
 
 未来如果需要引擎版本、Package 列表或 Project GUID，可在目录内增加独立 descriptor；不应让 Editor 解析 InnoEngine 自身的 `.csproj` 作为游戏项目格式。
 
 ## internal EditorHost
 
 `EditorHost` 是 Application 内部的启动实现，不属于公开 API。它依次构造 Platform、Window、EngineHost、Edit RuntimeSession、authoring services、Editor Audio、ImGui context 与 Editor runtime；启动失败与正常 `Dispose` 共用幂等资源栈，并按 Editor → ImGui → Audio → Session → EngineHost → Window → Platform 的逆序释放。
+
+EditorLayer 的 runtime/diagnostics 通过 Core LifetimeScope 统一拥有，Core LayerStack 在 Attach 失败后调用 Detach 补偿。
+Pending 从 extension Stop/Detach 经 interaction runtime、ImGui runtime、Layer 和 Shell 原样传播；未退休 owner 不移出资源栈，
+不销毁下层 native adapter。最外层 Play quiesce 仍作为产品前置阶段，但不替代通用扩展退出协议。
 
 `editor.ini`、`Settings.Editor.inno`、`Settings.Project.inno`、`Settings.Build.inno`、Editor boot log、Assets、Plugins 与脚本产物都以 `projectDirectory` 为根目录。`editor.ini` 只保存 ImGui layout 与 Module/Panel 状态；Editor 偏好通过 SerializationRegistry 写入 `Settings.Editor.inno`；runtime 项目协议和团队共享的导出默认值分别写入 `Settings.Project.inno` 与 `Settings.Build.inno`。三个设置文档共享一个 Settings frontend，但保持独立的生命周期和部署边界。
 

@@ -1,8 +1,8 @@
 # Inno.Core.Identity
 
-[上一页：Job](Inno.Core.Jobs.md) · [Core 索引](README.md) · [下一页：Input](Inno.Core.Input.md)
+[上一页：Job](Inno.Core.Jobs.md) · [Core 索引](README.md) · [下一页：Input](Inno.Core.Input.md) · [跨域引用与热重载标准](../architecture/IDENTITY_REFERENCE_RELOAD_STANDARD.md)
 
-Identity 模块为引擎对象提供两个层次的身份：跨保存/重载保持的 `persistentId`，以及只在当前 Registry 注册期间有效的 `runtimeId`。对象通过 `IIdentityObject` 获得弱关联的身份存储，无需继承特定基类。
+Identity 模块为引擎对象提供两个层次的身份：跨保存/重载保持的 `persistentId`，以及只在当前 Registry 注册期间有效的 `runtimeId`。需要身份的对象继承 `IdentityObject`，并由明确生命周期 owner 的 `IdentityAllocator` 注册。
 
 ## Identity
 
@@ -16,23 +16,24 @@ Identity 模块为引擎对象提供两个层次的身份：跨保存/重载保�
 
 复制 Identity 只是复制快照；runtime 有效性仍由对 Registry 的弱引用验证。
 
-## IIdentityObject
+## IdentityObject
 
-接口提供默认实现：
+抽象基类提供实例 identity 存储：
 
-- `GetIdentity()`：首次调用会生成一个 persistent ID，之后返回当前 identity 值。
-- `protected internal SetIdentity(Identity)`：供派生/引擎基础设施替换关联 identity。
+- `identity`：返回当前 persistent/runtime identity snapshot。
+- 新实例立即具有非空 persistent ID，但在 allocator 注册前没有 runtime ID。
+- identity 绑定和替换只由同程序集的 Identity 基础设施执行。
 
 ```csharp
-public sealed class RuntimeResource : IIdentityObject
+public sealed class RuntimeResource : IdentityObject
 {
 }
 
 RuntimeResource resource = new();
-Guid persistentId = resource.GetIdentity().persistentId;
+Guid persistentId = resource.identity.persistentId;
 ```
 
-对象到 identity 的映射使用 `ConditionalWeakTable`，不会仅因身份系统而阻止对象 GC。
+Registry 使用弱 object entry 和 `ConditionalWeakTable` slot 映射，不会仅因索引本身阻止失去 owner 的对象 GC。
 
 ## IdentityAllocator
 
@@ -53,7 +54,7 @@ RuntimeResource resource = new();
 identities.InitializePersistentIdentity(resource, savedId);
 identities.Register(resource);
 
-int runtimeId = resource.GetIdentity().runtimeId!.Value;
+int runtimeId = resource.identity.runtimeId!.Value;
 RuntimeResource? same = identities.Get<RuntimeResource>(runtimeId);
 
 identities.Unregister(resource);

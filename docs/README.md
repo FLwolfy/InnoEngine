@@ -10,35 +10,49 @@
 | [Extensibility](extensibility/README.md) | collectible module generation、Stable Type ID 与 Registry snapshot |
 | [Scripting](scripting/README.md) | 脚本 API、编译与原子 reload |
 | [Assets](assets/README.md) | Player-safe runtime assets 与 authoring pipeline |
-| [Audio](audio/README.md) | 后端中立播放/Mixer 契约、Runtime、资产、MiniAudio 与 Scene 集成 |
+| [References](references/README.md) | 跨领域持久引用、Missing 与恢复事务 |
+| [Input](input/README.md) | 每 Session 的物理输入快照、脚本 façade 与 SDL3 adapter |
+| [Storage](storage/README.md) | 沙箱化应用持久数据契约、Runtime Subsystem 与文件系统 adapter |
+| [Animation](animation/README.md) | 后端中立 Clip、采样、混合、事件、资产与 Runtime Subsystem |
+| [Audio](audio/README.md) | 后端中立播放/Mixer 契约、Runtime、资产与 MiniAudio adapter |
 | [Plugins](plugins/README.md) | Plugin manifest、安装源、只读 mount 与候选激活 |
 | [Scene](scene/README.md) | SceneWorld、GameBehavior、GameSystem、Scene/Prefab asset integration |
 | [Rendering](render/README.md) | 后端中立 Rendering、目标资产、BGFX 与 ShaderGraph |
 | [Platform](platform/README.md) | 中立窗口契约与 SDL3 adapter |
-| [Runtime](runtime/README.md) | EngineHost、RuntimeSession 与 Player composition |
+| [Runtime](runtime/README.md) | Subsystem Contracts、声明生成器、默认装配、EngineHost、RuntimeSession 与 Player |
 | [Editor](editor/README.md) | Editor feature、Panel、Play Mode、Diagnostics 与 Export UI |
 | [Build](build/README.md) | Build Pipeline、平台 target、Support Pack 与 toolchain |
 | [Native](native/README.md) | 原生绑定与动态库加载 |
+| [Architecture](architecture/README.md) | Foundation、Content/Services/Runtime、Adapter、Composition 的边界，以及 Identity、Missing、Undo/Redo 与 GC-safe reload 标准 |
 | [Architecture Tooling](tooling/README.md) | 可执行架构规则 |
 | [Issues](issues/README.md) | 唯一问题台账、审查记录与整改规格 |
 
 ## 核心依赖方向
 
 ```text
-Application / Player / Build CLI
+EditorHost : Shell / GamePlayerHost : Shell / Build CLI
+        ↓ compose through neutral catalogs
+Default Adapter Implementations / Bundled Plugins
         ↓
-Editor / Build / Runtime
+Content / Services / Runtime
         ↓
-Scripting / Plugins / Assets / Audio / Scene / Rendering / Platform
-        ↓
-Extensibility / Core / Native adapters
+Foundation (Extensibility / Core / Scripting API)
+
+Native Bindings ← only Adapters / Toolchains / native tests
 ```
 
-Core 不引用业务领域；Build 不引用 Editor；Runtime 不引用 Build/Editor；Player closure 不包含 Compiler、authoring pipeline 或 toolchain。违反关系由 `Inno.Tooling.Architecture` 阻止。
+Core 不引用业务领域；Build 不引用 Editor；Runtime 不引用 Build/Editor；Player closure 不包含 Compiler、authoring pipeline 或 toolchain。违反关系由 `Inno.Tooling.Architecture` 阻止。引擎长期分层与新系统归属以
+[完整项目架构 Overview 与本体收口方案](architecture/ENGINE_ARCHITECTURE_OVERVIEW.md)为准。
+所有跨域 live object 索引、可恢复引用、Missing、Undo/Redo 与 collectible generation 的完成语义以
+[Identity、可恢复引用与热重载强制标准](architecture/IDENTITY_REFERENCE_RELOAD_STANDARD.md)为准。
+本轮代码、公开边界和逐项验证见[统一收口实施记录](architecture/ENGINE_CONSOLIDATION_IMPLEMENTATION.md)；
+新增 Core.Execution、Runtime.Contracts、Runtime.Generators 和 Engine.Default 均有独立项目页。
+最新本轮结果见[2026-09-08 实现交付与集中验收](architecture/ENGINE_CLOSURE_IMPLEMENTATION_2026_09_08.md)；
+新增 [Architecture CLI 测试项目](tooling/Inno.Tooling.Architecture.Tests.md)已纳入 `tests/tooling`、Solution 和项目文档。
 
 ## 当前格式与状态
 
 - Project Settings、Editor Settings、Build Profile、Plugin Manifest、Catalog 与 Artifact 只支持当前源码格式。
 - `Assets` 是唯一可写创作源；`Plugins` 是只读安装源；`Library` 可完全重建。
 - API 变更必须同步源码 XML、所属项目页和索引。
-- 当前问题状态只在[全量问题台账](issues/2026-08-31-complete-issue-register.md)维护。
+- 当前 C01–C18 收口状态在[最新验收报告](architecture/ENGINE_CLOSURE_IMPLEMENTATION_2026_09_08.md)维护；此前编号和历史证据保留于[2026-08-31 台账](issues/2026-08-31-complete-issue-register.md)。

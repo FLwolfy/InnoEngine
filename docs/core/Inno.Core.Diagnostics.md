@@ -4,7 +4,29 @@
 
 `Inno.Core.Diagnostics` 管理 Compiler、Importer、Validator、Shader Processor 和 Build Pipeline 等生产者的“当前问题状态”。它独立于追加式 Logging：同一拥有者再次设置诊断会原子替换旧结果，成功后清除结果，后注册的工具仍能立即获得所有当前问题。
 
-项目不执行具体编译、导入或验证，也不保存历史日志。业务系统只构造通用 `Diagnostic` 并通过静态 `Diagnostics.Set/Clear` 更新状态；Editor Console、命令行工具和构建报告通过 sink 消费不可变 report。
+项目不执行具体编译、导入或验证，也不保存历史日志。引擎基础设施注入 `IDiagnosticReporter`；`Diagnostics.Set/Clear` 是已有 scope-bound 便捷入口。Editor Console、命令行工具和构建报告通过 sink 消费不可变 report。
+
+## Owner-bound producer
+
+```csharp
+using Inno.Core.Diagnostics;
+
+var hub = new DiagnosticHub();
+using DiagnosticReporter reporter = hub.CreateReporter(new DiagnosticSource("audio.session.example", "Audio"));
+reporter.Publish(new Diagnostic("audio.device.lost", "Output device is unavailable.", DiagnosticSeverity.Warning));
+reporter.Resolve("audio.device.lost");
+```
+
+| API | 稳定语义 |
+| --- | --- |
+| `Diagnostic(code, message, severity, semanticId?, objectId?, location?)` | 中立问题；semantic ID、persistent object ID 与文件位置各有独立语义 |
+| `DiagnosticHub.CreateReporter(source)` | 创建当前 producer registration，同 ID 的旧 registration 被撤销 |
+| `IDiagnosticReporter.Publish(diagnostic)` | 以 code + semanticId + objectId 更新同一问题，message 不参与身份 |
+| `Resolve(code, semanticId?, objectId?)` | 条件恢复后撤销指定问题 |
+| `Replace(diagnostics)` | 冻结并替换整个问题集合，拒绝重复问题身份 |
+| `DiagnosticReporter.Dispose()` | 释放该 registration 的报告；不能清除同 ID 的较新 producer |
+
+Reporter 是生产者，`IDiagnosticSink` 是 presentation 消费者；两者不是同一角色。Audio、Rendering、Shader、Graph、Scripting 和 Scene reload 统一使用 `DiagnosticSeverity`。没有领域自己的 severity enum 或 Audio/Render diagnostic sink。`DiagnosticLogSink` 位于 Logging，将当前问题的变化投影到追加日志，不成为第二个诊断状态 owner。
 
 ## 核心语义
 

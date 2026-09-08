@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\common\Inno.Adapter\Inno.Adapter.csproj" />
+    <ProjectReference Include="..\Inno.Adapter.Default\Inno.Adapter.Default.csproj" />
+    <ProjectReference Include="..\..\platform\Inno.Adapter.Platform.Sdl3\Inno.Adapter.Platform.Sdl3.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\presentation\Inno.Adapter.Presentation.ImGui.Sdl3\Inno.Adapter.Presentation.ImGui.Sdl3.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\presentation\Inno.Adapter.Presentation.ImGui.Bgfx\Inno.Adapter.Presentation.ImGui.Bgfx.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\rendering\Inno.Adapter.Rendering.Authoring\Inno.Adapter.Rendering.Authoring.csproj" />
+    <ProjectReference Include="..\..\..\services\rendering\Inno.Rendering\Inno.Rendering.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\services\rendering\Inno.Rendering.Assets\Inno.Rendering.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\..\build\toolchains\Inno.Build.Toolchains.Bgfx.Tools\Inno.Build.Toolchains.Bgfx.Tools.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+</Project>

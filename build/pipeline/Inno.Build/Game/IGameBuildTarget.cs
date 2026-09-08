@@ -14,6 +14,16 @@ public interface IGameBuildTarget
     BuildTargetId id { get; }
 
     /// <summary>
+    /// Gets the user-facing target name presented by authoring hosts.
+    /// </summary>
+    string displayName { get; }
+
+    /// <summary>
+    /// Gets whether this target is the adapter's preferred default on the current host.
+    /// </summary>
+    bool isPreferredOnCurrentHost { get; }
+
+    /// <summary>
     /// Produces every target-specific runtime artifact required by this platform.
     /// </summary>
     /// <param name="context">

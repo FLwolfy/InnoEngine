@@ -70,7 +70,7 @@ public sealed class BuildSettings : ISerializable
     }
 
     [SerializableProperty]
-    internal string m_gameTargetId = BuildTargetId.macOSArm64.value;
+    internal string m_gameTargetId = string.Empty;
 
     /// <summary>
     /// Creates canonical defaults for a new project.
@@ -167,16 +167,13 @@ public sealed class BuildSettings : ISerializable
         }
         if (gameWindowWidth <= 0 || gameWindowHeight <= 0)
             throw new InvalidDataException("Build Settings window dimensions must be positive.");
-        BuildTargetId target;
         try
         {
-            target = gameTarget;
+            _ = gameTarget;
         }
         catch (ArgumentException exception)
         {
             throw new InvalidDataException("Build Settings contains an invalid target.", exception);
         }
-        if (target != BuildTargetId.macOSArm64 && target != BuildTargetId.windowsX64)
-            throw new InvalidDataException($"Build target '{target}' is not supported.");
     }
 }

@@ -14,7 +14,7 @@
   </PropertyGroup>
   <ItemGroup Condition="'$(MSBuildProjectName)' != 'Inno.Core.Serialization.Generators'">
     <ProjectReference
-      Include="$(MSBuildThisFileDirectory)core/Inno.Core.Serialization.Generators/Inno.Core.Serialization.Generators.csproj"
+      Include="$(MSBuildThisFileDirectory)foundation/core/Inno.Core.Serialization.Generators/Inno.Core.Serialization.Generators.csproj"
       OutputItemType="Analyzer"
       ReferenceOutputAssembly="false" />
   </ItemGroup>
