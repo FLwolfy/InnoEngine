@@ -20,6 +20,7 @@ namespace Inno.Editor.Panel.Global;
 internal sealed class EditorZoomModule(EditorSettings settings) : EditorModule
 {
     private const string C_ACTUAL_SIZE_PATH = "Editor/Appearance/Accessibility/Actual Size";
+    private const string C_DENSITY_PATH = "Editor/Appearance/Density";
 
     private float m_actualSize = 1f;
     private int m_zoomStep;
@@ -70,6 +71,8 @@ internal sealed class EditorZoomModule(EditorSettings settings) : EditorModule
             changedSettings.Get(C_ACTUAL_SIZE_PATH).GetAsSingle("value", 1f));
         m_zoomStep = 0;
         _ = EditorWidget.style.SetZoom(m_actualSize);
+        _ = EditorWidget.style.SetCompactMode(
+            changedSettings.Get(C_DENSITY_PATH).GetAsBoolean("compact", false));
     }
 
     private float ResolveZoom(int step)

@@ -1649,7 +1649,11 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
         foreach (AssetDependency dependency in GetDirectDependencies(record.meta))
         {
             AssetRecord? dependencyRecord = FindDependencyRecordLocked(dependency);
-            if (dependencyRecord is not null)
+            // A valid last-good dependency may belong to a module generation that has not
+            // activated yet. Do not let that temporary type gap abort the entire object graph;
+            // AttachDependenciesLocked installs the identity-preserving placeholder and a later
+            // registry generation rehydrates the reference from the retained catalog record.
+            if (dependencyRecord is not null && ResolveRecordType(dependencyRecord) is not null)
                 PrepareShellsLocked(dependencyRecord, transaction);
         }
     }
@@ -1703,7 +1707,12 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
         AssetObject? loaded = LoadIdLocked(persistentId, expectedType);
         if (loaded is not null)
             return loaded;
-        m_diagnostics.PublishMissingReference(persistentId, lastKnownPath, expectedType);
+        // A cataloged source whose importer/type belongs to a later module generation is
+        // unavailable, not missing. Startup and atomic reload may legitimately observe this
+        // state before the corresponding generation is activated; publishing a missing-reference
+        // diagnostic here would turn a healthy last-good asset into a false warning.
+        if (!IsSourceBackedTypeUnavailableLocked(persistentId))
+            m_diagnostics.PublishMissingReference(persistentId, lastKnownPath, expectedType);
         if (m_missingAssets.TryGetValue(persistentId, out WeakReference<AssetObject>? weak) &&
             weak.TryGetTarget(out AssetObject? existing) && expectedType.IsInstanceOfType(existing))
         {
@@ -1735,6 +1744,20 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
             0);
         m_missingAssets[persistentId] = new WeakReference<AssetObject>(missing);
         return missing;
+    }
+
+    private bool IsSourceBackedTypeUnavailableLocked(Guid persistentId)
+    {
+        if (!m_recordsById.TryGetValue(persistentId, out AssetRecord? record) ||
+            record.meta.isTombstone ||
+            record.persistentId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(record.meta.importerId) ||
+            !IsMounted(record.relativePath) ||
+            !IOFile.Exists(GetSourcePath(record.relativePath)))
+        {
+            return false;
+        }
+        return ResolveRecordType(record) is null;
     }
 
     private AssetDependency[] ResolveDeclaredDependenciesLocked(AssetImportContext context)
@@ -1827,11 +1850,14 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
     private void RescanLocked()
     {
         LoadCatalogLocked();
+        bool registriesChanged =
+            m_importerRegistryVersion != m_importers.snapshotVersion ||
+            m_buildProcessorRegistryVersion != m_buildProcessors.snapshotVersion;
         bool releasedRetiredAssets = ReleaseRetiredCanonicalAssetsLocked();
         if (m_runtimeArtifactsOnly)
         {
             ValidateRuntimeArtifactsLocked();
-            if (releasedRetiredAssets)
+            if (releasedRetiredAssets || registriesChanged)
                 RefreshLoadedAssetReferencesLocked();
             m_importerRegistryVersion = m_importers.snapshotVersion;
             m_buildProcessorRegistryVersion = m_buildProcessors.snapshotVersion;
@@ -1888,7 +1914,7 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
                 continue;
             HandleDeletedLocked(record.relativePath);
         }
-        if (releasedRetiredAssets)
+        if (releasedRetiredAssets || registriesChanged)
             RefreshLoadedAssetReferencesLocked();
         CommitCatalogLocked();
         EnsureReadOnlyImportsSucceededLocked();
@@ -2564,7 +2590,10 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
             var states = new Dictionary<Guid, SerializedMissingState>();
             foreach (AssetRecord record in m_recordsById.Values)
             {
-                if (record.asset is not null || record.meta.isTombstone)
+                // Catalog tombstones preserve source identity, but they are not live reference
+                // roots. Only a materialized canonical asset belongs to the active generation;
+                // retained missing placeholders are captured separately below.
+                if (record.asset is not null)
                     Capture(record.persistentId, record.relativePath, record.stableTypeId, record.meta.assetStateBytes);
             }
             foreach ((Guid id, WeakReference<AssetObject> reference) in m_missingAssets)
@@ -2584,6 +2613,9 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
                         lastKnownPath: path), payload));
             }
         });
+
+    internal bool IsSourceBackedTypeUnavailable(Guid persistentId)
+        => Execute(() => IsSourceBackedTypeUnavailableLocked(persistentId));
 
     internal void SetIdentitiesActive(bool active)
         => Execute(() =>
@@ -2630,13 +2662,14 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
 
     private AssetRecord? FindRecordLocked(string relativePath)
     {
-        if (m_recordsByPath.TryGetValue(relativePath, out AssetRecord? record))
+        m_recordsByPath.TryGetValue(relativePath, out AssetRecord? record);
+        if (record is not null && record.persistentId != Guid.Empty)
             return record;
         string metaPath = GetMetaPath(relativePath);
         if (!TryReadSourceMeta(metaPath, out AssetSourceMeta sourceMeta))
-            return null;
+            return record;
         if (sourceMeta.persistentId == Guid.Empty)
-            return null;
+            return record;
         if (m_recordsById.TryGetValue(sourceMeta.persistentId, out AssetRecord? tombstone) &&
             tombstone.meta.isTombstone)
         {
@@ -2667,10 +2700,10 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
                 return sameId;
             }
         }
-        record = m_recordsById.GetValueOrDefault(sourceMeta.persistentId) ?? new AssetRecord();
+        record = m_recordsById.GetValueOrDefault(sourceMeta.persistentId) ?? record ?? new AssetRecord();
         record.relativePath = relativePath;
         record.persistentId = sourceMeta.persistentId;
-        if (record.meta.isTombstone)
+        if (record.meta.isTombstone || record.meta.persistentId == Guid.Empty)
         {
             record.meta = new AssetMeta
             {
@@ -2993,6 +3026,21 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
     private void TrackUnsupportedSourceLocked(string relativePath)
     {
         AssetRecord record = m_recordsByPath.GetValueOrDefault(relativePath) ?? new AssetRecord();
+        // The source catalog is last-good state. An importer can be absent briefly while the
+        // module/type generation that owns it is compiling or activating. Preserve a previously
+        // cataloged source verbatim so a scan cannot erase its persistent identity, stable type,
+        // dependency graph, or immutable artifact closure. A source that has never been imported
+        // still follows the Unsupported path below.
+        if (record.persistentId != Guid.Empty &&
+            !record.meta.isTombstone &&
+            !string.IsNullOrWhiteSpace(record.meta.importerId))
+        {
+            record.relativePath = relativePath;
+            record.meta.relativePath = relativePath;
+            AddOrReplaceRecordLocked(record);
+            UpdateGraphsLocked(record);
+            return;
+        }
         if (record.persistentId != Guid.Empty)
             m_recordsById.Remove(record.persistentId);
         record.relativePath = relativePath;

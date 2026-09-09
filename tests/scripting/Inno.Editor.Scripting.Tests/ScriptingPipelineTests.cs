@@ -807,6 +807,81 @@ public sealed class ScriptingPipelineTests : IDisposable
     }
 
     [Fact]
+    public void ShutdownPreservesLoadedScriptAssetAsMissingUntilItsTypeReturns()
+    {
+        using var fixture = new ScriptingFixture();
+        fixture.Write("ShutdownAsset.cs", """
+            using InnoEngine.Assets;
+            using InnoEngine.Reflection;
+
+            [StableTypeId("527df6c8-1373-48c9-9230-805a85590544")]
+            public sealed class ShutdownAsset : AssetObject
+            {
+            }
+            """);
+        fixture.Write("ShutdownAssetImporter.editor.cs", """
+            using System.Collections.Generic;
+            using System.Threading;
+            using System.Threading.Tasks;
+            using InnoEngine.Assets;
+            using InnoEditor.Assets;
+
+            [AssetImporterExtension]
+            public sealed class ShutdownAssetImporter : AssetImporter<ShutdownAsset>
+            {
+                public override string importerId => "tests.shutdown-script-asset";
+
+                public override IReadOnlyList<string> supportedExtensions { get; } = [".shutdownasset"];
+
+                protected override async ValueTask ImportAsync(
+                    AssetImportContext context,
+                    AssetImportWriter<ShutdownAsset> output,
+                    CancellationToken cancellationToken)
+                {
+                    output.SetAsset(new ShutdownAsset());
+                    await output.WriteArtifactAsync("runtime", context.sourceBytes, cancellationToken);
+                }
+            }
+            """);
+        fixture.Write("Content/value.shutdownasset", "last-good");
+        (Guid persistentId, Guid stableTypeId) = LoadScriptAssetAndUnloadScripts(fixture);
+
+        Assert.Empty(fixture.host.modules.modules);
+        Assert.True(fixture.assets.TryGetInfo(persistentId, out AssetInfo? preserved));
+        Assert.Equal(AssetImportStatus.Imported, preserved!.status);
+        Assert.Equal(stableTypeId, preserved.stableAssetTypeId);
+        AssetObject missing = ((IAssetReferenceResolver)fixture.assets).Resolve(
+            persistentId,
+            stableTypeId,
+            "Content/value.shutdownasset",
+            typeof(AssetObject),
+            "$test");
+        Assert.True(missing.isMissing);
+        Assert.Equal(persistentId, missing.identity.persistentId);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (Guid persistentId, Guid stableTypeId) LoadScriptAssetAndUnloadScripts(
+        ScriptingFixture fixture)
+    {
+        using ScriptReloadHost reload = fixture.CreateReloadHost(new EditorReloadCoordinator());
+        reload.Start();
+        ScriptCompilationResult compilation = fixture.CompilePending(reload);
+        Assert.True(compilation.success, FormatDiagnostics(compilation));
+        Assert.True(reload.ApplyPendingReload());
+        Type assetType = fixture.ResolveActiveType("ShutdownAsset");
+        AssetObject loaded = fixture.assets.Load(
+            AssetPath.Project("Content/value.shutdownasset"),
+            assetType);
+        Assert.True(fixture.assets.TryGetInfo(loaded.identity.persistentId, out AssetInfo? imported));
+        Assert.Equal(AssetImportStatus.Imported, imported!.status);
+        Guid persistentId = loaded.identity.persistentId;
+        Guid stableTypeId = imported.stableAssetTypeId;
+        reload.Dispose();
+        return (persistentId, stableTypeId);
+    }
+
+    [Fact]
     public void ContentPlayStopReloadPlaySoakRetiresEverySessionBeforeTheNextGeneration()
     {
         using var fixture = new ScriptingFixture(WriteUnavailableGenerationPlugin);

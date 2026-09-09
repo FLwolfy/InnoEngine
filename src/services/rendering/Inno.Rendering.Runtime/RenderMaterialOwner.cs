@@ -327,6 +327,8 @@ internal sealed class RenderMaterialOwner : RenderResourceProvider, IDisposable
         {
             if (!definitions.TryGetValue(binding.id, out ShaderPropertyDefinition property))
                 continue;
+            if (property.bindingOwner == ShaderPropertyBindingOwner.RenderPass)
+                continue;
             MaterialValue value = overrides is not null && overrides.TryGet(binding.id, out MaterialValue overridden)
                 ? overridden
                 : material.TryGet(binding.id, out MaterialValue materialValue)

@@ -20,6 +20,7 @@ public sealed class EditorInteractions : IEditorSelectionCoordinator, IEditorHis
     private readonly EditorContext m_editor;
     private readonly IReadOnlyDictionary<IdentityDomainId, IdentityAllocator> m_identityDomains;
     private readonly EditorHistory m_history;
+    private readonly EditorDocumentService m_documents;
     private readonly Logger m_log;
     private EditorActionRouter? m_actions;
     private EditorExtensionCatalog? m_catalog;
@@ -42,6 +43,8 @@ public sealed class EditorInteractions : IEditorSelectionCoordinator, IEditorHis
         ArgumentNullException.ThrowIfNull(identityDomains);
         m_identityDomains = identityDomains.ToDictionary(static allocator => allocator.domainId);
         m_log = log ?? throw new ArgumentNullException(nameof(log));
+        m_documents = new EditorDocumentService(
+            () => m_catalog?.TryOpenPanel("editor.documents") == true);
         m_history = new EditorHistory(new EditorHistoryOptions
         {
             cacheDirectory = Path.Combine(editor.projectDirectory, "Library", "Editor", "History")
@@ -60,6 +63,11 @@ public sealed class EditorInteractions : IEditorSelectionCoordinator, IEditorHis
     /// Gets the transactional Undo and Redo history owned by this editor runtime.
     /// </summary>
     public IEditorHistory history => m_history;
+
+    /// <summary>
+    /// Gets the reload-safe document host used by asset editors and the unified document panel.
+    /// </summary>
+    public IEditorDocumentService documents => m_documents;
 
     /// <summary>
     /// Starts an isolated temporary Undo and Redo branch while retaining the current editing branch.
@@ -167,6 +175,30 @@ public sealed class EditorInteractions : IEditorSelectionCoordinator, IEditorHis
         return m_catalog?.TryTogglePanel(panelId) == true;
     }
 
+    /// <summary>
+    /// Opens and requests presentation focus for one panel in the active extension generation.
+    /// </summary>
+    /// <param name="panelId">The stable panel identifier to resolve.</param>
+    /// <returns><see langword="true"/> when an available panel was found.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="panelId"/> is empty.</exception>
+    public bool OpenPanel(string panelId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(panelId);
+        return m_catalog?.TryOpenPanel(panelId) == true;
+    }
+
+    /// <summary>
+    /// Closes one panel in the active extension generation without toggling its current state.
+    /// </summary>
+    /// <param name="panelId">The stable panel identifier to resolve.</param>
+    /// <returns><see langword="true"/> when an available panel was found.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="panelId"/> is empty.</exception>
+    public bool ClosePanel(string panelId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(panelId);
+        return m_catalog?.TryClosePanel(panelId) == true;
+    }
+
     internal void Attach(EditorExtensionCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
@@ -234,6 +266,7 @@ public sealed class EditorInteractions : IEditorSelectionCoordinator, IEditorHis
         m_pendingFocusId = null;
         m_previousGenerationSelection = null;
         m_previousGenerationFocus = null;
+        m_documents.Shutdown();
         m_history.Dispose();
     }
 

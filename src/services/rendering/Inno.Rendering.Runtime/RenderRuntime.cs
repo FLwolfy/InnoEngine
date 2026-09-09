@@ -121,6 +121,14 @@ public sealed class RenderRuntime : RuntimeSubsystem, IRenderRequestSink
     public RenderTargetStore targets { get; }
 
     /// <summary>
+    /// Gets backend-neutral persistent resource resolution for host-owned previews and rendering integrations.
+    /// </summary>
+    public IRenderResourceService resources => m_resourceService;
+
+    /// <summary>Gets the non-zero rendering-device generation that owns persistent handles.</summary>
+    public uint deviceGeneration => m_device.generation;
+
+    /// <summary>
     /// Gets a detached control-thread snapshot of resource occupancy, high-water marks and rejected admissions.
     /// </summary>
     public RenderResourceStatistics resourceStatistics => m_resourceService.statistics with

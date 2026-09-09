@@ -18,12 +18,12 @@ public static class EditorPalette
     /// <summary>
     /// Gets the primary text color.
     /// </summary>
-    public static Vector4 text { get; } = new(1f, 1f, 1f, 1f);
+    public static Vector4 text { get; } = new(0.88f, 0.89f, 0.91f, 1f);
 
     /// <summary>
     /// Gets disabled text color.
     /// </summary>
-    public static Vector4 textDisabled { get; } = new(1f, 1f, 1f, 0.360515f);
+    public static Vector4 textDisabled { get; } = new(0.58f, 0.60f, 0.64f, 1f);
 
     /// <summary>
     /// Gets the standard error color.
@@ -38,12 +38,12 @@ public static class EditorPalette
     /// <summary>
     /// Gets the editor window background.
     /// </summary>
-    public static Vector4 windowBackground { get; } = new(0.18f, 0.18f, 0.18f, 1f);
+    public static Vector4 windowBackground { get; } = new(0.105f, 0.112f, 0.125f, 1f);
 
     /// <summary>
     /// Gets the editor popup background.
     /// </summary>
-    public static Vector4 popupBackground { get; } = new(0.09803922f, 0.09803922f, 0.09803922f, 1f);
+    public static Vector4 popupBackground { get; } = new(0.075f, 0.081f, 0.092f, 0.985f);
 
     /// <summary>
     /// Gets text color used by editor context menus.
@@ -63,12 +63,12 @@ public static class EditorPalette
     /// <summary>
     /// Gets the hovered background of an editor context-menu item.
     /// </summary>
-    public static Vector4 menuItemHovered => accentHovered;
+    public static Vector4 menuItemHovered => new(0.235f, 0.245f, 0.275f, 1f);
 
     /// <summary>
     /// Gets the active background of an editor context-menu item.
     /// </summary>
-    public static Vector4 menuItemActive => accentActive;
+    public static Vector4 menuItemActive => new(0.31f, 0.285f, 0.43f, 1f);
 
     /// <summary>
     /// Gets the separator color used by editor context menus.
@@ -78,7 +78,7 @@ public static class EditorPalette
     /// <summary>
     /// Gets the standard border color.
     /// </summary>
-    public static Vector4 border { get; } = new(0.32f, 0.34f, 0.37f, 0.65f);
+    public static Vector4 border { get; } = new(0.235f, 0.25f, 0.285f, 0.82f);
 
     /// <summary>
     /// Gets the standard border shadow color.
@@ -88,47 +88,47 @@ public static class EditorPalette
     /// <summary>
     /// Gets the standard frame background.
     /// </summary>
-    public static Vector4 frame { get; } = new(0.15686275f, 0.15686275f, 0.15686275f, 1f);
+    public static Vector4 frame { get; } = new(0.145f, 0.155f, 0.175f, 1f);
 
     /// <summary>
     /// Gets the hovered frame background.
     /// </summary>
-    public static Vector4 frameHovered { get; } = new(0.38039216f, 0.42352942f, 0.57254905f, 0.54901963f);
+    public static Vector4 frameHovered { get; } = new(0.205f, 0.218f, 0.245f, 1f);
 
     /// <summary>
     /// Gets the active frame background.
     /// </summary>
-    public static Vector4 frameActive { get; } = new(0.61960787f, 0.5764706f, 0.76862746f, 0.54901963f);
+    public static Vector4 frameActive { get; } = new(0.275f, 0.258f, 0.36f, 1f);
 
     /// <summary>
     /// Gets the inactive title background.
     /// </summary>
-    public static Vector4 title { get; } = new(0.14f, 0.14f, 0.14f, 1f);
+    public static Vector4 title { get; } = new(0.075f, 0.081f, 0.092f, 1f);
 
     /// <summary>
     /// Gets the active title background.
     /// </summary>
-    public static Vector4 titleActive { get; } = new(0.18f, 0.18f, 0.18f, 1f);
+    public static Vector4 titleActive { get; } = new(0.115f, 0.123f, 0.139f, 1f);
 
     /// <summary>
     /// Gets the collapsed title background.
     /// </summary>
-    public static Vector4 titleCollapsed { get; } = new(0.12f, 0.12f, 0.12f, 1f);
+    public static Vector4 titleCollapsed { get; } = new(0.065f, 0.070f, 0.080f, 1f);
 
     /// <summary>
     /// Gets the standard scrollbar thumb.
     /// </summary>
-    public static Vector4 scrollbarGrab { get; } = new(0.62f, 0.56f, 0.80f, 0.78f);
+    public static Vector4 scrollbarGrab { get; } = new(0.30f, 0.32f, 0.36f, 0.82f);
 
     /// <summary>
     /// Gets the hovered scrollbar thumb.
     /// </summary>
-    public static Vector4 scrollbarGrabHovered { get; } = new(0.72f, 0.66f, 0.90f, 0.90f);
+    public static Vector4 scrollbarGrabHovered { get; } = new(0.42f, 0.44f, 0.49f, 0.92f);
 
     /// <summary>
     /// Gets the active scrollbar thumb.
     /// </summary>
-    public static Vector4 scrollbarGrabActive { get; } = new(0.82f, 0.77f, 0.96f, 1f);
+    public static Vector4 scrollbarGrabActive { get; } = new(0.55f, 0.57f, 0.63f, 1f);
 
     /// <summary>
     /// Gets the standard accent color.
@@ -148,27 +148,27 @@ public static class EditorPalette
     /// <summary>
     /// Gets the standard tab color.
     /// </summary>
-    public static Vector4 tab { get; } = new(0.44f, 0.38f, 0.58f, 0.65f);
+    public static Vector4 tab { get; } = new(0.105f, 0.112f, 0.125f, 1f);
 
     /// <summary>
     /// Gets the hovered tab color.
     /// </summary>
-    public static Vector4 tabHovered { get; } = new(0.54f, 0.48f, 0.70f, 0.85f);
+    public static Vector4 tabHovered { get; } = new(0.19f, 0.20f, 0.225f, 1f);
 
     /// <summary>
     /// Gets the selected tab color.
     /// </summary>
-    public static Vector4 tabSelected { get; } = new(0.62f, 0.56f, 0.80f, 0.95f);
+    public static Vector4 tabSelected { get; } = new(0.17f, 0.176f, 0.20f, 1f);
 
     /// <summary>
     /// Gets the dimmed tab color.
     /// </summary>
-    public static Vector4 tabDimmed { get; } = new(0.32f, 0.29f, 0.42f, 0.60f);
+    public static Vector4 tabDimmed { get; } = new(0.082f, 0.088f, 0.10f, 1f);
 
     /// <summary>
     /// Gets the selected dimmed tab color.
     /// </summary>
-    public static Vector4 tabDimmedSelected { get; } = new(0.50f, 0.45f, 0.67f, 0.80f);
+    public static Vector4 tabDimmedSelected { get; } = new(0.135f, 0.142f, 0.16f, 1f);
 
     /// <summary>
     /// Gets the selected tab overline color.
@@ -183,12 +183,12 @@ public static class EditorPalette
     /// <summary>
     /// Gets the strong table border.
     /// </summary>
-    public static Vector4 tableBorderStrong { get; } = new(0.42352942f, 0.38039216f, 0.57254905f, 0.54901963f);
+    public static Vector4 tableBorderStrong { get; } = new(0.245f, 0.258f, 0.29f, 0.85f);
 
     /// <summary>
     /// Gets the light table border.
     /// </summary>
-    public static Vector4 tableBorderLight { get; } = new(0.42352942f, 0.38039216f, 0.57254905f, 0.2918455f);
+    public static Vector4 tableBorderLight { get; } = new(0.205f, 0.215f, 0.245f, 0.55f);
 
     /// <summary>
     /// Gets the alternate table row background.
@@ -218,7 +218,7 @@ public static class EditorPalette
     /// <summary>
     /// Gets inspector card header background.
     /// </summary>
-    public static Vector4 inspectorCardHeader { get; } = new(0.42f, 0.39f, 0.51f, 1f);
+    public static Vector4 inspectorCardHeader { get; } = new(0.17f, 0.18f, 0.205f, 1f);
 
     /// <summary>
     /// Gets the persistent Inspector target header background.
@@ -263,7 +263,7 @@ public static class EditorPalette
     /// <summary>
     /// Gets compact control hover color.
     /// </summary>
-    public static Vector4 compactControlHovered { get; } = new(0.76f, 0.69f, 0.94f, 1f);
+    public static Vector4 compactControlHovered { get; } = new(0.74f, 0.70f, 0.90f, 1f);
 
     /// <summary>
     /// Gets the deepest collection background.
@@ -526,13 +526,13 @@ public static class EditorPalette
         style.Colors[(int)ImGuiCol.CheckMark] = scrollbarGrabActive;
         style.Colors[(int)ImGuiCol.SliderGrab] = accent;
         style.Colors[(int)ImGuiCol.SliderGrabActive] = accentActive;
-        style.Colors[(int)ImGuiCol.Button] = accent;
-        style.Colors[(int)ImGuiCol.ButtonHovered] = accentHovered;
-        style.Colors[(int)ImGuiCol.ButtonActive] = accentActive;
+        style.Colors[(int)ImGuiCol.Button] = frame;
+        style.Colors[(int)ImGuiCol.ButtonHovered] = frameHovered;
+        style.Colors[(int)ImGuiCol.ButtonActive] = frameActive;
         style.Colors[(int)ImGuiCol.Header] = accent;
         style.Colors[(int)ImGuiCol.HeaderHovered] = accentHovered;
         style.Colors[(int)ImGuiCol.HeaderActive] = accentActive;
-        style.Colors[(int)ImGuiCol.Separator] = accent;
+        style.Colors[(int)ImGuiCol.Separator] = border;
         style.Colors[(int)ImGuiCol.SeparatorHovered] = accentHovered;
         style.Colors[(int)ImGuiCol.SeparatorActive] = accentActive;
         style.Colors[(int)ImGuiCol.ResizeGrip] = transparent;

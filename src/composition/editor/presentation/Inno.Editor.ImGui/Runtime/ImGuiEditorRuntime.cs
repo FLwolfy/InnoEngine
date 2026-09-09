@@ -206,6 +206,8 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
             ImGuiWindowFlags flags = ImGuiWindowFlags.NoCollapse;
             if (!allowScrolling)
                 flags |= ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
+            if (extension.TakeFocusRequest())
+                NativeImGui.SetNextWindowFocus();
             EditorWidget.PanelWindow(extension.title, ref isOpen, () =>
             {
                 if (extension.Draw(context) &&

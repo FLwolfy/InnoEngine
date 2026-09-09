@@ -291,6 +291,7 @@ public sealed class EditorInteractionRuntime : Inno.Editor.Core.EditorRuntime
                 registration.attribute.title,
                 registration.attribute.order,
                 registration.panel,
+                () => m_catalog.TakePanelFocusRequest(registration.attribute.id),
                 exception => m_catalog.QuarantinePanel(snapshot, registration, exception)));
         }
         m_panels = panels.ToArray();

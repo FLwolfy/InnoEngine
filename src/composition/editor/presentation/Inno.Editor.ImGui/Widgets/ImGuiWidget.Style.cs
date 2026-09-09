@@ -12,6 +12,7 @@ namespace Inno.Editor.ImGui.ImGuiWidget;
 public static partial class ImGuiWidget
 {
     private static float s_appliedZoom = float.NaN;
+    private static bool? s_appliedCompactMode;
 
     /// <summary>
     /// Gets the centralized editor layout metrics shared by every widget and feature panel.
@@ -27,11 +28,14 @@ public static partial class ImGuiWidget
         ApplyLayoutStyle(nativeStyle);
         EditorPalette.Apply(nativeStyle);
         s_appliedZoom = style.zoom;
+        s_appliedCompactMode = style.isCompact;
     }
 
     internal static void ApplyPendingStyle()
     {
-        if (float.IsNaN(s_appliedZoom) || MathF.Abs(s_appliedZoom - style.zoom) > 0.0001f)
+        if (float.IsNaN(s_appliedZoom)
+            || MathF.Abs(s_appliedZoom - style.zoom) > 0.0001f
+            || s_appliedCompactMode != style.isCompact)
             SetupStyle();
     }
 

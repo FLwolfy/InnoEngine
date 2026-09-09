@@ -12,6 +12,7 @@
     <ProjectReference Include="..\..\..\..\foundation\core\Inno.Core.Identity\Inno.Core.Identity.csproj" />
     <ProjectReference Include="..\..\..\..\foundation\core\Inno.Core.Events\Inno.Core.Events.csproj" />
     <ProjectReference Include="..\..\..\..\foundation\core\Inno.Core.Input\Inno.Core.Input.csproj" />
+    <ProjectReference Include="..\..\..\..\foundation\core\Inno.Core.Mathematics\Inno.Core.Mathematics.csproj" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\foundation\core\Inno.Core.Diagnostics\Inno.Core.Diagnostics.csproj" PrivateAssets="compile" />

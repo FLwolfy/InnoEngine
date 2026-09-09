@@ -48,7 +48,10 @@ internal sealed class GamePlayerHost : ShellHost
         m_engine = engine;
     }
 
-    internal static GamePlayerHost Create(IAdapterCatalog adapterCatalog, AdapterSelection adapterSelection)
+    internal static GamePlayerHost Create(
+        IAdapterCatalog adapterCatalog,
+        AdapterSelection adapterSelection,
+        GraphicsApi? preferredGraphicsApi = null)
     {
         ArgumentNullException.ThrowIfNull(adapterCatalog);
         string packagedContentRoot = ResolvePackagedContentRoot();
@@ -83,6 +86,7 @@ internal sealed class GamePlayerHost : ShellHost
                         resizable = true,
                         highPixelDensity = true
                     },
+                    preferredGraphicsApi = preferredGraphicsApi,
                     verticalSync = true,
                     sRgbBackbuffer = true
                 },

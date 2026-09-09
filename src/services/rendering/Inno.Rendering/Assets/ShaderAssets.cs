@@ -109,6 +109,21 @@ public enum ShaderPropertyBindingKind
 }
 
 /// <summary>
+/// Identifies which layer supplies a declared shader property's value for each dispatch or draw.
+/// </summary>
+public enum ShaderPropertyBindingOwner
+{
+    /// <summary>
+    /// The material and its optional property block supply the value.
+    /// </summary>
+    Material,
+    /// <summary>
+    /// The render pass supplies the value directly through its command encoder.
+    /// </summary>
+    RenderPass
+}
+
+/// <summary>
 /// Selects the programmable stage combination of a pass.
 /// </summary>
 public enum ShaderProgramKind
@@ -448,6 +463,9 @@ public struct ShaderPropertyDefinition
     /// <param name="storageAccess">
     /// Required access for storage texture or buffer bindings.
     /// </param>
+    /// <param name="bindingOwner">
+    /// Layer responsible for supplying the binding value at execution time.
+    /// </param>
     public ShaderPropertyDefinition(
         ShaderPropertyId id,
         string displayName,
@@ -455,7 +473,8 @@ public struct ShaderPropertyDefinition
         ShaderStage stages,
         MaterialValue defaultValue,
         ShaderPropertyBindingKind? bindingKind = null,
-        RenderStorageAccess storageAccess = RenderStorageAccess.Read)
+        RenderStorageAccess storageAccess = RenderStorageAccess.Read,
+        ShaderPropertyBindingOwner bindingOwner = ShaderPropertyBindingOwner.Material)
     {
         if (!id.isValid)
             throw new ArgumentException("A shader property ID must be valid.", nameof(id));
@@ -467,8 +486,11 @@ public struct ShaderPropertyDefinition
         this.defaultValue = defaultValue;
         this.bindingKind = bindingKind ?? InferBindingKind(type);
         this.storageAccess = storageAccess;
+        this.bindingOwner = bindingOwner;
         if (!Enum.IsDefined(storageAccess))
             throw new ArgumentOutOfRangeException(nameof(storageAccess));
+        if (!Enum.IsDefined(bindingOwner))
+            throw new ArgumentOutOfRangeException(nameof(bindingOwner));
         ValidateBindingKind(type, this.bindingKind);
     }
 
@@ -506,6 +528,11 @@ public struct ShaderPropertyDefinition
     /// Gets or sets required access for storage texture or buffer bindings.
     /// </summary>
     public RenderStorageAccess storageAccess { get; set; }
+
+    /// <summary>
+    /// Gets or sets the layer responsible for supplying this binding at execution time.
+    /// </summary>
+    public ShaderPropertyBindingOwner bindingOwner { get; set; }
 
     internal static bool IsBindingKindCompatible(
         ShaderPropertyType type,
@@ -976,8 +1003,13 @@ public enum TextureColorSpace
 /// Represents imported texture content without owning a GPU handle.
 /// </summary>
 [StableTypeId("e174b6eb-f79a-470f-a460-84f88ab49d0e")]
-public sealed class TextureAsset : AssetObject
+public sealed class TextureAsset : AssetObject, IRenderTextureArtifactSource
 {
+    private static readonly RenderTextureArtifactSlot[] S_linearTextureArtifacts =
+        [new RenderTextureArtifactSlot("main", "source", TextureColorSpace.Linear)];
+    private static readonly RenderTextureArtifactSlot[] S_sRgbTextureArtifacts =
+        [new RenderTextureArtifactSlot("main", "source", TextureColorSpace.Srgb)];
+
     internal TextureAsset()
     {
     }
@@ -1041,6 +1073,31 @@ public sealed class TextureAsset : AssetObject
     /// </summary>
     [SerializableProperty]
     public string sourceFormat { get; internal set; } = string.Empty;
+
+    /// <summary>
+    /// Gets the single source artifact compiled for this imported texture.
+    /// </summary>
+    public IReadOnlyList<RenderTextureArtifactSlot> textureArtifacts
+        => colorSpace == TextureColorSpace.Srgb
+            ? S_sRgbTextureArtifacts
+            : S_linearTextureArtifacts;
+
+    /// <summary>
+    /// Creates a stable reference to this texture's current imported content.
+    /// </summary>
+    /// <returns>
+    /// A reference suitable for target compilation and generation-scoped GPU resolution.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when this texture has not been assigned a persistent asset identity.
+    /// </exception>
+    public RenderTextureArtifactReference GetTextureArtifactReference()
+    {
+        Guid id = identity.persistentId;
+        if (id == Guid.Empty)
+            throw new InvalidOperationException("Texture must have a persistent asset identity.");
+        return new RenderTextureArtifactReference(id, contentVersion, textureArtifacts[0]);
+    }
 }
 
 /// <summary>

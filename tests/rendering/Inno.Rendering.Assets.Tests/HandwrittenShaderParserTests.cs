@@ -76,7 +76,8 @@ public sealed class HandwrittenShaderParserTests : IDisposable
             ShaderStage.Compute,
             default,
             ShaderPropertyBindingKind.StorageTexture,
-            RenderStorageAccess.ReadWrite);
+            RenderStorageAccess.ReadWrite,
+            ShaderPropertyBindingOwner.RenderPass);
         var pass = new ShaderPassDefinition(
             "Compute",
             ShaderProgramKind.Compute,
@@ -106,6 +107,7 @@ public sealed class HandwrittenShaderParserTests : IDisposable
         Assert.Equal(RenderStorageAccess.ReadWrite, binding.storageAccess);
         Assert.Equal(ShaderPropertyBindingKind.StorageTexture, restored.definition.properties[0].bindingKind);
         Assert.Equal(RenderStorageAccess.ReadWrite, restored.definition.properties[0].storageAccess);
+        Assert.Equal(ShaderPropertyBindingOwner.RenderPass, restored.definition.properties[0].bindingOwner);
     }
 
     internal static ShaderIRModule CreateModule(string source, ShaderIRSourceKind sourceKind)

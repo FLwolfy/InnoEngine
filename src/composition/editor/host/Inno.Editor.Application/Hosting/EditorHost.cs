@@ -25,6 +25,7 @@ using Inno.Editor.Core;
 using Inno.Editor.Rendering;
 using Inno.Input.Runtime;
 using Inno.Platform;
+using Inno.Rendering;
 using Inno.Rendering.Assets;
 using Inno.Rendering.Runtime;
 using Inno.Rendering.ShaderGraph;
@@ -62,7 +63,8 @@ internal sealed class EditorHost : ShellHost
         AdapterSelection adapterSelection,
         PresentationBackend presentationBackend,
         string projectDirectory,
-        string bootLogPath)
+        string bootLogPath,
+        GraphicsApi? preferredGraphicsApi)
         : base(
             adapterCatalog,
             new ShellOptions
@@ -76,6 +78,7 @@ internal sealed class EditorHost : ShellHost
                     resizable = true,
                     highPixelDensity = true
                 },
+                preferredGraphicsApi = preferredGraphicsApi,
                 verticalSync = true,
                 sRgbBackbuffer = true
             })
@@ -97,7 +100,8 @@ internal sealed class EditorHost : ShellHost
         IAuthoringAdapterCatalog adapterCatalog,
         AdapterSelection adapterSelection,
         PresentationBackend presentationBackend,
-        string projectDirectory)
+        string projectDirectory,
+        GraphicsApi? preferredGraphicsApi = null)
     {
         ArgumentNullException.ThrowIfNull(adapterCatalog);
         string normalizedProject = PrepareProjectDirectory(projectDirectory);
@@ -109,7 +113,8 @@ internal sealed class EditorHost : ShellHost
             adapterSelection,
             presentationBackend,
             normalizedProject,
-            bootLogPath);
+            bootLogPath,
+            preferredGraphicsApi);
         try
         {
             host.Initialize();

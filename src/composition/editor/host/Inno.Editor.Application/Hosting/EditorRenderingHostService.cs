@@ -14,6 +14,7 @@ namespace Inno.Editor.Application;
 
 internal sealed class EditorRenderingHostService :
     IEditorRenderingHost,
+    IEditorPreviewService,
     IEditorReloadParticipant,
     IDisposable
 {
@@ -21,6 +22,9 @@ internal sealed class EditorRenderingHostService :
     private readonly IPresentationContext m_presentation;
     private readonly IDisposable m_reloadRegistration;
     private readonly Dictionary<string, ViewportState> m_viewports = new(StringComparer.Ordinal);
+    private readonly Dictionary<RenderTextureArtifactReference, PreviewState> m_previews = [];
+    private readonly Dictionary<ulong, PreviewState> m_previewsById = [];
+    private ulong m_nextPreviewId;
     private bool m_disposed;
 
     internal EditorRenderingHostService(
@@ -32,6 +36,95 @@ internal sealed class EditorRenderingHostService :
         m_presentation = presentation ?? throw new ArgumentNullException(nameof(presentation));
         ArgumentNullException.ThrowIfNull(reloads);
         m_reloadRegistration = reloads.Register(this);
+    }
+
+    /// <summary>Gets the active rendering-device generation.</summary>
+    public uint deviceGeneration => m_runtime.deviceGeneration;
+
+    /// <summary>Tries to resolve a standalone texture preview without blocking target compilation.</summary>
+    public bool TryGetTexture(TextureAsset texture, out EditorPreviewHandle handle)
+    {
+        ArgumentNullException.ThrowIfNull(texture);
+        return TryGetTextureArtifact(
+            texture.GetTextureArtifactReference(),
+            texture.width,
+            texture.height,
+            out handle);
+    }
+
+    /// <summary>Tries to resolve a named texture artifact preview without blocking target compilation.</summary>
+    public bool TryGetTextureArtifact(
+        RenderTextureArtifactReference texture,
+        int pixelWidth,
+        int pixelHeight,
+        out EditorPreviewHandle handle)
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelWidth);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelHeight);
+        if (m_previews.TryGetValue(texture, out PreviewState? existing))
+        {
+            handle = existing.handle;
+            return true;
+        }
+        m_runtime.resources.PrewarmTextureArtifact(texture);
+        if (!m_runtime.resources.TryResolveTextureArtifact(texture, out PersistentTextureHandle resident))
+        {
+            handle = default;
+            return false;
+        }
+        ulong value = ++m_nextPreviewId;
+        if (value == 0)
+            value = ++m_nextPreviewId;
+        var preview = new PreviewState(
+            texture,
+            new EditorPreviewHandle(value, deviceGeneration, pixelWidth, pixelHeight),
+            resident,
+            m_presentation.RegisterTexture(resident));
+        m_previews.Add(texture, preview);
+        m_previewsById.Add(value, preview);
+        handle = preview.handle;
+        return true;
+    }
+
+    /// <summary>Draws one current-generation preview into the active presentation surface.</summary>
+    public void Draw(EditorPreviewHandle handle, Vector2 logicalSize)
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (!handle.isValid || handle.deviceGeneration != deviceGeneration
+            || !m_previewsById.TryGetValue(handle.value, out PreviewState? preview)
+            || preview.handle != handle)
+        {
+            throw new InvalidOperationException("The editor preview handle is stale or does not belong to this host.");
+        }
+        if (logicalSize.X <= 0f || logicalSize.Y <= 0f)
+            throw new ArgumentOutOfRangeException(nameof(logicalSize), "Preview size must be positive.");
+        m_presentation.DrawImage(preview.presentationTexture, logicalSize);
+    }
+
+    /// <summary>Releases one cached preview registration.</summary>
+    public bool Release(EditorPreviewHandle handle)
+    {
+        if (!handle.isValid || handle.deviceGeneration != deviceGeneration
+            || !m_previewsById.Remove(handle.value, out PreviewState? preview)
+            || preview.handle != handle)
+        {
+            return false;
+        }
+        m_previews.Remove(preview.reference);
+        _ = m_presentation.UnregisterTexture(preview.presentationTexture);
+        return true;
+    }
+
+    /// <summary>Releases every cached preview registration.</summary>
+    void IEditorPreviewService.ReleaseAll() => ReleaseAllPreviews();
+
+    private void ReleaseAllPreviews()
+    {
+        foreach (PreviewState preview in m_previews.Values)
+            _ = m_presentation.UnregisterTexture(preview.presentationTexture);
+        m_previews.Clear();
+        m_previewsById.Clear();
     }
 
     /// <summary>
@@ -147,6 +240,7 @@ internal sealed class EditorRenderingHostService :
             return;
         m_reloadRegistration.Dispose();
         ReleaseAll();
+        ReleaseAllPreviews();
         m_disposed = true;
     }
 
@@ -192,6 +286,7 @@ internal sealed class EditorRenderingHostService :
         public void PrepareForActivation()
         {
             owner.ReleaseAll();
+            owner.ReleaseAllPreviews();
         }
 
         /// <summary>
@@ -220,4 +315,10 @@ internal sealed class EditorRenderingHostService :
         {
         }
     }
+
+    private sealed record PreviewState(
+        RenderTextureArtifactReference reference,
+        EditorPreviewHandle handle,
+        PersistentTextureHandle residentTexture,
+        PresentationTextureHandle presentationTexture);
 }

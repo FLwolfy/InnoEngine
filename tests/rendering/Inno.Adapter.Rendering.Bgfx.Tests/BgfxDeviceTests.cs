@@ -247,6 +247,26 @@ public sealed class BgfxDeviceTests
     }
 
     [Fact]
+    public void NoopDevice_ReusesSteadyStateTransientTextureAndFramebufferAcrossGraphs()
+    {
+        CompiledRenderGraph first = BuildColorTargetGraph(101);
+        m_device.BeginFrame();
+        m_device.Execute(first, 101);
+        m_device.EndFrame();
+
+        int textureAllocations = m_device.transientTextureAllocationCount;
+        int frameBufferAllocations = m_device.transientFrameBufferAllocationCount;
+
+        CompiledRenderGraph second = BuildColorTargetGraph(102);
+        m_device.BeginFrame();
+        m_device.Execute(second, 102);
+        m_device.EndFrame();
+
+        Assert.Equal(textureAllocations, m_device.transientTextureAllocationCount);
+        Assert.Equal(frameBufferAllocations, m_device.transientFrameBufferAllocationCount);
+    }
+
+    [Fact]
     public void CreateBuffer_WithPartialInitialData_FailsWithoutClosingFrame()
     {
         RenderVertexLayout layout = new(
@@ -321,6 +341,22 @@ public sealed class BgfxDeviceTests
             () => new BgfxDevice(options));
 
         Assert.Contains("Only one BGFX device", exception.Message, StringComparison.Ordinal);
+    }
+
+    private CompiledRenderGraph BuildColorTargetGraph(uint generation)
+    {
+        RenderGraphBuilder builder = new(generation, m_device.capabilities);
+        RenderTextureHandle texture = builder.CreateTexture(
+            "Stable Color Target",
+            new RenderTextureDescriptor(
+                32,
+                32,
+                RenderTextureFormat.RGBA8,
+                RenderTextureUsage.ColorAttachment | RenderTextureUsage.Sampled));
+        builder.AddRasterPass("Stable Color Pass", C_FIRST, 0, static (_, _) => { })
+            .UseColorAttachment(texture, 0, RenderLoadAction.Clear);
+        builder.MarkOutput(texture);
+        return builder.Compile().graph!;
     }
 }
 

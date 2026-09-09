@@ -571,6 +571,12 @@ public static class ShaderIRValidator
                     "SHADER_IR_STORAGE_ACCESS_INVALID",
                     $"Shader property '{property.id}' declares invalid storage access."));
             }
+            if (!Enum.IsDefined(property.bindingOwner))
+            {
+                diagnostics.Add(Error(
+                    "SHADER_IR_BINDING_OWNER_INVALID",
+                    $"Shader property '{property.id}' declares an invalid binding owner."));
+            }
         }
         AddDuplicateDiagnostics(
             module.definition.keywords.Select(static value => value.id),

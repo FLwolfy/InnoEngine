@@ -1965,7 +1965,7 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
         }
 
         public RenderTargetArtifactStatus GetTextureArtifact(
-            TextureAsset texture,
+            RenderTextureArtifactReference texture,
             out ReadOnlyMemory<byte> artifact)
         {
             _ = texture;

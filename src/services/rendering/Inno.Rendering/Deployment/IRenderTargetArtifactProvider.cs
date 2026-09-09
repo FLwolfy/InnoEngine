@@ -26,7 +26,7 @@ public interface IRenderTargetArtifactProvider
     /// The current artifact availability. <see cref="RenderTargetArtifactStatus.Ready"/> guarantees that
     /// <paramref name="artifact"/> is non-null.
     /// </returns>
-    /// <exception cref="ArgumentNullException">
+    /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="shader"/> or <paramref name="capabilities"/> is <see langword="null"/>.
     /// </exception>
     RenderTargetArtifactStatus GetShaderArtifact(
@@ -39,7 +39,7 @@ public interface IRenderTargetArtifactProvider
     /// Resolves the portable KTX artifact for one imported runtime texture.
     /// </summary>
     /// <param name="texture">
-    /// The imported runtime texture description.
+    /// Stable reference to the imported texture slot.
     /// </param>
     /// <param name="artifact">
     /// Receives immutable KTX bytes when the artifact exists and is non-empty.
@@ -49,9 +49,9 @@ public interface IRenderTargetArtifactProvider
     /// <paramref name="artifact"/> is non-empty.
     /// </returns>
     /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="texture"/> is <see langword="null"/>.
+    /// Thrown when <paramref name="texture"/> is invalid.
     /// </exception>
     RenderTargetArtifactStatus GetTextureArtifact(
-        TextureAsset texture,
+        RenderTextureArtifactReference texture,
         out ReadOnlyMemory<byte> artifact);
 }

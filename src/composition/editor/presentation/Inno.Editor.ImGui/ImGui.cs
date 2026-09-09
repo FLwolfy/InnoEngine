@@ -410,6 +410,17 @@ public static class ImGui
     public static bool BeginTabItem(string label, ImGuiTabItemFlags flags = ImGuiTabItemFlags.None)
         => RawImGui.BeginTabItem(label, flags);
 
+    /// <summary>Begins one closeable tab item.</summary>
+    /// <param name="label">The tab label and identity.</param>
+    /// <param name="isOpen">Receives whether the tab remains open.</param>
+    /// <param name="flags">Tab-item behavior.</param>
+    /// <returns><see langword="true"/> when tab contents should be submitted.</returns>
+    public static bool BeginTabItem(
+        string label,
+        ref bool isOpen,
+        ImGuiTabItemFlags flags = ImGuiTabItemFlags.None)
+        => RawImGui.BeginTabItem(label, ref isOpen, flags);
+
     /// <summary>
     /// Ends the current tab item.
     /// </summary>

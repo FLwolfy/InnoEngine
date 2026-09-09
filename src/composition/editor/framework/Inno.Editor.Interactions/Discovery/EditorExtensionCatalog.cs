@@ -20,6 +20,7 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
     private readonly object[] m_hostServices;
     private readonly EditorExtensionStateStore m_state;
     private readonly Dictionary<string, PanelState> m_panelStates = new(StringComparer.Ordinal);
+    private readonly HashSet<string> m_pendingPanelFocus = new(StringComparer.Ordinal);
     private Snapshot? m_active;
     private ActivationState? m_activation;
     private Snapshot? m_staging;
@@ -100,10 +101,55 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
                 continue;
             }
             registration.panel.isOpen = !registration.panel.isOpen;
+            if (registration.panel.isOpen)
+                m_pendingPanelFocus.Add(panelId);
+            else
+                m_pendingPanelFocus.Remove(panelId);
             return true;
         }
         return false;
     }
+
+    internal bool TryOpenPanel(string panelId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(panelId);
+        Snapshot snapshot = extensions;
+        for (int i = 0; i < snapshot.panels.Length; i++)
+        {
+            PanelRegistration registration = snapshot.panels[i];
+            if (!string.Equals(registration.attribute.id, panelId, StringComparison.Ordinal) ||
+                snapshot.quarantinedPanels.Contains(registration.panel))
+            {
+                continue;
+            }
+            registration.panel.isOpen = true;
+            m_pendingPanelFocus.Add(panelId);
+            return true;
+        }
+        return false;
+    }
+
+    internal bool TryClosePanel(string panelId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(panelId);
+        Snapshot snapshot = extensions;
+        for (int i = 0; i < snapshot.panels.Length; i++)
+        {
+            PanelRegistration registration = snapshot.panels[i];
+            if (!string.Equals(registration.attribute.id, panelId, StringComparison.Ordinal) ||
+                snapshot.quarantinedPanels.Contains(registration.panel))
+            {
+                continue;
+            }
+            registration.panel.isOpen = false;
+            m_pendingPanelFocus.Remove(panelId);
+            return true;
+        }
+        return false;
+    }
+
+    internal bool TakePanelFocusRequest(string panelId)
+        => m_pendingPanelFocus.Remove(panelId);
 
     internal void PrepareShutdown()
     {

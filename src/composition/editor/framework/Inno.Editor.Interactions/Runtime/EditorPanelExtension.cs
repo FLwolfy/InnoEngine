@@ -10,6 +10,7 @@ namespace Inno.Editor.Interactions;
 public sealed class EditorPanelExtension
 {
     private readonly Action<Exception> m_quarantine;
+    private readonly Func<bool> m_takeFocusRequest;
     private readonly EditorPanel m_panel;
 
     internal EditorPanelExtension(
@@ -17,6 +18,7 @@ public sealed class EditorPanelExtension
         string title,
         int order,
         EditorPanel panel,
+        Func<bool> takeFocusRequest,
         Action<Exception> quarantine)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -24,6 +26,7 @@ public sealed class EditorPanelExtension
         this.title = title;
         this.order = order;
         m_panel = panel;
+        m_takeFocusRequest = takeFocusRequest;
         m_quarantine = quarantine;
     }
 
@@ -50,6 +53,10 @@ public sealed class EditorPanelExtension
         get => m_panel.isOpen;
         set => m_panel.isOpen = value;
     }
+
+    /// <summary>Consumes a pending request to focus this panel window.</summary>
+    /// <returns><see langword="true"/> once for each accepted focus request.</returns>
+    public bool TakeFocusRequest() => m_takeFocusRequest();
 
     /// <summary>
     /// Safely reads the panel window-presentation policy through the active extension boundary.

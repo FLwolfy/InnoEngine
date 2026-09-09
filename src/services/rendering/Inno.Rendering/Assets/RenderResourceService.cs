@@ -331,6 +331,14 @@ public interface IRenderResourceService
     void PrewarmTexture(TextureAsset texture);
 
     /// <summary>
+    /// Queues target conversion for a texture slot owned by any imported asset.
+    /// </summary>
+    /// <param name="texture">
+    /// Stable texture artifact reference to prepare.
+    /// </param>
+    void PrewarmTextureArtifact(RenderTextureArtifactReference texture);
+
+    /// <summary>
     /// Acquires or atomically replaces a provider-owned persistent buffer.
     /// </summary>
     /// <param name="id">
@@ -586,6 +594,22 @@ public interface IRenderResourceService
     /// True when current or last-good texture content is usable.
     /// </returns>
     bool TryResolveTexture(TextureAsset texture, out PersistentTextureHandle resolvedTexture);
+
+    /// <summary>
+    /// Resolves one imported artifact texture into a persistent sampled texture.
+    /// </summary>
+    /// <param name="texture">
+    /// Stable texture artifact reference.
+    /// </param>
+    /// <param name="resolvedTexture">
+    /// Receives a generation-scoped texture handle when successful.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when current or last-good texture content is usable.
+    /// </returns>
+    bool TryResolveTextureArtifact(
+        RenderTextureArtifactReference texture,
+        out PersistentTextureHandle resolvedTexture);
 
     /// <summary>
     /// Releases any cached resource with the specified provider-owned identifier.

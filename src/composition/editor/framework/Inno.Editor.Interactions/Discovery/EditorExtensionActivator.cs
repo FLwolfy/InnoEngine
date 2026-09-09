@@ -81,7 +81,9 @@ internal sealed class EditorExtensionActivator
         foreach (ParameterInfo parameter in constructors[0].GetParameters())
         {
             Type parameterType = parameter.ParameterType;
-            if (parameterType == typeof(EditorContext) || IsInteractionContract(parameterType))
+            if (parameterType == typeof(EditorContext)
+                || IsInteractionContract(parameterType)
+                || parameterType == typeof(IEditorDocumentService))
             {
                 continue;
             }
@@ -155,6 +157,8 @@ internal sealed class EditorExtensionActivator
             return m_context;
         if (IsInteractionContract(parameterType))
             return m_interactions;
+        if (parameterType == typeof(IEditorDocumentService))
+            return m_interactions.documents;
 
         object[] services = m_hostServices
             .Where(parameterType.IsInstanceOfType)

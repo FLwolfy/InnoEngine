@@ -79,6 +79,20 @@ internal sealed class RenderResourceService : RenderResourceProvider, IRenderRes
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(texture);
+        PrewarmTextureArtifact(texture.GetTextureArtifactReference());
+    }
+
+    /// <summary>
+    /// Queues target conversion for one stable texture artifact slot.
+    /// </summary>
+    /// <param name="texture">
+    /// Stable artifact reference to prepare.
+    /// </param>
+    public void PrewarmTextureArtifact(RenderTextureArtifactReference texture)
+    {
+        ThrowIfDisposed();
+        if (texture.assetId == Guid.Empty || string.IsNullOrWhiteSpace(texture.slot.id))
+            throw new ArgumentException("A valid texture artifact reference is required.", nameof(texture));
         if (m_targetArtifacts is null)
             throw new InvalidOperationException("No render target artifact provider is configured for this runtime.");
         _ = m_targetArtifacts.GetTextureArtifact(texture, out _);
@@ -440,19 +454,42 @@ internal sealed class RenderResourceService : RenderResourceProvider, IRenderRes
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(texture);
-        resolvedTexture = default;
         Guid id = texture.identity.persistentId;
         if (id == Guid.Empty)
         {
+            resolvedTexture = default;
             Publish("RENDER_TEXTURE_ID_MISSING", "Texture must have a persistent asset identity.", texture.assetPath.ToString());
             return false;
         }
+        return TryResolveTextureArtifact(texture.GetTextureArtifactReference(), out resolvedTexture);
+    }
 
-        var resourceId = new RenderPersistentResourceId($"asset:{id:D}:texture");
-        bool sRgb = texture.colorSpace == TextureColorSpace.Srgb;
+    /// <summary>
+    /// Resolves one stable texture artifact slot into a generation-scoped sampled texture.
+    /// </summary>
+    /// <param name="texture">
+    /// Stable texture artifact reference.
+    /// </param>
+    /// <param name="resolvedTexture">
+    /// Receives the current or last-good GPU texture when successful.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when current or last-good texture content is usable.
+    /// </returns>
+    public bool TryResolveTextureArtifact(
+        RenderTextureArtifactReference texture,
+        out PersistentTextureHandle resolvedTexture)
+    {
+        ThrowIfDisposed();
+        resolvedTexture = default;
+        if (texture.assetId == Guid.Empty || string.IsNullOrWhiteSpace(texture.slot.id))
+            return false;
+
+        RenderPersistentResourceId resourceId = texture.resourceId;
+        bool sRgb = texture.slot.colorSpace == TextureColorSpace.Srgb;
         if (m_textures.TryGetValue(resourceId, out TextureEntry? current)
             && current.kind == TextureEntryKind.Ktx
-            && current.revision == texture.contentVersion
+            && current.revision == texture.contentRevision
             && current.sRgb == sRgb)
         {
             current.lastUsedFrame = m_frameIndex;
@@ -465,7 +502,7 @@ internal sealed class RenderResourceService : RenderResourceProvider, IRenderRes
             RenderTargetArtifactStatus status = m_targetArtifacts is null
                 ? RenderTargetArtifactStatus.Unavailable
                 : m_targetArtifacts.GetTextureArtifact(texture, out artifact);
-            string sourceId = texture.assetPath.ToString();
+            string sourceId = $"{texture.assetId:D}:{texture.slot.id}";
             if (status != RenderTargetArtifactStatus.Unavailable)
                 m_diagnostics.Resolve("RENDER_TEXTURE_TARGET_UNAVAILABLE", sourceId);
             if (status != RenderTargetArtifactStatus.Ready)
@@ -476,7 +513,7 @@ internal sealed class RenderResourceService : RenderResourceProvider, IRenderRes
                         "RENDER_TEXTURE_TARGET_UNAVAILABLE",
                         m_targetArtifacts is null
                             ? "No render target artifact provider is configured for this runtime."
-                            : $"No deployed target texture artifact exists for '{texture.assetPath}'.",
+                            : $"No deployed target texture artifact exists for '{sourceId}'.",
                         sourceId);
                 }
                 if (m_textures.TryGetValue(resourceId, out TextureEntry? lastGood))
@@ -490,14 +527,14 @@ internal sealed class RenderResourceService : RenderResourceProvider, IRenderRes
             if (artifact.IsEmpty)
             {
                 throw new InvalidOperationException(
-                    $"Target artifact provider returned an empty ready texture for '{texture.assetPath}'.");
+                    $"Target artifact provider returned an empty ready texture for '{sourceId}'.");
             }
             resolvedTexture = AcquireKtxTexture(
                 resourceId,
-                texture.contentVersion,
+                texture.contentRevision,
                 artifact,
                 sRgb,
-                texture.name);
+                sourceId);
             m_diagnostics.Resolve("RENDER_TEXTURE_RESOLVE_FAILED", sourceId);
             return true;
         }
@@ -506,8 +543,8 @@ internal sealed class RenderResourceService : RenderResourceProvider, IRenderRes
         {
             Publish(
                 "RENDER_TEXTURE_RESOLVE_FAILED",
-                $"Texture '{texture.assetPath.ToString()}' kept its last-good GPU resource: {exception.Message}",
-                texture.assetPath.ToString());
+                $"Texture artifact '{texture.assetId:D}:{texture.slot.id}' kept its last-good GPU resource: {exception.Message}",
+                $"{texture.assetId:D}:{texture.slot.id}");
             if (m_textures.TryGetValue(resourceId, out TextureEntry? lastGood))
             {
                 lastGood.lastUsedFrame = m_frameIndex;

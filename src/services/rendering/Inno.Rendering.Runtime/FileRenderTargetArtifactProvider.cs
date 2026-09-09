@@ -110,11 +110,12 @@ public sealed class FileRenderTargetArtifactProvider : IRenderTargetArtifactProv
     /// Thrown when <paramref name="texture"/> is <see langword="null"/>.
     /// </exception>
     public RenderTargetArtifactStatus GetTextureArtifact(
-        TextureAsset texture,
+        RenderTextureArtifactReference texture,
         out ReadOnlyMemory<byte> artifact)
     {
-        ArgumentNullException.ThrowIfNull(texture);
-        string path = Resolve(RenderTargetArtifactPath.GetTexturePath(texture.identity.persistentId));
+        if (texture.assetId == Guid.Empty || string.IsNullOrWhiteSpace(texture.slot.id))
+            throw new ArgumentException("A valid texture artifact reference is required.", nameof(texture));
+        string path = Resolve(RenderTargetArtifactPath.GetTexturePath(texture));
         if (!File.Exists(path))
         {
             artifact = ReadOnlyMemory<byte>.Empty;

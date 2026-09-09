@@ -1156,6 +1156,38 @@ public readonly record struct RenderStencilFaceState
 public sealed class RenderStencilState
 {
     /// <summary>
+    /// Creates the default disabled stencil state.
+    /// </summary>
+    public RenderStencilState()
+    {
+    }
+
+    /// <summary>
+    /// Creates a complete immutable stencil configuration without relying on init-only setters.
+    /// </summary>
+    /// <param name="enabled">Whether stencil testing and updates are active.</param>
+    /// <param name="reference">Eight-bit stencil reference value.</param>
+    /// <param name="readMask">Mask applied while reading stored stencil.</param>
+    /// <param name="writeMask">Mask applied while writing stencil.</param>
+    /// <param name="front">Front-face stencil behavior.</param>
+    /// <param name="back">Back-face stencil behavior.</param>
+    public RenderStencilState(
+        bool enabled,
+        byte reference,
+        byte readMask,
+        byte writeMask,
+        RenderStencilFaceState front,
+        RenderStencilFaceState back)
+    {
+        this.enabled = enabled;
+        this.reference = reference;
+        this.readMask = readMask;
+        this.writeMask = writeMask;
+        this.front = front;
+        this.back = back;
+    }
+
+    /// <summary>
     /// Gets disabled stencil state.
     /// </summary>
     public static RenderStencilState disabled { get; } = new() { enabled = false };
@@ -1204,6 +1236,44 @@ public sealed class RenderStencilState
 /// </summary>
 public sealed class RenderRasterState
 {
+    /// <summary>
+    /// Creates the default opaque raster state.
+    /// </summary>
+    public RenderRasterState()
+    {
+    }
+
+    /// <summary>
+    /// Creates a complete immutable raster configuration without relying on init-only setters.
+    /// </summary>
+    /// <param name="cull">Face culling mode.</param>
+    /// <param name="frontFace">Winding order interpreted as the front face.</param>
+    /// <param name="depthCompare">Depth comparison.</param>
+    /// <param name="depthWrite">Whether accepted fragments update depth.</param>
+    /// <param name="blend">Independent RGB and alpha blending.</param>
+    /// <param name="colorWriteMask">Four-bit RGBA write mask.</param>
+    /// <param name="multisampling">Whether multisample rasterization is enabled.</param>
+    /// <param name="topology">Primitive assembly for subsequent draw commands.</param>
+    public RenderRasterState(
+        RenderCullMode cull,
+        RenderFrontFace frontFace,
+        RenderDepthCompare depthCompare,
+        bool depthWrite,
+        RenderBlendState blend,
+        byte colorWriteMask,
+        bool multisampling,
+        RenderPrimitiveTopology topology)
+    {
+        this.cull = cull;
+        this.frontFace = frontFace;
+        this.depthCompare = depthCompare;
+        this.depthWrite = depthWrite;
+        this.blend = blend;
+        this.colorWriteMask = colorWriteMask;
+        this.multisampling = multisampling;
+        this.topology = topology;
+    }
+
     /// <summary>
     /// Gets the default opaque raster state.
     /// </summary>

@@ -47,25 +47,29 @@ public static class RenderTargetArtifactPath
     /// <summary>
     /// Gets the relative deployment path for one portable texture artifact.
     /// </summary>
-    /// <param name="textureId">
-    /// The persistent texture asset identity.
+    /// <param name="texture">
+    /// Stable texture artifact reference.
     /// </param>
     /// <returns>
     /// A platform-neutral path beneath the runtime content root.
     /// </returns>
     /// <exception cref="ArgumentException">
-    /// Thrown when <paramref name="textureId"/> is empty.
+    /// Thrown when <paramref name="texture"/> is invalid.
     /// </exception>
-    public static string GetTexturePath(Guid textureId)
+    public static string GetTexturePath(RenderTextureArtifactReference texture)
     {
-        if (textureId == Guid.Empty)
-            throw new ArgumentException("A target texture path requires a persistent asset identity.", nameof(textureId));
+        if (texture.assetId == Guid.Empty || string.IsNullOrWhiteSpace(texture.slot.id))
+            throw new ArgumentException("A target texture path requires a valid artifact reference.", nameof(texture));
         return Path.Combine(
             "TargetArtifacts",
             "Textures",
-            textureId.ToString("D", CultureInfo.InvariantCulture) + ".ktx");
+            texture.assetId.ToString("D", CultureInfo.InvariantCulture),
+            HashSlot(texture.slot.id) + ".ktx");
     }
 
     private static string HashVariant(string value)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+
+    private static string HashSlot(string value)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 }

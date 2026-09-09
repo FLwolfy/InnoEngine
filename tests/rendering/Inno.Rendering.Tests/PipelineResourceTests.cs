@@ -183,6 +183,47 @@ public sealed class PipelineResourceTests
     }
 
     [Fact]
+    public void FixedFunctionStateConstructorsPreserveCompleteImmutableConfiguration()
+    {
+        var face = new RenderStencilFaceState(
+            RenderStencilCompare.NotEqual,
+            RenderStencilOperation.Zero,
+            RenderStencilOperation.IncrementWrap,
+            RenderStencilOperation.Replace);
+        var stencil = new RenderStencilState(
+            true,
+            7,
+            0x7f,
+            0x3f,
+            face,
+            face);
+        var raster = new RenderRasterState(
+            RenderCullMode.Front,
+            RenderFrontFace.Clockwise,
+            RenderDepthCompare.GreaterEqual,
+            false,
+            RenderBlendState.premultiplied,
+            0x07,
+            false,
+            RenderPrimitiveTopology.LineList);
+
+        Assert.True(stencil.enabled);
+        Assert.Equal((byte)7, stencil.reference);
+        Assert.Equal((byte)0x7f, stencil.readMask);
+        Assert.Equal((byte)0x3f, stencil.writeMask);
+        Assert.Equal(RenderStencilCompare.NotEqual, stencil.front.compare);
+        Assert.Equal(RenderStencilOperation.Replace, stencil.back.pass);
+        Assert.Equal(RenderCullMode.Front, raster.cull);
+        Assert.Equal(RenderFrontFace.Clockwise, raster.frontFace);
+        Assert.Equal(RenderDepthCompare.GreaterEqual, raster.depthCompare);
+        Assert.False(raster.depthWrite);
+        Assert.Equal(RenderBlendState.premultiplied, raster.blend);
+        Assert.Equal((byte)0x07, raster.colorWriteMask);
+        Assert.False(raster.multisampling);
+        Assert.Equal(RenderPrimitiveTopology.LineList, raster.topology);
+    }
+
+    [Fact]
     public void ShaderBinding_RejectsDefaultIdentifier()
     {
         Assert.Throws<ArgumentException>(() => new RenderShaderBindingDescriptor(

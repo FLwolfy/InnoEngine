@@ -35,6 +35,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\composition\editor\framework\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" />
     <ProjectReference Include="..\..\..\src\composition\editor\framework\Inno.Editor.Core\Inno.Editor.Core.csproj" />
+    <ProjectReference Include="..\..\..\src\composition\editor\presentation\Inno.Editor.ImGui\Inno.Editor.ImGui.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

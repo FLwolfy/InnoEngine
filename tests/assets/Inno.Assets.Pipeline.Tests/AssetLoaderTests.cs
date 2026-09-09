@@ -36,7 +36,9 @@ public sealed class AssetLoaderTests : IDisposable
     public AssetLoaderTests()
     {
         _ = typeof(PrivateConstructorAssetImporter);
+        _ = typeof(DeferredAssetImporter);
         _ = typeof(TestBuildProcessor);
+        DeferredAssetImporter.isAvailable = true;
         m_identityScope = m_identities.EnterScope();
         m_diagnosticScope = m_diagnostics.EnterScope();
         m_modules = new ModuleHost(new ModuleHostOptions
@@ -1159,6 +1161,73 @@ public sealed class AssetLoaderTests : IDisposable
     }
 
     [Fact]
+    public void CatalogRestart_DoesNotPromoteHistoricalTombstonesToMissingReferences()
+    {
+        using TestWorkspace workspace = new();
+        workspace.WriteText("Text/removed.txt", "one");
+        Guid removedId;
+        using (AssetLoader loader = workspace.CreateLoader(
+            m_types, m_serialization, m_identities, m_diagnostics, m_logs))
+        {
+            loader.Rescan();
+            Assert.True(loader.TryGetPersistentId(AssetPath.Project("Text/removed.txt"), out removedId));
+            workspace.DeleteSource("Text/removed.txt");
+            loader.ApplySourceChanges([
+                new Inno.Assets.Pipeline.AssetChangedEvent(
+                    "Text/removed.txt", WatcherChangeTypes.Deleted)
+            ]);
+        }
+
+        var sink = new TestDiagnosticSink();
+        m_diagnostics.RegisterSink(sink);
+        try
+        {
+            using var restarted = new AssetPipeline(
+                m_modules,
+                m_types,
+                m_serialization,
+                m_identities,
+                m_diagnostics,
+                m_logs,
+                new AssetPipelineOptions
+                {
+                    assetRoot = workspace.assetRoot,
+                    libraryRoot = workspace.libraryRoot,
+                    enableFileSystemWatcher = false
+                });
+
+            Assert.True(restarted.TryGetInfo(removedId, out AssetInfo? tombstone));
+            Assert.Equal(AssetImportStatus.Missing, tombstone!.status);
+
+            using AssetSourceMountTransaction generation =
+                restarted.PrepareSourceMounts(restarted.sourceMounts);
+            generation.Activate();
+
+            Assert.Empty(generation.recoveryChanges);
+            Assert.DoesNotContain(
+                sink.reports.Values.SelectMany(static report => report.diagnostics),
+                static diagnostic => diagnostic.code == "ASSET-REFERENCE");
+
+            generation.Complete();
+
+            AssetObject explicitlyResolved = ((IAssetReferenceResolver)restarted).Resolve(
+                removedId,
+                tombstone.stableAssetTypeId,
+                "Text/removed.txt",
+                typeof(TextAsset),
+                "$test.reference");
+            Assert.True(explicitlyResolved.isMissing);
+            Assert.Contains(
+                sink.reports.Values.SelectMany(static report => report.diagnostics),
+                static diagnostic => diagnostic.code == "ASSET-REFERENCE");
+        }
+        finally
+        {
+            m_diagnostics.UnregisterSink(sink);
+        }
+    }
+
+    [Fact]
     public void RestoredSourceAndMetadata_ReactivatesOriginalIdentityInPlace()
     {
         using TestWorkspace workspace = new();
@@ -1420,6 +1489,121 @@ public sealed class AssetLoaderTests : IDisposable
     }
 
     [Fact]
+    public void Rescan_RecoversAnonymousCatalogEntryFromSourceIdentityWithoutFalseMissingWarning()
+    {
+        using TestWorkspace workspace = new();
+        const string path = "Deferred/value.unavailable";
+        workspace.WriteText(path, "source awaiting its module generation");
+        using (AssetLoader first = workspace.CreateLoader(
+                   m_types, m_serialization, m_identities, m_diagnostics, m_logs))
+        {
+            first.Rescan();
+            Assert.True(first.TryGetInfo(AssetPath.Project(path), out AssetInfo? unsupported));
+            Assert.Equal(Guid.Empty, unsupported!.persistentId);
+        }
+
+        Guid persistentId = Guid.NewGuid();
+        Guid expectedStableTypeId = Guid.NewGuid();
+        System.IO.File.WriteAllBytes(
+            workspace.SourcePath(path + ".imeta"),
+            m_serialization.Serialize(new MountedSourceMetadata
+            {
+                persistentId = persistentId,
+                sourceKind = (int)AssetSourceKind.File,
+                importerId = "tests.unavailable-generation"
+            }));
+        var sink = new TestDiagnosticSink();
+        m_diagnostics.RegisterSink(sink);
+        try
+        {
+            using (AssetLoader recovered = workspace.CreateLoader(
+                       m_types, m_serialization, m_identities, m_diagnostics, m_logs))
+            {
+                recovered.Rescan();
+                Assert.True(recovered.TryGetInfo(persistentId, out AssetInfo? pending));
+                Assert.Equal(path, pending!.assetPath.ToString());
+                Assert.Equal("tests.unavailable-generation", pending.importerId);
+                Assert.Equal(AssetImportStatus.Pending, pending.status);
+
+                AssetObject placeholder = recovered.ResolveReference(
+                    persistentId,
+                    expectedStableTypeId,
+                    path,
+                    typeof(AssetObject));
+                Assert.True(placeholder.isMissing);
+                Assert.DoesNotContain(
+                    sink.reports.Values.SelectMany(static report => report.diagnostics),
+                    static diagnostic => diagnostic.code == "ASSET-REFERENCE");
+            }
+
+            using AssetLoader restarted = workspace.CreateLoader(
+                m_types, m_serialization, m_identities, m_diagnostics, m_logs);
+            restarted.Rescan();
+            Assert.True(restarted.TryGetInfo(persistentId, out AssetInfo? retained));
+            Assert.Equal("tests.unavailable-generation", retained!.importerId);
+        }
+        finally
+        {
+            m_diagnostics.UnregisterSink(sink);
+        }
+    }
+
+    [Fact]
+    public void Rescan_PreservesLastGoodCatalogWhileItsPathImporterIsUnavailable()
+    {
+        using TestWorkspace workspace = new();
+        const string path = "Deferred/value.deferredasset";
+        workspace.WriteText(path, "last-good source");
+        Guid persistentId;
+        Guid stableTypeId;
+        AssetArtifactKey artifactKey;
+        using (AssetLoader first = workspace.CreateLoader(
+                   m_types, m_serialization, m_identities, m_diagnostics, m_logs))
+        {
+            first.Rescan();
+            Assert.True(first.TryGetInfo(AssetPath.Project(path), out AssetInfo? imported));
+            persistentId = imported!.persistentId;
+            stableTypeId = imported.stableAssetTypeId;
+            artifactKey = imported.artifactKey;
+            Assert.False(artifactKey.isEmpty);
+        }
+
+        var sink = new TestDiagnosticSink();
+        m_diagnostics.RegisterSink(sink);
+        DeferredAssetImporter.isAvailable = false;
+        m_modules.Rebuild();
+        try
+        {
+            using (AssetLoader restarted = workspace.CreateLoader(
+                       m_types, m_serialization, m_identities, m_diagnostics, m_logs))
+            {
+                restarted.Rescan();
+
+                Assert.True(restarted.TryGetInfo(AssetPath.Project(path), out AssetInfo? preserved));
+                Assert.Equal(persistentId, preserved!.persistentId);
+                Assert.Equal(stableTypeId, preserved.stableAssetTypeId);
+                Assert.Equal(AssetImportStatus.Imported, preserved.status);
+                Assert.Equal(artifactKey, preserved.artifactKey);
+                AssetObject resolved = restarted.ResolveReference(
+                    persistentId,
+                    stableTypeId,
+                    path,
+                    typeof(AssetObject));
+                Assert.False(resolved.isMissing);
+                Assert.DoesNotContain(
+                    sink.reports.Values.SelectMany(static report => report.diagnostics),
+                    static diagnostic => diagnostic.code == "ASSET-REFERENCE");
+            }
+        }
+        finally
+        {
+            DeferredAssetImporter.isAvailable = true;
+            m_modules.Rebuild();
+            m_diagnostics.UnregisterSink(sink);
+        }
+    }
+
+    [Fact]
     public void SourceMetadata_RestoresPersistentIdentityWhenLibraryIsRebuilt()
     {
         using TestWorkspace workspace = new();
@@ -1602,6 +1786,31 @@ internal sealed class PrivateConstructorAssetImporter : AssetImporter<PrivateCon
         CancellationToken cancellationToken)
     {
         output.SetAsset(new PrivateConstructorAsset { value = context.ReadUtf8Text() });
+        return output.WriteArtifactAsync("runtime", context.sourceBytes, cancellationToken);
+    }
+}
+
+[StableTypeId("8d0d31ab-f9ea-4297-b865-e9014ae82a94")]
+internal sealed class DeferredAsset : AssetObject;
+
+[AssetImporterExtension]
+internal sealed class DeferredAssetImporter : AssetImporter<DeferredAsset>
+{
+    private static readonly IReadOnlyList<string> s_extensions = [".deferredasset"];
+
+    internal static bool isAvailable { get; set; } = true;
+
+    public override string importerId => "inno.tests.deferred";
+
+    public override IReadOnlyList<string> supportedExtensions
+        => isAvailable ? s_extensions : Array.Empty<string>();
+
+    protected override ValueTask ImportAsync(
+        AssetImportContext context,
+        AssetImportWriter<DeferredAsset> output,
+        CancellationToken cancellationToken)
+    {
+        output.SetAsset(new DeferredAsset());
         return output.WriteArtifactAsync("runtime", context.sourceBytes, cancellationToken);
     }
 }

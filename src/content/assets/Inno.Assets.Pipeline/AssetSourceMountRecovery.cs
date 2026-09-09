@@ -34,7 +34,9 @@ internal sealed class AssetSourceMountRecovery(AssetPipeline owner, AssetSourceM
                 throw new InvalidDataException(result.diagnostic ?? "Asset recovery has an invalid identity.");
             if (result.state == ReferenceResolutionState.Missing &&
                 transaction.candidateLoader.TryGetInfo(result.descriptor.targetPersistentId, out AssetInfo? info) &&
-                info!.status == AssetImportStatus.Imported)
+                info!.status == AssetImportStatus.Imported &&
+                !transaction.candidateLoader.IsSourceBackedTypeUnavailable(
+                    result.descriptor.targetPersistentId))
                 throw new InvalidDataException($"Imported asset '{info.assetPath}' could not recover its canonical state: {result.diagnostic}");
         }
     }

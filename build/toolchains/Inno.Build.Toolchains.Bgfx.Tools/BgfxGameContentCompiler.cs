@@ -156,14 +156,20 @@ public sealed class BgfxGameContentCompiler
         foreach (TextureInput texture in snapshot.textures)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            byte[] bytes = await textureCompiler.CompileKtxAsync(
-                    texture.sourcePath,
-                    texture.asset.colorSpace,
-                    cancellationToken)
-                .ConfigureAwait(false);
+            byte[] bytes;
+            using (ArtifactLease source = m_assets.AcquireArtifact(
+                texture.reference.assetId,
+                texture.reference.slot.sourceOutputName))
+            {
+                bytes = await textureCompiler.CompileKtxAsync(
+                        source.info.absolutePath,
+                        texture.reference.slot.colorSpace,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
             string destination = ResolveOutput(
                 outputRoot,
-                RenderTargetArtifactPath.GetTexturePath(texture.asset.identity.persistentId));
+                RenderTargetArtifactPath.GetTexturePath(texture.reference));
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             await File.WriteAllBytesAsync(destination, bytes, cancellationToken).ConfigureAwait(false);
         }
@@ -176,7 +182,7 @@ public sealed class BgfxGameContentCompiler
         Dictionary<AssetSourceId, AssetSourceMount> mounts = m_assets.sourceMounts.ToDictionary(
             static mount => mount.id);
         var shaders = new Dictionary<Guid, ShaderInput>();
-        var textures = new Dictionary<Guid, TextureInput>();
+        var textures = new Dictionary<TextureArtifactKey, TextureInput>();
         var materialVariants = new List<(ShaderAsset shader, RenderShaderVariant variant)>();
         AssetFileEntry[] entries = m_assets.GetFileSystemEntries(includeDirectories: false)
             .OrderBy(static entry => entry.assetPath.ToString(), StringComparer.Ordinal)
@@ -196,19 +202,45 @@ public sealed class BgfxGameContentCompiler
                 ShaderAsset shader = m_assets.Load<ShaderAsset>(entry.assetPath);
                 AddShader(shaders, mounts, shader, RenderShaderVariant.empty);
             }
-            if (typeof(TextureAsset).IsAssignableFrom(assetType))
+            if (typeof(IRenderTextureArtifactSource).IsAssignableFrom(assetType))
             {
-                TextureAsset texture = m_assets.Load<TextureAsset>(entry.assetPath);
-                Guid id = RequireIdentity(texture);
-                AssetSourceMount mount = GetMount(mounts, texture.assetPath);
-                textures.TryAdd(id, new TextureInput(texture, mount.Resolve(texture.assetPath.localPath)));
+                AssetObject asset = m_assets.Load(entry.assetPath, assetType);
+                AddTextures(textures, asset);
             }
         }
         foreach ((ShaderAsset shader, RenderShaderVariant variant) in materialVariants)
             AddShader(shaders, mounts, shader, variant);
         return new ContentSnapshot(
             shaders.Values.OrderBy(static value => value.asset.identity.persistentId).ToArray(),
-            textures.Values.OrderBy(static value => value.asset.identity.persistentId).ToArray());
+            textures.Values
+                .OrderBy(static value => value.reference.assetId)
+                .ThenBy(static value => value.reference.slot.id, StringComparer.Ordinal)
+                .ToArray());
+    }
+
+    private static void AddTextures(
+        IDictionary<TextureArtifactKey, TextureInput> textures,
+        AssetObject asset)
+    {
+        if (asset is not IRenderTextureArtifactSource source)
+            return;
+        Guid id = RequireIdentity(asset);
+        var slots = new HashSet<string>(StringComparer.Ordinal);
+        foreach (RenderTextureArtifactSlot slot in source.textureArtifacts)
+        {
+            if (string.IsNullOrWhiteSpace(slot.id) || string.IsNullOrWhiteSpace(slot.sourceOutputName))
+            {
+                throw new InvalidOperationException(
+                    $"Texture source asset '{asset.assetPath}' declares an invalid artifact slot.");
+            }
+            if (!slots.Add(slot.id))
+            {
+                throw new InvalidOperationException(
+                    $"Texture source asset '{asset.assetPath}' declares duplicate slot '{slot.id}'.");
+            }
+            var reference = new RenderTextureArtifactReference(id, asset.contentVersion, slot);
+            textures.Add(new TextureArtifactKey(id, slot.id), new TextureInput(reference));
+        }
     }
 
     private static void AddShader(
@@ -288,5 +320,7 @@ public sealed class BgfxGameContentCompiler
         internal HashSet<RenderShaderVariant> variants { get; } = [];
     }
 
-    private sealed record TextureInput(TextureAsset asset, string sourcePath);
+    private readonly record struct TextureArtifactKey(Guid assetId, string slotId);
+
+    private sealed record TextureInput(RenderTextureArtifactReference reference);
 }

@@ -21,3 +21,5 @@ using Inno.Editor.Rendering;
 [assembly: ScriptingApiExport(typeof(EditorViewportPointerContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorViewportContribution), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorViewportContributor), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorPreviewHandle), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(IEditorPreviewService), ScriptingApiScope.Editor)]

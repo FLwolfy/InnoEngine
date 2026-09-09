@@ -140,21 +140,22 @@ public sealed class EditorRenderTargetArtifactProvider : IRenderTargetArtifactPr
     /// Thrown when <paramref name="texture"/> is <see langword="null"/>.
     /// </exception>
     public RenderTargetArtifactStatus GetTextureArtifact(
-        TextureAsset texture,
+        RenderTextureArtifactReference texture,
         out ReadOnlyMemory<byte> artifact)
     {
-        ArgumentNullException.ThrowIfNull(texture);
+        if (texture.assetId == Guid.Empty || string.IsNullOrWhiteSpace(texture.slot.id))
+            throw new ArgumentException("A valid texture artifact reference is required.", nameof(texture));
         lock (m_sync)
         {
             EnsureActive();
-            var key = new TextureKey(texture.identity.persistentId, texture.colorSpace);
+            var key = new TextureKey(texture.assetId, texture.slot.id, texture.slot.colorSpace);
             if (!m_textures.TryGetValue(key, out TextureEntry? entry))
             {
                 entry = new TextureEntry();
                 m_textures.Add(key, entry);
             }
             CompleteTexture(key, entry);
-            if (entry.attemptedContentVersion != texture.contentVersion)
+            if (entry.attemptedContentVersion != texture.contentRevision)
                 StartTexture(texture, entry);
             artifact = entry.artifact ?? ReadOnlyMemory<byte>.Empty;
             return !artifact.IsEmpty
@@ -280,24 +281,30 @@ public sealed class EditorRenderTargetArtifactProvider : IRenderTargetArtifactPr
         ReplaceDiagnostics(entry.diagnostics, diagnostics);
     }
 
-    private void StartTexture(TextureAsset texture, TextureEntry entry)
+    private void StartTexture(RenderTextureArtifactReference texture, TextureEntry entry)
     {
         Retire(entry.pending, entry.cancellation);
         entry.pending = null;
         entry.cancellation = CancellationTokenSource.CreateLinkedTokenSource(m_lifetime.Token);
-        entry.attemptedContentVersion = texture.contentVersion;
+        entry.attemptedContentVersion = texture.contentRevision;
         entry.status = entry.artifact is null
             ? RenderTargetArtifactStatus.Pending
             : RenderTargetArtifactStatus.Ready;
         try
         {
-            string sourcePath = GetMount(texture.assetPath.source).Resolve(texture.assetPath.localPath);
+            ArtifactLease lease = m_assets.AcquireArtifact(texture.assetId, texture.slot.sourceOutputName);
             CancellationToken token = entry.cancellation.Token;
             entry.pending = Task.Run(
-                async () => await m_textureCompiler.CompileKtxAsync(
-                    sourcePath,
-                    texture.colorSpace,
-                    token).ConfigureAwait(false),
+                async () =>
+                {
+                    using (lease)
+                    {
+                        return await m_textureCompiler.CompileKtxAsync(
+                            lease.info.absolutePath,
+                            texture.slot.colorSpace,
+                            token).ConfigureAwait(false);
+                    }
+                },
                 token);
         }
         catch (Exception exception)
@@ -387,7 +394,10 @@ public sealed class EditorRenderTargetArtifactProvider : IRenderTargetArtifactPr
         => ObjectDisposedException.ThrowIf(m_disposed, this);
 
     private readonly record struct ShaderKey(Guid shaderId, string targetKey, string variantKey);
-    private readonly record struct TextureKey(Guid textureId, TextureColorSpace colorSpace);
+    private readonly record struct TextureKey(
+        Guid textureId,
+        string slotId,
+        TextureColorSpace colorSpace);
     private readonly record struct DiagnosticIdentity(string code, string? semanticId);
 
     private sealed class ShaderEntry

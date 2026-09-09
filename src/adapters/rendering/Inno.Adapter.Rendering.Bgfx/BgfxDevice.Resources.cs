@@ -17,6 +17,8 @@ public sealed unsafe partial class BgfxDevice
     private readonly Dictionary<ulong, BgfxPipelineResource> m_computePipelines = [];
     private readonly Dictionary<int, BgfxBufferResource> m_graphBuffers = [];
     private readonly Dictionary<int, BgfxBufferResource> m_transientBufferSlots = [];
+    private readonly List<PooledTransientBuffer> m_transientBufferPool = [];
+    private int m_transientBufferAllocationCount;
 
     /// <summary>
     /// Creates a buffer using this implementation's validated inputs.
@@ -322,8 +324,13 @@ public sealed unsafe partial class BgfxDevice
 
                 if (!m_transientBufferSlots.TryGetValue(buffer.physicalSlot, out resource!))
                 {
-                    resource = CreateTransientBuffer(buffer.descriptor);
+                    resource = AcquireTransientBuffer(buffer.descriptor, buffer.physicalSlot);
                     m_transientBufferSlots.Add(buffer.physicalSlot, resource);
+                }
+                else if (!resource.descriptor.Equals(buffer.descriptor))
+                {
+                    throw new InvalidOperationException(
+                        $"Render-graph physical buffer slot {buffer.physicalSlot} aliases incompatible descriptors.");
                 }
             }
 
@@ -468,6 +475,35 @@ public sealed unsafe partial class BgfxDevice
             BufferFlags(descriptor, RenderIndexFormat.UInt32));
         EnsureValid(vertex.Valid, "transient vertex or storage buffer");
         return BgfxBufferResource.FromDynamicVertex(descriptor, null, vertex);
+    }
+
+    private BgfxBufferResource AcquireTransientBuffer(
+        RenderBufferDescriptor descriptor,
+        int physicalSlot)
+    {
+        for (int index = m_transientBufferPool.Count - 1; index >= 0; index--)
+        {
+            PooledTransientBuffer pooled = m_transientBufferPool[index];
+            if (pooled.physicalSlot != physicalSlot
+                || !pooled.resource.descriptor.Equals(descriptor))
+            {
+                continue;
+            }
+            m_transientBufferPool.RemoveAt(index);
+            return pooled.resource;
+        }
+
+        for (int index = m_transientBufferPool.Count - 1; index >= 0; index--)
+        {
+            PooledTransientBuffer pooled = m_transientBufferPool[index];
+            if (!pooled.resource.descriptor.Equals(descriptor))
+                continue;
+            m_transientBufferPool.RemoveAt(index);
+            return pooled.resource;
+        }
+
+        m_transientBufferAllocationCount++;
+        return CreateTransientBuffer(descriptor);
     }
 
     private BgfxPipelineResource CreateGraphicsPipelineResource(

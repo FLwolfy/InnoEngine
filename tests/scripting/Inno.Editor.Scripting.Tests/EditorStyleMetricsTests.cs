@@ -23,12 +23,13 @@ public sealed class EditorStyleMetricsTests
 
         Assert.True(metrics.SetZoom(1.5f));
         Assert.Equal(1.5f, metrics.zoom, 3);
-        Assert.Equal(9f, metrics.windowPadding.X, 3);
+        Assert.Equal(12f, metrics.windowPadding.X, 3);
+        Assert.Equal(10.5f, metrics.windowPadding.Y, 3);
         Assert.Equal(3f, metrics.frameRounding, 3);
-        Assert.Equal(1.875f, metrics.fontScale, 3);
+        Assert.Equal(1.8f, metrics.fontScale, 3);
         Assert.Equal(0.4f, metrics.propertyLabelRatio, 3);
         Assert.Equal(3f, metrics.assetGridDefaultScale, 3);
-        Assert.Equal(new Vector2(4.5f, 3f), metrics.cellPadding);
+        Assert.Equal(new Vector2(7.5f, 4.5f), metrics.cellPadding);
     }
 
     [Fact]

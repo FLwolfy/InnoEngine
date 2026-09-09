@@ -16,6 +16,7 @@ using Inno.Core.Serialization;
 using Inno.Core.Settings;
 using Inno.Extensibility.Types;
 using Inno.Editor.Core;
+using Inno.Editor.ImGui;
 using Inno.Editor.Interactions;
 using Inno.Editor.Settings;
 using Xunit;
@@ -116,6 +117,22 @@ public sealed class EditorRuntimeTests : IDisposable
     }
 
     [Fact]
+    public void EditorDensityDefaultsToComfortableAndCanSwitchIdempotently()
+    {
+        var style = new EditorStyleMetrics();
+        float comfortablePadding = style.framePadding.Y;
+
+        Assert.False(style.isCompact);
+        Assert.True(style.SetCompactMode(true));
+        Assert.True(style.isCompact);
+        Assert.True(style.framePadding.Y < comfortablePadding);
+        Assert.False(style.SetCompactMode(true));
+        Assert.True(style.SetCompactMode(false));
+        Assert.False(style.isCompact);
+        Assert.Equal(comfortablePadding, style.framePadding.Y);
+    }
+
+    [Fact]
     public void InteractionRuntimeInjectsOneStableAssignableHostService()
     {
         var service = new TestHostService();
@@ -159,6 +176,128 @@ public sealed class EditorRuntimeTests : IDisposable
         Assert.Equal(typeof(string), forMethod.GetParameters()[0].ParameterType);
         Assert.Throws<ArgumentException>(() => m_runtime.interactions.For(string.Empty));
         Assert.Throws<ArgumentException>(() => m_runtime.interactions.TogglePanel(" "));
+        Assert.Throws<ArgumentException>(() => m_runtime.interactions.OpenPanel(" "));
+        Assert.Throws<ArgumentException>(() => m_runtime.interactions.ClosePanel(" "));
+    }
+
+    [Fact]
+    public void PanelOpenAndCloseOperationsAreIdempotentAndRequestFocus()
+    {
+        EditorPanelExtension panel = Assert.Single(
+            m_runtime.panels.Where(static candidate => candidate.id == "tests.panel"));
+        Assert.False(panel.isOpen);
+
+        Assert.True(m_runtime.interactions.OpenPanel("tests.panel"));
+        Assert.True(m_runtime.interactions.OpenPanel("tests.panel"));
+        Assert.True(panel.isOpen);
+        Assert.True(panel.TakeFocusRequest());
+        Assert.False(panel.TakeFocusRequest());
+
+        Assert.True(m_runtime.interactions.ClosePanel("tests.panel"));
+        Assert.True(m_runtime.interactions.ClosePanel("tests.panel"));
+        Assert.False(panel.isOpen);
+        Assert.False(panel.TakeFocusRequest());
+        Assert.False(m_runtime.interactions.OpenPanel("tests.missing-panel"));
+    }
+
+    [Fact]
+    public void DocumentHostOpensOneInstanceAndRequiresExplicitDirtyCloseDecision()
+    {
+        IEditorDocumentService documents = m_runtime.interactions.documents;
+        var provider = new TestDocumentProvider();
+        using IDisposable lease = documents.RegisterProvider(provider);
+        Guid assetId = Guid.NewGuid();
+
+        EditorDocumentContext opened = documents.Open("./Assets/Hero.ispriteatlas2d", assetId);
+        EditorDocumentContext focused = documents.Open("Assets/OtherName.ispriteatlas2d", assetId);
+        documents.MarkDirty(opened.documentId);
+
+        Assert.Same(opened, focused);
+        Assert.Same(opened, documents.activeDocument);
+        Assert.True(opened.isDirty);
+        Assert.False(documents.Close(opened.documentId, EditorDocumentCloseMode.Cancel));
+        Assert.Single(documents.documents);
+        Assert.True(documents.Close(opened.documentId, EditorDocumentCloseMode.Save));
+        Assert.Empty(documents.documents);
+        Assert.Equal(1, provider.saveCount);
+        Assert.Equal(1, provider.closeCount);
+    }
+
+    [Fact]
+    public void DocumentStateSurvivesProviderGenerationReplacement()
+    {
+        IEditorDocumentService documents = m_runtime.interactions.documents;
+        var firstProvider = new TestDocumentProvider();
+        IDisposable firstLease = documents.RegisterProvider(firstProvider);
+        EditorDocumentContext opened = documents.Open("Assets/World.itilemap2d", Guid.NewGuid());
+        opened.activeTool = "tilemap/brush";
+        opened.SetViewParameter("zoom", "2.5");
+        documents.MarkDirty(opened.documentId);
+        IReadOnlyList<EditorDocumentState> state = documents.CaptureState();
+
+        firstLease.Dispose();
+
+        Assert.False(opened.isProviderAvailable);
+        Assert.False(documents.DrawActive());
+        Assert.False(documents.Save(opened.documentId));
+
+        var replacement = new TestDocumentProvider();
+        using IDisposable replacementLease = documents.RegisterProvider(replacement);
+
+        Assert.True(opened.isProviderAvailable);
+        Assert.Equal(1, replacement.openCount);
+        Assert.True(documents.DrawActive());
+        Assert.Equal(1, replacement.drawCount);
+        Assert.True(documents.Close(opened.documentId, EditorDocumentCloseMode.Discard));
+
+        documents.RestoreState(state, opened.documentId);
+
+        EditorDocumentContext restored = Assert.Single(documents.documents);
+        Assert.Equal(opened.documentId, restored.documentId);
+        Assert.Equal("tilemap/brush", restored.activeTool);
+        Assert.True(restored.TryGetViewParameter("zoom", out string zoom));
+        Assert.Equal("2.5", zoom);
+        Assert.Same(restored, documents.activeDocument);
+    }
+
+    [Fact]
+    public void ViewportToolCapturesOnePointerAndCommitsOneGestureTransaction()
+    {
+        IEditorHistory history = m_runtime.interactions.history;
+        var coordinates = new TestViewportCoordinates();
+        var tool = new TestViewportTool(history);
+        using var session = new EditorViewportToolSession(history, coordinates);
+        session.SetTool(tool);
+        var down = new EditorViewportPointerEvent(
+            7,
+            EditorViewportPointerPhase.Down,
+            new Inno.Core.Mathematics.Vector2(2f, 3f),
+            coordinates.ScreenToWorld(new Inno.Core.Mathematics.Vector2(2f, 3f)),
+            0,
+            KeyModifier.None);
+
+        Assert.True(session.HandlePointer(down));
+        Assert.False(session.HandlePointer(new EditorViewportPointerEvent(
+            8,
+            EditorViewportPointerPhase.Move,
+            default,
+            default,
+            0,
+            KeyModifier.None)));
+        Assert.True(session.HandlePointer(new EditorViewportPointerEvent(
+            7,
+            EditorViewportPointerPhase.Up,
+            down.screenPosition,
+            down.worldPosition,
+            0,
+            KeyModifier.None)));
+
+        Assert.Equal(1, tool.downCount);
+        Assert.Equal(1, tool.upCount);
+        Assert.True(history.canUndo);
+        Assert.Equal("Paint Tile", history.undoName);
+        Assert.True(history.Undo().succeeded);
+        Assert.Equal(0, NeutralHistoryHandler.value);
     }
 
     [Fact]
@@ -1242,5 +1381,72 @@ public sealed class TestDrop : EditorDrop<DragSource, DropTarget>
     {
         context.target.wasDropped = true;
         return EditorDropResult.Accepted();
+    }
+}
+
+public sealed class TestDocumentProvider : EditorDocumentProvider
+{
+    public int openCount { get; private set; }
+    public int drawCount { get; private set; }
+    public int saveCount { get; private set; }
+    public int closeCount { get; private set; }
+
+    public override string id => "tests.documents";
+
+    public override bool CanOpen(string assetPath)
+        => assetPath.EndsWith(".ispriteatlas2d", StringComparison.Ordinal)
+           || assetPath.EndsWith(".itilemap2d", StringComparison.Ordinal);
+
+    public override void Open(EditorDocumentContext context) => openCount++;
+
+    public override void Draw(EditorDocumentContext context) => drawCount++;
+
+    public override bool Save(EditorDocumentContext context)
+    {
+        saveCount++;
+        return true;
+    }
+
+    public override void Close(EditorDocumentContext context) => closeCount++;
+}
+
+public sealed class TestViewportCoordinates : IEditorViewportCoordinateConverter
+{
+    public Inno.Core.Mathematics.Vector2 ScreenToWorld(Inno.Core.Mathematics.Vector2 screenPosition)
+        => screenPosition * 2f;
+
+    public Inno.Core.Mathematics.Vector2 WorldToScreen(Inno.Core.Mathematics.Vector2 worldPosition)
+        => worldPosition / 2f;
+}
+
+public sealed class TestViewportTool(IEditorHistory history) : EditorViewportTool
+{
+    public int downCount { get; private set; }
+    public int upCount { get; private set; }
+
+    public override string id => "tests.viewport.paint";
+
+    public override EditorViewportCursor cursor => EditorViewportCursor.Crosshair;
+
+    public override void OnPointerDown(
+        EditorViewportToolContext context,
+        EditorViewportPointerEvent pointer)
+    {
+        downCount++;
+        context.CapturePointer(pointer.pointerId);
+        context.BeginHistoryGesture("Paint Tile");
+        NeutralHistoryHandler.value = 1;
+        history.RecordApplied(
+            "Paint Tile Cell",
+            NeutralHistoryHandler.CreateChange(before: 0, after: 1));
+    }
+
+    public override void OnPointerUp(
+        EditorViewportToolContext context,
+        EditorViewportPointerEvent pointer)
+    {
+        upCount++;
+        context.CompleteHistoryGesture(commit: true);
+        context.ReleasePointer();
     }
 }
