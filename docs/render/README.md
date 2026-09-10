@@ -13,6 +13,6 @@ Rendering Core 是后端中立机制，不内建 2D/3D/PBR/Forward/Deferred/Came
 | [Inno.Adapter.Rendering.Authoring](Inno.Adapter.Rendering.Authoring.md) | Authoring-only shader/texture compiler factory contract |
 | [Inno.Adapter.Rendering.Bgfx](Inno.Adapter.Rendering.Bgfx.md) | 唯一 BGFX device adapter |
 | [Inno.Adapter.Presentation.ImGui.Bgfx](Inno.Adapter.Presentation.ImGui.Bgfx.md) | BGFX/ImGui GPU 合成 implementation |
-| [Inno.Rendering.ShaderGraph](Inno.Rendering.ShaderGraph.md) | Graph 前端、节点 registry 与共享 Shader IR 输出 |
+| [Inno.Rendering.MaterialGraph](Inno.Rendering.MaterialGraph.md) | 普通 Material 的强类型节点映射与确定性求值 |
 
-手写 Shader 与 ShaderGraph 进入同一 IR、验证、目标编译、反射和 last-good 链。只有 BGFX adapter 和对应 toolchain 可以引用 BGFX Native。
+Shader 进入唯一的 IR、验证、目标编译、反射和 last-good 链；MaterialGraph 只映射反射出的材质值，不生成 Shader。只有 BGFX adapter 和对应 toolchain 可以引用 BGFX Native。

@@ -147,7 +147,7 @@ internal static class ScriptApiCatalog
     }
 
     private static bool Includes(ScriptingApiScope scope, bool includeEditor)
-        => scope == ScriptingApiScope.Runtime || includeEditor && scope == ScriptingApiScope.Editor;
+        => scope is ScriptingApiScope.Runtime or ScriptingApiScope.Authoring || includeEditor && scope == ScriptingApiScope.Editor;
 
     private static void ValidateExports(
         IReadOnlyList<DeclaredTypeExport> exports,

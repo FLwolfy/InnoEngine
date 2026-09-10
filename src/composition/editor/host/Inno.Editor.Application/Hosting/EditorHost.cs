@@ -28,7 +28,6 @@ using Inno.Platform;
 using Inno.Rendering;
 using Inno.Rendering.Assets;
 using Inno.Rendering.Runtime;
-using Inno.Rendering.ShaderGraph;
 using Inno.Runtime;
 using Inno.Scene;
 using Inno.Shell;
@@ -79,7 +78,7 @@ internal sealed class EditorHost : ShellHost
                     highPixelDensity = true
                 },
                 preferredGraphicsApi = preferredGraphicsApi,
-                verticalSync = true,
+                verticalSync = false,
                 sRgbBackbuffer = true
             })
     {
@@ -415,10 +414,6 @@ internal sealed class EditorHost : ShellHost
                 presentation,
                 reloadCoordinator),
             static service => service.Dispose());
-        var shaderNodes = m_resources.Acquire(
-            () => new ShaderNodeRegistry(engineHost.types),
-            static registry => registry.Dispose());
-        shaderNodes.RefreshExtensions();
         var editorContext = new EditorContext(projectDirectory);
         presentation.SetLayoutFile(null);
         presentation.LoadLayout(editorContext.imguiLayout);
@@ -445,7 +440,7 @@ internal sealed class EditorHost : ShellHost
             engineHost.logs,
             [
                 renderingHost,
-                shaderNodes,
+                framePacing,
                 reloadCoordinator,
                 engineHost,
                 engineHost.modules,

@@ -780,7 +780,7 @@ public sealed class PluginEnvironment : IDisposable
     private sealed class AvailabilityPublication : IGenerationPublication<AvailabilityPublication>, IAssemblyUnloadProbe
     {
         /// <summary>
-        /// Gets the description exposed by this implementation.
+        /// Gets the user-facing explanation of this feature or setting.
         /// </summary>
         public string description => "Plugin content publication without assembly retirement";
         /// <summary>
@@ -799,7 +799,7 @@ public sealed class PluginEnvironment : IDisposable
         /// Completes the committed operation and releases temporary state.
         /// </summary>
         /// <returns>
-        /// The value produced by this implementation of the contract.
+        /// The validated availability publication that represents the completed operation.
         /// </returns>
         public AvailabilityPublication Complete() => this;
     }

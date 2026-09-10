@@ -18,7 +18,7 @@ public static class ShaderAssetRuntime
     /// The serialization registry that owns the active Shader contract generation.
     /// </param>
     /// <returns>
-    /// The shared handwritten/graph shader IR.
+    /// The backend-neutral shader IR.
     /// </returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown when the asset has no committed IR payload.

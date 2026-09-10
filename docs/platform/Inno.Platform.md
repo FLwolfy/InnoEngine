@@ -10,6 +10,7 @@
 | --- | --- |
 | `CreateWindow(options)` | 创建并拥有一个后端中立窗口。 |
 | `PollEvent(out Event?)` | 轮询并返回下一个引擎事件。 |
+| `redrawRequested` | `Action<uint>` 主线程事件；系统模态 resize 中请求 Host 完成一个渲染帧，不是 presentation-only 绘制。 |
 | `GetWindows()` | 返回当前有效窗口，包括集成创建的 viewport window。 |
 | `RegisterExtension(extension)` | 注册当前 application 的后端扩展，返回可释放 registration。 |
 | `Dispose()` | 通知扩展、释放窗口并关闭平台后端。 |
@@ -19,7 +20,7 @@
 `ISdl3ApplicationExtension` 用于 SDL3 Adapter 集成，不属于 `Inno.Platform` 或游戏脚本 API：
 
 - `ProcessNativeEvent(...)`：引擎翻译事件前接收短生命周期 native event。
-- `RenderLiveResizeWindow(...)`：macOS 等 live-resize 循环中重绘集成窗口。
+- `PrepareLiveResizeWindow(...)`：同步集成窗口尺寸；随后由 application 的 `redrawRequested` 交给 Shell 执行完整帧。
 - `OnApplicationDisposing(...)`：平台资源销毁前释放 application-bound 状态。
 
 `PlatformNativeEvent.data` 是不透明指针，只在回调期间有效，不得缓存。`backendName` 当前为 `SDL3`；扩展必须先检查名字再解释指针。
@@ -59,7 +60,7 @@ sealed class BackendExtension : ISdl3ApplicationExtension
         // Interpret nativeEvent.data only during this call.
     }
 
-    public void RenderLiveResizeWindow(
+    public void PrepareLiveResizeWindow(
         PlatformApplication application,
         uint windowId)
     {
@@ -72,3 +73,7 @@ sealed class BackendExtension : ISdl3ApplicationExtension
 
 using IDisposable registration = application.RegisterExtension(new BackendExtension());
 ```
+
+## FramePacingOptions
+
+后端中立、每 Shell 独立的呈现策略。`verticalSync` 控制显示同步；`maximumFrameRate` 为非负整数，0 表示无软件限制，负值抛出 `ArgumentOutOfRangeException`。该对象不包含 Editor Settings 或 2D 概念。Shell 每帧在安全点应用同步状态，在帧完成后执行可选软件限速。

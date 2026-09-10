@@ -14,9 +14,6 @@ namespace Inno.Assets.Pipeline;
 /// <param name="oldRelativePath">
 /// Old path for rename operations.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public readonly struct AssetChangedEvent(string relativePath, WatcherChangeTypes changeType, string oldRelativePath = "")
 {
     /// <summary>

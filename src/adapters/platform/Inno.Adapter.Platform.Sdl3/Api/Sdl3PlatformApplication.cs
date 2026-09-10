@@ -10,6 +10,9 @@ namespace Inno.Adapter.Platform.Sdl3;
 /// </summary>
 public sealed partial class Sdl3PlatformApplication : IPlatformApplication
 {
+    /// <inheritdoc />
+    public event Action<uint>? redrawRequested;
+
     /// <summary>
     /// Initializes platform subsystems required for windowing and input events.
     /// </summary>

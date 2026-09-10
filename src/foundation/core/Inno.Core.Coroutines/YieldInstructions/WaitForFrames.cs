@@ -6,9 +6,6 @@ namespace Inno.Core.Coroutines;
 /// <param name="frames">
 /// The frames used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public sealed class WaitForFrames(int frames) : YieldInstruction
 {
     /// <summary>

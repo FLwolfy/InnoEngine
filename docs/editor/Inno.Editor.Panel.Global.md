@@ -1,5 +1,9 @@
 # Inno.Editor.Panel.Global
 
+## Editor / Rendering
+
+Settings 新增 `Editor/Rendering` 页面。`Vertical Sync` 默认关闭；`Maximum Frame Rate` 默认 0（Unlimited），可设 1–1000。保存、Apply、Undo/Redo 都通过现有 EditorSettings 管线，`EditorFramePacingModule` 将已应用值同步到 Shell 注入的中立 FramePacingOptions。不需要重启；VSync 在下一设备帧安全点 reset。高帧率增加 GPU/功耗，操作系统合成器和显示硬件仍可能限制实际呈现频率。
+
 [Editor 索引](README.md) · [Settings API](Inno.Editor.Settings.md) · [Interactions](Inno.Editor.Interactions.md) · [Wiki 首页](../README.md)
 
 `Inno.Editor.Panel.Global` 是 Editor Application 的全局 feature composition 项目。它不提供一个可停靠 Panel，也没有公开 API；它只放置需要由宿主统一发现、但不应属于 Settings 或 Interactions 基础程序集的内建定义。

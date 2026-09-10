@@ -12,9 +12,6 @@ namespace Inno.Editor.Core;
 /// <param name="isFocused">
 /// Whether an editor viewport owns application focus.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public readonly record struct EditorFrame(
     float deltaTime,
     float totalTime,

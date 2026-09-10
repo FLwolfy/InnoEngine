@@ -268,17 +268,17 @@ public static class EditorPalette
     /// <summary>
     /// Gets the deepest collection background.
     /// </summary>
-    public static Vector4 collectionHeader { get; } = new(0.165f, 0.165f, 0.165f, 1f);
+    public static Vector4 collectionHeader => windowBackground;
 
     /// <summary>
     /// Gets the primary collection row background.
     /// </summary>
-    public static Vector4 collectionRow { get; } = new(0.185f, 0.185f, 0.185f, 1f);
+    public static Vector4 collectionRow { get; } = new(0.115f, 0.123f, 0.137f, 1f);
 
     /// <summary>
     /// Gets the alternate collection row background.
     /// </summary>
-    public static Vector4 collectionRowAlternate { get; } = new(0.215f, 0.215f, 0.215f, 1f);
+    public static Vector4 collectionRowAlternate { get; } = new(0.135f, 0.144f, 0.160f, 1f);
 
     /// <summary>
     /// Gets the translucent primary background of a complete Settings field.
@@ -350,7 +350,7 @@ public static class EditorPalette
     /// <summary>
     /// Gets scene row background.
     /// </summary>
-    public static Vector4 hierarchySceneRow { get; } = new(28f / 255f, 26f / 255f, 25f / 255f, 1f);
+    public static Vector4 hierarchySceneRow => title;
 
     /// <summary>
     /// Gets inactive hierarchy text.

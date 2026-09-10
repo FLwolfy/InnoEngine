@@ -125,7 +125,9 @@ public sealed class RenderRuntime : RuntimeSubsystem, IRenderRequestSink
     /// </summary>
     public IRenderResourceService resources => m_resourceService;
 
-    /// <summary>Gets the non-zero rendering-device generation that owns persistent handles.</summary>
+    /// <summary>
+    /// Gets the non-zero rendering-device generation that owns persistent handles.
+    /// </summary>
     public uint deviceGeneration => m_device.generation;
 
     /// <summary>

@@ -23,9 +23,6 @@ namespace Inno.Build.Toolchains;
 /// <param name="normalizeOutputName">
 /// The deterministic output naming policy.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public sealed record BuildArtifactOptions(
     string buildDirName,
     IReadOnlyCollection<string> libraryTokens,

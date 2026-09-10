@@ -1,5 +1,9 @@
 # Inno.Scripting.Compiler
 
+## Authoring 标注与 Player 边界
+
+编译器根据 ScriptingApiScope.Authoring 的导出清单，在语义绑定后、目标 Player references 绑定前移除纯创作标注使用、自定义派生标注类及相关 using。规则由清单与继承符号推导，不引用 Editor.Annotations/Serialization/Rendering2D，也没有具体属性类型白名单。创作编译与 IDE 保留完整标注 API，Player IL 不保留 Editor 程序集引用。普通 SerializableProperty 不在此 scope，继续持久化。
+
 [Scripting 索引](README.md) · [API](Inno.Scripting.Api.md) · [Reload](Inno.Scripting.Reload.md)
 
 ## 职责与边界

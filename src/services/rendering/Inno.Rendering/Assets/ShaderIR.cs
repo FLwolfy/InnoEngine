@@ -7,22 +7,7 @@ using Inno.Rendering;
 namespace Inno.Rendering;
 
 /// <summary>
-/// Identifies whether stage code originated in a handwritten source or a graph emitter.
-/// </summary>
-public enum ShaderIRSourceKind
-{
-    /// <summary>
-    /// Code was authored in a shader source file.
-    /// </summary>
-    Handwritten,
-    /// <summary>
-    /// Code was emitted from a validated node graph.
-    /// </summary>
-    Generated
-}
-
-/// <summary>
-/// Maps a shader IR range back to an asset, pass, stage, graph node and source position.
+/// Maps a shader IR range back to an asset, pass, stage, and source position.
 /// </summary>
 public readonly record struct ShaderSourceLocation
 {
@@ -44,16 +29,12 @@ public readonly record struct ShaderSourceLocation
     /// <param name="column">
     /// One-based source column, or zero when unavailable.
     /// </param>
-    /// <param name="nodeId">
-    /// Stable graph node ID, or an empty string for handwritten code.
-    /// </param>
     public ShaderSourceLocation(
         string assetPath,
         string passName,
         ShaderStage stage,
         int line = 0,
-        int column = 0,
-        string nodeId = "")
+        int column = 0)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(assetPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(passName);
@@ -64,7 +45,6 @@ public readonly record struct ShaderSourceLocation
         this.stage = stage;
         this.line = line;
         this.column = column;
-        this.nodeId = nodeId ?? string.Empty;
     }
 
     /// <summary>
@@ -92,10 +72,6 @@ public readonly record struct ShaderSourceLocation
     /// </summary>
     public int column { get; }
 
-    /// <summary>
-    /// Gets the stable graph node ID, or an empty string for handwritten code.
-    /// </summary>
-    public string nodeId { get; }
 }
 
 /// <summary>
@@ -154,7 +130,7 @@ public sealed class ShaderDiagnostic
 }
 
 /// <summary>
-/// Declares one canonical stage source in the shared handwritten/graph shader IR.
+/// Declares one canonical stage source in the backend-neutral shader IR.
 /// </summary>
 public sealed class ShaderIRStageModule
 {
@@ -170,32 +146,21 @@ public sealed class ShaderIRStageModule
     /// <param name="source">
     /// Shaderc-compatible canonical source.
     /// </param>
-    /// <param name="sourceKind">
-    /// Original source kind.
-    /// </param>
     /// <param name="location">
     /// Root source mapping.
-    /// </param>
-    /// <param name="lineNodeIds">
-    /// Optional generated-source line to stable node ID mapping.
     /// </param>
     public ShaderIRStageModule(
         ShaderStage stage,
         string entryPoint,
         string source,
-        ShaderIRSourceKind sourceKind,
-        ShaderSourceLocation location,
-        IReadOnlyDictionary<int, string>? lineNodeIds = null)
+        ShaderSourceLocation location)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(entryPoint);
         ArgumentException.ThrowIfNullOrWhiteSpace(source);
         this.stage = stage;
         this.entryPoint = entryPoint;
         this.source = source;
-        this.sourceKind = sourceKind;
         this.location = location;
-        this.lineNodeIds = new System.Collections.ObjectModel.ReadOnlyDictionary<int, string>(
-            lineNodeIds is null ? new Dictionary<int, string>() : new Dictionary<int, string>(lineNodeIds));
     }
 
     /// <summary>
@@ -214,19 +179,10 @@ public sealed class ShaderIRStageModule
     public string source { get; }
 
     /// <summary>
-    /// Gets whether source was handwritten or graph-generated.
-    /// </summary>
-    public ShaderIRSourceKind sourceKind { get; }
-
-    /// <summary>
     /// Gets the root source mapping.
     /// </summary>
     public ShaderSourceLocation location { get; }
 
-    /// <summary>
-    /// Gets generated-source line to stable graph node mappings.
-    /// </summary>
-    public IReadOnlyDictionary<int, string> lineNodeIds { get; }
 }
 
 /// <summary>
@@ -246,8 +202,8 @@ public sealed class ShaderIRPass
     /// <param name="stages">
     /// Canonical stage modules.
     /// </param>
-    /// <param name="generatedVaryingSource">
-    /// Optional graph-generated varying definition content.
+    /// <param name="varyingSource">
+    /// Optional varying definition content for raster stages.
     /// </param>
     /// <param name="bindingIds">
     /// Optional pass-local property IDs. A null value uses every manifest property visible to this pass.
@@ -255,13 +211,13 @@ public sealed class ShaderIRPass
     public ShaderIRPass(
         ShaderPassDefinition definition,
         IReadOnlyList<ShaderIRStageModule> stages,
-        string? generatedVaryingSource = null,
+        string? varyingSource = null,
         IReadOnlyList<ShaderPropertyId>? bindingIds = null)
     {
         ArgumentNullException.ThrowIfNull(stages);
         m_definition = ShaderDefinitionSnapshot.Copy(definition);
         this.stages = Array.AsReadOnly(stages.ToArray());
-        this.generatedVaryingSource = generatedVaryingSource;
+        this.varyingSource = varyingSource;
         usesAllBindings = bindingIds is null;
         m_bindingIds = Array.AsReadOnly(bindingIds?.ToArray() ?? Array.Empty<ShaderPropertyId>());
     }
@@ -277,9 +233,9 @@ public sealed class ShaderIRPass
     public IReadOnlyList<ShaderIRStageModule> stages { get; }
 
     /// <summary>
-    /// Gets optional graph-generated varying definition content.
+    /// Gets optional varying definition content for raster stages.
     /// </summary>
-    public string? generatedVaryingSource { get; }
+    public string? varyingSource { get; }
 
     /// <summary>
     /// Gets whether this pass consumes every manifest property visible to one of its stages.
@@ -528,7 +484,7 @@ public sealed class ShaderIRValidationResult
 }
 
 /// <summary>
-/// Validates the shared handwritten/graph shader IR before target compilation.
+/// Validates backend-neutral shader IR before target compilation.
 /// </summary>
 public static class ShaderIRValidator
 {
@@ -723,17 +679,6 @@ public static class ShaderIRValidator
                     stage.location));
             }
 
-            foreach ((int line, string nodeId) in stage.lineNodeIds)
-            {
-                if (line <= 0 || string.IsNullOrWhiteSpace(nodeId))
-                {
-                    diagnostics.Add(Error(
-                        "SHADER_IR_INVALID_NODE_MAP",
-                        $"Pass '{definition.name}' contains an invalid generated-source node mapping.",
-                        stage.location));
-                    break;
-                }
-            }
         }
 
         bool compute = stages.Contains(ShaderStage.Compute);

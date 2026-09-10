@@ -6,7 +6,7 @@ using Inno.Rendering.Assets;
 namespace Inno.Adapter.Presentation;
 
 /// <summary>
-/// Supplies backend-neutral resources required to create one host presentation context.
+/// Collects the validated presentation backend options values that configure one owned operation.
 /// </summary>
 public sealed class PresentationBackendOptions
 {

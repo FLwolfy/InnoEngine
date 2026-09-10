@@ -9,7 +9,9 @@ using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 
 namespace Inno.Editor.Panel.Global;
 
-/// <summary>Hosts every asset document in one consistent, reload-safe tab surface.</summary>
+/// <summary>
+/// Hosts every asset document in one consistent, reload-safe tab surface.
+/// </summary>
 [EditorPanel("editor.documents", "Documents", order: 240, defaultOpen: false, menuPath: "Authoring")]
 internal sealed class DocumentHostPanel : EditorPanel
 {
@@ -17,19 +19,31 @@ internal sealed class DocumentHostPanel : EditorPanel
     private readonly IEditorDocumentService m_documents;
     private Guid? m_pendingClose;
 
-    /// <summary>Creates the unified document host.</summary>
-    /// <param name="documents">The reload-safe document service.</param>
+    /// <summary>
+    /// Creates the unified document host.
+    /// </summary>
+    /// <param name="documents">
+    /// The reload-safe document service.
+    /// </param>
     internal DocumentHostPanel(IEditorDocumentService documents)
         => m_documents = documents ?? throw new ArgumentNullException(nameof(documents));
 
-    /// <summary>Gets whether the host uses the standard panel padding.</summary>
+    /// <summary>
+    /// Gets whether the host uses the standard panel padding.
+    /// </summary>
     public override bool useWindowPadding => false;
 
-    /// <summary>Gets whether the host window owns scrolling.</summary>
+    /// <summary>
+    /// Gets whether the host window owns scrolling.
+    /// </summary>
     public override bool allowScrolling => false;
 
-    /// <summary>Draws the unified tab strip, document commands, and active provider.</summary>
-    /// <param name="context">The active editor context.</param>
+    /// <summary>
+    /// Draws the unified tab strip, document commands, and active provider.
+    /// </summary>
+    /// <param name="context">
+    /// The active editor context.
+    /// </param>
     protected override void OnDraw(EditorContext context)
     {
         _ = context;

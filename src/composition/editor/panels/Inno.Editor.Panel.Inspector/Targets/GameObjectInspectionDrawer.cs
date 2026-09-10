@@ -256,6 +256,8 @@ internal sealed class GameObjectInspectionDrawer : InspectionDrawer<GameObject>
                         NativeImGui.PopStyleColor();
                         return;
                     }
+                    if (context.TryDrawInline(component))
+                        return;
                     if (properties.Count == 0)
                     {
                         InspectorTypeOrigin.Draw(componentType);

@@ -7,11 +7,9 @@
     <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../../foundation/core/Inno.Core.Execution/Inno.Core.Execution.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\foundation\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\foundation\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\..\foundation\core\Inno.Core.Collections\Inno.Core.Collections.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\content\assets\Inno.Assets.Pipeline\Inno.Assets.Pipeline.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\content\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\Inno.Rendering.Assets\Inno.Rendering.Assets.csproj" PrivateAssets="compile" />

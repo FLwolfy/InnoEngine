@@ -11,9 +11,6 @@ namespace Inno.Editor.Scripting;
 /// <param name="scripting">
 /// The scripting used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 [EditorModal("scripting.compilation", "Compiling Scripts", order: 100)]
 internal sealed class ScriptCompilationModal(EditorScripting scripting) : EditorModal
 {

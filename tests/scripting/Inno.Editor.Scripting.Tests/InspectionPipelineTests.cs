@@ -8,6 +8,7 @@ using Inno.Extensibility.Modules;
 using Inno.Core.Logging;
 using Inno.Extensibility.Types;
 using Inno.Core.Serialization;
+using Inno.Editor.Annotations;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
@@ -68,8 +69,14 @@ public sealed class InspectionPipelineTests : IDisposable
             m_types,
             m_serialization,
             []);
+        using var attributes = new InspectorAttributeDrawerRegistry(
+            m_runtime.interactions,
+            m_types,
+            m_serialization,
+            []);
         var renderer = new SerializedPropertyRenderer(
             drawers,
+            attributes,
             m_runtime.interactions,
             new NoopEditService(),
             m_logs);
@@ -142,13 +149,20 @@ public sealed class InspectionPipelineTests : IDisposable
             m_types,
             m_serialization,
             []);
+        using var attributes = new InspectorAttributeDrawerRegistry(
+            m_runtime.interactions,
+            m_types,
+            m_serialization,
+            []);
         var firstRenderer = new SerializedPropertyRenderer(
             drawers,
+            attributes,
             m_runtime.interactions,
             new NoopEditService(),
             m_logs);
         var secondRenderer = new SerializedPropertyRenderer(
             drawers,
+            attributes,
             m_runtime.interactions,
             new NoopEditService(),
             m_logs);
@@ -173,6 +187,60 @@ public sealed class InspectionPipelineTests : IDisposable
         Assert.Equal(
             ["First:<new>", "First:First", "Second:<new>", "First:<new>"],
             TextStateDrawer.observations);
+    }
+
+    [Fact]
+    public void PresentationAttributesComposeAndCustomDrawersRemainExtensible()
+    {
+        EditorContext editor = m_runtime.context;
+        using var drawers = new PropertyDrawerRegistry(
+            m_runtime.interactions,
+            m_types,
+            m_serialization,
+            []);
+        using var attributes = new InspectorAttributeDrawerRegistry(
+            m_runtime.interactions,
+            m_types,
+            m_serialization,
+            []);
+        var renderer = new SerializedPropertyRenderer(
+            drawers,
+            attributes,
+            m_runtime.interactions,
+            new NoopEditService(),
+            m_logs);
+        var owner = new AttributeOwner();
+        SerializedProperty property = Assert.Single(
+            m_serialization.GetProperties(owner),
+            static candidate => candidate.name == nameof(AttributeOwner.value));
+        AttributeValueDrawer.observations.Clear();
+        ProbeInspectorAttributeDrawer.observations.Clear();
+        var nativeContext = NativeImGui.CreateContext();
+        try
+        {
+            DrawPropertyFrame(renderer, editor, owner, property);
+            Assert.Empty(AttributeValueDrawer.observations);
+            Assert.Equal(
+                ["update:Friendly Value:False:2:8"],
+                ProbeInspectorAttributeDrawer.observations);
+
+            owner.showValue = true;
+            DrawPropertyFrame(renderer, editor, owner, property);
+        }
+        finally
+        {
+            NativeImGui.DestroyContext(nativeContext);
+        }
+
+        Assert.Equal(
+            [
+                "update:Friendly Value:False:2:8",
+                "update:Friendly Value:False:2:8",
+                "before",
+                "after"
+            ],
+            ProbeInspectorAttributeDrawer.observations);
+        Assert.Equal(["Friendly Value:False:2:8"], AttributeValueDrawer.observations);
     }
 
     private static void PrepareNativeFrame()
@@ -238,6 +306,58 @@ internal sealed class TextStateOwner : ISerializable
 }
 
 internal sealed record TextStateValue(string id);
+
+internal sealed class AttributeOwner : ISerializable
+{
+    internal bool showValue { get; set; }
+
+    [SerializableProperty]
+    [Header("Presentation", "Decorators are composed before the property row.")]
+    [Text("Persistent decorator text remains visible.")]
+    [Tooltip("Reusable hover guidance.")]
+    [InspectorName("Friendly Value")]
+    [Range(2, 8)]
+    [ShowIf(nameof(showValue))]
+    [ProbeInspector]
+    public AttributeValue value { get; set; } = new();
+}
+
+internal sealed class AttributeValue;
+
+[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+internal sealed class ProbeInspectorAttribute : InspectorPresentationAttribute;
+
+[InspectorAttributeDrawer(typeof(ProbeInspectorAttribute), priority: 10_000)]
+internal sealed class ProbeInspectorAttributeDrawer : IInspectorAttributeDrawer
+{
+    internal static List<string> observations { get; } = [];
+
+    public void Update(InspectorAttributeDrawContext context)
+        => observations.Add(
+            $"update:{context.label}:{context.isReadOnly}:{context.minimum}:{context.maximum}");
+
+    public void DrawBefore(InspectorAttributeDrawContext context)
+    {
+        _ = context;
+        observations.Add("before");
+    }
+
+    public void DrawAfter(InspectorAttributeDrawContext context)
+    {
+        _ = context;
+        observations.Add("after");
+    }
+}
+
+[PropertyDrawer(typeof(AttributeValue), priority: 10_000)]
+internal sealed class AttributeValueDrawer : IPropertyDrawer
+{
+    internal static List<string> observations { get; } = [];
+
+    public void Draw(PropertyDrawContext context)
+        => observations.Add(
+            $"{context.label}:{context.isReadOnly}:{context.minimum}:{context.maximum}");
+}
 
 [PropertyDrawer(typeof(TextStateValue), priority: 10_000)]
 internal sealed class TextStateDrawer : IPropertyDrawer

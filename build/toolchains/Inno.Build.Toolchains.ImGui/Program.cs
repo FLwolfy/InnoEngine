@@ -51,7 +51,7 @@ static class Program
             CimguiBuildUtils.ValidateSource(cimguiDir);
 
             builder.Build(cimguiDir, options.Config);
-            CopyArtifacts(cimguiDir, outputDir, options.Config);
+            CopyArtifacts(cimguiDir, outputDir, builder.outputPlatform, options.Config);
 
             Console.WriteLine($"cimgui build complete. Output: {outputDir}");
             return 0;
@@ -78,10 +78,10 @@ static class Program
         Console.WriteLine("ImGui outputs cleaned.");
     }
 
-    private static void CopyArtifacts(string cimguiDir, string outputDir, string config)
+    private static void CopyArtifacts(string cimguiDir, string outputDir, string platform, string config)
     {
         var options = new BuildArtifactOptions(
-            CimguiBuildConstants.BUILD_DIR_NAME,
+            Path.Combine(CimguiBuildConstants.BUILD_DIR_NAME, "inno", platform),
             LIBRARY_TOKENS,
             SHARED_EXTENSIONS,
             null,

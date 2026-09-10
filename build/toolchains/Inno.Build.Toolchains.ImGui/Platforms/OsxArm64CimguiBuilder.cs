@@ -37,10 +37,11 @@ internal sealed class OsxArm64CimguiBuilder : CimguiBuilder
     /// </param>
     public override void Build(string cimguiDir, string config)
     {
-        var buildDir = Path.Combine(cimguiDir, CimguiBuildConstants.BUILD_DIR_NAME, BUILD_DIR_NAME);
+        var buildDir = Path.Combine(cimguiDir, CimguiBuildConstants.BUILD_DIR_NAME, "inno", BUILD_DIR_NAME);
         var buildType = GetBuildType(config);
+        string sourceDir = CimguiSourceOverlay.Prepare(cimguiDir);
 
-        ToolchainEnvironment.Run("cmake", $"-S . -B \"{buildDir}\" -DCMAKE_BUILD_TYPE={buildType} -DBUILD_SHARED_LIBS=ON", cimguiDir);
+        ToolchainEnvironment.Run("cmake", $"-S \"{sourceDir}\" -B \"{buildDir}\" -DINNO_CIMGUI_SOURCE_DIR=\"{cimguiDir}\" -DCMAKE_BUILD_TYPE={buildType} -DBUILD_SHARED_LIBS=ON", cimguiDir);
         ToolchainEnvironment.Run("cmake", $"--build \"{buildDir}\" --config {buildType}", cimguiDir);
     }
 }

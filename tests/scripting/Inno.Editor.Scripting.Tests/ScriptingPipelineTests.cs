@@ -3,9 +3,12 @@ using Inno.Extensibility.Reload;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Inno.Editor.Annotations;
 using System.IO.Compression;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -135,6 +138,58 @@ public sealed class ScriptingPipelineTests : IDisposable
         Assert.DoesNotContain(
             result.compiledAssemblyNames.Concat(result.reusedAssemblyNames),
             static assemblyName => assemblyName.Contains("Editor", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void InspectorPresentationMetadataIsAuthoringOnlyWhileSerializationRemainsInPlayer()
+    {
+        m_fixture.Write("AttributedBehavior.cs", """
+            using InnoEngine.Scene;
+            using InnoEngine.Serialization;
+            using InnoEditor.Annotations;
+
+            public sealed class CustomPresentationAttribute : InspectorPresentationAttribute
+            {
+            }
+
+            public sealed class AttributedBehavior : GameBehavior
+            {
+                [SerializableProperty]
+                [Header("Visual")]
+                [Text("Persistent authoring text.")]
+                [Tooltip("Authoring help only.")]
+                [Range(0, 10)]
+                [CustomPresentation]
+                public int value { get; set; }
+            }
+            """);
+
+        ScriptCompilationResult authoring = m_fixture.Compile();
+        Assert.True(authoring.success, FormatDiagnostics(authoring));
+        string authoringAssembly = Path.Combine(authoring.outputDirectory!, "Inno.GameScripts.dll");
+        Assert.True(ContainsCustomAttribute(authoringAssembly, nameof(HeaderAttribute)));
+        Assert.True(ContainsCustomAttribute(authoringAssembly, nameof(TextAttribute)));
+        Assert.True(ContainsCustomAttribute(authoringAssembly, nameof(TooltipAttribute)));
+        Assert.True(ContainsCustomAttribute(authoringAssembly, nameof(RangeAttribute)));
+        Assert.True(ContainsCustomAttribute(authoringAssembly, "CustomPresentationAttribute"));
+        Assert.True(ContainsCustomAttribute(authoringAssembly, nameof(SerializablePropertyAttribute)));
+
+        ScriptCompilationResult player = m_fixture.CompileRuntimeDeployment();
+        Assert.True(player.success, FormatDiagnostics(player));
+        string playerAssembly = Path.Combine(player.outputDirectory!, "Inno.GameScripts.dll");
+        Assert.False(ContainsCustomAttribute(playerAssembly, nameof(HeaderAttribute)));
+        Assert.False(ContainsCustomAttribute(playerAssembly, nameof(TextAttribute)));
+        Assert.False(ContainsCustomAttribute(playerAssembly, nameof(TooltipAttribute)));
+        Assert.False(ContainsCustomAttribute(playerAssembly, nameof(RangeAttribute)));
+        Assert.False(ContainsCustomAttribute(playerAssembly, "CustomPresentationAttribute"));
+        Assert.True(ContainsCustomAttribute(playerAssembly, nameof(SerializablePropertyAttribute)));
+        using FileStream stream = File.OpenRead(playerAssembly);
+        using var executable = new PEReader(stream);
+        MetadataReader metadata = executable.GetMetadataReader();
+        Assert.DoesNotContain(metadata.AssemblyReferences, handle =>
+            metadata.GetString(metadata.GetAssemblyReference(handle).Name).Contains("Editor", StringComparison.Ordinal));
+        Assert.DoesNotContain(metadata.TypeDefinitions, handle =>
+            metadata.GetString(metadata.GetTypeDefinition(handle).Name) == "CustomPresentationAttribute");
     }
 
     [Fact]
@@ -486,6 +541,35 @@ public sealed class ScriptingPipelineTests : IDisposable
         Assert.False(failed.success);
         Assert.False(reload.ApplyPendingReload());
         Assert.Same(second, m_fixture.ResolveActiveType("VersionedBehavior"));
+    }
+
+    [Fact]
+    public void EditorSourceChangeRetiresTheWholeProjectAuthoringGeneration()
+    {
+        m_fixture.WriteVersionedBehavior(1);
+        m_fixture.Write("Editor/GenericPresentation.editor.cs", """
+            public class GenericPresentation<T> { public int version => 1; }
+            public sealed class ProjectPresentation : GenericPresentation<VersionedBehavior> { }
+            """);
+        using ScriptReloadHost reload = m_fixture.CreateReloadHost();
+        reload.Start();
+        Assert.True(m_fixture.CompilePending(reload).success);
+        Assert.True(reload.ApplyPendingReload());
+        WeakReference runtime = CaptureActiveType(m_fixture, "VersionedBehavior", 1);
+        WeakReference editor = CaptureActiveType(m_fixture, "ProjectPresentation", 1);
+
+        m_fixture.Write("Editor/GenericPresentation.editor.cs", """
+            public class GenericPresentation<T> { public int version => 2; }
+            public sealed class ProjectPresentation : GenericPresentation<VersionedBehavior> { }
+            """);
+        ScriptCompilationResult candidate = m_fixture.CompilePending(reload);
+        Assert.True(candidate.success, FormatDiagnostics(candidate));
+        Assert.True(reload.ApplyPendingReload());
+        CompleteUnloadVerification(reload);
+        Assert.False(runtime.IsAlive);
+        Assert.False(editor.IsAlive);
+        Assert.Equal(1, ReadVersion(m_fixture.ResolveActiveType("VersionedBehavior")));
+        Assert.Equal(2, ReadVersion(m_fixture.ResolveActiveType("ProjectPresentation")));
     }
 
     [Fact]
@@ -1306,6 +1390,45 @@ public sealed class ScriptingPipelineTests : IDisposable
     private static string FormatDiagnostics(ScriptCompilationResult result)
         => string.Join(Environment.NewLine, result.diagnostics.Select(static diagnostic =>
             $"{diagnostic.id}: {diagnostic.message}"));
+
+    private static bool ContainsCustomAttribute(string assemblyPath, string attributeTypeName)
+    {
+        using FileStream stream = File.OpenRead(assemblyPath);
+        using var portableExecutable = new PEReader(stream);
+        MetadataReader metadata = portableExecutable.GetMetadataReader();
+        foreach (CustomAttributeHandle handle in metadata.CustomAttributes)
+        {
+            CustomAttribute attribute = metadata.GetCustomAttribute(handle);
+            string? typeName = attribute.Constructor.Kind switch
+            {
+                HandleKind.MemberReference => GetMemberReferenceDeclaringTypeName(
+                    metadata,
+                    (MemberReferenceHandle)attribute.Constructor),
+                HandleKind.MethodDefinition => metadata.GetString(metadata.GetTypeDefinition(
+                    metadata.GetMethodDefinition((MethodDefinitionHandle)attribute.Constructor)
+                        .GetDeclaringType()).Name),
+                _ => null
+            };
+            if (string.Equals(typeName, attributeTypeName, StringComparison.Ordinal))
+                return true;
+        }
+        return false;
+    }
+
+    private static string? GetMemberReferenceDeclaringTypeName(
+        MetadataReader metadata,
+        MemberReferenceHandle constructorHandle)
+    {
+        MemberReference constructor = metadata.GetMemberReference(constructorHandle);
+        return constructor.Parent.Kind switch
+        {
+            HandleKind.TypeReference => metadata.GetString(
+                metadata.GetTypeReference((TypeReferenceHandle)constructor.Parent).Name),
+            HandleKind.TypeDefinition => metadata.GetString(
+                metadata.GetTypeDefinition((TypeDefinitionHandle)constructor.Parent).Name),
+            _ => null
+        };
+    }
 
     private sealed class ProgressRecorder : IProgress<ScriptCompilationProgress>
     {

@@ -102,7 +102,7 @@ internal sealed class WorkStealingJobSystem : IJobSystem
     }
 
     /// <summary>
-    /// Gets the worker count exposed by this implementation.
+    /// Gets the worker count scalar measured or assigned by the current instance.
     /// </summary>
     public int workerCount => m_workerCount;
 

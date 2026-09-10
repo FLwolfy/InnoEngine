@@ -21,7 +21,7 @@
 | C02 Execution | 共用 ExecutionSlot/LifetimeScope；有限 work admission、成功/取消 Task 即时脱离 owner、无 ExecutionContext 捕获的完成回调 | Execution 28 项通过，包含 256 次容量回收及结果弱引用测试 |
 | C03 Diagnostics | 延续 Core DiagnosticHub/Reporter/Sink 唯一问题所有权，不新增领域 sink | Diagnostics 10 项、Logging 6 项通过 |
 | C04 退出所有权 | 延续 Layer/Module/Panel/Registry/Runtime/Shell 的 Core Pending/timeout；ScriptReloadHost 关闭前等待上一代 GC 屏障；Storage 先排空工作再释放 backend | Core/Runtime/PlayMode 回归、独立脚本关闭回归与原生 Editor 600 帧退出通过 |
-| C05 发布快照 | Plugin manifest/scan/catalog、Shader emission/diagnostics/pass definition、Geometry collections、Settings contributors/effective records 由发布方持有隔离副本 | Plugin、ShaderGraph、Rendering 与 Settings 嵌套值隔离/失败回滚测试通过 |
+| C05 发布快照 | Plugin manifest/scan/catalog、Shader diagnostics/pass definition、Geometry collections、Settings contributors/effective records 由发布方持有隔离副本 | Plugin、MaterialGraph、Rendering 与 Settings 嵌套值隔离/失败回滚测试通过 |
 | C06 代际与工作 | Plugin background scan 进入 LifetimeScope；Editor Capture 进入共享 Prepare；失败准备只恢复已尝试 participant；强引用根矩阵、真实循环重载与关闭屏障实现 | Modules 31 项、Reload 22 项及脚本回归最新通过；Plugin 单次失败信号继续保留调查 |
 | C07 Recovery | Graph 文档 Identity session + Missing History；Settings exact neutral rollback；Plugin availability/content/script publication 接入共享五阶段 transaction | Graph 6 项含真实 assembly 发布/后续 participant 拒绝；References 22 项、Scene 49 项通过；Plugin 保留项见下文 |
 | C08 Subsystem | 统一 Contracts、生命周期模板、DAG、Host/Session 范围，保持通用 Shell 和 composition 边界 | Runtime 26 项、PlayMode 21 项、Layer 10 项通过 |
@@ -82,7 +82,7 @@ src/services/rendering/Inno.Rendering.Runtime/
 src/composition/editor/framework/
   Inno.Editor.Core/Reloading/EditorReloadCoordinator.cs
   Inno.Editor.Graph/{GraphEditorModule.cs,GraphDocumentSession.cs,GraphDocumentController.cs,GraphHistory.cs}
-src/composition/editor/panels/Inno.Editor.Panel.ShaderGraph/ShaderGraphPanel.cs
+src/composition/editor/panels/Inno.Editor.Panel.MaterialGraph/MaterialGraphPanel.cs
 ```
 
 不新增占位项目、测试后门、兼容 namespace、迁移 reader、托管实时 DSP callback 或另一个诊断 owner。
@@ -110,7 +110,7 @@ src/composition/editor/panels/Inno.Editor.Panel.ShaderGraph/ShaderGraphPanel.cs
 
 - 补齐 PluginEnvironment 构造边界的 Build CLI 调用方；修正公开 XML 和 nullable 标注，最终 Solution 零警告/错误。
 - Graph IdentityAllocator 是弱索引，不能独自保活文档：Module 增加独立 session lifetime 所有权，所有寻址仍经过 Identity；旧 controller 不重新认领同 ID 的新 session。
-- ShaderGraphPanel 不向注入器请求存在多个候选的 IdentityAllocator，明确使用 AssetPipeline 的 authoring domain。
+- MaterialGraphPanel 不向注入器请求存在多个候选的 IdentityAllocator，明确使用 AssetPipeline 的 authoring domain。
 - Lifetime 成功/取消 work 在锁内发布完成并移出 owner；完成统计不受延迟 continuation 干扰，也不长期保留 TResult。
 - Storage 的 backend 改由 operation scope 拥有，关闭先排空操作，再释放 backend。
 - Readback 取消遵守控制线程安全点先清理 native staging 再完成 Task；测试推进对应 frame 后验证取消，没有取消后提前丢 native owner。

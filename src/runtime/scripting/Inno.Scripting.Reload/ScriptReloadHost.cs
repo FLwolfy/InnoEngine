@@ -815,14 +815,16 @@ public sealed class ScriptReloadHost : IDisposable
                 .Where(static request => request.domain == AssemblyDomain.InnoScripting)
                 .Select(static request => request.moduleName));
         }
-        AssemblyLoadRequest? runtime = requests.SingleOrDefault(static request =>
-            request.domain == AssemblyDomain.InnoScripting && request.scope == AssemblyScope.Runtime);
-        if (runtime is not null && selected.Contains(runtime.moduleName))
+        // Closed generic editor extensions over project runtime types can create CLR loader
+        // allocator dependencies in both directions even though assembly references are one-way.
+        // Project scripts therefore retire as one authoring generation, preserving scene state
+        // through the same candidate transaction used for runtime-source changes.
+        if (requests.Any(request => request.domain == AssemblyDomain.InnoScripting &&
+                                    selected.Contains(request.moduleName)))
         {
-            AssemblyLoadRequest? editor = requests.SingleOrDefault(static request =>
-                request.domain == AssemblyDomain.InnoScripting && request.scope == AssemblyScope.Editor);
-            if (editor is not null)
-                selected.Add(editor.moduleName);
+            selected.UnionWith(requests
+                .Where(static request => request.domain == AssemblyDomain.InnoScripting)
+                .Select(static request => request.moduleName));
         }
         return new ReloadPlan(
             requests.Where(request => selected.Contains(request.moduleName)).ToArray(),

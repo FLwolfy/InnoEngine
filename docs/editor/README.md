@@ -9,6 +9,7 @@ Editor 采用“被动核心 → 后端无关交互 → ImGui 表现 → 独立 
 | 项目 | 职责 |
 | --- | --- |
 | [Inno.Editor.Core](Inno.Editor.Core.md) | `EditorContext`、frame/runtime、Module、Panel、Modal 与可选状态 hooks 的最小契约。 |
+| [Inno.Editor.Annotations](Inno.Editor.Annotations.md) | 不依赖 Serialization/ImGui 的 Inspector 创作标注；Player 编译移除。 |
 | [Inno.Editor.Interactions](Inno.Editor.Interactions.md) | Action、area、menu、shortcut、selection、drag/drop、Undo/Redo、Module/Panel 状态存储与扩展代际。 |
 | [Inno.Editor.PlayMode](Inno.Editor.PlayMode.md) | 脚本门禁、Scene/History 隔离、游戏循环与 Play/Edit 原子切换。 |
 | [Inno.Editor.Audio](Inno.Editor.Audio.md) | Edit/Play 独立音频 generation、预览、scope 与诊断。 |
@@ -29,7 +30,7 @@ Editor 采用“被动核心 → 后端无关交互 → ImGui 表现 → 独立 
 | [Inno.Editor.Panel.Stats](Inno.Editor.Panel.Stats.md) | 平滑后的帧统计与 Stats Panel。 |
 | [Inno.Editor.Panel.SceneView](Inno.Editor.Panel.SceneView.md) | 不含 Camera/Picking 假设的 Plugin 驱动 Scene viewport host。 |
 | [Inno.Editor.Panel.GameView](Inno.Editor.Panel.GameView.md) | 不含运行时世界观的 Plugin 驱动 Game viewport host。 |
-| [Inno.Editor.Panel.ShaderGraph](Inno.Editor.Panel.ShaderGraph.md) | ShaderGraph 画布、编辑、预览、诊断与状态恢复。 |
+| [Inno.Editor.Panel.MaterialGraph](Inno.Editor.Panel.MaterialGraph.md) | 普通 Material 的节点映射、强类型编辑、验证与状态恢复。 |
 | [Inno.Editor.Application](Inno.Editor.Application.md) | Platform、EngineHost/Edit Session、Build、ImGui 和全部 feature 的组合根。 |
 
 ## 依赖方向

@@ -82,6 +82,23 @@ public sealed class GraphDocumentController
     public void MarkSaved() => session.isDirty = false;
 
     /// <summary>
+    /// Replaces the complete neutral document as one atomic, undoable authoring operation.
+    /// </summary>
+    /// <param name="replacement">
+    /// Complete replacement document copied by the operation.
+    /// </param>
+    /// <param name="historyName">
+    /// Concise artist-facing history entry name.
+    /// </param>
+    public void ReplaceDocument(GraphDocument replacement, string historyName)
+    {
+        ArgumentNullException.ThrowIfNull(replacement);
+        ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
+        GraphDocument snapshot = replacement.Clone();
+        Mutate(historyName, null, () => document.ReplaceContents(snapshot));
+    }
+
+    /// <summary>
     /// Adds a node with a generated stable identity.
     /// </summary>
     /// <param name="definitionId">

@@ -107,6 +107,12 @@ public interface IRenderDevice : IDisposable
     /// </param>
     void ResizeBackbuffer(int width, int height);
 
+    /// <summary>Queues display synchronization policy for the next frame boundary.</summary>
+    /// <param name="enabled">Whether presentation waits for display refresh.</param>
+    /// <exception cref="NotSupportedException">The device has no configurable presentation policy.</exception>
+    void SetVerticalSync(bool enabled)
+        => throw new NotSupportedException("This render device does not expose presentation synchronization.");
+
     /// <summary>
     /// Creates a persistent texture at a frame safety point.
     /// </summary>

@@ -47,7 +47,6 @@ public sealed class BgfxToolchainTests : IDisposable
             ShaderStage.Vertex,
             "main",
             commonSource,
-            ShaderIRSourceKind.Handwritten,
             new ShaderSourceLocation("Shaders/common.vs.sc", "Main", ShaderStage.Vertex));
         ShaderCompileTarget metal = new BgfxShadercToolchain(BgfxShaderTargetPlatform.MacOSArm64)
             .CreateTarget(CreateCapabilities(GraphicsApi.Metal, GraphicsCapability.Compute));
@@ -78,13 +77,11 @@ public sealed class BgfxToolchainTests : IDisposable
                         ShaderStage.Vertex,
                         "main",
                         vertex,
-                        ShaderIRSourceKind.Handwritten,
                         new ShaderSourceLocation("Shaders/test.vs.sc", "Draw", ShaderStage.Vertex)),
                     new ShaderIRStageModule(
                         ShaderStage.Fragment,
                         "main",
                         fragment,
-                        ShaderIRSourceKind.Handwritten,
                         new ShaderSourceLocation("Shaders/test.fs.sc", "Draw", ShaderStage.Fragment))
                 ],
                 varying)]);

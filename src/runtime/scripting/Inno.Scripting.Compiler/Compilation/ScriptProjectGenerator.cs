@@ -13,6 +13,8 @@ namespace Inno.Scripting.Compiler;
 
 internal static class ScriptProjectGenerator
 {
+    private const string C_EDITOR_COMPILATION_SYMBOL = "INNO_EDITOR";
+
     internal static void Generate(
         ScriptCompilerOptions options,
         AssetPipeline assets,
@@ -61,7 +63,11 @@ internal static class ScriptProjectGenerator
                             StringComparison.OrdinalIgnoreCase)))
                         .Select(static reference => reference + ".csproj")
                         .ToArray(),
-                    assembly.defines,
+                    assembly.defines
+                        .Append(C_EDITOR_COMPILATION_SYMBOL)
+                        .Distinct(StringComparer.Ordinal)
+                        .OrderBy(static value => value, StringComparer.Ordinal)
+                        .ToArray(),
                     assembly.nullable,
                     assembly.allowUnsafe)
                 .Save(Path.Combine(options.projectRootDirectory, assembly.name + ".csproj"));

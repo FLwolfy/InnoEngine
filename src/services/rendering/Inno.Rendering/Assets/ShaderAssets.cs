@@ -833,7 +833,7 @@ public struct ShaderTechniqueDefinition
 }
 
 /// <summary>
-/// Contains the source-of-truth definition shared by handwritten and graph shaders.
+/// Contains the source-of-truth definition shared by shader import and material tooling.
 /// </summary>
 public sealed class ShaderDefinition : ISerializable
 {

@@ -11,9 +11,6 @@ namespace Inno.Scene;
 /// <param name="components">
 /// The components used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 internal sealed record SceneObjectStructureSnapshot(
     GameObject gameObject,
     IReadOnlyList<GameComponent> components);

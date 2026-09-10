@@ -103,7 +103,7 @@ internal sealed class SettingsPageView(SettingsEditSession session)
                 child.label);
             if (clicked)
                 navigate(child);
-            DrawDescriptionTooltip(child.description);
+            EditorWidget.DrawItemTooltip(child.description);
             NativeImGui.Spacing();
         }
     }
@@ -175,7 +175,7 @@ internal sealed class SettingsPageView(SettingsEditSession session)
                 NativeImGui.GetCursorPosX() + NativeImGui.GetStyle().WindowPadding.X);
             NativeImGui.AlignTextToFramePadding();
             NativeImGui.TextUnformatted(setting.label);
-            DrawDescriptionTooltip(setting.description);
+            EditorWidget.DrawItemTooltip(setting.description);
 
             _ = NativeImGui.TableSetColumnIndex(1);
             bool groupStarted = false;
@@ -275,30 +275,4 @@ internal sealed class SettingsPageView(SettingsEditSession session)
             ImGuiCol.Text,
             NativeImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
 
-    private static void DrawDescriptionTooltip(string description)
-    {
-        if (string.IsNullOrWhiteSpace(description) || !NativeImGui.IsItemHovered())
-            return;
-
-        float minimumWidth = 300f * EditorWidget.style.zoom;
-        float wrapWidth = 440f * EditorWidget.style.zoom;
-        NativeImGui.SetNextWindowSizeConstraints(
-            new System.Numerics.Vector2(minimumWidth, 0f),
-            new System.Numerics.Vector2(wrapWidth, float.MaxValue));
-        if (!EditorWidget.BeginMenuTooltip())
-            return;
-        bool wrapPushed = false;
-        try
-        {
-            NativeImGui.PushTextWrapPos(NativeImGui.GetCursorPosX() + wrapWidth);
-            wrapPushed = true;
-            NativeImGui.TextUnformatted(description);
-        }
-        finally
-        {
-            if (wrapPushed)
-                NativeImGui.PopTextWrapPos();
-            EditorWidget.EndMenuTooltip();
-        }
-    }
 }

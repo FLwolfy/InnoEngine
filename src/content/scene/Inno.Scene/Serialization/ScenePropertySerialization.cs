@@ -96,6 +96,37 @@ public static class ScenePropertySerialization
     }
 
     /// <summary>
+    /// Captures each persistent property independently while preserving scene-reference identities.
+    /// </summary>
+    /// <param name="target">
+    /// Live scene object whose properties should be captured.
+    /// </param>
+    /// <param name="serialization">
+    /// Registry owning the active converter generation.
+    /// </param>
+    /// <param name="assets">
+    /// Resolver used to preserve canonical asset references.
+    /// </param>
+    /// <returns>
+    /// Stable ordered property snapshots suitable for compact delta comparison.
+    /// </returns>
+    public static IReadOnlyList<SerializationPropertySnapshot> CapturePropertySnapshots(
+        EngineObject target,
+        SerializationRegistry serialization,
+        IAssetReferenceResolver assets)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(serialization);
+        ArgumentNullException.ThrowIfNull(assets);
+        if (target is not ISerializable serializable)
+            throw new ArgumentException($"Scene object '{target.GetType().FullName}' is not serializable.", nameof(target));
+        SceneGraphReferenceMap references = CreateReferences(ResolveScene(target));
+        SerializationContext context = AssetSerializationContext.Create(assets);
+        using (references.Enter())
+            return serialization.CaptureProperties(serializable, context);
+    }
+
+    /// <summary>
     /// Restores independently captured properties into a live scene object.
     /// </summary>
     /// <param name="target">

@@ -178,7 +178,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.SceneView
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.Settings", "src\composition\editor\panels\Inno.Editor.Panel.Settings\Inno.Editor.Panel.Settings.csproj", "{62F87567-0571-43C5-B380-C17EFD4404DD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.ShaderGraph", "src\composition\editor\panels\Inno.Editor.Panel.ShaderGraph\Inno.Editor.Panel.ShaderGraph.csproj", "{A441C37F-B451-4B47-AAB2-2CA4EAEBA170}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.MaterialGraph", "src\composition\editor\panels\Inno.Editor.Panel.MaterialGraph\Inno.Editor.Panel.MaterialGraph.csproj", "{A441C37F-B451-4B47-AAB2-2CA4EAEBA170}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Panel.Stats", "src\composition\editor\panels\Inno.Editor.Panel.Stats\Inno.Editor.Panel.Stats.csproj", "{C6F2FA90-1B02-4F7A-B610-CB7A2C3F99B9}"
 EndProject
@@ -212,7 +212,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Adapter.Rendering.Bgfx
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Runtime", "src\services\rendering\Inno.Rendering.Runtime\Inno.Rendering.Runtime.csproj", "{372D76BF-B319-484F-BA27-5393959A92D3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.ShaderGraph", "src\services\rendering\Inno.Rendering.ShaderGraph\Inno.Rendering.ShaderGraph.csproj", "{F18A1E5C-A25D-41DF-B2A8-21013F314F0C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.MaterialGraph", "src\services\rendering\Inno.Rendering.MaterialGraph\Inno.Rendering.MaterialGraph.csproj", "{F18A1E5C-A25D-41DF-B2A8-21013F314F0C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering", "src\services\rendering\Inno.Rendering\Inno.Rendering.csproj", "{4310DB2C-837A-425C-BF96-A8A48931B53E}"
 EndProject
@@ -338,7 +338,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Runtime.Test
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.Runtime.Reload.TestModule", "tests\rendering\fixtures\Inno.Rendering.Runtime.Reload.TestModule\Inno.Rendering.Runtime.Reload.TestModule.csproj", "{5B9FCAD1-53A9-4FE4-B840-30933ADBA726}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.ShaderGraph.Tests", "tests\rendering\Inno.Rendering.ShaderGraph.Tests\Inno.Rendering.ShaderGraph.Tests.csproj", "{BDF511BB-3810-46CB-A81B-F78D953B4C87}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Rendering.MaterialGraph.Tests", "tests\rendering\Inno.Rendering.MaterialGraph.Tests\Inno.Rendering.MaterialGraph.Tests.csproj", "{BDF511BB-3810-46CB-A81B-F78D953B4C87}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Runtime.Tests", "tests\runtime\Inno.Runtime.Tests\Inno.Runtime.Tests.csproj", "{A5CB9195-41B8-4841-A628-C0D38D455316}"
 EndProject
@@ -475,6 +475,10 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tooling", "tooling", "{9CEE6632-0D0D-444A-BE3C-72CEBB7DDE97}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Tooling.Architecture.Tests", "tests\tooling\Inno.Tooling.Architecture.Tests\Inno.Tooling.Architecture.Tests.csproj", "{24A449B0-2513-4331-9C4B-57E4FE8A3A2A}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "contracts", "contracts", "{09A2C445-ED80-45BC-A039-1824BF7F3243}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inno.Editor.Annotations", "src\composition\editor\contracts\Inno.Editor.Annotations\Inno.Editor.Annotations.csproj", "{C1DA902B-5BFB-4CE3-B0C4-9763AFFCA99A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -1154,6 +1158,10 @@ Global
 		{24A449B0-2513-4331-9C4B-57E4FE8A3A2A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{24A449B0-2513-4331-9C4B-57E4FE8A3A2A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{24A449B0-2513-4331-9C4B-57E4FE8A3A2A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C1DA902B-5BFB-4CE3-B0C4-9763AFFCA99A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C1DA902B-5BFB-4CE3-B0C4-9763AFFCA99A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C1DA902B-5BFB-4CE3-B0C4-9763AFFCA99A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C1DA902B-5BFB-4CE3-B0C4-9763AFFCA99A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1391,5 +1399,7 @@ Global
 		{7BBE6754-2853-429D-A1AF-A76B473E7EC2} = {985CC4F9-F39F-4691-BE3E-828CD78728D6}
 		{9CEE6632-0D0D-444A-BE3C-72CEBB7DDE97} = {D6BE33BD-7AC1-4C59-AF9A-52C523FABA31}
 		{24A449B0-2513-4331-9C4B-57E4FE8A3A2A} = {9CEE6632-0D0D-444A-BE3C-72CEBB7DDE97}
+		{09A2C445-ED80-45BC-A039-1824BF7F3243} = {F31DAA54-96B1-49BD-B7D7-3C036F60B1BB}
+		{C1DA902B-5BFB-4CE3-B0C4-9763AFFCA99A} = {09A2C445-ED80-45BC-A039-1824BF7F3243}
 	EndGlobalSection
 EndGlobal

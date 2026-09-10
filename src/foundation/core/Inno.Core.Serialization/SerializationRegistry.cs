@@ -178,6 +178,25 @@ public sealed class SerializationRegistry : IDisposable
     }
 
     /// <summary>
+    /// Encodes an existing ordered set of independent property snapshots as neutral restoration bytes.
+    /// </summary>
+    /// <param name="snapshots">
+    /// Snapshots previously produced by <see cref="CaptureProperties"/>.
+    /// </param>
+    /// <returns>
+    /// Strictly validated bytes accepted by <see cref="RestorePropertiesData"/>.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="snapshots"/> is <see langword="null"/>.
+    /// </exception>
+    public byte[] EncodePropertySnapshots(IReadOnlyList<SerializationPropertySnapshot> snapshots)
+    {
+        EnsureInitialized();
+        ArgumentNullException.ThrowIfNull(snapshots);
+        return PropertySnapshotBinaryFormat.Encode(snapshots);
+    }
+
+    /// <summary>
     /// Restores independently captured properties into an existing object.
     /// </summary>
     /// <param name="target">

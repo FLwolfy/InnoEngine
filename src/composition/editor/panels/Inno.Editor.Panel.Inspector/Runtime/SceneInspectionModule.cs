@@ -22,6 +22,7 @@ internal sealed class SceneInspectionModule : EditorModule
 {
     private readonly AssetPipeline m_assets;
     private readonly InspectionDrawerRegistry m_inspectors;
+    private readonly InspectorAttributeDrawerRegistry m_attributes;
     private readonly PropertyDrawerRegistry m_properties;
     private readonly SerializedPropertyRenderer m_renderer;
 
@@ -94,14 +95,20 @@ internal sealed class SceneInspectionModule : EditorModule
             settings,
             serialization,
             logs);
-        m_inspectors = new InspectionDrawerRegistry(interactions, activator.Create, types);
+        m_inspectors = new InspectionDrawerRegistry(interactions, activator.Create, types, serialization);
         m_properties = new PropertyDrawerRegistry(
+            interactions,
+            types,
+            serialization,
+            [assets, runtimeSession]);
+        m_attributes = new InspectorAttributeDrawerRegistry(
             interactions,
             types,
             serialization,
             [assets, runtimeSession]);
         m_renderer = new SerializedPropertyRenderer(
             m_properties,
+            m_attributes,
             interactions,
             new SceneInspectionPropertyEditService(edits),
             logs);
@@ -139,6 +146,7 @@ internal sealed class SceneInspectionModule : EditorModule
     protected override void OnDispose()
     {
         m_inspectors.Dispose();
+        m_attributes.Dispose();
         m_properties.Dispose();
     }
 }

@@ -10,6 +10,12 @@ namespace Inno.Platform;
 public interface IPlatformApplication : IDisposable
 {
     /// <summary>
+    /// Requests one complete host frame on the event-pump thread while the operating system
+    /// owns a modal window resize loop. Handlers must not poll events or reenter an active frame.
+    /// </summary>
+    event Action<uint>? redrawRequested;
+
+    /// <summary>
     /// Creates a window owned by this platform session.
     /// </summary>
     /// <param name="options">

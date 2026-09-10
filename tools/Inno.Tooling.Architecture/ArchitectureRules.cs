@@ -285,7 +285,7 @@ internal static partial class ArchitectureRules
             failures.Add($"{sourcePath}: Build cannot reference Editor project {targetPath}.");
         }
         if (sourcePath.Contains("Inno.Rendering/", StringComparison.Ordinal) &&
-            (targetPath.Contains("ShaderGraph", StringComparison.Ordinal) ||
+            (targetPath.Contains("MaterialGraph", StringComparison.Ordinal) ||
              targetPath.StartsWith("src/content/scene/", StringComparison.Ordinal) ||
              targetPath.StartsWith("src/composition/editor/", StringComparison.Ordinal)))
         {

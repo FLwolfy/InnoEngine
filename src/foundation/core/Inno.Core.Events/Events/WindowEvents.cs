@@ -6,9 +6,6 @@ namespace Inno.Core.Events;
 /// <param name="windowId">
 /// The window id used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public abstract class WindowEvent(uint windowId) : Event
 {
     /// <summary>
@@ -30,9 +27,6 @@ public abstract class WindowEvent(uint windowId) : Event
 /// <param name="height">
 /// The height in logical units or pixels required by this operation.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public class WindowResizeEvent(uint windowId, int width, int height) : WindowEvent(windowId)
 {
     /// <summary>
@@ -52,9 +46,6 @@ public class WindowResizeEvent(uint windowId, int width, int height) : WindowEve
 /// <param name="windowId">
 /// The window id used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public class WindowCloseEvent(uint windowId) : WindowEvent(windowId)
 {
 }
@@ -68,9 +59,6 @@ public class WindowCloseEvent(uint windowId) : WindowEvent(windowId)
 /// <param name="isFocused">
 /// The is focused used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public class WindowFocusChangedEvent(uint windowId, bool isFocused) : WindowEvent(windowId)
 {
     /// <summary>

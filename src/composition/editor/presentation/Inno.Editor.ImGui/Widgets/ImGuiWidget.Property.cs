@@ -12,6 +12,9 @@ namespace Inno.Editor.ImGui.ImGuiWidget;
 /// </summary>
 public static partial class ImGuiWidget
 {
+    private const string C_COMPACT_FLOAT_FORMAT = "%.1f";
+    private const string C_PRECISE_FLOAT_FORMAT = "%.9g";
+
     /// <summary>
     /// Draws a two-column property row with a stable internal identifier.
     /// </summary>
@@ -27,11 +30,15 @@ public static partial class ImGuiWidget
     /// <param name="labelWidth">
     /// Optional fixed label column width.
     /// </param>
+    /// <param name="tooltip">
+    /// Optional hover help displayed from the property label.
+    /// </param>
     public static void PropertyRow(
         string id,
         string label,
         Action drawValue,
-        float labelWidth = -1f)
+        float labelWidth = -1f,
+        string? tooltip = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         ArgumentNullException.ThrowIfNull(drawValue);
@@ -63,6 +70,7 @@ public static partial class ImGuiWidget
             NativeImGui.TableSetColumnIndex(0);
             NativeImGui.AlignTextToFramePadding();
             NativeImGui.TextUnformatted(label);
+            DrawItemTooltip(tooltip);
             NativeImGui.TableSetColumnIndex(1);
             NativeImGui.SetNextItemWidth(-1f);
             drawValue();
@@ -97,7 +105,101 @@ public static partial class ImGuiWidget
     public static bool AxisDragFloat(string id, string axis, ref float value, float width, float speed = 0.1f)
     {
         DrawAxisPrefix(id, axis, width);
-        return NativeImGui.DragFloat($"##axis_float_{id}_{axis}", ref value, speed);
+        return CompactDragFloat($"##axis_float_{id}_{axis}", ref value, speed);
+    }
+
+    /// <summary>
+    /// Draws a floating-point drag field with a compact one-decimal presentation and precise text editing.
+    /// </summary>
+    /// <param name="label">
+    /// Stable ImGui label and identifier.
+    /// </param>
+    /// <param name="value">
+    /// Exact floating-point value to edit. Compact presentation never rounds the stored value.
+    /// </param>
+    /// <param name="speed">
+    /// Drag speed.
+    /// </param>
+    /// <param name="minimum">
+    /// Optional inclusive lower bound.
+    /// </param>
+    /// <param name="maximum">
+    /// Optional inclusive upper bound.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the exact value changed.
+    /// </returns>
+    public static bool CompactDragFloat(
+        string label,
+        ref float value,
+        float speed = 0.1f,
+        float? minimum = null,
+        float? maximum = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(label);
+        ValidateFloatBounds(minimum, maximum);
+        bool bounded = minimum.HasValue;
+        ImGuiSliderFlags flags = ImGuiSliderFlags.NoRoundToFormat |
+                                 (bounded ? ImGuiSliderFlags.AlwaysClamp : ImGuiSliderFlags.None);
+        string format = WantsPreciseFloatInput(label)
+            ? C_PRECISE_FLOAT_FORMAT
+            : C_COMPACT_FLOAT_FORMAT;
+        return NativeImGui.DragFloat(
+            label,
+            ref value,
+            speed,
+            minimum ?? 0f,
+            maximum ?? 0f,
+            format,
+            flags);
+    }
+
+    /// <summary>
+    /// Draws a bounded slider with compact presentation and a double-click precise input mode.
+    /// </summary>
+    /// <param name="label">
+    /// Stable ImGui label and identifier.
+    /// </param>
+    /// <param name="value">
+    /// Exact floating-point value to edit. Compact presentation never rounds the stored value.
+    /// </param>
+    /// <param name="minimum">
+    /// Inclusive lower bound.
+    /// </param>
+    /// <param name="maximum">
+    /// Inclusive upper bound.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the exact value changed.
+    /// </returns>
+    public static bool CompactSliderFloat(
+        string label,
+        ref float value,
+        float minimum,
+        float maximum)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(label);
+        ValidateFloatBounds(minimum, maximum);
+        ImGuiSliderFlags flags = ImGuiSliderFlags.NoRoundToFormat | ImGuiSliderFlags.AlwaysClamp;
+        if (WantsPreciseFloatInput(label))
+        {
+            float speed = MathF.Max((maximum - minimum) * 0.01f, 0.0001f);
+            return NativeImGui.DragFloat(
+                label,
+                ref value,
+                speed,
+                minimum,
+                maximum,
+                C_PRECISE_FLOAT_FORMAT,
+                flags);
+        }
+        return NativeImGui.SliderFloat(
+            label,
+            ref value,
+            minimum,
+            maximum,
+            C_COMPACT_FLOAT_FORMAT,
+            flags);
     }
 
     /// <summary>
@@ -264,6 +366,32 @@ public static partial class ImGuiWidget
         NativeImGui.Dummy(new Vector2(axisWidth, height));
         NativeImGui.SameLine(0f, 0f);
         NativeImGui.SetNextItemWidth(MathF.Max(1f, width - axisWidth));
+    }
+
+    private static bool WantsPreciseFloatInput(string label)
+    {
+        bool inputRequested = NativeImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left) ||
+                              (NativeImGui.GetIO().KeyCtrl &&
+                               NativeImGui.IsMouseClicked(ImGuiMouseButton.Left));
+        if (!inputRequested)
+            return false;
+        Vector2 minimum = NativeImGui.GetCursorScreenPos();
+        Vector2 maximum = minimum + new Vector2(
+            MathF.Max(1f, NativeImGui.CalcItemWidth()),
+            NativeImGui.GetFrameHeight());
+        return NativeImGui.IsMouseHoveringRect(minimum, maximum, true);
+    }
+
+    private static void ValidateFloatBounds(float? minimum, float? maximum)
+    {
+        if (minimum.HasValue != maximum.HasValue)
+        {
+            throw new ArgumentException("Floating-point bounds must either both be supplied or both be omitted.");
+        }
+        if (minimum is not float lower || maximum is not float upper)
+            return;
+        if (!float.IsFinite(lower) || !float.IsFinite(upper) || lower > upper)
+            throw new ArgumentOutOfRangeException(nameof(maximum), "Floating-point bounds must be finite and ordered.");
     }
 
     private static Vector4 GetAxisColor(string axis)

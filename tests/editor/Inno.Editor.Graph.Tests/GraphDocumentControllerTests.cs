@@ -150,6 +150,30 @@ public sealed class GraphDocumentControllerTests : IDisposable
     }
 
     [Fact]
+    public void ReplaceDocument_IsAtomicUndoableAndDoesNotRetainTheCallerDocument()
+    {
+        GraphEditorModule module = Assert.IsType<GraphEditorModule>(m_sink.module);
+        var history = new RecordingHistory();
+        var document = new GraphDocument();
+        document.AddNode(new GraphNodeRecord(new GraphNodeId("old"), "test.old"));
+        GraphDocumentController controller = module.OpenDocument(Guid.NewGuid(), document, history);
+        var replacement = new GraphDocument();
+        var replacementNode = new GraphNodeRecord(new GraphNodeId("new"), "test.new");
+        replacement.AddNode(replacementNode);
+
+        controller.ReplaceDocument(replacement, "Replace Test Graph");
+        replacementNode.position = new GraphPosition(99f, 99f);
+
+        GraphNodeRecord current = Assert.Single(controller.document.nodes);
+        Assert.Equal(new GraphNodeId("new"), current.id);
+        Assert.Equal(default, current.position);
+        Assert.Equal(1UL, controller.revision);
+        Assert.True(controller.isDirty);
+        Assert.Single(history.changes).Dispose();
+        history.changes.Clear();
+    }
+
+    [Fact]
     public void CopyPaste_RemapsNodesAndPreservesInternalConnections()
     {
         GraphEditorModule module = Assert.IsType<GraphEditorModule>(m_sink.module);

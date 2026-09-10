@@ -17,7 +17,7 @@
 | [Audio](audio/README.md) | 后端中立播放/Mixer 契约、Runtime、资产与 MiniAudio adapter |
 | [Plugins](plugins/README.md) | Plugin manifest、安装源、只读 mount 与候选激活 |
 | [Scene](scene/README.md) | SceneWorld、GameBehavior、GameSystem、Scene/Prefab asset integration |
-| [Rendering](render/README.md) | 后端中立 Rendering、目标资产、BGFX 与 ShaderGraph |
+| [Rendering](render/README.md) | 后端中立 Rendering、目标资产、BGFX 与 MaterialGraph |
 | [Platform](platform/README.md) | 中立窗口契约与 SDL3 adapter |
 | [Runtime](runtime/README.md) | Subsystem Contracts、声明生成器、默认装配、EngineHost、RuntimeSession 与 Player |
 | [Editor](editor/README.md) | Editor feature、Panel、Play Mode、Diagnostics 与 Export UI |
@@ -51,6 +51,8 @@ Core 不引用业务领域；Build 不引用 Editor；Runtime 不引用 Build/Ed
 新增 [Architecture CLI 测试项目](tooling/Inno.Tooling.Architecture.Tests.md)已纳入 `tests/tooling`、Solution 和项目文档。
 
 ## 当前格式与状态
+
+新增 [Inno.Editor.Annotations](editor/Inno.Editor.Annotations.md) 已包含独立项目页与 Editor 索引；展示标注不再归属 Core.Serialization。
 
 - Project Settings、Editor Settings、Build Profile、Plugin Manifest、Catalog 与 Artifact 只支持当前源码格式。
 - `Assets` 是唯一可写创作源；`Plugins` 是只读安装源；`Library` 可完全重建。

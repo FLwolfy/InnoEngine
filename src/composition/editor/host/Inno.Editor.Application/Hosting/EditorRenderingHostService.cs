@@ -38,10 +38,23 @@ internal sealed class EditorRenderingHostService :
         m_reloadRegistration = reloads.Register(this);
     }
 
-    /// <summary>Gets the active rendering-device generation.</summary>
+    /// <summary>
+    /// Gets the active rendering-device generation.
+    /// </summary>
     public uint deviceGeneration => m_runtime.deviceGeneration;
 
-    /// <summary>Tries to resolve a standalone texture preview without blocking target compilation.</summary>
+    /// <summary>
+    /// Tries to resolve a standalone texture preview without blocking target compilation.
+    /// </summary>
+    /// <param name="texture">
+    /// Persistent texture asset whose default artifact should be previewed.
+    /// </param>
+    /// <param name="handle">
+    /// Receives a current-device-generation preview handle when the artifact is resident.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when a preview is immediately available.
+    /// </returns>
     public bool TryGetTexture(TextureAsset texture, out EditorPreviewHandle handle)
     {
         ArgumentNullException.ThrowIfNull(texture);
@@ -52,7 +65,24 @@ internal sealed class EditorRenderingHostService :
             out handle);
     }
 
-    /// <summary>Tries to resolve a named texture artifact preview without blocking target compilation.</summary>
+    /// <summary>
+    /// Tries to resolve a named texture artifact preview without blocking target compilation.
+    /// </summary>
+    /// <param name="texture">
+    /// Stable named texture artifact reference to prewarm and resolve.
+    /// </param>
+    /// <param name="pixelWidth">
+    /// Positive source width recorded in the returned handle.
+    /// </param>
+    /// <param name="pixelHeight">
+    /// Positive source height recorded in the returned handle.
+    /// </param>
+    /// <param name="handle">
+    /// Receives a current-device-generation preview handle when the artifact is resident.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when a preview is immediately available.
+    /// </returns>
     public bool TryGetTextureArtifact(
         RenderTextureArtifactReference texture,
         int pixelWidth,
@@ -87,7 +117,15 @@ internal sealed class EditorRenderingHostService :
         return true;
     }
 
-    /// <summary>Draws one current-generation preview into the active presentation surface.</summary>
+    /// <summary>
+    /// Draws one current-generation preview into the active presentation surface.
+    /// </summary>
+    /// <param name="handle">
+    /// Current preview handle owned by this rendering host.
+    /// </param>
+    /// <param name="logicalSize">
+    /// Positive logical presentation size.
+    /// </param>
     public void Draw(EditorPreviewHandle handle, Vector2 logicalSize)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
@@ -102,7 +140,15 @@ internal sealed class EditorRenderingHostService :
         m_presentation.DrawImage(preview.presentationTexture, logicalSize);
     }
 
-    /// <summary>Releases one cached preview registration.</summary>
+    /// <summary>
+    /// Releases one cached preview registration.
+    /// </summary>
+    /// <param name="handle">
+    /// Preview handle to release.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the exact current-generation preview was released.
+    /// </returns>
     public bool Release(EditorPreviewHandle handle)
     {
         if (!handle.isValid || handle.deviceGeneration != deviceGeneration
@@ -116,7 +162,9 @@ internal sealed class EditorRenderingHostService :
         return true;
     }
 
-    /// <summary>Releases every cached preview registration.</summary>
+    /// <summary>
+    /// Releases every cached preview registration.
+    /// </summary>
     void IEditorPreviewService.ReleaseAll() => ReleaseAllPreviews();
 
     private void ReleaseAllPreviews()

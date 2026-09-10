@@ -64,6 +64,8 @@ public sealed class PlayerState : ISerializable
 | `[RequiresSerializationConverter]` | 强制该 class 必须由显式 Converter 处理。 |
 | `[SerializationExtension]` | 标记 Converter class，让 TypeCache/Registry 自动发现。 |
 
+Inspector 展示标注不属于 Serialization。`Header`、`Text`、`Tooltip`、`Range`、`ShowIf` 等均由独立的 [Inno.Editor.Annotations](../editor/Inno.Editor.Annotations.md) 声明；本程序集不声明、引用或转发这些类型。`SerializableProperty` 继续只负责持久数据契约。
+
 ### PropertyVisibility
 
 这是 `[Flags]` enum：

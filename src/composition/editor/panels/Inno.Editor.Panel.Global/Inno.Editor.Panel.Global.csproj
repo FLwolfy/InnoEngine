@@ -8,6 +8,7 @@
     <InnoAssemblyScope>Editor</InnoAssemblyScope>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\..\..\services\platform\Inno.Platform\Inno.Platform.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\foundation\core\Inno.Core.Input\Inno.Core.Input.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\adapters\presentation\Inno.Adapter.Presentation.ImGui.Sdl3\Inno.Adapter.Presentation.ImGui.Sdl3.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\..\native\Inno.Native.ImGui\Inno.Native.ImGui.csproj" PrivateAssets="compile" />

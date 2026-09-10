@@ -6,6 +6,7 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <InnoAssemblyScope>Editor</InnoAssemblyScope>
+    <DefineConstants>$(DefineConstants);INNO_EDITOR</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\foundation\core\Inno.Core.Diagnostics\Inno.Core.Diagnostics.csproj" PrivateAssets="compile" />

@@ -124,6 +124,32 @@ public sealed class SceneHistoryTests : IDisposable
     }
 
     [Fact]
+    public void PropertyUndoRestoresEverySiblingChangedByThePrimarySetter()
+    {
+        var component = CreateScene().CreateObject("Coupled").AddComponent<CoupledHistoryComponent>();
+        Assert.True(component.primary);
+        Assert.Equal(CoupledHistoryMode.Base, component.mode);
+
+        Assert.True(m_edits.ChangeProperty(
+            component,
+            nameof(CoupledHistoryComponent.mode),
+            () => component.mode = CoupledHistoryMode.Overlay,
+            "Change Coupled Mode"));
+        Assert.Equal(CoupledHistoryMode.Overlay, component.mode);
+        Assert.False(component.primary);
+
+        EditorHistoryResult undo = m_runtime.interactions.history.Undo();
+        Assert.True(undo.succeeded, undo.message);
+        Assert.Equal(CoupledHistoryMode.Base, component.mode);
+        Assert.True(component.primary);
+
+        EditorHistoryResult redo = m_runtime.interactions.history.Redo();
+        Assert.True(redo.succeeded, redo.message);
+        Assert.Equal(CoupledHistoryMode.Overlay, component.mode);
+        Assert.False(component.primary);
+    }
+
+    [Fact]
     public void TransformManipulationTransactionUndoesAllLocalValuesAtomically()
     {
         GameObject gameObject = CreateScene().CreateObject("Manipulated");
@@ -163,6 +189,32 @@ public sealed class SceneHistoryTests : IDisposable
         Assert.Equal(position, transform.localPosition);
         Assert.Equal(rotation, transform.localRotation);
         Assert.Equal(scale, transform.localScale);
+    }
+
+    [Fact]
+    public void WorldPositionEditRestoresLocalStorageAndWorldResultThroughHistory()
+    {
+        GameScene scene = CreateScene();
+        Transform parent = scene.CreateObject("Parent").transform;
+        parent.localPosition = new Inno.Core.Mathematics.Vector3(3f, -2f, 4f);
+        parent.localScale = new Inno.Core.Mathematics.Vector3(2f, 3f, 4f);
+        Transform child = scene.CreateObject("Child").transform;
+        child.SetParent(parent);
+        var beforeLocal = child.localPosition;
+        var beforeWorld = child.worldPosition;
+        var requestedWorld = new Inno.Core.Mathematics.Vector3(11f, 7f, 20f);
+
+        Assert.True(m_edits.ChangeProperty(child, nameof(Transform.localPosition),
+            () => child.worldPosition = requestedWorld, "Edit World Position"));
+        var afterLocal = child.localPosition;
+        Assert.Equal(requestedWorld, child.worldPosition);
+        Assert.NotEqual(beforeLocal, afterLocal);
+        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        Assert.Equal(beforeLocal, child.localPosition);
+        Assert.Equal(beforeWorld, child.worldPosition);
+        Assert.True(m_runtime.interactions.history.Redo().succeeded);
+        Assert.Equal(afterLocal, child.localPosition);
+        Assert.Equal(requestedWorld, child.worldPosition);
     }
 
     [Fact]
@@ -807,6 +859,38 @@ internal sealed class HistoryComponent : GameBehavior
     protected override void Reset()
     {
         value = 7;
+    }
+}
+
+internal enum CoupledHistoryMode
+{
+    Base,
+    Overlay
+}
+
+[StableTypeId("f25d91a5-df87-4ed6-a383-12a9071af66e")]
+internal sealed class CoupledHistoryComponent : GameBehavior
+{
+    private bool m_primary = true;
+    private CoupledHistoryMode m_mode;
+
+    [SerializableProperty]
+    public bool primary
+    {
+        get => m_primary;
+        set => m_primary = value && mode == CoupledHistoryMode.Base;
+    }
+
+    [SerializableProperty]
+    public CoupledHistoryMode mode
+    {
+        get => m_mode;
+        set
+        {
+            m_mode = value;
+            if (value == CoupledHistoryMode.Overlay)
+                m_primary = false;
+        }
     }
 }
 

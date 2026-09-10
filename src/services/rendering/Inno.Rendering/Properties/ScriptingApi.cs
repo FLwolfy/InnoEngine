@@ -117,7 +117,6 @@ using Inno.Rendering;
 [assembly: ScriptingApiExport(typeof(IRenderTextureArtifactSource), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(TextureAsset), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GeometryAsset), ScriptingApiScope.Runtime)]
-[assembly: ScriptingApiExport(typeof(ShaderIRSourceKind), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(ShaderSourceLocation), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(ShaderDiagnostic), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(ShaderIRStageModule), ScriptingApiScope.Runtime)]

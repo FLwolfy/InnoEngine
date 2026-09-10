@@ -13,5 +13,11 @@ public enum ScriptingApiScope
     /// <summary>
     /// Exposes the API only to editor scripts.
     /// </summary>
-    Editor
+    Editor,
+
+    /// <summary>
+    /// Exposes compile-time annotations to game and editor scripts. Player compilation erases
+    /// their applications and derived annotation declarations before binding to target assemblies.
+    /// </summary>
+    Authoring
 }

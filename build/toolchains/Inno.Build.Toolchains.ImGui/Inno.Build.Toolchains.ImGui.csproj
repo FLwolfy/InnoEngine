@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <None Update="CMakeLists.txt" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="..\Inno.Build.Toolchains\Inno.Build.Toolchains.csproj" PrivateAssets="compile" />
   </ItemGroup>
 </Project>

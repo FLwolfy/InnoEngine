@@ -1,5 +1,9 @@
 # Inno.Scripting.Reload
 
+## 项目创作代际
+
+同一项目的 GameScripts 与 EditorScripts 共同构成一个创作代际。即使只修改 Editor 源码，也一起经过候选、Scene/Settings 状态恢复、原子激活与严格卸载验证。原因是 Editor 中的泛型扩展闭合于项目 runtime 类型时，CLR loader allocator 可以形成双向依赖；单向程序集引用并不保证两个 collectible context 可独立卸载。编译仍可复用未修改的 GameScripts 产物，不要求重编全部源码。Plugin 仍按公开模块依赖图处理，没有任何 Rendering2D 特例。
+
 [Scripting 索引](README.md) · [Compiler](Inno.Scripting.Compiler.md) · [Extensibility](../extensibility/Inno.Extensibility.Modules.md) · [目标 reload 强制标准](../architecture/IDENTITY_REFERENCE_RELOAD_STANDARD.md)
 
 ## 公开 API

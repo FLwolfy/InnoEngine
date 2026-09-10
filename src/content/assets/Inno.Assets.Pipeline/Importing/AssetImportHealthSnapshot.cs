@@ -41,9 +41,6 @@ public sealed class AssetImportHealthSnapshot
 /// <param name="diagnostics">
 /// The deterministic importer diagnostics associated with the failure.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public readonly record struct AssetImportFailure(
     string assetPath,
     string diagnostics);

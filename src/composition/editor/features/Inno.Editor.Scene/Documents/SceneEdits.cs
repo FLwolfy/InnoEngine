@@ -968,33 +968,57 @@ public sealed class SceneEdits : EditorModule
         ArgumentNullException.ThrowIfNull(mutation);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
         using IDisposable presentationScope = m_workspace.EnterPresentationScope();
-        byte[] before = ScenePropertySerialization.CaptureProperty(
-            target,
-            propertyName,
-            m_workspace.serialization,
-            m_workspace.assets);
-        byte[] after;
+        IReadOnlyList<SerializationPropertySnapshot> before = OrderPropertySnapshots(
+            ScenePropertySerialization.CapturePropertySnapshots(
+                target,
+                m_workspace.serialization,
+                m_workspace.assets),
+            propertyName);
+        if (!before.Any(snapshot => string.Equals(snapshot.name, propertyName, StringComparison.Ordinal)))
+        {
+            throw new ArgumentException(
+                $"Serializable property '{propertyName}' was not found on '{target.GetType().FullName}'.",
+                nameof(propertyName));
+        }
+        IReadOnlyList<SerializationPropertySnapshot> after;
         try
         {
             mutation();
-            after = ScenePropertySerialization.CaptureProperty(
-                target,
-                propertyName,
-                m_workspace.serialization,
-                m_workspace.assets);
+            after = OrderPropertySnapshots(
+                ScenePropertySerialization.CapturePropertySnapshots(
+                    target,
+                    m_workspace.serialization,
+                    m_workspace.assets),
+                propertyName);
         }
         catch (Exception exception)
         {
-            RollbackAndRethrow(exception, () => RequirePropertyRestore(target, before));
+            RollbackAndRethrow(exception, () => RestoreSnapshots(target, before));
             throw;
         }
-        if (before.AsSpan().SequenceEqual(after))
+
+        IReadOnlyDictionary<string, SerializationPropertySnapshot> afterByName = after.ToDictionary(
+            static snapshot => snapshot.name,
+            StringComparer.Ordinal);
+        var deltas = new List<ScenePropertyValueDelta>();
+        for (int index = 0; index < before.Count; index++)
+        {
+            SerializationPropertySnapshot previous = before[index];
+            if (!afterByName.TryGetValue(previous.name, out SerializationPropertySnapshot? current))
+                continue;
+            if (previous.data.Span.SequenceEqual(current.data.Span))
+                continue;
+            deltas.Add(new ScenePropertyValueDelta(
+                previous.name,
+                m_workspace.serialization.EncodePropertySnapshots([previous]),
+                m_workspace.serialization.EncodePropertySnapshots([current])));
+        }
+        if (deltas.Count == 0)
             return false;
         ScenePropertyHistoryData data = ScenePropertyHistoryData.Create(
             target.identity.persistentId,
             propertyName,
-            before,
-            after);
+            deltas);
         RecordWithRollback(
             () => m_interactions.history.RecordApplied(
                 historyName,
@@ -1002,8 +1026,36 @@ public sealed class SceneEdits : EditorModule
                     SceneHistoryKinds.Property,
                     EditorHistoryPayload.FromBytes(data.Encode()),
                     mergeKey)),
-            () => RequirePropertyRestore(target, before));
+            () => RestorePropertyDeltas(target, deltas, useAfter: false));
         return true;
+    }
+
+    private static IReadOnlyList<SerializationPropertySnapshot> OrderPropertySnapshots(
+        IReadOnlyList<SerializationPropertySnapshot> snapshots,
+        string primaryPropertyName)
+        => snapshots
+            .OrderBy(snapshot => string.Equals(snapshot.name, primaryPropertyName, StringComparison.Ordinal) ? 0 : 1)
+            .ToArray();
+
+    private void RestoreSnapshots(
+        EngineObject target,
+        IReadOnlyList<SerializationPropertySnapshot> snapshots)
+    {
+        for (int index = 0; index < snapshots.Count; index++)
+        {
+            RequirePropertyRestore(
+                target,
+                m_workspace.serialization.EncodePropertySnapshots([snapshots[index]]));
+        }
+    }
+
+    private void RestorePropertyDeltas(
+        EngineObject target,
+        IReadOnlyList<ScenePropertyValueDelta> deltas,
+        bool useAfter)
+    {
+        for (int index = 0; index < deltas.Count; index++)
+            RequirePropertyRestore(target, useAfter ? deltas[index].after : deltas[index].before);
     }
 
     /// <summary>

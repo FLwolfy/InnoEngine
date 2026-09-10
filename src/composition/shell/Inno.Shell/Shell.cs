@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 using Inno.Adapter;
 using Inno.Adapter.Input;
 using Inno.Adapter.Rendering;
@@ -29,6 +30,7 @@ public abstract class Shell : IDisposable
     private bool m_hasRun;
     private bool m_stoppingNotified;
     private bool m_disposed;
+    private bool m_frameActive;
     private readonly RetirementBarrier m_retirement = new("Composition Shell");
 
     /// <summary>
@@ -49,7 +51,14 @@ public abstract class Shell : IDisposable
         ArgumentNullException.ThrowIfNull(options);
         m_adapterSelection = options.adapters;
         this.options = options;
+        framePacing = new FramePacingOptions { verticalSync = options.verticalSync };
     }
+
+    /// <summary>
+    /// Gets the mutable presentation cadence applied at the next complete host frame.
+    /// Zero maximum frame rate means no software frame limit.
+    /// </summary>
+    public FramePacingOptions framePacing { get; }
 
     /// <summary>
     /// Gets the implementation-neutral adapter catalog used by this product host.
@@ -200,6 +209,7 @@ public abstract class Shell : IDisposable
         Stopwatch timer = Stopwatch.StartNew();
         double previousTime = 0d;
         int frameCount = 0;
+        platformApplication.redrawRequested += Redraw;
         try
         {
             OnStarting();
@@ -209,6 +219,33 @@ public abstract class Shell : IDisposable
                 if (m_exitRequested || primaryWindow.isClosed)
                     break;
 
+                DrawFrame();
+            }
+            if (smokeFrameLimit.HasValue)
+                OnSmokeCompleted(frameCount);
+            return 0;
+        }
+        finally
+        {
+            platformApplication.redrawRequested -= Redraw;
+            NotifyStopping();
+        }
+
+        void Redraw(uint windowId)
+        {
+            if (!hasCompletedFrame || m_frameActive || m_exitRequested || primaryWindow.isClosed)
+                return;
+            if (windowId == primaryWindow.windowId && primaryWindow.pixelWidth > 0 && primaryWindow.pixelHeight > 0)
+                renderDevice.ResizeBackbuffer(primaryWindow.pixelWidth, primaryWindow.pixelHeight);
+            DrawFrame();
+        }
+
+        void DrawFrame()
+        {
+            m_frameActive = true;
+            try
+            {
+                renderDevice.SetVerticalSync(framePacing.verticalSync);
                 double totalTime = timer.Elapsed.TotalSeconds;
                 float deltaTime = Math.Max(0f, (float)(totalTime - previousTime));
                 var frame = new ShellFrame(frameCount, totalTime, deltaTime);
@@ -234,14 +271,18 @@ public abstract class Shell : IDisposable
                 hasCompletedFrame = true;
                 if (smokeFrameLimit.HasValue && frameCount >= smokeFrameLimit.Value)
                     RequestExit();
+                int maximumRate = framePacing.maximumFrameRate;
+                if (maximumRate > 0)
+                {
+                    double remaining = 1d / maximumRate - (timer.Elapsed.TotalSeconds - totalTime);
+                    if (remaining > 0d)
+                        Thread.Sleep(TimeSpan.FromSeconds(remaining));
+                }
             }
-            if (smokeFrameLimit.HasValue)
-                OnSmokeCompleted(frameCount);
-            return 0;
-        }
-        finally
-        {
-            NotifyStopping();
+            finally
+            {
+                m_frameActive = false;
+            }
         }
     }
 

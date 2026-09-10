@@ -54,8 +54,12 @@ public sealed class EditorPanelExtension
         set => m_panel.isOpen = value;
     }
 
-    /// <summary>Consumes a pending request to focus this panel window.</summary>
-    /// <returns><see langword="true"/> once for each accepted focus request.</returns>
+    /// <summary>
+    /// Consumes a pending request to focus this panel window.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> once for each accepted focus request.
+    /// </returns>
     public bool TakeFocusRequest() => m_takeFocusRequest();
 
     /// <summary>

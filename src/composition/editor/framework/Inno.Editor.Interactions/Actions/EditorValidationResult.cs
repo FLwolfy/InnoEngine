@@ -9,9 +9,6 @@ namespace Inno.Editor.Interactions;
 /// <param name="message">
 /// The user-facing validation diagnostic, or an empty string for a valid result.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public readonly record struct EditorValidationResult(bool isValid, string message)
 {
     /// <summary>

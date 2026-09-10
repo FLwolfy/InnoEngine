@@ -6,6 +6,7 @@ using System.Reflection;
 using Inno.Extensibility.Types;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
+using Inno.Core.Serialization;
 
 namespace Inno.Editor.Inspection;
 
@@ -15,6 +16,7 @@ namespace Inno.Editor.Inspection;
 public sealed class InspectionDrawerRegistry : IDisposable
 {
     private readonly InspectionTypeRegistry m_registry;
+    private readonly SerializationRegistry m_serialization;
 
     /// <summary>
     /// Creates a generation-aware inspection drawer registry.
@@ -29,6 +31,9 @@ public sealed class InspectionDrawerRegistry : IDisposable
     /// <param name="types">
     /// The host-owned type catalog that coordinates drawer generations.
     /// </param>
+    /// <param name="serialization">
+    /// Serialization registry used to expose the selected target's visible properties to custom drawers.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="interactions"/> or <paramref name="factory"/> is
     /// <see langword="null"/>.
@@ -36,9 +41,11 @@ public sealed class InspectionDrawerRegistry : IDisposable
     public InspectionDrawerRegistry(
         EditorInteractions interactions,
         InspectionDrawerFactory factory,
-        TypeCatalog types)
+        TypeCatalog types,
+        SerializationRegistry serialization)
     {
         m_registry = new InspectionTypeRegistry(interactions, factory, types);
+        m_serialization = serialization ?? throw new ArgumentNullException(nameof(serialization));
     }
 
     /// <summary>
@@ -86,7 +93,9 @@ public sealed class InspectionDrawerRegistry : IDisposable
             editorContext,
             m_registry.interactions,
             target,
-            renderer);
+            renderer,
+            this,
+            GetProperties(target));
         return true;
     }
 
@@ -131,9 +140,20 @@ public sealed class InspectionDrawerRegistry : IDisposable
             context = null;
             return false;
         }
-        context = new InspectionDrawContext(editorContext, m_registry.interactions, target, renderer);
+        context = new InspectionDrawContext(
+            editorContext,
+            m_registry.interactions,
+            target,
+            renderer,
+            this,
+            GetProperties(target));
         return true;
     }
+
+    private IReadOnlyList<SerializedProperty> GetProperties(object target)
+        => target is ISerializable serializable
+            ? m_serialization.GetProperties(serializable)
+            : Array.Empty<SerializedProperty>();
 
     /// <summary>
     /// Releases every active drawer snapshot and unregisters the registry from type refreshes.

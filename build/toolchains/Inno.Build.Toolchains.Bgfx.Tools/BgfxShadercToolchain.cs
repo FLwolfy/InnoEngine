@@ -150,12 +150,12 @@ public sealed class BgfxShadercToolchain : IShaderCompilerToolchain
                 request.sourceRoot
             ];
             if (request.stage.stage != ShaderStage.Compute
-                && request.stagePass.generatedVaryingSource is not null)
+                && request.stagePass.varyingSource is not null)
             {
                 string varyingPath = Path.Combine(temporaryDirectory, "varying.def.sc");
                 await File.WriteAllTextAsync(
                     varyingPath,
-                    request.stagePass.generatedVaryingSource,
+                    request.stagePass.varyingSource,
                     cancellationToken).ConfigureAwait(false);
                 arguments.Add("--varyingdef");
                 arguments.Add(varyingPath);

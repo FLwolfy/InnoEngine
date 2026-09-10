@@ -126,4 +126,4 @@ Reload transaction 在提交后会清空 previous pipeline、request provider �
 
 `resourceStatistics` 返回 `RenderResourceStatistics`，包括 active/retiring/rejected resources、pending/peak/rejected readbacks、upload page/resident/peak/frame bytes/rejections、target count/rejections。`RenderTargetStore(device, capacity)` 也公开 count/rejectedCount。统计不保存 backend 类型或 extension 对象。
 
-普通退休错误继续其他步骤并报告，Pending 保留当前步骤；已经发布的新 native generation 不因随后旧资源退休错误而伪装为候选失败。Geometry sections、compiled pass definition、ShaderGraph emission 等发布数据拥有隔离副本；可编辑 Asset 保持可变，两者不能混用。
+普通退休错误继续其他步骤并报告，Pending 保留当前步骤；已经发布的新 native generation 不因随后旧资源退休错误而伪装为候选失败。Geometry sections 与 compiled pass definition 等发布数据拥有隔离副本；可编辑 Asset 保持可变，两者不能混用。

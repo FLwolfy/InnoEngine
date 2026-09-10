@@ -10,9 +10,6 @@ namespace Inno.Editor.Application;
 /// <param name="reportCleanupFailure">
 /// The report cleanup failure used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 internal sealed class EditorHostResourceStack(Action<Exception> reportCleanupFailure) : IDisposable
 {
     private readonly List<Action> m_cleanup = [];

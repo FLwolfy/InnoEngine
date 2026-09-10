@@ -314,7 +314,7 @@ InnoEngine
 │   │   ├── platform             # Inno.Platform
 │   │   ├── input                # Inno.Input, Inno.Input.Runtime
 │   │   ├── storage              # Inno.Storage, Inno.Storage.Runtime
-│   │   ├── rendering            # neutral Rendering, Runtime, Assets, ShaderGraph
+│   │   ├── rendering            # neutral Rendering, Runtime, Assets, MaterialGraph
 │   │   └── audio                # neutral Audio, Runtime, Assets
 │   ├── runtime
 │   │   ├── contracts            # Inno.Runtime.Contracts
@@ -371,7 +371,7 @@ InnoEngine
 | `src/services/platform` | `Inno.Platform` |
 | `src/services/input` | `Inno.Input`、`Inno.Input.Runtime` |
 | `src/services/storage` | `Inno.Storage`、`Inno.Storage.Runtime` |
-| `src/services/rendering` | `Inno.Rendering`、`Inno.Rendering.Runtime`、`Inno.Rendering.Assets`、`Inno.Rendering.ShaderGraph` |
+| `src/services/rendering` | `Inno.Rendering`、`Inno.Rendering.Runtime`、`Inno.Rendering.Assets`、`Inno.Rendering.MaterialGraph` |
 | `src/services/audio` | `Inno.Audio`、`Inno.Audio.Runtime`、`Inno.Audio.Assets` |
 | `src/runtime/engine` | `Inno.Runtime` |
 | `src/runtime/contracts` | `Inno.Runtime.Contracts` |
@@ -393,7 +393,7 @@ InnoEngine
 | `src/composition/editor/framework` | `Inno.Editor.Core`、`Inno.Editor.Diagnostics`、`Inno.Editor.Graph`、`Inno.Editor.Inspection`、`Inno.Editor.Interactions`、`Inno.Editor.Settings` |
 | `src/composition/editor/features` | `Inno.Editor.Audio`、`Inno.Editor.Exporting`、`Inno.Editor.PlayMode`、`Inno.Editor.Rendering`、`Inno.Editor.Scene`、`Inno.Editor.Scripting` |
 | `src/composition/editor/presentation` | `Inno.Editor.ImGui` |
-| `src/composition/editor/panels` | `Inno.Editor.Panel.FileBrowser`、`Inno.Editor.Panel.GameView`、`Inno.Editor.Panel.Global`、`Inno.Editor.Panel.Hierarchy`、`Inno.Editor.Panel.Inspector`、`Inno.Editor.Panel.Logging`、`Inno.Editor.Panel.SceneView`、`Inno.Editor.Panel.Settings`、`Inno.Editor.Panel.ShaderGraph`、`Inno.Editor.Panel.Stats` |
+| `src/composition/editor/panels` | `Inno.Editor.Panel.FileBrowser`、`Inno.Editor.Panel.GameView`、`Inno.Editor.Panel.Global`、`Inno.Editor.Panel.Hierarchy`、`Inno.Editor.Panel.Inspector`、`Inno.Editor.Panel.Logging`、`Inno.Editor.Panel.SceneView`、`Inno.Editor.Panel.Settings`、`Inno.Editor.Panel.MaterialGraph`、`Inno.Editor.Panel.Stats` |
 
 其余可构建项目保持独立顶层角色：
 
@@ -423,7 +423,7 @@ InnoEngine
 | `tests/player` | `Inno.Player.E2E` |
 | `tests/plugins` | `Inno.Plugins.Tests` |
 | `tests/references` | `Inno.References.Tests` |
-| `tests/rendering` | `Inno.Rendering.Tests`、`Inno.Rendering.Assets.Tests`、`Inno.Rendering.Runtime.Tests`、`Inno.Adapter.Rendering.Bgfx.Tests`、`Inno.Rendering.ShaderGraph.Tests` |
+| `tests/rendering` | `Inno.Rendering.Tests`、`Inno.Rendering.Assets.Tests`、`Inno.Rendering.Runtime.Tests`、`Inno.Adapter.Rendering.Bgfx.Tests`、`Inno.Rendering.MaterialGraph.Tests` |
 | `tests/rendering/fixtures` | `Inno.Rendering.Runtime.Reload.TestModule` |
 | `tests/scene` | `Inno.Scene.Tests` |
 | `tests/scene/fixtures` | `Inno.Scene.Reload.TestModule` |

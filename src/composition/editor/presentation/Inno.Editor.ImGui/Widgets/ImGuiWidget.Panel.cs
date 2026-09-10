@@ -51,7 +51,12 @@ public static partial class ImGuiWidget
                 NativeImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
                 pushedPadding = true;
             }
-            bool visible = NativeImGui.Begin(title, flags);
+            // Native title separators use FrameBorderSize, which is intended for inputs in the
+            // editor theme. Suppress that extra strip only while window decorations are built.
+            NativeImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 0f);
+            bool visible;
+            try { visible = NativeImGui.Begin(title, flags); }
+            finally { NativeImGui.PopStyleVar(); }
             beganWindow = true;
             if (pushedPadding)
             {
@@ -131,7 +136,7 @@ public static partial class ImGuiWidget
     private static bool DrawPanelCloseButton(string title)
     {
         if (!NativeImGui.IsWindowDocked())
-            return false;
+            return DrawFloatingPanelCloseButton(title);
 
         uint dockId = NativeImGui.GetWindowDockID();
         ImGuiDockNodePtr dockNode = ImGuiP.DockBuilderGetNode(dockId);
@@ -186,6 +191,41 @@ public static partial class ImGuiWidget
         finally
         {
             ImGuiP.DockNodeEndAmendTabBar();
+        }
+    }
+
+    private static bool DrawFloatingPanelCloseButton(string title)
+    {
+        ImGuiWindowPtr window = ImGuiP.GetCurrentWindow();
+        if ((window.Flags & ImGuiWindowFlags.NoTitleBar) != 0)
+            return false;
+        ImGuiStylePtr nativeStyle = NativeImGui.GetStyle();
+        float size = GetCompactIconSize().X;
+        Vector2 maximum = new(window.Pos.X + window.Size.X - nativeStyle.WindowBorderSize - nativeStyle.FramePadding.X,
+            window.Pos.Y + (window.TitleBarHeight + size) * 0.5f);
+        Vector2 minimum = maximum - new Vector2(size);
+        ImRect bounds = new() { Min = minimum, Max = maximum };
+        ImRect previousClip = window.ClipRect;
+        ImDrawListPtr draw = NativeImGui.GetWindowDrawList();
+        window.ClipRect = new ImRect { Min = window.Pos, Max = window.Pos + window.Size };
+        draw.PushClipRect(window.Pos, window.Pos + window.Size, false);
+        try
+        {
+            uint id = NativeImGui.GetID("##floating_panel_close");
+            bool hovered = false, held = false;
+            bool pressed = ImGuiP.ItemAdd(bounds, id) && ImGuiP.ButtonBehavior(
+                bounds, id, ref hovered, ref held,
+                (ImGuiButtonFlags)((int)ImGuiButtonFlagsPrivate.NoNavFocus | (int)ImGuiButtonFlagsPrivate.PressedOnClickRelease));
+            DrawClickableTextPresentation(draw, minimum, new Vector2(size), ImGuiIcon.Xmark,
+                NativeImGui.CalcTextSize(ImGuiIcon.Xmark), hovered, held);
+            if (hovered)
+                DrawItemTooltip($"Close {title}");
+            return pressed;
+        }
+        finally
+        {
+            draw.PopClipRect();
+            window.ClipRect = previousClip;
         }
     }
 

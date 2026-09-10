@@ -9,9 +9,6 @@ namespace Inno.Editor.Panel.Global;
 /// <param name="zoom">
 /// The zoom used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 [EditorAction(GlobalInteractionIds.C_ZOOM_IN)]
 [EditorMenu(GlobalInteractionIds.C_MAIN_MENU_AREA, "View/Zoom In", order: 100)]
 [EditorShortcut(KeyCode.Plus, primary: true)]
@@ -47,9 +44,6 @@ internal sealed class ZoomInEditorAction(EditorZoomModule zoom) : EditorAction
 /// <param name="zoom">
 /// The zoom used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 [EditorAction(GlobalInteractionIds.C_ZOOM_OUT)]
 [EditorMenu(GlobalInteractionIds.C_MAIN_MENU_AREA, "View/Zoom Out", order: 110)]
 [EditorShortcut(KeyCode.Minus, primary: true)]
@@ -85,9 +79,6 @@ internal sealed class ZoomOutEditorAction(EditorZoomModule zoom) : EditorAction
 /// <param name="zoom">
 /// The zoom used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 [EditorAction(GlobalInteractionIds.C_ZOOM_RESET)]
 [EditorMenu(GlobalInteractionIds.C_MAIN_MENU_AREA, "View/Actual Size", order: 120)]
 [EditorShortcut(KeyCode.D0, primary: true)]

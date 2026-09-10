@@ -1,5 +1,13 @@
 # Inno.Shell
 
+## 原生实时缩放与帧率
+
+`framePacing` 是每 Shell 的 `FramePacingOptions`：`verticalSync` 控制设备同步，`maximumFrameRate = 0` 不施加软件上限。Editor 默认关闭 VSync；该策略不改变 fixed-step simulation。
+
+Shell 订阅平台的 `redrawRequested`。系统模态缩放阻塞普通 PollEvent 循环时，使用同一个时钟、帧号及 Begin/Update/LateUpdate/Render/End 生命周期渲染，不递归 PumpEvents。重入保护避免正在执行的帧再次进入。原生 callback 不允许托管异常穿越 ABI；SDL adapter 将失败留到受控事件循环中重新抛出。
+
+Presentation adapter 只能同步尺寸并请求绘制，不能独自回放 Editor draw callback。这一约束确保 Game/Scene 请求在同一帧提交和消费，BGFX 帧推进及资源退休仍由正常 runtime owner 完成。
+
 ## 有界产品退休
 
 Shell 使用 Core 的 `RetirementBarrier`，在 owner thread 排空产品资源后才释放 rendering/input/window/platform。

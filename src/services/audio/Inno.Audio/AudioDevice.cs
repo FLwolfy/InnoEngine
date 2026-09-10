@@ -14,9 +14,6 @@ public abstract class AudioDevice
     /// <param name="generation">
     /// Device generation that owns the resource.
     /// </param>
-    /// <returns>
-    /// The value produced by this implementation of the contract.
-    /// </returns>
     protected readonly record struct DeviceHandleIdentity(ulong value, uint generation);
 
     /// <summary>

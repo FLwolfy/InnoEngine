@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using Inno.Core.Events;
 using Inno.Core.Input;
@@ -23,6 +24,8 @@ public sealed partial class Sdl3PlatformApplication
     private GCHandle m_liveResizeEventWatchHandle;
     private int m_liveResizeRedrawQueued;
     private uint m_liveResizeWindowId;
+    private ExceptionDispatchInfo? m_redrawFailure;
+    private bool m_dispatchingRedraw;
     private int m_pendingEventReadIndex;
     private bool m_disposed;
 
@@ -50,9 +53,12 @@ public sealed partial class Sdl3PlatformApplication
         var userData = (nint)GCHandle.ToIntPtr(m_liveResizeEventWatchHandle);
         if (!SDL.AddEventWatch(m_liveResizeEventWatch, userData))
         {
+            Exception failure = SDL.GetErrorAsException() ?? new InvalidOperationException("SDL_AddEventWatch failed.");
             m_liveResizeEventWatchHandle.Free();
             m_liveResizeEventWatch = null;
             m_liveResizeMainThreadCallback = null;
+            SDL.Quit();
+            throw failure;
         }
     }
 
@@ -98,6 +104,7 @@ public sealed partial class Sdl3PlatformApplication
     public partial bool PollEvent(out Event? evnt)
     {
         ObjectDisposedException.ThrowIf(m_disposed, this);
+        m_redrawFailure?.Throw();
 
         if (TryDequeuePendingEvent(out evnt))
         {
@@ -215,6 +222,7 @@ public sealed partial class Sdl3PlatformApplication
         SDLEvent sdlEvent = default;
         while (SDL.PollEvent(ref sdlEvent))
         {
+            m_redrawFailure?.Throw();
             DispatchNativeEvent(ref sdlEvent);
 
             if (!TryTranslateEvent(ref sdlEvent, out var translatedEvent) || translatedEvent is null)
@@ -320,7 +328,15 @@ public sealed partial class Sdl3PlatformApplication
         Interlocked.Exchange(ref application.m_liveResizeRedrawQueued, 0);
         if (windowId != 0)
         {
-            application.DispatchLiveResizeRedraw(windowId);
+            try
+            {
+                application.DispatchLiveResizeRedraw(windowId);
+            }
+            catch (Exception exception)
+            {
+                // Never unwind managed exceptions through SDL's native event callback.
+                application.m_redrawFailure ??= ExceptionDispatchInfo.Capture(exception);
+            }
         }
     }
 
@@ -335,8 +351,27 @@ public sealed partial class Sdl3PlatformApplication
 
     private void DispatchLiveResizeRedraw(uint windowId)
     {
-        foreach (ISdl3ApplicationExtension extension in m_extensions.ToArray())
-            extension.RenderLiveResizeWindow(this, windowId);
+        if (m_dispatchingRedraw || m_redrawFailure is not null)
+            return;
+        m_dispatchingRedraw = true;
+        try
+        {
+            if (m_windows.TryGetValue(windowId, out Sdl3PlatformWindow? window))
+            {
+                int width = 0, height = 0;
+                SDL.GetWindowSize(window.sdlWindow, ref width, ref height);
+                window.UpdateLogicalSize(width, height);
+                SDL.GetWindowSizeInPixels(window.sdlWindow, ref width, ref height);
+                window.UpdatePixelSize(width, height);
+            }
+            foreach (ISdl3ApplicationExtension extension in m_extensions.ToArray())
+                extension.PrepareLiveResizeWindow(this, windowId);
+            redrawRequested?.Invoke(windowId);
+        }
+        finally
+        {
+            m_dispatchingRedraw = false;
+        }
     }
 
     private void UnregisterExtension(ISdl3ApplicationExtension extension)

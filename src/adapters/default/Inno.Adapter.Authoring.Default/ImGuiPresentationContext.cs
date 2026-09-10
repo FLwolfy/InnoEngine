@@ -173,7 +173,6 @@ internal sealed class ImGuiPresentationContext : IPresentationContext
             stage,
             "main",
             source,
-            ShaderIRSourceKind.Handwritten,
             new ShaderSourceLocation(path, "ImGui", stage));
 
     private static ImGuiContextFlags ToImGuiFlags(PresentationFeatures features)

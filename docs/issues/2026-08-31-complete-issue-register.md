@@ -304,9 +304,9 @@
 
 - 历史证据：Rendering Core、Runtime、BGFX 通过 friend 访问实现成员。
 - 根因与影响：项目拆分按文件角色而非稳定部署/替换边界，封装是假的。
-- 当前实现：backend-neutral core 合并为 `Inno.Rendering`；Runtime、Assets、Scene、ShaderGraph、Bgfx、Bgfx.ImGui 各自承担真实集成边界；只有 BGFX adapter 引用 Native BGFX。
-- 测试：RenderGraph、pipeline resource、runtime layer、shader graph candidate 和 BGFX device tests；Architecture native consumer rules。
-- 关闭标准：零 friend，Core 不引用 Scene/ShaderGraph/Editor。已满足。
+- 当前实现：backend-neutral core 合并为 `Inno.Rendering`；Runtime、Assets、Scene、MaterialGraph、Bgfx、Bgfx.ImGui 各自承担真实集成边界；只有 BGFX adapter 引用 Native BGFX。
+- 测试：RenderGraph、pipeline resource、runtime layer、material graph mapping 和 BGFX device tests；Architecture native consumer rules。
+- 关闭标准：零 friend，Core 不引用 Scene/MaterialGraph/Editor。已满足。
 
 ### ARCH-030：测试非确定性和 Player E2E 缺失
 

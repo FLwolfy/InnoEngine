@@ -42,8 +42,9 @@ internal sealed class StructPropertyDrawer : IPropertyDrawer
             Type memberType = GetMemberType(member);
             bool memberReadOnly = !CanWrite(member) ||
                 (GetVisibility(member) & PropertyVisibility.RuntimeSet) == 0;
-            context.DrawChild(
-                member.Name,
+            context.DrawChildMember(
+                context.GetValue() ?? boxedValue,
+                member,
                 memberType,
                 () => GetMemberValue(member, context.GetValue() ?? boxedValue),
                 value =>

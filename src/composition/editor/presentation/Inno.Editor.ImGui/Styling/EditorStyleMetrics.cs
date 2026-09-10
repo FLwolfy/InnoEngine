@@ -31,12 +31,20 @@ public sealed class EditorStyleMetrics
     /// </summary>
     public float zoom => m_zoom;
 
-    /// <summary>Gets whether compact editor density is active.</summary>
+    /// <summary>
+    /// Gets whether compact editor density is active.
+    /// </summary>
     public bool isCompact => m_compactMode;
 
-    /// <summary>Switches between comfortable and compact editor density.</summary>
-    /// <param name="value"><see langword="true"/> for compact density.</param>
-    /// <returns><see langword="true"/> when the density changed.</returns>
+    /// <summary>
+    /// Switches between comfortable and compact editor density.
+    /// </summary>
+    /// <param name="value">
+    /// <see langword="true"/> for compact density.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the density changed.
+    /// </returns>
     public bool SetCompactMode(bool value)
     {
         if (m_compactMode == value)

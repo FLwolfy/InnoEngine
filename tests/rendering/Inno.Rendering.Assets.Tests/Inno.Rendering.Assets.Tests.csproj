@@ -8,7 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\services\rendering\Inno.Rendering.Assets\Inno.Rendering.Assets.csproj" />
-    <ProjectReference Include="..\..\..\src\services\rendering\Inno.Rendering.ShaderGraph\Inno.Rendering.ShaderGraph.csproj" />
     <ProjectReference Include="..\..\..\src\foundation\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />
     <ProjectReference Include="..\..\..\src\foundation\extensibility\Inno.Extensibility.Modules\Inno.Extensibility.Modules.csproj" />
     <ProjectReference Include="..\..\..\src\foundation\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" />

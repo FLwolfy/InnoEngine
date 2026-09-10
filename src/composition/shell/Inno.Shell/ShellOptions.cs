@@ -27,7 +27,7 @@ public sealed class ShellOptions
     /// <summary>
     /// Gets or sets whether presentation waits for display synchronization.
     /// </summary>
-    public bool verticalSync { get; set; } = true;
+    public bool verticalSync { get; set; }
 
     /// <summary>
     /// Gets or sets whether the primary backbuffer performs sRGB encoding.

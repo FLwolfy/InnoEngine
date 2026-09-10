@@ -18,9 +18,6 @@ public abstract class RenderDevice
     /// <param name="generation">
     /// The device generation that owns the resource.
     /// </param>
-    /// <returns>
-    /// The value produced by this implementation of the contract.
-    /// </returns>
     protected readonly record struct DeviceHandleIdentity(ulong value, uint generation);
 
     /// <summary>
@@ -32,9 +29,6 @@ public abstract class RenderDevice
     /// <param name="generation">
     /// The render-graph generation that owns the resource.
     /// </param>
-    /// <returns>
-    /// The value produced by this implementation of the contract.
-    /// </returns>
     protected readonly record struct GraphHandleIdentity(int index, uint generation);
 
     /// <summary>

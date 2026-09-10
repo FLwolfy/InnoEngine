@@ -22,9 +22,6 @@ namespace Inno.Scripting.Compiler;
 /// <param name="column">
 /// The one-based source column, or zero when no source location is available.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public sealed record ScriptDiagnostic(
     string id,
     DiagnosticSeverity severity,

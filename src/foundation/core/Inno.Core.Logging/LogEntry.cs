@@ -34,9 +34,6 @@ namespace Inno.Core.Logging;
 /// <param name="sessionId">
 /// The isolated runtime session that produced the entry, or <see cref="LogSessionId.none"/> for process-level work.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public readonly struct LogEntry(
     LogLevel level,
     AssemblyDomain domain,

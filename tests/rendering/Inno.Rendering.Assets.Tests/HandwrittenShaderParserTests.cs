@@ -1,6 +1,5 @@
 using Inno.Core.Diagnostics;
 using System;
-using System.Collections.Generic;
 using System.IO;
 using Inno.Extensibility.Modules;
 using Inno.Core.Mathematics;
@@ -38,7 +37,7 @@ public sealed class HandwrittenShaderParserTests : IDisposable
     [Fact]
     public void SharedIrUsesOnlyProviderOwnedContractAndRoleIdentifiers()
     {
-        ShaderIRModule module = CreateModule("void main() {}", ShaderIRSourceKind.Handwritten);
+        ShaderIRModule module = CreateModule("void main() {}");
 
         ShaderIRValidationResult validation = ShaderIRValidator.Validate(module);
 
@@ -51,9 +50,9 @@ public sealed class HandwrittenShaderParserTests : IDisposable
     }
 
     [Fact]
-    public void ArtifactSerializationPreservesSharedHandwrittenAndGeneratedIrContract()
+    public void ArtifactSerializationPreservesCanonicalIrContract()
     {
-        ShaderIRModule module = CreateModule("void main() {}", ShaderIRSourceKind.Generated);
+        ShaderIRModule module = CreateModule("void main() {}");
 
         ShaderIRModule restored = ShaderIRArtifactSerialization.Decode(
             ShaderIRArtifactSerialization.Encode(module, m_serialization),
@@ -61,8 +60,8 @@ public sealed class HandwrittenShaderParserTests : IDisposable
 
         Assert.Equal(module.definition.name, restored.definition.name);
         Assert.Equal(module.definition.techniques[0].contract, restored.definition.techniques[0].contract);
-        Assert.Equal(module.passes[0].stages[0].sourceKind, restored.passes[0].stages[0].sourceKind);
-        Assert.Equal("node-v", restored.passes[0].stages[0].lineNodeIds[2]);
+        Assert.Equal(module.passes[0].stages[0].source, restored.passes[0].stages[0].source);
+        Assert.Equal(module.passes[0].stages[0].location, restored.passes[0].stages[0].location);
     }
 
     [Fact]
@@ -91,7 +90,6 @@ public sealed class HandwrittenShaderParserTests : IDisposable
                     ShaderStage.Compute,
                     "main",
                     "void main() {}",
-                    ShaderIRSourceKind.Handwritten,
                     new ShaderSourceLocation("Shaders/storage.cs.sc", "Compute", ShaderStage.Compute))],
                 bindingIds: [outputId])]);
 
@@ -110,7 +108,7 @@ public sealed class HandwrittenShaderParserTests : IDisposable
         Assert.Equal(ShaderPropertyBindingOwner.RenderPass, restored.definition.properties[0].bindingOwner);
     }
 
-    internal static ShaderIRModule CreateModule(string source, ShaderIRSourceKind sourceKind)
+    internal static ShaderIRModule CreateModule(string source)
     {
         var pass = new ShaderPassDefinition("Main", ShaderProgramKind.Raster);
         var definition = new ShaderDefinition(
@@ -136,14 +134,11 @@ public sealed class HandwrittenShaderParserTests : IDisposable
                         ShaderStage.Vertex,
                         "main",
                         source,
-                        sourceKind,
-                        new ShaderSourceLocation("Shaders/v.sc", "Main", ShaderStage.Vertex),
-                        new Dictionary<int, string> { [2] = "node-v" }),
+                        new ShaderSourceLocation("Shaders/v.sc", "Main", ShaderStage.Vertex)),
                     new ShaderIRStageModule(
                         ShaderStage.Fragment,
                         "main",
                         "void main() {}",
-                        sourceKind,
                         new ShaderSourceLocation("Shaders/f.sc", "Main", ShaderStage.Fragment))
                 ])]);
     }

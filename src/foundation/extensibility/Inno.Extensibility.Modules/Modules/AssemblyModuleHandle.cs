@@ -8,7 +8,4 @@ namespace Inno.Extensibility.Modules;
 /// <param name="id">
 /// The stable identity used to locate the requested value.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public readonly record struct AssemblyModuleHandle(Guid id);

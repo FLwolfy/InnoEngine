@@ -20,9 +20,6 @@ public STBTexteditState* Handle;
         /// <param name="handle">
         /// The opaque handle validated by this operation.
         /// </param>
-        /// <returns>
-        /// The value produced by this implementation of the contract.
-        /// </returns>
 public unsafe STBTexteditStatePtr(STBTexteditState* handle)
         {
             Handle = handle;

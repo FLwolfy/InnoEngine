@@ -1,50 +1,44 @@
 using System;
-using Inno.Assets;
 using Inno.Core.Graphs;
-using Inno.Extensibility.Types;
 using Inno.Core.Serialization;
+using Inno.Extensibility.Types;
+using Inno.Rendering;
 using Inno.Scripting.Api;
 
-namespace Inno.Rendering.ShaderGraph;
+namespace Inno.Rendering.MaterialGraph;
 
 /// <summary>
-/// Represents one native neutral shader graph without prescribing a rendering contract.
+/// Represents a material whose persistent values are authored as a neutral node graph.
 /// </summary>
-[StableTypeId("2364a560-d890-4ec4-8ba7-5fa47404c140")]
-public sealed class ShaderGraphAsset : ShaderAsset
+[StableTypeId("6205722d-59ce-4a96-a375-aed9863246fb")]
+public sealed class MaterialGraphAsset : MaterialAsset
 {
     [SerializableProperty(PropertyVisibility.Hide)]
     private byte[] m_documentData = [];
 
     /// <summary>
-    /// Gets the currently committed neutral graph document.
+    /// Gets the currently committed neutral material-mapping document.
     /// </summary>
+    [ScriptingApiIgnore]
     public GraphDocument? document { get; private set; }
 
     /// <summary>
-    /// Replaces the editable neutral graph document.
+    /// Replaces the editable graph document with an isolated copy.
     /// </summary>
     /// <param name="document">
-    /// Complete graph state to copy into this asset.
+    /// Complete graph state to commit.
     /// </param>
     /// <param name="serialization">
-    /// The serialization registry that owns the active graph converter generation.
+    /// Serialization generation used for graph values.
     /// </param>
     [ScriptingApiIgnore]
-    public void SetDocument(
-        GraphDocument document,
-        SerializationRegistry serialization)
+    public void SetDocument(GraphDocument document, SerializationRegistry serialization)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(serialization);
         this.document = document.Clone();
         m_documentData = GraphDocumentCodec.Encode(this.document, serialization);
     }
-
-    internal void CommitDefinition(
-        ShaderDefinition definition,
-        SerializationRegistry serialization)
-        => SetDefinition(definition, serialization);
 
     [OnSerializableRestored]
     private void OnSerializableRestored(SerializationContext context)
@@ -58,63 +52,61 @@ public sealed class ShaderGraphAsset : ShaderAsset
 }
 
 /// <summary>
-/// Contains one decoded shader graph source document.
+/// Contains one decoded material graph source document.
 /// </summary>
-public sealed class ShaderGraphDocumentData
+public sealed class MaterialGraphDocumentData
 {
     /// <summary>
-    /// Creates decoded shader graph data.
+    /// Creates decoded material graph data.
     /// </summary>
     /// <param name="document">
-    /// Neutral graph document.
+    /// Detached neutral graph document.
     /// </param>
-    public ShaderGraphDocumentData(GraphDocument document)
+    public MaterialGraphDocumentData(GraphDocument document)
     {
         ArgumentNullException.ThrowIfNull(document);
         this.document = document;
     }
 
     /// <summary>
-    /// Gets the neutral graph document.
+    /// Gets the detached neutral graph document.
     /// </summary>
     public GraphDocument document { get; }
 }
 
 /// <summary>
-/// Provides the native editable shader graph document format.
+/// Encodes and decodes native material graph documents through the shared graph codec.
 /// </summary>
-public static class ShaderGraphDocumentCodec
+public static class MaterialGraphDocumentCodec
 {
     /// <summary>
-    /// Encodes a neutral shader graph through Inno serialization.
+    /// Encodes a material graph into deterministic native bytes.
     /// </summary>
-    /// <returns>
-    /// Deterministic native document bytes.
-    /// </returns>
     /// <param name="document">
-    /// The document consumed by encode; ownership remains with the caller unless explicitly stated otherwise.
+    /// Graph document to encode.
     /// </param>
     /// <param name="serialization">
-    /// The serialization registry that owns the active graph converter generation.
+    /// Serialization generation used by graph values.
     /// </param>
-    public static byte[] Encode(
-        GraphDocument document,
-        SerializationRegistry serialization)
+    /// <returns>
+    /// Detached native document bytes.
+    /// </returns>
+    public static byte[] Encode(GraphDocument document, SerializationRegistry serialization)
         => GraphDocumentCodec.Encode(document, serialization);
 
     /// <summary>
-    /// Decodes a neutral shader graph from Inno serialization.
+    /// Decodes a material graph from native bytes.
     /// </summary>
     /// <param name="bytes">
-    /// Complete native document bytes.
+    /// Complete native graph payload.
     /// </param>
     /// <param name="serialization">
-    /// The serialization registry that owns the active graph converter generation.
+    /// Serialization generation used by graph values.
     /// </param>
     /// <returns>
     /// The detached decoded graph data.
     /// </returns>
-    public static ShaderGraphDocumentData Decode(
+    public static MaterialGraphDocumentData Decode(
         ReadOnlySpan<byte> bytes,
         SerializationRegistry serialization)
         => new(GraphDocumentCodec.Decode(bytes, serialization));

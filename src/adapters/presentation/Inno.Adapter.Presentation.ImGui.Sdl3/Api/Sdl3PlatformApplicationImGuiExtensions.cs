@@ -44,12 +44,12 @@ public static class Sdl3PlatformApplicationImGuiExtensions
                 context.ProcessEvent(ref sdlEvent);
         }
 
-        void ISdl3ApplicationExtension.RenderLiveResizeWindow(
+        void ISdl3ApplicationExtension.PrepareLiveResizeWindow(
             Sdl3PlatformApplication application,
             uint windowId)
         {
             foreach (PlatformImGuiContext context in contexts.Values)
-                context.RenderLiveResizeWindow(windowId);
+                context.PrepareLiveResizeWindow(windowId);
         }
 
         void ISdl3ApplicationExtension.OnApplicationDisposing(Sdl3PlatformApplication application)

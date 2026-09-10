@@ -8,9 +8,6 @@ namespace Inno.Extensibility.Types;
 /// <param name="id">
 /// The stable identity used to locate the requested value.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface, Inherited = false)]
 public sealed class StableTypeIdAttribute(string id) : Attribute
 {

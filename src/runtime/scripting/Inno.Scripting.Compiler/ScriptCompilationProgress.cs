@@ -9,7 +9,4 @@ namespace Inno.Scripting.Compiler;
 /// <param name="stage">
 /// The current human-readable compiler stage.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public readonly record struct ScriptCompilationProgress(float fraction, string stage);

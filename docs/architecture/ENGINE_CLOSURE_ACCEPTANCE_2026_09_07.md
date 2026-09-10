@@ -30,7 +30,7 @@ Windows/跨平台验收按本次要求不计入工作范围；不能用这一排
 | Audio 内部 owner | `AudioClipCache` 实际拥有 Clip、Artifact、preload 与预算；`AudioMixerOwner` 实际拥有 Bus、控制状态和旧 graph | preload、Decode/Stream、取消、Mixer、清理失败测试 |
 | Audio 设备替换 | 先完整准备候选 graph，再退休旧 backend；不可逆退休失败清理全部 owner、释放候选并 Fault；不会报告“旧设备仍然可用” | 旧设备 Dispose 故障、候选释放计数、禁止继续 Update |
 | Audio 诊断/Bus | 恢复撤销 Missing/no-device/lost/recovery-failed；Provider 成功/移除撤销失败；旧 Bus 只等待实际使用它的 Voice | Mixer/设备恢复诊断回归；常规 Audio 回归 |
-| Rendering | 候选失败与已发布后退休失败分开；清理尝试全部 generation/resource owner，保留 last-good 语义 | Rendering Runtime、Reload、ShaderGraph 回归 |
+| Rendering | 候选失败与已发布后退休失败分开；清理尝试全部 generation/resource owner，保留 last-good 语义 | Rendering Runtime、Reload、MaterialGraph 回归 |
 | 发布集合 | Graphics/Compute/Vertex Layout、Shader IR/编译结果/Artifact、Assembly catalog、Asset mounts 冻结；Graph/Material/Editor settings 集合不能强转改写内部容器 | 不可写 IList 负向验证、全仓编译与领域回归 |
 | 冷资产 IO | 同一 persistent ID 的并发 Acquire 合并；单个取消不取消其他等待者；准备阶段 bytes 预算独立于驻留预算 | Build 的真实 Catalog/Artifact 冷载、取消、合并、超预算拒绝 |
 | 队列 | Job 每帧 admission、主线程 callback capacity/drain budget；Audio preload waiter 与 Rendering request 上限；音频完成排空有界 | SingleThread/WorkerPool 压力边界、递归 callback 延后测试 |

@@ -15,9 +15,6 @@ namespace Inno.Editor.Panel.FileBrowser;
 /// <param name="assets">
 /// The assets used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 internal sealed class FileBrowserDragDrop(AssetEditorModule assets)
 {
     /// <summary>

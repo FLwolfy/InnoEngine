@@ -128,7 +128,6 @@ internal sealed class ShaderAssetImporter : AssetImporter<ShaderAsset>
                     stage,
                     "main",
                     source.content,
-                    ShaderIRSourceKind.Handwritten,
                     new ShaderSourceLocation(
                         string.IsNullOrWhiteSpace(source.assetPath.localPath)
                             ? assetPath

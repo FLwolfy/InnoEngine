@@ -14,3 +14,6 @@ using Inno.Editor.Inspection;
 [assembly: ScriptingApiExport(typeof(PropertyDrawerAttribute), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(IInspectionPropertyEditService), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(SerializedPropertyRenderer), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(IInspectorAttributeDrawer), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(InspectorAttributeDrawerAttribute), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(InspectorAttributeDrawContext), ScriptingApiScope.Editor)]

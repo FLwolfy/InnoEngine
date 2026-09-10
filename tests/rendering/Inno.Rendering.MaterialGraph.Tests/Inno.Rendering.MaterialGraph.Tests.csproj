@@ -7,15 +7,13 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../../src/foundation/core/Inno.Core.Execution/Inno.Core.Execution.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\..\build\toolchains\Inno.Build.Toolchains.Bgfx.Tools\Inno.Build.Toolchains.Bgfx.Tools.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\src\foundation\extensibility\Inno.Extensibility.Modules\Inno.Extensibility.Modules.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\src\foundation\core\Inno.Core.Graphs\Inno.Core.Graphs.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\src\foundation\core\Inno.Core.Identity\Inno.Core.Identity.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\src\foundation\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\src\services\rendering\Inno.Rendering\Inno.Rendering.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\src\services\rendering\Inno.Rendering.Assets\Inno.Rendering.Assets.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\..\src\adapters\rendering\Inno.Adapter.Rendering.Bgfx\Inno.Adapter.Rendering.Bgfx.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\..\src\services\rendering\Inno.Rendering.ShaderGraph\Inno.Rendering.ShaderGraph.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="..\..\..\src\services\rendering\Inno.Rendering.MaterialGraph\Inno.Rendering.MaterialGraph.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

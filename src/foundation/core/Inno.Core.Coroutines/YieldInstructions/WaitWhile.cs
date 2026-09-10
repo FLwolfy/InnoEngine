@@ -8,9 +8,6 @@ namespace Inno.Core.Coroutines;
 /// <param name="predicate">
 /// The predicate used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public sealed class WaitWhile(Func<bool> predicate) : YieldInstruction
 {
     /// <summary>

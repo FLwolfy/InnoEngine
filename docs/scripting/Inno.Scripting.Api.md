@@ -20,6 +20,9 @@
 | --- | --- |
 | `Runtime` | `Inno.GameScripts` 和 `Inno.EditorScripts`。 |
 | `Editor` | 仅 `Inno.EditorScripts`。 |
+| `Authoring` | GameScripts/EditorScripts 的创作编译与 IDE 可见；Player 绑定前移除标注使用、派生标注声明及其 namespace import。 |
+
+`Authoring` 用于独立 namespace 中的编译期标注及其枚举，不是运行时服务权限。自定义展示标注可以派生公开的标注基类；编译器依据导出清单及符号继承关系处理，不维护 Editor 类型名单。把这类类型当作 Player 的普通字段或业务对象使用会产生编译错误，而不会把 Editor DLL 带入 Player。
 
 ### ScriptingApiExportAttribute
 

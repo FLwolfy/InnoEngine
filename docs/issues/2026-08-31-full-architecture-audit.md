@@ -511,7 +511,7 @@ LocalApplicationData/InnoEngine/<executable-name>
 - Editor Extension 的发现、构造注入、稳定 ID、quarantine、状态恢复。
 - History 的协议化 payload、预算和 reload-safe handler。
 - Rendering Core 的后端中立、开放 ID、RenderGraph hazard/culling/aliasing。
-- ShaderGraph 与 handwritten shader 共用编译链的方向。
+- MaterialGraph 只映射普通材质且不建立第二套 shader 编译链的方向。
 - Play Mode 的 Scene/History 隔离。
 - GameBehavior/GameSystem 统一 lifecycle。
 - Scripting API 的显式导出和逻辑 namespace。
@@ -560,4 +560,3 @@ LocalApplicationData/InnoEngine/<executable-name>
 6. Plugin 使用 watcher/后台 fingerprint，并计算真实依赖闭包。
 
 最终判断：**核心值得继续建设，而且很有潜力；现在最大的问题不是底层设计差，而是发布链仍停留在“功能刚打通”，同时少数边界规则没有自动执行。把 Export/Player 和机器可验证的架构规则补齐后，这套系统才真正能称为现代、无明显妥协的引擎架构。**
-

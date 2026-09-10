@@ -8,9 +8,6 @@ namespace Inno.Core.Events;
 /// <param name="windowId">
 /// The window id used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public abstract class MouseEvent(uint windowId) : Event
 {
     /// <summary>
@@ -32,9 +29,6 @@ public abstract class MouseEvent(uint windowId) : Event
 /// <param name="y">
 /// The vertical or second component.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public class MouseMovedEvent(uint windowId, float x, float y) : MouseEvent(windowId)
 {
     /// <summary>
@@ -60,9 +54,6 @@ public class MouseMovedEvent(uint windowId, float x, float y) : MouseEvent(windo
 /// <param name="offsetY">
 /// The offset y used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public class MouseScrolledEvent(uint windowId, float offsetX, float offsetY) : MouseEvent(windowId)
 {
     /// <summary>
@@ -85,9 +76,6 @@ public class MouseScrolledEvent(uint windowId, float offsetX, float offsetY) : M
 /// <param name="button">
 /// The button used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public abstract class MouseButtonEvent(uint windowId, MouseButton button) : MouseEvent(windowId)
 {
     /// <summary>
@@ -105,9 +93,6 @@ public abstract class MouseButtonEvent(uint windowId, MouseButton button) : Mous
 /// <param name="button">
 /// The button used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public class MouseButtonPressedEvent(uint windowId, MouseButton button) : MouseButtonEvent(windowId, button)
 {
 }
@@ -121,9 +106,6 @@ public class MouseButtonPressedEvent(uint windowId, MouseButton button) : MouseB
 /// <param name="button">
 /// The button used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public class MouseButtonReleasedEvent(uint windowId, MouseButton button) : MouseButtonEvent(windowId, button)
 {
 }

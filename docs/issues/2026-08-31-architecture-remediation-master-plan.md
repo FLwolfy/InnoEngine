@@ -210,7 +210,7 @@ InnoEngine/
 │   │   ├── Inno.Rendering.Assets
 │   │   ├── Inno.Adapter.Rendering.Bgfx
 │   │   ├── Inno.Adapter.Presentation.ImGui
-│   │   ├── Inno.Rendering.ShaderGraph
+│   │   ├── Inno.Rendering.MaterialGraph
 │   │   └── Inno.Rendering.Scene
 │   │
 │   ├── platform/
@@ -344,8 +344,8 @@ flowchart TB
 - Build 不引用 Editor。
 - Runtime 不引用 Editor 或 Build。
 - Player 不引用 Editor、Build、Compiler、Reload、Assets Pipeline、Plugins Authoring 或 Toolchains。
-- Rendering 不反向引用 ShaderGraph、Scene 或 Editor。
-- ShaderGraph 自己注册扩展，Rendering 不维护节点名单。
+- Rendering 不反向引用 MaterialGraph、Scene 或 Editor。
+- MaterialGraph 自己解析公开的 Shader reflection，Rendering 不维护材质节点名单。
 - 只有 BGFX Adapter 可以引用 BGFX Native。
 - 只有 SDL3 Adapter 可以引用 SDL3 Native。
 - Editor Application 是唯一允许高 fan-out 的 Editor Composition Root。
@@ -697,7 +697,7 @@ Console Collapse：
 - SDL 类型。
 - Editor。
 - Scene 世界观。
-- ShaderGraph 节点实现。
+- MaterialGraph 节点映射实现。
 - 2D/3D/PBR 固定管线。
 
 `Inno.Rendering.Scene` 承担 Scene 与 Rendering 集成。
@@ -778,7 +778,7 @@ Persistent Data 严格使用 Application ID。
 
 - Assets Loader/Façade：重新合并所有权。
 - Rendering Core/Rendering：合并。
-- ShaderGraph/Assets：Importer 留在 ShaderGraph 并使用 Attribute 注册。
+- MaterialGraph/Assets：Importer 留在 MaterialGraph 并使用 Attribute 注册。
 - Scene/Scene.Assets：使用最小不可变 Scene Snapshot 协议。
 - Rendering Runtime/Editor：提供正式 Runtime Composition API。
 - PlayMode Tests：测试 public controller 行为。
@@ -892,7 +892,7 @@ Generated Code 仅通过明确生成标识豁免。
 
 - 合并 Rendering/Core。
 - 分离 Platform/Sdl3。
-- 重组 BGFX、ImGui、ShaderGraph、Rendering.Scene。
+- 重组 BGFX、ImGui、MaterialGraph、Rendering.Scene。
 - 清除所有 Native 泄漏。
 
 ### 阶段 6：Runtime、Build 与 Player

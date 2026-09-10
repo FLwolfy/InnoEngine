@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using Inno.Core.Logging;
 using Inno.Scripting.Api;
@@ -21,6 +22,7 @@ public sealed class SerializedPropertyRenderer
     private readonly ConditionalWeakTable<object, Dictionary<string, string>> m_failureStates = new();
     private readonly ConditionalWeakTable<object, Dictionary<string, string>> m_textStates = new();
     private readonly PropertyDrawerRegistry m_drawers;
+    private readonly InspectorAttributeDrawerRegistry m_attributes;
     private readonly EditorInteractions m_interactions;
     private readonly IInspectionPropertyEditService m_edits;
     private readonly Logger m_logger;
@@ -30,6 +32,9 @@ public sealed class SerializedPropertyRenderer
     /// </summary>
     /// <param name="drawers">
     /// The property drawer registry used for runtime type resolution.
+    /// </param>
+    /// <param name="attributes">
+    /// The generation-aware registry that interprets Inspector presentation attributes.
     /// </param>
     /// <param name="interactions">
     /// The active editor interaction entry point.
@@ -47,11 +52,13 @@ public sealed class SerializedPropertyRenderer
     [ScriptingApiIgnore]
     public SerializedPropertyRenderer(
         PropertyDrawerRegistry drawers,
+        InspectorAttributeDrawerRegistry attributes,
         EditorInteractions interactions,
         IInspectionPropertyEditService edits,
         LogRouter logs)
     {
         m_drawers = drawers ?? throw new ArgumentNullException(nameof(drawers));
+        m_attributes = attributes ?? throw new ArgumentNullException(nameof(attributes));
         m_interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
         m_edits = edits ?? throw new ArgumentNullException(nameof(edits));
         ArgumentNullException.ThrowIfNull(logs);
@@ -85,6 +92,9 @@ public sealed class SerializedPropertyRenderer
         Draw(
             editorContext,
             owner,
+            owner,
+            InspectorMemberMetadata.Resolve(owner.GetType(), property.name),
+            property,
             property.name,
             $"{ownerPath}.{property.name}",
             property.name,
@@ -97,6 +107,9 @@ public sealed class SerializedPropertyRenderer
     internal void Draw(
         EditorContext editorContext,
         object owner,
+        object metadataOwner,
+        MemberInfo? member,
+        SerializedProperty? property,
         string rootPropertyName,
         string path,
         string label,
@@ -105,6 +118,27 @@ public sealed class SerializedPropertyRenderer
         Func<object?> getter,
         Action<object?> setter)
     {
+        string displayLabel = EditorWidget.NicifyName(label);
+        bool isReadOnly = (visibility & PropertyVisibility.RuntimeSet) == 0;
+        Attribute[] attributes = member is null ? [] : InspectorMemberMetadata.GetAttributes(member);
+        InspectorAttributeDrawContext? attributeContext = null;
+        if (member is not null && attributes.Length > 0)
+        {
+            attributeContext = new InspectorAttributeDrawContext(
+                metadataOwner,
+                member,
+                property,
+                path,
+                displayLabel,
+                isReadOnly);
+            m_attributes.Update(attributeContext, attributes);
+            if (!attributeContext.isVisible)
+                return;
+            displayLabel = attributeContext.label;
+            isReadOnly = attributeContext.isReadOnly;
+            m_attributes.DrawBefore(attributeContext, attributes);
+        }
+
         var context = new PropertyDrawContext(
             editorContext,
             m_interactions,
@@ -112,20 +146,30 @@ public sealed class SerializedPropertyRenderer
             owner,
             rootPropertyName,
             path,
-            EditorWidget.NicifyName(label),
+            displayLabel,
             propertyType,
             visibility,
+            isReadOnly,
+            attributeContext?.minimum,
+            attributeContext?.maximum,
             getter,
             setter,
             this);
 
-        EditorWidget.PropertyRow(path, context.label, () =>
-            DrawContent(context));
+        EditorWidget.PropertyRow(
+            path,
+            context.label,
+            () => DrawContent(context),
+            tooltip: attributeContext?.tooltip);
+        if (attributeContext is not null)
+            m_attributes.DrawAfter(attributeContext, attributes);
     }
 
     internal void DrawInline(
         EditorContext editorContext,
         object owner,
+        object metadataOwner,
+        MemberInfo? member,
         string rootPropertyName,
         string path,
         string label,
@@ -144,6 +188,9 @@ public sealed class SerializedPropertyRenderer
             EditorWidget.NicifyName(label),
             propertyType,
             visibility,
+            (visibility & PropertyVisibility.RuntimeSet) == 0,
+            null,
+            null,
             getter,
             setter,
             this);

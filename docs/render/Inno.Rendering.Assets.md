@@ -4,7 +4,7 @@
 
 编译发布的 stages、passes、diagnostics 与 last-good selection diagnostics 均拥有冻结副本。修改调用者传入的 List/数组不会改变已经发布的容器。
 
-[Rendering 索引](README.md) · [公开 API](Inno.Rendering.md) · [ShaderGraph](Inno.Rendering.ShaderGraph.md)
+[Rendering 索引](README.md) · [公开 API](Inno.Rendering.md) · [MaterialGraph](Inno.Rendering.MaterialGraph.md)
 
 `Inno.Rendering.Assets` 将通用渲染源转换成后端中立候选产物。它不创建 GPU handle，也不包含具体材质模型。
 
@@ -26,14 +26,14 @@
 ```text
 ShaderAsset + .sc ─┐
                    ├─ ShaderDefinition / ShaderIRModule
-ShaderGraph ───────┘       │
+Shader Asset ───────┘      │
                            ├─ validation / variant planning
                            ├─ backend compiler target
                            ├─ injected target toolchain
                            └─ reflection + last-good artifact
 ```
 
-`ShaderIRSourceKind` 只区分来源；两条路径没有独立编译器。Assets 层不知道 shaderc、Metal 或 D3D，只调用注入的 `IShaderCompilerToolchain`；具体 profile 与可执行工具由图形后端拥有。同一 `.sc` 因而可以被不同后端编译器消费，不需要平台专用源文件副本。
+Assets 层不知道 shaderc、Metal 或 D3D，只调用注入的 `IShaderCompilerToolchain`；具体 profile 与可执行工具由图形后端拥有。同一份规范 Shader IR 因而可以被不同后端编译器消费，不需要平台专用源文件副本。
 
 ## 公开 API
 

@@ -13,37 +13,28 @@ namespace Inno.Rendering.Assets.Tests;
 public sealed class ShaderCompilerTests
 {
     [Fact]
-    public async Task CompileAsync_UsesSameChainForHandwrittenAndGeneratedSources()
+    public async Task CompileAsync_UsesTheCanonicalShaderIrChain()
     {
         var toolchain = new FakeToolchain();
         var compiler = new ShaderCompiler(toolchain);
         ShaderCompileTarget target = CreateTarget(GraphicsCapability.Compute);
 
-        ShaderCompilationResult handwritten = await compiler.CompileAsync(
-            HandwrittenShaderParserTests.CreateModule("void main() {}", ShaderIRSourceKind.Handwritten),
-            target,
-            RenderShaderVariant.empty,
-            "/project/Assets");
-        ShaderCompilationResult generated = await compiler.CompileAsync(
-            HandwrittenShaderParserTests.CreateModule("void main() {}", ShaderIRSourceKind.Generated),
+        ShaderCompilationResult result = await compiler.CompileAsync(
+            HandwrittenShaderParserTests.CreateModule("void main() {}"),
             target,
             RenderShaderVariant.empty,
             "/project/Assets");
 
-        Assert.True(handwritten.succeeded);
-        Assert.True(generated.succeeded);
-        Assert.Equal(4, toolchain.requests.Count);
-        Assert.Equal(handwritten.artifact!.shaderInterface.bindings.Count,
-            generated.artifact!.shaderInterface.bindings.Count);
+        Assert.True(result.succeeded);
+        Assert.Equal(2, toolchain.requests.Count);
+        Assert.Single(result.artifact!.shaderInterface.bindings);
     }
 
     [Fact]
-    public async Task CompileAsync_MapsGeneratedLineBackToNode()
+    public async Task CompileAsync_MapsCompilerLineBackToSource()
     {
         var compiler = new ShaderCompiler(new FakeToolchain());
-        ShaderIRModule module = HandwrittenShaderParserTests.CreateModule(
-            "line one\nFAIL",
-            ShaderIRSourceKind.Generated);
+        ShaderIRModule module = HandwrittenShaderParserTests.CreateModule("line one\nFAIL");
 
         ShaderCompilationResult result = await compiler.CompileAsync(
             module,
@@ -54,7 +45,7 @@ public sealed class ShaderCompilerTests
         Assert.False(result.succeeded);
         ShaderDiagnostic diagnostic = Assert.Single(result.diagnostics.Where(value =>
             value.severity == DiagnosticSeverity.Error));
-        Assert.Equal("node-v", diagnostic.location!.Value.nodeId);
+        Assert.Equal("Shaders/v.sc", diagnostic.location!.Value.assetPath);
         Assert.Equal(2, diagnostic.location.Value.line);
     }
 
@@ -78,13 +69,11 @@ public sealed class ShaderCompilerTests
                     ShaderStage.Vertex,
                     "main",
                     "void main() {}",
-                    ShaderIRSourceKind.Generated,
                     new ShaderSourceLocation("Shaders/alternative.vs.sc", pass.name, ShaderStage.Vertex)),
                 new ShaderIRStageModule(
                     ShaderStage.Fragment,
                     "main",
                     "void main() {}",
-                    ShaderIRSourceKind.Generated,
                     new ShaderSourceLocation("Shaders/alternative.fs.sc", pass.name, ShaderStage.Fragment))
             ]);
         var module = new ShaderIRModule(definition, [CreatePass(clustered), CreatePass(fallback)]);
@@ -155,9 +144,7 @@ public sealed class ShaderCompilerTests
 
     private static CompiledShaderArtifact CreateArtifact()
     {
-        ShaderIRModule module = HandwrittenShaderParserTests.CreateModule(
-            "void main() {}",
-            ShaderIRSourceKind.Handwritten);
+        ShaderIRModule module = HandwrittenShaderParserTests.CreateModule("void main() {}");
         return new CompiledShaderArtifact(
             module.definition.name,
             "target",

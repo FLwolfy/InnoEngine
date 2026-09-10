@@ -1,6 +1,6 @@
 # Inno.Rendering
 
-[Rendering 索引](README.md) · [Runtime](Inno.Rendering.Runtime.md) · [ShaderGraph](Inno.Rendering.ShaderGraph.md)
+[Rendering 索引](README.md) · [Runtime](Inno.Rendering.Runtime.md) · [MaterialGraph](Inno.Rendering.MaterialGraph.md)
 
 ## 发布集合的不可变性
 
@@ -28,6 +28,13 @@ Graphics/Compute pipeline binding、Shader IR 的 stages/passes/interface bindin
 | 目标产物 | `IRenderTargetArtifactProvider`, `RenderTargetArtifactStatus` | 以 `Ready`、`Pending`、`Unavailable`、`Failed` 精确表达无源码 Shader/Texture 目标产物状态。 |
 | 诊断 | `IDiagnosticReporter`, `Diagnostic`（Core.Diagnostics） | 发布并在条件恢复后解除领域问题；没有 Rendering 专用 sink/severity。 |
 | 全局 | `GraphicsSettings`, `RenderFrameStatistics` | 当前 capability、默认 Pipeline 与只读统计。 |
+
+### 设备呈现节奏
+
+`IRenderDevice.SetVerticalSync(bool)` 请求在安全帧边界更改垂直同步；设备不应在已开始的 Pass 中重置。
+BGFX 适配器将变更与下一次 `BeginFrame` 的 backbuffer reset 合并，相同值不产生重复 reset。
+不支持动态切换的设备必须明确抛出 `NotSupportedException`，不能静默忽略。软件限帧属于 Shell 的
+`FramePacingOptions`，不属于 Render Graph 或特定渲染插件；`0` 表示不限帧。
 
 ## Shader → Technique → Material → Pipeline
 

@@ -6,7 +6,7 @@ using Inno.Core.Serialization;
 namespace Inno.Rendering.Assets;
 
 /// <summary>
-/// Persists the shared handwritten and graph-generated Shader IR artifact.
+/// Persists the canonical backend-neutral Shader IR artifact.
 /// </summary>
 public static class ShaderIRArtifactSerialization
 {
@@ -32,7 +32,7 @@ public static class ShaderIRArtifactSerialization
             passes = module.passes.Select(static pass => new PassData
             {
                 name = pass.definition.name,
-                generatedVaryingSource = pass.generatedVaryingSource,
+                varyingSource = pass.varyingSource,
                 usesAllBindings = pass.usesAllBindings,
                 bindingIds = pass.bindingIds.Select(static value => value.value).ToArray(),
                 stages = pass.stages.Select(static stage => new StageData
@@ -40,12 +40,9 @@ public static class ShaderIRArtifactSerialization
                     stage = stage.stage,
                     entryPoint = stage.entryPoint,
                     source = stage.source,
-                    sourceKind = stage.sourceKind,
                     assetPath = stage.location.assetPath,
                     line = stage.location.line,
-                    column = stage.location.column,
-                    nodeId = stage.location.nodeId,
-                    lineNodeIds = new Dictionary<int, string>(stage.lineNodeIds)
+                    column = stage.location.column
                 }).ToArray()
             }).ToArray()
         });
@@ -80,19 +77,16 @@ public static class ShaderIRArtifactSerialization
                 stage.stage,
                 stage.entryPoint,
                 stage.source,
-                stage.sourceKind,
                 new ShaderSourceLocation(
                     stage.assetPath,
                     pass.name,
                     stage.stage,
                     stage.line,
-                    stage.column,
-                    stage.nodeId),
-                stage.lineNodeIds)).ToArray();
+                    stage.column))).ToArray();
             return new ShaderIRPass(
                 passDefinition,
                 stages,
-                pass.generatedVaryingSource,
+                pass.varyingSource,
                 pass.usesAllBindings
                     ? null
                     : pass.bindingIds.Select(static value => new ShaderPropertyId(value)).ToArray());
@@ -137,7 +131,7 @@ public static class ShaderIRArtifactSerialization
         /// <summary>
         /// Gets generated varying declarations when the source required synthesis.
         /// </summary>
-        public string? generatedVaryingSource { get; set; }
+        public string? varyingSource { get; set; }
         /// <summary>
         /// Gets whether the caller-visible condition represented by this property is satisfied.
         /// </summary>
@@ -167,10 +161,6 @@ public static class ShaderIRArtifactSerialization
         /// </summary>
         public string source { get; set; }
         /// <summary>
-        /// Gets whether the Shader IR originated from handwritten or generated source.
-        /// </summary>
-        public ShaderIRSourceKind sourceKind { get; set; }
-        /// <summary>
         /// Gets the normalized asset path used by the current operation.
         /// </summary>
         public string assetPath { get; set; }
@@ -182,13 +172,5 @@ public static class ShaderIRArtifactSerialization
         /// Gets the scalar measurement or identity associated with the current state.
         /// </summary>
         public int column { get; set; }
-        /// <summary>
-        /// Gets text used for stable identity, presentation, or diagnostics by this contract.
-        /// </summary>
-        public string nodeId { get; set; }
-        /// <summary>
-        /// Gets the mapping from generated source lines to stable Shader Graph node identities.
-        /// </summary>
-        public Dictionary<int, string> lineNodeIds { get; set; }
     }
 }

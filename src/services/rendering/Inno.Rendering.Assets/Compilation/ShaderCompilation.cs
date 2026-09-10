@@ -354,9 +354,6 @@ public sealed class ShaderCompilationResult
 /// <param name="sourceRoot">
 /// Controlled source root used to resolve includes.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public sealed record ShaderToolRequest(
     ShaderIRStageModule stage,
     ShaderIRPass stagePass,
@@ -380,9 +377,6 @@ public sealed record ShaderToolRequest(
 /// <param name="standardError">
 /// Captured standard error.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public sealed record ShaderToolResult(
     byte[]? bytes,
     int exitCode,
@@ -432,7 +426,7 @@ public interface IShaderCompilerToolchain
 }
 
 /// <summary>
-/// Compiles validated handwritten or graph-generated Shader IR through one target toolchain.
+/// Compiles validated Shader IR through one target toolchain.
 /// </summary>
 public sealed partial class ShaderCompiler
 {
@@ -474,7 +468,7 @@ public sealed partial class ShaderCompiler
     /// Compiles a complete shader candidate without replacing any active artifact.
     /// </summary>
     /// <param name="module">
-    /// Shared handwritten/graph Shader IR.
+    /// Backend-neutral Shader IR.
     /// </param>
     /// <param name="target">
     /// Target renderer profile and capabilities.
@@ -616,9 +610,6 @@ public sealed partial class ShaderCompiler
             int sourceLine = match.Success && int.TryParse(match.Groups[1].Value, out int parsedLine)
                 ? parsedLine
                 : 0;
-            string nodeId = sourceLine > 0 && stage.lineNodeIds.TryGetValue(sourceLine, out string? mappedNode)
-                ? mappedNode
-                : stage.location.nodeId;
             DiagnosticSeverity severity = line.Contains("warning", StringComparison.OrdinalIgnoreCase)
                 ? DiagnosticSeverity.Warning
                 : result.exitCode == 0
@@ -633,8 +624,7 @@ public sealed partial class ShaderCompiler
                     stage.location.passName,
                     stage.stage,
                     sourceLine,
-                    0,
-                    nodeId)));
+                    0)));
         }
 
         return diagnostics;

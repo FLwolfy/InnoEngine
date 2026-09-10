@@ -178,9 +178,15 @@ public sealed class EditorInteractions : IEditorSelectionCoordinator, IEditorHis
     /// <summary>
     /// Opens and requests presentation focus for one panel in the active extension generation.
     /// </summary>
-    /// <param name="panelId">The stable panel identifier to resolve.</param>
-    /// <returns><see langword="true"/> when an available panel was found.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="panelId"/> is empty.</exception>
+    /// <param name="panelId">
+    /// The stable panel identifier to resolve.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when an available panel was found.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="panelId"/> is empty.
+    /// </exception>
     public bool OpenPanel(string panelId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(panelId);
@@ -190,9 +196,15 @@ public sealed class EditorInteractions : IEditorSelectionCoordinator, IEditorHis
     /// <summary>
     /// Closes one panel in the active extension generation without toggling its current state.
     /// </summary>
-    /// <param name="panelId">The stable panel identifier to resolve.</param>
-    /// <returns><see langword="true"/> when an available panel was found.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="panelId"/> is empty.</exception>
+    /// <param name="panelId">
+    /// The stable panel identifier to resolve.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when an available panel was found.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="panelId"/> is empty.
+    /// </exception>
     public bool ClosePanel(string panelId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(panelId);

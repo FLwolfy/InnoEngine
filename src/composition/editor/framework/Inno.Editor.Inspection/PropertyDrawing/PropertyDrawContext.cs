@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using Inno.Core.Serialization;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
@@ -16,6 +17,7 @@ public sealed class PropertyDrawContext
     private readonly IInspectionPropertyEditService m_edits;
     private readonly object m_owner;
     private readonly string m_rootPropertyName;
+    private readonly bool m_isReadOnly;
 
     /// <summary>
     /// Gets the shared editor context.
@@ -50,7 +52,17 @@ public sealed class PropertyDrawContext
     /// <summary>
     /// Gets whether assignments are disabled.
     /// </summary>
-    public bool isReadOnly => (visibility & PropertyVisibility.RuntimeSet) == 0;
+    public bool isReadOnly => m_isReadOnly;
+
+    /// <summary>
+    /// Gets the optional inclusive numeric lower bound supplied by Inspector metadata.
+    /// </summary>
+    public double? minimum { get; }
+
+    /// <summary>
+    /// Gets the optional inclusive numeric upper bound supplied by Inspector metadata.
+    /// </summary>
+    public double? maximum { get; }
 
     internal object owner => m_owner;
 
@@ -64,6 +76,9 @@ public sealed class PropertyDrawContext
         string label,
         Type propertyType,
         PropertyVisibility visibility,
+        bool isReadOnly,
+        double? minimum,
+        double? maximum,
         Func<object?> getter,
         Action<object?> setter,
         SerializedPropertyRenderer renderer)
@@ -79,6 +94,9 @@ public sealed class PropertyDrawContext
         this.label = label;
         this.propertyType = propertyType;
         this.visibility = visibility;
+        m_isReadOnly = isReadOnly;
+        this.minimum = minimum;
+        this.maximum = maximum;
         m_getter = getter;
         m_setter = setter;
         m_renderer = renderer;
@@ -178,6 +196,9 @@ public sealed class PropertyDrawContext
         m_renderer.Draw(
             editorContext,
             m_owner,
+            m_owner,
+            null,
+            null,
             m_rootPropertyName,
             $"{path}.{childName}",
             childName,
@@ -194,11 +215,27 @@ public sealed class PropertyDrawContext
     /// Nested property.
     /// </param>
     public void DrawChild(SerializedProperty property)
+        => DrawChild(GetValue() ?? m_owner, property);
+
+    /// <summary>
+    /// Draws a nested serialized property with presentation metadata resolved from its immediate owner.
+    /// </summary>
+    /// <param name="metadataOwner">
+    /// Object that declares the nested serialized member.
+    /// </param>
+    /// <param name="property">
+    /// Nested property.
+    /// </param>
+    public void DrawChild(object metadataOwner, SerializedProperty property)
     {
+        ArgumentNullException.ThrowIfNull(metadataOwner);
         ArgumentNullException.ThrowIfNull(property);
         m_renderer.Draw(
             editorContext,
             m_owner,
+            metadataOwner,
+            InspectorMemberMetadata.Resolve(metadataOwner.GetType(), property.name),
+            property,
             m_rootPropertyName,
             $"{path}.{property.name}",
             property.name,
@@ -206,6 +243,34 @@ public sealed class PropertyDrawContext
             isReadOnly || !property.canWrite ? PropertyVisibility.Readonly : property.visibility,
             property.GetValue,
             property.SetValue);
+    }
+
+    internal void DrawChildMember(
+        object metadataOwner,
+        MemberInfo member,
+        Type childType,
+        Func<object?> getter,
+        Action<object?> setter,
+        bool readOnly)
+    {
+        ArgumentNullException.ThrowIfNull(metadataOwner);
+        ArgumentNullException.ThrowIfNull(member);
+        PropertyVisibility childVisibility = readOnly || isReadOnly
+            ? PropertyVisibility.Readonly
+            : PropertyVisibility.Show;
+        m_renderer.Draw(
+            editorContext,
+            m_owner,
+            metadataOwner,
+            member,
+            null,
+            m_rootPropertyName,
+            $"{path}.{member.Name}",
+            member.Name,
+            childType,
+            childVisibility,
+            getter,
+            setter);
     }
 
     /// <summary>
@@ -239,6 +304,8 @@ public sealed class PropertyDrawContext
         m_renderer.DrawInline(
             editorContext,
             m_owner,
+            m_owner,
+            null,
             m_rootPropertyName,
             $"{path}.{childName}",
             childName,

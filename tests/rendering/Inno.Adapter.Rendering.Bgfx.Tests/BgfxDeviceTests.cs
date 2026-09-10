@@ -257,13 +257,46 @@ public sealed class BgfxDeviceTests
         int textureAllocations = m_device.transientTextureAllocationCount;
         int frameBufferAllocations = m_device.transientFrameBufferAllocationCount;
 
-        CompiledRenderGraph second = BuildColorTargetGraph(102);
+        CompiledRenderGraph second = BuildColorTargetGraph(102, "Request[8] Renamed Color Pass");
         m_device.BeginFrame();
         m_device.Execute(second, 102);
         m_device.EndFrame();
 
         Assert.Equal(textureAllocations, m_device.transientTextureAllocationCount);
         Assert.Equal(frameBufferAllocations, m_device.transientFrameBufferAllocationCount);
+    }
+
+    [Fact]
+    public void NoopDevice_RetiresSupersededNamedFramebuffersDuringResizeChurn()
+    {
+        const int passCount = 16;
+        for (uint frame = 0; frame < 32; frame++)
+        {
+            RenderGraphBuilder builder = new(1000 + frame, m_device.capabilities);
+            int extent = 64 + checked((int)frame);
+            for (int passIndex = 0; passIndex < passCount; passIndex++)
+            {
+                RenderTextureHandle texture = builder.CreateTexture(
+                    $"Resize Target {passIndex}",
+                    new RenderTextureDescriptor(
+                        extent,
+                        extent,
+                        RenderTextureFormat.RGBA8,
+                        RenderTextureUsage.ColorAttachment | RenderTextureUsage.Sampled));
+                builder.AddRasterPass(
+                        $"Resize Pass {passIndex}",
+                        C_FIRST,
+                        passIndex,
+                        static (_, _) => { })
+                    .UseColorAttachment(texture, 0, RenderLoadAction.Clear)
+                    .HasSideEffect();
+            }
+
+            CompiledRenderGraph graph = builder.Compile().graph!;
+            m_device.BeginFrame();
+            m_device.Execute(graph, 1000 + frame);
+            m_device.EndFrame();
+        }
     }
 
     [Fact]
@@ -343,7 +376,7 @@ public sealed class BgfxDeviceTests
         Assert.Contains("Only one BGFX device", exception.Message, StringComparison.Ordinal);
     }
 
-    private CompiledRenderGraph BuildColorTargetGraph(uint generation)
+    private CompiledRenderGraph BuildColorTargetGraph(uint generation, string passName = "Stable Color Pass")
     {
         RenderGraphBuilder builder = new(generation, m_device.capabilities);
         RenderTextureHandle texture = builder.CreateTexture(
@@ -353,7 +386,7 @@ public sealed class BgfxDeviceTests
                 32,
                 RenderTextureFormat.RGBA8,
                 RenderTextureUsage.ColorAttachment | RenderTextureUsage.Sampled));
-        builder.AddRasterPass("Stable Color Pass", C_FIRST, 0, static (_, _) => { })
+        builder.AddRasterPass(passName, C_FIRST, 0, static (_, _) => { })
             .UseColorAttachment(texture, 0, RenderLoadAction.Clear);
         builder.MarkOutput(texture);
         return builder.Compile().graph!;

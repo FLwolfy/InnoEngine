@@ -39,7 +39,6 @@ public sealed partial class PlatformImGuiContext
     private SDLWindowPtr m_textInputWindow = SDLWindowPtr.Null;
     private TimeSpan m_lastFrameTime;
     private TimeSpan m_lastLiveResizeLockTime;
-    private Action? m_lastDrawFrame;
     private IntPtr m_iniFilename;
     private Vector2 m_leftMousePressPosition;
     private uint m_leftMousePressWindowId;
@@ -619,7 +618,7 @@ public sealed partial class PlatformImGuiContext
         }
     }
 
-    internal void RenderLiveResizeWindow(uint windowId)
+    internal void PrepareLiveResizeWindow(uint windowId)
     {
         if (m_disposed || !m_enableSmoothResize)
         {
@@ -634,36 +633,9 @@ public sealed partial class PlatformImGuiContext
         }
 
         m_pendingLiveResizeWindowIds.Add(windowId);
-        if (m_isFrameActive)
-        {
-            return;
-        }
-
-        ImGuiNative.SetCurrentContext(m_context);
-        var liveResizeDraw = m_lastDrawFrame;
-        if (liveResizeDraw is null)
-        {
-            return;
-        }
-
         var now = m_frameTimer.Elapsed;
         m_liveResizeLockedWindowId = windowId;
         m_lastLiveResizeLockTime = now;
-        var deltaSeconds = (float)(now - m_lastFrameTime).TotalSeconds;
-        m_lastFrameTime = now;
-
-        SynchronizePendingLiveResizeWindows();
-        BeginFrame(deltaSeconds);
-        try
-        {
-            liveResizeDraw();
-            _ = EndFrame();
-        }
-        catch
-        {
-            m_isFrameActive = false;
-            throw;
-        }
     }
 
     /// <summary>
@@ -678,7 +650,8 @@ public sealed partial class PlatformImGuiContext
     public partial IntPtr RenderFrame(Action drawFrame)
     {
         ArgumentNullException.ThrowIfNull(drawFrame);
-        m_lastDrawFrame = drawFrame;
+        if (m_isFrameActive)
+            throw new InvalidOperationException("An ImGui frame cannot be reentered.");
 
         var now = m_frameTimer.Elapsed;
         var deltaSeconds = (float)(now - m_lastFrameTime).TotalSeconds;

@@ -1,5 +1,11 @@
 # Inno.Editor.Panel.Inspector
 
+## Transform 坐标空间
+
+Transform 使用专用的 Editor InspectionDrawer，复用 SectionHeader 与属性 tooltip 样式。`World` 是 Editor 视图开关，不是 Transform 的序列化字段；关闭显示 Local Space，开启显示 World Space。位置、欧拉角（度）与比例仍用 XYZ 控件。
+
+世界空间编辑通过 Transform 既有 world API 转换成本地值，并通过 SceneEdits 记录实际变化的属性 delta。Undo/Redo 因而恢复真实数据及渲染 revision。父级零缩放导致矩阵不可逆时，禁用世界空间输入并显示 Warning HelpBox；切回 Local 仍可修复父级。
+
 [Editor 索引](README.md) · [Inspection](Inno.Editor.Inspection.md) · [Hierarchy](Inno.Editor.Panel.Hierarchy.md) · [ImGui](Inno.Editor.ImGui.md)
 
 该项目拥有 Inspector Panel、统一 Target Header、Scene 的 Component/System 操作、动态 Add 菜单与引用拖放。可复用 Drawer 契约、Registry 和 serialized property renderer 已归入 `Inno.Editor.Inspection`。

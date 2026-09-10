@@ -9,9 +9,6 @@ namespace Inno.Core.Coroutines;
 /// <param name="task">
 /// The task used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public sealed class WaitForTask(Task task) : YieldInstruction
 {
     /// <summary>

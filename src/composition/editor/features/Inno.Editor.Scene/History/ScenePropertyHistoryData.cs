@@ -1,15 +1,20 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
 
 namespace Inno.Editor.Scene;
 
+internal sealed record ScenePropertyValueDelta(
+    string propertyName,
+    byte[] before,
+    byte[] after);
+
 internal sealed record ScenePropertyHistoryData(
     Guid targetId,
     string propertyName,
-    byte[] before,
-    byte[] after,
+    ScenePropertyValueDelta[] deltas,
     long timestamp)
 {
     internal byte[] Encode()
@@ -18,8 +23,14 @@ internal sealed record ScenePropertyHistoryData(
         using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
         writer.Write(targetId.ToByteArray());
         writer.Write(propertyName);
-        WriteBytes(writer, before);
-        WriteBytes(writer, after);
+        writer.Write(deltas.Length);
+        for (int index = 0; index < deltas.Length; index++)
+        {
+            ScenePropertyValueDelta delta = deltas[index];
+            writer.Write(delta.propertyName);
+            WriteBytes(writer, delta.before);
+            WriteBytes(writer, delta.after);
+        }
         writer.Write(timestamp);
         writer.Flush();
         return stream.ToArray();
@@ -28,9 +39,18 @@ internal sealed record ScenePropertyHistoryData(
     internal static ScenePropertyHistoryData Create(
         Guid targetId,
         string propertyName,
-        byte[] before,
-        byte[] after)
-        => new(targetId, propertyName, before, after, Stopwatch.GetTimestamp());
+        IReadOnlyList<ScenePropertyValueDelta> deltas)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(propertyName);
+        ArgumentNullException.ThrowIfNull(deltas);
+        if (deltas.Count == 0)
+            throw new ArgumentException("A scene property history change requires at least one delta.", nameof(deltas));
+        return new ScenePropertyHistoryData(
+            targetId,
+            propertyName,
+            [.. deltas],
+            Stopwatch.GetTimestamp());
+    }
 
     internal static ScenePropertyHistoryData Decode(ReadOnlySpan<byte> bytes)
     {
@@ -38,12 +58,25 @@ internal sealed record ScenePropertyHistoryData(
         using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: false);
         Guid targetId = new(reader.ReadBytes(16));
         string propertyName = reader.ReadString();
-        byte[] before = ReadBytes(reader, "before");
-        byte[] after = ReadBytes(reader, "after");
+        int count = reader.ReadInt32();
+        if (count <= 0)
+            throw new InvalidDataException("Scene property history delta count must be positive.");
+        var deltas = new ScenePropertyValueDelta[count];
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        for (int index = 0; index < count; index++)
+        {
+            string affectedProperty = reader.ReadString();
+            if (string.IsNullOrWhiteSpace(affectedProperty) || !names.Add(affectedProperty))
+                throw new InvalidDataException("Scene property history contains an invalid or duplicate property name.");
+            deltas[index] = new ScenePropertyValueDelta(
+                affectedProperty,
+                ReadBytes(reader, $"{affectedProperty} before"),
+                ReadBytes(reader, $"{affectedProperty} after"));
+        }
         long timestamp = reader.ReadInt64();
         if (stream.Position != stream.Length)
             throw new InvalidDataException("Scene property history payload contains trailing data.");
-        return new ScenePropertyHistoryData(targetId, propertyName, before, after, timestamp);
+        return new ScenePropertyHistoryData(targetId, propertyName, deltas, timestamp);
     }
 
     private static void WriteBytes(BinaryWriter writer, byte[] bytes)

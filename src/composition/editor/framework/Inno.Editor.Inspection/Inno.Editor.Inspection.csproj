@@ -8,6 +8,7 @@
     <InnoAssemblyScope>Editor</InnoAssemblyScope>
   </PropertyGroup>
 <ItemGroup>
+    <ProjectReference Include="../../contracts/Inno.Editor.Annotations/Inno.Editor.Annotations.csproj" />
     <ProjectReference Include="..\Inno.Editor.Core\Inno.Editor.Core.csproj" />
     <ProjectReference Include="..\Inno.Editor.Interactions\Inno.Editor.Interactions.csproj" />
     <ProjectReference Include="..\..\..\..\foundation\core\Inno.Core.Serialization\Inno.Core.Serialization.csproj" />

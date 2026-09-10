@@ -2,14 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using Inno.Native.Bgfx;
 using Inno.Platform;
 using Inno.Rendering;
-
-[assembly: InternalsVisibleTo("Inno.Adapter.Rendering.Bgfx.Tests")]
 
 namespace Inno.Adapter.Rendering.Bgfx;
 
@@ -35,7 +32,8 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
     private readonly List<PooledTransientTexture> m_transientTexturePool = [];
     private readonly List<bgfx.FrameBufferHandle> m_graphFrameBuffers = [];
     private readonly List<CachedGraphFrameBuffer> m_graphFrameBufferCache = [];
-    private readonly uint m_resetFlags;
+    private uint m_resetFlags;
+    private bool m_resetPending;
 
     private CompiledRenderGraph? m_activeGraph;
     private bgfx.Encoder* m_activeEncoder;
@@ -165,10 +163,14 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
         ProcessDeferredResources(force: false);
         ProcessCanceledReadbacks();
         TrimTransientResourceCaches();
-        if (m_pendingWidth > 0 && m_pendingHeight > 0)
+        if (m_resetPending || (m_pendingWidth > 0 && m_pendingHeight > 0))
         {
-            m_backbufferWidth = m_pendingWidth;
-            m_backbufferHeight = m_pendingHeight;
+            if (m_pendingWidth > 0 && m_pendingHeight > 0)
+            {
+                m_backbufferWidth = m_pendingWidth;
+                m_backbufferHeight = m_pendingHeight;
+            }
+            m_resetPending = false;
             m_pendingWidth = 0;
             m_pendingHeight = 0;
             if (capabilities.backend != GraphicsApi.Noop)
@@ -247,6 +249,20 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
         m_pendingWidth = width;
         m_pendingHeight = height;
+    }
+
+    /// <inheritdoc />
+    public void SetVerticalSync(bool enabled)
+    {
+        EnsureApiThread();
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        uint next = enabled
+            ? m_resetFlags | (uint)bgfx.ResetFlags.Vsync
+            : m_resetFlags & ~(uint)bgfx.ResetFlags.Vsync;
+        if (next == m_resetFlags)
+            return;
+        m_resetFlags = next;
+        m_resetPending = true;
     }
 
     /// <summary>
@@ -838,9 +854,15 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
 
     internal int allocatedViewCount => m_nextViewId;
 
-    internal int transientTextureAllocationCount => m_transientTextureAllocationCount;
+    /// <summary>
+    /// Gets the number of native transient textures allocated by this device generation.
+    /// </summary>
+    public int transientTextureAllocationCount => m_transientTextureAllocationCount;
 
-    internal int transientFrameBufferAllocationCount => m_transientFrameBufferAllocationCount;
+    /// <summary>
+    /// Gets the number of native transient framebuffers allocated by this device generation.
+    /// </summary>
+    public int transientFrameBufferAllocationCount => m_transientFrameBufferAllocationCount;
 
     internal int transientBufferAllocationCount => m_transientBufferAllocationCount;
 
@@ -991,6 +1013,7 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
             }
             else
             {
+                RetireSupersededFrameBuffer(pass.name);
                 bgfx.Attachment* attachments = stackalloc bgfx.Attachment[pass.attachments.Count];
                 GraphAttachmentSignature[] signature = new GraphAttachmentSignature[pass.attachments.Count];
                 for (int index = 0; index < pass.attachments.Count; index++)
@@ -1023,7 +1046,11 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
                 }
 
                 m_transientFrameBufferAllocationCount++;
-                m_graphFrameBufferCache.Add(new CachedGraphFrameBuffer(frameBuffer, signature, m_backendFrame));
+                m_graphFrameBufferCache.Add(new CachedGraphFrameBuffer(
+                    frameBuffer,
+                    pass.name,
+                    signature,
+                    m_backendFrame));
                 m_graphFrameBuffers.Add(frameBuffer);
                 bgfx.set_view_frame_buffer(viewId, frameBuffer);
             }
@@ -1108,6 +1135,24 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
         }
 
         return new bgfx.FrameBufferHandle { idx = ushort.MaxValue };
+    }
+
+    private void RetireSupersededFrameBuffer(string passName)
+    {
+        for (int index = m_graphFrameBufferCache.Count - 1; index >= 0; index--)
+        {
+            CachedGraphFrameBuffer cached = m_graphFrameBufferCache[index];
+            if (!string.Equals(cached.passName, passName, StringComparison.Ordinal)
+                || cached.lastUsedFrame == m_backendFrame)
+            {
+                continue;
+            }
+
+            // BGFX owns the native command retirement and releases handles after frame
+            // advancement. Avoid adding our persistent-resource delay to obsolete bindings.
+            bgfx.destroy_frame_buffer(cached.handle);
+            m_graphFrameBufferCache.RemoveAt(index);
+        }
     }
 
     private void ApplyAttachmentState(
@@ -1655,10 +1700,12 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
 
     private sealed class CachedGraphFrameBuffer(
         bgfx.FrameBufferHandle handle,
+        string passName,
         GraphAttachmentSignature[] attachments,
         uint lastUsedFrame)
     {
         internal bgfx.FrameBufferHandle handle { get; } = handle;
+        internal string passName { get; } = passName;
         internal GraphAttachmentSignature[] attachments { get; } = attachments;
         internal uint lastUsedFrame { get; set; } = lastUsedFrame;
 

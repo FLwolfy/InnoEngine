@@ -223,7 +223,7 @@ public struct MaterialMetadataEntry
 /// Represents material state keyed by stable shader property identifiers.
 /// </summary>
 [StableTypeId("56f1fdc7-dad9-464a-848f-fcae4c33ecf2")]
-public sealed class MaterialAsset : AssetObject
+public class MaterialAsset : AssetObject
 {
     [SerializableProperty(PropertyVisibility.Hide)]
     private MaterialPropertyEntry[] m_properties = [];
@@ -283,6 +283,33 @@ public sealed class MaterialAsset : AssetObject
         }
 
         m_properties[index] = new MaterialPropertyEntry(id, value);
+    }
+
+    /// <summary>
+    /// Atomically replaces all persistent material values with an isolated, deterministically ordered set.
+    /// </summary>
+    /// <param name="properties">
+    /// Complete replacement property set. Duplicate identifiers are rejected.
+    /// </param>
+    public void ReplaceProperties(IEnumerable<MaterialPropertyEntry> properties)
+    {
+        ArgumentNullException.ThrowIfNull(properties);
+        MaterialPropertyEntry[] candidate = properties.ToArray();
+        var ids = new HashSet<ShaderPropertyId>();
+        foreach (MaterialPropertyEntry property in candidate)
+        {
+            if (!property.id.isValid)
+                throw new ArgumentException("A material property ID must be valid.", nameof(properties));
+            if (!ids.Add(property.id))
+            {
+                throw new ArgumentException(
+                    $"Material property '{property.id}' is duplicated.",
+                    nameof(properties));
+            }
+        }
+        m_properties = candidate
+            .OrderBy(static property => property.id.value, StringComparer.Ordinal)
+            .ToArray();
     }
 
     /// <summary>
@@ -364,6 +391,38 @@ public sealed class MaterialAsset : AssetObject
         int index = Array.FindIndex(m_metadata, entry => string.Equals(entry.key, key, StringComparison.Ordinal));
         value = index < 0 ? null : m_metadata[index].value;
         return index >= 0;
+    }
+
+    /// <summary>
+    /// Removes one provider-defined metadata value.
+    /// </summary>
+    /// <param name="key">
+    /// Stable metadata key.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when an entry was removed.
+    /// </returns>
+    public bool RemoveMetadata(string key)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        int index = Array.FindIndex(m_metadata, entry =>
+            string.Equals(entry.key, key, StringComparison.Ordinal));
+        if (index < 0)
+            return false;
+        var replacement = new MaterialMetadataEntry[m_metadata.Length - 1];
+        if (index > 0)
+            Array.Copy(m_metadata, 0, replacement, 0, index);
+        if (index < m_metadata.Length - 1)
+        {
+            Array.Copy(
+                m_metadata,
+                index + 1,
+                replacement,
+                index,
+                m_metadata.Length - index - 1);
+        }
+        m_metadata = replacement;
+        return true;
     }
 }
 

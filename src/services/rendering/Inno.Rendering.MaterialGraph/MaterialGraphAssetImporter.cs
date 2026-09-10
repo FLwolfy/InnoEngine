@@ -1,28 +1,25 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Inno.Assets;
 using Inno.Assets.Pipeline;
-using Inno.Core.Graphs;
-using Inno.Rendering.Assets;
 
-namespace Inno.Rendering.ShaderGraph;
+namespace Inno.Rendering.MaterialGraph;
 
 [AssetImporterExtension]
-internal sealed class ShaderGraphAssetImporter : AssetImporter<ShaderGraphAsset>
+internal sealed class MaterialGraphAssetImporter : AssetImporter<MaterialGraphAsset>
 {
     /// <summary>
     /// Gets the stable importer identity used in artifact fingerprints.
     /// </summary>
-    public override string importerId => "inno.rendering.shader-graph";
+public override string importerId => "inno.rendering.material-graph";
 
     /// <summary>
     /// Gets the normalized source extensions accepted by this importer.
     /// </summary>
-    public override IReadOnlyList<string> supportedExtensions { get; } = [".ishadergraph"];
+public override IReadOnlyList<string> supportedExtensions { get; } = [".imaterialgraph"];
 
     /// <summary>
     /// Imports source content into a validated runtime asset and artifact set.
@@ -39,34 +36,23 @@ internal sealed class ShaderGraphAssetImporter : AssetImporter<ShaderGraphAsset>
     /// <returns>
     /// An asynchronous operation that completes after all requested work has finished.
     /// </returns>
-    protected override async ValueTask ImportAsync(
+protected override async ValueTask ImportAsync(
         AssetImportContext context,
-        AssetImportWriter<ShaderGraphAsset> output,
+        AssetImportWriter<MaterialGraphAsset> output,
         CancellationToken cancellationToken)
     {
-        ShaderGraphAsset asset = NativeAssetSourceSerialization.Import<ShaderGraphAsset>(
+        MaterialGraphAsset asset = NativeAssetSourceSerialization.Import<MaterialGraphAsset>(
             context.sourceBytes.Span,
             context.services,
             out IReadOnlyList<AssetDependency> dependencies);
         foreach (AssetDependency dependency in dependencies)
             output.DependsOnAsset(dependency);
-        GraphDocument document = asset.document
-            ?? throw new InvalidDataException("A Shader Graph asset requires a neutral graph document.");
-        using var registry = new ShaderNodeRegistry(context.types);
-        registry.RefreshExtensions();
-        ShaderGraphCompileResult compilation = ShaderGraphCompiler.Compile(
-            context.assetPath.ToString(),
-            Path.GetFileNameWithoutExtension(context.assetPath.localPath),
-            document,
-            registry,
-            context.serialization);
+        if (asset.document is null)
+            throw new InvalidDataException("A Material Graph asset requires a neutral graph document.");
+        _ = MaterialGraphEvaluator.Commit(asset, context.serialization);
         output.SetAsset(asset);
-        if (!compilation.succeeded || compilation.module is null)
-            return;
-        asset.CommitDefinition(compilation.module.definition, context.serialization);
-        byte[] artifact = ShaderIRArtifactSerialization.Encode(compilation.module, context.serialization);
-        await output.WriteArtifactAsync("runtime", artifact, cancellationToken).ConfigureAwait(false);
-        await output.WriteArtifactAsync("shader-ir", artifact, cancellationToken).ConfigureAwait(false);
+        byte[] runtime = NativeAssetSourceSerialization.Export(asset, context.services);
+        await output.WriteArtifactAsync("runtime", runtime, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -84,16 +70,16 @@ internal sealed class ShaderGraphAssetImporter : AssetImporter<ShaderGraphAsset>
     /// <returns>
     /// An asynchronous operation that completes after all requested work has finished.
     /// </returns>
-    protected override ValueTask<ReadOnlyMemory<byte>?> ExportAsync(
+protected override ValueTask<ReadOnlyMemory<byte>?> ExportAsync(
         AssetExportContext context,
-        ShaderGraphAsset asset,
+        MaterialGraphAsset asset,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (asset.document is null)
-            throw new InvalidOperationException("A Shader Graph asset requires a neutral graph document.");
-        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(NativeAssetSourceSerialization.Export(
-            asset,
-            context.services));
+            throw new InvalidOperationException("A Material Graph asset requires a neutral graph document.");
+        _ = MaterialGraphEvaluator.Commit(asset, context.serialization);
+        return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+            NativeAssetSourceSerialization.Export(asset, context.services));
     }
 }

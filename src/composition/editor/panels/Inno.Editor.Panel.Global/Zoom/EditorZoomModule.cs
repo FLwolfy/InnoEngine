@@ -13,9 +13,6 @@ namespace Inno.Editor.Panel.Global;
 /// <param name="settings">
 /// The validated configuration that controls this operation.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 [EditorModule("editor-zoom", order: 10)]
 internal sealed class EditorZoomModule(EditorSettings settings) : EditorModule
 {

@@ -1,5 +1,9 @@
 # Inno.Adapter.Rendering.Bgfx
 
+## 帧同步与 framebuffer 缓存
+
+`SetVerticalSync(bool enabled)` 更新设备 reset flags，并在下一 BeginFrame 与 backbuffer resize 合并应用；不改变 graph 或资源 generation。Framebuffer 缓存按实际 attachment（texture、mip、layer、depth/color）匹配，而不是依赖可能变化的 Request/pass 名称。原生 framebuffer handle 在 BGFX 帧推进后才回收，不能假设 destroy 调用立即释放容量。
+
 [返回 Rendering 索引](README.md) · [Wiki 首页](../README.md) · [后端中立 API](Inno.Rendering.md)
 
 ## 职责与边界

@@ -44,9 +44,6 @@ public enum AssemblyModuleStatus
 /// <param name="assemblyNames">
 /// The immutable assembly names exposed for this active module generation.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 public sealed record AssemblyModuleInfo(
     AssemblyModuleHandle handle,
     string moduleName,

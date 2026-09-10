@@ -21,7 +21,7 @@ public interface ISdl3ApplicationExtension
         scoped ReadOnlySpan<byte> nativeEventData);
 
     /// <summary>
-    /// Redraws integration content while a native window is in a live resize loop.
+    /// Synchronizes integration window state before the host renders a complete live-resize frame.
     /// </summary>
     /// <param name="application">
     /// The platform application requesting the redraw.
@@ -29,7 +29,7 @@ public interface ISdl3ApplicationExtension
     /// <param name="windowId">
     /// The platform window identifier being resized.
     /// </param>
-    void RenderLiveResizeWindow(Sdl3PlatformApplication application, uint windowId);
+    void PrepareLiveResizeWindow(Sdl3PlatformApplication application, uint windowId);
 
     /// <summary>
     /// Releases application-bound integration state before platform resources are destroyed.

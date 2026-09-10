@@ -9,9 +9,6 @@ namespace Inno.Editor.Panel.FileBrowser;
 /// <param name="assets">
 /// The assets used to initialize this instance.
 /// </param>
-/// <returns>
-/// The value produced by this implementation of the contract.
-/// </returns>
 [EditorDrop(FileBrowserInteractionIds.C_AREA, priority: 200)]
 internal sealed class MoveAssetEntryDropHandler(AssetEditorModule assets)
     : EditorDrop<AssetFileEntry, string>

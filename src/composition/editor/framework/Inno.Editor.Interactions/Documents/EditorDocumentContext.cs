@@ -20,37 +20,61 @@ public sealed class EditorDocumentContext
         title = Path.GetFileName(assetPath);
     }
 
-    /// <summary>Gets the stable identity of this open tab.</summary>
+    /// <summary>
+    /// Gets the stable identity of this open tab.
+    /// </summary>
     public Guid documentId { get; }
 
-    /// <summary>Gets the persistent asset identity, or an empty value before the source has one.</summary>
+    /// <summary>
+    /// Gets the persistent asset identity, or an empty value before the source has one.
+    /// </summary>
     public Guid assetId { get; }
 
-    /// <summary>Gets the normalized project asset path.</summary>
+    /// <summary>
+    /// Gets the normalized project asset path.
+    /// </summary>
     public string assetPath { get; }
 
-    /// <summary>Gets the stable provider identity used to recover across extension reload.</summary>
+    /// <summary>
+    /// Gets the stable provider identity used to recover across extension reload.
+    /// </summary>
     public string providerId { get; }
 
-    /// <summary>Gets or sets the author-facing tab title.</summary>
+    /// <summary>
+    /// Gets or sets the author-facing tab title.
+    /// </summary>
     public string title { get; set; }
 
-    /// <summary>Gets whether unsaved source or staged changes exist.</summary>
+    /// <summary>
+    /// Gets whether unsaved source or staged changes exist.
+    /// </summary>
     public bool isDirty { get; internal set; }
 
-    /// <summary>Gets whether a current-generation provider is available.</summary>
+    /// <summary>
+    /// Gets whether a current-generation provider is available.
+    /// </summary>
     public bool isProviderAvailable { get; internal set; }
 
-    /// <summary>Gets or sets the stable active viewport tool identity.</summary>
+    /// <summary>
+    /// Gets or sets the stable active viewport tool identity.
+    /// </summary>
     public string activeTool { get; set; } = string.Empty;
 
-    /// <summary>Gets an immutable snapshot of stable view parameters.</summary>
+    /// <summary>
+    /// Gets an immutable snapshot of stable view parameters.
+    /// </summary>
     public IReadOnlyDictionary<string, string> viewParameters
         => new Dictionary<string, string>(m_viewParameters, StringComparer.Ordinal);
 
-    /// <summary>Adds or replaces one stable scalar or JSON-formatted view parameter.</summary>
-    /// <param name="key">Stable provider-local parameter name.</param>
-    /// <param name="value">Persistent scalar or JSON-formatted value.</param>
+    /// <summary>
+    /// Adds or replaces one stable scalar or JSON-formatted view parameter.
+    /// </summary>
+    /// <param name="key">
+    /// Stable provider-local parameter name.
+    /// </param>
+    /// <param name="value">
+    /// Persistent scalar or JSON-formatted value.
+    /// </param>
     public void SetViewParameter(string key, string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
@@ -58,10 +82,18 @@ public sealed class EditorDocumentContext
         m_viewParameters[key] = value;
     }
 
-    /// <summary>Tries to read one stable view parameter.</summary>
-    /// <param name="key">Stable provider-local parameter name.</param>
-    /// <param name="value">Receives the stored value.</param>
-    /// <returns><see langword="true"/> when the parameter exists.</returns>
+    /// <summary>
+    /// Tries to read one stable view parameter.
+    /// </summary>
+    /// <param name="key">
+    /// Stable provider-local parameter name.
+    /// </param>
+    /// <param name="value">
+    /// Receives the stored value.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the parameter exists.
+    /// </returns>
     public bool TryGetViewParameter(string key, out string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
@@ -97,7 +129,33 @@ public sealed class EditorDocumentContext
     }
 }
 
-/// <summary>Contains one reload-safe open-document snapshot.</summary>
+/// <summary>
+/// Contains one reload-safe open-document snapshot.
+/// </summary>
+/// <param name="documentId">
+/// Stable identity of the open document tab.
+/// </param>
+/// <param name="assetId">
+/// Persistent identity of the backing asset, or an empty value before assignment.
+/// </param>
+/// <param name="assetPath">
+/// Normalized project-relative asset path.
+/// </param>
+/// <param name="providerId">
+/// Stable identity of the document provider that owns the editing behavior.
+/// </param>
+/// <param name="title">
+/// Author-facing title displayed by the document host.
+/// </param>
+/// <param name="isDirty">
+/// Whether the document contains uncommitted authoring changes.
+/// </param>
+/// <param name="activeTool">
+/// Stable identity of the active document tool.
+/// </param>
+/// <param name="viewParameters">
+/// Reload-safe provider-owned view parameters.
+/// </param>
 public sealed record EditorDocumentState(
     Guid documentId,
     Guid assetId,

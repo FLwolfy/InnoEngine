@@ -107,7 +107,7 @@ internal sealed class RenderResourceCache<TKey, TEntry>(Action<TEntry> release, 
     /// Gets an enumerator required by the implemented contract.
     /// </summary>
     /// <returns>
-    /// The value produced by this implementation of the contract.
+    /// The validated ienumeratorkey value pairtkey, tentry that represents the completed operation.
     /// </returns>
     public IEnumerator<KeyValuePair<TKey, TEntry>> GetEnumerator() => m_entries.GetEnumerator();
 

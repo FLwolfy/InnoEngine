@@ -1165,12 +1165,24 @@ public sealed class RenderStencilState
     /// <summary>
     /// Creates a complete immutable stencil configuration without relying on init-only setters.
     /// </summary>
-    /// <param name="enabled">Whether stencil testing and updates are active.</param>
-    /// <param name="reference">Eight-bit stencil reference value.</param>
-    /// <param name="readMask">Mask applied while reading stored stencil.</param>
-    /// <param name="writeMask">Mask applied while writing stencil.</param>
-    /// <param name="front">Front-face stencil behavior.</param>
-    /// <param name="back">Back-face stencil behavior.</param>
+    /// <param name="enabled">
+    /// Whether stencil testing and updates are active.
+    /// </param>
+    /// <param name="reference">
+    /// Eight-bit stencil reference value.
+    /// </param>
+    /// <param name="readMask">
+    /// Mask applied while reading stored stencil.
+    /// </param>
+    /// <param name="writeMask">
+    /// Mask applied while writing stencil.
+    /// </param>
+    /// <param name="front">
+    /// Front-face stencil behavior.
+    /// </param>
+    /// <param name="back">
+    /// Back-face stencil behavior.
+    /// </param>
     public RenderStencilState(
         bool enabled,
         byte reference,
@@ -1246,14 +1258,30 @@ public sealed class RenderRasterState
     /// <summary>
     /// Creates a complete immutable raster configuration without relying on init-only setters.
     /// </summary>
-    /// <param name="cull">Face culling mode.</param>
-    /// <param name="frontFace">Winding order interpreted as the front face.</param>
-    /// <param name="depthCompare">Depth comparison.</param>
-    /// <param name="depthWrite">Whether accepted fragments update depth.</param>
-    /// <param name="blend">Independent RGB and alpha blending.</param>
-    /// <param name="colorWriteMask">Four-bit RGBA write mask.</param>
-    /// <param name="multisampling">Whether multisample rasterization is enabled.</param>
-    /// <param name="topology">Primitive assembly for subsequent draw commands.</param>
+    /// <param name="cull">
+    /// Face culling mode.
+    /// </param>
+    /// <param name="frontFace">
+    /// Winding order interpreted as the front face.
+    /// </param>
+    /// <param name="depthCompare">
+    /// Depth comparison.
+    /// </param>
+    /// <param name="depthWrite">
+    /// Whether accepted fragments update depth.
+    /// </param>
+    /// <param name="blend">
+    /// Independent RGB and alpha blending.
+    /// </param>
+    /// <param name="colorWriteMask">
+    /// Four-bit RGBA write mask.
+    /// </param>
+    /// <param name="multisampling">
+    /// Whether multisample rasterization is enabled.
+    /// </param>
+    /// <param name="topology">
+    /// Primitive assembly for subsequent draw commands.
+    /// </param>
     public RenderRasterState(
         RenderCullMode cull,
         RenderFrontFace frontFace,

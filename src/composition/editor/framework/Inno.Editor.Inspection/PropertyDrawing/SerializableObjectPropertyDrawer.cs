@@ -51,7 +51,7 @@ internal sealed class SerializableObjectPropertyDrawer : IPropertyDrawer
         IReadOnlyList<SerializedProperty> properties = m_serialization.GetProperties(serializable);
         for (int i = 0; i < properties.Count; i++)
         {
-            context.DrawChild(properties[i]);
+            context.DrawChild(serializable, properties[i]);
         }
 
         NativeImGui.TreePop();

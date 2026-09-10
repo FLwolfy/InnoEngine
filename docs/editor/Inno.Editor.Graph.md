@@ -1,6 +1,6 @@
 # Inno.Editor.Graph
 
-[返回 Editor 索引](README.md) · [Wiki 首页](../README.md) · [通用 Graph](../core/Inno.Core.Graphs.md) · [ShaderGraph](../render/Inno.Rendering.ShaderGraph.md)
+[返回 Editor 索引](README.md) · [Wiki 首页](../README.md) · [通用 Graph](../core/Inno.Core.Graphs.md) · [MaterialGraph](../render/Inno.Rendering.MaterialGraph.md)
 
 `Inno.Editor.Graph` 提供不含 Shader 或 ImGui 语义的编辑控制层。`GraphEditorModule` 管理按稳定 document ID 索引的 session；`GraphDocumentController` 完成节点增删移动、连接重连、值修改、复制粘贴与 dirty/revision；`GraphCanvasState` 保存 session 内 pan/zoom、选择和 pending connection。
 
@@ -25,4 +25,4 @@ Module 的 live session 只由自己的 IdentityAllocator 解析，Guid 集合�
 
 GraphDocument 是可编辑创作模型，不是假称不可变的运行快照。回调/编译产物需要独立副本；GraphCanvasState 仅保存 session 瞬时展示状态。
 
-相邻页面：[Inno.Core.Graphs](../core/Inno.Core.Graphs.md) · [ShaderGraph Panel](Inno.Editor.Panel.ShaderGraph.md) · [Editor Interactions](Inno.Editor.Interactions.md)
+相邻页面：[Inno.Core.Graphs](../core/Inno.Core.Graphs.md) · [MaterialGraph Panel](Inno.Editor.Panel.MaterialGraph.md) · [Editor Interactions](Inno.Editor.Interactions.md)
