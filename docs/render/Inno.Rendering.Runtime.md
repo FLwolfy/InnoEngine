@@ -96,6 +96,7 @@ Runtime 不把一次请求假定为整个 target 的唯一 owner。请求仍按 
 - 多请求共享一个设备帧和一个 Graph；请求/Contributor 通过 name scope 隔离同名 Pass，单个建图失败由 mutation scope 回滚。累计 Pass 超过 `maxViews` 时拒绝新增候选并给出明确诊断。
 - 显式调用 `AllowParallelRecording` 的独立 Pass callback 可在 worker 上并行生成中立 command list；Runtime/后端仍按全帧 Graph 拓扑串行回放并只调用一次 `EndFrame`。
 - `GraphicsSettings.frameStatistics` 汇总全帧 Graph 的实际 View、后端报告的 draw/dispatch 与真实裁剪 Pass 数。
+- `RenderFrameStatistics.allocationCounters` 同时冻结后端中立的累计 transient 分配快照；含设备 generation，后端不提供时为 `null`，不是零。Editor Stats 实际展示此快照，性能工具也可读取同一契约。构造快照时必须显式传入该参数。
 
 ## Graphics execution context
 

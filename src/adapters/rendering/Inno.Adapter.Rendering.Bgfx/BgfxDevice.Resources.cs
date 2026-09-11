@@ -18,7 +18,7 @@ public sealed unsafe partial class BgfxDevice
     private readonly Dictionary<int, BgfxBufferResource> m_graphBuffers = [];
     private readonly Dictionary<int, BgfxBufferResource> m_transientBufferSlots = [];
     private readonly List<PooledTransientBuffer> m_transientBufferPool = [];
-    private int m_transientBufferAllocationCount;
+    private ulong m_transientBufferAllocationCount;
 
     /// <summary>
     /// Creates a buffer using this implementation's validated inputs.

@@ -60,6 +60,8 @@ Metal、D3D、Vulkan 等 BGFX renderer 不要求分别维护业务 Shader：同�
 - `UpdateTextureRegion` 分别映射 2D、3D 与 Cube update API，并在进入 native call 前校验 mip texel bounds、层/face 与精确 byte count；持久 handle 和设备 generation 保持不变。
 - `Draw` 不会在缺少 Vertex Buffer 时隐式转成 procedural；调用方必须使用 `DrawProcedural`。Indirect Draw 会先提交当前 Vertex/Index range，无 Vertex Buffer 时要求 ProceduralDraw capability。
 - 每次直接或间接 draw/dispatch 成功交给 BGFX Encoder 后更新 `frameCounters`；`BeginFrame` 原子清零，因此 Runtime 读取的是本帧真实提交量。
+- `allocationCounters` 实现通用设备诊断契约，报告当前 generation 的 transient Texture、Buffer、Framebuffer 累计分配；每项只在原生创建成功后递增。外部通过 `IRenderDevice` 或完成帧统计读取，不公开 BGFX 专属分配计数器属性。
+- `SetVerticalSync` 完整实现两种幂等策略，变更与下一次 `BeginFrame` 的 resize/reset 合并；Noop 保留策略与尺寸，但不执行原生 reset。
 - shaderc/profile 和 texturec 不位于通用 Assets、Runtime 或 Player；Build 在导出时生成目标产物，Player 只消费已经冻结的 KTX 与 Shader 二进制。
 
 ## 失败与资源安全

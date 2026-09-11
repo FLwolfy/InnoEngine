@@ -209,6 +209,7 @@ public abstract class Shell : IDisposable
         Stopwatch timer = Stopwatch.StartNew();
         double previousTime = 0d;
         int frameCount = 0;
+        bool? appliedVerticalSync = null;
         platformApplication.redrawRequested += Redraw;
         try
         {
@@ -245,7 +246,12 @@ public abstract class Shell : IDisposable
             m_frameActive = true;
             try
             {
-                renderDevice.SetVerticalSync(framePacing.verticalSync);
+                bool verticalSync = framePacing.verticalSync;
+                if (appliedVerticalSync != verticalSync)
+                {
+                    renderDevice.SetVerticalSync(verticalSync);
+                    appliedVerticalSync = verticalSync;
+                }
                 double totalTime = timer.Elapsed.TotalSeconds;
                 float deltaTime = Math.Max(0f, (float)(totalTime - previousTime));
                 var frame = new ShellFrame(frameCount, totalTime, deltaTime);

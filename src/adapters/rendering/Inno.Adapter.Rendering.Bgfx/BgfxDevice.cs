@@ -48,8 +48,8 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
     private int m_pendingHeight;
     private int m_drawCount;
     private int m_dispatchCount;
-    private int m_transientTextureAllocationCount;
-    private int m_transientFrameBufferAllocationCount;
+    private ulong m_transientTextureAllocationCount;
+    private ulong m_transientFrameBufferAllocationCount;
     private bool m_frameOpen;
     private bool m_disposed;
 
@@ -139,6 +139,20 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
     /// </summary>
     public RenderDeviceFrameCounters frameCounters
         => new(Volatile.Read(ref m_drawCount), Volatile.Read(ref m_dispatchCount));
+
+    /// <summary>
+    /// Gets API-thread allocation diagnostics for the current device generation's native transient pools.
+    /// </summary>
+    public RenderDeviceAllocationCounters? allocationCounters
+    {
+        get
+        {
+            EnsureApiThread();
+            ObjectDisposedException.ThrowIf(m_disposed, this);
+            return new RenderDeviceAllocationCounters(generation, m_transientTextureAllocationCount,
+                m_transientBufferAllocationCount, m_transientFrameBufferAllocationCount);
+        }
+    }
 
     /// <summary>
     /// Gets the last frame number returned by BGFX submission.
@@ -251,7 +265,13 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
         m_pendingHeight = height;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Queues an idempotent presentation policy update for the next BeginFrame reset.
+    /// Noop devices retain the policy without issuing a native presentation reset.
+    /// </summary>
+    /// <param name="enabled">
+    /// Whether presentation should wait for display refresh.
+    /// </param>
     public void SetVerticalSync(bool enabled)
     {
         EnsureApiThread();
@@ -853,18 +873,6 @@ public sealed unsafe partial class BgfxDevice : RenderDevice, IRenderDevice, IRe
     }
 
     internal int allocatedViewCount => m_nextViewId;
-
-    /// <summary>
-    /// Gets the number of native transient textures allocated by this device generation.
-    /// </summary>
-    public int transientTextureAllocationCount => m_transientTextureAllocationCount;
-
-    /// <summary>
-    /// Gets the number of native transient framebuffers allocated by this device generation.
-    /// </summary>
-    public int transientFrameBufferAllocationCount => m_transientFrameBufferAllocationCount;
-
-    internal int transientBufferAllocationCount => m_transientBufferAllocationCount;
 
     internal void RecordDraw(int count = 1) => Interlocked.Add(ref m_drawCount, count);
 

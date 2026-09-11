@@ -254,16 +254,32 @@ public sealed class BgfxDeviceTests
         m_device.Execute(first, 101);
         m_device.EndFrame();
 
-        int textureAllocations = m_device.transientTextureAllocationCount;
-        int frameBufferAllocations = m_device.transientFrameBufferAllocationCount;
+        IRenderDevice device = m_device;
+        RenderDeviceAllocationCounters allocations = Assert.IsType<RenderDeviceAllocationCounters>(device.allocationCounters);
+        Assert.Equal(device.generation, allocations.deviceGeneration);
 
         CompiledRenderGraph second = BuildColorTargetGraph(102, "Request[8] Renamed Color Pass");
         m_device.BeginFrame();
         m_device.Execute(second, 102);
         m_device.EndFrame();
 
-        Assert.Equal(textureAllocations, m_device.transientTextureAllocationCount);
-        Assert.Equal(frameBufferAllocations, m_device.transientFrameBufferAllocationCount);
+        Assert.Equal(allocations, device.allocationCounters);
+    }
+
+    [Fact]
+    public void NoopDevice_AcceptsBothSynchronizationPoliciesAndKeepsResizeFrameBoundaries()
+    {
+        IRenderDevice device = m_device;
+        uint generation = device.generation;
+        foreach (bool enabled in new[] { true, true, false, false, true, false })
+        {
+            device.SetVerticalSync(enabled);
+            device.ResizeBackbuffer(127, 93);
+            device.BeginFrame();
+            Assert.Equal(new RenderPresentationSize(127, 93), device.primaryPresentationSize);
+            device.EndFrame();
+        }
+        Assert.Equal(generation, device.generation);
     }
 
     [Fact]

@@ -4,6 +4,9 @@
 
 Transform 使用专用的 Editor InspectionDrawer，复用 SectionHeader 与属性 tooltip 样式。`World` 是 Editor 视图开关，不是 Transform 的序列化字段；关闭显示 Local Space，开启显示 World Space。位置、欧拉角（度）与比例仍用 XYZ 控件。
 
+正文排列固定为：Local Space / World Space 分组标题 → `World` 开关 → Position → Rotation → Scale。
+开关位于分组标题下方，与其他布尔属性共用 PropertyRow；标题说明仍通过 hover tooltip 展示。
+
 世界空间编辑通过 Transform 既有 world API 转换成本地值，并通过 SceneEdits 记录实际变化的属性 delta。Undo/Redo 因而恢复真实数据及渲染 revision。父级零缩放导致矩阵不可逆时，禁用世界空间输入并显示 Warning HelpBox；切回 Local 仍可修复父级。
 
 [Editor 索引](README.md) · [Inspection](Inno.Editor.Inspection.md) · [Hierarchy](Inno.Editor.Panel.Hierarchy.md) · [ImGui](Inno.Editor.ImGui.md)

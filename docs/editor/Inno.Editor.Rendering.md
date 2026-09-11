@@ -6,6 +6,10 @@
 
 ## Contributor 与 Composition 协议
 
+`EditorRenderingModule` 从完成帧统计发布 Stats 数据，不直接依赖具体后端。除 View/Draw/Dispatch 外，
+还展示 Allocation Generation 与 transient Texture/Buffer/Framebuffer 的设备生命周期累计分配数；
+后端不提供分配诊断时显示 `Unavailable`，不显示误导性的零。
+
 | API | 说明 |
 | --- | --- |
 | `EditorViewportKindId` | 开放 viewport 用途，例如 `inno.editor.viewport.scene`。 |

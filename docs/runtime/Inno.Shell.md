@@ -2,6 +2,9 @@
 
 ## 原生实时缩放与帧率
 
+Shell 在首次帧和 `framePacing.verticalSync` 发生变化时调用必需的 `IRenderDevice.SetVerticalSync`，
+只有调用成功才更新已应用值；稳态帧不重复调用。普通帧与原生 resize 帧共享这一状态和设备帧边界。
+
 `framePacing` 是每 Shell 的 `FramePacingOptions`：`verticalSync` 控制设备同步，`maximumFrameRate = 0` 不施加软件上限。Editor 默认关闭 VSync；该策略不改变 fixed-step simulation。
 
 Shell 订阅平台的 `redrawRequested`。系统模态缩放阻塞普通 PollEvent 循环时，使用同一个时钟、帧号及 Begin/Update/LateUpdate/Render/End 生命周期渲染，不递归 PumpEvents。重入保护避免正在执行的帧再次进入。原生 callback 不允许托管异常穿越 ABI；SDL adapter 将失败留到受控事件循环中重新抛出。

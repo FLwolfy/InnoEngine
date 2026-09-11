@@ -521,11 +521,16 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
         Assert.True(monitor.isCompleted);
     }
 
-    [Fact]
-    public void FrameStatisticsReportBackendCommandsAndGraphCulling()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FrameStatisticsReportBackendCommandsAndGraphCulling(bool reportsAllocations)
     {
         IRenderDevice device = TestDeviceProxy.Create(out TestDeviceProxy proxy);
         proxy.frameCounters = new RenderDeviceFrameCounters(3, 2);
+        proxy.allocationCounters = reportsAllocations
+            ? new RenderDeviceAllocationCounters(device.generation, 17, 23, 11)
+            : null;
         var runtime = new RenderRuntime(m_types, device, new TestDiagnosticSink());
         using IDisposable executionScope = runtime.EnterExecutionScope();
         var asset = new RenderPipelineAsset { pipelineTypeId = StatisticsPipeline.extensionId };
@@ -546,7 +551,24 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
         Assert.Equal(3, statistics.drawCount);
         Assert.Equal(2, statistics.dispatchCount);
         Assert.Equal(1, statistics.culledPassCount);
+        Assert.Equal(proxy.allocationCounters, statistics.allocationCounters);
+        proxy.allocationCounters = new RenderDeviceAllocationCounters(device.generation, 19, 25, 13);
+        Assert.NotEqual(proxy.allocationCounters, statistics.allocationCounters);
         runtime.Detach();
+    }
+
+    [Fact]
+    public void DeviceSynchronizationIsRequiredAndUnsupportedDiagnosticsAreExplicitlyUnavailable()
+    {
+        Assert.True(typeof(IRenderDevice).GetMethod(nameof(IRenderDevice.SetVerticalSync))!.IsAbstract);
+        using var backend = new RecordingRenderDevice();
+        IRenderDevice device = backend;
+        device.SetVerticalSync(true);
+        Assert.True(backend.verticalSync);
+        device.SetVerticalSync(false);
+        Assert.False(backend.verticalSync);
+        Assert.Null(device.allocationCounters);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new RenderDeviceAllocationCounters(0, 0, 0, 0));
     }
 
     [Fact]
@@ -1561,6 +1583,9 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
             homogeneousDepth: false);
 
         public RenderDeviceFrameCounters frameCounters { get; internal set; }
+        public RenderDeviceAllocationCounters? allocationCounters { get; internal set; }
+        internal bool verticalSync { get; private set; }
+        public void SetVerticalSync(bool enabled) => verticalSync = enabled;
         internal List<PersistentBufferHandle> createdBuffers { get; } = [];
         internal List<PersistentBufferHandle> destroyedBuffers { get; } = [];
         internal int failBufferCreationAt { get; set; }
@@ -1739,6 +1764,9 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
 
     private sealed class RecordingRenderDevice : RenderDevice, IRenderDevice
     {
+        internal bool verticalSync { get; private set; }
+        public void SetVerticalSync(bool enabled) => verticalSync = enabled;
+
         private readonly RenderTextureDescriptor m_readbackDescriptor = new(
             4,
             4,

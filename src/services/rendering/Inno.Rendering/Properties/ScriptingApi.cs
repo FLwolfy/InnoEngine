@@ -8,6 +8,7 @@ using Inno.Rendering;
     ScriptingApiScope.Runtime)]
 
 [assembly: ScriptingApiExport(typeof(GraphicsApi), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(RenderDeviceAllocationCounters), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GraphicsCapability), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GraphicsLimits), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GraphicsCapabilities), ScriptingApiScope.Runtime)]

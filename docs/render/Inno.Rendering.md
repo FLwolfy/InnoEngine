@@ -31,10 +31,22 @@ Graphics/Compute pipeline binding、Shader IR 的 stages/passes/interface bindin
 
 ### 设备呈现节奏
 
-`IRenderDevice.SetVerticalSync(bool)` 请求在安全帧边界更改垂直同步；设备不应在已开始的 Pass 中重置。
+`IRenderDevice.SetVerticalSync(bool)` 是所有后端必须实现的契约，不提供默认抛异常实现。
+两种策略必须均可接受，相同值幂等；在安全帧边界更改垂直同步，不能在已开始的 Pass 中重置。
 BGFX 适配器将变更与下一次 `BeginFrame` 的 backbuffer reset 合并，相同值不产生重复 reset。
-不支持动态切换的设备必须明确抛出 `NotSupportedException`，不能静默忽略。软件限帧属于 Shell 的
+无窗口设备保留请求的策略，不执行无意义的呈现操作。新增后端漏实现此方法时直接编译失败。
+软件限帧属于 Shell 的
 `FramePacingOptions`，不属于 Render Graph 或特定渲染插件；`0` 表示不限帧。
+
+### 设备资源诊断
+
+`IRenderDevice.allocationCounters` 返回可选的 `RenderDeviceAllocationCounters` 值快照，由 Runtime
+写入最近完成帧的 `RenderFrameStatistics.allocationCounters`，供 Editor Stats、脚本和性能工具使用。
+快照包含 `deviceGeneration` 及 `textureAllocations`、`bufferAllocations`、`frameBufferAllocations`。
+三项均为该 generation 从创建以来成功分配的原生 transient 资源总数：池复用不递增，退休不递减，
+新设备重新计数。它们不是活跃资源数、显存字节或 GC 分配数；比较快照前先确认 generation 相同。
+不提供此诊断的后端返回 `null`，不能用全零伪装为已测量。设备 getter 仅在 API thread 读取，
+完成帧的值快照不保留设备、插件或原生 handle。
 
 ## Shader → Technique → Material → Pipeline
 

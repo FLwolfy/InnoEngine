@@ -27,12 +27,16 @@ public sealed class RenderFrameStatistics
     /// <param name="culledPassCount">
     /// Passes removed by graph compilation.
     /// </param>
+    /// <param name="allocationCounters">
+    /// Device-generation cumulative transient allocations at frame completion, or null when unavailable.
+    /// </param>
     public RenderFrameStatistics(
         ulong frameIndex,
         int viewCount,
         int drawCount,
         int dispatchCount,
-        int culledPassCount)
+        int culledPassCount,
+        RenderDeviceAllocationCounters? allocationCounters)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(viewCount);
         ArgumentOutOfRangeException.ThrowIfNegative(drawCount);
@@ -43,6 +47,7 @@ public sealed class RenderFrameStatistics
         this.drawCount = drawCount;
         this.dispatchCount = dispatchCount;
         this.culledPassCount = culledPassCount;
+        this.allocationCounters = allocationCounters;
     }
 
     /// <summary>
@@ -69,6 +74,12 @@ public sealed class RenderFrameStatistics
     /// Gets passes removed by graph compilation.
     /// </summary>
     public int culledPassCount { get; }
+
+    /// <summary>
+    /// Gets the device-generation cumulative transient allocation snapshot at frame completion.
+    /// Null means the backend does not report allocation accounting; it does not mean zero allocations.
+    /// </summary>
+    public RenderDeviceAllocationCounters? allocationCounters { get; }
 }
 
 /// <summary>

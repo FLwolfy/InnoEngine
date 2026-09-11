@@ -10,6 +10,7 @@
 
 | 日期 | 页面 | 范围 |
 | --- | --- | --- |
+| 2026-09-11 | [MaterialGraph 双资产路径残留（暂缓）](2026-09-11-material-graph-dual-asset-path.md) | 用户要求仅记录；普通 Material 内嵌图与独立图资产路线尚未收口 |
 | 2026-09-08 | [累积收口报告](../architecture/ENGINE_CLOSURE_CONTINUATION_2026_09_07.md) | Source/Scene Recovery、Asset/Audio/Rendering Pending 退休、837 项回归和持续收口目标 |
 | 2026-09-07 | [前轮收口报告](../architecture/ENGINE_CLOSURE_ACCEPTANCE_2026_09_07.md) | 前轮源码修复、742 项本地回归与发布验证 |
 | 2026-08-31 | [完整架构审查结论](2026-08-31-full-architecture-audit.md) | Core、Assets、Plugin、Scripting、Play Mode、Editor、Rendering、Native、Game Export、Player、测试与整改顺序 |

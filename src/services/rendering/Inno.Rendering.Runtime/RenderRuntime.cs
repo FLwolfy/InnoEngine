@@ -527,6 +527,7 @@ public sealed class RenderRuntime : RuntimeSubsystem, IRenderRequestSink
     private void EndRenderingFrame(int executedViewCount, int culledPassCount)
     {
         RenderDeviceFrameCounters counters = m_device.frameCounters;
+        RenderDeviceAllocationCounters? allocations = m_device.allocationCounters;
         try { _ = m_device.EndFrame(); }
         catch (Exception pendingRetirement) when (RetirementPendingException.Find(pendingRetirement) is not null) { throw; }
         catch
@@ -543,7 +544,8 @@ public sealed class RenderRuntime : RuntimeSubsystem, IRenderRequestSink
             m_currentRequests.Clear();
             m_frameIndex++;
             m_graphicsSettings.frameStatistics = new RenderFrameStatistics(
-                m_frameIndex, executedViewCount, counters.drawCount, counters.dispatchCount, culledPassCount);
+                m_frameIndex, executedViewCount, counters.drawCount, counters.dispatchCount, culledPassCount,
+                allocations);
         }
     }
 

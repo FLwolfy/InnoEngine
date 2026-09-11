@@ -499,6 +499,23 @@ public sealed class EditorRenderingModule : EditorModule
             CreateStatistic("dispatches", "Dispatches", statistics.dispatchCount.ToString(), 30),
             CreateStatistic("culled-passes", "Culled Passes", statistics.culledPassCount.ToString(), 40)
         });
+        if (statistics.allocationCounters is { } allocations)
+        {
+            context.statistics.Publish(new EditorStatistic[]
+            {
+                CreateStatistic("allocation-generation", "Allocation Generation", allocations.deviceGeneration.ToString(), 50),
+                CreateStatistic("texture-allocations", "Transient Textures (lifetime)", allocations.textureAllocations.ToString(), 60),
+                CreateStatistic("buffer-allocations", "Transient Buffers (lifetime)", allocations.bufferAllocations.ToString(), 70),
+                CreateStatistic("framebuffer-allocations", "Transient Framebuffers (lifetime)", allocations.frameBufferAllocations.ToString(), 80)
+            });
+        }
+        else
+        {
+            context.statistics.Publish(new[]
+            {
+                CreateStatistic("allocations-unavailable", "Transient Allocations", "Unavailable", 50)
+            });
+        }
         return;
 
         EditorStatistic CreateStatistic(string id, string label, string value, int order)
