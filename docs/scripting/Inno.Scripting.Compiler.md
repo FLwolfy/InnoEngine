@@ -20,6 +20,10 @@ Compiler 拥有 Roslyn、裁剪 reference assemblies、logical namespace analyze
 
 同一裁剪 reference 规则用于 authoring generation、runtime deployment 与 IDE project。Runtime deployment 先用当前裁剪 API 和 analyzer 验证逻辑 namespace、可见性与脚本规则，再把改写后的源码直接针对目标 Support Pack 的 `Inno.*` 实现程序集编译；目标程序集内容指纹属于增量缓存键，因此更换或修改 Pack 不会复用不兼容脚本产物。IDE 投影只为 Project 自己的 Runtime、Editor 和显式 `.iasmdef` assembly 生成工程；Plugin source 是引擎管理的安装内容，只通过最近一次成功编译 generation 的 DLL 进入用户工程引用，绝不会生成或保留 `Inno.Plugin.*.csproj`。Game Build 只调用 runtime deployment 入口，不解析 Editor API reference、不编译 `.editor.cs`，也不生成 `Inno.EditorScripts.dll`。取消或失败结果没有 activation artifact；缓存命中仍重放诊断。
 
+Shader 创作扩展通过 [`InnoEditor.Rendering.Shaders`](../render/Inno.Rendering.Shaders.md) 的逐类型 Editor scope 清单进入同一规则，
+不在 Compiler 中增加 Shader 类型或程序集白名单。新增集成用例实际编译节点扩展，并读取生成 IDE reference 的公开 metadata：
+Editor 可见 `IShaderNodeCompiler`，Runtime 不可见；Runtime 脚本直接引用该命名空间必须编译失败。
+
 Project `Assets` 的 `~` 目录是普通 authoring content，其中的 `.cs` 与 `.iasmdef` 正常进入 authoring generation 和 IDE project；runtime deployment 始终剔除该子树。只读 `.iplugin` Mount 中的 `~` 目录才是 `.isample`，其脚本在显式 `Import Sample` 到 Project 前不会进入 Plugin assembly。
 
 Compiler 为每个产物写入 `Inno.AssetSource` assembly metadata。Project assembly 写入 `project`，Plugin assembly 写入 manifest Plugin ID；`Assets.LocalPath` 以此解析同源资源，使业务源码在 Project 开发态和 `.iplugin` 安装态保持完全一致。

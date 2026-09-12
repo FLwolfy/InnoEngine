@@ -1,6 +1,6 @@
 # Inno.Rendering
 
-[Rendering 索引](README.md) · [Runtime](Inno.Rendering.Runtime.md) · [MaterialGraph](Inno.Rendering.MaterialGraph.md)
+[Rendering 索引](README.md) · [Runtime](Inno.Rendering.Runtime.md) · [Shader 图](Inno.Rendering.Shaders.md)
 
 ## 发布集合的不可变性
 
@@ -8,7 +8,7 @@ Vertex Layout、Graphics/Compute Pipeline bindings、Shader IR 与部署 Artifac
 
 Graphics/Compute pipeline binding、Shader IR 的 stages/passes/interface bindings/source mapping、RenderGeometry sections 均复制并冻结容器。调用者不能通过将 IReadOnlyList 转回数组或 IList 来改变已验证的发布集合。该约束针对运行快照，不把可编辑的 Shader/Material 创作模型伪装成不可变值。
 
-`ShaderDefinition` 仍是可编辑的创作 DTO。`ShaderAsset.SetDefinition` 先捕获完整嵌套声明、编码 bytes 和依赖，再一次提交；失败不改变旧 definition 或序列化 bytes。`ShaderAsset.definition`、`ShaderIRModule.definition` 返回独立可编辑副本，keywords/options、pass metadata、technique/pass mappings 都隔离。`ShaderIRPass`、`MaterialPassResolution`、`RenderMaterialPass` 同样不暴露其内部嵌套数组。Asset 引用仍属于 Identity owner，不复制出第二套 canonical Asset；这里冻结的是声明值，而不是把可编辑 Asset 宣称为深度不可变世界。
+`ShaderDefinition` 仍是可编辑的创作 DTO。`ShaderAsset.SetDefinition` 先捕获完整嵌套声明、编码 bytes 和依赖，再一次提交；失败不改变旧 definition 或序列化 bytes。`ShaderAsset.definition` 返回独立可编辑副本，keywords/options、pass metadata、technique/pass mappings 都隔离。`MaterialPassResolution`、`RenderMaterialPass` 同样不暴露其内部嵌套数组。Asset 引用仍属于 Identity owner，不复制出第二套 canonical Asset；这里冻结的是声明值，而不是把可编辑 Asset 宣称为深度不可变世界。
 
 `Inno.Rendering` 是 Project/Plugin 脚本面对的通用渲染 API。它不引用 Scene，也不定义 Camera、Light、MeshRenderer、PBR 参数、Render Queue 或固定 Pass Tag。
 

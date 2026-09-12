@@ -211,6 +211,47 @@ public sealed class GraphDocumentControllerTests : IDisposable
         Assert.Equal(new GraphPosition(-90f, -180f), canvas.pan);
     }
 
+    [Fact]
+    public void SeparateDragsOfTheSameSelectionUndoIndependentlyAfterAutosave()
+    {
+        GraphEditorModule module = Assert.IsType<GraphEditorModule>(m_sink.module);
+        IEditorHistory history = m_runtime.interactions.history;
+        GraphDocumentController controller = module.OpenDocument(Guid.NewGuid(), new(), history);
+        GraphNodeId node = controller.AddNode("test.node", default);
+        controller.MoveNodes(new Dictionary<GraphNodeId, GraphPosition> { [node] = new(10, 20) });
+        controller.MarkSaved();
+        controller.MoveNodes(new Dictionary<GraphNodeId, GraphPosition> { [node] = new(30, 40) });
+        controller.MarkSaved();
+        Assert.True(history.Undo().succeeded);
+        Assert.Equal(new(10, 20), controller.document.FindNode(node)!.position);
+        Assert.True(controller.isDirty);
+        controller.MarkSaved();
+        Assert.True(history.Undo().succeeded);
+        Assert.Equal(default, controller.document.FindNode(node)!.position);
+        Assert.True(controller.isDirty);
+        Assert.True(history.Redo().succeeded);
+        Assert.Equal(new(10, 20), controller.document.FindNode(node)!.position);
+    }
+
+    [Fact]
+    public void PasteRemapRunsInsideTheSameAtomicHistoryOperation()
+    {
+        GraphEditorModule module = Assert.IsType<GraphEditorModule>(m_sink.module);
+        IEditorHistory history = m_runtime.interactions.history;
+        GraphDocumentController controller = module.OpenDocument(Guid.NewGuid(), new(), history);
+        GraphNodeId owner = controller.AddNode("test.owner", default);
+        GraphNodeId child = controller.AddNode("test.child", default);
+        GraphClipboardData copy = controller.Copy([owner, child]);
+        IReadOnlyList<GraphNodeId> created = controller.Paste(copy, new(10, 10), (node, remap) =>
+            node.SetValue("owner", new(System.Text.Encoding.UTF8.GetBytes(remap[owner].value))));
+        Assert.Equal(created[0].value, System.Text.Encoding.UTF8.GetString(controller.document.FindNode(created[1])!.values["owner"].data.Span));
+        Assert.True(history.Undo().succeeded);
+        Assert.Equal(2, controller.document.nodes.Count);
+        byte[] before = GraphDocumentCodec.Encode(controller.document, m_serialization);
+        Assert.Throws<InvalidOperationException>(() => controller.Paste(copy, default, (node, remap) => throw new InvalidOperationException("Rejected node remapping")));
+        Assert.Equal(before, GraphDocumentCodec.Encode(controller.document, m_serialization));
+    }
+
     private sealed class RecordingHistory : IEditorHistory
     {
         public List<EditorHistoryChange> changes { get; } = [];

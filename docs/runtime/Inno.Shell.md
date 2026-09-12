@@ -52,3 +52,6 @@ internal sealed class GameHost : Shell
 ```
 
 一个 Shell 只能运行一次。初始化中途失败会回滚已创建的 render/input/window/application；Dispose 先调用产品释放，再按 render → input → window → platform 逆序清理，并聚合 cleanup exception。`GamePlayerHost` 与 `EditorHost` 都必须继承 Shell，Architecture Tool 会拒绝直接引用具体 adapter 的 Host。
+
+`Run(smokeFrameLimit)` 只有实际完成的帧数达到所请求的上限，才调用 `OnSmokeCompleted`。
+用户提前关闭窗口或产品 `RequestExit` 仍按正常生命周期清理，但不能打印 smoke 成功标记；验收调用方必须同时检查完成标记和退出码。

@@ -60,7 +60,8 @@ public interface IEditorDocumentService
     /// <returns>
     /// The stable document context.
     /// </returns>
-    EditorDocumentContext Open(string assetPath, Guid assetId = default);
+    /// <param name="revealHost">Whether to reveal the shared host; dedicated panels can retain its document lifetime without opening a second canvas.</param>
+    EditorDocumentContext Open(string assetPath, Guid assetId = default, bool revealHost = true);
 
     /// <summary>
     /// Focuses an open document.
@@ -72,6 +73,12 @@ public interface IEditorDocumentService
     /// <see langword="true"/> when the document exists.
     /// </returns>
     bool Focus(Guid documentId);
+
+    /// <summary>Updates an open document's source location after an identity-preserving asset move, without changing history or focus.</summary>
+    /// <param name="documentId">Existing document identity.</param>
+    /// <param name="assetPath">Current authoritative source location for the same persistent asset.</param>
+    /// <returns>Whether the document exists.</returns>
+    bool UpdateAssetPath(Guid documentId, string assetPath);
 
     /// <summary>
     /// Marks a document as containing unsaved changes.

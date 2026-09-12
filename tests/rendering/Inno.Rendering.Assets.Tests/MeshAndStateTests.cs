@@ -124,7 +124,7 @@ public sealed class MeshAndStateTests : IDisposable
                     new ShaderTechniqueId("basic"),
                     new ShaderContractId("example.2d.sprite"),
                     [new ShaderTechniquePass(new ShaderPassRoleId("draw"), basicPass.name)])
-            ]), m_serialization);
+            ]), m_serialization, SerializationContext.empty);
         var material = new MaterialAsset { shader = shader };
         GraphicsCapabilities basicCapabilities = CreateCapabilities(GraphicsCapability.None);
         GraphicsCapabilities computeCapabilities = CreateCapabilities(GraphicsCapability.Compute);
@@ -169,7 +169,7 @@ public sealed class MeshAndStateTests : IDisposable
                     "wire",
                     ShaderProgramKind.Raster,
                     renderState: sourceState)
-            ]), m_serialization);
+            ]), m_serialization, SerializationContext.empty);
 
         byte[] state = m_serialization.Encode(writer => writer.WriteProperties(source));
         var restored = new ShaderAsset();

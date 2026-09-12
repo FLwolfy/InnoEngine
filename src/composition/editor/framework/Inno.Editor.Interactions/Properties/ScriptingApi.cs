@@ -49,6 +49,7 @@ using Inno.Editor.Interactions;
 [assembly: ScriptingApiExport(typeof(EditorViewportTool), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorViewportToolContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorViewportToolSession), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorPlanarNavigation), ScriptingApiScope.Editor)]
 
 [assembly: ScriptingApiExport(typeof(EditorMenuAttribute), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorMenuBuilder), ScriptingApiScope.Editor)]

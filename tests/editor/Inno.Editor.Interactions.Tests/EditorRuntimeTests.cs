@@ -213,6 +213,8 @@ public sealed class EditorRuntimeTests : IDisposable
         documents.MarkDirty(opened.documentId);
 
         Assert.Same(opened, focused);
+        Assert.Equal("Assets/OtherName.ispriteatlas2d", opened.assetPath);
+        Assert.Equal("OtherName.ispriteatlas2d", opened.title);
         Assert.Same(opened, documents.activeDocument);
         Assert.True(opened.isDirty);
         Assert.False(documents.Close(opened.documentId, EditorDocumentCloseMode.Cancel));
@@ -681,7 +683,7 @@ public sealed class EditorRuntimeTests : IDisposable
         EditorPanelExtension panel = Assert.Single(
             m_runtime.panels.Where(static value => value.id == "tests.panel"));
 
-        Assert.False(panel.TryGetWindowPresentation(out _, out _));
+        Assert.False(panel.TryGetWindowPresentation(out _, out _, out _));
         Assert.False(panel.isOpen);
     }
 

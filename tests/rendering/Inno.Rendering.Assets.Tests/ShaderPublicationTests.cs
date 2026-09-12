@@ -1,5 +1,8 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
+using Inno.Core.Graphs;
+using Inno.Rendering.Shaders;
 using Inno.Core.Serialization;
 using Inno.Extensibility.Modules;
 using Inno.Extensibility.Types;
@@ -37,7 +40,7 @@ public sealed class ShaderPublicationTests : IDisposable
     {
         ShaderDefinition source = CreateDefinition();
         var shader = new ShaderAsset();
-        shader.SetDefinition(source, m_serialization);
+        shader.SetDefinition(source, m_serialization, SerializationContext.empty);
         byte[] committed = m_serialization.Encode(writer => writer.WriteProperties(shader));
 
         Mutate(source);
@@ -60,39 +63,31 @@ public sealed class ShaderPublicationTests : IDisposable
     public void FailedShaderCommitPreservesThePreviousDefinitionAndSerializedState()
     {
         var shader = new ShaderAsset();
-        shader.SetDefinition(CreateDefinition(), m_serialization);
+        shader.SetDefinition(CreateDefinition(), m_serialization, SerializationContext.empty);
         byte[] committed = m_serialization.Encode(writer => writer.WriteProperties(shader));
         ShaderDefinition invalid = CreateDefinition();
         invalid.properties = null!;
 
-        Assert.Throws<ArgumentException>(() => shader.SetDefinition(invalid, m_serialization));
+        Assert.Throws<ArgumentException>(() => shader.SetDefinition(invalid, m_serialization, SerializationContext.empty));
 
         AssertOriginal(shader.definition!);
-        Assert.Null(shader.definition!.passes[0].vertexSource);
         Assert.Equal(committed, m_serialization.Encode(writer => writer.WriteProperties(shader)));
     }
 
     [Fact]
-    public void ShaderIrRetainsCanonicalInputWhenTheAuthoringDefinitionIsEdited()
+    public void ShaderGraphRetainsCanonicalInputWhenTheAuthoringDefinitionIsEdited()
     {
         ShaderDefinition definition = CreateDefinition();
-        var pass = new ShaderIRPass(definition.passes[0], []);
-        var passes = new[] { pass };
-        var module = new ShaderIRModule(definition, passes);
-        byte[] committed = ShaderIRArtifactSerialization.Encode(module, m_serialization);
+        GraphDocument graph = ShaderGraphDocument.Create(definition, m_serialization, SerializationContext.empty);
+        byte[] committed = ShaderGraphArtifact.Encode(graph, new Dictionary<GraphNodeId, byte[]>(), m_serialization);
 
         Mutate(definition);
-        Mutate(module.definition);
-        pass.definition.metadata[0] = new ShaderMetadataEntry("sort", "changed");
-        passes[0] = new ShaderIRPass(new ShaderPassDefinition("other", ShaderProgramKind.Compute), []);
-
-        AssertOriginal(module.definition);
-        Assert.Same(pass, Assert.Single(module.passes));
-        Assert.Equal("opaque", pass.definition.metadata[0].value);
-        Assert.Equal(committed, ShaderIRArtifactSerialization.Encode(module, m_serialization));
-        ShaderIRModule restored = ShaderIRArtifactSerialization.Decode(committed, m_serialization);
-        Mutate(restored.definition);
-        AssertOriginal(restored.definition);
+        Mutate(ShaderGraphDocument.ReadDefinition(graph, m_serialization, SerializationContext.empty));
+        AssertOriginal(ShaderGraphDocument.ReadDefinition(graph, m_serialization, SerializationContext.empty));
+        Assert.Equal(committed, ShaderGraphArtifact.Encode(graph, new Dictionary<GraphNodeId, byte[]>(), m_serialization));
+        GraphDocument restored = ShaderGraphArtifact.ReadDocument(committed, m_serialization);
+        Mutate(ShaderGraphDocument.ReadDefinition(restored, m_serialization, SerializationContext.empty));
+        AssertOriginal(ShaderGraphDocument.ReadDefinition(restored, m_serialization, SerializationContext.empty));
     }
 
     [Fact]

@@ -7,6 +7,12 @@ namespace Inno.Rendering;
 /// </summary>
 public interface IRenderTargetArtifactProvider
 {
+    /// <summary>Resolves the exact material contract stored with a compiled program using the current owner reference context.</summary>
+    /// <param name="artifact">One immutable program publication, including its native-serialized runtime definition.</param>
+    /// <returns>A detached definition belonging to this artifact, never the latest uncompiled source definition.</returns>
+    /// <exception cref="InvalidOperationException">The publication cannot be decoded in the current owner generation.</exception>
+    ShaderDefinition ReadShaderDefinition(RenderShaderArtifact artifact);
+
     /// <summary>
     /// Resolves the target shader matching one runtime asset, variant, and device capability snapshot.
     /// </summary>

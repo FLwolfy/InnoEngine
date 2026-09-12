@@ -91,6 +91,15 @@ public static partial class ImGuiWidget
             return;
         }
 
+        DrawTooltip(text);
+    }
+
+    /// <summary>Draws the standard viewport-clamped tooltip when a custom-drawn canvas element is hovered.</summary>
+    /// <param name="text">Tooltip contents. The caller owns hit testing; empty text draws nothing.</param>
+    public static void DrawTooltip(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return;
+
         ImGuiViewportPtr viewport = NativeImGui.GetWindowViewport();
         Vector2 margin = new(6f * style.zoom);
         Vector2 available = Vector2.Max(Vector2.One, viewport.WorkSize - margin * 2f);

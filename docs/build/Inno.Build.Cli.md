@@ -8,4 +8,10 @@ Game 命令未提供 `--profile` 时，从项目根 `Settings.Build.inno` 复制
 
 CLI 不包含独立构建算法；错误通过结构化 Build diagnostics 和非零进程退出码报告。它可以依赖 Build/Compiler/authoring projects，但不会进入 Player closure。
 
+Headless 构建先编译并激活完整 authoring generation，再对账资产，最后编译目标 Player scripts 和导出。
+这样项目/插件的 `.editor.cs` importer、Shader 节点和语言扩展与 Editor 构建路径一致；编译失败直接终止，
+不把缺失 importer 的 last-good 状态当作当前源码。CLI 只提供这些脚本需要的 Editor API 程序集元数据，
+不启动 Editor UI。`Inno.Editor.Annotations` 只进入脚本编译引用，部署编译移除属性后不保留运行时引用。
+这些 authoring 依赖不加入 Player support pack。
+
 `--project` 接受绝对或相对目录路径，包括末尾带目录分隔符的写法。与 Editor 一样，初始 Project ID 从目录本身的名称派生，不把末尾分隔符解释为空项目名；已有项目设置中的 ID 保持不变。

@@ -28,7 +28,7 @@ public enum BgfxShaderTargetPlatform
 /// <summary>
 /// Compiles common Shader IR stages with the BGFX shaderc toolchain.
 /// </summary>
-public sealed class BgfxShadercToolchain : IShaderCompilerToolchain
+public sealed partial class BgfxShadercToolchain : IShaderCompilerToolchain
 {
     private readonly BgfxShaderTargetPlatform m_targetPlatform;
 
@@ -80,31 +80,18 @@ public sealed class BgfxShadercToolchain : IShaderCompilerToolchain
         return new ShaderCompileTarget(profile.key, capabilities, optimize, debugInformation);
     }
 
-    /// <summary>
-    /// Compiles the supplied source into a validated runtime artifact.
-    /// </summary>
-    /// <param name="request">
-    /// The validated immutable request that defines this operation.
-    /// </param>
-    /// <param name="cancellationToken">
-    /// The token that cancels the operation before it commits.
-    /// </param>
-    /// <returns>
-    /// An asynchronous operation that completes after all requested work has finished.
-    /// </returns>
-    public async ValueTask<ShaderToolResult> CompileAsync(
-        ShaderToolRequest request,
-        CancellationToken cancellationToken)
+    private async ValueTask<BgfxShadercResult> RunCompilerAsync(string source, string? varying, ShaderStage stage,
+        ShaderCompileTarget target, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
         BgfxShaderCompilerProfile profile = BgfxRendererProfileCatalog.Resolve(
             m_targetPlatform,
-            request.target.capabilities);
-        if (!string.Equals(profile.key, request.target.profileKey, StringComparison.Ordinal))
+            target.capabilities);
+        if (!string.Equals(profile.key, target.profileKey, StringComparison.Ordinal))
         {
             throw new ArgumentException(
-                $"Shader target '{request.target.profileKey}' does not belong to this BGFX toolchain.",
-                nameof(request));
+                $"Shader target '{target.profileKey}' does not belong to this BGFX toolchain.",
+                nameof(target));
         }
 
         string temporaryDirectory = Path.Combine(
@@ -131,7 +118,7 @@ public sealed class BgfxShadercToolchain : IShaderCompilerToolchain
                 overwrite: true);
             await File.WriteAllTextAsync(
                 sourcePath,
-                request.stage.source,
+                source,
                 cancellationToken).ConfigureAwait(false);
 
             List<string> arguments =
@@ -141,42 +128,45 @@ public sealed class BgfxShadercToolchain : IShaderCompilerToolchain
                 "-o",
                 outputPath,
                 "--type",
-                ToShadercStage(request.stage.stage),
+                ToShadercStage(stage),
                 "--platform",
                 profile.shadercPlatform,
                 "--profile",
-                profile.GetStageProfile(request.stage.stage),
+                profile.GetStageProfile(stage),
                 "-i",
-                request.sourceRoot
+                temporaryDirectory
             ];
-            if (request.stage.stage != ShaderStage.Compute
-                && request.stagePass.varyingSource is not null)
+            if (stage != ShaderStage.Compute && varying is not null)
             {
                 string varyingPath = Path.Combine(temporaryDirectory, "varying.def.sc");
                 await File.WriteAllTextAsync(
                     varyingPath,
-                    request.stagePass.varyingSource,
+                    varying,
                     cancellationToken).ConfigureAwait(false);
                 arguments.Add("--varyingdef");
                 arguments.Add(varyingPath);
             }
 
-            if (request.variant.options.Count != 0)
+            var defines = new List<string>();
+            // Shaderc's osx branch sets Metal/GLSL macros but omits its SPIR-V language flag.
+            // The explicit Vulkan profile must retain the correct language while preserving OSX platform semantics.
+            if (profile.targetPlatform == BgfxShaderTargetPlatform.MacOSArm64 && profile.backend == GraphicsApi.Vulkan)
+                defines.Add("BGFX_SHADER_LANGUAGE_SPIRV=1");
+            if (defines.Count != 0)
             {
                 arguments.Add("--define");
-                arguments.Add(string.Join(
-                    ";",
-                    request.variant.options.Select(static value => $"{value.Key}_{value.Value}=1")));
+                arguments.Add(string.Join(";", defines));
             }
 
-            if (request.target.optimize)
+            if (target.optimize)
             {
                 arguments.Add("-O");
                 arguments.Add("3");
             }
 
-            if (request.target.debugInformation)
+            if (target.debugInformation)
                 arguments.Add("--debug");
+            arguments.Add("--keepcomments");
 
             ToolRunResult result = await ToolRunner.RunAsync(
                 BgfxTool.Shaderc,
@@ -186,7 +176,7 @@ public sealed class BgfxShadercToolchain : IShaderCompilerToolchain
             byte[]? bytes = result.succeeded && File.Exists(outputPath)
                 ? await File.ReadAllBytesAsync(outputPath, cancellationToken).ConfigureAwait(false)
                 : null;
-            return new ShaderToolResult(
+            return new BgfxShadercResult(
                 bytes,
                 result.exitCode,
                 result.standardOutput,
@@ -247,6 +237,8 @@ public sealed class BgfxShadercToolchain : IShaderCompilerToolchain
             "Unable to resolve the BGFX shader include 'bgfx_shader.sh' from the application or repository root.");
     }
 }
+
+internal sealed record BgfxShadercResult(byte[]? bytes, int exitCode, string standardOutput, string standardError);
 
 internal sealed class BgfxShaderCompilerProfile(
     BgfxShaderTargetPlatform targetPlatform,

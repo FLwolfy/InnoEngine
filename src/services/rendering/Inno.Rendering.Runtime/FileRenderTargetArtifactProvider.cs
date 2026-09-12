@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
+using Inno.Core.Serialization;
 
 using Inno.Rendering;
 
@@ -11,6 +13,9 @@ namespace Inno.Rendering.Runtime;
 public sealed class FileRenderTargetArtifactProvider : IRenderTargetArtifactProvider
 {
     private readonly string m_contentRoot;
+    private readonly SerializationRegistry m_serialization;
+    private readonly SerializationContext m_context;
+    private readonly Dictionary<string, RenderShaderArtifact> m_shaders = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Creates a provider rooted at one source-free runtime content directory.
@@ -21,12 +26,23 @@ public sealed class FileRenderTargetArtifactProvider : IRenderTargetArtifactProv
     /// <exception cref="DirectoryNotFoundException">
     /// Thrown when the content root does not exist.
     /// </exception>
-    public FileRenderTargetArtifactProvider(string contentRoot)
+    /// <param name="serialization">The runtime owner serialization registry.</param>
+    /// <param name="context">Complete runtime asset/reference context used to resolve captured texture defaults.</param>
+    public FileRenderTargetArtifactProvider(string contentRoot, SerializationRegistry serialization, SerializationContext context)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(contentRoot);
+        m_serialization = serialization ?? throw new ArgumentNullException(nameof(serialization));
+        m_context = context ?? throw new ArgumentNullException(nameof(context));
         m_contentRoot = Path.GetFullPath(contentRoot);
         if (!Directory.Exists(m_contentRoot))
             throw new DirectoryNotFoundException($"Runtime content root '{m_contentRoot}' does not exist.");
+    }
+
+    /// <inheritdoc />
+    public ShaderDefinition ReadShaderDefinition(RenderShaderArtifact artifact)
+    {
+        ArgumentNullException.ThrowIfNull(artifact);
+        return m_serialization.Deserialize<ShaderDefinition>(artifact.definitionData.Span, m_context);
     }
 
     /// <summary>
@@ -66,6 +82,7 @@ public sealed class FileRenderTargetArtifactProvider : IRenderTargetArtifactProv
             shader.identity.persistentId,
             capabilities.backend,
             variant));
+        if (m_shaders.TryGetValue(path, out artifact)) return RenderTargetArtifactStatus.Ready;
         if (!File.Exists(path))
         {
             artifact = null;
@@ -80,6 +97,7 @@ public sealed class FileRenderTargetArtifactProvider : IRenderTargetArtifactProv
                 File.ReadAllBytes(path),
                 definition.name,
                 variant);
+            m_shaders.Add(path, artifact);
             return RenderTargetArtifactStatus.Ready;
         }
         catch (Exception exception) when (exception is not InvalidDataException)

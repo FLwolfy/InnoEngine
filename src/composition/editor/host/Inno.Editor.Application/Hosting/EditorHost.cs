@@ -103,6 +103,11 @@ internal sealed class EditorHost : ShellHost
         GraphicsApi? preferredGraphicsApi = null)
     {
         ArgumentNullException.ThrowIfNull(adapterCatalog);
+        if (!adapterSelection.rendering.isValid ||
+            !adapterCatalog.rendering.supportedBackends.Contains(adapterSelection.rendering) ||
+            !adapterCatalog.renderingAuthoring.supportedBackends.Contains(adapterSelection.rendering))
+            throw new NotSupportedException(
+                $"Rendering backend '{adapterSelection.rendering}' requires paired runtime and authoring providers.");
         string normalizedProject = PrepareProjectDirectory(projectDirectory);
         string logDirectory = Path.Combine(normalizedProject, C_LOG_DIRECTORY_NAME);
         Directory.CreateDirectory(logDirectory);
@@ -337,8 +342,8 @@ internal sealed class EditorHost : ShellHost
             activeAuthoring.compiler,
             ResolveSupportPackRoot(),
             [
-                new MacOSArm64GameBuildTarget(activeAuthoring.assets, engineHost.serialization),
-                new WindowsX64GameBuildTarget(activeAuthoring.assets, engineHost.serialization)
+                new MacOSArm64GameBuildTarget(activeAuthoring.assets, engineHost.serialization, engineHost.types),
+                new WindowsX64GameBuildTarget(activeAuthoring.assets, engineHost.serialization, engineHost.types)
             ]);
         BuildSettings defaultBuildSettings = BuildSettings.CreateDefault(
             Path.GetFileName(Path.TrimEndingDirectorySeparator(projectDirectory)),
@@ -378,6 +383,7 @@ internal sealed class EditorHost : ShellHost
             () => new EditorRenderTargetArtifactProvider(
                 activeAuthoring.assets,
                 engineHost.serialization,
+                engineHost.types,
                 shaderCompiler,
                 textureCompiler,
                 renderDiagnostics),
@@ -390,8 +396,6 @@ internal sealed class EditorHost : ShellHost
                     platformApplication = platformApplication,
                     window = primaryWindow,
                     renderDevice = renderDevice,
-                    shaderCompiler = shaderCompiler,
-                    assetSourceDirectory = Path.Combine(projectDirectory, "Assets"),
                     features = PresentationFeatures.MultipleWindows
                                | PresentationFeatures.Docking
                                | PresentationFeatures.SmoothResize
@@ -440,6 +444,7 @@ internal sealed class EditorHost : ShellHost
             engineHost.logs,
             [
                 renderingHost,
+                new EditorShaderCompilation(renderArtifacts, renderDevice.capabilities),
                 framePacing,
                 reloadCoordinator,
                 engineHost,

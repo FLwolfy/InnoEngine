@@ -17,7 +17,7 @@
 | [Audio](audio/README.md) | 后端中立播放/Mixer 契约、Runtime、资产与 MiniAudio adapter |
 | [Plugins](plugins/README.md) | Plugin manifest、安装源、只读 mount 与候选激活 |
 | [Scene](scene/README.md) | SceneWorld、GameBehavior、GameSystem、Scene/Prefab asset integration |
-| [Rendering](render/README.md) | 后端中立 Rendering、目标资产、BGFX 与 MaterialGraph |
+| [Rendering](render/README.md) | 后端中立 Rendering、目标资产、BGFX 与实施中的统一 Shader 创作层 |
 | [Platform](platform/README.md) | 中立窗口契约与 SDL3 adapter |
 | [Runtime](runtime/README.md) | Subsystem Contracts、声明生成器、默认装配、EngineHost、RuntimeSession 与 Player |
 | [Editor](editor/README.md) | Editor feature、Panel、Play Mode、Diagnostics 与 Export UI |
@@ -53,6 +53,11 @@ Core 不引用业务领域；Build 不引用 Editor；Runtime 不引用 Build/Ed
 ## 当前格式与状态
 
 新增 [Inno.Editor.Annotations](editor/Inno.Editor.Annotations.md) 已包含独立项目页与 Editor 索引；展示标注不再归属 Core.Serialization。
+新增 [Inno.Rendering.Shaders](render/Inno.Rendering.Shaders.md) 已包含独立项目页与 Rendering 索引；
+当前实现源码接口、多实现快照、节点降低与 typed stage/资源/分支/循环，完整 Shader 图替换的未完成项单独记录，不以单元测试或原生编译通过代替产品验收。
+新增 [Shader Editor](editor/Inno.Editor.Panel.ShaderEditor.md) 与
+[内置 Shader 离线工具](build/Inno.Build.Toolchains.Bgfx.Shaders.md) 已有项目页和分类索引。
+图资产替换、自动保存、原生启动记录以及尚未通过的验收见[当前 Shader 检查点](issues/2026-09-11-unified-shader-implementation.md)。
 
 - Project Settings、Editor Settings、Build Profile、Plugin Manifest、Catalog 与 Artifact 只支持当前源码格式。
 - `Assets` 是唯一可写创作源；`Plugins` 是只读安装源；`Library` 可完全重建。

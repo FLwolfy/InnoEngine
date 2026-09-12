@@ -35,6 +35,8 @@ public static class RenderShaderArtifactCodec
         WriteString(writer, artifact.shaderName);
         WriteString(writer, artifact.targetKey);
         WriteString(writer, artifact.variant.value);
+        writer.Write(artifact.definitionData.Length);
+        writer.Write(artifact.definitionData.Span);
         WriteInterface(writer, artifact.shaderInterface);
         writer.Write(artifact.passes.Count);
         foreach (RenderShaderPassArtifact pass in artifact.passes)
@@ -98,6 +100,9 @@ public static class RenderShaderArtifactCodec
                 throw new InvalidDataException(
                     $"Shader artifact variant '{variant}' does not match requested variant '{expectedVariant}'.");
             }
+            int definitionLength = ReadCount(reader, C_MAX_STAGE_BYTES, "shader definition byte");
+            if (definitionLength == 0) throw new InvalidDataException("A shader publication has no runtime contract.");
+            byte[] definitionData = ReadBytes(reader, definitionLength);
             ShaderInterface shaderInterface = ReadInterface(reader);
             int passCount = ReadCount(reader, C_MAX_PASSES, "shader pass");
             if (passCount == 0)
@@ -128,7 +133,7 @@ public static class RenderShaderArtifactCodec
             }
             if (stream.Position != stream.Length)
                 throw new InvalidDataException("Shader artifact contains trailing data.");
-            return new RenderShaderArtifact(shaderName, targetKey, variant, shaderInterface, passes);
+            return new RenderShaderArtifact(shaderName, targetKey, variant, shaderInterface, passes, definitionData);
         }
         catch (InvalidDataException)
         {
@@ -155,6 +160,9 @@ public static class RenderShaderArtifactCodec
             writer.Write(binding.arrayCount);
             writer.Write((int)binding.bindingKind);
             writer.Write((int)binding.storageAccess);
+            WriteString(writer, binding.nativeName);
+            writer.Write(binding.location.HasValue);
+            if (binding.location.HasValue) writer.Write(binding.location.Value);
         }
     }
 
@@ -182,7 +190,9 @@ public static class RenderShaderArtifactCodec
                 stages,
                 arrayCount,
                 ReadEnum<ShaderPropertyBindingKind>(reader),
-                ReadEnum<RenderStorageAccess>(reader));
+                ReadEnum<RenderStorageAccess>(reader),
+                ReadString(reader),
+                reader.ReadBoolean() ? reader.ReadInt32() : null);
         }
         return new ShaderInterface(bindings);
     }

@@ -17,7 +17,8 @@ public static class AtomicFile
     /// <param name="data">
     /// The complete file payload.
     /// </param>
-    public static void WriteAllBytes(string path, ReadOnlySpan<byte> data)
+    /// <param name="overwrite">Whether an existing destination may be replaced; false atomically rejects name collisions.</param>
+    public static void WriteAllBytes(string path, ReadOnlySpan<byte> data, bool overwrite = true)
     {
         string destination = NormalizeDestination(path);
         string candidate = destination + ".staging-" + Guid.NewGuid().ToString("N");
@@ -34,7 +35,7 @@ public static class AtomicFile
                 stream.Write(data);
                 stream.Flush(flushToDisk: true);
             }
-            Install(candidate, destination);
+            Install(candidate, destination, overwrite);
         }
         finally
         {
@@ -52,7 +53,8 @@ public static class AtomicFile
     /// <param name="destination">
     /// The destination file path beside the candidate.
     /// </param>
-    public static void Install(string source, string destination)
+    /// <param name="overwrite">Whether an existing destination may be replaced; false never overwrites an external creator.</param>
+    public static void Install(string source, string destination, bool overwrite = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(source);
         string candidate = Path.GetFullPath(source);
@@ -69,7 +71,7 @@ public static class AtomicFile
                 "Atomic file installation requires the candidate and destination to share a directory.",
                 nameof(source));
 
-        File.Move(candidate, target, overwrite: true);
+        File.Move(candidate, target, overwrite);
     }
 
     private static string NormalizeDestination(string path)

@@ -110,6 +110,19 @@ public readonly struct RenderShaderVariant : IEquatable<RenderShaderVariant>
             ?? throw new InvalidOperationException($"Material '{material.assetPath}' has no shader reference.");
         ShaderDefinition definition = shader.definition
             ?? throw new InvalidOperationException($"Shader '{shader.assetPath}' has no committed definition.");
+        return FromMaterial(material, definition);
+    }
+
+    /// <summary>Resolves material keyword selections against an exact published shader contract.</summary>
+    /// <param name="material">Material whose selected options are evaluated.</param>
+    /// <param name="definition">Captured shader contract, which may be the last successful publication.</param>
+    /// <returns>The canonical keyword selection for this publication.</returns>
+    /// <exception cref="InvalidOperationException">A selected option is unknown or conflicts with another option.</exception>
+    public static RenderShaderVariant FromMaterial(MaterialAsset material, ShaderDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(material);
+        ArgumentNullException.ThrowIfNull(definition);
+        if (material.keywords.Count == 0) return empty;
         HashSet<string> enabled = material.keywords.ToHashSet(StringComparer.Ordinal);
         var selections = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (ShaderKeywordDefinition keyword in definition.keywords)

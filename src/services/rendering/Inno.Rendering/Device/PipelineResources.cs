@@ -703,13 +703,15 @@ public sealed class RenderShaderBindingDescriptor
     /// <param name="storageAccess">
     /// Storage texture or buffer access.
     /// </param>
+    /// <param name="nativeName">Adapter-generated reflected symbol, or null when the logical ID is also the symbol.</param>
     public RenderShaderBindingDescriptor(
         RenderBindingId id,
         RenderShaderBindingKind kind,
         int slot = 0,
         RenderUniformType uniformType = RenderUniformType.Vector4,
         int count = 1,
-        RenderStorageAccess storageAccess = RenderStorageAccess.Read)
+        RenderStorageAccess storageAccess = RenderStorageAccess.Read,
+        string? nativeName = null)
     {
         if (!id.isValid)
         {
@@ -728,6 +730,8 @@ public sealed class RenderShaderBindingDescriptor
         this.uniformType = uniformType;
         this.count = count;
         this.storageAccess = storageAccess;
+        this.nativeName = nativeName ?? id.value;
+        ArgumentException.ThrowIfNullOrWhiteSpace(this.nativeName);
     }
 
     /// <summary>
@@ -759,6 +763,9 @@ public sealed class RenderShaderBindingDescriptor
     /// Gets storage texture or buffer access.
     /// </summary>
     public RenderStorageAccess storageAccess { get; }
+
+    /// <summary>Gets the exact adapter-generated symbol used only for reflection and native resource creation.</summary>
+    public string nativeName { get; }
 }
 
 /// <summary>

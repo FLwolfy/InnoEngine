@@ -636,7 +636,7 @@ public sealed unsafe partial class BgfxDevice
         IReadOnlyDictionary<string, ReflectedUniform> reflected)
     {
         Dictionary<string, RenderShaderBindingDescriptor> declared = declaredBindings
-            .ToDictionary(static value => value.id.value, StringComparer.Ordinal);
+            .ToDictionary(static value => value.nativeName, StringComparer.Ordinal);
         foreach ((string name, ReflectedUniform uniform) in reflected)
         {
             if (!declared.TryGetValue(name, out RenderShaderBindingDescriptor? binding)
@@ -666,7 +666,7 @@ public sealed unsafe partial class BgfxDevice
                 continue;
             }
 
-            if (!reflected.TryGetValue(binding.id.value, out ReflectedUniform uniform))
+            if (!reflected.TryGetValue(binding.nativeName, out ReflectedUniform uniform))
             {
                 throw new InvalidOperationException(
                     $"Shader manifest binding '{binding.id.value}' is absent from compiled reflection.");

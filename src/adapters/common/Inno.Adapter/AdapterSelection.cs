@@ -34,7 +34,7 @@ public readonly struct AdapterSelection()
     /// <summary>
     /// Gets the selected rendering backend.
     /// </summary>
-    public RenderingBackend rendering { get; init; } = RenderingBackend.Bgfx;
+    public RenderingBackendId rendering { get; init; } = RenderingBackendId.bgfx;
 
     /// <summary>
     /// Gets the selected audio backend.

@@ -546,32 +546,39 @@ public static class MaterialPassResolver
         GraphicsCapabilities capabilities)
     {
         ArgumentNullException.ThrowIfNull(material);
+        ShaderDefinition? definition = material.shader?.definition;
+        return definition is null ? null : Resolve(definition, material.techniqueId, contractId, passRoleId, capabilities);
+    }
+
+    /// <summary>Resolves a role against an exact published shader contract rather than a possibly newer authoring asset.</summary>
+    /// <param name="definition">The immutable publication's detached material contract.</param>
+    /// <param name="techniqueId">Explicit material technique, or an invalid ID to select the first compatible technique.</param>
+    /// <param name="contractId">Open rendering contract required by the caller.</param>
+    /// <param name="passRoleId">Open pass role required by the caller.</param>
+    /// <param name="capabilities">Current target capability snapshot.</param>
+    /// <returns>The matching technique and pass, or null when this publication has no compatible mapping.</returns>
+    /// <exception cref="ArgumentException">A required contract or role identity is invalid.</exception>
+    public static MaterialPassResolution? Resolve(ShaderDefinition definition, ShaderTechniqueId techniqueId,
+        ShaderContractId contractId, ShaderPassRoleId passRoleId, GraphicsCapabilities capabilities)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(capabilities);
         if (!contractId.isValid)
             throw new ArgumentException("A shader contract ID must be valid.", nameof(contractId));
         if (!passRoleId.isValid)
             throw new ArgumentException("A shader pass role ID must be valid.", nameof(passRoleId));
 
-        ShaderDefinition? definition = material.shader?.definition;
-        if (definition is null)
-            return null;
-
-        IEnumerable<ShaderTechniqueDefinition> candidates = definition.techniques.Where(technique =>
-            technique.contract == contractId
-            && capabilities.Supports(technique.requiredFeatures));
-        if (material.techniqueId.isValid)
-            candidates = candidates.Where(technique => technique.id == material.techniqueId);
-
-        foreach (ShaderTechniqueDefinition technique in candidates)
+        foreach (ShaderTechniqueDefinition technique in definition.techniques)
         {
-            ShaderTechniquePass mapping = technique.passes.FirstOrDefault(value => value.role == passRoleId);
-            if (string.IsNullOrWhiteSpace(mapping.passName))
-                continue;
-            int passIndex = Array.FindIndex(definition.passes, pass =>
-                string.Equals(pass.name, mapping.passName, StringComparison.Ordinal)
-                && capabilities.Supports(pass.requiredFeatures));
-            if (passIndex >= 0)
-                return new MaterialPassResolution(technique, definition.passes[passIndex]);
+            if (technique.contract != contractId || !capabilities.Supports(technique.requiredFeatures)
+                || techniqueId.isValid && technique.id != techniqueId) continue;
+            foreach (ShaderTechniquePass mapping in technique.passes)
+            {
+                if (mapping.role != passRoleId) continue;
+                foreach (ShaderPassDefinition pass in definition.passes)
+                    if (string.Equals(pass.name, mapping.passName, StringComparison.Ordinal) && capabilities.Supports(pass.requiredFeatures))
+                        return new MaterialPassResolution(technique, pass);
+            }
         }
 
         return null;

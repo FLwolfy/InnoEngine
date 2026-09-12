@@ -158,7 +158,8 @@ internal sealed class AssetWatcher : IDisposable
         if (m_disposed)
             return;
         string relativePath = NormalizeRelativePath(Path.GetRelativePath(m_root, fullPath));
-        if (AssetSourcePolicy.IsGeneratedPath(relativePath))
+        if (AssetSourcePolicy.IsGeneratedPath(relativePath) &&
+            !relativePath.EndsWith(".imeta", StringComparison.OrdinalIgnoreCase))
             return;
         lock (m_sync)
         {

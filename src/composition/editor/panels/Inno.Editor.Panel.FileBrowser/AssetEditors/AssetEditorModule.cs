@@ -19,7 +19,7 @@ namespace Inno.Editor.Panel.FileBrowser;
 /// Owns shared Asset Browser state and asset-type extension dispatch.
 /// </summary>
 [EditorModule("asset-browser", order: 100)]
-public sealed class AssetEditorModule : EditorModule, IInspectionIconProvider<AssetFileEntry>
+public sealed partial class AssetEditorModule : EditorModule, IInspectionIconProvider<AssetFileEntry>
 {
     private readonly AssetPipeline m_pipeline;
     private readonly AssetEditorRegistry m_editors;

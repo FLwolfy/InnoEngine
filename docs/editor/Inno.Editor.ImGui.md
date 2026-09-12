@@ -10,6 +10,8 @@
 
 ## 退出所有权
 
+`ImGuiEditorRuntime.HandleKeyPressed()` 在原生文本控件要求文本输入时，不向底层 Panel 分发删除、复制、撤销等快捷键；Command/Ctrl+S 仍可执行当前文档的显式保存。焦点与语义动作继续由共享 Interactions 管理，不在控件中直接写盘。
+
 `ImGuiEditorRuntime.Dispose()` 只有在 interaction runtime 完整退场后才标记完成。
 Core `RetirementPendingException` 原样上抛并保留内部 runtime；普通已终结错误仍传播，但不会重复已完成的 Dispose。
 因此表现层不会把未退休的扩展误当作已经销毁，也不授权上层提前释放 ImGui/native context。

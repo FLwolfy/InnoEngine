@@ -7,6 +7,7 @@ using Inno.Assets;
 using Inno.Assets.Pipeline;
 using Inno.Build.Toolchains.Bgfx.Tools;
 using Inno.Core.Serialization;
+using Inno.Extensibility.Types;
 
 namespace Inno.Build.Platform.MacOS;
 
@@ -26,11 +27,13 @@ public sealed class MacOSArm64GameBuildTarget : IGameBuildTarget
     /// <param name="serialization">
     /// The serialization registry that owns Shader IR contracts.
     /// </param>
+    /// <param name="types">The active shader extension generation owner.</param>
     public MacOSArm64GameBuildTarget(
         AssetPipeline assets,
-        SerializationRegistry serialization)
+        SerializationRegistry serialization,
+        TypeCatalog types)
     {
-        m_contentCompiler = BgfxGameContentCompiler.CreateMacOSArm64(assets, serialization);
+        m_contentCompiler = BgfxGameContentCompiler.CreateMacOSArm64(assets, serialization, types);
     }
 
     /// <summary>

@@ -90,12 +90,13 @@ public sealed class GraphDocumentController
     /// <param name="historyName">
     /// Concise artist-facing history entry name.
     /// </param>
-    public void ReplaceDocument(GraphDocument replacement, string historyName)
+    /// <param name="gestureId">Unique active gesture identity for continuous samples, or null for an independent edit.</param>
+    public void ReplaceDocument(GraphDocument replacement, string historyName, string? gestureId = null)
     {
         ArgumentNullException.ThrowIfNull(replacement);
         ArgumentException.ThrowIfNullOrWhiteSpace(historyName);
         GraphDocument snapshot = replacement.Clone();
-        Mutate(historyName, null, () => document.ReplaceContents(snapshot));
+        Mutate(historyName, gestureId is null ? null : $"graph:{documentId}:document:{gestureId}", () => document.ReplaceContents(snapshot));
     }
 
     /// <summary>
@@ -166,7 +167,7 @@ public sealed class GraphDocumentController
     }
 
     /// <summary>
-    /// Moves one or more nodes and merges adjacent drag samples for the same stable selection.
+    /// Moves one or more nodes as one completed gesture, independently undoable from earlier drags.
     /// </summary>
     /// <param name="positions">
     /// Complete destination positions keyed by node identity.
@@ -184,10 +185,9 @@ public sealed class GraphDocumentController
             RequireNode(id);
         }
 
-        string selection = string.Join(",", positions.Keys.Select(static value => value.value).Order(StringComparer.Ordinal));
         Mutate(
             positions.Count == 1 ? "Move Node" : "Move Nodes",
-            $"graph:{documentId}:move:{selection}",
+            null,
             () =>
             {
                 foreach ((GraphNodeId id, GraphPosition position) in positions)
@@ -256,7 +256,7 @@ public sealed class GraphDocumentController
     }
 
     /// <summary>
-    /// Creates or replaces one neutral node property and merges adjacent edits to that value.
+    /// Creates or replaces one neutral node property; only samples carrying the same explicit gesture identity merge.
     /// </summary>
     /// <param name="nodeId">
     /// Owning node.
@@ -267,14 +267,15 @@ public sealed class GraphDocumentController
     /// <param name="value">
     /// New neutral value.
     /// </param>
-    public void SetNodeValue(GraphNodeId nodeId, string propertyId, GraphSerializedValue value)
+    /// <param name="gestureId">Unique current text/numeric gesture identity, or null for an independent edit.</param>
+    public void SetNodeValue(GraphNodeId nodeId, string propertyId, GraphSerializedValue value, string? gestureId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(propertyId);
         ArgumentNullException.ThrowIfNull(value);
         GraphNodeRecord node = RequireNode(nodeId);
         Mutate(
             "Edit Node Property",
-            $"graph:{documentId}:value:{nodeId.value}:{propertyId}",
+            gestureId is null ? null : $"graph:{documentId}:value:{nodeId.value}:{propertyId}:{gestureId}",
             () => node.SetValue(propertyId, value.Clone()));
     }
 
@@ -343,7 +344,9 @@ public sealed class GraphDocumentController
     /// <returns>
     /// New node identities in clipboard document order.
     /// </returns>
-    public IReadOnlyList<GraphNodeId> Paste(GraphClipboardData clipboard, GraphPosition offset)
+    /// <param name="remapNode">Optional synchronous domain remapping of neutral node values after identity allocation. The callback is never stored in History.</param>
+    public IReadOnlyList<GraphNodeId> Paste(GraphClipboardData clipboard, GraphPosition offset,
+        Action<GraphNodeRecord, IReadOnlyDictionary<GraphNodeId, GraphNodeId>>? remapNode = null)
     {
         ArgumentNullException.ThrowIfNull(clipboard);
         GraphDocument fragment = clipboard.CloneFragment();
@@ -357,10 +360,12 @@ public sealed class GraphDocumentController
         {
             foreach (GraphNodeRecord source in fragment.nodes)
             {
-                document.AddNode(CloneNode(
+                GraphNodeRecord clone = CloneNode(
                     source,
                     remap[source.id],
-                    new GraphPosition(source.position.x + offset.x, source.position.y + offset.y)));
+                    new GraphPosition(source.position.x + offset.x, source.position.y + offset.y));
+                remapNode?.Invoke(clone, remap);
+                document.AddNode(clone);
             }
 
             foreach (GraphEdgeRecord edge in fragment.edges)

@@ -21,6 +21,17 @@ Tombstone 保留中立 property bytes、依赖描述与 last-successful artifact
 
 该 authoring project 拥有 Source Mount、文件索引/watcher、Importer、Build Processor、`.imeta`、依赖图、Catalog、CAS Artifact、canonical authoring object 和 runtime closure export。Player 不引用它。
 
+## 命名产物与发布范围
+
+`AssetImportWriter<T>.WriteArtifactAsync` 和 `AssetArtifactWriter.WriteAsync` 接收可选的 `deploymentScope`，默认 `Runtime`；
+创作期缓存可明确标为 `AuthoringOnly`。保留的 `runtime` / `asset-state` 槽不可标为创作期输出。
+部署范围写入不可变 manifest，并参与内容指纹。`AssetImportContext.AcquireArtifact(id, output)` 声明 artifact 依赖并返回 lease；
+`AssetExportContext.artifacts` 提供当前导出 owner 的显式查询，调用方不得直接绕过 lease 读取任意旧缓存。
+
+Runtime 导出不复制整个创作期 bundle：校验各输出的相对文件名、长度和 SHA-256，只投影 Runtime 输出到新的 CAS key，
+通过 owner serializer 克隆并重写部署 Catalog/metadata 的 artifact key，清除仅用于重新导入的依赖记录。
+源 Catalog 和 sidecar 不变。该协议不认识 Shader、Sprite、字体或其他具体资产类型。
+
 ## 公开 API
 
 | 分组 | 主要 API |
@@ -28,6 +39,7 @@ Tombstone 保留中立 property bytes、依赖描述与 last-successful artifact
 | Composition | `AssetPipeline`, `AssetPipelineOptions`, `AssetPipelineMode`, `AssetSourcePolicy`, `AssetCacheOptions` |
 | Source | `AssetSourceMount`, `AssetSourceMountTransaction`, `AssetFileSystem`, `AssetFileEntry`, `AssetSample`, `AssetChangedEvent` |
 | Import | `AssetImporter`, `AssetImporter<T>`, `AssetImporterExtensionAttribute`, `AssetImportContext`, `AssetImportWriter<T>`, `AssetImportHealthSnapshot`, `AssetImportFailure` |
+| Import settings | `AssetImportSettingsSnapshot`、`AssetImporter.CreateImportSettings()`、`AssetImportContext.importSettings`、Pipeline/Loader 的 `GetImportSettings` 与 `SaveImportSettings` |
 | Build | `AssetBuildProcessor`, `AssetBuildProcessor<T>`, `AssetBuildProcessorExtensionAttribute`, `AssetBuildContext<T>`, `AssetArtifactWriter` |
 | Transactions/export | `AssetCatalogCandidate`, `AssetExportContext`, `AssetSerializationServices`, `AssetDeploymentScope`, `NativeAssetSourceSerialization` |
 | Script authoring | `EditorAssets` 提供当前 Editor Session 中显式受限的保存入口；不暴露 Pipeline owner 或 mutation graph。 |
@@ -93,6 +105,36 @@ Prepare/Activate 不改创作源 sidecar。Complete 先验证所有已读取 met
 候选的 import/build/reference/catalog 诊断只暂存中立数据，激活时才创建 Core `DiagnosticReporter`；
 停用时撤销当前 reporter，但保留回滚所需的中立报告。旧代 Dispose 不清除新代报告，回滚会恢复旧未解决诊断。
 领域并未新增第二个 DiagnosticHub 或 sink。
+
+## 通用 Import Settings
+
+Importer 可以重写 `CreateImportSettings()`，每次返回新的 `ISerializable` 对象；该类型必须注册
+`StableTypeId`，字段使用共同的 `SerializableProperty`。无设置时返回 null。设置不属于运行时 Asset
+属性，也不进入 runtime closure；它们通过现有 `.imeta.importerSettingsBytes` 保存稳定类型 ID、
+共同序列化的 property bytes 与依赖描述，不新增 JSON、配置资产或 Shader 特例。
+
+`AssetPipeline` 和独立 `AssetLoader` 具有相同接口：
+
+```csharp
+AssetImportSettingsSnapshot snapshot = assets.GetImportSettings(path);
+// Edit the detached snapshot.value with the registered inspector.
+bool imported = assets.SaveImportSettings(path, snapshot.value, snapshot.fingerprint);
+```
+
+- `GetImportSettings` 不写盘，返回当前代际的独立 `value` 与 sidecar 的 `fingerprint`。
+  调用者不能跨 reload 保留这个对象；长期编辑/历史只保留稳定身份和中立 bytes。
+- `SaveImportSettings(path, value, expectedFingerprint)` 拒绝类型不匹配和外部冲突，原子写入一个
+  sidecar 后尝试导入。传 null 表示重置为 importer 默认值。返回 false 表示**设置已经保存，但导入失败**；
+  last-good artifact 和当前诊断保持分离。保存失败抛异常，不静默覆盖外部设置。
+- Importer 从 `AssetImportContext.importSettings` 取得候选代际恢复后的值。导入期间改动这个对象不写回设置。
+- 设置中的 Asset 引用以 persistent ID 恢复，声明为 source/artifact **导入依赖**，不会仅因出现在设置中
+  而成为 runtime dependency。跨 mount 引用沿用现有权限校验。临时缺失的引用仍保留原 identity。
+- 设置内容参与 artifact fingerprint；移动文件身份不变，重建 Library 仍从 `.imeta` 恢复设置。
+  Importer 执行期间 sidecar 内容变化会拒绝提交，不能把旧设置生成的结果标为当前结果。
+- Watcher 会发布 `.imeta` 变化供 Loader 检查失效；File Browser 仍隐藏这些 sidecar，`.abin` 仍被过滤。
+  自身产生但语义不变的 sidecar 通知不会重复导入；损坏的 sidecar 不会被失败记录擦除。
+- 只读 mount 可读取设置，但不能保存；隔离的 Asset candidate 也不能编辑创作源。所有 Pipeline 操作
+  都在 owner thread、共同 generation operation scope 内执行。现阶段尚未添加专门的设置 Inspector UI。
 
 ## `~` 开发目录与安装态 `.isample`
 

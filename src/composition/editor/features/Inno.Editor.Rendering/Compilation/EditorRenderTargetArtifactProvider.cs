@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Inno.Assets;
 using Inno.Assets.Pipeline;
 using Inno.Core.Serialization;
+using Inno.Extensibility.Types;
 using Inno.Rendering;
 using Inno.Rendering.Assets;
 
@@ -21,13 +22,16 @@ public sealed class EditorRenderTargetArtifactProvider : IRenderTargetArtifactPr
     private readonly object m_sync = new();
     private readonly AssetPipeline m_assets;
     private readonly SerializationRegistry m_serialization;
+    private readonly TypeCatalog m_types;
     private readonly ShaderCompiler m_shaderCompiler;
     private readonly ITextureTargetCompiler m_textureCompiler;
     private readonly IDiagnosticReporter m_diagnostics;
     private readonly CancellationTokenSource m_lifetime = new();
+    private readonly Inno.Core.Execution.LifetimeScope m_work = new();
     private readonly Dictionary<ShaderKey, ShaderEntry> m_shaders = [];
     private readonly Dictionary<TextureKey, TextureEntry> m_textures = [];
     private bool m_disposed;
+    private bool m_stopping;
 
     /// <summary>
     /// Creates an Editor artifact provider backed by explicit shader and texture toolchains.
@@ -50,15 +54,18 @@ public sealed class EditorRenderTargetArtifactProvider : IRenderTargetArtifactPr
     /// <exception cref="ArgumentNullException">
     /// Thrown when any required service is null.
     /// </exception>
+    /// <param name="types">The shared authoring type generation owner for graph and source extensions.</param>
     public EditorRenderTargetArtifactProvider(
         AssetPipeline assets,
         SerializationRegistry serialization,
+        TypeCatalog types,
         ShaderCompiler shaderCompiler,
         ITextureTargetCompiler textureCompiler,
         IDiagnosticReporter diagnostics)
     {
         m_assets = assets ?? throw new ArgumentNullException(nameof(assets));
         m_serialization = serialization ?? throw new ArgumentNullException(nameof(serialization));
+        m_types = types ?? throw new ArgumentNullException(nameof(types));
         m_shaderCompiler = shaderCompiler ?? throw new ArgumentNullException(nameof(shaderCompiler));
         m_textureCompiler = textureCompiler ?? throw new ArgumentNullException(nameof(textureCompiler));
         m_diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
@@ -110,13 +117,50 @@ public sealed class EditorRenderTargetArtifactProvider : IRenderTargetArtifactPr
                 entry = new ShaderEntry();
                 m_shaders.Add(key, entry);
             }
+            long generation = m_types.current.version;
+            if (entry.attemptedContentVersion != shader.contentVersion || entry.extensionGeneration != generation)
+            {
+                string semanticHash = ShaderGraphArtifact.GetSemanticHash(ShaderGraphArtifact.Read(shader, m_assets), m_serialization);
+                if (entry.semanticHash != semanticHash || entry.extensionGeneration != generation)
+                {
+                    StartShader(shader, target, variant, entry);
+                    entry.semanticHash = semanticHash;
+                }
+                entry.attemptedContentVersion = shader.contentVersion;
+                entry.extensionGeneration = generation;
+            }
             CompleteShader(key, entry);
-            if (entry.attemptedContentVersion != shader.contentVersion)
-                StartShader(shader, target, variant, entry);
             artifact = entry.artifact;
             return artifact is not null
                 ? RenderTargetArtifactStatus.Ready
                 : entry.status;
+        }
+    }
+
+    /// <inheritdoc />
+    public ShaderDefinition ReadShaderDefinition(RenderShaderArtifact artifact)
+    {
+        ArgumentNullException.ThrowIfNull(artifact);
+        EnsureActive();
+        return m_serialization.Deserialize<ShaderDefinition>(artifact.definitionData.Span,
+            AssetSerializationContext.Create(m_assets));
+    }
+
+    /// <summary>Schedules compilation if required and reports saving-independent state for the exact shader, variant and device target.</summary>
+    /// <param name="shader">Current imported shader.</param>
+    /// <param name="variant">Selected keyword variant.</param>
+    /// <param name="capabilities">Current device capabilities.</param>
+    /// <returns>A detached status and diagnostic snapshot; last-good is explicit and never implies current-source success.</returns>
+    public EditorShaderCompilationSnapshot RequestShaderCompilation(ShaderAsset shader, RenderShaderVariant variant, GraphicsCapabilities capabilities)
+    {
+        lock (m_sync)
+        {
+            _ = GetShaderArtifact(shader, variant, capabilities, out _);
+            ShaderCompileTarget target = m_shaderCompiler.CreateTarget(capabilities, optimize: false, debugInformation: true);
+            ShaderEntry entry = m_shaders[new(shader.identity.persistentId, target.key, variant.value)];
+            return new(entry.pending is not null ? EditorShaderCompilationState.Compiling : entry.latestSucceeded
+                ? EditorShaderCompilationState.Succeeded : EditorShaderCompilationState.Failed,
+                entry.artifact is not null && (entry.pending is not null || !entry.latestSucceeded), entry.sourceDiagnostics);
         }
     }
 
@@ -173,21 +217,25 @@ public sealed class EditorRenderTargetArtifactProvider : IRenderTargetArtifactPr
         {
             if (m_disposed)
                 return;
-            m_disposed = true;
+            m_stopping = true;
             m_lifetime.Cancel();
             foreach (ShaderEntry entry in m_shaders.Values)
             {
                 Retire(entry.pending, entry.cancellation);
+                entry.cancellation = null;
                 ClearDiagnostics(entry.diagnostics);
             }
             foreach (TextureEntry entry in m_textures.Values)
             {
                 Retire(entry.pending, entry.cancellation);
+                entry.cancellation = null;
                 ClearDiagnostics(entry.diagnostics);
             }
+            m_work.Dispose();
             m_shaders.Clear();
             m_textures.Clear();
             m_lifetime.Dispose();
+            m_disposed = true;
         }
     }
 
@@ -206,19 +254,11 @@ public sealed class EditorRenderTargetArtifactProvider : IRenderTargetArtifactPr
             : RenderTargetArtifactStatus.Ready;
         try
         {
-            ShaderIRModule module = ShaderAssetRuntime.GetModule(shader, m_serialization);
-            string sourceRoot = GetMount(shader.assetPath.source).rootPath;
             CancellationToken token = entry.cancellation.Token;
-            entry.pending = Task.Run(
-                async () => await m_shaderCompiler.CompileAsync(
-                    module,
-                    target,
-                    variant,
-                    sourceRoot,
-                    token).ConfigureAwait(false),
-                token);
+            entry.pending = RunOwned(token => m_shaderCompiler.CompileGraphAsync(shader, target, variant, m_types, m_serialization,
+                AssetSerializationContext.Create(m_assets), m_assets, token), token);
         }
-        catch (Exception exception)
+        catch (Exception exception) when (Inno.Core.Execution.RetirementPendingException.Find(exception) is null)
         {
             entry.cancellation.Dispose();
             entry.cancellation = null;
@@ -236,6 +276,8 @@ public sealed class EditorRenderTargetArtifactProvider : IRenderTargetArtifactPr
         Task<ShaderCompilationResult>? pending = entry.pending;
         if (pending is null || !pending.IsCompleted)
             return;
+        if (pending.Exception is Exception failure && Inno.Core.Execution.RetirementPendingException.Find(failure) is not null)
+            throw failure;
         entry.pending = null;
         entry.cancellation?.Dispose();
         entry.cancellation = null;
@@ -249,6 +291,8 @@ public sealed class EditorRenderTargetArtifactProvider : IRenderTargetArtifactPr
                     "SHADER_COMPILE_EXCEPTION",
                     DiagnosticSeverity.Error,
                     pending.Exception?.GetBaseException().Message ?? "Shader compilation failed without an exception.")]);
+        entry.latestSucceeded = result.succeeded;
+        entry.sourceDiagnostics = Array.AsReadOnly(result.diagnostics.ToArray());
         var diagnostics = result.diagnostics
             .Select(diagnostic => new Diagnostic(
                 diagnostic.code,
@@ -292,22 +336,21 @@ public sealed class EditorRenderTargetArtifactProvider : IRenderTargetArtifactPr
             : RenderTargetArtifactStatus.Ready;
         try
         {
-            ArtifactLease lease = m_assets.AcquireArtifact(texture.assetId, texture.slot.sourceOutputName);
             CancellationToken token = entry.cancellation.Token;
-            entry.pending = Task.Run(
-                async () =>
-                {
-                    using (lease)
+            entry.pending = RunOwned(async token =>
+            {
+                using ArtifactLease lease = m_assets.AcquireArtifact(texture.assetId, texture.slot.sourceOutputName);
+                return await Task.Run(
+                    async () =>
                     {
                         return await m_textureCompiler.CompileKtxAsync(
                             lease.info.absolutePath,
                             texture.slot.colorSpace,
                             token).ConfigureAwait(false);
-                    }
-                },
-                token);
+                    }).ConfigureAwait(false);
+            }, token);
         }
-        catch (Exception exception)
+        catch (Exception exception) when (Inno.Core.Execution.RetirementPendingException.Find(exception) is null)
         {
             entry.cancellation.Dispose();
             entry.cancellation = null;
@@ -320,6 +363,8 @@ public sealed class EditorRenderTargetArtifactProvider : IRenderTargetArtifactPr
         Task<byte[]>? pending = entry.pending;
         if (pending is null || !pending.IsCompleted)
             return;
+        if (pending.Exception is Exception failure && Inno.Core.Execution.RetirementPendingException.Find(failure) is not null)
+            throw failure;
         entry.pending = null;
         entry.cancellation?.Dispose();
         entry.cancellation = null;
@@ -348,6 +393,25 @@ public sealed class EditorRenderTargetArtifactProvider : IRenderTargetArtifactPr
     private AssetSourceMount GetMount(AssetSourceId source)
         => m_assets.sourceMounts.FirstOrDefault(mount => mount.id == source)
             ?? throw new InvalidOperationException($"Asset source mount '{source}' is not active.");
+
+    private Task<T> RunOwned<T>(Func<CancellationToken, ValueTask<T>> operation, CancellationToken token)
+    {
+        // Admit before starting work or acquiring leases. Ordinary compilation errors are data;
+        // retirement-pending failures stay in the lifetime and retain every dependent owner.
+        return Unwrap(m_work.RunAsync<(T value, Exception? failure)>(async cancellation =>
+        {
+            try { return (await operation(cancellation).ConfigureAwait(false), null); }
+            catch (Exception failure) when (Inno.Core.Execution.RetirementPendingException.Find(failure) is null)
+            { return (default!, failure); }
+        }, token));
+
+        static async Task<T> Unwrap(Task<(T value, Exception? failure)> task)
+        {
+            var result = await task.ConfigureAwait(false);
+            if (result.failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(result.failure).Throw();
+            return result.value;
+        }
+    }
 
     private static void Retire(Task? task, CancellationTokenSource? cancellation)
     {
@@ -391,7 +455,10 @@ public sealed class EditorRenderTargetArtifactProvider : IRenderTargetArtifactPr
     }
 
     private void EnsureActive()
-        => ObjectDisposedException.ThrowIf(m_disposed, this);
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (m_stopping) throw new InvalidOperationException("A retiring artifact provider cannot accept compilation requests.");
+    }
 
     private readonly record struct ShaderKey(Guid shaderId, string targetKey, string variantKey);
     private readonly record struct TextureKey(
@@ -402,6 +469,10 @@ public sealed class EditorRenderTargetArtifactProvider : IRenderTargetArtifactPr
 
     private sealed class ShaderEntry
     {
+        internal string semanticHash { get; set; } = "";
+        internal long extensionGeneration { get; set; } = long.MinValue;
+        internal bool latestSucceeded { get; set; }
+        internal IReadOnlyList<ShaderDiagnostic> sourceDiagnostics { get; set; } = Array.Empty<ShaderDiagnostic>();
         internal long attemptedContentVersion { get; set; } = long.MinValue;
         internal RenderShaderArtifact? artifact { get; set; }
         internal RenderTargetArtifactStatus status { get; set; } = RenderTargetArtifactStatus.Unavailable;

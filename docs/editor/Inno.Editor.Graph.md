@@ -1,10 +1,10 @@
 # Inno.Editor.Graph
 
-[返回 Editor 索引](README.md) · [Wiki 首页](../README.md) · [通用 Graph](../core/Inno.Core.Graphs.md) · [MaterialGraph](../render/Inno.Rendering.MaterialGraph.md)
+[返回 Editor 索引](README.md) · [Wiki 首页](../README.md) · [通用 Graph](../core/Inno.Core.Graphs.md) · [Shader Editor](Inno.Editor.Panel.ShaderEditor.md)
 
 `Inno.Editor.Graph` 提供不含 Shader 或 ImGui 语义的编辑控制层。`GraphEditorModule` 管理按稳定 document ID 索引的 session；`GraphDocumentController` 完成节点增删移动、连接重连、值修改、复制粘贴与 dirty/revision；`GraphCanvasState` 保存 session 内 pan/zoom、选择和 pending connection。
 
-`GraphDocumentHistory`、`GraphHistoryData` 与 `GraphHistoryTransition` 把 before/after 文档编码为中立 bytes，经 `EditorInteractions.history` 执行。拖动可使用稳定 merge key；结构修改不合并。History payload 不保存 CLR `Type`、节点实例、GPU 对象或 delegate。
+`GraphDocumentHistory`、`GraphHistoryData` 与 `GraphHistoryTransition` 把 before/after 文档编码为中立 bytes，经 `EditorInteractions.history` 执行。一次拖动在释放时调用 MoveNodes；不同拖动不合并。SetNodeValue / ReplaceDocument 可显式传入本次值编辑的唯一 gesture ID。结构修改不合并。History payload 不保存 CLR `Type`、节点实例、GPU 对象或 delegate。
 
 `GraphCanvasState.selectedNodes/selectedEdges` 返回冻结集合快照，不能强转 HashSet 绕过选择 API；它们仍是当前 Session 瞬时状态，不持久化到 editor.ini。
 
@@ -25,4 +25,6 @@ Module 的 live session 只由自己的 IdentityAllocator 解析，Guid 集合�
 
 GraphDocument 是可编辑创作模型，不是假称不可变的运行快照。回调/编译产物需要独立副本；GraphCanvasState 仅保存 session 瞬时展示状态。
 
-相邻页面：[Inno.Core.Graphs](../core/Inno.Core.Graphs.md) · [MaterialGraph Panel](Inno.Editor.Panel.MaterialGraph.md) · [Editor Interactions](Inno.Editor.Interactions.md)
+`Paste(data, offset, remapNode)` 的可选同步回调在同一次原子修改中重映射领域内部 ID；回调失败回滚整个粘贴，回调不进入 History。Shader Editor 用它重映射复制的 stage owner，而不是按端口位置猜测引用。
+
+相邻页面：[Inno.Core.Graphs](../core/Inno.Core.Graphs.md) · [Shader Editor](Inno.Editor.Panel.ShaderEditor.md) · [Editor Interactions](Inno.Editor.Interactions.md)

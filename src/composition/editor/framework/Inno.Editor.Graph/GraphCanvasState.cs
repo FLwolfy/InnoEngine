@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Frozen;
 using Inno.Core.Graphs;
+using Inno.Editor.Interactions;
 
 namespace Inno.Editor.Graph;
 
@@ -12,6 +13,8 @@ public sealed class GraphCanvasState
 {
     private readonly HashSet<GraphNodeId> m_selectedNodes = [];
     private readonly HashSet<GraphEdgeId> m_selectedEdges = [];
+    private FrozenSet<GraphNodeId>? m_nodeSelection;
+    private FrozenSet<GraphEdgeId>? m_edgeSelection;
 
     /// <summary>
     /// Gets the graph-space origin mapped to canvas screen origin.
@@ -26,12 +29,12 @@ public sealed class GraphCanvasState
     /// <summary>
     /// Gets selected node identities.
     /// </summary>
-    public IReadOnlyCollection<GraphNodeId> selectedNodes => m_selectedNodes.ToFrozenSet();
+    public IReadOnlyCollection<GraphNodeId> selectedNodes => m_nodeSelection ??= m_selectedNodes.ToFrozenSet();
 
     /// <summary>
     /// Gets selected edge identities.
     /// </summary>
-    public IReadOnlyCollection<GraphEdgeId> selectedEdges => m_selectedEdges.ToFrozenSet();
+    public IReadOnlyCollection<GraphEdgeId> selectedEdges => m_edgeSelection ??= m_selectedEdges.ToFrozenSet();
 
     /// <summary>
     /// Gets the output endpoint currently being connected, or <see langword="null"/>.
@@ -49,6 +52,7 @@ public sealed class GraphCanvasState
     /// </param>
     public void SetViewport(GraphPosition pan, float zoom)
     {
+        if (!float.IsFinite(pan.x) || !float.IsFinite(pan.y)) throw new ArgumentOutOfRangeException(nameof(pan));
         if (!float.IsFinite(zoom))
         {
             throw new ArgumentOutOfRangeException(nameof(zoom));
@@ -68,7 +72,7 @@ public sealed class GraphCanvasState
     /// Vertical screen-space delta.
     /// </param>
     public void PanBy(float deltaX, float deltaY)
-        => pan = new GraphPosition(pan.x + deltaX, pan.y + deltaY);
+        => SetViewport(new GraphPosition(pan.x + deltaX, pan.y + deltaY), zoom);
 
     /// <summary>
     /// Changes zoom while preserving the graph point beneath a screen-space pivot.
@@ -90,9 +94,8 @@ public sealed class GraphCanvasState
         }
 
         float next = Math.Clamp(zoom * factor, 0.1f, 4f);
-        float graphX = (pivotX - pan.x) / zoom;
-        float graphY = (pivotY - pan.y) / zoom;
-        pan = new GraphPosition(pivotX - (graphX * next), pivotY - (graphY * next));
+        System.Numerics.Vector2 origin = EditorPlanarNavigation.ZoomOrigin(new(pan.x, pan.y), new(pivotX, pivotY), zoom, next);
+        pan = new GraphPosition(origin.X, origin.Y);
         zoom = next;
     }
 
@@ -107,6 +110,7 @@ public sealed class GraphCanvasState
         ArgumentNullException.ThrowIfNull(nodes);
         m_selectedNodes.Clear();
         m_selectedNodes.UnionWith(nodes);
+        m_nodeSelection = null;
     }
 
     /// <summary>
@@ -117,6 +121,7 @@ public sealed class GraphCanvasState
     /// </param>
     public void ToggleNode(GraphNodeId nodeId)
     {
+        m_nodeSelection = null;
         if (!m_selectedNodes.Remove(nodeId))
         {
             m_selectedNodes.Add(nodeId);
@@ -130,6 +135,8 @@ public sealed class GraphCanvasState
     {
         m_selectedNodes.Clear();
         m_selectedEdges.Clear();
+        m_nodeSelection = null;
+        m_edgeSelection = null;
     }
 
     /// <summary>

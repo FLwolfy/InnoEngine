@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using Inno.Adapter.Audio;
 using Inno.Adapter.Default;
@@ -20,7 +21,25 @@ public sealed class DefaultAuthoringAdapterCatalog :
     IRenderingAuthoringBackendFactory,
     IPresentationBackendFactory
 {
-    private readonly DefaultAdapterCatalog m_runtime = new();
+    private readonly DefaultAdapterCatalog m_runtime;
+    private readonly RenderingAuthoringBackendCatalog m_renderingAuthoring;
+
+    /// <summary>Creates paired runtime and authoring registrations before any native device is initialized.</summary>
+    /// <param name="renderingProviders">Complete runtime rendering registrations, or null for bundled BGFX.</param>
+    /// <param name="authoringProviders">Complete matching authoring registrations, or null for bundled BGFX.</param>
+    /// <exception cref="ArgumentException">The runtime and authoring backend registrations do not match.</exception>
+    public DefaultAuthoringAdapterCatalog(
+        IEnumerable<RenderingBackendProvider>? renderingProviders = null,
+        IEnumerable<RenderingAuthoringBackendProvider>? authoringProviders = null)
+    {
+        m_runtime = new DefaultAdapterCatalog(renderingProviders);
+        m_renderingAuthoring = new RenderingAuthoringBackendCatalog(
+            m_runtime.rendering,
+            authoringProviders ?? [new BgfxAuthoringProvider()]);
+    }
+
+    IReadOnlyList<RenderingBackendId> IRenderingAuthoringBackendFactory.supportedBackends
+        => m_renderingAuthoring.supportedBackends;
 
     /// <summary>
     /// Gets the built-in platform backend factory.
@@ -58,20 +77,19 @@ public sealed class DefaultAuthoringAdapterCatalog :
     public IPresentationBackendFactory presentation => this;
 
     IShaderCompilerToolchain IRenderingAuthoringBackendFactory.CreateShaderCompilerToolchain(
-        RenderingBackend backend)
-        => backend switch
-        {
-            RenderingBackend.Bgfx => new BgfxShadercToolchain(),
-            _ => throw Unsupported(nameof(backend), backend)
-        };
+        RenderingBackendId backend)
+        => m_renderingAuthoring.CreateShaderCompilerToolchain(backend);
 
     ITextureTargetCompiler IRenderingAuthoringBackendFactory.CreateTextureTargetCompiler(
-        RenderingBackend backend)
-        => backend switch
-        {
-            RenderingBackend.Bgfx => new BgfxTextureTargetCompiler(),
-            _ => throw Unsupported(nameof(backend), backend)
-        };
+        RenderingBackendId backend)
+        => m_renderingAuthoring.CreateTextureTargetCompiler(backend);
+
+    private sealed class BgfxAuthoringProvider : RenderingAuthoringBackendProvider
+    {
+        public override RenderingBackendId id => RenderingBackendId.bgfx;
+        public override IShaderCompilerToolchain CreateShaderCompilerToolchain() => new BgfxShadercToolchain();
+        public override ITextureTargetCompiler CreateTextureTargetCompiler() => new BgfxTextureTargetCompiler();
+    }
 
     IPresentationContext IPresentationBackendFactory.CreateContext(
         PresentationBackend backend,

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Inno.Rendering;
 
 namespace Inno.Adapter.Rendering;
@@ -7,11 +8,14 @@ namespace Inno.Adapter.Rendering;
 /// </summary>
 public interface IRenderingBackendFactory
 {
+    /// <summary>Gets the exact runtime backend identities available in this composition generation.</summary>
+    IReadOnlyList<RenderingBackendId> supportedBackends { get; }
+
     /// <summary>
     /// Creates a rendering device for the supplied primary presentation surface.
     /// </summary>
     /// <param name="backend">
-    /// Built-in rendering backend selected by the composition root.
+    /// Stable rendering backend selected by the composition root.
     /// </param>
     /// <param name="options">
     /// Backend-neutral rendering options.
@@ -19,5 +23,5 @@ public interface IRenderingBackendFactory
     /// <returns>
     /// A caller-owned backend-neutral rendering device.
     /// </returns>
-    IRenderDevice CreateDevice(RenderingBackend backend, RenderingBackendOptions options);
+    IRenderDevice CreateDevice(RenderingBackendId backend, RenderingBackendOptions options);
 }

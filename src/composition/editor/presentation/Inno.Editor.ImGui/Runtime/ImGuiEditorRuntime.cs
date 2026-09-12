@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Numerics;
 
 using Inno.Core.Events;
 using Inno.Core.Execution;
 using Inno.Core.Logging;
+using Inno.Core.Input;
 using Inno.Extensibility.Types;
 using Inno.Editor.Core;
 using Inno.Editor.ImGui.ImGuiWidget;
@@ -158,7 +160,7 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
     }
 
     /// <summary>
-    /// Dispatches an unhandled keyboard event through contextual shortcuts.
+    /// Dispatches contextual shortcuts, leaving editing keys with active text widgets while permitting explicit save.
     /// </summary>
     /// <param name="keyEvent">
     /// The keyboard event received from the application event stream.
@@ -167,6 +169,11 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
     {
         ArgumentNullException.ThrowIfNull(keyEvent);
         if (m_modals.Update(m_runtime.modals, m_timer.Elapsed.TotalSeconds))
+            return;
+        // Text widgets own editing keys, including Backspace and clipboard/history gestures.
+        // Explicit document save remains available without first leaving an input field.
+        HotKeyGesture save = HotKeyGesture.Primary(KeyCode.S);
+        if (NativeImGui.GetIO().WantTextInput && (keyEvent.key != save.key || keyEvent.modifiers != save.modifiers))
             return;
         m_runtime.HandleKeyPressed(keyEvent);
     }
@@ -200,9 +207,12 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
             EditorPanelExtension extension = panels[i];
             if (!extension.isOpen || !extension.TryGetWindowPresentation(
                     out bool useWindowPadding,
-                    out bool allowScrolling))
+                    out bool allowScrolling,
+                    out Vector2 initialSize))
                 continue;
             bool isOpen = extension.isOpen;
+            if (initialSize.X > 0 && initialSize.Y > 0)
+                NativeImGui.SetNextWindowSize(initialSize, ImGuiCond.FirstUseEver);
             ImGuiWindowFlags flags = ImGuiWindowFlags.NoCollapse;
             if (!allowScrolling)
                 flags |= ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;

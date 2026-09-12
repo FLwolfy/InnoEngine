@@ -166,8 +166,9 @@ Adapter 把中立引擎能力连接到 OS、native library、设备或目标平�
 | `Inno.Editor.Application` | 默认 Editor composition root |
 | Toolchains / Native | 构建或绑定原生依赖，不进入游戏脚本 API |
 
-默认 Host 只能通过 `AdapterSelection`、`PlatformBackend`、`RenderingBackend`、`AudioBackend` 等中立枚举
-选择实现，并通过 `IAdapterCatalog` / `IAuthoringAdapterCatalog` 获得中立对象。SDL3、BGFX、MiniAudio、
+默认 Host 通过 `AdapterSelection` 的开放 `RenderingBackendId` 选择渲染实现；`PlatformBackend`、
+`AudioBackend` 等其他 family 继续使用各自中立选择协议。Host 通过 `IAdapterCatalog` /
+`IAuthoringAdapterCatalog` 获得中立对象。SDL3、BGFX、MiniAudio、
 FileSystem 与 ImGui bridge 的类型创建全部收口在默认 catalog 内，`GamePlayerHost`、`EditorHost` 和
 `Inno.Shell` 均不得引用或公开这些具体类型。Host 同样不得知道 `AudioSource`、`Camera2D`、
 `SpriteRenderer2D` 等 Feature Model，也不得使用 `typeof(T)` 作为隐式注册机制。
@@ -314,7 +315,7 @@ InnoEngine
 │   │   ├── platform             # Inno.Platform
 │   │   ├── input                # Inno.Input, Inno.Input.Runtime
 │   │   ├── storage              # Inno.Storage, Inno.Storage.Runtime
-│   │   ├── rendering            # neutral Rendering, Runtime, Assets, MaterialGraph
+│   │   ├── rendering            # neutral Rendering, Runtime, Assets, Shaders
 │   │   └── audio                # neutral Audio, Runtime, Assets
 │   ├── runtime
 │   │   ├── contracts            # Inno.Runtime.Contracts
@@ -371,7 +372,7 @@ InnoEngine
 | `src/services/platform` | `Inno.Platform` |
 | `src/services/input` | `Inno.Input`、`Inno.Input.Runtime` |
 | `src/services/storage` | `Inno.Storage`、`Inno.Storage.Runtime` |
-| `src/services/rendering` | `Inno.Rendering`、`Inno.Rendering.Runtime`、`Inno.Rendering.Assets`、`Inno.Rendering.MaterialGraph` |
+| `src/services/rendering` | `Inno.Rendering`、`Inno.Rendering.Runtime`、`Inno.Rendering.Assets`、`Inno.Rendering.Shaders` |
 | `src/services/audio` | `Inno.Audio`、`Inno.Audio.Runtime`、`Inno.Audio.Assets` |
 | `src/runtime/engine` | `Inno.Runtime` |
 | `src/runtime/contracts` | `Inno.Runtime.Contracts` |
@@ -393,7 +394,7 @@ InnoEngine
 | `src/composition/editor/framework` | `Inno.Editor.Core`、`Inno.Editor.Diagnostics`、`Inno.Editor.Graph`、`Inno.Editor.Inspection`、`Inno.Editor.Interactions`、`Inno.Editor.Settings` |
 | `src/composition/editor/features` | `Inno.Editor.Audio`、`Inno.Editor.Exporting`、`Inno.Editor.PlayMode`、`Inno.Editor.Rendering`、`Inno.Editor.Scene`、`Inno.Editor.Scripting` |
 | `src/composition/editor/presentation` | `Inno.Editor.ImGui` |
-| `src/composition/editor/panels` | `Inno.Editor.Panel.FileBrowser`、`Inno.Editor.Panel.GameView`、`Inno.Editor.Panel.Global`、`Inno.Editor.Panel.Hierarchy`、`Inno.Editor.Panel.Inspector`、`Inno.Editor.Panel.Logging`、`Inno.Editor.Panel.SceneView`、`Inno.Editor.Panel.Settings`、`Inno.Editor.Panel.MaterialGraph`、`Inno.Editor.Panel.Stats` |
+| `src/composition/editor/panels` | `Inno.Editor.Panel.FileBrowser`、`Inno.Editor.Panel.GameView`、`Inno.Editor.Panel.Global`、`Inno.Editor.Panel.Hierarchy`、`Inno.Editor.Panel.Inspector`、`Inno.Editor.Panel.Logging`、`Inno.Editor.Panel.SceneView`、`Inno.Editor.Panel.Settings`、`Inno.Editor.Panel.ShaderEditor`、`Inno.Editor.Panel.Stats` |
 
 其余可构建项目保持独立顶层角色：
 
@@ -423,7 +424,7 @@ InnoEngine
 | `tests/player` | `Inno.Player.E2E` |
 | `tests/plugins` | `Inno.Plugins.Tests` |
 | `tests/references` | `Inno.References.Tests` |
-| `tests/rendering` | `Inno.Rendering.Tests`、`Inno.Rendering.Assets.Tests`、`Inno.Rendering.Runtime.Tests`、`Inno.Adapter.Rendering.Bgfx.Tests`、`Inno.Rendering.MaterialGraph.Tests` |
+| `tests/rendering` | `Inno.Rendering.Tests`、`Inno.Rendering.Assets.Tests`、`Inno.Rendering.Shaders.Tests`、`Inno.Rendering.Runtime.Tests`、`Inno.Adapter.Rendering.Bgfx.Tests` |
 | `tests/rendering/fixtures` | `Inno.Rendering.Runtime.Reload.TestModule` |
 | `tests/scene` | `Inno.Scene.Tests` |
 | `tests/scene/fixtures` | `Inno.Scene.Reload.TestModule` |

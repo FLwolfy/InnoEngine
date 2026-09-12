@@ -43,7 +43,7 @@ internal sealed class RenderResourceService : RenderResourceProvider, IRenderRes
         m_graphicsPipelines = new(entry => m_device.DestroyGraphicsPipeline(entry.handle), limits.resourcesPerKind);
         m_computePipelines = new(entry => m_device.DestroyComputePipeline(entry.handle), limits.resourcesPerKind);
         m_geometry = new(device, diagnostics, limits.resourcesPerKind);
-        m_materials = new(device, diagnostics, targetArtifacts, TryResolveTexture, limits.resourcesPerKind);
+        m_materials = new(device, diagnostics, targetArtifacts, TryResolveTextureArtifact, limits.resourcesPerKind);
     }
 
     /// <summary>

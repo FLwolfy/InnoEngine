@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 
 using Inno.Editor.Core;
 
@@ -71,23 +72,29 @@ public sealed class EditorPanelExtension
     /// <param name="allowScrolling">
     /// The requested scrolling policy, or the safe default when the panel is quarantined.
     /// </param>
+    /// <param name="initialSize">The preferred first-use floating size, or zero when native sizing is requested.</param>
     /// <returns>
     /// <see langword="true"/> when the policy was read without quarantining the panel.
     /// </returns>
     public bool TryGetWindowPresentation(
         out bool useWindowPadding,
-        out bool allowScrolling)
+        out bool allowScrolling,
+        out Vector2 initialSize)
     {
         try
         {
             useWindowPadding = m_panel.useWindowPadding;
             allowScrolling = m_panel.allowScrolling;
+            initialSize = m_panel.initialSize;
+            if (!float.IsFinite(initialSize.X) || !float.IsFinite(initialSize.Y) || initialSize.X < 0 || initialSize.Y < 0)
+                throw new InvalidOperationException("A panel's initial size must contain finite nonnegative dimensions.");
             return true;
         }
-        catch (Exception exception)
+        catch (Exception exception) when (Inno.Core.Execution.RetirementPendingException.Find(exception) is null)
         {
             useWindowPadding = true;
             allowScrolling = true;
+            initialSize = Vector2.Zero;
             m_panel.isOpen = false;
             m_quarantine(exception);
             return false;
@@ -114,7 +121,7 @@ public sealed class EditorPanelExtension
             m_panel.Draw(context);
             return true;
         }
-        catch (Exception exception)
+        catch (Exception exception) when (Inno.Core.Execution.RetirementPendingException.Find(exception) is null)
         {
             m_panel.isOpen = false;
             m_quarantine(exception);

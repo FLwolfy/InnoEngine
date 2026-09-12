@@ -16,4 +16,38 @@
     <ProjectReference Include="..\Inno.Adapter.Presentation.ImGui.Sdl3\Inno.Adapter.Presentation.ImGui.Sdl3.csproj" />
     <ProjectReference Include="..\..\..\services\rendering\Inno.Rendering\Inno.Rendering.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../build/toolchains/Inno.Build.Toolchains.Bgfx.Shaders/Inno.Build.Toolchains.Bgfx.Shaders.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <_ImGuiShaderSource Include="Shaders/**/*" />
+    <_ImGuiShaderApi Include="Metal;Vulkan;OpenGL" Condition="$([MSBuild]::IsOSPlatform('OSX'))" />
+    <_ImGuiShaderApi Include="Direct3D11;Direct3D12;Vulkan;OpenGL" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+  </ItemGroup>
+  <PropertyGroup>
+    <_ImGuiShaderPlatform Condition="$([MSBuild]::IsOSPlatform('OSX'))">MacOSArm64</_ImGuiShaderPlatform>
+    <_ImGuiShaderPlatform Condition="$([MSBuild]::IsOSPlatform('Windows'))">WindowsX64</_ImGuiShaderPlatform>
+    <_ShaderDotnet Condition="'$(DotNetHostPath)' != ''">$(DotNetHostPath)</_ShaderDotnet>
+    <_ShaderDotnet Condition="'$(_ShaderDotnet)' == '' and '$(NetCoreRoot)' != ''">$(NetCoreRoot)dotnet</_ShaderDotnet>
+    <_ShaderDotnet Condition="$([MSBuild]::IsOSPlatform('Windows')) and '$(_ShaderDotnet)' != '' and !$([System.String]::Copy('$(_ShaderDotnet)').EndsWith('.exe'))">$(_ShaderDotnet).exe</_ShaderDotnet>
+    <_ShaderDotnet Condition="'$(_ShaderDotnet)' == ''">dotnet</_ShaderDotnet>
+    <_ShaderCompiler>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../../../../build/toolchains/Inno.Build.Toolchains.Bgfx.Shaders/bin/$(Configuration)/net9.0/Inno.Build.Toolchains.Bgfx.Shaders.dll'))</_ShaderCompiler>
+  </PropertyGroup>
+  <Target Name="CollectImGuiShaderCompilerInputs" DependsOnTargets="ResolveProjectReferences">
+    <ItemGroup>
+      <_ImGuiShaderCompilerInput Include="$([System.IO.Path]::GetDirectoryName('$(_ShaderCompiler)'))/*.dll" />
+      <_ImGuiShaderCompilerInput Include="../../../../extern/bgfx/src/*.sh;../../../../extern/bgfx/tools/bin/**/*" />
+    </ItemGroup>
+  </Target>
+  <Target Name="CompileImGuiShaderGraphs" DependsOnTargets="CollectImGuiShaderCompilerInputs"
+          Inputs="@(_ImGuiShaderSource);@(_ImGuiShaderCompilerInput);$(_ShaderCompiler);$(MSBuildProjectFullPath)"
+          Outputs="@(_ImGuiShaderApi->'$(IntermediateOutputPath)Shaders/%(Identity).bin')">
+    <Error Condition="'$(_ImGuiShaderPlatform)' == ''" Text="No built-in ImGui shader distribution target exists for this host." />
+    <Exec Command="&quot;$(_ShaderDotnet)&quot; &quot;$(_ShaderCompiler)&quot; &quot;$(MSBuildProjectDirectory)/Shaders&quot; ImGui.ishader $(_ImGuiShaderPlatform) %(_ImGuiShaderApi.Identity) &quot;$(MSBuildProjectDirectory)/$(IntermediateOutputPath)Shaders/%(_ImGuiShaderApi.Identity).bin&quot;" />
+  </Target>
+  <Target Name="IncludeImGuiShaderArtifacts" BeforeTargets="AssignTargetPaths" DependsOnTargets="CompileImGuiShaderGraphs">
+    <ItemGroup>
+      <EmbeddedResource Include="@(_ImGuiShaderApi->'$(IntermediateOutputPath)Shaders/%(Identity).bin')">
+        <LogicalName>Inno.BuiltInShaders.ImGui.$(_ImGuiShaderPlatform).%(Filename)</LogicalName>
+      </EmbeddedResource>
+    </ItemGroup>
+  </Target>
 </Project>

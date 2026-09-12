@@ -44,7 +44,7 @@ public sealed class EmptyRenderingKernelTests
     }
 }
 
-public sealed class RenderRuntimeGenerationTests : IDisposable
+public sealed partial class RenderRuntimeGenerationTests : IDisposable
 {
     private readonly string m_cacheDirectory = Path.Combine(
         Path.GetTempPath(),
@@ -983,7 +983,8 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
                     new ShaderTechniqueId("default"),
                     contract,
                     [new ShaderTechniquePass(role, pass.name)])]),
-            m_serialization);
+            m_serialization,
+            SerializationContext.empty);
         PendingShaderPipeline.material = new MaterialAsset { shader = shader };
         PendingShaderPipeline.contract = contract;
         PendingShaderPipeline.role = role;
@@ -1764,6 +1765,13 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
 
     private sealed class RecordingRenderDevice : RenderDevice, IRenderDevice
     {
+        internal List<GraphicsPipelineHandle> createdPrograms { get; } = [];
+        internal List<GraphicsPipelineHandle> destroyedPrograms { get; } = [];
+        internal List<GraphicsPipelineDescriptor> programDescriptors { get; } = [];
+        internal string? failProgramName { get; set; }
+        internal int pendingProgramRetirements { get; set; }
+        internal int failedProgramRetirements { get; set; }
+        internal int programRetirementAttempts { get; private set; }
         internal bool verticalSync { get; private set; }
         public void SetVerticalSync(bool enabled) => verticalSync = enabled;
 
@@ -1935,12 +1943,29 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
             GraphicsPipelineDescriptor descriptor,
             string name)
         {
-            _ = descriptor;
-            _ = name;
-            return default;
+            if (name == failProgramName) throw new InvalidOperationException("Injected program allocation failure.");
+            GraphicsPipelineHandle handle = CreateGraphicsPipelineHandle(checked((ulong)createdPrograms.Count + 1), generation);
+            createdPrograms.Add(handle);
+            programDescriptors.Add(descriptor);
+            return handle;
         }
 
-        public void DestroyGraphicsPipeline(GraphicsPipelineHandle pipeline) => _ = pipeline;
+        public void DestroyGraphicsPipeline(GraphicsPipelineHandle pipeline)
+        {
+            programRetirementAttempts++;
+            if (pendingProgramRetirements > 0)
+            {
+                pendingProgramRetirements--;
+                throw new RetirementPendingException("Injected unfinished program retirement.");
+            }
+            Assert.DoesNotContain(pipeline, destroyedPrograms);
+            destroyedPrograms.Add(pipeline);
+            if (failedProgramRetirements > 0)
+            {
+                failedProgramRetirements--;
+                throw new InvalidOperationException("Injected completed program retirement failure.");
+            }
+        }
 
         public ComputePipelineHandle CreateComputePipeline(
             ComputePipelineDescriptor descriptor,
@@ -1978,6 +2003,9 @@ public sealed class RenderRuntimeGenerationTests : IDisposable
         : IRenderTargetArtifactProvider
     {
         private Task<byte[]>? m_texture;
+
+        public ShaderDefinition ReadShaderDefinition(RenderShaderArtifact artifact)
+            => throw new InvalidOperationException("This pending provider never publishes a shader artifact.");
 
         public RenderTargetArtifactStatus GetShaderArtifact(
             ShaderAsset shader,

@@ -161,7 +161,8 @@ internal sealed class GamePlayerHost : ShellHost
         AnimationRuntime animation = session.subsystems
             .GetRequiredSubsystem<AnimationRuntime>();
         m_rendering = new RenderRuntime(m_engine.types, renderDevice, m_renderDiagnostics,
-            targetArtifacts: new FileRenderTargetArtifactProvider(runtimeContentRoot),
+            targetArtifacts: new FileRenderTargetArtifactProvider(runtimeContentRoot, m_engine.serialization,
+                AssetSerializationContext.Create(session.assets)),
             contentScopeProvider: () => SceneContentSource.CreateScope(session.scenes),
             primaryPresentationViewportProvider: size => CreatePresentationViewport(presentation, size));
         UseHostPipeline(m_engine.CreateHostPipeline(DefaultEngine.CreateHostSubsystems(m_rendering)));

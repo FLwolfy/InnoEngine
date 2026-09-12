@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using Inno.Adapter.Audio;
 using Inno.Adapter.Audio.MiniAudio;
@@ -28,6 +29,15 @@ public sealed class DefaultAdapterCatalog :
     IRenderingBackendFactory,
     IAudioBackendFactory
 {
+    private readonly RenderingBackendCatalog m_rendering;
+
+    /// <summary>Creates the standard adapters with an optional complete rendering provider set.</summary>
+    /// <param name="renderingProviders">Replacement rendering providers, or null to use bundled BGFX.</param>
+    public DefaultAdapterCatalog(IEnumerable<RenderingBackendProvider>? renderingProviders = null)
+        => m_rendering = new RenderingBackendCatalog(renderingProviders ?? [new BgfxRenderingProvider()]);
+
+    IReadOnlyList<RenderingBackendId> IRenderingBackendFactory.supportedBackends => m_rendering.supportedBackends;
+
     /// <summary>
     /// Gets the built-in platform backend factory.
     /// </summary>
@@ -81,22 +91,23 @@ public sealed class DefaultAdapterCatalog :
     }
 
     IRenderDevice IRenderingBackendFactory.CreateDevice(
-        RenderingBackend backend,
+        RenderingBackendId backend,
         RenderingBackendOptions options)
+        => m_rendering.CreateDevice(backend, options);
+
+    private sealed class BgfxRenderingProvider : RenderingBackendProvider
     {
-        ArgumentNullException.ThrowIfNull(options);
-        return backend switch
-        {
-            RenderingBackend.Bgfx => new BgfxDevice(new BgfxDeviceOptions
+        public override RenderingBackendId id => RenderingBackendId.bgfx;
+
+        public override IRenderDevice CreateDevice(RenderingBackendOptions options)
+            => new BgfxDevice(new BgfxDeviceOptions
             {
                 window = options.window,
                 preferredBackend = options.preferredGraphicsApi,
                 verticalSync = options.verticalSync,
                 sRgbBackbuffer = options.sRgbBackbuffer,
                 forceSingleThreaded = options.forceSingleThreaded
-            }),
-            _ => throw Unsupported(nameof(backend), backend)
-        };
+            });
     }
 
     IAudioDevice IAudioBackendFactory.CreateDevice(AudioBackend backend, AudioBackendOptions options)

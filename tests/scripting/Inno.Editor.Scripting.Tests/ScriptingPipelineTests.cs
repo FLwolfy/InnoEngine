@@ -11,6 +11,7 @@ using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 using Inno.Assets;
 using Inno.Assets.Pipeline;
@@ -40,6 +41,60 @@ public sealed class ScriptingPipelineTests : IDisposable
     private readonly ScriptingFixture m_fixture = new();
 
     public void Dispose() => m_fixture.Dispose();
+
+    [Fact]
+    public void ShaderNodeExtensionsCompileThroughTheEditorOnlyLogicalApi()
+    {
+        m_fixture.Write("ShaderNodeProbe.editor.cs", """
+            using System.Collections.Generic;
+            using InnoEngine.Graphs;
+            using InnoEditor.Rendering.Shaders;
+
+            [ShaderNodeCompilerExtension]
+            public sealed class ShaderNodeProbe : IShaderNodeCompiler
+            {
+                public string definitionId => "tests.shader-node-probe";
+                public IReadOnlyList<ShaderNodePort> GetPorts(ShaderNodeDescriptionContext context)
+                    => [new("value", ShaderSourceType.Atomic("float"), GraphPortDirection.Output)];
+                public IReadOnlyDictionary<string, ShaderIrValue> Lower(ShaderNodeLoweringContext context)
+                    => new Dictionary<string, ShaderIrValue> { ["value"] = context.builder.Constant(0.5f) };
+            }
+            """);
+        ScriptCompilationResult result = m_fixture.Compile();
+        Assert.True(result.success, FormatDiagnostics(result));
+        Assert.Contains(result.activationRequests, static request => request.scope == AssemblyScope.Editor);
+        m_fixture.compiler.GenerateProjectFiles(result);
+        Assert.True(ContainsShaderApi("Inno.EditorScripts.csproj"));
+        Assert.False(ContainsShaderApi("Inno.GameScripts.csproj"));
+
+        bool ContainsShaderApi(string project)
+        {
+            XDocument document = XDocument.Load(Path.Combine(m_fixture.projectRoot, project));
+            foreach (XElement element in document.Descendants("HintPath"))
+            {
+                string path = Path.GetFullPath(element.Value, m_fixture.projectRoot);
+                using FileStream stream = File.OpenRead(path);
+                using var executable = new PEReader(stream);
+                MetadataReader metadata = executable.GetMetadataReader();
+                if (metadata.TypeDefinitions.Any(handle =>
+                {
+                    TypeDefinition type = metadata.GetTypeDefinition(handle);
+                    return metadata.GetString(type.Namespace) == "InnoEditor.Rendering.Shaders" && metadata.GetString(type.Name) == "IShaderNodeCompiler";
+                })) return true;
+            }
+            return false;
+        }
+    }
+
+    [Fact]
+    public void RuntimeScriptsCannotReferenceShaderAuthoringIr()
+    {
+        m_fixture.Write("ShaderRuntimeLeak.cs", """
+            using InnoEditor.Rendering.Shaders;
+            public sealed class ShaderRuntimeLeak { public ShaderIrBuilder? builder; }
+            """);
+        Assert.False(m_fixture.Compile().success);
+    }
 
     [Fact]
     public void RuntimeAndEditorSourcesProduceSeparateDeterministicArtifacts()

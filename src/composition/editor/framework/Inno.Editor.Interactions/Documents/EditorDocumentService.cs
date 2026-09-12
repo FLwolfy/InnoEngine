@@ -40,11 +40,15 @@ internal sealed class EditorDocumentService : IEditorDocumentService
         ArgumentException.ThrowIfNullOrWhiteSpace(provider.id);
         if (!m_providers.TryAdd(provider.id, provider))
             throw new InvalidOperationException($"Editor document provider '{provider.id}' is already registered.");
-        foreach (EditorDocumentContext document in m_documents.Where(document => document.providerId == provider.id))
+        try
         {
-            document.isProviderAvailable = true;
-            provider.Open(document);
+            foreach (EditorDocumentContext document in m_documents.Where(document => document.providerId == provider.id))
+            {
+                document.isProviderAvailable = true;
+                provider.Open(document);
+            }
         }
+        catch { Unregister(provider); throw; }
         return new ProviderLease(this, provider);
     }
 
@@ -57,10 +61,11 @@ internal sealed class EditorDocumentService : IEditorDocumentService
     /// <param name="assetId">
     /// Persistent asset identity used for single-instance matching, or an empty value to match by path.
     /// </param>
+    /// <param name="revealHost">Whether opening also reveals the shared document panel; false lets a dedicated panel present the same managed document.</param>
     /// <returns>
     /// The existing matching context or a newly opened document context.
     /// </returns>
-    public EditorDocumentContext Open(string assetPath, Guid assetId = default)
+    public EditorDocumentContext Open(string assetPath, Guid assetId = default, bool revealHost = true)
     {
         string normalizedPath = NormalizePath(assetPath);
         EditorDocumentContext? existing = m_documents.FirstOrDefault(document =>
@@ -68,8 +73,9 @@ internal sealed class EditorDocumentService : IEditorDocumentService
             || assetId == Guid.Empty && string.Equals(document.assetPath, normalizedPath, StringComparison.Ordinal));
         if (existing is not null)
         {
+            _ = UpdateAssetPath(existing.documentId, normalizedPath);
             m_activeDocumentId = existing.documentId;
-            _ = m_showHost();
+            if (revealHost) _ = m_showHost();
             return existing;
         }
         EditorDocumentProvider provider = m_providers.Values
@@ -91,7 +97,7 @@ internal sealed class EditorDocumentService : IEditorDocumentService
             throw;
         }
         m_activeDocumentId = context.documentId;
-        _ = m_showHost();
+        if (revealHost) _ = m_showHost();
         return context;
     }
 
@@ -110,6 +116,22 @@ internal sealed class EditorDocumentService : IEditorDocumentService
             return false;
         m_activeDocumentId = documentId;
         _ = m_showHost();
+        return true;
+    }
+
+    /// <inheritdoc />
+    public bool UpdateAssetPath(Guid documentId, string assetPath)
+    {
+        EditorDocumentContext? document = Find(documentId);
+        if (document is null) return false;
+        string path = NormalizePath(assetPath);
+        if (m_providers.TryGetValue(document.providerId, out EditorDocumentProvider? provider) && !provider.CanOpen(path))
+            throw new ArgumentException("The new source path is not supported by this document provider.", nameof(assetPath));
+        if (m_documents.Any(value => value.documentId != documentId && value.assetPath == path))
+            throw new InvalidOperationException("Another open document already owns the destination source path.");
+        bool defaultTitle = document.title == System.IO.Path.GetFileName(document.assetPath);
+        document.assetPath = path;
+        if (defaultTitle) document.title = System.IO.Path.GetFileName(path);
         return true;
     }
 

@@ -99,8 +99,8 @@ public sealed class BuildPipelineTests : IDisposable
             m_compiler,
             m_supportPackRoot,
             [
-                new MacOSArm64GameBuildTarget(m_assets, m_engine.serialization),
-                new WindowsX64GameBuildTarget(m_assets, m_engine.serialization)
+                new MacOSArm64GameBuildTarget(m_assets, m_engine.serialization, m_engine.types),
+                new WindowsX64GameBuildTarget(m_assets, m_engine.serialization, m_engine.types)
             ]);
     }
 

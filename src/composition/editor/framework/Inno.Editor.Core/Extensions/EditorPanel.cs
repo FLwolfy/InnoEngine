@@ -1,5 +1,6 @@
 
 using System;
+using System.Numerics;
 
 using Inno.Core.Execution;
 using Inno.Scripting.Api;
@@ -28,6 +29,9 @@ public abstract class EditorPanel
     /// own content instead of allowing the host window to scroll.
     /// </remarks>
     public virtual bool allowScrolling => true;
+
+    /// <summary>Gets the initial floating size in UI coordinates; zero leaves native auto-sizing in control. Saved layouts take precedence.</summary>
+    public virtual Vector2 initialSize => Vector2.Zero;
 
     /// <summary>
     /// Gets or sets whether panel is visible.

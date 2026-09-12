@@ -11,6 +11,5 @@
     <ProjectReference Include="..\..\rendering\Inno.Adapter.Rendering.Authoring\Inno.Adapter.Rendering.Authoring.csproj" />
     <ProjectReference Include="..\..\..\services\platform\Inno.Platform\Inno.Platform.csproj" />
     <ProjectReference Include="..\..\..\services\rendering\Inno.Rendering\Inno.Rendering.csproj" />
-    <ProjectReference Include="..\..\..\services\rendering\Inno.Rendering.Assets\Inno.Rendering.Assets.csproj" />
   </ItemGroup>
 </Project>

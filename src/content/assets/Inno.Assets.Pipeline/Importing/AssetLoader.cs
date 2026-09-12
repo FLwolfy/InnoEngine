@@ -28,7 +28,7 @@ namespace Inno.Assets.Pipeline;
 /// Coordinates importing, persistent cataloging, canonical loading, reloading and collection
 /// for one source and artifact root pair.
 /// </summary>
-public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
+public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, IAssetArtifactLookup
 {
     internal const string C_META_POSTFIX = ".imeta";
 
@@ -911,7 +911,7 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
                 if (output.outputs.Count == 0)
                     throw new InvalidOperationException("An asset build processor produced no outputs.");
                 string fingerprint = CreateBuildFingerprint(processor, definition, inputs);
-                AssetArtifactKey result = m_artifacts.Commit(fingerprint, output.outputs);
+                AssetArtifactKey result = m_artifacts.Commit(fingerprint, output.outputs, output.authoringOutputs);
                 m_diagnostics.PublishBuild(targetId, displayName, output.diagnostics);
                 return result;
             }
@@ -1222,7 +1222,8 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
         record.meta.diagnostics = [$"{exception.GetType().Name}: {exception.Message}"];
         AddOrReplaceRecordLocked(record);
         // Failure belongs to the writable catalog, not the immutable source being rejected.
-        if (!GetMount(relativePath).isReadOnly)
+        if (!GetMount(relativePath).isReadOnly &&
+            (ReadMetadata(GetMetaPath(relativePath)) is null || TryReadSourceMeta(GetMetaPath(relativePath), out _)))
             WriteSourceMeta(record.meta);
         CommitCatalogLocked();
         m_log.Write(
@@ -1266,7 +1267,9 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
                         physicalPath);
                 }
                 return ReadStableSourceBytes(physicalPath, out _);
-            });
+            }, this);
+        byte[] settingsBytes = ReadImportSettingsBytesLocked(relativePath, importer);
+        context.importSettings = RestoreImportSettingsLocked(importer, settingsBytes, context);
         AssetImportProduct product = importer
             .ImportInternalAsync(context, CancellationToken.None)
             .AsTask()
@@ -1329,6 +1332,7 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
                 .ToArray(),
             importStatus = (int)AssetImportStatus.Imported,
             importerImplementationFingerprint = implementationFingerprint,
+            importerSettingsHash = ComputeSha256Hex(settingsBytes),
             diagnostics = product.diagnostics.ToArray()
         };
         ApplySourceStamp(meta, sourceStamp);
@@ -1338,6 +1342,7 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
             product.asset,
             product.runtimePayload.ToArray(),
             outputs,
+            product.authoringOutputs,
             runtimeDependencies);
     }
 
@@ -1421,10 +1426,15 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
                     $"Source '{build.meta.relativePath}' changed while its importer was running.");
             }
             ApplySourceStamp(build.meta, sourceStamp);
+            if (!string.Equals(build.meta.importerSettingsHash,
+                    ComputeSha256Hex(ReadImportSettingsBytesLocked(build.meta.relativePath,
+                        m_importers.FindById(build.meta.importerId)!)), StringComparison.Ordinal))
+                throw new IOException($"Import settings for '{build.meta.relativePath}' changed during import.");
             ValidateImportDependencySnapshotsLocked(build.meta);
             AssetArtifactKey artifactKey = m_artifacts.Commit(
                 CreateImportFingerprint(build.meta),
-                build.outputs);
+                build.outputs,
+                build.authoringOutputs);
             build.meta.artifactKey = artifactKey.value;
             build.meta.lastSuccessfulArtifactKey = artifactKey.value;
             WriteSourceMeta(build.meta);
@@ -1482,7 +1492,7 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
             return false;
         ReadOnlyMemory<byte>? exported = importer
             .ExportInternalAsync(
-                new AssetExportContext(m_types, m_serialization),
+                new AssetExportContext(m_types, m_serialization, this),
                 asset,
                 CancellationToken.None)
             .AsTask()
@@ -1985,18 +1995,25 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
         AssetCatalogStore catalog = serialization is null
             ? new AssetCatalogStore(destination, m_serialization)
             : new AssetCatalogStore(destination, serialization);
-        catalog.Commit(exported.Select(static record => record.meta).ToArray());
+        var destinationArtifacts = new AssetArtifactStore(destination, m_serialization);
+        var projectedKeys = new Dictionary<string, AssetArtifactKey>(StringComparer.Ordinal);
+        foreach (string key in keys)
+            projectedKeys.Add(key, m_artifacts.ExportRuntime(new(key), destinationArtifacts, serialization, cancellationToken));
+        var deployed = new List<AssetMeta>();
+        foreach (AssetRecord record in exported)
+        {
+            byte[] bytes = serialization is null ? m_serialization.Serialize(record.meta) : serialization.Serialize(record.meta);
+            AssetMeta meta = serialization is null ? m_serialization.Deserialize<AssetMeta>(bytes) : serialization.Deserialize<AssetMeta>(bytes);
+            meta.artifactKey = projectedKeys[record.meta.artifactKey].value;
+            meta.lastSuccessfulArtifactKey = meta.artifactKey;
+            meta.importDependencies = [];
+            deployed.Add(meta);
+        }
+        catalog.Commit(deployed.ToArray());
         long totalBytes = Directory
             .EnumerateFiles(Path.Combine(destination, "AssetDatabase"), "*", SearchOption.AllDirectories)
             .Sum(static path => new FileInfo(path).Length);
-        foreach (string keyValue in keys)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            AssetArtifactKey key = new(keyValue);
-            string source = GetArtifactBundlePath(m_artifacts.root, key);
-            string target = GetArtifactBundlePath(Path.Combine(destination, "Artifacts"), key);
-            totalBytes += CopyDirectory(source, target, cancellationToken);
-        }
+        totalBytes += Directory.EnumerateFiles(destinationArtifacts.root, "*", SearchOption.AllDirectories).Sum(static path => new FileInfo(path).Length);
 
         AssetSourceId[] sources = exported
             .Select(static record => AssetPath.Parse(record.relativePath).source)
@@ -2007,41 +2024,6 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
         foreach (AssetSourceId source in sources)
             Directory.CreateDirectory(Path.Combine(destination, "Sources", source.value));
         return new AssetRuntimeContentInfo(sources, exported.Length, keys.Length, totalBytes);
-    }
-
-    private static string GetArtifactBundlePath(string root, AssetArtifactKey key)
-    {
-        string value = key.value;
-        if (value.Length < 4)
-            throw new InvalidDataException("A deployed artifact key must contain a SHA-256 value.");
-        return Path.Combine(root, value[..2].ToLowerInvariant(), value[2..4].ToLowerInvariant(), value);
-    }
-
-    private static long CopyDirectory(
-        string source,
-        string destination,
-        CancellationToken cancellationToken)
-    {
-        if (!Directory.Exists(source))
-            throw new DirectoryNotFoundException($"Artifact bundle '{source}' does not exist.");
-        long bytes = 0;
-        foreach (string directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            string relative = Path.GetRelativePath(source, directory);
-            Directory.CreateDirectory(Path.Combine(destination, relative));
-        }
-        Directory.CreateDirectory(destination);
-        foreach (string file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            string relative = Path.GetRelativePath(source, file);
-            string target = Path.Combine(destination, relative);
-            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            IOFile.Copy(file, target, overwrite: false);
-            bytes = checked(bytes + new FileInfo(file).Length);
-        }
-        return bytes;
     }
 
     private void ValidateRuntimeArtifactsLocked()
@@ -2314,6 +2296,14 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
         IReadOnlyDictionary<string, int> ambiguousRenames = AssociateUntrackedRenamesLocked(changes);
         foreach (AssetChangedEvent change in changes)
         {
+            if (change.relativePath.EndsWith(C_META_POSTFIX, StringComparison.OrdinalIgnoreCase))
+            {
+                string ownerPath = NormalizeRelativePath(change.relativePath[..^C_META_POSTFIX.Length]);
+                AssetRecord? owner = FindRecordLocked(ownerPath);
+                if (owner is not null && !owner.meta.isDirectory && IsStale(owner, out _))
+                    ImportLocked(ownerPath);
+                continue;
+            }
             if (IsInternalGeneratedPath(change.relativePath))
                 continue;
             if (change.changeType.HasFlag(WatcherChangeTypes.Renamed))
@@ -2400,7 +2390,10 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
                 m_runtimeOwner.UpdateAssetPath(record.asset, AssetPath.Parse(newNormalized));
         }
         m_recordsByPath[newNormalized] = record;
-        WriteSourceMeta(record.meta);
+        // A renamed source may deliberately carry a different importer and its matching settings.
+        // The source sidecar is authoritative; cached importer state must not relabel those bytes.
+        if (ReadMetadata(newMeta) is null)
+            WriteSourceMeta(record.meta);
         UpdateGraphsLocked(record);
         CommitCatalogLocked();
 
@@ -2817,6 +2810,8 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
         if (record.importerGeneration != m_importers.GetGeneration(record.meta.importerId))
             return true;
         if (record.meta.importStatus != (int)AssetImportStatus.Imported)
+            return true;
+        if (AreImportSettingsStaleLocked(record, importer))
             return true;
         if (!AssetSourceFileStamp.TryCapture(sourcePath, out AssetSourceFileStamp sourceStamp))
             return true;
@@ -3279,7 +3274,9 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
     private void WriteSourceMeta(AssetMeta meta)
     {
         string metaPath = GetMetaPath(meta.relativePath);
-        _ = TryReadSourceMeta(metaPath, out AssetSourceMeta existing);
+        byte[]? existingBytes = ReadMetadata(metaPath);
+        AssetSourceMeta? existing = existingBytes is null
+            ? null : m_serialization.Deserialize<AssetSourceMeta>(existingBytes);
         var sourceMeta = new AssetSourceMeta
         {
             persistentId = meta.persistentId,
@@ -3326,7 +3323,8 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
             "Inno.AssetImport",
             meta.sourceHash,
             meta.importerId,
-            meta.importerImplementationFingerprint
+            meta.importerImplementationFingerprint,
+            meta.importerSettingsHash
         };
         foreach (AssetDependencyData dependency in meta.runtimeDependencies
                      .OrderBy(static value => value.persistentId))
@@ -3667,6 +3665,7 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
         internal AssetObject? asset;
         internal bool? lastSweepReachability;
         internal long importerGeneration;
+        internal AssetSourceFileStamp settingsStamp;
     }
 
     private sealed class AssetRecordRetirement(AssetLoader owner, AssetRecord record) : IDisposable
@@ -3714,6 +3713,7 @@ public sealed class AssetLoader : IDisposable, IAssetReferenceResolver
         AssetObject asset,
         byte[] payload,
         IReadOnlyDictionary<string, ReadOnlyMemory<byte>> outputs,
+        IReadOnlySet<string> authoringOutputs,
         AssetDependency[] dependencies);
 
     private readonly record struct SweepCandidate(

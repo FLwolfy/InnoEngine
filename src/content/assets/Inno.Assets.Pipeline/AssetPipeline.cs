@@ -780,6 +780,39 @@ public sealed class AssetPipeline : AssetResidencyProvider,
     }
 
     /// <summary>
+    /// Reads a detached settings copy for the currently registered importer.
+    /// </summary>
+    /// <param name="path">The isolated source path.</param>
+    /// <returns>The settings copy and the fingerprint required for saving it.</returns>
+    public AssetImportSettingsSnapshot GetImportSettings(AssetPath path)
+    {
+        EnsureOwnerThread();
+        using IDisposable operationScope = AcquireOperation();
+        return GetLoader().GetImportSettings(path);
+    }
+
+    /// <summary>
+    /// Saves import settings with conflict detection and immediately attempts to reimport the source.
+    /// </summary>
+    /// <param name="path">The writable isolated source path.</param>
+    /// <param name="settings">The edited settings, or null to reset to importer defaults.</param>
+    /// <param name="expectedFingerprint">The fingerprint obtained when reading the settings.</param>
+    /// <returns>True when settings were saved and reimport succeeded; false when the saved settings failed import.</returns>
+    /// <exception cref="IOException">The settings changed externally or could not be written.</exception>
+    public bool SaveImportSettings(AssetPath path, ISerializable? settings, string expectedFingerprint)
+    {
+        EnsureOwnerThread();
+        using IDisposable operationScope = AcquireOperation();
+        _ = NormalizeMutationPath(path, nameof(path));
+        AssetLoader loader = GetLoader();
+        bool imported = loader.SaveImportSettings(path, settings, expectedFingerprint);
+        GetFileSystem().Refresh();
+        _ = loader.TryGetPersistentId(path, out Guid persistentId);
+        PublishMutation(new AssetChange(AssetChangeKind.Modified, persistentId, path));
+        return imported;
+    }
+
+    /// <summary>
     /// Saves an asset to its current source path.
     /// </summary>
     /// <param name="asset">

@@ -2,8 +2,6 @@ using Inno.Core.Diagnostics;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Inno.Rendering;
@@ -180,6 +178,7 @@ public sealed class CompiledShaderPass
 /// </summary>
 public sealed class CompiledShaderArtifact
 {
+    private readonly byte[] m_definitionData;
     /// <summary>
     /// Creates a compiled shader artifact.
     /// </summary>
@@ -198,12 +197,14 @@ public sealed class CompiledShaderArtifact
     /// <param name="passes">
     /// Compiled pass binaries.
     /// </param>
+    /// <param name="definitionData">Native-serialized runtime definition captured before asynchronous compilation.</param>
     public CompiledShaderArtifact(
         string shaderName,
         string targetKey,
         RenderShaderVariant variant,
         ShaderInterface shaderInterface,
-        IReadOnlyList<CompiledShaderPass> passes)
+        IReadOnlyList<CompiledShaderPass> passes,
+        ReadOnlySpan<byte> definitionData)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(shaderName);
         ArgumentException.ThrowIfNullOrWhiteSpace(targetKey);
@@ -214,6 +215,8 @@ public sealed class CompiledShaderArtifact
         this.variant = variant;
         this.shaderInterface = shaderInterface;
         this.passes = Array.AsReadOnly(passes.ToArray());
+        if (definitionData.IsEmpty) throw new ArgumentException("Compiled programs require a captured runtime contract.", nameof(definitionData));
+        m_definitionData = definitionData.ToArray();
     }
 
     /// <summary>
@@ -260,7 +263,8 @@ public sealed class CompiledShaderArtifact
                 pass.shaderInterface,
                 pass.stages.Select(static stage => new RenderShaderStageArtifact(
                     stage.stage,
-                    stage.bytes.Span)).ToArray())).ToArray());
+                    stage.bytes.Span)).ToArray())).ToArray(),
+            m_definitionData);
 
     private static RenderRasterState ConvertRasterState(ShaderRenderState source)
         => new()
@@ -334,60 +338,22 @@ public sealed class ShaderCompilationResult
 }
 
 /// <summary>
-/// Supplies one validated IR stage to a backend-owned shader compiler.
-/// </summary>
-/// <param name="stage">
-/// Validated stage module.
-/// </param>
-/// <param name="stagePass">
-/// Owning IR pass.
-/// </param>
-/// <param name="pass">
-/// Stable pass definition.
-/// </param>
-/// <param name="target">
-/// Backend compiler target.
-/// </param>
-/// <param name="variant">
-/// Static keyword variant.
-/// </param>
-/// <param name="sourceRoot">
-/// Controlled source root used to resolve includes.
-/// </param>
-public sealed record ShaderToolRequest(
-    ShaderIRStageModule stage,
-    ShaderIRPass stagePass,
-    ShaderPassDefinition pass,
-    ShaderCompileTarget target,
-    RenderShaderVariant variant,
-    string sourceRoot);
-
-/// <summary>
-/// Returns one backend compiler process result without activating it.
-/// </summary>
-/// <param name="bytes">
-/// Compiled stage bytes, or <see langword="null"/> after failure.
-/// </param>
-/// <param name="exitCode">
-/// Compiler process exit code.
-/// </param>
-/// <param name="standardOutput">
-/// Captured standard output.
-/// </param>
-/// <param name="standardError">
-/// Captured standard error.
-/// </param>
-public sealed record ShaderToolResult(
-    byte[]? bytes,
-    int exitCode,
-    string standardOutput,
-    string standardError);
-
-/// <summary>
 /// Defines a backend-owned target compiler used by the common Shader IR pipeline.
 /// </summary>
 public interface IShaderCompilerToolchain
 {
+    /// <summary>Gets the stable source implementation identity paired with this rendering adapter.</summary>
+    string implementationId { get; }
+
+    /// <summary>Gets the explicit source-language identities accepted by this adapter's typed IR generator.</summary>
+    IReadOnlyList<string> supportedSourceLanguages { get; }
+
+    /// <summary>Generates and compiles one typed stage, including its frozen function modules and resource layout.</summary>
+    /// <param name="request">Typed stage and exact target profile.</param>
+    /// <param name="cancellationToken">Cancellation before publishing the candidate.</param>
+    /// <returns>Immutable compiled bytes, generated binding names and structured diagnostics.</returns>
+    ValueTask<ShaderStageToolResult> CompileAsync(ShaderStageToolRequest request, CancellationToken cancellationToken);
+
     /// <summary>
     /// Creates a target supported by this toolchain and capability snapshot.
     /// </summary>
@@ -408,21 +374,6 @@ public interface IShaderCompilerToolchain
         bool optimize = true,
         bool debugInformation = false);
 
-    /// <summary>
-    /// Compiles one validated stage without mutating active GPU state.
-    /// </summary>
-    /// <param name="request">
-    /// Complete stage compilation request.
-    /// </param>
-    /// <param name="cancellationToken">
-    /// Compilation cancellation.
-    /// </param>
-    /// <returns>
-    /// The target stage bytes and captured diagnostics.
-    /// </returns>
-    ValueTask<ShaderToolResult> CompileAsync(
-        ShaderToolRequest request,
-        CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -464,172 +415,4 @@ public sealed partial class ShaderCompiler
         bool debugInformation = false)
         => m_toolchain.CreateTarget(capabilities, optimize, debugInformation);
 
-    /// <summary>
-    /// Compiles a complete shader candidate without replacing any active artifact.
-    /// </summary>
-    /// <param name="module">
-    /// Backend-neutral Shader IR.
-    /// </param>
-    /// <param name="target">
-    /// Target renderer profile and capabilities.
-    /// </param>
-    /// <param name="variant">
-    /// Static keyword selection.
-    /// </param>
-    /// <param name="sourceRoot">
-    /// Absolute project Assets directory used for includes and varying definitions.
-    /// </param>
-    /// <param name="cancellationToken">
-    /// Compilation cancellation.
-    /// </param>
-    /// <returns>
-    /// A candidate artifact or structured failure diagnostics.
-    /// </returns>
-    public async ValueTask<ShaderCompilationResult> CompileAsync(
-        ShaderIRModule module,
-        ShaderCompileTarget target,
-        RenderShaderVariant variant,
-        string sourceRoot,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(module);
-        ArgumentNullException.ThrowIfNull(target);
-        ArgumentException.ThrowIfNullOrWhiteSpace(sourceRoot);
-        var diagnostics = new List<ShaderDiagnostic>();
-        ShaderIRValidationResult validation = ShaderIRValidator.Validate(module, target.capabilities);
-        diagnostics.AddRange(validation.diagnostics);
-        ValidateVariant(module, variant, diagnostics);
-        if (diagnostics.Any(static value => value.severity == DiagnosticSeverity.Error))
-        {
-            return new ShaderCompilationResult(null, diagnostics);
-        }
-
-        var passes = new List<CompiledShaderPass>();
-        foreach (ShaderIRPass pass in module.passes)
-        {
-            GraphicsCapability unavailable = pass.definition.requiredFeatures & ~target.capabilities.features;
-            if (unavailable != GraphicsCapability.None)
-            {
-                continue;
-            }
-
-            var stages = new List<ShaderStageArtifact>();
-            foreach (ShaderIRStageModule stage in pass.stages)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                ShaderToolResult result = await m_toolchain.CompileAsync(
-                    new ShaderToolRequest(stage, pass, pass.definition, target, variant, sourceRoot),
-                    cancellationToken).ConfigureAwait(false);
-                if (result.exitCode != 0 || result.bytes is null || result.bytes.Length == 0)
-                {
-                    diagnostics.AddRange(ParseCompilerDiagnostics(stage, result));
-                    if (!diagnostics.Any(static value => value.severity == DiagnosticSeverity.Error))
-                    {
-                        diagnostics.Add(new ShaderDiagnostic(
-                            "SHADER_TARGET_COMPILE_FAILED",
-                            DiagnosticSeverity.Error,
-                            $"Target compiler failed for pass '{pass.definition.name}' stage '{stage.stage}' " +
-                            $"with exit code {result.exitCode}.",
-                            stage.location));
-                    }
-
-                    return new ShaderCompilationResult(null, diagnostics);
-                }
-
-                diagnostics.AddRange(ParseCompilerDiagnostics(stage, result));
-                stages.Add(new ShaderStageArtifact(stage.stage, result.bytes, stage.location));
-            }
-
-            passes.Add(new CompiledShaderPass(
-                pass.definition,
-                stages,
-                ShaderInterface.FromPass(module, pass)));
-        }
-
-        if (passes.Count == 0)
-        {
-            diagnostics.Add(new ShaderDiagnostic(
-                "SHADER_NO_SUPPORTED_PASS",
-                DiagnosticSeverity.Error,
-                $"Shader '{module.definition.name}' has no pass supported by target '{target.key}'."));
-            return new ShaderCompilationResult(null, diagnostics);
-        }
-
-        var artifact = new CompiledShaderArtifact(
-            module.definition.name,
-            target.key,
-            variant,
-            ShaderInterface.FromModule(module),
-            passes);
-        return new ShaderCompilationResult(artifact, diagnostics);
-    }
-
-    private static void ValidateVariant(
-        ShaderIRModule module,
-        RenderShaderVariant variant,
-        List<ShaderDiagnostic> diagnostics)
-    {
-        Dictionary<string, ShaderKeywordDefinition> definitions = module.definition.keywords
-            .ToDictionary(static value => value.id, StringComparer.Ordinal);
-        foreach ((string id, string option) in variant.options)
-        {
-            if (!definitions.TryGetValue(id, out ShaderKeywordDefinition definition))
-            {
-                diagnostics.Add(new ShaderDiagnostic(
-                    "SHADER_VARIANT_UNKNOWN_KEYWORD",
-                    DiagnosticSeverity.Error,
-                    $"Variant selects undeclared keyword '{id}'."));
-            }
-            else if (!definition.options.Contains(option, StringComparer.Ordinal))
-            {
-                diagnostics.Add(new ShaderDiagnostic(
-                    "SHADER_VARIANT_UNKNOWN_OPTION",
-                    DiagnosticSeverity.Error,
-                    $"Variant selects undeclared option '{option}' for keyword '{id}'."));
-            }
-        }
-    }
-
-    private static IReadOnlyList<ShaderDiagnostic> ParseCompilerDiagnostics(
-        ShaderIRStageModule stage,
-        ShaderToolResult result)
-    {
-        string text = string.Join(
-            Environment.NewLine,
-            new[] { result.standardOutput, result.standardError }
-                .Where(static value => !string.IsNullOrWhiteSpace(value)));
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return [];
-        }
-
-        var diagnostics = new List<ShaderDiagnostic>();
-        foreach (string line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            Match match = CompilerLinePattern().Match(line);
-            int sourceLine = match.Success && int.TryParse(match.Groups[1].Value, out int parsedLine)
-                ? parsedLine
-                : 0;
-            DiagnosticSeverity severity = line.Contains("warning", StringComparison.OrdinalIgnoreCase)
-                ? DiagnosticSeverity.Warning
-                : result.exitCode == 0
-                    ? DiagnosticSeverity.Info
-                    : DiagnosticSeverity.Error;
-            diagnostics.Add(new ShaderDiagnostic(
-                severity == DiagnosticSeverity.Warning ? "SHADERC_WARNING" : "SHADERC_DIAGNOSTIC",
-                severity,
-                line,
-                new ShaderSourceLocation(
-                    stage.location.assetPath,
-                    stage.location.passName,
-                    stage.stage,
-                    sourceLine,
-                    0)));
-        }
-
-        return diagnostics;
-    }
-
-    [GeneratedRegex(@"(?:\(|:)(\d+)(?:[,\):])")]
-    private static partial Regex CompilerLinePattern();
 }

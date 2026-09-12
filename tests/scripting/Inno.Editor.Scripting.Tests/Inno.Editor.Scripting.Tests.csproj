@@ -9,6 +9,12 @@
     <DefineConstants>$(DefineConstants);INNO_EDITOR</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../../src/composition/editor/panels/Inno.Editor.Panel.ShaderEditor/Inno.Editor.Panel.ShaderEditor.csproj" />
+    <ProjectReference Include="../../../src/composition/editor/panels/Inno.Editor.Panel.FileBrowser/Inno.Editor.Panel.FileBrowser.csproj" />
+    <ProjectReference Include="../../../src/composition/editor/framework/Inno.Editor.Graph/Inno.Editor.Graph.csproj" />
+    <ProjectReference Include="../../../src/services/rendering/Inno.Rendering.Assets/Inno.Rendering.Assets.csproj" />
+    <ProjectReference Include="../../../build/toolchains/Inno.Build.Toolchains.Bgfx.Tools/Inno.Build.Toolchains.Bgfx.Tools.csproj" />
+    <ProjectReference Include="../../../src/services/rendering/Inno.Rendering.Shaders/Inno.Rendering.Shaders.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\src\foundation\core\Inno.Core.Diagnostics\Inno.Core.Diagnostics.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\src\foundation\core\Inno.Core.Graphs\Inno.Core.Graphs.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\src\composition\editor\features\Inno.Editor.Scripting\Inno.Editor.Scripting.csproj" PrivateAssets="compile" />

@@ -49,6 +49,29 @@ public static class EditorMenuRenderer
         return true;
     }
 
+    /// <summary>Draws the shared context menu with a searchable command list, including menus opened explicitly by a pointer gesture.</summary>
+    /// <param name="id">Stable popup identity in the current ImGui scope.</param>
+    /// <param name="interaction">Shared action/menu routing context.</param>
+    /// <param name="search">Transient search text owned by the invoking view.</param>
+    /// <returns>Whether the context popup is currently open.</returns>
+    public static bool ContextMenu(string id, EditorInteraction interaction, ref string search)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        if (!ShouldResolveItemContextMenu(id)) return false;
+        EditorMenuModel menu = interaction.BuildMenu();
+        if (!EditorWidget.BeginContextMenu(id)) return false;
+        try
+        {
+            NativeImGui.SetNextItemWidth(260f);
+            NativeImGui.InputTextWithHint("##command-search", "Search commands…", ref search, 256);
+            NativeImGui.Separator();
+            if (string.IsNullOrWhiteSpace(search)) DrawItems(interaction, menu.items);
+            else if (DrawSearchItems(interaction, menu.items, search)) NativeImGui.CloseCurrentPopup();
+        }
+        finally { EditorWidget.EndContextMenu(); }
+        return true;
+    }
+
     /// <summary>
     /// Draws a resolved right-click menu when the current ImGui window's unoccupied background is clicked.
     /// </summary>

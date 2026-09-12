@@ -18,6 +18,7 @@
     <ProjectReference Include="../../../../content/references/Inno.References/Inno.References.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../../../../foundation/core/Inno.Core.Execution/Inno.Core.Execution.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\content\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\services\rendering\Inno.Rendering.Runtime\Inno.Rendering.Runtime.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\foundation\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj" PrivateAssets="compile" />
@@ -30,4 +31,3 @@
     <ProjectReference Include="../../../../foundation/core/Inno.Core.Serialization/Inno.Core.Serialization.csproj" />
   </ItemGroup>
 </Project>
-

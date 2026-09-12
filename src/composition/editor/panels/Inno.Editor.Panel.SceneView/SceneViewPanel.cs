@@ -43,6 +43,7 @@ internal sealed class SceneViewPanel : EditorPanel
     private readonly EditorSettings m_settings;
     private Vector4 m_backgroundColor;
     private NavigationDrag m_navigationDrag;
+    private readonly EditorPlanarNavigation m_planarNavigation = new();
     private ImGuiMouseButton m_navigationDragButton;
     private ImGuizmoOperation m_operation = ImGuizmoOperation.Translate;
     private ImGuizmoMode m_mode = ImGuizmoMode.World;
@@ -170,6 +171,7 @@ internal sealed class SceneViewPanel : EditorPanel
     {
         _ = context;
         m_settings.changed -= ApplySettings;
+        m_planarNavigation.Cancel();
         m_navigationDrag = NavigationDrag.None;
         CommitGesture();
         m_rendering.Release(C_VIEWPORT_ID);
@@ -282,6 +284,7 @@ internal sealed class SceneViewPanel : EditorPanel
             || profile.capabilities == EditorViewportNavigationCapabilities.None)
         {
             m_navigationDrag = NavigationDrag.None;
+            m_planarNavigation.Cancel();
             return false;
         }
 
@@ -293,24 +296,18 @@ internal sealed class SceneViewPanel : EditorPanel
         {
             m_navigationDrag = NavigationDrag.None;
         }
-        if (hovered && m_navigationDrag == NavigationDrag.None)
+        bool panning = m_planarNavigation.Update(hovered && m_navigationDrag == NavigationDrag.None
+            && profile.capabilities.HasFlag(EditorViewportNavigationCapabilities.Pan),
+            NativeImGui.IsMouseClicked(ImGuiMouseButton.Left), NativeImGui.IsMouseClicked(ImGuiMouseButton.Middle),
+            NativeImGui.IsMouseDown(ImGuiMouseButton.Left), NativeImGui.IsMouseDown(ImGuiMouseButton.Middle), io.KeyAlt,
+            allowAltPrimary: !profile.capabilities.HasFlag(EditorViewportNavigationCapabilities.Orbit));
+        if (hovered && !panning && m_navigationDrag == NavigationDrag.None)
         {
-            if (profile.capabilities.HasFlag(EditorViewportNavigationCapabilities.Pan)
-                && NativeImGui.IsMouseClicked(ImGuiMouseButton.Middle))
-            {
-                m_navigationDrag = NavigationDrag.Pan;
-                m_navigationDragButton = ImGuiMouseButton.Middle;
-            }
-            else if (io.KeyAlt && NativeImGui.IsMouseClicked(ImGuiMouseButton.Left))
+            if (io.KeyAlt && NativeImGui.IsMouseClicked(ImGuiMouseButton.Left))
             {
                 if (profile.capabilities.HasFlag(EditorViewportNavigationCapabilities.Orbit))
                 {
                     m_navigationDrag = NavigationDrag.Orbit;
-                    m_navigationDragButton = ImGuiMouseButton.Left;
-                }
-                else if (profile.capabilities.HasFlag(EditorViewportNavigationCapabilities.Pan))
-                {
-                    m_navigationDrag = NavigationDrag.Pan;
                     m_navigationDragButton = ImGuiMouseButton.Left;
                 }
             }
@@ -322,18 +319,25 @@ internal sealed class SceneViewPanel : EditorPanel
             }
         }
 
-        bool ownsPointer = m_navigationDrag != NavigationDrag.None;
+        if (!io.WantTextInput && NativeImGui.IsKeyPressed(ImGuiKey.Escape, repeat: false))
+        {
+            m_planarNavigation.Cancel();
+            m_navigationDrag = NavigationDrag.None;
+            panning = false;
+        }
+        bool ownsPointer = panning || m_navigationDrag != NavigationDrag.None;
         if (!hovered && !ownsPointer)
             return false;
         float width = MathF.Max(1f, maximum.X - minimum.X);
         float height = MathF.Max(1f, maximum.Y - minimum.Y);
         float aspect = width / height;
+        if (panning)
+        {
+            Pan(navigation, io.MouseDelta, height);
+            NativeImGui.SetMouseCursor(ImGuiMouseCursor.ResizeAll);
+        }
         switch (m_navigationDrag)
         {
-            case NavigationDrag.Pan:
-                Pan(navigation, io.MouseDelta, height);
-                NativeImGui.SetMouseCursor(ImGuiMouseCursor.ResizeAll);
-                break;
             case NavigationDrag.Orbit:
                 Orbit(navigation, profile, io.MouseDelta);
                 break;
@@ -464,7 +468,7 @@ internal sealed class SceneViewPanel : EditorPanel
                 minimumSize,
                 GetPositive(profile.maximumOrthographicSize, 100000f));
             float nextSize = Math.Clamp(
-                previousSize * MathF.Exp(-wheel * zoomSensitivity),
+                previousSize / EditorPlanarNavigation.WheelFactor(wheel, zoomSensitivity),
                 minimumSize,
                 maximumSize);
             EngineVector3 nextOffset = GetViewportOffset(
@@ -485,7 +489,7 @@ internal sealed class SceneViewPanel : EditorPanel
             minimumDistance,
             GetPositive(profile.maximumFocusDistance, 1000000f));
         navigation.focusDistance = Math.Clamp(
-            navigation.focusDistance * MathF.Exp(-wheel * zoomSensitivity),
+            navigation.focusDistance / EditorPlanarNavigation.WheelFactor(wheel, zoomSensitivity),
             minimumDistance,
             maximumDistance);
         EngineVector3 direction = EngineVector3.Transform(EngineVector3.FORWARD, navigation.rotation);
@@ -959,7 +963,6 @@ internal sealed class SceneViewPanel : EditorPanel
     private enum NavigationDrag
     {
         None,
-        Pan,
         Orbit,
         Fly
     }

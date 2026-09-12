@@ -8,9 +8,14 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../../src/foundation/extensibility/Inno.Extensibility.Modules/Inno.Extensibility.Modules.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\build\toolchains\Inno.Build.Toolchains.Bgfx.Tools\Inno.Build.Toolchains.Bgfx.Tools.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\src\adapters\rendering\Inno.Adapter.Rendering.Bgfx\Inno.Adapter.Rendering.Bgfx.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\src\adapters\presentation\Inno.Adapter.Presentation.ImGui.Bgfx\Inno.Adapter.Presentation.ImGui.Bgfx.csproj" PrivateAssets="compile" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../../src/adapters/presentation/Inno.Adapter.Presentation.ImGui.Bgfx/Shaders/Fragment.ishadersource"
+          Link="ShaderFixtures/ImGuiFragment.ishadersource" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

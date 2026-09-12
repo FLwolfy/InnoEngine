@@ -13,3 +13,4 @@ using Inno.Editor.Panel.FileBrowser;
 [assembly: ScriptingApiExport(typeof(AssetBrowserRoot), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(AssetBrowserState), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(AssetIconAttribute), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(AssetImportSettingsEdits), ScriptingApiScope.Editor)]

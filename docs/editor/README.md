@@ -30,7 +30,7 @@ Editor 采用“被动核心 → 后端无关交互 → ImGui 表现 → 独立 
 | [Inno.Editor.Panel.Stats](Inno.Editor.Panel.Stats.md) | 平滑后的帧统计与 Stats Panel。 |
 | [Inno.Editor.Panel.SceneView](Inno.Editor.Panel.SceneView.md) | 不含 Camera/Picking 假设的 Plugin 驱动 Scene viewport host。 |
 | [Inno.Editor.Panel.GameView](Inno.Editor.Panel.GameView.md) | 不含运行时世界观的 Plugin 驱动 Game viewport host。 |
-| [Inno.Editor.Panel.MaterialGraph](Inno.Editor.Panel.MaterialGraph.md) | 普通 Material 的节点映射、强类型编辑、验证与状态恢复。 |
+| [Inno.Editor.Panel.ShaderEditor](Inno.Editor.Panel.ShaderEditor.md) | Shader 图画布、节点绘制扩展、手势历史与自动保存；完整验收进行中。 |
 | [Inno.Editor.Application](Inno.Editor.Application.md) | Platform、EngineHost/Edit Session、Build、ImGui 和全部 feature 的组合根。 |
 
 ## 依赖方向

@@ -606,37 +606,6 @@ public struct ShaderKeywordDefinition
 }
 
 /// <summary>
-/// Represents shaderc-compatible source imported through the common asset system.
-/// </summary>
-[StableTypeId("80356429-c04e-4cf0-b32e-ebda7ed8d428")]
-public sealed class ShaderSourceAsset : AssetObject
-{
-    internal ShaderSourceAsset()
-    {
-    }
-
-    /// <summary>
-    /// Creates an immutable imported shader-source description.
-    /// </summary>
-    /// <param name="content">
-    /// The fully expanded shader source text.
-    /// </param>
-    /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="content"/> is <see langword="null"/>.
-    /// </exception>
-    public ShaderSourceAsset(string content)
-    {
-        this.content = content ?? throw new ArgumentNullException(nameof(content));
-    }
-
-    /// <summary>
-    /// Gets or sets decoded source text.
-    /// </summary>
-    [SerializableProperty]
-    public string content { get; internal set; } = string.Empty;
-}
-
-/// <summary>
 /// Defines one backend-neutral raster or compute shader pass.
 /// </summary>
 public struct ShaderPassDefinition
@@ -650,18 +619,6 @@ public struct ShaderPassDefinition
     /// <param name="programKind">
     /// Programmable stage combination.
     /// </param>
-    /// <param name="vertexSource">
-    /// Optional vertex source asset.
-    /// </param>
-    /// <param name="fragmentSource">
-    /// Optional fragment source asset.
-    /// </param>
-    /// <param name="computeSource">
-    /// Optional compute source asset.
-    /// </param>
-    /// <param name="varyingSource">
-    /// Optional varying definition source asset.
-    /// </param>
     /// <param name="requiredFeatures">
     /// Required device capability mask.
     /// </param>
@@ -674,10 +631,6 @@ public struct ShaderPassDefinition
     public ShaderPassDefinition(
         string name,
         ShaderProgramKind programKind,
-        ShaderSourceAsset? vertexSource = null,
-        ShaderSourceAsset? fragmentSource = null,
-        ShaderSourceAsset? computeSource = null,
-        ShaderSourceAsset? varyingSource = null,
         GraphicsCapability requiredFeatures = GraphicsCapability.None,
         ShaderRenderState? renderState = null,
         IEnumerable<ShaderMetadataEntry>? metadata = null)
@@ -685,10 +638,6 @@ public struct ShaderPassDefinition
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         this.name = name;
         this.programKind = programKind;
-        this.vertexSource = vertexSource;
-        this.fragmentSource = fragmentSource;
-        this.computeSource = computeSource;
-        this.varyingSource = varyingSource;
         this.requiredFeatures = requiredFeatures;
         this.renderState = renderState ?? ShaderRenderState.opaque;
         this.metadata = metadata?.ToArray() ?? [];
@@ -703,26 +652,6 @@ public struct ShaderPassDefinition
     /// Gets or sets the programmable stage combination.
     /// </summary>
     public ShaderProgramKind programKind { get; set; }
-
-    /// <summary>
-    /// Gets or sets the vertex source asset.
-    /// </summary>
-    public ShaderSourceAsset? vertexSource { get; set; }
-
-    /// <summary>
-    /// Gets or sets the fragment source asset.
-    /// </summary>
-    public ShaderSourceAsset? fragmentSource { get; set; }
-
-    /// <summary>
-    /// Gets or sets the compute source asset.
-    /// </summary>
-    public ShaderSourceAsset? computeSource { get; set; }
-
-    /// <summary>
-    /// Gets or sets the varying definition source asset.
-    /// </summary>
-    public ShaderSourceAsset? varyingSource { get; set; }
 
     /// <summary>
     /// Gets or sets required device capabilities.
@@ -912,7 +841,7 @@ public sealed class ShaderDefinition : ISerializable
 }
 
 /// <summary>
-/// Represents an imported handwritten or generated shader definition.
+/// Represents the runtime contract imported from a shader graph.
 /// </summary>
 [StableTypeId("e6672287-145f-4f51-8380-a6aeaf57a801")]
 public class ShaderAsset : AssetObject
@@ -921,9 +850,6 @@ public class ShaderAsset : AssetObject
 
     [SerializableProperty(PropertyVisibility.Hide)]
     private byte[] m_definitionData = [];
-
-    [SerializableProperty(PropertyVisibility.Hide)]
-    private ShaderSourceAsset[] m_sourceDependencies = [];
 
     /// <summary>
     /// Gets a detached editable copy of the committed backend-neutral definition, or null before import.
@@ -940,6 +866,7 @@ public class ShaderAsset : AssetObject
     /// <param name="serialization">
     /// The serialization registry that owns the active shader converter generation.
     /// </param>
+    /// <param name="context">The complete owner reference context used for material texture defaults.</param>
     /// <exception cref="ArgumentException">
     /// A declaration collection is null. The previous committed definition remains unchanged.
     /// </exception>
@@ -949,27 +876,16 @@ public class ShaderAsset : AssetObject
     [ScriptingApiIgnore]
     public void SetDefinition(
         ShaderDefinition value,
-        SerializationRegistry serialization)
+        SerializationRegistry serialization,
+        SerializationContext context)
     {
         ArgumentNullException.ThrowIfNull(value);
         ArgumentNullException.ThrowIfNull(serialization);
+        ArgumentNullException.ThrowIfNull(context);
         var snapshot = new ShaderDefinitionSnapshot(value);
         ShaderDefinition captured = snapshot.CreateDefinition();
-        byte[] definitionData = serialization.Serialize(captured);
-        ShaderSourceAsset[] sourceDependencies = captured.passes
-            .SelectMany(static pass => new[]
-            {
-                pass.vertexSource,
-                pass.fragmentSource,
-                pass.computeSource,
-                pass.varyingSource
-            })
-            .Where(static source => source is not null)
-            .Cast<ShaderSourceAsset>()
-            .Distinct()
-            .ToArray();
+        byte[] definitionData = serialization.Serialize(captured, context);
         m_definitionData = definitionData;
-        m_sourceDependencies = sourceDependencies;
         m_definition = snapshot;
     }
 

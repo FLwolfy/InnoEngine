@@ -168,6 +168,9 @@ internal sealed class BuildWorkspace : IDisposable
                 },
                 assets,
                 plugins);
+            ActivateAuthoring(engine, plugins, compiler);
+            engine.generations.Wait();
+            assets.Rescan();
             var pipeline = new BuildPipeline(
                 assets,
                 plugins,
@@ -177,8 +180,8 @@ internal sealed class BuildWorkspace : IDisposable
                 compiler,
                 supportPackRoot,
                 [
-                    new MacOSArm64GameBuildTarget(assets, engine.serialization),
-                    new WindowsX64GameBuildTarget(assets, engine.serialization)
+                    new MacOSArm64GameBuildTarget(assets, engine.serialization, engine.types),
+                    new WindowsX64GameBuildTarget(assets, engine.serialization, engine.types)
                 ]);
             return new BuildWorkspace(engine, settings, assets, plugins, projectRoot, pipeline);
         }
@@ -190,6 +193,18 @@ internal sealed class BuildWorkspace : IDisposable
             engine?.Dispose();
             throw;
         }
+    }
+
+    private static void ActivateAuthoring(EngineHost engine, PluginEnvironment plugins, ScriptCompiler compiler)
+    {
+        // Asset importers and graph extensions belong to the authoring generation, including in a
+        // headless build. Compiling only Player scripts would export unresolved/last-good asset state.
+        ScriptCompilationResult result = compiler.CompileAuthoringGenerationAsync().GetAwaiter().GetResult();
+        if (!result.success)
+            throw new InvalidOperationException("Build authoring compilation failed:" + Environment.NewLine
+                + string.Join(Environment.NewLine, result.diagnostics.Select(static diagnostic => diagnostic.message)));
+        using Inno.Extensibility.Modules.AssemblyReloadSession reload = engine.modules.BeginReload(result.activationRequests);
+        _ = engine.generations.Execute("Build authoring generation", reload, [plugins.CreateReloadChange()]);
     }
 
     /// <summary>

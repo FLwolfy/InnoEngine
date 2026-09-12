@@ -13,4 +13,9 @@ EditorHost 只依赖 `IAuthoringAdapterCatalog`，不会看到 `Sdl3PlatformAppl
 IAuthoringAdapterCatalog catalog = new DefaultAuthoringAdapterCatalog();
 ```
 
+构造参数 `renderingProviders` 与 `authoringProviders` 分别接收完整 runtime/authoring provider 集合，
+null 使用对应内置 BGFX 集合。`RenderingAuthoringBackendCatalog` 在创建 GPU 设备前要求两边的
+`RenderingBackendId` 集合完全配对，拒绝重复或缺失。Shader/Texture 工厂按稳定 ID 查找，不再维护
+中央 Rendering enum switch。实际设备能力与 Shader 绑定/产物兼容性仍由各自后续验证负责。
+
 Presentation 创建是原子操作：shader、renderer 或 context 任一步失败都释放已创建资源并让 Editor 启动失败；不会发布半初始化 context。

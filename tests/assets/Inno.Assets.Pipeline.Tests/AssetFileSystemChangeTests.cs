@@ -70,17 +70,21 @@ public sealed class AssetFileSystemChangeTests
     }
 
     [Fact]
-    public void Watcher_DoesNotPublishGeneratedMetadataChanges()
+    public void WatcherPublishesSettingsSidecarChangesWithoutExposingMetadataAsAssets()
     {
         string root = CreateRoot();
         try
         {
             using var fileSystem = new AssetFileSystem(root, autoStart: true, flushDelayMs: 20);
             System.IO.File.WriteAllText(Path.Combine(root, "asset.txt.imeta"), "cache");
+            System.IO.File.WriteAllText(Path.Combine(root, "asset.txt.abin"), "generated");
             Thread.Sleep(100);
             IReadOnlyList<AssetChangedEvent> changes = fileSystem.WaitForIdle();
 
-            Assert.Empty(changes);
+            Assert.Contains(changes, static change => change.relativePath == "asset.txt.imeta");
+            Assert.DoesNotContain(changes, static change => change.relativePath.EndsWith(".abin", StringComparison.Ordinal));
+            Assert.False(fileSystem.TryGetEntry(AssetPath.Project("asset.txt.imeta"), out _));
+            Assert.False(fileSystem.TryGetEntry(AssetPath.Project("asset.txt.abin"), out _));
         }
         finally
         {

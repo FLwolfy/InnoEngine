@@ -1,7 +1,13 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using Inno.Core.Graphs;
+using Inno.Core.Serialization;
+using Inno.Extensibility.Modules;
+using Inno.Extensibility.Types;
+using Inno.Rendering.Shaders;
 using Inno.Build.Toolchains.Bgfx.Tools;
 using Inno.Rendering.Assets;
 using Inno.Rendering;
@@ -42,56 +48,36 @@ public sealed class BgfxToolchainTests : IDisposable
     [Fact]
     public void Direct3DAndMetalTargetsSelectProfilesWithoutForkingShaderSource()
     {
-        const string commonSource = "$input a_position\n#include <bgfx_shader.sh>\nvoid main() { gl_Position = vec4(a_position, 1.0); }";
-        var stage = new ShaderIRStageModule(
-            ShaderStage.Vertex,
-            "main",
-            commonSource,
-            new ShaderSourceLocation("Shaders/common.vs.sc", "Main", ShaderStage.Vertex));
         ShaderCompileTarget metal = new BgfxShadercToolchain(BgfxShaderTargetPlatform.MacOSArm64)
             .CreateTarget(CreateCapabilities(GraphicsApi.Metal, GraphicsCapability.Compute));
         ShaderCompileTarget direct3D = new BgfxShadercToolchain(BgfxShaderTargetPlatform.WindowsX64)
             .CreateTarget(CreateCapabilities(GraphicsApi.Direct3D11, GraphicsCapability.Compute));
 
-        Assert.Equal(commonSource, stage.source);
         Assert.Contains(":Metal:", metal.profileKey, StringComparison.Ordinal);
         Assert.Contains(":Direct3D11:", direct3D.profileKey, StringComparison.Ordinal);
         Assert.NotEqual(metal.profileKey, direct3D.profileKey);
     }
 
     [Fact]
-    public async Task Direct3DProfileCompilesCommonSourceOnWindows()
+    public async Task Direct3DProfileCompilesTheCommonGraphOnWindows()
     {
         if (!OperatingSystem.IsWindows())
             return;
-        const string vertex = "$input a_position\n#include <bgfx_shader.sh>\nvoid main() { gl_Position = vec4(a_position, 1.0); }";
-        const string fragment = "#include <bgfx_shader.sh>\nvoid main() { gl_FragColor = vec4(1.0); }";
-        const string varying = "vec3 a_position : POSITION;";
-        var pass = new ShaderPassDefinition("Draw", ShaderProgramKind.Raster);
-        var module = new ShaderIRModule(
-            new ShaderDefinition("Tests/Direct3D", [], [], [pass]),
-            [new ShaderIRPass(
-                pass,
-                [
-                    new ShaderIRStageModule(
-                        ShaderStage.Vertex,
-                        "main",
-                        vertex,
-                        new ShaderSourceLocation("Shaders/test.vs.sc", "Draw", ShaderStage.Vertex)),
-                    new ShaderIRStageModule(
-                        ShaderStage.Fragment,
-                        "main",
-                        fragment,
-                        new ShaderSourceLocation("Shaders/test.fs.sc", "Draw", ShaderStage.Fragment))
-                ],
-                varying)]);
+        using var modules = new ModuleHost(new() { cacheDirectory = Path.Combine(m_root, "Modules") });
+        using var types = new TypeCatalog(modules);
+        using var serialization = new SerializationRegistry(types);
+        using var nodes = new ShaderNodeCompilerRegistry(types);
+        GraphDocument graph = ShaderGraphTemplates.CreateRaster(serialization, SerializationContext.empty);
+        ShaderGraphProgramResult program = new ShaderGraphProgramCompiler(nodes).Lower(graph, "bgfx",
+            new Dictionary<GraphNodeId, ShaderSourceModuleAnalysis>(), serialization, SerializationContext.empty);
         var compiler = new ShaderCompiler(new BgfxShadercToolchain(BgfxShaderTargetPlatform.WindowsX64));
 
         ShaderCompilationResult result = await compiler.CompileAsync(
-            module,
+            ShaderGraphDocument.ReadDefinition(graph, serialization, SerializationContext.empty),
+            program,
             compiler.CreateTarget(CreateCapabilities(GraphicsApi.Direct3D11, GraphicsCapability.None)),
             RenderShaderVariant.empty,
-            m_root);
+            serialization, SerializationContext.empty);
 
         Assert.True(result.succeeded, string.Join(
             Environment.NewLine,

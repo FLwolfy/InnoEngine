@@ -13,6 +13,7 @@ public sealed class AssetArtifactWriter
     private readonly Dictionary<string, ReadOnlyMemory<byte>> m_outputs =
         new(StringComparer.Ordinal);
     private readonly List<string> m_diagnostics = [];
+    private readonly HashSet<string> m_authoringOutputs = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Writes one named build output.
@@ -26,19 +27,24 @@ public sealed class AssetArtifactWriter
     /// <param name="cancellationToken">
     /// Cancellation for the write operation.
     /// </param>
+    /// <param name="deploymentScope">Whether runtime packages retain this output.</param>
     /// <returns>
     /// A completed operation after the output has been staged.
     /// </returns>
     public ValueTask WriteAsync(
         string outputName,
         ReadOnlyMemory<byte> bytes,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        AssetDeploymentScope deploymentScope = AssetDeploymentScope.Runtime)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(outputName))
             throw new ArgumentException("An artifact output name is required.", nameof(outputName));
+        if (!Enum.IsDefined(deploymentScope) || (deploymentScope == AssetDeploymentScope.AuthoringOnly && outputName is "runtime" or "asset-state"))
+            throw new ArgumentException("The output deployment scope is invalid.", nameof(deploymentScope));
         if (!m_outputs.TryAdd(outputName, bytes.ToArray()))
             throw new InvalidOperationException($"Artifact output '{outputName}' was written more than once.");
+        if (deploymentScope == AssetDeploymentScope.AuthoringOnly) m_authoringOutputs.Add(outputName);
         return ValueTask.CompletedTask;
     }
 
@@ -57,4 +63,5 @@ public sealed class AssetArtifactWriter
 
     internal IReadOnlyDictionary<string, ReadOnlyMemory<byte>> outputs => m_outputs;
     internal IReadOnlyList<string> diagnostics => m_diagnostics;
+    internal IReadOnlySet<string> authoringOutputs => m_authoringOutputs;
 }

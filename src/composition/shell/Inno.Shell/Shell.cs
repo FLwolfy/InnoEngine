@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using Inno.Adapter;
 using Inno.Adapter.Input;
@@ -136,6 +137,9 @@ public abstract class Shell : IDisposable
         ObjectDisposedException.ThrowIf(m_disposed, this);
         if (m_platformApplication is not null)
             throw new InvalidOperationException("The composition shell adapter resources are already initialized.");
+        if (!m_adapterSelection.rendering.isValid ||
+            !m_adapterCatalog.rendering.supportedBackends.Contains(m_adapterSelection.rendering))
+            throw new NotSupportedException($"Rendering backend '{m_adapterSelection.rendering}' is not registered.");
 
         try
         {
@@ -222,7 +226,7 @@ public abstract class Shell : IDisposable
 
                 DrawFrame();
             }
-            if (smokeFrameLimit.HasValue)
+            if (smokeFrameLimit.HasValue && frameCount >= smokeFrameLimit.Value)
                 OnSmokeCompleted(frameCount);
             return 0;
         }
@@ -344,7 +348,8 @@ public abstract class Shell : IDisposable
     protected virtual void OnPresentation(ShellFrame frame) { }
 
     /// <summary>
-    /// Receives the final frame count when a bounded smoke run completes.
+    /// Receives the final frame count only when a bounded smoke run reaches its requested frame limit.
+    /// Closing a window or requesting an earlier exit does not report smoke completion.
     /// </summary>
     /// <param name="frameCount">
     /// Number of product frames completed by the smoke run.

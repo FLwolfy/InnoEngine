@@ -1,5 +1,8 @@
 using System;
 using System.IO;
+using Inno.Core.Serialization;
+using Inno.Extensibility.Modules;
+using Inno.Extensibility.Types;
 
 using Inno.Core.Identity;
 using Inno.Rendering;
@@ -13,6 +16,16 @@ public sealed class FileRenderTargetArtifactProviderTests : IDisposable
         Path.GetTempPath(),
         "InnoRenderTargetArtifactProviderTests",
         Guid.NewGuid().ToString("N"));
+    private readonly ModuleHost m_modules;
+    private readonly TypeCatalog m_types;
+    private readonly SerializationRegistry m_serialization;
+
+    public FileRenderTargetArtifactProviderTests()
+    {
+        m_modules = new(new() { cacheDirectory = Path.Combine(m_root, "Modules") });
+        m_types = new(m_modules);
+        m_serialization = new(m_types);
+    }
 
     [Fact]
     public void TextureTargetArtifactLoadsWithoutAnyAuthoringSourceMount()
@@ -29,7 +42,7 @@ public sealed class FileRenderTargetArtifactProviderTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(artifactPath)!);
         byte[] expected = [0xAB, 0x4B, 0x54, 0x58];
         File.WriteAllBytes(artifactPath, expected);
-        var provider = new FileRenderTargetArtifactProvider(m_root);
+        var provider = new FileRenderTargetArtifactProvider(m_root, m_serialization, SerializationContext.empty);
 
         RenderTargetArtifactStatus status = provider.GetTextureArtifact(
             reference,
@@ -48,7 +61,7 @@ public sealed class FileRenderTargetArtifactProviderTests : IDisposable
         var texture = new TextureAsset(1, 1, TextureColorSpace.Linear, "png");
         identities.InitializePersistentIdentity(texture, Guid.NewGuid());
         RenderTextureArtifactReference reference = texture.GetTextureArtifactReference();
-        var provider = new FileRenderTargetArtifactProvider(m_root);
+        var provider = new FileRenderTargetArtifactProvider(m_root, m_serialization, SerializationContext.empty);
 
         RenderTargetArtifactStatus status = provider.GetTextureArtifact(
             reference,
@@ -79,7 +92,7 @@ public sealed class FileRenderTargetArtifactProviderTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(firstPath)!);
         File.WriteAllBytes(firstPath, [0x01]);
         File.WriteAllBytes(secondPath, [0x02]);
-        var provider = new FileRenderTargetArtifactProvider(m_root);
+        var provider = new FileRenderTargetArtifactProvider(m_root, m_serialization, SerializationContext.empty);
 
         Assert.Equal(RenderTargetArtifactStatus.Ready, provider.GetTextureArtifact(first, out ReadOnlyMemory<byte> firstBytes));
         Assert.Equal(RenderTargetArtifactStatus.Ready, provider.GetTextureArtifact(second, out ReadOnlyMemory<byte> secondBytes));
@@ -89,6 +102,9 @@ public sealed class FileRenderTargetArtifactProviderTests : IDisposable
 
     public void Dispose()
     {
+        m_serialization.Dispose();
+        m_types.Dispose();
+        m_modules.Dispose();
         if (Directory.Exists(m_root))
             Directory.Delete(m_root, recursive: true);
     }

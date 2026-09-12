@@ -109,7 +109,9 @@ internal sealed class RenderResourceCache<TKey, TEntry>(Action<TEntry> release, 
     /// <returns>
     /// The validated ienumeratorkey value pairtkey, tentry that represents the completed operation.
     /// </returns>
-    public IEnumerator<KeyValuePair<TKey, TEntry>> GetEnumerator() => m_entries.GetEnumerator();
+    public Dictionary<TKey, TEntry>.Enumerator GetEnumerator() => m_entries.GetEnumerator();
+
+    IEnumerator<KeyValuePair<TKey, TEntry>> IEnumerable<KeyValuePair<TKey, TEntry>>.GetEnumerator() => GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }

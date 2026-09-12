@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using Inno.Assets;
+using Inno.Core.Serialization;
 
 namespace Inno.Assets.Pipeline;
 
@@ -31,6 +32,15 @@ public abstract class AssetImporter
     /// Gets the normalized source extensions accepted by this importer.
     /// </summary>
     public abstract IReadOnlyList<string> supportedExtensions { get; }
+
+    /// <summary>
+    /// Creates a detached settings value for this importer in the current extension generation.
+    /// </summary>
+    /// <returns>
+    /// A fresh serializable value with a registered stable type identity, or null when this importer has no settings.
+    /// Defaults must be deterministic; implementations must not retain the returned instance.
+    /// </returns>
+    public virtual ISerializable? CreateImportSettings() => null;
 
     internal abstract ValueTask<AssetImportProduct> ImportInternalAsync(
         AssetImportContext context,
@@ -118,11 +128,13 @@ public abstract class AssetImporter<TAsset> : AssetImporter where TAsset : Asset
 internal readonly struct AssetImportProduct(
     AssetObject asset,
     IReadOnlyDictionary<string, ReadOnlyMemory<byte>> outputs,
-    IReadOnlyList<string> diagnostics)
+    IReadOnlyList<string> diagnostics,
+    IReadOnlySet<string> authoringOutputs)
 {
     internal AssetObject asset { get; } = asset ?? throw new ArgumentNullException(nameof(asset));
     internal IReadOnlyDictionary<string, ReadOnlyMemory<byte>> outputs { get; } = outputs;
     internal IReadOnlyList<string> diagnostics { get; } = diagnostics;
+    internal IReadOnlySet<string> authoringOutputs { get; } = authoringOutputs;
 
     internal ReadOnlyMemory<byte> runtimePayload
         => outputs.TryGetValue("runtime", out ReadOnlyMemory<byte> bytes)

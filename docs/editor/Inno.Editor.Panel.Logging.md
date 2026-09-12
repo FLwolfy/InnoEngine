@@ -28,6 +28,8 @@ Console card header 只显示等级，例如 `[Info]` 或 `[Error]`。展开后�
 - `Copy Message`：复制诊断 code 与消息正文。
 - `Copy Full Entry`：复制时间、等级、category、重复次数和源文件位置。
 
+详情标签列按当前字体实际测量并显式分配固定宽度，数值列填充余宽；不依赖上帧自动测量，避免首次展开或裁剪后只显示 K/F/S/T。窗口不足以容纳两列时，同一组元数据改为标签在上、内容在下。普通日志与诊断共享这一布局，不另开 Shader 专用样式。
+
 菜单复用全局 `EditorMenuRenderer` 与 Context Menu 样式，因此会正确捕获 hover/input，不把右键事件传递给后方 Panel 内容。
 
 两个复制操作的 area/action ID 保存在项目根目录 `LoggingInteractionIds` 的稳定 `const string` 清单中，运行时菜单模型直接使用这些字符串。Console 的 `OnDraw` 只能由宿主生命周期 bridge 调用；Draw 异常会关闭并 quarantine 当前 generation 的 Panel，同时由 runtime 保证 window/menu ImGui 栈平衡，不影响后续 Panel。

@@ -2,8 +2,9 @@
 
 [架构治理](README.md) · [Wiki 首页](../README.md) · [正式问题台账](../issues/2026-08-31-complete-issue-register.md)
 
-2026-09-11 新增待处理项：[MaterialGraph 双资产路径残留](../issues/2026-09-11-material-graph-dual-asset-path.md)。
-用户明确要求暂缓，本轮仅记录，不修改实现；历史验收结果不表示该项已完成。
+2026-09-12 更新：[MaterialGraph 双资产路径清理](../issues/2026-09-11-material-graph-dual-asset-path.md)
+已按后续用户授权完成；单一 Shader 创作链及尚未完成的验收见
+[统一 Shader 实施记录](../issues/2026-09-11-unified-shader-implementation.md)。历史全引擎验收不能替代本次改动的验证。
 
 本次 C01–C18 收口的当前状态与阻断项统一维护在
 [2026-09-08 实现交付与集中验收](ENGINE_CLOSURE_IMPLEMENTATION_2026_09_08.md)；

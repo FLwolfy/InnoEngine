@@ -6,6 +6,7 @@ using Inno.Assets;
 using Inno.Assets.Pipeline;
 using Inno.Build.Toolchains.Bgfx.Tools;
 using Inno.Core.Serialization;
+using Inno.Extensibility.Types;
 
 namespace Inno.Build.Platform.Windows;
 
@@ -25,11 +26,13 @@ public sealed class WindowsX64GameBuildTarget : IGameBuildTarget
     /// <param name="serialization">
     /// The serialization registry that owns Shader IR contracts.
     /// </param>
+    /// <param name="types">The active shader extension generation owner.</param>
     public WindowsX64GameBuildTarget(
         AssetPipeline assets,
-        SerializationRegistry serialization)
+        SerializationRegistry serialization,
+        TypeCatalog types)
     {
-        m_contentCompiler = BgfxGameContentCompiler.CreateWindowsX64(assets, serialization);
+        m_contentCompiler = BgfxGameContentCompiler.CreateWindowsX64(assets, serialization, types);
     }
 
     /// <summary>

@@ -33,7 +33,7 @@ public sealed class EditorDocumentContext
     /// <summary>
     /// Gets the normalized project asset path.
     /// </summary>
-    public string assetPath { get; }
+    public string assetPath { get; internal set; }
 
     /// <summary>
     /// Gets the stable provider identity used to recover across extension reload.

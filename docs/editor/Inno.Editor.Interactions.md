@@ -183,6 +183,32 @@ if (panelFocused)
 
 `IEditorSelectionCoordinator` 是给会替换对象实例的 host feature 使用的窄接口，只暴露 `selectedTarget` 与 `SetSelection`。当前 `EditorInteractions` 实现该接口；extension activator 可按此接口注入同一个稳定 interaction instance。普通 Panel 仍应使用 `EditorInteraction.Select()`，只有 Scene generation/Play Mode 这类必须在原子替换期间重绑 persistent identity 的基础设施才依赖 coordinator。
 
+## Scene 与图画布的共享平面导航
+
+`EditorPlanarNavigation` 是不依赖 ImGui、Assets 或 Scene 的公开输入状态机；Scene View 与 Shader Editor 共用它，
+坐标均为逻辑像素，表现后端负责 framebuffer DPI 换算。
+
+| API | 行为 |
+| --- | --- |
+| `isPanning` | 只读，表示当前画布持有平移手势，包括指针已离开画布时 |
+| `Update(hovered, primaryPressed, middlePressed, primaryDown, middleDown, alt, allowAltPrimary)` | 悬停时开始中键或 Alt 左键手势；用全局按钮 down 状态释放捕获。`allowAltPrimary=false` 可把 Alt 左键留给 3D orbit，中键不受影响 |
+| `Cancel()` | Esc、失去文档、关闭画布时明确释放捕获 |
+| `WheelFactor(wheel, sensitivity=0.16f)` | 公用指数缩放倍率；拒绝非有限输入与非正 sensitivity，极端输入限幅以保持有限结果 |
+| `ZoomOrigin(origin, pivot, previousScale, nextScale)` | 用缩放前后倍率重算屏幕原点，保持鼠标下的内容坐标不变；拒绝非有限或非正倍率 |
+
+平移/缩放属于视图状态，不进入数据 History。每帧传入全局按钮状态，不能只在鼠标悬停时调用 `Update`，否则窗口外
+释放会丢失。它不拥有场景或图的 live object，也不代替节点拖动、3D orbit、飞行和业务工具的状态机。
+
+```csharp
+using System.Numerics;
+using Inno.Editor.Interactions;
+
+static Vector2 Zoom(Vector2 origin, Vector2 cursor, float previous, float next)
+    => EditorPlanarNavigation.ZoomOrigin(origin, cursor, previous, next);
+```
+
+脚本通过 Editor-only 逻辑命名空间 `InnoEditor.Interactions` 使用已导出的类型；上例为宿主源码写法。
+
 ## Drag and Drop
 
 ```csharp

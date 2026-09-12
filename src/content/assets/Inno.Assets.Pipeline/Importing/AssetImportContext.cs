@@ -54,6 +54,7 @@ public sealed class AssetImportContext
     /// <param name="sourceReader">
     /// Reader for controlled source dependencies in the current mount snapshot.
     /// </param>
+    /// <param name="artifacts">Named artifact lookup bound to the same owner generation.</param>
     internal AssetImportContext(
         string relativePath,
         string absolutePath,
@@ -64,7 +65,8 @@ public sealed class AssetImportContext
         SerializationRegistry serialization,
         IAssetReferenceResolver references,
         Func<string, Type, AssetObject?> dependencyResolver,
-        Func<string, ReadOnlyMemory<byte>> sourceReader)
+        Func<string, ReadOnlyMemory<byte>> sourceReader,
+        IAssetArtifactLookup artifacts)
     {
         assetPath = AssetPath.Parse(relativePath ?? throw new ArgumentNullException(nameof(relativePath)));
         this.absolutePath = absolutePath ?? throw new ArgumentNullException(nameof(absolutePath));
@@ -82,6 +84,19 @@ public sealed class AssetImportContext
         m_dependencyResolver = dependencyResolver
             ?? throw new ArgumentNullException(nameof(dependencyResolver));
         m_sourceReader = sourceReader ?? throw new ArgumentNullException(nameof(sourceReader));
+        m_artifacts = artifacts ?? throw new ArgumentNullException(nameof(artifacts));
+    }
+
+    private readonly IAssetArtifactLookup m_artifacts;
+
+    /// <summary>Acquires an immutable dependency output and records its invalidation dependency automatically.</summary>
+    /// <param name="assetId">Persistent dependency identity.</param>
+    /// <param name="outputName">Stable named output protocol.</param>
+    /// <returns>A caller-owned lease that must be disposed after reading.</returns>
+    public ArtifactLease AcquireArtifact(Guid assetId, string outputName)
+    {
+        DependsOnArtifact(assetId);
+        return m_artifacts.AcquireArtifact(assetId, outputName);
     }
 
     /// <summary>
@@ -131,6 +146,12 @@ public sealed class AssetImportContext
     /// Gets the narrow structured serialization API bound to this importer candidate.
     /// </summary>
     public AssetSerializationServices services { get; }
+
+    /// <summary>
+    /// Gets the settings restored from this source's sidecar against the isolated import generation.
+    /// The value is detached and changes made during import are not saved to the sidecar.
+    /// </summary>
+    public ISerializable? importSettings { get; internal set; }
 
     /// <summary>
     /// Gets the normalized lower-case source extension.

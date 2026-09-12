@@ -7,12 +7,14 @@
     <WarningsAsErrors>$(WarningsAsErrors);CS1572;CS1573;CS1591</WarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../../src/foundation/core/Inno.Core.Execution/Inno.Core.Execution.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\native\Inno.Native.Bgfx.Tools\Inno.Native.Bgfx.Tools.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\pipeline\Inno.Build\Inno.Build.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\src\content\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\src\content\assets\Inno.Assets.Pipeline\Inno.Assets.Pipeline.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../../../src/services/rendering/Inno.Rendering.Shaders/Inno.Rendering.Shaders.csproj" />
     <ProjectReference Include="..\..\..\src\services\rendering\Inno.Rendering\Inno.Rendering.csproj" />
     <ProjectReference Include="..\..\..\src\services\rendering\Inno.Rendering.Assets\Inno.Rendering.Assets.csproj" />
   </ItemGroup>

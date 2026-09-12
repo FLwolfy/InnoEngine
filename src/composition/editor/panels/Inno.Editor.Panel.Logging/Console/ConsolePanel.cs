@@ -419,9 +419,21 @@ internal sealed class ConsolePanel : EditorPanel
                 : $"{fileText}:{entry.line}"
             : fileText;
 
-        if (NativeImGui.BeginTable("##ConsoleEntryDetails", 2, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.NoHostExtendX))
+        // These cards may be culled between frames; do not rely on a previous frame's auto-fit width.
+        float labelWidth = NativeImGui.CalcTextSize("Session:").X;
+        float availableWidth = NativeImGui.GetContentRegionAvail().X;
+        if (availableWidth < labelWidth + NativeImGui.CalcTextSize("Diagnostic").X + NativeImGui.GetStyle().CellPadding.X * 4)
         {
-            NativeImGui.TableSetupColumn("##label", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize);
+            DrawStackedField("Kind:", entry.kind.ToString());
+            DrawStackedField("File:", fileWithLineText);
+            DrawStackedField("Source:", sourceText);
+            if (entry.sessionId.isAssigned) DrawStackedField("Session:", entry.sessionId.ToString());
+            DrawStackedField("Time:", timeText);
+        }
+        else if (NativeImGui.BeginTable("##ConsoleEntryDetails", 2, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.NoSavedSettings,
+            new Vector2(availableWidth, 0)))
+        {
+            NativeImGui.TableSetupColumn("##label", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoResize, labelWidth);
             NativeImGui.TableSetupColumn("##value", ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoResize, 1f);
             DrawDetailFieldRow("Kind:", entry.kind.ToString());
             DrawDetailFieldRow("File:", fileWithLineText);
@@ -466,8 +478,16 @@ internal sealed class ConsolePanel : EditorPanel
     {
         NativeImGui.TableNextRow();
         _ = NativeImGui.TableSetColumnIndex(0);
-        NativeImGui.TextUnformatted(label);
+        NativeImGui.TextDisabled(label);
         _ = NativeImGui.TableSetColumnIndex(1);
+        NativeImGui.PushTextWrapPos(0f);
+        NativeImGui.TextUnformatted(value);
+        NativeImGui.PopTextWrapPos();
+    }
+
+    private static void DrawStackedField(string label, string value)
+    {
+        NativeImGui.TextDisabled(label);
         NativeImGui.PushTextWrapPos(0f);
         NativeImGui.TextUnformatted(value);
         NativeImGui.PopTextWrapPos();

@@ -21,6 +21,7 @@ internal sealed class AssetMeta : ISerializable
     [SerializableProperty] internal AssetImportDependencyData[] importDependencies { get; set; } = [];
     [SerializableProperty] internal int importStatus { get; set; } = (int)AssetImportStatus.Pending;
     [SerializableProperty] internal string importerImplementationFingerprint { get; set; } = string.Empty;
+    [SerializableProperty] internal string importerSettingsHash { get; set; } = string.Empty;
     [SerializableProperty] internal string artifactKey { get; set; } = string.Empty;
     [SerializableProperty] internal string lastSuccessfulArtifactKey { get; set; } = string.Empty;
     [SerializableProperty] internal string[] diagnostics { get; set; } = [];
