@@ -2,6 +2,7 @@ using Inno.References;
 using Inno.Runtime.Contracts;
 using Inno.Core.Diagnostics;
 using Inno.Core.Execution;
+using Inno.Core.Identity;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -31,6 +32,7 @@ public sealed class RenderRuntime : RuntimeSubsystem, IRenderRequestSink
     private readonly RenderExtensionRegistry m_extensions;
     private readonly GraphicsSettingsState m_graphicsSettings;
     private readonly Dictionary<RenderPipelineAsset, GenerationCacheEntry> m_generations = [];
+    private readonly List<RenderPipelineAsset> m_retiredAssets = [];
     private readonly List<RenderRequest> m_pendingRequests = [];
     private readonly List<RenderRequest> m_currentRequests = [];
     private readonly List<IRenderFrameGraphContributor> m_contributors = [];
@@ -736,7 +738,7 @@ public sealed class RenderRuntime : RuntimeSubsystem, IRenderRequestSink
 
         if (!m_generations.TryGetValue(asset, out GenerationCacheEntry? entry))
         {
-            entry = new GenerationCacheEntry();
+            entry = new GenerationCacheEntry(asset);
             m_generations.Add(asset, entry);
         }
 
@@ -799,6 +801,7 @@ public sealed class RenderRuntime : RuntimeSubsystem, IRenderRequestSink
 
     private void PruneRetiredGenerations()
     {
+        PruneRetiredAssets();
         RenderExtensionRegistry.Snapshot snapshot;
         try
         {
@@ -838,6 +841,24 @@ public sealed class RenderRuntime : RuntimeSubsystem, IRenderRequestSink
     private void EnsureRequestProviders()
     {
         m_requestProviders = m_extensions.extensions.providers;
+    }
+
+    private void PruneRetiredAssets()
+    {
+        try
+        {
+            foreach ((RenderPipelineAsset asset, GenerationCacheEntry entry) in m_generations)
+            {
+                if (entry.hasAssetOwner && !ReferenceEquals(entry.assetIdentity.Resolve<RenderPipelineAsset>(), asset))
+                    m_retiredAssets.Add(asset);
+            }
+            foreach (RenderPipelineAsset asset in m_retiredAssets)
+            {
+                m_extensions.Retire(m_generations[asset].lastGood);
+                m_generations.Remove(asset);
+            }
+        }
+        finally { m_retiredAssets.Clear(); }
     }
 
     private IReadOnlyList<IRenderFrameGraphContributor> PrepareContributors()
@@ -957,8 +978,10 @@ public sealed class RenderRuntime : RuntimeSubsystem, IRenderRequestSink
         }
     }
 
-    private sealed class GenerationCacheEntry
+    private sealed class GenerationCacheEntry(RenderPipelineAsset asset)
     {
+        internal readonly Identity assetIdentity = asset.identity;
+        internal readonly bool hasAssetOwner = asset.identity.runtimeIdentity.HasValue;
         internal long attemptedTypeCacheVersion { get; set; } = -1;
         internal string? attemptedFingerprint { get; set; }
         internal RenderPipelineGeneration? lastGood { get; set; }
@@ -998,6 +1021,8 @@ public sealed class RenderRuntime : RuntimeSubsystem, IRenderRequestSink
 
         internal static RenderRuntimeReloadSession Create(RenderRuntime owner)
         {
+            // Disposed sessions must not contribute obsolete assets to the next extension generation.
+            owner.PruneRetiredAssets();
             var previous = new Dictionary<RenderPipelineAsset, GenerationState>();
             foreach ((RenderPipelineAsset asset, GenerationCacheEntry entry) in owner.m_generations)
             {

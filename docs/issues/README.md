@@ -10,6 +10,7 @@
 
 | 日期 | 页面 | 范围 |
 | --- | --- | --- |
+| 2026-09-13 | [Scene View System 失效与 Play 后插件退休修复](2026-09-13-scene-scope-plugin-retirement.md) | GC 根定位、Pipeline owner 清理、298 项测试、三轮 Metal 重载及 Scope 零分配 |
 | 2026-09-13 | [Shader Target 启动导入时序修复](2026-09-13-shader-target-import-lifecycle.md) | 扩展发现等待、候选严格校验、依赖传播、380 项测试及 Metal 冷/暖启动 |
 | 2026-09-13 | [Shader 创作体系阶段验收](2026-09-13-shader-authoring-validation.md) | P1–P6 代码边界、完整 Metal 脚本与 Player 证据；锁屏 UI、全帧性能与既有测试失败仍未收口 |
 | 2026-09-12 | [Shader 创作体系实施记录](2026-09-12-shader-authoring-execution.md) | 持续实施中的代码边界、验证结果与未完成验收；不是完成声明 |

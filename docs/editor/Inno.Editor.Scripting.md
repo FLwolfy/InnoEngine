@@ -122,7 +122,7 @@ scripts.ReloadScripting();
 scripts.ReloadPlugins();
 ```
 
-三个 public 操作只排队；内部 scheduler 在 Editor 主线程 focus safe point 捕获已提交 snapshot，后台以串行 Roslyn assembly emit 编译，并仅在候选原子激活的短安全点暂停后续 Module 更新。请求强度为 Recompile < ReloadScripting < ReloadPlugins，并发请求合并为最强项，同时只允许一个 compiler/reload transaction。若新请求在编译期间到达，本次结果会被标记为 superseded 而不发布中间 generation，随后以合并后的最强请求重新取得 source/plugin snapshot。后台编译不调用全局 AssetPipeline，也不冻结 Editor 输入、绘制或普通 Panel 更新。
+三个 public 操作只排队；内部 scheduler 在 Editor 主线程安全点捕获已提交 snapshot，后台以串行 Roslyn assembly emit 编译，并仅在候选原子激活的短安全点暂停后续 Module 更新。文件变化产生的自动请求仍等待窗口焦点；菜单或 Play/Export API 的显式请求不因窗口失焦而停留在队列中。请求强度为 Recompile < ReloadScripting < ReloadPlugins，并发请求合并为最强项，同时只允许一个 compiler/reload transaction。若新请求在编译期间到达，本次结果会被标记为 superseded 而不发布中间 generation，随后以合并后的最强请求重新取得 source/plugin snapshot。后台编译不调用全局 AssetPipeline，也不冻结 Editor 输入、绘制或普通 Panel 更新。
 
 Assembly reload 使用一组有顺序的 transaction participant，而不是提交后再通知：Play Mode 首先在 candidate 激活前退出并释放瞬态 Runtime Session；TypeRegistry 随后激活候选 snapshot，AssetPipeline 在候选 generation 下完成 Source Catalog 对账；若存在 Plugin source 候选，再临时激活其隔离 Mount/Catalog/Settings；Edit Scene 随后迁移对象，Rendering Runtime 预构造所有活动 Pipeline/Feature。只有全部 participant 与外部 generation 同步成功才提交；后续失败会逆序 Rollback，恢复旧 Mount、Settings、Pipeline/Feature、Scene、TypeCache 和 Asset Catalog。Play simulation 属于一次性运行状态，quiesce 后即使 candidate 回滚也保持 Edit，不从旧 generation 重建。完整提交后才通知 Source Mount 观察者、释放旧 Loader/渲染实例并开始旧 ALC 卸载验证。
 

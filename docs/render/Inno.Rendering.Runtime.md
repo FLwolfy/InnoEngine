@@ -88,6 +88,7 @@ Runtime 不把一次请求假定为整个 target 的唯一 owner。请求仍按 
 
 ## 资源与代际
 
+- Pipeline 缓存记录资产注册时的 Identity。Session 退出、资产卸载或身份替换后，下一帧及 reload 候选捕获前按原 owner 解析身份；失效条目先通过共享退休协议释放 Pipeline/Feature，再移除缓存。不能把已退出 Play 世界的 Pipeline 带入下一代。未注册的宿主自建 Pipeline 仍由 Runtime 生命周期拥有。
 - `RenderResourceService` 以资产 Persistent ID、内容状态和设备 generation 缓存 Texture、Geometry、Program 与 Material 绑定。
 - Provider 可按 Stable Resource ID + revision 原子获取原始 Graphics/Compute Pipeline；候选创建失败不会销毁旧 handle，因此预编译程序不依赖 Material helper 或运行时 shaderc。
 - 资源替换和销毁只发生在帧安全点；旧资源延迟释放。

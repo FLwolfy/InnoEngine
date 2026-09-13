@@ -34,6 +34,7 @@ internal sealed class EditorScripting : EditorModule, IEditorScriptCompilation
     private bool m_blockFollowingUpdates;
     private bool m_hideCompilationOnNextUpdate;
     private bool m_showCompilation;
+    private bool m_explicitReloadPending;
     private string? m_activationFailure;
     private long m_nextRequestId;
 
@@ -212,10 +213,11 @@ internal sealed class EditorScripting : EditorModule, IEditorScriptCompilation
         }
         if (m_manager.isFaulted)
             return;
-        if (!context.isFocused)
+        if (!context.isFocused && !m_explicitReloadPending)
             return;
         if (m_manager.TryCompilePending(out Task<ScriptCompilationResult>? compilation))
         {
+            m_explicitReloadPending = false;
             m_compilation = compilation;
             BeginCompilationTicket();
             m_showCompilation = true;
@@ -393,6 +395,7 @@ internal sealed class EditorScripting : EditorModule, IEditorScriptCompilation
         if (supersedeCurrentTicket)
             m_currentTicket?.MarkSuperseded();
         request(manager);
+        m_explicitReloadPending = true;
         m_hideCompilationOnNextUpdate = false;
         m_showCompilation = true;
     }
@@ -408,6 +411,7 @@ internal sealed class EditorScripting : EditorModule, IEditorScriptCompilation
 
     private void DisposeManager()
     {
+        m_explicitReloadPending = false;
         if (m_manager is null)
         {
             ScriptDiagnosticPublisher.ClearAll();
