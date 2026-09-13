@@ -26,16 +26,24 @@ internal sealed class ShaderAssetImporter : AssetImporter<ShaderAsset>
         GraphDocument graph = GraphDocumentCodec.Decode(context.sourceBytes.Span, context.serialization);
         var dependencies = new AssetDependencyCollection();
         SerializationContext owner = AssetSerializationContext.Create(context.references, dependencies);
-        byte[] captured = ShaderGraphArtifact.Capture(graph, context.types, context.serialization, owner, (id, path) =>
+        byte[] captured;
+        try
         {
-            context.DependsOnArtifact(id);
-            AssetObject resolved = context.references.Resolve(id, context.services.GetStableTypeId<ShaderFunctionAsset>(),
-                path, typeof(ShaderFunctionAsset), $"shader.sources[{id}]");
-            if (resolved is not ShaderFunctionAsset { isMissing: false } source)
-                throw new InvalidDataException($"Shader function '{id}' is unavailable. Its graph reference is preserved.");
-            using ArtifactLease sourceLease = context.AcquireArtifact(source.identity.persistentId, ShaderSourceBundle.outputName);
-            return File.ReadAllBytes(sourceLease.info.absolutePath);
-        }, cancellationToken);
+            captured = ShaderGraphArtifact.Capture(graph, context.types, context.serialization, owner, (id, path) =>
+            {
+                context.DependsOnArtifact(id);
+                AssetObject resolved = context.references.Resolve(id, context.services.GetStableTypeId<ShaderFunctionAsset>(),
+                    path, typeof(ShaderFunctionAsset), $"shader.sources[{id}]");
+                if (resolved is not ShaderFunctionAsset { isMissing: false } source)
+                    throw new InvalidDataException($"Shader function '{id}' is unavailable. Its graph reference is preserved.");
+                using ArtifactLease sourceLease = context.AcquireArtifact(source.identity.persistentId, ShaderSourceBundle.outputName);
+                return File.ReadAllBytes(sourceLease.info.absolutePath);
+            }, cancellationToken);
+        }
+        catch (ShaderTargetUnavailableException exception)
+        {
+            throw new AssetImportExtensionUnavailableException("inno.rendering.shader-target", exception.targetId);
+        }
         ShaderDefinition definition = ShaderGraphArtifact.ReadDefinition(captured, context.serialization, owner);
         // Function dependencies are authoring-only; texture defaults remain ordinary runtime references.
         _ = context.serialization.Serialize(definition, owner);

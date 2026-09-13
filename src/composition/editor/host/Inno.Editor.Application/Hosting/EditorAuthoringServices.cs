@@ -82,6 +82,7 @@ internal sealed class EditorAuthoringServices : IDisposable
                 engineHost.logs,
                 defaultOptions with
             {
+                deferUnavailableExtensions = true,
                 sourceMounts =
                 [
                     projectMount,

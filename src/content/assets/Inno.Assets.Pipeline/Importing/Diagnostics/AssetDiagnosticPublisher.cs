@@ -269,6 +269,7 @@ internal sealed class AssetDiagnosticPublisher : IDisposable
             return [];
         return messages.Select(message => status switch
         {
+            AssetImportStatus.Pending => Diagnostic.Info("ASSET-IMPORT-PENDING", message, location),
             AssetImportStatus.Failed => Diagnostic.Error("ASSET-IMPORT", message, location),
             AssetImportStatus.Conflict => Diagnostic.Error("ASSET-CONFLICT", message, location),
             _ => Diagnostic.Warning("ASSET-IMPORT", message, location)

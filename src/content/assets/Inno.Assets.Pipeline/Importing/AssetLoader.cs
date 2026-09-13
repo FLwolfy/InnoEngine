@@ -52,6 +52,8 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
     private readonly ConditionalWeakTable<AssetObject, AssetDependencySet> m_dependencyRetention = new();
     private readonly HashSet<string> m_activeImports = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Guid> m_pendingImportIds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (long generation, AssetSourceFileStamp source, AssetSourceFileStamp metadata,
+        string kind, string id)> m_unavailableImports = new(StringComparer.OrdinalIgnoreCase);
     private readonly AssetArtifactStore m_artifacts;
     private readonly AssetCatalogStore m_catalog;
     private readonly AssetDiagnosticPublisher m_diagnostics;
@@ -71,6 +73,8 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
     private int m_admittedOperations;
     private bool m_retirementActive;
     private bool m_identitiesActive = true;
+    private bool m_deferUnavailableExtensions;
+    private bool m_preserveInitialExtensionDiscovery;
     private LifetimeScope? m_retirement;
     private AssetSourceMetadataStage? m_sourceMetadataStage;
     private long m_importerRegistryVersion = -1;
@@ -375,6 +379,8 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
                     candidateLibraryRoot,
                     sourcePolicy ?? m_sourcePolicy);
                 candidateLoader.m_identitiesActive = false;
+                candidateLoader.m_deferUnavailableExtensions = true;
+                candidateLoader.m_preserveInitialExtensionDiscovery = m_deferUnavailableExtensions;
                 candidateLoader.m_diagnostics.SetActive(false);
                 candidateLoader.m_sourceMetadataStage = new AssetSourceMetadataStage();
                 return new AssetCatalogCandidate(libraryRoot, candidateLibraryRoot, candidateLoader);
@@ -411,13 +417,34 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
     /// <see langword="true"/> when an importer handled the source.
     /// </returns>
     public bool Import(AssetPath path)
-        => Execute(() => ImportLocked(NormalizeAssetPath(path)));
+        => Execute(() => ImportLocked(NormalizeAssetPath(path), force: true));
 
     /// <summary>
     /// Reconciles source files, metadata, artifacts and the in-memory catalog.
     /// </summary>
     public void Rescan()
         => Execute(RescanLocked);
+
+    internal void DeferUnavailableExtensions()
+        => Execute(() => { m_deferUnavailableExtensions = true; });
+
+    internal void CompleteExtensionDiscovery()
+        => Execute(() =>
+        {
+            if (!m_deferUnavailableExtensions)
+                return;
+            m_deferUnavailableExtensions = false;
+            m_unavailableImports.Clear();
+            RescanLocked();
+        });
+
+    internal void ActivateExtensionDiscovery()
+    {
+        // Assembly discovery may publish built-in catalogs before the initial script compilation.
+        // Only the composition host can close that initial discovery boundary.
+        if (!m_preserveInitialExtensionDiscovery)
+            CompleteExtensionDiscovery();
+    }
 
     /// <summary>
     /// Loads a canonical asset by isolated source path.
@@ -617,6 +644,7 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
         {
             return ResolveReference(persistentId, stableTypeId, lastKnownPath, expectedType);
         }
+        catch (AssetImportExtensionUnavailableException) { throw; }
         catch (Exception exception)
         {
             throw new InvalidOperationException(
@@ -1109,10 +1137,12 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
         }
     }
 
-    private bool ImportLocked(string relativePath)
+    private bool ImportLocked(string relativePath, bool force = false)
     {
         if (m_activeImports.Contains(relativePath))
             return true;
+        if (!force && IsExtensionImportUnchanged(relativePath))
+            return false;
         if (IsSourceIgnored(relativePath, isDirectory: false))
             return false;
         string sourcePath = GetSourcePath(relativePath);
@@ -1173,6 +1203,13 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
                 try
                 {
                     CommitBuildLocked(build, writeSource: false, sourceBytes);
+                    if (m_unavailableImports.Remove(relativePath, out var recovered))
+                    {
+                        foreach (string dependent in m_unavailableImports
+                            .Where(pair => pair.Value.kind == recovered.kind && pair.Value.id == recovered.id)
+                            .Select(static pair => pair.Key).ToArray())
+                            m_unavailableImports.Remove(dependent);
+                    }
                 }
                 finally
                 {
@@ -1227,24 +1264,63 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
         record.meta.sourceHash = sourceBytes.Length == 0 ? string.Empty : ComputeSha256Hex(sourceBytes);
         record.meta.importerId = importer.importerId;
         record.meta.importerImplementationFingerprint = GetImporterImplementationFingerprint(importer);
+        record.meta.deploymentScope = (int)importer.deploymentScope;
         if (record.meta.stableAssetTypeId == Guid.Empty &&
             m_types.TryGetTypeRef(importer.targetAssetType, out TypeRef importerTypeRef))
         {
             record.meta.stableAssetTypeId = importerTypeRef.stableId;
             record.stableTypeId = importerTypeRef.stableId;
         }
-        record.meta.importStatus = (int)AssetImportStatus.Failed;
-        record.meta.diagnostics = [$"{exception.GetType().Name}: {exception.Message}"];
+        AssetImportExtensionUnavailableException? unavailable = exception as AssetImportExtensionUnavailableException;
+        bool extensionUnavailable = unavailable is not null;
+        bool pending = extensionUnavailable && m_deferUnavailableExtensions;
+        record.meta.importStatus = (int)(pending ? AssetImportStatus.Pending : AssetImportStatus.Failed);
+        record.meta.diagnostics = [pending
+            ? $"Waiting for authoring extension publication (or recovery after compilation failure). {exception.Message}"
+            : $"{exception.GetType().Name}: {exception.Message}"];
         AddOrReplaceRecordLocked(record);
         // Failure belongs to the writable catalog, not the immutable source being rejected.
         if (!GetMount(relativePath).isReadOnly &&
             (ReadMetadata(GetMetaPath(relativePath)) is null || TryReadSourceMeta(GetMetaPath(relativePath), out _)))
             WriteSourceMeta(record.meta);
         CommitCatalogLocked();
+        if (extensionUnavailable)
+        {
+            AssetSourceFileStamp.TryCapture(GetSourcePath(relativePath), out AssetSourceFileStamp sourceStamp);
+            AssetSourceFileStamp.TryCapture(GetMetaPath(relativePath), out AssetSourceFileStamp metadataStamp);
+            m_unavailableImports[relativePath] = (m_types.current.version, sourceStamp, metadataStamp,
+                unavailable!.extensionKind, unavailable.extensionId);
+        }
+        else
+            m_unavailableImports.Remove(relativePath);
+        if (pending)
+            return;
         m_log.Write(
             LogLevel.Error,
             "Asset import for '{0}' failed: {1}",
             [relativePath, exception]);
+    }
+
+    private bool IsExtensionImportUnchanged(string relativePath)
+    {
+        if (!m_unavailableImports.TryGetValue(relativePath, out var previous) ||
+            previous.generation != m_types.current.version ||
+            !AssetSourceFileStamp.TryCapture(GetSourcePath(relativePath), out AssetSourceFileStamp sourceStamp) ||
+            sourceStamp != previous.source)
+            return false;
+        AssetSourceFileStamp.TryCapture(GetMetaPath(relativePath), out AssetSourceFileStamp metadataStamp);
+        if (metadataStamp != previous.metadata)
+            return false;
+        AssetRecord? record = FindRecordLocked(relativePath);
+        if (record is null)
+            return false;
+        foreach (AssetImportDependencyData value in record.meta.importDependencies)
+        {
+            AssetImportDependencyData dependency = value;
+            if (ComputeImportDependencyFingerprintLocked(ref dependency, out _) != value.fingerprint)
+                return false;
+        }
+        return true;
     }
 
     private ImportBuild BuildImportLocked(
@@ -1587,7 +1663,10 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
         if (record is null || stale)
         {
             if (!ImportLocked(relativePath))
+            {
+                record = FindRecordLocked(relativePath);
                 return record is null ? null : LoadRecordLocked(record, requestedAssetType);
+            }
             record = FindRecordLocked(relativePath);
         }
         return record is null ? null : LoadRecordLocked(record, requestedAssetType);
@@ -1624,6 +1703,12 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
 
     private AssetObject? LoadRecordLocked(AssetRecord record, Type requestedAssetType)
     {
+        if (string.IsNullOrEmpty(record.meta.artifactKey) && record.meta.assetStateBytes.Length == 0)
+        {
+            if (m_activeImports.Count != 0 && m_unavailableImports.TryGetValue(record.relativePath, out var unavailable))
+                throw new AssetImportExtensionUnavailableException(unavailable.kind, unavailable.id);
+            return null;
+        }
         Type? actualType = ResolveRecordType(record);
         if (actualType is null || !requestedAssetType.IsAssignableFrom(actualType))
             return null;
@@ -1678,7 +1763,8 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
             // activated yet. Do not let that temporary type gap abort the entire object graph;
             // AttachDependenciesLocked installs the identity-preserving placeholder and a later
             // registry generation rehydrates the reference from the retained catalog record.
-            if (dependencyRecord is not null && ResolveRecordType(dependencyRecord) is not null)
+            if (dependencyRecord is not null && ResolveRecordType(dependencyRecord) is not null &&
+                (dependencyRecord.meta.assetStateBytes.Length != 0 || !string.IsNullOrEmpty(dependencyRecord.meta.artifactKey)))
                 PrepareShellsLocked(dependencyRecord, transaction);
         }
     }
@@ -1782,7 +1868,7 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
         {
             return false;
         }
-        return ResolveRecordType(record) is null;
+        return ResolveRecordType(record) is null || m_unavailableImports.ContainsKey(record.relativePath);
     }
 
     private AssetDependency[] ResolveDeclaredDependenciesLocked(AssetImportContext context)
@@ -1963,7 +2049,9 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
                 && !record.meta.isTombstone
                 && !AssetSample.IsRuntimeExcluded(AssetPath.Parse(record.relativePath), isDirectory: false)
                 && (record.meta.importStatus == (int)AssetImportStatus.Imported
-                    || !string.IsNullOrEmpty(record.meta.artifactKey)))
+                    || !string.IsNullOrEmpty(record.meta.artifactKey)
+                    || (!string.IsNullOrEmpty(record.meta.importerId)
+                        && record.meta.importStatus is (int)AssetImportStatus.Pending or (int)AssetImportStatus.Failed)))
             .OrderBy(static record => record.relativePath, StringComparer.Ordinal)
             .ToArray();
         AssetRecord? invalidScope = imported.FirstOrDefault(static record =>

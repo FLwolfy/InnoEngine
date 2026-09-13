@@ -39,6 +39,8 @@ public sealed class AssetLoaderTests : IDisposable
         _ = typeof(DeferredAssetImporter);
         _ = typeof(TestBuildProcessor);
         DeferredAssetImporter.isAvailable = true;
+        ExtensionDependentImporter.available = false;
+        ExtensionDependentImporter.attempts = 0;
         m_identityScope = m_identities.EnterScope();
         m_diagnosticScope = m_diagnostics.EnterScope();
         m_modules = new ModuleHost(new ModuleHostOptions
@@ -84,6 +86,142 @@ public sealed class AssetLoaderTests : IDisposable
         Assert.True(loader.TryGetInfo(new AssetPath(source, "README.md"), out AssetInfo? failure));
         Assert.Equal(AssetImportStatus.Failed, failure!.status);
         Assert.Contains(failure.diagnostics, value => value.Contains("Read-only source metadata", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ExtensionDiscoveryDefersOnlyMissingExtensionsAndRetriesOnceWhenCompleted(bool available)
+    {
+        using TestWorkspace workspace = new();
+        workspace.WriteText("surface.extensionasset", "authored");
+        var sink = new TestDiagnosticSink();
+        m_diagnostics.RegisterSink(sink);
+        using var pipeline = new AssetPipeline(m_modules, m_types, m_serialization, m_identities,
+            m_diagnostics, m_logs, new AssetPipelineOptions
+            { assetRoot = workspace.assetRoot, libraryRoot = workspace.libraryRoot, deferUnavailableExtensions = true });
+        AssetPath path = AssetPath.Project("surface.extensionasset");
+        Assert.True(pipeline.TryGetInfo(path, out AssetInfo? pending));
+        Assert.Equal(AssetImportStatus.Pending, pending!.status);
+        Assert.Equal(DiagnosticSeverity.Info, Assert.Single(Assert.Single(sink.reports.Values).diagnostics).severity);
+        byte[] sidecar = System.IO.File.ReadAllBytes(workspace.SourcePath("surface.extensionasset.imeta"));
+        int attempts = ExtensionDependentImporter.attempts;
+        for (int i = 0; i < 5; i++) pipeline.Rescan();
+        Assert.Equal(attempts, ExtensionDependentImporter.attempts);
+        Assert.Throws<InvalidOperationException>(() => pipeline.ExportRuntimeArtifacts(Path.Combine(workspace.libraryRoot, "PendingExport")));
+
+        ExtensionDependentImporter.available = available;
+        pipeline.CompleteExtensionDiscovery();
+        Assert.True(pipeline.TryGetInfo(path, out AssetInfo? completed));
+        Assert.Equal(available ? AssetImportStatus.Imported : AssetImportStatus.Failed, completed!.status);
+        if (available)
+            Assert.Empty(sink.reports);
+        else
+            Assert.Equal(DiagnosticSeverity.Error, Assert.Single(Assert.Single(sink.reports.Values).diagnostics).severity);
+        Assert.Equal(pending.persistentId, completed.persistentId);
+        Assert.Equal(sidecar, System.IO.File.ReadAllBytes(workspace.SourcePath("surface.extensionasset.imeta")));
+        Assert.Equal("authored", System.IO.File.ReadAllText(workspace.SourcePath("surface.extensionasset")));
+        attempts = ExtensionDependentImporter.attempts;
+        for (int i = 0; i < 5; i++) pipeline.Rescan();
+        Assert.Equal(attempts, ExtensionDependentImporter.attempts);
+        if (!available)
+        {
+            Assert.Throws<InvalidOperationException>(() => pipeline.ExportRuntimeArtifacts(Path.Combine(workspace.libraryRoot, "MissingExport")));
+            ExtensionDependentImporter.available = true;
+            Assert.True(pipeline.Import(path));
+            Assert.True(pipeline.TryGetInfo(path, out AssetInfo? restored));
+            Assert.Equal(AssetImportStatus.Imported, restored!.status);
+            Assert.Equal(pending.persistentId, restored.persistentId);
+        }
+        m_diagnostics.UnregisterSink(sink);
+    }
+
+    [Fact]
+    public void ReadOnlyExtensionWaitPreservesSidecarAndBecomesStrictAfterDiscovery()
+    {
+        using TestWorkspace workspace = new();
+        using TestWorkspace package = new();
+        package.WriteText("surface.extensionasset", "authored");
+        byte[] metadata = m_serialization.Serialize(new MountedSourceMetadata
+        {
+            persistentId = Guid.NewGuid(), sourceKind = (int)AssetSourceKind.File,
+            importerId = "tests.extension-dependent"
+        });
+        System.IO.File.WriteAllBytes(package.SourcePath("surface.extensionasset.imeta"), metadata);
+        var source = new AssetSourceId("tests.readonly-extension");
+        using var pipeline = new AssetPipeline(m_modules, m_types, m_serialization, m_identities,
+            m_diagnostics, m_logs, new AssetPipelineOptions
+            {
+                assetRoot = workspace.assetRoot, libraryRoot = workspace.libraryRoot,
+                deferUnavailableExtensions = true,
+                sourceMounts = [new(AssetSourceId.project, workspace.assetRoot, false), new(source, package.assetRoot, true)]
+            });
+        var path = new AssetPath(source, "surface.extensionasset");
+        Assert.True(pipeline.TryGetInfo(path, out AssetInfo? pending));
+        Assert.Equal(AssetImportStatus.Pending, pending!.status);
+        Assert.Throws<InvalidDataException>(pipeline.CompleteExtensionDiscovery);
+        Assert.True(pipeline.TryGetInfo(path, out AssetInfo? failed));
+        Assert.Equal(AssetImportStatus.Failed, failed!.status);
+        Assert.Equal(metadata, System.IO.File.ReadAllBytes(package.SourcePath("surface.extensionasset.imeta")));
+        ExtensionDependentImporter.available = true;
+        Assert.True(pipeline.Import(path));
+        Assert.True(pipeline.TryGetInfo(path, out AssetInfo? recovered));
+        Assert.Equal(AssetImportStatus.Imported, recovered!.status);
+        Assert.Equal(pending.persistentId, recovered.persistentId);
+    }
+
+    [Fact]
+    public void DiscoveryDoesNotDeferMalformedContentAndCandidateActivationDoesNotHideMissingExtensions()
+    {
+        using TestWorkspace workspace = new();
+        workspace.WriteText("bad.mutableasset", "!invalid!");
+        using var pipeline = new AssetPipeline(m_modules, m_types, m_serialization, m_identities,
+            m_diagnostics, m_logs, new AssetPipelineOptions
+            { assetRoot = workspace.assetRoot, libraryRoot = workspace.libraryRoot, deferUnavailableExtensions = true });
+        Assert.True(pipeline.TryGetInfo(AssetPath.Project("bad.mutableasset"), out AssetInfo? bad));
+        Assert.Equal(AssetImportStatus.Failed, bad!.status);
+        workspace.WriteText("surface.extensionasset", "authored");
+        pipeline.Rescan();
+        m_modules.Rebuild();
+        Assert.True(pipeline.TryGetInfo(AssetPath.Project("surface.extensionasset"), out AssetInfo? waiting));
+        Assert.Equal(AssetImportStatus.Pending, waiting!.status);
+        ExtensionDependentImporter.available = true;
+        pipeline.CompleteExtensionDiscovery();
+        ExtensionDependentImporter.available = false;
+        workspace.WriteText("surface.extensionasset", "changed before activation");
+        Assert.Throws<InvalidDataException>(m_modules.Rebuild);
+        ExtensionDependentImporter.available = true;
+        m_modules.Rebuild();
+        Assert.True(pipeline.TryGetInfo(AssetPath.Project("surface.extensionasset"), out AssetInfo? recovered));
+        Assert.Equal(AssetImportStatus.Imported, recovered!.status);
+        Assert.Equal(waiting.persistentId, recovered.persistentId);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MissingExtensionPropagatesToImportDependentsWithoutHydratingEmptyArtifacts(bool reference)
+    {
+        using TestWorkspace workspace = new();
+        workspace.WriteText("surface.extensionasset", "authored");
+        using var pipeline = new AssetPipeline(m_modules, m_types, m_serialization, m_identities,
+            m_diagnostics, m_logs, new AssetPipelineOptions
+            { assetRoot = workspace.assetRoot, libraryRoot = workspace.libraryRoot, deferUnavailableExtensions = true });
+        Assert.True(pipeline.TryGetInfo(AssetPath.Project("surface.extensionasset"), out AssetInfo? root));
+        workspace.WriteText("material.extensiondependent", reference ? root!.persistentId.ToString() : "surface.extensionasset");
+        pipeline.Rescan();
+        Assert.True(pipeline.TryGetInfo(AssetPath.Project("material.extensiondependent"), out AssetInfo? pending));
+        Assert.Equal(AssetImportStatus.Pending, pending!.status);
+        Assert.Contains(pending.diagnostics, static text => text.Contains("tests.surface", StringComparison.Ordinal));
+        InvalidOperationException unavailable = Assert.Throws<InvalidOperationException>(() =>
+            pipeline.Load<ExtensionDependentAsset>(AssetPath.Project("surface.extensionasset")));
+        Assert.Null(unavailable.InnerException);
+        ExtensionDependentImporter.available = true;
+        Assert.True(pipeline.Import(AssetPath.Project("surface.extensionasset")));
+        pipeline.Rescan();
+        Assert.True(pipeline.TryGetInfo(AssetPath.Project("material.extensiondependent"), out AssetInfo? restored));
+        Assert.Equal(AssetImportStatus.Imported, restored!.status);
+        Assert.Equal(pending.persistentId, restored.persistentId);
     }
 
     [Theory]
@@ -1858,6 +1996,48 @@ internal sealed class PrivateConstructorAssetImporter : AssetImporter<PrivateCon
 
 [StableTypeId("8d0d31ab-f9ea-4297-b865-e9014ae82a94")]
 internal sealed class DeferredAsset : AssetObject;
+
+[StableTypeId("79cef88a-3d5a-4c36-8095-a59cae3c641c")]
+internal sealed class ExtensionDependentAsset : AssetObject;
+
+[AssetImporterExtension]
+internal sealed class ExtensionDependentImporter : AssetImporter<ExtensionDependentAsset>
+{
+    internal static bool available;
+    internal static int attempts;
+    public override string importerId => "tests.extension-dependent";
+    public override IReadOnlyList<string> supportedExtensions { get; } = [".extensionasset"];
+
+    protected override ValueTask ImportAsync(AssetImportContext context,
+        AssetImportWriter<ExtensionDependentAsset> output, CancellationToken cancellationToken)
+    {
+        attempts++;
+        if (!available)
+            throw new AssetImportExtensionUnavailableException("tests.target", "tests.surface");
+        output.SetAsset(new ExtensionDependentAsset());
+        return output.WriteArtifactAsync("runtime", context.sourceBytes, cancellationToken);
+    }
+}
+
+[AssetImporterExtension]
+internal sealed class ExtensionConsumerImporter : AssetImporter<ExtensionDependentAsset>
+{
+    public override string importerId => "tests.extension-consumer";
+    public override IReadOnlyList<string> supportedExtensions { get; } = [".extensiondependent"];
+
+    protected override ValueTask ImportAsync(AssetImportContext context,
+        AssetImportWriter<ExtensionDependentAsset> output, CancellationToken cancellationToken)
+    {
+        string source = context.ReadUtf8Text();
+        if (Guid.TryParse(source, out Guid id))
+            _ = context.references.Resolve(id, context.services.GetStableTypeId<ExtensionDependentAsset>(),
+                "surface.extensionasset", typeof(ExtensionDependentAsset), "$.shader");
+        else
+            _ = context.ResolveDependency<ExtensionDependentAsset>(AssetPath.Project(source));
+        output.SetAsset(new ExtensionDependentAsset());
+        return output.WriteArtifactAsync("runtime", context.sourceBytes, cancellationToken);
+    }
+}
 
 [AssetImporterExtension]
 internal sealed class DeferredAssetImporter : AssetImporter<DeferredAsset>

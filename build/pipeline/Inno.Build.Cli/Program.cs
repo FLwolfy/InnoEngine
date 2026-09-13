@@ -141,6 +141,7 @@ internal sealed class BuildWorkspace : IDisposable
                 options with
                 {
                     enableFileSystemWatcher = false,
+                    deferUnavailableExtensions = true,
                     sourceMounts =
                     [
                         projectMount,
@@ -170,6 +171,7 @@ internal sealed class BuildWorkspace : IDisposable
                 plugins);
             ActivateAuthoring(engine, plugins, compiler);
             engine.generations.Wait();
+            assets.CompleteExtensionDiscovery();
             assets.Rescan();
             var pipeline = new BuildPipeline(
                 assets,

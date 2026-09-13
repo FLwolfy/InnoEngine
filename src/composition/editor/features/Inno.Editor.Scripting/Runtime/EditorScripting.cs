@@ -322,6 +322,8 @@ internal sealed class EditorScripting : EditorModule, IEditorScriptCompilation
 
     private void FinishCompletion(PendingCompletion completion)
     {
+        if (completion.succeeded)
+            m_assets.CompleteExtensionDiscovery();
         bool projected = GenerateIdeProjection();
         if (completion.succeeded)
         {

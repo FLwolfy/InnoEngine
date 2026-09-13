@@ -214,6 +214,8 @@ public sealed class AssetPipeline : AssetResidencyProvider,
                 libraryRoot,
                 options.sourcePolicy,
                 runtimeArtifactsOnly: options.mode == AssetPipelineMode.RuntimeArtifacts);
+            if (options.deferUnavailableExtensions)
+                loader.DeferUnavailableExtensions();
             AssetFileSystem fileSystem = new(
                 mounts,
                 autoStart: false,
@@ -376,6 +378,7 @@ public sealed class AssetPipeline : AssetResidencyProvider,
             EnsurePendingSourceMountTransaction(transaction);
             if (transaction.isActivated)
                 return;
+            transaction.candidateLoader.ActivateExtensionDiscovery();
             _ = transaction.candidateLoader.RefreshRegistries();
             transaction.candidateFileSystem.Refresh();
             transaction.previousLoader = m_loader;
@@ -1231,6 +1234,17 @@ public sealed class AssetPipeline : AssetResidencyProvider,
         GetFileSystem().Refresh();
     }
 
+    /// <summary>Ends initial authoring extension discovery and strictly retries dependent imports.</summary>
+    /// <remarks>Call on the initialization thread after successful extension activation. Failed compilation must not call this method.</remarks>
+    [ScriptingApiIgnore]
+    public void CompleteExtensionDiscovery()
+    {
+        EnsureOwnerThread();
+        using IDisposable operationScope = AcquireOperation();
+        GetLoader().CompleteExtensionDiscovery();
+        GetFileSystem().Refresh();
+    }
+
     /// <summary>
     /// Applies queued source and build changes on the initialization thread.
     /// </summary>
@@ -2000,6 +2014,7 @@ public sealed class AssetPipeline : AssetResidencyProvider,
             EnsureNotFinished();
             if (candidate is not null)
             {
+                candidate.candidateLoader.ActivateExtensionDiscovery();
                 candidate.candidateLoader.RefreshRegistries();
                 IReadOnlyList<AssetImportFailure> failures =
                     candidate.candidateLoader.FindIntroducedImportFailures(existingFailures);

@@ -35,7 +35,8 @@ public sealed class ShaderTargetRegistry : IDisposable
     /// <param name="context">Complete owner reference context.</param>
     /// <param name="cancellationToken">Cancellation before and during extension invocation.</param>
     /// <returns>Detached explicit stage graph consumed by the existing compiler.</returns>
-    /// <exception cref="InvalidOperationException">The assigned target is unavailable or returns an invalid result.</exception>
+    /// <exception cref="ShaderTargetUnavailableException">The assigned target is absent from this generation.</exception>
+    /// <exception cref="InvalidOperationException">The target returns an invalid result.</exception>
     public GraphDocument Expand(GraphDocument document, SerializationRegistry serialization, SerializationContext context,
         CancellationToken cancellationToken = default)
     {
@@ -47,7 +48,7 @@ public sealed class ShaderTargetRegistry : IDisposable
         string id = ShaderGraphDocument.ReadTarget(document, serialization, context);
         if (id.Length == 0) return document.Clone();
         if (!m_registry.snapshot.TryGetValue(id, out ShaderTarget? target))
-            throw new InvalidOperationException($"Shader target '{id}' is unavailable. The authored graph is retained for recovery.");
+            throw new ShaderTargetUnavailableException(id);
         GraphDocument expanded = target.Expand(new(document.Clone(), serialization, context), cancellationToken)
             ?? throw new InvalidOperationException($"Shader target '{id}' returned no program.");
         cancellationToken.ThrowIfCancellationRequested();

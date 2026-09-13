@@ -48,7 +48,7 @@ public sealed class ShaderTargetTests : IDisposable
         GraphDocument authored = ShaderGraphTemplates.CreateRaster(m_serialization, SerializationContext.empty);
         ShaderGraphDocument.SetTarget(authored, "tests.unavailable-target", m_serialization, SerializationContext.empty);
         byte[] before = GraphDocumentCodec.Encode(authored, m_serialization);
-        Assert.Contains("tests.unavailable-target", Assert.Throws<InvalidOperationException>(
+        Assert.Contains("tests.unavailable-target", Assert.Throws<ShaderTargetUnavailableException>(
             () => m_targets.Expand(authored, m_serialization, SerializationContext.empty)).Message);
         Assert.Equal(before, GraphDocumentCodec.Encode(authored, m_serialization));
     }

@@ -7,6 +7,7 @@ using Inno.Scripting.Api;
     ScriptingApiScope.Editor)]
 
 [assembly: ScriptingApiExport(typeof(AssetImportContext), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(AssetImportExtensionUnavailableException), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(AssetExportContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(AssetSerializationServices), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(NativeAssetSourceSerialization), ScriptingApiScope.Editor)]
