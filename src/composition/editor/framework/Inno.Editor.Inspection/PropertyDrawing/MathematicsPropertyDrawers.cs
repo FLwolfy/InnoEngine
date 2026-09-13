@@ -249,7 +249,11 @@ internal sealed class ColorPropertyDrawer : IPropertyDrawer
     {
         Color value = context.GetValue() is Color current ? current : default;
         var nativeValue = new NumericsVector4(value.r, value.g, value.b, value.a);
-        if (NativeImGui.ColorEdit4($"##{context.path}", ref nativeValue))
+        var flags = context.hdrColor
+            ? Inno.Native.ImGui.ImGuiColorEditFlags.Hdr | Inno.Native.ImGui.ImGuiColorEditFlags.Float
+                | Inno.Native.ImGui.ImGuiColorEditFlags.InputRgb | Inno.Native.ImGui.ImGuiColorEditFlags.DisplayRgb
+            : Inno.Native.ImGui.ImGuiColorEditFlags.None;
+        if (NativeImGui.ColorEdit4($"##{context.path}", ref nativeValue, flags))
         {
             context.SetValue(new Color(nativeValue.X, nativeValue.Y, nativeValue.Z, nativeValue.W));
         }

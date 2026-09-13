@@ -15,7 +15,7 @@ internal sealed partial class ShaderEditorCanvas
     private void Controls(GraphNodeRecord node)
     {
         if (owner.drawers?.TryDraw(node.definitionId, new(node, owner.serialization, owner.context,
-            (key, value, continuous) => SetEncoded(node, key, value, continuous), owner.previews)) == true) return;
+            (key, value, continuous) => SetEncoded(node, key, value, continuous), owner.previews, m_inspection!, draft.readOnly)) == true) return;
         switch (node.definitionId)
         {
             case "inno.shader.constant":
@@ -38,7 +38,7 @@ internal sealed partial class ShaderEditorCanvas
             case "inno.shader.extract":
                 Choice(node, "type", "float4", ["float2", "float3", "float4", "float3x3", "float4x4"]);
                 int index = Read(node, "index", 0);
-                if (UI.InputInt("##index", ref index) && index >= 0) Set(node, "index", index);
+                if (UI.InputInt("Component", ref index) && index >= 0) Set(node, "index", index);
                 break;
             case "inno.shader.sample":
                 Choice(node, "type", "sampled-texture2d", ["sampled-texture2d", "sampled-texture2d-array", "sampled-texture3d", "sampled-texture-cube"]);
@@ -75,7 +75,7 @@ internal sealed partial class ShaderEditorCanvas
     private void Scalar(GraphNodeRecord node)
     {
         string type = Read(node, "type", "float");
-        if (UI.BeginCombo("##type", type))
+        if (UI.BeginCombo("Type", type))
         {
             foreach (string candidate in new[] { "float", "int", "uint", "bool" })
                 if (UI.Selectable(candidate, type == candidate))
@@ -98,7 +98,7 @@ internal sealed partial class ShaderEditorCanvas
         {
             case "float":
                 float number = Read(node, "value", 0f);
-                bool changed = Widget.CompactDragFloat("##value", ref number, 0.01f);
+                bool changed = Widget.CompactDragFloat("Value", ref number, 0.01f);
                 Gesture();
                 if (changed) Set(node, "value", number, true);
                 break;
@@ -108,13 +108,13 @@ internal sealed partial class ShaderEditorCanvas
                 break;
             case "int":
                 int integer = Read(node, "value", 0);
-                bool integerChanged = UI.InputInt("##value", ref integer);
+                bool integerChanged = UI.InputInt("Value", ref integer);
                 Gesture();
                 if (integerChanged) Set(node, "value", integer, true);
                 break;
             case "uint":
                 string unsigned = Read(node, "value", 0u).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                bool unsignedChanged = UI.InputText("##value", ref unsigned, 32, ImGuiInputTextFlags.CharsDecimal);
+                bool unsignedChanged = UI.InputText("Value", ref unsigned, 32, ImGuiInputTextFlags.CharsDecimal);
                 Gesture();
                 if (unsignedChanged && uint.TryParse(unsigned, out uint value)) Set(node, "value", value, true);
                 break;
@@ -148,10 +148,10 @@ internal sealed partial class ShaderEditorCanvas
     {
         ShaderGraphInputSettings input = Read(node, "settings", new ShaderGraphInputSettings());
         string id = input.id;
-        bool changed = UI.InputText("##binding", ref id, 256);
+        bool changed = UI.InputText("Binding ID", ref id, 256);
         Gesture();
         if (changed) { input.id = id; Set(node, "settings", input, true); }
-        if (UI.BeginCombo("##kind", input.kind.ToString()))
+        if (UI.BeginCombo("Source", input.kind.ToString()))
         {
             foreach (ShaderIrInputKind kind in Enum.GetValues<ShaderIrInputKind>())
                 if (UI.Selectable(kind.ToString(), input.kind == kind))
@@ -178,25 +178,24 @@ internal sealed partial class ShaderEditorCanvas
             ShaderGraphType resource = input.type;
             if (StoragePopup(ref resource)) { input.type = resource; Set(node, "settings", input); }
         }
-        else if (UI.BeginCombo("##type", type))
+        else if (UI.BeginCombo("Type", type))
         {
             foreach (string candidate in new[] { "float", "float2", "float3", "float4", "int", "int2", "int3", "int4", "uint", "uint2", "uint3", "uint4", "bool", "float3x3", "float4x4", "sampled-texture2d", "sampled-texture2d-array", "sampled-texture3d", "sampled-texture-cube" })
                 if (UI.Selectable(candidate, type == candidate)) { input.type = new() { id = candidate }; Set(node, "settings", input); }
             UI.EndCombo();
         }
         string semantic = input.semantic;
-        bool semanticChanged = UI.InputText("##semantic", ref semantic, 256);
+        bool semanticChanged = UI.InputText("Semantic", ref semantic, 256);
         Gesture();
         if (semanticChanged) { input.semantic = semantic; Set(node, "settings", input, true); }
         Widget.DrawItemTooltip("Stage semantic, not a native expression. Builtins must be supported by the selected stage and target; compute invocation IDs use uint3.");
         int location = input.location;
-        bool locationChanged = UI.InputInt("##location", ref location);
+        bool locationChanged = UI.InputInt("Location", ref location);
         Gesture();
         if (locationChanged && location >= 0) { input.location = location; Set(node, "settings", input, true); }
         if (input.kind is ShaderIrInputKind.Uniform or ShaderIrInputKind.SampledTexture or ShaderIrInputKind.Storage)
         {
-            if (UI.Button("Parameter Settings…")) UI.OpenPopup("##parameter");
-            ParameterPopup(input);
+            DrawParameter(input);
         }
         if (input.kind == ShaderIrInputKind.SampledTexture)
         {
@@ -217,7 +216,8 @@ internal sealed partial class ShaderEditorCanvas
     private void Output(GraphNodeRecord node)
     {
         ShaderGraphStageSettings stage = Read(node, "settings", new ShaderGraphStageSettings());
-        UI.TextDisabled(stage.pass);
+        UI.TextDisabled(string.Join(", ", ShaderGraphPrograms.Read(Controller.document, owner.serialization, owner.context)
+            .Where(program => program.stages.Contains(node.id.value, StringComparer.Ordinal)).Select(static program => program.pass)));
         if (UI.Button("Stage & Pass Settings…")) UI.OpenPopup("##stage-settings");
         StageSettingsPopup(node, stage);
         if (stage.stage == ShaderStage.Compute)
@@ -232,7 +232,7 @@ internal sealed partial class ShaderEditorCanvas
     private void Choice(GraphNodeRecord node, string key, string defaultValue, string[] values)
     {
         string current = Read(node, key, defaultValue);
-        if (!UI.BeginCombo("##" + key, current)) return;
+        if (!UI.BeginCombo(Widget.NicifyName(key), current)) return;
         foreach (string candidate in values)
             if (UI.Selectable(candidate, current == candidate)) Set(node, key, candidate);
         UI.EndCombo();

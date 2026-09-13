@@ -39,7 +39,7 @@ public static class ShaderGraphTemplates
         GraphNodeRecord color = Node("color", "inno.shader.stage-input", 480, 920, fragment);
         Set(color, "settings", new ShaderGraphInputSettings { id = "color", type = new() { id = "float4" }, kind = ShaderIrInputKind.Uniform, semantic = "" });
         Connect(color, "value", fragment, "color");
-        return graph;
+        return ShaderGraphPrograms.Bind(graph, "Main", [vertex.id, fragment.id], serialization, context);
 
         GraphNodeRecord Node(string id, string type, float x, float y, GraphNodeRecord? stage = null)
         {

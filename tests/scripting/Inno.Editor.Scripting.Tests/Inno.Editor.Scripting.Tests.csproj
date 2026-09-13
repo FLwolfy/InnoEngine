@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../../src/composition/editor/panels/Inno.Editor.Panel.ShaderEditor/Inno.Editor.Panel.ShaderEditor.csproj" />
+    <ProjectReference Include="../../../src/composition/editor/features/Inno.Editor.Shaders/Inno.Editor.Shaders.csproj" />
     <ProjectReference Include="../../../src/composition/editor/panels/Inno.Editor.Panel.FileBrowser/Inno.Editor.Panel.FileBrowser.csproj" />
     <ProjectReference Include="../../../src/composition/editor/framework/Inno.Editor.Graph/Inno.Editor.Graph.csproj" />
     <ProjectReference Include="../../../src/services/rendering/Inno.Rendering.Assets/Inno.Rendering.Assets.csproj" />

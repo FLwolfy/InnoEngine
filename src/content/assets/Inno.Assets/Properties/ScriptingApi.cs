@@ -7,6 +7,7 @@ using Inno.Scripting.Api;
     ScriptingApiScope.Runtime)]
 
 [assembly: ScriptingApiExport(typeof(AssetDependency), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(AssetPropertySnapshot), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(AssetArtifactInfo), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(AssetArtifactKey), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(AssetChange), ScriptingApiScope.Runtime)]

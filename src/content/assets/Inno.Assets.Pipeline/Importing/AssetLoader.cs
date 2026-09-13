@@ -28,14 +28,14 @@ namespace Inno.Assets.Pipeline;
 /// Coordinates importing, persistent cataloging, canonical loading, reloading and collection
 /// for one source and artifact root pair.
 /// </summary>
-public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, IAssetArtifactLookup
+public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, IAssetArtifactLookup, IAssetPropertyStateResolver
 {
     internal const string C_META_POSTFIX = ".imeta";
 
     [ThreadStatic]
     private static AssetLoader? t_activeLoader;
 
-    private readonly AssetRuntimeOwner m_runtimeOwner = new();
+    private readonly AssetRuntimeOwner m_runtimeOwner;
     private readonly ArtifactRetention m_artifactRetention = new();
     private readonly SemaphoreSlim m_operationGate = new(1, 1);
     private readonly object m_asyncSync = new();
@@ -75,6 +75,16 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
     private AssetSourceMetadataStage? m_sourceMetadataStage;
     private long m_importerRegistryVersion = -1;
     private long m_buildProcessorRegistryVersion = -1;
+
+    /// <inheritdoc />
+    public void RestoreProperties<TValue>(Guid stableTypeId, byte[] propertyData, TValue target) where TValue : class, ISerializable
+    {
+        ObjectDisposedException.ThrowIf(m_disposed || m_disposeRequested, this);
+        ArgumentNullException.ThrowIfNull(target);
+        if (m_types.GetTypeRef(target.GetType()).stableId != stableTypeId)
+            throw new InvalidOperationException("The asset property payload has an incompatible stable type identity.");
+        m_serialization.Decode(propertyData, reader => { reader.RestoreProperties(target); return true; }, m_serializationContext);
+    }
 
     /// <summary>
     /// Creates an asset loader for one source and Library root pair.
@@ -190,6 +200,7 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
         AssetSourcePolicy? sourcePolicy,
         bool runtimeArtifactsOnly = false)
     {
+        m_runtimeOwner = new(this);
         ArgumentNullException.ThrowIfNull(types);
         ArgumentNullException.ThrowIfNull(serialization);
         ArgumentNullException.ThrowIfNull(identities);
@@ -270,7 +281,8 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
     /// Counts and source identities for the exported runtime snapshot.
     /// </returns>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when a runtime-scoped asset has no complete artifact or depends on an authoring-only asset.
+    /// Thrown when runtime artifacts are incomplete, a deployed reference is authoring-only,
+    /// or a transitive authoring input has failed or become stale.
     /// </exception>
     /// <exception cref="IOException">
     /// Thrown when the destination is not empty or content cannot be copied.
@@ -290,6 +302,9 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
     /// <returns>
     /// Counts and source identities represented by the exported snapshot.
     /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when artifacts are incomplete or transitive source inputs no longer certify the imported snapshot.
+    /// </exception>
     /// <exception cref="OperationCanceledException">
     /// Thrown when cancellation is requested before the snapshot finishes.
     /// </exception>
@@ -1942,14 +1957,13 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
         string destination = Path.GetFullPath(destinationLibraryRoot);
         if (Directory.Exists(destination) && Directory.EnumerateFileSystemEntries(destination).Any())
             throw new IOException("Runtime asset content destination must be empty.");
-        Directory.CreateDirectory(destination);
-
         AssetRecord[] imported = m_recordsByPath.Values
             .Where(static record =>
                 !record.meta.isDirectory
                 && !record.meta.isTombstone
                 && !AssetSample.IsRuntimeExcluded(AssetPath.Parse(record.relativePath), isDirectory: false)
-                && record.meta.importStatus == (int)AssetImportStatus.Imported)
+                && (record.meta.importStatus == (int)AssetImportStatus.Imported
+                    || !string.IsNullOrEmpty(record.meta.artifactKey)))
             .OrderBy(static record => record.relativePath, StringComparer.Ordinal)
             .ToArray();
         AssetRecord? invalidScope = imported.FirstOrDefault(static record =>
@@ -1962,6 +1976,9 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
         AssetRecord[] exported = imported
             .Where(static record => record.meta.deploymentScope == (int)AssetDeploymentScope.Runtime)
             .ToArray();
+        var validated = new HashSet<Guid>();
+        foreach (AssetRecord record in exported)
+            ValidateExportInputsLocked(record, record.relativePath, validated, cancellationToken);
         string[] keys = exported
             .Select(static record => record.meta.artifactKey)
             .Distinct(StringComparer.Ordinal)
@@ -1992,6 +2009,7 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
             }
         }
 
+        Directory.CreateDirectory(destination);
         AssetCatalogStore catalog = serialization is null
             ? new AssetCatalogStore(destination, m_serialization)
             : new AssetCatalogStore(destination, serialization);
@@ -2024,6 +2042,46 @@ public sealed partial class AssetLoader : IDisposable, IAssetReferenceResolver, 
         foreach (AssetSourceId source in sources)
             Directory.CreateDirectory(Path.Combine(destination, "Sources", source.value));
         return new AssetRuntimeContentInfo(sources, exported.Length, keys.Length, totalBytes);
+    }
+
+    private void ValidateExportInputsLocked(
+        AssetRecord record,
+        string dependencyChain,
+        HashSet<Guid> validated,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!validated.Add(record.persistentId))
+            return;
+        if (record.meta.isTombstone || record.meta.importStatus != (int)AssetImportStatus.Imported)
+        {
+            throw new InvalidOperationException(
+                $"Runtime export requires successful current inputs: {dependencyChain}. " +
+                $"Status: {(AssetImportStatus)record.meta.importStatus}. " +
+                string.Join(" | ", record.meta.diagnostics));
+        }
+
+        // Validate authoring inputs as well as deployed references. Editor last-good artifacts
+        // remain available, but must never certify a build of failed or stale source content.
+        foreach (AssetImportDependencyData dependency in record.meta.importDependencies)
+        {
+            if ((AssetImportDependencyKind)dependency.kind != AssetImportDependencyKind.Artifact)
+                continue;
+            if (!Guid.TryParse(dependency.key, out Guid id)
+                || !m_recordsById.TryGetValue(id, out AssetRecord? input))
+            {
+                throw new InvalidOperationException(
+                    $"Runtime export has a missing artifact input: {dependencyChain} -> {dependency.key}.");
+            }
+            ValidateExportInputsLocked(input, $"{dependencyChain} -> {input.relativePath}", validated, cancellationToken);
+        }
+        // Do not reimport here: target compilation may already have captured this generation.
+        // A source change during the build must reject the snapshot, not mix two generations.
+        if (IsStale(record, out _))
+        {
+            throw new InvalidOperationException(
+                $"Runtime export has stale source inputs: {dependencyChain}. Reimport current sources and rebuild.");
+        }
     }
 
     private void ValidateRuntimeArtifactsLocked()

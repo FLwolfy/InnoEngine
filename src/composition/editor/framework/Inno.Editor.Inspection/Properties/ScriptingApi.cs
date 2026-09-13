@@ -9,6 +9,7 @@ using Inno.Editor.Inspection;
 [assembly: ScriptingApiExport(typeof(InspectionDrawer<>), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(IPropertyDrawer), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(InspectionDrawContext), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(AssetInspectionSelection), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(InspectionDrawerAttribute), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(PropertyDrawContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(PropertyDrawerAttribute), ScriptingApiScope.Editor)]

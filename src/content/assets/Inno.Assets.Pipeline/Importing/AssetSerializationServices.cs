@@ -25,6 +25,9 @@ public sealed class AssetSerializationServices
 
     internal TypeCatalog types => m_types;
 
+    internal SerializationContext context => m_references is null
+        ? SerializationContext.empty : AssetSerializationContext.Create(m_references);
+
     internal AssetSerializationServices(
         TypeCatalog types,
         SerializationRegistry serialization,
@@ -52,6 +55,21 @@ public sealed class AssetSerializationServices
     public Guid GetStableTypeId<TValue>()
         => m_types.GetTypeRef(typeof(TValue)).stableId;
 
+    /// <summary>Captures typed properties and their references as one neutral, owner-independent value.</summary>
+    /// <typeparam name="TValue">Current serializable settings contract.</typeparam>
+    /// <param name="value">Current generation settings object, never retained.</param>
+    /// <returns>Frozen native properties with exact stable type identity and collected direct dependencies.</returns>
+    public AssetPropertySnapshot CaptureProperties<TValue>(TValue value) where TValue : class, ISerializable
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        using IDisposable operation = m_types.AcquireOperation("Capture asset properties");
+        var dependencies = new AssetDependencyCollection();
+        byte[] data = m_serialization.Encode(writer => writer.WriteProperties(value), context.With(dependencies));
+        if (m_dependencySink is not null)
+            foreach (AssetDependency dependency in dependencies.dependencies) m_dependencySink(dependency);
+        return new(m_types.GetTypeRef(value.GetType()).stableId, data, dependencies.dependencies);
+    }
+
     /// <summary>
     /// Serializes one structured value and declares every encountered asset reference as a runtime dependency.
     /// </summary>
@@ -72,7 +90,7 @@ public sealed class AssetSerializationServices
     {
         ArgumentNullException.ThrowIfNull(value);
         var dependencies = new AssetDependencyCollection();
-        SerializationContext context = SerializationContext.empty.With(dependencies);
+        SerializationContext context = this.context.With(dependencies);
         byte[] result = m_serialization.Serialize(value, context);
         if (m_dependencySink is not null)
         {

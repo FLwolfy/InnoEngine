@@ -10,6 +10,79 @@ namespace Inno.Rendering.Runtime.Tests;
 public sealed partial class RenderRuntimeGenerationTests
 {
     [Fact]
+    public void ExplicitArtifactScopesDoNotPublishIntoCanonicalMaterialCachesAndReleaseIndependently()
+    {
+        var material = new MaterialAsset { shader = PublicationShader("saved") };
+        var provider = new PublicationProvider(m_serialization) { artifact = Publication("saved") };
+        var device = new RecordingRenderDevice();
+        var projectDiagnostics = new TestDiagnosticSink();
+        var previewDiagnostics = new TestDiagnosticSink();
+        using var runtime = new RenderRuntime(m_types, device, projectDiagnostics, targetArtifacts: provider);
+        RenderShaderArtifact draft = Publication("draft");
+        GraphicsPipelineHandle canonical = default, preview = default;
+        ResourceProbePipeline.action = resources =>
+        {
+            Assert.True(resources.TryResolveGraphicsMaterial(material, new("test.publication"), new("draw"), null, null, out var saved));
+            Assert.True(resources.TryResolveMaterialArtifact(new("preview/document"), draft, material, new("test.publication"),
+                new("draw"), ShaderProgramKind.Raster, null, null, previewDiagnostics, out var edited));
+            Assert.Equal("saved", saved!.definition.name);
+            Assert.Equal("draft", edited!.definition.name);
+            canonical = saved.graphicsPipeline; preview = edited.graphicsPipeline;
+            Assert.NotEqual(canonical, preview);
+            Assert.True(resources.TryResolveMaterialArtifact(new("preview/document"), Publication("next-frame"), material, new("test.publication"),
+                new("draw"), ShaderProgramKind.Raster, null, null, previewDiagnostics, out var sameFrame));
+            Assert.Equal(preview, sameFrame!.graphicsPipeline);
+        };
+        RunResourceFrame(runtime);
+        Assert.Equal(1, provider.requests);
+        runtime.resources.Release(new("preview/document"));
+        Assert.DoesNotContain(preview, device.destroyedPrograms);
+        ResourceProbePipeline.action = resources =>
+        {
+            Assert.True(resources.TryResolveGraphicsMaterial(material, new("test.publication"), new("draw"), null, null, out var saved));
+            Assert.Equal(canonical, saved!.graphicsPipeline);
+        };
+        RunResourceFrame(runtime);
+        Assert.Contains(preview, device.destroyedPrograms);
+        Assert.DoesNotContain(canonical, device.destroyedPrograms);
+        Assert.Empty(projectDiagnostics.items);
+    }
+
+    [Fact]
+    public void InvalidDraftProgramKeepsOnlyItsOwnLastGoodAndReportsOnlyToItsConsumer()
+    {
+        var material = new MaterialAsset { shader = PublicationShader("saved") };
+        var provider = new PublicationProvider(m_serialization) { artifact = Publication("saved") };
+        var device = new RecordingRenderDevice();
+        var project = new TestDiagnosticSink();
+        var preview = new TestDiagnosticSink();
+        using var runtime = new RenderRuntime(m_types, device, project, targetArtifacts: provider);
+        RenderShaderArtifact draft = Publication("draft");
+        GraphicsPipelineHandle lastGood = default;
+        ResourceProbePipeline.action = resources =>
+        {
+            Assert.True(resources.TryResolveMaterialArtifact(new("preview/a"), draft, material, new("test.publication"),
+                new("draw"), ShaderProgramKind.Raster, null, null, preview, out var pass));
+            if (lastGood.isValid) Assert.Equal(lastGood, pass!.graphicsPipeline);
+            lastGood = pass!.graphicsPipeline;
+        };
+        RunResourceFrame(runtime);
+        draft = Publication("broken");
+        device.failProgramName = "Publication/broken";
+        RunResourceFrame(runtime);
+        Assert.Empty(project.items);
+        Assert.Contains(preview.items, issue => issue.code == "RENDER_PROGRAM_CREATE_FAILED");
+        ResourceProbePipeline.action = resources =>
+        {
+            Assert.True(resources.TryResolveGraphicsMaterial(material, new("test.publication"), new("draw"), null, null, out var saved));
+            Assert.Equal("saved", saved!.definition.name);
+            Assert.NotEqual(lastGood, saved.graphicsPipeline);
+        };
+        RunResourceFrame(runtime);
+        Assert.Empty(project.items);
+    }
+
+    [Fact]
     public void ShaderProgramsFollowPublishedContentNotTheLatestAssetDefinitionOrItsVersion()
     {
         var first = Publication("first");

@@ -27,6 +27,9 @@ internal static class ScriptApiStubSourceBuilder
     [ThreadStatic]
     private static IReadOnlyDictionary<Type, string>? s_typeNames;
 
+    [ThreadStatic]
+    private static NullabilityInfoContext? s_nullability;
+
     internal static string BuildImplementation(
         ScriptApiAssembly export,
         IReadOnlySet<Type> exportedTypes)
@@ -58,6 +61,7 @@ internal static class ScriptApiStubSourceBuilder
         s_exportedTypes = exportedTypes;
         s_namespaceMappings = namespaceMappings;
         s_typeNames = typeNames;
+        s_nullability = new NullabilityInfoContext();
         try
         {
             var builder = new StringBuilder();
@@ -82,6 +86,7 @@ internal static class ScriptApiStubSourceBuilder
             s_exportedTypes = null;
             s_namespaceMappings = null;
             s_typeNames = null;
+            s_nullability = null;
         }
     }
 
@@ -175,7 +180,7 @@ internal static class ScriptApiStubSourceBuilder
         MethodInfo invoke = type.GetMethod("Invoke")
             ?? throw new InvalidOperationException($"Delegate '{type.FullName}' has no Invoke method.");
         builder.Append("public delegate ")
-            .Append(FormatType(invoke.ReturnType))
+            .Append(FormatParameterType(invoke.ReturnParameter))
             .Append(' ');
         AppendNamedType(builder, type);
         builder.Append('(');
@@ -295,7 +300,7 @@ internal static class ScriptApiStubSourceBuilder
                 if (field.IsInitOnly)
                     builder.Append("readonly ");
             }
-            builder.Append(FormatType(field.FieldType))
+            builder.Append(FormatType(field.FieldType, s_nullability!.Create(field), new(field.GetCustomAttributesData(), field)))
                 .Append(' ')
                 .Append(EscapeIdentifier(field.Name));
             if (field.IsLiteral)
@@ -349,7 +354,7 @@ internal static class ScriptApiStubSourceBuilder
                 .Append(accessibility)
                 .Append(' ');
             AppendMethodModifiers(builder, representative, type.IsInterface);
-            builder.Append(FormatType(property.PropertyType)).Append(' ');
+            builder.Append(FormatType(property.PropertyType, s_nullability!.Create(property), new(property.GetCustomAttributesData(), property))).Append(' ');
             ParameterInfo[] indexParameters = property.GetIndexParameters();
             if (indexParameters.Length > 0)
             {
@@ -405,7 +410,7 @@ internal static class ScriptApiStubSourceBuilder
             if (accessor!.IsStatic)
                 builder.Append("static ");
             builder.Append("event ")
-                .Append(FormatType(eventInfo.EventHandlerType!))
+                .Append(FormatType(eventInfo.EventHandlerType!, s_nullability!.Create(eventInfo), new(eventInfo.GetCustomAttributesData(), eventInfo)))
                 .Append(' ')
                 .Append(EscapeIdentifier(eventInfo.Name))
                 .AppendLine(";");
@@ -448,7 +453,7 @@ internal static class ScriptApiStubSourceBuilder
                 .Append(GetAccessibility(method))
                 .Append(' ');
             AppendMethodModifiers(builder, method, type.IsInterface);
-            builder.Append(FormatType(method.ReturnType))
+            builder.Append(FormatParameterType(method.ReturnParameter))
                 .Append(' ')
                 .Append(EscapeIdentifier(method.Name));
             Type[] genericArguments = method.GetGenericArguments();
@@ -467,7 +472,7 @@ internal static class ScriptApiStubSourceBuilder
         builder.Append("    public static ")
             .Append(method.Name == "op_Implicit" ? "implicit" : "explicit")
             .Append(" operator ")
-            .Append(FormatType(method.ReturnType))
+            .Append(FormatParameterType(method.ReturnParameter))
             .Append('(');
         AppendParameters(builder, method.GetParameters());
         builder.AppendLine(") => throw new global::System.NotImplementedException();");
@@ -476,7 +481,7 @@ internal static class ScriptApiStubSourceBuilder
     private static void AppendOperator(StringBuilder builder, MethodInfo method, string symbol)
     {
         builder.Append("    public static ")
-            .Append(FormatType(method.ReturnType))
+            .Append(FormatParameterType(method.ReturnParameter))
             .Append(" operator ")
             .Append(symbol)
             .Append('(');
@@ -520,6 +525,7 @@ internal static class ScriptApiStubSourceBuilder
             if (i > 0)
                 builder.Append(", ");
             ParameterInfo parameter = parameters[i];
+            AppendFlowAttributes(builder, parameter.GetCustomAttributesData());
             if (parameter.IsDefined(typeof(ParamArrayAttribute), inherit: false))
                 builder.Append("params ");
             Type parameterType = parameter.ParameterType;
@@ -533,7 +539,7 @@ internal static class ScriptApiStubSourceBuilder
                     builder.Append("ref ");
                 parameterType = parameterType.GetElementType()!;
             }
-            builder.Append(FormatType(parameterType))
+            builder.Append(FormatParameterType(parameter))
                 .Append(' ')
                 .Append(EscapeIdentifier(parameter.Name ?? "value"));
             if (parameter.IsOptional)
@@ -579,24 +585,84 @@ internal static class ScriptApiStubSourceBuilder
         => method.IsPublic ? 3 : method.IsFamilyOrAssembly ? 2 : method.IsFamily ? 1 : 0;
 
     private static string FormatType(Type type)
+        => FormatType(type, null);
+
+    private static string FormatParameterType(ParameterInfo parameter)
+        => FormatType(parameter.ParameterType, s_nullability!.Create(parameter), new(parameter.GetCustomAttributesData(), parameter.Member));
+
+    private static void AppendFlowAttributes(StringBuilder builder, IEnumerable<CustomAttributeData> attributes)
+    {
+        foreach (CustomAttributeData attribute in attributes)
+        {
+            if (attribute.AttributeType.Namespace != "System.Diagnostics.CodeAnalysis"
+                || attribute.AttributeType.Name is not ("AllowNullAttribute" or "DisallowNullAttribute"
+                    or "MaybeNullAttribute" or "NotNullAttribute" or "NotNullWhenAttribute"
+                    or "MaybeNullWhenAttribute" or "NotNullIfNotNullAttribute" or "DoesNotReturnIfAttribute")) continue;
+            builder.Append("[global::").Append(attribute.AttributeType.FullName).Append('(')
+                .Append(string.Join(", ", attribute.ConstructorArguments.Select(static argument => FormatConstant(argument.Value, argument.ArgumentType))))
+                .Append(")] ");
+        }
+    }
+
+    private static string FormatType(Type type, NullabilityInfo? nullability, NullableAnnotations? annotations = null)
     {
         if (type.IsByRef || type.IsPointer)
         {
             string suffix = type.IsPointer ? "*" : string.Empty;
-            return FormatType(type.GetElementType()!) + suffix;
+            return FormatType(type.GetElementType()!, nullability, annotations) + suffix;
         }
+        byte flag = annotations?.Next(type) ?? 0;
+        // NullabilityInfo reports an unconstrained T as nullable even when its usage is T,
+        // not T?. Preserve the emitted usage flag instead of weakening delegate arguments.
+        bool nullable = type.IsGenericParameter ? flag == 2 : nullability?.ReadState == NullabilityState.Nullable;
+        string annotation = !type.IsValueType && nullable ? "?" : string.Empty;
         if (type.IsArray)
-            return FormatType(type.GetElementType()!) + "[" + new string(',', type.GetArrayRank() - 1) + "]";
+            return FormatType(type.GetElementType()!, nullability?.ElementType, annotations) + "[" + new string(',', type.GetArrayRank() - 1) + "]" + annotation;
         if (type.IsGenericParameter)
-            return type.Name;
+            return type.Name + annotation;
         if (C_TYPE_ALIASES.TryGetValue(type, out string? alias))
-            return alias;
+            return alias + annotation;
         if (!type.IsGenericType)
-            return "global::" + FormatNamedTypeName(type, removeGenericArities: false);
+            return "global::" + FormatNamedTypeName(type, removeGenericArities: false) + annotation;
         Type definition = type.GetGenericTypeDefinition();
         string name = FormatNamedTypeName(definition, removeGenericArities: true);
         return "global::" + name + "<" +
-               string.Join(", ", type.GetGenericArguments().Select(FormatType)) + ">";
+               string.Join(", ", type.GetGenericArguments().Select((argument, index) =>
+                   FormatType(argument, nullability?.GenericTypeArguments.ElementAtOrDefault(index), annotations))) + ">" + annotation;
+    }
+
+    private sealed class NullableAnnotations
+    {
+        private readonly byte[] m_flags;
+        private readonly byte m_context;
+        private int m_index;
+
+        internal NullableAnnotations(IEnumerable<CustomAttributeData> attributes, MemberInfo owner)
+        {
+            CustomAttributeData? transform = attributes.FirstOrDefault(static attribute =>
+                attribute.AttributeType.FullName == "System.Runtime.CompilerServices.NullableAttribute");
+            m_flags = transform?.ConstructorArguments[0].Value switch
+            {
+                byte flag => [flag],
+                IEnumerable<CustomAttributeTypedArgument> flags => flags.Select(static value => (byte)value.Value!).ToArray(),
+                _ => []
+            };
+            for (MemberInfo? current = owner; current is not null; current = current.DeclaringType)
+            {
+                CustomAttributeData? context = current.GetCustomAttributesData().FirstOrDefault(static attribute =>
+                    attribute.AttributeType.FullName == "System.Runtime.CompilerServices.NullableContextAttribute");
+                if (context is null) continue;
+                m_context = (byte)context.ConstructorArguments[0].Value!;
+                break;
+            }
+        }
+
+        internal byte Next(Type type)
+        {
+            if (type.IsValueType && !type.IsGenericType) return 0;
+            int index = m_index++;
+            return index < m_flags.Length ? m_flags[index] : m_context;
+        }
     }
 
     private static string FormatNamedTypeName(Type type, bool removeGenericArities)

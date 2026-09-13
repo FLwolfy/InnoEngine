@@ -16,6 +16,13 @@ public abstract class InspectionDrawer<TTarget> : IInspectionDrawer
     /// </summary>
     public abstract string icon { get; }
 
+    /// <summary>Determines whether this drawer handles the selected value, in addition to its registered type.</summary>
+    /// <param name="target">Current target. The check must not mutate it.</param>
+    /// <returns>Whether this drawer accepts the target.</returns>
+    protected virtual bool CanInspect(TTarget target) => true;
+
+    bool IInspectionDrawer.CanInspect(object target) => target is TTarget value && CanInspect(value);
+
     /// <summary>
     /// Binds the name displayed in the first row of the Inspector target header.
     /// </summary>
@@ -103,6 +110,11 @@ public abstract class InspectionDrawer<TTarget> : IInspectionDrawer
 /// </summary>
 public interface IInspectionDrawer
 {
+    /// <summary>Determines whether a type-compatible selected value can be inspected by this drawer.</summary>
+    /// <param name="target">Selected value, never mutated by this query.</param>
+    /// <returns>Whether this drawer accepts the value; ordinary type-only drawers accept by default.</returns>
+    bool CanInspect(object target) => true;
+
     /// <summary>
     /// Gets the icon glyph displayed in the Inspector target header.
     /// </summary>

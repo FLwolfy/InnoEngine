@@ -29,3 +29,5 @@ Project `Assets` 的 `~` 目录是普通 authoring content，其中的 `.cs` 与
 Compiler 为每个产物写入 `Inno.AssetSource` assembly metadata。Project assembly 写入 `project`，Plugin assembly 写入 manifest Plugin ID；`Assets.LocalPath` 以此解析同源资源，使业务源码在 Project 开发态和 `.iplugin` 安装态保持完全一致。
 
 脚本编译、generation 激活和 IDE 投影是有顺序但不同的责任。只有完整 Runtime + Editor + Plugin 候选编译成功后才能激活；IDE project 在激活成功后生成。IDE 文件写入失败只发布 `INNO-IDE-PROJECTION` Warning，不允许回滚或阻止已经验证成功的运行 generation。
+
+实现与逻辑 reference 均从公开成员的 nullable metadata 生成可空类型，包括参数、返回值、字段、属性、事件、数组元素与嵌套泛型实参。生成期间的 `NullabilityInfoContext` 在结束时释放，不进入跨代缓存；这些注解属于已有公共契约内容指纹，改变注解会产生新的 API 缓存身份。不能在调用方用 `null!` 掩盖投影遗失的可空契约。

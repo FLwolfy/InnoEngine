@@ -85,7 +85,6 @@ public sealed class ShaderCompilerTests : IDisposable
             if (node.definitionId == ShaderGraphDocument.outputDefinitionId)
             {
                 ShaderGraphStageSettings settings = ShaderGraphDocument.Read<ShaderGraphStageSettings>(node, "settings", null!, m_serialization, SerializationContext.empty);
-                settings.pass = "Clustered";
                 node.SetValue("settings", ShaderGraphDocument.Encode(settings, m_serialization, SerializationContext.empty));
             }
             else node.SetValue("stage", ShaderGraphDocument.Encode("alternate." + ShaderGraphDocument.Read(node, "stage", "", m_serialization, SerializationContext.empty), m_serialization, SerializationContext.empty));
@@ -95,6 +94,7 @@ public sealed class ShaderCompilerTests : IDisposable
             graph.AddEdge(new(new("alternate." + edge.id.value), new(new("alternate." + edge.output.nodeId.value), edge.output.portId), new(new("alternate." + edge.input.nodeId.value), edge.input.portId)));
         definition.passes = [new("Clustered", ShaderProgramKind.Raster, requiredFeatures: GraphicsCapability.Compute | GraphicsCapability.StorageBuffer), definition.passes[0]];
         graph.SetMetadata(ShaderGraphDocument.definitionKey, ShaderGraphDocument.Encode(m_serialization.Serialize(definition), m_serialization, SerializationContext.empty));
+        graph = ShaderGraphPrograms.Bind(graph, "Clustered", [new("alternate.vertex"), new("alternate.fragment")], m_serialization, SerializationContext.empty);
         var toolchain = new FakeToolchain();
         ShaderCompilationResult result = await Compile(new(toolchain), graph);
         Assert.True(result.succeeded, Diagnostics(result));

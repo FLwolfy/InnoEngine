@@ -17,7 +17,7 @@ internal static class Program
                 adapterCatalog,
                 AdapterSelection.defaultValue,
                 graphicsApi);
-            return host.Run(smokeFrameLimit);
+            return host.RunGame(smokeFrameLimit);
         }
         catch (Exception exception)
         {

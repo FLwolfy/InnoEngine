@@ -6,6 +6,9 @@
 
 ## 初始化
 
+Shader 等 Editor 创作回调可以借用宿主的 `SerializationRegistry`，脚本侧只导出数据编解码及属性读取。
+构造 Registry、捕获 generation 和底层属性恢复快照仍由宿主管理，不进入脚本 API。运行时脚本不导出 Registry。
+
 `SerializationRegistry.Initialize()` 必须在 `ModuleHost` 与 `TypeCatalog` 之后调用。Converter Registry 会跟随 TypeCache 的事务刷新；热重载新增/替换 Converter 不需要业务层手动订阅事件。
 
 ```csharp

@@ -43,12 +43,66 @@ public sealed class ScriptingPipelineTests : IDisposable
     public void Dispose() => m_fixture.Dispose();
 
     [Fact]
+    public void ShaderPreviewOptionalInputsRemainNullableInTheLogicalAndImplementationApis()
+    {
+        m_fixture.Write("NullablePreview.editor.cs", """
+            #nullable enable
+            #pragma warning error CS8625, CS8602, CS8604
+            using InnoEngine.Rendering;
+            using InnoEditor.Shaders;
+            public sealed class NullablePreviewProbe
+            {
+                public bool Resolve(ShaderPreviewContext preview, IRenderResourceService resources)
+                    => resources.TryResolveMaterialArtifact(preview.resourceId, preview.artifact, preview.material,
+                        new ShaderContractId("test.surface"), new ShaderPassRoleId("test.color"),
+                        ShaderProgramKind.Raster, null, null, preview.diagnostics, out _);
+                public void TypedCallback(RenderGraphBuilder graph)
+                    => graph.AddRasterPass("typed", new RenderPhaseId("test"), "payload",
+                        static (value, context) => Consume(value));
+                private static void Consume(string value) { _ = value.Length; }
+            }
+            """);
+        ScriptCompilationResult result = m_fixture.Compile();
+        Assert.True(result.success, FormatDiagnostics(result));
+    }
+
+    [Fact]
     public void ShaderNodeExtensionsCompileThroughTheEditorOnlyLogicalApi()
     {
         m_fixture.Write("ShaderNodeProbe.editor.cs", """
             using System.Collections.Generic;
+            using System.Threading;
             using InnoEngine.Graphs;
+            using InnoEngine.Serialization;
+            using InnoEngine.Assets;
+            using InnoEngine.Rendering;
+            using InnoEditor.Assets;
             using InnoEditor.Rendering.Shaders;
+            using InnoEditor.Rendering.Assets;
+            using InnoEditor.Shaders;
+            using InnoEditor.Rendering;
+
+            public static class PipelineSettingsProbe
+            {
+                public static SerializedRenderExtensionState Capture<T>(T settings) where T : class, ISerializable
+                    => new(EditorAssets.CaptureProperties(settings));
+                public static void Edit<T>(InnoEditor.Rendering.PipelineDocuments documents, AssetPath path, T settings) where T : class, ISerializable
+                    => documents.ReplaceSettings(documents.Open(path), settings);
+            }
+
+            [ShaderPreviewProvider("tests.preview")]
+            public sealed class PreviewProbe : ShaderPreviewProvider
+            {
+                public override EditorViewportLayer CreateLayer(ShaderPreviewContext context)
+                {
+                    var frame = new RenderFrameData();
+                    frame.Set(new("tests.preview"), context);
+                    return new("tests.preview", null, frame, 0);
+                }
+                public static bool Resolve(IRenderResourceService resources, ShaderPreviewContext context)
+                    => resources.TryResolveMaterialArtifact(context.resourceId, context.artifact, context.material,
+                        new("tests.preview"), new("draw"), ShaderProgramKind.Raster, null, null, context.diagnostics, out _);
+            }
 
             [ShaderNodeCompilerExtension]
             public sealed class ShaderNodeProbe : IShaderNodeCompiler
@@ -58,6 +112,40 @@ public sealed class ScriptingPipelineTests : IDisposable
                     => [new("value", ShaderSourceType.Atomic("float"), GraphPortDirection.Output)];
                 public IReadOnlyDictionary<string, ShaderIrValue> Lower(ShaderNodeLoweringContext context)
                     => new Dictionary<string, ShaderIrValue> { ["value"] = context.builder.Constant(0.5f) };
+            }
+
+            [ShaderTarget]
+            public sealed class ShaderTargetProbe : ShaderTarget
+            {
+                public override string id => "tests.script-target";
+                public override GraphDocument Expand(ShaderTargetContext context, CancellationToken cancellationToken)
+                    => ShaderGraphTemplates.CreateRaster(context.serialization, context.references);
+            }
+
+            [ShaderGraphTemplate]
+            public sealed class ShaderTemplateProbe : ShaderGraphTemplate
+            {
+                public override string id => "tests.script-template";
+                public override string displayName => "Script Surface";
+                public override GraphDocument Create(SerializationRegistry serialization, SerializationContext context)
+                {
+                    GraphDocument graph = ShaderGraphTemplates.CreateRaster(serialization, context);
+                    ShaderParameterPresentation.Write(graph, new("gain"), new()
+                    { group = "Surface", description = "Preview gain", hasRange = true, minimum = 0, maximum = 2 }, serialization, context);
+                    ShaderGraphDocument.SetTarget(graph, "tests.script-target", serialization, context);
+                    return ShaderGraphBindings.RemoveNodes(graph, [], serialization, context);
+                }
+            }
+
+            [ShaderNodeDrawer("tests.shader-node-probe")]
+            public sealed class ShaderDrawerProbe : ShaderNodeDrawer
+            {
+                public override void Draw(ShaderNodeDrawContext context)
+                {
+                    _ = context.Read("gain", 1f);
+                    _ = context.previews.deviceGeneration;
+                    context.DrawProperty<ShaderFunctionAsset?>("function", "Function", null);
+                }
             }
             """);
         ScriptCompilationResult result = m_fixture.Compile();
@@ -84,6 +172,35 @@ public sealed class ScriptingPipelineTests : IDisposable
             }
             return false;
         }
+    }
+
+    [Fact]
+    public void UserStaticImportsKeepTheirBindingWhenNativeApiNamespacesAreIntroduced()
+    {
+        m_fixture.Write("StaticNames.editor.cs", """
+            using System;
+            using InnoEditor.Rendering.Shaders;
+            using static Inno.StaticNames.Helpers;
+            namespace Inno.StaticNames;
+            public static class Helpers
+            {
+                public static ShaderGraphInputSettings Input() => new();
+                public static T Settings<T>(T value) => value;
+            }
+            public sealed class Consumer
+            {
+                public ShaderGraphInputSettings Build() => Input();
+                public Func<ShaderGraphInputSettings> Factory() => Input;
+                public int Value() => Settings<int>(7);
+                public int Local()
+                {
+                    Func<int> Input = () => 9;
+                    return Input();
+                }
+            }
+            """);
+        ScriptCompilationResult result = m_fixture.Compile();
+        Assert.True(result.success, FormatDiagnostics(result));
     }
 
     [Fact]

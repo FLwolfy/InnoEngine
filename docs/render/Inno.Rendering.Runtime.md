@@ -1,5 +1,10 @@
 # Inno.Rendering.Runtime
 
+## 帧外资源释放
+
+`IRenderResourceService.Release(id)` 在安全的图构建阶段可执行退休；帧外或图执行期间仅排队稳定资源 ID，由下一次 `BeginFrame` 执行。没有后续帧时，Runtime 的完整退出序列先打开原生安全帧再退休全部资源。
+队列只接收实际拥有的资源，不保存 Editor/Plugin 对象，也不通过吞掉 BGFX 帧外销毁异常来伪造成功。独立 Shader 预览的关闭、Editor 模块停止和 reload 使用同一协议。
+
 [Rendering 索引](README.md) · [公开 API](Inno.Rendering.md) · [BGFX 后端](Inno.Adapter.Rendering.Bgfx.md) · [Wiki 首页](../README.md)
 
 ## 代际退休与有界请求

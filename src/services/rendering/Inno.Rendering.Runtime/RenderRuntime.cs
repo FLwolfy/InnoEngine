@@ -346,6 +346,7 @@ public sealed class RenderRuntime : RuntimeSubsystem, IRenderRequestSink
             }
             finally
             {
+                m_resourceService.EndMutation();
                 m_frameOpen = false;
             }
             throw;
@@ -507,7 +508,11 @@ public sealed class RenderRuntime : RuntimeSubsystem, IRenderRequestSink
             {
                 executedViewCount = result.graph.passes.Count;
                 if (executedViewCount != 0)
+                {
+                    m_resourceService.EndMutation();
                     m_device.Execute(result.graph, m_frameIndex);
+                    m_resourceService.BeginMutation();
+                }
             }
             m_resourceService.SweepUnused();
             m_uploads.SweepUnused();
@@ -528,6 +533,7 @@ public sealed class RenderRuntime : RuntimeSubsystem, IRenderRequestSink
     {
         RenderDeviceFrameCounters counters = m_device.frameCounters;
         RenderDeviceAllocationCounters? allocations = m_device.allocationCounters;
+        m_resourceService.EndMutation();
         try { _ = m_device.EndFrame(); }
         catch (Exception pendingRetirement) when (RetirementPendingException.Find(pendingRetirement) is not null) { throw; }
         catch

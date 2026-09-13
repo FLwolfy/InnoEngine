@@ -17,7 +17,7 @@ namespace Inno.Editor.Rendering;
 /// Produces target-specific render artifacts from imported authoring assets without exposing source access
 /// to the backend-neutral render runtime.
 /// </summary>
-public sealed class EditorRenderTargetArtifactProvider : IRenderTargetArtifactProvider, IDisposable
+public sealed partial class EditorRenderTargetArtifactProvider : IRenderTargetArtifactProvider, IDisposable
 {
     private readonly object m_sync = new();
     private readonly AssetPipeline m_assets;
@@ -219,6 +219,8 @@ public sealed class EditorRenderTargetArtifactProvider : IRenderTargetArtifactPr
                 return;
             m_stopping = true;
             m_lifetime.Cancel();
+            foreach (DraftEntry draft in m_drafts.Values) Retire(draft.compilation.pending, draft.compilation.cancellation);
+            m_drafts.Clear();
             foreach (ShaderEntry entry in m_shaders.Values)
             {
                 Retire(entry.pending, entry.cancellation);

@@ -23,7 +23,8 @@ internal sealed class ShaderCanvasMenu(ShaderEditorDocuments documents) : Editor
         }
         foreach (string definition in documents.nodes.definitionIds)
             if (documents.CanCreate(draft, new(definition)))
-                builder.Add("Create/" + definition.Replace("inno.shader.", "", StringComparison.Ordinal).Replace('-', ' '),
+                builder.Add("Create/" + (documents.drawers?.GetDisplayName(definition)
+                    ?? Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget.NicifyName(definition.Replace("inno.shader.", "", StringComparison.Ordinal).Replace('-', ' '))),
                     "shader/create-node", argument: new ShaderNodeCreation(definition));
         foreach (AssetFileEntry source in documents.assets.GetFileSystemEntries(includeDirectories: false))
             if (source.extension == ".ishadersource" && documents.assets.TryGetInfo(source.assetPath, out var info) && info is not null
@@ -70,12 +71,13 @@ internal sealed class CreateShaderPass(ShaderEditorDocuments documents) : Editor
         {
             GraphNodeId id = new(Guid.NewGuid().ToString("N"));
             var node = new GraphNodeRecord(id, ShaderGraphDocument.outputDefinitionId) { position = new(draft.menuPosition.x, draft.menuPosition.y + created.Count * 340) };
-            node.SetValue("settings", ShaderGraphDocument.Encode(new ShaderGraphStageSettings { pass = name, stage = stage,
+            node.SetValue("settings", ShaderGraphDocument.Encode(new ShaderGraphStageSettings { stage = stage,
                 outputs = stage == Inno.Rendering.ShaderStage.Compute ? [] : [new() { id = stage == Inno.Rendering.ShaderStage.Vertex ? "position" : "color",
                     kind = stage == Inno.Rendering.ShaderStage.Vertex ? ShaderIrOutputKind.ClipPosition : ShaderIrOutputKind.Color }] }, documents.serialization, documents.context));
             graph.AddNode(node);
             created.Add(id);
         }
+        graph = ShaderGraphPrograms.Bind(graph, name, created, documents.serialization, documents.context);
         controller.ReplaceDocument(graph, "Create Shader Pass");
         draft.canvas.SelectNodes(created);
         draft.activeStage = created[0];

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Inno.Core.Diagnostics;
 using Inno.Rendering;
 
 namespace Inno.Rendering;
@@ -539,6 +540,23 @@ public interface IRenderResourceService
         MaterialPropertyBlock? overrides,
         out RenderMaterialPass? materialPass);
 
+    /// <summary>Resolves an explicitly compiled candidate in a caller-owned publication scope, without publishing it as an asset.</summary>
+    /// <param name="scope">Non-empty resource identity for this isolated consumer; release it when the consumer closes.</param>
+    /// <param name="artifact">Complete immutable candidate built for the active device and exact Material variant.</param>
+    /// <param name="material">Invocation-local values and a persistent Shader reference; neither asset is changed or retained.</param>
+    /// <param name="contractId">Required provider-owned Shader contract.</param>
+    /// <param name="passRoleId">Required role within the selected Technique.</param>
+    /// <param name="programKind">Required graphics or compute program kind.</param>
+    /// <param name="vertexLayout">Graphics layout, or null for procedural or compute work.</param>
+    /// <param name="overrides">Optional invocation-local Material values.</param>
+    /// <param name="diagnostics">Consumer-owned diagnostic reporter, not retained or forwarded to canonical asset diagnostics.</param>
+    /// <param name="materialPass">Receives the current or complete last-good scoped pass.</param>
+    /// <returns>True when the isolated publication can satisfy this request; failure never changes canonical programs.</returns>
+    /// <exception cref="InvalidOperationException">No artifact decoder is configured, or resource retirement cannot complete.</exception>
+    bool TryResolveMaterialArtifact(RenderPersistentResourceId scope, RenderShaderArtifact artifact, MaterialAsset material,
+        ShaderContractId contractId, ShaderPassRoleId passRoleId, ShaderProgramKind programKind, RenderVertexLayout? vertexLayout,
+        MaterialPropertyBlock? overrides, IDiagnosticReporter diagnostics, out RenderMaterialPass? materialPass);
+
     /// <summary>
     /// Resolves one compute material pass through an open provider contract and role.
     /// </summary>
@@ -612,8 +630,10 @@ public interface IRenderResourceService
         out PersistentTextureHandle resolvedTexture);
 
     /// <summary>
-    /// Releases any cached resource with the specified provider-owned identifier.
+    /// Releases cached resources with this provider-owned identifier at a safe GPU mutation point.
     /// </summary>
+    /// <remarks>Calls between frames or during graph execution queue neutral identities until the next frame;
+    /// runtime shutdown also retires them. Calls must occur on the rendering owner thread. Unused identities are ignored.</remarks>
     /// <param name="id">
     /// Stable resource identifier to release.
     /// </param>

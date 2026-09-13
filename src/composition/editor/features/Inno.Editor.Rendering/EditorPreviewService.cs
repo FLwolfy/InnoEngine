@@ -72,6 +72,16 @@ public interface IEditorPreviewService
     /// </summary>
     uint deviceGeneration { get; }
 
+    /// <summary>Submits an isolated rendering composition through the shared offscreen viewport bridge.</summary>
+    /// <param name="composition">Invocation-local layers; the host retains no contributor instances after the frame.</param>
+    /// <param name="handle">Receives a current-generation preview once its target is resident.</param>
+    /// <returns>True when the completed previous output can be drawn; false during initial allocation or resize.</returns>
+    bool TryRender(EditorViewportComposition composition, out EditorPreviewHandle handle);
+
+    /// <summary>Releases an offscreen preview, including one which has not produced its first handle.</summary>
+    /// <param name="viewportId">The same consumer-qualified identity submitted in the composition.</param>
+    void ReleaseRendered(string viewportId);
+
     /// <summary>
     /// Tries to resolve a standalone texture preview without blocking target compilation.
     /// </summary>

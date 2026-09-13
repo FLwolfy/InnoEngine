@@ -7,6 +7,7 @@ using Inno.Editor.Rendering;
     ScriptingApiScope.Editor)]
 
 [assembly: ScriptingApiExport(typeof(EditorViewportKindId), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(PipelineDocuments), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorViewportContributorExtensionAttribute), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorViewportContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorViewportProjection), ScriptingApiScope.Editor)]
@@ -23,3 +24,7 @@ using Inno.Editor.Rendering;
 [assembly: ScriptingApiExport(typeof(EditorViewportContributor), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(EditorPreviewHandle), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(IEditorPreviewService), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorViewportLayer), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorViewportComposition), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorShaderCompilationState), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(EditorShaderDraftCompilationSnapshot), ScriptingApiScope.Editor)]

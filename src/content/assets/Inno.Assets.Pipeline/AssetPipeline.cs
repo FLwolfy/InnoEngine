@@ -28,6 +28,7 @@ public sealed class AssetPipeline : AssetResidencyProvider,
     IDisposable,
     IAssetLookup,
     IAssetReferenceResolver,
+    IAssetPropertyStateResolver,
     IAssetArtifactLookup,
     IAssetResidency
 {
@@ -90,6 +91,33 @@ public sealed class AssetPipeline : AssetResidencyProvider,
     /// </summary>
     [ScriptingApiIgnore]
     public IdentityAllocator identities => m_identities;
+
+    /// <summary>Creates a detached source editor sharing this owner's mounts, native converters and references.</summary>
+    /// <returns>A source store that must not outlive this asset pipeline.</returns>
+    [ScriptingApiIgnore]
+    public AssetSourceStore CreateSourceStore()
+        => new(this, new AssetSerializationServices(m_types, m_serialization, this, null));
+
+    /// <summary>Captures native settings and nested asset dependencies through this explicit authoring owner.</summary>
+    /// <typeparam name="TValue">Current settings type.</typeparam>
+    /// <param name="value">Typed settings, never retained by the returned snapshot.</param>
+    /// <returns>Complete stable properties and dependencies without writing or importing an asset.</returns>
+    public AssetPropertySnapshot CaptureProperties<TValue>(TValue value) where TValue : class, ISerializable
+    {
+        EnsureOwnerThread();
+        using IDisposable operationScope = AcquireOperation();
+        return new AssetSerializationServices(m_types, m_serialization, this, null).CaptureProperties(value);
+    }
+
+    /// <inheritdoc />
+    public void RestoreProperties<TValue>(Guid stableTypeId, byte[] propertyData, TValue target) where TValue : class, ISerializable
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        using IDisposable operationScope = AcquireOperation();
+        if (m_types.GetTypeRef(target.GetType()).stableId != stableTypeId)
+            throw new InvalidOperationException("The asset property payload has an incompatible stable type identity.");
+        m_serialization.Decode(propertyData, reader => { reader.RestoreProperties(target); return true; }, AssetSerializationContext.Create(this));
+    }
 
     /// <summary>
     /// Occurs after an asset database transaction has committed.
@@ -1365,7 +1393,8 @@ public sealed class AssetPipeline : AssetResidencyProvider,
     /// Counts and source identities for the deployed runtime snapshot.
     /// </returns>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when a runtime-scoped asset has no complete artifact or depends on an authoring-only asset.
+    /// Thrown when runtime artifacts are incomplete, a deployed reference is authoring-only,
+    /// or a transitive authoring input has failed or changed since import. Last-good inputs do not certify an export.
     /// </exception>
     /// <exception cref="IOException">
     /// Thrown when the destination is not empty or cannot be written.
@@ -1386,6 +1415,10 @@ public sealed class AssetPipeline : AssetResidencyProvider,
     /// <summary>
     /// Exports a runtime-only artifact snapshot on a worker without loading artifact files into memory.
     /// </summary>
+    /// <remarks>
+    /// Keeps generation admission and serialization pinned until the worker completes, fails or cancels.
+    /// A pending or faulted generation cannot start a new export.
+    /// </remarks>
     /// <param name="destinationContentRoot">
     /// The empty destination that receives the runtime asset database.
     /// </param>
@@ -1396,33 +1429,25 @@ public sealed class AssetPipeline : AssetResidencyProvider,
     /// A task that completes with counts and source identities for the captured runtime snapshot.
     /// </returns>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when runtime artifacts are incomplete or the asset service is not available.
+    /// Thrown when runtime artifacts are incomplete, transitive authoring inputs have failed or become stale,
+    /// or the asset service is not available.
     /// </exception>
     /// <exception cref="OperationCanceledException">
     /// Thrown when cancellation is requested before export completes.
     /// </exception>
     [ScriptingApiIgnore]
-    public Task<AssetRuntimeContentInfo> ExportRuntimeArtifactsAsync(
+    public async Task<AssetRuntimeContentInfo> ExportRuntimeArtifactsAsync(
         string destinationContentRoot,
         CancellationToken cancellationToken = default)
     {
         EnsureOwnerThread();
-        using IDisposable operationScope = AcquireOperation();
+        using IDisposable operationScope = m_generations.AcquireRead("export runtime artifacts");
         WaitForIdle();
         AssetLoader loader = GetLoader();
-        SerializationGeneration serialization = m_serialization.CaptureGeneration();
-        return Task.Run(
-            () =>
-            {
-                using (serialization)
-                {
-                    return loader.ExportRuntimeArtifacts(
-                        destinationContentRoot,
-                        serialization,
-                        cancellationToken);
-                }
-            },
-            CancellationToken.None);
+        using SerializationGeneration serialization = m_serialization.CaptureGeneration();
+        return await Task.Run(
+            () => loader.ExportRuntimeArtifacts(destinationContentRoot, serialization, cancellationToken),
+            CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>

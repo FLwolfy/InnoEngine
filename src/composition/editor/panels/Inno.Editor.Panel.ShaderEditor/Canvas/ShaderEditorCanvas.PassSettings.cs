@@ -23,11 +23,30 @@ internal sealed partial class ShaderEditorCanvas
             if (UI.InputText("Name", ref name, 256)) { definition.name = name; definitionChanged = true; }
             Gesture();
             UI.SeparatorText(stage.stage + " Interface");
-            if (UI.BeginCombo("Pass", stage.pass))
+            ShaderGraphPassProgram[] programs = ShaderGraphPrograms.Read(Controller.document, owner.serialization, owner.context);
+            string activePass = draft.inspectedPass;
+            if (!definition.passes.Any(pass => pass.name == activePass))
+                activePass = programs.FirstOrDefault(program => program.stages.Contains(node.id.value, StringComparer.Ordinal)).pass
+                    ?? definition.passes.FirstOrDefault().name ?? "";
+            if (UI.BeginCombo("Pass State", activePass))
             {
                 foreach (ShaderPassDefinition available in definition.passes)
-                    if (UI.Selectable(available.name, stage.pass == available.name)) { stage.pass = available.name; Set(node, "settings", stage); }
+                    if (UI.Selectable(available.name, activePass == available.name)) { activePass = available.name; draft.inspectedPass = activePass; }
                 UI.EndCombo();
+            }
+            ShaderGraphPassProgram assignment = programs.FirstOrDefault(program => program.pass == activePass);
+            bool assigned = assignment.stages?.Contains(node.id.value, StringComparer.Ordinal) == true;
+            if (activePass.Length != 0 && UI.Checkbox("Use this shared stage", ref assigned))
+            {
+                var stageIds = (assignment.stages ?? []).Where(id => id != node.id.value).Select(static id => new GraphNodeId(id)).ToList();
+                if (assigned)
+                {
+                    stageIds.RemoveAll(id => Controller.document.FindNode(id) is GraphNodeRecord existing
+                        && Read(existing, "settings", new ShaderGraphStageSettings()).stage == stage.stage);
+                    stageIds.Add(node.id);
+                }
+                Controller.ReplaceDocument(ShaderGraphPrograms.Bind(Controller.document, activePass, stageIds, owner.serialization, owner.context), "Assign Shared Shader Stage");
+                owner.Changed(draft);
             }
             for (int i = 0; i < stage.outputs.Length; i++)
             {
@@ -63,7 +82,7 @@ internal sealed partial class ShaderEditorCanvas
                     semantic = "texcoord", location = stage.outputs.Length }];
                 Set(node, "settings", stage);
             }
-            int passIndex = Array.FindIndex(definition.passes, pass => pass.name == stage.pass);
+            int passIndex = Array.FindIndex(definition.passes, pass => pass.name == activePass);
             if (passIndex >= 0 && UI.CollapsingHeader("Pass State"))
             {
                 ShaderPassDefinition pass = definition.passes[passIndex];

@@ -44,6 +44,8 @@ internal sealed class AnimationControllerInspectionDrawer
 - 当前 `EditorInteractions`。
 - 当前 target。
 - `SerializedPropertyRenderer`。
+- `InspectionDrawerAttribute(..., conditional: true)` 声明由 CanInspect 筛选目标的 Drawer，允许同类型、同优先级的条件注册。实际同时接受同一目标仍明确报歧义，不依赖发现顺序；普通无条件冲突继续在候选构建时报错。
+- `DrawValue(..., readOnly, hdrColor, tooltip, minimum, maximum)` 用共享控件编辑声明值，允许动态声明贡献 Tooltip/数值范围，不伪造 CLR Attribute 或建立第二套控件；`DrawDraftProperty(editorContext, stateOwner, valueOwner, ownerPath, property, edits, readOnly)` 还保留原生属性 Header/Tooltip/范围。stateOwner 为中立文档状态，valueOwner 是仅本帧使用的设置对象，避免文本状态保留插件代际。
 
 通用 context 不包含 `SceneEdits`、AssetPipeline 或其他 feature service。具体 Drawer 需要领域能力时，由宿主组合根通过构造函数注入。例如 GameObject/Scene Drawer 在 Inspector Panel 内部取得 `SceneEdits`，而资产 Drawer 只取得资产 icon provider。
 

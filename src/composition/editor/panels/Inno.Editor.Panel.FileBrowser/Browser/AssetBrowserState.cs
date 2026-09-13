@@ -1,10 +1,12 @@
 
 using System;
+using System.Linq;
 
 using Inno.Assets;
 using Inno.Assets.Pipeline;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
+using Inno.Editor.Inspection;
 
 namespace Inno.Editor.Panel.FileBrowser;
 
@@ -84,7 +86,30 @@ public sealed class AssetBrowserState
     public string? GetSelectedPath(EditorContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
+        if (m_interactions.selection.selectedTarget is AssetInspectionSelection group
+            && m_assets.TryGetInfo(group.primaryAssetId, out AssetInfo? info) && info is not null)
+            return info.assetPath.ToString();
         return (m_interactions.selection.selectedTarget as Inno.Assets.Pipeline.AssetFileEntry)?.assetPath.ToString();
+    }
+
+    internal bool IsSelected(EditorContext context, AssetFileEntry entry)
+        => m_interactions.selection.selectedTarget is AssetInspectionSelection group
+            ? m_assets.TryGetInfo(entry.assetPath, out AssetInfo? info) && info is not null && group.assetIds.Contains(info.persistentId)
+            : string.Equals(GetSelectedPath(context), entry.assetPath.ToString(), StringComparison.Ordinal);
+
+    internal void ToggleSelection(EditorContext context, AssetFileEntry entry)
+    {
+        if (entry.isDirectory || !m_assets.TryGetInfo(entry.assetPath, out AssetInfo? info) || info is null)
+        { Select(context, entry.assetPath.ToString()); return; }
+        var ids = m_interactions.selection.selectedTarget is AssetInspectionSelection group ? group.assetIds.ToList() : new System.Collections.Generic.List<Guid>();
+        if (ids.Count == 0 && m_interactions.selection.selectedTarget is AssetFileEntry selected && !selected.isDirectory
+            && m_assets.TryGetInfo(selected.assetPath, out AssetInfo? previous) && previous is not null)
+            ids.Add(previous.persistentId);
+        if (!ids.Remove(info.persistentId)) ids.Add(info.persistentId);
+        if (ids.Count == 0) Select(context, null);
+        else if (ids.Count == 1 && m_assets.TryGetInfo(ids[0], out AssetInfo? remaining) && remaining is not null)
+            Select(context, remaining.assetPath.ToString());
+        else m_interactions.SetSelection(new AssetInspectionSelection(ids));
     }
 
     /// <summary>

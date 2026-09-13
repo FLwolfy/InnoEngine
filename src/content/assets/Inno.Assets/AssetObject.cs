@@ -18,6 +18,7 @@ public abstract class AssetObject : IdentityObject, ISerializable
     private long m_contentVersion;
     private string m_sourceHash = string.Empty;
     private object? m_runtimeOwner;
+    private WeakReference<IAssetPropertyStateResolver>? m_propertyStateOwner;
 
     /// <summary>
     /// Gets the isolated source path associated with this asset.
@@ -46,6 +47,19 @@ public abstract class AssetObject : IdentityObject, ISerializable
     /// Gets the runtime artifact payload produced by the importer.
     /// </summary>
     public ReadOnlyMemory<byte> runtimePayload => m_runtimePayload;
+
+    /// <summary>Restores detached extension settings using this asset's actual owner and converter generation.</summary>
+    /// <typeparam name="TValue">Current settings contract with a stable type identity.</typeparam>
+    /// <param name="stableTypeId">Persisted settings type identity.</param>
+    /// <param name="propertyData">Native property payload to restore.</param>
+    /// <param name="target">Detached target, never retained by the asset.</param>
+    /// <exception cref="InvalidOperationException">The asset is unowned, retired, or lacks property-state services.</exception>
+    public void RestoreProperties<TValue>(Guid stableTypeId, byte[] propertyData, TValue target) where TValue : class, ISerializable
+    {
+        if (m_runtimeResourcesReleased || m_propertyStateOwner is null || !m_propertyStateOwner.TryGetTarget(out var owner))
+            throw new InvalidOperationException("The asset's property-state owner is unavailable.");
+        owner.RestoreProperties(stableTypeId, propertyData, target);
+    }
 
     /// <summary>
     /// Called after a new runtime payload has been committed to this instance.
@@ -78,11 +92,12 @@ public abstract class AssetObject : IdentityObject, ISerializable
 
     internal string sourceHash => m_sourceHash;
 
-    internal void ClaimRuntimeOwner(object authority)
+    internal void ClaimRuntimeOwner(object authority, WeakReference<IAssetPropertyStateResolver>? properties)
     {
         object? previous = System.Threading.Interlocked.CompareExchange(ref m_runtimeOwner, authority, null);
         if (previous is not null && !ReferenceEquals(previous, authority))
             throw new InvalidOperationException("The asset belongs to another runtime owner.");
+        m_propertyStateOwner = properties;
     }
 
     internal void InitializeRuntimeState(

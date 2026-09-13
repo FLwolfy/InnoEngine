@@ -56,6 +56,8 @@ Core 不引用业务领域；Build 不引用 Editor；Runtime 不引用 Build/Ed
 新增 [Inno.Rendering.Shaders](render/Inno.Rendering.Shaders.md) 已包含独立项目页与 Rendering 索引；
 当前实现源码接口、多实现快照、节点降低与 typed stage/资源/分支/循环，完整 Shader 图替换的未完成项单独记录，不以单元测试或原生编译通过代替产品验收。
 新增 [Shader Editor](editor/Inno.Editor.Panel.ShaderEditor.md) 与
+独立的 [Editor Shader 功能层](editor/Inno.Editor.Shaders.md)，以及
+可复用的 [原生资产草稿功能层](editor/Inno.Editor.Assets.md)，以及
 [内置 Shader 离线工具](build/Inno.Build.Toolchains.Bgfx.Shaders.md) 已有项目页和分类索引。
 图资产替换、自动保存、原生启动记录以及尚未通过的验收见[当前 Shader 检查点](issues/2026-09-11-unified-shader-implementation.md)。
 

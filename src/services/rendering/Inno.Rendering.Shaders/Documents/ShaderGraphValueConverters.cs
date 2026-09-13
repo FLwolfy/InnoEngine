@@ -4,12 +4,22 @@ using Inno.Core.Serialization.Converters;
 namespace Inno.Rendering.Shaders;
 
 [SerializationExtension]
+internal sealed class ShaderGraphLiteralConverter : SerializationConverter<ShaderGraphLiteral>
+{
+    /// <inheritdoc />
+    public override void Write(SerializationWriter writer, ShaderGraphLiteral value)
+    { writer.Write("type", value.type); writer.Write("scalarBits", value.scalarBits); }
+    /// <inheritdoc />
+    public override ShaderGraphLiteral Read(SerializationReader reader)
+        => new() { type = reader.Read<ShaderGraphType>("type"), scalarBits = reader.Read<uint[]>("scalarBits") };
+}
+
+[SerializationExtension]
 internal sealed class ShaderGraphStageSettingsConverter : SerializationConverter<ShaderGraphStageSettings>
 {
     /// <inheritdoc />
     public override void Write(SerializationWriter writer, ShaderGraphStageSettings value)
     {
-        writer.Write("pass", value.pass);
         writer.Write("stage", value.stage);
         writer.Write("outputs", value.outputs);
         writer.Write("threadsX", value.threadsX);
@@ -19,7 +29,6 @@ internal sealed class ShaderGraphStageSettingsConverter : SerializationConverter
     /// <inheritdoc />
     public override ShaderGraphStageSettings Read(SerializationReader reader) => new()
     {
-        pass = reader.Read<string>("pass"),
         stage = reader.Read<ShaderStage>("stage"),
         outputs = reader.Read<ShaderGraphOutput[]>("outputs"),
         threadsX = reader.Read<int>("threadsX"),

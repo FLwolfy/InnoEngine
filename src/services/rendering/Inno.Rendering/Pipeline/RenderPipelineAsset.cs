@@ -19,6 +19,7 @@ public struct SerializedRenderExtensionState
     public SerializedRenderExtensionState()
     {
         propertyData = [];
+        dependencies = [];
     }
 
     /// <summary>
@@ -28,12 +29,23 @@ public struct SerializedRenderExtensionState
     /// Stable type identity, or empty when the extension has no typed settings.
     /// </param>
     /// <param name="propertyData">
-    /// Neutral bytes produced by <see cref="SerializationRegistry.CapturePropertiesData"/>.
+    /// Neutral native property bytes produced by asset serialization. Use the snapshot constructor when settings reference assets.
     /// </param>
     public SerializedRenderExtensionState(Guid stableTypeId, ReadOnlySpan<byte> propertyData)
     {
         this.stableTypeId = stableTypeId;
         this.propertyData = propertyData.ToArray();
+        dependencies = [];
+    }
+
+    /// <summary>Copies an owner-captured property snapshot, preserving its automatic resource dependency declarations.</summary>
+    /// <param name="properties">Complete neutral properties produced by the asset authoring services.</param>
+    public SerializedRenderExtensionState(AssetPropertySnapshot properties)
+    {
+        ArgumentNullException.ThrowIfNull(properties);
+        stableTypeId = properties.stableTypeId;
+        propertyData = properties.data.ToArray();
+        dependencies = properties.dependencies.ToArray();
     }
 
     /// <summary>
@@ -48,6 +60,10 @@ public struct SerializedRenderExtensionState
     [SerializableProperty]
     public byte[] propertyData { get; set; }
 
+    /// <summary>Gets or sets asset dependencies captured with the neutral property payload.</summary>
+    [SerializableProperty]
+    public AssetDependency[] dependencies { get; set; }
+
     /// <summary>
     /// Restores settings into a generation-local instance.
     /// </summary>
@@ -57,35 +73,18 @@ public struct SerializedRenderExtensionState
     /// <param name="target">
     /// Current generation instance to restore.
     /// </param>
-    /// <param name="types">
-    /// The type catalog that owns the active extension type generation.
-    /// </param>
-    /// <param name="serialization">
-    /// The serialization registry used to restore the captured property payload.
-    /// </param>
+    /// <param name="context">Explicit owner context used to restore types and asset references.</param>
     /// <exception cref="ArgumentException">
     /// Thrown when the active type does not match the stored stable identity.
     /// </exception>
-    [ScriptingApiIgnore]
     public void Restore<TSettings>(
         TSettings target,
-        TypeCatalog types,
-        SerializationRegistry serialization)
+        RenderExtensionStateContext context)
         where TSettings : class, ISerializable
     {
         ArgumentNullException.ThrowIfNull(target);
-        ArgumentNullException.ThrowIfNull(types);
-        ArgumentNullException.ThrowIfNull(serialization);
-        TypeRef activeType = types.GetTypeRef(target.GetType());
-        if (stableTypeId != Guid.Empty && activeType.stableId != stableTypeId)
-        {
-            throw new ArgumentException(
-                $"Settings type '{activeType.stableId:D}' does not match '{stableTypeId:D}'.",
-                nameof(target));
-        }
-
-        if (propertyData is { Length: > 0 })
-            _ = serialization.RestorePropertiesData(target, propertyData);
+        ArgumentNullException.ThrowIfNull(context);
+        context.Restore(this, target);
     }
 }
 

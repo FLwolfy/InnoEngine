@@ -233,14 +233,15 @@ internal sealed class RenderExtensionRegistry : TypeRegistry<RenderExtensionRegi
             var candidate = new RenderPipelineGeneration(typeCacheVersion, Create<RenderPipeline>(pipelineType));
             try
             {
-                candidate.pipeline.Configure(asset.pipelineState);
+                var settings = new RenderExtensionStateContext(asset);
+                candidate.pipeline.Configure(asset.pipelineState, settings);
                 foreach (RenderFeatureConfiguration configuration in asset.features.Where(
                              static value => value.enabled))
                 {
                     RenderPipelineFeature feature = Create<RenderPipelineFeature>(
                         featureTypes[configuration.featureTypeId]);
                     candidate.AddFeature(configuration.featureTypeId, feature);
-                    feature.Configure(configuration);
+                    feature.Configure(configuration, settings);
                 }
 
                 generation = candidate;

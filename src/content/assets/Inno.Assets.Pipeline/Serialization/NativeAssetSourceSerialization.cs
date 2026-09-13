@@ -36,7 +36,7 @@ public static class NativeAssetSourceSerialization
         ArgumentNullException.ThrowIfNull(services);
         TypeRef type = services.types.GetTypeRef(asset.GetType());
         var dependencies = new AssetDependencyCollection();
-        SerializationContext context = SerializationContext.empty.With(dependencies);
+        SerializationContext context = services.context.With(dependencies);
         byte[] propertyData = services.serialization.Encode(
             writer => writer.WriteProperties(asset),
             context);

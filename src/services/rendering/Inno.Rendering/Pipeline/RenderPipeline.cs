@@ -333,9 +333,11 @@ public abstract class RenderPipeline : IDisposable
     /// <param name="state">
     /// Stable type identity and neutral property bytes.
     /// </param>
-    public void Configure(SerializedRenderExtensionState state)
+    /// <param name="settings">Native context bound to the canonical Pipeline asset's actual owner.</param>
+    public void Configure(SerializedRenderExtensionState state, RenderExtensionStateContext settings)
     {
-        OnConfigure(state);
+        ArgumentNullException.ThrowIfNull(settings);
+        OnConfigure(state, settings);
     }
 
     /// <summary>
@@ -373,7 +375,8 @@ public abstract class RenderPipeline : IDisposable
     /// <param name="state">
     /// Reload-safe extension state.
     /// </param>
-    protected virtual void OnConfigure(SerializedRenderExtensionState state) { }
+    /// <param name="settings">Native context bound to the canonical Pipeline asset's actual owner.</param>
+    protected virtual void OnConfigure(SerializedRenderExtensionState state, RenderExtensionStateContext settings) { }
 
     /// <summary>
     /// Releases managed generation-scoped state.
@@ -398,9 +401,11 @@ public abstract class RenderPipelineFeature
     /// <param name="configuration">
     /// Stable feature configuration.
     /// </param>
-    public void Configure(RenderFeatureConfiguration configuration)
+    /// <param name="settings">Native context bound to the canonical Pipeline asset's actual owner.</param>
+    public void Configure(RenderFeatureConfiguration configuration, RenderExtensionStateContext settings)
     {
-        OnConfigure(configuration.state);
+        ArgumentNullException.ThrowIfNull(settings);
+        OnConfigure(configuration.state, settings);
     }
 
     /// <summary>
@@ -417,5 +422,6 @@ public abstract class RenderPipelineFeature
     /// <param name="state">
     /// Reload-safe extension state.
     /// </param>
-    protected virtual void OnConfigure(SerializedRenderExtensionState state) { }
+    /// <param name="settings">Native context bound to the canonical Pipeline asset's actual owner.</param>
+    protected virtual void OnConfigure(SerializedRenderExtensionState state, RenderExtensionStateContext settings) { }
 }

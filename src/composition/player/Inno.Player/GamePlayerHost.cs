@@ -46,6 +46,7 @@ internal sealed class GamePlayerHost : ShellHost
         : base(adapterCatalog, shellOptions)
     {
         m_engine = engine;
+        m_engine.logs.RegisterSink(new ConsoleLogSink());
     }
 
     internal static GamePlayerHost Create(
@@ -112,6 +113,14 @@ internal sealed class GamePlayerHost : ShellHost
 
     private RuntimeSession session
         => m_session ?? throw new InvalidOperationException("The Player runtime session is not initialized.");
+
+    internal int RunGame(int? smokeFrameLimit)
+    {
+        // The Player has one immutable project owner for its entire run. Output providers execute
+        // after the session tick, so its settings must cover the complete Shell phase sequence.
+        using IDisposable scope = settings.EnterExecutionScope();
+        return Run(smokeFrameLimit);
+    }
 
     private ProjectSettingsStore settings
         => m_settings ?? throw new InvalidOperationException("The Player settings owner is not initialized.");
@@ -196,10 +205,7 @@ internal sealed class GamePlayerHost : ShellHost
     /// Immutable timing and identity for the current shell frame.
     /// </param>
     protected override void OnFrame(ShellFrame frame)
-    {
-        using (settings.EnterExecutionScope())
-            session.Tick(frame.deltaTime);
-    }
+        => session.Tick(frame.deltaTime);
 
     /// <summary>
     /// Writes deterministic rendering statistics after a bounded smoke run completes.
@@ -209,6 +215,12 @@ internal sealed class GamePlayerHost : ShellHost
     /// </param>
     protected override void OnSmokeCompleted(int frameCount)
     {
+        var diagnostics = new SmokeDiagnostics();
+        m_engine.diagnostics.RegisterSink(diagnostics);
+        m_engine.diagnostics.UnregisterSink(diagnostics);
+        if (diagnostics.errors.Count != 0)
+            throw new InvalidOperationException("Player smoke completed with active errors:" + Environment.NewLine
+                + string.Join(Environment.NewLine, diagnostics.errors));
         RenderFrameStatistics? statistics;
         using (rendering.EnterExecutionScope())
             statistics = GraphicsSettings.frameStatistics;
@@ -217,6 +229,18 @@ internal sealed class GamePlayerHost : ShellHost
             + $"views={statistics?.viewCount ?? 0} "
             + $"draws={statistics?.drawCount ?? 0} "
             + $"dispatches={statistics?.dispatchCount ?? 0}");
+    }
+
+    private sealed class SmokeDiagnostics : IDiagnosticSink
+    {
+        internal readonly List<string> errors = [];
+        public void Replace(DiagnosticReport report)
+        {
+            foreach (Diagnostic diagnostic in report.diagnostics)
+                if (diagnostic.severity == DiagnosticSeverity.Error)
+                    errors.Add(report.source.id + "/" + diagnostic.code + ": " + diagnostic.message);
+        }
+        public void Clear(DiagnosticSource source) { }
     }
 
     /// <summary>

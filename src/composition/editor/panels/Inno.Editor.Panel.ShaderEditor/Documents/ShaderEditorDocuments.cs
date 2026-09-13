@@ -12,6 +12,7 @@ using Inno.Editor.Core;
 using Inno.Editor.Graph;
 using Inno.Editor.Interactions;
 using Inno.Editor.Rendering;
+using Inno.Editor.Shaders;
 using Inno.Editor.Panel.FileBrowser;
 using Inno.Rendering;
 using Inno.Extensibility.Types;
@@ -34,6 +35,8 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
     private ShaderNodeCompilerRegistry? m_nodes;
     private ShaderSourceFrontendRegistry? m_frontends;
     internal ShaderNodeDrawerRegistry? drawers;
+    internal ShaderGraphTemplateRegistry? templates;
+    internal ShaderTargetRegistry? targets;
     private readonly TypeCatalog m_types;
     private readonly EditorShaderCompilation m_compilation;
     internal readonly AssetImportSettingsEdits importSettings;
@@ -62,6 +65,23 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
     internal ShaderNodeCompilerRegistry nodes => m_nodes ?? throw new InvalidOperationException("Shader documents have not started.");
     internal ShaderSourceFrontendRegistry frontends => m_frontends ?? throw new InvalidOperationException("Shader documents have not started.");
     internal long typeVersion => m_types.current.version;
+
+    internal EditorShaderDraftCompilationSnapshot Preview(Draft draft)
+    {
+        GraphDocumentController controller = Controller(draft);
+        long now = Stopwatch.GetTimestamp();
+        if (draft.previewRevision != controller.revision)
+        {
+            draft.previewRevision = controller.revision;
+            draft.previewDue = now + Stopwatch.Frequency * 3 / 10;
+        }
+        if (now < draft.previewDue)
+            return new(EditorShaderCompilationState.Compiling, draft.preview?.artifact is not null, [], draft.preview?.artifact);
+        return draft.preview = m_compilation.RequestDraft(draft.id, controller.document, controller.revision, RenderShaderVariant.empty);
+    }
+
+    internal void ReleasePreview(Draft draft)
+    { m_compilation.ReleaseDraft(draft.id); draft.preview = null; draft.previewRevision = ulong.MaxValue; }
 
     internal Draft Open(AssetFileEntry entry)
     {
@@ -135,8 +155,13 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
     {
         GraphDocumentController controller = Controller(draft);
         draft.observedRevision = controller.revision;
-        if (!controller.isDirty) return;
-        interactions.documents.MarkDirty(draft.documentId);
+        interactions.documents.SetDirty(draft.documentId, controller.isDirty);
+        if (!controller.isDirty)
+        {
+            string recovery = RecoveryPath(draft.id);
+            if (File.Exists(recovery)) File.Delete(recovery);
+            return;
+        }
         try { PreserveRecovery(draft, controller); draft.error = ""; }
         catch (Exception failure) when ((failure is IOException or UnauthorizedAccessException or InvalidOperationException) && Inno.Core.Execution.RetirementPendingException.Find(failure) is null)
         { draft.error = "Recovery could not be written: " + failure.Message; }
@@ -200,6 +225,8 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
             m_nodes = m_lifetime.Own(new ShaderNodeCompilerRegistry(m_types));
             m_frontends = m_lifetime.Own(new ShaderSourceFrontendRegistry(m_types));
             drawers = m_lifetime.Own(new ShaderNodeDrawerRegistry(m_types));
+            templates = m_lifetime.Own(new ShaderGraphTemplateRegistry(m_types));
+            targets = m_lifetime.Own(new ShaderTargetRegistry(m_types));
             _ = m_lifetime.Own(interactions.documents.RegisterProvider(new Provider(this)));
         }
         catch (Exception failure)
@@ -256,11 +283,16 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
     {
         // Recovery is not an asset save. Closing the panel, shutdown and reload must not apply a draft.
         foreach (Draft draft in m_drafts.Values)
+        {
             if (Controller(draft).isDirty) PreserveRecovery(draft, Controller(draft));
+            ReleasePreview(draft);
+        }
         m_lifetime?.Dispose();
         m_lifetime = null;
         m_frontends = null;
         drawers = null;
+        templates = null;
+        targets = null;
         m_nodes = null;
     }
 
@@ -387,6 +419,7 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
             string recovery = owner.RecoveryPath(draft.id);
             if (File.Exists(recovery)) File.Delete(recovery);
             owner.RememberView(draft);
+            owner.ReleasePreview(draft);
             draft.navigation.Cancel();
             owner.m_graphs.CloseDocument(draft.id);
             owner.m_drafts.Remove(draft.id);
@@ -407,6 +440,10 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
         internal string compilationDiagnostics = "";
         internal ShaderDiagnostic[] diagnostics = [];
         internal bool showDiagnostics;
+        internal bool previewEnabled;
+        internal ulong previewRevision = ulong.MaxValue;
+        internal long previewDue;
+        internal EditorShaderDraftCompilationSnapshot? preview;
         internal string diagnosticSource = "";
         internal string[] diagnosticLines = [];
         internal int diagnosticLine;
@@ -428,6 +465,8 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
         internal readonly GraphCanvasState canvas = new();
         internal GraphPosition menuPosition;
         internal GraphNodeId? activeStage;
+        internal string inspectedPass = "";
+        internal GraphNodeId[] inspectedNodes = [];
         internal string valueGesture = Guid.NewGuid().ToString("N");
         internal readonly EditorPlanarNavigation navigation = new();
         internal bool dragging;

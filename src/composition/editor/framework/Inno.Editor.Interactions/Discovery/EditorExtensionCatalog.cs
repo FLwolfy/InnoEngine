@@ -56,6 +56,19 @@ internal sealed class EditorExtensionCatalog : TypeRegistry<EditorExtensionCatal
         }
     }
 
+    internal bool TryGetModule<TModule>(out TModule? module) where TModule : EditorModule
+    {
+        Snapshot? snapshot = m_active;
+        if (snapshot is not null)
+            foreach (ModuleRegistration registration in snapshot.modules)
+                if (registration.module is TModule candidate
+                    && snapshot.startedModules.Contains(candidate)
+                    && !snapshot.quarantinedModules.Contains(candidate))
+                { module = candidate; return true; }
+        module = null;
+        return false;
+    }
+
     internal void UpdateModules()
     {
         Snapshot snapshot = extensions;

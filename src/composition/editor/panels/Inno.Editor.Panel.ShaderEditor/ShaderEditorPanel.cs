@@ -4,6 +4,7 @@ using Inno.Assets;
 using Inno.Assets.Pipeline;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
+using Inno.Editor.Shaders;
 using Inno.Rendering;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
@@ -24,6 +25,9 @@ internal sealed class ShaderEditorPanel(ShaderEditorDocuments documents) : Edito
         AssetFileEntry? entry = documents.interactions.selection.selectedTarget as AssetFileEntry;
         if (documents.interactions.selection.selectedTarget is ShaderAsset shader)
             _ = documents.assets.TryGetFileSystemEntry(shader.assetPath, out entry);
+        if (documents.interactions.selection.selectedTarget is ShaderInspectionSelection selection
+            && documents.assets.TryGetInfo(selection.assetId, out AssetInfo? info) && info is not null)
+            _ = documents.assets.TryGetFileSystemEntry(info.assetPath, out entry);
         if (entry is null || entry.isDirectory || !entry.assetPath.localPath.EndsWith(".ishader", StringComparison.OrdinalIgnoreCase))
         {
             NativeImGui.TextDisabled("Select a Shader (.ishader) in the File Browser.");

@@ -76,6 +76,7 @@ public sealed class ProjectSettingsExecutionContextTests
 
     private sealed class FixedSettingsLookup(int value) : IProjectSettingsLookup
     {
+        public Guid ownerId { get; } = Guid.NewGuid();
         public long revision => value;
 
         public TSetting Get<TSetting>(ProjectSettingId id)

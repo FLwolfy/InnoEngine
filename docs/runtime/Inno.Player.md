@@ -12,4 +12,6 @@ Player closure 必须保持 source-free：不得包含 Editor、Build、AssetPip
 完整 Asset resolver context。配置中的冷资产引用因此落在正确的 Session identity domain；不再先创建
 没有 resolver 的 Settings。默认 Audio 配置通过定义明确的 Settings 契约读取，不使用缺失时静默 new 默认值的旁路。
 
-`--smoke-frames` 使用 Shell 的有界 run loop，并输出最终 rendering statistics；普通启动运行到 application 或 primary window 请求退出。
+Player 的单一 Project Settings 执行作用域覆盖完整 Shell 循环，而不只覆盖 `session.Tick()`。渲染 Request Provider 和 Pipeline 在 Tick 之后执行，仍必须解析到同一设置 owner；此职责属于产品宿主，不在 Rendering Core 或具体插件中增加作用域补丁。
+
+`--smoke-frames` 使用 Shell 的有界 run loop，并输出最终 rendering statistics；如果 DiagnosticHub 仍有活动错误则返回失败，不把空提交当作成功。普通启动运行到 application 或 primary window 请求退出。Player 接入既有 `ConsoleLogSink`，领域和渲染诊断不会在无 Editor Console 时被丢弃。

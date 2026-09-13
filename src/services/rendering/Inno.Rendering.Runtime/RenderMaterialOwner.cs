@@ -72,33 +72,49 @@ internal sealed class RenderMaterialOwner : RenderResourceProvider, IDisposable
 
     internal bool TryResolveMaterial(MaterialAsset material, ShaderContractId contractId, ShaderPassRoleId passRoleId,
         ShaderProgramKind expectedKind, RenderVertexLayout? vertexLayout, MaterialPropertyBlock? overrides,
-        out RenderMaterialPass? materialPass)
+        out RenderMaterialPass? materialPass, RenderShaderArtifact? suppliedArtifact = null,
+        string scope = "", IDiagnosticReporter? diagnostics = null)
     {
         Drain();
         ArgumentNullException.ThrowIfNull(material);
+        diagnostics ??= m_diagnostics;
         materialPass = null;
         ShaderAsset? shader = material.shader;
         if (shader is null || shader.identity.persistentId == Guid.Empty)
         {
-            Publish("RENDER_SHADER_ID_MISSING", "Material requires a shader with a persistent asset identity.", material.assetPath.ToString());
+            Publish("RENDER_SHADER_ID_MISSING", "Material requires a shader with a persistent asset identity.", material.assetPath.ToString(), diagnostics);
             return false;
         }
 
         Guid shaderId = shader.identity.persistentId;
         RenderShaderVariant variant;
-        try { variant = RenderShaderVariant.FromMaterial(material); }
+        try
+        {
+            variant = suppliedArtifact is null ? RenderShaderVariant.FromMaterial(material)
+                : RenderShaderVariant.FromMaterial(material, m_targetArtifacts!.ReadShaderDefinition(suppliedArtifact));
+        }
         catch (Exception pending) when (RetirementPendingException.Find(pending) is not null) { throw; }
         catch (Exception failure)
         {
-            Publish("RENDER_MATERIAL_VARIANT_INVALID", failure.Message, material.assetPath.ToString());
-            return TryUseLastGood(material, shaderId, contractId, passRoleId, expectedKind, vertexLayout, overrides, out materialPass);
+            Publish("RENDER_MATERIAL_VARIANT_INVALID", failure.Message, material.assetPath.ToString(), diagnostics);
+            return TryUseLastGood(material, shaderId, contractId, passRoleId, expectedKind, vertexLayout, overrides, out materialPass, scope, diagnostics);
         }
 
-        ProgramPublication? publication = FindPublication(shaderId, variant);
-        ArtifactResult result = QueryArtifact(shader, variant);
+        ProgramPublication? publication = FindPublication(shaderId, variant, scope);
+        ArtifactResult result;
+        if (suppliedArtifact is null) result = QueryArtifact(shader, variant);
+        else
+        {
+            var lookup = new LookupKey(shaderId, variant.value, scope);
+            if (!m_frameArtifacts.TryGetValue(lookup, out result))
+            {
+                result = new(RenderTargetArtifactStatus.Ready, suppliedArtifact);
+                m_frameArtifacts.Add(lookup, result);
+            }
+        }
         if (result.artifact is { } artifact && result.status == RenderTargetArtifactStatus.Ready
             && publication?.artifact.contentHash != artifact.contentHash
-            && !m_failedFrameCandidates.Contains(artifact.contentHash))
+            && !m_failedFrameCandidates.Contains(scope + artifact.contentHash))
         {
             ProgramPublication? candidate = null;
             bool published = false;
@@ -108,8 +124,8 @@ internal sealed class RenderMaterialOwner : RenderResourceProvider, IDisposable
                 ValidatePublication(artifact, definition, variant);
                 MaterialPassResolution? selected = MaterialPassResolver.Resolve(definition, material.techniqueId,
                     contractId, passRoleId, m_device.capabilities);
-                if (selected is null) return Unavailable(material, contractId, passRoleId);
-                if (selected.pass.programKind != expectedKind) return WrongKind(material, selected.pass, expectedKind);
+                if (selected is null) return Unavailable(material, contractId, passRoleId, diagnostics);
+                if (selected.pass.programKind != expectedKind) return WrongKind(material, selected.pass, expectedKind, diagnostics);
                 candidate = new(artifact, definition);
                 var required = new HashSet<ProgramLayout>();
                 if (publication is not null)
@@ -119,7 +135,7 @@ internal sealed class RenderMaterialOwner : RenderResourceProvider, IDisposable
                 required.Add(new(selected.pass.name, expectedKind, vertexLayout));
                 if (count - (publication?.programs.Count ?? 0) + required.Count > m_capacity)
                     throw new InvalidOperationException("Shader program publication exceeds the configured program capacity.");
-                var key = new PublicationKey(shaderId, artifact.targetKey, variant.value);
+                var key = new PublicationKey(shaderId, artifact.targetKey, variant.value, scope);
                 m_programs.RequireCapacity(key);
                 foreach (ProgramLayout layout in required)
                     candidate.programs.Add(layout, CreateProgram(artifact, layout));
@@ -129,7 +145,7 @@ internal sealed class RenderMaterialOwner : RenderResourceProvider, IDisposable
                 candidate = null;
                 published = true;
                 m_programs.Drain();
-                m_diagnostics.Resolve("RENDER_PROGRAM_CREATE_FAILED", shader.assetPath.ToString());
+                diagnostics.Resolve("RENDER_PROGRAM_CREATE_FAILED", shader.assetPath.ToString());
             }
             catch (Exception failure)
             {
@@ -142,17 +158,29 @@ internal sealed class RenderMaterialOwner : RenderResourceProvider, IDisposable
                     catch (Exception cleanup) { throw new AggregateException(failure, cleanup); }
                 }
                 if (RetirementPendingException.Find(failure) is not null) throw;
-                m_failedFrameCandidates.Add(artifact.contentHash);
-                Publish("RENDER_PROGRAM_CREATE_FAILED", $"Shader kept its complete last-good publication: {failure.Message}", shader.assetPath.ToString());
+                m_failedFrameCandidates.Add(scope + artifact.contentHash);
+                Publish("RENDER_PROGRAM_CREATE_FAILED", $"Shader kept its complete last-good publication: {failure.Message}", shader.assetPath.ToString(), diagnostics);
             }
         }
         if (publication is null) return false;
-        return TryUsePublication(material, publication, contractId, passRoleId, expectedKind, vertexLayout, overrides, out materialPass);
+        return TryUsePublication(material, publication, contractId, passRoleId, expectedKind, vertexLayout, overrides, out materialPass, diagnostics);
+    }
+
+    internal void ReleaseScope(string scope)
+    {
+        foreach (PublicationKey key in m_programs.Where(pair => pair.Key.scope == scope).Select(pair => pair.Key).ToArray())
+            m_programs.Release(key);
+    }
+
+    internal bool HasScope(string scope)
+    {
+        foreach (var pair in m_programs) if (pair.Key.scope == scope) return true;
+        return false;
     }
 
     private ArtifactResult QueryArtifact(ShaderAsset shader, RenderShaderVariant variant)
     {
-        var key = new LookupKey(shader.identity.persistentId, variant.value);
+        var key = new LookupKey(shader.identity.persistentId, variant.value, "");
         if (m_frameArtifacts.TryGetValue(key, out ArtifactResult result)) return result;
         string source = shader.assetPath.ToString();
         try
@@ -178,24 +206,25 @@ internal sealed class RenderMaterialOwner : RenderResourceProvider, IDisposable
         return result;
     }
 
-    private ProgramPublication? FindPublication(Guid shaderId, RenderShaderVariant variant)
+    private ProgramPublication? FindPublication(Guid shaderId, RenderShaderVariant variant, string scope)
     {
         foreach ((PublicationKey key, ProgramPublication publication) in m_programs)
-            if (key.shaderId == shaderId && key.variantKey == variant.value) return publication;
+            if (key.shaderId == shaderId && key.variantKey == variant.value && key.scope == scope) return publication;
         return null;
     }
 
     private bool TryUseLastGood(MaterialAsset material, Guid shaderId, ShaderContractId contract, ShaderPassRoleId role,
-        ShaderProgramKind kind, RenderVertexLayout? layout, MaterialPropertyBlock? overrides, out RenderMaterialPass? result)
+        ShaderProgramKind kind, RenderVertexLayout? layout, MaterialPropertyBlock? overrides, out RenderMaterialPass? result,
+        string scope, IDiagnosticReporter diagnostics)
     {
         foreach ((PublicationKey key, ProgramPublication publication) in m_programs)
         {
-            if (key.shaderId != shaderId) continue;
+            if (key.shaderId != shaderId || key.scope != scope) continue;
             RenderShaderVariant variant;
             try { variant = RenderShaderVariant.FromMaterial(material, publication.definition); }
             catch (InvalidOperationException) { continue; }
             if (variant.value == key.variantKey)
-                return TryUsePublication(material, publication, contract, role, kind, layout, overrides, out result);
+                return TryUsePublication(material, publication, contract, role, kind, layout, overrides, out result, diagnostics);
         }
         result = null;
         return false;
@@ -203,13 +232,13 @@ internal sealed class RenderMaterialOwner : RenderResourceProvider, IDisposable
 
     private bool TryUsePublication(MaterialAsset material, ProgramPublication publication, ShaderContractId contract,
         ShaderPassRoleId role, ShaderProgramKind kind, RenderVertexLayout? layout, MaterialPropertyBlock? overrides,
-        out RenderMaterialPass? result)
+        out RenderMaterialPass? result, IDiagnosticReporter diagnostics)
     {
         result = null;
         MaterialPassResolution? resolution = MaterialPassResolver.Resolve(publication.definition, material.techniqueId,
             contract, role, m_device.capabilities);
-        if (resolution is null) return Unavailable(material, contract, role);
-        if (resolution.pass.programKind != kind) return WrongKind(material, resolution.pass, kind);
+        if (resolution is null) return Unavailable(material, contract, role, diagnostics);
+        if (resolution.pass.programKind != kind) return WrongKind(material, resolution.pass, kind, diagnostics);
         var key = new ProgramLayout(resolution.pass.name, kind, layout);
         if (!publication.programs.TryGetValue(key, out ProgramEntry? program))
         {
@@ -220,25 +249,26 @@ internal sealed class RenderMaterialOwner : RenderResourceProvider, IDisposable
                 publication.programs.Add(key, program);
             }
             catch (Exception pending) when (RetirementPendingException.Find(pending) is not null) { throw; }
-            catch (Exception failure) { Publish("RENDER_PROGRAM_CREATE_FAILED", failure.Message, material.assetPath.ToString()); return false; }
+            catch (Exception failure) { Publish("RENDER_PROGRAM_CREATE_FAILED", failure.Message, material.assetPath.ToString(), diagnostics); return false; }
         }
         publication.lastUsedFrame = m_frameIndex;
-        if (!TryBuildBindings(material, overrides, publication, program.shaderInterface, out MaterialBinding[] bindings)) return false;
+        if (!TryBuildBindings(material, overrides, publication, program.shaderInterface, out MaterialBinding[] bindings, diagnostics)) return false;
         result = CreateMaterialPass(resolution.pass, program.graphicsPipeline, program.computePipeline, bindings);
-        m_diagnostics.Resolve("RENDER_MATERIAL_PASS_UNAVAILABLE", material.assetPath.ToString());
-        m_diagnostics.Resolve("RENDER_MATERIAL_PASS_KIND_MISMATCH", material.assetPath.ToString());
+        diagnostics.Resolve("RENDER_MATERIAL_PASS_UNAVAILABLE", material.assetPath.ToString());
+        diagnostics.Resolve("RENDER_MATERIAL_PASS_KIND_MISMATCH", material.assetPath.ToString());
+        diagnostics.Resolve("RENDER_MATERIAL_PROPERTY_TYPE_MISMATCH", material.assetPath.ToString());
         return true;
     }
 
-    private bool Unavailable(MaterialAsset material, ShaderContractId contract, ShaderPassRoleId role)
+    private bool Unavailable(MaterialAsset material, ShaderContractId contract, ShaderPassRoleId role, IDiagnosticReporter diagnostics)
     {
-        Publish("RENDER_MATERIAL_PASS_UNAVAILABLE", $"Material does not implement contract '{contract}' role '{role}' in its published shader.", material.assetPath.ToString());
+        Publish("RENDER_MATERIAL_PASS_UNAVAILABLE", $"Material does not implement contract '{contract}' role '{role}' in its published shader.", material.assetPath.ToString(), diagnostics);
         return false;
     }
 
-    private bool WrongKind(MaterialAsset material, ShaderPassDefinition pass, ShaderProgramKind kind)
+    private bool WrongKind(MaterialAsset material, ShaderPassDefinition pass, ShaderProgramKind kind, IDiagnosticReporter diagnostics)
     {
-        Publish("RENDER_MATERIAL_PASS_KIND_MISMATCH", $"Published pass '{pass.name}' is {pass.programKind}, not {kind}.", material.assetPath.ToString());
+        Publish("RENDER_MATERIAL_PASS_KIND_MISMATCH", $"Published pass '{pass.name}' is {pass.programKind}, not {kind}.", material.assetPath.ToString(), diagnostics);
         return false;
     }
 
@@ -303,7 +333,7 @@ internal sealed class RenderMaterialOwner : RenderResourceProvider, IDisposable
         MaterialPropertyBlock? overrides,
         ProgramPublication publication,
         ShaderInterface shaderInterface,
-        out MaterialBinding[] bindings)
+        out MaterialBinding[] bindings, IDiagnosticReporter diagnostics)
     {
         var result = new List<MaterialBinding>();
         Dictionary<ShaderPropertyId, ShaderPropertyDefinition> definitions = publication.properties;
@@ -343,7 +373,7 @@ internal sealed class RenderMaterialOwner : RenderResourceProvider, IDisposable
                 Publish(
                     "RENDER_MATERIAL_PROPERTY_TYPE_MISMATCH",
                     $"Material '{material.assetPath.ToString()}' property '{binding.id}' does not match {binding.type}.",
-                    material.assetPath.ToString());
+                    material.assetPath.ToString(), diagnostics);
                 bindings = [];
                 return false;
             }
@@ -441,8 +471,8 @@ internal sealed class RenderMaterialOwner : RenderResourceProvider, IDisposable
         return result;
     }
 
-    private void Publish(string code, string message, string? source)
-        => m_diagnostics.Publish(new Diagnostic(
+    private void Publish(string code, string message, string? source, IDiagnosticReporter? diagnostics = null)
+        => (diagnostics ?? m_diagnostics).Publish(new Diagnostic(
             code,
             message,
             DiagnosticSeverity.Error,
@@ -492,7 +522,7 @@ internal sealed class RenderMaterialOwner : RenderResourceProvider, IDisposable
     private sealed record ProgramEntry(GraphicsPipelineHandle graphicsPipeline, ComputePipelineHandle computePipeline,
         ShaderInterface shaderInterface);
     private readonly record struct ProgramLayout(string passName, ShaderProgramKind kind, RenderVertexLayout? vertexLayout);
-    private readonly record struct PublicationKey(Guid shaderId, string targetKey, string variantKey);
-    private readonly record struct LookupKey(Guid shaderId, string variantKey);
+    private readonly record struct PublicationKey(Guid shaderId, string targetKey, string variantKey, string scope);
+    private readonly record struct LookupKey(Guid shaderId, string variantKey, string scope);
     private readonly record struct ArtifactResult(RenderTargetArtifactStatus status, RenderShaderArtifact? artifact);
 }

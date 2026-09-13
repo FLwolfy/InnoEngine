@@ -10,6 +10,9 @@
 
 | 日期 | 页面 | 范围 |
 | --- | --- | --- |
+| 2026-09-13 | [Shader 创作体系阶段验收](2026-09-13-shader-authoring-validation.md) | P1–P6 代码边界、完整 Metal 脚本与 Player 证据；锁屏 UI、全帧性能与既有测试失败仍未收口 |
+| 2026-09-12 | [Shader 创作体系实施记录](2026-09-12-shader-authoring-execution.md) | 持续实施中的代码边界、验证结果与未完成验收；不是完成声明 |
+| 2026-09-12 | [Shader 创作体系与渲染2D解耦实施计划](2026-09-12-shader-authoring-completion-plan.md) | 计划、缺口与完整阶段；后续实施与验收标准 |
 | 2026-09-12 | [Shader 草稿保存与 Console 布局](2026-09-12-shader-drafts-and-console.md) | 显式 Save 取代自动保存；修复未提交事务、资产身份、阶段删除及详情标签裁剪；242 项通过 |
 | 2026-09-11 | [统一 Shader 实施记录](2026-09-11-unified-shader-implementation.md) | 新批准方案；基础契约与导入设置已实施，完整替换及验收未完成 |
 | 2026-09-11 | [MaterialGraph 双资产路径残留](2026-09-11-material-graph-dual-asset-path.md) | 已授权并删除代码及当前资产残留；统一 Shader 验收独立跟踪 |

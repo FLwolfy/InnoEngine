@@ -103,6 +103,19 @@ public sealed class EditorRuntimeTests : IDisposable
         => new(context, m_types, m_logs, [m_types, m_identities, .. hostServices]);
 
     [Fact]
+    public void FeatureLookupReturnsOnlyStartedNonQuarantinedModules()
+    {
+        Assert.True(m_runtime.interactions.TryGetModule<TestModule>(out var first));
+        Assert.NotNull(first);
+        Assert.True(m_runtime.interactions.TryGetModule<TestModule>(out var again));
+        Assert.Same(first, again);
+        UpdateBarrierModule.throwWhenRead = true;
+        m_runtime.Update(new EditorFrame());
+        Assert.False(m_runtime.interactions.TryGetModule<UpdateBarrierModule>(out var quarantined));
+        Assert.Null(quarantined);
+    }
+
+    [Fact]
     public void HistoryAndExtensionStateContractsDoNotExposeStandaloneWorkspaceTypes()
     {
         Assembly core = typeof(EditorModule).Assembly;
@@ -210,7 +223,7 @@ public sealed class EditorRuntimeTests : IDisposable
 
         EditorDocumentContext opened = documents.Open("./Assets/Hero.ispriteatlas2d", assetId);
         EditorDocumentContext focused = documents.Open("Assets/OtherName.ispriteatlas2d", assetId);
-        documents.MarkDirty(opened.documentId);
+        documents.SetDirty(opened.documentId);
 
         Assert.Same(opened, focused);
         Assert.Equal("Assets/OtherName.ispriteatlas2d", opened.assetPath);
@@ -234,7 +247,7 @@ public sealed class EditorRuntimeTests : IDisposable
         EditorDocumentContext opened = documents.Open("Assets/World.itilemap2d", Guid.NewGuid());
         opened.activeTool = "tilemap/brush";
         opened.SetViewParameter("zoom", "2.5");
-        documents.MarkDirty(opened.documentId);
+        documents.SetDirty(opened.documentId);
         IReadOnlyList<EditorDocumentState> state = documents.CaptureState();
 
         firstLease.Dispose();

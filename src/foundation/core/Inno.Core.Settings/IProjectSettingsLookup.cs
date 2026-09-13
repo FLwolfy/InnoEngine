@@ -1,3 +1,4 @@
+using System;
 using Inno.Core.Serialization;
 
 namespace Inno.Core.Settings;
@@ -7,6 +8,9 @@ namespace Inno.Core.Settings;
 /// </summary>
 public interface IProjectSettingsLookup
 {
+    /// <summary>Gets the unique lifetime identity of this settings owner; revisions from different owners are not interchangeable.</summary>
+    Guid ownerId { get; }
+
     /// <summary>
     /// Gets the monotonic revision of the active effective settings snapshot.
     /// </summary>

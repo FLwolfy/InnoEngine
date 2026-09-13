@@ -1212,7 +1212,7 @@ public sealed partial class RenderRuntimeGenerationTests : IDisposable
 
         public override void Build(RenderPipelineContext context) => _ = context;
 
-        protected override void OnConfigure(SerializedRenderExtensionState state)
+        protected override void OnConfigure(SerializedRenderExtensionState state, RenderExtensionStateContext settings)
         {
             _ = state;
             if (rejectConfiguration)

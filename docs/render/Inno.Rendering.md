@@ -1,5 +1,13 @@
 # Inno.Rendering
 
+## 独立编译产物消费者
+
+`IRenderResourceService.TryResolveMaterialArtifact(scope, artifact, material, contractId, passRoleId, programKind, vertexLayout, overrides, diagnostics, out materialPass)` 接收已经过创作编译链的完整不可变产物。
+它用于隔离预览等显式消费者，不读取图、不解析源码，也不将传入产物注册为资产。Raster/Compute 均经过正式材质的反射校验、能力检查、绑定及全 Pass 原子发布流程。
+缓存由非空 `RenderPersistentResourceId` 与 Shader 身份、目标和变体共同隔离；同一帧内相同 scope 的产物固定。候选失败只保留同 scope 的 last-good；调用者提供的 `IDiagnosticReporter` 不被保留或转发到正式项目诊断。
+`Release(scope)` 退休该消费者的全部程序，不影响 canonical Material 或其他预览。统一程序容量限制和未使用资源清扫对这类程序同样生效。
+`RenderShaderArtifact`、`RenderShaderPassArtifact`、`RenderShaderStageArtifact`、`RenderShaderVariant` 的脚本导出为后端中立运行时产物协议，不新增完整 Shader 源码资产入口。
+
 [Rendering 索引](README.md) · [Runtime](Inno.Rendering.Runtime.md) · [Shader 图](Inno.Rendering.Shaders.md)
 
 ## 发布集合的不可变性

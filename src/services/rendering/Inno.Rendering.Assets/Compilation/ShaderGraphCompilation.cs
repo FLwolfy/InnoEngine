@@ -27,10 +27,26 @@ public sealed partial class ShaderCompiler
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(shader);
+        return CompileGraphAsync(ShaderGraphArtifact.Read(shader, artifacts), target, variant, types, serialization, context, cancellationToken);
+    }
+
+    /// <summary>Compiles an immutable import or preview candidate without reading or mutating a canonical Shader asset.</summary>
+    /// <param name="artifact">Frozen target-expanded graph and source bundles.</param>
+    /// <param name="target">Target policy and capabilities.</param>
+    /// <param name="variant">Exact keyword selection.</param>
+    /// <param name="types">Current authoring generation.</param>
+    /// <param name="serialization">Owner converter registry.</param>
+    /// <param name="context">Complete owner references captured before asynchronous native work.</param>
+    /// <param name="cancellationToken">Cancellation of this candidate.</param>
+    /// <returns>A complete immutable compilation result, never published by this method.</returns>
+    public ValueTask<ShaderCompilationResult> CompileGraphAsync(ReadOnlyMemory<byte> artifact, ShaderCompileTarget target,
+        RenderShaderVariant variant, TypeCatalog types, SerializationRegistry serialization, SerializationContext context,
+        CancellationToken cancellationToken = default)
+    {
         using IDisposable operation = types.AcquireOperation("Capture shader graph compilation");
         using var nodes = new ShaderNodeCompilerRegistry(types);
         using var frontends = new ShaderSourceFrontendRegistry(types);
-        ShaderDefinition definition = shader.definition ?? throw new InvalidOperationException("The shader has no committed graph definition.");
+        ShaderDefinition definition = ShaderGraphArtifact.ReadDefinition(artifact.Span, serialization, context);
         var diagnostics = ShaderDefinitionValidator.Validate(definition, target.capabilities).ToList();
         if (diagnostics.Any(static value => value.severity == DiagnosticSeverity.Error)) return ValueTask.FromResult(new ShaderCompilationResult(null, diagnostics));
         var keywords = definition.keywords.ToDictionary(static value => value.id, StringComparer.Ordinal);
@@ -38,7 +54,7 @@ public sealed partial class ShaderCompiler
             if (!keywords.TryGetValue(id, out ShaderKeywordDefinition keyword) || !keyword.options.Contains(value, StringComparer.Ordinal))
                 diagnostics.Add(new("SHADER_VARIANT_INVALID", DiagnosticSeverity.Error, $"Shader variant selects undeclared option '{id}={value}'."));
         if (diagnostics.Any(static value => value.severity == DiagnosticSeverity.Error)) return ValueTask.FromResult(new ShaderCompilationResult(null, diagnostics));
-        ShaderGraphProgramResult program = ShaderGraphArtifact.Lower(ShaderGraphArtifact.Read(shader, artifacts), m_toolchain.implementationId,
+        ShaderGraphProgramResult program = ShaderGraphArtifact.Lower(artifact.Span, m_toolchain.implementationId,
             nodes, frontends, serialization, context, variant.options);
         return CompileAsync(definition, program, target, variant, serialization, context, cancellationToken);
     }

@@ -8,6 +8,10 @@ using Inno.Rendering;
     ScriptingApiScope.Runtime)]
 
 [assembly: ScriptingApiExport(typeof(GraphicsApi), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(RenderShaderArtifact), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(RenderShaderPassArtifact), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(RenderShaderStageArtifact), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(RenderShaderVariant), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(RenderDeviceAllocationCounters), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GraphicsCapability), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GraphicsLimits), ScriptingApiScope.Runtime)]
@@ -137,6 +141,7 @@ using Inno.Rendering;
 [assembly: ScriptingApiExport(typeof(IRenderResourceService), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(IRenderFrameUploadService), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(SerializedRenderExtensionState), ScriptingApiScope.Runtime)]
+[assembly: ScriptingApiExport(typeof(RenderExtensionStateContext), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(RenderFeatureConfiguration), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(RenderPipelineAsset), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(RenderPipelineExtensionAttribute), ScriptingApiScope.Runtime)]

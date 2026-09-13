@@ -13,6 +13,12 @@ namespace Inno.Assets;
 public sealed class AssetRuntimeOwner
 {
     private readonly object m_authority = new();
+    private readonly WeakReference<IAssetPropertyStateResolver>? m_properties;
+
+    /// <summary>Creates exclusive mutation authority with optional owner-bound extension state restoration.</summary>
+    /// <param name="properties">Owner resolver, weakly referenced so stale assets cannot retain a retired database.</param>
+    public AssetRuntimeOwner(IAssetPropertyStateResolver? properties = null)
+        => m_properties = properties is null ? null : new(properties);
 
     /// <summary>
     /// Reads the source fingerprint of an asset claimed by this owner.
@@ -102,6 +108,6 @@ public sealed class AssetRuntimeOwner
     private void Validate(AssetObject asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
-        asset.ClaimRuntimeOwner(m_authority);
+        asset.ClaimRuntimeOwner(m_authority, m_properties);
     }
 }

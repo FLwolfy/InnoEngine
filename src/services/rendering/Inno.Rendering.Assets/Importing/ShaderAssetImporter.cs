@@ -26,23 +26,17 @@ internal sealed class ShaderAssetImporter : AssetImporter<ShaderAsset>
         GraphDocument graph = GraphDocumentCodec.Decode(context.sourceBytes.Span, context.serialization);
         var dependencies = new AssetDependencyCollection();
         SerializationContext owner = AssetSerializationContext.Create(context.references, dependencies);
-        ShaderDefinition definition = ShaderGraphDocument.ReadDefinition(graph, context.serialization, owner);
-        var sources = new Dictionary<GraphNodeId, byte[]>();
-        foreach (GraphNodeRecord node in graph.nodes)
+        byte[] captured = ShaderGraphArtifact.Capture(graph, context.types, context.serialization, owner, (id, path) =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (node.definitionId != "inno.shader.source") continue;
-            Guid id = ShaderGraphDocument.Read(node, "sourceId", Guid.Empty, context.serialization, owner);
-            if (id == Guid.Empty) continue;
             context.DependsOnArtifact(id);
-            string path = ShaderGraphDocument.Read(node, "sourcePath", "", context.serialization, owner);
             AssetObject resolved = context.references.Resolve(id, context.services.GetStableTypeId<ShaderFunctionAsset>(),
-                path, typeof(ShaderFunctionAsset), $"shader.nodes[{node.id}].sourceId");
+                path, typeof(ShaderFunctionAsset), $"shader.sources[{id}]");
             if (resolved is not ShaderFunctionAsset { isMissing: false } source)
                 throw new InvalidDataException($"Shader function '{id}' is unavailable. Its graph reference is preserved.");
             using ArtifactLease sourceLease = context.AcquireArtifact(source.identity.persistentId, ShaderSourceBundle.outputName);
-            sources.Add(node.id, File.ReadAllBytes(sourceLease.info.absolutePath));
-        }
+            return File.ReadAllBytes(sourceLease.info.absolutePath);
+        }, cancellationToken);
+        ShaderDefinition definition = ShaderGraphArtifact.ReadDefinition(captured, context.serialization, owner);
         // Function dependencies are authoring-only; texture defaults remain ordinary runtime references.
         _ = context.serialization.Serialize(definition, owner);
         foreach (AssetDependency dependency in dependencies.dependencies) output.DependsOnAsset(dependency);
@@ -50,7 +44,7 @@ internal sealed class ShaderAssetImporter : AssetImporter<ShaderAsset>
         asset.SetDefinition(definition, context.serialization, owner);
         output.SetAsset(asset);
         await output.WriteArtifactAsync("runtime", ReadOnlyMemory<byte>.Empty, cancellationToken).ConfigureAwait(false);
-        await output.WriteArtifactAsync(ShaderGraphArtifact.outputName, ShaderGraphArtifact.Encode(graph, sources, context.serialization),
+        await output.WriteArtifactAsync(ShaderGraphArtifact.outputName, captured,
             cancellationToken, AssetDeploymentScope.AuthoringOnly).ConfigureAwait(false);
     }
 

@@ -53,7 +53,7 @@ public sealed partial class ShaderGraphProgramTests
     {
         GraphDocument graph = ShaderGraphDocument.Create(new("Compute", [], [], [new("Main", ShaderProgramKind.Compute)]), m_serialization, SerializationContext.empty);
         GraphNodeRecord stage = Node("compute", ShaderGraphDocument.outputDefinitionId);
-        Set(stage, "settings", new ShaderGraphStageSettings { pass = "Main", stage = ShaderStage.Compute });
+        Set(stage, "settings", new ShaderGraphStageSettings { stage = ShaderStage.Compute });
         var resourceType = new ShaderGraphType { isStorage = true, access = RenderStorageAccess.ReadWrite, storageElement = new() { id = "uint" } };
         GraphNodeRecord resource = Node("resource", "inno.shader.stage-input");
         var settings = new ShaderGraphInputSettings { id = "buffer", kind = ShaderIrInputKind.Storage, type = resourceType };
@@ -65,6 +65,7 @@ public sealed partial class ShaderGraphProgramTests
         { Set(effect, "resource", resourceType); Connect(resource, "value", effect, "resource"); Connect(coordinate, "value", effect, "coordinate"); }
         Connect(value, "value", store, "value"); Connect(value, "value", atomic, "value");
         Connect(store, "then", load, "after"); Connect(load, "then", atomic, "after");
+        graph = ShaderGraphPrograms.Bind(graph, "Main", [stage.id], m_serialization, SerializationContext.empty);
         return ShaderGraphBindings.ChangeInput(graph, resource.id, settings, m_serialization, SerializationContext.empty);
 
         GraphNodeRecord Node(string id, string type)

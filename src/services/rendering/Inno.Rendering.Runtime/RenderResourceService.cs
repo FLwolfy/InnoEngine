@@ -24,6 +24,8 @@ internal sealed class RenderResourceService : RenderResourceProvider, IRenderRes
     private readonly RenderGeometryOwner m_geometry;
     private readonly RenderMaterialOwner m_materials;
     private readonly RenderReadbackOwner m_readbacks;
+    private readonly HashSet<RenderPersistentResourceId> m_pendingReleases = [];
+    private bool m_mutationAllowed;
     private ulong m_frameIndex;
     private bool m_disposed;
     private RenderRetirementQueue? m_retirement;
@@ -381,6 +383,23 @@ internal sealed class RenderResourceService : RenderResourceProvider, IRenderRes
             out materialPass);
     }
 
+    /// <inheritdoc />
+    public bool TryResolveMaterialArtifact(RenderPersistentResourceId scope, RenderShaderArtifact artifact, MaterialAsset material,
+        ShaderContractId contractId, ShaderPassRoleId passRoleId, ShaderProgramKind programKind, RenderVertexLayout? vertexLayout,
+        MaterialPropertyBlock? overrides, IDiagnosticReporter diagnostics, out RenderMaterialPass? materialPass)
+    {
+        ThrowIfDisposed();
+        RequireId(scope);
+        ArgumentNullException.ThrowIfNull(artifact);
+        ArgumentNullException.ThrowIfNull(diagnostics);
+        if (m_targetArtifacts is null) throw new InvalidOperationException("No render target artifact decoder is configured.");
+        if (!Enum.IsDefined(programKind)) throw new ArgumentOutOfRangeException(nameof(programKind));
+        if (programKind == ShaderProgramKind.Compute && vertexLayout is not null)
+            throw new ArgumentException("A compute program cannot consume a vertex layout.", nameof(vertexLayout));
+        return m_materials.TryResolveMaterial(material, contractId, passRoleId, programKind, vertexLayout, overrides,
+            out materialPass, artifact, scope.value, diagnostics);
+    }
+
     /// <summary>
     /// Attempts to resolve compute material without changing state when the operation cannot complete.
     /// </summary>
@@ -649,8 +668,22 @@ internal sealed class RenderResourceService : RenderResourceProvider, IRenderRes
     /// </param>
     public void Release(RenderPersistentResourceId id)
     {
-        ThrowIfDisposed();
+        ObjectDisposedException.ThrowIf(m_disposed || m_retirement is not null, this);
         RequireId(id);
+        if (!m_mutationAllowed)
+        {
+            if (m_materials.HasScope(id.value) || m_graphicsPipelines.TryGetValue(id, out _)
+                || m_computePipelines.TryGetValue(id, out _) || m_buffers.TryGetValue(id, out _) || m_textures.TryGetValue(id, out _))
+                m_pendingReleases.Add(id);
+            return;
+        }
+        ThrowIfDisposed();
+        ReleaseNow(id);
+    }
+
+    private void ReleaseNow(RenderPersistentResourceId id)
+    {
+        m_materials.ReleaseScope(id.value);
         m_graphicsPipelines.Release(id);
         m_computePipelines.Release(id);
         m_buffers.Release(id);
@@ -702,12 +735,18 @@ internal sealed class RenderResourceService : RenderResourceProvider, IRenderRes
 
     internal void BeginFrame(ulong frameIndex)
     {
+        m_mutationAllowed = true;
         ThrowIfDisposed();
         m_frameIndex = frameIndex;
         m_geometry.BeginFrame(frameIndex);
         m_materials.BeginFrame(frameIndex);
         m_readbacks.Update();
+        foreach (RenderPersistentResourceId id in m_pendingReleases) ReleaseNow(id);
+        m_pendingReleases.Clear();
     }
+
+    internal void EndMutation() => m_mutationAllowed = false;
+    internal void BeginMutation() => m_mutationAllowed = true;
 
     internal void SweepUnused()
     {

@@ -66,7 +66,9 @@ assets.Update();
 TextAsset value = assets.Load<TextAsset>(AssetPath.Project("Config/value.txt"));
 ```
 
-所有 mutation 必须在构造线程执行。Save、Import、ImportSample、Move、Delete、CreateDirectory 和 source candidate commit 各自发布一个 revision；后台 `ExportRuntimeArtifactsAsync` 只使用 owner thread 捕获的 immutable Serialization generation。
+所有 mutation 必须在构造线程执行。Save、Import、ImportSample、Move、Delete、CreateDirectory 和 source candidate commit 各自发布一个 revision；后台 `ExportRuntimeArtifactsAsync` 使用 owner thread 捕获的 immutable Serialization generation，并在 worker 完成、失败或取消之前持续持有严格的 generation read lease。不能在提交 Task 后提前释放租约；Pending/Faulted generation 不允许开始导出。
+
+运行时导出同时校验创作依赖：沿 Artifact 依赖递归检查当前导入状态和源指纹（包括 include/Source 输入）。Editor 可以继续使用 last-good，但失败、缺失或过期的必需创作输入不能认证 Player 构建。导出不在中途重导入，以免已编译的目标产物与新资产混用 generation；拒绝时报告完整依赖路径，需重导入后重新构建。
 
 ### Source Mount 候选与共同 Recovery
 

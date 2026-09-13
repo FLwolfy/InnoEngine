@@ -136,13 +136,14 @@ internal sealed class EditorDocumentService : IEditorDocumentService
     }
 
     /// <summary>
-    /// Marks an open document as containing uncommitted authoring changes.
+    /// Updates whether an open document differs from its saved authoring baseline.
     /// </summary>
     /// <param name="documentId">
     /// Stable identity of the open document to mark.
     /// </param>
-    public void MarkDirty(Guid documentId)
-        => Get(documentId).isDirty = true;
+    /// <param name="isDirty">True when the provider retains unsaved changes.</param>
+    public void SetDirty(Guid documentId, bool isDirty = true)
+        => Get(documentId).isDirty = isDirty;
 
     /// <summary>
     /// Persists the supplied value through the configured storage contract.

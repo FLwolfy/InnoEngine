@@ -24,10 +24,11 @@ public sealed partial class AssetDatabase : AssetResidencyProvider,
     IDisposable,
     IAssetLookup,
     IAssetReferenceResolver,
+    IAssetPropertyStateResolver,
     IAssetArtifactLookup,
     IAssetResidency
 {
-    private readonly AssetRuntimeOwner m_runtimeOwner = new();
+    private readonly AssetRuntimeOwner m_runtimeOwner;
     private readonly ArtifactRetention m_artifactRetention = new();
     private readonly object m_sync = new();
     private readonly Dictionary<AssetPath, RuntimeAssetRecord> m_recordsByPath = [];
@@ -44,6 +45,16 @@ public sealed partial class AssetDatabase : AssetResidencyProvider,
     private long m_residentBytes;
     private bool m_disposed;
     private LifetimeScope? m_retirement;
+
+    /// <inheritdoc />
+    public void RestoreProperties<TValue>(Guid stableTypeId, byte[] propertyData, TValue target) where TValue : class, ISerializable
+    {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        ArgumentNullException.ThrowIfNull(target);
+        if (m_types!.GetTypeRef(target.GetType()).stableId != stableTypeId)
+            throw new InvalidOperationException("The asset property payload has an incompatible stable type identity.");
+        m_serialization.Decode(propertyData, reader => { reader.RestoreProperties(target); return true; }, m_serializationContext);
+    }
 
     /// <summary>
     /// Creates a read-only runtime asset database from one materialized content pack.
@@ -91,6 +102,7 @@ public sealed partial class AssetDatabase : AssetResidencyProvider,
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(preparationBudgetBytes);
         string root = Path.GetFullPath(contentRoot);
         m_serialization = serialization;
+        m_runtimeOwner = new(this);
         m_serializationContext = AssetSerializationContext.Create(new PreparedAssetResolver(this));
         m_types = types;
         m_identities = identities;

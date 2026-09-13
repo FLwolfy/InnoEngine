@@ -9,12 +9,36 @@ public static class ShaderGraphDocument
 {
     /// <summary>Identifies the graph metadata containing the source-free material and pass contract.</summary>
     public const string definitionKey = "inno.shader.definition";
+    /// <summary>Identifies the optional domain target; absent means explicitly authored generic stages.</summary>
+    public const string targetKey = "inno.shader.target";
+
+    /// <summary>Reads the stable domain target assignment without resolving extension instances.</summary>
+    /// <param name="graph">Authored graph.</param>
+    /// <param name="serialization">Current owner converters.</param>
+    /// <param name="context">Complete owner reference context.</param>
+    /// <returns>The assigned stable ID, or an empty string for generic explicit stage authoring.</returns>
+    public static string ReadTarget(GraphDocument graph, SerializationRegistry serialization, SerializationContext context)
+        => graph.metadata.TryGetValue(targetKey, out GraphSerializedValue? value) ? Decode<string>(value, serialization, context) : "";
+
+    /// <summary>Assigns a domain target by stable identity without retaining its current provider.</summary>
+    /// <param name="graph">Document being authored.</param>
+    /// <param name="targetId">Stable target identity; empty selects explicit generic stage authoring.</param>
+    /// <param name="serialization">Current owner converters.</param>
+    /// <param name="context">Complete owner reference context.</param>
+    public static void SetTarget(GraphDocument graph, string targetId, SerializationRegistry serialization, SerializationContext context)
+    {
+        ArgumentNullException.ThrowIfNull(targetId);
+        if (targetId.Length == 0) graph.RemoveMetadata(targetKey);
+        else graph.SetMetadata(targetKey, Encode(targetId, serialization, context));
+    }
     /// <summary>Identifies a stage output node; its incoming edges name the stage's GPU outputs.</summary>
     public const string outputDefinitionId = "inno.shader.stage-output";
     /// <summary>Identifies a node property containing its owning stage output node identity.</summary>
     public const string stageKey = "stage";
     /// <summary>Identifies the structured settings stored on a stage output node.</summary>
     public const string settingsKey = "settings";
+    /// <summary>Prefixes stable port IDs storing explicit typed defaults for unconnected inputs.</summary>
+    public const string inputDefaultPrefix = "input-default.";
 
     /// <summary>Creates an empty graph with a source-free shader contract; incomplete graphs remain serializable.</summary>
     /// <param name="definition">Material parameters, techniques and pass state.</param>
@@ -26,6 +50,7 @@ public static class ShaderGraphDocument
         ArgumentNullException.ThrowIfNull(definition);
         var graph = new GraphDocument();
         graph.SetMetadata(definitionKey, Encode(serialization.Serialize(definition, context), serialization, context));
+        ShaderGraphPrograms.Write(graph, [], serialization, context);
         return graph;
     }
 
@@ -84,8 +109,6 @@ public static class ShaderGraphDocument
 /// <summary>Stores one stage's explicit output interface and compute dimensions inside its output node.</summary>
 public sealed class ShaderGraphStageSettings : ISerializable
 {
-    /// <summary>Gets or sets the exact pass identity in the shader definition.</summary>
-    [SerializableProperty] public string pass { get; set; } = "Main";
     /// <summary>Gets or sets the programmable stage.</summary>
     [SerializableProperty] public ShaderStage stage { get; set; } = ShaderStage.Fragment;
     /// <summary>Gets or sets output ports and their GPU destinations.</summary>

@@ -1,11 +1,10 @@
 using System;
 using System.Linq;
-using Inno.Assets.Pipeline;
 using Inno.Core.Graphs;
-using Inno.Core.Mathematics;
 using Inno.Native.ImGui;
 using Inno.Rendering;
 using Inno.Rendering.Shaders;
+using Inno.Editor.Shaders;
 using Widget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using UI = Inno.Native.ImGui.ImGui;
 
@@ -56,78 +55,96 @@ internal sealed partial class ShaderEditorCanvas
         return changed;
     }
 
-    private void ParameterPopup(ShaderGraphInputSettings input)
+    private void DrawParameter(ShaderGraphInputSettings input)
     {
-        UI.SetNextWindowSize(new(490, 380), ImGuiCond.Appearing);
-        if (!UI.BeginPopup("##parameter")) return;
-        try
+        if (m_inspection is null) return;
+        ShaderDefinition definition = ShaderGraphDocument.ReadDefinition(Controller.document, owner.serialization, owner.context);
+        int index = Array.FindIndex(definition.properties, value => value.id.value == input.id);
+        if (index < 0) { Widget.Hint("Enter a binding name and supported type to declare this parameter."); return; }
+        ShaderPropertyDefinition property = definition.properties[index];
+        Widget.SectionHeader("Parameter", "The stable binding ID identifies overrides. Shader defaults and Material overrides are edited independently.");
+        string displayName = property.displayName;
+        bool changed = UI.InputText("Display Name", ref displayName, 256);
+        Gesture();
+        if (changed) { property.displayName = displayName; Save(property, true); }
+        ShaderPropertyBindingOwner bindingOwner = property.bindingOwner;
+        if (EnumControl("Bound By", ref bindingOwner)) { property.bindingOwner = bindingOwner; Save(property, false); }
+        if (property.type is ShaderPropertyType.Vector4 or ShaderPropertyType.Color)
         {
-            ShaderDefinition definition = ShaderGraphDocument.ReadDefinition(Controller.document, owner.serialization, owner.context);
-            int index = Array.FindIndex(definition.properties, value => value.id.value == input.id);
-            if (index < 0) { UI.TextWrapped("Enter a valid binding name and supported material type to declare this parameter."); return; }
-            ShaderPropertyDefinition property = definition.properties[index];
-            bool changed = false;
-            string displayName = property.displayName;
-            if (UI.InputText("Display Name", ref displayName, 256)) { property.displayName = displayName; changed = true; }
-            Gesture();
-            ShaderPropertyBindingOwner bindingOwner = property.bindingOwner;
-            if (EnumControl("Bound By", ref bindingOwner)) { property.bindingOwner = bindingOwner; changed = true; }
-            UI.SeparatorText("Default Value");
-            MaterialValue value = property.defaultValue;
-            if (property.bindingKind == ShaderPropertyBindingKind.SampledTexture)
+            bool color = property.type == ShaderPropertyType.Color;
+            if (UI.Checkbox("Color", ref color))
             {
-                if (UI.BeginCombo("Texture", value.texture?.assetPath.ToString() ?? "None"))
-                {
-                    if (UI.Selectable("None", value.texture is null)) { value.kind = MaterialValueKind.Texture; value.texture = null; changed = true; }
-                    foreach (AssetFileEntry entry in owner.assets.GetFileSystemEntries(includeDirectories: false))
-                        if (owner.assets.TryGetAssetType(entry.assetPath, out Type? type) && type is not null && typeof(TextureAsset).IsAssignableFrom(type)
-                            && UI.Selectable(entry.assetPath.ToString(), value.texture?.assetPath == entry.assetPath)
-                            && owner.assets.TryLoad(entry.assetPath, out TextureAsset? texture) && texture is not null)
-                        { value = MaterialValue.FromTexture(texture); changed = true; }
-                    UI.EndCombo();
-                }
-            }
-            else if (property.bindingKind == ShaderPropertyBindingKind.Uniform)
-            {
-                if (property.type == ShaderPropertyType.Matrix4x4)
-                {
-                    Matrix matrix = value.kind == MaterialValueKind.Matrix ? value.matrix : Matrix.identity;
-                    float[] elements = [matrix.m11, matrix.m12, matrix.m13, matrix.m14, matrix.m21, matrix.m22, matrix.m23, matrix.m24,
-                        matrix.m31, matrix.m32, matrix.m33, matrix.m34, matrix.m41, matrix.m42, matrix.m43, matrix.m44];
-                    for (int i = 0; i < elements.Length; i++)
-                    {
-                        UI.SetNextItemWidth(90);
-                        if (Widget.CompactDragFloat("##matrix" + i, ref elements[i], 0.01f)) changed = true;
-                        Gesture();
-                        if (i % 4 != 3) UI.SameLine();
-                    }
-                    value = MaterialValue.FromMatrix(new(elements[0], elements[1], elements[2], elements[3], elements[4], elements[5], elements[6], elements[7],
-                        elements[8], elements[9], elements[10], elements[11], elements[12], elements[13], elements[14], elements[15]));
-                }
-                else
-                {
-                    Vector4 vector = value.vector;
-                    float[] components = [vector.x, vector.y, vector.z, vector.w];
-                    int count = property.type switch { ShaderPropertyType.Float => 1, ShaderPropertyType.Vector2 => 2, ShaderPropertyType.Vector3 => 3, _ => 4 };
-                    for (int i = 0; i < count; i++)
-                    {
-                        UI.SetNextItemWidth(90);
-                        if (Widget.CompactDragFloat("##component" + i, ref components[i], 0.01f)) changed = true;
-                        Gesture();
-                        if (i + 1 < count) UI.SameLine();
-                    }
-                    value = count == 1 ? MaterialValue.FromFloat(components[0]) : MaterialValue.FromVector(new(components[0], components[1], components[2], components[3]));
-                }
-            }
-            else UI.TextDisabled("Supplied by the render pass.");
-            if (changed)
-            {
-                property.defaultValue = value;
-                definition.properties[index] = property;
-                CommitDefinition(definition, "Edit Shader Parameter", UI.IsAnyItemActive());
+                property.type = color ? ShaderPropertyType.Color : ShaderPropertyType.Vector4;
+                MaterialValue converted = property.defaultValue;
+                converted.kind = color ? MaterialValueKind.Color : MaterialValueKind.Vector;
+                property.defaultValue = converted;
+                Save(property, false);
             }
         }
-        finally { UI.EndPopup(); }
+        if (property.bindingOwner != ShaderPropertyBindingOwner.Material)
+        { Widget.Hint("Supplied by the Render Pass. This binding is read-only in Material Inspectors."); return; }
+        if (property.bindingKind is not (ShaderPropertyBindingKind.Uniform or ShaderPropertyBindingKind.SampledTexture))
+        { Widget.Hint("Storage resources require a Render Pass owner."); return; }
+        ShaderParameterPresentation presentation = ShaderParameterPresentation.Read(Controller.document, property.id, owner.serialization, owner.context);
+        Widget.SectionHeader("Material Inspector", "Presentation belongs only to this Shader's authoring graph. It does not modify existing Material values or enter the Player.");
+        string group = presentation.group;
+        if (UI.InputText("Group", ref group, 256)) { presentation.group = group; SavePresentation(true); }
+        Gesture();
+        string description = presentation.description;
+        if (UI.InputText("Description", ref description, 2048)) { presentation.description = description; SavePresentation(true); }
+        Gesture();
+        bool visible = presentation.visible;
+        if (UI.Checkbox("Visible in Material", ref visible)) { presentation.visible = visible; SavePresentation(false); }
+        if (property.type == ShaderPropertyType.Float)
+        {
+            bool range = presentation.hasRange;
+            if (UI.Checkbox("Range", ref range)) { presentation.hasRange = range; SavePresentation(false); }
+            if (range)
+            {
+                m_inspection.properties.DrawValue(m_inspection.editorContext, draft, "shader.parameter." + property.id.value + ".minimum",
+                    "Minimum", typeof(double), () => presentation.minimum, value =>
+                    {
+                        if (!double.IsFinite((double)value!)) return;
+                        presentation.minimum = Math.Clamp((double)value!, -float.MaxValue, presentation.maximum);
+                        SavePresentation(true);
+                    }, new ParameterEdits(this), draft.readOnly, minimum: -float.MaxValue, maximum: presentation.maximum);
+                m_inspection.properties.DrawValue(m_inspection.editorContext, draft, "shader.parameter." + property.id.value + ".maximum",
+                    "Maximum", typeof(double), () => presentation.maximum, value =>
+                    {
+                        if (!double.IsFinite((double)value!)) return;
+                        presentation.maximum = Math.Clamp((double)value!, presentation.minimum, float.MaxValue);
+                        SavePresentation(true);
+                    }, new ParameterEdits(this), draft.readOnly, minimum: presentation.minimum, maximum: float.MaxValue);
+                Widget.Hint("Editing bounds only · existing defaults and overrides are not clamped on display");
+            }
+        }
+        ShaderPropertyDefinition shown = property;
+        shown.displayName = "Default";
+        ShaderPropertyInspector.Draw(m_inspection, draft, "shader.parameter." + property.id.value, shown, property.defaultValue,
+            value => { property.defaultValue = value; Save(property, true); }, new ParameterEdits(this), draft.readOnly, presentation);
+        void SavePresentation(bool continuous)
+        {
+            Gesture();
+            GraphDocument candidate = Controller.document.Clone();
+            ShaderParameterPresentation.Write(candidate, property.id, presentation, owner.serialization, owner.context);
+            Controller.ReplaceDocument(candidate, "Edit Parameter Presentation", continuous && UI.IsAnyItemActive() ? draft.valueGesture : null);
+            owner.Changed(draft);
+        }
+        void Save(ShaderPropertyDefinition value, bool continuous)
+        {
+            definition.properties[index] = value;
+            CommitDefinition(definition, "Edit Shader Parameter", continuous && UI.IsAnyItemActive());
+        }
+    }
+
+    private sealed class ParameterEdits(ShaderEditorCanvas canvas) : Inno.Editor.Inspection.IInspectionPropertyEditService
+    {
+        public bool ChangeProperty(object owner, string propertyName, Action mutation, string historyName)
+        {
+            canvas.Gesture();
+            mutation();
+            return true;
+        }
     }
 
     private void CommitDefinition(ShaderDefinition definition, string label, bool continuous = false)

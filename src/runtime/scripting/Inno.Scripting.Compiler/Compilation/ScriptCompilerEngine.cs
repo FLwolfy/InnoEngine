@@ -334,10 +334,17 @@ internal static class ScriptCompilerEngine
 
         var usingRewriter = new ScriptApiUsingRewriter(api.namespaceMappings, api.typeMappings);
         var propertyOrderRewriter = new SerializablePropertyOrderRewriter();
+        var logicalReferences = new Dictionary<string, MetadataReference>(StringComparer.OrdinalIgnoreCase);
+        foreach (MetadataReference reference in platformReferences)
+            if (!string.IsNullOrWhiteSpace(reference.Display)) logicalReferences[reference.Display!] = reference;
+        foreach (string referencePath in apiReferences.ideReferencePaths)
+            logicalReferences[referencePath] = MetadataReference.CreateFromFile(referencePath);
+        var logicalBindings = CSharpCompilation.Create(assemblyName, syntaxTrees, logicalReferences.Values, validationCompilation.Options);
         SyntaxTree[] runtimeTrees = syntaxTrees
             .Select(tree => CSharpSyntaxTree.Create(
                 (CSharpSyntaxNode)usingRewriter.Visit(
-                    propertyOrderRewriter.Visit(tree.GetRoot(cancellationToken)))!,
+                    propertyOrderRewriter.Visit(new ScriptStaticMemberRewriter(logicalBindings.GetSemanticModel(tree))
+                        .Visit(tree.GetRoot(cancellationToken))))!,
                 parseOptions,
                 tree.FilePath,
                 Encoding.UTF8))

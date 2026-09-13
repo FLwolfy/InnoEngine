@@ -18,11 +18,12 @@
 
 ## 公开扩展 API
 
+下列扩展已移入 [Inno.Editor.Shaders](Inno.Editor.Shaders.md)，本 Panel 仅作为使用方，不再拥有公共节点创作协议。
+
 | 类型 / 成员 | 契约 |
 | --- | --- |
 | `ShaderNodeDrawerAttribute(string definitionId)` / `definitionId` | 注册一个稳定节点 ID 的 Editor-only 呈现；重复 ID 拒绝候选 |
-| `ShaderNodeDrawer.Draw(ShaderNodeDrawContext)` | 在节点内部绘制控件；不编译 Shader，不保存当前帧 context |
-| `ShaderNodeDrawer.contentHeight` | 声明非负有限的未缩放控件高度，宿主统一应用 DPI / 画布缩放 |
+| `ShaderNodeDrawer.Draw(ShaderNodeDrawContext)` | 在统一 Inspector 绘制选中节点的控件；不编译 Shader，不保存当前帧 context |
 | `ShaderNodeDrawContext.previews` | 帧内使用共享 generation-scoped 预览；不得缓存过期 handle |
 | `ShaderNodeDrawContext.nodeId` | 用于稳定控件身份的节点 ID |
 | `Read<T>(key, defaultValue)` | 通过当前 owner 的序列化上下文读取独立值，损坏值不替换为默认 |
@@ -59,6 +60,9 @@ public sealed class SurfaceDrawer : ShaderNodeDrawer
 - 删除支持 Delete 与 Backspace。删除阶段输出同时删除该阶段的内容；最后一个阶段输出删除后清除对应 Pass 及引用映射；删除最后一个参数输入清理其声明，共享输入保留默认值和剩余阶段可见性。剪切/复制阶段包含其内容，粘贴重建节点身份与 Pass 名称。事务显式 Commit，一次操作对应一次 Undo。
 
 ## 当前限制
+
+节点参数和输入默认值现在在 Inspector 编辑，不在画布重复一套字段。未连接数值输入支持精确类型默认值，连接后只显示上游来源；资源/副作用必须接线。
+Inspector 的 Compile Draft Preview 使用独立编译缓存，未经 Save 不进入正式资源发布；它当前是编译预览，不是完整材质画面预览。
 
 Pass/Variant、Technique/Role、自定义混合和能力要求在节点临时弹窗中编辑。存储读写、原子加法和 discard 节点通过显式 after/then 连线约束副作用顺序。右键沿用共享菜单与搜索，支持按端口类型创建、分组、连接线转接点和项目副本。转接点保留完整结构体、数组和资源类型。源码导入设置通过 .imeta 与共享 History 编辑；端口快照只保存中立类型/身份，缺失端口以红色保留，不按序号重连。预览按需展开。
 

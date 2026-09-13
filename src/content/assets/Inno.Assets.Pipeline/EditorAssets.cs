@@ -1,6 +1,7 @@
 using System;
 
 using Inno.Assets;
+using Inno.Core.Serialization;
 
 namespace Inno.Assets.Pipeline;
 
@@ -9,6 +10,16 @@ namespace Inno.Assets.Pipeline;
 /// </summary>
 public static class EditorAssets
 {
+    /// <summary>Captures reload-safe settings using the currently bound authoring owner's converters and references.</summary>
+    /// <typeparam name="TValue">Current serializable settings type.</typeparam>
+    /// <param name="value">Settings to capture without saving or mutating their referenced assets.</param>
+    /// <returns>Native properties, stable type identity and automatically collected dependencies.</returns>
+    public static AssetPropertySnapshot CaptureProperties<TValue>(TValue value) where TValue : class, ISerializable
+    {
+        if (AssetExecutionContext.current is not AssetPipeline pipeline)
+            throw new InvalidOperationException("Capturing authoring settings requires an asset pipeline execution context.");
+        return pipeline.CaptureProperties(value);
+    }
     /// <summary>
     /// Creates or replaces a writable project asset source and imports the committed result.
     /// </summary>

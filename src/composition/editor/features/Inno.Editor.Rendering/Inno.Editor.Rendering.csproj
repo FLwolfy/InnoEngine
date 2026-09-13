@@ -18,13 +18,19 @@
     <ProjectReference Include="../../../../content/references/Inno.References/Inno.References.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../Inno.Editor.Assets/Inno.Editor.Assets.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="../../framework/Inno.Editor.Inspection/Inno.Editor.Inspection.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="../../presentation/Inno.Editor.ImGui/Inno.Editor.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="../../../../../native/Inno.Native.ImGui/Inno.Native.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="../../../../adapters/presentation/Inno.Adapter.Presentation.ImGui.Sdl3/Inno.Adapter.Presentation.ImGui.Sdl3.csproj" PrivateAssets="compile" />
     <ProjectReference Include="../../../../foundation/core/Inno.Core.Execution/Inno.Core.Execution.csproj" PrivateAssets="compile" />
-    <ProjectReference Include="..\..\..\..\content\assets\Inno.Assets\Inno.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\services\rendering\Inno.Rendering.Runtime\Inno.Rendering.Runtime.csproj" PrivateAssets="compile" />
     <ProjectReference Include="..\..\..\..\foundation\scripting\Inno.Scripting.Api\Inno.Scripting.Api.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\..\..\content\assets\Inno.Assets\Inno.Assets.csproj" />
     <ProjectReference Include="../../../../foundation/core/Inno.Core.Diagnostics/Inno.Core.Diagnostics.csproj" />
+    <ProjectReference Include="../../../../foundation/core/Inno.Core.Graphs/Inno.Core.Graphs.csproj" />
     <ProjectReference Include="..\..\..\..\content\assets\Inno.Assets.Pipeline\Inno.Assets.Pipeline.csproj" />
     <ProjectReference Include="..\..\..\..\services\rendering\Inno.Rendering.Assets\Inno.Rendering.Assets.csproj" />
     <ProjectReference Include="..\..\..\..\foundation\extensibility\Inno.Extensibility.Types\Inno.Extensibility.Types.csproj" />

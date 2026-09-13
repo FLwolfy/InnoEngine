@@ -69,6 +69,18 @@ public sealed class EditorInteractions : IEditorSelectionCoordinator, IEditorHis
     /// </summary>
     public IEditorDocumentService documents => m_documents;
 
+    /// <summary>Resolves an active feature module for immediate use in the current Editor callback.</summary>
+    /// <typeparam name="TModule">The feature module contract to resolve.</typeparam>
+    /// <param name="module">The started, non-quarantined module, or null when unavailable.</param>
+    /// <returns>True when the active generation supplies the requested module.</returns>
+    /// <remarks>Do not retain the result across callbacks or generation changes. Candidate modules are never exposed.</remarks>
+    public bool TryGetModule<TModule>(out TModule? module) where TModule : EditorModule
+    {
+        if (m_catalog is not null) return m_catalog.TryGetModule(out module);
+        module = null;
+        return false;
+    }
+
     /// <summary>
     /// Starts an isolated temporary Undo and Redo branch while retaining the current editing branch.
     /// </summary>

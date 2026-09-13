@@ -20,7 +20,7 @@ using Inno.Editor.Core;
 using Inno.Editor.Graph;
 using Inno.Editor.Interactions;
 using Inno.Editor.Panel.FileBrowser;
-using Inno.Editor.Panel.ShaderEditor;
+using Inno.Editor.Shaders;
 using Inno.Editor.Rendering;
 using Inno.Extensibility.Modules;
 using Inno.Extensibility.Reload;
@@ -51,6 +51,9 @@ public sealed class ShaderEditorWorkflowTests : IDisposable
     private readonly WorkflowSink m_sink = new();
     private readonly ShaderGraphSourceStore m_source;
     private readonly ImGuiContextPtr m_imgui;
+    private Vector2 m_canvasMinimum;
+    private Vector2 m_canvasMaximum;
+    private Vector2 m_probeOffset;
 
     public ShaderEditorWorkflowTests()
     {
@@ -76,6 +79,46 @@ public sealed class ShaderEditorWorkflowTests : IDisposable
         io.DeltaTime = 1f / 60;
         io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
         io.Fonts.RendererHasTextures = true;
+    }
+
+    [Fact]
+    public void ParameterPresentationRoundTripsWithoutChangingTheRuntimeDefinitionOrSemanticProgram()
+    {
+        AssetFileEntry entry = Create("Presentation.ishader");
+        GraphDocument graph = m_source.Read(entry.assetPath).document;
+        SerializationContext context = AssetSerializationContext.Create(m_assets);
+        byte[] beforeDefinition = m_serialization.Serialize(ShaderGraphDocument.ReadDefinition(graph, m_serialization, context), context);
+        string beforeHash = ShaderGraphArtifact.GetSemanticHash(ShaderGraphArtifact.Encode(graph, new Dictionary<GraphNodeId, byte[]>(), m_serialization), m_serialization);
+        ShaderPropertyId id = new("stable.tint");
+        Assert.True(ShaderParameterPresentation.Read(graph, id, m_serialization, context).visible);
+        ShaderParameterPresentation.Write(graph, id, new()
+        {
+            group = "Surface", description = "Linear tint", visible = false, hasRange = true, minimum = -2, maximum = 8
+        }, m_serialization, context);
+        GraphDocument restored = GraphDocumentCodec.Decode(GraphDocumentCodec.Encode(graph, m_serialization), m_serialization);
+        ShaderParameterPresentation presentation = ShaderParameterPresentation.Read(restored, id, m_serialization, context);
+        Assert.Equal("Surface", presentation.group);
+        Assert.Equal("Linear tint", presentation.description);
+        Assert.False(presentation.visible);
+        Assert.True(presentation.hasRange);
+        Assert.Equal(-2, presentation.minimum);
+        Assert.Equal(8, presentation.maximum);
+        presentation.group = "Detached";
+        Assert.Equal("Surface", ShaderParameterPresentation.Read(restored, id, m_serialization, context).group);
+        Assert.Equal(beforeDefinition, m_serialization.Serialize(ShaderGraphDocument.ReadDefinition(restored, m_serialization, context), context));
+        Assert.Equal(beforeHash, ShaderGraphArtifact.GetSemanticHash(ShaderGraphArtifact.Encode(restored, new Dictionary<GraphNodeId, byte[]>(), m_serialization), m_serialization));
+    }
+
+    [Fact]
+    public void ParameterPresentationRejectsInvalidBoundsBeforeMutatingTheGraph()
+    {
+        GraphDocument graph = m_source.Read(Create("Range.ishader").assetPath).document;
+        byte[] before = GraphDocumentCodec.Encode(graph, m_serialization);
+        SerializationContext context = AssetSerializationContext.Create(m_assets);
+        foreach (var range in new[] { (double.NaN, 1d), (0d, double.PositiveInfinity), (2d, 1d), (-1e100, 0d), (0d, 1e100) })
+            Assert.Throws<ArgumentException>(() => ShaderParameterPresentation.Write(graph, new("range"),
+                new() { hasRange = true, minimum = range.Item1, maximum = range.Item2 }, m_serialization, context));
+        Assert.Equal(before, GraphDocumentCodec.Encode(graph, m_serialization));
     }
 
     [Fact]
@@ -271,7 +314,8 @@ public sealed class ShaderEditorWorkflowTests : IDisposable
 
     private void DragProbe(Vector2 distance)
     {
-        Vector2 start = CanvasProbeDrawer.header;
+        // A single framed summary-only node is centered in the canvas (82 px tall).
+        Vector2 start = (m_canvasMinimum + m_canvasMaximum) * 0.5f + new Vector2(0, -25) + m_probeOffset;
         Assert.True(start.X > 0 && start.Y > 0);
         UI.GetIO().AddMousePosEvent(start.X, start.Y);
         Draw();
@@ -282,6 +326,7 @@ public sealed class ShaderEditorWorkflowTests : IDisposable
         UI.GetIO().AddMouseButtonEvent(0, false);
         Draw();
         Tick();
+        m_probeOffset += distance;
     }
 
     [Fact]
@@ -485,6 +530,52 @@ public sealed class ShaderEditorWorkflowTests : IDisposable
         Assert.Equal(saved, File.ReadAllBytes(Path.Combine(m_root, "Assets", entry.assetPath.localPath)));
     }
 
+    [Fact]
+    public async Task DraftCompilationNeverReplacesTheCanonicalArtifactAndLayoutChangesDoNotRecompile()
+    {
+        AssetFileEntry entry = Create("Preview.ishader");
+        ShaderAsset shader = m_assets.Load<ShaderAsset>(entry.assetPath);
+        byte[] disk = File.ReadAllBytes(Path.Combine(m_root, "Assets", entry.assetPath.localPath));
+        RenderTextureFormat[] formats = Enum.GetValues<RenderTextureFormat>();
+        var capabilities = new GraphicsCapabilities(GraphicsApi.Metal, GraphicsCapability.None, new(256, 8, 8192, 16), formats, formats, formats, formats, false, false);
+        var compilation = new EditorShaderCompilation(m_artifacts, capabilities);
+        RenderShaderArtifact? canonical = null;
+        for (int i = 0; i < 100 && canonical is null; i++)
+        { _ = m_artifacts.GetShaderArtifact(shader, RenderShaderVariant.empty, capabilities, out canonical); await Task.Yield(); }
+        Assert.NotNull(canonical);
+        GraphDocument draft = m_source.Read(entry.assetPath).document;
+        var context = AssetSerializationContext.Create(m_assets);
+        ShaderDefinition definition = ShaderGraphDocument.ReadDefinition(draft, m_serialization, context);
+        ShaderPropertyDefinition property = definition.properties[0];
+        property.defaultValue = MaterialValue.FromColor(new Inno.Core.Mathematics.Color(0.23f, 1, 1, 1));
+        definition.properties[0] = property;
+        draft.SetMetadata(ShaderGraphDocument.definitionKey, ShaderGraphDocument.Encode(m_serialization.Serialize(definition, context), m_serialization, context));
+        Guid previewId = Guid.NewGuid();
+        async Task<EditorShaderDraftCompilationSnapshot> Poll(ulong revision)
+        {
+            EditorShaderDraftCompilationSnapshot result = compilation.RequestDraft(previewId, draft, revision, RenderShaderVariant.empty);
+            for (int i = 0; i < 100 && result.state == EditorShaderCompilationState.Compiling; i++)
+            { await Task.Yield(); result = compilation.RequestDraft(previewId, draft, revision, RenderShaderVariant.empty); }
+            return result;
+        }
+        var preview = await Poll(1);
+        Assert.Equal(EditorShaderCompilationState.Succeeded, preview.state);
+        Assert.NotNull(preview.artifact);
+        Assert.NotEqual(canonical!.contentHash, preview.artifact!.contentHash);
+        draft.nodes[0].position = new(123, 456);
+        Assert.Same(preview.artifact, (await Poll(2)).artifact);
+        GraphNodeRecord output = draft.nodes.First(value => value.definitionId == ShaderGraphDocument.outputDefinitionId);
+        draft.RemoveNode(output.id);
+        var failed = await Poll(3);
+        Assert.Equal(EditorShaderCompilationState.Failed, failed.state);
+        Assert.True(failed.usingLastGood);
+        Assert.Same(preview.artifact, failed.artifact);
+        _ = m_artifacts.GetShaderArtifact(shader, RenderShaderVariant.empty, capabilities, out var unchanged);
+        Assert.Same(canonical, unchanged);
+        Assert.Equal(disk, File.ReadAllBytes(Path.Combine(m_root, "Assets", entry.assetPath.localPath)));
+        compilation.ReleaseDraft(previewId);
+    }
+
     private EditorInteractionRuntime CreateRuntime()
     {
         RenderTextureFormat[] formats = Enum.GetValues<RenderTextureFormat>();
@@ -493,6 +584,253 @@ public sealed class ShaderEditorWorkflowTests : IDisposable
             [m_types, m_serialization, m_assets, m_sink, new EditorReloadCoordinator(), new EditorShaderCompilation(m_artifacts, capabilities), new EmptyPreviews()]);
         runtime.Start();
         return runtime;
+    }
+
+    [Fact]
+    public void MaterialGesturesAreIndependentAndOnlySavePublishesTheDraft()
+    {
+        (AssetPath path, ShaderPropertyId property) = CreateMaterial();
+        MaterialDocuments documents = Assert.IsType<MaterialDocuments>(m_sink.materials);
+        Guid id = documents.Open(path);
+        byte[] original = File.ReadAllBytes(Path.Combine(m_root, "Assets", path.localPath));
+        MaterialAsset canonical = m_assets.Load<MaterialAsset>(path);
+        void Set(float value, bool finish = true)
+        {
+            MaterialAsset candidate = documents.Read(id);
+            candidate.Set(property, MaterialValue.FromColor(new Inno.Core.Mathematics.Color(value, 1, 1, 1)));
+            documents.Replace(id, candidate, finish);
+        }
+        Set(0.1f, false); Set(0.2f, false); documents.Commit(id);
+        Set(0.3f, false); Set(0.4f, true);
+        Assert.False(canonical.TryGet(property, out _));
+        Assert.Equal(original, File.ReadAllBytes(Path.Combine(m_root, "Assets", path.localPath)));
+        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        Assert.True(documents.Read(id).TryGet(property, out MaterialValue value));
+        Assert.Equal(0.2f, value.vector.x);
+        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        Assert.False(documents.Read(id).TryGet(property, out _));
+        Assert.False(Assert.Single(m_runtime.interactions.documents.documents).isDirty);
+        Assert.True(m_runtime.interactions.history.Redo().succeeded);
+        EditorDocumentContext context = Assert.Single(m_runtime.interactions.documents.documents);
+        Assert.True(m_runtime.interactions.documents.Save(context.documentId));
+        Assert.False(canonical.TryGet(property, out _));
+        Tick();
+        Assert.True(canonical.TryGet(property, out value));
+        Assert.Equal(0.2f, value.vector.x);
+        Set(0.8f);
+        Assert.True(m_runtime.interactions.documents.Revert(context.documentId));
+        Assert.True(documents.Read(id).TryGet(property, out value));
+        Assert.Equal(0.2f, value.vector.x);
+    }
+
+    [Fact]
+    public void MaterialSaveConflictKeepsDiskAndRecoveredDraftDistinct()
+    {
+        (AssetPath path, ShaderPropertyId property) = CreateMaterial();
+        MaterialDocuments documents = Assert.IsType<MaterialDocuments>(m_sink.materials);
+        Guid id = documents.Open(path);
+        MaterialAsset candidate = documents.Read(id);
+        candidate.Set(property, MaterialValue.FromColor(new Inno.Core.Mathematics.Color(0.3f, 1, 1, 1)));
+        documents.Replace(id, candidate);
+        AssetSourceStore sources = m_assets.CreateSourceStore();
+        AssetSourceSnapshot before = sources.Read(path);
+        MaterialAsset external = sources.Decode<MaterialAsset>(before.bytes);
+        external.Set(property, MaterialValue.FromColor(new Inno.Core.Mathematics.Color(0.9f, 1, 1, 1)));
+        byte[] externalBytes = sources.Encode(external);
+        sources.Save(path, externalBytes, before.contentHash);
+        EditorDocumentContext context = Assert.Single(m_runtime.interactions.documents.documents);
+        Assert.False(m_runtime.interactions.documents.Save(context.documentId));
+        Assert.Equal(externalBytes, sources.Read(path).bytes);
+        m_runtime.Dispose();
+        m_runtime = CreateRuntime();
+        documents = Assert.IsType<MaterialDocuments>(m_sink.materials);
+        documents.Open(path);
+        Assert.True(documents.Read(id).TryGet(property, out MaterialValue recovered));
+        Assert.Equal(0.3f, recovered.vector.x);
+        Assert.Equal(externalBytes, sources.Read(path).bytes);
+    }
+
+    [Fact]
+    public void CleanMaterialFollowsExternalSourceButDirtyMaterialKeepsItsDraft()
+    {
+        (AssetPath path, ShaderPropertyId property) = CreateMaterial();
+        MaterialDocuments documents = Assert.IsType<MaterialDocuments>(m_sink.materials);
+        Guid id = documents.Open(path);
+        void External(float value)
+        {
+            AssetSourceStore sources = m_assets.CreateSourceStore();
+            AssetSourceSnapshot captured = sources.Read(path);
+            MaterialAsset material = sources.Decode<MaterialAsset>(captured.bytes);
+            material.Set(property, MaterialValue.FromColor(new Inno.Core.Mathematics.Color(value, 1, 1, 1)));
+            sources.Save(path, sources.Encode(material), captured.contentHash);
+            Assert.True(m_assets.Import(path));
+            Tick();
+        }
+        External(0.2f);
+        Assert.True(documents.Read(id).TryGet(property, out MaterialValue inherited));
+        Assert.Equal(0.2f, inherited.vector.x);
+        Assert.False(Assert.Single(m_runtime.interactions.documents.documents).isDirty);
+        MaterialAsset candidate = documents.Read(id);
+        candidate.Set(property, MaterialValue.FromColor(new Inno.Core.Mathematics.Color(0.5f, 1, 1, 1)));
+        documents.Replace(id, candidate);
+        External(0.8f);
+        Assert.True(documents.Read(id).TryGet(property, out MaterialValue draft));
+        Assert.Equal(0.5f, draft.vector.x);
+        Assert.True(Assert.Single(m_runtime.interactions.documents.documents).isDirty);
+        Assert.False(m_runtime.interactions.documents.Save(Assert.Single(m_runtime.interactions.documents.documents).documentId));
+    }
+
+    [Fact]
+    public void MultipleMaterialSamplesCommitAsOneIndependentUndoWithoutPublishing()
+    {
+        (AssetPath firstPath, ShaderPropertyId property) = CreateMaterial();
+        AssetPath secondPath = AssetPath.Project("SecondSurface.imaterial");
+        AssetSourceStore sources = m_assets.CreateSourceStore();
+        sources.Save(secondPath, sources.Read(firstPath).bytes, null);
+        Assert.True(m_assets.Import(secondPath));
+        MaterialDocuments documents = Assert.IsType<MaterialDocuments>(m_sink.materials);
+        Guid first = documents.Open(firstPath), second = documents.Open(secondPath);
+        byte[] original = sources.Read(firstPath).bytes;
+        void Sample(float value)
+        {
+            var candidates = new Dictionary<Guid, MaterialAsset>();
+            foreach (Guid id in new[] { first, second })
+            {
+                MaterialAsset candidate = documents.Read(id);
+                candidate.Set(property, MaterialValue.FromColor(new Inno.Core.Mathematics.Color(value, 1, 1, 1)));
+                candidates.Add(id, candidate);
+            }
+            documents.ReplaceMany(candidates, false);
+        }
+        Sample(0.2f); Sample(0.4f); documents.CommitMany([first, second]);
+        Sample(0.6f); documents.CommitMany([first, second]);
+        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        foreach (Guid id in new[] { first, second })
+        {
+            Assert.True(documents.Read(id).TryGet(property, out MaterialValue value));
+            Assert.Equal(0.4f, value.vector.x);
+        }
+        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        foreach (Guid id in new[] { first, second }) Assert.False(documents.Read(id).TryGet(property, out _));
+        Assert.All(m_runtime.interactions.documents.documents, document => Assert.False(document.isDirty));
+        Assert.Equal(original, sources.Read(firstPath).bytes);
+        Assert.Equal(original, sources.Read(secondPath).bytes);
+        Assert.True(m_runtime.interactions.history.Redo().succeeded);
+        foreach (Guid id in new[] { first, second }) Assert.True(documents.Read(id).TryGet(property, out _));
+    }
+
+    [Fact]
+    public void CommonMaterialEditingPreservesUntouchedMixedComponentsAndTextureReferences()
+    {
+        var first = MaterialValue.FromVector(new Inno.Core.Mathematics.Vector4(1, 2, 3, 4));
+        var edited = MaterialValue.FromVector(new Inno.Core.Mathematics.Vector4(8, 2, 3, 4));
+        var other = MaterialValue.FromVector(new Inno.Core.Mathematics.Vector4(5, 6, 7, 9));
+        MaterialValue result = ShaderPropertyInspector.ApplyEdit(ShaderPropertyType.Vector4, first, edited, other);
+        Assert.Equal(new Inno.Core.Mathematics.Vector4(8, 6, 7, 9), result.vector);
+        var firstTexture = new TextureAsset(1, 1, TextureColorSpace.Linear, "first");
+        var secondTexture = new TextureAsset(1, 1, TextureColorSpace.Linear, "second");
+        first = MaterialValue.FromTexture(firstTexture);
+        edited = first; edited.sampler = new(RenderSamplerFilter.Point, RenderSamplerAddressMode.Clamp, RenderSamplerAddressMode.Clamp, RenderSamplerAddressMode.Clamp);
+        other = MaterialValue.FromTexture(secondTexture);
+        result = ShaderPropertyInspector.ApplyEdit(ShaderPropertyType.Texture2D, first, edited, other);
+        Assert.Same(secondTexture, result.texture);
+        Assert.Equal(RenderSamplerFilter.Point, result.sampler.filter);
+    }
+
+
+    [Fact]
+    public void PipelineSettingsDraftsPreserveReferencesAndPublishOnlyAfterSave()
+    {
+        (AssetPath materialPath, _) = CreateMaterial();
+        MaterialAsset material = m_assets.Load<MaterialAsset>(materialPath);
+        var originalSettings = new WorkflowPipelineSettings { material = material, exposure = 1 };
+        var initial = new RenderPipelineAsset
+        {
+            pipelineTypeId = "tests.workflow.pipeline",
+            pipelineState = new(m_assets.CaptureProperties(originalSettings))
+        };
+        AssetPath path = AssetPath.Project("Workflow.irenderpipeline");
+        AssetSourceStore sources = m_assets.CreateSourceStore();
+        sources.Save(path, sources.Encode(initial), null);
+        Assert.True(m_assets.Import(path));
+        byte[] before = sources.Read(path).bytes;
+        RenderPipelineAsset canonical = m_assets.Load<RenderPipelineAsset>(path);
+        PipelineDocuments documents = Assert.IsType<PipelineDocuments>(m_sink.pipelines);
+        Guid id = documents.Open(path);
+        documents.ReplaceSettings(id, new WorkflowPipelineSettings { material = material, exposure = 3 });
+        Assert.Equal(before, sources.Read(path).bytes);
+        Assert.Equal(1, Read(canonical).exposure);
+        Assert.Equal(3, Read(documents.Read(id)).exposure);
+        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        Assert.Equal(1, Read(documents.Read(id)).exposure);
+        Assert.True(m_runtime.interactions.history.Redo().succeeded);
+        RenderPipelineAsset draft = documents.Read(id);
+        Assert.Equal(material.identity.persistentId, Assert.Single(draft.pipelineState.dependencies).persistentId);
+        EditorDocumentContext document = Assert.Single(m_runtime.interactions.documents.documents);
+        Assert.True(m_runtime.interactions.documents.Save(document.documentId));
+        Assert.Equal(1, Read(canonical).exposure);
+        Tick();
+        Assert.Equal(3, Read(canonical).exposure);
+        Assert.Same(material, Read(canonical).material);
+        Assert.True(m_assets.TryGetInfo(path, out AssetInfo? info));
+        Assert.Contains(m_assets.GetDependencies(canonical), value => value.persistentId == material.identity.persistentId);
+        documents.ReplaceSettings(id, new WorkflowPipelineSettings { material = null, exposure = 8 });
+        Assert.True(m_runtime.interactions.documents.Revert(document.documentId));
+        Assert.Same(material, Read(documents.Read(id)).material);
+        Assert.Equal(3, Read(documents.Read(id)).exposure);
+
+        WorkflowPipelineSettings Read(RenderPipelineAsset pipeline)
+        {
+            var result = new WorkflowPipelineSettings();
+            m_assets.RestoreProperties(pipeline.pipelineState.stableTypeId, pipeline.pipelineState.propertyData, result);
+            return result;
+        }
+    }
+
+    [Fact]
+    public void PipelineMissingSettingsKeepOpaqueBytesThroughHistoryAndRecovery()
+    {
+        var unknown = new SerializedRenderExtensionState(Guid.NewGuid(), new byte[] { 19, 42, 7 });
+        var source = new RenderPipelineAsset { pipelineTypeId = "tests.missing-pipeline", pipelineState = unknown };
+        AssetPath path = AssetPath.Project("Missing.irenderpipeline");
+        AssetSourceStore sources = m_assets.CreateSourceStore();
+        sources.Save(path, sources.Encode(source), null);
+        Assert.True(m_assets.Import(path));
+        PipelineDocuments documents = Assert.IsType<PipelineDocuments>(m_sink.pipelines);
+        Guid id = documents.Open(path);
+        RenderPipelineAsset draft = documents.Read(id);
+        draft.features = [new("tests.optional", unknown, false)];
+        documents.Replace(id, draft);
+        Assert.True(m_runtime.interactions.history.Undo().succeeded);
+        Assert.Empty(documents.Read(id).features);
+        Assert.True(m_runtime.interactions.history.Redo().succeeded);
+        m_runtime.Dispose();
+        m_runtime = CreateRuntime();
+        documents = Assert.IsType<PipelineDocuments>(m_sink.pipelines);
+        documents.Open(path);
+        RenderPipelineAsset recovered = documents.Read(id);
+        Assert.Equal(unknown.stableTypeId, recovered.pipelineState.stableTypeId);
+        Assert.Equal(unknown.propertyData, recovered.pipelineState.propertyData);
+        Assert.Equal(unknown.propertyData, Assert.Single(recovered.features).state.propertyData);
+        Assert.Empty(sources.Decode<RenderPipelineAsset>(sources.Read(path).bytes).features);
+    }
+
+    [StableTypeId("8c096b6f-92c3-48ed-917e-955858d6a65c")]
+    public sealed class WorkflowPipelineSettings : ISerializable
+    {
+        [SerializableProperty] public MaterialAsset? material { get; set; }
+        [SerializableProperty] public float exposure { get; set; }
+    }
+
+    private (AssetPath, ShaderPropertyId) CreateMaterial()
+    {
+        AssetFileEntry shaderEntry = Create("MaterialSurface.ishader");
+        ShaderAsset shader = m_assets.Load<ShaderAsset>(shaderEntry.assetPath);
+        AssetPath path = AssetPath.Project("Surface.imaterial");
+        AssetSourceStore sources = m_assets.CreateSourceStore();
+        sources.Save(path, sources.Encode(new MaterialAsset { shader = shader }), null);
+        Assert.True(m_assets.Import(path));
+        return (path, Assert.Single(shader.definition!.properties).id);
     }
 
     private GraphDocumentController Controller(AssetFileEntry entry)
@@ -518,7 +856,12 @@ public sealed class ShaderEditorWorkflowTests : IDisposable
         UI.SetNextWindowPos(new(0, 0));
         UI.SetNextWindowSize(size ?? new(1200, 800));
         _ = UI.Begin("Shader Editor Workflow");
-        try { Assert.True(panel.Draw(m_runtime.context)); }
+        try
+        {
+            Assert.True(panel.Draw(m_runtime.context));
+            m_canvasMinimum = UI.GetItemRectMin();
+            m_canvasMaximum = UI.GetItemRectMax();
+        }
         finally { UI.End(); UI.Render(); }
     }
 
@@ -537,7 +880,12 @@ public sealed class ShaderEditorWorkflowTests : IDisposable
         Directory.Delete(m_root, true);
     }
 
-    public sealed class WorkflowSink { public GraphEditorModule? graphs { get; set; } }
+    public sealed class WorkflowSink
+    {
+        public GraphEditorModule? graphs { get; set; }
+        public MaterialDocuments? materials { get; set; }
+        public PipelineDocuments? pipelines { get; set; }
+    }
 
     private sealed class WorkflowLogs : ILogSink
     {
@@ -559,7 +907,8 @@ public sealed class ShaderEditorWorkflowTests : IDisposable
     [EditorModule("tests.shader-workflow", order: 160)]
     public sealed class WorkflowProbe : EditorModule
     {
-        public WorkflowProbe(GraphEditorModule graphs, WorkflowSink sink) { sink.graphs = graphs; }
+        public WorkflowProbe(GraphEditorModule graphs, MaterialDocuments materials, PipelineDocuments pipelines, WorkflowSink sink)
+        { sink.graphs = graphs; sink.materials = materials; sink.pipelines = pipelines; }
     }
 
     private sealed class WorkflowCompiler : IShaderCompilerToolchain
@@ -575,6 +924,8 @@ public sealed class ShaderEditorWorkflowTests : IDisposable
 
     private sealed class EmptyPreviews : IEditorPreviewService
     {
+        public bool TryRender(EditorViewportComposition composition, out EditorPreviewHandle handle) { handle = default; return false; }
+        public void ReleaseRendered(string viewportId) { }
         public uint deviceGeneration => 1;
         public bool TryGetTexture(TextureAsset texture, out EditorPreviewHandle handle) { handle = default; return false; }
         public bool TryGetTextureArtifact(RenderTextureArtifactReference texture, int pixelWidth, int pixelHeight, out EditorPreviewHandle handle) { handle = default; return false; }

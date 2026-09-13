@@ -64,6 +64,9 @@ public sealed class PropertyDrawContext
     /// </summary>
     public double? maximum { get; }
 
+    /// <summary>Gets whether Color values are unclamped linear floating-point channels.</summary>
+    public bool hdrColor { get; }
+
     internal object owner => m_owner;
 
     internal PropertyDrawContext(
@@ -81,7 +84,7 @@ public sealed class PropertyDrawContext
         double? maximum,
         Func<object?> getter,
         Action<object?> setter,
-        SerializedPropertyRenderer renderer)
+        SerializedPropertyRenderer renderer, bool hdrColor = false)
     {
         this.editorContext = editorContext;
         this.interactions = interactions ?? throw new ArgumentNullException(nameof(interactions));
@@ -100,6 +103,7 @@ public sealed class PropertyDrawContext
         m_getter = getter;
         m_setter = setter;
         m_renderer = renderer;
+        this.hdrColor = hdrColor;
     }
 
     /// <summary>
@@ -205,7 +209,8 @@ public sealed class PropertyDrawContext
             childType,
             childVisibility,
             getter,
-            setter);
+            setter,
+            m_edits);
     }
 
     /// <summary>
@@ -242,7 +247,8 @@ public sealed class PropertyDrawContext
             property.propertyType,
             isReadOnly || !property.canWrite ? PropertyVisibility.Readonly : property.visibility,
             property.GetValue,
-            property.SetValue);
+            property.SetValue,
+            m_edits);
     }
 
     internal void DrawChildMember(
@@ -270,7 +276,8 @@ public sealed class PropertyDrawContext
             childType,
             childVisibility,
             getter,
-            setter);
+            setter,
+            m_edits);
     }
 
     /// <summary>
@@ -312,6 +319,7 @@ public sealed class PropertyDrawContext
             childType,
             childVisibility,
             getter,
-            setter);
+            setter,
+            m_edits);
     }
 }

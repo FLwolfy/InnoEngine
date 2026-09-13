@@ -23,6 +23,9 @@ public sealed class InspectionDrawerAttribute : Attribute
     /// </summary>
     public int priority { get; }
 
+    /// <summary>Gets whether CanInspect selects a subset of targets, allowing peer conditional registrations at the same priority.</summary>
+    public bool conditional { get; }
+
     /// <summary>
     /// Creates an inspector drawer registration.
     /// </summary>
@@ -35,13 +38,15 @@ public sealed class InspectionDrawerAttribute : Attribute
     /// <param name="priority">
     /// The tie-breaking priority after exactness and inheritance distance.
     /// </param>
+    /// <param name="conditional">Whether CanInspect is a target-dependent predicate. Equally specific accepted peers remain an explicit ambiguity error.</param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="targetType"/> is <see langword="null"/>.
     /// </exception>
-    public InspectionDrawerAttribute(Type targetType, bool useForChildren = false, int priority = 0)
+    public InspectionDrawerAttribute(Type targetType, bool useForChildren = false, int priority = 0, bool conditional = false)
     {
         this.targetType = targetType ?? throw new ArgumentNullException(nameof(targetType));
         this.useForChildren = useForChildren;
         this.priority = priority;
+        this.conditional = conditional;
     }
 }

@@ -82,9 +82,25 @@ Registry 的 protected override 复用 `TypeRegistry` 契约；Registry 本身�
 本项目唯一的 `Properties/ScriptingApi.cs` 显式导出节点/前端扩展契约、描述对象和 typed IR，逻辑命名空间为
 `InnoEditor.Rendering.Shaders`，全部是 Editor scope。Registry、后台编译 owner 和 Adapter 实现不暴露给普通脚本。
 运行时脚本不能引用这些创作类型；Player 仍只需要运行时接口和预编译产物。
-图读写工具 `ShaderGraphDocument`、`ShaderGraphBindings`、`ShaderGraphTemplates` 属于宿主 API，不导出给脚本，
-避免把 SerializationRegistry 等宿主服务穿透到 IDE 引用。自定义节点绘制通过 Shader Editor 的
-`ShaderNodeDrawContext.Read/Write` 使用中立数据，与编译扩展独立。
+图读写工具 `ShaderGraphDocument`、`ShaderGraphBindings`、`ShaderGraphTemplates` 已导出到 Editor 脚本，
+配合宿主提供的 SerializationRegistry 与完整引用上下文使用。脚本不能构造 Registry 或捕获 converter generation。
+自定义节点绘制通过独立 `Inno.Editor.Shaders` 的 `ShaderNodeDrawContext.Read/Write` 使用中立数据，与编译扩展独立。
+
+## Target 与模板
+
+| API | 契约 |
+| --- | --- |
+| `ShaderTargetAttribute`、`ShaderTarget.id/Expand(context, cancellationToken)` | 插件将领域输出展开为已有阶段图；Pass 声明能力、Contract/Role 和绑定；不生成原生 Shader 字符串 |
+| `ShaderTargetContext.document/serialization/references` | 独立原图副本、借用的 owner converter 和完整引用上下文，只在调用期间有效 |
+| `ShaderTargetRegistry(types).ids/Expand/Dispose` | 宿主的 generation-scoped 发现与调用；Missing Target 明确失败且不改原图 |
+| `ShaderGraphDocument.targetKey/ReadTarget/SetTarget` | 持久化稳定 Target ID；未指定领域 Target 的图显式创作通用阶段 |
+| `ShaderGraphTemplateAttribute`、`ShaderGraphTemplate.id/displayName/Create` | 插件贡献 File Browser Shader 创建模板 |
+| `ShaderGraphTemplateInfo(id, displayName)` | 不含 provider 的菜单快照 |
+| `ShaderGraphTemplateRegistry(types).templates/Create/Dispose` | 按稳定 ID 创建独立图，重复 ID 或缺失模板明确失败 |
+
+Target 在导入时先展开，随后捕获其引入的源码与资产依赖，进入同一公共 IR 和 Adapter 编译链。
+Authoring Artifact 同时保存原图与展开图；Export/Editor 读取原图，编译读取展开图。目标生成的节点位置不影响语义指纹。
+Target 与 Template 的 provider 只存活于 TypeRegistry snapshot，公共菜单快照只含字符串；运行时不解释 Target 或图。
 
 ```csharp
 using System.Collections.Generic;
@@ -174,7 +190,14 @@ static ShaderIrBlock BuildBrightness()
 - 图降低按稳定拓扑顺序执行，独立节点以文档顺序排序；不删除未使用的源码调用。输入索引线性建立，不按每个节点全表搜索连线。
 - Stage 支持显式 raster/compute 接口、uniform/采样纹理、storage、MRT 与工作组；图 artifact 冻结源码依赖并调用 typed 编译链。
   完整 Target、图级资源/控制节点接线和定义/产物原子发布仍未验收。
-- BGFX 已通过原生编译验证基础路径，但旧完整 SC 字符串资产链尚未删除；不能把新 API 可用当作一次性替换完成。
+- 旧完整 SC 字符串创作入口已被统一图链取代；本轮还需完成最终内部 Shader 解耦和产物清理验收，详见[实施记录](../issues/2026-09-12-shader-authoring-execution.md)。
+
+### 图输入默认值
+
+`ShaderGraphLiteral.Zero(type)` 为支持的标量、向量、浮点矩阵、结构体和固定数组创建精确位模式默认值。
+`type` 保存完整类型，`scalarBits` 以声明/矩阵列顺序保存 IEEE float、int、uint、bool 的原始位；`GetScalarTypes()` 校验形状，`Emit(builder, expectedType)` 发出同一公共 IR。
+`ShaderGraphDocument.inputDefaultPrefix + portId` 绑定到稳定输入名，而非端口位置。连线优先、旧默认值保留但不求值；未连接类型不匹配返回定位到端口的 `SHADER_GRAPH_DEFAULT_TYPE`。
+不能给 storage、opaque texture 或效果顺序令牌生成数值默认值。类型变更要显式修复，不做隐式转换。该类型仅导出给 Editor 创作脚本。
 
 ## 端口与生命周期
 

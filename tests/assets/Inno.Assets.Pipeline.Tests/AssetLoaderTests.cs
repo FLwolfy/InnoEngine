@@ -940,6 +940,72 @@ public sealed class AssetLoaderTests : IDisposable
     }
 
     [Theory]
+    [InlineData("success")]
+    [InlineData("cancel")]
+    [InlineData("invalid")]
+    public async Task AsyncRuntimeExportReleasesItsGenerationLeaseAfterEveryOutcome(string outcome)
+    {
+        using TestWorkspace workspace = new();
+        workspace.WriteText("leaf.buildinput", "original");
+        using var pipeline = new AssetPipeline(m_modules, m_types, m_serialization, m_identities,
+            m_diagnostics, m_logs, new AssetPipelineOptions
+            { assetRoot = workspace.assetRoot, libraryRoot = workspace.libraryRoot, enableFileSystemWatcher = false });
+        DependencyAsset leaf = pipeline.Load<DependencyAsset>(AssetPath.Project("leaf.buildinput"));
+        workspace.WriteText("root.buildconsumer", leaf.identity.persistentId.ToString());
+        _ = pipeline.Load<DependencyAsset>(AssetPath.Project("root.buildconsumer"));
+        if (outcome == "invalid") workspace.WriteText("leaf.buildinput", "changed input");
+        using var cancellation = new CancellationTokenSource();
+        if (outcome == "cancel") cancellation.Cancel();
+        Task<AssetRuntimeContentInfo> export = pipeline.ExportRuntimeArtifactsAsync(
+            Path.Combine(workspace.libraryRoot, "AsyncRuntime"), cancellation.Token);
+        if (outcome == "cancel")
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => export);
+        else if (outcome == "invalid")
+            await Assert.ThrowsAsync<InvalidOperationException>(() => export);
+        else
+            _ = await export;
+        m_modules.generations.EnsureReady("replace the generation after export");
+    }
+
+    [Theory]
+    [InlineData("failed", true)]
+    [InlineData("changed", false)]
+    public void RuntimeExportRejectsTransitiveAuthoringInputsWithoutDiscardingLastGood(string change, bool importChange)
+    {
+        using TestWorkspace workspace = new();
+        workspace.WriteText("leaf.buildinput", "original");
+        using var loader = workspace.CreateLoader(m_types, m_serialization, m_identities, m_diagnostics, m_logs);
+        Assert.True(loader.Import(AssetPath.Project("leaf.buildinput")));
+        AssetObject leaf = Assert.IsType<DependencyAsset>(loader.Load(AssetPath.Project("leaf.buildinput"), typeof(DependencyAsset)));
+        workspace.WriteText("middle.buildinput", leaf.identity.persistentId.ToString());
+        Assert.True(loader.Import(AssetPath.Project("middle.buildinput")));
+        AssetObject middle = Assert.IsType<DependencyAsset>(loader.Load(AssetPath.Project("middle.buildinput"), typeof(DependencyAsset)));
+        workspace.WriteText("root.buildconsumer", middle.identity.persistentId.ToString());
+        Assert.True(loader.Import(AssetPath.Project("root.buildconsumer")));
+        loader.ExportRuntimeArtifacts(Path.Combine(workspace.libraryRoot, "ValidRuntime"));
+
+        workspace.WriteText("leaf.buildinput", change);
+        if (importChange)
+            Assert.False(loader.Import(AssetPath.Project("leaf.buildinput")));
+        using (ArtifactLease lastGood = loader.AcquireArtifact(leaf.identity.persistentId, "authoring"))
+            Assert.Equal("original", System.IO.File.ReadAllText(lastGood.info.absolutePath));
+        string invalidDestination = Path.Combine(workspace.libraryRoot, "InvalidRuntime");
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => loader.ExportRuntimeArtifacts(invalidDestination));
+        Assert.Contains("root.buildconsumer -> middle.buildinput -> leaf.buildinput", error.Message);
+        Assert.False(Directory.Exists(invalidDestination));
+
+        workspace.WriteText("leaf.buildinput", "original");
+        Assert.True(loader.Import(AssetPath.Project("leaf.buildinput")));
+        loader.ExportRuntimeArtifacts(Path.Combine(workspace.libraryRoot, "RestoredRuntime"));
+
+        workspace.WriteText("root.buildconsumer", "not a valid dependency identity");
+        Assert.False(loader.Import(AssetPath.Project("root.buildconsumer")));
+        error = Assert.Throws<InvalidOperationException>(() =>
+            loader.ExportRuntimeArtifacts(Path.Combine(workspace.libraryRoot, "FailedRootRuntime")));
+        Assert.Contains("root.buildconsumer", error.Message);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task ColdRootsShareDependencyIoAndRetireReservationsAcrossRepeatedCycles(bool cancelFirst)
@@ -1848,6 +1914,41 @@ internal sealed class AlternateDependencyAssetImporter : AssetImporter<Dependenc
         AssetImportWriter<DependencyAsset> output,
         CancellationToken cancellationToken)
     {
+        output.SetAsset(new DependencyAsset());
+        return output.WriteArtifactAsync("runtime", context.sourceBytes, cancellationToken);
+    }
+}
+
+[AssetImporterExtension]
+internal sealed class BuildInputAssetImporter : AssetImporter<DependencyAsset>
+{
+    public override string importerId => "inno.tests.build-input";
+    public override IReadOnlyList<string> supportedExtensions { get; } = [".buildinput"];
+    public override AssetDeploymentScope deploymentScope => AssetDeploymentScope.AuthoringOnly;
+
+    protected override ValueTask ImportAsync(AssetImportContext context, AssetImportWriter<DependencyAsset> output,
+        CancellationToken cancellationToken)
+    {
+        string text = context.ReadUtf8Text();
+        if (text == "failed")
+            throw new InvalidDataException("Required authoring input failed.");
+        if (Guid.TryParse(text, out Guid dependency))
+            context.DependsOnArtifact(dependency);
+        output.SetAsset(new DependencyAsset());
+        return output.WriteArtifactAsync("authoring", context.sourceBytes, cancellationToken, AssetDeploymentScope.AuthoringOnly);
+    }
+}
+
+[AssetImporterExtension]
+internal sealed class BuildConsumerAssetImporter : AssetImporter<DependencyAsset>
+{
+    public override string importerId => "inno.tests.build-consumer";
+    public override IReadOnlyList<string> supportedExtensions { get; } = [".buildconsumer"];
+
+    protected override ValueTask ImportAsync(AssetImportContext context, AssetImportWriter<DependencyAsset> output,
+        CancellationToken cancellationToken)
+    {
+        context.DependsOnArtifact(Guid.Parse(context.ReadUtf8Text()));
         output.SetAsset(new DependencyAsset());
         return output.WriteArtifactAsync("runtime", context.sourceBytes, cancellationToken);
     }

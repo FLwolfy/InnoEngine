@@ -1,8 +1,33 @@
 # Inno.Editor.Rendering
 
+## 离屏预览与编译候选
+
+`IEditorPreviewService.TryRender(EditorViewportComposition, out EditorPreviewHandle)` 将模型贡献提交到现有 `IEditorRenderingHost` 离屏链；只返回当前设备 generation 的可绘制图像。首次分配或 resize 等待完整新目标，不暴露失效原生句柄。
+`ReleaseRendered(viewportId)` 可以释放尚未产生首张图像的预览，同时退休同名 `RenderPersistentResourceId` 范围的 Shader 程序。`Release(handle)` 和 `ReleaseAll()` 同样覆盖生成预览。
+纹理预览每次核对当前 resident texture、generation 与尺寸；依赖重导入之后重新注册图像，不永久显示旧贴图。
+
+`EditorShaderCompilation.RequestArtifact(shader, variant)` 为 Material 预览读取当前正式 Shader 的不可变候选和编译状态，不改变 Material 值。
+`ReadDefinition(artifact)` 使用 owner 引用上下文读取该产物携带的精确接口。Shader 草稿仍通过 `RequestDraft` 独立缓存编译；预览错误和正式保存状态互不冒充。
+
 [Editor 索引](README.md) · [Rendering](../render/README.md) · [Scene View](Inno.Editor.Panel.SceneView.md) · [Game View](Inno.Editor.Panel.GameView.md)
 
 `Inno.Editor.Rendering` 是 Editor viewport 与任意 Plugin 渲染模型之间的后端中立合成边界。Viewport kind 只表示“Scene View”“Game View”或自定义预览等用途，不再等同于某一种 2D/3D 渲染器。Editor 不知道 Camera、Scene snapshot、Picking buffer、Render Path 或材质世界观。
+
+## Pipeline Inspector 与源草稿
+
+`PipelineDocuments` 是内置 Editor Module，使用 [通用资产草稿](Inno.Editor.Assets.md) 编辑 `.irenderpipeline`，不保存第二份配置。
+选择原生 Pipeline 或导入失败的源均进入统一 Inspector。强类型设置按当前 stableTypeId 恢复，并使用实际 AssetPipeline owner 捕获引用与依赖。
+字段复用共享属性 Drawer 和 Header/Tooltip，不添加 2D 分支。缺失设置保留中立 bytes、依赖与 Feature 顺序。
+
+公开 API（同时导出到 `InnoEditor.Rendering`）：
+
+- `Open(path)` / `Read(id)`：打开源并解码独立 Pipeline 草稿。
+- `Replace(id, candidate, finishGesture)` / `Commit(id)`：一手势一次共享 History，不保存、不改变 Scene/Game。
+- `ReplaceSettings<TSettings>(id, settings, finishGesture)`：自动捕获设置的完整依赖，写入草稿 pipelineState。
+
+Save/Revert 使用共享文档服务，保存与导入/激活状态分开呈现；源冲突拒绝覆盖。
+当前 Inspector 支持既有设置类型的字段、Feature 开关和顺序。Pipeline 类型及新增 Feature 由配置创建 API/插件模板提供。
+范例：`var id = documents.Open(path); documents.ReplaceSettings(id, settings);`；显式 Save 是另一个文档操作。
 
 ## Contributor 与 Composition 协议
 

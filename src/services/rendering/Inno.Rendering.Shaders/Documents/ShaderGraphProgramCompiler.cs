@@ -45,7 +45,11 @@ public sealed class ShaderGraphProgramCompiler
             if (diagnostics.Any(static value => value.severity == DiagnosticSeverity.Error)) return new([], diagnostics);
             var definitions = definition.passes.ToDictionary(static pass => pass.name, StringComparer.Ordinal);
             if (definitions.Count == 0) throw new InvalidOperationException("A shader graph requires at least one pass.");
-            var stages = new Dictionary<(string pass, ShaderStage stage), ShaderIrStage>();
+            ShaderGraphPassProgram[] programs = ShaderGraphPrograms.Read(graph, serialization, context);
+            if (programs.Select(static value => value.pass).Distinct(StringComparer.Ordinal).Count() != programs.Length
+                || programs.Any(value => !definitions.ContainsKey(value.pass)))
+                throw new InvalidOperationException("Program references must name unique declared passes.");
+            var stages = new Dictionary<string, ShaderIrStage>(StringComparer.Ordinal);
             var outputs = graph.nodes.Where(static node => node.definitionId == ShaderGraphDocument.outputDefinitionId).ToArray();
             var owners = graph.nodes.Where(static node => node.definitionId != ShaderGraphDocument.outputDefinitionId)
                 .ToDictionary(static node => node.id, node => ShaderGraphDocument.Read(node, ShaderGraphDocument.stageKey, "", serialization, context));
@@ -60,7 +64,6 @@ public sealed class ShaderGraphProgramCompiler
                 ShaderGraphStageSettings settings = ShaderGraphDocument.Read<ShaderGraphStageSettings?>(output,
                     ShaderGraphDocument.settingsKey, null, serialization, context)
                     ?? throw new InvalidOperationException("A stage output node requires its stage settings.");
-                if (!definitions.ContainsKey(settings.pass)) throw new InvalidOperationException($"Stage refers to unknown pass '{settings.pass}'.");
                 var region = graph.Clone();
                 foreach (GraphNodeRecord node in graph.nodes)
                     if (!owners.TryGetValue(node.id, out string? owner) || owner != output.id.value) region.RemoveNode(node.id);
@@ -92,7 +95,7 @@ public sealed class ShaderGraphProgramCompiler
                 var stage = new ShaderIrStage(settings.stage, lowered.block!, inputs.Values,
                     settings.outputs.Select(static value => new ShaderIrStageOutput(value.id, value.kind, value.semantic ?? "", value.location)),
                     settings.threadsX, settings.threadsY, settings.threadsZ);
-                if (!stages.TryAdd((settings.pass, settings.stage), stage)) throw new InvalidOperationException($"Pass '{settings.pass}' repeats {settings.stage}.");
+                stages.Add(output.id.value, stage);
             }
             activeNode = null;
             foreach (ShaderPassDefinition pass in definition.passes)
@@ -103,7 +106,17 @@ public sealed class ShaderGraphProgramCompiler
                     ShaderProgramKind.Compute => [ShaderStage.Compute],
                     _ => throw new InvalidOperationException("The pass program kind is invalid.")
                 };
-                var selected = stages.Where(pair => pair.Key.pass == pass.name).ToDictionary(static pair => pair.Key.stage, static pair => pair.Value);
+                ShaderGraphPassProgram[] references = programs.Where(value => value.pass == pass.name).ToArray();
+                if (references.Length != 1 || references[0].stages is null)
+                { Error("SHADER_PROGRAM_MISSING", $"Pass '{pass.name}' has no stage program assignment."); continue; }
+                var selected = new Dictionary<ShaderStage, ShaderIrStage>();
+                foreach (string reference in references[0].stages)
+                {
+                    if (!stages.TryGetValue(reference, out ShaderIrStage? shared))
+                    { Error("SHADER_PROGRAM_STAGE_MISSING", $"Pass '{pass.name}' refers to unavailable stage program '{reference}'."); continue; }
+                    if (!selected.TryAdd(shared.stage, shared))
+                        Error("SHADER_PROGRAM_STAGE_DUPLICATE", $"Pass '{pass.name}' repeats stage {shared.stage}.");
+                }
                 if (!expected.ToHashSet().SetEquals(selected.Keys))
                 { Error("SHADER_STAGE_SET", $"Pass '{pass.name}' requires exactly {string.Join(" and ", expected)} stages."); continue; }
                 if (pass.programKind == ShaderProgramKind.Raster) ValidateVaryings(selected[ShaderStage.Vertex], selected[ShaderStage.Fragment]);

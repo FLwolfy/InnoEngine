@@ -36,6 +36,24 @@ public sealed class ShaderGraphArtifactTests : IDisposable
     }
 
     [Fact]
+    public void ExpandedProgramCompilesWhileAuthoringExportRetainsTheSmallSourceGraph()
+    {
+        GraphDocument authored = ShaderGraphDocument.Create(new("Surface", [], [], []), m_serialization, SerializationContext.empty);
+        ShaderGraphDocument.SetTarget(authored, "example.surface", m_serialization, SerializationContext.empty);
+        GraphDocument expanded = ShaderGraphTemplates.CreateRaster(m_serialization, SerializationContext.empty);
+        byte[] bytes = ShaderGraphArtifact.Encode(authored, new Dictionary<GraphNodeId, byte[]>(), m_serialization, expanded);
+        using var nodes = new ShaderNodeCompilerRegistry(m_types);
+        using var sources = new ShaderSourceFrontendRegistry(m_types);
+        ShaderGraphProgramResult result = ShaderGraphArtifact.Lower(bytes, "bgfx", nodes, sources, m_serialization, SerializationContext.empty);
+        Assert.True(result.succeeded);
+        Assert.Equal(GraphDocumentCodec.Encode(authored, m_serialization), GraphDocumentCodec.Encode(ShaderGraphArtifact.ReadDocument(bytes, m_serialization), m_serialization));
+        string hash = ShaderGraphArtifact.GetSemanticHash(bytes, m_serialization);
+        expanded.FindNode(new("color"))!.SetValue("semantic-value", ShaderGraphDocument.Encode(3f, m_serialization, SerializationContext.empty));
+        Assert.NotEqual(hash, ShaderGraphArtifact.GetSemanticHash(ShaderGraphArtifact.Encode(authored,
+            new Dictionary<GraphNodeId, byte[]>(), m_serialization, expanded), m_serialization));
+    }
+
+    [Fact]
     public void TemporarilyEmptyInputNameRetainsItsMaterialDefaultWhileTyping()
     {
         GraphDocument graph = ShaderGraphTemplates.CreateRaster(m_serialization, SerializationContext.empty);

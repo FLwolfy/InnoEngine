@@ -7,6 +7,7 @@ using Inno.Core.Graphs;
 using Inno.Editor.Graph;
 using Inno.Editor.ImGui;
 using Inno.Editor.Interactions;
+using Inno.Editor.Shaders;
 using Inno.Native.ImGui;
 using Inno.Rendering.Assets;
 using Inno.Rendering.Shaders;
@@ -86,7 +87,77 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         UI.SetCursorScreenPos(m_origin);
         UI.Dummy(m_size);
         Diagnostics();
+        SynchronizeInspection();
     }
+
+    private void SynchronizeInspection()
+    {
+        if (Canvas.selectedNodes.SequenceEqual(draft.inspectedNodes)) return;
+        draft.inspectedNodes = Canvas.selectedNodes.ToArray();
+        owner.interactions.SetSelection(new ShaderInspectionSelection(draft.id, draft.inspectedNodes));
+    }
+
+    internal void DrawInspector(Inno.Editor.Inspection.InspectionDrawContext inspection, IReadOnlyList<GraphNodeId> selected)
+    {
+        m_inspection = inspection;
+        try { DrawInspectorContents(selected); }
+        finally { m_inspection = null; }
+    }
+
+    private void DrawInspectorContents(IReadOnlyList<GraphNodeId> selected)
+    {
+        RefreshPorts();
+        DrawSaveBar();
+        if (UI.Checkbox("Shader Output Preview", ref draft.previewEnabled) && !draft.previewEnabled) owner.ReleasePreview(draft);
+        if (draft.previewEnabled)
+        {
+            var preview = owner.Preview(draft);
+            Widget.Hint("Draft: " + preview.state + (preview.usingLastGood ? " · last-good preview" : "") + " · Scene/Game unchanged");
+            foreach (var diagnostic in preview.diagnostics) UI.TextWrapped(diagnostic.code + ": " + diagnostic.message);
+            if (preview.artifact is not null && owner.interactions.TryGetModule<Inno.Editor.Shaders.ShaderPreviews>(out var images) && images is not null)
+            {
+                var shader = owner.assets.Load<Inno.Rendering.ShaderAsset>(draft.path);
+                images.Draw(draft.id, new Inno.Rendering.MaterialAsset { shader = shader }, preview,
+                    MathF.Max(1f, MathF.Min(256f, UI.GetContentRegionAvail().X)));
+            }
+        }
+        if (selected.Count == 0)
+        {
+            Widget.SectionHeader("Shader", "Target and public interface belong to this Shader, not to any Material override.");
+            DrawTarget();
+            if (Controller.document.metadata.ContainsKey(ShaderGraphDocument.definitionKey))
+            {
+                var definition = ShaderGraphDocument.ReadDefinition(Controller.document, owner.serialization, owner.context);
+                foreach (var property in definition.properties)
+                    UI.TextWrapped(property.displayName + " · " + property.type + " · " + property.bindingOwner);
+            }
+            owner.RefreshCompilation(draft);
+            UI.TextWrapped(draft.compilationStatus);
+            if (draft.compilationDiagnostics.Length != 0) UI.TextWrapped(draft.compilationDiagnostics);
+            return;
+        }
+        GraphNodeRecord[] nodes = selected.Select(Controller.document.FindNode).OfType<GraphNodeRecord>().ToArray();
+        if (nodes.Length != selected.Count) Widget.Hint("Some selected nodes are unavailable. Stable identities are retained.");
+        if (nodes.Length == 0) return;
+        if (nodes.Any(node => node.definitionId != nodes[0].definitionId))
+        { Widget.Hint("Select nodes of the same kind to edit common settings."); return; }
+        m_inspectionNodes = nodes;
+        Widget.SectionHeader(Title(nodes[0]), "Inputs, defaults and output configuration are edited here. Changes remain in the Shader draft until Save.");
+        if (nodes.Length > 1) Widget.Hint("Editing " + nodes.Length + " nodes · differing values are replaced together");
+        UI.PushID(draft.id.ToString("N"));
+        UI.PushID(nodes[0].id.value);
+        UI.BeginDisabled(draft.readOnly);
+        try
+        {
+            Controls(nodes[0]);
+            foreach (ShaderNodePort port in draft.ports[nodes[0].id].Where(port => port.direction == GraphPortDirection.Input))
+                DrawInputDefault(nodes[0], port);
+        }
+        finally { UI.EndDisabled(); UI.PopID(); UI.PopID(); m_inspectionNodes = null; }
+    }
+
+    private GraphNodeRecord[]? m_inspectionNodes;
+    private Inno.Editor.Inspection.InspectionDrawContext? m_inspection;
 
     private void DrawSaveBar()
     {
@@ -281,33 +352,9 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
             if (Vector2.DistanceSquared(point, UI.GetMousePos()) <= 64)
                 Widget.DrawTooltip(port.type.id + (missing ? " · missing port; reconnect explicitly" : ""));
         }
-        if (zoom >= 0.55f)
-        {
-            int rows = Rows(node);
-            UI.SetCursorScreenPos(rect.min + new Vector2(12, C_HEADER + rows * C_ROW + 8) * zoom);
-            UI.PushID(node.id.value);
-            ImGuiStylePtr style = UI.GetStyle();
-            float baseFontSize = UI.GetFontSize() / MathF.Max(0.01f, style.FontScaleMain * style.FontScaleDpi);
-            UI.PushFont(UI.GetFont(), baseFontSize * zoom);
-            UI.PushStyleVar(ImGuiStyleVar.FramePadding, style.FramePadding * zoom);
-            UI.PushStyleVar(ImGuiStyleVar.ItemSpacing, style.ItemSpacing * zoom);
-            UI.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
-            try
-            {
-                if (UI.BeginChild("##controls", new((C_WIDTH - 24) * zoom, ControlHeight(node) * zoom), ImGuiChildFlags.None,
-                    ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
-                {
-                    UI.PushItemWidth(-1);
-                    UI.BeginDisabled(draft.readOnly);
-                    try { Controls(node); }
-                    catch (Exception failure) when ((failure is System.IO.IOException or InvalidOperationException or ArgumentException or FormatException) && Inno.Core.Execution.RetirementPendingException.Find(failure) is null)
-                    { draft.nodeErrors[node.id] = failure.Message; }
-                    finally { UI.EndDisabled(); UI.PopItemWidth(); }
-                }
-                UI.EndChild();
-            }
-            finally { UI.PopStyleVar(3); UI.PopFont(); UI.PopID(); }
-        }
+        draw.AddText(UI.GetFont(), UI.GetFontSize() * zoom,
+            rect.min + new Vector2(12, C_HEADER + Rows(node) * C_ROW + 8) * zoom,
+            UI.GetColorU32(ImGuiCol.TextDisabled), "Select to edit in Inspector");
         if (draft.nodeErrors.TryGetValue(node.id, out string? error))
         {
             draw.AddCircleFilled(rect.min + new Vector2(C_WIDTH - 14, 16) * zoom, 4 * zoom, Color(1, 0.4f, 0.35f));
@@ -393,13 +440,7 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         Vector2 min = m_origin + new Vector2(Canvas.pan.x, Canvas.pan.y) + new Vector2(position.x, position.y) * Canvas.zoom;
         return (min, min + new Vector2(C_WIDTH, C_HEADER + Rows(node) * C_ROW + ControlHeight(node) + 20) * Canvas.zoom);
     }
-    private float ControlHeight(GraphNodeRecord node) => owner.drawers?.ContentHeight(node.definitionId) ?? node.definitionId switch
-    {
-        "inno.shader.stage-input" => draft.expandedPreviews.Contains(node.id) ? 440 : 300,
-        "inno.shader.source" => 100,
-        ShaderGraphDocument.outputDefinitionId => 140,
-        _ => 110
-    };
+    private static float ControlHeight(GraphNodeRecord node) => 30f;
     private int Rows(GraphNodeRecord node) => Math.Max(draft.ports[node.id].Count(static port => port.direction == GraphPortDirection.Input), draft.ports[node.id].Count(static port => port.direction == GraphPortDirection.Output));
     private GraphNodeRecord? HitNode(Vector2 point) => Controller.document.nodes.Reverse().FirstOrDefault(node => Contains(Rect(node), point));
     private GraphEndpoint? HitPort(Vector2 point, Dictionary<GraphEndpoint, Vector2> ports)
@@ -418,7 +459,19 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
     private void SetEncoded(GraphNodeRecord node, string key, GraphSerializedValue value, bool continuous)
     {
         if (UI.IsItemActivated()) draft.valueGesture = Guid.NewGuid().ToString("N");
-        if (key == "settings" && node.definitionId == "inno.shader.stage-input")
+        if (m_inspectionNodes is { Length: > 1 } selected)
+        {
+            GraphDocument candidate = Controller.document.Clone();
+            foreach (GraphNodeRecord target in selected)
+            {
+                if (key == "settings" && target.definitionId == "inno.shader.stage-input")
+                    candidate = ShaderGraphBindings.ChangeInput(candidate, target.id,
+                        ShaderGraphDocument.Decode<ShaderGraphInputSettings>(value, owner.serialization, owner.context), owner.serialization, owner.context);
+                else candidate.FindNode(target.id)!.SetValue(key, value.Clone());
+            }
+            Controller.ReplaceDocument(candidate, "Edit Shader Nodes", continuous ? draft.valueGesture : null);
+        }
+        else if (key == "settings" && node.definitionId == "inno.shader.stage-input")
             Controller.ReplaceDocument(ShaderGraphBindings.ChangeInput(Controller.document, node.id,
                 ShaderGraphDocument.Decode<ShaderGraphInputSettings>(value, owner.serialization, owner.context), owner.serialization, owner.context),
                 "Edit Shader Input", continuous ? draft.valueGesture : null);
@@ -441,7 +494,18 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         float scale = Math.Clamp(MathF.Min(MathF.Max(1, m_size.X - 80) / MathF.Max(1, maxX - minX), MathF.Max(1, m_size.Y - 80) / MathF.Max(1, maxY - minY)), 0.1f, 1f);
         Canvas.SetViewport(new(m_size.X / 2 - (minX + maxX) / 2 * scale, m_size.Y / 2 - (minY + maxY) / 2 * scale), scale);
     }
-    private string Title(GraphNodeRecord node) => node.definitionId == ShaderGraphDocument.outputDefinitionId
-        ? Read(node, "settings", new ShaderGraphStageSettings()).stage + " Output"
-        : node.definitionId.Replace("inno.shader.", "", StringComparison.Ordinal).Replace('-', ' ');
+    private string Title(GraphNodeRecord node)
+    {
+        if (owner.drawers?.GetDisplayName(node.definitionId) is { } displayName) return displayName;
+        if (node.definitionId == ShaderGraphDocument.outputDefinitionId)
+            return Read(node, "settings", new ShaderGraphStageSettings()).stage + " Output";
+        if (node.definitionId == "inno.shader.binary")
+            return Widget.NicifyName(Read(node, "operation", "add").Replace('-', ' '));
+        if (node.definitionId == "inno.shader.stage-input")
+        {
+            ShaderGraphInputSettings input = Read(node, "settings", new ShaderGraphInputSettings());
+            return input.id.Length != 0 ? Widget.NicifyName(input.id) : "Stage Input";
+        }
+        return Widget.NicifyName(node.definitionId.Replace("inno.shader.", "", StringComparison.Ordinal).Replace('-', ' '));
+    }
 }

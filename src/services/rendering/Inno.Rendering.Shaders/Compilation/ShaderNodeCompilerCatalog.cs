@@ -106,6 +106,7 @@ public sealed class ShaderNodeCompilerCatalog
             if (diagnostics.Count != 0) return new(null, diagnostics);
 
             var connections = new Dictionary<GraphEndpoint, GraphEndpoint>();
+            var inputDefaults = new Dictionary<GraphEndpoint, ShaderGraphLiteral>();
             var nodeConnections = nodes.ToDictionary(static node => node.id, static _ => new List<(string port, GraphEndpoint source)>());
             var incoming = new int[nodes.Count];
             var following = Enumerable.Range(0, nodes.Count).Select(static _ => new List<int>()).ToArray();
@@ -125,8 +126,20 @@ public sealed class ShaderNodeCompilerCatalog
                 following[nodeIndexes[edge.output.nodeId]].Add(target);
             }
             foreach ((GraphEndpoint endpoint, ShaderNodePort port) in ports)
-                if (port.direction == GraphPortDirection.Input && port.required && !connections.ContainsKey(endpoint))
-                    Error("SHADER_GRAPH_INPUT_REQUIRED", "A required input is not connected.", endpoint.nodeId, endpoint.portId.value);
+            {
+                if (port.direction != GraphPortDirection.Input || connections.ContainsKey(endpoint)) continue;
+                GraphNodeRecord node = nodes[nodeIndexes[endpoint.nodeId]];
+                if (node.TryGetValue(ShaderGraphDocument.inputDefaultPrefix + port.id, out GraphSerializedValue? encoded))
+                {
+                    activeNode = node.id;
+                    ShaderGraphLiteral value = ShaderGraphDocument.Decode<ShaderGraphLiteral>(encoded!, serialization, context);
+                    if (!value.type.CreateType().IsEquivalentTo(port.type))
+                        Error("SHADER_GRAPH_DEFAULT_TYPE", "The input default has an obsolete type; reset it explicitly.", endpoint.nodeId, port.id);
+                    else inputDefaults.Add(endpoint, value);
+                }
+                else if (port.required) Error("SHADER_GRAPH_INPUT_REQUIRED", "A required input is not connected and has no explicit default.", endpoint.nodeId, endpoint.portId.value);
+            }
+            activeNode = null;
             foreach ((string name, GraphEndpoint endpoint) in request.outputs)
                 if (!ports.TryGetValue(endpoint, out ShaderNodePort? port) || port.direction != GraphPortDirection.Output)
                     Error("SHADER_GRAPH_OUTPUT_MISSING", $"Region output '{name}' points to an unavailable output port.", endpoint.nodeId, endpoint.portId.value);
@@ -155,6 +168,9 @@ public sealed class ShaderNodeCompilerCatalog
                 activeNode = node.id;
                 var inputs = new Dictionary<string, ShaderIrValue>(StringComparer.Ordinal);
                 foreach ((string port, GraphEndpoint source) in nodeConnections[node.id]) inputs.Add(port, values[source]);
+                foreach (ShaderNodePort port in nodePorts[node.id])
+                    if (inputDefaults.TryGetValue(new(node.id, new(port.id)), out ShaderGraphLiteral? literal))
+                        inputs.Add(port.id, literal.Emit(builder, port.type));
                 IReadOnlyDictionary<string, ShaderIrValue> outputs = m_compilers[node.definitionId].Lower(new(descriptions[node.id], builder, inputs));
                 ShaderNodePort[] expected = nodePorts[node.id].Where(static port => port.direction == GraphPortDirection.Output).ToArray();
                 if (outputs.Count != expected.Length) throw new InvalidOperationException("A node compiler did not return exactly its declared outputs.");

@@ -56,6 +56,7 @@ internal sealed class EditorHost : ShellHost
     private LayerStack? m_layers;
     private EditorLayer? m_editorLayer;
     private bool m_shutdownStateSaved;
+    private DiagnosticHub? m_diagnostics;
 
     private EditorHost(
         IAuthoringAdapterCatalog adapterCatalog,
@@ -212,7 +213,28 @@ internal sealed class EditorHost : ShellHost
     /// Number of editor frames completed.
     /// </param>
     protected override void OnSmokeCompleted(int frameCount)
-        => BootLog($"Smoke frame limit reached after {frameCount} frame(s).");
+    {
+        BootLog($"Smoke frame limit reached after {frameCount} frame(s).");
+        var snapshot = new SmokeDiagnostics();
+        DiagnosticHub hub = m_diagnostics ?? throw new InvalidOperationException("The Editor diagnostic owner is unavailable.");
+        hub.RegisterSink(snapshot);
+        hub.UnregisterSink(snapshot);
+        foreach (string error in snapshot.errors) BootLog("Smoke diagnostic: " + error);
+        if (snapshot.errors.Count != 0)
+            throw new InvalidOperationException($"Native Editor smoke completed with {snapshot.errors.Count} active error diagnostic(s). See the smoke diagnostics above.");
+    }
+
+    private sealed class SmokeDiagnostics : Inno.Core.Diagnostics.IDiagnosticSink
+    {
+        internal readonly List<string> errors = [];
+        public void Replace(Inno.Core.Diagnostics.DiagnosticReport report)
+        {
+            foreach (var diagnostic in report.diagnostics)
+                if (diagnostic.severity == Inno.Core.Diagnostics.DiagnosticSeverity.Error)
+                    errors.Add(report.source.id + "/" + diagnostic.code + ": " + diagnostic.message);
+        }
+        public void Clear(Inno.Core.Diagnostics.DiagnosticSource source) { }
+    }
     /// <summary>
     /// Submits product UI requests while the host output pipeline is open.
     /// </summary>
@@ -285,6 +307,7 @@ internal sealed class EditorHost : ShellHost
                 .Build(),
             static host => host.Dispose());
         var consoleLog = new ConsoleLogSink();
+        m_diagnostics = engineHost.diagnostics;
         engineHost.logs.RegisterSink(consoleLog);
         m_resources.Register(() => engineHost.logs.UnregisterSink(consoleLog));
         EditorAuthoringServices activeAuthoring = m_resources.Acquire(

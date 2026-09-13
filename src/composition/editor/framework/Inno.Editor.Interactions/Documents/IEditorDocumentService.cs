@@ -81,12 +81,13 @@ public interface IEditorDocumentService
     bool UpdateAssetPath(Guid documentId, string assetPath);
 
     /// <summary>
-    /// Marks a document as containing unsaved changes.
+    /// Updates a document's unsaved state without saving, discarding or changing its History.
     /// </summary>
     /// <param name="documentId">
     /// Stable tab identity.
     /// </param>
-    void MarkDirty(Guid documentId);
+    /// <param name="isDirty">Whether the provider's current draft differs from its saved baseline.</param>
+    void SetDirty(Guid documentId, bool isDirty = true);
 
     /// <summary>
     /// Saves one open document through its current provider.

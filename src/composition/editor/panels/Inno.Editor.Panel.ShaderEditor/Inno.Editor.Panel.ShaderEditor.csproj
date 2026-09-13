@@ -9,6 +9,8 @@
     <InnoAssemblyScope>Editor</InnoAssemblyScope>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../framework/Inno.Editor.Inspection/Inno.Editor.Inspection.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="../../features/Inno.Editor.Shaders/Inno.Editor.Shaders.csproj" PrivateAssets="compile" />
     <ProjectReference Include="../../../../foundation/core/Inno.Core.Execution/Inno.Core.Execution.csproj" PrivateAssets="compile" />
     <ProjectReference Include="../../features/Inno.Editor.Rendering/Inno.Editor.Rendering.csproj" PrivateAssets="compile" />
     <ProjectReference Include="../Inno.Editor.Panel.FileBrowser/Inno.Editor.Panel.FileBrowser.csproj" PrivateAssets="compile" />

@@ -293,6 +293,61 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
         => new(m_modules, m_types, m_serialization, m_identities, m_diagnostics, m_logs,
             new AssetPipelineOptions { assetRoot = m_assets, libraryRoot = m_library, enableFileSystemWatcher = false, sourceMounts = mounts });
 
+    [Fact]
+    public void NativePipelineSettingsCaptureNestedReferencesAndRestoreAgainstTheirOwner()
+    {
+        GraphDocument graph = ShaderGraphTemplates.CreateRaster(m_serialization, SerializationContext.empty);
+        WriteBytes("surface.ishader", GraphDocumentCodec.Encode(graph, m_serialization));
+        using AssetPipeline assets = CreatePipeline();
+        ShaderAsset shader = assets.Load<ShaderAsset>(AssetPath.Project("surface.ishader"));
+        SerializedRenderExtensionState state = new(assets.CaptureProperties(new NestedPipelineSettings
+        { nested = new NestedPipelineReferences { shader = shader } }));
+        Assert.Equal(shader.identity.persistentId, Assert.Single(state.dependencies).persistentId);
+        var pipeline = new RenderPipelineAsset { pipelineTypeId = "tests.pipeline", pipelineState = state };
+        AssetPath path = AssetPath.Project("configured.irenderpipeline");
+        Assert.True(assets.Save(path, pipeline));
+        RenderPipelineAsset loaded = assets.Load<RenderPipelineAsset>(path);
+        var context = new RenderExtensionStateContext(loaded);
+        Assert.Equal(shader.identity.persistentId, Assert.Single(assets.GetDependencies(loaded)).persistentId);
+        var restored = new NestedPipelineSettings();
+        loaded.pipelineState.Restore(restored, context);
+        Assert.Same(shader, restored.nested.shader);
+        var ownedContext = new RenderExtensionStateContext(loaded);
+        var restoredThroughOwner = new NestedPipelineSettings();
+        loaded.pipelineState.Restore(restoredThroughOwner, ownedContext);
+        Assert.Same(shader, restoredThroughOwner.nested.shader);
+        Assert.Throws<InvalidOperationException>(() => new RenderPipelineAsset().RestoreProperties(state.stableTypeId, state.propertyData, new NestedPipelineSettings()));
+        Assert.Throws<InvalidOperationException>(() => loaded.pipelineState.Restore(new OtherPipelineSettings(), context));
+        using (AssetLoader other = new(m_types, m_serialization, new IdentityAllocator(), m_diagnostics, m_logs,
+                   m_assets, Path.Combine(m_root, "IsolatedLibrary")))
+        {
+            var otherPipeline = Assert.IsType<RenderPipelineAsset>(other.Load(path, typeof(RenderPipelineAsset)));
+            var otherShader = Assert.IsType<ShaderAsset>(other.Load(AssetPath.Project("surface.ishader"), typeof(ShaderAsset)));
+            Assert.Equal(shader.identity.persistentId, otherShader.identity.persistentId);
+            Assert.NotSame(shader, otherShader);
+            var second = new NestedPipelineSettings();
+            otherPipeline.pipelineState.Restore(second, new RenderExtensionStateContext(otherPipeline));
+            Assert.Same(otherShader, second.nested.shader);
+            var firstAgain = new NestedPipelineSettings();
+            loaded.pipelineState.Restore(firstAgain, ownedContext);
+            Assert.Same(shader, firstAgain.nested.shader);
+        }
+    }
+
+    [StableTypeId("5c438963-794a-4fde-bd59-45c00d7479de")]
+    private sealed class NestedPipelineSettings : ISerializable
+    {
+        [SerializableProperty] public NestedPipelineReferences nested { get; set; }
+    }
+
+    private struct NestedPipelineReferences
+    {
+        public ShaderAsset? shader { get; set; }
+    }
+
+    [StableTypeId("830a7851-bc19-44d4-a6e6-a6c38f6bb972")]
+    private sealed class OtherPipelineSettings : ISerializable { }
+
     private AssetLoader CreateLoader(
         IReadOnlyList<AssetSourceMount> mounts,
         string libraryRoot)

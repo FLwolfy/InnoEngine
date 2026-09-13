@@ -870,7 +870,7 @@ internal sealed class FileBrowserPanel : EditorPanel
         string name = item.isPluginRoot
             ? item.displayName
             : entry.nameWithoutExtension;
-        bool selected = string.Equals(m_assets.browser.GetSelectedPath(context), entry.assetPath.ToString(), StringComparison.Ordinal);
+        bool selected = m_assets.browser.IsSelected(context, entry);
         bool editing = m_rename.IsEditing(context, entry.assetPath.ToString(), FileBrowserPresentation.List);
         ImGuiTablePtr table = ImGuiP.GetCurrentTable();
         float rowMinimumY = table.RowPosY1;
@@ -1004,7 +1004,7 @@ internal sealed class FileBrowserPanel : EditorPanel
         float cellSize = GetGridCellSize();
         string icon = m_assets.GetIcon(entry);
         string name = item.isPluginRoot ? item.displayName : entry.name;
-        bool selected = string.Equals(m_assets.browser.GetSelectedPath(context), entry.assetPath.ToString(), StringComparison.Ordinal);
+        bool selected = m_assets.browser.IsSelected(context, entry);
         bool editing = m_rename.IsEditing(context, entry.assetPath.ToString(), FileBrowserPresentation.Grid);
         Vector2 itemSize = new(cellSize - EditorWidget.style.assetGridCellPadding, cellSize - EditorWidget.style.assetGridCellPadding);
 
@@ -1109,7 +1109,9 @@ internal sealed class FileBrowserPanel : EditorPanel
             return;
         }
 
-        m_assets.browser.Select(context, entry.assetPath.ToString());
+        if (NativeImGui.GetIO().KeyCtrl || NativeImGui.GetIO().KeySuper)
+            m_assets.browser.ToggleSelection(context, entry);
+        else m_assets.browser.Select(context, entry.assetPath.ToString());
     }
 
     private static void DrawGridItemVisual(
