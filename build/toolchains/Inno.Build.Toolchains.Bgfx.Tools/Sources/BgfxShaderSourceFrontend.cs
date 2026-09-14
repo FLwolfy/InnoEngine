@@ -8,7 +8,6 @@ using Inno.Rendering.Shaders;
 namespace Inno.Build.Toolchains.Bgfx.Tools;
 
 /// <summary>Parses BGFX SC function modules without placing BGFX grammar in the common shader model.</summary>
-[ShaderSourceFrontendExtension]
 public sealed class BgfxShaderSourceFrontend : IShaderSourceFrontend
 {
     /// <inheritdoc />

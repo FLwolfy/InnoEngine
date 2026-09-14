@@ -7,7 +7,6 @@ using Inno.Core.Serialization.Converters;
 
 namespace Inno.Assets;
 
-[SerializationExtension]
 internal sealed class AssetDependencyConverter : SerializationConverter<AssetDependency>
 {
     /// <summary>

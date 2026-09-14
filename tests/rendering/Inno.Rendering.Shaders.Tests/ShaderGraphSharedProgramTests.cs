@@ -41,16 +41,15 @@ public sealed partial class ShaderGraphProgramTests
     }
 
     [Fact]
-    public void RemovingASharedStageUpdatesAllReferencesWithoutDeletingTheRemainingStage()
+    public void RemovingAnOutputRemovesEveryAffectedPassAndItsNowUnreferencedStagePair()
     {
         GraphDocument original = SharedGraph();
         GraphDocument changed = ShaderGraphBindings.RemoveNodes(original, [new("fragment")], m_serialization, SerializationContext.empty);
-        Assert.NotNull(changed.FindNode(new("vertex")));
-        Assert.All(ShaderGraphPrograms.Read(changed, m_serialization, SerializationContext.empty), binding => Assert.Equal(new[] { "vertex" }, binding.stages));
-        Assert.False(Lower(changed).succeeded);
-        Assert.Equal(5, ShaderGraphDocument.ReadDefinition(changed, m_serialization, SerializationContext.empty).passes.Length);
-        changed = ShaderGraphBindings.RemoveNodes(changed, [new("vertex")], m_serialization, SerializationContext.empty);
+        Assert.Null(changed.FindNode(new("vertex")));
+        Assert.Null(changed.FindNode(new("fragment")));
+        Assert.Empty(ShaderGraphPrograms.Read(changed, m_serialization, SerializationContext.empty));
         Assert.Empty(ShaderGraphDocument.ReadDefinition(changed, m_serialization, SerializationContext.empty).passes);
+        Assert.Empty(changed.nodes);
     }
 
     [Fact]

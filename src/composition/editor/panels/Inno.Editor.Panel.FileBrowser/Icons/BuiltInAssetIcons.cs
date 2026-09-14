@@ -14,6 +14,10 @@ namespace Inno.Editor.Panel.FileBrowser;
 [AssetIcon(".dat", ImGuiIcon.File)]
 [AssetIcon(".iscene", "Editor/Appearance/Icons/Scene")]
 [AssetIcon(".iprefab", "Editor/Appearance/Icons/Prefab")]
+[AssetIcon(".ishader", "Editor/Appearance/Icons/Shader")]
+[AssetIcon(".ishadersource", "Editor/Appearance/Icons/ShaderSource")]
+[AssetIcon(".imaterial", "Editor/Appearance/Icons/Material")]
+[AssetIcon(".irenderpipeline", "Editor/Appearance/Icons/RenderPipeline")]
 [AssetIcon(".cs", ImGuiIcon.FileCode)]
 [AssetIcon(".iasmdef", ImGuiIcon.Gears)]
 internal static class BuiltInAssetIcons;

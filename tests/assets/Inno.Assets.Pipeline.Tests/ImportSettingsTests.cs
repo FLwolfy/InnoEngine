@@ -209,7 +209,6 @@ internal sealed class ConfiguredAsset : AssetObject
     [SerializableProperty] internal string value { get; set; } = string.Empty;
 }
 
-[AssetImporterExtension]
 internal sealed class ConfiguredImporter : AssetImporter<ConfiguredAsset>
 {
     public override string importerId => "tests.configured";

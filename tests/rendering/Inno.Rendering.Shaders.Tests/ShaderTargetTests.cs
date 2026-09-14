@@ -79,7 +79,6 @@ public sealed class ShaderTargetTests : IDisposable
     public void Dispose()
     { m_targets.Dispose(); m_serialization.Dispose(); m_types.Dispose(); m_modules.Dispose(); }
 
-    [ShaderTarget]
     public sealed class SurfaceTarget : ShaderTarget
     {
         public override string id => "tests.surface-target";
@@ -87,7 +86,6 @@ public sealed class ShaderTargetTests : IDisposable
             => ShaderGraphTemplates.CreateRaster(context.serialization, context.references);
     }
 
-    [ShaderGraphTemplate]
     public sealed class SurfaceTemplate : ShaderGraphTemplate
     {
         public override string id => "tests.surface-template";

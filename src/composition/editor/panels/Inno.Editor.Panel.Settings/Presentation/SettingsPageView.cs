@@ -25,9 +25,18 @@ internal sealed class SettingsPageView(SettingsEditSession session)
             0f,
             16f * EditorWidget.style.zoom));
 
-        if (!page.hasSettings)
+        if (page.children.Count != 0)
         {
             DrawOverview(page.children, navigate);
+            NativeImGui.Dummy(new System.Numerics.Vector2(
+                0f,
+                8f * EditorWidget.style.zoom));
+        }
+
+        if (!page.hasSettings)
+        {
+            if (page.children.Count == 0)
+                DrawOverview(page.children, navigate);
             return;
         }
 

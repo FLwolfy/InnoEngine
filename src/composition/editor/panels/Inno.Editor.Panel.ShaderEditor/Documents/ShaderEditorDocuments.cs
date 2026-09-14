@@ -28,6 +28,7 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
     private readonly Dictionary<Guid, Draft> m_drafts = [];
     private readonly Dictionary<Guid, ViewState> m_views = [];
     private readonly HashSet<AssetPath> m_pendingImports = [];
+    private Guid? m_checkDraftId;
     private long m_sourceRevision = long.MinValue;
     private readonly GraphEditorModule m_graphs;
     private readonly ShaderGraphSourceStore m_sources;
@@ -79,6 +80,25 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
             return new(EditorShaderCompilationState.Compiling, draft.preview?.artifact is not null, [], draft.preview?.artifact);
         return draft.preview = m_compilation.RequestDraft(draft.id, controller.document, controller.revision, RenderShaderVariant.empty);
     }
+
+    internal EditorShaderDraftCompilationSnapshot Check(Draft draft)
+    {
+        GraphDocumentController controller = Controller(draft);
+        draft.previewRevision = controller.revision;
+        draft.previewDue = 0;
+        return draft.preview = m_compilation.RequestDraft(draft.id, controller.document, controller.revision, RenderShaderVariant.empty);
+    }
+
+    internal void ShowCheck(Draft draft)
+        => m_checkDraftId = draft.id;
+
+    internal bool TryGetCheckDraft(out Draft draft)
+    {
+        draft = null!;
+        return m_checkDraftId is Guid id && m_drafts.TryGetValue(id, out draft!);
+    }
+
+    internal void CloseCheck() => m_checkDraftId = null;
 
     internal void ReleasePreview(Draft draft)
     { m_compilation.ReleaseDraft(draft.id); draft.preview = null; draft.previewRevision = ulong.MaxValue; }
@@ -143,7 +163,15 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
     {
         if (draft.canvas.selectedNodes.Count == 0) return;
         GraphDocumentController controller = Controller(draft);
-        controller.ReplaceDocument(ShaderGraphBindings.RemoveNodes(controller.document, draft.canvas.selectedNodes, serialization, context), "Delete Shader Nodes");
+        GraphDocument candidate = ShaderGraphBindings.RemoveNodes(controller.document, draft.canvas.selectedNodes, serialization, context);
+        ShaderCanvasGroup[] groups = GroupShaderNodes.Read(this, candidate).Select(group =>
+        {
+            group.nodes = group.nodes.Where(id => candidate.FindNode(new(id)) is not null).ToArray();
+            return group;
+        }).Where(static group => group.nodes.Length != 0).ToArray();
+        candidate.SetMetadata(GroupShaderNodes.C_GROUPS, ShaderGraphDocument.Encode(groups, serialization, context));
+        if (draft.selectedGroupId.Length != 0 && !groups.Any(group => group.id == draft.selectedGroupId)) draft.selectedGroupId = "";
+        controller.ReplaceDocument(candidate, "Delete Shader Nodes");
         if (draft.activeStage is GraphNodeId stage && controller.document.FindNode(stage) is null) draft.activeStage = null;
         draft.navigation.Cancel();
         draft.dragging = draft.boxSelecting = false;
@@ -281,6 +309,7 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
     /// <inheritdoc />
     protected override void OnStop(EditorContext editor)
     {
+        m_checkDraftId = null;
         // Recovery is not an asset save. Closing the panel, shutdown and reload must not apply a draft.
         foreach (Draft draft in m_drafts.Values)
         {
@@ -439,23 +468,16 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
         internal string compilationStatus = "Waiting for import";
         internal string compilationDiagnostics = "";
         internal ShaderDiagnostic[] diagnostics = [];
-        internal bool showDiagnostics;
-        internal bool previewEnabled;
         internal ulong previewRevision = ulong.MaxValue;
         internal long previewDue;
         internal EditorShaderDraftCompilationSnapshot? preview;
-        internal string diagnosticSource = "";
-        internal string[] diagnosticLines = [];
-        internal int diagnosticLine;
-        internal int diagnosticColumn;
-        internal bool revealDiagnosticLine;
-        internal string diagnosticReadError = "";
         internal long nextCompilationPoll;
         internal string menuSearch = "";
         internal GraphEndpoint? createFromPort;
         internal GraphEdgeId? selectedEdge;
         internal bool frameRequested;
         internal ShaderCanvasGroup[] groups = [];
+        internal string selectedGroupId = "";
         internal readonly HashSet<GraphNodeId> expandedPreviews = [];
         internal Guid settingsSource;
         internal byte[] sourceSettings = [];

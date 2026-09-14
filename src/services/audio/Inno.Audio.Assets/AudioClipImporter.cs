@@ -11,7 +11,6 @@ namespace Inno.Audio.Assets;
 /// <summary>
 /// Imports standard encoded audio sources into compact runtime metadata and immutable encoded-data artifacts.
 /// </summary>
-[AssetImporterExtension]
 public sealed class AudioClipImporter : AssetImporter<AudioClipAsset>
 {
     /// <summary>

@@ -5,7 +5,6 @@ using Inno.Scripting.Api;
 
 [assembly: ScriptingApiExport(typeof(ShaderNodePort), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(IShaderNodeCompiler), ScriptingApiScope.Editor)]
-[assembly: ScriptingApiExport(typeof(ShaderNodeCompilerExtensionAttribute), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderNodeDescriptionContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderNodeLoweringContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderSourceType), ScriptingApiScope.Editor)]
@@ -22,7 +21,6 @@ using Inno.Scripting.Api;
 [assembly: ScriptingApiExport(typeof(ShaderSourceRequest), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderSourceAnalysis), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(IShaderSourceFrontend), ScriptingApiScope.Editor)]
-[assembly: ScriptingApiExport(typeof(ShaderSourceFrontendExtensionAttribute), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderSourceImplementationAnalysis), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderSourceModuleAnalysis), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderSourceNodeDefinition), ScriptingApiScope.Editor)]
@@ -50,7 +48,5 @@ using Inno.Scripting.Api;
 [assembly: ScriptingApiExport(typeof(ShaderGraphPassProgram), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderTarget), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderTargetUnavailableException), ScriptingApiScope.Editor)]
-[assembly: ScriptingApiExport(typeof(ShaderTargetAttribute), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderTargetContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(ShaderGraphTemplate), ScriptingApiScope.Editor)]
-[assembly: ScriptingApiExport(typeof(ShaderGraphTemplateAttribute), ScriptingApiScope.Editor)]

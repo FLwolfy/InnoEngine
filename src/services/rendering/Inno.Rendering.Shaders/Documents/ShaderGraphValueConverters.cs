@@ -3,7 +3,6 @@ using Inno.Core.Serialization.Converters;
 
 namespace Inno.Rendering.Shaders;
 
-[SerializationExtension]
 internal sealed class ShaderGraphLiteralConverter : SerializationConverter<ShaderGraphLiteral>
 {
     /// <inheritdoc />
@@ -14,7 +13,6 @@ internal sealed class ShaderGraphLiteralConverter : SerializationConverter<Shade
         => new() { type = reader.Read<ShaderGraphType>("type"), scalarBits = reader.Read<uint[]>("scalarBits") };
 }
 
-[SerializationExtension]
 internal sealed class ShaderGraphStageSettingsConverter : SerializationConverter<ShaderGraphStageSettings>
 {
     /// <inheritdoc />
@@ -37,7 +35,6 @@ internal sealed class ShaderGraphStageSettingsConverter : SerializationConverter
     };
 }
 
-[SerializationExtension]
 internal sealed class ShaderGraphInputSettingsConverter : SerializationConverter<ShaderGraphInputSettings>
 {
     /// <inheritdoc />
@@ -60,7 +57,6 @@ internal sealed class ShaderGraphInputSettingsConverter : SerializationConverter
     };
 }
 
-[SerializationExtension]
 internal sealed class ShaderGraphTypeConverter : SerializationConverter<ShaderGraphType>
 {
     /// <inheritdoc />

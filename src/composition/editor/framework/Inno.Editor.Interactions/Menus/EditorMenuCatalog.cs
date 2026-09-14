@@ -30,7 +30,8 @@ internal sealed class EditorMenuCatalog(
                     menu.order,
                     menu.separatorBefore,
                     argument: null,
-                    status: null));
+                    status: null,
+                    isGroup: false));
             }
         }
 
@@ -44,13 +45,22 @@ internal sealed class EditorMenuCatalog(
                 registration.source.Build(context, builder);
                 string sourceName = registration.type.FullName ?? registration.type.Name;
                 m_sourceFailures.Remove(sourceName);
+                placements.AddRange(builder.groups.Select(static group => new Placement(
+                    NormalizePath(group.path),
+                    actionId: null,
+                    group.order,
+                    group.separatorBefore,
+                    argument: null,
+                    status: null,
+                    isGroup: true)));
                 placements.AddRange(builder.items.Select(static item => new Placement(
                     NormalizePath(item.path),
                     item.actionId,
                     item.order,
                     item.separatorBefore,
                     item.argument,
-                    status: null)));
+                    status: null,
+                    isGroup: false)));
             }
             catch (Exception exception)
             {
@@ -84,7 +94,8 @@ internal sealed class EditorMenuCatalog(
                     new EditorActionState(
                         isVisible: true,
                         isEnabled: true,
-                        isChecked: panel.panel.isOpen)));
+                        isChecked: panel.panel.isOpen),
+                    isGroup: false));
             }
         }
 
@@ -101,7 +112,9 @@ internal sealed class EditorMenuCatalog(
     private void AddPlacement(MutableNode root, Placement placement, EditorMenuContext context)
     {
         EditorActionContext actionContext = context.CreateActionContext(placement.argument);
-        EditorActionState state = placement.status ?? actions.Query(placement.actionId, actionContext);
+        EditorActionState state = placement.isGroup
+            ? EditorActionState.enabled
+            : placement.status ?? actions.Query(placement.actionId!, actionContext);
         if (!state.isVisible)
             return;
 
@@ -112,9 +125,7 @@ internal sealed class EditorMenuCatalog(
             string segment = segments[i];
             if (!current.children.TryGetValue(segment, out MutableNode? child))
             {
-                child = new MutableNode(
-                    segment,
-                    placement.order,
+                child = new MutableNode(segment, placement.order,
                     i == segments.Length - 1 && placement.separatorBefore);
                 current.children.Add(segment, child);
             }
@@ -123,6 +134,8 @@ internal sealed class EditorMenuCatalog(
 
         current.order = placement.order;
         current.separatorBefore = placement.separatorBefore;
+        if (placement.isGroup)
+            return;
         current.actionId = placement.actionId;
         current.argument = placement.argument;
         current.state = state;
@@ -167,11 +180,12 @@ internal sealed class EditorMenuCatalog(
 
     private sealed record Placement(
         string path,
-        string actionId,
+        string? actionId,
         int order,
         bool separatorBefore,
         object? argument,
-        EditorActionState? status);
+        EditorActionState? status,
+        bool isGroup);
 
     private sealed class MutableNode(string label, int order, bool separatorBefore)
     {

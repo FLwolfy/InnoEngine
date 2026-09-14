@@ -9,7 +9,6 @@ using Inno.Rendering;
 
 namespace Inno.Rendering.Assets;
 
-[AssetImporterExtension]
 internal sealed class MaterialAssetImporter : AssetImporter<MaterialAsset>
 {
     /// <summary>

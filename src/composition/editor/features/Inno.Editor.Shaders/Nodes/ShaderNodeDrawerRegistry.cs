@@ -38,36 +38,57 @@ public sealed class ShaderNodeDrawerRegistry : IDisposable
         return m_registry.snapshot.names.TryGetValue(definitionId, out string? name) && name.Length != 0 ? name : null;
     }
 
+    /// <summary>Gets optional creation-menu presentation without executing the drawer.</summary>
+    /// <param name="definitionId">Stable compiler-independent node identity.</param>
+    /// <param name="presentation">Receives immutable creation-menu presentation when registered.</param>
+    /// <returns>True when the current generation contributes presentation for the node; otherwise false.</returns>
+    public bool TryGetPresentation(string definitionId, out ShaderNodePresentation presentation)
+    {
+        using IDisposable operation = m_types.AcquireOperation("Resolve shader node authoring presentation");
+        return m_registry.snapshot.presentations.TryGetValue(definitionId, out presentation);
+    }
+
     /// <summary>Retires the current presentation providers through the shared lifecycle.</summary>
     public void Dispose() => m_registry.Dispose();
 
     private sealed class Registry(TypeCatalog types) : TypeRegistry<Snapshot>(types)
     {
-    internal Snapshot snapshot => current;
-    protected override Snapshot Build(TypeCacheSnapshot snapshot)
-    {
-        var result = new Dictionary<string, ShaderNodeDrawer>(StringComparer.Ordinal);
-        var names = new Dictionary<string, string>(StringComparer.Ordinal);
-        try
+        internal Snapshot snapshot => current;
+
+        protected override Snapshot Build(TypeCacheSnapshot snapshot)
         {
-            foreach (Type type in snapshot.GetTypesWithAttribute<ShaderNodeDrawerAttribute>().Select(reference => reference.Resolve(snapshot)))
+            var result = new Dictionary<string, ShaderNodeDrawer>(StringComparer.Ordinal);
+            var names = new Dictionary<string, string>(StringComparer.Ordinal);
+            var presentations = new Dictionary<string, ShaderNodePresentation>(StringComparer.Ordinal);
+            try
             {
-                ShaderNodeDrawerAttribute attribute = type.GetCustomAttribute<ShaderNodeDrawerAttribute>()!;
-                string id = attribute.definitionId;
-                if (result.ContainsKey(id)) throw new InvalidOperationException($"Shader node drawer '{id}' is registered twice.");
-                result.Add(id, CreateExtension<ShaderNodeDrawer>(type));
-                names.Add(id, attribute.displayName);
+                foreach (Type type in snapshot.GetTypesWithAttribute<ShaderNodeDrawerAttribute>().Select(reference => reference.Resolve(snapshot)))
+                {
+                    ShaderNodeDrawerAttribute attribute = type.GetCustomAttribute<ShaderNodeDrawerAttribute>()!;
+                    string id = attribute.definitionId;
+                    if (result.ContainsKey(id)) throw new InvalidOperationException($"Shader node drawer '{id}' is registered twice.");
+                    result.Add(id, CreateExtension<ShaderNodeDrawer>(type));
+                    names.Add(id, attribute.displayName);
+                    presentations.Add(id, new(attribute.displayName, Normalize(attribute.createPath), attribute.createOrder, attribute.separatorBefore));
+                }
+                return new(result, names, presentations);
             }
-            return new(result, names);
+            catch (Exception failure)
+            {
+                try { DisposeExtensions(result.Values); }
+                catch (Exception retirement) { throw new AggregateException(failure, retirement); }
+                throw;
+            }
         }
-        catch (Exception failure)
-        {
-            try { DisposeExtensions(result.Values); }
-            catch (Exception retirement) { throw new AggregateException(failure, retirement); }
-            throw;
-        }
+
+        protected override void DisposeSnapshot(Snapshot snapshot) => DisposeExtensions(snapshot.drawers.Values);
     }
-    protected override void DisposeSnapshot(Snapshot snapshot) => DisposeExtensions(snapshot.drawers.Values);
-    }
-    private sealed record Snapshot(IReadOnlyDictionary<string, ShaderNodeDrawer> drawers, IReadOnlyDictionary<string, string> names);
+
+    private static string Normalize(string value)
+        => string.Join('/', value.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    private sealed record Snapshot(
+        IReadOnlyDictionary<string, ShaderNodeDrawer> drawers,
+        IReadOnlyDictionary<string, string> names,
+        IReadOnlyDictionary<string, ShaderNodePresentation> presentations);
 }

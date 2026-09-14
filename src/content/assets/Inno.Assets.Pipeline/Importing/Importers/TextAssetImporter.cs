@@ -9,7 +9,6 @@ using Inno.Assets.Pipeline;
 
 namespace Inno.Assets.Pipeline.Importers;
 
-[AssetImporterExtension]
 internal sealed class TextAssetImporter : AssetImporter<TextAsset>
 {
     /// <summary>

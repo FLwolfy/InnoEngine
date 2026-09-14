@@ -11,7 +11,6 @@ using Inno.Rendering.Shaders;
 
 namespace Inno.Rendering.Assets;
 
-[AssetImporterExtension]
 internal sealed class ShaderAssetImporter : AssetImporter<ShaderAsset>
 {
     /// <inheritdoc />

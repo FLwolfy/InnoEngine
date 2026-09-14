@@ -6,7 +6,6 @@ using Inno.Core.Graphs;
 namespace Inno.Rendering.Shaders;
 
 /// <summary>Lowers an exact scalar constant; its type/value are native graph properties.</summary>
-[ShaderNodeCompilerExtension]
 public sealed class ShaderConstantNodeCompiler : IShaderNodeCompiler
 {
     /// <inheritdoc />
@@ -31,7 +30,6 @@ public sealed class ShaderConstantNodeCompiler : IShaderNodeCompiler
 }
 
 /// <summary>Lowers an explicit arithmetic/comparison operation; operation IDs are node configuration, not backend code.</summary>
-[ShaderNodeCompilerExtension]
 public sealed class ShaderBinaryNodeCompiler : IShaderNodeCompiler
 {
     /// <inheritdoc />
@@ -60,7 +58,6 @@ public sealed class ShaderBinaryNodeCompiler : IShaderNodeCompiler
 }
 
 /// <summary>Constructs a vector or column-major matrix from individually connected scalar components.</summary>
-[ShaderNodeCompilerExtension]
 public sealed class ShaderConstructNodeCompiler : IShaderNodeCompiler
 {
     /// <inheritdoc />
@@ -95,7 +92,6 @@ public sealed class ShaderConstructNodeCompiler : IShaderNodeCompiler
 }
 
 /// <summary>Reads one target-assigned stage/resource input without choosing a native variable name.</summary>
-[ShaderNodeCompilerExtension]
 public sealed class ShaderStageInputNodeCompiler : IShaderNodeCompiler
 {
     /// <inheritdoc />
@@ -114,7 +110,6 @@ public sealed class ShaderStageInputNodeCompiler : IShaderNodeCompiler
 }
 
 /// <summary>Selects between equal typed values; all producer effects remain evaluated before selection.</summary>
-[ShaderNodeCompilerExtension]
 public sealed class ShaderSelectNodeCompiler : IShaderNodeCompiler
 {
     /// <inheritdoc />
@@ -132,7 +127,6 @@ public sealed class ShaderSelectNodeCompiler : IShaderNodeCompiler
 }
 
 /// <summary>Lowers a parsed function module with name-based ports and explicit aggregate/member connection alternatives.</summary>
-[ShaderNodeCompilerExtension]
 public sealed class ShaderSourceNodeCompiler : IShaderNodeCompiler
 {
     /// <inheritdoc />

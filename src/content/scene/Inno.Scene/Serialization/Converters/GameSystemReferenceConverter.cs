@@ -7,7 +7,6 @@ using Inno.Scene;
 
 namespace Inno.Scene;
 
-[SerializationExtension]
 internal sealed class GameSystemReferenceConverter : SerializationConverter<GameSystem>
 {
     /// <summary>

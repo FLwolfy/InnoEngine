@@ -55,7 +55,7 @@ Reflection 引用 Assemblies 并注册一个 catalog participant。Assemblies �
 ```csharp
 IReadOnlyList<TypeRef> behaviors = types.GetSubTypesOf<GameBehavior>();
 IReadOnlyList<TypeRef> converters =
-    types.GetTypesWithAttribute<SerializationExtensionAttribute>();
+    types.GetSubTypesOf<SerializationConverter>();
 
 TypeRef player = types.GetTypeRef(typeof(PlayerController));
 Console.WriteLine(player.Resolve(types).FullName);

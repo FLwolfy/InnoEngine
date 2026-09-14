@@ -8,7 +8,7 @@
 SceneAsset、PrefabAsset、ScenePropertySerialization、SceneElementSerialization、
 SceneSubtreeSerialization、SceneReloadService 实际属于 Inno.Scene，namespace 为 Inno.Scene。
 
-本项目的两个 Importer 都是 internal sealed 类型，通过 AssetImporterExtension 自动发现。
+本项目的两个 Importer 都是 internal sealed 类型，通过 `AssetImporter` 基类自动发现。
 当前没有对外公开类型或面向外部派生者的 protected 扩展点；用户扩展 Importer 应面向 Assets.Pipeline，
 不能依赖这里的内部实现。项目依赖 Inno.Scene、Inno.Assets、Inno.Assets.Pipeline、Core.Serialization，
 不引用 Editor 或具体 backend。

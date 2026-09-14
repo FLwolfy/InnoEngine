@@ -9,9 +9,10 @@ using UI = Inno.Native.ImGui.ImGui;
 namespace Inno.Editor.Panel.ShaderEditor;
 
 [InspectionDrawer(typeof(AssetFileEntry), priority: 100, conditional: true)]
-internal sealed class ShaderSourceDrawer : InspectionDrawer<AssetFileEntry>
+internal sealed class ShaderSourceDrawer(IInspectionIconProvider<AssetFileEntry> icons) : InspectionDrawer<AssetFileEntry>
 {
     public override string icon => "S";
+    protected override string GetIcon(InspectionDrawContext context, AssetFileEntry target) => icons.GetIcon(target);
     protected override bool CanInspect(AssetFileEntry target)
         => !target.isDirectory && target.extension.Equals(".ishader", StringComparison.OrdinalIgnoreCase);
     protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, AssetFileEntry target)
@@ -24,9 +25,13 @@ internal sealed class ShaderSourceDrawer : InspectionDrawer<AssetFileEntry>
 }
 
 [InspectionDrawer(typeof(ShaderInspectionSelection))]
-internal sealed class ShaderSelectionDrawer : InspectionDrawer<ShaderInspectionSelection>
+internal sealed class ShaderSelectionDrawer(IInspectionIconProvider<AssetFileEntry> icons) : InspectionDrawer<ShaderInspectionSelection>
 {
     public override string icon => "S";
+    protected override string GetIcon(InspectionDrawContext context, ShaderInspectionSelection target)
+        => context.interactions.TryGetModule<ShaderEditorDocuments>(out var documents) && documents is not null
+            && documents.assets.TryGetInfo(target.assetId, out AssetInfo? info) && info is not null
+            && documents.assets.TryGetFileSystemEntry(info.assetPath, out AssetFileEntry entry) ? icons.GetIcon(entry) : icon;
     protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, ShaderInspectionSelection target)
         => (target.nodes.Count == 0 ? "Shader" : target.nodes.Count == 1 ? "Shader Node" : "Shader Nodes", null);
     protected override void Draw(InspectionDrawContext context, ShaderInspectionSelection target)
@@ -40,9 +45,12 @@ internal sealed class ShaderSelectionDrawer : InspectionDrawer<ShaderInspectionS
 }
 
 [InspectionDrawer(typeof(ShaderAsset))]
-internal sealed class ShaderAssetDrawer : InspectionDrawer<ShaderAsset>
+internal sealed class ShaderAssetDrawer(IInspectionIconProvider<AssetFileEntry> icons) : InspectionDrawer<ShaderAsset>
 {
     public override string icon => "S";
+    protected override string GetIcon(InspectionDrawContext context, ShaderAsset target)
+        => context.interactions.TryGetModule<ShaderEditorDocuments>(out var documents) && documents is not null
+            && documents.assets.TryGetFileSystemEntry(target.assetPath, out AssetFileEntry entry) ? icons.GetIcon(entry) : icon;
     protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, ShaderAsset target) => (target.name, null);
     protected override void Draw(InspectionDrawContext context, ShaderAsset target)
     {

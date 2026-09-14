@@ -10,7 +10,6 @@ using Inno.Scene.Components;
 
 namespace Inno.Scene;
 
-[SerializationExtension]
 internal sealed class SceneSubtreeStateConverter : SerializationConverter<SceneSubtreeState>
 {
     private const string C_ROOT_ID_KEY = "rootId";

@@ -10,8 +10,7 @@ BGFX、Rendering.Assets、Scene、Editor 或 2D 插件。
 它不创建 GPU 对象，Rendering 运行时也不反向引用它。
 
 `.ishader` 图 importer、函数源码模块和 typed program 已进入实际资产编译链，Rendering2D 与 ImGui 图产物已在 Metal 启动中使用。
-[Shader Editor](../editor/Inno.Editor.Panel.ShaderEditor.md) 已接入，但高级工作流、Target 扩展、安全帧原子发布与完整 legacy 清理仍未完成。
-当前实现不能作为完整交付；已验证行为和具体缺口以[实施记录](../issues/2026-09-11-unified-shader-implementation.md)为准。
+[Shader Editor](../editor/Inno.Editor.Panel.ShaderEditor.md)、Target/Template 扩展、安全帧原子发布和当前资产替换均已接入。历史阶段与硬件验收边界以[阶段验收](../issues/2026-09-13-shader-authoring-validation.md)为准；本轮函数库与创作体验收口见[实施记录](../issues/2026-09-14-shader-editor-authoring-experience.md)。
 
 ## 公开 API
 
@@ -31,8 +30,7 @@ BGFX、Rendering.Assets、Scene、Editor 或 2D 插件。
 | `ShaderSourceAnalysis` | `function`、`dependencies`、`diagnostics`、`succeeded`；成功仅表示接口分析无错误，不表示 GPU 编译通过 |
 | `IShaderSourceFrontend` | `languageId`、`Analyze(request)`；一种语言的词法/声明分析扩展，不能创建 GPU 资源 |
 | `ShaderSourceFrontendCatalog` | 构造时捕获唯一语言 ID 的集合；`languageIds`、`Analyze(languageId, request)`；缺失前端明确失败 |
-| `ShaderSourceFrontendExtensionAttribute` | 标记参与共同 TypeRegistry 发现的前端实现 |
-| `ShaderSourceFrontendRegistry` | `(TypeCatalog)` 绑定 owner；`languageIds`、`Analyze` 在共同 operation scope 下工作；`Build` 与 `DisposeSnapshot` 接入候选、回滚和退休 |
+| `ShaderSourceFrontendRegistry` | `(TypeCatalog)` 绑定 owner；按 `IShaderSourceFrontend` 接口直接发现实现，`languageIds`、`Analyze` 在共同 operation scope 下工作；`Build` 与 `DisposeSnapshot` 接入候选、回滚和退休 |
 | `ShaderSourceNodeDefinition` | 从函数接口创建 `inno.shader.source` 的 `GraphNodeDefinition`；`function`、`GetPorts(node)` 返回缓存的端口快照 |
 | `ShaderSourceImplementationRequest` | `(implementationId, languageId, source)`；键由 owner 明确区分 Adapter/Target/variant，不从文件名推断 |
 | `ShaderSourceImplementationAnalysis` | `implementationId`、`languageId`、`sourcePath`、`entryPoint`、`defines`、`sources`、`includes`、`analysis`、`contentHash`；`CreateSourceRequest()` 只通过冻结文件和 include 边重建输入，不触碰活动 resolver |
@@ -48,7 +46,6 @@ BGFX、Rendering.Assets、Scene、Editor 或 2D 插件。
 | `ShaderIrStage` | `(stage, body, inputs, outputs, threadsX, threadsY, threadsZ)`；复制接口、验证输入/输出类型及唯一绑定，禁止跨阶段错误接口；`contentHash` 覆盖阶段语义、嵌套区域、源码与布局，不包含画布位置 |
 | `ShaderNodePort` | `id`、完整 `type`、`direction`、`required`，与 Editor 绘制类型分离 |
 | `IShaderNodeCompiler` | `definitionId`、`GetPorts(context)`、`Lower(context)`；公共算法不集中判断具体节点类型 |
-| `ShaderNodeCompilerExtensionAttribute` | 标记参与共同 TypeRegistry 发现的节点编译实现 |
 | `ShaderNodeDescriptionContext` | `nodeId`、`definitionId`、`sourceModule`、`implementationId`、`stageInput`；`Read<T>(id, defaultValue)` 使用完整 owner SerializationContext；禁止跨调用保留 |
 | `ShaderNodeLoweringContext` | `description`、`builder`、`inputs`、`Input(id)`；只在当前降低调用中使用 |
 | `ShaderGraphLoweringRequest` | 捕获图的独立中立副本、具名 `outputs`、`implementationId`、冻结 `sourceModules` 和 `stageInputs` |
@@ -75,7 +72,7 @@ BGFX、Rendering.Assets、Scene、Editor 或 2D 插件。
 | `ShaderGraphPass` | `(name, stages)`；保存有序阶段快照，公开只读 `name/stages` |
 | `ShaderGraphProgramResult` | 只读 `passes/diagnostics/succeeded`；成功降低不表示 Adapter 编译或 GPU 发布成功 |
 
-Registry 的 protected override 复用 `TypeRegistry` 契约；Registry 本身封闭，语言通过接口与发现标记组合，端口呈现仍属于 Editor。
+Registry 的 protected override 复用 `TypeRegistry` 契约；Registry 本身封闭，语言和节点编译器直接通过各自接口发现，不要求重复的空 marker Attribute；端口呈现仍属于 Editor。
 
 ## 脚本扩展边界
 
@@ -90,11 +87,11 @@ Registry 的 protected override 复用 `TypeRegistry` 契约；Registry 本身�
 
 | API | 契约 |
 | --- | --- |
-| `ShaderTargetAttribute`、`ShaderTarget.id/Expand(context, cancellationToken)` | 插件将领域输出展开为已有阶段图；Pass 声明能力、Contract/Role 和绑定；不生成原生 Shader 字符串 |
+| `ShaderTarget.id/Expand(context, cancellationToken)` | `ShaderTarget` 的具体非抽象子类会被直接发现；插件将领域输出展开为已有阶段图，声明 Contract/Role 和绑定，不生成原生 Shader 字符串 |
 | `ShaderTargetContext.document/serialization/references` | 独立原图副本、借用的 owner converter 和完整引用上下文，只在调用期间有效 |
 | `ShaderTargetRegistry(types).ids/Expand/Dispose` | 宿主的 generation-scoped 发现与调用；Missing Target 明确失败且不改原图 |
 | `ShaderGraphDocument.targetKey/ReadTarget/SetTarget` | 持久化稳定 Target ID；未指定领域 Target 的图显式创作通用阶段 |
-| `ShaderGraphTemplateAttribute`、`ShaderGraphTemplate.id/displayName/Create` | 插件贡献 File Browser Shader 创建模板 |
+| `ShaderGraphTemplate.id/displayName/Create` | `ShaderGraphTemplate` 的具体非抽象子类会被直接发现，并向 File Browser 贡献 Shader 创建模板 |
 | `ShaderGraphTemplateInfo(id, displayName)` | 不含 provider 的菜单快照 |
 | `ShaderGraphTemplateRegistry(types).templates/Create/Dispose` | 按稳定 ID 创建独立图，重复 ID 或缺失模板明确失败 |
 
@@ -107,7 +104,6 @@ using System.Collections.Generic;
 using InnoEngine.Graphs;
 using InnoEditor.Rendering.Shaders;
 
-[ShaderNodeCompilerExtension]
 public sealed class HalfNodeCompiler : IShaderNodeCompiler
 {
     public string definitionId => "project.shader.half";
@@ -159,8 +155,7 @@ BGFX 类只出现在工具链组合处。其他前端实现 `IShaderSourceFronte
 
 ## Typed IR 的当前边界
 
-当前 typed region、嵌套分支/计数循环与 stage 已由 ShaderGraphProgramCompiler 组合，并接到 `.ishader` importer。
-完整 Target、资源/控制流节点 UI 和发布原子性仍需收口，不能把底层 IR 能力视为全部创作体验已完成。
+当前 typed region、嵌套分支/计数循环与 stage 已由 ShaderGraphProgramCompiler 组合，并接到 `.ishader` importer、Target 展开、资源/控制流节点 UI 与原子发布。底层 IR 能力仍不等于某个领域的高层创作节点；这些由对应渲染插件贡献。
 常量保存 IEEE/整数位模式而不是 native 字符串；输入使用中立名称；聚合保留完整成员类型；参数按语义名称检查后，
 调用操作按函数声明顺序传参，返回值在前、out/inout 在后。`Build` 冻结快照，之后继续编辑 builder 不改变旧结果。
 
@@ -188,8 +183,7 @@ static ShaderIrBlock BuildBrightness()
   `StorageLoad` 也保留内存顺序，不能把写入前后的两次 load 合并；原子加返回原值，只允许 read-write int/uint buffer。
 - 所有源码调用保守视作有副作用；即使返回值无人使用，也保留原始调用顺序。本批次不做 DCE 或跨调用重排。
 - 图降低按稳定拓扑顺序执行，独立节点以文档顺序排序；不删除未使用的源码调用。输入索引线性建立，不按每个节点全表搜索连线。
-- Stage 支持显式 raster/compute 接口、uniform/采样纹理、storage、MRT 与工作组；图 artifact 冻结源码依赖并调用 typed 编译链。
-  完整 Target、图级资源/控制节点接线和定义/产物原子发布仍未验收。
+- Stage 支持显式 raster/compute 接口、uniform/采样纹理、storage、MRT 与工作组；图 artifact 冻结源码依赖并调用 typed 编译链。Target、图级资源/控制节点接线和定义/产物使用同一发布代际。
 - 旧完整 SC 字符串创作入口已被统一图链取代；本轮还需完成最终内部 Shader 解耦和产物清理验收，详见[实施记录](../issues/2026-09-12-shader-authoring-execution.md)。
 
 ### 图输入默认值
@@ -205,7 +199,7 @@ static ShaderIrBlock BuildBrightness()
 - `void` 只用于无返回值；参数、结构体成员和数组元素均不能使用它，也不能用 alias/嵌套数组绕过值类型检查。
 - 结构体保留聚合端口，同时提供 `.member` 端口；展开/折叠不改变边的身份。数组保留固定元素类型和长度。
 - 聚合端口类型标识包含完整布局的确定性 hash，不能把不同长度数组当作同一种图类型。
-- lowering 已验证聚合与成员冲突、按名称发现失效连接和缺失编译器恢复；原图不被修改。悬挂边的 Editor 修复界面尚未实现。
+- lowering 已验证聚合与成员冲突、按名称发现失效连接和缺失编译器恢复；原图不被修改。悬挂端口在 Editor 中保留稳定身份并提供显式修复/重绑定，不按位置误接。
 - Catalog 是 owner 持有的不可变注册快照，不是全局单例。独立组合时调用者负责 provider 生命周期；
   `ShaderSourceFrontendRegistry` 则使用共享 TypeRegistry 发现、候选冲突回滚和 provider 退休，解析期间
   持有共同 operation scope。现有测试覆盖该注册闭环，不等于真实 collectible 插件、Editor 文档和 GPU 发布的完整热卸载验收。

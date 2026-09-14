@@ -13,7 +13,6 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Inno.Scripting.Compiler;
 
-[AssetImporterExtension]
 internal sealed class CSharpScriptImporter : AssetImporter<ScriptSourceAsset>
 {
     /// <summary>

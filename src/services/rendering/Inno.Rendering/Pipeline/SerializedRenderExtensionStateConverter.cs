@@ -4,7 +4,6 @@ using Inno.Core.Serialization.Converters;
 
 namespace Inno.Rendering;
 
-[SerializationExtension]
 internal sealed class SerializedRenderExtensionStateConverter : SerializationConverter<SerializedRenderExtensionState>
 {
     /// <inheritdoc />

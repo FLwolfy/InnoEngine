@@ -45,6 +45,8 @@ Zoom 的持久设置、session 倍率 Module 与三个 Action 作为一个 featu
 | `Editor/Appearance/Icons/Layers` | String 属性 `value` | Settings/Inspector presentation |
 | `Editor/Appearance/Icons/Folder` | String 属性 `value` | FileBrowser |
 | `Editor/Appearance/Icons/File` | String 属性 `value` | FileBrowser fallback |
+| `Editor/Appearance/Icons/ShaderSource` | String 属性 `value`；默认 `RupeeSign` | FileBrowser、Inspector |
+| `Editor/Appearance/Icons/RenderPipeline` | String 属性 `value`；默认 `RupiahSign` | FileBrowser、Inspector |
 
 每个 icon 是独立的 `EditorSetting` field，并在自己的 `OnDraw(EditorSettingObject)` 中绘制 ImGui glyph selector。Selector 的关闭预览和弹出选项使用同一个最大 icon slot；每个 glyph 再按 baked font 的真实可见边界居中，因此 File、Folder 与较宽的 Cubes 等轮廓中心保持在同一竖线上，label 也从同一位置开始。消费者直接调用 `EditorSettings.Get("...")`，再读取 `value`；Settings 内核不会解析 icon，也不导出路径常量。
 

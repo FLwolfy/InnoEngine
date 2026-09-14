@@ -65,7 +65,8 @@ public sealed class ShaderTargetRegistry : IDisposable
         protected override IReadOnlyDictionary<string, ShaderTarget> Build(TypeCacheSnapshot types)
         {
             var targets = new Dictionary<string, ShaderTarget>(StringComparer.Ordinal);
-            foreach (Type type in types.GetTypesWithAttribute<ShaderTargetAttribute>().Select(value => value.Resolve(types))
+            foreach (Type type in types.GetSubTypesOf<ShaderTarget>().Select(value => value.Resolve(types))
+                         .Where(static type => !type.IsAbstract)
                          .OrderBy(static type => type.FullName, StringComparer.Ordinal))
             {
                 ShaderTarget target = CreateExtension<ShaderTarget>(type);

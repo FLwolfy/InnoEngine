@@ -14,13 +14,18 @@ internal sealed partial class ShaderEditorCanvas
     private void SourceSettings(Guid sourceId)
     {
         if (!owner.assets.TryGetInfo(sourceId, out AssetInfo? info) || info is null) return;
-        if (UI.SmallButton("Open Source")) OpenShaderFunction.Open(owner, sourceId);
-        UI.SameLine();
-        if (UI.SmallButton("Import Settings…"))
+        InspectorRow("source.actions", "Source", () =>
         {
-            LoadSourceSettings(info.assetPath, sourceId);
-            UI.OpenPopup("##source-settings");
-        }
+            if (UI.SmallButton("Show in File Browser")
+                && owner.interactions.TryGetModule<Inno.Editor.Panel.FileBrowser.AssetEditorModule>(out var browser) && browser is not null)
+                RevealShaderFunction.Reveal(owner, browser, sourceId);
+            UI.SameLine();
+            if (UI.SmallButton("Import Settings…"))
+            {
+                LoadSourceSettings(info.assetPath, sourceId);
+                UI.OpenPopup("##source-settings");
+            }
+        });
         UI.SetNextWindowSize(new(580, 470), ImGuiCond.Appearing);
         if (!UI.BeginPopup("##source-settings")) return;
         try
@@ -34,33 +39,77 @@ internal sealed partial class ShaderEditorCanvas
             {
                 var settings = owner.serialization.Deserialize<ShaderSourceImportSettings>(draft.sourceSettings, owner.context);
                 bool changed = false;
-                if (UI.BeginCombo("Language", settings.languageId))
+                InspectorRow("source.language", "Language", () =>
                 {
-                    foreach (string language in owner.frontends.languageIds)
-                        if (UI.Selectable(language, settings.languageId == language)) { settings.languageId = language; changed = true; }
-                    UI.EndCombo();
-                }
+                    if (!Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget.BeginBoundedCombo("##language", settings.languageId)) return;
+                    try
+                    {
+                        foreach (string language in owner.frontends.languageIds)
+                            if (UI.Selectable(language, settings.languageId == language)) { settings.languageId = language; changed = true; }
+                    }
+                    finally { UI.EndCombo(); }
+                });
                 string implementation = settings.implementationId;
-                if (UI.InputText("Adapter implementation", ref implementation, 256)) { settings.implementationId = implementation; changed = true; }
-                string function = settings.entryPoint;
-                if (UI.InputText("Exported function", ref function, 256)) { settings.entryPoint = function; changed = true; }
-                UI.TextWrapped("Inputs, outputs and structure members are parsed from this function declaration. Alternative implementations must expose the same interface.");
+                bool implementationChanged = false;
+                InspectorRow("source.adapter", "Adapter", () => implementationChanged = UI.InputText("##adapter", ref implementation, 256));
+                if (implementationChanged) { settings.implementationId = implementation; changed = true; }
+                string catalog = settings.catalogPath;
+                bool catalogChanged = false;
+                InspectorRow("source.catalog", "Catalog Path", () => catalogChanged = UI.InputText("##catalog", ref catalog, 256));
+                if (catalogChanged) { settings.catalogPath = catalog; changed = true; }
+                int catalogOrder = settings.catalogOrder;
+                bool orderChanged = false;
+                InspectorRow("source.catalog-order", "Catalog Order", () => orderChanged = UI.InputInt("##catalog-order", ref catalogOrder));
+                if (orderChanged) { settings.catalogOrder = catalogOrder; changed = true; }
+                UI.TextWrapped("Catalog paths are declared by the source library and group its exported functions in Shader creation tools. They do not affect compilation or runtime assets.");
+                UI.SeparatorText("Exported Functions");
+                for (int i = 0; i < settings.exports.Length; i++)
+                {
+                    UI.PushID("export." + i);
+                    string function = settings.exports[i];
+                    bool functionChanged = false, remove = false;
+                    InspectorRow("source.export", "Function " + (i + 1), () =>
+                    {
+                        functionChanged = UI.InputText("##name", ref function, 256);
+                        UI.SameLine();
+                        remove = UI.SmallButton("Remove");
+                    });
+                    if (functionChanged) { settings.exports[i] = function; changed = true; }
+                    if (remove)
+                    {
+                        settings.exports = settings.exports.Where((_, index) => index != i).ToArray();
+                        changed = true;
+                        UI.PopID();
+                        break;
+                    }
+                    UI.PopID();
+                }
+                if (UI.Button("Add Export")) { settings.exports = [.. settings.exports, "Function"]; changed = true; }
+                UI.TextWrapped("Every listed name is exported as an independent graph function. All other functions remain private helpers. Ports are parsed from each exported declaration; alternative implementations must expose matching interfaces.");
                 UI.SeparatorText("Alternative Implementations");
                 for (int i = 0; i < settings.implementations.Length; i++)
                 {
                     UI.PushID(i);
                     ShaderFunctionAsset? current = settings.implementations[i];
-                    if (UI.BeginCombo("##implementation", current?.assetPath.ToString() ?? "Missing source"))
+                    bool remove = false;
+                    InspectorRow("source.implementation", "Implementation " + (i + 1), () =>
                     {
-                        foreach (AssetFileEntry source in owner.assets.GetFileSystemEntries(includeDirectories: false))
-                            if (source.extension == ".ishadersource" && source.assetPath != info.assetPath
-                                && UI.Selectable(source.assetPath.ToString(), current?.assetPath == source.assetPath)
-                                && owner.assets.TryLoad(source.assetPath, out ShaderFunctionAsset? replacement) && replacement is not null)
-                            { settings.implementations[i] = replacement; changed = true; }
-                        UI.EndCombo();
-                    }
-                    UI.SameLine();
-                    if (UI.SmallButton("Remove"))
+                        if (Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget.BeginBoundedCombo("##implementation", current?.assetPath.ToString() ?? "Missing source"))
+                        {
+                            try
+                            {
+                                foreach (AssetFileEntry source in owner.assets.GetFileSystemEntries(includeDirectories: false))
+                                    if (source.extension == ".ishadersource" && source.assetPath != info.assetPath
+                                        && UI.Selectable(source.assetPath.ToString(), current?.assetPath == source.assetPath)
+                                        && owner.assets.TryLoad(source.assetPath, out ShaderFunctionAsset? replacement) && replacement is not null)
+                                    { settings.implementations[i] = replacement; changed = true; }
+                            }
+                            finally { UI.EndCombo(); }
+                        }
+                        UI.SameLine();
+                        remove = UI.SmallButton("Remove");
+                    });
+                    if (remove)
                     {
                         settings.implementations = settings.implementations.Where((_, index) => index != i).ToArray();
                         changed = true;

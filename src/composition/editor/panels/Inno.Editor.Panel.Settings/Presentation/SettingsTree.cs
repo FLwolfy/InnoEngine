@@ -10,16 +10,34 @@ namespace Inno.Editor.Panel.Settings;
 
 internal sealed class SettingsTree
 {
+    private string? m_revealPath;
+
+    internal void Reveal(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        m_revealPath = path;
+    }
+
     internal void Draw(
         IReadOnlyList<SettingsPage> pages,
         string query,
         string selectedPath,
         Action<SettingsPage> select)
     {
-        for (int i = 0; i < pages.Count; i++)
+        string? revealPath = m_revealPath;
+        try
         {
-            if (Matches(pages[i], query))
-                DrawPage(pages[i], query, selectedPath, select);
+            for (int i = 0; i < pages.Count; i++)
+            {
+                if (Matches(pages[i], query))
+                    DrawPage(pages[i], query, selectedPath, revealPath, select);
+            }
+        }
+        finally
+        {
+            // Apply a navigation reveal to retained tree state once. Later frames do not force it,
+            // so the user can immediately collapse the branch again.
+            m_revealPath = null;
         }
     }
 
@@ -63,12 +81,14 @@ internal sealed class SettingsTree
         SettingsPage page,
         string query,
         string selectedPath,
+        string? revealPath,
         Action<SettingsPage> select)
     {
         bool hasVisibleChildren = false;
         for (int i = 0; i < page.children.Count; i++)
             hasVisibleChildren |= Matches(page.children[i], query);
-        if (!string.IsNullOrWhiteSpace(query) && hasVisibleChildren)
+        if ((!string.IsNullOrWhiteSpace(query) && hasVisibleChildren) ||
+            (hasVisibleChildren && IsRevealed(page.path, revealPath)))
             EditorWidget.SetNextTreeNodeOpen(true);
 
         TreeNodeResult result = EditorWidget.TreeNode(
@@ -87,10 +107,15 @@ internal sealed class SettingsTree
         for (int i = 0; i < page.children.Count; i++)
         {
             if (Matches(page.children[i], query))
-                DrawPage(page.children[i], query, selectedPath, select);
+                DrawPage(page.children[i], query, selectedPath, revealPath, select);
         }
         NativeImGui.TreePop();
     }
+
+    private static bool IsRevealed(string pagePath, string? revealPath)
+        => revealPath is not null &&
+           (string.Equals(pagePath, revealPath, StringComparison.Ordinal) ||
+            revealPath.StartsWith(pagePath + "/", StringComparison.Ordinal));
 
     private static bool Matches(SettingsPage page, string query)
     {

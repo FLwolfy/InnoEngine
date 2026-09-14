@@ -104,7 +104,6 @@ public sealed class ScriptingPipelineTests : IDisposable
                         new("tests.preview"), new("draw"), ShaderProgramKind.Raster, null, null, context.diagnostics, out _);
             }
 
-            [ShaderNodeCompilerExtension]
             public sealed class ShaderNodeProbe : IShaderNodeCompiler
             {
                 public string definitionId => "tests.shader-node-probe";
@@ -114,7 +113,6 @@ public sealed class ScriptingPipelineTests : IDisposable
                     => new Dictionary<string, ShaderIrValue> { ["value"] = context.builder.Constant(0.5f) };
             }
 
-            [ShaderTarget]
             public sealed class ShaderTargetProbe : ShaderTarget
             {
                 public override string id => "tests.script-target";
@@ -122,7 +120,6 @@ public sealed class ScriptingPipelineTests : IDisposable
                     => ShaderGraphTemplates.CreateRaster(context.serialization, context.references);
             }
 
-            [ShaderGraphTemplate]
             public sealed class ShaderTemplateProbe : ShaderGraphTemplate
             {
                 public override string id => "tests.script-template";
@@ -1082,7 +1079,6 @@ public sealed class ScriptingPipelineTests : IDisposable
             using InnoEngine.Assets;
             using InnoEditor.Assets;
 
-            [AssetImporterExtension]
             public sealed class ShutdownAssetImporter : AssetImporter<ShutdownAsset>
             {
                 public override string importerId => "tests.shutdown-script-asset";

@@ -11,6 +11,8 @@ namespace Inno.Adapter.Presentation.ImGui;
 
 public static class ImGuiIcon
 {
+    /// <summary>Letter mark used for authored Shader graph assets.</summary>
+    public const string Shader = "S";
     public const string Num0 = "\u0030";
     public const string Num1 = "\u0031";
     public const string Num2 = "\u0032";

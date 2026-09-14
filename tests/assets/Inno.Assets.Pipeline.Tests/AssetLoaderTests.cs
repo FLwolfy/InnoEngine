@@ -1972,7 +1972,6 @@ internal sealed class PrivateConstructorAsset : AssetObject
     internal string value { get; set; } = string.Empty;
 }
 
-[AssetImporterExtension]
 internal sealed class PrivateConstructorAssetImporter : AssetImporter<PrivateConstructorAsset>
 {
     private static readonly IReadOnlyList<string> s_extensions = [".privateasset"];
@@ -2000,7 +1999,6 @@ internal sealed class DeferredAsset : AssetObject;
 [StableTypeId("79cef88a-3d5a-4c36-8095-a59cae3c641c")]
 internal sealed class ExtensionDependentAsset : AssetObject;
 
-[AssetImporterExtension]
 internal sealed class ExtensionDependentImporter : AssetImporter<ExtensionDependentAsset>
 {
     internal static bool available;
@@ -2019,7 +2017,6 @@ internal sealed class ExtensionDependentImporter : AssetImporter<ExtensionDepend
     }
 }
 
-[AssetImporterExtension]
 internal sealed class ExtensionConsumerImporter : AssetImporter<ExtensionDependentAsset>
 {
     public override string importerId => "tests.extension-consumer";
@@ -2039,7 +2036,6 @@ internal sealed class ExtensionConsumerImporter : AssetImporter<ExtensionDepende
     }
 }
 
-[AssetImporterExtension]
 internal sealed class DeferredAssetImporter : AssetImporter<DeferredAsset>
 {
     private static readonly IReadOnlyList<string> s_extensions = [".deferredasset"];
@@ -2064,7 +2060,6 @@ internal sealed class DeferredAssetImporter : AssetImporter<DeferredAsset>
 [StableTypeId("a49b603c-0f5f-4861-903a-3819513da002")]
 internal sealed class DependencyAsset : AssetObject;
 
-[AssetImporterExtension]
 internal sealed class DependencyAssetImporter : AssetImporter<DependencyAsset>
 {
     public override string importerId => "inno.tests.runtime-dependency";
@@ -2083,7 +2078,6 @@ internal sealed class DependencyAssetImporter : AssetImporter<DependencyAsset>
     }
 }
 
-[AssetImporterExtension]
 internal sealed class AlternateDependencyAssetImporter : AssetImporter<DependencyAsset>
 {
     public override string importerId => "inno.tests.runtime-dependency-alternate";
@@ -2099,7 +2093,6 @@ internal sealed class AlternateDependencyAssetImporter : AssetImporter<Dependenc
     }
 }
 
-[AssetImporterExtension]
 internal sealed class BuildInputAssetImporter : AssetImporter<DependencyAsset>
 {
     public override string importerId => "inno.tests.build-input";
@@ -2119,7 +2112,6 @@ internal sealed class BuildInputAssetImporter : AssetImporter<DependencyAsset>
     }
 }
 
-[AssetImporterExtension]
 internal sealed class BuildConsumerAssetImporter : AssetImporter<DependencyAsset>
 {
     public override string importerId => "inno.tests.build-consumer";
@@ -2137,7 +2129,6 @@ internal sealed class BuildConsumerAssetImporter : AssetImporter<DependencyAsset
 [StableTypeId("a80d363f-8e49-4615-89ee-589613b91c03")]
 internal sealed class ImportGraphAsset : AssetObject;
 
-[AssetImporterExtension]
 internal sealed class ImportGraphAssetImporter : AssetImporter<ImportGraphAsset>
 {
     public override string importerId => "inno.tests.import-dependency";
@@ -2163,7 +2154,6 @@ internal sealed class SlowAsset : AssetObject
     internal string value { get; set; } = string.Empty;
 }
 
-[AssetImporterExtension]
 internal sealed class SlowAssetImporter : AssetImporter<SlowAsset>
 {
     internal static readonly ManualResetEventSlim importStarted = new(false);
@@ -2201,7 +2191,6 @@ internal sealed class MutableAsset : AssetObject
     internal string value { get; set; } = string.Empty;
 }
 
-[AssetImporterExtension]
 internal sealed class MutableAssetImporter : AssetImporter<MutableAsset>
 {
     public override string importerId => "inno.tests.mutable";
@@ -2255,7 +2244,6 @@ internal sealed class HookAsset : AssetObject
     }
 }
 
-[AssetImporterExtension]
 internal sealed class HookAssetImporter : AssetImporter<HookAsset>
 {
     public override string importerId => "inno.tests.hook";
@@ -2286,7 +2274,6 @@ internal static class ImporterConflictProbe
 [StableTypeId("da675da1-9276-40c4-9964-0eb4b8ff9a07")]
 internal sealed class ImporterConflictAsset : AssetObject;
 
-[AssetImporterExtension]
 internal sealed class ImporterConflictAssetImporterA : AssetImporter<ImporterConflictAsset>
 {
     public override string importerId => ImporterConflictProbe.mode == ImporterConflictMode.DuplicateId
@@ -2308,7 +2295,6 @@ internal sealed class ImporterConflictAssetImporterA : AssetImporter<ImporterCon
     }
 }
 
-[AssetImporterExtension]
 internal sealed class ImporterConflictAssetImporterB : AssetImporter<ImporterConflictAsset>
 {
     public override string importerId => ImporterConflictProbe.mode == ImporterConflictMode.DuplicateId
@@ -2337,7 +2323,6 @@ internal sealed class TestBuildDefinitionAsset : AssetObject
     internal string label { get; set; } = string.Empty;
 }
 
-[AssetBuildProcessorExtension]
 internal sealed class TestBuildProcessor : AssetBuildProcessor<TestBuildDefinitionAsset>
 {
     public override string processorId => "inno.tests.aggregate-build";

@@ -8,7 +8,6 @@ using Inno.Assets.Pipeline;
 
 namespace Inno.Assets.Pipeline.Importers;
 
-[AssetImporterExtension]
 internal sealed class BinaryAssetImporter : AssetImporter<BinaryAsset>
 {
     /// <summary>

@@ -41,7 +41,7 @@ internal sealed class AssetBuildProcessorRegistry
     /// </returns>
     protected override Snapshot Build(TypeCacheSnapshot types)
     {
-        Type[] discovered = types.GetTypesWithAttribute<AssetBuildProcessorExtensionAttribute>()
+        Type[] discovered = types.GetSubTypesOf<AssetBuildProcessor>()
             .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static value => value.FullName, StringComparer.Ordinal)
             .ToArray();

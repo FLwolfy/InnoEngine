@@ -5,7 +5,6 @@ using Inno.Core.Serialization.Converters;
 
 namespace Inno.Core.Serialization;
 
-[SerializationExtension]
 internal sealed class TypeRefConverter : SerializationConverter<TypeRef>
 {
     /// <summary>

@@ -211,7 +211,11 @@ internal sealed class SettingsModal(
             if (page is not null)
             {
                 var view = new SettingsPageView(session);
-                view.Draw(page, child => m_navigation.NavigateTo(child.path));
+                view.Draw(page, child =>
+                {
+                    m_navigation.NavigateTo(child.path);
+                    m_tree.Reveal(child.path);
+                });
             }
             else
             {

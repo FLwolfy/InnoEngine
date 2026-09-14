@@ -1,13 +1,8 @@
-using System;
 using System.Threading;
 using Inno.Core.Graphs;
 using Inno.Core.Serialization;
 
 namespace Inno.Rendering.Shaders;
-
-/// <summary>Marks a domain target for discovery in the shared authoring generation.</summary>
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-public sealed class ShaderTargetAttribute : Attribute;
 
 /// <summary>Expands a domain's surface contract into ordinary graph stages before source dependency capture.</summary>
 public abstract class ShaderTarget

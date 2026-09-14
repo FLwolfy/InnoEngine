@@ -9,7 +9,6 @@ namespace Inno.Scene.Layers;
 /// <summary>
 /// Converts a layer mask through its stable thirty-two-bit value.
 /// </summary>
-[SerializationExtension]
 internal sealed class GameLayerMaskConverter : SerializationConverter<GameLayerMask>
 {
     /// <summary>

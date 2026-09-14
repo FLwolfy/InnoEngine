@@ -9,7 +9,7 @@ using Inno.Rendering.Shaders;
 
 namespace Inno.Editor.Panel.ShaderEditor;
 
-internal sealed record ShaderNodeCreation(string definitionId, Guid sourceId = default);
+internal sealed record ShaderNodeCreation(string definitionId, Guid sourceId = default, string function = "");
 
 internal sealed partial class ShaderEditorDocuments
 {
@@ -39,9 +39,11 @@ internal sealed partial class ShaderEditorDocuments
         }
         if (creation.sourceId != Guid.Empty)
         {
+            ArgumentException.ThrowIfNullOrWhiteSpace(creation.function);
             if (!assets.TryGetInfo(creation.sourceId, out AssetInfo? info) || info is null) throw new IOException("Source function is unavailable.");
             node.SetValue("sourceId", ShaderGraphDocument.Encode(creation.sourceId, serialization, context));
             node.SetValue("sourcePath", ShaderGraphDocument.Encode(info.assetPath.ToString(), serialization, context));
+            node.SetValue("function", ShaderGraphDocument.Encode(creation.function, serialization, context));
         }
         return node;
     }
@@ -59,7 +61,8 @@ internal sealed partial class ShaderEditorDocuments
                 throw new InvalidOperationException("Source function " + info.status + ": " + string.Join("\n", info.diagnostics));
             if (id != Guid.Empty && assets.TryLoad(id, out ShaderFunctionAsset? function) && function is not null && !function.isMissing)
             {
-                module = frontends.AnalyzeModule(ShaderSourceBundle.Decode(ShaderSourceBundle.Read(function, assets), serialization));
+                string selected = ShaderGraphDocument.Read(node, "function", "", serialization, context);
+                module = frontends.AnalyzeModule(ShaderSourceBundle.Decode(ShaderSourceBundle.Read(function, assets), selected, serialization));
                 implementation = function.implementationId;
             }
         }

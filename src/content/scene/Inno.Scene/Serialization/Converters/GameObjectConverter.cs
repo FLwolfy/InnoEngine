@@ -11,7 +11,6 @@ using Inno.Scene.Components;
 
 namespace Inno.Scene;
 
-[SerializationExtension]
 internal sealed class GameObjectConverter : SerializationConverter<GameObject>
 {
     private const string C_SOURCE_ROOT_ID_KEY = "sourceRootId";

@@ -4,7 +4,7 @@
 
 ## 职责与边界
 
-内置 `.ishader` 编辑界面，替代已经移除的 Material Graph Panel。`.imaterial` 仍只保存 Shader 引用及参数，不承载图。画布跟随 File Browser 当前 Shader 选择；双击 Shader 打开并聚焦。没有固定侧栏或路径输入框；顶部提供 Save / Revert 和文件名，星号表示尚未应用的草稿。
+内置 `.ishader` 编辑界面，替代已经移除的 Material Graph Panel。`.imaterial` 仍只保存 Shader 引用及参数，不承载图。画布跟随 File Browser 当前 Shader 选择；双击 Shader 打开并聚焦。没有固定侧栏或路径输入框；画布 Header 第一行是当前 Shader 下拉选择，第二行提供 Save / Revert / Format / Check，星号表示尚未应用的草稿。没有选中 Shader 时使用带 Panel padding 的居中空状态。
 
 当前实现与完整验收必须区分：右键菜单、节点值编辑、捕获式平移、鼠标锚点缩放、框选、节点移动、连接、复制粘贴、显式保存已经接线；完整 UI 实操、所有高级节点/资源操作和最终渲染一致性尚待验收。详见[实施状态](../issues/2026-09-11-unified-shader-implementation.md)。
 
@@ -22,7 +22,7 @@
 
 | 类型 / 成员 | 契约 |
 | --- | --- |
-| `ShaderNodeDrawerAttribute(string definitionId)` / `definitionId` | 注册一个稳定节点 ID 的 Editor-only 呈现；重复 ID 拒绝候选 |
+| `ShaderNodeDrawerAttribute(definitionId, displayName, createPath, createOrder, separatorBefore)` | 注册稳定节点 ID 与 Editor-only 呈现；插件自主贡献创建目录、顺序和同级分隔，重复 ID 拒绝候选 |
 | `ShaderNodeDrawer.Draw(ShaderNodeDrawContext)` | 在统一 Inspector 绘制选中节点的控件；不编译 Shader，不保存当前帧 context |
 | `ShaderNodeDrawContext.previews` | 帧内使用共享 generation-scoped 预览；不得缓存过期 handle |
 | `ShaderNodeDrawContext.nodeId` | 用于稳定控件身份的节点 ID |
@@ -48,7 +48,7 @@ public sealed class SurfaceDrawer : ShaderNodeDrawer
 
 ## 保存与错误
 
-- 编辑、拖动、连接、Undo/Redo 只改变草稿；Save 按钮、画布右键 Save 或画布聚焦时 Command/Ctrl+S 才写入 `.ishader`。共享 Document Host 的 Save/Save All 也显式保存。保存不以图编译成功为条件。
+- 编辑、拖动、连接、Undo/Redo 只改变草稿；Save 按钮或画布聚焦时 Command/Ctrl+S 才写入 `.ishader`。共享 Document Host 的 Save/Save All 也显式保存。保存不以图编译成功为条件。
 - 写盘前先保留 Library/Editor/ShaderRecovery 中的中立恢复数据；比较上次读取的源指纹，已发生的外部修改拒绝覆盖。
 - 文件切换、关闭 Shader Editor 面板和停止不应用草稿。恢复文件只位于 Library，不参与资产导入或 GPU 发布。失败保留文档、历史与恢复文件，并在画布显示错误。
 - 源码外部更新：未编辑文档接受新源；dirty 文档显示冲突，不覆盖磁盘。暂时缺失源保留图和 Undo barrier。
@@ -57,15 +57,18 @@ public sealed class SurfaceDrawer : ShaderNodeDrawer
 - Close 由共享文档服务处理 Save/Discard/Cancel；provider 不在 Discard 后偷偷 Save。
 - Revert 恢复已保存内容，可通过 Undo 找回草稿；Undo 后仍需 Save 才会应用。
 - 源码节点的 `Apply Import Settings` 是对所选 `.ishadersource.imeta` 的独立显式操作，可能影响引用该源码的其他 Shader；它不代替当前 Shader 图的 Save。编辑源码文件本身仍使用 IDE 保存。
-- 删除支持 Delete 与 Backspace。删除阶段输出同时删除该阶段的内容；最后一个阶段输出删除后清除对应 Pass 及引用映射；删除最后一个参数输入清理其声明，共享输入保留默认值和剩余阶段可见性。剪切/复制阶段包含其内容，粘贴重建节点身份与 Pass 名称。事务显式 Commit，一次操作对应一次 Undo。
+- 删除支持 Delete 与 Backspace。每个低级 Shader 最多拥有一个 Vertex、Fragment 和 Compute Output；创建菜单按 Output 单独创建，已存在的阶段禁用，复制/粘贴与 Duplicate 不能绕过该不变量。删除 Output 同时删除引用它的 Pass、配对后失去引用的阶段内容及声明。删除最后一个参数输入清理其声明，共享输入保留默认值和剩余阶段可见性。事务显式 Commit，一次操作对应一次 Undo。
 
 ## 当前限制
 
 节点参数和输入默认值现在在 Inspector 编辑，不在画布重复一套字段。未连接数值输入支持精确类型默认值，连接后只显示上游来源；资源/副作用必须接线。
 Inspector 的 Compile Draft Preview 使用独立编译缓存，未经 Save 不进入正式资源发布；它当前是编译预览，不是完整材质画面预览。
 
-Pass/Variant、Technique/Role、自定义混合和能力要求在节点临时弹窗中编辑。存储读写、原子加法和 discard 节点通过显式 after/then 连线约束副作用顺序。右键沿用共享菜单与搜索，支持按端口类型创建、分组、连接线转接点和项目副本。转接点保留完整结构体、数组和资源类型。源码导入设置通过 .imeta 与共享 History 编辑；端口快照只保存中立类型/身份，缺失端口以红色保留，不按序号重连。预览按需展开。
+Pass/Variant、Technique/Role、自定义混合和能力要求在 Output Inspector 中编辑，不再通过“Create Pass”一次生成一组可重复 Output。存储读写、原子加法和 discard 节点通过显式 after/then 连线约束副作用顺序。右键沿用共享菜单与搜索，并分为 Create、View、Edit、Connections、Organize 与 Assets；分隔线只标示同级语义边界或插件贡献的顶级函数目录，不向父级和每个子项传播。Group 可被选中，拖动组标题会整体移动成员。Insert Reroute 在当前连接线上插入一个强类型、零运算的布线点，只整理长连线，不改变生成的 Shader 语义。Format 使用分层依赖布局和多轮端口感知的交叉最小化：输入在左、Output 在右，并按目标端口次序排列同层来源；它只改画布位置且可 Undo。源码导入设置通过 .imeta 与共享 History 编辑；`catalogPath`/`catalogOrder` 让插件把函数库放入自己的可读菜单分组。端口快照只保存中立类型/身份，缺失端口以红色保留，不按序号重连。
 
-源码文件可从节点打开到系统关联的 IDE。右键 `Compilation Diagnostics` 打开临时诊断窗口；带源位置的诊断可通过 `Locate`
-定位到源码行并显示行列、复制位置。只读取当前 source mount，源缺失时报告错误；不猜测任意 IDE 的命令行协议。
+菜单项的 enabled 状态统一来自 `EditorAction.Query`，不是表现层根据 label 猜测。显式 Vertex/Fragment/Compute Output 的查询检查资产只读状态、图是否已经交给领域 Target，以及对应 Stage Output 是否已经存在；每个显式 Stage 只允许一个，因此已存在的项保持可见但禁用。领域 Output 和其他插件节点通过相同 Action/Menu 模型及节点扩展注册进入菜单，通用 Editor 不判断 Rendering2D 类型。
+
+`.ishadersource` 是显式函数库：Import Settings 中列出的每个函数名都是独立公开 API，未列出的函数是私有 helper；一个文件可以导出多个函数，右键 Create / Functions 按“插件目录 / 文件 / 函数”创建节点，不存在默认 Source 或隐式 `main`。节点的 Show in File Browser 只在引擎 File Browser 中定位资产，不启动操作系统或外部 IDE。顶部 Check 对当前草稿进行隔离编译，不保存、不发布；它使用与脚本/插件重载相同的默认固定宽度、居中位置、遮罩、淡入淡出和阻塞生命周期，不显示进度条。编译完成后无论成功或失败都自动关闭，结构化结果及源码位置统一发布到 Console，不在 Modal 内建立第二套诊断浏览器。
+
+Shader 与节点 Inspector 不重复画布 Header 的 Save / Revert / Format / Check。Shader Inspector 始终显示草稿专用 Preview（无开关），所有 Target、参数、节点设置和输入默认值复用通用 Inspector 的“左侧 label、右侧控件”Property Row；草稿预览仍不会修改资产或 Scene/Game。
 完整 UI 实操和热重载回归仍在最终验收清单中，不能把接线完成等同为验收通过。

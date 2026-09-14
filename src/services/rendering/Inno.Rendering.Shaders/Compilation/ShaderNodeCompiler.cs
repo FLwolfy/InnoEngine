@@ -14,10 +14,6 @@ namespace Inno.Rendering.Shaders;
 /// <param name="required">Whether an input must be connected; alternative aggregate/member inputs validate in their compiler.</param>
 public sealed record ShaderNodePort(string id, ShaderSourceType type, GraphPortDirection direction, bool required = true);
 
-/// <summary>Marks a node compiler for discovery by the shared type-generation registry.</summary>
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-public sealed class ShaderNodeCompilerExtensionAttribute : Attribute;
-
 /// <summary>Defines one shader node's typed ports and lowering; drawing belongs to a separate editor extension.</summary>
 public interface IShaderNodeCompiler
 {

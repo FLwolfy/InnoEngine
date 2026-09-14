@@ -93,7 +93,6 @@ public sealed partial class ShaderGraphLoweringTests
     }
 }
 
-[ShaderNodeCompilerExtension]
 internal sealed class NodeRegistryProbe : IShaderNodeCompiler, IDisposable
 {
     internal static int created;

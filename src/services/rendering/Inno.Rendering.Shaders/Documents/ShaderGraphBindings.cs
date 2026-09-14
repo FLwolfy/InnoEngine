@@ -34,13 +34,13 @@ public static class ShaderGraphBindings
             ? ShaderGraphPrograms.Read(graph, serialization, context) : [];
         HashSet<string> affectedPasses = programs.Where(program => program.stages.Any(stages.Contains))
             .Select(static program => program.pass).ToHashSet(StringComparer.Ordinal);
-        for (int index = 0; index < programs.Length; index++)
-        {
-            ShaderGraphPassProgram program = programs[index];
-            program.stages = program.stages.Where(id => !stages.Contains(id)).ToArray();
-            programs[index] = program;
-            if (program.stages.Length != 0) affectedPasses.Remove(program.pass);
-        }
+        ShaderGraphPassProgram[] retainedPrograms = programs.Where(program => !affectedPasses.Contains(program.pass)).ToArray();
+        HashSet<string> retainedStages = retainedPrograms.SelectMany(static program => program.stages).ToHashSet(StringComparer.Ordinal);
+        foreach (string stage in programs.Where(program => affectedPasses.Contains(program.pass)).SelectMany(static program => program.stages))
+            if (!retainedStages.Contains(stage)) stages.Add(stage);
+        foreach (GraphNodeRecord node in graph.nodes)
+            if (stages.Contains(node.id.value) || stages.Contains(ShaderGraphDocument.Read(node, "stage", "", serialization, context)))
+                removed.Add(node.id);
         HashSet<string> affectedBindings = [];
         foreach (GraphNodeRecord node in graph.nodes.Where(node => removed.Contains(node.id) && node.definitionId == "inno.shader.stage-input"))
         {
@@ -51,7 +51,7 @@ public static class ShaderGraphBindings
         foreach (GraphNodeId id in removed) candidate.RemoveNode(id);
         if (!candidate.metadata.ContainsKey(ShaderGraphDocument.definitionKey)) return candidate;
         ShaderDefinition definition = ShaderGraphDocument.ReadDefinition(candidate, serialization, context);
-        ShaderGraphPrograms.Write(candidate, programs.Where(program => !affectedPasses.Contains(program.pass)).ToArray(), serialization, context);
+        ShaderGraphPrograms.Write(candidate, retainedPrograms, serialization, context);
         definition.passes = definition.passes.Where(pass => !affectedPasses.Contains(pass.name)).ToArray();
         for (int i = 0; i < definition.techniques.Length; i++)
         {

@@ -123,8 +123,15 @@ public static class ShaderGraphArtifact
     {
         ArtifactData data = serialization.Deserialize<ArtifactData>(bytes);
         GraphDocument graph = GraphDocumentCodec.Decode(data.program, serialization);
-        var sources = data.sources.ToDictionary(static source => new GraphNodeId(source.node),
-            source => frontends.AnalyzeModule(ShaderSourceBundle.Decode(source.bundle, serialization, defines)));
+        var sources = data.sources.ToDictionary(static source => new GraphNodeId(source.node), source =>
+        {
+            GraphNodeRecord node = graph.FindNode(new(source.node))
+                ?? throw new InvalidOperationException($"Captured source node '{source.node}' is unavailable.");
+            string function = ShaderGraphDocument.Read(node, "function", "", serialization, context);
+            if (string.IsNullOrWhiteSpace(function))
+                throw new InvalidOperationException($"Source node '{source.node}' has no exported function selection.");
+            return frontends.AnalyzeModule(ShaderSourceBundle.Decode(source.bundle, function, serialization, defines));
+        });
         return new ShaderGraphProgramCompiler(nodes).Lower(graph, implementationId, sources, serialization, context);
     }
 

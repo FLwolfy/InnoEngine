@@ -10,7 +10,6 @@ using Inno.Rendering;
 
 namespace Inno.Rendering.Assets;
 
-[AssetImporterExtension]
 internal sealed partial class TextureAssetImporter : AssetImporter<TextureAsset>
 {
     /// <summary>

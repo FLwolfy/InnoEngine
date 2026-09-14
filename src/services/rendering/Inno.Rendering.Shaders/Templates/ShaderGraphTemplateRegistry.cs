@@ -58,7 +58,8 @@ public sealed class ShaderGraphTemplateRegistry : IDisposable
         protected override IReadOnlyDictionary<string, ShaderGraphTemplate> Build(TypeCacheSnapshot types)
         {
             var templates = new Dictionary<string, ShaderGraphTemplate>(StringComparer.Ordinal);
-            foreach (Type type in types.GetTypesWithAttribute<ShaderGraphTemplateAttribute>().Select(value => value.Resolve(types))
+            foreach (Type type in types.GetSubTypesOf<ShaderGraphTemplate>().Select(value => value.Resolve(types))
+                         .Where(static type => !type.IsAbstract)
                          .OrderBy(static value => value.FullName, StringComparer.Ordinal))
             {
                 ShaderGraphTemplate template = CreateExtension<ShaderGraphTemplate>(type);

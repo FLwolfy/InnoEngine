@@ -20,7 +20,9 @@ internal sealed partial class ShaderEditorCanvas
         try
         {
             bool image = type.isImage;
-            if (UI.Checkbox("Storage Image", ref image))
+            bool imageChanged = false;
+            InspectorRow("storage.image", "Storage Image", () => imageChanged = UI.Checkbox("##image", ref image));
+            if (imageChanged)
             {
                 type.isImage = image;
                 type.isStorage = true;
@@ -37,17 +39,25 @@ internal sealed partial class ShaderEditorCanvas
                 RenderTextureDimension dimension = type.dimension;
                 if (EnumControl("Dimension", ref dimension)) { type.dimension = dimension; changed = true; }
                 bool array = type.isArray;
-                if (UI.Checkbox("Array Layers", ref array)) { type.isArray = array; changed = true; }
+                bool arrayChanged = false;
+                InspectorRow("storage.array", "Array Layers", () => arrayChanged = UI.Checkbox("##array", ref array));
+                if (arrayChanged) { type.isArray = array; changed = true; }
             }
             else
             {
                 string current = type.storageElement?.id ?? "float4";
-                if (UI.BeginCombo("Element", current))
+                string selected = current;
+                InspectorRow("storage.element", "Element", () =>
                 {
-                    foreach (string candidate in new[] { "float", "float2", "float3", "float4", "int", "int2", "int3", "int4", "uint", "uint2", "uint3", "uint4" })
-                        if (UI.Selectable(candidate, current == candidate)) { type.storageElement = new() { id = candidate }; changed = true; }
-                    UI.EndCombo();
-                }
+                    if (!Widget.BeginBoundedCombo("##element", current)) return;
+                    try
+                    {
+                        foreach (string candidate in new[] { "float", "float2", "float3", "float4", "int", "int2", "int3", "int4", "uint", "uint2", "uint3", "uint4" })
+                            if (UI.Selectable(candidate, current == candidate)) selected = candidate;
+                    }
+                    finally { UI.EndCombo(); }
+                });
+                if (selected != current) { type.storageElement = new() { id = selected }; changed = true; }
             }
             UI.TextWrapped("Storage resources are bound by the render pass. The graph declares types and access; the Render Graph owns resource lifetime and synchronization.");
         }
@@ -64,7 +74,8 @@ internal sealed partial class ShaderEditorCanvas
         ShaderPropertyDefinition property = definition.properties[index];
         Widget.SectionHeader("Parameter", "The stable binding ID identifies overrides. Shader defaults and Material overrides are edited independently.");
         string displayName = property.displayName;
-        bool changed = UI.InputText("Display Name", ref displayName, 256);
+        bool changed = false;
+        InspectorRow("parameter.display-name", "Display Name", () => changed = UI.InputText("##display-name", ref displayName, 256));
         Gesture();
         if (changed) { property.displayName = displayName; Save(property, true); }
         ShaderPropertyBindingOwner bindingOwner = property.bindingOwner;
@@ -72,14 +83,17 @@ internal sealed partial class ShaderEditorCanvas
         if (property.type is ShaderPropertyType.Vector4 or ShaderPropertyType.Color)
         {
             bool color = property.type == ShaderPropertyType.Color;
-            if (UI.Checkbox("Color", ref color))
+            InspectorRow("parameter.color", "Color", () =>
             {
-                property.type = color ? ShaderPropertyType.Color : ShaderPropertyType.Vector4;
-                MaterialValue converted = property.defaultValue;
-                converted.kind = color ? MaterialValueKind.Color : MaterialValueKind.Vector;
-                property.defaultValue = converted;
-                Save(property, false);
-            }
+                if (UI.Checkbox("##color", ref color))
+                {
+                    property.type = color ? ShaderPropertyType.Color : ShaderPropertyType.Vector4;
+                    MaterialValue converted = property.defaultValue;
+                    converted.kind = color ? MaterialValueKind.Color : MaterialValueKind.Vector;
+                    property.defaultValue = converted;
+                    Save(property, false);
+                }
+            });
         }
         if (property.bindingOwner != ShaderPropertyBindingOwner.Material)
         { Widget.Hint("Supplied by the Render Pass. This binding is read-only in Material Inspectors."); return; }
@@ -88,17 +102,27 @@ internal sealed partial class ShaderEditorCanvas
         ShaderParameterPresentation presentation = ShaderParameterPresentation.Read(Controller.document, property.id, owner.serialization, owner.context);
         Widget.SectionHeader("Material Inspector", "Presentation belongs only to this Shader's authoring graph. It does not modify existing Material values or enter the Player.");
         string group = presentation.group;
-        if (UI.InputText("Group", ref group, 256)) { presentation.group = group; SavePresentation(true); }
+        bool groupChanged = false;
+        InspectorRow("parameter.group", "Group", () => groupChanged = UI.InputText("##group", ref group, 256));
+        if (groupChanged) { presentation.group = group; SavePresentation(true); }
         Gesture();
         string description = presentation.description;
-        if (UI.InputText("Description", ref description, 2048)) { presentation.description = description; SavePresentation(true); }
+        bool descriptionChanged = false;
+        InspectorRow("parameter.description", "Description", () => descriptionChanged = UI.InputText("##description", ref description, 2048));
+        if (descriptionChanged) { presentation.description = description; SavePresentation(true); }
         Gesture();
         bool visible = presentation.visible;
-        if (UI.Checkbox("Visible in Material", ref visible)) { presentation.visible = visible; SavePresentation(false); }
+        InspectorRow("parameter.visible", "Visible in Material", () =>
+        {
+            if (UI.Checkbox("##visible", ref visible)) { presentation.visible = visible; SavePresentation(false); }
+        });
         if (property.type == ShaderPropertyType.Float)
         {
             bool range = presentation.hasRange;
-            if (UI.Checkbox("Range", ref range)) { presentation.hasRange = range; SavePresentation(false); }
+            InspectorRow("parameter.range", "Range", () =>
+            {
+                if (UI.Checkbox("##range", ref range)) { presentation.hasRange = range; SavePresentation(false); }
+            });
             if (range)
             {
                 m_inspection.properties.DrawValue(m_inspection.editorContext, draft, "shader.parameter." + property.id.value + ".minimum",

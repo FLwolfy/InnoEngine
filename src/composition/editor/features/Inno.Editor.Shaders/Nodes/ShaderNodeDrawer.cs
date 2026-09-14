@@ -14,16 +14,62 @@ public sealed class ShaderNodeDrawerAttribute : Attribute
     /// <summary>Associates the drawer with one stable node definition.</summary>
     /// <param name="definitionId">The compiler-independent graph node identity.</param>
     /// <param name="displayName">Optional artist-facing name used in node headers and creation menus.</param>
-    public ShaderNodeDrawerAttribute(string definitionId, string displayName = "")
+    /// <param name="createPath">Optional slash-delimited path below Create. Empty uses the host's built-in classification.</param>
+    /// <param name="createOrder">Stable ordering value among sibling creation groups and nodes.</param>
+    /// <param name="separatorBefore">Whether the contributed creation group is preceded by a separator at its own level.</param>
+    public ShaderNodeDrawerAttribute(
+        string definitionId,
+        string displayName = "",
+        string createPath = "",
+        int createOrder = 0,
+        bool separatorBefore = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(definitionId);
         this.definitionId = definitionId;
         this.displayName = displayName ?? throw new ArgumentNullException(nameof(displayName));
+        this.createPath = createPath ?? throw new ArgumentNullException(nameof(createPath));
+        this.createOrder = createOrder;
+        this.separatorBefore = separatorBefore;
     }
     /// <summary>Gets the stable node identity handled by this drawer.</summary>
     public string definitionId { get; }
     /// <summary>Gets the optional presentation-only name; it does not participate in Shader compilation or identity.</summary>
     public string displayName { get; }
+    /// <summary>Gets the optional creation-menu path below Create.</summary>
+    public string createPath { get; }
+    /// <summary>Gets the creation-menu order.</summary>
+    public int createOrder { get; }
+    /// <summary>Gets whether the contributed creation group starts a new visual section.</summary>
+    public bool separatorBefore { get; }
+}
+
+/// <summary>Immutable authoring presentation contributed for one Shader node definition.</summary>
+public readonly record struct ShaderNodePresentation
+{
+    /// <summary>Creates presentation metadata for one Shader node definition.</summary>
+    /// <param name="displayName">Optional artist-facing node name.</param>
+    /// <param name="createPath">Optional slash-delimited creation-menu path.</param>
+    /// <param name="createOrder">Stable ordering value within the creation menu.</param>
+    /// <param name="separatorBefore">Whether the contributed group starts a visual section.</param>
+    public ShaderNodePresentation(string displayName, string createPath, int createOrder, bool separatorBefore)
+    {
+        this.displayName = displayName;
+        this.createPath = createPath;
+        this.createOrder = createOrder;
+        this.separatorBefore = separatorBefore;
+    }
+
+    /// <summary>Gets the optional artist-facing node name.</summary>
+    public string displayName { get; }
+
+    /// <summary>Gets the optional slash-delimited creation-menu path.</summary>
+    public string createPath { get; }
+
+    /// <summary>Gets the stable ordering value within the creation menu.</summary>
+    public int createOrder { get; }
+
+    /// <summary>Gets whether the contributed group starts a visual section.</summary>
+    public bool separatorBefore { get; }
 }
 
 /// <summary>Provides reloadable Inspector controls; instances must not retain frame contexts or asset objects.</summary>

@@ -179,11 +179,11 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
         loader.Rescan();
         ShaderFunctionAsset shader = Assert.IsType<ShaderFunctionAsset>(loader.Load(
             new AssetPath(consumerId, "main.ishadersource"), typeof(ShaderFunctionAsset)));
-        ShaderSourceImplementationRequest request = Assert.Single(ShaderSourceBundle.Decode(ShaderSourceBundle.Read(shader, loader), m_serialization));
+        ShaderSourceImplementationRequest request = Assert.Single(ShaderSourceBundle.Decode(ShaderSourceBundle.Read(shader, loader), "Evaluate", m_serialization));
         using var frontends = new ShaderSourceFrontendRegistry(m_types);
         ShaderSourceModuleAnalysis analysis = frontends.AnalyzeModule([request]);
         Assert.True(analysis.succeeded, string.Join("\n", analysis.diagnostics.Select(static value => value.message)));
-        Assert.Equal("Evaluate", shader.entryPoint);
+        Assert.Equal("Evaluate", Assert.Single(shader.exports));
         Assert.Equal(3, Assert.Single(analysis.implementations).sources.Count);
         Assert.Equal(
         [
@@ -219,6 +219,25 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
             Assert.DoesNotContain("inno.shader.stage-input", bytes);
             Assert.DoesNotContain("vec4 Evaluate", bytes);
         }
+    }
+
+    [Fact]
+    public void OneShaderSourceLibraryExportsMultipleExplicitGraphFunctions()
+    {
+        WriteReadOnlyShaderSource(m_assets, "Library.ishadersource",
+            "float Exposure(float value) { return value; }\nvec4 Tint(vec4 color) { return color; }",
+            "Exposure", "Tint");
+        using var loader = CreateLoader(m_assets, m_library);
+        ShaderFunctionAsset library = Assert.IsType<ShaderFunctionAsset>(loader.Load(
+            AssetPath.Project("Library.ishadersource"), typeof(ShaderFunctionAsset)));
+        Assert.Equal(new[] { "Exposure", "Tint" }, library.exports);
+        byte[] bundle = ShaderSourceBundle.Read(library, loader);
+        using var frontends = new ShaderSourceFrontendRegistry(m_types);
+        Assert.Equal("Exposure", Assert.Single(frontends.AnalyzeModule(
+            ShaderSourceBundle.Decode(bundle, "Exposure", m_serialization)).implementations).entryPoint);
+        Assert.Equal("Tint", Assert.Single(frontends.AnalyzeModule(
+            ShaderSourceBundle.Decode(bundle, "Tint", m_serialization)).implementations).entryPoint);
+        Assert.Throws<InvalidOperationException>(() => ShaderSourceBundle.Decode(bundle, "PrivateHelper", m_serialization));
     }
 
     private AssetLoader CreateLoader(string assetRoot, string libraryRoot)
@@ -370,8 +389,9 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
         System.IO.File.WriteAllBytes(path, bytes);
     }
 
-    private void WriteReadOnlyShaderSource(string root, string localPath, string content, string entry = "Evaluate")
+    private void WriteReadOnlyShaderSource(string root, string localPath, string content, params string[] exports)
     {
+        if (exports.Length == 0) exports = ["Evaluate"];
         string path = Path.Combine(root, localPath.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         System.IO.File.WriteAllText(path, content, Encoding.UTF8);
@@ -385,7 +405,7 @@ public sealed class RenderingImporterIntegrationTests : IDisposable
                 {
                     stableTypeId = Guid.Parse("59c92a59-ef51-4587-b917-df5d187d2717"),
                     properties = m_serialization.Encode(writer => writer.WriteProperties(new ShaderSourceImportSettings
-                    { languageId = "inno.shader-language.bgfx-sc", implementationId = "bgfx", entryPoint = entry }))
+                    { languageId = "inno.shader-language.bgfx-sc", implementationId = "bgfx", exports = exports }))
                 })
             }));
     }

@@ -27,7 +27,6 @@ internal static class StorageNodePorts
     }
 }
 
-[ShaderNodeCompilerExtension]
 internal sealed class ShaderStorageLoadNodeCompiler : IShaderNodeCompiler
 {
     public string definitionId => "inno.shader.storage-load";
@@ -40,7 +39,6 @@ internal sealed class ShaderStorageLoadNodeCompiler : IShaderNodeCompiler
         };
 }
 
-[ShaderNodeCompilerExtension]
 internal sealed class ShaderStorageStoreNodeCompiler : IShaderNodeCompiler
 {
     public string definitionId => "inno.shader.storage-store";
@@ -52,7 +50,6 @@ internal sealed class ShaderStorageStoreNodeCompiler : IShaderNodeCompiler
     }
 }
 
-[ShaderNodeCompilerExtension]
 internal sealed class ShaderStorageAtomicAddNodeCompiler : IShaderNodeCompiler
 {
     public string definitionId => "inno.shader.storage-atomic-add";
@@ -65,7 +62,6 @@ internal sealed class ShaderStorageAtomicAddNodeCompiler : IShaderNodeCompiler
         };
 }
 
-[ShaderNodeCompilerExtension]
 internal sealed class ShaderDiscardNodeCompiler : IShaderNodeCompiler
 {
     public string definitionId => "inno.shader.discard";

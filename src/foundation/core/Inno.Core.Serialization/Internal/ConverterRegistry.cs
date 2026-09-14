@@ -274,7 +274,7 @@ internal sealed class ConverterRegistry : IDisposable
         protected override ConverterRegistrySnapshot Build(TypeCacheSnapshot types)
         {
             IReadOnlyList<Type> registrations = types
-                .GetTypesWithAttribute<SerializationExtensionAttribute>()
+                .GetSubTypesOf<SerializationConverter>()
                 .Select(typeRef => typeRef.Resolve(types))
                 .OrderBy(static type => type.FullName, StringComparer.Ordinal)
                 .ToArray();

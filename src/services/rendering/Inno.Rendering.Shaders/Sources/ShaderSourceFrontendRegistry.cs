@@ -52,7 +52,7 @@ public sealed class ShaderSourceFrontendRegistry : TypeRegistry<ShaderSourceFron
     protected override ShaderSourceFrontendCatalog Build(TypeCacheSnapshot types)
     {
         var providers = new List<IShaderSourceFrontend>();
-        foreach (Type type in types.GetTypesWithAttribute<ShaderSourceFrontendExtensionAttribute>()
+        foreach (Type type in types.GetTypesImplementing<IShaderSourceFrontend>()
                      .Select(reference => reference.Resolve(types))
                      .OrderBy(static type => type.FullName, StringComparer.Ordinal))
             providers.Add(CreateExtension<IShaderSourceFrontend>(type));

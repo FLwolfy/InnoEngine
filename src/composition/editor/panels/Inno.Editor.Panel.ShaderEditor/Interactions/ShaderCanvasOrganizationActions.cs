@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Inno.Assets;
@@ -70,6 +69,7 @@ internal sealed class GroupShaderNodes(ShaderEditorDocuments documents) : Shader
             nodes = draft.canvas.selectedNodes.Select(static id => id.value).ToArray() }];
         graph.SetMetadata(C_GROUPS, ShaderGraphDocument.Encode(groups, documents.serialization, documents.context));
         documents.Controller(draft).ReplaceDocument(graph, "Group Shader Nodes");
+        draft.selectedGroupId = groups[^1].id;
         documents.Changed(draft);
     }
 }
@@ -81,15 +81,18 @@ internal sealed class UngroupShaderNodes(ShaderEditorDocuments documents) : Shad
     {
         var draft = documents.Open(context.target);
         GraphDocument graph = documents.Controller(draft).document.Clone();
-        var groups = GroupShaderNodes.Read(documents, graph).Where(group => !group.nodes.Any(id => draft.canvas.selectedNodes.Contains(new(id)))).ToArray();
+        var groups = GroupShaderNodes.Read(documents, graph).Where(group => draft.selectedGroupId.Length != 0
+            ? group.id != draft.selectedGroupId
+            : !group.nodes.All(id => draft.canvas.selectedNodes.Contains(new(id)))).ToArray();
         graph.SetMetadata(GroupShaderNodes.C_GROUPS, ShaderGraphDocument.Encode(groups, documents.serialization, documents.context));
         documents.Controller(draft).ReplaceDocument(graph, "Ungroup Shader Nodes");
+        draft.selectedGroupId = "";
         documents.Changed(draft);
     }
 }
 
-[EditorAction("shader/open-source", ShaderEditorCanvas.C_AREA)]
-internal sealed class OpenShaderFunction(ShaderEditorDocuments documents) : ShaderSelectionAction(documents)
+[EditorAction("shader/reveal-source", ShaderEditorCanvas.C_AREA)]
+internal sealed class RevealShaderFunction(ShaderEditorDocuments documents, AssetEditorModule browser) : ShaderSelectionAction(documents)
 {
     protected override bool writes => false;
     protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
@@ -103,25 +106,27 @@ internal sealed class OpenShaderFunction(ShaderEditorDocuments documents) : Shad
     {
         var draft = documents.Open(context.target);
         GraphNodeRecord node = documents.Controller(draft).document.FindNode(draft.canvas.selectedNodes.First())!;
-        Open(documents, ShaderGraphDocument.Read(node, "sourceId", Guid.Empty, documents.serialization, documents.context));
+        Reveal(documents, browser, ShaderGraphDocument.Read(node, "sourceId", Guid.Empty, documents.serialization, documents.context));
     }
-    internal static void Open(ShaderEditorDocuments documents, Guid sourceId)
+    internal static void Reveal(ShaderEditorDocuments documents, AssetEditorModule browser, Guid sourceId)
     {
         if (!documents.assets.TryGetInfo(sourceId, out AssetInfo? info) || info is null) throw new IOException("Source function is missing. Select a replacement in the node.");
-        string path = documents.assets.sourceMounts.Single(mount => mount.id == info.assetPath.source).Resolve(info.assetPath.localPath);
-        if (!File.Exists(path)) throw new FileNotFoundException("Source function is missing.", path);
-        try { using Process? process = Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
-        catch (System.ComponentModel.Win32Exception failure) { throw new IOException("No source editor could open this file. Configure its application association.", failure); }
+        if (!documents.assets.TryGetFileSystemEntry(info.assetPath, out AssetFileEntry entry))
+            throw new FileNotFoundException("Source function is missing from the Asset Browser.", info.assetPath.ToString());
+        string parent = Path.GetDirectoryName(info.assetPath.localPath)?.Replace('\\', '/') ?? string.Empty;
+        browser.browser.SetCurrentDirectory(new AssetPath(info.assetPath.source, parent).ToString());
+        documents.interactions.SetSelection(entry);
+        documents.interactions.OpenPanel("asset.file-browser");
     }
 }
 
-[EditorAction("shader/diagnostics", ShaderEditorCanvas.C_AREA)]
+[EditorAction("shader/check", ShaderEditorCanvas.C_AREA)]
 internal sealed class ShowShaderDiagnostics(ShaderEditorDocuments documents) : ShaderSelectionAction(documents)
 {
     protected override bool writes => false;
     protected override bool needsSelection => false;
     protected override void Execute(EditorActionContext<AssetFileEntry> context)
-        => documents.Open(context.target).showDiagnostics = true;
+        => documents.ShowCheck(documents.Open(context.target));
 }
 
 [EditorAction("shader/copy-to-project", ShaderEditorCanvas.C_AREA)]

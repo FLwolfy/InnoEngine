@@ -5,7 +5,6 @@ using Inno.Core.Graphs;
 namespace Inno.Rendering.Shaders;
 
 /// <summary>Extracts one statically selected component from a vector or matrix.</summary>
-[ShaderNodeCompilerExtension]
 public sealed class ShaderExtractNodeCompiler : IShaderNodeCompiler
 {
     /// <inheritdoc />
@@ -24,7 +23,6 @@ public sealed class ShaderExtractNodeCompiler : IShaderNodeCompiler
 }
 
 /// <summary>Samples a graph-connected texture with implicit derivatives or an explicit level of detail.</summary>
-[ShaderNodeCompilerExtension]
 public sealed class ShaderSampleNodeCompiler : IShaderNodeCompiler
 {
     /// <inheritdoc />

@@ -11,9 +11,17 @@ using UI = Inno.Native.ImGui.ImGui;
 namespace Inno.Editor.Shaders;
 
 [InspectionDrawer(typeof(AssetInspectionSelection))]
-internal sealed class MaterialSelectionDrawer : InspectionDrawer<AssetInspectionSelection>
+internal sealed class MaterialSelectionDrawer(IInspectionIconProvider<AssetFileEntry> icons) : InspectionDrawer<AssetInspectionSelection>
 {
     public override string icon => Inno.Adapter.Presentation.ImGui.ImGuiIcon.File;
+    protected override string GetIcon(InspectionDrawContext context, AssetInspectionSelection target)
+    {
+        Guid id = target.assetIds.FirstOrDefault();
+        return id != Guid.Empty
+            && context.interactions.TryGetModule<MaterialDocuments>(out var documents) && documents is not null
+            && documents.assets.TryGetInfo(id, out AssetInfo? info) && info is not null
+            && documents.assets.TryGetFileSystemEntry(info.assetPath, out AssetFileEntry entry) ? icons.GetIcon(entry) : icon;
+    }
     protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, AssetInspectionSelection target)
         => (target.assetIds.Count + " Assets", null);
 

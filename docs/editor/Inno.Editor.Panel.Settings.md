@@ -16,6 +16,8 @@ Settings
 - 主菜单 `Edit/Settings...` 打开可移动、可缩放但不可 Dock/Collapse 的 Modal。
 - 搜索框左侧提供 Back/Forward 导航按钮。两个按钮使用与搜索输入框相同的当前 `GetFrameHeight()`，方形 hit area、上下边界与垂直中心完全一致；Tree 点击、页面内链接与开始搜索都会形成页面历史，连续输入搜索词只替换当前搜索结果，不会为每个字符制造历史项。
 - 左侧 Tree 合并 `EditorSetting`、`ProjectSettingEditor` 与内置 `BuildSettings` 字段；搜索匹配 page、path、label、section 与 description。
+- 从右侧页面链接导航时，左侧 Tree 会一次性展开目标及其祖先并保留正常的用户展开状态；之后不会逐帧强制展开，用户可立即手动收起。
+- 任何拥有子页面的非叶页面都会在 description 下方自动显示相同的子页面跳转列表，即使该页面自身同时拥有设置字段；字段仍从跳转列表下方开始，不要求每个页面重复编写导航 UI。
 - 右侧每个完整字段使用自动内容行高；label/content/reset 保持对齐，连续行之间没有空隙。Field Table 严格使用 page 的真实 content width，不通过负 cursor 或扩大 table width 穿透 padding，因此不会污染 `CursorMaxPos` 或产生虚假水平滚动范围。左右 gutter 背景作为不参与 layout 的 draw-list geometry 延伸至内容窗口边缘，文字与控件继续使用正常 window/cell inset。两种背景使用轻微明度差和固定 `0.005` alpha，只辅助辨认连续字段而不形成明显色块。
 - 合成页面不需要中央 page 注册；frontend 根据 slash-delimited path 自动补齐祖先。
 - Catalog generation 改变时丢弃旧 staged generation，按新 definitions 原子重建窗口 session。

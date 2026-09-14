@@ -12,9 +12,13 @@ using UI = Inno.Native.ImGui.ImGui;
 namespace Inno.Editor.Rendering;
 
 [InspectionDrawer(typeof(RenderPipelineAsset))]
-internal sealed class PipelineInspectionDrawer : InspectionDrawer<RenderPipelineAsset>
+internal sealed class PipelineInspectionDrawer(IInspectionIconProvider<AssetFileEntry> icons) : InspectionDrawer<RenderPipelineAsset>
 {
     public override string icon => Inno.Adapter.Presentation.ImGui.ImGuiIcon.File;
+    protected override string GetIcon(InspectionDrawContext context, RenderPipelineAsset target)
+        => context.interactions.TryGetModule<PipelineDocuments>(out var documents) && documents is not null
+            && documents.assets.TryGetInfo(target.identity.persistentId, out AssetInfo? info) && info is not null
+            && documents.assets.TryGetFileSystemEntry(info.assetPath, out AssetFileEntry entry) ? icons.GetIcon(entry) : icon;
     protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, RenderPipelineAsset target)
         => (target.name, null);
     protected override void Draw(InspectionDrawContext context, RenderPipelineAsset target)
@@ -26,9 +30,10 @@ internal sealed class PipelineInspectionDrawer : InspectionDrawer<RenderPipeline
 }
 
 [InspectionDrawer(typeof(AssetFileEntry), priority: 100, conditional: true)]
-internal sealed class PipelineSourceDrawer : InspectionDrawer<AssetFileEntry>
+internal sealed class PipelineSourceDrawer(IInspectionIconProvider<AssetFileEntry> icons) : InspectionDrawer<AssetFileEntry>
 {
     public override string icon => Inno.Adapter.Presentation.ImGui.ImGuiIcon.File;
+    protected override string GetIcon(InspectionDrawContext context, AssetFileEntry target) => icons.GetIcon(target);
     protected override bool CanInspect(AssetFileEntry target)
         => !target.isDirectory && target.extension.Equals(".irenderpipeline", StringComparison.OrdinalIgnoreCase);
     protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, AssetFileEntry target)

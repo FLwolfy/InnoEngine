@@ -13,7 +13,6 @@ namespace Inno.Scene.Assets.Importers;
 /// <summary>
 /// Imports and exports <c>.iprefab</c> source state.
 /// </summary>
-[AssetImporterExtension]
 internal sealed class PrefabAssetImporter : AssetImporter<PrefabAsset>
 {
     private static readonly IReadOnlyList<string> s_extensions = new[] { ".iprefab" };

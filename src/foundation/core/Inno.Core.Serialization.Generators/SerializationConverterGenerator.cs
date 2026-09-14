@@ -198,7 +198,6 @@ public sealed class SerializationConverterGenerator : IIncrementalGenerator
         source.AppendLine("namespace " + GetNamespace(type));
         source.AppendLine("{");
         source.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"Inno.Core.Serialization.Generators\", \"1\")]");
-        source.AppendLine("    [global::Inno.Core.Serialization.Converters.SerializationExtension]");
         source.Append("    internal sealed class ").Append(converterName)
             .Append(" : global::Inno.Core.Serialization.Converters.SerializationConverter<")
             .Append(targetType).AppendLine(">");

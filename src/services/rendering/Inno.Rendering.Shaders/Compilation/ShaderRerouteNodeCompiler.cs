@@ -4,7 +4,6 @@ using Inno.Core.Graphs;
 namespace Inno.Rendering.Shaders;
 
 /// <summary>Forwards a typed connection without adding instructions or changing resource-effect order.</summary>
-[ShaderNodeCompilerExtension]
 public sealed class ShaderRerouteNodeCompiler : IShaderNodeCompiler
 {
     /// <inheritdoc />

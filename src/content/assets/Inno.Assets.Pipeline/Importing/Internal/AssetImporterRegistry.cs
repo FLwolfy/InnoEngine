@@ -58,7 +58,7 @@ internal sealed class AssetImporterRegistry
     /// </returns>
     protected override Snapshot Build(TypeCacheSnapshot types)
     {
-        Type[] discovered = types.GetTypesWithAttribute<AssetImporterExtensionAttribute>()
+        Type[] discovered = types.GetSubTypesOf<AssetImporter>()
             .Select(typeRef => typeRef.Resolve(types))
             .OrderBy(static value => value.FullName, StringComparer.Ordinal)
             .ToArray();

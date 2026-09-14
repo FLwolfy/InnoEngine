@@ -11,7 +11,6 @@ namespace Inno.Animation.Assets;
 /// <summary>
 /// Imports and exports structured <c>.ianim</c> animation clip sources.
 /// </summary>
-[AssetImporterExtension]
 public sealed class AnimationClipImporter : AssetImporter<AnimationClipAsset>
 {
     private static readonly IReadOnlyList<string> S_EXTENSIONS = [".ianim"];

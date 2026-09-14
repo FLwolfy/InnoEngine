@@ -65,7 +65,8 @@ public sealed class PlayerState : ISerializable
 | `[SerializableProperty(visibility)]` | 标注 field/property；默认 `Show`。`propertyVisibility` 暴露规则，`order` 控制同一声明类型内的处理顺序。 |
 | `[OnSerializableRestored]` | 标记无参实例方法，在完整 restore 成功后调用。 |
 | `[RequiresSerializationConverter]` | 强制该 class 必须由显式 Converter 处理。 |
-| `[SerializationExtension]` | 标记 Converter class，让 TypeCache/Registry 自动发现。 |
+| `SerializationConverter` | 非泛型发现基类；具体 Converter 通过继承关系自动进入当前 generation 的 Registry。 |
+| `SerializationConverter<T>` | 强类型读写与 Restore 扩展契约；不再要求重复 marker Attribute。 |
 
 Inspector 展示标注不属于 Serialization。`Header`、`Text`、`Tooltip`、`Range`、`ShowIf` 等均由独立的 [Inno.Editor.Annotations](../editor/Inno.Editor.Annotations.md) 声明；本程序集不声明、引用或转发这些类型。`SerializableProperty` 继续只负责持久数据契约。
 
@@ -154,7 +155,6 @@ byte[] bytes = SerializationRegistry.Serialize(state, context);
 ## 自定义 Converter
 
 ```csharp
-[SerializationExtension]
 public sealed class RangeConverter : SerializationConverter<Range>
 {
     public override void Write(SerializationWriter writer, Range value)

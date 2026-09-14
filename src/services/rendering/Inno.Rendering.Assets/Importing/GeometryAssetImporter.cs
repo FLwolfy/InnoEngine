@@ -11,7 +11,6 @@ using Inno.Rendering.Assets;
 
 namespace Inno.Rendering.Assets;
 
-[AssetImporterExtension]
 internal sealed class GeometryAssetImporter : AssetImporter<GeometryAsset>
 {
     /// <summary>

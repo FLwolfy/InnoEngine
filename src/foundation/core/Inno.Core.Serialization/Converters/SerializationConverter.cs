@@ -3,12 +3,17 @@ using System;
 namespace Inno.Core.Serialization.Converters;
 
 /// <summary>
+/// Identifies a concrete serialization converter for generation-scoped type discovery.
+/// </summary>
+public abstract class SerializationConverter;
+
+/// <summary>
 /// Defines the single advanced extension contract for serializing a specific value type.
 /// </summary>
 /// <typeparam name="T">
 /// The value contract handled by the converter.
 /// </typeparam>
-public abstract class SerializationConverter<T>
+public abstract class SerializationConverter<T> : SerializationConverter
 {
     /// <summary>
     /// Writes a value into the current structured object.

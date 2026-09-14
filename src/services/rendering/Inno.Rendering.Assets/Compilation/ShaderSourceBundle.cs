@@ -24,41 +24,55 @@ public static class ShaderSourceBundle
         return System.IO.File.ReadAllBytes(lease.info.absolutePath);
     }
 
-    /// <summary>Captures every implementation and include resolution from a successful source import.</summary>
-    /// <param name="module">Complete source analysis.</param>
+    /// <summary>Captures every exported function, implementation and include resolution from a successful source import.</summary>
+    /// <param name="functions">Complete source analyses keyed by explicit exported function name.</param>
     /// <param name="serialization">Native converter registry; this bundle contains pure values only.</param>
     /// <returns>Deterministic native authoring artifact bytes, not Player content.</returns>
-    public static byte[] Encode(ShaderSourceModuleAnalysis module, SerializationRegistry serialization)
+    public static byte[] Encode(IReadOnlyDictionary<string, ShaderSourceModuleAnalysis> functions, SerializationRegistry serialization)
     {
-        ArgumentNullException.ThrowIfNull(module);
+        ArgumentNullException.ThrowIfNull(functions);
         ArgumentNullException.ThrowIfNull(serialization);
+        if (functions.Count == 0 || functions.Any(static pair => string.IsNullOrWhiteSpace(pair.Key) || pair.Value is null))
+            throw new ArgumentException("A shader source library requires named function analyses.", nameof(functions));
         return serialization.Serialize(new BundleData
         {
-            implementations = module.implementations.Select(static value => new ImplementationData
+            functions = functions.OrderBy(static pair => pair.Key, StringComparer.Ordinal).Select(static pair => new FunctionData
             {
-                id = value.implementationId, language = value.languageId, root = value.sourcePath, entry = value.entryPoint,
-                paths = value.sources.Select(static file => file.assetPath).ToArray(),
-                texts = value.sources.Select(static file => file.text).ToArray(),
-                includeOwners = value.includes.Select(static edge => edge.includingFile).ToArray(),
-                includeNames = value.includes.Select(static edge => edge.include).ToArray(),
-                includePaths = value.includes.Select(static edge => edge.resolvedPath).ToArray(),
-                defineNames = value.defines.Keys.ToArray(), defineValues = value.defines.Values.ToArray()
+                name = pair.Key,
+                implementations = pair.Value.implementations.Select(static value => new ImplementationData
+                {
+                    id = value.implementationId, language = value.languageId, root = value.sourcePath, entry = value.entryPoint,
+                    paths = value.sources.Select(static file => file.assetPath).ToArray(),
+                    texts = value.sources.Select(static file => file.text).ToArray(),
+                    includeOwners = value.includes.Select(static edge => edge.includingFile).ToArray(),
+                    includeNames = value.includes.Select(static edge => edge.include).ToArray(),
+                    includePaths = value.includes.Select(static edge => edge.resolvedPath).ToArray(),
+                    defineNames = value.defines.Keys.ToArray(), defineValues = value.defines.Values.ToArray()
+                }).ToArray()
             }).ToArray()
         });
     }
 
     /// <summary>Restores requests whose resolvers can access only the captured files and edges.</summary>
     /// <param name="bytes">Current native authoring artifact.</param>
+    /// <param name="function">Exact exported function selected by the graph node.</param>
     /// <param name="serialization">Native converter registry.</param>
     /// <param name="defines">Additional target/variant definitions; conflicting recorded values are rejected.</param>
     /// <returns>Detached requests without filesystem access or old-generation provider references.</returns>
-    public static IReadOnlyList<ShaderSourceImplementationRequest> Decode(ReadOnlySpan<byte> bytes, SerializationRegistry serialization,
+    public static IReadOnlyList<ShaderSourceImplementationRequest> Decode(ReadOnlySpan<byte> bytes, string function, SerializationRegistry serialization,
         IReadOnlyDictionary<string, string>? defines = null)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(function);
         ArgumentNullException.ThrowIfNull(serialization);
         BundleData data = serialization.Deserialize<BundleData>(bytes);
-        return Array.AsReadOnly(data.implementations.Select(value =>
+        FunctionData selected = (data.functions ?? []).SingleOrDefault(value => value.name == function);
+        if (selected.implementations is null)
+            throw new InvalidOperationException($"Shader source library does not export function '{function}'.");
+        return Array.AsReadOnly(selected.implementations.Select(value =>
         {
+            if (value.paths is null || value.texts is null || value.includeOwners is null || value.includeNames is null
+                || value.includePaths is null || value.defineNames is null || value.defineValues is null)
+                throw new InvalidOperationException("The frozen shader source bundle is missing required collections.");
             if (value.paths.Length != value.texts.Length || value.includeOwners.Length != value.includeNames.Length
                 || value.includeOwners.Length != value.includePaths.Length || value.defineNames.Length != value.defineValues.Length)
                 throw new InvalidOperationException("The frozen shader source bundle has inconsistent collection lengths.");
@@ -87,7 +101,12 @@ public static class ShaderSourceBundle
 
     private sealed class BundleData : ISerializable
     {
-        [SerializableProperty] public ImplementationData[] implementations { get; set; } = [];
+        [SerializableProperty] public FunctionData[] functions { get; set; } = [];
+    }
+    private struct FunctionData
+    {
+        public string name { get; set; }
+        public ImplementationData[] implementations { get; set; }
     }
     private struct ImplementationData
     {

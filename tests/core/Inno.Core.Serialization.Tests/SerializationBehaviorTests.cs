@@ -705,7 +705,6 @@ internal sealed class ConvertedConstructorSample : ISerializable
     }
 }
 
-[SerializationExtension]
 internal sealed class ConvertedConstructorSampleConverter : SerializationConverter<ConvertedConstructorSample>
 {
     public override void Write(SerializationWriter writer, ConvertedConstructorSample value)
@@ -792,7 +791,6 @@ internal sealed class CycleHost : ISerializable
     [SerializableProperty] public CycleValue? value { get; set; }
 }
 
-[SerializationExtension]
 internal sealed class CycleValueConverter : SerializationConverter<CycleValue>
 {
     public override void Write(SerializationWriter writer, CycleValue value)
@@ -802,7 +800,6 @@ internal sealed class CycleValueConverter : SerializationConverter<CycleValue>
         => new() { next = reader.Read<CycleValue?>("next") };
 }
 
-[SerializationExtension]
 internal sealed class ConvertedChildConverter : SerializationConverter<ConvertedChild>
 {
     public override void Write(SerializationWriter writer, ConvertedChild value)
@@ -827,7 +824,6 @@ internal sealed class NearestHost : ISerializable
     [SerializableProperty] public NearestLeaf? item { get; set; }
 }
 
-[SerializationExtension]
 internal sealed class NearestBaseConverter : SerializationConverter<NearestBase>
 {
     public override void Write(SerializationWriter writer, NearestBase value)
@@ -837,7 +833,6 @@ internal sealed class NearestBaseConverter : SerializationConverter<NearestBase>
         => new NearestLeaf { value = reader.Read<int>("value"), selectedBy = "base" };
 }
 
-[SerializationExtension]
 internal sealed class NearestMidConverter : SerializationConverter<NearestMid>
 {
     public override void Write(SerializationWriter writer, NearestMid value)
@@ -860,7 +855,6 @@ internal sealed class ExactHost : ISerializable
     [SerializableProperty] public ExactLeaf? item { get; set; }
 }
 
-[SerializationExtension]
 internal sealed class ExactBaseConverter : SerializationConverter<ExactBase>
 {
     public override void Write(SerializationWriter writer, ExactBase value)
@@ -870,7 +864,6 @@ internal sealed class ExactBaseConverter : SerializationConverter<ExactBase>
         => new ExactLeaf { value = reader.Read<int>("value"), selectedBy = "base" };
 }
 
-[SerializationExtension]
 internal sealed class ExactLeafConverter : SerializationConverter<ExactLeaf>
 {
     public override void Write(SerializationWriter writer, ExactLeaf value)
@@ -891,14 +884,12 @@ internal sealed class AmbiguousHost : ISerializable
     [SerializableProperty] public AmbiguousValue? item { get; set; }
 }
 
-[SerializationExtension]
 internal sealed class AmbiguousLeftConverter : SerializationConverter<IAmbiguousLeft>
 {
     public override void Write(SerializationWriter writer, IAmbiguousLeft value) { }
     public override IAmbiguousLeft Read(SerializationReader reader) => new AmbiguousValue();
 }
 
-[SerializationExtension]
 internal sealed class AmbiguousRightConverter : SerializationConverter<IAmbiguousRight>
 {
     public override void Write(SerializationWriter writer, IAmbiguousRight value) { }
@@ -920,7 +911,6 @@ internal sealed class GenericBoxHost : ISerializable
     [SerializableProperty] public GenericBox<int>? box { get; set; }
 }
 
-[SerializationExtension]
 internal sealed class GenericBoxConverter<T> : SerializationConverter<GenericBox<T>>
 {
     public override void Write(SerializationWriter writer, GenericBox<T> value)
@@ -958,7 +948,6 @@ internal sealed class ConvertedHookSample : ISerializable
     private void AfterRestore() => hookCount++;
 }
 
-[SerializationExtension]
 internal sealed class ConvertedHookSampleConverter : SerializationConverter<ConvertedHookSample>
 {
     public override void Write(SerializationWriter writer, ConvertedHookSample value)

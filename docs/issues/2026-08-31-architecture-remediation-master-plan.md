@@ -352,7 +352,7 @@ flowchart TB
 
 ## 五、Attribute 驱动扩展模型
 
-Attribute 模型属于应当保留并强化的核心架构思想。
+Attribute 模型只用于承载类型关系无法表达的稳定注册数据或可选语义。无参数 marker 若与基类／接口身份重复则直接删除。
 
 继续使用并规范：
 
@@ -362,10 +362,10 @@ Attribute 模型属于应当保留并强化的核心架构思想。
 - `EditorModule`
 - `EditorPanel`
 - `EditorAction`
-- `AssetImporterExtension`
-- `AssetBuildProcessorExtension`
 - `EditorHistoryHandler`
 - Shader Node、Rendering Feature、Settings Contributor 等稳定扩展 Attribute
+
+`AssetImporter`、`AssetBuildProcessor` 与 `SerializationConverter` 已改为按基类发现，不再要求同步标注无参数 Attribute。
 
 工作流程统一为：
 

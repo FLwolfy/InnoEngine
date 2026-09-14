@@ -9,9 +9,12 @@ using NativeImGui = Inno.Native.ImGui.ImGui;
 namespace Inno.Editor.Shaders;
 
 [InspectionDrawer(typeof(MaterialAsset))]
-internal sealed class MaterialInspectionDrawer : InspectionDrawer<MaterialAsset>
+internal sealed class MaterialInspectionDrawer(IInspectionIconProvider<AssetFileEntry> icons) : InspectionDrawer<MaterialAsset>
 {
     public override string icon => Inno.Adapter.Presentation.ImGui.ImGuiIcon.File;
+    protected override string GetIcon(InspectionDrawContext context, MaterialAsset target)
+        => context.interactions.TryGetModule<MaterialDocuments>(out var documents) && documents is not null
+            && documents.assets.TryGetFileSystemEntry(target.assetPath, out AssetFileEntry entry) ? icons.GetIcon(entry) : icon;
     protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, MaterialAsset target)
         => (target.name, null);
     protected override void Draw(InspectionDrawContext context, MaterialAsset target)
@@ -22,9 +25,10 @@ internal sealed class MaterialInspectionDrawer : InspectionDrawer<MaterialAsset>
 }
 
 [InspectionDrawer(typeof(AssetFileEntry), priority: 100, conditional: true)]
-internal sealed class MaterialSourceDrawer : InspectionDrawer<AssetFileEntry>
+internal sealed class MaterialSourceDrawer(IInspectionIconProvider<AssetFileEntry> icons) : InspectionDrawer<AssetFileEntry>
 {
     public override string icon => Inno.Adapter.Presentation.ImGui.ImGuiIcon.File;
+    protected override string GetIcon(InspectionDrawContext context, AssetFileEntry target) => icons.GetIcon(target);
     protected override bool CanInspect(AssetFileEntry target)
         => !target.isDirectory && target.extension.Equals(".imaterial", StringComparison.OrdinalIgnoreCase);
     protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, AssetFileEntry target)

@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Inno.Assets;
 using Inno.Assets.Pipeline;
 using Inno.Core.Graphs;
 using Inno.Core.Input;
 using Inno.Editor.Interactions;
+using Inno.Editor.Shaders;
+using Inno.Rendering.Assets;
 using Inno.Rendering.Shaders;
 
 namespace Inno.Editor.Panel.ShaderEditor;
@@ -16,71 +19,150 @@ internal sealed class ShaderCanvasMenu(ShaderEditorDocuments documents) : Editor
     public override void Build(EditorMenuContext context, EditorMenuBuilder builder)
     {
         if (context.target is not AssetFileEntry entry || !documents.TryGet(entry, out var draft)) return;
-        if (draft.createFromPort is null)
+        builder.AddGroup("Create/Functions", order: 500, separatorBefore: true);
+        builder.AddGroup("Create/Domain Outputs", order: 800, separatorBefore: true);
+        bool explicitStages = ShaderGraphDocument.ReadTarget(documents.Controller(draft).document, documents.serialization, documents.context).Length == 0;
+        if (draft.createFromPort is null && explicitStages)
         {
-            builder.Add("Create/Raster Pass", "shader/create-pass", argument: "Raster");
-            builder.Add("Create/Compute Pass", "shader/create-pass", argument: "Compute");
+            builder.Add("Create/Outputs/Vertex Output", "shader/create-output", order: 0, argument: "Vertex");
+            builder.Add("Create/Outputs/Fragment Output", "shader/create-output", order: 10, argument: "Fragment");
+            builder.Add("Create/Outputs/Compute Output", "shader/create-output", order: 20, argument: "Compute");
         }
         foreach (string definition in documents.nodes.definitionIds)
-            if (documents.CanCreate(draft, new(definition)))
-                builder.Add("Create/" + (documents.drawers?.GetDisplayName(definition)
+            if (definition != "inno.shader.source" && documents.CanCreate(draft, new(definition)))
+            {
+                string category = Category(definition);
+                int order = CategoryOrder(category);
+                if (documents.drawers?.TryGetPresentation(definition, out ShaderNodePresentation presentation) == true
+                    && presentation.createPath.Length != 0)
+                {
+                    category = presentation.createPath;
+                    order = presentation.createOrder;
+                    builder.AddGroup("Create/" + category, order, presentation.separatorBefore);
+                }
+                builder.Add("Create/" + category + "/" + (documents.drawers?.GetDisplayName(definition)
                     ?? Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget.NicifyName(definition.Replace("inno.shader.", "", StringComparison.Ordinal).Replace('-', ' '))),
-                    "shader/create-node", argument: new ShaderNodeCreation(definition));
+                    "shader/create-node", order, argument: new ShaderNodeCreation(definition));
+            }
+        var functionLibraries = new List<(AssetFileEntry source, AssetInfo info, ShaderFunctionAsset library)>();
         foreach (AssetFileEntry source in documents.assets.GetFileSystemEntries(includeDirectories: false))
             if (source.extension == ".ishadersource" && documents.assets.TryGetInfo(source.assetPath, out var info) && info is not null
-                && documents.CanCreate(draft, new("inno.shader.source", info.persistentId)))
-                builder.Add("Create/Source Functions/" + source.nameWithoutExtension, "shader/create-node",
-                    argument: new ShaderNodeCreation("inno.shader.source", info.persistentId));
-        builder.Add("Focus", "shader/focus", order: 90, separatorBefore: true);
-        builder.Add("Copy", "shader/copy", order: 100, separatorBefore: true);
-        builder.Add("Cut", "shader/cut", order: 110);
-        builder.Add("Paste", "shader/paste", order: 120);
-        builder.Add("Duplicate", "shader/duplicate", order: 130);
-        builder.Add("Disconnect", "shader/disconnect", order: 140);
-        builder.Add("Delete", "shader/delete", order: 150);
-        builder.Add("Insert Reroute", "shader/reroute", order: 160);
-        builder.Add("Group Selection", "shader/group", order: 170);
-        builder.Add("Ungroup Selection", "shader/ungroup", order: 180);
-        builder.Add("Open Source", "shader/open-source", order: 190);
-        builder.Add("Compilation Diagnostics", "shader/diagnostics", order: 195);
-        builder.Add("Save", "shader/save", order: 200, separatorBefore: true);
-        builder.Add("Revert to Saved", "shader/reload", order: 210);
-        builder.Add("Copy Shader To Project", "shader/copy-to-project", order: 220);
+                && documents.assets.TryLoad(info.persistentId, out ShaderFunctionAsset? library) && library is not null && !library.isMissing)
+                functionLibraries.Add((source, info, library));
+        foreach (var catalog in functionLibraries
+                     .Select(static value => (path: NormalizeCatalog(value.library.catalogPath), value.library.catalogOrder))
+                     .Where(static value => value.path.Length != 0)
+                     .GroupBy(static value => value.path.Split('/')[0], StringComparer.Ordinal)
+                     .Select(static group => (name: group.Key, order: group.Min(static value => value.catalogOrder)))
+                     .OrderBy(static value => value.order).ThenBy(static value => value.name, StringComparer.Ordinal))
+            builder.AddGroup("Create/Functions/" + catalog.name, order: 500 + catalog.order, separatorBefore: true);
+        foreach ((AssetFileEntry source, AssetInfo info, ShaderFunctionAsset library) in functionLibraries
+                     .OrderBy(static value => value.library.catalogOrder)
+                     .ThenBy(static value => value.source.nameWithoutExtension, StringComparer.Ordinal))
+            foreach (string function in library.exports)
+                    if (documents.CanCreate(draft, new("inno.shader.source", info.persistentId, function)))
+                    {
+                        string catalog = NormalizeCatalog(library.catalogPath);
+                        string prefix = "Create/Functions/" + (catalog.Length == 0 ? "General" : catalog);
+                        builder.Add(prefix + "/" + source.nameWithoutExtension + "/" + function, "shader/create-node",
+                            order: 500 + library.catalogOrder,
+                            argument: new ShaderNodeCreation("inno.shader.source", info.persistentId, function));
+                    }
+        builder.Add("View/Focus Selection", "shader/focus", order: 900);
+        builder.Add("Edit/Copy", "shader/copy", order: 1000);
+        builder.Add("Edit/Cut", "shader/cut", order: 110);
+        builder.Add("Edit/Paste", "shader/paste", order: 120);
+        builder.Add("Edit/Duplicate", "shader/duplicate", order: 130);
+        builder.Add("Edit/Delete", "shader/delete", order: 140, separatorBefore: true);
+        builder.Add("Connections/Disconnect", "shader/disconnect", order: 1500);
+        builder.Add("Connections/Insert Reroute", "shader/reroute", order: 160);
+        builder.Add("Organize/Group Selection", "shader/group", order: 1700);
+        builder.Add("Organize/Ungroup Selection", "shader/ungroup", order: 180);
+        builder.Add("Assets/Show Source in File Browser", "shader/reveal-source", order: 1900);
+        builder.Add("Assets/Copy Shader To Project", "shader/copy-to-project", order: 200);
+
+        static string Category(string definition) => definition switch
+        {
+            "inno.shader.constant" or "inno.shader.stage-input" => "Inputs",
+            "inno.shader.sample" => "Textures",
+            "inno.shader.binary" or "inno.shader.construct" or "inno.shader.extract" or "inno.shader.select" => "Math",
+            "inno.shader.storage-load" or "inno.shader.storage-store" or "inno.shader.storage-atomic-add" => "Resources",
+            "inno.shader.discard" => "Flow",
+            "inno.shader.reroute" => "Utility",
+            _ when definition.Contains("surface-output", StringComparison.Ordinal) => "Domain Outputs",
+            _ => "Domain"
+        };
+
+        static int CategoryOrder(string category) => category switch
+        {
+            "Outputs" => 0,
+            "Inputs" => 100,
+            "Textures" => 200,
+            "Math" => 300,
+            "Resources" => 400,
+            "Flow" => 600,
+            "Utility" => 700,
+            "Domain Outputs" => 800,
+            _ => 850
+        };
+
+        static string NormalizeCatalog(string value)
+            => string.Join('/', value.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
     }
 }
 
-[EditorAction("shader/create-pass", ShaderEditorCanvas.C_AREA)]
-internal sealed class CreateShaderPass(ShaderEditorDocuments documents) : EditorAction<AssetFileEntry, string>
+[EditorAction("shader/create-output", ShaderEditorCanvas.C_AREA)]
+internal sealed class CreateShaderOutput(ShaderEditorDocuments documents) : EditorAction<AssetFileEntry, string>
 {
     protected override EditorActionState Query(EditorActionContext<AssetFileEntry, string> context)
-        => documents.TryGet(context.target, out var draft) && !draft.readOnly ? EditorActionState.enabled : EditorActionState.disabled;
+    {
+        if (!documents.TryGet(context.target, out var draft) || draft.readOnly
+            || !Enum.TryParse(context.argument, out Inno.Rendering.ShaderStage stage)) return EditorActionState.disabled;
+        GraphDocument graph = documents.Controller(draft).document;
+        if (ShaderGraphDocument.ReadTarget(graph, documents.serialization, documents.context).Length != 0)
+            return EditorActionState.disabled;
+        bool exists = graph.nodes.Where(static node => node.definitionId == ShaderGraphDocument.outputDefinitionId)
+            .Any(node => ShaderGraphDocument.Read(node, "settings", new ShaderGraphStageSettings(), documents.serialization, documents.context).stage == stage);
+        return exists ? EditorActionState.disabled : EditorActionState.enabled;
+    }
     protected override void Execute(EditorActionContext<AssetFileEntry, string> context)
     {
         var draft = documents.Open(context.target);
         var controller = documents.Controller(draft);
         GraphDocument graph = controller.document.Clone();
         Inno.Rendering.ShaderDefinition definition = ShaderGraphDocument.ReadDefinition(graph, documents.serialization, documents.context);
-        Inno.Rendering.ShaderProgramKind kind = Enum.Parse<Inno.Rendering.ShaderProgramKind>(context.argument);
-        string name = kind.ToString();
-        for (int suffix = 2; definition.passes.Any(pass => pass.name == name); suffix++) name = kind + " " + suffix;
-        definition.passes = [.. definition.passes, new(name, kind)];
-        graph.SetMetadata(ShaderGraphDocument.definitionKey, ShaderGraphDocument.Encode(documents.serialization.Serialize(definition, documents.context), documents.serialization, documents.context));
-        Inno.Rendering.ShaderStage[] stages = kind == Inno.Rendering.ShaderProgramKind.Compute ? [Inno.Rendering.ShaderStage.Compute] : [Inno.Rendering.ShaderStage.Vertex, Inno.Rendering.ShaderStage.Fragment];
-        var created = new List<GraphNodeId>();
-        foreach (Inno.Rendering.ShaderStage stage in stages)
+        Inno.Rendering.ShaderStage stage = Enum.Parse<Inno.Rendering.ShaderStage>(context.argument);
+        Inno.Rendering.ShaderProgramKind kind = stage == Inno.Rendering.ShaderStage.Compute
+            ? Inno.Rendering.ShaderProgramKind.Compute : Inno.Rendering.ShaderProgramKind.Raster;
+        ShaderGraphPassProgram[] programs = ShaderGraphPrograms.Read(graph, documents.serialization, documents.context);
+        ShaderGraphPassProgram? incomplete = kind == Inno.Rendering.ShaderProgramKind.Raster
+            ? programs.FirstOrDefault(program => definition.passes.Any(pass => pass.name == program.pass && pass.programKind == kind)
+                && !program.stages.Select(id => graph.FindNode(new(id))).OfType<GraphNodeRecord>()
+                    .Any(node => ShaderGraphDocument.Read(node, "settings", new ShaderGraphStageSettings(), documents.serialization, documents.context).stage == stage))
+            : null;
+        string name;
+        string[] stages;
+        if (incomplete is ShaderGraphPassProgram existing && existing.pass is not null)
+        { name = existing.pass; stages = existing.stages; }
+        else
         {
-            GraphNodeId id = new(Guid.NewGuid().ToString("N"));
-            var node = new GraphNodeRecord(id, ShaderGraphDocument.outputDefinitionId) { position = new(draft.menuPosition.x, draft.menuPosition.y + created.Count * 340) };
-            node.SetValue("settings", ShaderGraphDocument.Encode(new ShaderGraphStageSettings { stage = stage,
-                outputs = stage == Inno.Rendering.ShaderStage.Compute ? [] : [new() { id = stage == Inno.Rendering.ShaderStage.Vertex ? "position" : "color",
-                    kind = stage == Inno.Rendering.ShaderStage.Vertex ? ShaderIrOutputKind.ClipPosition : ShaderIrOutputKind.Color }] }, documents.serialization, documents.context));
-            graph.AddNode(node);
-            created.Add(id);
+            string prefix = kind.ToString();
+            name = prefix;
+            for (int suffix = 2; definition.passes.Any(pass => pass.name == name); suffix++) name = prefix + " " + suffix;
+            definition.passes = [.. definition.passes, new(name, kind)];
+            graph.SetMetadata(ShaderGraphDocument.definitionKey, ShaderGraphDocument.Encode(documents.serialization.Serialize(definition, documents.context), documents.serialization, documents.context));
+            stages = [];
         }
-        graph = ShaderGraphPrograms.Bind(graph, name, created, documents.serialization, documents.context);
-        controller.ReplaceDocument(graph, "Create Shader Pass");
-        draft.canvas.SelectNodes(created);
-        draft.activeStage = created[0];
+        GraphNodeId id = new(Guid.NewGuid().ToString("N"));
+        var node = new GraphNodeRecord(id, ShaderGraphDocument.outputDefinitionId) { position = draft.menuPosition };
+        node.SetValue("settings", ShaderGraphDocument.Encode(new ShaderGraphStageSettings { stage = stage,
+            outputs = stage == Inno.Rendering.ShaderStage.Compute ? [] : [new() { id = stage == Inno.Rendering.ShaderStage.Vertex ? "position" : "color",
+                kind = stage == Inno.Rendering.ShaderStage.Vertex ? ShaderIrOutputKind.ClipPosition : ShaderIrOutputKind.Color }] }, documents.serialization, documents.context));
+        graph.AddNode(node);
+        graph = ShaderGraphPrograms.Bind(graph, name, stages.Select(static value => new GraphNodeId(value)).Append(id), documents.serialization, documents.context);
+        controller.ReplaceDocument(graph, "Create " + stage + " Output");
+        draft.canvas.SelectNodes([id]);
+        draft.activeStage = id;
         documents.Changed(draft);
     }
 }
@@ -164,7 +246,9 @@ internal sealed class PasteShaderNodes(ShaderEditorDocuments documents) : Shader
     protected override bool needsSelection => false;
     /// <inheritdoc />
     protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
-        => base.Query(context).isEnabled && documents.clipboard is not null ? EditorActionState.enabled : EditorActionState.disabled;
+        => base.Query(context).isEnabled && documents.clipboard is not null
+            && documents.TryGet(context.target, out var draft) && documents.CanPaste(draft, documents.clipboard)
+            ? EditorActionState.enabled : EditorActionState.disabled;
     /// <inheritdoc />
     protected override void Execute(EditorActionContext<AssetFileEntry> context)
     {
@@ -177,6 +261,12 @@ internal sealed class PasteShaderNodes(ShaderEditorDocuments documents) : Shader
 [EditorShortcut(ShaderEditorCanvas.C_AREA, KeyCode.D, primary: true)]
 internal sealed class DuplicateShaderNodes(ShaderEditorDocuments documents) : ShaderSelectionAction(documents)
 {
+    protected override EditorActionState Query(EditorActionContext<AssetFileEntry> context)
+    {
+        if (!base.Query(context).isEnabled || !documents.TryGet(context.target, out var draft)) return EditorActionState.disabled;
+        return draft.canvas.selectedNodes.Any(id => documents.Controller(draft).document.FindNode(id)?.definitionId == ShaderGraphDocument.outputDefinitionId)
+            ? EditorActionState.disabled : EditorActionState.enabled;
+    }
     /// <inheritdoc />
     protected override void Execute(EditorActionContext<AssetFileEntry> context)
     {
@@ -209,6 +299,24 @@ internal sealed class SaveShader(ShaderEditorDocuments documents) : ShaderSelect
     /// <inheritdoc />
     protected override void Execute(EditorActionContext<AssetFileEntry> context)
         => context.interactions.documents.Save(documents.Open(context.target).documentId);
+}
+
+[EditorAction("shader/format", ShaderEditorCanvas.C_AREA)]
+internal sealed class FormatShaderGraph(ShaderEditorDocuments documents) : ShaderSelectionAction(documents)
+{
+    protected override bool needsSelection => false;
+    protected override void Execute(EditorActionContext<AssetFileEntry> context)
+    {
+        var draft = documents.Open(context.target);
+        var controller = documents.Controller(draft);
+        controller.ReplaceDocument(ShaderGraphAutoLayout.Apply(
+            controller.document,
+            documents.serialization,
+            documents.context,
+            documents.Describe), "Format Shader Graph");
+        draft.frameRequested = true;
+        documents.Changed(draft);
+    }
 }
 
 [EditorAction("shader/reload", ShaderEditorCanvas.C_AREA)]

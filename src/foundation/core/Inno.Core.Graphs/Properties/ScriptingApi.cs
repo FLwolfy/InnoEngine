@@ -19,7 +19,6 @@ using Inno.Scripting.Api;
 [assembly: ScriptingApiExport(typeof(GraphPortDirection), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GraphPortCapacity), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GraphPortDefinition), ScriptingApiScope.Runtime)]
-[assembly: ScriptingApiExport(typeof(GraphNodeExtensionAttribute), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(GraphNodeDefinition), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(IGraphNodeDefinitionResolver), ScriptingApiScope.Runtime)]
 [assembly: ScriptingApiExport(typeof(IGraphTypeConversion), ScriptingApiScope.Runtime)]

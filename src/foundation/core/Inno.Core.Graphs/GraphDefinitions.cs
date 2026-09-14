@@ -109,30 +109,6 @@ public sealed class GraphPortDefinition
 }
 
 /// <summary>
-/// Marks a reloadable graph node definition with a stable extension identifier.
-/// </summary>
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-public sealed class GraphNodeExtensionAttribute : Attribute
-{
-    /// <summary>
-    /// Creates a graph node extension declaration.
-    /// </summary>
-    /// <param name="id">
-    /// Globally stable extension identifier.
-    /// </param>
-    public GraphNodeExtensionAttribute(string id)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(id);
-        this.id = id;
-    }
-
-    /// <summary>
-    /// Gets the globally stable extension identifier.
-    /// </summary>
-    public string id { get; }
-}
-
-/// <summary>
 /// Describes node presentation and resolves ports without entering graph persistence.
 /// </summary>
 public abstract class GraphNodeDefinition

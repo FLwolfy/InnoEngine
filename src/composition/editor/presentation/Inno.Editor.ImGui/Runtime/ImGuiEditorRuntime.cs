@@ -124,12 +124,15 @@ public sealed class ImGuiEditorRuntime : EditorRuntime
         double now = m_timer.Elapsed.TotalSeconds;
         bool blocksInteraction = m_modals.Update(modals, now);
 
-        DrawDockSpace();
         if (blocksInteraction)
             NativeImGui.BeginDisabled(true);
         try
         {
+            // The main menu must reserve the viewport work area before the dockspace snapshots it.
+            // Reversing this order makes the dockspace overlap the bottom of the menu and clip the
+            // first docked tab bar row.
             EditorMenuRenderer.MainMenu(interactions.For(ImGuiInteractionIds.C_MAIN_MENU_AREA));
+            DrawDockSpace();
             DrawPanels(m_runtime.panels);
         }
         finally

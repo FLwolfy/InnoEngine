@@ -85,7 +85,11 @@ internal static class EditorModalRenderer
         if (!presentation.canMove)
             flags |= ImGuiWindowFlags.NoMove;
         if (!presentation.canResize)
-            flags |= ImGuiWindowFlags.NoResize | ImGuiWindowFlags.AlwaysAutoResize;
+        {
+            flags |= ImGuiWindowFlags.NoResize;
+            if (presentation.initialSize.X <= 0f || presentation.initialSize.Y <= 0f)
+                flags |= ImGuiWindowFlags.AlwaysAutoResize;
+        }
         bool beganWindow = false;
         try
         {

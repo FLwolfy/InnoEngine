@@ -13,15 +13,18 @@ internal sealed partial class ShaderEditorCanvas
         UI.BeginDisabled(draft.readOnly);
         try
         {
-            if (!Widget.BeginBoundedCombo("Target", current.Length == 0 ? "Explicit Stages" : current)) return;
-            try
+            InspectorRow("target", "Target", () =>
             {
-                if (UI.Selectable("Explicit Stages", current.Length == 0)) Assign("");
-                if (owner.targets is { } targets)
-                    foreach (string id in targets.ids)
-                        if (UI.Selectable(id, current == id)) Assign(id);
-            }
-            finally { UI.EndCombo(); }
+                if (!Widget.BeginBoundedCombo("##target", current.Length == 0 ? "Explicit Stages" : current)) return;
+                try
+                {
+                    if (UI.Selectable("Explicit Stages", current.Length == 0)) Assign("");
+                    if (owner.targets is { } targets)
+                        foreach (string id in targets.ids)
+                            if (UI.Selectable(id, current == id)) Assign(id);
+                }
+                finally { UI.EndCombo(); }
+            });
         }
         finally { UI.EndDisabled(); }
         void Assign(string id)

@@ -513,8 +513,13 @@ public sealed class EditorRuntimeTests : IDisposable
         EditorMenuItem create = Assert.Single(tools.children);
         Assert.Equal("Create", create.label);
         Assert.Equal(
-            ["Asset", "Generated"],
+            ["Asset", "Libraries", "Generated"],
             create.children.Select(static item => item.label));
+        EditorMenuItem libraries = Assert.Single(create.children.Where(static item => item.label == "Libraries"));
+        Assert.True(libraries.separatorBefore);
+        Assert.False(tools.separatorBefore);
+        Assert.False(create.separatorBefore);
+        Assert.Equal("Function", Assert.Single(libraries.children).label);
     }
 
     [Fact]
@@ -1383,7 +1388,11 @@ public sealed class MenuAction : EditorAction
 public sealed class DynamicMenuSource : EditorMenuSource
 {
     public override void Build(EditorMenuContext context, EditorMenuBuilder builder)
-        => builder.Add("Tools/Create/Generated", "tests.menu", order: 200);
+    {
+        builder.AddGroup("Tools/Create/Libraries", order: 150, separatorBefore: true);
+        builder.Add("Tools/Create/Libraries/Function", "tests.menu", order: 150);
+        builder.Add("Tools/Create/Generated", "tests.menu", order: 200);
+    }
 }
 
 [EditorDrop("tests/drop")]

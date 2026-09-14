@@ -35,8 +35,8 @@ Inno 自有结构化内容只经过 owner 的 SerializationRegistry 和完整 As
 | `IShaderCompilerToolchain` | 声明支持语言与目标，消费 typed IR，返回结构化诊断 |
 | `ShaderStageToolRequest / ShaderStageToolResult` | 冻结输入阶段、目标、结果 bytes、反射 bindings 和 diagnostics |
 | `ShaderGraphArtifact.GetSemanticHash` | 内容、依赖与语义配置哈希；忽略节点位置及保留的 `inno.editor.*` 视图 metadata |
-| `ShaderSourceBundle` | 冻结源文件、include、实现身份；不持有运行时对象或解析器 |
-| `ShaderSourceImportSettings` | 语言 ID、公开函数、实现 ID 和其他实现的资产引用 |
+| `ShaderSourceBundle` | 按显式公开函数名分别冻结源文件、include 与实现身份；读取必须指定函数，不持有运行时对象或解析器 |
+| `ShaderSourceImportSettings` | 语言 ID、公开函数数组、实现 ID、其他实现的资产引用，以及仅影响 Editor 创建菜单的 `catalogPath/catalogOrder`；未列出的声明是私有 helper，不存在隐式 `main` |
 | `ShaderGraphSourceStore.Read / Save` | 直接读写可序列化图，不以编译成功为保存前提 |
 | `ShaderLastGoodStore` | 坏候选不覆盖成功产物；构建不得以其掩盖当前源错误 |
 | `ITextureTargetCompiler` | Adapter 拥有的可取消纹理目标编译 |

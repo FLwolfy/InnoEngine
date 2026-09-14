@@ -70,7 +70,6 @@ public sealed class ShaderSourceFrontendRegistryTests
     }
 }
 
-[ShaderSourceFrontendExtension]
 internal sealed class RegistryFrontendProbe : IShaderSourceFrontend, IDisposable
 {
     internal static int created;

@@ -5,6 +5,7 @@ using Inno.Assets.Pipeline;
 using Inno.Editor.Core;
 using Inno.Editor.Interactions;
 using Inno.Editor.Shaders;
+using Inno.Editor.ImGui.ImGuiWidget;
 using Inno.Rendering;
 using NativeImGui = Inno.Native.ImGui.ImGui;
 
@@ -14,7 +15,7 @@ namespace Inno.Editor.Panel.ShaderEditor;
 internal sealed class ShaderEditorPanel(ShaderEditorDocuments documents) : EditorPanel
 {
     /// <inheritdoc />
-    public override bool useWindowPadding => false;
+    public override bool useWindowPadding => true;
     /// <inheritdoc />
     public override bool allowScrolling => false;
     /// <inheritdoc />
@@ -30,7 +31,10 @@ internal sealed class ShaderEditorPanel(ShaderEditorDocuments documents) : Edito
             _ = documents.assets.TryGetFileSystemEntry(info.assetPath, out entry);
         if (entry is null || entry.isDirectory || !entry.assetPath.localPath.EndsWith(".ishader", StringComparison.OrdinalIgnoreCase))
         {
-            NativeImGui.TextDisabled("Select a Shader (.ishader) in the File Browser.");
+            ImGuiWidget.CenteredWrappedText(
+                "Select a Shader (.ishader) in the File Browser.",
+                Vector2.Max(Vector2.One, NativeImGui.GetContentRegionAvail()),
+                new Vector2(40f, 28f));
             return;
         }
         try { new ShaderEditorCanvas(documents, documents.Open(entry)).Draw(); }

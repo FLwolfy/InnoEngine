@@ -16,25 +16,38 @@ internal sealed partial class ShaderEditorCanvas
         UI.PushID(port.id);
         try
         {
-            UI.TextUnformatted(port.id + " · " + port.type.id);
+            string portLabel = port.id + " · " + port.type.id;
             if (edge is not null)
             {
-                Widget.Hint("From " + edge.output.nodeId.value + "." + edge.output.portId.value + " · stored defaults are inactive");
+                InspectorRow("port." + port.id, portLabel, () =>
+                    UI.TextDisabled("From " + edge.output.nodeId.value + "." + edge.output.portId.value));
                 return;
             }
             if (node.definitionId == ShaderGraphDocument.outputDefinitionId || draft.missingPorts.Contains(endpoint))
-            { Widget.Hint("Connect an available output to this input."); return; }
+            {
+                InspectorRow("port." + port.id, portLabel, () => UI.TextDisabled("Connect an available output"));
+                return;
+            }
             if (m_inspectionNodes is { Length: > 1 } selected && selected.Any(value => !draft.ports[value.id].Any(candidate =>
                 candidate.id == port.id && candidate.type.IsEquivalentTo(port.type)) || Controller.document.edges.Any(connection => connection.input == new GraphEndpoint(value.id, new(port.id)))))
-            { Widget.Hint("Selected inputs have different types or connections; edit them separately."); return; }
+            {
+                InspectorRow("port." + port.id, portLabel, () => UI.TextDisabled("Mixed connections or types"));
+                return;
+            }
             ShaderGraphLiteral zero;
             try { zero = ShaderGraphLiteral.Zero(port.type); }
-            catch (NotSupportedException) { Widget.Hint("This resource or effect input requires an explicit connection."); return; }
+            catch (NotSupportedException)
+            {
+                InspectorRow("port." + port.id, portLabel, () => UI.TextDisabled("Explicit connection required"));
+                return;
+            }
             string key = ShaderGraphDocument.inputDefaultPrefix + port.id;
             if (!node.TryGetValue(key, out var encoded))
             {
-                if (!port.required) Widget.Hint("No override · this input is defined by its node or Target.");
-                if (UI.SmallButton(port.required ? "Use Zero Default" : "Override Default with Zero")) Set(node, key, zero);
+                InspectorRow("port." + port.id, portLabel, () =>
+                {
+                    if (UI.SmallButton(port.required ? "Use Zero Default" : "Override with Zero")) Set(node, key, zero);
+                });
                 return;
             }
             ShaderGraphLiteral literal;
@@ -59,37 +72,45 @@ internal sealed partial class ShaderEditorCanvas
                 string label = scalarTypes.Count == 1 ? "Value" : scalarTypes.Count <= 4 && port.type.fields.Count == 0 && port.type.elementType is null
                     ? new[] { "X", "Y", "Z", "W" }[index] : "Component " + index;
                 uint bits = literal.scalarBits[index];
-                bool changed;
-                switch (scalarTypes[index])
+                bool changed = false;
+                InspectorRow("port." + port.id + "." + index,
+                    scalarTypes.Count == 1 ? portLabel : port.id + " " + label,
+                    () =>
                 {
-                    case "float":
-                        float number = BitConverter.UInt32BitsToSingle(bits);
-                        changed = Widget.CompactDragFloat(label, ref number, 0.01f);
-                        bits = BitConverter.SingleToUInt32Bits(number);
-                        break;
-                    case "int":
-                        int signed = unchecked((int)bits);
-                        changed = UI.InputInt(label, ref signed); bits = unchecked((uint)signed);
-                        break;
-                    case "uint":
-                        string text = bits.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                        changed = UI.InputText(label, ref text, 32) && uint.TryParse(text, out bits);
-                        break;
-                    default:
-                        bool boolean = bits != 0;
-                        changed = UI.Checkbox(label, ref boolean); bits = boolean ? 1u : 0u;
-                        break;
-                }
+                    switch (scalarTypes[index])
+                    {
+                        case "float":
+                            float number = BitConverter.UInt32BitsToSingle(bits);
+                            changed = Widget.CompactDragFloat("##value", ref number, 0.01f);
+                            bits = BitConverter.SingleToUInt32Bits(number);
+                            break;
+                        case "int":
+                            int signed = unchecked((int)bits);
+                            changed = UI.InputInt("##value", ref signed); bits = unchecked((uint)signed);
+                            break;
+                        case "uint":
+                            string text = bits.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                            changed = UI.InputText("##value", ref text, 32) && uint.TryParse(text, out bits);
+                            break;
+                        default:
+                            bool boolean = bits != 0;
+                            changed = UI.Checkbox("##value", ref boolean); bits = boolean ? 1u : 0u;
+                            break;
+                    }
+                });
                 Gesture();
                 if (changed) { literal.scalarBits[index] = bits; Set(node, key, literal, true); }
                 UI.PopID();
             }
-            if (UI.SmallButton(port.required ? "Require Connection" : "Use Node / Target Default"))
+            InspectorRow("port." + port.id + ".reset", "Default", () =>
             {
-                using var transaction = owner.interactions.history.BeginTransaction("Remove Input Default");
-                foreach (GraphNodeRecord target in m_inspectionNodes ?? [node]) Controller.RemoveNodeValue(target.id, key);
-                transaction.Commit(); owner.Changed(draft);
-            }
+                if (UI.SmallButton(port.required ? "Require Connection" : "Use Node / Target Default"))
+                {
+                    using var transaction = owner.interactions.history.BeginTransaction("Remove Input Default");
+                    foreach (GraphNodeRecord target in m_inspectionNodes ?? [node]) Controller.RemoveNodeValue(target.id, key);
+                    transaction.Commit(); owner.Changed(draft);
+                }
+            });
         }
         finally { UI.PopID(); }
     }

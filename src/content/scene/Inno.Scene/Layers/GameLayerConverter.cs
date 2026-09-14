@@ -9,7 +9,6 @@ namespace Inno.Scene.Layers;
 /// <summary>
 /// Converts a layer identifier through its stable numeric slot.
 /// </summary>
-[SerializationExtension]
 internal sealed class GameLayerConverter : SerializationConverter<GameLayer>
 {
     /// <summary>

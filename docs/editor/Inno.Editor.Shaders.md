@@ -16,7 +16,7 @@ Drawer 不得保存 DrawContext、PreviewHandle、Asset 或历史回调到下一
 
 | API | 语义 |
 | --- | --- |
-| `ShaderNodeDrawerAttribute(definitionId, displayName)`、`definitionId`、`displayName` | 稳定节点 ID 与可选艺术家可读名称，名称只影响节点标题/菜单，不参与编译 |
+| `ShaderNodeDrawerAttribute(definitionId, displayName, createPath, createOrder, separatorBefore)` | 稳定节点 ID、可选显示名称与节点创建菜单呈现；插件可贡献自己的分组、顺序和同级分隔，不参与编译语义 |
 | `ShaderNodeDrawer.Draw(context)` | 统一 Inspector 中的帧内绘制入口 |
 | `ShaderNodeDrawContext(node, serialization, context, write, previews, inspection, readOnly)` | 独立节点快照、完整 owner context、统一草稿 History 写入、预览与共享 Inspector 上下文 |
 | `nodeId`、`previews` | 稳定控件身份和当前 generation 预览服务 |
@@ -25,6 +25,7 @@ Drawer 不得保存 DrawContext、PreviewHandle、Asset 或历史回调到下一
 | `DrawProperty<T>(key, label, defaultValue)` | 复用现有属性 Drawer、资产选择/拖放和数值控件；受草稿 History 与只读检查约束 |
 | `ShaderNodeDrawerRegistry(types)`、`TryDraw(id, context)`、`Dispose()` | 按 generation 发现、调用和退休呈现；缺少 Drawer 时返回 false |
 | `GetDisplayName(definitionId)` | 获取本代际中立显示名称；未贡献名称时返回 null，由宿主提供通用名称 |
+| `TryGetPresentation(definitionId, out presentation)` | 获取本代际不可变创建菜单呈现；未贡献时由 Shader Editor 使用内置中立分类 |
 | `MaterialDocuments.Open(path)`、`Read(id)`、`Replace(id, material, finishGesture)`、`Commit(id)` | 原生 Material 草稿；读回的是独立可编辑对象，显式保存前不发布 |
 | `MaterialDocuments.ReplaceMany(candidates, finishGesture)`、`CommitMany(ids)` | 一组兼容材质共享一次 History 事务，不提供跨文件原子保存承诺 |
 | `ShaderPropertyInspector.Draw(...)`、`Compatible(type, kind)` | Shader 默认值与 Material 覆盖复用属性 Drawer；Float/向量/线性 HDR Color/Matrix/Texture/Sampler，精确类型匹配 |
@@ -57,7 +58,7 @@ Editor 脚本导出 Drawer、预览 Provider、标记、帧内 Context、Materia
 
 ## 实际渲染预览
 
-Material Inspector 的 Material Preview 与 Shader Inspector 的 Shader Output Preview 共用此模块。输出预览表示整个 Shader 的结果，不冒充任意中间节点的数值可视化。
+Material Inspector 的 Material Preview 与 Shader Inspector 中始终可见的 Preview 共用此模块。输出预览表示整个 Shader 的结果，不冒充任意中间节点的数值可视化。
 Rendering2D 的 `SpriteShaderPreview`/`SpritePreviewPipeline` 是独立的 Editor-only 消费者：使用中性的未受光 Sprite 平面、白色实例纹理和独立材质覆盖，通过普通 Render Graph 绘制。
 不同领域通过自己的 Contract 提供网格、环境与 Pass 参数，通用引擎没有 Sprite 分支。若多种可预览 Contract 同时匹配，要求选择 Technique，不按发现顺序猜测。
 

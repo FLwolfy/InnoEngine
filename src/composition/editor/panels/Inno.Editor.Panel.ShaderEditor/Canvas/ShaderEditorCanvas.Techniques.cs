@@ -17,9 +17,13 @@ internal sealed partial class ShaderEditorCanvas
             UI.PushID("technique-" + i);
             ShaderTechniqueDefinition technique = definition.techniques[i];
             string id = technique.id.value ?? "", contract = technique.contract.value ?? "";
-            if (UI.InputText("ID", ref id, 128)) { technique.id = new() { value = id }; changed = true; }
+            bool idChanged = false;
+            InspectorRow("technique.id", "ID", () => idChanged = UI.InputText("##id", ref id, 128));
+            if (idChanged) { technique.id = new() { value = id }; changed = true; }
             Gesture();
-            if (UI.InputText("Contract", ref contract, 256)) { technique.contract = new() { value = contract }; changed = true; }
+            bool contractChanged = false;
+            InspectorRow("technique.contract", "Contract", () => contractChanged = UI.InputText("##contract", ref contract, 256));
+            if (contractChanged) { technique.contract = new() { value = contract }; changed = true; }
             Gesture();
             GraphicsCapability features = technique.requiredFeatures;
             if (FeatureControls(ref features)) { technique.requiredFeatures = features; changed = true; }
@@ -28,14 +32,22 @@ internal sealed partial class ShaderEditorCanvas
                 UI.PushID(j);
                 ShaderTechniquePass mapping = technique.passes[j];
                 string role = mapping.role.value ?? "";
-                if (UI.InputText("Role", ref role, 128)) { mapping.role = new() { value = role }; changed = true; }
+                bool roleChanged = false;
+                InspectorRow("technique.role", "Role", () => roleChanged = UI.InputText("##role", ref role, 128));
+                if (roleChanged) { mapping.role = new() { value = role }; changed = true; }
                 Gesture();
-                if (UI.BeginCombo("Pass", mapping.passName))
+                bool passChanged = false;
+                InspectorRow("technique.pass", "Pass", () =>
                 {
-                    foreach (ShaderPassDefinition pass in definition.passes)
-                        if (UI.Selectable(pass.name, pass.name == mapping.passName)) { mapping.passName = pass.name; changed = true; }
-                    UI.EndCombo();
-                }
+                    if (!Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget.BeginBoundedCombo("##pass", mapping.passName)) return;
+                    try
+                    {
+                        foreach (ShaderPassDefinition pass in definition.passes)
+                            if (UI.Selectable(pass.name, pass.name == mapping.passName)) { mapping.passName = pass.name; passChanged = true; }
+                    }
+                    finally { UI.EndCombo(); }
+                });
+                changed |= passChanged;
                 technique.passes[j] = mapping;
                 if (UI.SmallButton("Remove Role"))
                 { technique.passes = technique.passes.Where((_, index) => index != j).ToArray(); changed = true; UI.PopID(); break; }
@@ -65,14 +77,18 @@ internal sealed partial class ShaderEditorCanvas
     {
         if (!UI.TreeNode("Required Capabilities")) return false;
         bool changed = false;
+        GraphicsCapability updated = features;
         foreach (GraphicsCapability feature in Enum.GetValues<GraphicsCapability>())
         {
             ulong bits = Convert.ToUInt64(feature);
             if (bits == 0 || (bits & (bits - 1)) != 0) continue;
-            bool enabled = (features & feature) != 0;
-            if (UI.Checkbox(feature.ToString(), ref enabled))
-            { features = enabled ? features | feature : features & ~feature; changed = true; }
+            bool enabled = (updated & feature) != 0;
+            bool featureChanged = false;
+            InspectorRow("feature." + feature, feature.ToString(), () => featureChanged = UI.Checkbox("##enabled", ref enabled));
+            if (featureChanged)
+            { updated = enabled ? updated | feature : updated & ~feature; changed = true; }
         }
+        features = updated;
         UI.TreePop();
         return changed;
     }

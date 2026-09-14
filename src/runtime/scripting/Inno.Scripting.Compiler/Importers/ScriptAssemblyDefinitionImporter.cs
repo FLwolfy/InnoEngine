@@ -8,7 +8,6 @@ using Inno.Assets.Pipeline;
 
 namespace Inno.Scripting.Compiler;
 
-[AssetImporterExtension]
 internal sealed class ScriptAssemblyDefinitionImporter : AssetImporter<ScriptAssemblyDefinitionAsset>
 {
     /// <summary>

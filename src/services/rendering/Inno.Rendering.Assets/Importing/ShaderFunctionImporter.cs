@@ -11,7 +11,6 @@ using Inno.Rendering.Shaders;
 
 namespace Inno.Rendering.Assets;
 
-[AssetImporterExtension]
 internal sealed class ShaderFunctionImporter : AssetImporter<ShaderFunctionAsset>
 {
     /// <inheritdoc />
@@ -31,31 +30,45 @@ internal sealed class ShaderFunctionImporter : AssetImporter<ShaderFunctionAsset
             ?? throw new InvalidOperationException("Shader source requires its standard import settings.");
         ArgumentException.ThrowIfNullOrWhiteSpace(settings.languageId);
         ArgumentException.ThrowIfNullOrWhiteSpace(settings.implementationId);
-        var request = new ShaderSourceRequest(new(context.assetPath.ToString(), context.ReadUtf8Text()), settings.entryPoint,
-            new SourceResolver(context));
+        string[] exports = (settings.exports ?? []).Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+        if (exports.Length == 0) throw new InvalidDataException("Shader source libraries must export at least one named function.");
+        var source = new ShaderSourceFile(context.assetPath.ToString(), context.ReadUtf8Text());
         using var frontends = new ShaderSourceFrontendRegistry(context.types);
-        var requests = new List<ShaderSourceImplementationRequest> { new(settings.implementationId, settings.languageId, request) };
-        foreach (ShaderFunctionAsset implementation in settings.implementations)
+        var modules = new Dictionary<string, ShaderSourceModuleAnalysis>(StringComparer.Ordinal);
+        foreach (string export in exports)
         {
-            if (implementation is null || implementation.isMissing)
-                throw new InvalidDataException("An alternate shader implementation is missing; its reference must be repaired before compilation.");
-            context.DependsOnArtifact(implementation.identity.persistentId);
-            using ArtifactLease lease = context.AcquireArtifact(implementation.identity.persistentId, ShaderSourceBundle.outputName);
-            requests.AddRange(ShaderSourceBundle.Decode(File.ReadAllBytes(lease.info.absolutePath), context.serialization));
+            var requests = new List<ShaderSourceImplementationRequest>
+            { new(settings.implementationId, settings.languageId, new(source, export, new SourceResolver(context))) };
+            foreach (ShaderFunctionAsset implementation in settings.implementations ?? [])
+            {
+                if (implementation is null || implementation.isMissing)
+                    throw new InvalidDataException("An alternate shader implementation is missing; its reference must be repaired before compilation.");
+                context.DependsOnArtifact(implementation.identity.persistentId);
+                using ArtifactLease lease = context.AcquireArtifact(implementation.identity.persistentId, ShaderSourceBundle.outputName);
+                requests.AddRange(ShaderSourceBundle.Decode(File.ReadAllBytes(lease.info.absolutePath), export, context.serialization));
+            }
+            ShaderSourceModuleAnalysis module = frontends.AnalyzeModule(requests);
+            if (!module.succeeded)
+                throw new InvalidDataException(string.Join("\n", module.diagnostics.Select(static diagnostic =>
+                    $"{diagnostic.location.assetPath}:{diagnostic.location.line}:{diagnostic.location.column}: {diagnostic.message}")));
+            modules.Add(export, module);
         }
-        ShaderSourceModuleAnalysis module = frontends.AnalyzeModule(requests);
-        if (!module.succeeded)
-            throw new InvalidDataException(string.Join("\n", module.diagnostics.Select(static diagnostic =>
-                $"{diagnostic.location.assetPath}:{diagnostic.location.line}:{diagnostic.location.column}: {diagnostic.message}")));
         output.SetAsset(new ShaderFunctionAsset
         {
             languageId = settings.languageId,
-            entryPoint = settings.entryPoint,
-            implementationId = settings.implementationId
+            exports = exports,
+            implementationId = settings.implementationId,
+            catalogPath = NormalizeCatalogPath(settings.catalogPath),
+            catalogOrder = settings.catalogOrder
         });
-        await output.WriteArtifactAsync(ShaderSourceBundle.outputName, ShaderSourceBundle.Encode(module, context.serialization),
+        await output.WriteArtifactAsync(ShaderSourceBundle.outputName, ShaderSourceBundle.Encode(modules, context.serialization),
             cancellationToken, AssetDeploymentScope.AuthoringOnly).ConfigureAwait(false);
     }
+
+    private static string NormalizeCatalogPath(string? value)
+        => string.Join('/', (value ?? string.Empty).Split('/',
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
     private sealed class SourceResolver(AssetImportContext context) : IShaderSourceResolver
     {

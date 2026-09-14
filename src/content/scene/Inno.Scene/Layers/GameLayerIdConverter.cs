@@ -9,7 +9,6 @@ namespace Inno.Scene.Layers;
 /// <summary>
 /// Converts a logical layer identity through its stable string value.
 /// </summary>
-[SerializationExtension]
 internal sealed class GameLayerIdConverter : SerializationConverter<GameLayerId>
 {
     /// <summary>

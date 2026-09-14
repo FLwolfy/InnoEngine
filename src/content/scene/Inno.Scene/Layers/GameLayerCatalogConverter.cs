@@ -10,7 +10,6 @@ namespace Inno.Scene.Layers;
 /// <summary>
 /// Converts a layer stack to and from its fixed-width project-local serialization state.
 /// </summary>
-[SerializationExtension]
 internal sealed class GameLayerCatalogConverter : SerializationConverter<GameLayerCatalog>
 {
     /// <summary>
