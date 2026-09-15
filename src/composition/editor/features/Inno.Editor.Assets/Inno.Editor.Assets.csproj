@@ -12,6 +12,7 @@
     <ProjectReference Include="../../../../foundation/core/Inno.Core.Execution/Inno.Core.Execution.csproj" PrivateAssets="compile" />
     <ProjectReference Include="../../framework/Inno.Editor.Core/Inno.Editor.Core.csproj" PrivateAssets="compile" />
     <ProjectReference Include="../../../../../native/Inno.Native.ImGui/Inno.Native.ImGui.csproj" PrivateAssets="compile" />
+    <ProjectReference Include="../../../../foundation/scripting/Inno.Scripting.Api/Inno.Scripting.Api.csproj" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../../../content/assets/Inno.Assets/Inno.Assets.csproj" />

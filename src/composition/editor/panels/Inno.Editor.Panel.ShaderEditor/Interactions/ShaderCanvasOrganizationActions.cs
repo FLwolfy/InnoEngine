@@ -120,6 +120,23 @@ internal sealed class RevealShaderFunction(ShaderEditorDocuments documents, Asse
     }
 }
 
+[EditorAction("shader/reveal-shader", ShaderEditorCanvas.C_AREA)]
+internal sealed class RevealShaderAsset(ShaderEditorDocuments documents, AssetEditorModule browser) : ShaderSelectionAction(documents)
+{
+    protected override bool writes => false;
+    protected override bool needsSelection => false;
+    protected override void Execute(EditorActionContext<AssetFileEntry> context)
+    {
+        var draft = documents.Open(context.target);
+        string parent = Path.GetDirectoryName(draft.path.localPath)?.Replace('\\', '/') ?? string.Empty;
+        browser.browser.SetCurrentDirectory(new AssetPath(draft.path.source, parent).ToString());
+        if (!documents.assets.TryGetFileSystemEntry(draft.path, out AssetFileEntry entry))
+            throw new FileNotFoundException("Shader source is missing from the Asset Browser.", draft.path.ToString());
+        documents.interactions.SetSelection(entry);
+        documents.interactions.OpenPanel("asset.file-browser");
+    }
+}
+
 [EditorAction("shader/check", ShaderEditorCanvas.C_AREA)]
 internal sealed class ShowShaderDiagnostics(ShaderEditorDocuments documents) : ShaderSelectionAction(documents)
 {

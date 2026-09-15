@@ -45,7 +45,13 @@ internal sealed class ShaderTemplateMenu(ShaderEditorDocuments documents) : Edit
     public override void Build(EditorMenuContext context, EditorMenuBuilder builder)
     {
         if (documents.templates is null) return;
+        builder.AddGroup("Create/Rendering", order: 200, separatorBefore: true);
+        builder.AddGroup("Create/Rendering/Shaders", order: 0);
         foreach (ShaderGraphTemplateInfo template in documents.templates.templates)
-            builder.Add("Create/Shader/" + template.displayName, "shader/create-asset", argument: template.id, order: 130);
+            builder.Add(
+                "Create/Rendering/Shaders/" + template.displayName,
+                "shader/create-asset",
+                argument: template.id,
+                order: 0);
     }
 }

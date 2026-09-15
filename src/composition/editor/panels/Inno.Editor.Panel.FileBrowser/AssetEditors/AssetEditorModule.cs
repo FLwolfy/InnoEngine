@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.ExceptionServices;
 
 using Inno.Assets;
@@ -7,6 +9,7 @@ using Inno.Assets.Pipeline;
 using Inno.Core.Logging;
 using Inno.Extensibility.Types;
 using Inno.Editor.Core;
+using Inno.Editor.Assets;
 using Inno.Editor.Inspection;
 using Inno.Editor.Interactions;
 using Inno.Editor.Settings;
@@ -23,6 +26,7 @@ public sealed partial class AssetEditorModule : EditorModule, IInspectionIconPro
 {
     private readonly AssetPipeline m_pipeline;
     private readonly AssetEditorRegistry m_editors;
+    private readonly AssetCreationRegistry m_creations;
     private readonly AssetIconRegistry m_icons;
     private readonly EditorSettings m_settings;
     private readonly EditorInteractions m_interactions;
@@ -70,6 +74,7 @@ public sealed partial class AssetEditorModule : EditorModule, IInspectionIconPro
         ArgumentNullException.ThrowIfNull(logs);
         m_log = logs.CreateLogger<AssetEditorModule>();
         m_editors = new AssetEditorRegistry(types);
+        m_creations = new AssetCreationRegistry(types);
         m_icons = new AssetIconRegistry(m_settings, types);
         browser = new AssetBrowserState(interactions, pipeline);
     }
@@ -139,6 +144,65 @@ public sealed partial class AssetEditorModule : EditorModule, IInspectionIconPro
     internal EditorInteractions interactions => m_interactions;
 
     internal AssetPipeline pipeline => m_pipeline;
+
+    internal IReadOnlyList<AssetCreationRegistry.Registration> creationTemplates
+        => m_creations.templates;
+
+    internal bool CanCreateAsset(string directory, string templateId)
+    {
+        if (!m_pipeline.isInitialized || !m_creations.TryGet(templateId, out _))
+            return false;
+        AssetPath path = AssetPath.Parse(NormalizePath(directory));
+        AssetSourceMount? mount = m_pipeline.sourceMounts.FirstOrDefault(source => source.id == path.source);
+        return mount is { isReadOnly: false }
+            && (string.IsNullOrEmpty(path.localPath)
+                || m_pipeline.TryGetFileSystemEntry(path, out AssetFileEntry entry) && entry.isDirectory);
+    }
+
+    internal AssetFileEntry CreateAsset(string directory, string templateId)
+    {
+        if (!m_creations.TryGet(templateId, out AssetCreationRegistry.Registration? registration)
+            || registration is null)
+        {
+            throw new InvalidOperationException($"Asset creation template '{templateId}' is unavailable.");
+        }
+        if (!CanCreateAsset(directory, templateId))
+            throw new InvalidOperationException("The selected Asset directory is not writable.");
+
+        AssetCreationMenuAttribute declaration = registration.declaration;
+        AssetPath parent = AssetPath.Parse(NormalizePath(directory));
+        AssetSourceMount mount = m_pipeline.sourceMounts.Single(source => source.id == parent.source);
+        string prefix = parent.localPath.TrimEnd('/');
+        if (prefix.Length != 0)
+            prefix += "/";
+        int suffix = 1;
+        AssetPath path;
+        do
+        {
+            string number = suffix == 1 ? string.Empty : " " + suffix;
+            path = new AssetPath(
+                parent.source,
+                prefix + declaration.defaultName + number + declaration.extension);
+            suffix++;
+        }
+        while (File.Exists(mount.Resolve(path.localPath))
+               || File.Exists(mount.Resolve(path.localPath) + ".imeta"));
+
+        AssetObject candidate = registration.template.Create()
+            ?? throw new InvalidOperationException(
+                $"Asset creation template '{templateId}' returned no asset.");
+        if (candidate.GetType() != registration.template.assetType)
+        {
+            throw new InvalidOperationException(
+                $"Asset creation template '{templateId}' returned '{candidate.GetType().FullName}' " +
+                $"instead of '{registration.template.assetType.FullName}'.");
+        }
+        AssetSourceStore sources = m_pipeline.CreateSourceStore();
+        byte[] source = registration.template.Encode(new AssetCreationContext(sources), candidate)
+            ?? throw new InvalidOperationException(
+                $"Asset creation template '{templateId}' returned no source data.");
+        return CreateSource(path, source);
+    }
 
     internal bool IsPluginSource(AssetSourceId source)
         => m_plugins.TryGet(source, out _);
@@ -502,6 +566,7 @@ public sealed partial class AssetEditorModule : EditorModule, IInspectionIconPro
     /// </summary>
     protected override void OnDispose()
     {
+        m_creations.Dispose();
         m_editors.Dispose();
         m_icons.Dispose();
     }

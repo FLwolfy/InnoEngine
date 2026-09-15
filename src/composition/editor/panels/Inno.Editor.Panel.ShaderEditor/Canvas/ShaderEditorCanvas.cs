@@ -30,7 +30,7 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
 
     internal void Draw()
     {
-        DrawHeader();
+        DrawHeader(owner, draft);
         m_origin = UI.GetCursorScreenPos();
         m_size = Vector2.Max(UI.GetContentRegionAvail(), Vector2.One);
         RefreshPorts();
@@ -175,8 +175,9 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
     private static void InspectorRow(string id, string label, Action draw)
         => Widget.PropertyRow("shader." + id, label, draw);
 
-    private void DrawHeader()
+    internal static void DrawHeader(ShaderEditorDocuments owner, ShaderEditorDocuments.Draft? draft)
     {
+        ArgumentNullException.ThrowIfNull(owner);
         UI.PushStyleColor(ImGuiCol.FrameBg, EditorPalette.inspectorTargetHeader);
         UI.PushStyleColor(ImGuiCol.Border, EditorPalette.inspectorTargetHeaderBorder);
         UI.PushStyleVar(ImGuiStyleVar.FrameRounding, Widget.style.frameRounding);
@@ -187,7 +188,9 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         {
             if (!visible) return;
             UI.SetNextItemWidth(-1f);
-            string title = System.IO.Path.GetFileName(draft.path.localPath) + (Controller.isDirty ? " *" : "");
+            string title = draft is null
+                ? "Select Shader"
+                : System.IO.Path.GetFileName(draft.path.localPath) + (owner.Controller(draft).isDirty ? " *" : "");
             if (Widget.BeginBoundedCombo("##shader-header-select", title))
             {
                 try
@@ -196,7 +199,7 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
                                  .Where(static candidate => candidate.extension.Equals(".ishader", StringComparison.OrdinalIgnoreCase))
                                  .OrderBy(static candidate => candidate.assetPath.ToString(), StringComparer.Ordinal))
                     {
-                        bool selected = candidate.assetPath == draft.path;
+                        bool selected = draft is not null && candidate.assetPath == draft.path;
                         if (UI.Selectable(candidate.assetPath.ToString(), selected))
                         {
                             owner.interactions.SetSelection(candidate);
@@ -207,22 +210,25 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
                 }
                 finally { UI.EndCombo(); }
             }
-            UI.BeginDisabled(draft.readOnly);
-            if (UI.Button("Save") && owner.assets.TryGetFileSystemEntry(draft.path, out AssetFileEntry entry))
+            bool noDocument = draft is null;
+            UI.BeginDisabled(noDocument || draft!.readOnly);
+            if (UI.Button("Save") && draft is not null && owner.assets.TryGetFileSystemEntry(draft.path, out AssetFileEntry entry))
                 _ = owner.interactions.For(C_AREA, entry).Execute("shader/save");
             Widget.DrawItemTooltip("Save this shader and apply its changes (Command/Ctrl + S). Invalid graphs can be saved; rendering retains the last successful programs.");
             UI.SameLine();
-            if (UI.Button("Revert")) _ = owner.interactions.documents.Revert(draft.documentId);
+            if (UI.Button("Revert") && draft is not null) _ = owner.interactions.documents.Revert(draft.documentId);
             Widget.DrawItemTooltip("Restore the saved shader. This draft change can be undone.");
             UI.EndDisabled();
             UI.SameLine();
-            if (UI.Button("Format") && owner.assets.TryGetFileSystemEntry(draft.path, out AssetFileEntry formatEntry))
+            UI.BeginDisabled(noDocument);
+            if (UI.Button("Format") && draft is not null && owner.assets.TryGetFileSystemEntry(draft.path, out AssetFileEntry formatEntry))
                 _ = owner.interactions.For(C_AREA, formatEntry).Execute("shader/format");
             Widget.DrawItemTooltip("Arrange the graph from inputs on the left to outputs on the right. This changes only authoring positions and is undoable.");
             UI.SameLine();
-            if (UI.Button("Check") && owner.assets.TryGetFileSystemEntry(draft.path, out AssetFileEntry checkEntry))
+            if (UI.Button("Check") && draft is not null && owner.assets.TryGetFileSystemEntry(draft.path, out AssetFileEntry checkEntry))
                 _ = owner.interactions.For(C_AREA, checkEntry).Execute("shader/check");
             Widget.DrawItemTooltip("Compile-check the current draft without saving or publishing it, and show diagnostics with source locations.");
+            UI.EndDisabled();
         }
         finally
         {

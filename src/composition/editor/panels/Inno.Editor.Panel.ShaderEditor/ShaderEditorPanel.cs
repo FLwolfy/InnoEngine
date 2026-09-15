@@ -31,6 +31,7 @@ internal sealed class ShaderEditorPanel(ShaderEditorDocuments documents) : Edito
             _ = documents.assets.TryGetFileSystemEntry(info.assetPath, out entry);
         if (entry is null || entry.isDirectory || !entry.assetPath.localPath.EndsWith(".ishader", StringComparison.OrdinalIgnoreCase))
         {
+            ShaderEditorCanvas.DrawHeader(documents, null);
             ImGuiWidget.CenteredWrappedText(
                 "Select a Shader (.ishader) in the File Browser.",
                 Vector2.Max(Vector2.One, NativeImGui.GetContentRegionAvail()),

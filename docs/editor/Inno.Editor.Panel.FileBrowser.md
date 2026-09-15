@@ -27,6 +27,7 @@ Project `Assets` 中名称以 `~` 开头的目录显示为 `ISAMPLE`，但仍按
 | `AssetBrowserRoot` / `AssetBrowserState` | 区分 Assets/Plugins 根，分别保存导航位置，并始终保留最近的可写 Project 目录。 |
 | `AssetEditor` / `AssetEditorAttribute` | 为特定 Asset 类型声明 Open/Rename/Delete/Drag 行为。 |
 | `AssetEditorContext` | 当前 `EditorContext`、interactions、路径、Asset 信息和实例。 |
+| `AssetFileEntry` | EditorScript 可检查的源文件身份、路径、扩展名和只读状态。 |
 | `AssetIconAttribute` | 按 imported Asset 类型或 source extension 配置 Tree/List/Grid 共用图标；glyph 使用 `InnoEditor.ImGui.ImGuiIcon`。 |
 | `AssetEditorModule.GetIcon` | 为其他 Editor presentation 解析完全相同的 Asset 图标。 |
 
@@ -96,6 +97,10 @@ public sealed class ReimportAnimationAction : EditorAction<AssetFileEntry>
 
 同一个菜单 Attribute 自动出现在 Tree/List/Grid，因为三种视图都提交相同 area 和共享 `AssetFileEntry` target。
 
+文件条目的右键菜单由两个同 area 的 interaction 组合：包含目录提供 `Create` 命令，条目本身提供 Rename、Delete 等对象命令；两组之间只绘制一个语义分隔线。因此右键文件也能在其父目录创建资产，右键目录则在该目录创建。统一 Create 菜单包含 Folder、插件贡献的 Shader 图模板，以及所有从 `AssetCreationTemplate` 派生并带源元数据的资产模板。Registry 根据 `menuPath` 自动建立多层分类，只在 top-level domain 边界应用声明的 separator；不会给每个叶子画横线。
+
+Material 与 Render Pipeline 已分别由自己的 feature 贡献模板；Rendering2D 插件同样贡献 Sprite Atlas、Sprite Animation、Tile Set、Tilemap、Particle Effect、Post Process Profile 与已配置的 2D Pipeline。新 `AssetObject` 不进入 File Browser switch，只需在所属 Editor feature 中添加创建模板。原生结构化资产直接使用泛型模板；自定义文本或二进制源 override `Encode`。详细协议见 [Inno.Editor.Assets](Inno.Editor.Assets.md)。创建完成后统一经过原子文件创建、导入、选择和 Inspector 流程；只读 mount 的创建命令保持禁用。
+
 ## 为 Asset 类型声明图标
 
 图标扩展不要求 runtime Asset 程序集引用 Editor。在 Editor extension 项目中选择任意容器类型，并把任意数量的声明并排放在该类型上：
@@ -147,4 +152,4 @@ List 的三个 column 使用同一个内容 inset，手动 splitter 只占用从
 
 ## Scripting API
 
-EditorScripts 使用 `InnoEditor.Assets` 扩展 AssetEditor、声明 AssetIcon。Action/Menu/Drop Attribute 与运行时 API 共用 feature-owned `const string` ID；脚本必须显式写 `using InnoEditor.Assets;`。
+EditorScripts 使用 `InnoEditor.Assets` 扩展 AssetEditor、声明 AssetIcon/AssetCreationTemplate，并可用 `AssetFileEntry` 为插件源类型贡献条件 Inspector Drawer。`IInspectionIconProvider<AssetFileEntry>` 也进入裁剪 API，使 Drawer Header 与 File Browser 使用同一个 Appearance 图标来源。Action/Menu/Drop Attribute 与运行时 API 共用 feature-owned `const string` ID；脚本必须显式写 `using InnoEditor.Assets;`。

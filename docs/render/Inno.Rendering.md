@@ -37,6 +37,8 @@ Graphics/Compute pipeline binding、Shader IR 的 stages/passes/interface bindin
 | 诊断 | `IDiagnosticReporter`, `Diagnostic`（Core.Diagnostics） | 发布并在条件恢复后解除领域问题；没有 Rendering 专用 sink/severity。 |
 | 全局 | `GraphicsSettings`, `RenderFrameStatistics` | 当前 capability、默认 Pipeline 与只读统计。 |
 
+Pipeline/Feature/Request Provider 的 Attribute 与 Shader Target 的实例 ID 并非两套相互矛盾的风格。Runtime Registry 必须先用资产里保存的 Stable ID 路由到实现类型，之后才按需构造 Pipeline，因此参数化 Attribute 同时承担“构造前 ID → Type 索引”的必要元数据。它不是空 marker，也不与实例成员重复。若改成实例 `id`，Registry 就必须为查表提前构造全部 Pipeline，改变资源生命周期和失败边界。
+
 ### 设备呈现节奏
 
 `IRenderDevice.SetVerticalSync(bool)` 是所有后端必须实现的契约，不提供默认抛异常实现。

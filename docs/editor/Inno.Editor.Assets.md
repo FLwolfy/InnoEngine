@@ -4,9 +4,43 @@
 
 ## 职责与边界
 
-提供原生资产草稿的可复用生命周期。Material 与 Pipeline 共用此实现；不认识 Shader、Sprite 或具体插件配置。
+提供原生资产草稿的可复用生命周期，以及 File Browser 可发现的资产创建模板协议。Material 与 Pipeline 共用草稿实现；本项目不认识 Shader、Sprite 或具体插件配置。
 资产源编解码、原子保存和引用上下文属于 AssetPipeline/AssetSourceStore，文档与撤销属于 EditorInteractions。
 本项目不另建资产数据库、文档服务或 Undo 栈。
+
+## Asset 创建扩展
+
+`AssetCreationTemplate` 的派生关系是发现协议；`AssetCreationMenuAttribute` 只携带无法从 `AssetObject` 推导的稳定模板 ID、菜单路径、扩展名、默认文件名和排序。File Browser Registry 构造并持有全部模板，因此模板本身不重复声明实例 ID。一个插件新增资产类型时不需要修改 File Browser 中央分支：
+
+```csharp
+using System.Text;
+using InnoEditor.Assets;
+using InnoEngine.Assets;
+
+public sealed class DialogueAsset : AssetObject;
+
+public static class ProjectIds
+{
+    public const string dialogueCreation = "example.gameplay.asset-create.dialogue";
+}
+
+[AssetCreationMenu(
+    ProjectIds.dialogueCreation,
+    "Gameplay/Dialogue",
+    ".dialogue",
+    "New Dialogue",
+    groupOrder: 400,
+    separatorBeforeGroup: true)]
+public sealed class DialogueCreationTemplate : AssetCreationTemplate<DialogueAsset>
+{
+    public override byte[] Encode(AssetCreationContext context, AssetObject asset)
+        => Encoding.UTF8.GetBytes("speaker: narrator\ntext: \n");
+}
+```
+
+`AssetCreationTemplate<TAsset>` 默认构造 `TAsset` 并调用 `AssetCreationContext.EncodeNative`，适合 Inno 原生结构化源。自定义文本或二进制 Importer 可 override `Encode`，因此协议支持任意具体 `AssetObject`，并不要求所有资产共享一种源格式。模板必须返回其声明的精确类型；空返回、重复 ID、重复菜单路径、非法扩展名或错误类型会使候选 Registry 明确失败，不会部分发布菜单。
+
+“继承 `AssetObject`”本身不会自动生成 Create 项：扩展名、默认内容和是否存在有意义的空白资产无法可靠推导。Texture、Geometry、AudioClip、普通 Text/Binary 等外部导入资产应通过导入文件产生，不注册空白模板；Scene/Prefab 继续由各自的领域工作流创建。这里是语义分类，不是 File Browser 的类型白名单。
 
 ## 初始化与公开 API
 
@@ -27,6 +61,15 @@ Feature 必须提供相同 historyKind 的 EditorHistoryHandler；不能保存�
 | `ValidateHistory(change, direction)` / `ApplyHistory(change, direction)` | Feature 的注册 Handler 路由公共 History 协议，不独立移动历史栈 |
 | `Update()` | 处理明确保存后的导入、源变动和离开 Inspector 的手势 |
 | `Dispose()` | 保留脏草稿恢复数据，注销当前 Provider |
+
+创建协议的公开 API：
+
+| API | 语义 |
+| --- | --- |
+| `AssetCreationMenuAttribute` | 声明稳定模板 ID、分层菜单路径、源扩展名、默认名称和组排序 |
+| `AssetCreationTemplate` | 通过派生被发现，创建精确的 detached `AssetObject`，并允许覆盖源编码 |
+| `AssetCreationTemplate<TAsset>` | 使用默认构造和原生结构化编码的常用实现 |
+| `AssetCreationContext.EncodeNative` | 使用当前 AssetPipeline 的完整引用上下文编码原生结构化源 |
 
 嵌套 `Draft` 只有公开只读属性：`id`、`documentId`、`path`、`readOnly`、`error`、`isDirty`。
 它保存中立 bytes，不保存解码对象；状态属性不能绕过 Store 修改数据。

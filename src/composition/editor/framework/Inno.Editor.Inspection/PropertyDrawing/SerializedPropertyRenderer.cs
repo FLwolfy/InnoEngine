@@ -118,7 +118,6 @@ public sealed class SerializedPropertyRenderer
     /// <param name="tooltip">Optional authoring description rendered by the shared property tooltip.</param>
     /// <param name="minimum">Optional inclusive numeric editing bound.</param>
     /// <param name="maximum">Optional inclusive numeric editing bound.</param>
-    [ScriptingApiIgnore]
     public void DrawValue(EditorContext editorContext, object owner, string path, string label, Type propertyType,
         Func<object?> getter, Action<object?> setter, IInspectionPropertyEditService edits, bool readOnly = false, bool hdrColor = false,
         string? tooltip = null, double? minimum = null, double? maximum = null)

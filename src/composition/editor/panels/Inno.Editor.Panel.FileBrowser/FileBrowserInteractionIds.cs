@@ -3,6 +3,7 @@ namespace Inno.Editor.Panel.FileBrowser;
 internal static class FileBrowserInteractionIds
 {
     internal const string C_AREA = "panel/asset.file-browser";
+    internal const string C_CREATE_ASSET = "file-browser/create-asset";
     internal const string C_CREATE_FOLDER = "file-browser/create-folder";
     internal const string C_DELETE = "file-browser/delete";
     internal const string C_IMPORT_SAMPLE = "file-browser/import-sample";

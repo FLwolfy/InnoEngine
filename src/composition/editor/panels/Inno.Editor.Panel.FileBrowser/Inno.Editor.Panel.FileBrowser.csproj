@@ -17,6 +17,7 @@
     <ProjectReference Include="..\..\..\..\runtime\plugins\Inno.Plugins.Authoring\Inno.Plugins.Authoring.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\features\Inno.Editor.Assets\Inno.Editor.Assets.csproj" PrivateAssets="compile" />
     <ProjectReference Include="../../../../foundation/core/Inno.Core.Execution/Inno.Core.Execution.csproj" PrivateAssets="compile" />
     <ProjectReference Include="../../../../foundation/core/Inno.Core.Serialization/Inno.Core.Serialization.csproj" PrivateAssets="compile" />
     <ProjectReference Include="../../../../foundation/core/Inno.Core.IO/Inno.Core.IO.csproj" PrivateAssets="compile" />

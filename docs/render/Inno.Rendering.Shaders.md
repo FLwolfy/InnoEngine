@@ -99,6 +99,8 @@ Target 在导入时先展开，随后捕获其引入的源码与资产依赖，�
 Authoring Artifact 同时保存原图与展开图；Export/Editor 读取原图，编译读取展开图。目标生成的节点位置不影响语义指纹。
 Target 与 Template 的 provider 只存活于 TypeRegistry snapshot，公共菜单快照只含字符串；运行时不解释 Target 或图。
 
+`ShaderTarget.id` 属于实例契约是有意设计：Target Registry 为当前 generation 主动构造并持有全部 Target，随后才建立 ID 索引，所以继承已经完整表达发现身份，实例 `id` 是唯一 Stable ID 来源。这里不再增加 `[ShaderTarget(id)]`；那会让同一个值在 Attribute 与实例中重复。相对地，Render Pipeline Runtime 需要在构造实例前从资产 ID 路由到 `Type`，因此使用携带 ID 的 `[RenderPipelineExtension(id)]`。统一的是生命周期规则，而不是强制两种 Registry 使用相同语法。
+
 ```csharp
 using System.Collections.Generic;
 using InnoEngine.Graphs;

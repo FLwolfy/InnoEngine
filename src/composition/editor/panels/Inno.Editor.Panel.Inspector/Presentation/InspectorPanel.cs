@@ -87,7 +87,7 @@ internal sealed class InspectorPanel : EditorPanel
 
     private void DrawContent(EditorContext context)
     {
-        object? target = m_targetHeader.Resolve(m_interactions.selection.selectedTarget);
+        object? target = m_targetHeader.Resolve(m_interactions, m_interactions.selection.selectedTarget);
         if (target is null)
         {
             m_failureState = string.Empty;

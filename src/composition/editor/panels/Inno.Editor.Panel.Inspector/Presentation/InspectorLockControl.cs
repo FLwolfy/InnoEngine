@@ -1,6 +1,7 @@
 using System;
 
 using Inno.Core.Identity;
+using Inno.Editor.Interactions;
 using Inno.Scene;
 
 namespace Inno.Editor.Panel.Inspector;
@@ -12,22 +13,26 @@ internal sealed class InspectorLockControl
 {
     private WeakReference<object>? m_collectibleTarget;
     private object? m_lockedTarget;
-    private Guid m_lockedIdentity;
-    private bool m_hasLockedIdentity;
+    private RuntimeIdentity? m_lockedIdentity;
+    private Guid m_lockedPersistentId;
     private bool m_isLocked;
 
     /// <summary>
     /// Resolves the target that the Inspector should present this frame.
     /// </summary>
+    /// <param name="interactions">
+    /// Shared interaction service used to resolve the target in its owning identity domain.
+    /// </param>
     /// <param name="selectedTarget">
     /// The current global editor selection.
     /// </param>
     /// <returns>
     /// The retained target while locked; otherwise, the current valid global selection.
     /// </returns>
-    internal object? Resolve(object? selectedTarget)
+    internal object? Resolve(EditorInteractions interactions, object? selectedTarget)
     {
-        object? lockedTarget = m_isLocked ? ResolveLockedTarget() : null;
+        ArgumentNullException.ThrowIfNull(interactions);
+        object? lockedTarget = m_isLocked ? ResolveLockedTarget(interactions) : null;
         if (m_isLocked && !IsValid(lockedTarget))
         {
             Clear();
@@ -45,11 +50,15 @@ internal sealed class InspectorLockControl
     /// <summary>
     /// Toggles target retention using the target currently displayed by the Inspector.
     /// </summary>
+    /// <param name="interactions">
+    /// Shared interaction service used to retain domain-qualified runtime identity.
+    /// </param>
     /// <param name="displayedTarget">
     /// The current valid Inspector target to retain when locking.
     /// </param>
-    internal void Toggle(object displayedTarget)
+    internal void Toggle(EditorInteractions interactions, object displayedTarget)
     {
+        ArgumentNullException.ThrowIfNull(interactions);
         if (m_isLocked)
         {
             Clear();
@@ -61,9 +70,12 @@ internal sealed class InspectorLockControl
         m_isLocked = true;
         if (displayedTarget is IdentityObject identityObject)
         {
-            m_lockedIdentity = identityObject.identity.persistentId;
-            m_hasLockedIdentity = true;
-            return;
+            if (identityObject.identity.runtimeIdentity is RuntimeIdentity runtimeIdentity)
+            {
+                m_lockedIdentity = runtimeIdentity;
+                m_lockedPersistentId = identityObject.identity.persistentId;
+                return;
+            }
         }
 
         if (displayedTarget.GetType().Assembly.IsCollectible)
@@ -79,17 +91,19 @@ internal sealed class InspectorLockControl
     {
         m_collectibleTarget = null;
         m_lockedTarget = null;
-        m_lockedIdentity = Guid.Empty;
-        m_hasLockedIdentity = false;
+        m_lockedIdentity = null;
+        m_lockedPersistentId = Guid.Empty;
         m_isLocked = false;
     }
 
-    private object? ResolveLockedTarget()
+    private object? ResolveLockedTarget(EditorInteractions interactions)
     {
-        if (m_hasLockedIdentity)
+        if (m_lockedIdentity is RuntimeIdentity identity)
         {
-            return IdentityAllocator.hasCurrent
-                ? IdentityAllocator.current.Get<IdentityObject>(m_lockedIdentity)
+            if (interactions.TryResolveIdentity(identity, out IdentityObject? target))
+                return target;
+            return interactions.TryResolveIdentity(identity.domainId, m_lockedPersistentId, out target)
+                ? target
                 : null;
         }
 

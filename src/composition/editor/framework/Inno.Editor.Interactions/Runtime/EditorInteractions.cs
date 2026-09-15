@@ -188,6 +188,55 @@ public sealed class EditorInteractions : IEditorSelectionCoordinator, IEditorHis
     }
 
     /// <summary>
+    /// Resolves a domain-qualified runtime identity through the Editor's complete identity-domain set.
+    /// </summary>
+    /// <param name="identity">
+    /// Runtime identity captured from a live Editor target.
+    /// </param>
+    /// <param name="target">
+    /// Receives the current live object, or <see langword="null"/> when its domain or generation is unavailable.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the exact identity resolves in its owning domain.
+    /// </returns>
+    [ScriptingApiIgnore]
+    public bool TryResolveIdentity(RuntimeIdentity identity, out IdentityObject? target)
+    {
+        target = m_identityDomains.TryGetValue(identity.domainId, out IdentityAllocator? allocator)
+            ? allocator.Get<IdentityObject>(identity)
+            : null;
+        return target is not null;
+    }
+
+    /// <summary>
+    /// Resolves a persistent identity through one explicitly selected Editor identity domain.
+    /// </summary>
+    /// <param name="domainId">
+    /// Identity domain that owns the object and any replacement generation.
+    /// </param>
+    /// <param name="persistentId">
+    /// Stable object identity to resolve inside that domain.
+    /// </param>
+    /// <param name="target">
+    /// Receives the current live object, or <see langword="null"/> when the domain or object is unavailable.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the stable identity resolves in the requested domain.
+    /// </returns>
+    [ScriptingApiIgnore]
+    public bool TryResolveIdentity(
+        IdentityDomainId domainId,
+        Guid persistentId,
+        out IdentityObject? target)
+    {
+        target = persistentId != Guid.Empty
+            && m_identityDomains.TryGetValue(domainId, out IdentityAllocator? allocator)
+                ? allocator.Get<IdentityObject>(persistentId)
+                : null;
+        return target is not null;
+    }
+
+    /// <summary>
     /// Opens and requests presentation focus for one panel in the active extension generation.
     /// </summary>
     /// <param name="panelId">

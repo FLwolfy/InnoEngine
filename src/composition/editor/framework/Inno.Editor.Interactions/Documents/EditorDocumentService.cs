@@ -42,8 +42,10 @@ internal sealed class EditorDocumentService : IEditorDocumentService
             throw new InvalidOperationException($"Editor document provider '{provider.id}' is already registered.");
         try
         {
-            foreach (EditorDocumentContext document in m_documents.Where(document => document.providerId == provider.id))
+            foreach (EditorDocumentContext document in m_documents.Where(document => document.providerId == provider.id).ToArray())
             {
+                if (!m_documents.Contains(document))
+                    continue;
                 document.isProviderAvailable = true;
                 provider.Open(document);
             }
@@ -68,9 +70,19 @@ internal sealed class EditorDocumentService : IEditorDocumentService
     public EditorDocumentContext Open(string assetPath, Guid assetId = default, bool revealHost = true)
     {
         string normalizedPath = NormalizePath(assetPath);
-        EditorDocumentContext? existing = m_documents.FirstOrDefault(document =>
-            assetId != Guid.Empty && document.assetId == assetId
-            || assetId == Guid.Empty && string.Equals(document.assetPath, normalizedPath, StringComparison.Ordinal));
+        EditorDocumentContext? identityOwner = assetId == Guid.Empty
+            ? null
+            : m_documents.FirstOrDefault(document => document.assetId == assetId);
+        EditorDocumentContext? pathOwner = FindPathOwner(normalizedPath);
+        if (identityOwner is not null && pathOwner is not null && !ReferenceEquals(identityOwner, pathOwner))
+            RetireStalePathOwner(pathOwner, normalizedPath);
+
+        EditorDocumentContext? existing = identityOwner ?? pathOwner;
+        if (existing is not null && assetId != Guid.Empty && existing.assetId != assetId)
+        {
+            RetireStalePathOwner(existing, normalizedPath);
+            existing = null;
+        }
         if (existing is not null)
         {
             _ = UpdateAssetPath(existing.documentId, normalizedPath);
@@ -127,8 +139,9 @@ internal sealed class EditorDocumentService : IEditorDocumentService
         string path = NormalizePath(assetPath);
         if (m_providers.TryGetValue(document.providerId, out EditorDocumentProvider? provider) && !provider.CanOpen(path))
             throw new ArgumentException("The new source path is not supported by this document provider.", nameof(assetPath));
-        if (m_documents.Any(value => value.documentId != documentId && value.assetPath == path))
-            throw new InvalidOperationException("Another open document already owns the destination source path.");
+        EditorDocumentContext? pathOwner = FindPathOwner(path, documentId);
+        if (pathOwner is not null)
+            RetireStalePathOwner(pathOwner, path);
         bool defaultTitle = document.title == System.IO.Path.GetFileName(document.assetPath);
         document.assetPath = path;
         if (defaultTitle) document.title = System.IO.Path.GetFileName(path);
@@ -325,6 +338,32 @@ internal sealed class EditorDocumentService : IEditorDocumentService
 
     private EditorDocumentContext? Find(Guid documentId)
         => m_documents.FirstOrDefault(document => document.documentId == documentId);
+
+    private EditorDocumentContext? FindPathOwner(string assetPath, Guid excludedDocumentId = default)
+        => m_documents.FirstOrDefault(document => document.documentId != excludedDocumentId
+            && string.Equals(document.assetPath, assetPath, StringComparison.Ordinal));
+
+    private void RetireStalePathOwner(EditorDocumentContext document, string destinationPath)
+    {
+        if (document.isDirty)
+        {
+            throw new InvalidOperationException(
+                $"Open document '{document.title}' has unsaved changes for '{destinationPath}'. " +
+                "Save, revert, or close it before assigning that source path to another asset identity.");
+        }
+        if (m_providers.TryGetValue(document.providerId, out EditorDocumentProvider? provider))
+            provider.Close(document);
+        int index = m_documents.IndexOf(document);
+        if (index < 0)
+            return;
+        m_documents.RemoveAt(index);
+        if (m_activeDocumentId == document.documentId)
+        {
+            m_activeDocumentId = m_documents.Count == 0
+                ? null
+                : m_documents[Math.Min(index, m_documents.Count - 1)].documentId;
+        }
+    }
 
     private static string NormalizePath(string assetPath)
     {

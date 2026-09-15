@@ -4,6 +4,7 @@ using System.Numerics;
 using Inno.Editor.Inspection;
 using Inno.Editor.ImGui;
 using Inno.Editor.ImGui.ImGuiWidget;
+using Inno.Editor.Interactions;
 using EditorWidget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 using Inno.Native.ImGui;
 using Inno.Adapter.Presentation.ImGui;
@@ -26,10 +27,14 @@ internal sealed class InspectorTargetHeader
     /// <returns>
     /// The current valid Inspector target, or <see langword="null"/> when none is available.
     /// </returns>
+    /// <param name="interactions">
+    /// Shared interaction service that resolves targets in their owning identity domains.
+    /// </param>
     /// <param name="selectedTarget">
     /// The current inspection target used to render the header.
     /// </param>
-    internal object? Resolve(object? selectedTarget) => m_lock.Resolve(selectedTarget);
+    internal object? Resolve(EditorInteractions interactions, object? selectedTarget)
+        => m_lock.Resolve(interactions, selectedTarget);
 
     /// <summary>
     /// Draws the common framed header for a resolved Inspector target.
@@ -167,7 +172,7 @@ internal sealed class InspectorTargetHeader
         string lockIcon = m_lock.isLocked ? ImGuiIcon.Lock : ImGuiIcon.LockOpen;
         string tooltip = m_lock.isLocked ? "Unlock Inspector" : "Lock Inspector";
         if (EditorWidget.ClickableIcon("inspector_target_lock", lockIcon, tooltip))
-            m_lock.Toggle(context.target);
+            m_lock.Toggle(context.interactions, context.target);
     }
 
     private static void DrawIcon(string icon, float slotSize)

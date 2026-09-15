@@ -4,7 +4,7 @@
 
 ## 职责与边界
 
-内置 `.ishader` 编辑界面，替代已经移除的 Material Graph Panel。`.imaterial` 仍只保存 Shader 引用及参数，不承载图。画布跟随 File Browser 当前 Shader 选择；双击 Shader 打开并聚焦。没有固定侧栏或路径输入框；画布 Header 第一行是当前 Shader 下拉选择，第二行提供 Save / Revert / Format / Check，星号表示尚未应用的草稿。没有选中 Shader 时使用带 Panel padding 的居中空状态。
+内置 `.ishader` 编辑界面，替代已经移除的 Material Graph Panel。`.imaterial` 仍只保存 Shader 引用及参数，不承载图。画布跟随 File Browser 当前 Shader 选择；双击 Shader 打开并聚焦。没有固定侧栏或路径输入框；画布 Header 第一行是当前 Shader 下拉选择，第二行提供 Save / Revert / Format / Check，星号表示尚未应用的草稿。没有选中 Shader 时 Header 仍然存在，显示 `Select Shader` 下拉选择，四个文档操作按钮禁用；其下使用带 Panel padding 的居中空状态。
 
 当前实现与完整验收必须区分：右键菜单、节点值编辑、捕获式平移、鼠标锚点缩放、框选、节点移动、连接、复制粘贴、显式保存已经接线；完整 UI 实操、所有高级节点/资源操作和最终渲染一致性尚待验收。详见[实施状态](../issues/2026-09-11-unified-shader-implementation.md)。
 
@@ -54,6 +54,7 @@ public sealed class SurfaceDrawer : ShaderNodeDrawer
 - 源码外部更新：未编辑文档接受新源；dirty 文档显示冲突，不覆盖磁盘。暂时缺失源保留图和 Undo barrier。
 - Save 与编译是不同状态；编译状态明确标记为 Saved asset。保存完成后在下一次 Editor Update 请求导入，不依赖 watcher 延迟；无效已保存图继续显示失败和 last-good，不伪装成成功。
 - 安装资产只读，可查看；右键“Copy Shader to Project”创建独立项目资产并选中，创建可撤销。
+- 画布空白区域的 Assets 菜单始终提供“Show Shader in File Browser”；它定位当前 `.ishader`，不要求先选中节点。源码节点另行提供“Show Source in File Browser”。不再提供“Create Material From Shader”；Material 从 File Browser 的统一 Create 菜单建立后再显式选择 Shader。
 - Close 由共享文档服务处理 Save/Discard/Cancel；provider 不在 Discard 后偷偷 Save。
 - Revert 恢复已保存内容，可通过 Undo 找回草稿；Undo 后仍需 Save 才会应用。
 - 源码节点的 `Apply Import Settings` 是对所选 `.ishadersource.imeta` 的独立显式操作，可能影响引用该源码的其他 Shader；它不代替当前 Shader 图的 Save。编辑源码文件本身仍使用 IDE 保存。

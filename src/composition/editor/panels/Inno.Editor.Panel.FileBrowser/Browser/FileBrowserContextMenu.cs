@@ -20,13 +20,15 @@ internal sealed class FileBrowserContextMenu(
     {
         if (NativeImGui.IsItemClicked(ImGuiMouseButton.Right))
             assets.browser.Select(context, relativePath);
+        if (!assets.pipeline.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry entry))
+            return;
+        string creationDirectory = entry.isDirectory
+            ? entry.assetPath.ToString()
+            : GetParentDirectory(entry.assetPath.ToString());
         bool isOpen = EditorMenuRenderer.ContextMenu(
             id,
-            assets.interactions.For(
-                FileBrowserInteractionIds.C_AREA,
-                assets.pipeline.TryGetFileSystemEntry(AssetPath.Parse(relativePath), out AssetFileEntry entry)
-                    ? entry
-                    : null));
+            CreateDirectoryInteraction(creationDirectory),
+            assets.interactions.For(FileBrowserInteractionIds.C_AREA, entry));
         if (isOpen)
             rename.MarkInteraction(presentation);
     }

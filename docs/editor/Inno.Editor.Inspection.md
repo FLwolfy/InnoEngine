@@ -126,4 +126,4 @@ Inspector 的浮点标量以及 `Vector2/3/4`、`Rect`、Quaternion Euler 和 Tr
 
 ## Scripting API
 
-EditorScripts 通过显式 `using InnoEditor.Inspection;` 使用裁剪后的 `InspectionDrawer`、`PropertyDrawer`、`InspectorAttributeDrawer` 与 property-edit 契约。Registry、snapshot、Activator 和各 feature 的具体 mutation adapter 不导出。
+EditorScripts 通过显式 `using InnoEditor.Inspection;` 使用裁剪后的 `InspectionDrawer`、`PropertyDrawer`、`InspectorAttributeDrawer`、`IInspectionIconProvider<TTarget>` 与 property-edit 契约。`AssetFileEntry` 条件 Drawer 因而能从 File Browser 注入统一图标解析，而不复制 Appearance 设置。Registry、snapshot、Activator 和各 feature 的具体 mutation adapter 不导出。

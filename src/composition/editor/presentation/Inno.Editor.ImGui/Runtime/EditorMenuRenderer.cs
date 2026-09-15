@@ -49,6 +49,51 @@ public static class EditorMenuRenderer
         return true;
     }
 
+    /// <summary>
+    /// Draws one context popup composed from an item interaction and its containing-scope interaction.
+    /// </summary>
+    /// <param name="id">
+    /// Stable popup identifier in the current ImGui ID scope.
+    /// </param>
+    /// <param name="scopeInteraction">
+    /// Container interaction whose commands are shown first, such as creation commands for a directory.
+    /// </param>
+    /// <param name="itemInteraction">
+    /// Selected-item interaction whose commands are shown after the container commands.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> while the context popup is open and at least one command group was drawn.
+    /// </returns>
+    public static bool ContextMenu(
+        string id,
+        EditorInteraction scopeInteraction,
+        EditorInteraction itemInteraction)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        if (!ShouldResolveItemContextMenu(id))
+            return false;
+        EditorMenuModel scopeMenu = scopeInteraction.BuildMenu();
+        EditorMenuModel itemMenu = itemInteraction.BuildMenu();
+        if (scopeMenu.items.Count == 0 && itemMenu.items.Count == 0)
+            return false;
+        if (!EditorWidget.BeginContextMenu(id))
+            return false;
+        try
+        {
+            if (scopeMenu.items.Count != 0)
+                DrawItems(scopeInteraction, scopeMenu.items);
+            if (scopeMenu.items.Count != 0 && itemMenu.items.Count != 0)
+                NativeImGui.Separator();
+            if (itemMenu.items.Count != 0)
+                DrawItems(itemInteraction, itemMenu.items);
+        }
+        finally
+        {
+            EditorWidget.EndContextMenu();
+        }
+        return true;
+    }
+
     /// <summary>Draws the shared context menu with a searchable command list, including menus opened explicitly by a pointer gesture.</summary>
     /// <param name="id">Stable popup identity in the current ImGui scope.</param>
     /// <param name="interaction">Shared action/menu routing context.</param>

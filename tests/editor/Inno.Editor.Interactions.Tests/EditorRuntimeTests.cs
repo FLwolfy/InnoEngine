@@ -32,6 +32,7 @@ public sealed class EditorRuntimeTests : IDisposable
     private readonly DiagnosticHub m_diagnostics = new();
     private readonly LogRouter m_logs = new();
     private readonly IdentityAllocator m_identities = new();
+    private readonly IdentityAllocator m_secondaryIdentities = new();
     private readonly IDisposable m_diagnosticScope;
     private readonly ModuleHost m_modules;
     private readonly TypeCatalog m_types;
@@ -100,7 +101,7 @@ public sealed class EditorRuntimeTests : IDisposable
     private EditorInteractionRuntime CreateRuntime(
         EditorContext context,
         params object[] hostServices)
-        => new(context, m_types, m_logs, [m_types, m_identities, .. hostServices]);
+        => new(context, m_types, m_logs, [m_types, m_identities, m_secondaryIdentities, .. hostServices]);
 
     [Fact]
     public void FeatureLookupReturnsOnlyStartedNonQuarantinedModules()
@@ -236,6 +237,28 @@ public sealed class EditorRuntimeTests : IDisposable
         Assert.Empty(documents.documents);
         Assert.Equal(1, provider.saveCount);
         Assert.Equal(1, provider.closeCount);
+    }
+
+    [Fact]
+    public void DocumentPathReassignmentRetiresOnlyCleanStaleOwner()
+    {
+        IEditorDocumentService documents = m_runtime.interactions.documents;
+        var provider = new TestDocumentProvider();
+        using IDisposable lease = documents.RegisterProvider(provider);
+        const string path = "Assets/Shared.ispriteatlas2d";
+
+        EditorDocumentContext first = documents.Open(path, Guid.NewGuid());
+        EditorDocumentContext replacement = documents.Open(path, Guid.NewGuid());
+
+        Assert.NotSame(first, replacement);
+        Assert.Single(documents.documents);
+        Assert.Equal(1, provider.closeCount);
+
+        documents.SetDirty(replacement.documentId);
+        InvalidOperationException failure = Assert.Throws<InvalidOperationException>(
+            () => documents.Open(path, Guid.NewGuid()));
+        Assert.Contains("unsaved changes", failure.Message, StringComparison.Ordinal);
+        Assert.Same(replacement, Assert.Single(documents.documents));
     }
 
     [Fact]
@@ -648,6 +671,41 @@ public sealed class EditorRuntimeTests : IDisposable
         Assert.Null(m_runtime.interactions.selection.selectedTarget);
         Assert.Null(typeof(EditorSelectionState).GetMethod("Select"));
         Assert.Null(typeof(EditorSelectionState).GetMethod("Clear"));
+    }
+
+    [Fact]
+    public void IdentityResolutionUsesTheOwningDomain()
+    {
+        DragSource primary = Register(new DragSource());
+        var secondary = new DragSource();
+        Assert.True(m_secondaryIdentities.Register(secondary));
+        RuntimeIdentity primaryIdentity = primary.identity.runtimeIdentity!.Value;
+        RuntimeIdentity secondaryIdentity = secondary.identity.runtimeIdentity!.Value;
+
+        Assert.True(m_runtime.interactions.TryResolveIdentity(primaryIdentity, out IdentityObject? primaryResult));
+        Assert.Same(primary, primaryResult);
+        Assert.True(m_runtime.interactions.TryResolveIdentity(secondaryIdentity, out IdentityObject? secondaryResult));
+        Assert.Same(secondary, secondaryResult);
+        Assert.True(m_runtime.interactions.TryResolveIdentity(
+            secondaryIdentity.domainId,
+            secondary.identity.persistentId,
+            out IdentityObject? persistentResult));
+        Assert.Same(secondary, persistentResult);
+
+        var crossDomainAlias = new RuntimeIdentity(secondaryIdentity.domainId, primaryIdentity.runtimeId);
+        Assert.NotSame(primary, m_runtime.interactions.TryResolveIdentity(crossDomainAlias, out IdentityObject? alias)
+            ? alias
+            : null);
+
+        Guid persistentId = secondary.identity.persistentId;
+        Assert.True(m_secondaryIdentities.Unregister(secondary));
+        var replacement = new DragSource();
+        Assert.True(m_secondaryIdentities.Register(replacement, persistentId));
+        Assert.True(m_runtime.interactions.TryResolveIdentity(
+            secondaryIdentity.domainId,
+            persistentId,
+            out IdentityObject? replacementResult));
+        Assert.Same(replacement, replacementResult);
     }
 
     [Fact]

@@ -7,6 +7,7 @@ using Inno.Editor.Inspection;
     ScriptingApiScope.Editor)]
 
 [assembly: ScriptingApiExport(typeof(InspectionDrawer<>), ScriptingApiScope.Editor)]
+[assembly: ScriptingApiExport(typeof(IInspectionIconProvider<>), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(IPropertyDrawer), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(InspectionDrawContext), ScriptingApiScope.Editor)]
 [assembly: ScriptingApiExport(typeof(AssetInspectionSelection), ScriptingApiScope.Editor)]
