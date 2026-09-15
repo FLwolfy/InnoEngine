@@ -6,6 +6,7 @@ using System.Linq;
 using Inno.Assets;
 using Inno.Assets.Pipeline;
 using Inno.Core.Graphs;
+using Inno.Core.Diagnostics;
 using Inno.Core.IO;
 using Inno.Core.Serialization;
 using Inno.Editor.Core;
@@ -25,6 +26,7 @@ namespace Inno.Editor.Panel.ShaderEditor;
 internal sealed partial class ShaderEditorDocuments : EditorModule
 {
     internal const string C_PORT_SNAPSHOT = "inno.editor.ports";
+    private const string C_NODE_DIAGNOSTIC_GROUP = "Shader Nodes";
     private readonly Dictionary<Guid, Draft> m_drafts = [];
     private readonly Dictionary<Guid, ViewState> m_views = [];
     private readonly HashSet<AssetPath> m_pendingImports = [];
@@ -67,26 +69,35 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
     internal ShaderSourceFrontendRegistry frontends => m_frontends ?? throw new InvalidOperationException("Shader documents have not started.");
     internal long typeVersion => m_types.current.version;
 
-    internal EditorShaderDraftCompilationSnapshot Preview(Draft draft)
+    internal EditorShaderDraftCompilationSnapshot? Preview(Draft draft)
     {
         GraphDocumentController controller = Controller(draft);
-        long now = Stopwatch.GetTimestamp();
-        if (draft.previewRevision != controller.revision)
-        {
-            draft.previewRevision = controller.revision;
-            draft.previewDue = now + Stopwatch.Frequency * 3 / 10;
-        }
-        if (now < draft.previewDue)
-            return new(EditorShaderCompilationState.Compiling, draft.preview?.artifact is not null, [], draft.preview?.artifact);
-        return draft.preview = m_compilation.RequestDraft(draft.id, controller.document, controller.revision, RenderShaderVariant.empty);
+        return draft.checkedRevision == controller.revision && draft.checkedState is not null
+            ? draft.preview
+            : null;
     }
 
     internal EditorShaderDraftCompilationSnapshot Check(Draft draft)
     {
         GraphDocumentController controller = Controller(draft);
-        draft.previewRevision = controller.revision;
-        draft.previewDue = 0;
-        return draft.preview = m_compilation.RequestDraft(draft.id, controller.document, controller.revision, RenderShaderVariant.empty);
+        EditorShaderDraftCompilationSnapshot snapshot = m_compilation.RequestDraft(
+            draft.id,
+            controller.document,
+            controller.revision,
+            RenderShaderVariant.empty);
+        if (snapshot.state == EditorShaderCompilationState.Compiling)
+            return snapshot;
+
+        draft.checkedRevision = controller.revision;
+        draft.checkedState = snapshot.state;
+        if (snapshot.state == EditorShaderCompilationState.Failed)
+        {
+            // The compiler may retain a last-good candidate for its own transactional cache, but a
+            // failed explicit Check must never present that candidate as the current draft preview.
+            m_compilation.ReleaseDraft(draft.id);
+            snapshot = new(EditorShaderCompilationState.Failed, false, snapshot.diagnostics, null);
+        }
+        return draft.preview = snapshot;
     }
 
     internal void ShowCheck(Draft draft)
@@ -101,7 +112,27 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
     internal void CloseCheck() => m_checkDraftId = null;
 
     internal void ReleasePreview(Draft draft)
-    { m_compilation.ReleaseDraft(draft.id); draft.preview = null; draft.previewRevision = ulong.MaxValue; }
+    {
+        m_compilation.ReleaseDraft(draft.id);
+        draft.preview = null;
+        draft.checkedRevision = ulong.MaxValue;
+        draft.checkedState = null;
+    }
+
+    internal void PublishNodeDiagnostics(Draft draft)
+    {
+        Diagnostic[] diagnostics = draft.nodeErrors.Select(pair => new Diagnostic(
+            "SHADER_NODE_INVALID",
+            $"Node '{pair.Key.value}' cannot be evaluated: {pair.Value}",
+            DiagnosticSeverity.Error,
+            semanticId: pair.Key.value,
+            objectId: draft.id,
+            location: new DiagnosticLocation(draft.path.ToString()))).ToArray();
+        Diagnostics.Set(draft.id, C_NODE_DIAGNOSTIC_GROUP, diagnostics, draft.path.ToString());
+    }
+
+    private static void ClearNodeDiagnostics(Draft draft)
+        => Diagnostics.Clear(draft.id, C_NODE_DIAGNOSTIC_GROUP);
 
     internal Draft Open(AssetFileEntry entry)
     {
@@ -151,7 +182,6 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
                 EditorShaderCompilationState.Succeeded => "Compiled",
                 _ => "Compilation failed"
             };
-            if (snapshot.usingLastGood) draft.compilationStatus += " · using last-good programs";
             draft.compilationDiagnostics = string.Join("\n", snapshot.diagnostics.Select(static value => value.code + ": " + value.message));
             draft.diagnostics = snapshot.diagnostics.ToArray();
         }
@@ -182,6 +212,8 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
     internal void Changed(Draft draft)
     {
         GraphDocumentController controller = Controller(draft);
+        if (draft.checkedRevision != ulong.MaxValue && draft.checkedRevision != controller.revision)
+            ReleasePreview(draft);
         draft.observedRevision = controller.revision;
         interactions.documents.SetDirty(draft.documentId, controller.isDirty);
         if (!controller.isDirty)
@@ -314,6 +346,7 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
         foreach (Draft draft in m_drafts.Values)
         {
             if (Controller(draft).isDirty) PreserveRecovery(draft, Controller(draft));
+            ClearNodeDiagnostics(draft);
             ReleasePreview(draft);
         }
         m_lifetime?.Dispose();
@@ -448,6 +481,7 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
             string recovery = owner.RecoveryPath(draft.id);
             if (File.Exists(recovery)) File.Delete(recovery);
             owner.RememberView(draft);
+            ClearNodeDiagnostics(draft);
             owner.ReleasePreview(draft);
             draft.navigation.Cancel();
             owner.m_graphs.CloseDocument(draft.id);
@@ -468,8 +502,8 @@ internal sealed partial class ShaderEditorDocuments : EditorModule
         internal string compilationStatus = "Waiting for import";
         internal string compilationDiagnostics = "";
         internal ShaderDiagnostic[] diagnostics = [];
-        internal ulong previewRevision = ulong.MaxValue;
-        internal long previewDue;
+        internal ulong checkedRevision = ulong.MaxValue;
+        internal EditorShaderCompilationState? checkedState;
         internal EditorShaderDraftCompilationSnapshot? preview;
         internal long nextCompilationPoll;
         internal string menuSearch = "";

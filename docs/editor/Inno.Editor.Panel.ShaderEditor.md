@@ -62,7 +62,7 @@ public sealed class SurfaceDrawer : ShaderNodeDrawer
 ## 当前限制
 
 节点参数和输入默认值现在在 Inspector 编辑，不在画布重复一套字段。未连接数值输入支持精确类型默认值，连接后只显示上游来源；资源/副作用必须接线。
-Inspector 的 Compile Draft Preview 使用独立编译缓存，未经 Save 不进入正式资源发布；它当前是编译预览，不是完整材质画面预览。
+Inspector 的 Draft Preview 只在用户显式执行 Check 且当前草稿编译成功后显示；任何后续草稿修改都会使其失效并要求重新 Check。Check 失败时 Inspector 只提示失败，不显示详细错误，也不呈现编译器缓存中的 last-good 候选；完整成功/失败诊断统一进入 Console。未经 Save 的预览不进入正式资源发布；它当前是编译预览，不是完整材质画面预览。
 
 Pass/Variant、Technique/Role、自定义混合和能力要求在 Output Inspector 中编辑，不再通过“Create Pass”一次生成一组可重复 Output。存储读写、原子加法和 discard 节点通过显式 after/then 连线约束副作用顺序。右键沿用共享菜单与搜索，并分为 Create、View、Edit、Connections、Organize 与 Assets；分隔线只标示同级语义边界或插件贡献的顶级函数目录，不向父级和每个子项传播。Group 可被选中，拖动组标题会整体移动成员。Insert Reroute 在当前连接线上插入一个强类型、零运算的布线点，只整理长连线，不改变生成的 Shader 语义。Format 使用分层依赖布局和多轮端口感知的交叉最小化：输入在左、Output 在右，并按目标端口次序排列同层来源；它只改画布位置且可 Undo。源码导入设置通过 .imeta 与共享 History 编辑；`catalogPath`/`catalogOrder` 让插件把函数库放入自己的可读菜单分组。端口快照只保存中立类型/身份，缺失端口以红色保留，不按序号重连。
 
@@ -71,4 +71,7 @@ Pass/Variant、Technique/Role、自定义混合和能力要求在 Output Inspect
 `.ishadersource` 是显式函数库：Import Settings 中列出的每个函数名都是独立公开 API，未列出的函数是私有 helper；一个文件可以导出多个函数，右键 Create / Functions 按“插件目录 / 文件 / 函数”创建节点，不存在默认 Source 或隐式 `main`。节点的 Show in File Browser 只在引擎 File Browser 中定位资产，不启动操作系统或外部 IDE。顶部 Check 对当前草稿进行隔离编译，不保存、不发布；它使用与脚本/插件重载相同的默认固定宽度、居中位置、遮罩、淡入淡出和阻塞生命周期，不显示进度条。编译完成后无论成功或失败都自动关闭，结构化结果及源码位置统一发布到 Console，不在 Modal 内建立第二套诊断浏览器。
 
 Shader 与节点 Inspector 不重复画布 Header 的 Save / Revert / Format / Check。Shader Inspector 始终显示草稿专用 Preview（无开关），所有 Target、参数、节点设置和输入默认值复用通用 Inspector 的“左侧 label、右侧控件”Property Row；草稿预览仍不会修改资产或 Scene/Game。
+节点本体不再绘制“Select to edit in Inspector”占位尾部；Stage Input 节点使用主题统一的橙色 Header，Output 使用紫色 Header。选中节点时 Inspector 顶部仍显示所属 `.ishader` 文件名，第二行显示 `Node: <节点名>` 或多选数量。端口描述阶段发现的节点错误保留画布红点和 tooltip，同时作为带稳定节点 semantic ID 的结构化诊断发布到 Console，修复节点后对应诊断自动清除。
+
+Stage Input 的 `Source = Builtin` 表示该值由 GPU 阶段或引擎/Adapter 的标准阶段环境提供，而不是来自顶点缓冲、Material uniform、纹理或上游 varying。图保存后端中立 semantic，例如 Vertex 的 `vertex-id`/`instance-id`/`view-projection`、Fragment 的 `fragment-coordinate`/`front-facing`/`view-rectangle`，以及 Compute 的 `global-invocation-id`；Target 与 Adapter 必须共同支持该 semantic 和精确类型，否则 Check 产生错误。它不是任意源码表达式，也不是让用户填原生变量名的旁路。
 完整 UI 实操和热重载回归仍在最终验收清单中，不能把接线完成等同为验收通过。

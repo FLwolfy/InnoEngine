@@ -35,6 +35,15 @@ public static class EditorPalette
     /// </summary>
     public static Vector4 warning { get; } = new(0.9f, 0.65f, 0.25f, 1f);
 
+    /// <summary>Gets the neutral Shader node heading surface.</summary>
+    public static Vector4 shaderNodeHeader { get; } = new(0.16f, 0.17f, 0.20f, 1f);
+
+    /// <summary>Gets the orange heading surface shared by Shader input nodes.</summary>
+    public static Vector4 shaderInputNodeHeader { get; } = new(0.43f, 0.245f, 0.085f, 1f);
+
+    /// <summary>Gets the purple heading surface shared by Shader output nodes.</summary>
+    public static Vector4 shaderOutputNodeHeader { get; } = new(0.25f, 0.19f, 0.34f, 1f);
+
     /// <summary>
     /// Gets the editor window background.
     /// </summary>

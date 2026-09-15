@@ -1,10 +1,14 @@
 using System;
+using System.IO;
 using Inno.Assets;
 using Inno.Assets.Pipeline;
+using Inno.Core.Graphs;
+using Inno.Editor.ImGui;
 using Inno.Editor.Inspection;
 using Inno.Editor.Shaders;
 using Inno.Rendering;
 using UI = Inno.Native.ImGui.ImGui;
+using Widget = Inno.Editor.ImGui.ImGuiWidget.ImGuiWidget;
 
 namespace Inno.Editor.Panel.ShaderEditor;
 
@@ -33,7 +37,27 @@ internal sealed class ShaderSelectionDrawer(IInspectionIconProvider<AssetFileEnt
             && documents.assets.TryGetInfo(target.assetId, out AssetInfo? info) && info is not null
             && documents.assets.TryGetFileSystemEntry(info.assetPath, out AssetFileEntry entry) ? icons.GetIcon(entry) : icon;
     protected override (string name, Action<string>? setter) BindName(InspectionDrawContext context, ShaderInspectionSelection target)
-        => (target.nodes.Count == 0 ? "Shader" : target.nodes.Count == 1 ? "Shader Node" : "Shader Nodes", null);
+    {
+        if (context.interactions.TryGetModule<ShaderEditorDocuments>(out var documents) && documents is not null
+            && documents.assets.TryGetInfo(target.assetId, out AssetInfo? info) && info is not null)
+            return (Path.GetFileName(info.assetPath.localPath), null);
+        return ("Shader", null);
+    }
+    protected override void DrawHeader(InspectionDrawContext context, ShaderInspectionSelection target)
+    {
+        if (!context.interactions.TryGetModule<ShaderEditorDocuments>(out var documents) || documents is null
+            || !documents.assets.TryGetInfo(target.assetId, out AssetInfo? info) || info is null
+            || !documents.assets.TryGetFileSystemEntry(info.assetPath, out AssetFileEntry entry))
+        {
+            Widget.ColoredText(EditorPalette.assetBreadcrumbText, "Node selection unavailable");
+            return;
+        }
+        ShaderEditorDocuments.Draft draft = documents.Open(entry);
+        if (target.nodes.Count == 1 && documents.Controller(draft).document.FindNode(target.nodes[0]) is GraphNodeRecord node)
+            Widget.ColoredText(EditorPalette.assetBreadcrumbText, "Node: " + new ShaderEditorCanvas(documents, draft).Title(node));
+        else
+            Widget.ColoredText(EditorPalette.assetBreadcrumbText, $"Nodes: {target.nodes.Count} selected");
+    }
     protected override void Draw(InspectionDrawContext context, ShaderInspectionSelection target)
     {
         if (!context.interactions.TryGetModule<ShaderEditorDocuments>(out var documents) || documents is null) return;

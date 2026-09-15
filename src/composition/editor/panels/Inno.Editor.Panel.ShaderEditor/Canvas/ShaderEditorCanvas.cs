@@ -7,6 +7,7 @@ using Inno.Core.Graphs;
 using Inno.Editor.Graph;
 using Inno.Editor.ImGui;
 using Inno.Editor.Interactions;
+using Inno.Editor.Rendering;
 using Inno.Editor.Shaders;
 using Inno.Native.ImGui;
 using Inno.Rendering.Assets;
@@ -115,9 +116,16 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         Widget.SectionHeader("Preview", "The preview uses the current draft without publishing it to Scene or Game views.");
         {
             var preview = owner.Preview(draft);
-            Widget.Hint("Draft: " + preview.state + (preview.usingLastGood ? " · last-good preview" : "") + " · Scene/Game unchanged");
-            foreach (var diagnostic in preview.diagnostics) UI.TextWrapped(diagnostic.code + ": " + diagnostic.message);
-            if (preview.artifact is not null && owner.interactions.TryGetModule<Inno.Editor.Shaders.ShaderPreviews>(out var images) && images is not null)
+            if (preview is null)
+            {
+                Widget.Hint("Run Check to build a preview for the current draft.");
+            }
+            else if (preview.state == EditorShaderCompilationState.Failed)
+            {
+                Widget.Hint("Shader check failed. See Console.");
+            }
+            else if (preview.state == EditorShaderCompilationState.Succeeded && preview.artifact is not null
+                && owner.interactions.TryGetModule<Inno.Editor.Shaders.ShaderPreviews>(out var images) && images is not null)
             {
                 var shader = owner.assets.Load<Inno.Rendering.ShaderAsset>(draft.path);
                 images.Draw(draft.id, new Inno.Rendering.MaterialAsset { shader = shader }, preview,
@@ -137,7 +145,6 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
             }
             owner.RefreshCompilation(draft);
             InspectorRow("compilation", "Compilation", () => UI.TextWrapped(draft.compilationStatus));
-            if (draft.compilationDiagnostics.Length != 0) UI.TextWrapped(draft.compilationDiagnostics);
             return;
         }
         GraphNodeRecord[] nodes = selected.Select(Controller.document.FindNode).OfType<GraphNodeRecord>().ToArray();
@@ -274,6 +281,7 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         draft.groups = GroupShaderNodes.Read(owner, Controller.document);
         draft.assetRevision = owner.assets.revision;
         draft.typeRevision = owner.typeVersion;
+        owner.PublishNodeDiagnostics(draft);
     }
 
     private void Navigate(bool hovered)
@@ -402,8 +410,14 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         bool selected = Canvas.selectedNodes.Contains(node.id);
         draw.AddRectFilled(rect.min + new Vector2(3, 5), rect.max + new Vector2(3, 5), Color(0, 0, 0, 0.25f), 6 * zoom);
         draw.AddRectFilled(rect.min, rect.max, Color(0.115f, 0.12f, 0.14f), 6 * zoom);
+        Vector4 headerColor = node.definitionId switch
+        {
+            ShaderGraphDocument.outputDefinitionId => EditorPalette.shaderOutputNodeHeader,
+            "inno.shader.stage-input" or "inno.shader.constant" => EditorPalette.shaderInputNodeHeader,
+            _ => EditorPalette.shaderNodeHeader
+        };
         draw.AddRectFilled(rect.min, new(rect.max.X, rect.min.Y + C_HEADER * zoom),
-            node.definitionId == ShaderGraphDocument.outputDefinitionId ? Color(0.25f, 0.19f, 0.34f) : Color(0.16f, 0.17f, 0.20f), 6 * zoom);
+            UI.ColorConvertFloat4ToU32(headerColor), 6 * zoom);
         draw.AddRect(rect.min, rect.max, selected ? Color(0.65f, 0.47f, 0.88f) : Color(0.26f, 0.27f, 0.31f), 6 * zoom, ImDrawFlags.None, selected ? 2 : 1);
         draw.AddText(UI.GetFont(), UI.GetFontSize() * zoom, rect.min + new Vector2(10, 7) * zoom, UI.GetColorU32(ImGuiCol.Text), Title(node));
         foreach (ShaderNodePort port in draft.ports[node.id])
@@ -417,9 +431,6 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
             if (Vector2.DistanceSquared(point, UI.GetMousePos()) <= 64)
                 Widget.DrawTooltip(port.type.id + (missing ? " · missing port; reconnect explicitly" : ""));
         }
-        draw.AddText(UI.GetFont(), UI.GetFontSize() * zoom,
-            rect.min + new Vector2(12, C_HEADER + Rows(node) * C_ROW + 8) * zoom,
-            UI.GetColorU32(ImGuiCol.TextDisabled), "Select to edit in Inspector");
         if (draft.nodeErrors.TryGetValue(node.id, out string? error))
         {
             draw.AddCircleFilled(rect.min + new Vector2(C_WIDTH - 14, 16) * zoom, 4 * zoom, Color(1, 0.4f, 0.35f));
@@ -519,7 +530,7 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         Vector2 min = m_origin + new Vector2(Canvas.pan.x, Canvas.pan.y) + new Vector2(position.x, position.y) * Canvas.zoom;
         return (min, min + new Vector2(C_WIDTH, C_HEADER + Rows(node) * C_ROW + ControlHeight(node) + 20) * Canvas.zoom);
     }
-    private static float ControlHeight(GraphNodeRecord node) => 30f;
+    private static float ControlHeight(GraphNodeRecord node) => 0f;
     private int Rows(GraphNodeRecord node) => Math.Max(draft.ports[node.id].Count(static port => port.direction == GraphPortDirection.Input), draft.ports[node.id].Count(static port => port.direction == GraphPortDirection.Output));
     private GraphNodeRecord? HitNode(Vector2 point) => Controller.document.nodes.Reverse().FirstOrDefault(node => Contains(Rect(node), point));
     private GraphEndpoint? HitPort(Vector2 point, Dictionary<GraphEndpoint, Vector2> ports)
@@ -573,7 +584,7 @@ internal sealed partial class ShaderEditorCanvas(ShaderEditorDocuments owner, Sh
         float scale = Math.Clamp(MathF.Min(MathF.Max(1, m_size.X - 80) / MathF.Max(1, maxX - minX), MathF.Max(1, m_size.Y - 80) / MathF.Max(1, maxY - minY)), 0.1f, 1f);
         Canvas.SetViewport(new(m_size.X / 2 - (minX + maxX) / 2 * scale, m_size.Y / 2 - (minY + maxY) / 2 * scale), scale);
     }
-    private string Title(GraphNodeRecord node)
+    internal string Title(GraphNodeRecord node)
     {
         if (owner.drawers?.GetDisplayName(node.definitionId) is { } displayName) return displayName;
         if (node.definitionId == ShaderGraphDocument.outputDefinitionId)
